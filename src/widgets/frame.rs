@@ -1,0 +1,149 @@
+use std::io::Write;
+use std::marker::PhantomData;
+
+use anyhow::Result;
+use crossterm::{
+    cursor::MoveTo,
+    style::{Color, Print, SetForegroundColor},
+    QueueableCommand,
+};
+use pad::PadStr;
+
+use crate as canopy;
+use crate::{geom::Rect, widgets, Canopy, Node};
+
+/// Defines the set of glyphs used to draw the frame
+pub struct FrameGlyphs {
+    pub topleft: char,
+    pub topright: char,
+    pub bottomleft: char,
+    pub bottomright: char,
+    pub horizontal: char,
+    pub vertical: char,
+}
+
+/// Single line thin Unicode box drawing frame set
+pub const SINGLE: FrameGlyphs = FrameGlyphs {
+    topleft: '\u{250C}',
+    topright: '\u{2510}',
+    bottomleft: '\u{2514}',
+    bottomright: '\u{2518}',
+    horizontal: '\u{2500}',
+    vertical: '\u{2502}',
+};
+
+/// Double line Unicode box drawing frame set
+pub const DOUBLE: FrameGlyphs = FrameGlyphs {
+    topleft: '\u{2554}',
+    topright: '\u{2557}',
+    bottomleft: '\u{255A}',
+    bottomright: '\u{255D}',
+    horizontal: '\u{2550}',
+    vertical: '\u{2551}',
+};
+
+/// Single line thick Unicode box drawing frame set
+pub const SINGLE_THICK: FrameGlyphs = FrameGlyphs {
+    topleft: '\u{250F}',
+    topright: '\u{2513}',
+    bottomleft: '\u{2517}',
+    bottomright: '\u{251B}',
+    horizontal: '\u{2501}',
+    vertical: '\u{2503}',
+};
+
+/// This trait must be implemented for nodes that are direct children of the
+/// frame.
+pub trait FrameContent {
+    /// The title for this element, if any.
+    fn title(&self) -> Option<String> {
+        None
+    }
+}
+
+pub struct Frame<S, N: canopy::Node<S> + FrameContent> {
+    _marker: PhantomData<S>,
+    pub child: N,
+    pub state: canopy::NodeState,
+    pub rect: Option<Rect>,
+    pub focus_color: Color,
+    pub color: Color,
+    pub glyphs: FrameGlyphs,
+}
+
+impl<S, N: canopy::Node<S> + FrameContent> Frame<S, N> {
+    pub fn new(c: N, glyphs: FrameGlyphs, color: Color, focus_color: Color) -> Self {
+        Frame {
+            _marker: PhantomData,
+            child: c,
+            state: canopy::NodeState::default(),
+            rect: None,
+            color,
+            focus_color,
+            glyphs,
+        }
+    }
+}
+
+impl<S, N: canopy::Node<S> + FrameContent> Node<S> for Frame<S, N> {
+    fn should_render(&mut self, app: &mut Canopy) -> Option<bool> {
+        Some(app.should_render(&mut self.child))
+    }
+    fn rect(&self) -> Option<Rect> {
+        self.rect
+    }
+    fn state(&mut self) -> &mut canopy::NodeState {
+        &mut self.state
+    }
+    fn render(&mut self, app: &mut Canopy, w: &mut dyn Write) -> Result<()> {
+        if let Some(a) = self.rect {
+            let c = if app.on_focus_path(self) {
+                self.focus_color
+            } else {
+                self.color
+            };
+            let f = a.frame(1)?;
+
+            let twidth = (f.top.width - 2) as usize;
+            let top = if twidth < 8 || self.child.title().is_none() {
+                self.glyphs.horizontal.to_string().repeat(twidth)
+            } else {
+                let t = format!(" {} ", self.child.title().unwrap());
+                t.pad(twidth, self.glyphs.horizontal, pad::Alignment::Left, true)
+            };
+
+            w.queue(SetForegroundColor(c))?;
+            w.queue(MoveTo(f.top.x, f.top.y))?;
+            w.queue(Print(format!(
+                "{}{}{}",
+                self.glyphs.topleft, top, self.glyphs.topright
+            )))?;
+
+            w.queue(MoveTo(f.bottom.x, f.bottom.y))?;
+            w.queue(Print(format!(
+                "{}{}{}",
+                self.glyphs.bottomleft,
+                self.glyphs
+                    .horizontal
+                    .to_string()
+                    .repeat((f.bottom.width - 2) as usize),
+                self.glyphs.bottomright
+            )))?;
+
+            widgets::block(w, f.left, c, self.glyphs.vertical)?;
+            widgets::block(w, f.right, c, self.glyphs.vertical)?;
+        }
+        Ok(())
+    }
+    fn layout(&mut self, app: &mut Canopy, a: Rect) -> Result<()> {
+        self.rect = Some(a);
+        self.child.layout(app, a.inner(1)?)?;
+        Ok(())
+    }
+    fn children(
+        &mut self,
+        f: &mut dyn FnMut(&mut dyn canopy::Node<S>) -> Result<()>,
+    ) -> Result<()> {
+        f(&mut self.child)
+    }
+}
