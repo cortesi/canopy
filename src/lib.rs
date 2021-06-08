@@ -98,14 +98,14 @@ impl Walker for () {
 }
 
 /// An opaque structure that Canopy uses to track node state. Each Node has to
-/// keep a NodeState structure, and offer it up through the Node::state() method
-/// on request.
+/// keep a NodeState structure, and offer it up through the `Node::state()`
+/// method on request.
 #[derive(Debug, PartialEq)]
 pub struct NodeState {
     render_gen: u64,
     render_skip_gen: u64,
     focus_gen: u64,
-    // The focus generation if this node held focus, during the last rendering
+    // The focus generation if this node held focus during the last rendering
     // phase.
     rendered_focus_gen: u64,
 }
@@ -128,21 +128,24 @@ impl NodeState {
     }
 }
 
-/// A Node is the basic building-block of a Canopy UI. Nodes are composed in a
+/// A `Node` is the basic building-block of a Canopy UI. Nodes are composed in a
 /// tree structure, with each node responsible for managing its own children.
 /// Nodes keep track of the area of the screen that they are responsible for
 /// through the resize event.
+///
+/// The type paramter `S` is the application backing store object that is
+/// passed to all events.
 #[allow(unused_variables)]
 pub trait Node<S> {
     /// Every node must keep track of its state.
     fn state(&mut self) -> &mut NodeState;
 
     /// Over-ride Canopy's usual render checking. If this function returns
-    /// Some(true) or Some(false), it takes precedence over the taint and focus
-    /// change checking that usually determines rendering behaviour.
-    /// Implementing this method should only be needed in rare circumstances,
-    /// like container nodes that need to respond to changes in sub-nodes. The
-    /// default implementation returns None.
+    /// `Some(true)` or `Some(false)`, the response takes precedence over the
+    /// taint and focus change checking that usually determines rendering
+    /// behaviour. Implementing this method should only be needed in rare
+    /// circumstances, like container nodes that need to respond to changes in
+    /// sub-nodes. The default implementation returns `None`.
     fn should_render(&mut self, app: &mut Canopy) -> Option<bool> {
         None
     }
@@ -150,7 +153,7 @@ pub trait Node<S> {
     fn rect(&self) -> Option<Rect>;
 
     /// Can this node accept leaf focus? The default implementation returns
-    /// false.
+    /// `false`.
     fn can_focus(&self) -> bool {
         false
     }
@@ -179,14 +182,34 @@ pub trait Node<S> {
         Ok(EventResult::Ignore { skip: false })
     }
 
+    /// Handle a periodic tick event.
     fn handle_tick(&mut self, app: &mut Canopy, s: &mut S, k: app::Tick) -> Result<EventResult> {
         Ok(EventResult::Ignore { skip: false })
+    }
+
+    /// Calculate the virtual size of the component, based on possible width and
+    /// height constraints. Returns a rectangle at origin (0, 0) representing
+    /// the virtual size of the component. A best-effort attempt is made to
+    /// scale to within the constraints, but the returned rectangle can be
+    /// larger or smaller than the given constraints. This method should be used
+    /// in the `layout` method of a parent, and should be followed by a call to
+    /// layout with the established geometry.
+    ///
+    /// This method may return None, in which case the component will attempt to
+    /// render in whatever size it's laid out to.
+    fn virt_size(
+        &mut self,
+        app: &mut Canopy,
+        width: Option<u16>,
+        height: Option<u16>,
+    ) -> Option<Rect> {
+        None
     }
 
     /// Called whenever there is a resize event, either due to a terminal
     /// resize, or due to a change in widget layout. This method must call
     /// node::layout() on all children that need their sizes adjusted.
-    fn layout(&mut self, app: &mut Canopy, rect: Rect) -> Result<()>;
+    fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>, view: Option<Rect>) -> Result<()>;
 
     /// Call a closure mutably on this node's children.
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<()>) -> Result<()> {
@@ -243,7 +266,7 @@ pub fn locate<S, R: Joiner + Default>(
             ret = ret.join(f(inner)?);
             SkipWalker::default()
         } else if let Some(a) = inner.rect() {
-            if a.contains(x, y) {
+            if a.contains_point(x, y) {
                 seen = true;
                 ret = ret.join(f(inner)?);
                 SkipWalker { skip: true }

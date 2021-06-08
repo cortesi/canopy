@@ -83,7 +83,7 @@ impl Canopy {
         if let Some(bounds) = e.rect() {
             if let Some(start) = self.get_focus_area(e) {
                 start.search(dir, &mut |x, y| -> Result<bool> {
-                    if !bounds.contains(x, y) {
+                    if !bounds.contains_point(x, y) {
                         return Ok(true);
                     }
                     locate(e, x, y, &mut |x| {
@@ -383,7 +383,7 @@ impl Canopy {
                 return Ok(());
             }
         }
-        e.layout(self, rect)?;
+        e.layout(self, Some(rect), None)?;
         self.taint_tree(e)?;
         Ok(())
     }
@@ -537,8 +537,8 @@ mod tests {
             Rect {
                 x: 0,
                 y: 0,
-                width: SIZE,
-                height: SIZE,
+                w: SIZE,
+                h: SIZE,
             },
         )?;
 
@@ -678,8 +678,8 @@ mod tests {
             Rect {
                 x: 0,
                 y: 0,
-                width: SIZE,
-                height: SIZE,
+                w: SIZE,
+                h: SIZE,
             },
         )?;
 
@@ -713,8 +713,8 @@ mod tests {
             Rect {
                 x: 0,
                 y: 0,
-                width: SIZE,
-                height: SIZE,
+                w: SIZE,
+                h: SIZE,
             },
         )?;
         assert_eq!(
@@ -722,8 +722,8 @@ mod tests {
             Some(Rect {
                 x: 0,
                 y: 0,
-                width: SIZE,
-                height: SIZE
+                w: SIZE,
+                h: SIZE
             })
         );
         assert_eq!(
@@ -731,8 +731,8 @@ mod tests {
             Some(Rect {
                 x: 0,
                 y: 0,
-                width: SIZE / 2,
-                height: SIZE
+                w: SIZE / 2,
+                h: SIZE
             })
         );
         assert_eq!(
@@ -740,8 +740,8 @@ mod tests {
             Some(Rect {
                 x: SIZE / 2,
                 y: 0,
-                width: SIZE / 2,
-                height: SIZE
+                w: SIZE / 2,
+                h: SIZE
             })
         );
 
@@ -750,8 +750,8 @@ mod tests {
             Rect {
                 x: 0,
                 y: 0,
-                width: 50,
-                height: 50,
+                w: 50,
+                h: 50,
             },
         )?;
 
@@ -760,8 +760,8 @@ mod tests {
             Some(Rect {
                 x: 25,
                 y: 0,
-                width: 25,
-                height: 50
+                w: 25,
+                h: 50
             })
         );
 
@@ -778,8 +778,8 @@ mod tests {
             Rect {
                 x: 0,
                 y: 0,
-                width: SIZE,
-                height: SIZE,
+                w: SIZE,
+                h: SIZE,
             },
         )?;
 
@@ -818,8 +818,8 @@ mod tests {
             Rect {
                 x: 0,
                 y: 0,
-                width: SIZE,
-                height: SIZE,
+                w: SIZE,
+                h: SIZE,
             },
         )?;
         utils::trender(&mut app, &mut root)?;

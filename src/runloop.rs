@@ -21,8 +21,8 @@ pub fn runloop<S>(app: &mut Canopy, root: &mut dyn Node<S>, s: &mut S) -> Result
         Rect {
             x: 0,
             y: 0,
-            width: size.0,
-            height: size.1,
+            w: size.0,
+            h: size.1,
         },
     )?;
     'outer: loop {

@@ -1,6 +1,8 @@
 pub mod editor;
 pub mod frame;
 pub mod panes;
+pub mod scroll;
+pub mod text;
 
 use crate::geom;
 use anyhow::Result;
@@ -13,9 +15,9 @@ use std::io::Write;
 
 /// Draw a solid block
 pub fn block(w: &mut dyn Write, r: geom::Rect, col: Color, c: char) -> Result<()> {
-    let line = c.to_string().repeat(r.width as usize);
+    let line = c.to_string().repeat(r.w as usize);
     w.queue(SetForegroundColor(col))?;
-    for n in 0..r.height {
+    for n in 0..r.h {
         w.queue(MoveTo(r.x, r.y + n))?;
         w.queue(Print(&line))?;
     }

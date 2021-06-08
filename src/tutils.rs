@@ -100,8 +100,8 @@ pub mod utils {
         fn rect(&self) -> Option<Rect> {
             self.rect
         }
-        fn layout(&mut self, _: &mut Canopy, a: Rect) -> Result<()> {
-            self.rect = Some(a);
+        fn layout(&mut self, _: &mut Canopy, a: Option<Rect>, _virt: Option<Rect>) -> Result<()> {
+            self.rect = a;
             Ok(())
         }
     }
@@ -143,11 +143,18 @@ pub mod utils {
         ) -> Result<EventResult> {
             self.handle(s, "tick")
         }
-        fn layout(&mut self, app: &mut Canopy, rect: Rect) -> Result<()> {
-            self.rect = Some(rect);
-            let v = rect.split_vertical(2)?;
-            app.resize(&mut self.a, v[0])?;
-            app.resize(&mut self.b, v[1])?;
+        fn layout(
+            &mut self,
+            app: &mut Canopy,
+            rect: Option<Rect>,
+            _virt: Option<Rect>,
+        ) -> Result<()> {
+            self.rect = rect;
+            if let Some(a) = rect {
+                let v = a.split_vertical(2)?;
+                app.resize(&mut self.a, v[0])?;
+                app.resize(&mut self.b, v[1])?;
+            }
             Ok(())
         }
         fn children(
@@ -173,11 +180,18 @@ pub mod utils {
         fn render(&mut self, _: &mut Canopy, w: &mut dyn Write) -> Result<()> {
             tnode_render(self.name.clone(), w)
         }
-        fn layout(&mut self, app: &mut Canopy, rect: Rect) -> Result<()> {
-            self.rect = Some(rect);
-            let v = rect.split_horizontal(2)?;
-            app.resize(&mut self.a, v[0])?;
-            app.resize(&mut self.b, v[1])?;
+        fn layout(
+            &mut self,
+            app: &mut Canopy,
+            rect: Option<Rect>,
+            _virt: Option<Rect>,
+        ) -> Result<()> {
+            self.rect = rect;
+            if let Some(a) = rect {
+                let v = a.split_horizontal(2)?;
+                app.resize(&mut self.a, v[0])?;
+                app.resize(&mut self.b, v[1])?;
+            }
             Ok(())
         }
         fn handle_key(

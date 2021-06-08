@@ -13,8 +13,8 @@ pub enum Direction {
 pub struct Rect {
     pub x: u16,
     pub y: u16,
-    pub width: u16,
-    pub height: u16,
+    pub w: u16,
+    pub h: u16,
 }
 
 /// A frame extracted from a rectangle
@@ -33,8 +33,8 @@ impl Default for Rect {
         Rect {
             x: 0,
             y: 0,
-            width: 0,
-            height: 0,
+            w: 0,
+            h: 0,
         }
     }
 }
@@ -43,75 +43,82 @@ impl Rect {
     /// Rebase co-ordinates to be relative to the origin of this rect. If the
     /// points are outside the rect, an error is returned.
     pub fn rebase(&self, x: u16, y: u16) -> Result<(u16, u16)> {
-        if !self.contains(x, y) {
+        if !self.contains_point(x, y) {
             return Err(anyhow::format_err!("co-ords outside rectangle"));
         }
         Ok((x - self.x, y - self.y))
     }
     /// Does this rectangle contain the point?
-    pub fn contains(&self, x: u16, y: u16) -> bool {
-        if x < self.x || x >= self.x + self.width {
+    pub fn contains_point(&self, x: u16, y: u16) -> bool {
+        if x < self.x || x >= self.x + self.w {
             false
         } else {
-            !(y < self.y || y >= self.y + self.height)
+            !(y < self.y || y >= self.y + self.h)
         }
+    }
+    /// Does this rectangle completely enclose the other?
+    pub fn contains_rect(&self, other: Rect) -> bool {
+        // The rectangle is completely contained if both the upper left and the
+        // lower right points are inside self.
+        self.contains_point(other.x, other.y)
+            && self.contains_point(other.x + other.w - 1, other.y + other.h - 1)
     }
     /// Extracts an inner rectangle, given a border width.
     pub fn inner(&self, border: u16) -> Result<Rect> {
-        if self.width < (border * 2) || self.height < (border * 2) {
+        if self.w < (border * 2) || self.h < (border * 2) {
             return Err(anyhow::format_err!("rectangle too small"));
         }
         Ok(Rect {
             x: self.x + border,
             y: self.y + border,
-            width: self.width - (border * 2),
-            height: self.height - (border * 2),
+            w: self.w - (border * 2),
+            h: self.h - (border * 2),
         })
     }
     /// Extracts a frame for this rect, given a border width. The interior of the frame will match a call to inner() with the same arguments.
     pub fn frame(&self, border: u16) -> Result<Frame> {
-        if self.width < (border * 2) || self.height < (border * 2) {
+        if self.w < (border * 2) || self.h < (border * 2) {
             return Err(anyhow::format_err!("rectangle too small"));
         }
         Ok(Frame {
             top: Rect {
                 x: self.x,
                 y: self.y,
-                width: self.width,
-                height: border,
+                w: self.w,
+                h: border,
             },
             bottom: Rect {
                 x: self.x,
-                y: self.y + self.height - border,
-                width: self.width,
-                height: border,
+                y: self.y + self.h - border,
+                w: self.w,
+                h: border,
             },
             left: Rect {
                 x: self.x,
                 y: self.y + border,
-                width: border,
-                height: self.height - 2 * border,
+                w: border,
+                h: self.h - 2 * border,
             },
             right: Rect {
-                x: self.x + self.width - border,
+                x: self.x + self.w - border,
                 y: self.y + border,
-                width: border,
-                height: self.height - 2 * border,
+                w: border,
+                h: self.h - 2 * border,
             },
         })
     }
     /// Splits the rectangle horizontally into n sections, as close to equally
     /// sized as possible.
     pub fn split_horizontal(&self, n: u16) -> Result<Vec<Rect>> {
-        let widths = split(self.width, n)?;
+        let widths = split(self.w, n)?;
         let mut off: u16 = self.x;
         let mut ret = vec![];
         for i in 0..n {
             ret.push(Rect {
                 x: off,
                 y: self.y,
-                width: widths[i as usize],
-                height: self.height,
+                w: widths[i as usize],
+                h: self.h,
             });
             off += widths[i as usize];
         }
@@ -120,15 +127,15 @@ impl Rect {
     /// Splits the rectangle vertically into n sections, as close to equally
     /// sized as possible.
     pub fn split_vertical(&self, n: u16) -> Result<Vec<Rect>> {
-        let heights = split(self.height, n)?;
+        let heights = split(self.h, n)?;
         let mut off: u16 = self.y;
         let mut ret = vec![];
         for i in 0..n {
             ret.push(Rect {
                 x: self.x,
                 y: off,
-                width: self.width,
-                height: heights[i as usize],
+                w: self.w,
+                h: heights[i as usize],
             });
             off += heights[i as usize];
         }
@@ -140,17 +147,17 @@ impl Rect {
     pub fn split_panes(&self, spec: Vec<u16>) -> Result<Vec<Vec<Rect>>> {
         let mut ret = vec![];
 
-        let cols = split(self.width, spec.len() as u16)?;
+        let cols = split(self.w, spec.len() as u16)?;
         let mut x = self.x;
         for (ci, width) in cols.iter().enumerate() {
             let mut y = self.y;
             let mut colret = vec![];
-            for height in split(self.height, spec[ci])? {
+            for height in split(self.h, spec[ci])? {
                 colret.push(Rect {
                     x,
                     y,
-                    width: *width,
-                    height,
+                    w: *width,
+                    h: height,
                 });
                 y += height;
             }
@@ -162,7 +169,7 @@ impl Rect {
     // Sweeps upwards from the top of the rectangle.
     pub fn search_up(&self, f: &mut dyn FnMut(u16, u16) -> Result<bool>) -> Result<()> {
         'outer: for y in (0..self.y).rev() {
-            for x in self.x..(self.x + self.width) {
+            for x in self.x..(self.x + self.w) {
                 if f(x, y)? {
                     break 'outer;
                 }
@@ -172,8 +179,8 @@ impl Rect {
     }
     // Sweeps downwards from the bottom of the rectangle.
     pub fn search_down(&self, f: &mut dyn FnMut(u16, u16) -> Result<bool>) -> Result<()> {
-        'outer: for y in self.y + self.height..u16::MAX {
-            for x in self.x..(self.x + self.width) {
+        'outer: for y in self.y + self.h..u16::MAX {
+            for x in self.x..(self.x + self.w) {
                 if f(x, y)? {
                     break 'outer;
                 }
@@ -184,7 +191,7 @@ impl Rect {
     // Sweeps leftwards the left of the rectangle.
     pub fn search_left(&self, f: &mut dyn FnMut(u16, u16) -> Result<bool>) -> Result<()> {
         'outer: for x in (0..self.x).rev() {
-            for y in self.y..self.y + self.height {
+            for y in self.y..self.y + self.h {
                 if f(x, y)? {
                     break 'outer;
                 }
@@ -194,8 +201,8 @@ impl Rect {
     }
     // Sweeps rightwards from the right of the rectangle.
     pub fn search_right(&self, f: &mut dyn FnMut(u16, u16) -> Result<bool>) -> Result<()> {
-        'outer: for x in self.x + self.width..u16::MAX {
-            for y in self.y..self.y + self.height {
+        'outer: for x in self.x + self.w..u16::MAX {
+            for y in self.y..self.y + self.h {
                 if f(x, y)? {
                     break 'outer;
                 }
@@ -241,19 +248,19 @@ mod tests {
         let bounds = Rect {
             x: 0,
             y: 0,
-            width: 6,
-            height: 6,
+            w: 6,
+            h: 6,
         };
         let r = Rect {
             x: 2,
             y: 2,
-            width: 2,
-            height: 2,
+            w: 2,
+            h: 2,
         };
 
         let mut v: Vec<(u16, u16)> = vec![];
         r.search_up(&mut |x, y| {
-            Ok(if !bounds.contains(x, y) {
+            Ok(if !bounds.contains_point(x, y) {
                 true
             } else {
                 v.push((x, y));
@@ -264,7 +271,7 @@ mod tests {
 
         let mut v: Vec<(u16, u16)> = vec![];
         r.search_left(&mut |x, y| {
-            Ok(if !bounds.contains(x, y) {
+            Ok(if !bounds.contains_point(x, y) {
                 true
             } else {
                 v.push((x, y));
@@ -275,7 +282,7 @@ mod tests {
 
         let mut v: Vec<(u16, u16)> = vec![];
         r.search_down(&mut |x, y| {
-            Ok(if !bounds.contains(x, y) {
+            Ok(if !bounds.contains_point(x, y) {
                 true
             } else {
                 v.push((x, y));
@@ -286,7 +293,7 @@ mod tests {
 
         let mut v: Vec<(u16, u16)> = vec![];
         r.search_right(&mut |x, y| {
-            Ok(if !bounds.contains(x, y) {
+            Ok(if !bounds.contains_point(x, y) {
                 true
             } else {
                 v.push((x, y));
@@ -302,16 +309,16 @@ mod tests {
         let r = Rect {
             x: 0,
             y: 0,
-            width: 10,
-            height: 10,
+            w: 10,
+            h: 10,
         };
         assert_eq!(
             r.inner(1)?,
             Rect {
                 x: 1,
                 y: 1,
-                width: 8,
-                height: 8,
+                w: 8,
+                h: 8,
             },
         );
         Ok(())
@@ -321,14 +328,23 @@ mod tests {
         let r = Rect {
             x: 10,
             y: 10,
-            width: 10,
-            height: 10,
+            w: 10,
+            h: 10,
         };
-        assert!(r.contains(10, 10));
-        assert!(!r.contains(9, 10));
-        assert!(!r.contains(20, 20));
-        assert!(r.contains(19, 19));
-        assert!(!r.contains(20, 21));
+        assert!(r.contains_point(10, 10));
+        assert!(!r.contains_point(9, 10));
+        assert!(!r.contains_point(20, 20));
+        assert!(r.contains_point(19, 19));
+        assert!(!r.contains_point(20, 21));
+
+        assert!(r.contains_rect(Rect {
+            x: 10,
+            y: 10,
+            w: 1,
+            h: 1
+        }));
+        assert!(r.contains_rect(r));
+
         Ok(())
     }
 
@@ -345,8 +361,8 @@ mod tests {
         let r = Rect {
             x: 10,
             y: 10,
-            width: 10,
-            height: 10,
+            w: 10,
+            h: 10,
         };
         assert_eq!(r.rebase(11, 11)?, (1, 1));
         assert_eq!(r.rebase(10, 10)?, (0, 0));
@@ -362,8 +378,8 @@ mod tests {
         let r = Rect {
             x: 10,
             y: 10,
-            width: 10,
-            height: 10,
+            w: 10,
+            h: 10,
         };
         assert_eq!(
             r.frame(1)?,
@@ -371,26 +387,26 @@ mod tests {
                 top: Rect {
                     x: 10,
                     y: 10,
-                    width: 10,
-                    height: 1
+                    w: 10,
+                    h: 1
                 },
                 bottom: Rect {
                     x: 10,
                     y: 19,
-                    width: 10,
-                    height: 1
+                    w: 10,
+                    h: 1
                 },
                 left: Rect {
                     x: 10,
                     y: 11,
-                    width: 1,
-                    height: 8
+                    w: 1,
+                    h: 8
                 },
                 right: Rect {
                     x: 19,
                     y: 11,
-                    width: 1,
-                    height: 8
+                    w: 1,
+                    h: 8
                 },
             }
         );
@@ -402,8 +418,8 @@ mod tests {
         let r = Rect {
             x: 10,
             y: 10,
-            width: 40,
-            height: 40,
+            w: 40,
+            h: 40,
         };
         assert_eq!(
             r.split_panes(vec![2, 2])?,
@@ -412,28 +428,28 @@ mod tests {
                     Rect {
                         x: 10,
                         y: 10,
-                        width: 20,
-                        height: 20
+                        w: 20,
+                        h: 20
                     },
                     Rect {
                         x: 10,
                         y: 30,
-                        width: 20,
-                        height: 20
+                        w: 20,
+                        h: 20
                     }
                 ],
                 [
                     Rect {
                         x: 30,
                         y: 10,
-                        width: 20,
-                        height: 20
+                        w: 20,
+                        h: 20
                     },
                     Rect {
                         x: 30,
                         y: 30,
-                        width: 20,
-                        height: 20
+                        w: 20,
+                        h: 20
                     }
                 ]
             ],
@@ -445,21 +461,21 @@ mod tests {
                     Rect {
                         x: 10,
                         y: 10,
-                        width: 20,
-                        height: 20
+                        w: 20,
+                        h: 20
                     },
                     Rect {
                         x: 10,
                         y: 30,
-                        width: 20,
-                        height: 20
+                        w: 20,
+                        h: 20
                     }
                 ],
                 vec![Rect {
                     x: 30,
                     y: 10,
-                    width: 20,
-                    height: 40
+                    w: 20,
+                    h: 40
                 }],
             ],
         );

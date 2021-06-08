@@ -45,8 +45,8 @@ impl EventSource {
                         event::Event::Resize(x, y) => Event::Resize(geom::Rect {
                             x: 0,
                             y: 0,
-                            width: x,
-                            height: y,
+                            w: x,
+                            h: y,
                         }),
                     };
                     let ret = evt_tx.send(oevt);

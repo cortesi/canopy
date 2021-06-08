@@ -61,6 +61,7 @@ pub trait FrameContent {
     }
 }
 
+/// A frame around an element.
 pub struct Frame<S, N: canopy::Node<S> + FrameContent> {
     _marker: PhantomData<S>,
     pub child: N,
@@ -104,7 +105,7 @@ impl<S, N: canopy::Node<S> + FrameContent> Node<S> for Frame<S, N> {
             };
             let f = a.frame(1)?;
 
-            let twidth = (f.top.width - 2) as usize;
+            let twidth = (f.top.w - 2) as usize;
             let top = if twidth < 8 || self.child.title().is_none() {
                 self.glyphs.horizontal.to_string().repeat(twidth)
             } else {
@@ -126,7 +127,7 @@ impl<S, N: canopy::Node<S> + FrameContent> Node<S> for Frame<S, N> {
                 self.glyphs
                     .horizontal
                     .to_string()
-                    .repeat((f.bottom.width - 2) as usize),
+                    .repeat((f.bottom.w - 2) as usize),
                 self.glyphs.bottomright
             )))?;
 
@@ -135,9 +136,11 @@ impl<S, N: canopy::Node<S> + FrameContent> Node<S> for Frame<S, N> {
         }
         Ok(())
     }
-    fn layout(&mut self, app: &mut Canopy, a: Rect) -> Result<()> {
-        self.rect = Some(a);
-        self.child.layout(app, a.inner(1)?)?;
+    fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>, _virt: Option<Rect>) -> Result<()> {
+        self.rect = rect;
+        if let Some(r) = rect {
+            self.child.layout(app, Some(r.inner(1)?), None)?;
+        }
         Ok(())
     }
     fn children(

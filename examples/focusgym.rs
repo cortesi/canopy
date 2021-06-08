@@ -60,9 +60,12 @@ impl Node<Handle> for Root {
     fn rect(&self) -> Option<Rect> {
         self.rect
     }
-    fn layout(&mut self, app: &mut Canopy, rect: Rect) -> Result<()> {
-        self.rect = Some(rect);
-        app.resize(&mut self.child, rect)
+    fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>, _virt: Option<Rect>) -> Result<()> {
+        self.rect = rect;
+        if let Some(a) = rect {
+            app.resize(&mut self.child, a)?;
+        }
+        Ok(())
     }
     fn handle_mouse(
         &mut self,
@@ -100,18 +103,16 @@ impl Block {
             EventResult::Handle { skip: false }
         } else {
             self.children.push(Block::new(!self.horizontal));
-            if let Some(a) = self.rect() {
-                self.layout(app, a)?;
-            }
+            self.layout(app, self.rect(), None)?;
             app.taint_tree(self)?;
             EventResult::Handle { skip: false }
         })
     }
     fn size_limited(&self) -> bool {
         if let Some(a) = self.rect() {
-            if self.horizontal && a.width <= 4 {
+            if self.horizontal && a.w <= 4 {
                 true
-            } else if !self.horizontal && a.height <= 4 {
+            } else if !self.horizontal && a.h <= 4 {
                 true
             } else {
                 false
@@ -127,9 +128,7 @@ impl Block {
             EventResult::Handle { skip: false }
         } else {
             self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
-            if let Some(a) = self.rect() {
-                self.layout(app, a)?;
-            }
+            self.layout(app, self.rect(), None)?;
             app.taint_tree(self)?;
             EventResult::Handle { skip: false }
         })
@@ -164,16 +163,18 @@ impl Node<Handle> for Block {
         }
         Ok(())
     }
-    fn layout(&mut self, app: &mut Canopy, rect: Rect) -> Result<()> {
-        self.rect = Some(rect);
-        if self.children.len() > 0 {
-            let sizes = if self.horizontal {
-                rect.split_horizontal(self.children.len() as u16)?
-            } else {
-                rect.split_vertical(self.children.len() as u16)?
-            };
-            for i in 0..self.children.len() {
-                app.resize(&mut self.children[i], sizes[i])?
+    fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>, _virt: Option<Rect>) -> Result<()> {
+        self.rect = rect;
+        if let Some(a) = rect {
+            if self.children.len() > 0 {
+                let sizes = if self.horizontal {
+                    a.split_horizontal(self.children.len() as u16)?
+                } else {
+                    a.split_vertical(self.children.len() as u16)?
+                };
+                for i in 0..self.children.len() {
+                    app.resize(&mut self.children[i], sizes[i])?
+                }
             }
         }
         Ok(())
