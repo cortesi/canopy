@@ -1,5 +1,10 @@
 use crate as canopy;
-use crate::{app::Canopy, geom::Rect, Node, NodeState};
+use crate::{
+    app::Canopy,
+    geom::{Point, Rect},
+    layout::ConstrainedLayout,
+    Node, NodeState,
+};
 use std::io::Write;
 use std::marker::PhantomData;
 
@@ -9,14 +14,14 @@ use crossterm::{
     QueueableCommand,
 };
 
-use anyhow::Result;
+use anyhow::{format_err, Result};
 use textwrap;
 
 pub struct Text<S> {
     pub state: NodeState,
     pub rect: Option<Rect>,
-    pub view: Option<Rect>,
     pub virt: Option<Rect>,
+    pub virt_origin: Option<Point>,
     pub raw: String,
     _marker: PhantomData<S>,
 
@@ -27,13 +32,46 @@ impl<S> Text<S> {
     pub fn new(raw: &str) -> Self {
         Text {
             state: canopy::NodeState::default(),
-            rect: None,
-            view: None,
             virt: None,
+            rect: None,
+            virt_origin: None,
+
             raw: raw.to_owned(),
             lines: None,
             _marker: PhantomData,
         }
+    }
+}
+
+impl<'a, S> ConstrainedLayout for Text<S> {
+    fn constrain(
+        &mut self,
+        _app: &mut Canopy,
+        width: Option<u16>,
+        _height: Option<u16>,
+    ) -> Result<Rect> {
+        if let Some(w) = width {
+            let mut split: Vec<String> = vec![];
+            for i in textwrap::wrap(&self.raw, w as usize) {
+                split.push(format!("{:width$}", i, width = w as usize))
+            }
+            let ret = Rect {
+                x: 0,
+                y: 0,
+                w,
+                h: split.len() as u16,
+            };
+            self.virt = Some(ret);
+            self.lines = Some(split);
+            Ok(ret)
+        } else {
+            Err(format_err!("need width to constrain"))
+        }
+    }
+    fn layout(&mut self, _app: &mut Canopy, virt_origin: Point, rect: Rect) -> Result<()> {
+        self.rect = Some(rect);
+        self.virt_origin = Some(virt_origin);
+        Ok(())
     }
 }
 
@@ -44,43 +82,15 @@ impl<'a, S> Node<S> for Text<S> {
     fn rect(&self) -> Option<Rect> {
         self.rect
     }
-    fn layout(&mut self, _app: &mut Canopy, rect: Option<Rect>, view: Option<Rect>) -> Result<()> {
-        self.rect = rect;
-        self.view = view;
-        Ok(())
-    }
-    fn virt_size(
-        &mut self,
-        _app: &mut Canopy,
-        width: Option<u16>,
-        _height: Option<u16>,
-    ) -> Option<Rect> {
-        if let Some(w) = width {
-            let mut split: Vec<String> = vec![];
-            for i in textwrap::wrap(&self.raw, w as usize) {
-                split.push(format!("{:width$}", i, width = w as usize))
-            }
-            self.virt = Some(Rect {
-                x: 0,
-                y: 0,
-                w,
-                h: split.len() as u16,
-            });
-            self.lines = Some(split);
-            self.virt
-        } else {
-            None
-        }
-    }
     fn render(&mut self, _app: &mut Canopy, w: &mut dyn Write) -> Result<()> {
         w.queue(SetForegroundColor(Color::White))?;
-        if let (Some(lines), Some(v), Some(r)) = (self.lines.as_ref(), self.view, self.rect) {
-            for i in 0..v.h {
-                w.queue(MoveTo(r.x, r.y + i))?;
-                let l = &lines[(v.y + i) as usize];
-                w.queue(Print(&l[(v.x) as usize..(v.x + v.w) as usize]))?;
-            }
-        }
+        // if let (Some(lines), Some(v), Some(r)) = (self.lines.as_ref(), self.view, self.rect) {
+        //     for i in 0..v.h {
+        //         w.queue(MoveTo(r.x, r.y + i))?;
+        //         let l = &lines[(v.y + i) as usize];
+        //         w.queue(Print(&l[(v.x) as usize..(v.x + v.w) as usize]))?;
+        //     }
+        // }
         Ok(())
     }
 }
@@ -93,7 +103,7 @@ mod tests {
         let mut app = Canopy::new();
         let txt = "aaa bbb ccc\nddd eee fff\nggg hhh iii";
         let mut t: Text<()> = Text::new(txt);
-        t.virt_size(&mut app, Some(7), None);
+        t.constrain(&mut app, Some(7), None);
 
         let expected: Vec<String> = vec![
             "aaa bbb".into(),

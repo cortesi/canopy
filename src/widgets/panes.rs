@@ -2,9 +2,7 @@ use std::io::Write;
 use std::marker::PhantomData;
 
 use crate as canopy;
-use crate::geom::Rect;
-use crate::Canopy;
-use crate::Node;
+use crate::{geom::Rect, layout::FixedLayout, Canopy, Node};
 use anyhow::Result;
 
 /// Panes manages a set of child nodes arranged in a 2d grid.
@@ -15,7 +13,7 @@ pub struct Panes<S, N: canopy::Node<S>> {
     pub rect: Option<Rect>,
 }
 
-impl<S, N: canopy::Node<S>> Panes<S, N> {
+impl<S, N: canopy::Node<S> + FixedLayout> Panes<S, N> {
     pub fn new(n: N) -> Self {
         Panes {
             children: vec![vec![n]],
@@ -43,7 +41,7 @@ impl<S, N: canopy::Node<S>> Panes<S, N> {
             if self.children[x].is_empty() {
                 self.children.remove(x);
             }
-            self.layout(app, self.rect, None)?;
+            self.layout(app, self.rect)?;
             app.taint_tree(self)?;
         }
         Ok(())
@@ -87,24 +85,27 @@ impl<S, N: canopy::Node<S>> Panes<S, N> {
     }
 }
 
+impl<S, N: canopy::Node<S> + FixedLayout> FixedLayout for Panes<S, N> {
+    fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
+        self.rect = rect;
+        if let Some(a) = rect {
+            let l = a.split_panes(self.shape())?;
+            for (ci, col) in self.children.iter_mut().enumerate() {
+                for (ri, row) in col.iter_mut().enumerate() {
+                    row.layout(app, Some(l[ci][ri]))?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 impl<S, N: canopy::Node<S>> Node<S> for Panes<S, N> {
     fn rect(&self) -> Option<Rect> {
         self.rect
     }
     fn state(&mut self) -> &mut canopy::NodeState {
         &mut self.state
-    }
-    fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>, _virt: Option<Rect>) -> Result<()> {
-        self.rect = rect;
-        if let Some(a) = rect {
-            let l = a.split_panes(self.shape())?;
-            for (ci, col) in self.children.iter_mut().enumerate() {
-                for (ri, row) in col.iter_mut().enumerate() {
-                    row.layout(app, Some(l[ci][ri]), None)?;
-                }
-            }
-        }
-        Ok(())
     }
     fn children(
         &mut self,

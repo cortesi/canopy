@@ -10,7 +10,7 @@ use crossterm::{
 use pad::PadStr;
 
 use crate as canopy;
-use crate::{geom::Rect, widgets, Canopy, Node};
+use crate::{geom::Rect, layout::FixedLayout, widgets, Canopy, Node};
 
 /// Defines the set of glyphs used to draw the frame
 pub struct FrameGlyphs {
@@ -62,7 +62,10 @@ pub trait FrameContent {
 }
 
 /// A frame around an element.
-pub struct Frame<S, N: canopy::Node<S> + FrameContent> {
+pub struct Frame<S, N>
+where
+    N: canopy::Node<S> + FrameContent + FixedLayout,
+{
     _marker: PhantomData<S>,
     pub child: N,
     pub state: canopy::NodeState,
@@ -72,7 +75,10 @@ pub struct Frame<S, N: canopy::Node<S> + FrameContent> {
     pub glyphs: FrameGlyphs,
 }
 
-impl<S, N: canopy::Node<S> + FrameContent> Frame<S, N> {
+impl<S, N> Frame<S, N>
+where
+    N: canopy::Node<S> + FrameContent + FixedLayout,
+{
     pub fn new(c: N, glyphs: FrameGlyphs, color: Color, focus_color: Color) -> Self {
         Frame {
             _marker: PhantomData,
@@ -86,7 +92,23 @@ impl<S, N: canopy::Node<S> + FrameContent> Frame<S, N> {
     }
 }
 
-impl<S, N: canopy::Node<S> + FrameContent> Node<S> for Frame<S, N> {
+impl<S, N> FixedLayout for Frame<S, N>
+where
+    N: canopy::Node<S> + FrameContent + FixedLayout,
+{
+    fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
+        self.rect = rect;
+        if let Some(r) = rect {
+            self.child.layout(app, Some(r.inner(1)?))?;
+        }
+        Ok(())
+    }
+}
+
+impl<S, N> Node<S> for Frame<S, N>
+where
+    N: canopy::Node<S> + FrameContent + FixedLayout,
+{
     fn should_render(&mut self, app: &mut Canopy) -> Option<bool> {
         Some(app.should_render(&mut self.child))
     }
@@ -133,13 +155,6 @@ impl<S, N: canopy::Node<S> + FrameContent> Node<S> for Frame<S, N> {
 
             widgets::block(w, f.left, c, self.glyphs.vertical)?;
             widgets::block(w, f.right, c, self.glyphs.vertical)?;
-        }
-        Ok(())
-    }
-    fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>, _virt: Option<Rect>) -> Result<()> {
-        self.rect = rect;
-        if let Some(r) = rect {
-            self.child.layout(app, Some(r.inner(1)?), None)?;
         }
         Ok(())
     }

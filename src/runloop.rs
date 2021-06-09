@@ -1,4 +1,4 @@
-use crate::{event::EventSource, geom::Rect, Canopy, EventResult, Node};
+use crate::{event::EventSource, geom::Rect, layout::FixedLayout, Canopy, EventResult, Node};
 use anyhow::Result;
 use crossterm::{
     cursor::{Hide, Show},
@@ -10,7 +10,10 @@ use crossterm::{
 
 use std::io::Write;
 
-pub fn runloop<S>(app: &mut Canopy, root: &mut dyn Node<S>, s: &mut S) -> Result<()> {
+pub fn runloop<S, N>(app: &mut Canopy, root: &mut N, s: &mut S) -> Result<()>
+where
+    N: Node<S> + FixedLayout,
+{
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture, Hide)?;

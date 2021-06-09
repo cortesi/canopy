@@ -7,6 +7,7 @@ use canopy::{
     app::Canopy,
     event::{key, mouse},
     geom::Rect,
+    layout::FixedLayout,
     runloop::runloop,
     widgets::{block, solid_frame},
     EventResult, Node, NodeState,
@@ -53,19 +54,22 @@ impl Block {
     }
 }
 
+impl FixedLayout for Root {
+    fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
+        self.rect = rect;
+        if let Some(a) = rect {
+            app.resize(&mut self.child, a)?;
+        }
+        Ok(())
+    }
+}
+
 impl Node<Handle> for Root {
     fn state(&mut self) -> &mut NodeState {
         &mut self.state
     }
     fn rect(&self) -> Option<Rect> {
         self.rect
-    }
-    fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>, _virt: Option<Rect>) -> Result<()> {
-        self.rect = rect;
-        if let Some(a) = rect {
-            app.resize(&mut self.child, a)?;
-        }
-        Ok(())
     }
     fn handle_mouse(
         &mut self,
@@ -103,7 +107,7 @@ impl Block {
             EventResult::Handle { skip: false }
         } else {
             self.children.push(Block::new(!self.horizontal));
-            self.layout(app, self.rect(), None)?;
+            self.layout(app, self.rect())?;
             app.taint_tree(self)?;
             EventResult::Handle { skip: false }
         })
@@ -128,10 +132,29 @@ impl Block {
             EventResult::Handle { skip: false }
         } else {
             self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
-            self.layout(app, self.rect(), None)?;
+            self.layout(app, self.rect())?;
             app.taint_tree(self)?;
             EventResult::Handle { skip: false }
         })
+    }
+}
+
+impl FixedLayout for Block {
+    fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
+        self.rect = rect;
+        if let Some(a) = rect {
+            if self.children.len() > 0 {
+                let sizes = if self.horizontal {
+                    a.split_horizontal(self.children.len() as u16)?
+                } else {
+                    a.split_vertical(self.children.len() as u16)?
+                };
+                for i in 0..self.children.len() {
+                    app.resize(&mut self.children[i], sizes[i])?
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -159,22 +182,6 @@ impl Node<Handle> for Block {
                     '\u{2588}',
                 )?;
                 solid_frame(w, a.frame(1)?, Color::Black, ' ')?;
-            }
-        }
-        Ok(())
-    }
-    fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>, _virt: Option<Rect>) -> Result<()> {
-        self.rect = rect;
-        if let Some(a) = rect {
-            if self.children.len() > 0 {
-                let sizes = if self.horizontal {
-                    a.split_horizontal(self.children.len() as u16)?
-                } else {
-                    a.split_vertical(self.children.len() as u16)?
-                };
-                for i in 0..self.children.len() {
-                    app.resize(&mut self.children[i], sizes[i])?
-                }
             }
         }
         Ok(())

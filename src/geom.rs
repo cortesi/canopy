@@ -8,6 +8,12 @@ pub enum Direction {
     Right,
 }
 
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct Point {
+    pub x: u16,
+    pub y: u16,
+}
+
 /// A rectangle
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct Rect {

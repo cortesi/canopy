@@ -1,6 +1,7 @@
 pub mod app;
 pub mod event;
 pub mod geom;
+pub mod layout;
 pub mod runloop;
 mod tutils;
 pub mod widgets;
@@ -186,30 +187,6 @@ pub trait Node<S> {
     fn handle_tick(&mut self, app: &mut Canopy, s: &mut S, k: app::Tick) -> Result<EventResult> {
         Ok(EventResult::Ignore { skip: false })
     }
-
-    /// Calculate the virtual size of the component, based on possible width and
-    /// height constraints. Returns a rectangle at origin (0, 0) representing
-    /// the virtual size of the component. A best-effort attempt is made to
-    /// scale to within the constraints, but the returned rectangle can be
-    /// larger or smaller than the given constraints. This method should be used
-    /// in the `layout` method of a parent, and should be followed by a call to
-    /// layout with the established geometry.
-    ///
-    /// This method may return None, in which case the component will attempt to
-    /// render in whatever size it's laid out to.
-    fn virt_size(
-        &mut self,
-        app: &mut Canopy,
-        width: Option<u16>,
-        height: Option<u16>,
-    ) -> Option<Rect> {
-        None
-    }
-
-    /// Called whenever there is a resize event, either due to a terminal
-    /// resize, or due to a change in widget layout. This method must call
-    /// node::layout() on all children that need their sizes adjusted.
-    fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>, view: Option<Rect>) -> Result<()>;
 
     /// Call a closure mutably on this node's children.
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<()>) -> Result<()> {

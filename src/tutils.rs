@@ -63,6 +63,13 @@ pub mod utils {
         Ok(())
     }
 
+    impl layout::FixedLayout for TLeaf {
+        fn layout(&mut self, _: &mut Canopy, a: Option<Rect>) -> Result<()> {
+            self.rect = a;
+            Ok(())
+        }
+    }
+
     impl Node<State> for TLeaf {
         fn state(&mut self) -> &mut NodeState {
             &mut self.state
@@ -100,8 +107,16 @@ pub mod utils {
         fn rect(&self) -> Option<Rect> {
             self.rect
         }
-        fn layout(&mut self, _: &mut Canopy, a: Option<Rect>, _virt: Option<Rect>) -> Result<()> {
-            self.rect = a;
+    }
+
+    impl layout::FixedLayout for TBranch {
+        fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
+            self.rect = rect;
+            if let Some(a) = rect {
+                let v = a.split_vertical(2)?;
+                app.resize(&mut self.a, v[0])?;
+                app.resize(&mut self.b, v[1])?;
+            }
             Ok(())
         }
     }
@@ -143,26 +158,24 @@ pub mod utils {
         ) -> Result<EventResult> {
             self.handle(s, "tick")
         }
-        fn layout(
-            &mut self,
-            app: &mut Canopy,
-            rect: Option<Rect>,
-            _virt: Option<Rect>,
-        ) -> Result<()> {
-            self.rect = rect;
-            if let Some(a) = rect {
-                let v = a.split_vertical(2)?;
-                app.resize(&mut self.a, v[0])?;
-                app.resize(&mut self.b, v[1])?;
-            }
-            Ok(())
-        }
         fn children(
             &mut self,
             f: &mut dyn FnMut(&mut dyn Node<State>) -> Result<()>,
         ) -> Result<()> {
             f(&mut self.a)?;
             f(&mut self.b)?;
+            Ok(())
+        }
+    }
+
+    impl layout::FixedLayout for TRoot {
+        fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
+            self.rect = rect;
+            if let Some(a) = rect {
+                let v = a.split_horizontal(2)?;
+                app.resize(&mut self.a, v[0])?;
+                app.resize(&mut self.b, v[1])?;
+            }
             Ok(())
         }
     }
@@ -179,20 +192,6 @@ pub mod utils {
         }
         fn render(&mut self, _: &mut Canopy, w: &mut dyn Write) -> Result<()> {
             tnode_render(self.name.clone(), w)
-        }
-        fn layout(
-            &mut self,
-            app: &mut Canopy,
-            rect: Option<Rect>,
-            _virt: Option<Rect>,
-        ) -> Result<()> {
-            self.rect = rect;
-            if let Some(a) = rect {
-                let v = a.split_horizontal(2)?;
-                app.resize(&mut self.a, v[0])?;
-                app.resize(&mut self.b, v[1])?;
-            }
-            Ok(())
         }
         fn handle_key(
             &mut self,

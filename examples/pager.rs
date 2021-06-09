@@ -10,6 +10,7 @@ use canopy::{
     app::Canopy,
     event::{key, mouse},
     geom::Rect,
+    layout::FixedLayout,
     runloop::runloop,
     widgets::{frame, scroll, text},
     EventResult, Node, NodeState,
@@ -38,6 +39,16 @@ impl Root {
     }
 }
 
+impl FixedLayout for Root {
+    fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
+        self.rect = rect;
+        if let Some(a) = rect {
+            app.resize(&mut self.child, a)?;
+        }
+        Ok(())
+    }
+}
+
 impl Node<Handle> for Root {
     fn can_focus(&self) -> bool {
         true
@@ -47,13 +58,6 @@ impl Node<Handle> for Root {
     }
     fn rect(&self) -> Option<Rect> {
         self.rect
-    }
-    fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>, _virt: Option<Rect>) -> Result<()> {
-        self.rect = rect;
-        if let Some(a) = rect {
-            app.resize(&mut self.child, a)?;
-        }
-        Ok(())
     }
     fn handle_mouse(
         &mut self,
