@@ -7,7 +7,7 @@ use crate as canopy;
 use crate::{
     geom::{Point, Rect},
     layout::{ConstrainedLayout, FixedLayout},
-    widgets, Canopy, Node,
+    widgets, Canopy, EventResult, Node,
 };
 
 pub struct Scroll<S, N: canopy::Node<S> + ConstrainedLayout> {
@@ -16,6 +16,9 @@ pub struct Scroll<S, N: canopy::Node<S> + ConstrainedLayout> {
     pub state: canopy::NodeState,
     pub rect: Option<Rect>,
     pub view: Option<Rect>,
+
+    pub xoff: u16,
+    pub yoff: u16,
 }
 
 impl<S, N: canopy::Node<S> + ConstrainedLayout> Scroll<S, N> {
@@ -26,7 +29,24 @@ impl<S, N: canopy::Node<S> + ConstrainedLayout> Scroll<S, N> {
             state: canopy::NodeState::default(),
             rect: None,
             view: None,
+            xoff: 0,
+            yoff: 0,
         }
+    }
+    pub fn down(&mut self, app: &mut Canopy) -> Result<EventResult> {
+        if let Some(r) = self.rect {
+            self.yoff += 1;
+            self.child.layout(
+                app,
+                Point {
+                    x: self.xoff,
+                    y: self.yoff,
+                },
+                r,
+            )?;
+            app.taint_tree(self)?;
+        }
+        Ok(EventResult::Handle { skip: false })
     }
 }
 
@@ -34,8 +54,8 @@ impl<S, N: canopy::Node<S> + ConstrainedLayout> FixedLayout for Scroll<S, N> {
     fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
         self.rect = rect;
         if let Some(r) = rect {
-            let v = self.child.constrain(app, Some(r.w), None)?;
-            self.child.layout(app, Point { x: 0, y: 0 }, v)?;
+            self.child.constrain(app, Some(r.w), None)?;
+            self.child.layout(app, Point { x: 0, y: self.yoff }, r)?;
         }
         Ok(())
     }

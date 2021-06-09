@@ -20,7 +20,6 @@ use textwrap;
 pub struct Text<S> {
     pub state: NodeState,
     pub rect: Option<Rect>,
-    pub virt: Option<Rect>,
     pub virt_origin: Option<Point>,
     pub raw: String,
     _marker: PhantomData<S>,
@@ -32,7 +31,7 @@ impl<S> Text<S> {
     pub fn new(raw: &str) -> Self {
         Text {
             state: canopy::NodeState::default(),
-            virt: None,
+
             rect: None,
             virt_origin: None,
 
@@ -61,11 +60,10 @@ impl<'a, S> ConstrainedLayout for Text<S> {
                 w,
                 h: split.len() as u16,
             };
-            self.virt = Some(ret);
             self.lines = Some(split);
             Ok(ret)
         } else {
-            Err(format_err!("need width to constrain"))
+            Err(format_err!("Text requires a width constraint"))
         }
     }
     fn layout(&mut self, _app: &mut Canopy, virt_origin: Point, rect: Rect) -> Result<()> {
@@ -84,13 +82,15 @@ impl<'a, S> Node<S> for Text<S> {
     }
     fn render(&mut self, _app: &mut Canopy, w: &mut dyn Write) -> Result<()> {
         w.queue(SetForegroundColor(Color::White))?;
-        // if let (Some(lines), Some(v), Some(r)) = (self.lines.as_ref(), self.view, self.rect) {
-        //     for i in 0..v.h {
-        //         w.queue(MoveTo(r.x, r.y + i))?;
-        //         let l = &lines[(v.y + i) as usize];
-        //         w.queue(Print(&l[(v.x) as usize..(v.x + v.w) as usize]))?;
-        //     }
-        // }
+        if let (Some(lines), Some(rect), Some(vo)) =
+            (self.lines.as_ref(), self.rect, self.virt_origin)
+        {
+            for i in 0..rect.h {
+                w.queue(MoveTo(rect.x, rect.y + i))?;
+                let l = &lines[(vo.y + i) as usize];
+                w.queue(Print(&l[(vo.x) as usize..(vo.x + rect.w) as usize]))?;
+            }
+        }
         Ok(())
     }
 }
@@ -103,8 +103,7 @@ mod tests {
         let mut app = Canopy::new();
         let txt = "aaa bbb ccc\nddd eee fff\nggg hhh iii";
         let mut t: Text<()> = Text::new(txt);
-        t.constrain(&mut app, Some(7), None);
-
+        t.constrain(&mut app, Some(7), None)?;
         let expected: Vec<String> = vec![
             "aaa bbb".into(),
             "ccc    ".into(),

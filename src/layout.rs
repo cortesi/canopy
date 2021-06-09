@@ -1,6 +1,5 @@
 use crate::geom::{Point, Rect};
 use crate::Canopy;
-
 use anyhow::Result;
 
 /// A layout for nodes that provide no feedback on their internal geometry -

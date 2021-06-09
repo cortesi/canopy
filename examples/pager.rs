@@ -73,11 +73,7 @@ impl Node<Handle> for Root {
     }
     fn handle_key(&mut self, app: &mut Canopy, _: &mut Handle, k: key::Key) -> Result<EventResult> {
         Ok(match k {
-            c if c == key::KeyCode::Tab => app.focus_next(self)?,
-            c if c == 'l' || c == key::KeyCode::Right => app.focus_right(self)?,
-            c if c == 'h' || c == key::KeyCode::Left => app.focus_left(self)?,
-            c if c == 'j' || c == key::KeyCode::Down => app.focus_down(self)?,
-            c if c == 'k' || c == key::KeyCode::Up => app.focus_up(self)?,
+            c if c == 'j' || c == key::KeyCode::Down => self.child.child.down(app)?,
             c if c == 'q' => EventResult::Exit,
             _ => EventResult::Ignore { skip: false },
         })
