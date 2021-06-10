@@ -18,7 +18,7 @@ pub fn block(w: &mut dyn Write, r: geom::Rect, col: Color, c: char) -> Result<()
     let line = c.to_string().repeat(r.w as usize);
     w.queue(SetForegroundColor(col))?;
     for n in 0..r.h {
-        w.queue(MoveTo(r.x, r.y + n))?;
+        w.queue(MoveTo(r.tl.x, r.tl.y + n))?;
         w.queue(Print(&line))?;
     }
     Ok(())

@@ -136,13 +136,13 @@ where
             };
 
             w.queue(SetForegroundColor(c))?;
-            w.queue(MoveTo(f.top.x, f.top.y))?;
+            w.queue(MoveTo(f.top.tl.x, f.top.tl.y))?;
             w.queue(Print(format!(
                 "{}{}{}",
                 self.glyphs.topleft, top, self.glyphs.topright
             )))?;
 
-            w.queue(MoveTo(f.bottom.x, f.bottom.y))?;
+            w.queue(MoveTo(f.bottom.tl.x, f.bottom.tl.y))?;
             w.queue(Print(format!(
                 "{}{}{}",
                 self.glyphs.bottomleft,

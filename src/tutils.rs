@@ -242,8 +242,8 @@ pub mod utils {
                     action: Some(event::mouse::Action::Down),
                     button: Some(event::mouse::Button::Left),
                     modifiers: None,
-                    x: a.x,
-                    y: a.y,
+                    x: a.tl.x,
+                    y: a.tl.y,
                 })
             } else {
                 Err(format_err!("no area"))

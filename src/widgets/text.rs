@@ -55,8 +55,7 @@ impl<'a, S> ConstrainedLayout for Text<S> {
                 split.push(format!("{:width$}", i, width = w as usize))
             }
             let ret = Rect {
-                x: 0,
-                y: 0,
+                tl: Point { x: 0, y: 0 },
                 w,
                 h: split.len() as u16,
             };
@@ -86,7 +85,7 @@ impl<'a, S> Node<S> for Text<S> {
             (self.lines.as_ref(), self.rect, self.virt_origin)
         {
             for i in 0..rect.h {
-                w.queue(MoveTo(rect.x, rect.y + i))?;
+                w.queue(MoveTo(rect.tl.x, rect.tl.y + i))?;
                 let l = &lines[(vo.y + i) as usize];
                 w.queue(Print(&l[(vo.x) as usize..(vo.x + rect.w) as usize]))?;
             }

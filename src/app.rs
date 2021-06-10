@@ -439,6 +439,7 @@ impl Canopy {
 
 #[cfg(test)]
 mod tests {
+    use crate::geom::Point;
     use crate::tutils::utils;
     use crate::*;
     use anyhow::Result;
@@ -542,8 +543,7 @@ mod tests {
         app.resize(
             &mut root,
             Rect {
-                x: 0,
-                y: 0,
+                tl: Point { x: 0, y: 0 },
                 w: SIZE,
                 h: SIZE,
             },
@@ -683,8 +683,7 @@ mod tests {
         app.resize(
             &mut root,
             Rect {
-                x: 0,
-                y: 0,
+                tl: Point { x: 0, y: 0 },
                 w: SIZE,
                 h: SIZE,
             },
@@ -718,8 +717,7 @@ mod tests {
         app.resize(
             &mut root,
             Rect {
-                x: 0,
-                y: 0,
+                tl: Point { x: 0, y: 0 },
                 w: SIZE,
                 h: SIZE,
             },
@@ -727,8 +725,7 @@ mod tests {
         assert_eq!(
             root.rect(),
             Some(Rect {
-                x: 0,
-                y: 0,
+                tl: Point { x: 0, y: 0 },
                 w: SIZE,
                 h: SIZE
             })
@@ -736,8 +733,7 @@ mod tests {
         assert_eq!(
             root.a.rect(),
             Some(Rect {
-                x: 0,
-                y: 0,
+                tl: Point { x: 0, y: 0 },
                 w: SIZE / 2,
                 h: SIZE
             })
@@ -745,8 +741,7 @@ mod tests {
         assert_eq!(
             root.b.rect(),
             Some(Rect {
-                x: SIZE / 2,
-                y: 0,
+                tl: Point { x: SIZE / 2, y: 0 },
                 w: SIZE / 2,
                 h: SIZE
             })
@@ -755,8 +750,7 @@ mod tests {
         app.resize(
             &mut root,
             Rect {
-                x: 0,
-                y: 0,
+                tl: Point { x: 0, y: 0 },
                 w: 50,
                 h: 50,
             },
@@ -765,8 +759,7 @@ mod tests {
         assert_eq!(
             root.b.rect(),
             Some(Rect {
-                x: 25,
-                y: 0,
+                tl: Point { x: 25, y: 0 },
                 w: 25,
                 h: 50
             })
@@ -783,8 +776,7 @@ mod tests {
         app.resize(
             &mut root,
             Rect {
-                x: 0,
-                y: 0,
+                tl: Point { x: 0, y: 0 },
                 w: SIZE,
                 h: SIZE,
             },
@@ -823,8 +815,7 @@ mod tests {
         app.resize(
             &mut root,
             Rect {
-                x: 0,
-                y: 0,
+                tl: Point { x: 0, y: 0 },
                 w: SIZE,
                 h: SIZE,
             },

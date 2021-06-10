@@ -43,8 +43,7 @@ impl EventSource {
                         event::Event::Key(e) => Event::Key(e.into()),
                         event::Event::Mouse(e) => Event::Mouse(e.into()),
                         event::Event::Resize(x, y) => Event::Resize(geom::Rect {
-                            x: 0,
-                            y: 0,
+                            tl: geom::Point { x: 0, y: 0 },
                             w: x,
                             h: y,
                         }),

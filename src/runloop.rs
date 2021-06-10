@@ -1,4 +1,9 @@
-use crate::{event::EventSource, geom::Rect, layout::FixedLayout, Canopy, EventResult, Node};
+use crate::{
+    event::EventSource,
+    geom::{Point, Rect},
+    layout::FixedLayout,
+    Canopy, EventResult, Node,
+};
 use anyhow::Result;
 use crossterm::{
     cursor::{Hide, Show},
@@ -22,8 +27,7 @@ where
     app.resize(
         root,
         Rect {
-            x: 0,
-            y: 0,
+            tl: Point { x: 0, y: 0 },
             w: size.0,
             h: size.1,
         },
