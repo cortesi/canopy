@@ -1,4 +1,5 @@
 use crate::event::key;
+use crate::geom::Point;
 use crossterm::event::{self as cevent};
 use std::ops::Add;
 
@@ -17,8 +18,7 @@ impl Add<key::Mods> for Button {
             action: None,
             button: Some(self),
             modifiers: Some(other),
-            x: 0,
-            y: 0,
+            loc: Point { x: 0, y: 0 },
         }
     }
 }
@@ -67,8 +67,7 @@ impl Add<key::Mods> for Action {
             action: Some(self),
             button: None,
             modifiers: Some(other),
-            x: 0,
-            y: 0,
+            loc: Point { x: 0, y: 0 },
         }
     }
 }
@@ -89,8 +88,7 @@ impl Add<Button> for Action {
             action: Some(self),
             button: Some(other),
             modifiers: None,
-            x: 0,
-            y: 0,
+            loc: Point { x: 0, y: 0 },
         }
     }
 }
@@ -100,8 +98,7 @@ pub struct Mouse {
     pub action: Option<Action>,
     pub button: Option<Button>,
     pub modifiers: Option<key::Mods>,
-    pub x: u16,
-    pub y: u16,
+    pub loc: Point,
 }
 
 impl From<cevent::MouseEvent> for Mouse {
@@ -127,8 +124,10 @@ impl From<cevent::MouseEvent> for Mouse {
         Mouse {
             button,
             action: Some(action),
-            x: e.column,
-            y: e.row,
+            loc: Point {
+                x: e.column,
+                y: e.row,
+            },
             modifiers: Some(e.modifiers.into()),
         }
     }
@@ -161,8 +160,7 @@ impl From<Button> for Mouse {
             action: None,
             modifiers: None,
             button: Some(e),
-            x: 0,
-            y: 0,
+            loc: Point { x: 0, y: 0 },
         }
     }
 }
@@ -173,8 +171,7 @@ impl From<Action> for Mouse {
             action: Some(e),
             modifiers: None,
             button: None,
-            x: 0,
-            y: 0,
+            loc: Point { x: 0, y: 0 },
         }
     }
 }
@@ -252,8 +249,7 @@ mod tests {
             Mouse {
                 button: Some(Button::Left),
                 action: Some(Action::Down),
-                x: 0,
-                y: 0,
+                loc: Point { x: 0, y: 0 },
                 modifiers: None,
             } == Button::Left
         );
@@ -261,8 +257,7 @@ mod tests {
             Mouse {
                 button: Some(Button::Left),
                 action: Some(Action::Down),
-                x: 0,
-                y: 0,
+                loc: Point { x: 0, y: 0 },
                 modifiers: None,
             } == Button::Left + Action::Down
         );
@@ -270,8 +265,7 @@ mod tests {
             Mouse {
                 button: Some(Button::Left),
                 action: Some(Action::Down),
-                x: 0,
-                y: 0,
+                loc: Point { x: 0, y: 0 },
                 modifiers: None,
             } == Action::Down
         );
@@ -279,8 +273,7 @@ mod tests {
             Mouse {
                 button: Some(Button::Left),
                 action: Some(Action::Down),
-                x: 0,
-                y: 0,
+                loc: Point { x: 0, y: 0 },
                 modifiers: None,
             } != Action::Down + Button::Right
         );
@@ -288,8 +281,7 @@ mod tests {
             Mouse {
                 button: Some(Button::Left),
                 action: Some(Action::Down),
-                x: 0,
-                y: 0,
+                loc: Point { x: 0, y: 0 },
                 modifiers: None,
             } != Button::Right
         );
@@ -297,8 +289,7 @@ mod tests {
             Mouse {
                 button: Some(Button::Left),
                 action: Some(Action::Down),
-                x: 0,
-                y: 0,
+                loc: Point { x: 0, y: 0 },
                 modifiers: None,
             } != key::Alt + Button::Right
         );
@@ -306,8 +297,7 @@ mod tests {
             Mouse {
                 button: Some(Button::Left),
                 action: Some(Action::Down),
-                x: 0,
-                y: 0,
+                loc: Point { x: 0, y: 0 },
                 modifiers: Some(key::Alt),
             } == key::Alt + Button::Left
         );
@@ -315,8 +305,7 @@ mod tests {
             Mouse {
                 button: Some(Button::Left),
                 action: Some(Action::Down),
-                x: 0,
-                y: 0,
+                loc: Point { x: 0, y: 0 },
                 modifiers: Some(key::Alt),
             } == key::Alt + Action::Down + Button::Left
         );
@@ -324,8 +313,7 @@ mod tests {
             Mouse {
                 button: Some(Button::Left),
                 action: Some(Action::Down),
-                x: 0,
-                y: 0,
+                loc: Point { x: 0, y: 0 },
                 modifiers: Some(key::Alt),
             } != key::Alt + Action::Up + Button::Left
         );
@@ -334,8 +322,7 @@ mod tests {
                 button: Some(Button::Left),
                 action: Some(Action::Down),
                 modifiers: Some(key::Alt),
-                x: 0,
-                y: 0,
+                loc: Point { x: 0, y: 0 }
             } == Action::Down
         );
         Ok(())

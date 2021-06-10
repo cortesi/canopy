@@ -315,17 +315,16 @@ impl Canopy {
         m: mouse::Mouse,
     ) -> Result<EventResult> {
         let mut handled = false;
-        locate(root, Point { x: m.x, y: m.y }, &mut |x| {
+        locate(root, m.loc, &mut |x| {
             Ok(if handled {
                 EventResult::default()
             } else {
-                let (rx, ry) = x.rect().unwrap().rebase(m.x, m.y)?;
+                let (rx, ry) = x.rect().unwrap().rebase(m.loc.x, m.loc.y)?;
                 let m = mouse::Mouse {
                     action: m.action,
                     button: m.button,
                     modifiers: m.modifiers,
-                    x: rx,
-                    y: ry,
+                    loc: Point { x: rx, y: ry },
                 };
                 match x.handle_mouse(self, s, m)? {
                     EventResult::Ignore { skip } => {
