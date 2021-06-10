@@ -74,6 +74,7 @@ impl Node<Handle> for Root {
     fn handle_key(&mut self, app: &mut Canopy, _: &mut Handle, k: key::Key) -> Result<EventResult> {
         Ok(match k {
             c if c == 'j' || c == key::KeyCode::Down => self.child.child.down(app)?,
+            c if c == 'k' || c == key::KeyCode::Up => self.child.child.up(app)?,
             c if c == 'q' => EventResult::Exit,
             _ => EventResult::Ignore { skip: false },
         })

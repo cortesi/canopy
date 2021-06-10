@@ -14,6 +14,24 @@ pub struct Point {
     pub y: u16,
 }
 
+impl Point {
+    /// A safe function for scrolling the rectangle by an offset, which won't
+    /// under- or overflow.
+    pub fn scroll(&self, x: i16, y: i16) -> Self {
+        let nx = if x < 0 {
+            self.x.saturating_sub(x.abs() as u16)
+        } else {
+            self.x.saturating_add(x.abs() as u16)
+        };
+        let ny = if y < 0 {
+            self.y.saturating_sub(y.abs() as u16)
+        } else {
+            self.y.saturating_add(y.abs() as u16)
+        };
+        Point { x: nx, y: ny }
+    }
+}
+
 /// A rectangle
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct Rect {
@@ -60,6 +78,26 @@ impl Rect {
             false
         } else {
             !(y < self.y || y >= self.y + self.h)
+        }
+    }
+    /// A safe function for scrolling the rectangle by an offset, which won't
+    /// under- or overflow.
+    pub fn scroll(&self, x: i16, y: i16) -> Rect {
+        let nx = if x < 0 {
+            self.x.saturating_sub(x.abs() as u16)
+        } else {
+            self.x.saturating_add(x.abs() as u16)
+        };
+        let ny = if y < 0 {
+            self.y.saturating_sub(y.abs() as u16)
+        } else {
+            self.y.saturating_add(y.abs() as u16)
+        };
+        Rect {
+            x: nx,
+            y: ny,
+            w: self.w,
+            h: self.h,
         }
     }
     /// Does this rectangle completely enclose the other?
@@ -147,7 +185,6 @@ impl Rect {
         }
         Ok(ret)
     }
-
     /// Splits the rectangle into columns, with each column split into rows.
     /// Returns a Vec of rects per column.
     pub fn split_panes(&self, spec: Vec<u16>) -> Result<Vec<Vec<Rect>>> {
@@ -216,7 +253,6 @@ impl Rect {
         }
         Ok(())
     }
-
     // Sweeps to and fro from the right of the rectangle to the left.
     pub fn search(
         &self,
@@ -376,6 +412,41 @@ mod tests {
         if let Ok(_) = r.rebase(9, 9) {
             assert!(false);
         }
+        Ok(())
+    }
+
+    #[test]
+    fn tscroll() -> Result<()> {
+        assert_eq!(
+            Rect {
+                x: 5,
+                y: 5,
+                w: 10,
+                h: 10,
+            }
+            .scroll(-10, -10),
+            Rect {
+                x: 0,
+                y: 0,
+                w: 10,
+                h: 10
+            }
+        );
+        assert_eq!(
+            Rect {
+                x: u16::MAX - 5,
+                y: u16::MAX - 5,
+                w: 10,
+                h: 10,
+            }
+            .scroll(10, 10),
+            Rect {
+                x: u16::MAX,
+                y: u16::MAX,
+                w: 10,
+                h: 10
+            }
+        );
         Ok(())
     }
 
