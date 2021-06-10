@@ -1,6 +1,6 @@
 use std::{fmt::Debug, io::Write};
 
-use crate::geom::{Direction, Rect};
+use crate::geom::{Direction, Point, Rect};
 use crate::{
     key, layout::FixedLayout, locate, mouse, postorder, preorder, Event, EventResult, Joiner, Node,
     SkipWalker,
@@ -84,7 +84,7 @@ impl Canopy {
         if let Some(bounds) = e.rect() {
             if let Some(start) = self.get_focus_area(e) {
                 start.search(dir, &mut |x, y| -> Result<bool> {
-                    if !bounds.contains_point(x, y) {
+                    if !bounds.contains_point(Point { x, y }) {
                         return Ok(true);
                     }
                     locate(e, x, y, &mut |x| {

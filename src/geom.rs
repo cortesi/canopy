@@ -71,17 +71,17 @@ impl Rect {
     /// Rebase co-ordinates to be relative to the origin of this rect. If the
     /// points are outside the rect, an error is returned.
     pub fn rebase(&self, x: u16, y: u16) -> Result<(u16, u16)> {
-        if !self.contains_point(x, y) {
+        if !self.contains_point(Point { x, y }) {
             return Err(anyhow::format_err!("co-ords outside rectangle"));
         }
         Ok((x - self.tl.x, y - self.tl.y))
     }
     /// Does this rectangle contain the point?
-    pub fn contains_point(&self, x: u16, y: u16) -> bool {
-        if x < self.tl.x || x >= self.tl.x + self.w {
+    pub fn contains_point(&self, p: Point) -> bool {
+        if p.x < self.tl.x || p.x >= self.tl.x + self.w {
             false
         } else {
-            !(y < self.tl.y || y >= self.tl.y + self.h)
+            !(p.y < self.tl.y || p.y >= self.tl.y + self.h)
         }
     }
     /// A safe function for scrolling the rectangle by an offset, which won't
@@ -107,8 +107,11 @@ impl Rect {
     pub fn contains_rect(&self, other: Rect) -> bool {
         // The rectangle is completely contained if both the upper left and the
         // lower right points are inside self.
-        self.contains_point(other.tl.x, other.tl.y)
-            && self.contains_point(other.tl.x + other.w - 1, other.tl.y + other.h - 1)
+        self.contains_point(other.tl)
+            && self.contains_point(Point {
+                x: other.tl.x + other.w - 1,
+                y: other.tl.y + other.h - 1,
+            })
     }
     /// Extracts an inner rectangle, given a border width.
     pub fn inner(&self, border: u16) -> Result<Rect> {
@@ -316,7 +319,7 @@ mod tests {
 
         let mut v: Vec<(u16, u16)> = vec![];
         r.search_up(&mut |x, y| {
-            Ok(if !bounds.contains_point(x, y) {
+            Ok(if !bounds.contains_point(Point { x, y }) {
                 true
             } else {
                 v.push((x, y));
@@ -327,7 +330,7 @@ mod tests {
 
         let mut v: Vec<(u16, u16)> = vec![];
         r.search_left(&mut |x, y| {
-            Ok(if !bounds.contains_point(x, y) {
+            Ok(if !bounds.contains_point(Point { x, y }) {
                 true
             } else {
                 v.push((x, y));
@@ -338,7 +341,7 @@ mod tests {
 
         let mut v: Vec<(u16, u16)> = vec![];
         r.search_down(&mut |x, y| {
-            Ok(if !bounds.contains_point(x, y) {
+            Ok(if !bounds.contains_point(Point { x, y }) {
                 true
             } else {
                 v.push((x, y));
@@ -349,7 +352,7 @@ mod tests {
 
         let mut v: Vec<(u16, u16)> = vec![];
         r.search_right(&mut |x, y| {
-            Ok(if !bounds.contains_point(x, y) {
+            Ok(if !bounds.contains_point(Point { x, y }) {
                 true
             } else {
                 v.push((x, y));
@@ -384,11 +387,11 @@ mod tests {
             w: 10,
             h: 10,
         };
-        assert!(r.contains_point(10, 10));
-        assert!(!r.contains_point(9, 10));
-        assert!(!r.contains_point(20, 20));
-        assert!(r.contains_point(19, 19));
-        assert!(!r.contains_point(20, 21));
+        assert!(r.contains_point(Point { x: 10, y: 10 }));
+        assert!(!r.contains_point(Point { x: 9, y: 10 }));
+        assert!(!r.contains_point(Point { x: 20, y: 20 }));
+        assert!(r.contains_point(Point { x: 19, y: 19 }));
+        assert!(!r.contains_point(Point { x: 20, y: 21 }));
 
         assert!(r.contains_rect(Rect {
             tl: Point { x: 10, y: 10 },

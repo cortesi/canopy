@@ -12,7 +12,7 @@ use anyhow::Result;
 
 use crate::app::Canopy;
 use crate::event::{key, mouse, Event};
-use crate::geom::Rect;
+use crate::geom::{Point, Rect};
 
 /// A type that accumulates results.
 pub trait Joiner {
@@ -243,7 +243,7 @@ pub fn locate<S, R: Joiner + Default>(
             ret = ret.join(f(inner)?);
             SkipWalker::default()
         } else if let Some(a) = inner.rect() {
-            if a.contains_point(x, y) {
+            if a.contains_point(Point { x, y }) {
                 seen = true;
                 ret = ret.join(f(inner)?);
                 SkipWalker { skip: true }
