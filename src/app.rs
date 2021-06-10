@@ -87,7 +87,7 @@ impl Canopy {
                     if !bounds.contains_point(p) {
                         return Ok(true);
                     }
-                    locate(e, p.x, p.y, &mut |x| {
+                    locate(e, p, &mut |x| {
                         if !seen && x.can_focus() {
                             seen = true;
                             self.set_focus(x)?;
@@ -315,7 +315,7 @@ impl Canopy {
         m: mouse::Mouse,
     ) -> Result<EventResult> {
         let mut handled = false;
-        locate(root, m.x, m.y, &mut |x| {
+        locate(root, Point { x: m.x, y: m.y }, &mut |x| {
             Ok(if handled {
                 EventResult::default()
             } else {

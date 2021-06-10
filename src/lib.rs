@@ -232,8 +232,7 @@ pub fn preorder<S, W: Walker>(
 // root.
 pub fn locate<S, R: Joiner + Default>(
     e: &mut dyn Node<S>,
-    x: u16,
-    y: u16,
+    p: Point,
     f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<R>,
 ) -> Result<R> {
     let mut seen = false;
@@ -243,7 +242,7 @@ pub fn locate<S, R: Joiner + Default>(
             ret = ret.join(f(inner)?);
             SkipWalker::default()
         } else if let Some(a) = inner.rect() {
-            if a.contains_point(Point { x, y }) {
+            if a.contains_point(p) {
                 seen = true;
                 ret = ret.join(f(inner)?);
                 SkipWalker { skip: true }
