@@ -68,13 +68,17 @@ impl Rect {
             h,
         }
     }
-    /// Rebase co-ordinates to be relative to the origin of this rect. If the
-    /// points are outside the rect, an error is returned.
-    pub fn rebase(&self, x: u16, y: u16) -> Result<(u16, u16)> {
-        if !self.contains_point(Point { x, y }) {
+    /// Given a point that falls within this rectangle, rebase the point to be
+    /// relative to our origin. If the point falls outside the rect, an error is
+    /// returned.
+    pub fn rebase(&self, pt: Point) -> Result<Point> {
+        if !self.contains_point(pt) {
             return Err(anyhow::format_err!("co-ords outside rectangle"));
         }
-        Ok((x - self.tl.x, y - self.tl.y))
+        Ok(Point {
+            x: pt.x - self.tl.x,
+            y: pt.y - self.tl.y,
+        })
     }
     /// Does this rectangle contain the point?
     pub fn contains_point(&self, p: Point) -> bool {
@@ -436,10 +440,10 @@ mod tests {
             w: 10,
             h: 10,
         };
-        assert_eq!(r.rebase(11, 11)?, (1, 1));
-        assert_eq!(r.rebase(10, 10)?, (0, 0));
+        assert_eq!(r.rebase(Point { x: 11, y: 11 })?, Point { x: 1, y: 1 });
+        assert_eq!(r.rebase(Point { x: 10, y: 10 })?, Point { x: 0, y: 0 });
 
-        if let Ok(_) = r.rebase(9, 9) {
+        if let Ok(_) = r.rebase(Point { x: 9, y: 9 }) {
             assert!(false);
         }
         Ok(())

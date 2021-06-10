@@ -319,12 +319,11 @@ impl Canopy {
             Ok(if handled {
                 EventResult::default()
             } else {
-                let (rx, ry) = x.rect().unwrap().rebase(m.loc.x, m.loc.y)?;
                 let m = mouse::Mouse {
                     action: m.action,
                     button: m.button,
                     modifiers: m.modifiers,
-                    loc: Point { x: rx, y: ry },
+                    loc: x.rect().unwrap().rebase(m.loc)?,
                 };
                 match x.handle_mouse(self, s, m)? {
                     EventResult::Ignore { skip } => {
