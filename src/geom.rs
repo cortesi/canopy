@@ -87,18 +87,8 @@ impl Rect {
     /// A safe function for scrolling the rectangle by an offset, which won't
     /// under- or overflow.
     pub fn scroll(&self, x: i16, y: i16) -> Rect {
-        let nx = if x < 0 {
-            self.tl.x.saturating_sub(x.abs() as u16)
-        } else {
-            self.tl.x.saturating_add(x.abs() as u16)
-        };
-        let ny = if y < 0 {
-            self.tl.y.saturating_sub(y.abs() as u16)
-        } else {
-            self.tl.y.saturating_add(y.abs() as u16)
-        };
         Rect {
-            tl: Point { x: nx, y: ny },
+            tl: self.tl.scroll(x, y),
             w: self.w,
             h: self.h,
         }
@@ -229,10 +219,10 @@ impl Rect {
         Ok(ret)
     }
     // Sweeps upwards from the top of the rectangle.
-    pub fn search_up(&self, f: &mut dyn FnMut(u16, u16) -> Result<bool>) -> Result<()> {
+    pub fn search_up(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
         'outer: for y in (0..self.tl.y).rev() {
             for x in self.tl.x..(self.tl.x + self.w) {
-                if f(x, y)? {
+                if f(Point { x, y })? {
                     break 'outer;
                 }
             }
@@ -240,10 +230,10 @@ impl Rect {
         Ok(())
     }
     // Sweeps downwards from the bottom of the rectangle.
-    pub fn search_down(&self, f: &mut dyn FnMut(u16, u16) -> Result<bool>) -> Result<()> {
+    pub fn search_down(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
         'outer: for y in self.tl.y + self.h..u16::MAX {
             for x in self.tl.x..(self.tl.x + self.w) {
-                if f(x, y)? {
+                if f(Point { x, y })? {
                     break 'outer;
                 }
             }
@@ -251,10 +241,10 @@ impl Rect {
         Ok(())
     }
     // Sweeps leftwards the left of the rectangle.
-    pub fn search_left(&self, f: &mut dyn FnMut(u16, u16) -> Result<bool>) -> Result<()> {
+    pub fn search_left(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
         'outer: for x in (0..self.tl.x).rev() {
             for y in self.tl.y..self.tl.y + self.h {
-                if f(x, y)? {
+                if f(Point { x, y })? {
                     break 'outer;
                 }
             }
@@ -262,10 +252,10 @@ impl Rect {
         Ok(())
     }
     // Sweeps rightwards from the right of the rectangle.
-    pub fn search_right(&self, f: &mut dyn FnMut(u16, u16) -> Result<bool>) -> Result<()> {
+    pub fn search_right(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
         'outer: for x in self.tl.x + self.w..u16::MAX {
             for y in self.tl.y..self.tl.y + self.h {
-                if f(x, y)? {
+                if f(Point { x, y })? {
                     break 'outer;
                 }
             }
@@ -273,11 +263,7 @@ impl Rect {
         Ok(())
     }
     // Sweeps to and fro from the right of the rectangle to the left.
-    pub fn search(
-        &self,
-        dir: Direction,
-        f: &mut dyn FnMut(u16, u16) -> Result<bool>,
-    ) -> Result<()> {
+    pub fn search(&self, dir: Direction, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
         match dir {
             Direction::Up => self.search_up(f),
             Direction::Down => self.search_down(f),
@@ -317,49 +303,81 @@ mod tests {
             h: 2,
         };
 
-        let mut v: Vec<(u16, u16)> = vec![];
-        r.search_up(&mut |x, y| {
-            Ok(if !bounds.contains_point(Point { x, y }) {
+        let mut v: Vec<Point> = vec![];
+        r.search_up(&mut |p| {
+            Ok(if !bounds.contains_point(p) {
                 true
             } else {
-                v.push((x, y));
+                v.push(p);
                 false
             })
         })?;
-        assert_eq!(v, [(2, 1), (3, 1), (2, 0), (3, 0)]);
+        assert_eq!(
+            v,
+            [
+                Point { x: 2, y: 1 },
+                Point { x: 3, y: 1 },
+                Point { x: 2, y: 0 },
+                Point { x: 3, y: 0 }
+            ]
+        );
 
-        let mut v: Vec<(u16, u16)> = vec![];
-        r.search_left(&mut |x, y| {
-            Ok(if !bounds.contains_point(Point { x, y }) {
+        let mut v: Vec<Point> = vec![];
+        r.search_left(&mut |p| {
+            Ok(if !bounds.contains_point(p) {
                 true
             } else {
-                v.push((x, y));
+                v.push(p);
                 false
             })
         })?;
-        assert_eq!(v, [(1, 2), (1, 3), (0, 2), (0, 3)]);
+        assert_eq!(
+            v,
+            [
+                Point { x: 1, y: 2 },
+                Point { x: 1, y: 3 },
+                Point { x: 0, y: 2 },
+                Point { x: 0, y: 3 }
+            ]
+        );
 
-        let mut v: Vec<(u16, u16)> = vec![];
-        r.search_down(&mut |x, y| {
-            Ok(if !bounds.contains_point(Point { x, y }) {
+        let mut v: Vec<Point> = vec![];
+        r.search_down(&mut |p| {
+            Ok(if !bounds.contains_point(p) {
                 true
             } else {
-                v.push((x, y));
+                v.push(p);
                 false
             })
         })?;
-        assert_eq!(v, [(2, 4), (3, 4), (2, 5), (3, 5)]);
+        assert_eq!(
+            v,
+            [
+                Point { x: 2, y: 4 },
+                Point { x: 3, y: 4 },
+                Point { x: 2, y: 5 },
+                Point { x: 3, y: 5 }
+            ]
+        );
 
-        let mut v: Vec<(u16, u16)> = vec![];
-        r.search_right(&mut |x, y| {
-            Ok(if !bounds.contains_point(Point { x, y }) {
+        let mut v: Vec<Point> = vec![];
+        r.search_right(&mut |p| {
+            Ok(if !bounds.contains_point(p) {
                 true
             } else {
-                v.push((x, y));
+                v.push(p);
                 false
             })
         })?;
-        assert_eq!(v, [(4, 2), (4, 3), (5, 2), (5, 3)]);
+        assert_eq!(
+            v,
+            [
+                Point { x: 4, y: 2 },
+                Point { x: 4, y: 3 },
+                Point { x: 5, y: 2 },
+                Point { x: 5, y: 3 }
+            ]
+        );
 
         Ok(())
     }

@@ -83,11 +83,11 @@ impl Canopy {
         let mut seen = false;
         if let Some(bounds) = e.rect() {
             if let Some(start) = self.get_focus_area(e) {
-                start.search(dir, &mut |x, y| -> Result<bool> {
-                    if !bounds.contains_point(Point { x, y }) {
+                start.search(dir, &mut |p| -> Result<bool> {
+                    if !bounds.contains_point(p) {
                         return Ok(true);
                     }
-                    locate(e, x, y, &mut |x| {
+                    locate(e, p.x, p.y, &mut |x| {
                         if !seen && x.can_focus() {
                             seen = true;
                             self.set_focus(x)?;
