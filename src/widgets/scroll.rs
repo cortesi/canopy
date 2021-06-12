@@ -38,29 +38,61 @@ impl<S, N: canopy::Node<S> + ConstrainedLayout> Scroll<S, N> {
         }
     }
 
-    pub fn scroll_to(&mut self, app: &mut Canopy, x: i16, y: i16) -> Result<EventResult> {
+    pub fn scroll_to(&mut self, app: &mut Canopy, x: u16, y: u16) -> Result<EventResult> {
         if let Some(ss) = &mut self.scrollstate {
-            ss.view = ss.view.scroll_within(x, y, ss.virt);
+            ss.view = Rect {
+                tl: Point { x, y },
+                w: ss.view.w,
+                h: ss.view.h,
+            }
+            .clamp(ss.virt)?;
             self.child.layout(app, ss.view.tl, ss.rect)?;
             app.taint_tree(self)?;
         }
         Ok(EventResult::Handle { skip: false })
     }
 
+    pub fn scroll_by(&mut self, app: &mut Canopy, x: i16, y: i16) -> Result<EventResult> {
+        if let Some(ss) = &mut self.scrollstate {
+            ss.view = ss.view.scroll_within(x, y, ss.virt)?;
+            self.child.layout(app, ss.view.tl, ss.rect)?;
+            app.taint_tree(self)?;
+        }
+        Ok(EventResult::Handle { skip: false })
+    }
+
+    pub fn page_up(&mut self, app: &mut Canopy) -> Result<EventResult> {
+        let h = if let Some(ss) = &mut self.scrollstate {
+            ss.view.h
+        } else {
+            0
+        };
+        self.scroll_by(app, 0, -(h as i16))
+    }
+
+    pub fn page_down(&mut self, app: &mut Canopy) -> Result<EventResult> {
+        let h = if let Some(ss) = &mut self.scrollstate {
+            ss.view.h
+        } else {
+            0
+        };
+        self.scroll_by(app, 0, h as i16)
+    }
+
     pub fn up(&mut self, app: &mut Canopy) -> Result<EventResult> {
-        self.scroll_to(app, 0, -1)
+        self.scroll_by(app, 0, -1)
     }
 
     pub fn down(&mut self, app: &mut Canopy) -> Result<EventResult> {
-        self.scroll_to(app, 0, 1)
+        self.scroll_by(app, 0, 1)
     }
 
     pub fn left(&mut self, app: &mut Canopy) -> Result<EventResult> {
-        self.scroll_to(app, -1, 0)
+        self.scroll_by(app, -1, 0)
     }
 
     pub fn right(&mut self, app: &mut Canopy) -> Result<EventResult> {
-        self.scroll_to(app, 1, 0)
+        self.scroll_by(app, 1, 0)
     }
 }
 

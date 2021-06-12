@@ -29,6 +29,13 @@ impl Point {
         };
         Point { x: nx, y: ny }
     }
+    /// Clamp a point, constraining it to fall within `rect`.
+    pub fn clamp(&self, rect: Rect) -> Self {
+        Point {
+            x: self.x.clamp(rect.tl.x, rect.tl.x + rect.w),
+            y: self.y.clamp(rect.tl.y, rect.tl.y + rect.h),
+        }
+    }
     /// Like scroll, but constrained within a rectangle.
     pub fn scroll_within(&self, x: i16, y: i16, rect: Rect) -> Self {
         let nx = if x < 0 {
@@ -41,10 +48,7 @@ impl Point {
         } else {
             self.y.saturating_add(y.abs() as u16)
         };
-        Point {
-            x: nx.clamp(rect.tl.x, rect.tl.x + rect.w),
-            y: ny.clamp(rect.tl.y, rect.tl.y + rect.h),
-        }
+        Point { x: nx, y: ny }.clamp(rect)
     }
 }
 
@@ -180,21 +184,43 @@ impl Rect {
 
     /// Scroll this rectangle, constrained to be within another rectangle. The
     /// size of the returned Rect is always equal to that of self. If self is
-    /// larger than the enclosing rectangle, we make a best effort by returning
-    /// a Rect at the origin of the enclosing rectangle.
-    pub fn scroll_within(&self, x: i16, y: i16, rect: Rect) -> Self {
-        Rect {
-            tl: self.tl.scroll_within(
-                x,
-                y,
-                Rect {
+    /// larger than the enclosing rectangle, return an error.
+    pub fn scroll_within(&self, x: i16, y: i16, rect: Rect) -> Result<Self> {
+        if rect.w < self.w || rect.h < self.h {
+            Err(format_err!("can't scroll within smaller rectangle"))
+        } else {
+            Ok(Rect {
+                tl: self.tl.scroll_within(
+                    x,
+                    y,
+                    Rect {
+                        tl: rect.tl,
+                        h: rect.h.saturating_sub(self.h),
+                        w: rect.w.saturating_sub(self.w),
+                    },
+                ),
+                w: self.w,
+                h: self.h,
+            })
+        }
+    }
+
+    /// Clamp this rectangle, constraining it lie within another rectangle. The
+    /// size of the returned Rect is always equal to that of self. If self is
+    /// larger than the enclosing rectangle, return an error.
+    pub fn clamp(&self, rect: Rect) -> Result<Self> {
+        if rect.w < self.w || rect.h < self.h {
+            Err(format_err!("can't clamp to smaller rectangle"))
+        } else {
+            Ok(Rect {
+                tl: self.tl.clamp(Rect {
                     tl: rect.tl,
                     h: rect.h.saturating_sub(self.h),
                     w: rect.w.saturating_sub(self.w),
-                },
-            ),
-            w: self.w,
-            h: self.h,
+                }),
+                w: self.w,
+                h: self.h,
+            })
         }
     }
 
@@ -557,6 +583,61 @@ mod tests {
         );
         Ok(())
     }
+    #[test]
+    fn trect_clamp() -> Result<()> {
+        assert_eq!(
+            Rect {
+                tl: Point { x: 11, y: 11 },
+                w: 5,
+                h: 5,
+            }
+            .clamp(Rect {
+                tl: Point { x: 10, y: 10 },
+                w: 10,
+                h: 10,
+            })?,
+            Rect {
+                tl: Point { x: 11, y: 11 },
+                w: 5,
+                h: 5,
+            },
+        );
+        assert_eq!(
+            Rect {
+                tl: Point { x: 19, y: 19 },
+                w: 5,
+                h: 5,
+            }
+            .clamp(Rect {
+                tl: Point { x: 10, y: 10 },
+                w: 10,
+                h: 10,
+            })?,
+            Rect {
+                tl: Point { x: 15, y: 15 },
+                w: 5,
+                h: 5,
+            },
+        );
+        assert_eq!(
+            Rect {
+                tl: Point { x: 5, y: 5 },
+                w: 5,
+                h: 5,
+            }
+            .clamp(Rect {
+                tl: Point { x: 10, y: 10 },
+                w: 10,
+                h: 10,
+            })?,
+            Rect {
+                tl: Point { x: 10, y: 10 },
+                w: 5,
+                h: 5,
+            },
+        );
+        Ok(())
+    }
 
     #[test]
     fn trect_scroll_within() -> Result<()> {
@@ -579,16 +660,27 @@ mod tests {
                     w: 10,
                     h: 10,
                 },
-            )
+            )?
         );
-        // Degenerate case - trying to scroll within a smaller rect.
         assert_eq!(
             Rect {
-                tl: Point { x: 10, y: 10 },
+                tl: Point { x: 15, y: 15 },
                 w: 5,
                 h: 5,
             },
             r.scroll_within(
+                10,
+                10,
+                Rect {
+                    tl: Point { x: 10, y: 10 },
+                    w: 10,
+                    h: 10,
+                },
+            )?
+        );
+        // Degenerate case - trying to scroll within a smaller rect.
+        assert!(r
+            .scroll_within(
                 1,
                 1,
                 Rect {
@@ -597,7 +689,7 @@ mod tests {
                     h: 2,
                 },
             )
-        );
+            .is_err());
         Ok(())
     }
 

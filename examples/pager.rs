@@ -1,6 +1,5 @@
 use std::env;
 use std::fs;
-use std::io::Write;
 
 use anyhow::Result;
 use crossterm::style::Color;
@@ -66,15 +65,20 @@ impl Node<Handle> for Root {
         k: mouse::Mouse,
     ) -> Result<EventResult> {
         Ok(match k {
-            c if c == mouse::Action::ScrollDown => app.focus_next(self)?,
-            c if c == mouse::Action::ScrollUp => app.focus_prev(self)?,
+            c if c == mouse::Action::ScrollDown => self.child.child.down(app)?,
+            c if c == mouse::Action::ScrollUp => self.child.child.up(app)?,
             _ => EventResult::Ignore { skip: false },
         })
     }
     fn handle_key(&mut self, app: &mut Canopy, _: &mut Handle, k: key::Key) -> Result<EventResult> {
         Ok(match k {
+            c if c == 'g' => self.child.child.scroll_to(app, 0, 0)?,
             c if c == 'j' || c == key::KeyCode::Down => self.child.child.down(app)?,
             c if c == 'k' || c == key::KeyCode::Up => self.child.child.up(app)?,
+            c if c == 'h' || c == key::KeyCode::Left => self.child.child.left(app)?,
+            c if c == 'l' || c == key::KeyCode::Up => self.child.child.right(app)?,
+            c if c == ' ' || c == key::KeyCode::PageDown => self.child.child.page_down(app)?,
+            c if c == key::KeyCode::PageUp => self.child.child.page_up(app)?,
             c if c == 'q' => EventResult::Exit,
             _ => EventResult::Ignore { skip: false },
         })
@@ -96,6 +100,5 @@ pub fn main() -> Result<()> {
         app.focus_next(&mut root)?;
         runloop(&mut app, &mut root, &mut h)?;
     }
-
     Ok(())
 }
