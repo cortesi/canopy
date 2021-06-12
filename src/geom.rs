@@ -15,8 +15,7 @@ pub struct Point {
 }
 
 impl Point {
-    /// A safe function for scrolling the rectangle by an offset, which won't
-    /// under- or overflow.
+    /// Shift the point by an offset, avoiding under- or overflow.
     pub fn scroll(&self, x: i16, y: i16) -> Self {
         let nx = if x < 0 {
             self.x.saturating_sub(x.abs() as u16)
@@ -29,6 +28,23 @@ impl Point {
             self.y.saturating_add(y.abs() as u16)
         };
         Point { x: nx, y: ny }
+    }
+    /// Like scroll, but constrained within a rectangle.
+    pub fn scroll_within(&self, x: i16, y: i16, rect: Rect) -> Self {
+        let nx = if x < 0 {
+            self.x.saturating_sub(x.abs() as u16)
+        } else {
+            self.x.saturating_add(x.abs() as u16)
+        };
+        let ny = if y < 0 {
+            self.y.saturating_sub(y.abs() as u16)
+        } else {
+            self.y.saturating_add(y.abs() as u16)
+        };
+        Point {
+            x: nx.clamp(rect.tl.x, rect.tl.x + rect.w),
+            y: ny.clamp(rect.tl.y, rect.tl.y + rect.h),
+        }
     }
 }
 
@@ -161,6 +177,27 @@ impl Rect {
             },
         })
     }
+
+    /// Scroll this rectangle, constrained to be within another rectangle. The
+    /// size of the returned Rect is always equal to that of self. If self is
+    /// larger than the enclosing rectangle, we make a best effort by returning
+    /// a Rect at the origin of the enclosing rectangle.
+    pub fn scroll_within(&self, x: i16, y: i16, rect: Rect) -> Self {
+        Rect {
+            tl: self.tl.scroll_within(
+                x,
+                y,
+                Rect {
+                    tl: rect.tl,
+                    h: rect.h.saturating_sub(self.h),
+                    w: rect.w.saturating_sub(self.w),
+                },
+            ),
+            w: self.w,
+            h: self.h,
+        }
+    }
+
     /// Splits the rectangle horizontally into n sections, as close to equally
     /// sized as possible.
     pub fn split_horizontal(&self, n: u16) -> Result<Vec<Rect>> {
@@ -517,6 +554,91 @@ mod tests {
                     h: 8
                 },
             }
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn trect_scroll_within() -> Result<()> {
+        let r = Rect {
+            tl: Point { x: 10, y: 10 },
+            w: 5,
+            h: 5,
+        };
+        assert_eq!(
+            Rect {
+                tl: Point { x: 11, y: 11 },
+                w: 5,
+                h: 5,
+            },
+            r.scroll_within(
+                1,
+                1,
+                Rect {
+                    tl: Point { x: 10, y: 10 },
+                    w: 10,
+                    h: 10,
+                },
+            )
+        );
+        // Degenerate case - trying to scroll within a smaller rect.
+        assert_eq!(
+            Rect {
+                tl: Point { x: 10, y: 10 },
+                w: 5,
+                h: 5,
+            },
+            r.scroll_within(
+                1,
+                1,
+                Rect {
+                    tl: Point { x: 10, y: 10 },
+                    w: 2,
+                    h: 2,
+                },
+            )
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn tpoint_scroll_within() -> Result<()> {
+        let p = Point { x: 15, y: 15 };
+        assert_eq!(
+            Point { x: 10, y: 10 },
+            p.scroll_within(
+                -10,
+                -10,
+                Rect {
+                    tl: Point { x: 10, y: 10 },
+                    w: 10,
+                    h: 10,
+                },
+            )
+        );
+        assert_eq!(
+            Point { x: 20, y: 20 },
+            p.scroll_within(
+                10,
+                10,
+                Rect {
+                    tl: Point { x: 10, y: 10 },
+                    w: 10,
+                    h: 10,
+                },
+            )
+        );
+        assert_eq!(
+            Point { x: 16, y: 15 },
+            p.scroll_within(
+                1,
+                0,
+                Rect {
+                    tl: Point { x: 10, y: 10 },
+                    w: 10,
+                    h: 10,
+                },
+            )
         );
         Ok(())
     }

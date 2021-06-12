@@ -1,6 +1,6 @@
 use std::{fmt::Debug, io::Write};
 
-use crate::geom::{Direction, Point, Rect};
+use crate::geom::{Direction, Rect};
 use crate::{
     key, layout::FixedLayout, locate, mouse, postorder, preorder, Event, EventResult, Joiner, Node,
     SkipWalker,
