@@ -199,29 +199,49 @@ fn scroll_parts_vert(view: Rect, virt: Rect, space: Rect) -> (Rect, Rect, Rect) 
     let preh = (vdraw * (view.tl.y as f32 / virt.h as f32)).ceil() as u16;
     let activeh = (vdraw * (view.h as f32 / virt.h as f32)).ceil() as u16;
     let posth = view.h.saturating_sub(preh + activeh);
-    (
-        Rect {
-            tl: space.tl,
-            w: space.w,
-            h: preh,
-        },
-        Rect {
-            tl: Point {
-                x: space.tl.x,
-                y: space.tl.y + preh,
+
+    if activeh == 0 || preh == 0 && posth == 0 {
+        (
+            space,
+            Rect {
+                tl: space.tl,
+                w: 0,
+                h: 0,
             },
-            w: space.w,
-            h: activeh,
-        },
-        Rect {
-            tl: Point {
-                x: space.tl.x,
-                y: space.tl.y + preh + activeh,
+            Rect {
+                tl: Point {
+                    x: space.tl.x,
+                    y: space.tl.y,
+                },
+                w: 0,
+                h: 0,
             },
-            w: space.w,
-            h: posth,
-        },
-    )
+        )
+    } else {
+        (
+            Rect {
+                tl: space.tl,
+                w: space.w,
+                h: preh,
+            },
+            Rect {
+                tl: Point {
+                    x: space.tl.x,
+                    y: space.tl.y + preh,
+                },
+                w: space.w,
+                h: activeh,
+            },
+            Rect {
+                tl: Point {
+                    x: space.tl.x,
+                    y: space.tl.y + preh + activeh,
+                },
+                w: space.w,
+                h: posth,
+            },
+        )
+    }
 }
 
 // Takes a `view` onto a `virt` element, and splits up `space` horizontally into

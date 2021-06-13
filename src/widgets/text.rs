@@ -50,6 +50,18 @@ impl<'a, S> ConstrainedLayout for Text<S> {
         _height: Option<u16>,
     ) -> Result<Rect> {
         if let Some(w) = width {
+            if let Some(l) = &self.lines {
+                if l.len() > 0 {
+                    if l[0].len() == w as usize {
+                        return Ok(Rect {
+                            tl: Point { x: 0, y: 0 },
+                            w,
+                            h: l.len() as u16,
+                        });
+                    }
+                }
+            }
+
             let mut split: Vec<String> = vec![];
             for i in textwrap::wrap(&self.raw, w as usize) {
                 split.push(format!("{:width$}", i, width = w as usize))
