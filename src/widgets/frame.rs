@@ -10,7 +10,11 @@ use crossterm::{
 use pad::PadStr;
 
 use crate as canopy;
-use crate::{geom::Rect, layout::FixedLayout, widgets, Canopy, Node};
+use crate::{
+    geom::{Point, Rect},
+    layout::FixedLayout,
+    widgets, Canopy, Node,
+};
 
 /// Defines the set of glyphs used to draw the frame
 pub struct FrameGlyphs {
@@ -20,36 +24,44 @@ pub struct FrameGlyphs {
     pub bottomright: char,
     pub horizontal: char,
     pub vertical: char,
+    pub vertical_active: char,
+    pub horizontal_active: char,
 }
 
 /// Single line thin Unicode box drawing frame set
 pub const SINGLE: FrameGlyphs = FrameGlyphs {
-    topleft: '\u{250C}',
-    topright: '\u{2510}',
-    bottomleft: '\u{2514}',
-    bottomright: '\u{2518}',
-    horizontal: '\u{2500}',
-    vertical: '\u{2502}',
+    topleft: '┌',
+    topright: '┐',
+    bottomleft: '└',
+    bottomright: '┘',
+    horizontal: '─',
+    vertical: '│',
+    horizontal_active: '█',
+    vertical_active: '█',
 };
 
 /// Double line Unicode box drawing frame set
 pub const DOUBLE: FrameGlyphs = FrameGlyphs {
-    topleft: '\u{2554}',
-    topright: '\u{2557}',
-    bottomleft: '\u{255A}',
-    bottomright: '\u{255D}',
-    horizontal: '\u{2550}',
-    vertical: '\u{2551}',
+    topleft: '╔',
+    topright: '╗',
+    bottomleft: '╚',
+    bottomright: '╝',
+    horizontal: '═',
+    vertical: '║',
+    horizontal_active: '█',
+    vertical_active: '█',
 };
 
 /// Single line thick Unicode box drawing frame set
 pub const SINGLE_THICK: FrameGlyphs = FrameGlyphs {
-    topleft: '\u{250F}',
-    topright: '\u{2513}',
-    bottomleft: '\u{2517}',
-    bottomright: '\u{251B}',
-    horizontal: '\u{2501}',
-    vertical: '\u{2503}',
+    topleft: '┏',
+    topright: '┓',
+    bottomleft: '┗',
+    bottomright: '┛',
+    horizontal: '━',
+    vertical: '┃',
+    horizontal_active: '█',
+    vertical_active: '█',
 };
 
 /// This trait must be implemented for nodes that are direct children of the
@@ -57,6 +69,12 @@ pub const SINGLE_THICK: FrameGlyphs = FrameGlyphs {
 pub trait FrameContent {
     /// The title for this element, if any.
     fn title(&self) -> Option<String> {
+        None
+    }
+    /// Return the bounds of the frame content as a `(view, virtual)` tuple
+    /// where virtual is the virtual size of the element, and view is some
+    /// sub-rectangle of the element that is currently being viewed.
+    fn bounds(&self) -> Option<(Rect, Rect)> {
         None
     }
 }
@@ -125,36 +143,43 @@ where
             } else {
                 self.color
             };
-            let f = a.frame(1)?;
+            w.queue(SetForegroundColor(c))?;
 
-            let twidth = (f.top.w - 2) as usize;
-            let top = if twidth < 8 || self.child.title().is_none() {
-                self.glyphs.horizontal.to_string().repeat(twidth)
+            let f = a.frame(1)?;
+            widgets::block(w, f.topleft, c, self.glyphs.topleft)?;
+            widgets::block(w, f.topright, c, self.glyphs.topright)?;
+            widgets::block(w, f.bottomleft, c, self.glyphs.bottomleft)?;
+            widgets::block(w, f.bottomright, c, self.glyphs.bottomright)?;
+
+            let top = if f.top.w < 8 || self.child.title().is_none() {
+                self.glyphs.horizontal.to_string().repeat(f.top.w as usize)
             } else {
                 let t = format!(" {} ", self.child.title().unwrap());
-                t.pad(twidth, self.glyphs.horizontal, pad::Alignment::Left, true)
+                t.pad(
+                    f.top.w as usize,
+                    self.glyphs.horizontal,
+                    pad::Alignment::Left,
+                    true,
+                )
             };
-
-            w.queue(SetForegroundColor(c))?;
             w.queue(MoveTo(f.top.tl.x, f.top.tl.y))?;
-            w.queue(Print(format!(
-                "{}{}{}",
-                self.glyphs.topleft, top, self.glyphs.topright
-            )))?;
+            w.queue(Print(top))?;
 
-            w.queue(MoveTo(f.bottom.tl.x, f.bottom.tl.y))?;
-            w.queue(Print(format!(
-                "{}{}{}",
-                self.glyphs.bottomleft,
-                self.glyphs
-                    .horizontal
-                    .to_string()
-                    .repeat((f.bottom.w - 2) as usize),
-                self.glyphs.bottomright
-            )))?;
+            if let Some((view, virt)) = self.child.bounds() {
+                let (pre, active, post) = scroll_parts_vert(view, virt, f.right);
+                widgets::block(w, pre, c, self.glyphs.vertical)?;
+                widgets::block(w, post, c, self.glyphs.vertical)?;
+                widgets::block(w, active, c, self.glyphs.vertical_active)?;
 
+                let (pre, active, post) = scroll_parts_horiz(view, virt, f.bottom);
+                widgets::block(w, pre, c, self.glyphs.horizontal)?;
+                widgets::block(w, post, c, self.glyphs.horizontal)?;
+                widgets::block(w, active, c, self.glyphs.horizontal_active)?;
+            } else {
+                widgets::block(w, f.right, c, self.glyphs.vertical)?;
+                widgets::block(w, f.bottom, c, self.glyphs.horizontal)?;
+            }
             widgets::block(w, f.left, c, self.glyphs.vertical)?;
-            widgets::block(w, f.right, c, self.glyphs.vertical)?;
         }
         Ok(())
     }
@@ -164,4 +189,68 @@ where
     ) -> Result<()> {
         f(&mut self.child)
     }
+}
+
+// Takes a `view` onto a `virt` element, and splits up `space` vertically into
+// three rectangles: `(pre, active, post)`, where pre and post are space outside
+// of the active scrollbar indicator.
+fn scroll_parts_vert(view: Rect, virt: Rect, space: Rect) -> (Rect, Rect, Rect) {
+    let preh = ((space.h as f32) * (view.tl.y as f32 / virt.h as f32)).ceil() as u16;
+    let activeh = ((space.h as f32) * (view.h as f32 / virt.h as f32)).ceil() as u16;
+    let posth = view.h.saturating_sub(preh + activeh);
+    (
+        Rect {
+            tl: space.tl,
+            w: space.w,
+            h: preh,
+        },
+        Rect {
+            tl: Point {
+                x: space.tl.x,
+                y: space.tl.y + preh,
+            },
+            w: space.w,
+            h: activeh,
+        },
+        Rect {
+            tl: Point {
+                x: space.tl.x,
+                y: space.tl.y + preh + activeh,
+            },
+            w: space.w,
+            h: posth,
+        },
+    )
+}
+
+// Takes a `view` onto a `virt` element, and splits up `space` horizontally into
+// three rectangles: `(pre, active, post)`, where pre and post are space outside
+// of the active scrollbar indicator.
+fn scroll_parts_horiz(view: Rect, virt: Rect, space: Rect) -> (Rect, Rect, Rect) {
+    let prew = ((space.w as f32) * (view.tl.x as f32 / virt.w as f32)).ceil() as u16;
+    let activew = ((space.w as f32) * (view.w as f32 / virt.w as f32)).ceil() as u16;
+    let postw = view.w.saturating_sub(prew + activew);
+    (
+        Rect {
+            tl: space.tl,
+            w: prew,
+            h: space.h,
+        },
+        Rect {
+            tl: Point {
+                x: space.tl.x + prew,
+                y: space.tl.y,
+            },
+            w: activew,
+            h: space.h,
+        },
+        Rect {
+            tl: Point {
+                x: space.tl.x + prew + activew,
+                y: space.tl.y,
+            },
+            w: postw,
+            h: space.h,
+        },
+    )
 }

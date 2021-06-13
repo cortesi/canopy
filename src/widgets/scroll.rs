@@ -118,7 +118,15 @@ impl<S, N: canopy::Node<S> + ConstrainedLayout> FixedLayout for Scroll<S, N> {
     }
 }
 
-impl<S, N: canopy::Node<S> + ConstrainedLayout> widgets::frame::FrameContent for Scroll<S, N> {}
+impl<S, N: canopy::Node<S> + ConstrainedLayout> widgets::frame::FrameContent for Scroll<S, N> {
+    fn bounds(&self) -> Option<(Rect, Rect)> {
+        if let Some(ss) = &self.scrollstate {
+            Some((ss.view, ss.virt))
+        } else {
+            None
+        }
+    }
+}
 
 impl<S, N: canopy::Node<S> + ConstrainedLayout> Node<S> for Scroll<S, N> {
     fn should_render(&mut self, app: &mut Canopy) -> Option<bool> {

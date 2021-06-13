@@ -66,12 +66,22 @@ pub struct Rect {
 /// A frame extracted from a rectangle
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct Frame {
-    // Spans the entire width, including the top left and right corners.
+    /// The top of the frame, not including corners
     pub top: Rect,
-    // Spans the entire width, including the bottom left and right corners.
+    /// The bottom of the frame, not including corners
     pub bottom: Rect,
+    /// The left of the frame, not including corners
     pub left: Rect,
+    /// The right of the frame, not including corners
     pub right: Rect,
+    /// The top left corner
+    pub topleft: Rect,
+    /// The top right corner
+    pub topright: Rect,
+    /// The bottom left corner
+    pub bottomleft: Rect,
+    /// The bottom right corner
+    pub bottomright: Rect,
 }
 
 impl Default for Rect {
@@ -149,18 +159,18 @@ impl Rect {
         Ok(Frame {
             top: Rect {
                 tl: Point {
-                    x: self.tl.x,
+                    x: self.tl.x + border,
                     y: self.tl.y,
                 },
-                w: self.w,
+                w: self.w - 2 * border,
                 h: border,
             },
             bottom: Rect {
                 tl: Point {
-                    x: self.tl.x,
+                    x: self.tl.x + border,
                     y: self.tl.y + self.h - border,
                 },
-                w: self.w,
+                w: self.w - 2 * border,
                 h: border,
             },
             left: Rect {
@@ -178,6 +188,38 @@ impl Rect {
                 },
                 w: border,
                 h: self.h - 2 * border,
+            },
+            topleft: Rect {
+                tl: Point {
+                    x: self.tl.x,
+                    y: self.tl.y,
+                },
+                w: border,
+                h: border,
+            },
+            topright: Rect {
+                tl: Point {
+                    x: self.tl.x + self.w - border,
+                    y: self.tl.y,
+                },
+                w: border,
+                h: border,
+            },
+            bottomleft: Rect {
+                tl: Point {
+                    x: self.tl.x,
+                    y: self.tl.y + self.h - border,
+                },
+                w: border,
+                h: border,
+            },
+            bottomright: Rect {
+                tl: Point {
+                    x: self.tl.x + self.w - border,
+                    y: self.tl.y + self.h - border,
+                },
+                w: border,
+                h: border,
             },
         })
     }
@@ -560,13 +602,13 @@ mod tests {
             r.frame(1)?,
             Frame {
                 top: Rect {
-                    tl: Point { x: 10, y: 10 },
-                    w: 10,
+                    tl: Point { x: 11, y: 10 },
+                    w: 8,
                     h: 1
                 },
                 bottom: Rect {
-                    tl: Point { x: 10, y: 19 },
-                    w: 10,
+                    tl: Point { x: 11, y: 19 },
+                    w: 8,
                     h: 1
                 },
                 left: Rect {
@@ -578,6 +620,26 @@ mod tests {
                     tl: Point { x: 19, y: 11 },
                     w: 1,
                     h: 8
+                },
+                topleft: Rect {
+                    tl: Point { x: 10, y: 10 },
+                    w: 1,
+                    h: 1
+                },
+                topright: Rect {
+                    tl: Point { x: 19, y: 10 },
+                    w: 1,
+                    h: 1
+                },
+                bottomleft: Rect {
+                    tl: Point { x: 10, y: 19 },
+                    w: 1,
+                    h: 1
+                },
+                bottomright: Rect {
+                    tl: Point { x: 19, y: 19 },
+                    w: 1,
+                    h: 1
                 },
             }
         );
