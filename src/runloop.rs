@@ -14,6 +14,7 @@ use crossterm::{
 };
 
 use color_backtrace::{default_output_stream, BacktracePrinter};
+use scopeguard::defer;
 
 use std::io::Write;
 use std::panic;
@@ -25,6 +26,14 @@ where
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture, Hide)?;
+    defer! {
+        let mut stdout = std::io::stdout();
+        #[allow(unused_must_use)]
+        {
+            execute!(stdout, LeaveAlternateScreen, DisableMouseCapture, Show);
+            disable_raw_mode();
+        }
+    }
 
     panic::set_hook(Box::new(|pi| {
         let mut stdout = std::io::stdout();
@@ -61,9 +70,10 @@ where
             stdout.flush()?;
         }
     }
+    let _ = panic::take_hook();
+
     let mut stdout = std::io::stdout();
     execute!(stdout, LeaveAlternateScreen, DisableMouseCapture, Show)?;
     disable_raw_mode()?;
-    let _ = panic::take_hook();
     Ok(())
 }

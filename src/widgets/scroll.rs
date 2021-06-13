@@ -54,7 +54,7 @@ impl<S, N: canopy::Node<S> + ConstrainedLayout> Scroll<S, N> {
 
     pub fn scroll_by(&mut self, app: &mut Canopy, x: i16, y: i16) -> Result<EventResult> {
         if let Some(ss) = &mut self.scrollstate {
-            ss.view = ss.view.scroll_within(x, y, ss.virt)?;
+            ss.view = ss.view.scroll_within(x, y, ss.virt);
             self.child.layout(app, ss.view.tl, ss.rect)?;
             app.taint_tree(self)?;
         }

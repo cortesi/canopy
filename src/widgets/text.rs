@@ -86,8 +86,12 @@ impl<'a, S> Node<S> for Text<S> {
         {
             for i in 0..rect.h {
                 w.queue(MoveTo(rect.tl.x, rect.tl.y + i))?;
-                let l = &lines[(vo.y + i) as usize];
-                w.queue(Print(&l[(vo.x) as usize..(vo.x + rect.w) as usize]))?;
+                if (vo.y + i) < lines.len() as u16 {
+                    let l = &lines[(vo.y + i) as usize];
+                    w.queue(Print(&l[(vo.x) as usize..(vo.x + rect.w) as usize]))?;
+                } else {
+                    w.queue(Print(" ".repeat(rect.w as usize)))?;
+                };
             }
         }
         Ok(())

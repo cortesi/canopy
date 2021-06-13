@@ -69,6 +69,7 @@ dependencies = [
  "color-backtrace",
  "crossterm",
  "pad",
+ "scopeguard",
  "textwrap",
 ]
 

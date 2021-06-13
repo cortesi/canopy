@@ -226,12 +226,12 @@ impl Rect {
 
     /// Scroll this rectangle, constrained to be within another rectangle. The
     /// size of the returned Rect is always equal to that of self. If self is
-    /// larger than the enclosing rectangle, return an error.
-    pub fn scroll_within(&self, x: i16, y: i16, rect: Rect) -> Result<Self> {
+    /// larger than the enclosing rectangle, self unchanged.
+    pub fn scroll_within(&self, x: i16, y: i16, rect: Rect) -> Self {
         if rect.w < self.w || rect.h < self.h {
-            Err(format_err!("can't scroll within smaller rectangle"))
+            *self
         } else {
-            Ok(Rect {
+            Rect {
                 tl: self.tl.scroll_within(
                     x,
                     y,
@@ -243,7 +243,7 @@ impl Rect {
                 ),
                 w: self.w,
                 h: self.h,
-            })
+            }
         }
     }
 
@@ -722,7 +722,7 @@ mod tests {
                     w: 10,
                     h: 10,
                 },
-            )?
+            )
         );
         assert_eq!(
             Rect {
@@ -738,11 +738,11 @@ mod tests {
                     w: 10,
                     h: 10,
                 },
-            )?
+            )
         );
         // Degenerate case - trying to scroll within a smaller rect.
-        assert!(r
-            .scroll_within(
+        assert_eq!(
+            r.scroll_within(
                 1,
                 1,
                 Rect {
@@ -750,8 +750,9 @@ mod tests {
                     w: 2,
                     h: 2,
                 },
-            )
-            .is_err());
+            ),
+            r
+        );
         Ok(())
     }
 
