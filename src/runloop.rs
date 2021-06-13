@@ -13,7 +13,10 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 
+use color_backtrace::{default_output_stream, BacktracePrinter};
+
 use std::io::Write;
+use std::panic;
 
 pub fn runloop<S, N>(app: &mut Canopy, root: &mut N, s: &mut S) -> Result<()>
 where
@@ -22,6 +25,17 @@ where
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture, Hide)?;
+
+    panic::set_hook(Box::new(|pi| {
+        let mut stdout = std::io::stdout();
+        #[allow(unused_must_use)]
+        {
+            execute!(stdout, LeaveAlternateScreen, DisableMouseCapture, Show);
+            disable_raw_mode();
+            BacktracePrinter::new().print_panic_info(&pi, &mut default_output_stream());
+        }
+    }));
+
     let events = EventSource::new(200);
     let size = size()?;
     app.resize(
@@ -50,5 +64,6 @@ where
     let mut stdout = std::io::stdout();
     execute!(stdout, LeaveAlternateScreen, DisableMouseCapture, Show)?;
     disable_raw_mode()?;
+    let _ = panic::take_hook();
     Ok(())
 }

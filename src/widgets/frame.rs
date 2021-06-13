@@ -195,8 +195,9 @@ where
 // three rectangles: `(pre, active, post)`, where pre and post are space outside
 // of the active scrollbar indicator.
 fn scroll_parts_vert(view: Rect, virt: Rect, space: Rect) -> (Rect, Rect, Rect) {
-    let preh = ((space.h as f32) * (view.tl.y as f32 / virt.h as f32)).ceil() as u16;
-    let activeh = ((space.h as f32) * (view.h as f32 / virt.h as f32)).ceil() as u16;
+    let vdraw = space.h as f32 - 1.0;
+    let preh = (vdraw * (view.tl.y as f32 / virt.h as f32)).ceil() as u16;
+    let activeh = (vdraw * (view.h as f32 / virt.h as f32)).ceil() as u16;
     let posth = view.h.saturating_sub(preh + activeh);
     (
         Rect {
@@ -230,27 +231,47 @@ fn scroll_parts_horiz(view: Rect, virt: Rect, space: Rect) -> (Rect, Rect, Rect)
     let prew = ((space.w as f32) * (view.tl.x as f32 / virt.w as f32)).ceil() as u16;
     let activew = ((space.w as f32) * (view.w as f32 / virt.w as f32)).ceil() as u16;
     let postw = view.w.saturating_sub(prew + activew);
-    (
-        Rect {
-            tl: space.tl,
-            w: prew,
-            h: space.h,
-        },
-        Rect {
-            tl: Point {
-                x: space.tl.x + prew,
-                y: space.tl.y,
+
+    if activew == 0 || prew == 0 && postw == 0 {
+        (
+            space,
+            Rect {
+                tl: space.tl,
+                w: 0,
+                h: 0,
             },
-            w: activew,
-            h: space.h,
-        },
-        Rect {
-            tl: Point {
-                x: space.tl.x + prew + activew,
-                y: space.tl.y,
+            Rect {
+                tl: Point {
+                    x: space.tl.x,
+                    y: space.tl.y,
+                },
+                w: 0,
+                h: 0,
             },
-            w: postw,
-            h: space.h,
-        },
-    )
+        )
+    } else {
+        (
+            Rect {
+                tl: space.tl,
+                w: prew,
+                h: space.h,
+            },
+            Rect {
+                tl: Point {
+                    x: space.tl.x + prew,
+                    y: space.tl.y,
+                },
+                w: activew,
+                h: space.h,
+            },
+            Rect {
+                tl: Point {
+                    x: space.tl.x + prew + activew,
+                    y: space.tl.y,
+                },
+                w: postw,
+                h: space.h,
+            },
+        )
+    }
 }
