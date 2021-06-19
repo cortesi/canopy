@@ -13,6 +13,7 @@ use crate as canopy;
 use crate::{
     geom::{Point, Rect},
     layout::FixedLayout,
+    state::{NodeState, StatefulNode},
     widgets, Canopy, Node,
 };
 
@@ -80,14 +81,14 @@ pub trait FrameContent {
 }
 
 /// A frame around an element.
+#[derive(StatefulNode)]
 pub struct Frame<S, N>
 where
     N: canopy::Node<S> + FrameContent + FixedLayout,
 {
     _marker: PhantomData<S>,
     pub child: N,
-    pub state: canopy::NodeState,
-    pub rect: Option<Rect>,
+    pub state: NodeState,
     pub focus_color: Color,
     pub color: Color,
     pub glyphs: FrameGlyphs,
@@ -101,8 +102,7 @@ where
         Frame {
             _marker: PhantomData,
             child: c,
-            state: canopy::NodeState::default(),
-            rect: None,
+            state: NodeState::default(),
             color,
             focus_color,
             glyphs,
@@ -115,7 +115,7 @@ where
     N: canopy::Node<S> + FrameContent + FixedLayout,
 {
     fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
-        self.rect = rect;
+        self.set_rect(rect);
         if let Some(r) = rect {
             self.child.layout(app, Some(r.inner(1)?))?;
         }
@@ -130,14 +130,8 @@ where
     fn should_render(&mut self, app: &mut Canopy) -> Option<bool> {
         Some(app.should_render(&mut self.child))
     }
-    fn rect(&self) -> Option<Rect> {
-        self.rect
-    }
-    fn state(&mut self) -> &mut canopy::NodeState {
-        &mut self.state
-    }
     fn render(&mut self, app: &mut Canopy, w: &mut dyn Write) -> Result<()> {
-        if let Some(a) = self.rect {
+        if let Some(a) = self.rect() {
             let c = if app.on_focus_path(self) {
                 self.focus_color
             } else {

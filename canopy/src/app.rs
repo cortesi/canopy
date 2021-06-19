@@ -44,7 +44,7 @@ impl Canopy {
     }
 
     /// Is this node render tainted?
-    pub fn is_tainted<S>(&self, e: &mut dyn Node<S>) -> bool {
+    pub fn is_tainted<S>(&self, e: &dyn Node<S>) -> bool {
         let s = e.state();
         if self.render_gen == s.render_skip_gen {
             false
@@ -57,7 +57,7 @@ impl Canopy {
 
     /// Has the focus status of this node changed since the last render
     /// sweep?
-    pub fn focus_changed<S>(&self, e: &mut dyn Node<S>) -> bool {
+    pub fn focus_changed<S>(&self, e: &dyn Node<S>) -> bool {
         let s = e.state();
         if s.is_focused(self) {
             if s.focus_gen != s.rendered_focus_gen {
@@ -73,7 +73,7 @@ impl Canopy {
     pub fn set_focus<S>(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
         if e.can_focus() {
             self.focus_gen += 1;
-            e.state().focus_gen = self.focus_gen;
+            e.state_mut().focus_gen = self.focus_gen;
             return Ok(EventResult::Handle { skip: false });
         }
         Err(format_err!("node does not accept focus"))
@@ -138,7 +138,7 @@ impl Canopy {
     }
 
     /// Does the node have terminal focus?
-    pub fn is_focused<S>(&self, e: &mut dyn Node<S>) -> bool {
+    pub fn is_focused<S>(&self, e: &dyn Node<S>) -> bool {
         e.state().is_focused(self)
     }
 
@@ -268,7 +268,7 @@ impl Canopy {
     /// Mark a tree of nodes for render.
     pub fn taint_tree<S>(&self, e: &mut dyn Node<S>) -> Result<()> {
         let v = postorder(e, &mut |x| -> Result<()> {
-            let r = x.state();
+            let r = x.state_mut();
             r.render_gen = self.render_gen;
             Ok(())
         })?;
@@ -277,13 +277,13 @@ impl Canopy {
 
     /// Mark a single node for render.
     pub fn taint<S>(&self, e: &mut dyn Node<S>) {
-        let r = e.state();
+        let r = e.state_mut();
         r.render_gen = self.render_gen;
     }
 
     /// Mark that a node should skip the next render sweep.
     pub fn skip_taint<S>(&self, e: &mut dyn Node<S>) {
-        let r = e.state();
+        let r = e.state_mut();
         r.render_skip_gen = self.render_gen;
     }
 
@@ -293,7 +293,7 @@ impl Canopy {
         let r = preorder(e, &mut |x| -> Result<()> {
             if self.should_render(x) {
                 if self.is_focused(x) {
-                    let s = &mut x.state();
+                    let s = &mut x.state_mut();
                     s.rendered_focus_gen = self.focus_gen
                 }
                 x.render(self, w)
@@ -343,8 +343,8 @@ impl Canopy {
         })
     }
 
-    /// Propagate a key event through the focus and all its ancestors. Keys handled
-    /// only once, and then ignored.
+    /// Propagate a key event through the focus and all its ancestors. Keys
+    /// handled only once, and then ignored.
     pub fn key<S>(
         &mut self,
         root: &mut dyn Node<S>,
@@ -437,7 +437,7 @@ impl Canopy {
 
 #[cfg(test)]
 mod tests {
-    use crate::geom::Point;
+    use crate::geom::{Point, Rect};
     use crate::tutils::utils;
     use crate::*;
     use anyhow::Result;

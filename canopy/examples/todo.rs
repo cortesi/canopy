@@ -8,16 +8,17 @@ use canopy::{
     geom::{Point, Rect},
     layout::FixedLayout,
     runloop::runloop,
+    state::{NodeState, StatefulNode},
     widgets::{frame, input, scroll, text},
-    EventResult, Node, NodeState,
+    EventResult, Node,
 };
 
 struct Handle {}
 
+#[derive(StatefulNode)]
 struct Root {
     state: NodeState,
     child: frame::Frame<Handle, scroll::Scroll<Handle, text::Text<Handle>>>,
-    rect: Option<Rect>,
     adder: Option<frame::Frame<Handle, input::Input<Handle>>>,
 }
 
@@ -25,7 +26,6 @@ impl Root {
     fn new(contents: String) -> Self {
         Root {
             state: NodeState::default(),
-            rect: None,
             child: frame::Frame::new(
                 scroll::Scroll::new(text::Text::new(&contents)),
                 frame::SINGLE,
@@ -44,14 +44,14 @@ impl Root {
         );
         app.set_focus(&mut adder.child)?;
         self.adder = Some(adder);
-        self.layout(app, self.rect)?;
+        self.layout(app, self.rect())?;
         Ok(EventResult::Handle { skip: false })
     }
 }
 
 impl FixedLayout for Root {
     fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
-        self.rect = rect;
+        self.set_rect(rect);
         if let Some(a) = rect {
             app.resize(&mut self.child, a)?;
             if let Some(add) = &mut self.adder {
@@ -75,12 +75,6 @@ impl FixedLayout for Root {
 impl Node<Handle> for Root {
     fn can_focus(&self) -> bool {
         true
-    }
-    fn state(&mut self) -> &mut NodeState {
-        &mut self.state
-    }
-    fn rect(&self) -> Option<Rect> {
-        self.rect
     }
     fn handle_mouse(
         &mut self,

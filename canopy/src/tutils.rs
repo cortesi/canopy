@@ -4,6 +4,7 @@ pub mod utils {
 
     use crate as canopy;
     use crate::event::key;
+    use crate::geom::Rect;
     use crate::state;
     use crate::*;
 
@@ -32,8 +33,7 @@ pub mod utils {
 
     #[derive(Debug, PartialEq, state::StatefulNode)]
     pub struct TRoot {
-        state: NodeState,
-        rect: Option<Rect>,
+        state: state::NodeState,
         name: String,
 
         pub next_event: Option<EventResult>,
@@ -41,10 +41,9 @@ pub mod utils {
         pub b: TBranch,
     }
 
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, StatefulNode)]
     pub struct TBranch {
-        state: NodeState,
-        rect: Option<Rect>,
+        state: state::NodeState,
         name: String,
 
         pub next_event: Option<EventResult>,
@@ -52,10 +51,9 @@ pub mod utils {
         pub b: TLeaf,
     }
 
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, StatefulNode)]
     pub struct TLeaf {
-        state: NodeState,
-        rect: Option<Rect>,
+        state: state::NodeState,
         name: String,
 
         pub next_event: Option<EventResult>,
@@ -68,15 +66,12 @@ pub mod utils {
 
     impl layout::FixedLayout for TLeaf {
         fn layout(&mut self, _: &mut Canopy, a: Option<Rect>) -> Result<()> {
-            self.rect = a;
+            self.set_rect(a);
             Ok(())
         }
     }
 
     impl Node<State> for TLeaf {
-        fn state(&mut self) -> &mut NodeState {
-            &mut self.state
-        }
         fn can_focus(&self) -> bool {
             true
         }
@@ -107,14 +102,11 @@ pub mod utils {
         ) -> Result<EventResult> {
             self.handle(s, "tick")
         }
-        fn rect(&self) -> Option<Rect> {
-            self.rect
-        }
     }
 
     impl layout::FixedLayout for TBranch {
         fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
-            self.rect = rect;
+            self.set_rect(rect);
             if let Some(a) = rect {
                 let v = a.split_vertical(2)?;
                 app.resize(&mut self.a, v[0])?;
@@ -125,12 +117,6 @@ pub mod utils {
     }
 
     impl Node<State> for TBranch {
-        fn state(&mut self) -> &mut NodeState {
-            &mut self.state
-        }
-        fn rect(&self) -> Option<Rect> {
-            self.rect
-        }
         fn can_focus(&self) -> bool {
             true
         }
@@ -173,7 +159,7 @@ pub mod utils {
 
     impl layout::FixedLayout for TRoot {
         fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
-            self.rect = rect;
+            self.set_rect(rect);
             if let Some(a) = rect {
                 let v = a.split_horizontal(2)?;
                 app.resize(&mut self.a, v[0])?;
@@ -184,12 +170,6 @@ pub mod utils {
     }
 
     impl Node<State> for TRoot {
-        fn state(&mut self) -> &mut NodeState {
-            &mut self.state
-        }
-        fn rect(&self) -> Option<Rect> {
-            self.rect
-        }
         fn can_focus(&self) -> bool {
             true
         }
@@ -233,14 +213,13 @@ pub mod utils {
     impl TLeaf {
         pub fn new(name: &str) -> Self {
             TLeaf {
-                state: NodeState::default(),
-                rect: None,
+                state: state::NodeState::default(),
                 name: name.into(),
                 next_event: None,
             }
         }
         pub fn mouse_event(&self) -> Result<mouse::Mouse> {
-            if let Some(a) = self.rect {
+            if let Some(a) = self.rect() {
                 Ok(mouse::Mouse {
                     action: Some(event::mouse::Action::Down),
                     button: Some(event::mouse::Button::Left),
@@ -266,8 +245,7 @@ pub mod utils {
     impl TBranch {
         pub fn new(name: &str) -> Self {
             TBranch {
-                state: NodeState::default(),
-                rect: None,
+                state: state::NodeState::default(),
                 name: name.into(),
                 a: TLeaf::new(&(name.to_owned() + ":" + "la")),
                 b: TLeaf::new(&(name.to_owned() + ":" + "lb")),
@@ -289,8 +267,7 @@ pub mod utils {
     impl TRoot {
         pub fn new() -> Self {
             TRoot {
-                state: NodeState::default(),
-                rect: None,
+                state: state::NodeState::default(),
                 name: "r".into(),
                 a: TBranch::new("ba"),
                 b: TBranch::new("bb"),

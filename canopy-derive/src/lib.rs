@@ -8,15 +8,18 @@ pub fn derive_statefulnode(input: proc_macro::TokenStream) -> proc_macro::TokenS
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let expanded = quote! {
         // The generated impl.
-        impl #impl_generics canopy::state::StateFulNode for #name #ty_generics #where_clause {
-            fn state_mut(&mut self) -> &mut canopy::NodeState {
+        impl #impl_generics canopy::state::StatefulNode for #name #ty_generics #where_clause {
+            fn state_mut(&mut self) -> &mut canopy::state::NodeState {
                 &mut self.state
             }
-            fn state(&self) -> &canopy::NodeState {
+            fn state(&self) -> &canopy::state::NodeState {
                 &self.state
             }
             fn rect(&self) -> Option<canopy::geom::Rect> {
                 self.state().rect
+            }
+            fn set_rect(&mut self, r: Option<Rect>) {
+                self.state_mut().rect = r
             }
         }
     };

@@ -2,23 +2,27 @@ use std::io::Write;
 use std::marker::PhantomData;
 
 use crate as canopy;
-use crate::{geom::Rect, layout::FixedLayout, Canopy, Node};
+use crate::{
+    geom::Rect,
+    layout::FixedLayout,
+    state::{NodeState, StatefulNode},
+    Canopy, Node,
+};
 use anyhow::Result;
 
 /// Panes manages a set of child nodes arranged in a 2d grid.
+#[derive(StatefulNode)]
 pub struct Panes<S, N: canopy::Node<S>> {
     _marker: PhantomData<S>,
     pub children: Vec<Vec<N>>,
-    pub state: canopy::NodeState,
-    pub rect: Option<Rect>,
+    pub state: NodeState,
 }
 
 impl<S, N: canopy::Node<S> + FixedLayout> Panes<S, N> {
     pub fn new(n: N) -> Self {
         Panes {
             children: vec![vec![n]],
-            state: canopy::NodeState::default(),
-            rect: None,
+            state: NodeState::default(),
             _marker: PhantomData,
         }
     }
@@ -41,7 +45,7 @@ impl<S, N: canopy::Node<S> + FixedLayout> Panes<S, N> {
             if self.children[x].is_empty() {
                 self.children.remove(x);
             }
-            self.layout(app, self.rect)?;
+            self.layout(app, self.rect())?;
             app.taint_tree(self)?;
         }
         Ok(())
@@ -87,7 +91,7 @@ impl<S, N: canopy::Node<S> + FixedLayout> Panes<S, N> {
 
 impl<S, N: canopy::Node<S> + FixedLayout> FixedLayout for Panes<S, N> {
     fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
-        self.rect = rect;
+        self.set_rect(rect);
         if let Some(a) = rect {
             let l = a.split_panes(self.shape())?;
             for (ci, col) in self.children.iter_mut().enumerate() {
@@ -101,12 +105,6 @@ impl<S, N: canopy::Node<S> + FixedLayout> FixedLayout for Panes<S, N> {
 }
 
 impl<S, N: canopy::Node<S>> Node<S> for Panes<S, N> {
-    fn rect(&self) -> Option<Rect> {
-        self.rect
-    }
-    fn state(&mut self) -> &mut canopy::NodeState {
-        &mut self.state
-    }
     fn children(
         &mut self,
         f: &mut dyn FnMut(&mut dyn canopy::Node<S>) -> Result<()>,

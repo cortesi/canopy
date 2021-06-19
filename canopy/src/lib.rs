@@ -13,7 +13,8 @@ use anyhow::Result;
 
 use crate::app::Canopy;
 use crate::event::{key, mouse, Event};
-use crate::geom::{Point, Rect};
+use crate::geom::Point;
+use crate::state::StatefulNode;
 
 /// A type that accumulates results.
 pub trait Joiner {
@@ -99,39 +100,6 @@ impl Walker for () {
     fn update(&mut self, _: Self) {}
 }
 
-/// An opaque structure that Canopy uses to track node state. Each Node has to
-/// keep a NodeState structure, and offer it up through the `Node::state()`
-/// method on request.
-#[derive(Debug, PartialEq)]
-pub struct NodeState {
-    render_gen: u64,
-    render_skip_gen: u64,
-    focus_gen: u64,
-    // The focus generation if this node held focus during the last rendering
-    // phase.
-    rendered_focus_gen: u64,
-    rect: Option<Rect>,
-}
-
-impl NodeState {
-    /// Does this node currently hold focus?
-    fn is_focused(&self, appstate: &Canopy) -> bool {
-        self.focus_gen == appstate.focus_gen
-    }
-}
-
-impl NodeState {
-    pub fn default() -> Self {
-        NodeState {
-            render_gen: 0,
-            focus_gen: 0,
-            rendered_focus_gen: 0,
-            render_skip_gen: 0,
-            rect: None,
-        }
-    }
-}
-
 /// A `Node` is the basic building-block of a Canopy UI. Nodes are composed in a
 /// tree structure, with each node responsible for managing its own children.
 /// Nodes keep track of the area of the screen that they are responsible for
@@ -140,10 +108,7 @@ impl NodeState {
 /// The type paramter `S` is the application backing store object that is
 /// passed to all events.
 #[allow(unused_variables)]
-pub trait Node<S> {
-    /// Every node must keep track of its state.
-    fn state(&mut self) -> &mut NodeState;
-
+pub trait Node<S>: StatefulNode {
     /// Over-ride Canopy's usual render checking. If this function returns
     /// `Some(true)` or `Some(false)`, the response takes precedence over the
     /// taint and focus change checking that usually determines rendering
@@ -153,8 +118,6 @@ pub trait Node<S> {
     fn should_render(&mut self, app: &mut Canopy) -> Option<bool> {
         None
     }
-
-    fn rect(&self) -> Option<Rect>;
 
     /// Can this node accept leaf focus? The default implementation returns
     /// `false`.

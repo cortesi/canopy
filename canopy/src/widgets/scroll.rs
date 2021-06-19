@@ -6,6 +6,7 @@ use crate as canopy;
 use crate::{
     geom::{Point, Rect},
     layout::{ConstrainedLayout, FixedLayout},
+    state::{NodeState, StatefulNode},
     widgets, Canopy, EventResult, Node,
 };
 
@@ -21,10 +22,11 @@ struct ScrollState {
 /// `Scroll` is an adapter that turns a node with `ConstrainedLayout` into one
 /// with `FixedLayout`, by managing a scrollable view onto the constrained
 /// widget.
+#[derive(StatefulNode)]
 pub struct Scroll<S, N: canopy::Node<S> + ConstrainedLayout> {
     _marker: PhantomData<S>,
     pub child: N,
-    pub state: canopy::NodeState,
+    pub state: NodeState,
     scrollstate: Option<ScrollState>,
 }
 
@@ -33,7 +35,7 @@ impl<S, N: canopy::Node<S> + ConstrainedLayout> Scroll<S, N> {
         Scroll {
             _marker: PhantomData,
             child: c,
-            state: canopy::NodeState::default(),
+            state: NodeState::default(),
             scrollstate: None,
         }
     }
@@ -131,16 +133,6 @@ impl<S, N: canopy::Node<S> + ConstrainedLayout> widgets::frame::FrameContent for
 impl<S, N: canopy::Node<S> + ConstrainedLayout> Node<S> for Scroll<S, N> {
     fn should_render(&mut self, app: &mut Canopy) -> Option<bool> {
         Some(app.should_render(&mut self.child))
-    }
-    fn rect(&self) -> Option<Rect> {
-        if let Some(ss) = &self.scrollstate {
-            Some(ss.rect)
-        } else {
-            None
-        }
-    }
-    fn state(&mut self) -> &mut canopy::NodeState {
-        &mut self.state
     }
     fn children(
         &mut self,

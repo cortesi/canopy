@@ -3,7 +3,8 @@ use crate::{
     app::Canopy,
     geom::{Point, Rect},
     layout::ConstrainedLayout,
-    Node, NodeState,
+    state::{NodeState, StatefulNode},
+    Node,
 };
 use std::io::Write;
 use std::marker::PhantomData;
@@ -17,9 +18,9 @@ use crossterm::{
 use anyhow::{format_err, Result};
 use textwrap;
 
+#[derive(StatefulNode)]
 pub struct Text<S> {
     pub state: NodeState,
-    pub rect: Option<Rect>,
     pub virt_origin: Option<Point>,
     pub raw: String,
     _marker: PhantomData<S>,
@@ -30,9 +31,8 @@ pub struct Text<S> {
 impl<S> Text<S> {
     pub fn new(raw: &str) -> Self {
         Text {
-            state: canopy::NodeState::default(),
+            state: NodeState::default(),
 
-            rect: None,
             virt_origin: None,
 
             raw: raw.to_owned(),
@@ -78,23 +78,17 @@ impl<'a, S> ConstrainedLayout for Text<S> {
         }
     }
     fn layout(&mut self, _app: &mut Canopy, virt_origin: Point, rect: Rect) -> Result<()> {
-        self.rect = Some(rect);
+        self.set_rect(Some(rect));
         self.virt_origin = Some(virt_origin);
         Ok(())
     }
 }
 
 impl<'a, S> Node<S> for Text<S> {
-    fn state(&mut self) -> &mut canopy::NodeState {
-        &mut self.state
-    }
-    fn rect(&self) -> Option<Rect> {
-        self.rect
-    }
     fn render(&mut self, _app: &mut Canopy, w: &mut dyn Write) -> Result<()> {
         w.queue(SetForegroundColor(Color::White))?;
         if let (Some(lines), Some(rect), Some(vo)) =
-            (self.lines.as_ref(), self.rect, self.virt_origin)
+            (self.lines.as_ref(), self.rect(), self.virt_origin)
         {
             for i in 0..rect.h {
                 w.queue(MoveTo(rect.tl.x, rect.tl.y + i))?;

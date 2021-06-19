@@ -9,26 +9,25 @@ use canopy::{
     geom::Rect,
     layout::FixedLayout,
     runloop::runloop,
+    state::{NodeState, StatefulNode},
     widgets::{block, solid_frame},
-    EventResult, Node, NodeState,
+    EventResult, Node,
 };
 
 struct Handle {}
 
+#[derive(StatefulNode)]
 struct Root {
     state: NodeState,
     child: Block,
-    rect: Option<Rect>,
 }
 
 impl Root {
     fn new() -> Self {
         Root {
             state: NodeState::default(),
-            rect: None,
             child: Block {
                 state: NodeState::default(),
-                rect: None,
                 children: vec![Block::new(false), Block::new(false)],
                 horizontal: true,
             },
@@ -36,9 +35,9 @@ impl Root {
     }
 }
 
+#[derive(StatefulNode)]
 struct Block {
     state: NodeState,
-    rect: Option<Rect>,
     children: Vec<Block>,
     horizontal: bool,
 }
@@ -47,7 +46,6 @@ impl Block {
     fn new(orientation: bool) -> Self {
         Block {
             state: NodeState::default(),
-            rect: None,
             children: vec![],
             horizontal: orientation,
         }
@@ -56,7 +54,7 @@ impl Block {
 
 impl FixedLayout for Root {
     fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
-        self.rect = rect;
+        self.set_rect(rect);
         if let Some(a) = rect {
             app.resize(&mut self.child, a)?;
         }
@@ -65,12 +63,6 @@ impl FixedLayout for Root {
 }
 
 impl Node<Handle> for Root {
-    fn state(&mut self) -> &mut NodeState {
-        &mut self.state
-    }
-    fn rect(&self) -> Option<Rect> {
-        self.rect
-    }
     fn handle_mouse(
         &mut self,
         app: &mut Canopy,
@@ -141,7 +133,7 @@ impl Block {
 
 impl FixedLayout for Block {
     fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
-        self.rect = rect;
+        self.set_rect(rect);
         if let Some(a) = rect {
             if self.children.len() > 0 {
                 let sizes = if self.horizontal {
@@ -159,12 +151,6 @@ impl FixedLayout for Block {
 }
 
 impl Node<Handle> for Block {
-    fn state(&mut self) -> &mut NodeState {
-        &mut self.state
-    }
-    fn rect(&self) -> Option<Rect> {
-        self.rect
-    }
     fn can_focus(&self) -> bool {
         self.children.len() == 0
     }
