@@ -1,8 +1,11 @@
 #[cfg(test)]
 pub mod utils {
-    use crate::event::key;
-    use crate::*;
     use std::io::{Cursor, Read, Seek, SeekFrom, Write};
+
+    use crate as canopy;
+    use crate::event::key;
+    use crate::state;
+    use crate::*;
 
     use anyhow::{format_err, Result};
     use crossterm::{style::Print, ExecutableCommand};
@@ -27,7 +30,7 @@ pub mod utils {
         }
     }
 
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, state::StatefulNode)]
     pub struct TRoot {
         state: NodeState,
         rect: Option<Rect>,

@@ -42,7 +42,6 @@ impl Root {
             Color::White,
             Color::Blue,
         );
-        app.taint_tree(&mut adder)?;
         app.set_focus(&mut adder.child)?;
         self.adder = Some(adder);
         self.layout(app, self.rect)?;
@@ -105,6 +104,12 @@ impl Node<Handle> for Root {
             c if c == 'l' || c == key::KeyCode::Up => self.child.child.right(app)?,
             c if c == ' ' || c == key::KeyCode::PageDown => self.child.child.page_down(app)?,
             c if c == key::KeyCode::PageUp => self.child.child.page_up(app)?,
+            c if c == key::KeyCode::Enter => {
+                self.adder = None;
+                app.set_focus(self)?;
+                app.taint_tree(self)?;
+                EventResult::Handle { skip: false }
+            }
             c if c == key::KeyCode::Esc => {
                 self.adder = None;
                 app.set_focus(self)?;

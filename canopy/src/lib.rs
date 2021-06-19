@@ -3,6 +3,7 @@ pub mod event;
 pub mod geom;
 pub mod layout;
 pub mod runloop;
+pub mod state;
 mod tutils;
 pub mod widgets;
 
@@ -109,6 +110,7 @@ pub struct NodeState {
     // The focus generation if this node held focus during the last rendering
     // phase.
     rendered_focus_gen: u64,
+    rect: Option<Rect>,
 }
 
 impl NodeState {
@@ -125,6 +127,7 @@ impl NodeState {
             focus_gen: 0,
             rendered_focus_gen: 0,
             render_skip_gen: 0,
+            rect: None,
         }
     }
 }
