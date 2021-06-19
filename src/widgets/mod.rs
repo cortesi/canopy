@@ -1,5 +1,6 @@
 pub mod editor;
 pub mod frame;
+pub mod input;
 pub mod panes;
 pub mod scroll;
 pub mod text;

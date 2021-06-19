@@ -164,7 +164,7 @@ pub trait Node<S> {
         Ok(())
     }
 
-    /// Handle a key event just for this node. Return Action::default() if the
+    /// Handle a key event just for this node. Return EventResult::Ingore if the
     /// event was ignored. Only nodes that have focus may handle key input, so
     /// this method is only called if focused() returns true. The default
     /// implementation ignores input.
@@ -172,7 +172,7 @@ pub trait Node<S> {
         Ok(EventResult::Ignore { skip: false })
     }
 
-    /// Handle a mouse event just for this node. Return Action::default() if
+    /// Handle a mouse event just for this node. Return EventResult::Ignore if
     /// the event was ignored. The default implementation ignores mouse input.
     fn handle_mouse(
         &mut self,
