@@ -7,9 +7,8 @@ use canopy::{
     geom::{Point, Rect},
     layout::FixedLayout,
     runloop::runloop,
-    state::{NodeState, StatefulNode},
     widgets::{frame, input, scroll, text},
-    Canopy, EventResult, Node,
+    Canopy, EventResult, Node, NodeState, StatefulNode,
 };
 
 struct Handle {}

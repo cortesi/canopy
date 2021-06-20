@@ -453,9 +453,11 @@ impl<S> Canopy<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::geom::{Point, Rect};
-    use crate::tutils::utils;
-    use crate::StatefulNode;
+    use crate::{
+        geom::{Point, Rect},
+        tutils::utils,
+        StatefulNode,
+    };
     use anyhow::Result;
 
     pub fn focvec(app: &mut Canopy<utils::State>, root: &mut utils::TRoot) -> Result<Vec<String>> {

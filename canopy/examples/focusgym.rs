@@ -7,9 +7,8 @@ use canopy::{
     event::{key, mouse},
     layout::FixedLayout,
     runloop::runloop,
-    state::{NodeState, StatefulNode},
     widgets::{block, solid_frame},
-    Canopy, EventResult, Node, Rect,
+    Canopy, EventResult, Node, NodeState, Rect, StatefulNode,
 };
 
 struct Handle {}

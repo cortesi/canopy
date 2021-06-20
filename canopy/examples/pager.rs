@@ -9,9 +9,8 @@ use canopy::{
     event::{key, mouse},
     layout::FixedLayout,
     runloop::runloop,
-    state::{NodeState, StatefulNode},
     widgets::{frame, scroll, text},
-    Canopy, EventResult, Node, Rect,
+    Canopy, EventResult, Node, NodeState, Rect, StatefulNode,
 };
 
 struct Handle {}
