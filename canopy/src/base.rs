@@ -3,8 +3,9 @@ use std::{fmt::Debug, io::Write};
 
 use crate::geom::{Direction, Rect};
 use crate::{
-    key, layout::FixedLayout, locate, mouse, postorder, preorder, Event, EventResult, Joiner, Node,
-    SkipWalker,
+    event::{key, mouse, Event},
+    layout::FixedLayout,
+    node::{locate, postorder, preorder, EventResult, Joiner, Node, SkipWalker},
 };
 use anyhow::{format_err, Result};
 
@@ -449,9 +450,10 @@ impl<S> Canopy<S> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::geom::{Point, Rect};
     use crate::tutils::utils;
-    use crate::*;
+    use crate::StatefulNode;
     use anyhow::Result;
 
     pub fn focvec(app: &mut Canopy<utils::State>, root: &mut utils::TRoot) -> Result<Vec<String>> {
@@ -585,7 +587,7 @@ mod tests {
         let mut s = utils::State::new();
         app.set_focus(&mut root)?;
         root.next_event = Some(handled);
-        assert_eq!(app.tick(&mut root, &mut s, app::Tick {})?, handled);
+        assert_eq!(app.tick(&mut root, &mut s, Tick {})?, handled);
         assert_eq!(
             s.path,
             vec![
@@ -602,7 +604,7 @@ mod tests {
         let mut s = utils::State::new();
         app.set_focus(&mut root)?;
         root.a.next_event = Some(EventResult::Ignore { skip: true });
-        assert_eq!(app.tick(&mut root, &mut s, app::Tick {})?, ignore);
+        assert_eq!(app.tick(&mut root, &mut s, Tick {})?, ignore);
         assert_eq!(
             s.path,
             vec![
@@ -618,7 +620,7 @@ mod tests {
         app.set_focus(&mut root)?;
         root.a.next_event = Some(EventResult::Ignore { skip: true });
         root.b.next_event = Some(EventResult::Handle { skip: true });
-        assert_eq!(app.tick(&mut root, &mut s, app::Tick {})?, handled);
+        assert_eq!(app.tick(&mut root, &mut s, Tick {})?, handled);
         assert_eq!(
             s.path,
             vec!["r@tick->ignore", "ba@tick->ignore", "bb@tick->handle",]
@@ -840,7 +842,7 @@ mod tests {
         root.a.a.next_event = Some(handled);
         root.b.b.next_event = Some(handled);
         app.skip_taint(&mut root.a.a);
-        assert_eq!(app.tick(&mut root, &mut s, app::Tick {})?, handled);
+        assert_eq!(app.tick(&mut root, &mut s, Tick {})?, handled);
         assert_eq!(
             s.path,
             vec![

@@ -6,8 +6,9 @@ use crate as canopy;
 use crate::{
     geom::{Point, Rect},
     layout::{ConstrainedLayout, FixedLayout},
+    node::{EventResult, Node},
     state::{NodeState, StatefulNode},
-    widgets, Canopy, EventResult, Node,
+    widgets, Canopy,
 };
 
 struct ScrollState {
@@ -23,14 +24,14 @@ struct ScrollState {
 /// with `FixedLayout`, by managing a scrollable view onto the constrained
 /// widget.
 #[derive(StatefulNode)]
-pub struct Scroll<S, N: canopy::Node<S> + ConstrainedLayout<S>> {
+pub struct Scroll<S, N: Node<S> + ConstrainedLayout<S>> {
     _marker: PhantomData<S>,
     pub child: N,
     pub state: NodeState,
     scrollstate: Option<ScrollState>,
 }
 
-impl<S, N: canopy::Node<S> + ConstrainedLayout<S>> Scroll<S, N> {
+impl<S, N: Node<S> + ConstrainedLayout<S>> Scroll<S, N> {
     pub fn new(c: N) -> Self {
         Scroll {
             _marker: PhantomData,
@@ -98,7 +99,7 @@ impl<S, N: canopy::Node<S> + ConstrainedLayout<S>> Scroll<S, N> {
     }
 }
 
-impl<S, N: canopy::Node<S> + ConstrainedLayout<S>> FixedLayout<S> for Scroll<S, N> {
+impl<S, N: Node<S> + ConstrainedLayout<S>> FixedLayout<S> for Scroll<S, N> {
     fn layout(&mut self, app: &mut Canopy<S>, rect: Option<Rect>) -> Result<()> {
         if let Some(r) = rect {
             let virt = self.child.constrain(app, Some(r.w), None)?;
@@ -120,7 +121,7 @@ impl<S, N: canopy::Node<S> + ConstrainedLayout<S>> FixedLayout<S> for Scroll<S, 
     }
 }
 
-impl<S, N: canopy::Node<S> + ConstrainedLayout<S>> widgets::frame::FrameContent for Scroll<S, N> {
+impl<S, N: Node<S> + ConstrainedLayout<S>> widgets::frame::FrameContent for Scroll<S, N> {
     fn bounds(&self) -> Option<(Rect, Rect)> {
         if let Some(ss) = &self.scrollstate {
             Some((ss.view, ss.virt))
@@ -130,14 +131,11 @@ impl<S, N: canopy::Node<S> + ConstrainedLayout<S>> widgets::frame::FrameContent 
     }
 }
 
-impl<S, N: canopy::Node<S> + ConstrainedLayout<S>> Node<S> for Scroll<S, N> {
+impl<S, N: Node<S> + ConstrainedLayout<S>> Node<S> for Scroll<S, N> {
     fn should_render(&mut self, app: &mut Canopy<S>) -> Option<bool> {
         Some(app.should_render(&mut self.child))
     }
-    fn children(
-        &mut self,
-        f: &mut dyn FnMut(&mut dyn canopy::Node<S>) -> Result<()>,
-    ) -> Result<()> {
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<()>) -> Result<()> {
         f(&mut self.child)
     }
 }

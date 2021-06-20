@@ -4,6 +4,7 @@ pub mod utils {
 
     use crate as canopy;
     use crate::event::key;
+    use crate::event::mouse;
     use crate::geom::Rect;
     use crate::state;
     use crate::*;
@@ -99,7 +100,7 @@ pub mod utils {
             &mut self,
             _: &mut Canopy<State>,
             s: &mut State,
-            _: app::Tick,
+            _: Tick,
         ) -> Result<EventResult> {
             self.handle(s, "tick")
         }
@@ -144,7 +145,7 @@ pub mod utils {
             &mut self,
             _: &mut Canopy<State>,
             s: &mut State,
-            _: app::Tick,
+            _: Tick,
         ) -> Result<EventResult> {
             self.handle(s, "tick")
         }
@@ -197,7 +198,7 @@ pub mod utils {
             &mut self,
             _: &mut Canopy<State>,
             s: &mut State,
-            _: app::Tick,
+            _: Tick,
         ) -> Result<EventResult> {
             self.handle(s, "tick")
         }

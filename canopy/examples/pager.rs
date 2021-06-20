@@ -6,14 +6,12 @@ use crossterm::style::Color;
 
 use canopy;
 use canopy::{
-    app::Canopy,
     event::{key, mouse},
-    geom::Rect,
     layout::FixedLayout,
     runloop::runloop,
     state::{NodeState, StatefulNode},
     widgets::{frame, scroll, text},
-    EventResult, Node,
+    Canopy, EventResult, Node, Rect,
 };
 
 struct Handle {}

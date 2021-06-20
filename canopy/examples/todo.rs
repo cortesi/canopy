@@ -3,14 +3,13 @@ use crossterm::style::Color;
 
 use canopy;
 use canopy::{
-    app::Canopy,
     event::{key, mouse},
     geom::{Point, Rect},
     layout::FixedLayout,
     runloop::runloop,
     state::{NodeState, StatefulNode},
     widgets::{frame, input, scroll, text},
-    EventResult, Node,
+    Canopy, EventResult, Node,
 };
 
 struct Handle {}

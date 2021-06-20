@@ -1,10 +1,9 @@
 use crate as canopy;
 use crate::{
-    app::Canopy,
     geom::{Point, Rect},
     layout::ConstrainedLayout,
     state::{NodeState, StatefulNode},
-    Node,
+    Canopy, Node,
 };
 use std::io::Write;
 use std::marker::PhantomData;

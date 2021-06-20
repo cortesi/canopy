@@ -4,14 +4,12 @@ use std::io::Write;
 
 use canopy;
 use canopy::{
-    app::Canopy,
     event::{key, mouse},
-    geom::Rect,
     layout::FixedLayout,
     runloop::runloop,
     state::{NodeState, StatefulNode},
     widgets::{block, solid_frame},
-    EventResult, Node,
+    Canopy, EventResult, Node, Rect,
 };
 
 struct Handle {}
