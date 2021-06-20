@@ -35,7 +35,7 @@ impl Root {
             adder: None,
         }
     }
-    fn open_adder(&mut self, app: &mut Canopy) -> Result<EventResult> {
+    fn open_adder(&mut self, app: &mut Canopy<Handle>) -> Result<EventResult> {
         let mut adder = frame::Frame::new(
             input::Input::new(15),
             frame::SINGLE,
@@ -49,8 +49,8 @@ impl Root {
     }
 }
 
-impl FixedLayout for Root {
-    fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
+impl FixedLayout<Handle> for Root {
+    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<()> {
         self.set_rect(rect);
         if let Some(a) = rect {
             app.resize(&mut self.child, a)?;
@@ -78,7 +78,7 @@ impl Node<Handle> for Root {
     }
     fn handle_mouse(
         &mut self,
-        app: &mut Canopy,
+        app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<EventResult> {
@@ -88,7 +88,12 @@ impl Node<Handle> for Root {
             _ => EventResult::Ignore { skip: false },
         })
     }
-    fn handle_key(&mut self, app: &mut Canopy, _: &mut Handle, k: key::Key) -> Result<EventResult> {
+    fn handle_key(
+        &mut self,
+        app: &mut Canopy<Handle>,
+        _: &mut Handle,
+        k: key::Key,
+    ) -> Result<EventResult> {
         Ok(match k {
             c if c == 'a' => self.open_adder(app)?,
             c if c == 'g' => self.child.child.scroll_to(app, 0, 0)?,

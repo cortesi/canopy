@@ -1,4 +1,3 @@
-use crate::app::Canopy;
 use crate::geom::Rect;
 
 pub use canopy_derive::StatefulNode;
@@ -18,10 +17,10 @@ pub struct NodeState {
 }
 
 impl NodeState {
-    /// Does this node currently hold focus?
-    pub fn is_focused(&self, appstate: &Canopy) -> bool {
-        self.focus_gen == appstate.focus_gen
-    }
+    // Does this node currently hold focus?
+    // pub fn is_focused(&self, appstate: &Canopy<S>) -> bool {
+    //     self.focus_gen == appstate.focus_gen
+    // }
 }
 
 impl NodeState {

@@ -1,3 +1,4 @@
+use std::marker::PhantomData;
 use std::{fmt::Debug, io::Write};
 
 use crate::geom::{Direction, Rect};
@@ -10,32 +11,47 @@ use anyhow::{format_err, Result};
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Tick {}
 
-#[derive(Debug, PartialEq, Copy, Clone)]
-pub struct Canopy {
+#[derive(Debug, PartialEq, Copy)]
+pub struct Canopy<S> {
     pub focus_gen: u64,
     pub render_gen: u64,
     pub last_focus_gen: u64,
+    _marker: PhantomData<S>,
 }
 
-impl Default for Canopy {
+// Derive isn't smart enough to notice that the type argument to Canopy doesn't
+// need to be Clone, so we manually implement.
+impl<S> Clone for Canopy<S> {
+    fn clone(&self) -> Canopy<S> {
+        Canopy {
+            focus_gen: self.focus_gen,
+            render_gen: self.render_gen,
+            last_focus_gen: self.last_focus_gen,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<S> Default for Canopy<S> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Canopy {
+impl<S> Canopy<S> {
     pub fn new() -> Self {
         Canopy {
             focus_gen: 1,
             render_gen: 1,
             last_focus_gen: 1,
+            _marker: PhantomData,
         }
     }
 
     /// Should the node render in the next sweep? This checks if the node is
     /// tainted, if the focus of the node has changed, or if the node's
     /// Node::should_render method is active.
-    pub fn should_render<S>(&mut self, e: &mut dyn Node<S>) -> bool {
+    pub fn should_render(&mut self, e: &mut dyn Node<S>) -> bool {
         if let Some(r) = e.should_render(self) {
             r
         } else {
@@ -44,7 +60,7 @@ impl Canopy {
     }
 
     /// Is this node render tainted?
-    pub fn is_tainted<S>(&self, e: &dyn Node<S>) -> bool {
+    pub fn is_tainted(&self, e: &dyn Node<S>) -> bool {
         let s = e.state();
         if self.render_gen == s.render_skip_gen {
             false
@@ -57,9 +73,9 @@ impl Canopy {
 
     /// Has the focus status of this node changed since the last render
     /// sweep?
-    pub fn focus_changed<S>(&self, e: &dyn Node<S>) -> bool {
+    pub fn focus_changed(&self, e: &dyn Node<S>) -> bool {
         let s = e.state();
-        if s.is_focused(self) {
+        if self.is_focused(e) {
             if s.focus_gen != s.rendered_focus_gen {
                 return true;
             }
@@ -70,7 +86,7 @@ impl Canopy {
     }
 
     /// Focus the specified node.
-    pub fn set_focus<S>(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
+    pub fn set_focus(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
         if e.can_focus() {
             self.focus_gen += 1;
             e.state_mut().focus_gen = self.focus_gen;
@@ -79,7 +95,7 @@ impl Canopy {
         Err(format_err!("node does not accept focus"))
     }
 
-    fn focus_dir<S>(&mut self, e: &mut dyn Node<S>, dir: Direction) -> Result<EventResult> {
+    fn focus_dir(&mut self, e: &mut dyn Node<S>, dir: Direction) -> Result<EventResult> {
         let mut seen = false;
         if let Some(bounds) = e.rect() {
             if let Some(start) = self.get_focus_area(e) {
@@ -102,28 +118,28 @@ impl Canopy {
     }
 
     /// Move focus to the right of the currently focused node within the subtree.
-    pub fn focus_right<S>(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
+    pub fn focus_right(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
         self.focus_dir(e, Direction::Right)
     }
 
     /// Move focus to the left of the currently focused node within the subtree.
-    pub fn focus_left<S>(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
+    pub fn focus_left(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
         self.focus_dir(e, Direction::Left)
     }
 
     /// Move focus upward of the currently focused node within the subtree.
-    pub fn focus_up<S>(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
+    pub fn focus_up(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
         self.focus_dir(e, Direction::Up)
     }
 
     /// Move focus downward of the currently focused node within the subtree.
-    pub fn focus_down<S>(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
+    pub fn focus_down(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
         self.focus_dir(e, Direction::Down)
     }
 
     /// Focus the first node that accepts focus in the pre-order traversal of
     /// the subtree.
-    pub fn focus_first<S>(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
+    pub fn focus_first(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
         let mut focus_set = false;
         preorder(e, &mut |x| -> Result<SkipWalker> {
             Ok(if !focus_set && x.can_focus() {
@@ -138,12 +154,13 @@ impl Canopy {
     }
 
     /// Does the node have terminal focus?
-    pub fn is_focused<S>(&self, e: &dyn Node<S>) -> bool {
-        e.state().is_focused(self)
+    pub fn is_focused(&self, e: &dyn Node<S>) -> bool {
+        let s = e.state();
+        self.focus_gen == s.focus_gen
     }
 
     /// A node is on the focus path if it or any of its descendants have focus.
-    pub fn on_focus_path<S>(&self, e: &mut dyn Node<S>) -> bool {
+    pub fn on_focus_path(&self, e: &mut dyn Node<S>) -> bool {
         let mut onpath = false;
         self.focus_path(e, &mut |_| -> Result<()> {
             onpath = true;
@@ -155,8 +172,8 @@ impl Canopy {
 
     /// A node is on the focus path if it does not have focus itself, but some
     /// node below it does.
-    pub fn is_focus_ancestor<S>(&self, e: &mut dyn Node<S>) -> bool {
-        if e.state().is_focused(self) {
+    pub fn is_focus_ancestor(&self, e: &mut dyn Node<S>) -> bool {
+        if self.is_focused(e) {
             false
         } else {
             let mut onpath = false;
@@ -171,7 +188,7 @@ impl Canopy {
 
     /// Focus the next node in the pre-order traversal of a node. If no node
     /// with focus is found, we focus the first node we can find instead.
-    pub fn focus_next<S>(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
+    pub fn focus_next(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
         let mut focus_set = false;
         let mut focus_seen = false;
         preorder(e, &mut |x| -> Result<()> {
@@ -181,7 +198,7 @@ impl Canopy {
                         self.set_focus(x)?;
                         focus_set = true;
                     }
-                } else if x.state().is_focused(self) {
+                } else if self.is_focused(x) {
                     focus_seen = true;
                 }
             }
@@ -196,7 +213,7 @@ impl Canopy {
 
     /// Focus the previous node in the pre-order traversal of a node. If no
     /// node with focus is found, we focus the first node we can find instead.
-    pub fn focus_prev<S>(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
+    pub fn focus_prev(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
         let current = self.focus_gen;
         let mut focus_seen = false;
         let mut first = true;
@@ -217,7 +234,7 @@ impl Canopy {
     }
 
     /// Find the area of the current focus, if any.
-    pub fn get_focus_area<S>(&self, e: &mut dyn Node<S>) -> Option<Rect> {
+    pub fn get_focus_area(&self, e: &mut dyn Node<S>) -> Option<Rect> {
         let mut ret = None;
         self.focus_path(e, &mut |x| -> Result<()> {
             if ret == None {
@@ -231,7 +248,7 @@ impl Canopy {
 
     // Calls a closure on the currently focused node and all its parents to the
     // root.
-    pub fn focus_path<S, R: Joiner + Default>(
+    pub fn focus_path<R: Joiner + Default>(
         &self,
         e: &mut dyn Node<S>,
         f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<R>,
@@ -255,7 +272,7 @@ impl Canopy {
     /// Returns the focal depth of the specified node. If the node is not part
     /// of the focus chain, the depth is 0. If the node is a leaf focus, the
     /// depth is 1.
-    pub fn focus_depth<S>(&self, e: &mut dyn Node<S>) -> usize {
+    pub fn focus_depth(&self, e: &mut dyn Node<S>) -> usize {
         let mut total = 0;
         self.focus_path(e, &mut |_| -> Result<()> {
             total += 1;
@@ -266,7 +283,7 @@ impl Canopy {
     }
 
     /// Mark a tree of nodes for render.
-    pub fn taint_tree<S>(&self, e: &mut dyn Node<S>) -> Result<()> {
+    pub fn taint_tree(&self, e: &mut dyn Node<S>) -> Result<()> {
         let v = postorder(e, &mut |x| -> Result<()> {
             let r = x.state_mut();
             r.render_gen = self.render_gen;
@@ -276,20 +293,20 @@ impl Canopy {
     }
 
     /// Mark a single node for render.
-    pub fn taint<S>(&self, e: &mut dyn Node<S>) {
+    pub fn taint(&self, e: &mut dyn Node<S>) {
         let r = e.state_mut();
         r.render_gen = self.render_gen;
     }
 
     /// Mark that a node should skip the next render sweep.
-    pub fn skip_taint<S>(&self, e: &mut dyn Node<S>) {
+    pub fn skip_taint(&self, e: &mut dyn Node<S>) {
         let r = e.state_mut();
         r.render_skip_gen = self.render_gen;
     }
 
     /// Render a tree of nodes. If force is true, all visible nodes are
     /// rendered, otherwise we check the taint state.
-    pub fn render<S>(&mut self, e: &mut dyn Node<S>, w: &mut dyn Write) -> Result<()> {
+    pub fn render(&mut self, e: &mut dyn Node<S>, w: &mut dyn Write) -> Result<()> {
         let r = preorder(e, &mut |x| -> Result<()> {
             if self.should_render(x) {
                 if self.is_focused(x) {
@@ -308,7 +325,7 @@ impl Canopy {
 
     /// Propagate a mouse event through the node under the event and all its
     /// ancestors. Events are handled only once, and then ignored.
-    pub fn mouse<S>(
+    pub fn mouse(
         &mut self,
         root: &mut dyn Node<S>,
         s: &mut S,
@@ -345,12 +362,7 @@ impl Canopy {
 
     /// Propagate a key event through the focus and all its ancestors. Keys
     /// handled only once, and then ignored.
-    pub fn key<S>(
-        &mut self,
-        root: &mut dyn Node<S>,
-        s: &mut S,
-        k: key::Key,
-    ) -> Result<EventResult> {
+    pub fn key(&mut self, root: &mut dyn Node<S>, s: &mut S, k: key::Key) -> Result<EventResult> {
         let mut handled = false;
         self.clone()
             .focus_path(root, &mut |x| -> Result<EventResult> {
@@ -376,9 +388,9 @@ impl Canopy {
     }
 
     /// Propagate a resize event through the tree of nodes.
-    pub fn resize<S, N>(&mut self, e: &mut N, rect: Rect) -> Result<()>
+    pub fn resize<N>(&mut self, e: &mut N, rect: Rect) -> Result<()>
     where
-        N: Node<S> + FixedLayout,
+        N: Node<S> + FixedLayout<S>,
     {
         if let Some(old) = e.rect() {
             if old == rect {
@@ -391,7 +403,7 @@ impl Canopy {
     }
 
     /// Propagate a tick event through the tree.
-    pub fn tick<S>(&mut self, root: &mut dyn Node<S>, s: &mut S, t: Tick) -> Result<EventResult> {
+    pub fn tick(&mut self, root: &mut dyn Node<S>, s: &mut S, t: Tick) -> Result<EventResult> {
         let mut ret = EventResult::default();
         preorder(root, &mut |x| -> Result<SkipWalker> {
             let v = x.handle_tick(self, s, t)?;
@@ -419,9 +431,9 @@ impl Canopy {
     }
 
     /// Propagate an event through the tree.
-    pub fn event<S, N>(&mut self, root: &mut N, s: &mut S, e: Event) -> Result<EventResult>
+    pub fn event<N>(&mut self, root: &mut N, s: &mut S, e: Event) -> Result<EventResult>
     where
-        N: Node<S> + FixedLayout,
+        N: Node<S> + FixedLayout<S>,
     {
         match e {
             Event::Key(k) => self.key(root, s, k),
@@ -442,7 +454,7 @@ mod tests {
     use crate::*;
     use anyhow::Result;
 
-    pub fn focvec(app: &mut Canopy, root: &mut utils::TRoot) -> Result<Vec<String>> {
+    pub fn focvec(app: &mut Canopy<utils::State>, root: &mut utils::TRoot) -> Result<Vec<String>> {
         let mut v = vec![];
         app.clone().focus_path(root, &mut |x| -> Result<()> {
             let n = utils::get_name(app, x)?;
@@ -457,28 +469,28 @@ mod tests {
         let mut app = Canopy::new();
         let mut root = utils::TRoot::new();
 
-        assert!(!root.state().is_focused(&app));
+        assert!(!app.is_focused(&root));
         app.focus_next(&mut root)?;
-        assert!(root.state().is_focused(&app));
+        assert!(app.is_focused(&root));
 
         app.focus_next(&mut root)?;
-        assert!(root.a.state().is_focused(&app));
+        assert!(app.is_focused(&root.a));
         assert!(app.is_focus_ancestor(&mut root));
         assert!(!app.is_focus_ancestor(&mut root.a));
 
         app.focus_next(&mut root)?;
-        assert!(root.a.a.state().is_focused(&app));
+        assert!(app.is_focused(&root.a.a));
         assert!(app.is_focus_ancestor(&mut root.a));
         app.focus_next(&mut root)?;
-        assert!(root.a.b.state().is_focused(&app));
+        assert!(app.is_focused(&root.a.b));
         assert!(app.is_focus_ancestor(&mut root.a));
         app.focus_next(&mut root)?;
-        assert!(root.b.state().is_focused(&app));
+        assert!(app.is_focused(&root.b));
 
         app.set_focus(&mut root.b.b)?;
         assert!(app.is_focus_ancestor(&mut root.b));
         app.focus_next(&mut root)?;
-        assert!(root.state().is_focused(&app));
+        assert!(app.is_focused(&root));
 
         Ok(())
     }
@@ -488,19 +500,19 @@ mod tests {
         let mut app = Canopy::new();
         let mut root = utils::TRoot::new();
 
-        assert!(!root.state().is_focused(&app));
+        assert!(!app.is_focused(&root));
         app.focus_prev(&mut root)?;
-        assert!(root.b.b.state().is_focused(&app));
+        assert!(app.is_focused(&root.b.b));
 
         app.focus_prev(&mut root)?;
-        assert!(root.b.a.state().is_focused(&app));
+        assert!(app.is_focused(&root.b.a));
 
         app.focus_prev(&mut root)?;
-        assert!(root.b.state().is_focused(&app));
+        assert!(app.is_focused(&root.b));
 
         app.set_focus(&mut root)?;
         app.focus_prev(&mut root)?;
-        assert!(root.b.b.state().is_focused(&app));
+        assert!(app.is_focused(&root.b.b));
 
         Ok(())
     }
@@ -549,7 +561,7 @@ mod tests {
 
         app.set_focus(&mut root.a.a)?;
         app.focus_right(&mut root)?;
-        assert!(root.b.a.state().is_focused(&app));
+        assert!(app.is_focused(&root.b.a));
         // app.focus_right(&mut root)?;
         // assert!(root.b.a.state().is_focused(&app));
 

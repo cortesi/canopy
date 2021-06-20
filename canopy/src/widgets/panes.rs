@@ -18,7 +18,7 @@ pub struct Panes<S, N: canopy::Node<S>> {
     pub state: NodeState,
 }
 
-impl<S, N: canopy::Node<S> + FixedLayout> Panes<S, N> {
+impl<S, N: canopy::Node<S> + FixedLayout<S>> Panes<S, N> {
     pub fn new(n: N) -> Self {
         Panes {
             children: vec![vec![n]],
@@ -27,7 +27,7 @@ impl<S, N: canopy::Node<S> + FixedLayout> Panes<S, N> {
         }
     }
     /// Get the offset of the current focus in the children vector.
-    pub fn focus_coords(&mut self, app: &Canopy) -> Option<(usize, usize)> {
+    pub fn focus_coords(&mut self, app: &Canopy<S>) -> Option<(usize, usize)> {
         for (x, col) in self.children.iter_mut().enumerate() {
             for (y, row) in col.iter_mut().enumerate() {
                 if app.on_focus_path(row) {
@@ -38,7 +38,7 @@ impl<S, N: canopy::Node<S> + FixedLayout> Panes<S, N> {
         None
     }
     /// Delete the focus node. If a column ends up empty, it is removed.
-    pub fn delete_focus(&mut self, app: &mut Canopy) -> Result<()> {
+    pub fn delete_focus(&mut self, app: &mut Canopy<S>) -> Result<()> {
         if let Some((x, y)) = self.focus_coords(app) {
             app.focus_next(self)?;
             self.children[x].remove(y);
@@ -52,7 +52,7 @@ impl<S, N: canopy::Node<S> + FixedLayout> Panes<S, N> {
     }
     /// Insert a node, splitting vertically. If we have a focused node, the new
     /// node is inserted in a row beneath it. If not, a new column is added.
-    pub fn insert_row(&mut self, app: &Canopy, n: N) -> Result<()>
+    pub fn insert_row(&mut self, app: &Canopy<S>, n: N) -> Result<()>
     where
         N: canopy::Node<S>,
     {
@@ -65,7 +65,7 @@ impl<S, N: canopy::Node<S> + FixedLayout> Panes<S, N> {
     }
     /// Insert a node in a new column. If we have a focused node, the new node
     /// is added in a new column to the right.
-    pub fn insert_col(&mut self, app: &mut Canopy, mut n: N) -> Result<()>
+    pub fn insert_col(&mut self, app: &mut Canopy<S>, mut n: N) -> Result<()>
     where
         N: canopy::Node<S>,
     {
@@ -89,8 +89,8 @@ impl<S, N: canopy::Node<S> + FixedLayout> Panes<S, N> {
     }
 }
 
-impl<S, N: canopy::Node<S> + FixedLayout> FixedLayout for Panes<S, N> {
-    fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
+impl<S, N: canopy::Node<S> + FixedLayout<S>> FixedLayout<S> for Panes<S, N> {
+    fn layout(&mut self, app: &mut Canopy<S>, rect: Option<Rect>) -> Result<()> {
         self.set_rect(rect);
         if let Some(a) = rect {
             let l = a.split_panes(self.shape())?;
@@ -116,7 +116,7 @@ impl<S, N: canopy::Node<S>> Node<S> for Panes<S, N> {
         }
         Ok(())
     }
-    fn render(&mut self, _: &mut Canopy, _: &mut dyn Write) -> Result<()> {
+    fn render(&mut self, _: &mut Canopy<S>, _: &mut dyn Write) -> Result<()> {
         // FIXME - this should probably clear the area if the last node is
         // deleted.
         Ok(())

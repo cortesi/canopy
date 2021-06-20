@@ -13,6 +13,7 @@ pub mod utils {
 
     pub const K_ANY: key::Key = key::Key(None, key::KeyCode::Char('a'));
 
+    #[derive(Debug, PartialEq, Clone)]
     pub struct State {
         pub path: Vec<String>,
     }
@@ -64,8 +65,8 @@ pub mod utils {
         Ok(())
     }
 
-    impl layout::FixedLayout for TLeaf {
-        fn layout(&mut self, _: &mut Canopy, a: Option<Rect>) -> Result<()> {
+    impl layout::FixedLayout<State> for TLeaf {
+        fn layout(&mut self, _: &mut Canopy<State>, a: Option<Rect>) -> Result<()> {
             self.set_rect(a);
             Ok(())
         }
@@ -75,12 +76,12 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(&mut self, _: &mut Canopy, w: &mut dyn Write) -> Result<()> {
+        fn render(&mut self, _: &mut Canopy<State>, w: &mut dyn Write) -> Result<()> {
             tnode_render(self.name.clone(), w)
         }
         fn handle_key(
             &mut self,
-            _: &mut Canopy,
+            _: &mut Canopy<State>,
             s: &mut State,
             _: key::Key,
         ) -> Result<EventResult> {
@@ -88,7 +89,7 @@ pub mod utils {
         }
         fn handle_mouse(
             &mut self,
-            _: &mut Canopy,
+            _: &mut Canopy<State>,
             s: &mut State,
             _: mouse::Mouse,
         ) -> Result<EventResult> {
@@ -96,7 +97,7 @@ pub mod utils {
         }
         fn handle_tick(
             &mut self,
-            _: &mut Canopy,
+            _: &mut Canopy<State>,
             s: &mut State,
             _: app::Tick,
         ) -> Result<EventResult> {
@@ -104,8 +105,8 @@ pub mod utils {
         }
     }
 
-    impl layout::FixedLayout for TBranch {
-        fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
+    impl layout::FixedLayout<State> for TBranch {
+        fn layout(&mut self, app: &mut Canopy<State>, rect: Option<Rect>) -> Result<()> {
             self.set_rect(rect);
             if let Some(a) = rect {
                 let v = a.split_vertical(2)?;
@@ -120,12 +121,12 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(&mut self, _: &mut Canopy, w: &mut dyn Write) -> Result<()> {
+        fn render(&mut self, _: &mut Canopy<State>, w: &mut dyn Write) -> Result<()> {
             tnode_render(self.name.clone(), w)
         }
         fn handle_key(
             &mut self,
-            _: &mut Canopy,
+            _: &mut Canopy<State>,
             s: &mut State,
             _: key::Key,
         ) -> Result<EventResult> {
@@ -133,7 +134,7 @@ pub mod utils {
         }
         fn handle_mouse(
             &mut self,
-            _: &mut Canopy,
+            _: &mut Canopy<State>,
             s: &mut State,
             _: mouse::Mouse,
         ) -> Result<EventResult> {
@@ -141,7 +142,7 @@ pub mod utils {
         }
         fn handle_tick(
             &mut self,
-            _: &mut Canopy,
+            _: &mut Canopy<State>,
             s: &mut State,
             _: app::Tick,
         ) -> Result<EventResult> {
@@ -157,8 +158,8 @@ pub mod utils {
         }
     }
 
-    impl layout::FixedLayout for TRoot {
-        fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
+    impl layout::FixedLayout<State> for TRoot {
+        fn layout(&mut self, app: &mut Canopy<State>, rect: Option<Rect>) -> Result<()> {
             self.set_rect(rect);
             if let Some(a) = rect {
                 let v = a.split_horizontal(2)?;
@@ -173,12 +174,12 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(&mut self, _: &mut Canopy, w: &mut dyn Write) -> Result<()> {
+        fn render(&mut self, _: &mut Canopy<State>, w: &mut dyn Write) -> Result<()> {
             tnode_render(self.name.clone(), w)
         }
         fn handle_key(
             &mut self,
-            _: &mut Canopy,
+            _: &mut Canopy<State>,
             s: &mut State,
             _: key::Key,
         ) -> Result<EventResult> {
@@ -186,7 +187,7 @@ pub mod utils {
         }
         fn handle_mouse(
             &mut self,
-            _: &mut Canopy,
+            _: &mut Canopy<State>,
             s: &mut State,
             _: mouse::Mouse,
         ) -> Result<EventResult> {
@@ -194,7 +195,7 @@ pub mod utils {
         }
         fn handle_tick(
             &mut self,
-            _: &mut Canopy,
+            _: &mut Canopy<State>,
             s: &mut State,
             _: app::Tick,
         ) -> Result<EventResult> {
@@ -286,7 +287,7 @@ pub mod utils {
         }
     }
 
-    pub fn trender(app: &mut Canopy, r: &mut TRoot) -> Result<String> {
+    pub fn trender(app: &mut Canopy<State>, r: &mut TRoot) -> Result<String> {
         let mut c = Cursor::new(Vec::new());
         app.render(r, &mut c)?;
         c.seek(SeekFrom::Start(0))?;
@@ -295,7 +296,7 @@ pub mod utils {
         Ok(String::from_utf8_lossy(&out).into())
     }
 
-    pub fn get_name<S>(app: &mut Canopy, x: &mut dyn Node<S>) -> Result<String> {
+    pub fn get_name(app: &mut Canopy<State>, x: &mut dyn Node<State>) -> Result<String> {
         let mut c = Cursor::new(Vec::new());
         x.render(app, &mut c)?;
         c.seek(SeekFrom::Start(0))?;

@@ -6,8 +6,8 @@ use anyhow::Result;
 /// they just occupy the space specified. Examples include frames that fill any
 /// region we pass them, and widgets that have one fixed dimension, like a
 /// fixed-height status bar.
-pub trait FixedLayout {
-    fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()>;
+pub trait FixedLayout<S> {
+    fn layout(&mut self, app: &mut Canopy<S>, rect: Option<Rect>) -> Result<()>;
 }
 
 /// A layout for nodes with geometry computed based on constraints. This defines
@@ -21,7 +21,7 @@ pub trait FixedLayout {
 /// rectangle that encloses all its content. Now, the parent component can make
 /// a decision to render some sub-view of the virtual component rectangle onto
 /// the screen.
-pub trait ConstrainedLayout {
+pub trait ConstrainedLayout<S> {
     /// Constrain size of the component along a dimension. Returns a rectangle
     /// at origin (0, 0) representing the virtual size of the component. A
     /// best-effort attempt is made to scale to within the constraints, but the
@@ -33,7 +33,7 @@ pub trait ConstrainedLayout {
     /// render in whatever size it's laid out to.
     fn constrain(
         &mut self,
-        app: &mut Canopy,
+        app: &mut Canopy<S>,
         width: Option<u16>,
         height: Option<u16>,
     ) -> Result<Rect>;
@@ -41,5 +41,5 @@ pub trait ConstrainedLayout {
     /// smaller than or equal to the rect `constrain`, and `virt_origin` must be
     /// a point within the virtual component such that rect would fall entirely
     /// inside it.
-    fn layout(&mut self, app: &mut Canopy, virt_origin: Point, rect: Rect) -> Result<()>;
+    fn layout(&mut self, app: &mut Canopy<S>, virt_origin: Point, rect: Rect) -> Result<()>;
 }

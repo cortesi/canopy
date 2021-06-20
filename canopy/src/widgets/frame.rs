@@ -84,7 +84,7 @@ pub trait FrameContent {
 #[derive(StatefulNode)]
 pub struct Frame<S, N>
 where
-    N: canopy::Node<S> + FrameContent + FixedLayout,
+    N: canopy::Node<S> + FrameContent + FixedLayout<S>,
 {
     _marker: PhantomData<S>,
     pub child: N,
@@ -96,7 +96,7 @@ where
 
 impl<S, N> Frame<S, N>
 where
-    N: canopy::Node<S> + FrameContent + FixedLayout,
+    N: canopy::Node<S> + FrameContent + FixedLayout<S>,
 {
     pub fn new(c: N, glyphs: FrameGlyphs, color: Color, focus_color: Color) -> Self {
         Frame {
@@ -110,11 +110,11 @@ where
     }
 }
 
-impl<S, N> FixedLayout for Frame<S, N>
+impl<S, N> FixedLayout<S> for Frame<S, N>
 where
-    N: canopy::Node<S> + FrameContent + FixedLayout,
+    N: canopy::Node<S> + FrameContent + FixedLayout<S>,
 {
-    fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
+    fn layout(&mut self, app: &mut Canopy<S>, rect: Option<Rect>) -> Result<()> {
         self.set_rect(rect);
         if let Some(r) = rect {
             self.child.layout(app, Some(r.inner(1)?))?;
@@ -125,12 +125,12 @@ where
 
 impl<S, N> Node<S> for Frame<S, N>
 where
-    N: canopy::Node<S> + FrameContent + FixedLayout,
+    N: canopy::Node<S> + FrameContent + FixedLayout<S>,
 {
-    fn should_render(&mut self, app: &mut Canopy) -> Option<bool> {
+    fn should_render(&mut self, app: &mut Canopy<S>) -> Option<bool> {
         Some(app.should_render(&mut self.child))
     }
-    fn render(&mut self, app: &mut Canopy, w: &mut dyn Write) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<S>, w: &mut dyn Write) -> Result<()> {
         if let Some(a) = self.rect() {
             let c = if app.on_focus_path(self) {
                 self.focus_color

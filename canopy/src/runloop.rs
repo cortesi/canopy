@@ -19,9 +19,9 @@ use scopeguard::defer;
 use std::io::Write;
 use std::panic;
 
-pub fn runloop<S, N>(app: &mut Canopy, root: &mut N, s: &mut S) -> Result<()>
+pub fn runloop<S, N>(app: &mut Canopy<S>, root: &mut N, s: &mut S) -> Result<()>
 where
-    N: Node<S> + FixedLayout,
+    N: Node<S> + FixedLayout<S>,
 {
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();

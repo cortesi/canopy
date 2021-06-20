@@ -42,10 +42,10 @@ impl<S> Text<S> {
     }
 }
 
-impl<'a, S> ConstrainedLayout for Text<S> {
+impl<'a, S> ConstrainedLayout<S> for Text<S> {
     fn constrain(
         &mut self,
-        _app: &mut Canopy,
+        _app: &mut Canopy<S>,
         width: Option<u16>,
         _height: Option<u16>,
     ) -> Result<Rect> {
@@ -77,7 +77,7 @@ impl<'a, S> ConstrainedLayout for Text<S> {
             Err(format_err!("Text requires a width constraint"))
         }
     }
-    fn layout(&mut self, _app: &mut Canopy, virt_origin: Point, rect: Rect) -> Result<()> {
+    fn layout(&mut self, _app: &mut Canopy<S>, virt_origin: Point, rect: Rect) -> Result<()> {
         self.set_rect(Some(rect));
         self.virt_origin = Some(virt_origin);
         Ok(())
@@ -85,7 +85,7 @@ impl<'a, S> ConstrainedLayout for Text<S> {
 }
 
 impl<'a, S> Node<S> for Text<S> {
-    fn render(&mut self, _app: &mut Canopy, w: &mut dyn Write) -> Result<()> {
+    fn render(&mut self, _app: &mut Canopy<S>, w: &mut dyn Write) -> Result<()> {
         w.queue(SetForegroundColor(Color::White))?;
         if let (Some(lines), Some(rect), Some(vo)) =
             (self.lines.as_ref(), self.rect(), self.virt_origin)

@@ -34,8 +34,8 @@ impl<S> Input<S> {
     }
 }
 
-impl<S> FixedLayout for Input<S> {
-    fn layout(&mut self, _app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
+impl<S> FixedLayout<S> for Input<S> {
+    fn layout(&mut self, _app: &mut Canopy<S>, rect: Option<Rect>) -> Result<()> {
         self.set_rect(rect);
         Ok(())
     }
@@ -60,14 +60,14 @@ impl<'a, S> Node<S> for Input<S> {
     fn can_focus(&self) -> bool {
         true
     }
-    fn render(&mut self, _app: &mut Canopy, w: &mut dyn Write) -> Result<()> {
+    fn render(&mut self, _app: &mut Canopy<S>, w: &mut dyn Write) -> Result<()> {
         if let Some(r) = self.rect() {
             w.queue(MoveTo(r.tl.x, r.tl.y))?;
             w.queue(Print(&self.value))?;
         }
         Ok(())
     }
-    fn handle_key(&mut self, app: &mut Canopy, _: &mut S, k: key::Key) -> Result<EventResult> {
+    fn handle_key(&mut self, app: &mut Canopy<S>, _: &mut S, k: key::Key) -> Result<EventResult> {
         Ok(match k {
             key::Key(_, key::KeyCode::Char(c)) => {
                 self.value.push(c);

@@ -52,8 +52,8 @@ impl Block {
     }
 }
 
-impl FixedLayout for Root {
-    fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
+impl FixedLayout<Handle> for Root {
+    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<()> {
         self.set_rect(rect);
         if let Some(a) = rect {
             app.resize(&mut self.child, a)?;
@@ -65,7 +65,7 @@ impl FixedLayout for Root {
 impl Node<Handle> for Root {
     fn handle_mouse(
         &mut self,
-        app: &mut Canopy,
+        app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<EventResult> {
@@ -75,7 +75,12 @@ impl Node<Handle> for Root {
             _ => EventResult::Ignore { skip: false },
         })
     }
-    fn handle_key(&mut self, app: &mut Canopy, _: &mut Handle, k: key::Key) -> Result<EventResult> {
+    fn handle_key(
+        &mut self,
+        app: &mut Canopy<Handle>,
+        _: &mut Handle,
+        k: key::Key,
+    ) -> Result<EventResult> {
         Ok(match k {
             c if c == key::KeyCode::Tab => app.focus_next(self)?,
             c if c == 'l' || c == key::KeyCode::Right => app.focus_right(self)?,
@@ -92,7 +97,7 @@ impl Node<Handle> for Root {
 }
 
 impl Block {
-    fn add(&mut self, app: &mut Canopy) -> Result<EventResult> {
+    fn add(&mut self, app: &mut Canopy<Handle>) -> Result<EventResult> {
         Ok(if self.children.len() == 0 {
             EventResult::Ignore { skip: false }
         } else if self.size_limited() {
@@ -117,7 +122,7 @@ impl Block {
             false
         }
     }
-    fn split(&mut self, app: &mut Canopy) -> Result<EventResult> {
+    fn split(&mut self, app: &mut Canopy<Handle>) -> Result<EventResult> {
         Ok(if self.children.len() != 0 {
             EventResult::Ignore { skip: false }
         } else if self.size_limited() {
@@ -131,8 +136,8 @@ impl Block {
     }
 }
 
-impl FixedLayout for Block {
-    fn layout(&mut self, app: &mut Canopy, rect: Option<Rect>) -> Result<()> {
+impl FixedLayout<Handle> for Block {
+    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<()> {
         self.set_rect(rect);
         if let Some(a) = rect {
             if self.children.len() > 0 {
@@ -154,7 +159,7 @@ impl Node<Handle> for Block {
     fn can_focus(&self) -> bool {
         self.children.len() == 0
     }
-    fn render(&mut self, app: &mut Canopy, w: &mut dyn Write) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<Handle>, w: &mut dyn Write) -> Result<()> {
         if let Some(a) = self.rect() {
             if self.children.len() == 0 {
                 block(
@@ -174,7 +179,7 @@ impl Node<Handle> for Block {
     }
     fn handle_mouse(
         &mut self,
-        app: &mut Canopy,
+        app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<EventResult> {
@@ -194,7 +199,12 @@ impl Node<Handle> for Block {
             _ => EventResult::Ignore { skip: false },
         })
     }
-    fn handle_key(&mut self, app: &mut Canopy, _: &mut Handle, k: key::Key) -> Result<EventResult> {
+    fn handle_key(
+        &mut self,
+        app: &mut Canopy<Handle>,
+        _: &mut Handle,
+        k: key::Key,
+    ) -> Result<EventResult> {
         Ok(match k {
             c if c == 's' => {
                 self.split(app)?;

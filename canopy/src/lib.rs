@@ -115,7 +115,7 @@ pub trait Node<S>: StatefulNode {
     /// behaviour. Implementing this method should only be needed in rare
     /// circumstances, like container nodes that need to respond to changes in
     /// sub-nodes. The default implementation returns `None`.
-    fn should_render(&mut self, app: &mut Canopy) -> Option<bool> {
+    fn should_render(&mut self, app: &mut Canopy<S>) -> Option<bool> {
         None
     }
 
@@ -126,7 +126,7 @@ pub trait Node<S>: StatefulNode {
     }
 
     /// Render the widget to a buffer. The default implementation does nothing.
-    fn render(&mut self, app: &mut Canopy, w: &mut dyn Write) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<S>, w: &mut dyn Write) -> Result<()> {
         Ok(())
     }
 
@@ -134,7 +134,7 @@ pub trait Node<S>: StatefulNode {
     /// event was ignored. Only nodes that have focus may handle key input, so
     /// this method is only called if focused() returns true. The default
     /// implementation ignores input.
-    fn handle_key(&mut self, app: &mut Canopy, s: &mut S, k: key::Key) -> Result<EventResult> {
+    fn handle_key(&mut self, app: &mut Canopy<S>, s: &mut S, k: key::Key) -> Result<EventResult> {
         Ok(EventResult::Ignore { skip: false })
     }
 
@@ -142,7 +142,7 @@ pub trait Node<S>: StatefulNode {
     /// the event was ignored. The default implementation ignores mouse input.
     fn handle_mouse(
         &mut self,
-        app: &mut Canopy,
+        app: &mut Canopy<S>,
         s: &mut S,
         k: mouse::Mouse,
     ) -> Result<EventResult> {
@@ -150,7 +150,7 @@ pub trait Node<S>: StatefulNode {
     }
 
     /// Handle a periodic tick event.
-    fn handle_tick(&mut self, app: &mut Canopy, s: &mut S, k: app::Tick) -> Result<EventResult> {
+    fn handle_tick(&mut self, app: &mut Canopy<S>, s: &mut S, k: app::Tick) -> Result<EventResult> {
         Ok(EventResult::Ignore { skip: false })
     }
 
@@ -229,9 +229,9 @@ mod tests {
     use crate::tutils::utils;
     use crate::*;
 
-    fn skipper<S>(
-        app: &mut Canopy,
-        x: &mut dyn Node<S>,
+    fn skipper(
+        app: &mut Canopy<utils::State>,
+        x: &mut dyn Node<utils::State>,
         skipname: String,
         v: &mut Vec<String>,
     ) -> Result<SkipWalker> {
@@ -247,7 +247,7 @@ mod tests {
     #[test]
     fn tpostorder() -> Result<()> {
         fn skipon(
-            app: &mut Canopy,
+            app: &mut Canopy<utils::State>,
             root: &mut utils::TRoot,
             skipname: String,
         ) -> Result<Vec<String>> {
@@ -286,7 +286,7 @@ mod tests {
     #[test]
     fn tpreorder() -> Result<()> {
         fn skipon(
-            app: &mut Canopy,
+            app: &mut Canopy<utils::State>,
             root: &mut utils::TRoot,
             skipname: String,
         ) -> Result<Vec<String>> {
