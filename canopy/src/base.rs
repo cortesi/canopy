@@ -3,14 +3,11 @@ use std::{fmt::Debug, io::Write};
 
 use crate::geom::{Direction, Rect};
 use crate::{
-    event::{key, mouse, Event},
+    event::{key, mouse, tick, Event},
     layout::FixedLayout,
     node::{locate, postorder, preorder, EventResult, Joiner, Node, SkipWalker},
 };
 use anyhow::{format_err, Result};
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub struct Tick {}
 
 #[derive(Debug, PartialEq, Copy)]
 pub struct Canopy<S> {
@@ -404,7 +401,12 @@ impl<S> Canopy<S> {
     }
 
     /// Propagate a tick event through the tree.
-    pub fn tick(&mut self, root: &mut dyn Node<S>, s: &mut S, t: Tick) -> Result<EventResult> {
+    pub fn tick(
+        &mut self,
+        root: &mut dyn Node<S>,
+        s: &mut S,
+        t: tick::Tick,
+    ) -> Result<EventResult> {
         let mut ret = EventResult::default();
         preorder(root, &mut |x| -> Result<SkipWalker> {
             let v = x.handle_tick(self, s, t)?;
@@ -443,7 +445,7 @@ impl<S> Canopy<S> {
                 self.resize(root, r)?;
                 Ok(EventResult::Handle { skip: false })
             }
-            Event::Tick() => self.tick(root, s, Tick {}),
+            Event::Tick(t) => self.tick(root, s, t),
         }
     }
 }
@@ -587,7 +589,7 @@ mod tests {
         let mut s = utils::State::new();
         app.set_focus(&mut root)?;
         root.next_event = Some(handled);
-        assert_eq!(app.tick(&mut root, &mut s, Tick {})?, handled);
+        assert_eq!(app.tick(&mut root, &mut s, tick::Tick {})?, handled);
         assert_eq!(
             s.path,
             vec![
@@ -604,7 +606,7 @@ mod tests {
         let mut s = utils::State::new();
         app.set_focus(&mut root)?;
         root.a.next_event = Some(EventResult::Ignore { skip: true });
-        assert_eq!(app.tick(&mut root, &mut s, Tick {})?, ignore);
+        assert_eq!(app.tick(&mut root, &mut s, tick::Tick {})?, ignore);
         assert_eq!(
             s.path,
             vec![
@@ -620,7 +622,7 @@ mod tests {
         app.set_focus(&mut root)?;
         root.a.next_event = Some(EventResult::Ignore { skip: true });
         root.b.next_event = Some(EventResult::Handle { skip: true });
-        assert_eq!(app.tick(&mut root, &mut s, Tick {})?, handled);
+        assert_eq!(app.tick(&mut root, &mut s, tick::Tick {})?, handled);
         assert_eq!(
             s.path,
             vec!["r@tick->ignore", "ba@tick->ignore", "bb@tick->handle",]
@@ -842,7 +844,7 @@ mod tests {
         root.a.a.next_event = Some(handled);
         root.b.b.next_event = Some(handled);
         app.skip_taint(&mut root.a.a);
-        assert_eq!(app.tick(&mut root, &mut s, Tick {})?, handled);
+        assert_eq!(app.tick(&mut root, &mut s, tick::Tick {})?, handled);
         assert_eq!(
             s.path,
             vec![

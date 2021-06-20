@@ -3,11 +3,10 @@ pub mod utils {
     use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
     use crate as canopy;
-    use crate::event::key;
-    use crate::event::mouse;
-    use crate::geom::Rect;
-    use crate::state;
-    use crate::*;
+    use crate::{
+        event::{key, mouse, tick},
+        layout, Canopy, EventResult, Node, NodeState, Rect, StatefulNode,
+    };
 
     use anyhow::{format_err, Result};
     use crossterm::{style::Print, ExecutableCommand};
@@ -33,9 +32,9 @@ pub mod utils {
         }
     }
 
-    #[derive(Debug, PartialEq, state::StatefulNode)]
+    #[derive(Debug, PartialEq, StatefulNode)]
     pub struct TRoot {
-        state: state::NodeState,
+        state: NodeState,
         name: String,
 
         pub next_event: Option<EventResult>,
@@ -45,7 +44,7 @@ pub mod utils {
 
     #[derive(Debug, PartialEq, StatefulNode)]
     pub struct TBranch {
-        state: state::NodeState,
+        state: NodeState,
         name: String,
 
         pub next_event: Option<EventResult>,
@@ -55,7 +54,7 @@ pub mod utils {
 
     #[derive(Debug, PartialEq, StatefulNode)]
     pub struct TLeaf {
-        state: state::NodeState,
+        state: NodeState,
         name: String,
 
         pub next_event: Option<EventResult>,
@@ -100,7 +99,7 @@ pub mod utils {
             &mut self,
             _: &mut Canopy<State>,
             s: &mut State,
-            _: Tick,
+            _: tick::Tick,
         ) -> Result<EventResult> {
             self.handle(s, "tick")
         }
@@ -145,7 +144,7 @@ pub mod utils {
             &mut self,
             _: &mut Canopy<State>,
             s: &mut State,
-            _: Tick,
+            _: tick::Tick,
         ) -> Result<EventResult> {
             self.handle(s, "tick")
         }
@@ -198,7 +197,7 @@ pub mod utils {
             &mut self,
             _: &mut Canopy<State>,
             s: &mut State,
-            _: Tick,
+            _: tick::Tick,
         ) -> Result<EventResult> {
             self.handle(s, "tick")
         }
@@ -215,7 +214,7 @@ pub mod utils {
     impl TLeaf {
         pub fn new(name: &str) -> Self {
             TLeaf {
-                state: state::NodeState::default(),
+                state: NodeState::default(),
                 name: name.into(),
                 next_event: None,
             }
@@ -223,8 +222,8 @@ pub mod utils {
         pub fn mouse_event(&self) -> Result<mouse::Mouse> {
             if let Some(a) = self.rect() {
                 Ok(mouse::Mouse {
-                    action: Some(event::mouse::Action::Down),
-                    button: Some(event::mouse::Button::Left),
+                    action: Some(mouse::Action::Down),
+                    button: Some(mouse::Button::Left),
                     modifiers: None,
                     loc: a.tl,
                 })
@@ -247,7 +246,7 @@ pub mod utils {
     impl TBranch {
         pub fn new(name: &str) -> Self {
             TBranch {
-                state: state::NodeState::default(),
+                state: NodeState::default(),
                 name: name.into(),
                 a: TLeaf::new(&(name.to_owned() + ":" + "la")),
                 b: TLeaf::new(&(name.to_owned() + ":" + "lb")),
@@ -269,7 +268,7 @@ pub mod utils {
     impl TRoot {
         pub fn new() -> Self {
             TRoot {
-                state: state::NodeState::default(),
+                state: NodeState::default(),
                 name: "r".into(),
                 a: TBranch::new("ba"),
                 b: TBranch::new("bb"),

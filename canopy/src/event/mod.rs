@@ -1,5 +1,7 @@
 pub mod key;
 pub mod mouse;
+pub mod tick;
+
 use crate::geom;
 
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -14,7 +16,7 @@ pub enum Event {
     Key(key::Key),
     Mouse(mouse::Mouse),
     Resize(geom::Rect),
-    Tick(),
+    Tick(tick::Tick),
 }
 
 pub struct EventSource {
@@ -63,7 +65,7 @@ impl EventSource {
             }
         });
         thread::spawn(move || loop {
-            if tick_tx.send(Event::Tick()).is_err() {
+            if tick_tx.send(Event::Tick(tick::Tick {})).is_err() {
                 break;
             }
             thread::sleep(Duration::from_millis(

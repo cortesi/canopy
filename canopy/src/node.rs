@@ -3,8 +3,8 @@ use std::{fmt::Debug, io::Write};
 use anyhow::Result;
 
 use crate::{
-    event::{key, mouse},
-    Canopy, Point, StatefulNode, Tick,
+    event::{key, mouse, tick},
+    Canopy, Point, StatefulNode,
 };
 
 /// A type that accumulates results.
@@ -141,7 +141,12 @@ pub trait Node<S>: StatefulNode {
     }
 
     /// Handle a periodic tick event.
-    fn handle_tick(&mut self, app: &mut Canopy<S>, s: &mut S, k: Tick) -> Result<EventResult> {
+    fn handle_tick(
+        &mut self,
+        app: &mut Canopy<S>,
+        s: &mut S,
+        k: tick::Tick,
+    ) -> Result<EventResult> {
         Ok(EventResult::Ignore { skip: false })
     }
 
