@@ -21,7 +21,7 @@ struct ScrollState {
 }
 
 /// `Scroll` is an adapter that turns a node with `ConstrainedLayout` into one
-/// with `FixedLayout`, by managing a scrollable view onto the constrained
+/// with `FixedLayout` by managing a scrollable view onto the constrained
 /// widget.
 #[derive(StatefulNode)]
 pub struct Scroll<S, N: Node<S> + ConstrainedLayout<S>> {

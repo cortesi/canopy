@@ -9,9 +9,16 @@ use crate::{
 };
 use anyhow::{format_err, Result};
 
+/// The core of a Canopy app - this struct keeps track of the render and focus
+/// state, and provides functionality for interacting with node trees.
 #[derive(Debug, PartialEq, Copy)]
 pub struct Canopy<S> {
+    // A counter that is incremented every time focus changes. The current focus
+    // will have a state `focus_gen` equal to this.
     pub focus_gen: u64,
+    // A counter that is incremented every time we render. All items that
+    // require rendering during the current sweep will have a state `render_gen`
+    // equal to this.
     pub render_gen: u64,
     pub last_focus_gen: u64,
     _marker: PhantomData<S>,
@@ -174,13 +181,7 @@ impl<S> Canopy<S> {
         if self.is_focused(e) {
             false
         } else {
-            let mut onpath = false;
-            self.focus_path(e, &mut |_| -> Result<()> {
-                onpath = true;
-                Ok(())
-            })
-            .unwrap();
-            onpath
+            self.on_focus_path(e)
         }
     }
 
@@ -231,7 +232,7 @@ impl<S> Canopy<S> {
         Ok(EventResult::Handle { skip: false })
     }
 
-    /// Find the area of the current focus, if any.
+    /// Find the area of the current terminal focus node.
     pub fn get_focus_area(&self, e: &mut dyn Node<S>) -> Option<Rect> {
         let mut ret = None;
         self.focus_path(e, &mut |x| -> Result<()> {
@@ -529,6 +530,7 @@ mod tests {
         let mut root = utils::TRoot::new();
 
         assert_eq!(focvec(&mut app, &mut root)?.len(), 0);
+
         assert!(!app.on_focus_path(&mut root));
         assert!(!app.on_focus_path(&mut root.a));
 
@@ -568,14 +570,14 @@ mod tests {
         app.set_focus(&mut root.a.a)?;
         app.focus_right(&mut root)?;
         assert!(app.is_focused(&root.b.a));
-        // app.focus_right(&mut root)?;
-        // assert!(root.b.a.state().is_focused(&app));
+        app.focus_right(&mut root)?;
+        assert!(app.is_focused(&root.b.a));
 
-        // app.set_focus(&mut root.a.b)?;
-        // app.focus_right(&mut root)?;
-        // assert!(root.b.b.state().is_focused(&app));
-        // app.focus_right(&mut root)?;
-        // assert!(root.b.b.state().is_focused(&app));
+        app.set_focus(&mut root.a.b)?;
+        app.focus_right(&mut root)?;
+        assert!(app.is_focused(&root.b.b));
+        app.focus_right(&mut root)?;
+        assert!(app.is_focused(&root.b.b));
 
         Ok(())
     }

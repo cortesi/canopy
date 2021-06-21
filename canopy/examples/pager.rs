@@ -93,7 +93,6 @@ pub fn main() -> Result<()> {
         let mut h = Handle {};
         let contents = fs::read_to_string(args[1].clone())?;
         let mut root = Root::new(contents);
-        app.focus_next(&mut root)?;
         runloop(&mut app, &mut root, &mut h)?;
     }
     Ok(())

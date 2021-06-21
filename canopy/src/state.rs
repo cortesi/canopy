@@ -7,20 +7,15 @@ pub use canopy_derive::StatefulNode;
 /// method on request.
 #[derive(Debug, PartialEq)]
 pub struct NodeState {
-    pub render_gen: u64,
-    pub render_skip_gen: u64,
-    pub focus_gen: u64,
+    // If this is equal to the global render_gen, we render during the current
+    // sweep.
+    pub(crate) render_gen: u64,
+    pub(crate) render_skip_gen: u64,
+    pub(crate) focus_gen: u64,
     // The focus generation if this node held focus during the last rendering
     // phase.
-    pub rendered_focus_gen: u64,
+    pub(crate) rendered_focus_gen: u64,
     pub rect: Option<Rect>,
-}
-
-impl NodeState {
-    // Does this node currently hold focus?
-    // pub fn is_focused(&self, appstate: &Canopy<S>) -> bool {
-    //     self.focus_gen == appstate.focus_gen
-    // }
 }
 
 impl NodeState {

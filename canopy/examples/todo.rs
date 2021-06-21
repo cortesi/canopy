@@ -103,13 +103,11 @@ impl Node<Handle> for Root {
             c if c == key::KeyCode::PageUp => self.child.child.page_up(app)?,
             c if c == key::KeyCode::Enter => {
                 self.adder = None;
-                app.set_focus(self)?;
                 app.taint_tree(self)?;
                 EventResult::Handle { skip: false }
             }
             c if c == key::KeyCode::Esc => {
                 self.adder = None;
-                app.set_focus(self)?;
                 app.taint_tree(self)?;
                 EventResult::Handle { skip: false }
             }
@@ -130,7 +128,6 @@ pub fn main() -> Result<()> {
     let mut app = Canopy::new();
     let mut h = Handle {};
     let mut root = Root::new(String::new());
-    app.focus_next(&mut root)?;
     runloop(&mut app, &mut root, &mut h)?;
     Ok(())
 }

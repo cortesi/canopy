@@ -48,8 +48,9 @@ on each tainted node.
 
 <img width=300 style="padding: 20px;" src=".assets/focus.png">
 
-Only one node can have **focus** at a time. When a node has focus, its ancestors
-up to the root of the tree are on the **focus path**. Nodes advertise whether
+Eactly one node has **focus** at any one time. If a node has focus, its
+ancestors up to the root of the tree are on the **focus path**. A corollary of
+this is that the root node is always on the focus path. Nodes advertise whether
 they can accept focus by implementing the **can_focus** method of the **Node**
 trait - any node can accept focus, even if it's not a leaf.
 

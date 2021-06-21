@@ -56,6 +56,9 @@ where
         },
     )?;
     'outer: loop {
+        if app.focus_depth(root) == 0 {
+            app.focus_first(root)?;
+        }
         app.render(root, &mut stdout)?;
         loop {
             match app.event(root, s, events.next()?)? {
@@ -64,6 +67,9 @@ where
                     break 'outer;
                 }
                 EventResult::Handle { .. } => {
+                    if app.focus_depth(root) == 0 {
+                        app.focus_first(root)?;
+                    }
                     app.render(root, &mut stdout)?;
                 }
             }

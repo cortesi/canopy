@@ -223,6 +223,5 @@ pub fn main() -> Result<()> {
     let mut h = Handle {};
     let mut app = Canopy::new();
     let mut root = Root::new();
-    app.focus_next(&mut root)?;
     runloop(&mut app, &mut root, &mut h)
 }
