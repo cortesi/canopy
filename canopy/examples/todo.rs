@@ -35,7 +35,7 @@ impl Root {
     }
     fn open_adder(&mut self, app: &mut Canopy<Handle>) -> Result<EventResult> {
         let mut adder = frame::Frame::new(
-            input::InputLine::new(15),
+            input::InputLine::new(""),
             frame::SINGLE,
             Color::White,
             Color::Blue,

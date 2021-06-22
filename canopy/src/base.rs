@@ -3,13 +3,14 @@ use std::{fmt::Debug, io::Write};
 
 use crate::geom::{Direction, Rect};
 use crate::{
+    cursor,
     event::{key, mouse, tick, Event},
     layout::FixedLayout,
     node::{locate, postorder, preorder, EventResult, Joiner, Node, SkipWalker},
 };
 use anyhow::{format_err, Result};
 use crossterm::{
-    cursor::{DisableBlinking, EnableBlinking, Hide, MoveTo, Show},
+    cursor::{CursorShape, DisableBlinking, EnableBlinking, Hide, MoveTo, SetCursorShape, Show},
     QueueableCommand,
 };
 
@@ -315,6 +316,11 @@ impl<S> Canopy<S> {
                         } else {
                             w.queue(DisableBlinking)?;
                         }
+                        w.queue(SetCursorShape(match c.shape {
+                            cursor::CursorShape::Block => CursorShape::Block,
+                            cursor::CursorShape::Line => CursorShape::Line,
+                            cursor::CursorShape::Underscore => CursorShape::UnderScore,
+                        }))?;
                         seen = true;
                     }
                 }

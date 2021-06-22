@@ -16,22 +16,55 @@ use crate::{
 
 use crossterm::{cursor::MoveTo, style::Print, QueueableCommand};
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct TextBuf {
+    pub value: String,
+    cursor_pos: usize,
+}
+
+impl TextBuf {
+    fn new(start: &str) -> Self {
+        TextBuf {
+            value: start.to_owned(),
+            cursor_pos: start.len(),
+        }
+    }
+    fn insert(&mut self, c: char) {
+        self.value.insert(self.cursor_pos, c);
+        self.cursor_pos += 1;
+    }
+    fn backspace(&mut self) {
+        if self.value.len() > 0 {
+            self.value.remove(self.cursor_pos - 1);
+            self.cursor_pos -= 1;
+        }
+    }
+    fn left(&mut self) {
+        if self.cursor_pos > 0 {
+            self.cursor_pos -= 1;
+        }
+    }
+    fn right(&mut self) {
+        if self.cursor_pos < self.value.len() {
+            self.cursor_pos += 1;
+        }
+    }
+}
+
 /// A single input line, one character high.
 #[derive(StatefulNode)]
 pub struct InputLine<S> {
-    pub state: NodeState,
-    pub width: u16,
-    pub value: String,
+    state: NodeState,
     _marker: PhantomData<S>,
+    pub textbuf: TextBuf,
 }
 
 impl<S> InputLine<S> {
-    pub fn new(width: u16) -> Self {
+    pub fn new(txt: &str) -> Self {
         InputLine {
             state: NodeState::default(),
             _marker: PhantomData,
-            value: String::new(),
-            width,
+            textbuf: TextBuf::new(txt),
         }
     }
 }
@@ -70,7 +103,7 @@ impl<'a, S> Node<S> for InputLine<S> {
     fn cursor(&mut self) -> Option<cursor::Cursor> {
         Some(cursor::Cursor {
             location: Point {
-                x: self.value.len() as u16,
+                x: self.textbuf.cursor_pos as u16,
                 y: 0,
             },
             shape: cursor::CursorShape::Block,
@@ -80,18 +113,95 @@ impl<'a, S> Node<S> for InputLine<S> {
     fn render(&mut self, _app: &mut Canopy<S>, w: &mut dyn Write) -> Result<()> {
         if let Some(r) = self.rect() {
             w.queue(MoveTo(r.tl.x, r.tl.y))?;
-            w.queue(Print(&self.value))?;
+            w.queue(Print(&self.textbuf.value))?;
+            w.queue(Print(" ".repeat(r.w as usize - self.textbuf.value.len())))?;
         }
         Ok(())
     }
-    fn handle_key(&mut self, app: &mut Canopy<S>, _: &mut S, k: key::Key) -> Result<EventResult> {
-        Ok(match k {
-            key::Key(_, key::KeyCode::Char(c)) => {
-                self.value.push(c);
-                app.taint(self);
-                EventResult::Handle { skip: false }
+    fn handle_key(&mut self, _app: &mut Canopy<S>, _: &mut S, k: key::Key) -> Result<EventResult> {
+        match k {
+            key::Key(_, key::KeyCode::Left) => {
+                self.textbuf.left();
             }
-            _ => EventResult::Ignore { skip: false },
-        })
+            key::Key(_, key::KeyCode::Right) => {
+                self.textbuf.right();
+            }
+            key::Key(_, key::KeyCode::Backspace) => {
+                self.textbuf.backspace();
+            }
+            key::Key(_, key::KeyCode::Char(c)) => {
+                self.textbuf.insert(c);
+            }
+            _ => return Ok(EventResult::Ignore { skip: false }),
+        };
+        Ok(EventResult::Handle { skip: false })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn textbuf() -> Result<()> {
+        let mut t = TextBuf::new("");
+        t.left();
+        assert_eq!(
+            t,
+            TextBuf {
+                cursor_pos: 0,
+                value: "".into()
+            }
+        );
+        t.right();
+        assert_eq!(
+            t,
+            TextBuf {
+                cursor_pos: 0,
+                value: "".into()
+            }
+        );
+        t.backspace();
+        assert_eq!(
+            t,
+            TextBuf {
+                cursor_pos: 0,
+                value: "".into()
+            }
+        );
+        t.insert('c');
+        assert_eq!(
+            t,
+            TextBuf {
+                cursor_pos: 1,
+                value: "c".into()
+            }
+        );
+        t.left();
+        assert_eq!(
+            t,
+            TextBuf {
+                cursor_pos: 0,
+                value: "c".into()
+            }
+        );
+        t.right();
+        assert_eq!(
+            t,
+            TextBuf {
+                cursor_pos: 1,
+                value: "c".into()
+            }
+        );
+        t.insert('a');
+        assert_eq!(
+            t,
+            TextBuf {
+                cursor_pos: 2,
+                value: "ca".into()
+            }
+        );
+
+        Ok(())
     }
 }

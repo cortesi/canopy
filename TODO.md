@@ -1,6 +1,7 @@
 
 
 - Ergonomics:
+  - FixedFrame
   - Better EventResult
   - Move to a builder pattern for complex widgets
   - Introduce a root type?
