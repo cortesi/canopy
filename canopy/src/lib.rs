@@ -3,6 +3,7 @@ mod node;
 mod state;
 mod tutils;
 
+pub mod cursor;
 pub mod event;
 pub mod geom;
 pub mod layout;

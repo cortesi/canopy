@@ -8,6 +8,10 @@ use crate::{
     node::{locate, postorder, preorder, EventResult, Joiner, Node, SkipWalker},
 };
 use anyhow::{format_err, Result};
+use crossterm::{
+    cursor::{DisableBlinking, EnableBlinking, Hide, MoveTo, Show},
+    QueueableCommand,
+};
 
 /// The core of a Canopy app - this struct keeps track of the render and focus
 /// state, and provides functionality for interacting with node trees.
@@ -268,6 +272,7 @@ impl<S> Canopy<S> {
         })?;
         Ok(ret)
     }
+
     /// Returns the focal depth of the specified node. If the node is not part
     /// of the focus chain, the depth is 0. If the node is a leaf focus, the
     /// depth is 1.
@@ -279,6 +284,44 @@ impl<S> Canopy<S> {
         })
         .unwrap();
         total
+    }
+
+    /// Pre-render sweep of the tree.
+    pub(crate) fn pre_render(&mut self, e: &mut dyn Node<S>, w: &mut dyn Write) -> Result<()> {
+        let mut seen = false;
+        self.focus_path(e, &mut |_| -> Result<()> {
+            seen = true;
+            Ok(())
+        })?;
+        if !seen {
+            self.focus_first(e)?;
+        }
+        // FIXME: Maybe only hide if we know the cursor is visible?
+        w.queue(Hide {})?;
+        Ok(())
+    }
+
+    /// Post-render sweep of the tree.
+    pub(crate) fn post_render(&mut self, e: &mut dyn Node<S>, w: &mut dyn Write) -> Result<()> {
+        let mut seen = false;
+        self.focus_path(e, &mut |n| -> Result<()> {
+            if !seen {
+                if let Some(c) = n.cursor() {
+                    if let Some(r) = n.rect() {
+                        w.queue(MoveTo(r.tl.x + c.location.x, r.tl.y + c.location.y))?;
+                        w.queue(Show)?;
+                        if c.blink {
+                            w.queue(EnableBlinking)?;
+                        } else {
+                            w.queue(DisableBlinking)?;
+                        }
+                        seen = true;
+                    }
+                }
+            }
+            Ok(())
+        })?;
+        Ok(())
     }
 
     /// Mark a tree of nodes for render.

@@ -17,7 +17,7 @@ struct Handle {}
 struct Root {
     state: NodeState,
     child: frame::Frame<Handle, scroll::Scroll<Handle, text::Text<Handle>>>,
-    adder: Option<frame::Frame<Handle, input::Input<Handle>>>,
+    adder: Option<frame::Frame<Handle, input::InputLine<Handle>>>,
 }
 
 impl Root {
@@ -35,7 +35,7 @@ impl Root {
     }
     fn open_adder(&mut self, app: &mut Canopy<Handle>) -> Result<EventResult> {
         let mut adder = frame::Frame::new(
-            input::Input::new(15),
+            input::InputLine::new(15),
             frame::SINGLE,
             Color::White,
             Color::Blue,

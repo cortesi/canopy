@@ -1,10 +1,11 @@
 use std::io::Write;
 use std::marker::PhantomData;
 
-use anyhow::Result;
+use anyhow::{format_err, Result};
 
 use crate as canopy;
 use crate::{
+    cursor,
     event::key,
     geom::{Point, Rect},
     layout::FixedLayout,
@@ -15,17 +16,18 @@ use crate::{
 
 use crossterm::{cursor::MoveTo, style::Print, QueueableCommand};
 
+/// A single input line, one character high.
 #[derive(StatefulNode)]
-pub struct Input<S> {
+pub struct InputLine<S> {
     pub state: NodeState,
     pub width: u16,
     pub value: String,
     _marker: PhantomData<S>,
 }
 
-impl<S> Input<S> {
+impl<S> InputLine<S> {
     pub fn new(width: u16) -> Self {
-        Input {
+        InputLine {
             state: NodeState::default(),
             _marker: PhantomData,
             value: String::new(),
@@ -34,14 +36,19 @@ impl<S> Input<S> {
     }
 }
 
-impl<S> FixedLayout<S> for Input<S> {
+impl<S> FixedLayout<S> for InputLine<S> {
     fn layout(&mut self, _app: &mut Canopy<S>, rect: Option<Rect>) -> Result<()> {
+        if let Some(r) = rect {
+            if r.h != 1 {
+                return Err(format_err!("InputLine height must be exactly 1."));
+            }
+        }
         self.set_rect(rect);
         Ok(())
     }
 }
 
-impl<S> frame::FrameContent for Input<S> {
+impl<S> frame::FrameContent for InputLine<S> {
     fn bounds(&self) -> Option<(Rect, Rect)> {
         if let Some(r) = self.rect() {
             let vr = Rect {
@@ -56,9 +63,19 @@ impl<S> frame::FrameContent for Input<S> {
     }
 }
 
-impl<'a, S> Node<S> for Input<S> {
+impl<'a, S> Node<S> for InputLine<S> {
     fn can_focus(&self) -> bool {
         true
+    }
+    fn cursor(&mut self) -> Option<cursor::Cursor> {
+        Some(cursor::Cursor {
+            location: Point {
+                x: self.value.len() as u16,
+                y: 0,
+            },
+            shape: cursor::CursorShape::Block,
+            blink: true,
+        })
     }
     fn render(&mut self, _app: &mut Canopy<S>, w: &mut dyn Write) -> Result<()> {
         if let Some(r) = self.rect() {

@@ -1,5 +1,4 @@
 
-
 **Hey curious person - if you've stumbled onto this project, please know that
 Canopy is is not yet ready for human consumption! I'll announce a release as
 soon as I feel it's worth anyone else's time.**
@@ -132,4 +131,11 @@ Nodes that handle a tick event are automatically tainted.
 ### Actions
 
 
+### Cursor management
+
+For historical reasons, terminals don't distinguish between the location of the
+visible cursor shown to users and the draw location for rendering. Canopy
+simplifies this by introducing a separate cursor rendering sweep after widget
+rendering. This gives all nodes on the focus path the opportunity to define a
+cursor location and style without needing to consider rendering or render order.
 

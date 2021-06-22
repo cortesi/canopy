@@ -24,22 +24,23 @@ where
     N: Node<S> + FixedLayout<S>,
 {
     enable_raw_mode()?;
-    let mut stdout = std::io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture, Hide)?;
+    let mut w = std::io::stderr();
+
+    execute!(w, EnterAlternateScreen, EnableMouseCapture, Hide)?;
     defer! {
-        let mut stdout = std::io::stdout();
+        let mut stderr = std::io::stderr();
         #[allow(unused_must_use)]
         {
-            execute!(stdout, LeaveAlternateScreen, DisableMouseCapture, Show);
+            execute!(stderr, LeaveAlternateScreen, DisableMouseCapture, Show);
             disable_raw_mode();
         }
     }
 
     panic::set_hook(Box::new(|pi| {
-        let mut stdout = std::io::stdout();
+        let mut stderr = std::io::stderr();
         #[allow(unused_must_use)]
         {
-            execute!(stdout, LeaveAlternateScreen, DisableMouseCapture, Show);
+            execute!(stderr, LeaveAlternateScreen, DisableMouseCapture, Show);
             disable_raw_mode();
             BacktracePrinter::new().print_panic_info(&pi, &mut default_output_stream());
         }
@@ -56,30 +57,31 @@ where
         },
     )?;
     'outer: loop {
-        if app.focus_depth(root) == 0 {
-            app.focus_first(root)?;
-        }
-        app.render(root, &mut stdout)?;
+        let mut ignore = false;
         loop {
+            if !ignore {
+                app.pre_render(root, &mut w)?;
+                app.render(root, &mut w)?;
+                app.post_render(root, &mut w)?;
+                w.flush()?;
+            }
             match app.event(root, s, events.next()?)? {
-                EventResult::Ignore { .. } => {}
+                EventResult::Ignore { .. } => {
+                    ignore = true;
+                }
                 EventResult::Exit => {
                     break 'outer;
                 }
                 EventResult::Handle { .. } => {
-                    if app.focus_depth(root) == 0 {
-                        app.focus_first(root)?;
-                    }
-                    app.render(root, &mut stdout)?;
+                    ignore = false;
                 }
             }
-            stdout.flush()?;
         }
     }
     let _ = panic::take_hook();
 
-    let mut stdout = std::io::stdout();
-    execute!(stdout, LeaveAlternateScreen, DisableMouseCapture, Show)?;
+    let mut stderr = std::io::stderr();
+    execute!(stderr, LeaveAlternateScreen, DisableMouseCapture, Show)?;
     disable_raw_mode()?;
     Ok(())
 }

@@ -3,6 +3,7 @@ use std::{fmt::Debug, io::Write};
 use anyhow::Result;
 
 use crate::{
+    cursor,
     event::{key, mouse, tick},
     Canopy, Point, StatefulNode,
 };
@@ -119,6 +120,11 @@ pub trait Node<S>: StatefulNode {
     /// Render the widget to a buffer. The default implementation does nothing.
     fn render(&mut self, app: &mut Canopy<S>, w: &mut dyn Write) -> Result<()> {
         Ok(())
+    }
+
+    /// Called for each node on the focus path, after each render sweep.
+    fn cursor(&mut self) -> Option<cursor::Cursor> {
+        None
     }
 
     /// Handle a key event just for this node. Return EventResult::Ingore if the
