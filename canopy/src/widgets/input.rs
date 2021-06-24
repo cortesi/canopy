@@ -7,7 +7,7 @@ use crate as canopy;
 use crate::{
     cursor,
     event::key,
-    geom::{Point, Rect},
+    geom::{Extent, Point, Rect},
     layout::FixedLayout,
     state::{NodeState, StatefulNode},
     widgets::frame,
@@ -23,68 +23,70 @@ use crossterm::{cursor::MoveTo, style::Print, QueueableCommand};
 pub struct TextBuf {
     pub value: String,
 
-    cursor_pos: usize,
-    display_width: usize,
-    display_loc: usize,
+    cursor_pos: u16,
+    window: Extent,
 }
 
 impl TextBuf {
     fn new(start: &str) -> Self {
         TextBuf {
             value: start.to_owned(),
-            cursor_pos: start.len(),
-            display_width: 0,
-            display_loc: 0,
+            cursor_pos: start.len() as u16,
+            window: Extent { off: 0, len: 0 },
         }
     }
     /// The location of the displayed cursor along the x axis
-    fn cursor_display(&self) -> usize {
-        self.cursor_pos - self.display_loc
+    fn cursor_display(&self) -> u16 {
+        self.cursor_pos - self.window.off
     }
     fn text(&self) -> String {
-        let end = (self.display_loc + self.display_width).min(self.value.len());
-        let mut v = self.value[self.display_loc..end].to_owned();
-        let extra = self.display_width - v.len();
+        let end = self.window.far().min(self.value.len() as u16) as usize;
+        let mut v = self.value[self.window.off as usize..end].to_owned();
+        let extra = self.window.len as usize - v.len();
         v = v + &" ".repeat(extra);
         v
     }
     fn fix_window(&mut self) {
-        if self.cursor_pos > self.value.len() {
-            self.cursor_pos = self.value.len()
+        if self.cursor_pos > self.value.len() as u16 {
+            self.cursor_pos = self.value.len() as u16
         }
-        if self.cursor_pos < self.display_loc {
-            self.display_loc = self.cursor_pos;
-        } else if self.cursor_pos >= self.display_loc + self.display_width {
-            self.display_loc = self.cursor_pos - self.display_width;
+        if self.cursor_pos < self.window.off {
+            self.window.off = self.cursor_pos;
+        } else if self.cursor_pos >= self.window.far() {
+            let mut off = self.cursor_pos - self.window.len;
             // When we're right at the end of the sequence, we need one extra
             // character for the cursor.
-            if self.cursor_pos == self.value.len() {
-                self.display_loc += 1
+            if self.cursor_pos == self.value.len() as u16 {
+                off += 1
             }
+            self.window.off = off as u16;
         }
 
-        if self.cursor_display() >= self.display_width {
-            let delta = self.cursor_display() - self.display_width + 1;
-            self.display_loc += delta;
+        if self.cursor_display() >= self.window.len {
+            let delta = self.cursor_display() - self.window.len + 1;
+            self.window.off += delta as u16;
         }
     }
     /// Should be called during layout
     fn set_display_width(&mut self, val: usize) {
-        self.display_width = val;
+        self.window = Extent {
+            off: self.window.off,
+            len: val as u16,
+        };
     }
 
-    fn goto(&mut self, loc: usize) {
+    fn goto(&mut self, loc: u16) {
         self.cursor_pos = loc;
         self.fix_window();
     }
     fn insert(&mut self, c: char) {
-        self.value.insert(self.cursor_pos, c);
+        self.value.insert(self.cursor_pos as usize, c);
         self.cursor_pos += 1;
         self.fix_window();
     }
     fn backspace(&mut self) {
-        if self.value.len() > 0 {
-            self.value.remove(self.cursor_pos - 1);
+        if self.value.len() > 0 && self.cursor_pos > 0 {
+            self.value.remove(self.cursor_pos as usize - 1);
             self.cursor_pos -= 1;
             self.fix_window();
         }
@@ -96,7 +98,7 @@ impl TextBuf {
         }
     }
     fn right(&mut self) {
-        if self.cursor_pos < self.value.len() {
+        if self.cursor_pos < self.value.len() as u16 {
             self.cursor_pos += 1;
             self.fix_window();
         }
@@ -137,7 +139,7 @@ impl<S> FixedLayout<S> for InputLine<S> {
 impl<S> frame::FrameContent for InputLine<S> {
     fn bounds(&self) -> Option<(Rect, Rect)> {
         if let Some(r) = self.rect() {
-            if self.textbuf.display_width >= self.textbuf.value.len() {
+            if self.textbuf.window.len >= self.textbuf.value.len() as u16 {
                 let r = Rect {
                     tl: Point { x: 0, y: 0 },
                     w: r.w,
@@ -145,20 +147,23 @@ impl<S> frame::FrameContent for InputLine<S> {
                 };
                 Some((r, r))
             } else {
+                let view = Rect {
+                    tl: Point { x: 0, y: 0 },
+                    w: self.textbuf.value.len() as u16,
+                    h: 1,
+                };
                 Some((
                     Rect {
                         tl: Point {
-                            x: self.textbuf.display_loc as u16,
+                            x: self.textbuf.window.off,
                             y: 0,
                         },
-                        w: self.textbuf.display_width as u16,
+                        w: self.textbuf.window.len,
                         h: 1,
-                    },
-                    Rect {
-                        tl: Point { x: 0, y: 0 },
-                        w: self.textbuf.value.len() as u16,
-                        h: 1,
-                    },
+                    }
+                    .clamp(view)
+                    .unwrap(),
+                    view,
                 ))
             }
         } else {

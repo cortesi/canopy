@@ -390,6 +390,38 @@ impl Rect {
         }
     }
 
+    /// Extract a section of this rect based on an extent.
+    pub fn vextract(&self, e: Extent) -> Result<Self> {
+        if !self.vextent().contains(e) {
+            Err(format_err!("extract extent outside rectangle"))
+        } else {
+            Ok(Rect {
+                tl: Point {
+                    x: self.tl.x,
+                    y: e.off,
+                },
+                w: self.w,
+                h: e.len,
+            })
+        }
+    }
+
+    /// Extract a horizontal section of this rect based on an extent.
+    pub fn hextract(&self, e: Extent) -> Result<Self> {
+        if !self.hextent().contains(e) {
+            Err(format_err!("extract extent outside rectangle"))
+        } else {
+            Ok(Rect {
+                tl: Point {
+                    x: e.off,
+                    y: self.tl.y,
+                },
+                w: e.len,
+                h: self.h,
+            })
+        }
+    }
+
     /// The vertical extent of this rect.
     pub fn vextent(&self) -> Extent {
         Extent {
@@ -438,7 +470,11 @@ impl Extent {
         if window.len == 0 {
             Err(format_err!("window cannot be zero length"))
         } else if !view.contains(window) {
-            Err(format_err!("window does not contain view"))
+            Err(format_err!(
+                "view {:?} does not contain window {:?}",
+                view,
+                window,
+            ))
         } else {
             // Compute the fraction each section occupies of the view.
             let pref = (window.off - view.off) as f64 / view.len as f64;

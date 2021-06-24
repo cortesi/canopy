@@ -16,8 +16,8 @@ struct ScrollState {
     pub rect: Rect,
     // The total size of the virtual widget
     pub virt: Rect,
-    // The offset within the virtual widget that we're painting to rect
-    pub view: Rect,
+    // The part of the virtual widget that we're painting to rect
+    pub window: Rect,
 }
 
 /// `Scroll` is an adapter that turns a node with `ConstrainedLayout` into one
@@ -43,13 +43,13 @@ impl<S, N: Node<S> + ConstrainedLayout<S>> Scroll<S, N> {
 
     pub fn scroll_to(&mut self, app: &mut Canopy<S>, x: u16, y: u16) -> Result<EventResult> {
         if let Some(ss) = &mut self.scrollstate {
-            ss.view = Rect {
+            ss.window = Rect {
                 tl: Point { x, y },
-                w: ss.view.w,
-                h: ss.view.h,
+                w: ss.window.w,
+                h: ss.window.h,
             }
             .clamp(ss.virt)?;
-            self.child.layout(app, ss.view.tl, ss.rect)?;
+            self.child.layout(app, ss.window.tl, ss.rect)?;
             app.taint_tree(self)?;
         }
         Ok(EventResult::Handle { skip: false })
@@ -57,8 +57,8 @@ impl<S, N: Node<S> + ConstrainedLayout<S>> Scroll<S, N> {
 
     pub fn scroll_by(&mut self, app: &mut Canopy<S>, x: i16, y: i16) -> Result<EventResult> {
         if let Some(ss) = &mut self.scrollstate {
-            ss.view = ss.view.scroll_within(x, y, ss.virt);
-            self.child.layout(app, ss.view.tl, ss.rect)?;
+            ss.window = ss.window.scroll_within(x, y, ss.virt);
+            self.child.layout(app, ss.window.tl, ss.rect)?;
             app.taint_tree(self)?;
         }
         Ok(EventResult::Handle { skip: false })
@@ -66,7 +66,7 @@ impl<S, N: Node<S> + ConstrainedLayout<S>> Scroll<S, N> {
 
     pub fn page_up(&mut self, app: &mut Canopy<S>) -> Result<EventResult> {
         let h = if let Some(ss) = &mut self.scrollstate {
-            ss.view.h
+            ss.window.h
         } else {
             0
         };
@@ -75,7 +75,7 @@ impl<S, N: Node<S> + ConstrainedLayout<S>> Scroll<S, N> {
 
     pub fn page_down(&mut self, app: &mut Canopy<S>) -> Result<EventResult> {
         let h = if let Some(ss) = &mut self.scrollstate {
-            ss.view.h
+            ss.window.h
         } else {
             0
         };
@@ -109,7 +109,7 @@ impl<S, N: Node<S> + ConstrainedLayout<S>> FixedLayout<S> for Scroll<S, N> {
                 h: r.h,
             };
             self.scrollstate = Some(ScrollState {
-                view,
+                window: view,
                 virt,
                 rect: r,
             });
@@ -124,7 +124,7 @@ impl<S, N: Node<S> + ConstrainedLayout<S>> FixedLayout<S> for Scroll<S, N> {
 impl<S, N: Node<S> + ConstrainedLayout<S>> widgets::frame::FrameContent for Scroll<S, N> {
     fn bounds(&self) -> Option<(Rect, Rect)> {
         if let Some(ss) = &self.scrollstate {
-            Some((ss.view, ss.virt))
+            Some((ss.window, ss.virt))
         } else {
             None
         }

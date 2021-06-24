@@ -72,7 +72,7 @@ pub trait FrameContent {
     fn title(&self) -> Option<String> {
         None
     }
-    /// Return the bounds of the frame content as a `(view, virtual)` tuple
+    /// Return the bounds of the frame content as a `(window, virtual)` tuple
     /// where virtual is the virtual size of the element, and view is some
     /// sub-rectangle of the element that is currently being viewed.
     fn bounds(&self) -> Option<(Rect, Rect)> {
@@ -159,16 +159,43 @@ where
             w.queue(MoveTo(f.top.tl.x, f.top.tl.y))?;
             w.queue(Print(top))?;
 
-            if let Some((view, virt)) = self.child.bounds() {
-                let (pre, active, post) = scroll_parts_vert(view, virt, f.right);
-                widgets::block(w, pre, c, self.glyphs.vertical)?;
-                widgets::block(w, post, c, self.glyphs.vertical)?;
-                widgets::block(w, active, c, self.glyphs.vertical_active)?;
+            if let Some((window, virt)) = self.child.bounds() {
+                // Is window equal to or larger than virt?
+                if window.vextent().contains(virt.vextent()) {
+                    widgets::block(w, f.right, c, self.glyphs.vertical)?;
+                } else {
+                    let (epre, eactive, epost) = f
+                        .right
+                        .vextent()
+                        .split_active(window.vextent(), virt.vextent())?;
 
-                let (pre, active, post) = scroll_parts_horiz(view, virt, f.bottom);
-                widgets::block(w, pre, c, self.glyphs.horizontal)?;
-                widgets::block(w, post, c, self.glyphs.horizontal)?;
-                widgets::block(w, active, c, self.glyphs.horizontal_active)?;
+                    widgets::block(w, f.right.vextract(epre)?, c, self.glyphs.vertical)?;
+                    widgets::block(w, f.right.vextract(epost)?, c, self.glyphs.vertical)?;
+                    widgets::block(
+                        w,
+                        f.right.vextract(eactive)?,
+                        c,
+                        self.glyphs.vertical_active,
+                    )?;
+                }
+
+                // Is window equal to or larger than virt?
+                if window.hextent().contains(virt.hextent()) {
+                    widgets::block(w, f.bottom, c, self.glyphs.horizontal)?;
+                } else {
+                    let (epre, eactive, epost) = f
+                        .bottom
+                        .hextent()
+                        .split_active(window.hextent(), virt.hextent())?;
+                    widgets::block(w, f.bottom.hextract(epre)?, c, self.glyphs.horizontal)?;
+                    widgets::block(w, f.bottom.hextract(epost)?, c, self.glyphs.horizontal)?;
+                    widgets::block(
+                        w,
+                        f.bottom.hextract(eactive)?,
+                        c,
+                        self.glyphs.horizontal_active,
+                    )?;
+                }
             } else {
                 widgets::block(w, f.right, c, self.glyphs.vertical)?;
                 widgets::block(w, f.bottom, c, self.glyphs.horizontal)?;
@@ -182,110 +209,5 @@ where
         f: &mut dyn FnMut(&mut dyn canopy::Node<S>) -> Result<()>,
     ) -> Result<()> {
         f(&mut self.child)
-    }
-}
-
-// Takes a `view` onto a `virt` element, and splits up `space` vertically into
-// three rectangles: `(pre, active, post)`, where pre and post are space outside
-// of the active scrollbar indicator.
-fn scroll_parts_vert(view: Rect, virt: Rect, space: Rect) -> (Rect, Rect, Rect) {
-    let vdraw = space.h as f32 - 1.0;
-    let preh = (vdraw * (view.tl.y as f32 / virt.h as f32)).ceil() as u16;
-    let activeh = (vdraw * (view.h as f32 / virt.h as f32)).ceil() as u16;
-    let posth = view.h.saturating_sub(preh + activeh);
-
-    if activeh == 0 || preh == 0 && posth == 0 {
-        (
-            space,
-            Rect {
-                tl: space.tl,
-                w: 0,
-                h: 0,
-            },
-            Rect {
-                tl: Point {
-                    x: space.tl.x,
-                    y: space.tl.y,
-                },
-                w: 0,
-                h: 0,
-            },
-        )
-    } else {
-        (
-            Rect {
-                tl: space.tl,
-                w: space.w,
-                h: preh,
-            },
-            Rect {
-                tl: Point {
-                    x: space.tl.x,
-                    y: space.tl.y + preh,
-                },
-                w: space.w,
-                h: activeh,
-            },
-            Rect {
-                tl: Point {
-                    x: space.tl.x,
-                    y: space.tl.y + preh + activeh,
-                },
-                w: space.w,
-                h: posth,
-            },
-        )
-    }
-}
-
-// Takes a `view` onto a `virt` element, and splits up `space` horizontally into
-// three rectangles: `(pre, active, post)`, where pre and post are space outside
-// of the active scrollbar indicator.
-fn scroll_parts_horiz(view: Rect, virt: Rect, space: Rect) -> (Rect, Rect, Rect) {
-    let prew = ((space.w as f32) * (view.tl.x as f32 / virt.w as f32)).floor() as u16;
-    let activew = ((space.w as f32) * (view.w as f32 / virt.w as f32)).floor() as u16;
-    let postw = view.w.saturating_sub(prew + activew);
-
-    if activew == 0 || prew == 0 && postw == 0 {
-        (
-            space,
-            Rect {
-                tl: space.tl,
-                w: 0,
-                h: 0,
-            },
-            Rect {
-                tl: Point {
-                    x: space.tl.x,
-                    y: space.tl.y,
-                },
-                w: 0,
-                h: 0,
-            },
-        )
-    } else {
-        (
-            Rect {
-                tl: space.tl,
-                w: prew,
-                h: space.h,
-            },
-            Rect {
-                tl: Point {
-                    x: space.tl.x + prew,
-                    y: space.tl.y,
-                },
-                w: activew,
-                h: space.h,
-            },
-            Rect {
-                tl: Point {
-                    x: space.tl.x + prew + activew,
-                    y: space.tl.y,
-                },
-                w: postw,
-                h: space.h,
-            },
-        )
     }
 }
