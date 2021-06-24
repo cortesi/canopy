@@ -242,8 +242,8 @@ fn scroll_parts_vert(view: Rect, virt: Rect, space: Rect) -> (Rect, Rect, Rect) 
 // three rectangles: `(pre, active, post)`, where pre and post are space outside
 // of the active scrollbar indicator.
 fn scroll_parts_horiz(view: Rect, virt: Rect, space: Rect) -> (Rect, Rect, Rect) {
-    let prew = ((space.w as f32) * (view.tl.x as f32 / virt.w as f32)).ceil() as u16;
-    let activew = ((space.w as f32) * (view.w as f32 / virt.w as f32)).ceil() as u16;
+    let prew = ((space.w as f32) * (view.tl.x as f32 / virt.w as f32)).floor() as u16;
+    let activew = ((space.w as f32) * (view.w as f32 / virt.w as f32)).floor() as u16;
     let postw = view.w.saturating_sub(prew + activew);
 
     if activew == 0 || prew == 0 && postw == 0 {
