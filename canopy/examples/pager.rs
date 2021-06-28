@@ -6,6 +6,7 @@ use crossterm::style::Color;
 
 use canopy;
 use canopy::{
+    colorscheme::solarized,
     event::{key, mouse},
     layout::FixedLayout,
     runloop::runloop,
@@ -93,7 +94,8 @@ pub fn main() -> Result<()> {
         let mut h = Handle {};
         let contents = fs::read_to_string(args[1].clone())?;
         let mut root = Root::new(contents);
-        runloop(&mut app, &mut root, &mut h)?;
+        let mut colors = solarized::solarized_dark();
+        runloop(&mut app, &mut colors, &mut root, &mut h)?;
     }
     Ok(())
 }

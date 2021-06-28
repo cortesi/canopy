@@ -1,9 +1,13 @@
 use anyhow::Result;
-use crossterm::style::Color;
+use crossterm::{
+    style::{Color, SetForegroundColor},
+    QueueableCommand,
+};
 use std::io::Write;
 
 use canopy;
 use canopy::{
+    colorscheme::{solarized, ColorScheme},
     event::{key, mouse},
     layout::FixedLayout,
     runloop::runloop,
@@ -156,20 +160,24 @@ impl Node<Handle> for Block {
     fn can_focus(&self) -> bool {
         self.children.len() == 0
     }
-    fn render(&mut self, app: &mut Canopy<Handle>, w: &mut dyn Write) -> Result<()> {
+    fn render(
+        &mut self,
+        app: &mut Canopy<Handle>,
+        _colors: &mut ColorScheme,
+        w: &mut dyn Write,
+    ) -> Result<()> {
         if let Some(a) = self.rect() {
             if self.children.len() == 0 {
-                block(
-                    w,
-                    a.inner(1)?,
+                w.queue(SetForegroundColor(
                     if app.is_focused(self) && self.children.len() == 0 {
                         Color::Magenta
                     } else {
                         Color::Blue
                     },
-                    '\u{2588}',
-                )?;
-                solid_frame(w, a.frame(1)?, Color::Black, ' ')?;
+                ))?;
+                block(w, a.inner(1)?, '\u{2588}')?;
+                w.queue(SetForegroundColor(Color::Black))?;
+                solid_frame(w, a.frame(1)?, ' ')?;
             }
         }
         Ok(())
@@ -223,5 +231,8 @@ pub fn main() -> Result<()> {
     let mut h = Handle {};
     let mut app = Canopy::new();
     let mut root = Root::new();
-    runloop(&mut app, &mut root, &mut h)
+    let mut colors = solarized::solarized_dark();
+    runloop(&mut app, &mut colors, &mut root, &mut h)?;
+
+    runloop(&mut app, &mut colors, &mut root, &mut h)
 }

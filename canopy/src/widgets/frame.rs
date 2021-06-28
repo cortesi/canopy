@@ -4,13 +4,14 @@ use std::marker::PhantomData;
 use anyhow::Result;
 use crossterm::{
     cursor::MoveTo,
-    style::{Color, Print, SetForegroundColor},
+    style::{Color, Print},
     QueueableCommand,
 };
 use pad::PadStr;
 
 use crate as canopy;
 use crate::{
+    colorscheme::ColorScheme,
     geom::Rect,
     layout::FixedLayout,
     state::{NodeState, StatefulNode},
@@ -142,20 +143,26 @@ where
     fn should_render(&mut self, app: &mut Canopy<S>) -> Option<bool> {
         Some(app.should_render(&mut self.child))
     }
-    fn render(&mut self, app: &mut Canopy<S>, w: &mut dyn Write) -> Result<()> {
+    fn render(
+        &mut self,
+        app: &mut Canopy<S>,
+        colors: &mut ColorScheme,
+        w: &mut dyn Write,
+    ) -> Result<()> {
         if let Some(a) = self.rect() {
             let c = if app.on_focus_path(self) {
                 self.focus_color
             } else {
                 self.color
             };
-            w.queue(SetForegroundColor(c))?;
+
+            colors.set("frame", w)?;
 
             let f = a.frame(1)?;
-            widgets::block(w, f.topleft, c, self.glyphs.topleft)?;
-            widgets::block(w, f.topright, c, self.glyphs.topright)?;
-            widgets::block(w, f.bottomleft, c, self.glyphs.bottomleft)?;
-            widgets::block(w, f.bottomright, c, self.glyphs.bottomright)?;
+            widgets::block(w, f.topleft, self.glyphs.topleft)?;
+            widgets::block(w, f.topright, self.glyphs.topright)?;
+            widgets::block(w, f.bottomleft, self.glyphs.bottomleft)?;
+            widgets::block(w, f.bottomright, self.glyphs.bottomright)?;
 
             let top = if f.top.w < 8 || self.child.title().is_none() {
                 self.glyphs.horizontal.to_string().repeat(f.top.w as usize)
@@ -168,51 +175,50 @@ where
                     true,
                 )
             };
+
             w.queue(MoveTo(f.top.tl.x, f.top.tl.y))?;
             w.queue(Print(top))?;
 
+            widgets::block(w, f.left, self.glyphs.vertical)?;
             if let Some((window, virt)) = self.child.bounds() {
                 // Is window equal to or larger than virt?
                 if window.vextent().contains(virt.vextent()) {
-                    widgets::block(w, f.right, c, self.glyphs.vertical)?;
+                    widgets::block(w, f.right, self.glyphs.vertical)?;
                 } else {
                     let (epre, eactive, epost) = f
                         .right
                         .vextent()
                         .split_active(window.vextent(), virt.vextent())?;
 
-                    widgets::block(w, f.right.vextract(epre)?, c, self.glyphs.vertical)?;
-                    widgets::block(w, f.right.vextract(epost)?, c, self.glyphs.vertical)?;
-                    widgets::block(
-                        w,
-                        f.right.vextract(eactive)?,
-                        c,
-                        self.glyphs.vertical_active,
-                    )?;
+                    widgets::block(w, f.right.vextract(epre)?, self.glyphs.vertical)?;
+                    widgets::block(w, f.right.vextract(epost)?, self.glyphs.vertical)?;
+
+                    colors.set("frame/active", w)?;
+                    widgets::block(w, f.right.vextract(eactive)?, self.glyphs.vertical_active)?;
                 }
 
+                colors.set("frame", w)?;
                 // Is window equal to or larger than virt?
                 if window.hextent().contains(virt.hextent()) {
-                    widgets::block(w, f.bottom, c, self.glyphs.horizontal)?;
+                    widgets::block(w, f.bottom, self.glyphs.horizontal)?;
                 } else {
                     let (epre, eactive, epost) = f
                         .bottom
                         .hextent()
                         .split_active(window.hextent(), virt.hextent())?;
-                    widgets::block(w, f.bottom.hextract(epre)?, c, self.glyphs.horizontal)?;
-                    widgets::block(w, f.bottom.hextract(epost)?, c, self.glyphs.horizontal)?;
+                    widgets::block(w, f.bottom.hextract(epre)?, self.glyphs.horizontal)?;
+                    widgets::block(w, f.bottom.hextract(epost)?, self.glyphs.horizontal)?;
+                    colors.set("frame/active", w)?;
                     widgets::block(
                         w,
                         f.bottom.hextract(eactive)?,
-                        c,
                         self.glyphs.horizontal_active,
                     )?;
                 }
             } else {
-                widgets::block(w, f.right, c, self.glyphs.vertical)?;
-                widgets::block(w, f.bottom, c, self.glyphs.horizontal)?;
+                widgets::block(w, f.right, self.glyphs.vertical)?;
+                widgets::block(w, f.bottom, self.glyphs.horizontal)?;
             }
-            widgets::block(w, f.left, c, self.glyphs.vertical)?;
         }
         Ok(())
     }

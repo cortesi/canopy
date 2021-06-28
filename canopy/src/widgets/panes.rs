@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
+    colorscheme::ColorScheme,
     geom::Rect,
     layout::FixedLayout,
     state::{NodeState, StatefulNode},
@@ -116,7 +117,12 @@ impl<S, N: canopy::Node<S>> Node<S> for Panes<S, N> {
         }
         Ok(())
     }
-    fn render(&mut self, _: &mut Canopy<S>, _: &mut dyn Write) -> Result<()> {
+    fn render(
+        &mut self,
+        _: &mut Canopy<S>,
+        colors: &mut ColorScheme,
+        _: &mut dyn Write,
+    ) -> Result<()> {
         // FIXME - this should probably clear the area if the last node is
         // deleted.
         Ok(())

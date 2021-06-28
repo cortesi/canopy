@@ -3,6 +3,7 @@ use std::{fmt::Debug, io::Write};
 
 use crate::geom::{Direction, Rect};
 use crate::{
+    colorscheme::ColorScheme,
     cursor,
     event::{key, mouse, tick, Event},
     layout::FixedLayout,
@@ -354,14 +355,19 @@ impl<S> Canopy<S> {
 
     /// Render a tree of nodes. If force is true, all visible nodes are
     /// rendered, otherwise we check the taint state.
-    pub fn render(&mut self, e: &mut dyn Node<S>, w: &mut dyn Write) -> Result<()> {
+    pub fn render(
+        &mut self,
+        e: &mut dyn Node<S>,
+        colors: &mut ColorScheme,
+        w: &mut dyn Write,
+    ) -> Result<()> {
         let r = preorder(e, &mut |x| -> Result<()> {
             if self.should_render(x) {
                 if self.is_focused(x) {
                     let s = &mut x.state_mut();
                     s.rendered_focus_gen = self.focus_gen
                 }
-                x.render(self, w)
+                x.render(self, colors, w)
             } else {
                 Ok(())
             }

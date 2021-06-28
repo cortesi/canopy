@@ -3,6 +3,7 @@ use crossterm::style::Color;
 
 use canopy;
 use canopy::{
+    colorscheme::solarized,
     event::{key, mouse},
     geom::{Point, Rect},
     layout::FixedLayout,
@@ -128,6 +129,7 @@ pub fn main() -> Result<()> {
     let mut app = Canopy::new();
     let mut h = Handle {};
     let mut root = Root::new(String::new());
-    runloop(&mut app, &mut root, &mut h)?;
+    let mut colors = solarized::solarized_dark();
+    runloop(&mut app, &mut colors, &mut root, &mut h)?;
     Ok(())
 }

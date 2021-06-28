@@ -1,5 +1,6 @@
 use crate as canopy;
 use crate::{
+    colorscheme::ColorScheme,
     geom::{Point, Rect},
     layout::ConstrainedLayout,
     state::{NodeState, StatefulNode},
@@ -10,7 +11,7 @@ use std::marker::PhantomData;
 
 use crossterm::{
     cursor::MoveTo,
-    style::{Color, Print, SetForegroundColor},
+    style::{Print, SetBackgroundColor, SetForegroundColor},
     QueueableCommand,
 };
 
@@ -84,8 +85,15 @@ impl<'a, S> ConstrainedLayout<S> for Text<S> {
 }
 
 impl<'a, S> Node<S> for Text<S> {
-    fn render(&mut self, _app: &mut Canopy<S>, w: &mut dyn Write) -> Result<()> {
-        w.queue(SetForegroundColor(Color::White))?;
+    fn render(
+        &mut self,
+        _app: &mut Canopy<S>,
+        colors: &mut ColorScheme,
+        w: &mut dyn Write,
+    ) -> Result<()> {
+        let (fg, bg) = colors.colors("text");
+        w.queue(SetForegroundColor(fg))?;
+        w.queue(SetBackgroundColor(bg))?;
         if let (Some(lines), Some(rect), Some(vo)) =
             (self.lines.as_ref(), self.rect(), self.virt_origin)
         {

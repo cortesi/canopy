@@ -1,4 +1,12 @@
-use crossterm::style::Color;
+use std::io::Write;
+
+pub mod solarized;
+use anyhow::Result;
+
+use crossterm::{
+    style::{Color, SetBackgroundColor, SetForegroundColor},
+    QueueableCommand,
+};
 use std::collections::HashMap;
 
 /// A hierarchical color scheme manager.
@@ -26,6 +34,7 @@ use std::collections::HashMap;
 /// So given a layer stack ["foo"], and an attempt to look up "frame/selected",
 /// we try the following lookups in order: ["foo/frame/selected",
 /// "/frame/selected", "foo", ""].
+#[derive(Debug, PartialEq, Clone)]
 pub struct ColorScheme {
     colors: HashMap<String, (Option<Color>, Option<Color>)>,
     // The current render level
@@ -33,6 +42,12 @@ pub struct ColorScheme {
     // A list of selected layers, along with which render level they were set at
     layers: Vec<String>,
     layer_levels: Vec<usize>,
+}
+
+impl Default for ColorScheme {
+    fn default() -> Self {
+        ColorScheme::new()
+    }
 }
 
 impl ColorScheme {
@@ -90,6 +105,14 @@ impl ColorScheme {
     /// Retrieve a (bg, fg) tuple.
     pub fn colors(&self, path: &str) -> (Color, Color) {
         self.resolve(&self.layers, path)
+    }
+
+    /// Set the fg and bg colors
+    pub fn set(&self, path: &str, w: &mut dyn Write) -> Result<()> {
+        let (fg, bg) = self.colors(path);
+        w.queue(SetForegroundColor(fg))?;
+        w.queue(SetBackgroundColor(bg))?;
+        Ok(())
     }
 
     /// Insert a colour tuple at a specified path.

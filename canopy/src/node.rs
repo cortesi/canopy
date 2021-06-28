@@ -3,6 +3,7 @@ use std::{fmt::Debug, io::Write};
 use anyhow::Result;
 
 use crate::{
+    colorscheme::ColorScheme,
     cursor,
     event::{key, mouse, tick},
     Canopy, Point, StatefulNode,
@@ -118,7 +119,12 @@ pub trait Node<S>: StatefulNode {
     }
 
     /// Render the widget to a buffer. The default implementation does nothing.
-    fn render(&mut self, app: &mut Canopy<S>, w: &mut dyn Write) -> Result<()> {
+    fn render(
+        &mut self,
+        app: &mut Canopy<S>,
+        colors: &mut ColorScheme,
+        w: &mut dyn Write,
+    ) -> Result<()> {
         Ok(())
     }
 

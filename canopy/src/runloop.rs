@@ -1,4 +1,5 @@
 use crate::{
+    colorscheme::ColorScheme,
     event::EventSource,
     geom::{Point, Rect},
     layout::FixedLayout,
@@ -19,7 +20,12 @@ use scopeguard::defer;
 use std::io::Write;
 use std::panic;
 
-pub fn runloop<S, N>(app: &mut Canopy<S>, root: &mut N, s: &mut S) -> Result<()>
+pub fn runloop<S, N>(
+    app: &mut Canopy<S>,
+    colors: &mut ColorScheme,
+    root: &mut N,
+    s: &mut S,
+) -> Result<()>
 where
     N: Node<S> + FixedLayout<S>,
 {
@@ -61,7 +67,7 @@ where
         loop {
             if !ignore {
                 app.pre_render(root, &mut w)?;
-                app.render(root, &mut w)?;
+                app.render(root, colors, &mut w)?;
                 app.post_render(root, &mut w)?;
                 w.flush()?;
             }
