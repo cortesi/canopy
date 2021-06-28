@@ -75,29 +75,29 @@ impl TextBuf {
         };
     }
 
-    fn goto(&mut self, loc: u16) {
+    pub fn goto(&mut self, loc: u16) {
         self.cursor_pos = loc;
         self.fix_window();
     }
-    fn insert(&mut self, c: char) {
+    pub fn insert(&mut self, c: char) {
         self.value.insert(self.cursor_pos as usize, c);
         self.cursor_pos += 1;
         self.fix_window();
     }
-    fn backspace(&mut self) {
+    pub fn backspace(&mut self) {
         if self.value.len() > 0 && self.cursor_pos > 0 {
             self.value.remove(self.cursor_pos as usize - 1);
             self.cursor_pos -= 1;
             self.fix_window();
         }
     }
-    fn left(&mut self) {
+    pub fn left(&mut self) {
         if self.cursor_pos > 0 {
             self.cursor_pos -= 1;
             self.fix_window();
         }
     }
-    fn right(&mut self) {
+    pub fn right(&mut self) {
         if self.cursor_pos < self.value.len() as u16 {
             self.cursor_pos += 1;
             self.fix_window();

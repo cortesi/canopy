@@ -11,7 +11,7 @@ use pad::PadStr;
 
 use crate as canopy;
 use crate::{
-    geom::{Point, Rect},
+    geom::Rect,
     layout::FixedLayout,
     state::{NodeState, StatefulNode},
     widgets, Canopy, Node,
@@ -37,7 +37,7 @@ pub const SINGLE: FrameGlyphs = FrameGlyphs {
     bottomright: '┘',
     horizontal: '─',
     vertical: '│',
-    horizontal_active: '█',
+    horizontal_active: '▄',
     vertical_active: '█',
 };
 
@@ -49,7 +49,7 @@ pub const DOUBLE: FrameGlyphs = FrameGlyphs {
     bottomright: '╝',
     horizontal: '═',
     vertical: '║',
-    horizontal_active: '█',
+    horizontal_active: '▄',
     vertical_active: '█',
 };
 
@@ -61,7 +61,7 @@ pub const SINGLE_THICK: FrameGlyphs = FrameGlyphs {
     bottomright: '┛',
     horizontal: '━',
     vertical: '┃',
-    horizontal_active: '█',
+    horizontal_active: '▄',
     vertical_active: '█',
 };
 
@@ -107,6 +107,18 @@ where
             focus_color,
             glyphs,
         }
+    }
+    pub fn with_glyphs(mut self, glyphs: FrameGlyphs) -> Self {
+        self.glyphs = glyphs;
+        self
+    }
+    pub fn with_color(mut self, color: Color) -> Self {
+        self.color = color;
+        self
+    }
+    pub fn with_focus_color(mut self, color: Color) -> Self {
+        self.focus_color = color;
+        self
     }
 }
 
