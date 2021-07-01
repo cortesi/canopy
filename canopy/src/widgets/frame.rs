@@ -2,11 +2,7 @@ use std::io::Write;
 use std::marker::PhantomData;
 
 use anyhow::Result;
-use crossterm::{
-    cursor::MoveTo,
-    style::{Color, Print, SetBackgroundColor, SetForegroundColor},
-    QueueableCommand,
-};
+use crossterm::{cursor::MoveTo, style::Print, QueueableCommand};
 use pad::PadStr;
 
 use crate as canopy;
@@ -95,8 +91,6 @@ where
     _marker: PhantomData<S>,
     pub child: N,
     pub state: NodeState,
-    pub focus_color: Color,
-    pub color: Color,
     pub glyphs: FrameGlyphs,
 }
 
@@ -104,26 +98,17 @@ impl<S, N> Frame<S, N>
 where
     N: canopy::Node<S> + FrameContent + FixedLayout<S>,
 {
-    pub fn new(c: N, glyphs: FrameGlyphs, color: Color, focus_color: Color) -> Self {
+    pub fn new(c: N) -> Self {
         Frame {
             _marker: PhantomData,
             child: c,
             state: NodeState::default(),
-            color,
-            focus_color,
-            glyphs,
+            glyphs: SINGLE,
         }
     }
+    /// Build a frame with a specified glyph set
     pub fn with_glyphs(mut self, glyphs: FrameGlyphs) -> Self {
         self.glyphs = glyphs;
-        self
-    }
-    pub fn with_color(mut self, color: Color) -> Self {
-        self.color = color;
-        self
-    }
-    pub fn with_focus_color(mut self, color: Color) -> Self {
-        self.focus_color = color;
         self
     }
 }

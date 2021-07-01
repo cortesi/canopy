@@ -2,7 +2,6 @@ use std::env;
 use std::fs;
 
 use anyhow::Result;
-use crossterm::style::Color;
 
 use canopy;
 use canopy::{
@@ -26,12 +25,7 @@ impl Root {
     fn new(contents: String) -> Self {
         Root {
             state: NodeState::default(),
-            child: frame::Frame::new(
-                scroll::Scroll::new(text::Text::new(&contents)),
-                frame::SINGLE,
-                Color::White,
-                Color::Blue,
-            ),
+            child: frame::Frame::new(scroll::Scroll::new(text::Text::new(&contents))),
         }
     }
 }

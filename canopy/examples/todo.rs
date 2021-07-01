@@ -1,5 +1,4 @@
 use anyhow::Result;
-use crossterm::style::Color;
 
 use canopy;
 use canopy::{
@@ -25,22 +24,12 @@ impl Root {
     fn new(contents: String) -> Self {
         Root {
             state: NodeState::default(),
-            child: frame::Frame::new(
-                scroll::Scroll::new(text::Text::new(&contents)),
-                frame::SINGLE,
-                Color::White,
-                Color::Blue,
-            ),
+            child: frame::Frame::new(scroll::Scroll::new(text::Text::new(&contents))),
             adder: None,
         }
     }
     fn open_adder(&mut self, app: &mut Canopy<Handle>) -> Result<EventResult> {
-        let mut adder = frame::Frame::new(
-            input::InputLine::new(""),
-            frame::SINGLE,
-            Color::White,
-            Color::Blue,
-        );
+        let mut adder = frame::Frame::new(input::InputLine::new(""));
         app.set_focus(&mut adder.child)?;
         self.adder = Some(adder);
         self.layout(app, self.rect())?;

@@ -361,6 +361,7 @@ impl<S> Canopy<S> {
         colors: &mut ColorScheme,
         w: &mut dyn Write,
     ) -> Result<()> {
+        colors.reset();
         let r = preorder(e, &mut |x| -> Result<()> {
             if self.should_render(x) {
                 if self.is_focused(x) {
