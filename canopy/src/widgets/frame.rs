@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use anyhow::Result;
 use crossterm::{
     cursor::MoveTo,
-    style::{Color, Print},
+    style::{Color, Print, SetBackgroundColor, SetForegroundColor},
     QueueableCommand,
 };
 use pad::PadStr;
@@ -82,6 +82,11 @@ pub trait FrameContent {
 }
 
 /// A frame around an element.
+///
+/// Colors:
+///     frame:          normal frame border
+///     frame/focused   frame border if we hold focus
+///     frame/active    color of active area indicator
 #[derive(StatefulNode)]
 pub struct Frame<S, N>
 where
@@ -150,13 +155,11 @@ where
         w: &mut dyn Write,
     ) -> Result<()> {
         if let Some(a) = self.rect() {
-            let c = if app.on_focus_path(self) {
-                self.focus_color
+            if app.on_focus_path(self) {
+                colors.set("frame/focused", w)?;
             } else {
-                self.color
+                colors.set("frame", w)?;
             };
-
-            colors.set("frame", w)?;
 
             let f = a.frame(1)?;
             widgets::block(w, f.topleft, self.glyphs.topleft)?;
@@ -181,6 +184,9 @@ where
 
             widgets::block(w, f.left, self.glyphs.vertical)?;
             if let Some((window, virt)) = self.child.bounds() {
+                let mut vertactive = None;
+                let mut horizactive = None;
+
                 // Is window equal to or larger than virt?
                 if window.vextent().contains(virt.vextent()) {
                     widgets::block(w, f.right, self.glyphs.vertical)?;
@@ -193,11 +199,11 @@ where
                     widgets::block(w, f.right.vextract(epre)?, self.glyphs.vertical)?;
                     widgets::block(w, f.right.vextract(epost)?, self.glyphs.vertical)?;
 
-                    colors.set("frame/active", w)?;
-                    widgets::block(w, f.right.vextract(eactive)?, self.glyphs.vertical_active)?;
+                    vertactive = Some(f.right.vextract(eactive)?);
+                    // colors.set("frame/active", w)?;
+                    // widgets::block(w, f.right.vextract(eactive)?, self.glyphs.vertical_active)?;
                 }
 
-                colors.set("frame", w)?;
                 // Is window equal to or larger than virt?
                 if window.hextent().contains(virt.hextent()) {
                     widgets::block(w, f.bottom, self.glyphs.horizontal)?;
@@ -208,12 +214,16 @@ where
                         .split_active(window.hextent(), virt.hextent())?;
                     widgets::block(w, f.bottom.hextract(epre)?, self.glyphs.horizontal)?;
                     widgets::block(w, f.bottom.hextract(epost)?, self.glyphs.horizontal)?;
+                    horizactive = Some(f.bottom.hextract(eactive)?);
+                }
+                if vertactive.is_none() || horizactive.is_none() {
                     colors.set("frame/active", w)?;
-                    widgets::block(
-                        w,
-                        f.bottom.hextract(eactive)?,
-                        self.glyphs.horizontal_active,
-                    )?;
+                }
+                if let Some(vc) = vertactive {
+                    widgets::block(w, vc, self.glyphs.vertical_active)?;
+                }
+                if let Some(hc) = horizactive {
+                    widgets::block(w, hc, self.glyphs.horizontal_active)?;
                 }
             } else {
                 widgets::block(w, f.right, self.glyphs.vertical)?;

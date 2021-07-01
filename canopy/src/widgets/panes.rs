@@ -120,7 +120,7 @@ impl<S, N: canopy::Node<S>> Node<S> for Panes<S, N> {
     fn render(
         &mut self,
         _: &mut Canopy<S>,
-        colors: &mut ColorScheme,
+        _colors: &mut ColorScheme,
         _: &mut dyn Write,
     ) -> Result<()> {
         // FIXME - this should probably clear the area if the last node is

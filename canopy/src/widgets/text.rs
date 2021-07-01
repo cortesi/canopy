@@ -91,7 +91,7 @@ impl<'a, S> Node<S> for Text<S> {
         colors: &mut ColorScheme,
         w: &mut dyn Write,
     ) -> Result<()> {
-        let (fg, bg) = colors.colors("text");
+        let (fg, bg) = colors.get("text");
         w.queue(SetForegroundColor(fg))?;
         w.queue(SetBackgroundColor(bg))?;
         if let (Some(lines), Some(rect), Some(vo)) =

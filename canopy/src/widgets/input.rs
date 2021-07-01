@@ -193,6 +193,7 @@ impl<'a, S> Node<S> for InputLine<S> {
         colors: &mut ColorScheme,
         w: &mut dyn Write,
     ) -> Result<()> {
+        colors.set("text", w)?;
         if let Some(r) = self.rect() {
             w.queue(MoveTo(r.tl.x, r.tl.y))?;
             w.queue(Print(&self.textbuf.text()))?;

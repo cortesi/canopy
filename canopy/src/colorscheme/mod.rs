@@ -36,7 +36,7 @@ use std::collections::HashMap;
 /// "/frame/selected", "foo", ""].
 #[derive(Debug, PartialEq, Clone)]
 pub struct ColorScheme {
-    colors: HashMap<String, (Option<Color>, Option<Color>)>,
+    colors: HashMap<Vec<String>, (Option<Color>, Option<Color>)>,
     // The current render level
     level: usize,
     // A list of selected layers, along with which render level they were set at
@@ -94,80 +94,83 @@ impl ColorScheme {
 
     /// Retrieve a foreground color.
     pub fn fg(&self, path: &str) -> Color {
-        self.resolve(&self.layers, path).0
+        self.resolve(&self.layers, &self.parse_path(path)).0
     }
 
     /// Retrieve a background color.
     pub fn bg(&self, path: &str) -> Color {
-        self.resolve(&self.layers, path).1
+        self.resolve(&self.layers, &self.parse_path(path)).1
     }
 
     /// Retrieve a (bg, fg) tuple.
-    pub fn colors(&self, path: &str) -> (Color, Color) {
-        self.resolve(&self.layers, path)
+    pub fn get(&self, path: &str) -> (Color, Color) {
+        self.resolve(&self.layers, &self.parse_path(path))
     }
 
     /// Set the fg and bg colors
     pub fn set(&self, path: &str, w: &mut dyn Write) -> Result<()> {
-        let (fg, bg) = self.colors(path);
+        let (fg, bg) = self.get(path);
         w.queue(SetForegroundColor(fg))?;
         w.queue(SetBackgroundColor(bg))?;
         Ok(())
     }
 
+    fn parse_path(&self, path: &str) -> Vec<String> {
+        path.split("/")
+            .filter_map(|s| {
+                if s.len() > 0 {
+                    Some(s.to_owned())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
     /// Insert a colour tuple at a specified path.
     pub fn insert(&mut self, path: &str, fg: Option<Color>, bg: Option<Color>) {
-        self.colors.insert(path.to_owned(), (fg, bg));
+        self.colors.insert(self.parse_path(path), (fg, bg));
+    }
+
+    // Look up one suffix along a layer chain
+    fn lookup(&self, layers: &Vec<String>, suffix: &[String]) -> (Option<Color>, Option<Color>) {
+        let (mut fg, mut bg) = (None, None);
+        // Look up the path on all layers to the root.
+        for i in 0..layers.len() + 1 {
+            let mut v = layers[0..layers.len() - i].to_vec();
+            v.extend(suffix.to_vec());
+            if let Some(c) = self.colors.get(&v) {
+                if fg.is_none() {
+                    fg = c.0
+                }
+                if bg.is_none() {
+                    bg = c.1
+                }
+                if fg.is_some() && bg.is_some() {
+                    break;
+                }
+            }
+        }
+        (fg, bg)
     }
 
     /// Directly resolve a color tuple using a path and a layer specification,
     /// ignoring `self.layers`.
-    pub fn resolve(&self, layers: &Vec<String>, path: &str) -> (Color, Color) {
+    pub fn resolve(&self, layers: &Vec<String>, path: &Vec<String>) -> (Color, Color) {
         let (mut fg, mut bg) = (None, None);
-
-        let o = if path.chars().nth(0) == Some('/') {
-            path.to_owned()
-        } else {
-            "/".to_owned() + path
-        };
-
-        // First we look up the path on all layers to the root.
-        for i in 0..layers.len() {
-            let s = &layers[0..layers.len() - i].join("/");
-            if let Some(c) = self.colors.get(&(s.to_owned() + &o)) {
-                if fg.is_none() {
-                    fg = c.0
-                }
-                if bg.is_none() {
-                    bg = c.1
-                }
-                if let (Some(rfg), Some(rbg)) = (fg, bg) {
-                    return (rfg, rbg);
-                }
+        for i in 0..path.len() + 1 {
+            let parts = self.lookup(layers, &path[0..path.len() - i]);
+            if !fg.is_some() {
+                fg = parts.0;
+            }
+            if !bg.is_some() {
+                bg = parts.1;
+            }
+            if fg.is_some() && bg.is_some() {
+                break;
             }
         }
-
-        // We didn't find both colours under the path, so now we look up the
-        // defaults.
-        for i in 0..layers.len() {
-            let mut s = layers[0..layers.len() - i].join("/");
-            if s == "" {
-                s = "/".to_owned()
-            }
-            if let Some(c) = self.colors.get(&s) {
-                if fg.is_none() {
-                    fg = c.0
-                }
-                if bg.is_none() {
-                    bg = c.1
-                }
-                if let (Some(rfg), Some(rbg)) = (fg, bg) {
-                    return (rfg, rbg);
-                }
-            }
-        }
-
-        (fg.unwrap(), bg.unwrap())
+        return (fg.unwrap(), bg.unwrap());
     }
 }
 
@@ -187,29 +190,45 @@ mod tests {
 
         assert_eq!(
             c.resolve(
-                &vec!["".to_string(), "one".to_string(), "two".to_string()],
-                "target"
+                &vec!["one".to_string(), "two".to_string()],
+                &vec!["target".to_string(), "voing".to_string()],
+            ),
+            (Color::Green, Color::Black)
+        );
+
+        assert_eq!(
+            c.resolve(
+                &vec!["one".to_string(), "two".to_string()],
+                &vec!["two".to_string(), "voing".to_string()],
+            ),
+            (Color::Blue, Color::Black)
+        );
+
+        assert_eq!(
+            c.resolve(
+                &vec!["one".to_string(), "two".to_string()],
+                &vec!["target".to_string()],
             ),
             (Color::Green, Color::Black)
         );
         assert_eq!(
             c.resolve(
-                &vec!["".to_string(), "one".to_string(), "two".to_string()],
-                "nonexistent"
+                &vec!["one".to_string(), "two".to_string()],
+                &vec!["nonexistent".to_string()],
             ),
             (Color::Blue, Color::Black)
         );
         assert_eq!(
             c.resolve(
-                &vec!["".to_string(), "somelayer".to_string()],
-                "nonexistent"
+                &vec!["somelayer".to_string()],
+                &vec!["nonexistent".to_string()],
             ),
             (Color::White, Color::Black)
         );
         assert_eq!(
             c.resolve(
-                &vec!["".to_string(), "one".to_string(), "two".to_string()],
-                "frame/border"
+                &vec!["one".to_string(), "two".to_string()],
+                &vec!["frame".to_string(), "border".to_string()],
             ),
             (Color::Yellow, Color::Black)
         );

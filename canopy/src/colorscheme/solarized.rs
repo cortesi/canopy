@@ -86,6 +86,7 @@ pub fn solarized_dark() -> ColorScheme {
     let mut c = ColorScheme::default();
     c.insert("/", Some(BASE0), Some(BASE03));
     c.insert("/frame", Some(BASE01), None);
+    c.insert("/frame/focused", Some(BLUE), None);
     c.insert("/frame/active", Some(BASE1), None);
     c
 }
