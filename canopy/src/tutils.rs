@@ -80,7 +80,7 @@ pub mod utils {
         fn render(
             &mut self,
             _: &mut Canopy<State>,
-            c: &mut ColorScheme,
+            _c: &mut ColorScheme,
             w: &mut dyn Write,
         ) -> Result<()> {
             tnode_render(self.name.clone(), w)
@@ -130,7 +130,7 @@ pub mod utils {
         fn render(
             &mut self,
             _: &mut Canopy<State>,
-            colors: &mut ColorScheme,
+            _c: &mut ColorScheme,
             w: &mut dyn Write,
         ) -> Result<()> {
             tnode_render(self.name.clone(), w)
@@ -188,7 +188,7 @@ pub mod utils {
         fn render(
             &mut self,
             _: &mut Canopy<State>,
-            colors: &mut ColorScheme,
+            _c: &mut ColorScheme,
             w: &mut dyn Write,
         ) -> Result<()> {
             tnode_render(self.name.clone(), w)

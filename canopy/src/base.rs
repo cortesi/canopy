@@ -353,6 +353,25 @@ impl<S> Canopy<S> {
         r.render_skip_gen = self.render_gen;
     }
 
+    fn render_traversal(
+        &mut self,
+        colors: &mut ColorScheme,
+        e: &mut dyn Node<S>,
+        w: &mut dyn Write,
+    ) -> Result<()> {
+        if self.should_render(e) {
+            if self.is_focused(e) {
+                let s = &mut e.state_mut();
+                s.rendered_focus_gen = self.focus_gen
+            }
+            e.render(self, colors, w)?;
+        }
+        colors.inc();
+        e.children(&mut |x| self.render_traversal(colors, x, w))?;
+        colors.dec();
+        Ok(())
+    }
+
     /// Render a tree of nodes. If force is true, all visible nodes are
     /// rendered, otherwise we check the taint state.
     pub fn render(
@@ -362,20 +381,10 @@ impl<S> Canopy<S> {
         w: &mut dyn Write,
     ) -> Result<()> {
         colors.reset();
-        let r = preorder(e, &mut |x| -> Result<()> {
-            if self.should_render(x) {
-                if self.is_focused(x) {
-                    let s = &mut x.state_mut();
-                    s.rendered_focus_gen = self.focus_gen
-                }
-                x.render(self, colors, w)
-            } else {
-                Ok(())
-            }
-        })?;
+        self.render_traversal(colors, e, w)?;
         self.render_gen += 1;
         self.last_focus_gen = self.focus_gen;
-        Ok(r)
+        Ok(())
     }
 
     /// Propagate a mouse event through the node under the event and all its

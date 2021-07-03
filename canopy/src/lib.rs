@@ -5,6 +5,7 @@ mod tutils;
 
 pub mod colorscheme;
 pub mod cursor;
+pub mod error;
 pub mod event;
 pub mod geom;
 pub mod layout;
