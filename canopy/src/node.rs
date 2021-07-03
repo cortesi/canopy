@@ -213,7 +213,9 @@ pub fn locate<S, R: Joiner + Default>(
     let mut ret = R::default();
     postorder(e, &mut |inner| -> Result<SkipWalker> {
         Ok(if seen {
-            ret = ret.join(f(inner)?);
+            if inner.rect().is_some() {
+                ret = ret.join(f(inner)?);
+            }
             SkipWalker::default()
         } else if let Some(a) = inner.rect() {
             if a.contains_point(p) {
