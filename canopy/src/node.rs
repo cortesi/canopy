@@ -9,22 +9,22 @@ use crate::{
     Canopy, Point, StatefulNode,
 };
 
-/// A type that accumulates results.
-pub trait Joiner {
-    fn join(&self, rhs: Self) -> Self;
-}
-
-impl Joiner for () {
-    fn join(&self, _: Self) -> Self {}
-}
-
 /// Walker is implemented for the return values of tree operations.
 pub trait Walker {
-    /// Update this item to accumulate results from another instance. This is
-    /// done to join return values returned from node operations.
-    fn update(&mut self, rhs: Self);
+    /// Join this item with another instance, returning a new value. This is
+    /// done to accumulate return values returned from node operations.
+    fn join(&self, rhs: Self) -> Self;
     /// If skip is true, we skip further node processing and return.
     fn skip(&self) -> bool;
+}
+
+impl Walker for () {
+    fn join(&self, _: Self) -> Self {
+        ()
+    }
+    fn skip(&self) -> bool {
+        false
+    }
 }
 
 /// Signal that the event has been handled. The skip parameter has different
@@ -45,7 +45,14 @@ impl Default for EventResult {
     }
 }
 
-impl Joiner for EventResult {
+impl Walker for EventResult {
+    fn skip(&self) -> bool {
+        match self {
+            EventResult::Handle { skip } => *skip,
+            EventResult::Ignore { skip } => *skip,
+            EventResult::Exit => true,
+        }
+    }
     fn join(&self, rhs: Self) -> Self {
         // At the moment, we don't propagate the skip flag, because it gets used
         // by the traversal functions immediately on return.
@@ -68,38 +75,33 @@ impl Joiner for EventResult {
 }
 
 pub struct SkipWalker {
-    pub skip: bool,
+    pub has_skip: bool,
 }
 
 impl Default for SkipWalker {
     fn default() -> Self {
-        SkipWalker { skip: false }
+        SkipWalker { has_skip: false }
     }
 }
 
 impl Walker for SkipWalker {
     fn skip(&self) -> bool {
-        self.skip
+        self.has_skip
     }
-    fn update(&mut self, rhs: Self) {
-        self.skip |= rhs.skip;
+    fn join(&self, rhs: Self) -> Self {
+        SkipWalker {
+            has_skip: (self.has_skip | rhs.has_skip),
+        }
     }
 }
 
-impl Walker for () {
-    fn skip(&self) -> bool {
-        false
-    }
-    fn update(&mut self, _: Self) {}
-}
-
-/// A `Node` is the basic building-block of a Canopy UI. Nodes are composed in a
+/// Nodes are the basic building-blocks of a Canopy UI. Nodes are composed in a
 /// tree structure, with each node responsible for managing its own children.
 /// Nodes keep track of the area of the screen that they are responsible for
 /// through the resize event.
 ///
-/// The type paramter `S` is the application backing store object that is
-/// passed to all events.
+/// The type paramter `S` is the application backing store object that is passed
+/// to all events.
 #[allow(unused_variables)]
 pub trait Node<S>: StatefulNode {
     /// Over-ride Canopy's usual render checking. If this function returns
@@ -178,12 +180,11 @@ pub fn postorder<S, R: Walker + Default>(
     let mut v = R::default();
     e.children(&mut |x| {
         if !v.skip() {
-            v.update(postorder(x, f)?);
+            v = v.join(postorder(x, f)?);
         }
         Ok(())
     })?;
-    v.update(f(e)?);
-    Ok(v)
+    Ok(v.join(f(e)?))
 }
 
 // A preorder traversal of the nodes under e. Enabling skipping in the walker
@@ -195,7 +196,7 @@ pub fn preorder<S, W: Walker>(
     let mut v = f(e)?;
     if !v.skip() {
         e.children(&mut |x| {
-            v.update(preorder(x, f)?);
+            v = v.join(preorder(x, f)?);
             Ok(())
         })?;
     }
@@ -204,7 +205,7 @@ pub fn preorder<S, W: Walker>(
 
 // Calls a closure on the leaf node under (x, y), then all its parents to the
 // root.
-pub fn locate<S, R: Joiner + Default>(
+pub fn locate<S, R: Walker + Default>(
     e: &mut dyn Node<S>,
     p: Point,
     f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<R>,
@@ -221,7 +222,7 @@ pub fn locate<S, R: Joiner + Default>(
             if a.contains_point(p) {
                 seen = true;
                 ret = ret.join(f(inner)?);
-                SkipWalker { skip: true }
+                SkipWalker { has_skip: true }
             } else {
                 SkipWalker::default()
             }
@@ -248,7 +249,7 @@ mod tests {
         let mut ret = SkipWalker::default();
         let n = utils::get_name(app, x)?;
         if n == skipname {
-            ret.skip = true
+            ret.has_skip = true
         }
         v.push(n.into());
         Ok(ret)

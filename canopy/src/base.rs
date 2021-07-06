@@ -7,7 +7,7 @@ use crate::{
     cursor,
     event::{key, mouse, tick, Event},
     layout::FixedLayout,
-    node::{locate, postorder, preorder, EventResult, Joiner, Node, SkipWalker},
+    node::{locate, postorder, preorder, EventResult, Node, SkipWalker, Walker},
 };
 use anyhow::{format_err, Result};
 use crossterm::{
@@ -156,7 +156,7 @@ impl<S> Canopy<S> {
             Ok(if !focus_set && x.can_focus() {
                 self.set_focus(x)?;
                 focus_set = true;
-                SkipWalker { skip: true }
+                SkipWalker { has_skip: true }
             } else {
                 SkipWalker::default()
             })
@@ -253,7 +253,7 @@ impl<S> Canopy<S> {
 
     // Calls a closure on the currently focused node and all its parents to the
     // root.
-    pub fn focus_path<R: Joiner + Default>(
+    pub fn focus_path<R: Walker + Default>(
         &self,
         e: &mut dyn Node<S>,
         f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<R>,
@@ -267,7 +267,7 @@ impl<S> Canopy<S> {
             } else if self.is_focused(x) {
                 focus_seen = true;
                 ret = ret.join(f(x)?);
-                SkipWalker { skip: true }
+                SkipWalker { has_skip: true }
             } else {
                 SkipWalker::default()
             })
@@ -481,19 +481,19 @@ impl<S> Canopy<S> {
                 EventResult::Handle { skip } => {
                     self.taint(x);
                     if skip {
-                        SkipWalker { skip: true }
+                        SkipWalker { has_skip: true }
                     } else {
-                        SkipWalker { skip: false }
+                        SkipWalker { has_skip: false }
                     }
                 }
                 EventResult::Ignore { skip } => {
                     if skip {
-                        SkipWalker { skip: true }
+                        SkipWalker { has_skip: true }
                     } else {
-                        SkipWalker { skip: false }
+                        SkipWalker { has_skip: false }
                     }
                 }
-                EventResult::Exit => SkipWalker { skip: true },
+                EventResult::Exit => SkipWalker { has_skip: true },
             })
         })?;
         Ok(ret)
