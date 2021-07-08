@@ -51,14 +51,12 @@ impl<'a, S> ConstrainedLayout<S> for Text<S> {
     ) -> Result<Rect, CanopyError> {
         if let Some(w) = width {
             if let Some(l) = &self.lines {
-                if l.len() > 0 {
-                    if l[0].len() == w as usize {
-                        return Ok(Rect {
-                            tl: Point { x: 0, y: 0 },
-                            w,
-                            h: l.len() as u16,
-                        });
-                    }
+                if !l.is_empty() && l[0].len() == w as usize {
+                    return Ok(Rect {
+                        tl: Point { x: 0, y: 0 },
+                        w,
+                        h: l.len() as u16,
+                    });
                 }
             }
 

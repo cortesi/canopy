@@ -85,7 +85,7 @@ impl TextBuf {
         self.fix_window();
     }
     pub fn backspace(&mut self) {
-        if self.value.len() > 0 && self.cursor_pos > 0 {
+        if !self.value.is_empty() && self.cursor_pos > 0 {
             self.value.remove(self.cursor_pos as usize - 1);
             self.cursor_pos -= 1;
             self.fix_window();

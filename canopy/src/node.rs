@@ -17,9 +17,7 @@ pub trait Walker {
 }
 
 impl Walker for () {
-    fn join(&self, _: Self) -> Self {
-        ()
-    }
+    fn join(&self, _: Self) -> Self {}
     fn skip(&self) -> bool {
         false
     }

@@ -132,11 +132,7 @@ impl<S, N: Node<S> + ConstrainedLayout<S>> FixedLayout<S> for Scroll<S, N> {
 
 impl<S, N: Node<S> + ConstrainedLayout<S>> widgets::frame::FrameContent for Scroll<S, N> {
     fn bounds(&self) -> Option<(Rect, Rect)> {
-        if let Some(ss) = &self.scrollstate {
-            Some((ss.window, ss.virt))
-        } else {
-            None
-        }
+        self.scrollstate.as_ref().map(|ss| (ss.window, ss.virt))
     }
 }
 

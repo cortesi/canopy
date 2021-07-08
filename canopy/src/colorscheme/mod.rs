@@ -116,9 +116,9 @@ impl ColorScheme {
     }
 
     fn parse_path(&self, path: &str) -> Vec<String> {
-        path.split("/")
+        path.split('/')
             .filter_map(|s| {
-                if s.len() > 0 {
+                if !s.is_empty() {
                     Some(s.to_owned())
                 } else {
                     None
@@ -133,7 +133,7 @@ impl ColorScheme {
     }
 
     // Look up one suffix along a layer chain
-    fn lookup(&self, layers: &Vec<String>, suffix: &[String]) -> (Option<Color>, Option<Color>) {
+    fn lookup(&self, layers: &[String], suffix: &[String]) -> (Option<Color>, Option<Color>) {
         let (mut fg, mut bg) = (None, None);
         // Look up the path on all layers to the root.
         for i in 0..layers.len() + 1 {
@@ -156,21 +156,21 @@ impl ColorScheme {
 
     /// Directly resolve a color tuple using a path and a layer specification,
     /// ignoring `self.layers`.
-    pub fn resolve(&self, layers: &Vec<String>, path: &Vec<String>) -> (Color, Color) {
+    pub fn resolve(&self, layers: &[String], path: &[String]) -> (Color, Color) {
         let (mut fg, mut bg) = (None, None);
         for i in 0..path.len() + 1 {
             let parts = self.lookup(layers, &path[0..path.len() - i]);
-            if !fg.is_some() {
+            if fg.is_none() {
                 fg = parts.0;
             }
-            if !bg.is_some() {
+            if bg.is_none() {
                 bg = parts.1;
             }
             if fg.is_some() && bg.is_some() {
                 break;
             }
         }
-        return (fg.unwrap(), bg.unwrap());
+        (fg.unwrap(), bg.unwrap())
     }
 }
 
