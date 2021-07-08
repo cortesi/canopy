@@ -5,11 +5,11 @@ use crate::geom::{Direction, Rect};
 use crate::{
     colorscheme::ColorScheme,
     cursor,
+    error::{CanopyError, TResult},
     event::{key, mouse, tick, Event},
     layout::FixedLayout,
     node::{locate, postorder, preorder, EventResult, Node, SkipWalker, Walker},
 };
-use anyhow::{format_err, Result};
 use crossterm::{
     cursor::{CursorShape, DisableBlinking, EnableBlinking, Hide, MoveTo, SetCursorShape, Show},
     QueueableCommand,
@@ -95,22 +95,25 @@ impl<S> Canopy<S> {
         }
         false
     }
-
     /// Focus the specified node.
-    pub fn set_focus(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
+    pub fn set_focus(&mut self, e: &mut dyn Node<S>) -> Result<EventResult, CanopyError> {
         if e.can_focus() {
             self.focus_gen += 1;
             e.state_mut().focus_gen = self.focus_gen;
             return Ok(EventResult::Handle { skip: false });
         }
-        Err(format_err!("node does not accept focus"))
+        Err(CanopyError::Focus("node does not accept focus".into()))
     }
 
-    fn focus_dir(&mut self, e: &mut dyn Node<S>, dir: Direction) -> Result<EventResult> {
+    fn focus_dir(
+        &mut self,
+        e: &mut dyn Node<S>,
+        dir: Direction,
+    ) -> Result<EventResult, CanopyError> {
         let mut seen = false;
         if let Some(bounds) = e.rect() {
             if let Some(start) = self.get_focus_area(e) {
-                start.search(dir, &mut |p| -> Result<bool> {
+                start.search(dir, &mut |p| -> Result<bool, CanopyError> {
                     if !bounds.contains_point(p) {
                         return Ok(true);
                     }
@@ -129,30 +132,30 @@ impl<S> Canopy<S> {
     }
 
     /// Move focus to the right of the currently focused node within the subtree.
-    pub fn focus_right(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
+    pub fn focus_right(&mut self, e: &mut dyn Node<S>) -> Result<EventResult, CanopyError> {
         self.focus_dir(e, Direction::Right)
     }
 
     /// Move focus to the left of the currently focused node within the subtree.
-    pub fn focus_left(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
+    pub fn focus_left(&mut self, e: &mut dyn Node<S>) -> Result<EventResult, CanopyError> {
         self.focus_dir(e, Direction::Left)
     }
 
     /// Move focus upward of the currently focused node within the subtree.
-    pub fn focus_up(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
+    pub fn focus_up(&mut self, e: &mut dyn Node<S>) -> Result<EventResult, CanopyError> {
         self.focus_dir(e, Direction::Up)
     }
 
     /// Move focus downward of the currently focused node within the subtree.
-    pub fn focus_down(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
+    pub fn focus_down(&mut self, e: &mut dyn Node<S>) -> Result<EventResult, CanopyError> {
         self.focus_dir(e, Direction::Down)
     }
 
     /// Focus the first node that accepts focus in the pre-order traversal of
     /// the subtree.
-    pub fn focus_first(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
+    pub fn focus_first(&mut self, e: &mut dyn Node<S>) -> Result<EventResult, CanopyError> {
         let mut focus_set = false;
-        preorder(e, &mut |x| -> Result<SkipWalker> {
+        preorder(e, &mut |x| -> TResult<SkipWalker> {
             Ok(if !focus_set && x.can_focus() {
                 self.set_focus(x)?;
                 focus_set = true;
@@ -160,7 +163,8 @@ impl<S> Canopy<S> {
             } else {
                 SkipWalker::default()
             })
-        })?;
+        })
+        .map_err(|e| CanopyError::Focus(e.to_string()))?;
         Ok(EventResult::Handle { skip: false })
     }
 
@@ -173,7 +177,7 @@ impl<S> Canopy<S> {
     /// A node is on the focus path if it or any of its descendants have focus.
     pub fn on_focus_path(&self, e: &mut dyn Node<S>) -> bool {
         let mut onpath = false;
-        self.focus_path(e, &mut |_| -> Result<()> {
+        self.focus_path(e, &mut |_| -> Result<(), CanopyError> {
             onpath = true;
             Ok(())
         })
@@ -193,10 +197,10 @@ impl<S> Canopy<S> {
 
     /// Focus the next node in the pre-order traversal of a node. If no node
     /// with focus is found, we focus the first node we can find instead.
-    pub fn focus_next(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
+    pub fn focus_next(&mut self, e: &mut dyn Node<S>) -> Result<EventResult, CanopyError> {
         let mut focus_set = false;
         let mut focus_seen = false;
-        preorder(e, &mut |x| -> Result<()> {
+        preorder(e, &mut |x| -> TResult<()> {
             if !focus_set {
                 if focus_seen {
                     if x.can_focus() {
@@ -208,7 +212,8 @@ impl<S> Canopy<S> {
                 }
             }
             Ok(())
-        })?;
+        })
+        .map_err(|e| CanopyError::Focus(e.to_string()))?;
         if !focus_set {
             self.focus_first(e)
         } else {
@@ -218,11 +223,11 @@ impl<S> Canopy<S> {
 
     /// Focus the previous node in the pre-order traversal of a node. If no
     /// node with focus is found, we focus the first node we can find instead.
-    pub fn focus_prev(&mut self, e: &mut dyn Node<S>) -> Result<EventResult> {
+    pub fn focus_prev(&mut self, e: &mut dyn Node<S>) -> Result<EventResult, CanopyError> {
         let current = self.focus_gen;
         let mut focus_seen = false;
         let mut first = true;
-        preorder(e, &mut |x| -> Result<()> {
+        preorder(e, &mut |x| -> TResult<()> {
             // We skip the first node in the traversal
             if first {
                 first = false
@@ -234,14 +239,15 @@ impl<S> Canopy<S> {
                 }
             }
             Ok(())
-        })?;
+        })
+        .map_err(|e| CanopyError::Focus(e.to_string()))?;
         Ok(EventResult::Handle { skip: false })
     }
 
     /// Find the area of the current terminal focus node.
     pub fn get_focus_area(&self, e: &mut dyn Node<S>) -> Option<Rect> {
         let mut ret = None;
-        self.focus_path(e, &mut |x| -> Result<()> {
+        self.focus_path(e, &mut |x| -> Result<(), CanopyError> {
             if ret == None {
                 ret = x.rect();
             }
@@ -256,11 +262,11 @@ impl<S> Canopy<S> {
     pub fn focus_path<R: Walker + Default>(
         &self,
         e: &mut dyn Node<S>,
-        f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<R>,
-    ) -> Result<R> {
+        f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<R, CanopyError>,
+    ) -> Result<R, CanopyError> {
         let mut focus_seen = false;
         let mut ret = R::default();
-        postorder(e, &mut |x| -> Result<SkipWalker> {
+        postorder(e, &mut |x| -> TResult<SkipWalker> {
             Ok(if focus_seen {
                 ret = ret.join(f(x)?);
                 SkipWalker::default()
@@ -271,7 +277,8 @@ impl<S> Canopy<S> {
             } else {
                 SkipWalker::default()
             })
-        })?;
+        })
+        .map_err(|e| CanopyError::Focus(e.to_string()))?;
         Ok(ret)
     }
 
@@ -280,7 +287,7 @@ impl<S> Canopy<S> {
     /// depth is 1.
     pub fn focus_depth(&self, e: &mut dyn Node<S>) -> usize {
         let mut total = 0;
-        self.focus_path(e, &mut |_| -> Result<()> {
+        self.focus_path(e, &mut |_| -> Result<(), CanopyError> {
             total += 1;
             Ok(())
         })
@@ -289,9 +296,13 @@ impl<S> Canopy<S> {
     }
 
     /// Pre-render sweep of the tree.
-    pub(crate) fn pre_render(&mut self, e: &mut dyn Node<S>, w: &mut dyn Write) -> Result<()> {
+    pub(crate) fn pre_render(
+        &mut self,
+        e: &mut dyn Node<S>,
+        w: &mut dyn Write,
+    ) -> Result<(), CanopyError> {
         let mut seen = false;
-        self.focus_path(e, &mut |_| -> Result<()> {
+        self.focus_path(e, &mut |_| -> Result<(), CanopyError> {
             seen = true;
             Ok(())
         })?;
@@ -304,9 +315,13 @@ impl<S> Canopy<S> {
     }
 
     /// Post-render sweep of the tree.
-    pub(crate) fn post_render(&mut self, e: &mut dyn Node<S>, w: &mut dyn Write) -> Result<()> {
+    pub(crate) fn post_render(
+        &mut self,
+        e: &mut dyn Node<S>,
+        w: &mut dyn Write,
+    ) -> Result<(), CanopyError> {
         let mut seen = false;
-        self.focus_path(e, &mut |n| -> Result<()> {
+        self.focus_path(e, &mut |n| -> Result<(), CanopyError> {
             if !seen {
                 if let Some(c) = n.cursor() {
                     if let Some(r) = n.rect() {
@@ -332,13 +347,14 @@ impl<S> Canopy<S> {
     }
 
     /// Mark a tree of nodes for render.
-    pub fn taint_tree(&self, e: &mut dyn Node<S>) -> Result<()> {
-        let v = postorder(e, &mut |x| -> Result<()> {
+    pub fn taint_tree(&self, e: &mut dyn Node<S>) -> Result<(), CanopyError> {
+        postorder(e, &mut |x| -> TResult<()> {
             let r = x.state_mut();
             r.render_gen = self.render_gen;
             Ok(())
-        })?;
-        Ok(v)
+        })
+        .map_err(|e| CanopyError::Taint(e.to_string()))?;
+        Ok(())
     }
 
     /// Mark a single node for render.
@@ -358,7 +374,7 @@ impl<S> Canopy<S> {
         colors: &mut ColorScheme,
         e: &mut dyn Node<S>,
         w: &mut dyn Write,
-    ) -> Result<()> {
+    ) -> Result<(), CanopyError> {
         if self.should_render(e) {
             if self.is_focused(e) {
                 let s = &mut e.state_mut();
@@ -367,7 +383,8 @@ impl<S> Canopy<S> {
             e.render(self, colors, w)?;
         }
         colors.inc();
-        e.children(&mut |x| self.render_traversal(colors, x, w))?;
+        e.children(&mut |x| self.render_traversal(colors, x, w).map_err(|e| e.into()))
+            .map_err(|e| CanopyError::Render(e.to_string()))?;
         colors.dec();
         Ok(())
     }
@@ -379,7 +396,7 @@ impl<S> Canopy<S> {
         e: &mut dyn Node<S>,
         colors: &mut ColorScheme,
         w: &mut dyn Write,
-    ) -> Result<()> {
+    ) -> Result<(), CanopyError> {
         colors.reset();
         self.render_traversal(colors, e, w)?;
         self.render_gen += 1;
@@ -394,7 +411,7 @@ impl<S> Canopy<S> {
         root: &mut dyn Node<S>,
         s: &mut S,
         m: mouse::Mouse,
-    ) -> Result<EventResult> {
+    ) -> Result<EventResult, CanopyError> {
         let mut handled = false;
         locate(root, m.loc, &mut |x| {
             Ok(if handled {
@@ -426,10 +443,15 @@ impl<S> Canopy<S> {
 
     /// Propagate a key event through the focus and all its ancestors. Keys
     /// handled only once, and then ignored.
-    pub fn key(&mut self, root: &mut dyn Node<S>, s: &mut S, k: key::Key) -> Result<EventResult> {
+    pub fn key(
+        &mut self,
+        root: &mut dyn Node<S>,
+        s: &mut S,
+        k: key::Key,
+    ) -> Result<EventResult, CanopyError> {
         let mut handled = false;
         self.clone()
-            .focus_path(root, &mut |x| -> Result<EventResult> {
+            .focus_path(root, &mut |x| -> Result<EventResult, CanopyError> {
                 Ok(if handled {
                     EventResult::default()
                 } else {
@@ -452,7 +474,7 @@ impl<S> Canopy<S> {
     }
 
     /// Propagate a resize event through the tree of nodes.
-    pub fn resize<N>(&mut self, e: &mut N, rect: Rect) -> Result<()>
+    pub fn resize<N>(&mut self, e: &mut N, rect: Rect) -> Result<(), CanopyError>
     where
         N: Node<S> + FixedLayout<S>,
     {
@@ -472,9 +494,9 @@ impl<S> Canopy<S> {
         root: &mut dyn Node<S>,
         s: &mut S,
         t: tick::Tick,
-    ) -> Result<EventResult> {
+    ) -> Result<EventResult, CanopyError> {
         let mut ret = EventResult::default();
-        preorder(root, &mut |x| -> Result<SkipWalker> {
+        preorder(root, &mut |x| -> TResult<SkipWalker> {
             let v = x.handle_tick(self, s, t)?;
             ret = ret.join(v);
             Ok(match v {
@@ -495,12 +517,18 @@ impl<S> Canopy<S> {
                 }
                 EventResult::Exit => SkipWalker { has_skip: true },
             })
-        })?;
+        })
+        .map_err(|e| CanopyError::Tick(e.to_string()))?;
         Ok(ret)
     }
 
     /// Propagate an event through the tree.
-    pub fn event<N>(&mut self, root: &mut N, s: &mut S, e: Event) -> Result<EventResult>
+    pub fn event<N>(
+        &mut self,
+        root: &mut N,
+        s: &mut S,
+        e: Event,
+    ) -> Result<EventResult, CanopyError>
     where
         N: Node<S> + FixedLayout<S>,
     {
@@ -524,20 +552,23 @@ mod tests {
         tutils::utils,
         StatefulNode,
     };
-    use anyhow::Result;
 
-    pub fn focvec(app: &mut Canopy<utils::State>, root: &mut utils::TRoot) -> Result<Vec<String>> {
+    pub fn focvec(
+        app: &mut Canopy<utils::State>,
+        root: &mut utils::TRoot,
+    ) -> Result<Vec<String>, CanopyError> {
         let mut v = vec![];
-        app.clone().focus_path(root, &mut |x| -> Result<()> {
-            let n = utils::get_name(app, x)?;
-            v.push(n);
-            Ok(())
-        })?;
+        app.clone()
+            .focus_path(root, &mut |x| -> Result<(), CanopyError> {
+                let n = utils::get_name(app, x)?;
+                v.push(n);
+                Ok(())
+            })?;
         Ok(v)
     }
 
     #[test]
-    fn tfocus_next() -> Result<()> {
+    fn tfocus_next() -> Result<(), CanopyError> {
         let mut app = Canopy::new();
         let mut root = utils::TRoot::new();
 
@@ -568,7 +599,7 @@ mod tests {
     }
 
     #[test]
-    fn tfocus_prev() -> Result<()> {
+    fn tfocus_prev() -> Result<(), CanopyError> {
         let mut app = Canopy::new();
         let mut root = utils::TRoot::new();
 
@@ -590,7 +621,7 @@ mod tests {
     }
 
     #[test]
-    fn tfoci() -> Result<()> {
+    fn tfoci() -> Result<(), CanopyError> {
         let mut app = Canopy::new();
         let mut root = utils::TRoot::new();
 
@@ -619,7 +650,7 @@ mod tests {
     }
 
     #[test]
-    fn tfocus_right() -> Result<()> {
+    fn tfocus_right() -> Result<(), CanopyError> {
         let mut app = Canopy::new();
         let mut root = utils::TRoot::new();
         const SIZE: u16 = 100;
@@ -648,7 +679,7 @@ mod tests {
     }
 
     #[test]
-    fn ttick() -> Result<()> {
+    fn ttick() -> Result<(), CanopyError> {
         let mut app = Canopy::new();
         let mut root = utils::TRoot::new();
 
@@ -701,7 +732,7 @@ mod tests {
     }
 
     #[test]
-    fn tkey() -> Result<()> {
+    fn tkey() -> Result<(), CanopyError> {
         let mut app = Canopy::new();
         let mut root = utils::TRoot::new();
 
@@ -759,7 +790,7 @@ mod tests {
     }
 
     #[test]
-    fn tmouse() -> Result<()> {
+    fn tmouse() -> Result<(), CanopyError> {
         let mut app = Canopy::new();
         const SIZE: u16 = 100;
         let mut root = utils::TRoot::new();
@@ -793,7 +824,7 @@ mod tests {
     }
 
     #[test]
-    fn tresize() -> Result<()> {
+    fn tresize() -> Result<(), CanopyError> {
         const SIZE: u16 = 100;
         let mut app = Canopy::new();
         let mut root = utils::TRoot::new();
@@ -851,7 +882,7 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn trender() -> Result<()> {
+    fn trender() -> Result<(), CanopyError> {
         let mut app = Canopy::new();
         let mut root = utils::TRoot::new();
 
@@ -891,7 +922,7 @@ mod tests {
     }
 
     #[test]
-    fn ttaintskip() -> Result<()> {
+    fn ttaintskip() -> Result<(), CanopyError> {
         let mut app = Canopy::new();
         let mut root = utils::TRoot::new();
         const SIZE: u16 = 100;

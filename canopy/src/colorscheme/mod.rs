@@ -1,7 +1,7 @@
 use std::io::Write;
 
 pub mod solarized;
-use anyhow::Result;
+use crate::error::CanopyError;
 
 use crossterm::{
     style::{Color, SetBackgroundColor, SetForegroundColor},
@@ -108,7 +108,7 @@ impl ColorScheme {
     }
 
     /// Set the fg and bg colors
-    pub fn set(&self, path: &str, w: &mut dyn Write) -> Result<()> {
+    pub fn set(&self, path: &str, w: &mut dyn Write) -> Result<(), CanopyError> {
         let (fg, bg) = self.get(path);
         w.queue(SetForegroundColor(fg))?;
         w.queue(SetBackgroundColor(bg))?;

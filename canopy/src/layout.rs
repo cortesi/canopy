@@ -1,13 +1,12 @@
 use crate::geom::{Point, Rect};
-use crate::Canopy;
-use anyhow::Result;
+use crate::{error::CanopyError, Canopy};
 
 /// A layout for nodes that provide no feedback on their internal geometry -
 /// they just occupy the space specified. Examples include frames that fill any
 /// region we pass them, and widgets that have one fixed dimension, like a
 /// fixed-height status bar.
 pub trait FixedLayout<S> {
-    fn layout(&mut self, app: &mut Canopy<S>, rect: Option<Rect>) -> Result<()>;
+    fn layout(&mut self, app: &mut Canopy<S>, rect: Option<Rect>) -> Result<(), CanopyError>;
 }
 
 /// A layout for nodes with geometry computed based on constraints. This defines
@@ -36,10 +35,15 @@ pub trait ConstrainedLayout<S> {
         app: &mut Canopy<S>,
         width: Option<u16>,
         height: Option<u16>,
-    ) -> Result<Rect>;
+    ) -> Result<Rect, CanopyError>;
     /// Lay out a view onto the virtual component. The size of `rect` must be
     /// smaller than or equal to the rect `constrain`, and `virt_origin` must be
     /// a point within the virtual component such that rect would fall entirely
     /// inside it.
-    fn layout(&mut self, app: &mut Canopy<S>, virt_origin: Point, rect: Rect) -> Result<()>;
+    fn layout(
+        &mut self,
+        app: &mut Canopy<S>,
+        virt_origin: Point,
+        rect: Rect,
+    ) -> Result<(), CanopyError>;
 }

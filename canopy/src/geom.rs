@@ -1,4 +1,4 @@
-use anyhow::{format_err, Result};
+use crate::error::CanopyError;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Direction {
@@ -110,9 +110,9 @@ impl Rect {
     /// Given a point that falls within this rectangle, rebase the point to be
     /// relative to our origin. If the point falls outside the rect, an error is
     /// returned.
-    pub fn rebase(&self, pt: Point) -> Result<Point> {
+    pub fn rebase(&self, pt: Point) -> Result<Point, CanopyError> {
         if !self.contains_point(pt) {
-            return Err(anyhow::format_err!("co-ords outside rectangle"));
+            return Err(CanopyError::Geometry("co-ords outside rectangle".into()));
         }
         Ok(Point {
             x: pt.x - self.tl.x,
@@ -147,9 +147,9 @@ impl Rect {
             })
     }
     /// Extracts an inner rectangle, given a border width.
-    pub fn inner(&self, border: u16) -> Result<Rect> {
+    pub fn inner(&self, border: u16) -> Result<Rect, CanopyError> {
         if self.w < (border * 2) || self.h < (border * 2) {
-            return Err(anyhow::format_err!("rectangle too small"));
+            return Err(CanopyError::Geometry("rectangle too small".into()));
         }
         Ok(Rect {
             tl: Point {
@@ -161,9 +161,9 @@ impl Rect {
         })
     }
     /// Extracts a frame for this rect, given a border width. The interior of the frame will match a call to inner() with the same arguments.
-    pub fn frame(&self, border: u16) -> Result<Frame> {
+    pub fn frame(&self, border: u16) -> Result<Frame, CanopyError> {
         if self.w < (border * 2) || self.h < (border * 2) {
-            return Err(anyhow::format_err!("rectangle too small"));
+            return Err(CanopyError::Geometry("rectangle too small".into()));
         }
         Ok(Frame {
             top: Rect {
@@ -259,9 +259,11 @@ impl Rect {
     /// Clamp this rectangle, constraining it lie within another rectangle. The
     /// size of the returned Rect is always equal to that of self. If self is
     /// larger than the enclosing rectangle, return an error.
-    pub fn clamp(&self, rect: Rect) -> Result<Self> {
+    pub fn clamp(&self, rect: Rect) -> Result<Self, CanopyError> {
         if rect.w < self.w || rect.h < self.h {
-            Err(format_err!("can't clamp to smaller rectangle"))
+            Err(CanopyError::Geometry(
+                "can't clamp to smaller rectangle".into(),
+            ))
         } else {
             Ok(Rect {
                 tl: self.tl.clamp(Rect {
@@ -277,7 +279,7 @@ impl Rect {
 
     /// Splits the rectangle horizontally into n sections, as close to equally
     /// sized as possible.
-    pub fn split_horizontal(&self, n: u16) -> Result<Vec<Rect>> {
+    pub fn split_horizontal(&self, n: u16) -> Result<Vec<Rect>, CanopyError> {
         let widths = split(self.w, n)?;
         let mut off: u16 = self.tl.x;
         let mut ret = vec![];
@@ -296,7 +298,7 @@ impl Rect {
     }
     /// Splits the rectangle vertically into n sections, as close to equally
     /// sized as possible.
-    pub fn split_vertical(&self, n: u16) -> Result<Vec<Rect>> {
+    pub fn split_vertical(&self, n: u16) -> Result<Vec<Rect>, CanopyError> {
         let heights = split(self.h, n)?;
         let mut off: u16 = self.tl.y;
         let mut ret = vec![];
@@ -315,7 +317,7 @@ impl Rect {
     }
     /// Splits the rectangle into columns, with each column split into rows.
     /// Returns a Vec of rects per column.
-    pub fn split_panes(&self, spec: Vec<u16>) -> Result<Vec<Vec<Rect>>> {
+    pub fn split_panes(&self, spec: Vec<u16>) -> Result<Vec<Vec<Rect>>, CanopyError> {
         let mut ret = vec![];
 
         let cols = split(self.w, spec.len() as u16)?;
@@ -337,7 +339,10 @@ impl Rect {
         Ok(ret)
     }
     // Sweeps upwards from the top of the rectangle.
-    pub fn search_up(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
+    pub fn search_up(
+        &self,
+        f: &mut dyn FnMut(Point) -> Result<bool, CanopyError>,
+    ) -> Result<(), CanopyError> {
         'outer: for y in (0..self.tl.y).rev() {
             for x in self.tl.x..(self.tl.x + self.w) {
                 if f(Point { x, y })? {
@@ -348,7 +353,10 @@ impl Rect {
         Ok(())
     }
     // Sweeps downwards from the bottom of the rectangle.
-    pub fn search_down(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
+    pub fn search_down(
+        &self,
+        f: &mut dyn FnMut(Point) -> Result<bool, CanopyError>,
+    ) -> Result<(), CanopyError> {
         'outer: for y in self.tl.y + self.h..u16::MAX {
             for x in self.tl.x..(self.tl.x + self.w) {
                 if f(Point { x, y })? {
@@ -359,7 +367,10 @@ impl Rect {
         Ok(())
     }
     // Sweeps leftwards the left of the rectangle.
-    pub fn search_left(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
+    pub fn search_left(
+        &self,
+        f: &mut dyn FnMut(Point) -> Result<bool, CanopyError>,
+    ) -> Result<(), CanopyError> {
         'outer: for x in (0..self.tl.x).rev() {
             for y in self.tl.y..self.tl.y + self.h {
                 if f(Point { x, y })? {
@@ -370,7 +381,10 @@ impl Rect {
         Ok(())
     }
     // Sweeps rightwards from the right of the rectangle.
-    pub fn search_right(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
+    pub fn search_right(
+        &self,
+        f: &mut dyn FnMut(Point) -> Result<bool, CanopyError>,
+    ) -> Result<(), CanopyError> {
         'outer: for x in self.tl.x + self.w..u16::MAX {
             for y in self.tl.y..self.tl.y + self.h {
                 if f(Point { x, y })? {
@@ -381,7 +395,11 @@ impl Rect {
         Ok(())
     }
     // Sweeps to and fro from the right of the rectangle to the left.
-    pub fn search(&self, dir: Direction, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
+    pub fn search(
+        &self,
+        dir: Direction,
+        f: &mut dyn FnMut(Point) -> Result<bool, CanopyError>,
+    ) -> Result<(), CanopyError> {
         match dir {
             Direction::Up => self.search_up(f),
             Direction::Down => self.search_down(f),
@@ -391,9 +409,11 @@ impl Rect {
     }
 
     /// Extract a section of this rect based on an extent.
-    pub fn vextract(&self, e: Extent) -> Result<Self> {
+    pub fn vextract(&self, e: Extent) -> Result<Self, CanopyError> {
         if !self.vextent().contains(e) {
-            Err(format_err!("extract extent outside rectangle"))
+            Err(CanopyError::Geometry(
+                "extract extent outside rectangle".into(),
+            ))
         } else {
             Ok(Rect {
                 tl: Point {
@@ -407,9 +427,11 @@ impl Rect {
     }
 
     /// Extract a horizontal section of this rect based on an extent.
-    pub fn hextract(&self, e: Extent) -> Result<Self> {
+    pub fn hextract(&self, e: Extent) -> Result<Self, CanopyError> {
         if !self.hextent().contains(e) {
-            Err(format_err!("extract extent outside rectangle"))
+            Err(CanopyError::Geometry(
+                "extract extent outside rectangle".into(),
+            ))
         } else {
             Ok(Rect {
                 tl: Point {
@@ -440,9 +462,9 @@ impl Rect {
 }
 
 /// Split a length into n sections, as evenly as possible.
-fn split(len: u16, n: u16) -> Result<Vec<u16>> {
+fn split(len: u16, n: u16) -> Result<Vec<u16>, CanopyError> {
     if n == 0 {
-        return Err(format_err!("divide by zero"));
+        return Err(CanopyError::Geometry("divide by zero".into()));
     }
     let w = len / n;
     let rem = len % n;
@@ -466,15 +488,18 @@ impl Extent {
     /// Split this extent into (pre, active, post) extents, based on the
     /// position of a window within a view. The main use for this funtion is
     /// computation of the active indicator size and position in a scrollbar.
-    pub fn split_active(&self, window: Extent, view: Extent) -> Result<(Extent, Extent, Extent)> {
+    pub fn split_active(
+        &self,
+        window: Extent,
+        view: Extent,
+    ) -> Result<(Extent, Extent, Extent), CanopyError> {
         if window.len == 0 {
-            Err(format_err!("window cannot be zero length"))
+            Err(CanopyError::Geometry("window cannot be zero length".into()))
         } else if !view.contains(window) {
-            Err(format_err!(
+            Err(CanopyError::Geometry(format!(
                 "view {:?} does not contain window {:?}",
-                view,
-                window,
-            ))
+                view, window,
+            )))
         } else {
             // Compute the fraction each section occupies of the view.
             let pref = (window.off - view.off) as f64 / view.len as f64;
@@ -508,7 +533,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn extent_contains() -> Result<()> {
+    fn extent_contains() -> Result<(), CanopyError> {
         let v = Extent { off: 1, len: 3 };
         assert!(v.contains(Extent { off: 1, len: 3 }));
         assert!(!v.contains(Extent { off: 1, len: 4 }));
@@ -519,7 +544,7 @@ mod tests {
     }
 
     #[test]
-    fn extent_split_active() -> Result<()> {
+    fn extent_split_active() -> Result<(), CanopyError> {
         let v = Extent { off: 10, len: 10 };
         assert_eq!(
             v.split_active(Extent { off: 100, len: 50 }, Extent { off: 100, len: 100 })?,
@@ -557,7 +582,7 @@ mod tests {
     }
 
     #[test]
-    fn tsearch() -> Result<()> {
+    fn tsearch() -> Result<(), CanopyError> {
         let bounds = Rect {
             tl: Point { x: 0, y: 0 },
             w: 6,
@@ -648,7 +673,7 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn inner() -> Result<()> {
+    fn inner() -> Result<(), CanopyError> {
         let r = Rect {
             tl: Point { x: 0, y: 0 },
             w: 10,
@@ -665,7 +690,7 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn contains() -> Result<()> {
+    fn contains() -> Result<(), CanopyError> {
         let r = Rect {
             tl: Point { x: 10, y: 10 },
             w: 10,
@@ -688,7 +713,7 @@ mod tests {
     }
 
     #[test]
-    fn tsplit() -> Result<()> {
+    fn tsplit() -> Result<(), CanopyError> {
         assert_eq!(split(7, 3)?, vec![3, 2, 2]);
         assert_eq!(split(6, 3)?, vec![2, 2, 2]);
         assert_eq!(split(9, 1)?, vec![9]);
@@ -696,7 +721,7 @@ mod tests {
     }
 
     #[test]
-    fn trebase() -> Result<()> {
+    fn trebase() -> Result<(), CanopyError> {
         let r = Rect {
             tl: Point { x: 10, y: 10 },
             w: 10,
@@ -712,7 +737,7 @@ mod tests {
     }
 
     #[test]
-    fn tscroll() -> Result<()> {
+    fn tscroll() -> Result<(), CanopyError> {
         assert_eq!(
             Rect {
                 tl: Point { x: 5, y: 5 },
@@ -749,7 +774,7 @@ mod tests {
     }
 
     #[test]
-    fn tframe() -> Result<()> {
+    fn tframe() -> Result<(), CanopyError> {
         let r = Rect {
             tl: Point { x: 10, y: 10 },
             w: 10,
@@ -803,7 +828,7 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn trect_clamp() -> Result<()> {
+    fn trect_clamp() -> Result<(), CanopyError> {
         assert_eq!(
             Rect {
                 tl: Point { x: 11, y: 11 },
@@ -859,7 +884,7 @@ mod tests {
     }
 
     #[test]
-    fn trect_scroll_within() -> Result<()> {
+    fn trect_scroll_within() -> Result<(), CanopyError> {
         let r = Rect {
             tl: Point { x: 10, y: 10 },
             w: 5,
@@ -914,7 +939,7 @@ mod tests {
     }
 
     #[test]
-    fn tpoint_scroll_within() -> Result<()> {
+    fn tpoint_scroll_within() -> Result<(), CanopyError> {
         let p = Point { x: 15, y: 15 };
         assert_eq!(
             Point { x: 10, y: 10 },
@@ -956,7 +981,7 @@ mod tests {
     }
 
     #[test]
-    fn tsplit_panes() -> Result<()> {
+    fn tsplit_panes() -> Result<(), CanopyError> {
         let r = Rect {
             tl: Point { x: 10, y: 10 },
             w: 40,

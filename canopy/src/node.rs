@@ -1,13 +1,11 @@
-use std::{fmt::Debug, io::Write};
-
-use anyhow::Result;
-
 use crate::{
     colorscheme::ColorScheme,
     cursor,
+    error::{CanopyError, TResult},
     event::{key, mouse, tick},
     Canopy, Point, StatefulNode,
 };
+use std::{fmt::Debug, io::Write};
 
 /// Walker is implemented for the return values of tree operations.
 pub trait Walker {
@@ -126,7 +124,7 @@ pub trait Node<S>: StatefulNode {
         app: &mut Canopy<S>,
         colors: &mut ColorScheme,
         w: &mut dyn Write,
-    ) -> Result<()> {
+    ) -> Result<(), CanopyError> {
         Ok(())
     }
 
@@ -139,7 +137,12 @@ pub trait Node<S>: StatefulNode {
     /// event was ignored. Only nodes that have focus may handle key input, so
     /// this method is only called if focused() returns true. The default
     /// implementation ignores input.
-    fn handle_key(&mut self, app: &mut Canopy<S>, s: &mut S, k: key::Key) -> Result<EventResult> {
+    fn handle_key(
+        &mut self,
+        app: &mut Canopy<S>,
+        s: &mut S,
+        k: key::Key,
+    ) -> Result<EventResult, CanopyError> {
         Ok(EventResult::Ignore { skip: false })
     }
 
@@ -150,7 +153,7 @@ pub trait Node<S>: StatefulNode {
         app: &mut Canopy<S>,
         s: &mut S,
         k: mouse::Mouse,
-    ) -> Result<EventResult> {
+    ) -> Result<EventResult, CanopyError> {
         Ok(EventResult::Ignore { skip: false })
     }
 
@@ -160,12 +163,12 @@ pub trait Node<S>: StatefulNode {
         app: &mut Canopy<S>,
         s: &mut S,
         k: tick::Tick,
-    ) -> Result<EventResult> {
+    ) -> Result<EventResult, CanopyError> {
         Ok(EventResult::Ignore { skip: false })
     }
 
     /// Call a closure mutably on this node's children.
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<()>) -> Result<()> {
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<S>) -> TResult<()>) -> TResult<()> {
         Ok(())
     }
 }
@@ -175,8 +178,8 @@ pub trait Node<S>: StatefulNode {
 /// before exiting.
 pub fn postorder<S, R: Walker + Default>(
     e: &mut dyn Node<S>,
-    f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<R>,
-) -> Result<R> {
+    f: &mut dyn FnMut(&mut dyn Node<S>) -> TResult<R>,
+) -> TResult<R> {
     let mut v = R::default();
     e.children(&mut |x| {
         if !v.skip() {
@@ -191,8 +194,8 @@ pub fn postorder<S, R: Walker + Default>(
 // prunes all children of the currently visited node out of the traversal.
 pub fn preorder<S, W: Walker>(
     e: &mut dyn Node<S>,
-    f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<W>,
-) -> Result<W> {
+    f: &mut dyn FnMut(&mut dyn Node<S>) -> TResult<W>,
+) -> TResult<W> {
     let mut v = f(e)?;
     if !v.skip() {
         e.children(&mut |x| {
@@ -208,11 +211,11 @@ pub fn preorder<S, W: Walker>(
 pub fn locate<S, R: Walker + Default>(
     e: &mut dyn Node<S>,
     p: Point,
-    f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<R>,
-) -> Result<R> {
+    f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<R, CanopyError>,
+) -> Result<R, CanopyError> {
     let mut seen = false;
     let mut ret = R::default();
-    postorder(e, &mut |inner| -> Result<SkipWalker> {
+    postorder(e, &mut |inner| -> TResult<SkipWalker> {
         Ok(if seen {
             if inner.rect().is_some() {
                 ret = ret.join(f(inner)?);
@@ -229,14 +232,13 @@ pub fn locate<S, R: Walker + Default>(
         } else {
             SkipWalker::default()
         })
-    })?;
+    })
+    .map_err(|e| CanopyError::Locate(e.to_string()))?;
     Ok(ret)
 }
 
 #[cfg(test)]
 mod tests {
-    use anyhow::Result;
-
     use super::*;
     use crate::tutils::utils;
 
@@ -245,7 +247,7 @@ mod tests {
         x: &mut dyn Node<utils::State>,
         skipname: String,
         v: &mut Vec<String>,
-    ) -> Result<SkipWalker> {
+    ) -> TResult<SkipWalker> {
         let mut ret = SkipWalker::default();
         let n = utils::get_name(app, x)?;
         if n == skipname {
@@ -256,16 +258,17 @@ mod tests {
     }
 
     #[test]
-    fn tpostorder() -> Result<()> {
+    fn tpostorder() -> Result<(), CanopyError> {
         fn skipon(
             app: &mut Canopy<utils::State>,
             root: &mut utils::TRoot,
             skipname: String,
-        ) -> Result<Vec<String>> {
+        ) -> Result<Vec<String>, CanopyError> {
             let mut v: Vec<String> = vec![];
-            postorder(root, &mut |x| -> Result<SkipWalker> {
+            postorder(root, &mut |x| -> TResult<SkipWalker> {
                 skipper(app, x, skipname.clone(), &mut v)
-            })?;
+            })
+            .map_err(|_| CanopyError::Unknown("err".into()))?;
             Ok(v)
         }
 
@@ -295,16 +298,17 @@ mod tests {
     }
 
     #[test]
-    fn tpreorder() -> Result<()> {
+    fn tpreorder() -> Result<(), CanopyError> {
         fn skipon(
             app: &mut Canopy<utils::State>,
             root: &mut utils::TRoot,
             skipname: String,
-        ) -> Result<Vec<String>> {
+        ) -> Result<Vec<String>, CanopyError> {
             let mut v = vec![];
-            preorder(root, &mut |x| -> Result<SkipWalker> {
+            preorder(root, &mut |x| -> TResult<SkipWalker> {
                 skipper(app, x, skipname.clone(), &mut v)
-            })?;
+            })
+            .map_err(|_| CanopyError::Unknown("err".into()))?;
             Ok(v)
         }
 

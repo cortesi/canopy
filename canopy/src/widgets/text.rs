@@ -1,6 +1,7 @@
 use crate as canopy;
 use crate::{
     colorscheme::ColorScheme,
+    error::CanopyError,
     geom::{Point, Rect},
     layout::ConstrainedLayout,
     state::{NodeState, StatefulNode},
@@ -15,7 +16,6 @@ use crossterm::{
     QueueableCommand,
 };
 
-use anyhow::{format_err, Result};
 use textwrap;
 
 #[derive(StatefulNode)]
@@ -48,7 +48,7 @@ impl<'a, S> ConstrainedLayout<S> for Text<S> {
         _app: &mut Canopy<S>,
         width: Option<u16>,
         _height: Option<u16>,
-    ) -> Result<Rect> {
+    ) -> Result<Rect, CanopyError> {
         if let Some(w) = width {
             if let Some(l) = &self.lines {
                 if l.len() > 0 {
@@ -74,10 +74,17 @@ impl<'a, S> ConstrainedLayout<S> for Text<S> {
             self.lines = Some(split);
             Ok(ret)
         } else {
-            Err(format_err!("Text requires a width constraint"))
+            Err(CanopyError::Unknown(
+                "Text requires a width constraint".into(),
+            ))
         }
     }
-    fn layout(&mut self, _app: &mut Canopy<S>, virt_origin: Point, rect: Rect) -> Result<()> {
+    fn layout(
+        &mut self,
+        _app: &mut Canopy<S>,
+        virt_origin: Point,
+        rect: Rect,
+    ) -> Result<(), CanopyError> {
         self.set_rect(Some(rect));
         self.virt_origin = Some(virt_origin);
         Ok(())
@@ -90,7 +97,7 @@ impl<'a, S> Node<S> for Text<S> {
         _app: &mut Canopy<S>,
         colors: &mut ColorScheme,
         w: &mut dyn Write,
-    ) -> Result<()> {
+    ) -> Result<(), CanopyError> {
         let (fg, bg) = colors.get("text");
         w.queue(SetForegroundColor(fg))?;
         w.queue(SetBackgroundColor(bg))?;
@@ -115,7 +122,7 @@ impl<'a, S> Node<S> for Text<S> {
 mod tests {
     use super::*;
     #[test]
-    fn text_sizing() -> Result<()> {
+    fn text_sizing() -> Result<(), CanopyError> {
         let mut app = Canopy::new();
         let txt = "aaa bbb ccc\nddd eee fff\nggg hhh iii";
         let mut t: Text<()> = Text::new(txt);

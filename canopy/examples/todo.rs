@@ -1,9 +1,9 @@
-use anyhow::Result;
 use std::io::Write;
 
 use canopy;
 use canopy::{
     colorscheme::{solarized, ColorScheme},
+    error::{CanopyError, TResult},
     event::{key, mouse},
     geom::{Point, Rect},
     layout::FixedLayout,
@@ -27,7 +27,7 @@ impl Node<Handle> for StatusBar {
         _app: &mut Canopy<Handle>,
         colors: &mut ColorScheme,
         w: &mut dyn Write,
-    ) -> Result<()> {
+    ) -> Result<(), CanopyError> {
         colors.push_layer("statusbar");
         colors.set("statusbar/text", w)?;
         if let Some(r) = self.rect() {
@@ -40,7 +40,7 @@ impl Node<Handle> for StatusBar {
 }
 
 impl FixedLayout<Handle> for StatusBar {
-    fn layout(&mut self, _app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<()> {
+    fn layout(&mut self, _app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<(), CanopyError> {
         self.set_rect(rect);
         Ok(())
     }
@@ -65,7 +65,7 @@ impl Root {
             adder: None,
         }
     }
-    fn open_adder(&mut self, app: &mut Canopy<Handle>) -> Result<EventResult> {
+    fn open_adder(&mut self, app: &mut Canopy<Handle>) -> Result<EventResult, CanopyError> {
         let mut adder = frame::Frame::new(input::InputLine::new(""));
         app.set_focus(&mut adder.child)?;
         self.adder = Some(adder);
@@ -75,7 +75,7 @@ impl Root {
 }
 
 impl FixedLayout<Handle> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<()> {
+    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<(), CanopyError> {
         self.set_rect(rect);
         if let Some(a) = rect {
             if a.h > 2 {
@@ -124,7 +124,7 @@ impl Node<Handle> for Root {
         app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: mouse::Mouse,
-    ) -> Result<EventResult> {
+    ) -> Result<EventResult, CanopyError> {
         Ok(match k {
             c if c == mouse::Action::ScrollDown => self.content.child.down(app)?,
             c if c == mouse::Action::ScrollUp => self.content.child.up(app)?,
@@ -136,7 +136,7 @@ impl Node<Handle> for Root {
         app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: key::Key,
-    ) -> Result<EventResult> {
+    ) -> Result<EventResult, CanopyError> {
         Ok(match k {
             c if c == 'a' => self.open_adder(app)?,
             c if c == 'g' => self.content.child.scroll_to(app, 0, 0)?,
@@ -160,7 +160,7 @@ impl Node<Handle> for Root {
             _ => EventResult::Ignore { skip: false },
         })
     }
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<Handle>) -> Result<()>) -> Result<()> {
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<Handle>) -> TResult<()>) -> TResult<()> {
         f(&mut self.statusbar)?;
         f(&mut self.content)?;
         if let Some(a) = &mut self.adder {
@@ -170,7 +170,7 @@ impl Node<Handle> for Root {
     }
 }
 
-pub fn main() -> Result<()> {
+pub fn main() -> Result<(), CanopyError> {
     let mut app = Canopy::new();
     let mut h = Handle {};
     let mut root = Root::new(String::new());

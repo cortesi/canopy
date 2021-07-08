@@ -1,12 +1,11 @@
 use std::io::Write;
 use std::marker::PhantomData;
 
-use anyhow::{format_err, Result};
-
 use crate as canopy;
 use crate::{
     colorscheme::ColorScheme,
     cursor,
+    error::CanopyError,
     event::key,
     geom::{Extent, Point, Rect},
     layout::FixedLayout,
@@ -125,10 +124,12 @@ impl<S> InputLine<S> {
 }
 
 impl<S> FixedLayout<S> for InputLine<S> {
-    fn layout(&mut self, _app: &mut Canopy<S>, rect: Option<Rect>) -> Result<()> {
+    fn layout(&mut self, _app: &mut Canopy<S>, rect: Option<Rect>) -> Result<(), CanopyError> {
         if let Some(r) = rect {
             if r.h != 1 {
-                return Err(format_err!("InputLine height must be exactly 1."));
+                return Err(CanopyError::Layout(
+                    "InputLine height must be exactly 1.".into(),
+                ));
             }
             self.textbuf.set_display_width(r.w as usize);
         }
@@ -192,7 +193,7 @@ impl<'a, S> Node<S> for InputLine<S> {
         _app: &mut Canopy<S>,
         colors: &mut ColorScheme,
         w: &mut dyn Write,
-    ) -> Result<()> {
+    ) -> Result<(), CanopyError> {
         colors.set("text", w)?;
         if let Some(r) = self.rect() {
             w.queue(MoveTo(r.tl.x, r.tl.y))?;
@@ -200,7 +201,12 @@ impl<'a, S> Node<S> for InputLine<S> {
         }
         Ok(())
     }
-    fn handle_key(&mut self, _app: &mut Canopy<S>, _: &mut S, k: key::Key) -> Result<EventResult> {
+    fn handle_key(
+        &mut self,
+        _app: &mut Canopy<S>,
+        _: &mut S,
+        k: key::Key,
+    ) -> Result<EventResult, CanopyError> {
         match k {
             key::Key(_, key::KeyCode::Left) => {
                 self.textbuf.left();
@@ -225,7 +231,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn textbuf_basic() -> Result<()> {
+    fn textbuf_basic() -> Result<(), CanopyError> {
         let mut t = TextBuf::new("");
         t.set_display_width(3);
         t.left();

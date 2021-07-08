@@ -1,11 +1,10 @@
 use std::env;
 use std::fs;
 
-use anyhow::Result;
-
 use canopy;
 use canopy::{
     colorscheme::solarized,
+    error::{CanopyError, TResult},
     event::{key, mouse},
     layout::FixedLayout,
     runloop::runloop,
@@ -31,7 +30,7 @@ impl Root {
 }
 
 impl FixedLayout<Handle> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<()> {
+    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<(), CanopyError> {
         self.set_rect(rect);
         if let Some(a) = rect {
             app.resize(&mut self.child, a)?;
@@ -49,7 +48,7 @@ impl Node<Handle> for Root {
         app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: mouse::Mouse,
-    ) -> Result<EventResult> {
+    ) -> Result<EventResult, CanopyError> {
         Ok(match k {
             c if c == mouse::Action::ScrollDown => self.child.child.down(app)?,
             c if c == mouse::Action::ScrollUp => self.child.child.up(app)?,
@@ -61,7 +60,7 @@ impl Node<Handle> for Root {
         app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: key::Key,
-    ) -> Result<EventResult> {
+    ) -> Result<EventResult, CanopyError> {
         Ok(match k {
             c if c == 'g' => self.child.child.scroll_to(app, 0, 0)?,
             c if c == 'j' || c == key::KeyCode::Down => self.child.child.down(app)?,
@@ -74,12 +73,12 @@ impl Node<Handle> for Root {
             _ => EventResult::Ignore { skip: false },
         })
     }
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<Handle>) -> Result<()>) -> Result<()> {
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<Handle>) -> TResult<()>) -> TResult<()> {
         f(&mut self.child)
     }
 }
 
-pub fn main() -> Result<()> {
+pub fn main() -> Result<(), CanopyError> {
     let args: Vec<String> = env::args().collect();
     if args.len() != 2 {
         println!("Usage: pager filename");
