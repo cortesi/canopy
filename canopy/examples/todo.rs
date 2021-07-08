@@ -3,13 +3,13 @@ use std::io::Write;
 use canopy;
 use canopy::{
     colorscheme::{solarized, ColorScheme},
-    error::{CanopyError, TResult},
+    error::{Error, TResult},
     event::{key, mouse},
     geom::{Point, Rect},
     layout::FixedLayout,
     runloop::runloop,
     widgets::{block, frame, input, scroll, text},
-    Canopy, EventResult, Node, NodeState, StatefulNode,
+    Canopy, EventOutcome, Node, NodeState, StatefulNode,
 };
 use crossterm::{cursor::MoveTo, style::Print, QueueableCommand};
 
@@ -27,7 +27,7 @@ impl Node<Handle> for StatusBar {
         _app: &mut Canopy<Handle>,
         colors: &mut ColorScheme,
         w: &mut dyn Write,
-    ) -> Result<(), CanopyError> {
+    ) -> Result<(), Error> {
         colors.push_layer("statusbar");
         colors.set("statusbar/text", w)?;
         if let Some(r) = self.rect() {
@@ -40,7 +40,7 @@ impl Node<Handle> for StatusBar {
 }
 
 impl FixedLayout<Handle> for StatusBar {
-    fn layout(&mut self, _app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<(), CanopyError> {
+    fn layout(&mut self, _app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<(), Error> {
         self.set_rect(rect);
         Ok(())
     }
@@ -65,17 +65,17 @@ impl Root {
             adder: None,
         }
     }
-    fn open_adder(&mut self, app: &mut Canopy<Handle>) -> Result<EventResult, CanopyError> {
+    fn open_adder(&mut self, app: &mut Canopy<Handle>) -> Result<EventOutcome, Error> {
         let mut adder = frame::Frame::new(input::InputLine::new(""));
         app.set_focus(&mut adder.child)?;
         self.adder = Some(adder);
         self.layout(app, self.rect())?;
-        Ok(EventResult::Handle { skip: false })
+        Ok(EventOutcome::Handle { skip: false })
     }
 }
 
 impl FixedLayout<Handle> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<(), CanopyError> {
+    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<(), Error> {
         self.set_rect(rect);
         if let Some(a) = rect {
             if a.h > 2 {
@@ -124,11 +124,11 @@ impl Node<Handle> for Root {
         app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: mouse::Mouse,
-    ) -> Result<EventResult, CanopyError> {
+    ) -> Result<EventOutcome, Error> {
         Ok(match k {
             c if c == mouse::Action::ScrollDown => self.content.child.down(app)?,
             c if c == mouse::Action::ScrollUp => self.content.child.up(app)?,
-            _ => EventResult::Ignore { skip: false },
+            _ => EventOutcome::Ignore { skip: false },
         })
     }
     fn handle_key(
@@ -136,7 +136,7 @@ impl Node<Handle> for Root {
         app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: key::Key,
-    ) -> Result<EventResult, CanopyError> {
+    ) -> Result<EventOutcome, Error> {
         Ok(match k {
             c if c == 'a' => self.open_adder(app)?,
             c if c == 'g' => self.content.child.scroll_to(app, 0, 0)?,
@@ -149,15 +149,15 @@ impl Node<Handle> for Root {
             c if c == key::KeyCode::Enter => {
                 self.adder = None;
                 app.taint_tree(self)?;
-                EventResult::Handle { skip: false }
+                EventOutcome::Handle { skip: false }
             }
             c if c == key::KeyCode::Esc => {
                 self.adder = None;
                 app.taint_tree(self)?;
-                EventResult::Handle { skip: false }
+                EventOutcome::Handle { skip: false }
             }
-            c if c == 'q' => EventResult::Exit,
-            _ => EventResult::Ignore { skip: false },
+            c if c == 'q' => EventOutcome::Exit,
+            _ => EventOutcome::Ignore { skip: false },
         })
     }
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<Handle>) -> TResult<()>) -> TResult<()> {
@@ -170,7 +170,7 @@ impl Node<Handle> for Root {
     }
 }
 
-pub fn main() -> Result<(), CanopyError> {
+pub fn main() -> Result<(), Error> {
     let mut app = Canopy::new();
     let mut h = Handle {};
     let mut root = Root::new(String::new());

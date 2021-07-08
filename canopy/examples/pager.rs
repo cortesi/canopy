@@ -4,12 +4,12 @@ use std::fs;
 use canopy;
 use canopy::{
     colorscheme::solarized,
-    error::{CanopyError, TResult},
+    error::{Error, TResult},
     event::{key, mouse},
     layout::FixedLayout,
     runloop::runloop,
     widgets::{frame, scroll, text},
-    Canopy, EventResult, Node, NodeState, Rect, StatefulNode,
+    Canopy, EventOutcome, Node, NodeState, Rect, StatefulNode,
 };
 
 struct Handle {}
@@ -30,7 +30,7 @@ impl Root {
 }
 
 impl FixedLayout<Handle> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<(), CanopyError> {
+    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<(), Error> {
         self.set_rect(rect);
         if let Some(a) = rect {
             app.resize(&mut self.child, a)?;
@@ -48,11 +48,11 @@ impl Node<Handle> for Root {
         app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: mouse::Mouse,
-    ) -> Result<EventResult, CanopyError> {
+    ) -> Result<EventOutcome, Error> {
         Ok(match k {
             c if c == mouse::Action::ScrollDown => self.child.child.down(app)?,
             c if c == mouse::Action::ScrollUp => self.child.child.up(app)?,
-            _ => EventResult::Ignore { skip: false },
+            _ => EventOutcome::Ignore { skip: false },
         })
     }
     fn handle_key(
@@ -60,7 +60,7 @@ impl Node<Handle> for Root {
         app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: key::Key,
-    ) -> Result<EventResult, CanopyError> {
+    ) -> Result<EventOutcome, Error> {
         Ok(match k {
             c if c == 'g' => self.child.child.scroll_to(app, 0, 0)?,
             c if c == 'j' || c == key::KeyCode::Down => self.child.child.down(app)?,
@@ -69,8 +69,8 @@ impl Node<Handle> for Root {
             c if c == 'l' || c == key::KeyCode::Up => self.child.child.right(app)?,
             c if c == ' ' || c == key::KeyCode::PageDown => self.child.child.page_down(app)?,
             c if c == key::KeyCode::PageUp => self.child.child.page_up(app)?,
-            c if c == 'q' => EventResult::Exit,
-            _ => EventResult::Ignore { skip: false },
+            c if c == 'q' => EventOutcome::Exit,
+            _ => EventOutcome::Ignore { skip: false },
         })
     }
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<Handle>) -> TResult<()>) -> TResult<()> {
@@ -78,7 +78,7 @@ impl Node<Handle> for Root {
     }
 }
 
-pub fn main() -> Result<(), CanopyError> {
+pub fn main() -> Result<(), Error> {
     let args: Vec<String> = env::args().collect();
     if args.len() != 2 {
         println!("Usage: pager filename");

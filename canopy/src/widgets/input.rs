@@ -5,13 +5,13 @@ use crate as canopy;
 use crate::{
     colorscheme::ColorScheme,
     cursor,
-    error::CanopyError,
+    error::Error,
     event::key,
     geom::{Extent, Point, Rect},
     layout::FixedLayout,
     state::{NodeState, StatefulNode},
     widgets::frame,
-    Canopy, EventResult, Node,
+    Canopy, EventOutcome, Node,
 };
 
 use crossterm::{cursor::MoveTo, style::Print, QueueableCommand};
@@ -124,12 +124,10 @@ impl<S> InputLine<S> {
 }
 
 impl<S> FixedLayout<S> for InputLine<S> {
-    fn layout(&mut self, _app: &mut Canopy<S>, rect: Option<Rect>) -> Result<(), CanopyError> {
+    fn layout(&mut self, _app: &mut Canopy<S>, rect: Option<Rect>) -> Result<(), Error> {
         if let Some(r) = rect {
             if r.h != 1 {
-                return Err(CanopyError::Layout(
-                    "InputLine height must be exactly 1.".into(),
-                ));
+                return Err(Error::Layout("InputLine height must be exactly 1.".into()));
             }
             self.textbuf.set_display_width(r.w as usize);
         }
@@ -193,7 +191,7 @@ impl<'a, S> Node<S> for InputLine<S> {
         _app: &mut Canopy<S>,
         colors: &mut ColorScheme,
         w: &mut dyn Write,
-    ) -> Result<(), CanopyError> {
+    ) -> Result<(), Error> {
         colors.set("text", w)?;
         if let Some(r) = self.rect() {
             w.queue(MoveTo(r.tl.x, r.tl.y))?;
@@ -206,7 +204,7 @@ impl<'a, S> Node<S> for InputLine<S> {
         _app: &mut Canopy<S>,
         _: &mut S,
         k: key::Key,
-    ) -> Result<EventResult, CanopyError> {
+    ) -> Result<EventOutcome, Error> {
         match k {
             key::Key(_, key::KeyCode::Left) => {
                 self.textbuf.left();
@@ -220,9 +218,9 @@ impl<'a, S> Node<S> for InputLine<S> {
             key::Key(_, key::KeyCode::Char(c)) => {
                 self.textbuf.insert(c);
             }
-            _ => return Ok(EventResult::Ignore { skip: false }),
+            _ => return Ok(EventOutcome::Ignore { skip: false }),
         };
-        Ok(EventResult::Handle { skip: false })
+        Ok(EventOutcome::Handle { skip: false })
     }
 }
 
@@ -231,7 +229,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn textbuf_basic() -> Result<(), CanopyError> {
+    fn textbuf_basic() -> Result<(), Error> {
         let mut t = TextBuf::new("");
         t.set_display_width(3);
         t.left();

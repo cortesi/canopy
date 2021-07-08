@@ -13,6 +13,7 @@ pub mod runloop;
 pub mod widgets;
 
 pub use base::Canopy;
+pub use error::{Error, Result};
 pub use geom::{Point, Rect};
-pub use node::{EventResult, Node};
+pub use node::{EventOutcome, Node};
 pub use state::{NodeState, StatefulNode};

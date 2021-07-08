@@ -7,7 +7,7 @@ use pad::PadStr;
 use crate as canopy;
 use crate::{
     colorscheme::ColorScheme,
-    error::{CanopyError, TResult},
+    error::{Error, TResult},
     geom::Rect,
     layout::FixedLayout,
     state::{NodeState, StatefulNode},
@@ -117,7 +117,7 @@ impl<S, N> FixedLayout<S> for Frame<S, N>
 where
     N: canopy::Node<S> + FrameContent + FixedLayout<S>,
 {
-    fn layout(&mut self, app: &mut Canopy<S>, rect: Option<Rect>) -> Result<(), CanopyError> {
+    fn layout(&mut self, app: &mut Canopy<S>, rect: Option<Rect>) -> Result<(), Error> {
         self.set_rect(rect);
         if let Some(r) = rect {
             self.child.layout(app, Some(r.inner(1)?))?;
@@ -138,7 +138,7 @@ where
         app: &mut Canopy<S>,
         colors: &mut ColorScheme,
         w: &mut dyn Write,
-    ) -> Result<(), CanopyError> {
+    ) -> Result<(), Error> {
         if let Some(a) = self.rect() {
             if app.on_focus_path(self) {
                 colors.set("frame/focused", w)?;

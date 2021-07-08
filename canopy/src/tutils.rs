@@ -5,9 +5,9 @@ pub mod utils {
     use crate as canopy;
     use crate::{
         colorscheme::ColorScheme,
-        error::{CanopyError, TResult},
+        error::{Error, TResult},
         event::{key, mouse, tick},
-        layout, Canopy, EventResult, Node, NodeState, Rect, StatefulNode,
+        layout, Canopy, EventOutcome, Node, NodeState, Rect, StatefulNode,
     };
 
     use crossterm::{style::Print, ExecutableCommand};
@@ -23,11 +23,11 @@ pub mod utils {
         pub fn new() -> Self {
             State { path: vec![] }
         }
-        pub fn add_event(&mut self, n: &str, evt: &str, result: EventResult) {
+        pub fn add_event(&mut self, n: &str, evt: &str, result: EventOutcome) {
             let outcome = match result {
-                EventResult::Exit => "exit",
-                EventResult::Handle { .. } => "handle",
-                EventResult::Ignore { .. } => "ignore",
+                EventOutcome::Exit => "exit",
+                EventOutcome::Handle { .. } => "handle",
+                EventOutcome::Ignore { .. } => "ignore",
             };
             self.path.push(format!("{}@{}->{}", n, evt, outcome))
         }
@@ -38,7 +38,7 @@ pub mod utils {
         state: NodeState,
         name: String,
 
-        pub next_event: Option<EventResult>,
+        pub next_event: Option<EventOutcome>,
         pub a: TBranch,
         pub b: TBranch,
     }
@@ -48,7 +48,7 @@ pub mod utils {
         state: NodeState,
         name: String,
 
-        pub next_event: Option<EventResult>,
+        pub next_event: Option<EventOutcome>,
         pub a: TLeaf,
         pub b: TLeaf,
     }
@@ -58,16 +58,16 @@ pub mod utils {
         state: NodeState,
         name: String,
 
-        pub next_event: Option<EventResult>,
+        pub next_event: Option<EventOutcome>,
     }
 
-    pub fn tnode_render(n: String, w: &mut dyn Write) -> Result<(), CanopyError> {
+    pub fn tnode_render(n: String, w: &mut dyn Write) -> Result<(), Error> {
         w.execute(Print(format!("<{}>", n)))?;
         Ok(())
     }
 
     impl layout::FixedLayout<State> for TLeaf {
-        fn layout(&mut self, _: &mut Canopy<State>, a: Option<Rect>) -> Result<(), CanopyError> {
+        fn layout(&mut self, _: &mut Canopy<State>, a: Option<Rect>) -> Result<(), Error> {
             self.set_rect(a);
             Ok(())
         }
@@ -82,7 +82,7 @@ pub mod utils {
             _: &mut Canopy<State>,
             _c: &mut ColorScheme,
             w: &mut dyn Write,
-        ) -> Result<(), CanopyError> {
+        ) -> Result<(), Error> {
             tnode_render(self.name.clone(), w)
         }
         fn handle_key(
@@ -90,7 +90,7 @@ pub mod utils {
             _: &mut Canopy<State>,
             s: &mut State,
             _: key::Key,
-        ) -> Result<EventResult, CanopyError> {
+        ) -> Result<EventOutcome, Error> {
             self.handle(s, "key")
         }
         fn handle_mouse(
@@ -98,7 +98,7 @@ pub mod utils {
             _: &mut Canopy<State>,
             s: &mut State,
             _: mouse::Mouse,
-        ) -> Result<EventResult, CanopyError> {
+        ) -> Result<EventOutcome, Error> {
             self.handle(s, "mouse")
         }
         fn handle_tick(
@@ -106,17 +106,13 @@ pub mod utils {
             _: &mut Canopy<State>,
             s: &mut State,
             _: tick::Tick,
-        ) -> Result<EventResult, CanopyError> {
+        ) -> Result<EventOutcome, Error> {
             self.handle(s, "tick")
         }
     }
 
     impl layout::FixedLayout<State> for TBranch {
-        fn layout(
-            &mut self,
-            app: &mut Canopy<State>,
-            rect: Option<Rect>,
-        ) -> Result<(), CanopyError> {
+        fn layout(&mut self, app: &mut Canopy<State>, rect: Option<Rect>) -> Result<(), Error> {
             self.set_rect(rect);
             if let Some(a) = rect {
                 let v = a.split_vertical(2)?;
@@ -136,7 +132,7 @@ pub mod utils {
             _: &mut Canopy<State>,
             _c: &mut ColorScheme,
             w: &mut dyn Write,
-        ) -> Result<(), CanopyError> {
+        ) -> Result<(), Error> {
             tnode_render(self.name.clone(), w)
         }
         fn handle_key(
@@ -144,7 +140,7 @@ pub mod utils {
             _: &mut Canopy<State>,
             s: &mut State,
             _: key::Key,
-        ) -> Result<EventResult, CanopyError> {
+        ) -> Result<EventOutcome, Error> {
             self.handle(s, "key")
         }
         fn handle_mouse(
@@ -152,7 +148,7 @@ pub mod utils {
             _: &mut Canopy<State>,
             s: &mut State,
             _: mouse::Mouse,
-        ) -> Result<EventResult, CanopyError> {
+        ) -> Result<EventOutcome, Error> {
             self.handle(s, "mouse")
         }
         fn handle_tick(
@@ -160,7 +156,7 @@ pub mod utils {
             _: &mut Canopy<State>,
             s: &mut State,
             _: tick::Tick,
-        ) -> Result<EventResult, CanopyError> {
+        ) -> Result<EventOutcome, Error> {
             self.handle(s, "tick")
         }
         fn children(
@@ -174,11 +170,7 @@ pub mod utils {
     }
 
     impl layout::FixedLayout<State> for TRoot {
-        fn layout(
-            &mut self,
-            app: &mut Canopy<State>,
-            rect: Option<Rect>,
-        ) -> Result<(), CanopyError> {
+        fn layout(&mut self, app: &mut Canopy<State>, rect: Option<Rect>) -> Result<(), Error> {
             self.set_rect(rect);
             if let Some(a) = rect {
                 let v = a.split_horizontal(2)?;
@@ -198,7 +190,7 @@ pub mod utils {
             _: &mut Canopy<State>,
             _c: &mut ColorScheme,
             w: &mut dyn Write,
-        ) -> Result<(), CanopyError> {
+        ) -> Result<(), Error> {
             tnode_render(self.name.clone(), w)
         }
         fn handle_key(
@@ -206,7 +198,7 @@ pub mod utils {
             _: &mut Canopy<State>,
             s: &mut State,
             _: key::Key,
-        ) -> Result<EventResult, CanopyError> {
+        ) -> Result<EventOutcome, Error> {
             self.handle(s, "key")
         }
         fn handle_mouse(
@@ -214,7 +206,7 @@ pub mod utils {
             _: &mut Canopy<State>,
             s: &mut State,
             _: mouse::Mouse,
-        ) -> Result<EventResult, CanopyError> {
+        ) -> Result<EventOutcome, Error> {
             self.handle(s, "mouse")
         }
         fn handle_tick(
@@ -222,7 +214,7 @@ pub mod utils {
             _: &mut Canopy<State>,
             s: &mut State,
             _: tick::Tick,
-        ) -> Result<EventResult, CanopyError> {
+        ) -> Result<EventOutcome, Error> {
             self.handle(s, "tick")
         }
         fn children(
@@ -243,7 +235,7 @@ pub mod utils {
                 next_event: None,
             }
         }
-        pub fn mouse_event(&self) -> Result<mouse::Mouse, CanopyError> {
+        pub fn mouse_event(&self) -> Result<mouse::Mouse, Error> {
             if let Some(a) = self.rect() {
                 Ok(mouse::Mouse {
                     action: Some(mouse::Action::Down),
@@ -252,15 +244,15 @@ pub mod utils {
                     loc: a.tl,
                 })
             } else {
-                Err(CanopyError::Unknown("no area".into()))
+                Err(Error::Unknown("no area".into()))
             }
         }
-        fn handle(&mut self, s: &mut State, evt: &str) -> Result<EventResult, CanopyError> {
+        fn handle(&mut self, s: &mut State, evt: &str) -> Result<EventOutcome, Error> {
             let ret = if let Some(x) = self.next_event {
                 self.next_event = None;
                 x
             } else {
-                EventResult::Ignore { skip: false }
+                EventOutcome::Ignore { skip: false }
             };
             s.add_event(&self.name, evt, ret);
             Ok(ret)
@@ -277,12 +269,12 @@ pub mod utils {
                 next_event: None,
             }
         }
-        fn handle(&mut self, s: &mut State, evt: &str) -> Result<EventResult, CanopyError> {
+        fn handle(&mut self, s: &mut State, evt: &str) -> Result<EventOutcome, Error> {
             let ret = if let Some(x) = self.next_event {
                 self.next_event = None;
                 x
             } else {
-                EventResult::Ignore { skip: false }
+                EventOutcome::Ignore { skip: false }
             };
             s.add_event(&self.name, evt, ret);
             Ok(ret)
@@ -299,19 +291,19 @@ pub mod utils {
                 next_event: None,
             }
         }
-        fn handle(&mut self, s: &mut State, evt: &str) -> Result<EventResult, CanopyError> {
+        fn handle(&mut self, s: &mut State, evt: &str) -> Result<EventOutcome, Error> {
             let ret = if let Some(x) = self.next_event {
                 self.next_event = None;
                 x
             } else {
-                EventResult::Ignore { skip: false }
+                EventOutcome::Ignore { skip: false }
             };
             s.add_event(&self.name, evt, ret);
             Ok(ret)
         }
     }
 
-    pub fn trender(app: &mut Canopy<State>, r: &mut TRoot) -> Result<String, CanopyError> {
+    pub fn trender(app: &mut Canopy<State>, r: &mut TRoot) -> Result<String, Error> {
         let mut c = Cursor::new(Vec::new());
         let mut colors = ColorScheme::default();
         app.render(r, &mut colors, &mut c)?;
@@ -321,10 +313,7 @@ pub mod utils {
         Ok(String::from_utf8_lossy(&out).into())
     }
 
-    pub fn get_name(
-        app: &mut Canopy<State>,
-        x: &mut dyn Node<State>,
-    ) -> Result<String, CanopyError> {
+    pub fn get_name(app: &mut Canopy<State>, x: &mut dyn Node<State>) -> Result<String, Error> {
         let mut c = Cursor::new(Vec::new());
         let mut colors = ColorScheme::default();
 

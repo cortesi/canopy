@@ -4,7 +4,7 @@
 
 - Ergonomics:
   - Better EventResult
-- Move from Anyhow to something like ThisError
+  - Better error returns
 - Key binding management system
 - ctrl-c/ctrl-z
 

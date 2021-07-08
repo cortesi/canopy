@@ -1,4 +1,4 @@
-use crate::{error::CanopyError, geom::Rect, EventResult};
+use crate::{error::Error, geom::Rect, EventOutcome};
 use crossterm::event::{KeyCode, KeyEvent};
 
 pub struct LineEditor {
@@ -21,14 +21,14 @@ impl LineEditor {
         self.area = area;
     }
 
-    pub fn key(&mut self, k: KeyEvent) -> Result<EventResult, CanopyError> {
+    pub fn key(&mut self, k: KeyEvent) -> Result<EventOutcome, Error> {
         Ok(match k.code {
             KeyCode::Char(c) => {
                 self.text.insert(self.cursor, c);
                 self.cursor += 1;
-                EventResult::default()
+                EventOutcome::default()
             }
-            _ => EventResult::default(),
+            _ => EventOutcome::default(),
         })
     }
 }

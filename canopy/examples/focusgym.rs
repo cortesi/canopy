@@ -7,12 +7,12 @@ use std::io::Write;
 use canopy;
 use canopy::{
     colorscheme::{solarized, ColorScheme},
-    error::{CanopyError, TResult},
+    error::{Error, TResult},
     event::{key, mouse},
     layout::FixedLayout,
     runloop::runloop,
     widgets::{block, solid_frame},
-    Canopy, EventResult, Node, NodeState, Rect, StatefulNode,
+    Canopy, EventOutcome, Node, NodeState, Rect, StatefulNode,
 };
 
 struct Handle {}
@@ -54,7 +54,7 @@ impl Block {
 }
 
 impl FixedLayout<Handle> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<(), CanopyError> {
+    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<(), Error> {
         self.set_rect(rect);
         if let Some(a) = rect {
             app.resize(&mut self.child, a)?;
@@ -69,11 +69,11 @@ impl Node<Handle> for Root {
         app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: mouse::Mouse,
-    ) -> Result<EventResult, CanopyError> {
+    ) -> Result<EventOutcome, Error> {
         Ok(match k {
             c if c == mouse::Action::ScrollDown => app.focus_next(self)?,
             c if c == mouse::Action::ScrollUp => app.focus_prev(self)?,
-            _ => EventResult::Ignore { skip: false },
+            _ => EventOutcome::Ignore { skip: false },
         })
     }
     fn handle_key(
@@ -81,15 +81,15 @@ impl Node<Handle> for Root {
         app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: key::Key,
-    ) -> Result<EventResult, CanopyError> {
+    ) -> Result<EventOutcome, Error> {
         Ok(match k {
             c if c == key::KeyCode::Tab => app.focus_next(self)?,
             c if c == 'l' || c == key::KeyCode::Right => app.focus_right(self)?,
             c if c == 'h' || c == key::KeyCode::Left => app.focus_left(self)?,
             c if c == 'j' || c == key::KeyCode::Down => app.focus_down(self)?,
             c if c == 'k' || c == key::KeyCode::Up => app.focus_up(self)?,
-            c if c == 'q' => EventResult::Exit,
-            _ => EventResult::Ignore { skip: false },
+            c if c == 'q' => EventOutcome::Exit,
+            _ => EventOutcome::Ignore { skip: false },
         })
     }
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<Handle>) -> TResult<()>) -> TResult<()> {
@@ -98,16 +98,16 @@ impl Node<Handle> for Root {
 }
 
 impl Block {
-    fn add(&mut self, app: &mut Canopy<Handle>) -> Result<EventResult, CanopyError> {
+    fn add(&mut self, app: &mut Canopy<Handle>) -> Result<EventOutcome, Error> {
         Ok(if self.children.len() == 0 {
-            EventResult::Ignore { skip: false }
+            EventOutcome::Ignore { skip: false }
         } else if self.size_limited() {
-            EventResult::Handle { skip: false }
+            EventOutcome::Handle { skip: false }
         } else {
             self.children.push(Block::new(!self.horizontal));
             self.layout(app, self.rect())?;
             app.taint_tree(self)?;
-            EventResult::Handle { skip: false }
+            EventOutcome::Handle { skip: false }
         })
     }
     fn size_limited(&self) -> bool {
@@ -123,22 +123,22 @@ impl Block {
             false
         }
     }
-    fn split(&mut self, app: &mut Canopy<Handle>) -> Result<EventResult, CanopyError> {
+    fn split(&mut self, app: &mut Canopy<Handle>) -> Result<EventOutcome, Error> {
         Ok(if self.children.len() != 0 {
-            EventResult::Ignore { skip: false }
+            EventOutcome::Ignore { skip: false }
         } else if self.size_limited() {
-            EventResult::Handle { skip: false }
+            EventOutcome::Handle { skip: false }
         } else {
             self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
             self.layout(app, self.rect())?;
             app.taint_tree(self)?;
-            EventResult::Handle { skip: false }
+            EventOutcome::Handle { skip: false }
         })
     }
 }
 
 impl FixedLayout<Handle> for Block {
-    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<(), CanopyError> {
+    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<(), Error> {
         self.set_rect(rect);
         if let Some(a) = rect {
             if self.children.len() > 0 {
@@ -165,7 +165,7 @@ impl Node<Handle> for Block {
         app: &mut Canopy<Handle>,
         _colors: &mut ColorScheme,
         w: &mut dyn Write,
-    ) -> Result<(), CanopyError> {
+    ) -> Result<(), Error> {
         if let Some(a) = self.rect() {
             if self.children.len() == 0 {
                 w.queue(SetForegroundColor(
@@ -187,7 +187,7 @@ impl Node<Handle> for Block {
         app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: mouse::Mouse,
-    ) -> Result<EventResult, CanopyError> {
+    ) -> Result<EventOutcome, Error> {
         Ok(match k {
             c if c == mouse::Action::Down + mouse::Button::Left => {
                 app.taint_tree(self)?;
@@ -198,10 +198,10 @@ impl Node<Handle> for Block {
                 if app.is_focused(self) {
                     app.focus_next(self)?;
                 };
-                EventResult::Handle { skip: false }
+                EventOutcome::Handle { skip: false }
             }
             c if c == mouse::Action::Down + mouse::Button::Right => self.add(app)?,
-            _ => EventResult::Ignore { skip: false },
+            _ => EventOutcome::Ignore { skip: false },
         })
     }
     fn handle_key(
@@ -209,14 +209,14 @@ impl Node<Handle> for Block {
         app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: key::Key,
-    ) -> Result<EventResult, CanopyError> {
+    ) -> Result<EventOutcome, Error> {
         Ok(match k {
             c if c == 's' => {
                 self.split(app)?;
                 app.focus_next(self)?
             }
             c if c == 'a' => self.add(app)?,
-            _ => EventResult::Ignore { skip: false },
+            _ => EventOutcome::Ignore { skip: false },
         })
     }
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<Handle>) -> TResult<()>) -> TResult<()> {
@@ -227,7 +227,7 @@ impl Node<Handle> for Block {
     }
 }
 
-pub fn main() -> Result<(), CanopyError> {
+pub fn main() -> Result<(), Error> {
     let mut h = Handle {};
     let mut app = Canopy::new();
     let mut root = Root::new();

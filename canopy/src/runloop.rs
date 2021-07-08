@@ -1,10 +1,10 @@
 use crate::{
     colorscheme::ColorScheme,
-    error::CanopyError,
+    error::Error,
     event::EventSource,
     geom::{Point, Rect},
     layout::FixedLayout,
-    Canopy, EventResult, Node,
+    Canopy, EventOutcome, Node,
 };
 use crossterm::{
     cursor::{Hide, Show},
@@ -25,7 +25,7 @@ pub fn runloop<S, N>(
     colors: &mut ColorScheme,
     root: &mut N,
     s: &mut S,
-) -> Result<(), CanopyError>
+) -> Result<(), Error>
 where
     N: Node<S> + FixedLayout<S>,
 {
@@ -72,13 +72,13 @@ where
                 w.flush()?;
             }
             match app.event(root, s, events.next()?)? {
-                EventResult::Ignore { .. } => {
+                EventOutcome::Ignore { .. } => {
                     ignore = true;
                 }
-                EventResult::Exit => {
+                EventOutcome::Exit => {
                     break 'outer;
                 }
-                EventResult::Handle { .. } => {
+                EventOutcome::Handle { .. } => {
                     ignore = false;
                 }
             }

@@ -2,10 +2,10 @@ use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
-    error::{CanopyError, TResult},
+    error::{Error, TResult},
     geom::{Point, Rect},
     layout::{ConstrainedLayout, FixedLayout},
-    node::{EventResult, Node},
+    node::{EventOutcome, Node},
     state::{NodeState, StatefulNode},
     widgets, Canopy,
 };
@@ -45,7 +45,7 @@ impl<S, N: Node<S> + ConstrainedLayout<S>> Scroll<S, N> {
         app: &mut Canopy<S>,
         x: u16,
         y: u16,
-    ) -> Result<EventResult, CanopyError> {
+    ) -> Result<EventOutcome, Error> {
         if let Some(ss) = &mut self.scrollstate {
             ss.window = Rect {
                 tl: Point { x, y },
@@ -56,7 +56,7 @@ impl<S, N: Node<S> + ConstrainedLayout<S>> Scroll<S, N> {
             self.child.layout(app, ss.window.tl, ss.rect)?;
             app.taint_tree(self)?;
         }
-        Ok(EventResult::Handle { skip: false })
+        Ok(EventOutcome::Handle { skip: false })
     }
 
     pub fn scroll_by(
@@ -64,16 +64,16 @@ impl<S, N: Node<S> + ConstrainedLayout<S>> Scroll<S, N> {
         app: &mut Canopy<S>,
         x: i16,
         y: i16,
-    ) -> Result<EventResult, CanopyError> {
+    ) -> Result<EventOutcome, Error> {
         if let Some(ss) = &mut self.scrollstate {
             ss.window = ss.window.scroll_within(x, y, ss.virt);
             self.child.layout(app, ss.window.tl, ss.rect)?;
             app.taint_tree(self)?;
         }
-        Ok(EventResult::Handle { skip: false })
+        Ok(EventOutcome::Handle { skip: false })
     }
 
-    pub fn page_up(&mut self, app: &mut Canopy<S>) -> Result<EventResult, CanopyError> {
+    pub fn page_up(&mut self, app: &mut Canopy<S>) -> Result<EventOutcome, Error> {
         let h = if let Some(ss) = &mut self.scrollstate {
             ss.window.h
         } else {
@@ -82,7 +82,7 @@ impl<S, N: Node<S> + ConstrainedLayout<S>> Scroll<S, N> {
         self.scroll_by(app, 0, -(h as i16))
     }
 
-    pub fn page_down(&mut self, app: &mut Canopy<S>) -> Result<EventResult, CanopyError> {
+    pub fn page_down(&mut self, app: &mut Canopy<S>) -> Result<EventOutcome, Error> {
         let h = if let Some(ss) = &mut self.scrollstate {
             ss.window.h
         } else {
@@ -91,25 +91,25 @@ impl<S, N: Node<S> + ConstrainedLayout<S>> Scroll<S, N> {
         self.scroll_by(app, 0, h as i16)
     }
 
-    pub fn up(&mut self, app: &mut Canopy<S>) -> Result<EventResult, CanopyError> {
+    pub fn up(&mut self, app: &mut Canopy<S>) -> Result<EventOutcome, Error> {
         self.scroll_by(app, 0, -1)
     }
 
-    pub fn down(&mut self, app: &mut Canopy<S>) -> Result<EventResult, CanopyError> {
+    pub fn down(&mut self, app: &mut Canopy<S>) -> Result<EventOutcome, Error> {
         self.scroll_by(app, 0, 1)
     }
 
-    pub fn left(&mut self, app: &mut Canopy<S>) -> Result<EventResult, CanopyError> {
+    pub fn left(&mut self, app: &mut Canopy<S>) -> Result<EventOutcome, Error> {
         self.scroll_by(app, -1, 0)
     }
 
-    pub fn right(&mut self, app: &mut Canopy<S>) -> Result<EventResult, CanopyError> {
+    pub fn right(&mut self, app: &mut Canopy<S>) -> Result<EventOutcome, Error> {
         self.scroll_by(app, 1, 0)
     }
 }
 
 impl<S, N: Node<S> + ConstrainedLayout<S>> FixedLayout<S> for Scroll<S, N> {
-    fn layout(&mut self, app: &mut Canopy<S>, rect: Option<Rect>) -> Result<(), CanopyError> {
+    fn layout(&mut self, app: &mut Canopy<S>, rect: Option<Rect>) -> Result<(), Error> {
         if let Some(r) = rect {
             let virt = self.child.constrain(app, Some(r.w), None)?;
             let view = Rect {

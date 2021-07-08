@@ -1,7 +1,7 @@
 use crate::{
     colorscheme::ColorScheme,
     cursor,
-    error::{CanopyError, TResult},
+    error::{Error, TResult},
     event::{key, mouse, tick},
     Canopy, Point, StatefulNode,
 };
@@ -29,42 +29,42 @@ impl Walker for () {
 /// traversals, skip stops processing completely and skips the rest of the nodes
 /// on the path.
 #[derive(Debug, PartialEq, Copy, Clone)]
-pub enum EventResult {
+pub enum EventOutcome {
     Handle { skip: bool },
     Ignore { skip: bool },
     Exit,
 }
 
-impl Default for EventResult {
+impl Default for EventOutcome {
     fn default() -> Self {
-        EventResult::Ignore { skip: false }
+        EventOutcome::Ignore { skip: false }
     }
 }
 
-impl Walker for EventResult {
+impl Walker for EventOutcome {
     fn skip(&self) -> bool {
         match self {
-            EventResult::Handle { skip } => *skip,
-            EventResult::Ignore { skip } => *skip,
-            EventResult::Exit => true,
+            EventOutcome::Handle { skip } => *skip,
+            EventOutcome::Ignore { skip } => *skip,
+            EventOutcome::Exit => true,
         }
     }
     fn join(&self, rhs: Self) -> Self {
         // At the moment, we don't propagate the skip flag, because it gets used
         // by the traversal functions immediately on return.
         match (*self, rhs) {
-            (EventResult::Exit, _) | (_, EventResult::Exit) => EventResult::Exit,
-            (EventResult::Ignore { .. }, EventResult::Ignore { .. }) => {
-                EventResult::Ignore { skip: false }
+            (EventOutcome::Exit, _) | (_, EventOutcome::Exit) => EventOutcome::Exit,
+            (EventOutcome::Ignore { .. }, EventOutcome::Ignore { .. }) => {
+                EventOutcome::Ignore { skip: false }
             }
-            (EventResult::Ignore { .. }, EventResult::Handle { .. }) => {
-                EventResult::Handle { skip: false }
+            (EventOutcome::Ignore { .. }, EventOutcome::Handle { .. }) => {
+                EventOutcome::Handle { skip: false }
             }
-            (EventResult::Handle { .. }, EventResult::Ignore { .. }) => {
-                EventResult::Handle { skip: false }
+            (EventOutcome::Handle { .. }, EventOutcome::Ignore { .. }) => {
+                EventOutcome::Handle { skip: false }
             }
-            (EventResult::Handle { .. }, EventResult::Handle { .. }) => {
-                EventResult::Handle { skip: false }
+            (EventOutcome::Handle { .. }, EventOutcome::Handle { .. }) => {
+                EventOutcome::Handle { skip: false }
             }
         }
     }
@@ -122,7 +122,7 @@ pub trait Node<S>: StatefulNode {
         app: &mut Canopy<S>,
         colors: &mut ColorScheme,
         w: &mut dyn Write,
-    ) -> Result<(), CanopyError> {
+    ) -> Result<(), Error> {
         Ok(())
     }
 
@@ -140,8 +140,8 @@ pub trait Node<S>: StatefulNode {
         app: &mut Canopy<S>,
         s: &mut S,
         k: key::Key,
-    ) -> Result<EventResult, CanopyError> {
-        Ok(EventResult::Ignore { skip: false })
+    ) -> Result<EventOutcome, Error> {
+        Ok(EventOutcome::Ignore { skip: false })
     }
 
     /// Handle a mouse event just for this node. Return EventResult::Ignore if
@@ -151,8 +151,8 @@ pub trait Node<S>: StatefulNode {
         app: &mut Canopy<S>,
         s: &mut S,
         k: mouse::Mouse,
-    ) -> Result<EventResult, CanopyError> {
-        Ok(EventResult::Ignore { skip: false })
+    ) -> Result<EventOutcome, Error> {
+        Ok(EventOutcome::Ignore { skip: false })
     }
 
     /// Handle a periodic tick event.
@@ -161,8 +161,8 @@ pub trait Node<S>: StatefulNode {
         app: &mut Canopy<S>,
         s: &mut S,
         k: tick::Tick,
-    ) -> Result<EventResult, CanopyError> {
-        Ok(EventResult::Ignore { skip: false })
+    ) -> Result<EventOutcome, Error> {
+        Ok(EventOutcome::Ignore { skip: false })
     }
 
     /// Call a closure mutably on this node's children.
@@ -209,8 +209,8 @@ pub fn preorder<S, W: Walker>(
 pub fn locate<S, R: Walker + Default>(
     e: &mut dyn Node<S>,
     p: Point,
-    f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<R, CanopyError>,
-) -> Result<R, CanopyError> {
+    f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<R, Error>,
+) -> Result<R, Error> {
     let mut seen = false;
     let mut ret = R::default();
     postorder(e, &mut |inner| -> TResult<SkipWalker> {
@@ -231,7 +231,7 @@ pub fn locate<S, R: Walker + Default>(
             SkipWalker::default()
         })
     })
-    .map_err(|e| CanopyError::Locate(e.to_string()))?;
+    .map_err(|e| Error::Locate(e.to_string()))?;
     Ok(ret)
 }
 
@@ -256,17 +256,17 @@ mod tests {
     }
 
     #[test]
-    fn tpostorder() -> Result<(), CanopyError> {
+    fn tpostorder() -> Result<(), Error> {
         fn skipon(
             app: &mut Canopy<utils::State>,
             root: &mut utils::TRoot,
             skipname: String,
-        ) -> Result<Vec<String>, CanopyError> {
+        ) -> Result<Vec<String>, Error> {
             let mut v: Vec<String> = vec![];
             postorder(root, &mut |x| -> TResult<SkipWalker> {
                 skipper(app, x, skipname.clone(), &mut v)
             })
-            .map_err(|_| CanopyError::Unknown("err".into()))?;
+            .map_err(|_| Error::Unknown("err".into()))?;
             Ok(v)
         }
 
@@ -296,17 +296,17 @@ mod tests {
     }
 
     #[test]
-    fn tpreorder() -> Result<(), CanopyError> {
+    fn tpreorder() -> Result<(), Error> {
         fn skipon(
             app: &mut Canopy<utils::State>,
             root: &mut utils::TRoot,
             skipname: String,
-        ) -> Result<Vec<String>, CanopyError> {
+        ) -> Result<Vec<String>, Error> {
             let mut v = vec![];
             preorder(root, &mut |x| -> TResult<SkipWalker> {
                 skipper(app, x, skipname.clone(), &mut v)
             })
-            .map_err(|_| CanopyError::Unknown("err".into()))?;
+            .map_err(|_| Error::Unknown("err".into()))?;
             Ok(v)
         }
 

@@ -240,11 +240,11 @@ impl Add<key::Mods> for Mouse {
 
 #[cfg(test)]
 mod tests {
-    use crate::error::CanopyError;
+    use crate::error::Error;
     use crate::event::mouse::*;
 
     #[test]
-    fn tmouse() -> Result<(), CanopyError> {
+    fn tmouse() -> Result<(), Error> {
         assert!(
             Mouse {
                 button: Some(Button::Left),

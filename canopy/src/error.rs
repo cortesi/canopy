@@ -6,8 +6,10 @@ use thiserror::Error;
 
 pub type TResult<T> = std::result::Result<T, Box<dyn error::Error + Send + Sync>>;
 
+pub type Result<T> = std::result::Result<T, Error>;
+
 #[derive(Error, Debug)]
-pub enum CanopyError {
+pub enum Error {
     #[error("unknown")]
     Unknown(String),
     #[error("locate")]
@@ -28,14 +30,14 @@ pub enum CanopyError {
     RunLoop(String),
 }
 
-impl From<crossterm::ErrorKind> for CanopyError {
+impl From<crossterm::ErrorKind> for Error {
     fn from(e: crossterm::ErrorKind) -> Self {
-        CanopyError::Render(e.to_string())
+        Error::Render(e.to_string())
     }
 }
 
-impl From<mpsc::RecvError> for CanopyError {
+impl From<mpsc::RecvError> for Error {
     fn from(e: mpsc::RecvError) -> Self {
-        CanopyError::RunLoop(e.to_string())
+        Error::RunLoop(e.to_string())
     }
 }

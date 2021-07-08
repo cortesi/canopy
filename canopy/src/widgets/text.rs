@@ -1,7 +1,7 @@
 use crate as canopy;
 use crate::{
     colorscheme::ColorScheme,
-    error::CanopyError,
+    error::Error,
     geom::{Point, Rect},
     layout::ConstrainedLayout,
     state::{NodeState, StatefulNode},
@@ -48,7 +48,7 @@ impl<'a, S> ConstrainedLayout<S> for Text<S> {
         _app: &mut Canopy<S>,
         width: Option<u16>,
         _height: Option<u16>,
-    ) -> Result<Rect, CanopyError> {
+    ) -> Result<Rect, Error> {
         if let Some(w) = width {
             if let Some(l) = &self.lines {
                 if !l.is_empty() && l[0].len() == w as usize {
@@ -72,9 +72,7 @@ impl<'a, S> ConstrainedLayout<S> for Text<S> {
             self.lines = Some(split);
             Ok(ret)
         } else {
-            Err(CanopyError::Unknown(
-                "Text requires a width constraint".into(),
-            ))
+            Err(Error::Unknown("Text requires a width constraint".into()))
         }
     }
     fn layout(
@@ -82,7 +80,7 @@ impl<'a, S> ConstrainedLayout<S> for Text<S> {
         _app: &mut Canopy<S>,
         virt_origin: Point,
         rect: Rect,
-    ) -> Result<(), CanopyError> {
+    ) -> Result<(), Error> {
         self.set_rect(Some(rect));
         self.virt_origin = Some(virt_origin);
         Ok(())
@@ -95,7 +93,7 @@ impl<'a, S> Node<S> for Text<S> {
         _app: &mut Canopy<S>,
         colors: &mut ColorScheme,
         w: &mut dyn Write,
-    ) -> Result<(), CanopyError> {
+    ) -> Result<(), Error> {
         let (fg, bg) = colors.get("text");
         w.queue(SetForegroundColor(fg))?;
         w.queue(SetBackgroundColor(bg))?;
@@ -120,7 +118,7 @@ impl<'a, S> Node<S> for Text<S> {
 mod tests {
     use super::*;
     #[test]
-    fn text_sizing() -> Result<(), CanopyError> {
+    fn text_sizing() -> Result<(), Error> {
         let mut app = Canopy::new();
         let txt = "aaa bbb ccc\nddd eee fff\nggg hhh iii";
         let mut t: Text<()> = Text::new(txt);

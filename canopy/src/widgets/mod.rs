@@ -5,12 +5,12 @@ pub mod panes;
 pub mod scroll;
 pub mod text;
 
-use crate::{error::CanopyError, geom};
+use crate::{error::Error, geom};
 use crossterm::{cursor::MoveTo, style::Print, QueueableCommand};
 use std::io::Write;
 
 /// Draw a solid block
-pub fn block(w: &mut dyn Write, r: geom::Rect, c: char) -> Result<(), CanopyError> {
+pub fn block(w: &mut dyn Write, r: geom::Rect, c: char) -> Result<(), Error> {
     let line = c.to_string().repeat(r.w as usize);
     for n in 0..r.h {
         w.queue(MoveTo(r.tl.x, r.tl.y + n))?;
@@ -20,7 +20,7 @@ pub fn block(w: &mut dyn Write, r: geom::Rect, c: char) -> Result<(), CanopyErro
 }
 
 /// Draw a solid frame
-pub fn solid_frame(w: &mut dyn Write, f: geom::Frame, c: char) -> Result<(), CanopyError> {
+pub fn solid_frame(w: &mut dyn Write, f: geom::Frame, c: char) -> Result<(), Error> {
     block(w, f.top, c)?;
     block(w, f.left, c)?;
     block(w, f.right, c)?;
