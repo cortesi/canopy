@@ -133,10 +133,9 @@ impl<S, N: canopy::Node<S>> Node<S> for Panes<S, N> {
 mod tests {
     use super::*;
     use crate::tutils::utils;
-    use anyhow::Result;
 
     #[test]
-    fn tlayout() -> Result<()> {
+    fn tlayout() -> Result<(), CanopyError> {
         let mut app = Canopy::new();
         let tn = utils::TBranch::new("a");
         let mut p: Panes<utils::State, utils::TBranch> = Panes::new(tn);

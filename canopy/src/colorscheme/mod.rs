@@ -177,10 +177,9 @@ impl ColorScheme {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use anyhow::Result;
 
     #[test]
-    fn colorscheme_basic() -> Result<()> {
+    fn colorscheme_basic() -> Result<(), CanopyError> {
         let mut c = ColorScheme::new();
         c.insert("/", Some(Color::White), Some(Color::Black));
         c.insert("/one", Some(Color::Red), None);
@@ -235,7 +234,7 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn colorscheme_layers() -> Result<()> {
+    fn colorscheme_layers() -> Result<(), CanopyError> {
         let mut c = ColorScheme::new();
         assert_eq!(c.layers, vec![""]);
         assert_eq!(c.layer_levels, vec![0]);

@@ -6,7 +6,6 @@ edition = "2018"
 
 
 [dependencies]
-anyhow = "1.0.40"
 crossterm = "0.20.0"
 pad = "0.1.6"
 textwrap = "0.14.0"

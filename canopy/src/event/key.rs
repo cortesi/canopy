@@ -199,11 +199,11 @@ impl From<cevent::KeyEvent> for Key {
 
 #[cfg(test)]
 mod tests {
+    use crate::error::CanopyError;
     use crate::event::key::*;
-    use anyhow::Result;
 
     #[test]
-    fn tkey() -> Result<()> {
+    fn tkey() -> Result<(), CanopyError> {
         assert_eq!(Shift + 'c', Key(Some(Shift), KeyCode::Char('c')));
         assert!(Alt + 'c' != Shift + 'c');
         assert!('c' != Shift + 'c');
