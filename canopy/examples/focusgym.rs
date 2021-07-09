@@ -7,12 +7,12 @@ use std::io::Write;
 use canopy;
 use canopy::{
     colorscheme::{solarized, ColorScheme},
-    error::{Error, TResult},
+    error::TResult,
     event::{key, mouse},
     layout::FixedLayout,
     runloop::runloop,
     widgets::{block, solid_frame},
-    Canopy, EventOutcome, Node, NodeState, Rect, StatefulNode,
+    Canopy, EventOutcome, Node, NodeState, Rect, Result, StatefulNode,
 };
 
 struct Handle {}
@@ -54,7 +54,7 @@ impl Block {
 }
 
 impl FixedLayout<Handle> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<(), Error> {
+    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<()> {
         self.set_rect(rect);
         if let Some(a) = rect {
             app.resize(&mut self.child, a)?;
@@ -69,7 +69,7 @@ impl Node<Handle> for Root {
         app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: mouse::Mouse,
-    ) -> Result<EventOutcome, Error> {
+    ) -> Result<EventOutcome> {
         Ok(match k {
             c if c == mouse::Action::ScrollDown => app.focus_next(self)?,
             c if c == mouse::Action::ScrollUp => app.focus_prev(self)?,
@@ -81,7 +81,7 @@ impl Node<Handle> for Root {
         app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: key::Key,
-    ) -> Result<EventOutcome, Error> {
+    ) -> Result<EventOutcome> {
         Ok(match k {
             c if c == key::KeyCode::Tab => app.focus_next(self)?,
             c if c == 'l' || c == key::KeyCode::Right => app.focus_right(self)?,
@@ -98,7 +98,7 @@ impl Node<Handle> for Root {
 }
 
 impl Block {
-    fn add(&mut self, app: &mut Canopy<Handle>) -> Result<EventOutcome, Error> {
+    fn add(&mut self, app: &mut Canopy<Handle>) -> Result<EventOutcome> {
         Ok(if self.children.len() == 0 {
             EventOutcome::Ignore { skip: false }
         } else if self.size_limited() {
@@ -123,7 +123,7 @@ impl Block {
             false
         }
     }
-    fn split(&mut self, app: &mut Canopy<Handle>) -> Result<EventOutcome, Error> {
+    fn split(&mut self, app: &mut Canopy<Handle>) -> Result<EventOutcome> {
         Ok(if self.children.len() != 0 {
             EventOutcome::Ignore { skip: false }
         } else if self.size_limited() {
@@ -138,7 +138,7 @@ impl Block {
 }
 
 impl FixedLayout<Handle> for Block {
-    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<(), Error> {
+    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<()> {
         self.set_rect(rect);
         if let Some(a) = rect {
             if self.children.len() > 0 {
@@ -165,7 +165,7 @@ impl Node<Handle> for Block {
         app: &mut Canopy<Handle>,
         _colors: &mut ColorScheme,
         w: &mut dyn Write,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         if let Some(a) = self.rect() {
             if self.children.len() == 0 {
                 w.queue(SetForegroundColor(
@@ -187,7 +187,7 @@ impl Node<Handle> for Block {
         app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: mouse::Mouse,
-    ) -> Result<EventOutcome, Error> {
+    ) -> Result<EventOutcome> {
         Ok(match k {
             c if c == mouse::Action::Down + mouse::Button::Left => {
                 app.taint_tree(self)?;
@@ -209,7 +209,7 @@ impl Node<Handle> for Block {
         app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: key::Key,
-    ) -> Result<EventOutcome, Error> {
+    ) -> Result<EventOutcome> {
         Ok(match k {
             c if c == 's' => {
                 self.split(app)?;
@@ -227,7 +227,7 @@ impl Node<Handle> for Block {
     }
 }
 
-pub fn main() -> Result<(), Error> {
+pub fn main() -> Result<()> {
     let mut h = Handle {};
     let mut app = Canopy::new();
     let mut root = Root::new();

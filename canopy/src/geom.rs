@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::{Error, Result};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Direction {
@@ -110,7 +110,7 @@ impl Rect {
     /// Given a point that falls within this rectangle, rebase the point to be
     /// relative to our origin. If the point falls outside the rect, an error is
     /// returned.
-    pub fn rebase(&self, pt: Point) -> Result<Point, Error> {
+    pub fn rebase(&self, pt: Point) -> Result<Point> {
         if !self.contains_point(pt) {
             return Err(Error::Geometry("co-ords outside rectangle".into()));
         }
@@ -147,7 +147,7 @@ impl Rect {
             })
     }
     /// Extracts an inner rectangle, given a border width.
-    pub fn inner(&self, border: u16) -> Result<Rect, Error> {
+    pub fn inner(&self, border: u16) -> Result<Rect> {
         if self.w < (border * 2) || self.h < (border * 2) {
             return Err(Error::Geometry("rectangle too small".into()));
         }
@@ -161,7 +161,7 @@ impl Rect {
         })
     }
     /// Extracts a frame for this rect, given a border width. The interior of the frame will match a call to inner() with the same arguments.
-    pub fn frame(&self, border: u16) -> Result<Frame, Error> {
+    pub fn frame(&self, border: u16) -> Result<Frame> {
         if self.w < (border * 2) || self.h < (border * 2) {
             return Err(Error::Geometry("rectangle too small".into()));
         }
@@ -259,7 +259,7 @@ impl Rect {
     /// Clamp this rectangle, constraining it lie within another rectangle. The
     /// size of the returned Rect is always equal to that of self. If self is
     /// larger than the enclosing rectangle, return an error.
-    pub fn clamp(&self, rect: Rect) -> Result<Self, Error> {
+    pub fn clamp(&self, rect: Rect) -> Result<Self> {
         if rect.w < self.w || rect.h < self.h {
             Err(Error::Geometry("can't clamp to smaller rectangle".into()))
         } else {
@@ -277,7 +277,7 @@ impl Rect {
 
     /// Splits the rectangle horizontally into n sections, as close to equally
     /// sized as possible.
-    pub fn split_horizontal(&self, n: u16) -> Result<Vec<Rect>, Error> {
+    pub fn split_horizontal(&self, n: u16) -> Result<Vec<Rect>> {
         let widths = split(self.w, n)?;
         let mut off: u16 = self.tl.x;
         let mut ret = vec![];
@@ -296,7 +296,7 @@ impl Rect {
     }
     /// Splits the rectangle vertically into n sections, as close to equally
     /// sized as possible.
-    pub fn split_vertical(&self, n: u16) -> Result<Vec<Rect>, Error> {
+    pub fn split_vertical(&self, n: u16) -> Result<Vec<Rect>> {
         let heights = split(self.h, n)?;
         let mut off: u16 = self.tl.y;
         let mut ret = vec![];
@@ -315,7 +315,7 @@ impl Rect {
     }
     /// Splits the rectangle into columns, with each column split into rows.
     /// Returns a Vec of rects per column.
-    pub fn split_panes(&self, spec: Vec<u16>) -> Result<Vec<Vec<Rect>>, Error> {
+    pub fn split_panes(&self, spec: Vec<u16>) -> Result<Vec<Vec<Rect>>> {
         let mut ret = vec![];
 
         let cols = split(self.w, spec.len() as u16)?;
@@ -337,7 +337,7 @@ impl Rect {
         Ok(ret)
     }
     // Sweeps upwards from the top of the rectangle.
-    pub fn search_up(&self, f: &mut dyn FnMut(Point) -> Result<bool, Error>) -> Result<(), Error> {
+    pub fn search_up(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
         'outer: for y in (0..self.tl.y).rev() {
             for x in self.tl.x..(self.tl.x + self.w) {
                 if f(Point { x, y })? {
@@ -348,10 +348,7 @@ impl Rect {
         Ok(())
     }
     // Sweeps downwards from the bottom of the rectangle.
-    pub fn search_down(
-        &self,
-        f: &mut dyn FnMut(Point) -> Result<bool, Error>,
-    ) -> Result<(), Error> {
+    pub fn search_down(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
         'outer: for y in self.tl.y + self.h..u16::MAX {
             for x in self.tl.x..(self.tl.x + self.w) {
                 if f(Point { x, y })? {
@@ -362,10 +359,7 @@ impl Rect {
         Ok(())
     }
     // Sweeps leftwards the left of the rectangle.
-    pub fn search_left(
-        &self,
-        f: &mut dyn FnMut(Point) -> Result<bool, Error>,
-    ) -> Result<(), Error> {
+    pub fn search_left(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
         'outer: for x in (0..self.tl.x).rev() {
             for y in self.tl.y..self.tl.y + self.h {
                 if f(Point { x, y })? {
@@ -376,10 +370,7 @@ impl Rect {
         Ok(())
     }
     // Sweeps rightwards from the right of the rectangle.
-    pub fn search_right(
-        &self,
-        f: &mut dyn FnMut(Point) -> Result<bool, Error>,
-    ) -> Result<(), Error> {
+    pub fn search_right(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
         'outer: for x in self.tl.x + self.w..u16::MAX {
             for y in self.tl.y..self.tl.y + self.h {
                 if f(Point { x, y })? {
@@ -390,11 +381,7 @@ impl Rect {
         Ok(())
     }
     // Sweeps to and fro from the right of the rectangle to the left.
-    pub fn search(
-        &self,
-        dir: Direction,
-        f: &mut dyn FnMut(Point) -> Result<bool, Error>,
-    ) -> Result<(), Error> {
+    pub fn search(&self, dir: Direction, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
         match dir {
             Direction::Up => self.search_up(f),
             Direction::Down => self.search_down(f),
@@ -404,7 +391,7 @@ impl Rect {
     }
 
     /// Extract a section of this rect based on an extent.
-    pub fn vextract(&self, e: Extent) -> Result<Self, Error> {
+    pub fn vextract(&self, e: Extent) -> Result<Self> {
         if !self.vextent().contains(e) {
             Err(Error::Geometry("extract extent outside rectangle".into()))
         } else {
@@ -420,7 +407,7 @@ impl Rect {
     }
 
     /// Extract a horizontal section of this rect based on an extent.
-    pub fn hextract(&self, e: Extent) -> Result<Self, Error> {
+    pub fn hextract(&self, e: Extent) -> Result<Self> {
         if !self.hextent().contains(e) {
             Err(Error::Geometry("extract extent outside rectangle".into()))
         } else {
@@ -453,7 +440,7 @@ impl Rect {
 }
 
 /// Split a length into n sections, as evenly as possible.
-fn split(len: u16, n: u16) -> Result<Vec<u16>, Error> {
+fn split(len: u16, n: u16) -> Result<Vec<u16>> {
     if n == 0 {
         return Err(Error::Geometry("divide by zero".into()));
     }
@@ -479,11 +466,7 @@ impl Extent {
     /// Split this extent into (pre, active, post) extents, based on the
     /// position of a window within a view. The main use for this funtion is
     /// computation of the active indicator size and position in a scrollbar.
-    pub fn split_active(
-        &self,
-        window: Extent,
-        view: Extent,
-    ) -> Result<(Extent, Extent, Extent), Error> {
+    pub fn split_active(&self, window: Extent, view: Extent) -> Result<(Extent, Extent, Extent)> {
         if window.len == 0 {
             Err(Error::Geometry("window cannot be zero length".into()))
         } else if !view.contains(window) {
@@ -524,7 +507,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn extent_contains() -> Result<(), Error> {
+    fn extent_contains() -> Result<()> {
         let v = Extent { off: 1, len: 3 };
         assert!(v.contains(Extent { off: 1, len: 3 }));
         assert!(!v.contains(Extent { off: 1, len: 4 }));
@@ -535,7 +518,7 @@ mod tests {
     }
 
     #[test]
-    fn extent_split_active() -> Result<(), Error> {
+    fn extent_split_active() -> Result<()> {
         let v = Extent { off: 10, len: 10 };
         assert_eq!(
             v.split_active(Extent { off: 100, len: 50 }, Extent { off: 100, len: 100 })?,
@@ -573,7 +556,7 @@ mod tests {
     }
 
     #[test]
-    fn tsearch() -> Result<(), Error> {
+    fn tsearch() -> Result<()> {
         let bounds = Rect {
             tl: Point { x: 0, y: 0 },
             w: 6,
@@ -664,7 +647,7 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn inner() -> Result<(), Error> {
+    fn inner() -> Result<()> {
         let r = Rect {
             tl: Point { x: 0, y: 0 },
             w: 10,
@@ -681,7 +664,7 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn contains() -> Result<(), Error> {
+    fn contains() -> Result<()> {
         let r = Rect {
             tl: Point { x: 10, y: 10 },
             w: 10,
@@ -704,7 +687,7 @@ mod tests {
     }
 
     #[test]
-    fn tsplit() -> Result<(), Error> {
+    fn tsplit() -> Result<()> {
         assert_eq!(split(7, 3)?, vec![3, 2, 2]);
         assert_eq!(split(6, 3)?, vec![2, 2, 2]);
         assert_eq!(split(9, 1)?, vec![9]);
@@ -712,7 +695,7 @@ mod tests {
     }
 
     #[test]
-    fn trebase() -> Result<(), Error> {
+    fn trebase() -> Result<()> {
         let r = Rect {
             tl: Point { x: 10, y: 10 },
             w: 10,
@@ -728,7 +711,7 @@ mod tests {
     }
 
     #[test]
-    fn tscroll() -> Result<(), Error> {
+    fn tscroll() -> Result<()> {
         assert_eq!(
             Rect {
                 tl: Point { x: 5, y: 5 },
@@ -765,7 +748,7 @@ mod tests {
     }
 
     #[test]
-    fn tframe() -> Result<(), Error> {
+    fn tframe() -> Result<()> {
         let r = Rect {
             tl: Point { x: 10, y: 10 },
             w: 10,
@@ -819,7 +802,7 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn trect_clamp() -> Result<(), Error> {
+    fn trect_clamp() -> Result<()> {
         assert_eq!(
             Rect {
                 tl: Point { x: 11, y: 11 },
@@ -875,7 +858,7 @@ mod tests {
     }
 
     #[test]
-    fn trect_scroll_within() -> Result<(), Error> {
+    fn trect_scroll_within() -> Result<()> {
         let r = Rect {
             tl: Point { x: 10, y: 10 },
             w: 5,
@@ -930,7 +913,7 @@ mod tests {
     }
 
     #[test]
-    fn tpoint_scroll_within() -> Result<(), Error> {
+    fn tpoint_scroll_within() -> Result<()> {
         let p = Point { x: 15, y: 15 };
         assert_eq!(
             Point { x: 10, y: 10 },
@@ -972,7 +955,7 @@ mod tests {
     }
 
     #[test]
-    fn tsplit_panes() -> Result<(), Error> {
+    fn tsplit_panes() -> Result<()> {
         let r = Rect {
             tl: Point { x: 10, y: 10 },
             w: 40,

@@ -7,11 +7,11 @@ use pad::PadStr;
 use crate as canopy;
 use crate::{
     colorscheme::ColorScheme,
-    error::{Error, TResult},
+    error::TResult,
     geom::Rect,
     layout::FixedLayout,
     state::{NodeState, StatefulNode},
-    widgets, Canopy, Node,
+    widgets, Canopy, Node, Result,
 };
 
 /// Defines the set of glyphs used to draw the frame
@@ -117,7 +117,7 @@ impl<S, N> FixedLayout<S> for Frame<S, N>
 where
     N: canopy::Node<S> + FrameContent + FixedLayout<S>,
 {
-    fn layout(&mut self, app: &mut Canopy<S>, rect: Option<Rect>) -> Result<(), Error> {
+    fn layout(&mut self, app: &mut Canopy<S>, rect: Option<Rect>) -> Result<()> {
         self.set_rect(rect);
         if let Some(r) = rect {
             self.child.layout(app, Some(r.inner(1)?))?;
@@ -138,7 +138,7 @@ where
         app: &mut Canopy<S>,
         colors: &mut ColorScheme,
         w: &mut dyn Write,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         if let Some(a) = self.rect() {
             if app.on_focus_path(self) {
                 colors.set("frame/focused", w)?;

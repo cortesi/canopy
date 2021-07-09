@@ -5,7 +5,7 @@ use crate::{
     geom::{Point, Rect},
     layout::ConstrainedLayout,
     state::{NodeState, StatefulNode},
-    Canopy, Node,
+    Canopy, Node, Result,
 };
 use std::io::Write;
 use std::marker::PhantomData;
@@ -48,7 +48,7 @@ impl<'a, S> ConstrainedLayout<S> for Text<S> {
         _app: &mut Canopy<S>,
         width: Option<u16>,
         _height: Option<u16>,
-    ) -> Result<Rect, Error> {
+    ) -> Result<Rect> {
         if let Some(w) = width {
             if let Some(l) = &self.lines {
                 if !l.is_empty() && l[0].len() == w as usize {
@@ -75,12 +75,7 @@ impl<'a, S> ConstrainedLayout<S> for Text<S> {
             Err(Error::Unknown("Text requires a width constraint".into()))
         }
     }
-    fn layout(
-        &mut self,
-        _app: &mut Canopy<S>,
-        virt_origin: Point,
-        rect: Rect,
-    ) -> Result<(), Error> {
+    fn layout(&mut self, _app: &mut Canopy<S>, virt_origin: Point, rect: Rect) -> Result<()> {
         self.set_rect(Some(rect));
         self.virt_origin = Some(virt_origin);
         Ok(())
@@ -93,7 +88,7 @@ impl<'a, S> Node<S> for Text<S> {
         _app: &mut Canopy<S>,
         colors: &mut ColorScheme,
         w: &mut dyn Write,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         let (fg, bg) = colors.get("text");
         w.queue(SetForegroundColor(fg))?;
         w.queue(SetBackgroundColor(bg))?;
@@ -118,7 +113,7 @@ impl<'a, S> Node<S> for Text<S> {
 mod tests {
     use super::*;
     #[test]
-    fn text_sizing() -> Result<(), Error> {
+    fn text_sizing() -> Result<()> {
         let mut app = Canopy::new();
         let txt = "aaa bbb ccc\nddd eee fff\nggg hhh iii";
         let mut t: Text<()> = Text::new(txt);

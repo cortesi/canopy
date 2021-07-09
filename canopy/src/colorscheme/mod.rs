@@ -1,7 +1,7 @@
 use std::io::Write;
 
 pub mod solarized;
-use crate::error::Error;
+use crate::Result;
 
 use crossterm::{
     style::{Color, SetBackgroundColor, SetForegroundColor},
@@ -108,7 +108,7 @@ impl ColorScheme {
     }
 
     /// Set the fg and bg colors
-    pub fn set(&self, path: &str, w: &mut dyn Write) -> Result<(), Error> {
+    pub fn set(&self, path: &str, w: &mut dyn Write) -> Result<()> {
         let (fg, bg) = self.get(path);
         w.queue(SetForegroundColor(fg))?;
         w.queue(SetBackgroundColor(bg))?;
@@ -179,7 +179,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn colorscheme_basic() -> Result<(), Error> {
+    fn colorscheme_basic() -> Result<()> {
         let mut c = ColorScheme::new();
         c.insert("/", Some(Color::White), Some(Color::Black));
         c.insert("/one", Some(Color::Red), None);
@@ -234,7 +234,7 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn colorscheme_layers() -> Result<(), Error> {
+    fn colorscheme_layers() -> Result<()> {
         let mut c = ColorScheme::new();
         assert_eq!(c.layers, vec![""]);
         assert_eq!(c.layer_levels, vec![0]);

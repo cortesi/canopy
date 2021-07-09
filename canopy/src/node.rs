@@ -1,9 +1,9 @@
 use crate::{
     colorscheme::ColorScheme,
     cursor,
-    error::{Error, TResult},
+    error::TResult,
     event::{key, mouse, tick},
-    Canopy, Point, StatefulNode,
+    Canopy, Error, Point, Result, StatefulNode,
 };
 use std::{fmt::Debug, io::Write};
 
@@ -122,7 +122,7 @@ pub trait Node<S>: StatefulNode {
         app: &mut Canopy<S>,
         colors: &mut ColorScheme,
         w: &mut dyn Write,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         Ok(())
     }
 
@@ -135,12 +135,7 @@ pub trait Node<S>: StatefulNode {
     /// event was ignored. Only nodes that have focus may handle key input, so
     /// this method is only called if focused() returns true. The default
     /// implementation ignores input.
-    fn handle_key(
-        &mut self,
-        app: &mut Canopy<S>,
-        s: &mut S,
-        k: key::Key,
-    ) -> Result<EventOutcome, Error> {
+    fn handle_key(&mut self, app: &mut Canopy<S>, s: &mut S, k: key::Key) -> Result<EventOutcome> {
         Ok(EventOutcome::Ignore { skip: false })
     }
 
@@ -151,7 +146,7 @@ pub trait Node<S>: StatefulNode {
         app: &mut Canopy<S>,
         s: &mut S,
         k: mouse::Mouse,
-    ) -> Result<EventOutcome, Error> {
+    ) -> Result<EventOutcome> {
         Ok(EventOutcome::Ignore { skip: false })
     }
 
@@ -161,7 +156,7 @@ pub trait Node<S>: StatefulNode {
         app: &mut Canopy<S>,
         s: &mut S,
         k: tick::Tick,
-    ) -> Result<EventOutcome, Error> {
+    ) -> Result<EventOutcome> {
         Ok(EventOutcome::Ignore { skip: false })
     }
 
@@ -209,8 +204,8 @@ pub fn preorder<S, W: Walker>(
 pub fn locate<S, R: Walker + Default>(
     e: &mut dyn Node<S>,
     p: Point,
-    f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<R, Error>,
-) -> Result<R, Error> {
+    f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<R>,
+) -> Result<R> {
     let mut seen = false;
     let mut ret = R::default();
     postorder(e, &mut |inner| -> TResult<SkipWalker> {
@@ -256,12 +251,12 @@ mod tests {
     }
 
     #[test]
-    fn tpostorder() -> Result<(), Error> {
+    fn tpostorder() -> Result<()> {
         fn skipon(
             app: &mut Canopy<utils::State>,
             root: &mut utils::TRoot,
             skipname: String,
-        ) -> Result<Vec<String>, Error> {
+        ) -> Result<Vec<String>> {
             let mut v: Vec<String> = vec![];
             postorder(root, &mut |x| -> TResult<SkipWalker> {
                 skipper(app, x, skipname.clone(), &mut v)
@@ -296,12 +291,12 @@ mod tests {
     }
 
     #[test]
-    fn tpreorder() -> Result<(), Error> {
+    fn tpreorder() -> Result<()> {
         fn skipon(
             app: &mut Canopy<utils::State>,
             root: &mut utils::TRoot,
             skipname: String,
-        ) -> Result<Vec<String>, Error> {
+        ) -> Result<Vec<String>> {
             let mut v = vec![];
             preorder(root, &mut |x| -> TResult<SkipWalker> {
                 skipper(app, x, skipname.clone(), &mut v)

@@ -3,13 +3,13 @@ use std::io::Write;
 use canopy;
 use canopy::{
     colorscheme::{solarized, ColorScheme},
-    error::{Error, TResult},
+    error::TResult,
     event::{key, mouse},
     geom::{Point, Rect},
     layout::FixedLayout,
     runloop::runloop,
     widgets::{block, frame, input, scroll, text},
-    Canopy, EventOutcome, Node, NodeState, StatefulNode,
+    Canopy, EventOutcome, Node, NodeState, Result, StatefulNode,
 };
 use crossterm::{cursor::MoveTo, style::Print, QueueableCommand};
 
@@ -27,7 +27,7 @@ impl Node<Handle> for StatusBar {
         _app: &mut Canopy<Handle>,
         colors: &mut ColorScheme,
         w: &mut dyn Write,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         colors.push_layer("statusbar");
         colors.set("statusbar/text", w)?;
         if let Some(r) = self.rect() {
@@ -40,7 +40,7 @@ impl Node<Handle> for StatusBar {
 }
 
 impl FixedLayout<Handle> for StatusBar {
-    fn layout(&mut self, _app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<(), Error> {
+    fn layout(&mut self, _app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<()> {
         self.set_rect(rect);
         Ok(())
     }
@@ -65,7 +65,7 @@ impl Root {
             adder: None,
         }
     }
-    fn open_adder(&mut self, app: &mut Canopy<Handle>) -> Result<EventOutcome, Error> {
+    fn open_adder(&mut self, app: &mut Canopy<Handle>) -> Result<EventOutcome> {
         let mut adder = frame::Frame::new(input::InputLine::new(""));
         app.set_focus(&mut adder.child)?;
         self.adder = Some(adder);
@@ -75,7 +75,7 @@ impl Root {
 }
 
 impl FixedLayout<Handle> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<(), Error> {
+    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<()> {
         self.set_rect(rect);
         if let Some(a) = rect {
             if a.h > 2 {
@@ -124,7 +124,7 @@ impl Node<Handle> for Root {
         app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: mouse::Mouse,
-    ) -> Result<EventOutcome, Error> {
+    ) -> Result<EventOutcome> {
         Ok(match k {
             c if c == mouse::Action::ScrollDown => self.content.child.down(app)?,
             c if c == mouse::Action::ScrollUp => self.content.child.up(app)?,
@@ -136,7 +136,7 @@ impl Node<Handle> for Root {
         app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: key::Key,
-    ) -> Result<EventOutcome, Error> {
+    ) -> Result<EventOutcome> {
         Ok(match k {
             c if c == 'a' => self.open_adder(app)?,
             c if c == 'g' => self.content.child.scroll_to(app, 0, 0)?,
@@ -170,7 +170,7 @@ impl Node<Handle> for Root {
     }
 }
 
-pub fn main() -> Result<(), Error> {
+pub fn main() -> Result<()> {
     let mut app = Canopy::new();
     let mut h = Handle {};
     let mut root = Root::new(String::new());

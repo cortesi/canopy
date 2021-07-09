@@ -1,5 +1,4 @@
-use crate::event::key;
-use crate::geom::Point;
+use crate::{event::key, geom::Point};
 use crossterm::event::{self as cevent};
 use std::ops::Add;
 
@@ -240,11 +239,11 @@ impl Add<key::Mods> for Mouse {
 
 #[cfg(test)]
 mod tests {
-    use crate::error::Error;
+    use crate::error::Result;
     use crate::event::mouse::*;
 
     #[test]
-    fn tmouse() -> Result<(), Error> {
+    fn tmouse() -> Result<()> {
         assert!(
             Mouse {
                 button: Some(Button::Left),

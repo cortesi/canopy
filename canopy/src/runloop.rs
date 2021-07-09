@@ -1,10 +1,9 @@
 use crate::{
     colorscheme::ColorScheme,
-    error::Error,
     event::EventSource,
     geom::{Point, Rect},
     layout::FixedLayout,
-    Canopy, EventOutcome, Node,
+    Canopy, EventOutcome, Node, Result,
 };
 use crossterm::{
     cursor::{Hide, Show},
@@ -25,7 +24,7 @@ pub fn runloop<S, N>(
     colors: &mut ColorScheme,
     root: &mut N,
     s: &mut S,
-) -> Result<(), Error>
+) -> Result<()>
 where
     N: Node<S> + FixedLayout<S>,
 {

@@ -11,7 +11,7 @@ use crate::{
     layout::FixedLayout,
     state::{NodeState, StatefulNode},
     widgets::frame,
-    Canopy, EventOutcome, Node,
+    Canopy, EventOutcome, Node, Result,
 };
 
 use crossterm::{cursor::MoveTo, style::Print, QueueableCommand};
@@ -124,7 +124,7 @@ impl<S> InputLine<S> {
 }
 
 impl<S> FixedLayout<S> for InputLine<S> {
-    fn layout(&mut self, _app: &mut Canopy<S>, rect: Option<Rect>) -> Result<(), Error> {
+    fn layout(&mut self, _app: &mut Canopy<S>, rect: Option<Rect>) -> Result<()> {
         if let Some(r) = rect {
             if r.h != 1 {
                 return Err(Error::Layout("InputLine height must be exactly 1.".into()));
@@ -191,7 +191,7 @@ impl<'a, S> Node<S> for InputLine<S> {
         _app: &mut Canopy<S>,
         colors: &mut ColorScheme,
         w: &mut dyn Write,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         colors.set("text", w)?;
         if let Some(r) = self.rect() {
             w.queue(MoveTo(r.tl.x, r.tl.y))?;
@@ -199,12 +199,7 @@ impl<'a, S> Node<S> for InputLine<S> {
         }
         Ok(())
     }
-    fn handle_key(
-        &mut self,
-        _app: &mut Canopy<S>,
-        _: &mut S,
-        k: key::Key,
-    ) -> Result<EventOutcome, Error> {
+    fn handle_key(&mut self, _app: &mut Canopy<S>, _: &mut S, k: key::Key) -> Result<EventOutcome> {
         match k {
             key::Key(_, key::KeyCode::Left) => {
                 self.textbuf.left();
@@ -229,7 +224,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn textbuf_basic() -> Result<(), Error> {
+    fn textbuf_basic() -> Result<()> {
         let mut t = TextBuf::new("");
         t.set_display_width(3);
         t.left();

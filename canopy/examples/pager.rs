@@ -4,12 +4,12 @@ use std::fs;
 use canopy;
 use canopy::{
     colorscheme::solarized,
-    error::{Error, TResult},
+    error::TResult,
     event::{key, mouse},
     layout::FixedLayout,
     runloop::runloop,
     widgets::{frame, scroll, text},
-    Canopy, EventOutcome, Node, NodeState, Rect, StatefulNode,
+    Canopy, EventOutcome, Node, NodeState, Rect, Result, StatefulNode,
 };
 
 struct Handle {}
@@ -30,7 +30,7 @@ impl Root {
 }
 
 impl FixedLayout<Handle> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<(), Error> {
+    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<()> {
         self.set_rect(rect);
         if let Some(a) = rect {
             app.resize(&mut self.child, a)?;
@@ -48,7 +48,7 @@ impl Node<Handle> for Root {
         app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: mouse::Mouse,
-    ) -> Result<EventOutcome, Error> {
+    ) -> Result<EventOutcome> {
         Ok(match k {
             c if c == mouse::Action::ScrollDown => self.child.child.down(app)?,
             c if c == mouse::Action::ScrollUp => self.child.child.up(app)?,
@@ -60,7 +60,7 @@ impl Node<Handle> for Root {
         app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: key::Key,
-    ) -> Result<EventOutcome, Error> {
+    ) -> Result<EventOutcome> {
         Ok(match k {
             c if c == 'g' => self.child.child.scroll_to(app, 0, 0)?,
             c if c == 'j' || c == key::KeyCode::Down => self.child.child.down(app)?,
@@ -78,7 +78,7 @@ impl Node<Handle> for Root {
     }
 }
 
-pub fn main() -> Result<(), Error> {
+pub fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     if args.len() != 2 {
         println!("Usage: pager filename");
