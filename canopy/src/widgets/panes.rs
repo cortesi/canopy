@@ -4,7 +4,6 @@ use std::marker::PhantomData;
 use crate as canopy;
 use crate::{
     colorscheme::ColorScheme,
-    error::TResult,
     geom::Rect,
     layout::FixedLayout,
     state::{NodeState, StatefulNode},
@@ -108,8 +107,8 @@ impl<S, N: canopy::Node<S> + FixedLayout<S>> FixedLayout<S> for Panes<S, N> {
 impl<S, N: canopy::Node<S>> Node<S> for Panes<S, N> {
     fn children(
         &mut self,
-        f: &mut dyn FnMut(&mut dyn canopy::Node<S>) -> TResult<()>,
-    ) -> TResult<()> {
+        f: &mut dyn FnMut(&mut dyn canopy::Node<S>) -> Result<()>,
+    ) -> Result<()> {
         for col in &mut self.children {
             for row in col {
                 f(row)?

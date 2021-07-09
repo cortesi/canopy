@@ -3,7 +3,6 @@ use std::io::Write;
 use canopy;
 use canopy::{
     colorscheme::{solarized, ColorScheme},
-    error::TResult,
     event::{key, mouse},
     geom::{Point, Rect},
     layout::FixedLayout,
@@ -160,7 +159,7 @@ impl Node<Handle> for Root {
             _ => EventOutcome::Ignore { skip: false },
         })
     }
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<Handle>) -> TResult<()>) -> TResult<()> {
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<Handle>) -> Result<()>) -> Result<()> {
         f(&mut self.statusbar)?;
         f(&mut self.content)?;
         if let Some(a) = &mut self.adder {

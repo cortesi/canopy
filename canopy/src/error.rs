@@ -1,10 +1,7 @@
 use crossterm;
-use std::error;
 use std::sync::mpsc;
 
 use thiserror::Error;
-
-pub type TResult<T> = std::result::Result<T, Box<dyn error::Error + Send + Sync>>;
 
 pub type Result<T> = std::result::Result<T, Error>;
 

@@ -5,7 +5,6 @@ use crate::geom::{Direction, Rect};
 use crate::{
     colorscheme::ColorScheme,
     cursor,
-    error::TResult,
     event::{key, mouse, tick, Event},
     layout::FixedLayout,
     node::{locate, postorder, preorder, EventOutcome, Node, SkipWalker, Walker},
@@ -152,7 +151,7 @@ impl<S> Canopy<S> {
     /// the subtree.
     pub fn focus_first(&mut self, e: &mut dyn Node<S>) -> Result<EventOutcome> {
         let mut focus_set = false;
-        preorder(e, &mut |x| -> TResult<SkipWalker> {
+        preorder(e, &mut |x| -> Result<SkipWalker> {
             Ok(if !focus_set && x.can_focus() {
                 self.set_focus(x)?;
                 focus_set = true;
@@ -160,8 +159,7 @@ impl<S> Canopy<S> {
             } else {
                 SkipWalker::default()
             })
-        })
-        .map_err(|e| Error::Focus(e.to_string()))?;
+        })?;
         Ok(EventOutcome::Handle { skip: false })
     }
 
@@ -197,7 +195,7 @@ impl<S> Canopy<S> {
     pub fn focus_next(&mut self, e: &mut dyn Node<S>) -> Result<EventOutcome> {
         let mut focus_set = false;
         let mut focus_seen = false;
-        preorder(e, &mut |x| -> TResult<()> {
+        preorder(e, &mut |x| -> Result<()> {
             if !focus_set {
                 if focus_seen {
                     if x.can_focus() {
@@ -209,8 +207,7 @@ impl<S> Canopy<S> {
                 }
             }
             Ok(())
-        })
-        .map_err(|e| Error::Focus(e.to_string()))?;
+        })?;
         if !focus_set {
             self.focus_first(e)
         } else {
@@ -224,7 +221,7 @@ impl<S> Canopy<S> {
         let current = self.focus_gen;
         let mut focus_seen = false;
         let mut first = true;
-        preorder(e, &mut |x| -> TResult<()> {
+        preorder(e, &mut |x| -> Result<()> {
             // We skip the first node in the traversal
             if first {
                 first = false
@@ -236,8 +233,7 @@ impl<S> Canopy<S> {
                 }
             }
             Ok(())
-        })
-        .map_err(|e| Error::Focus(e.to_string()))?;
+        })?;
         Ok(EventOutcome::Handle { skip: false })
     }
 
@@ -263,7 +259,7 @@ impl<S> Canopy<S> {
     ) -> Result<R> {
         let mut focus_seen = false;
         let mut ret = R::default();
-        postorder(e, &mut |x| -> TResult<SkipWalker> {
+        postorder(e, &mut |x| -> Result<SkipWalker> {
             Ok(if focus_seen {
                 ret = ret.join(f(x)?);
                 SkipWalker::default()
@@ -274,8 +270,7 @@ impl<S> Canopy<S> {
             } else {
                 SkipWalker::default()
             })
-        })
-        .map_err(|e| Error::Focus(e.to_string()))?;
+        })?;
         Ok(ret)
     }
 
@@ -337,12 +332,11 @@ impl<S> Canopy<S> {
 
     /// Mark a tree of nodes for render.
     pub fn taint_tree(&self, e: &mut dyn Node<S>) -> Result<()> {
-        postorder(e, &mut |x| -> TResult<()> {
+        postorder(e, &mut |x| -> Result<()> {
             let r = x.state_mut();
             r.render_gen = self.render_gen;
             Ok(())
-        })
-        .map_err(|e| Error::Taint(e.to_string()))?;
+        })?;
         Ok(())
     }
 
@@ -372,8 +366,7 @@ impl<S> Canopy<S> {
             e.render(self, colors, w)?;
         }
         colors.inc();
-        e.children(&mut |x| self.render_traversal(colors, x, w).map_err(|e| e.into()))
-            .map_err(|e| Error::Render(e.to_string()))?;
+        e.children(&mut |x| self.render_traversal(colors, x, w))?;
         colors.dec();
         Ok(())
     }
@@ -480,7 +473,7 @@ impl<S> Canopy<S> {
         t: tick::Tick,
     ) -> Result<EventOutcome> {
         let mut ret = EventOutcome::default();
-        preorder(root, &mut |x| -> TResult<SkipWalker> {
+        preorder(root, &mut |x| -> Result<SkipWalker> {
             let v = x.handle_tick(self, s, t)?;
             ret = ret.join(v);
             Ok(match v {
@@ -501,8 +494,7 @@ impl<S> Canopy<S> {
                 }
                 EventOutcome::Exit => SkipWalker { has_skip: true },
             })
-        })
-        .map_err(|e| Error::Tick(e.to_string()))?;
+        })?;
         Ok(ret)
     }
 

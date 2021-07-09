@@ -5,7 +5,6 @@ pub mod utils {
     use crate as canopy;
     use crate::{
         colorscheme::ColorScheme,
-        error::TResult,
         event::{key, mouse, tick},
         layout, Canopy, Error, EventOutcome, Node, NodeState, Rect, Result, StatefulNode,
     };
@@ -161,8 +160,8 @@ pub mod utils {
         }
         fn children(
             &mut self,
-            f: &mut dyn FnMut(&mut dyn Node<State>) -> TResult<()>,
-        ) -> TResult<()> {
+            f: &mut dyn FnMut(&mut dyn Node<State>) -> Result<()>,
+        ) -> Result<()> {
             f(&mut self.a)?;
             f(&mut self.b)?;
             Ok(())
@@ -219,8 +218,8 @@ pub mod utils {
         }
         fn children(
             &mut self,
-            f: &mut dyn FnMut(&mut dyn Node<State>) -> TResult<()>,
-        ) -> TResult<()> {
+            f: &mut dyn FnMut(&mut dyn Node<State>) -> Result<()>,
+        ) -> Result<()> {
             f(&mut self.a)?;
             f(&mut self.b)?;
             Ok(())

@@ -1,9 +1,8 @@
 use crate::{
     colorscheme::ColorScheme,
     cursor,
-    error::TResult,
     event::{key, mouse, tick},
-    Canopy, Error, Point, Result, StatefulNode,
+    Canopy, Point, Result, StatefulNode,
 };
 use std::{fmt::Debug, io::Write};
 
@@ -161,7 +160,7 @@ pub trait Node<S>: StatefulNode {
     }
 
     /// Call a closure mutably on this node's children.
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<S>) -> TResult<()>) -> TResult<()> {
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<()>) -> Result<()> {
         Ok(())
     }
 }
@@ -171,8 +170,8 @@ pub trait Node<S>: StatefulNode {
 /// before exiting.
 pub fn postorder<S, R: Walker + Default>(
     e: &mut dyn Node<S>,
-    f: &mut dyn FnMut(&mut dyn Node<S>) -> TResult<R>,
-) -> TResult<R> {
+    f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<R>,
+) -> Result<R> {
     let mut v = R::default();
     e.children(&mut |x| {
         if !v.skip() {
@@ -187,8 +186,8 @@ pub fn postorder<S, R: Walker + Default>(
 // prunes all children of the currently visited node out of the traversal.
 pub fn preorder<S, W: Walker>(
     e: &mut dyn Node<S>,
-    f: &mut dyn FnMut(&mut dyn Node<S>) -> TResult<W>,
-) -> TResult<W> {
+    f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<W>,
+) -> Result<W> {
     let mut v = f(e)?;
     if !v.skip() {
         e.children(&mut |x| {
@@ -208,7 +207,7 @@ pub fn locate<S, R: Walker + Default>(
 ) -> Result<R> {
     let mut seen = false;
     let mut ret = R::default();
-    postorder(e, &mut |inner| -> TResult<SkipWalker> {
+    postorder(e, &mut |inner| -> Result<SkipWalker> {
         Ok(if seen {
             if inner.rect().is_some() {
                 ret = ret.join(f(inner)?);
@@ -225,8 +224,7 @@ pub fn locate<S, R: Walker + Default>(
         } else {
             SkipWalker::default()
         })
-    })
-    .map_err(|e| Error::Locate(e.to_string()))?;
+    })?;
     Ok(ret)
 }
 
@@ -240,7 +238,7 @@ mod tests {
         x: &mut dyn Node<utils::State>,
         skipname: String,
         v: &mut Vec<String>,
-    ) -> TResult<SkipWalker> {
+    ) -> Result<SkipWalker> {
         let mut ret = SkipWalker::default();
         let n = utils::get_name(app, x)?;
         if n == skipname {
@@ -258,10 +256,9 @@ mod tests {
             skipname: String,
         ) -> Result<Vec<String>> {
             let mut v: Vec<String> = vec![];
-            postorder(root, &mut |x| -> TResult<SkipWalker> {
+            postorder(root, &mut |x| -> Result<SkipWalker> {
                 skipper(app, x, skipname.clone(), &mut v)
-            })
-            .map_err(|_| Error::Unknown("err".into()))?;
+            })?;
             Ok(v)
         }
 
@@ -298,10 +295,9 @@ mod tests {
             skipname: String,
         ) -> Result<Vec<String>> {
             let mut v = vec![];
-            preorder(root, &mut |x| -> TResult<SkipWalker> {
+            preorder(root, &mut |x| -> Result<SkipWalker> {
                 skipper(app, x, skipname.clone(), &mut v)
-            })
-            .map_err(|_| Error::Unknown("err".into()))?;
+            })?;
             Ok(v)
         }
 

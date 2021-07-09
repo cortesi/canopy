@@ -4,7 +4,6 @@ use std::fs;
 use canopy;
 use canopy::{
     colorscheme::solarized,
-    error::TResult,
     event::{key, mouse},
     layout::FixedLayout,
     runloop::runloop,
@@ -73,7 +72,7 @@ impl Node<Handle> for Root {
             _ => EventOutcome::Ignore { skip: false },
         })
     }
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<Handle>) -> TResult<()>) -> TResult<()> {
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<Handle>) -> Result<()>) -> Result<()> {
         f(&mut self.child)
     }
 }

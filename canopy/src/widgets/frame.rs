@@ -7,7 +7,6 @@ use pad::PadStr;
 use crate as canopy;
 use crate::{
     colorscheme::ColorScheme,
-    error::TResult,
     geom::Rect,
     layout::FixedLayout,
     state::{NodeState, StatefulNode},
@@ -219,8 +218,8 @@ where
     }
     fn children(
         &mut self,
-        f: &mut dyn FnMut(&mut dyn canopy::Node<S>) -> TResult<()>,
-    ) -> TResult<()> {
+        f: &mut dyn FnMut(&mut dyn canopy::Node<S>) -> Result<()>,
+    ) -> Result<()> {
         f(&mut self.child)
     }
 }

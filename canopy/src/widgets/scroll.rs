@@ -2,7 +2,6 @@ use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
-    error::TResult,
     geom::{Point, Rect},
     layout::{ConstrainedLayout, FixedLayout},
     node::{EventOutcome, Node},
@@ -130,7 +129,7 @@ impl<S, N: Node<S> + ConstrainedLayout<S>> Node<S> for Scroll<S, N> {
     fn should_render(&mut self, app: &mut Canopy<S>) -> Option<bool> {
         Some(app.should_render(&mut self.child))
     }
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<S>) -> TResult<()>) -> TResult<()> {
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<()>) -> Result<()> {
         f(&mut self.child)
     }
 }
