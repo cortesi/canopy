@@ -39,8 +39,8 @@ impl Node<Handle> for StatusBar {
 }
 
 impl FillLayout<Handle> for StatusBar {
-    fn layout(&mut self, _app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<()> {
-        self.set_rect(rect);
+    fn layout(&mut self, _app: &mut Canopy<Handle>, rect: Rect) -> Result<()> {
+        self.set_rect(Some(rect));
         Ok(())
     }
 }
@@ -68,47 +68,47 @@ impl Root {
         let mut adder = frame::Frame::new(InputLine::new(""));
         app.set_focus(&mut adder.child)?;
         self.adder = Some(adder);
-        self.layout(app, self.rect())?;
+        if let Some(a) = self.rect() {
+            self.layout(app, a)?;
+        }
         Ok(EventOutcome::Handle { skip: false })
     }
 }
 
 impl FillLayout<Handle> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<()> {
-        self.set_rect(rect);
-        if let Some(a) = rect {
-            if a.h > 2 {
-                let sb = Rect {
+    fn layout(&mut self, app: &mut Canopy<Handle>, a: Rect) -> Result<()> {
+        self.set_rect(Some(a));
+        if a.h > 2 {
+            let sb = Rect {
+                tl: Point {
+                    x: a.tl.x,
+                    y: a.tl.y + a.h - 1,
+                },
+                w: a.w,
+                h: 1,
+            };
+            let ct = Rect {
+                tl: a.tl,
+                w: a.w,
+                h: a.h - 1,
+            };
+            app.resize(&mut self.statusbar, sb)?;
+            app.resize(&mut self.content, ct)?;
+        } else {
+            app.resize(&mut self.content, a)?;
+        }
+        if let Some(add) = &mut self.adder {
+            add.layout(
+                app,
+                Rect {
                     tl: Point {
-                        x: a.tl.x,
-                        y: a.tl.y + a.h - 1,
+                        x: a.tl.x + 2,
+                        y: a.tl.y + a.h / 2,
                     },
-                    w: a.w,
-                    h: 1,
-                };
-                let ct = Rect {
-                    tl: a.tl,
-                    w: a.w,
-                    h: a.h - 1,
-                };
-                app.resize(&mut self.statusbar, sb)?;
-                app.resize(&mut self.content, ct)?;
-            } else {
-                app.resize(&mut self.content, a)?;
-            }
-            if let Some(add) = &mut self.adder {
-                add.layout(
-                    app,
-                    Some(Rect {
-                        tl: Point {
-                            x: a.tl.x + 2,
-                            y: a.tl.y + a.h / 2,
-                        },
-                        w: a.w - 4,
-                        h: 3,
-                    }),
-                )?;
-            }
+                    w: a.w - 4,
+                    h: 3,
+                },
+            )?;
         }
         Ok(())
     }

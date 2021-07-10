@@ -487,7 +487,7 @@ impl<S> Canopy<S> {
                 return Ok(());
             }
         }
-        e.layout(self, Some(rect))?;
+        e.layout(self, rect)?;
         self.taint_tree(e)?;
         Ok(())
     }

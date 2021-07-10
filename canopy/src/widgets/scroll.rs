@@ -103,23 +103,19 @@ impl<S, N> FillLayout<S> for Scroll<S, N>
 where
     N: Node<S> + ConstrainedLayout<S>,
 {
-    fn layout(&mut self, app: &mut Canopy<S>, rect: Option<Rect>) -> Result<()> {
-        if let Some(r) = rect {
-            let virt = self.child.constrain(app, Some(r.w), None)?;
-            let view = Rect {
-                tl: Point { x: 0, y: 0 },
-                w: r.w,
-                h: r.h,
-            };
-            self.scrollstate = Some(ScrollState {
-                window: view,
-                virt,
-                rect: r,
-            });
-            self.child.layout(app, view.tl, r)?;
-        } else {
-            self.scrollstate = None
-        }
+    fn layout(&mut self, app: &mut Canopy<S>, rect: Rect) -> Result<()> {
+        let virt = self.child.constrain(app, Some(rect.w), None)?;
+        let view = Rect {
+            tl: Point { x: 0, y: 0 },
+            w: rect.w,
+            h: rect.h,
+        };
+        self.scrollstate = Some(ScrollState {
+            window: view,
+            virt,
+            rect: rect,
+        });
+        self.child.layout(app, view.tl, rect)?;
         Ok(())
     }
 }

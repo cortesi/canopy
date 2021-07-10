@@ -67,8 +67,8 @@ pub mod utils {
     }
 
     impl layout::FillLayout<State> for TLeaf {
-        fn layout(&mut self, _: &mut Canopy<State>, a: Option<Rect>) -> Result<()> {
-            self.set_rect(a);
+        fn layout(&mut self, _: &mut Canopy<State>, a: Rect) -> Result<()> {
+            self.set_rect(Some(a));
             Ok(())
         }
     }
@@ -107,13 +107,11 @@ pub mod utils {
     }
 
     impl layout::FillLayout<State> for TBranch {
-        fn layout(&mut self, app: &mut Canopy<State>, rect: Option<Rect>) -> Result<()> {
-            self.set_rect(rect);
-            if let Some(a) = rect {
-                let v = a.split_vertical(2)?;
-                app.resize(&mut self.a, v[0])?;
-                app.resize(&mut self.b, v[1])?;
-            }
+        fn layout(&mut self, app: &mut Canopy<State>, rect: Rect) -> Result<()> {
+            self.set_rect(Some(rect));
+            let v = rect.split_vertical(2)?;
+            app.resize(&mut self.a, v[0])?;
+            app.resize(&mut self.b, v[1])?;
             Ok(())
         }
     }
@@ -166,13 +164,11 @@ pub mod utils {
     }
 
     impl layout::FillLayout<State> for TRoot {
-        fn layout(&mut self, app: &mut Canopy<State>, rect: Option<Rect>) -> Result<()> {
-            self.set_rect(rect);
-            if let Some(a) = rect {
-                let v = a.split_horizontal(2)?;
-                app.resize(&mut self.a, v[0])?;
-                app.resize(&mut self.b, v[1])?;
-            }
+        fn layout(&mut self, app: &mut Canopy<State>, rect: Rect) -> Result<()> {
+            self.set_rect(Some(rect));
+            let v = rect.split_horizontal(2)?;
+            app.resize(&mut self.a, v[0])?;
+            app.resize(&mut self.b, v[1])?;
             Ok(())
         }
     }

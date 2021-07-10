@@ -6,7 +6,7 @@ use crate::{Canopy, Result};
 /// region we pass them, and widgets that have one fixed dimension, like a
 /// fixed-height status bar.
 pub trait FillLayout<S> {
-    fn layout(&mut self, app: &mut Canopy<S>, rect: Option<Rect>) -> Result<()>;
+    fn layout(&mut self, app: &mut Canopy<S>, rect: Rect) -> Result<()>;
 }
 
 /// A layout for nodes with geometry computed based on constraints. This defines

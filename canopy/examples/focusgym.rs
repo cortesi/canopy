@@ -54,11 +54,9 @@ impl Block {
 }
 
 impl FillLayout<Handle> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<()> {
-        self.set_rect(rect);
-        if let Some(a) = rect {
-            app.resize(&mut self.child, a)?;
-        }
+    fn layout(&mut self, app: &mut Canopy<Handle>, a: Rect) -> Result<()> {
+        self.set_rect(Some(a));
+        app.resize(&mut self.child, a)?;
         Ok(())
     }
 }
@@ -115,7 +113,9 @@ impl Block {
             EventOutcome::Handle { skip: false }
         } else {
             self.children.push(Block::new(!self.horizontal));
-            self.layout(app, self.rect())?;
+            if let Some(a) = self.rect() {
+                self.layout(app, a)?;
+            }
             app.taint_tree(self)?;
             EventOutcome::Handle { skip: false }
         })
@@ -140,7 +140,9 @@ impl Block {
             EventOutcome::Handle { skip: false }
         } else {
             self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
-            self.layout(app, self.rect())?;
+            if let Some(a) = self.rect() {
+                self.layout(app, a)?;
+            }
             app.taint_tree(self)?;
             EventOutcome::Handle { skip: false }
         })
@@ -148,18 +150,16 @@ impl Block {
 }
 
 impl FillLayout<Handle> for Block {
-    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<()> {
-        self.set_rect(rect);
-        if let Some(a) = rect {
-            if self.children.len() > 0 {
-                let sizes = if self.horizontal {
-                    a.split_horizontal(self.children.len() as u16)?
-                } else {
-                    a.split_vertical(self.children.len() as u16)?
-                };
-                for i in 0..self.children.len() {
-                    app.resize(&mut self.children[i], sizes[i])?
-                }
+    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Rect) -> Result<()> {
+        self.set_rect(Some(rect));
+        if self.children.len() > 0 {
+            let sizes = if self.horizontal {
+                rect.split_horizontal(self.children.len() as u16)?
+            } else {
+                rect.split_vertical(self.children.len() as u16)?
+            };
+            for i in 0..self.children.len() {
+                app.resize(&mut self.children[i], sizes[i])?
             }
         }
         Ok(())

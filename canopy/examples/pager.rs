@@ -30,11 +30,9 @@ impl Root {
 }
 
 impl FillLayout<Handle> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<()> {
-        self.set_rect(rect);
-        if let Some(a) = rect {
-            app.resize(&mut self.child, a)?;
-        }
+    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Rect) -> Result<()> {
+        self.set_rect(Some(rect));
+        app.resize(&mut self.child, rect)?;
         Ok(())
     }
 }

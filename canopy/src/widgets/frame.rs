@@ -116,11 +116,9 @@ impl<S, N> FillLayout<S> for Frame<S, N>
 where
     N: canopy::Node<S> + FrameContent + FillLayout<S>,
 {
-    fn layout(&mut self, app: &mut Canopy<S>, rect: Option<Rect>) -> Result<()> {
-        self.set_rect(rect);
-        if let Some(r) = rect {
-            self.child.layout(app, Some(r.inner(1)?))?;
-        }
+    fn layout(&mut self, app: &mut Canopy<S>, rect: Rect) -> Result<()> {
+        self.set_rect(Some(rect));
+        self.child.layout(app, rect.inner(1)?)?;
         Ok(())
     }
 }
