@@ -46,9 +46,7 @@ impl<S, N: canopy::Node<S> + FillLayout<S>> Panes<S, N> {
             if self.children[x].is_empty() {
                 self.children.remove(x);
             }
-            if let Some(a) = self.rect() {
-                self.layout(app, a)?;
-            }
+            self.layout(app, self.rect())?;
             app.taint_tree(self)?;
         }
         Ok(())
@@ -94,7 +92,7 @@ impl<S, N: canopy::Node<S> + FillLayout<S>> Panes<S, N> {
 
 impl<S, N: canopy::Node<S> + FillLayout<S>> FillLayout<S> for Panes<S, N> {
     fn layout(&mut self, app: &mut Canopy<S>, rect: Rect) -> Result<()> {
-        self.set_rect(Some(rect));
+        self.set_rect(rect);
         let l = rect.split_panes(self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {

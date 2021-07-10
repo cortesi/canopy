@@ -7,7 +7,7 @@ pub mod utils {
     use crate::{
         colorscheme::ColorScheme,
         event::{key, mouse, tick},
-        layout, Canopy, Error, EventOutcome, Node, NodeState, Rect, Result, StatefulNode,
+        layout, Canopy, EventOutcome, Node, NodeState, Rect, Result, StatefulNode,
     };
 
     use crossterm::{style::Print, ExecutableCommand};
@@ -68,7 +68,7 @@ pub mod utils {
 
     impl layout::FillLayout<State> for TLeaf {
         fn layout(&mut self, _: &mut Canopy<State>, a: Rect) -> Result<()> {
-            self.set_rect(Some(a));
+            self.set_rect(a);
             Ok(())
         }
     }
@@ -108,7 +108,7 @@ pub mod utils {
 
     impl layout::FillLayout<State> for TBranch {
         fn layout(&mut self, app: &mut Canopy<State>, rect: Rect) -> Result<()> {
-            self.set_rect(Some(rect));
+            self.set_rect(rect);
             let v = rect.split_vertical(2)?;
             app.resize(&mut self.a, v[0])?;
             app.resize(&mut self.b, v[1])?;
@@ -165,7 +165,7 @@ pub mod utils {
 
     impl layout::FillLayout<State> for TRoot {
         fn layout(&mut self, app: &mut Canopy<State>, rect: Rect) -> Result<()> {
-            self.set_rect(Some(rect));
+            self.set_rect(rect);
             let v = rect.split_horizontal(2)?;
             app.resize(&mut self.a, v[0])?;
             app.resize(&mut self.b, v[1])?;
@@ -229,16 +229,13 @@ pub mod utils {
             }
         }
         pub fn mouse_event(&self) -> Result<mouse::Mouse> {
-            if let Some(a) = self.rect() {
-                Ok(mouse::Mouse {
-                    action: Some(mouse::Action::Down),
-                    button: Some(mouse::Button::Left),
-                    modifiers: None,
-                    loc: a.tl,
-                })
-            } else {
-                Err(Error::Unknown("no area".into()))
-            }
+            let a = self.rect();
+            Ok(mouse::Mouse {
+                action: Some(mouse::Action::Down),
+                button: Some(mouse::Button::Left),
+                modifiers: None,
+                loc: a.tl,
+            })
         }
         fn handle(&mut self, s: &mut State, evt: &str) -> Result<EventOutcome> {
             let ret = if let Some(x) = self.next_event {

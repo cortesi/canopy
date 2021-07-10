@@ -55,7 +55,7 @@ impl Block {
 
 impl FillLayout<Handle> for Root {
     fn layout(&mut self, app: &mut Canopy<Handle>, a: Rect) -> Result<()> {
-        self.set_rect(Some(a));
+        self.set_rect(a);
         app.resize(&mut self.child, a)?;
         Ok(())
     }
@@ -113,22 +113,17 @@ impl Block {
             EventOutcome::Handle { skip: false }
         } else {
             self.children.push(Block::new(!self.horizontal));
-            if let Some(a) = self.rect() {
-                self.layout(app, a)?;
-            }
+            self.layout(app, self.rect())?;
             app.taint_tree(self)?;
             EventOutcome::Handle { skip: false }
         })
     }
     fn size_limited(&self) -> bool {
-        if let Some(a) = self.rect() {
-            if self.horizontal && a.w <= 4 {
-                true
-            } else if !self.horizontal && a.h <= 4 {
-                true
-            } else {
-                false
-            }
+        let a = self.rect();
+        if self.horizontal && a.w <= 4 {
+            true
+        } else if !self.horizontal && a.h <= 4 {
+            true
         } else {
             false
         }
@@ -140,9 +135,7 @@ impl Block {
             EventOutcome::Handle { skip: false }
         } else {
             self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
-            if let Some(a) = self.rect() {
-                self.layout(app, a)?;
-            }
+            self.layout(app, self.rect())?;
             app.taint_tree(self)?;
             EventOutcome::Handle { skip: false }
         })
@@ -151,7 +144,7 @@ impl Block {
 
 impl FillLayout<Handle> for Block {
     fn layout(&mut self, app: &mut Canopy<Handle>, rect: Rect) -> Result<()> {
-        self.set_rect(Some(rect));
+        self.set_rect(rect);
         if self.children.len() > 0 {
             let sizes = if self.horizontal {
                 rect.split_horizontal(self.children.len() as u16)?
@@ -176,19 +169,18 @@ impl Node<Handle> for Block {
         _colors: &mut ColorScheme,
         w: &mut dyn Write,
     ) -> Result<()> {
-        if let Some(a) = self.rect() {
-            if self.children.len() == 0 {
-                w.queue(SetForegroundColor(
-                    if app.is_focused(self) && self.children.len() == 0 {
-                        Color::Magenta
-                    } else {
-                        Color::Blue
-                    },
-                ))?;
-                block(w, a.inner(1)?, '\u{2588}')?;
-                w.queue(SetForegroundColor(Color::Black))?;
-                solid_frame(w, a.frame(1)?, ' ')?;
-            }
+        if self.children.len() == 0 {
+            w.queue(SetForegroundColor(
+                if app.is_focused(self) && self.children.len() == 0 {
+                    Color::Magenta
+                } else {
+                    Color::Blue
+                },
+            ))?;
+            let a = self.rect();
+            block(w, a.inner(1)?, '\u{2588}')?;
+            w.queue(SetForegroundColor(Color::Black))?;
+            solid_frame(w, a.frame(1)?, ' ')?;
         }
         Ok(())
     }

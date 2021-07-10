@@ -15,9 +15,11 @@ pub struct NodeState {
     // The focus generation if this node held focus during the last rendering
     // phase.
     pub(crate) rendered_focus_gen: u64,
-    pub rect: Option<Rect>,
+    pub rect: Rect,
 }
 
+/// The node state object - each node needs to keep one of these, and offer it
+/// up by implementing the StatefulNode trait.
 impl NodeState {
     pub fn default() -> Self {
         NodeState {
@@ -25,17 +27,18 @@ impl NodeState {
             focus_gen: 0,
             rendered_focus_gen: 0,
             render_skip_gen: 0,
-            rect: None,
+            rect: Rect::default(),
         }
     }
 }
 
+/// The interface implemented by all nodes that track state.
 pub trait StatefulNode {
     fn state(&self) -> &NodeState;
 
     fn state_mut(&mut self) -> &mut NodeState;
 
-    fn rect(&self) -> Option<Rect>;
+    fn rect(&self) -> Rect;
 
-    fn set_rect(&mut self, r: Option<Rect>);
+    fn set_rect(&mut self, r: Rect);
 }

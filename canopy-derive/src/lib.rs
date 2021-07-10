@@ -15,10 +15,10 @@ pub fn derive_statefulnode(input: proc_macro::TokenStream) -> proc_macro::TokenS
             fn state(&self) -> &canopy::NodeState {
                 &self.state
             }
-            fn rect(&self) -> Option<canopy::geom::Rect> {
+            fn rect(&self) -> canopy::geom::Rect {
                 self.state().rect
             }
-            fn set_rect(&mut self, r: Option<Rect>) {
+            fn set_rect(&mut self, r: Rect) {
                 self.state_mut().rect = r
             }
         }

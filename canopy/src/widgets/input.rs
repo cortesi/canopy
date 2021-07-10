@@ -129,43 +129,40 @@ impl<S> FillLayout<S> for InputLine<S> {
             return Err(Error::Layout("InputLine height must be exactly 1.".into()));
         }
         self.textbuf.set_display_width(rect.w as usize);
-        self.set_rect(Some(rect));
+        self.set_rect(rect);
         Ok(())
     }
 }
 
 impl<S> frame::FrameContent for InputLine<S> {
     fn bounds(&self) -> Option<(Rect, Rect)> {
-        if let Some(r) = self.rect() {
-            if self.textbuf.window.len >= self.textbuf.value.len() as u16 {
-                let r = Rect {
-                    tl: Point { x: 0, y: 0 },
-                    w: r.w,
-                    h: 1,
-                };
-                Some((r, r))
-            } else {
-                let view = Rect {
-                    tl: Point { x: 0, y: 0 },
-                    w: self.textbuf.value.len() as u16,
-                    h: 1,
-                };
-                Some((
-                    Rect {
-                        tl: Point {
-                            x: self.textbuf.window.off,
-                            y: 0,
-                        },
-                        w: self.textbuf.window.len,
-                        h: 1,
-                    }
-                    .clamp(view)
-                    .unwrap(),
-                    view,
-                ))
-            }
+        let r = self.rect();
+        if self.textbuf.window.len >= self.textbuf.value.len() as u16 {
+            let r = Rect {
+                tl: Point { x: 0, y: 0 },
+                w: r.w,
+                h: 1,
+            };
+            Some((r, r))
         } else {
-            None
+            let view = Rect {
+                tl: Point { x: 0, y: 0 },
+                w: self.textbuf.value.len() as u16,
+                h: 1,
+            };
+            Some((
+                Rect {
+                    tl: Point {
+                        x: self.textbuf.window.off,
+                        y: 0,
+                    },
+                    w: self.textbuf.window.len,
+                    h: 1,
+                }
+                .clamp(view)
+                .unwrap(),
+                view,
+            ))
         }
     }
 }
@@ -186,10 +183,9 @@ impl<'a, S> Node<S> for InputLine<S> {
     }
     fn render(&self, _app: &Canopy<S>, colors: &mut ColorScheme, w: &mut dyn Write) -> Result<()> {
         colors.set("text", w)?;
-        if let Some(r) = self.rect() {
-            w.queue(MoveTo(r.tl.x, r.tl.y))?;
-            w.queue(Print(&self.textbuf.text()))?;
-        }
+        let r = self.rect();
+        w.queue(MoveTo(r.tl.x, r.tl.y))?;
+        w.queue(Print(&self.textbuf.text()))?;
         Ok(())
     }
     fn handle_key(&mut self, _app: &mut Canopy<S>, _: &mut S, k: key::Key) -> Result<EventOutcome> {

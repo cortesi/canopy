@@ -76,7 +76,7 @@ impl<'a, S> ConstrainedLayout<S> for Text<S> {
         }
     }
     fn layout(&mut self, _app: &mut Canopy<S>, virt_origin: Point, rect: Rect) -> Result<()> {
-        self.set_rect(Some(rect));
+        self.set_rect(rect);
         self.virt_origin = Some(virt_origin);
         Ok(())
     }
@@ -87,9 +87,8 @@ impl<'a, S> Node<S> for Text<S> {
         let (fg, bg) = colors.get("text");
         w.queue(SetForegroundColor(fg))?;
         w.queue(SetBackgroundColor(bg))?;
-        if let (Some(lines), Some(rect), Some(vo)) =
-            (self.lines.as_ref(), self.rect(), self.virt_origin)
-        {
+        if let (Some(lines), Some(vo)) = (self.lines.as_ref(), self.virt_origin) {
+            let rect = self.rect();
             for i in 0..rect.h {
                 w.queue(MoveTo(rect.tl.x, rect.tl.y + i))?;
                 if (vo.y + i) < lines.len() as u16 {
