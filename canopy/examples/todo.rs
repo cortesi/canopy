@@ -21,7 +21,6 @@ struct StatusBar {
 }
 
 impl Node<Handle> for StatusBar {
-    /// Render the widget to a buffer. The default implementation does nothing.
     fn render(
         &self,
         _app: &Canopy<Handle>,

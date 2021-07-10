@@ -7,7 +7,8 @@ use crate::{
     layout::{ConstrainedLayout, FillLayout},
     node::{EventOutcome, Node},
     state::{NodeState, StatefulNode},
-    widgets, Canopy, Result,
+    widgets::frame::FrameContent,
+    Canopy, Result,
 };
 
 struct ScrollState {
@@ -98,7 +99,10 @@ impl<S, N: Node<S> + ConstrainedLayout<S>> Scroll<S, N> {
     }
 }
 
-impl<S, N: Node<S> + ConstrainedLayout<S>> FillLayout<S> for Scroll<S, N> {
+impl<S, N> FillLayout<S> for Scroll<S, N>
+where
+    N: Node<S> + ConstrainedLayout<S>,
+{
     fn layout(&mut self, app: &mut Canopy<S>, rect: Option<Rect>) -> Result<()> {
         if let Some(r) = rect {
             let virt = self.child.constrain(app, Some(r.w), None)?;
@@ -120,7 +124,10 @@ impl<S, N: Node<S> + ConstrainedLayout<S>> FillLayout<S> for Scroll<S, N> {
     }
 }
 
-impl<S, N: Node<S> + ConstrainedLayout<S>> widgets::frame::FrameContent for Scroll<S, N> {
+impl<S, N> FrameContent for Scroll<S, N>
+where
+    N: Node<S> + ConstrainedLayout<S>,
+{
     fn bounds(&self) -> Option<(Rect, Rect)> {
         self.scrollstate.as_ref().map(|ss| (ss.window, ss.virt))
     }
