@@ -84,7 +84,7 @@ impl<S> Canopy<S> {
     /// Should the node render in the next sweep? This checks if the node is
     /// tainted, if the focus of the node has changed, or if the node's
     /// Node::should_render method is active.
-    pub fn should_render(&mut self, e: &mut dyn Node<S>) -> bool {
+    pub fn should_render(&self, e: &dyn Node<S>) -> bool {
         if let Some(r) = e.should_render(self) {
             r
         } else {

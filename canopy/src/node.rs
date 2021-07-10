@@ -85,7 +85,7 @@ pub trait Node<S>: StatefulNode {
     /// behaviour. Implementing this method should only be needed in rare
     /// circumstances, like container nodes that need to respond to changes in
     /// sub-nodes. The default implementation returns `None`.
-    fn should_render(&mut self, app: &mut Canopy<S>) -> Option<bool> {
+    fn should_render(&self, app: &Canopy<S>) -> Option<bool> {
         None
     }
 

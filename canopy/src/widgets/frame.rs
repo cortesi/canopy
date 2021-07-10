@@ -129,8 +129,8 @@ impl<S, N> Node<S> for Frame<S, N>
 where
     N: canopy::Node<S> + FrameContent + FixedLayout<S>,
 {
-    fn should_render(&mut self, app: &mut Canopy<S>) -> Option<bool> {
-        Some(app.should_render(&mut self.child))
+    fn should_render(&self, app: &Canopy<S>) -> Option<bool> {
+        Some(app.should_render(&self.child))
     }
     fn render(
         &mut self,

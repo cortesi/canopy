@@ -127,8 +127,8 @@ impl<S, N: Node<S> + ConstrainedLayout<S>> widgets::frame::FrameContent for Scro
 }
 
 impl<S, N: Node<S> + ConstrainedLayout<S>> Node<S> for Scroll<S, N> {
-    fn should_render(&mut self, app: &mut Canopy<S>) -> Option<bool> {
-        Some(app.should_render(&mut self.child))
+    fn should_render(&self, app: &Canopy<S>) -> Option<bool> {
+        Some(app.should_render(&self.child))
     }
 
     #[duplicate(
