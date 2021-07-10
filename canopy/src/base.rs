@@ -204,7 +204,7 @@ impl<S> Canopy<S> {
 
     /// A node is on the focus path if it does not have focus itself, but some
     /// node below it does.
-    pub fn is_focus_ancestor(&self, e: &mut dyn Node<S>) -> bool {
+    pub fn is_focus_ancestor(&self, e: &dyn Node<S>) -> bool {
         if self.is_focused(e) {
             false
         } else {
@@ -260,9 +260,9 @@ impl<S> Canopy<S> {
     }
 
     /// Find the area of the current terminal focus node.
-    pub fn get_focus_area(&self, e: &mut dyn Node<S>) -> Option<Rect> {
+    pub fn get_focus_area(&self, e: &dyn Node<S>) -> Option<Rect> {
         let mut ret = None;
-        self.focus_path_mut(e, &mut |x| -> Result<()> {
+        self.focus_path(e, &mut |x| -> Result<()> {
             if ret == None {
                 ret = x.rect();
             }
@@ -304,9 +304,9 @@ impl<S> Canopy<S> {
     /// Returns the focal depth of the specified node. If the node is not part
     /// of the focus chain, the depth is 0. If the node is a leaf focus, the
     /// depth is 1.
-    pub fn focus_depth(&self, e: &mut dyn Node<S>) -> usize {
+    pub fn focus_depth(&self, e: &dyn Node<S>) -> usize {
         let mut total = 0;
-        self.focus_path_mut(e, &mut |_| -> Result<()> {
+        self.focus_path(e, &mut |_| -> Result<()> {
             total += 1;
             Ok(())
         })

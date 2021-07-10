@@ -4,6 +4,7 @@ use crate::{
     event::{key, mouse, tick},
     Canopy, Result, StatefulNode,
 };
+use duplicate::duplicate;
 use std::{fmt::Debug, io::Write};
 
 /// Walker is implemented for the return values of tree operations.
@@ -152,31 +153,19 @@ pub trait Node<S>: StatefulNode {
 /// A postorder traversal of the nodes under e. Enabling skipping in the Walker
 /// results in all the nodes in a route straight back to the root being visited
 /// before exiting.
-pub fn postorder_mut<S, R: Walker + Default>(
-    e: &mut dyn Node<S>,
-    f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<R>,
-) -> Result<R> {
-    let mut v = R::default();
-    e.children_mut(&mut |x| {
-        if !v.skip() {
-            v = v.join(postorder_mut(x, f)?);
-        }
-        Ok(())
-    })?;
-    Ok(v.join(f(e)?))
-}
-
-/// A postorder traversal of the nodes under e. Enabling skipping in the Walker
-/// results in all the nodes in a route straight back to the root being visited
-/// before exiting.
-pub fn postorder<S, R: Walker + Default>(
-    e: &dyn Node<S>,
-    f: &mut dyn FnMut(&dyn Node<S>) -> Result<R>,
+#[duplicate(
+    method             reference(type)  children;
+    [postorder]        [& type]         [children];
+    [postorder_mut]    [&mut type]      [children_mut];
+)]
+pub fn method<S, R: Walker + Default>(
+    e: reference([dyn Node<S>]),
+    f: &mut dyn FnMut(reference([dyn Node<S>])) -> Result<R>,
 ) -> Result<R> {
     let mut v = R::default();
     e.children(&mut |x| {
         if !v.skip() {
-            v = v.join(postorder(x, f)?);
+            v = v.join(method(x, f)?);
         }
         Ok(())
     })?;
