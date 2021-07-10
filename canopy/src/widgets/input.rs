@@ -16,9 +16,9 @@ use crate::{
 
 use crossterm::{cursor::MoveTo, style::Print, QueueableCommand};
 
-// A text buffer that exposes edit functionality for a single line. It also
-// keeps track of a display window that slides within the line, responding
-// naturally to cursor movements.
+/// A text buffer that exposes edit functionality for a single line. It also
+/// keeps track of a display window that slides within the line, responding
+/// naturally to cursor movements.
 #[derive(Debug, PartialEq, Clone)]
 pub struct TextBuf {
     pub value: String,

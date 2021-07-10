@@ -1,9 +1,15 @@
-pub mod editor;
+mod editor;
 pub mod frame;
-pub mod input;
-pub mod panes;
-pub mod paragraph;
-pub mod scroll;
+mod input;
+mod panes;
+mod scroll;
+mod text;
+
+pub use editor::LineEditor;
+pub use input::InputLine;
+pub use panes::Panes;
+pub use scroll::Scroll;
+pub use text::Text;
 
 use crate::{geom, Result};
 use crossterm::{cursor::MoveTo, style::Print, QueueableCommand};

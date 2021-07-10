@@ -19,7 +19,7 @@ use crossterm::{
 use textwrap;
 
 #[derive(StatefulNode)]
-pub struct Paragraph<S> {
+pub struct Text<S> {
     pub state: NodeState,
     pub virt_origin: Option<Point>,
     pub raw: String,
@@ -28,9 +28,9 @@ pub struct Paragraph<S> {
     lines: Option<Vec<String>>,
 }
 
-impl<S> Paragraph<S> {
+impl<S> Text<S> {
     pub fn new(raw: &str) -> Self {
-        Paragraph {
+        Text {
             state: NodeState::default(),
 
             virt_origin: None,
@@ -42,7 +42,7 @@ impl<S> Paragraph<S> {
     }
 }
 
-impl<'a, S> ConstrainedLayout<S> for Paragraph<S> {
+impl<'a, S> ConstrainedLayout<S> for Text<S> {
     fn constrain(
         &mut self,
         _app: &mut Canopy<S>,
@@ -82,7 +82,7 @@ impl<'a, S> ConstrainedLayout<S> for Paragraph<S> {
     }
 }
 
-impl<'a, S> Node<S> for Paragraph<S> {
+impl<'a, S> Node<S> for Text<S> {
     fn render(&self, _app: &Canopy<S>, colors: &mut ColorScheme, w: &mut dyn Write) -> Result<()> {
         let (fg, bg) = colors.get("text");
         w.queue(SetForegroundColor(fg))?;
@@ -111,7 +111,7 @@ mod tests {
     fn text_sizing() -> Result<()> {
         let mut app = Canopy::new();
         let txt = "aaa bbb ccc\nddd eee fff\nggg hhh iii";
-        let mut t: Paragraph<()> = Paragraph::new(txt);
+        let mut t: Text<()> = Text::new(txt);
         t.constrain(&mut app, Some(7), None)?;
         let expected: Vec<String> = vec![
             "aaa bbb".into(),

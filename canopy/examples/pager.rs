@@ -8,7 +8,7 @@ use canopy::{
     event::{key, mouse},
     layout::FillLayout,
     runloop::runloop,
-    widgets::{frame, paragraph, scroll},
+    widgets::{frame, Scroll, Text},
     Canopy, EventOutcome, Node, NodeState, Rect, Result, StatefulNode,
 };
 
@@ -17,14 +17,14 @@ struct Handle {}
 #[derive(StatefulNode)]
 struct Root {
     state: NodeState,
-    child: frame::Frame<Handle, scroll::Scroll<Handle, paragraph::Paragraph<Handle>>>,
+    child: frame::Frame<Handle, Scroll<Handle, Text<Handle>>>,
 }
 
 impl Root {
     fn new(contents: String) -> Self {
         Root {
             state: NodeState::default(),
-            child: frame::Frame::new(scroll::Scroll::new(paragraph::Paragraph::new(&contents))),
+            child: frame::Frame::new(Scroll::new(Text::new(&contents))),
         }
     }
 }

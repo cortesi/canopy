@@ -8,7 +8,7 @@ use canopy::{
     geom::{Point, Rect},
     layout::FillLayout,
     runloop::runloop,
-    widgets::{block, frame, input, paragraph, scroll},
+    widgets::{block, frame, InputLine, Scroll, Text},
     Canopy, EventOutcome, Node, NodeState, Result, StatefulNode,
 };
 use crossterm::{cursor::MoveTo, style::Print, QueueableCommand};
@@ -49,16 +49,16 @@ impl FillLayout<Handle> for StatusBar {
 #[derive(StatefulNode)]
 struct Root {
     state: NodeState,
-    content: frame::Frame<Handle, scroll::Scroll<Handle, paragraph::Paragraph<Handle>>>,
+    content: frame::Frame<Handle, Scroll<Handle, Text<Handle>>>,
     statusbar: StatusBar,
-    adder: Option<frame::Frame<Handle, input::InputLine<Handle>>>,
+    adder: Option<frame::Frame<Handle, InputLine<Handle>>>,
 }
 
 impl Root {
     fn new(contents: String) -> Self {
         Root {
             state: NodeState::default(),
-            content: frame::Frame::new(scroll::Scroll::new(paragraph::Paragraph::new(&contents))),
+            content: frame::Frame::new(Scroll::new(Text::new(&contents))),
             statusbar: StatusBar {
                 state: NodeState::default(),
             },
@@ -66,7 +66,7 @@ impl Root {
         }
     }
     fn open_adder(&mut self, app: &mut Canopy<Handle>) -> Result<EventOutcome> {
-        let mut adder = frame::Frame::new(input::InputLine::new(""));
+        let mut adder = frame::Frame::new(InputLine::new(""));
         app.set_focus(&mut adder.child)?;
         self.adder = Some(adder);
         self.layout(app, self.rect())?;
