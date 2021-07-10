@@ -1,3 +1,4 @@
+use duplicate::duplicate;
 use std::io::Write;
 use std::marker::PhantomData;
 
@@ -208,10 +209,15 @@ where
         }
         Ok(())
     }
-    fn children_mut(
-        &mut self,
-        f: &mut dyn FnMut(&mut dyn canopy::Node<S>) -> Result<()>,
+    #[duplicate(
+        method          reference(type);
+        [children]      [& type];
+        [children_mut]  [&mut type];
+    )]
+    fn method(
+        self: reference([Self]),
+        f: &mut dyn FnMut(reference([dyn Node<S>])) -> Result<()>,
     ) -> Result<()> {
-        f(&mut self.child)
+        f(reference([self.child]))
     }
 }

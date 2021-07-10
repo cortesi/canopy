@@ -1,7 +1,7 @@
-use crate::{layout::ConstrainedLayout, node::Node};
+use crate::{layout::ConstrainedWidthLayout, node::Node};
 use std::marker::PhantomData;
 
-pub struct List<S, N: Node<S> + ConstrainedLayout<S>> {
+pub struct List<S, N: Node<S> + ConstrainedWidthLayout<S>> {
     _marker: PhantomData<S>,
     pub items: Vec<N>,
     pub offset: u32,
@@ -10,7 +10,7 @@ pub struct List<S, N: Node<S> + ConstrainedLayout<S>> {
 
 impl<S, N> List<S, N>
 where
-    N: Node<S> + ConstrainedLayout<S>,
+    N: Node<S> + ConstrainedWidthLayout<S>,
 {
     pub fn new(c: Vec<N>) -> Self {
         List {

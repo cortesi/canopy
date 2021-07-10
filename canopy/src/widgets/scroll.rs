@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use crate as canopy;
 use crate::{
     geom::{Point, Rect},
-    layout::{ConstrainedLayout, FillLayout},
+    layout::{ConstrainedWidthLayout, FillLayout},
     node::{EventOutcome, Node},
     state::{NodeState, StatefulNode},
     widgets::frame::FrameContent,
@@ -24,14 +24,14 @@ struct ScrollState {
 /// with `FixedLayout` by managing a scrollable view onto the constrained
 /// widget.
 #[derive(StatefulNode)]
-pub struct Scroll<S, N: Node<S> + ConstrainedLayout<S>> {
+pub struct Scroll<S, N: Node<S> + ConstrainedWidthLayout<S>> {
     _marker: PhantomData<S>,
     pub child: N,
     pub state: NodeState,
     scrollstate: Option<ScrollState>,
 }
 
-impl<S, N: Node<S> + ConstrainedLayout<S>> Scroll<S, N> {
+impl<S, N: Node<S> + ConstrainedWidthLayout<S>> Scroll<S, N> {
     pub fn new(c: N) -> Self {
         Scroll {
             _marker: PhantomData,
@@ -101,10 +101,10 @@ impl<S, N: Node<S> + ConstrainedLayout<S>> Scroll<S, N> {
 
 impl<S, N> FillLayout<S> for Scroll<S, N>
 where
-    N: Node<S> + ConstrainedLayout<S>,
+    N: Node<S> + ConstrainedWidthLayout<S>,
 {
     fn layout(&mut self, app: &mut Canopy<S>, rect: Rect) -> Result<()> {
-        let virt = self.child.constrain(app, Some(rect.w), None)?;
+        let virt = self.child.constrain(app, rect.w)?;
         let view = Rect {
             tl: Point { x: 0, y: 0 },
             w: rect.w,
@@ -122,14 +122,14 @@ where
 
 impl<S, N> FrameContent for Scroll<S, N>
 where
-    N: Node<S> + ConstrainedLayout<S>,
+    N: Node<S> + ConstrainedWidthLayout<S>,
 {
     fn bounds(&self) -> Option<(Rect, Rect)> {
         self.scrollstate.as_ref().map(|ss| (ss.window, ss.virt))
     }
 }
 
-impl<S, N: Node<S> + ConstrainedLayout<S>> Node<S> for Scroll<S, N> {
+impl<S, N: Node<S> + ConstrainedWidthLayout<S>> Node<S> for Scroll<S, N> {
     fn should_render(&self, app: &Canopy<S>) -> Option<bool> {
         Some(app.should_render(&self.child))
     }

@@ -1,9 +1,8 @@
 use crate as canopy;
 use crate::{
     colorscheme::ColorScheme,
-    error::Error,
     geom::{Point, Rect},
-    layout::ConstrainedLayout,
+    layout::ConstrainedWidthLayout,
     state::{NodeState, StatefulNode},
     Canopy, Node, Result,
 };
@@ -42,38 +41,29 @@ impl<S> Text<S> {
     }
 }
 
-impl<'a, S> ConstrainedLayout<S> for Text<S> {
-    fn constrain(
-        &mut self,
-        _app: &mut Canopy<S>,
-        width: Option<u16>,
-        _height: Option<u16>,
-    ) -> Result<Rect> {
-        if let Some(w) = width {
-            if let Some(l) = &self.lines {
-                if !l.is_empty() && l[0].len() == w as usize {
-                    return Ok(Rect {
-                        tl: Point { x: 0, y: 0 },
-                        w,
-                        h: l.len() as u16,
-                    });
-                }
+impl<'a, S> ConstrainedWidthLayout<S> for Text<S> {
+    fn constrain(&mut self, _app: &mut Canopy<S>, w: u16) -> Result<Rect> {
+        if let Some(l) = &self.lines {
+            if !l.is_empty() && l[0].len() == w as usize {
+                return Ok(Rect {
+                    tl: Point { x: 0, y: 0 },
+                    w,
+                    h: l.len() as u16,
+                });
             }
-
-            let mut split: Vec<String> = vec![];
-            for i in textwrap::wrap(&self.raw, w as usize) {
-                split.push(format!("{:width$}", i, width = w as usize))
-            }
-            let ret = Rect {
-                tl: Point { x: 0, y: 0 },
-                w,
-                h: split.len() as u16,
-            };
-            self.lines = Some(split);
-            Ok(ret)
-        } else {
-            Err(Error::Layout("Text requires a width constraint".into()))
         }
+
+        let mut split: Vec<String> = vec![];
+        for i in textwrap::wrap(&self.raw, w as usize) {
+            split.push(format!("{:width$}", i, width = w as usize))
+        }
+        let ret = Rect {
+            tl: Point { x: 0, y: 0 },
+            w,
+            h: split.len() as u16,
+        };
+        self.lines = Some(split);
+        Ok(ret)
     }
     fn layout(&mut self, _app: &mut Canopy<S>, virt_origin: Point, rect: Rect) -> Result<()> {
         self.set_rect(rect);
@@ -111,7 +101,7 @@ mod tests {
         let mut app = Canopy::new();
         let txt = "aaa bbb ccc\nddd eee fff\nggg hhh iii";
         let mut t: Text<()> = Text::new(txt);
-        t.constrain(&mut app, Some(7), None)?;
+        t.constrain(&mut app, 7)?;
         let expected: Vec<String> = vec![
             "aaa bbb".into(),
             "ccc    ".into(),
