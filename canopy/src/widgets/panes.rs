@@ -6,7 +6,7 @@ use crate as canopy;
 use crate::{
     colorscheme::ColorScheme,
     geom::Rect,
-    layout::FixedLayout,
+    layout::FillLayout,
     state::{NodeState, StatefulNode},
     Canopy, Node, Result,
 };
@@ -19,7 +19,7 @@ pub struct Panes<S, N: canopy::Node<S>> {
     pub state: NodeState,
 }
 
-impl<S, N: canopy::Node<S> + FixedLayout<S>> Panes<S, N> {
+impl<S, N: canopy::Node<S> + FillLayout<S>> Panes<S, N> {
     pub fn new(n: N) -> Self {
         Panes {
             children: vec![vec![n]],
@@ -90,7 +90,7 @@ impl<S, N: canopy::Node<S> + FixedLayout<S>> Panes<S, N> {
     }
 }
 
-impl<S, N: canopy::Node<S> + FixedLayout<S>> FixedLayout<S> for Panes<S, N> {
+impl<S, N: canopy::Node<S> + FillLayout<S>> FillLayout<S> for Panes<S, N> {
     fn layout(&mut self, app: &mut Canopy<S>, rect: Option<Rect>) -> Result<()> {
         self.set_rect(rect);
         if let Some(a) = rect {

@@ -7,3 +7,7 @@
 - Key binding management system
 - ctrl-c/ctrl-z
 
+
+- Bugs
+  - Focusgym shows drawing issues when windows are resized
+

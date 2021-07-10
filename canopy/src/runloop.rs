@@ -2,7 +2,7 @@ use crate::{
     colorscheme::ColorScheme,
     event::EventSource,
     geom::{Point, Rect},
-    layout::FixedLayout,
+    layout::FillLayout,
     Canopy, EventOutcome, Node, Result,
 };
 use crossterm::{
@@ -26,7 +26,7 @@ pub fn runloop<S, N>(
     s: &mut S,
 ) -> Result<()>
 where
-    N: Node<S> + FixedLayout<S>,
+    N: Node<S> + FillLayout<S>,
 {
     enable_raw_mode()?;
     let mut w = std::io::stderr();

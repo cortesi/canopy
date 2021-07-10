@@ -6,7 +6,7 @@ use canopy;
 use canopy::{
     colorscheme::solarized,
     event::{key, mouse},
-    layout::FixedLayout,
+    layout::FillLayout,
     runloop::runloop,
     widgets::{frame, paragraph, scroll},
     Canopy, EventOutcome, Node, NodeState, Rect, Result, StatefulNode,
@@ -29,7 +29,7 @@ impl Root {
     }
 }
 
-impl FixedLayout<Handle> for Root {
+impl FillLayout<Handle> for Root {
     fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<()> {
         self.set_rect(rect);
         if let Some(a) = rect {

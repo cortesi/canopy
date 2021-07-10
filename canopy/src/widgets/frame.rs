@@ -8,7 +8,7 @@ use crate as canopy;
 use crate::{
     colorscheme::ColorScheme,
     geom::Rect,
-    layout::FixedLayout,
+    layout::FillLayout,
     state::{NodeState, StatefulNode},
     widgets, Canopy, Node, Result,
 };
@@ -85,7 +85,7 @@ pub trait FrameContent {
 #[derive(StatefulNode)]
 pub struct Frame<S, N>
 where
-    N: canopy::Node<S> + FrameContent + FixedLayout<S>,
+    N: canopy::Node<S> + FrameContent + FillLayout<S>,
 {
     _marker: PhantomData<S>,
     pub child: N,
@@ -95,7 +95,7 @@ where
 
 impl<S, N> Frame<S, N>
 where
-    N: canopy::Node<S> + FrameContent + FixedLayout<S>,
+    N: canopy::Node<S> + FrameContent + FillLayout<S>,
 {
     pub fn new(c: N) -> Self {
         Frame {
@@ -112,9 +112,9 @@ where
     }
 }
 
-impl<S, N> FixedLayout<S> for Frame<S, N>
+impl<S, N> FillLayout<S> for Frame<S, N>
 where
-    N: canopy::Node<S> + FrameContent + FixedLayout<S>,
+    N: canopy::Node<S> + FrameContent + FillLayout<S>,
 {
     fn layout(&mut self, app: &mut Canopy<S>, rect: Option<Rect>) -> Result<()> {
         self.set_rect(rect);
@@ -127,7 +127,7 @@ where
 
 impl<S, N> Node<S> for Frame<S, N>
 where
-    N: canopy::Node<S> + FrameContent + FixedLayout<S>,
+    N: canopy::Node<S> + FrameContent + FillLayout<S>,
 {
     fn should_render(&self, app: &Canopy<S>) -> Option<bool> {
         Some(app.should_render(&self.child))

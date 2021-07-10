@@ -66,7 +66,7 @@ pub mod utils {
         Ok(())
     }
 
-    impl layout::FixedLayout<State> for TLeaf {
+    impl layout::FillLayout<State> for TLeaf {
         fn layout(&mut self, _: &mut Canopy<State>, a: Option<Rect>) -> Result<()> {
             self.set_rect(a);
             Ok(())
@@ -106,7 +106,7 @@ pub mod utils {
         }
     }
 
-    impl layout::FixedLayout<State> for TBranch {
+    impl layout::FillLayout<State> for TBranch {
         fn layout(&mut self, app: &mut Canopy<State>, rect: Option<Rect>) -> Result<()> {
             self.set_rect(rect);
             if let Some(a) = rect {
@@ -165,7 +165,7 @@ pub mod utils {
         }
     }
 
-    impl layout::FixedLayout<State> for TRoot {
+    impl layout::FillLayout<State> for TRoot {
         fn layout(&mut self, app: &mut Canopy<State>, rect: Option<Rect>) -> Result<()> {
             self.set_rect(rect);
             if let Some(a) = rect {

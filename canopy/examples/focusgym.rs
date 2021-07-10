@@ -9,7 +9,7 @@ use canopy;
 use canopy::{
     colorscheme::{solarized, ColorScheme},
     event::{key, mouse},
-    layout::FixedLayout,
+    layout::FillLayout,
     runloop::runloop,
     widgets::{block, solid_frame},
     Canopy, EventOutcome, Node, NodeState, Rect, Result, StatefulNode,
@@ -53,7 +53,7 @@ impl Block {
     }
 }
 
-impl FixedLayout<Handle> for Root {
+impl FillLayout<Handle> for Root {
     fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<()> {
         self.set_rect(rect);
         if let Some(a) = rect {
@@ -147,7 +147,7 @@ impl Block {
     }
 }
 
-impl FixedLayout<Handle> for Block {
+impl FillLayout<Handle> for Block {
     fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<()> {
         self.set_rect(rect);
         if let Some(a) = rect {

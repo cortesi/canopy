@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use crate as canopy;
 use crate::{
     geom::{Point, Rect},
-    layout::{ConstrainedLayout, FixedLayout},
+    layout::{ConstrainedLayout, FillLayout},
     node::{EventOutcome, Node},
     state::{NodeState, StatefulNode},
     widgets, Canopy, Result,
@@ -98,7 +98,7 @@ impl<S, N: Node<S> + ConstrainedLayout<S>> Scroll<S, N> {
     }
 }
 
-impl<S, N: Node<S> + ConstrainedLayout<S>> FixedLayout<S> for Scroll<S, N> {
+impl<S, N: Node<S> + ConstrainedLayout<S>> FillLayout<S> for Scroll<S, N> {
     fn layout(&mut self, app: &mut Canopy<S>, rect: Option<Rect>) -> Result<()> {
         if let Some(r) = rect {
             let virt = self.child.constrain(app, Some(r.w), None)?;

@@ -6,7 +6,7 @@ use canopy::{
     colorscheme::{solarized, ColorScheme},
     event::{key, mouse},
     geom::{Point, Rect},
-    layout::FixedLayout,
+    layout::FillLayout,
     runloop::runloop,
     widgets::{block, frame, input, paragraph, scroll},
     Canopy, EventOutcome, Node, NodeState, Result, StatefulNode,
@@ -39,7 +39,7 @@ impl Node<Handle> for StatusBar {
     }
 }
 
-impl FixedLayout<Handle> for StatusBar {
+impl FillLayout<Handle> for StatusBar {
     fn layout(&mut self, _app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<()> {
         self.set_rect(rect);
         Ok(())
@@ -74,7 +74,7 @@ impl Root {
     }
 }
 
-impl FixedLayout<Handle> for Root {
+impl FillLayout<Handle> for Root {
     fn layout(&mut self, app: &mut Canopy<Handle>, rect: Option<Rect>) -> Result<()> {
         self.set_rect(rect);
         if let Some(a) = rect {

@@ -7,7 +7,7 @@ use crate::{
     colorscheme::ColorScheme,
     cursor,
     event::{key, mouse, tick, Event},
-    layout::FixedLayout,
+    layout::FillLayout,
     node::{postorder, postorder_mut, preorder, EventOutcome, Node, Walker},
     Error, Point, Result,
 };
@@ -480,7 +480,7 @@ impl<S> Canopy<S> {
     /// Propagate a resize event through the tree of nodes.
     pub fn resize<N>(&mut self, e: &mut N, rect: Rect) -> Result<()>
     where
-        N: Node<S> + FixedLayout<S>,
+        N: Node<S> + FillLayout<S>,
     {
         if let Some(old) = e.rect() {
             if old == rect {
@@ -528,7 +528,7 @@ impl<S> Canopy<S> {
     /// Propagate an event through the tree.
     pub fn event<N>(&mut self, root: &mut N, s: &mut S, e: Event) -> Result<EventOutcome>
     where
-        N: Node<S> + FixedLayout<S>,
+        N: Node<S> + FillLayout<S>,
     {
         match e {
             Event::Key(k) => self.key(root, s, k),

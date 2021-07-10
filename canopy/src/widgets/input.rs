@@ -8,7 +8,7 @@ use crate::{
     error::Error,
     event::key,
     geom::{Extent, Point, Rect},
-    layout::FixedLayout,
+    layout::FillLayout,
     state::{NodeState, StatefulNode},
     widgets::frame,
     Canopy, EventOutcome, Node, Result,
@@ -123,7 +123,7 @@ impl<S> InputLine<S> {
     }
 }
 
-impl<S> FixedLayout<S> for InputLine<S> {
+impl<S> FillLayout<S> for InputLine<S> {
     fn layout(&mut self, _app: &mut Canopy<S>, rect: Option<Rect>) -> Result<()> {
         if let Some(r) = rect {
             if r.h != 1 {
