@@ -1,4 +1,3 @@
-
 - Design actions, and use to signal Exit
 - Fixed-width text widget
 

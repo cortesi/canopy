@@ -9,18 +9,12 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     #[error("unknown")]
     Unknown(String),
-    #[error("locate")]
-    Locate(String),
     #[error("focus")]
     Focus(String),
-    #[error("taint")]
-    Taint(String),
     #[error("render")]
     Render(String),
     #[error("geometry")]
     Geometry(String),
-    #[error("tick")]
-    Tick(String),
     #[error("layout")]
     Layout(String),
     #[error("runloop")]

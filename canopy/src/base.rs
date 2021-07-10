@@ -272,8 +272,8 @@ impl<S> Canopy<S> {
         ret
     }
 
-    // Calls a closure on the currently focused node and all its parents to the
-    // root.
+    /// Calls a closure on the currently focused node and all its parents to the
+    /// root.
     #[duplicate(
         method              reference(type)    traversal;
         [focus_path]        [& type]           [postorder];

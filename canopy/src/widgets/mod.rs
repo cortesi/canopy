@@ -2,8 +2,8 @@ pub mod editor;
 pub mod frame;
 pub mod input;
 pub mod panes;
+pub mod paragraph;
 pub mod scroll;
-pub mod text;
 
 use crate::{geom, Result};
 use crossterm::{cursor::MoveTo, style::Print, QueueableCommand};

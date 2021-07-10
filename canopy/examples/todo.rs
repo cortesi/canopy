@@ -8,7 +8,7 @@ use canopy::{
     geom::{Point, Rect},
     layout::FixedLayout,
     runloop::runloop,
-    widgets::{block, frame, input, scroll, text},
+    widgets::{block, frame, input, paragraph, scroll},
     Canopy, EventOutcome, Node, NodeState, Result, StatefulNode,
 };
 use crossterm::{cursor::MoveTo, style::Print, QueueableCommand};
@@ -49,7 +49,7 @@ impl FixedLayout<Handle> for StatusBar {
 #[derive(StatefulNode)]
 struct Root {
     state: NodeState,
-    content: frame::Frame<Handle, scroll::Scroll<Handle, text::Text<Handle>>>,
+    content: frame::Frame<Handle, scroll::Scroll<Handle, paragraph::Paragraph<Handle>>>,
     statusbar: StatusBar,
     adder: Option<frame::Frame<Handle, input::InputLine<Handle>>>,
 }
@@ -58,7 +58,7 @@ impl Root {
     fn new(contents: String) -> Self {
         Root {
             state: NodeState::default(),
-            content: frame::Frame::new(scroll::Scroll::new(text::Text::new(&contents))),
+            content: frame::Frame::new(scroll::Scroll::new(paragraph::Paragraph::new(&contents))),
             statusbar: StatusBar {
                 state: NodeState::default(),
             },
