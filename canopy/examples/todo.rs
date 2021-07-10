@@ -23,8 +23,8 @@ struct StatusBar {
 impl Node<Handle> for StatusBar {
     /// Render the widget to a buffer. The default implementation does nothing.
     fn render(
-        &mut self,
-        _app: &mut Canopy<Handle>,
+        &self,
+        _app: &Canopy<Handle>,
         colors: &mut ColorScheme,
         w: &mut dyn Write,
     ) -> Result<()> {

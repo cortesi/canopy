@@ -171,8 +171,8 @@ impl Node<Handle> for Block {
         self.children.len() == 0
     }
     fn render(
-        &mut self,
-        app: &mut Canopy<Handle>,
+        &self,
+        app: &Canopy<Handle>,
         _colors: &mut ColorScheme,
         w: &mut dyn Write,
     ) -> Result<()> {

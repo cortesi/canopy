@@ -77,12 +77,7 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(
-            &mut self,
-            _: &mut Canopy<State>,
-            _c: &mut ColorScheme,
-            w: &mut dyn Write,
-        ) -> Result<()> {
+        fn render(&self, _: &Canopy<State>, _c: &mut ColorScheme, w: &mut dyn Write) -> Result<()> {
             tnode_render(self.name.clone(), w)
         }
         fn handle_key(
@@ -127,12 +122,7 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(
-            &mut self,
-            _: &mut Canopy<State>,
-            _c: &mut ColorScheme,
-            w: &mut dyn Write,
-        ) -> Result<()> {
+        fn render(&self, _: &Canopy<State>, _c: &mut ColorScheme, w: &mut dyn Write) -> Result<()> {
             tnode_render(self.name.clone(), w)
         }
         fn handle_key(
@@ -191,12 +181,7 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(
-            &mut self,
-            _: &mut Canopy<State>,
-            _c: &mut ColorScheme,
-            w: &mut dyn Write,
-        ) -> Result<()> {
+        fn render(&self, _: &Canopy<State>, _c: &mut ColorScheme, w: &mut dyn Write) -> Result<()> {
             tnode_render(self.name.clone(), w)
         }
         fn handle_key(

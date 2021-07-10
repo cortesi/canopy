@@ -186,12 +186,7 @@ impl<'a, S> Node<S> for InputLine<S> {
             blink: true,
         })
     }
-    fn render(
-        &mut self,
-        _app: &mut Canopy<S>,
-        colors: &mut ColorScheme,
-        w: &mut dyn Write,
-    ) -> Result<()> {
+    fn render(&self, _app: &Canopy<S>, colors: &mut ColorScheme, w: &mut dyn Write) -> Result<()> {
         colors.set("text", w)?;
         if let Some(r) = self.rect() {
             w.queue(MoveTo(r.tl.x, r.tl.y))?;

@@ -83,12 +83,7 @@ impl<'a, S> ConstrainedLayout<S> for Text<S> {
 }
 
 impl<'a, S> Node<S> for Text<S> {
-    fn render(
-        &mut self,
-        _app: &mut Canopy<S>,
-        colors: &mut ColorScheme,
-        w: &mut dyn Write,
-    ) -> Result<()> {
+    fn render(&self, _app: &Canopy<S>, colors: &mut ColorScheme, w: &mut dyn Write) -> Result<()> {
         let (fg, bg) = colors.get("text");
         w.queue(SetForegroundColor(fg))?;
         w.queue(SetBackgroundColor(bg))?;

@@ -96,12 +96,7 @@ pub trait Node<S>: StatefulNode {
     }
 
     /// Render the widget to a buffer. The default implementation does nothing.
-    fn render(
-        &mut self,
-        app: &mut Canopy<S>,
-        colors: &mut ColorScheme,
-        w: &mut dyn Write,
-    ) -> Result<()> {
+    fn render(&self, app: &Canopy<S>, colors: &mut ColorScheme, w: &mut dyn Write) -> Result<()> {
         Ok(())
     }
 

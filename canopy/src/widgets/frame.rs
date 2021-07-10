@@ -132,12 +132,7 @@ where
     fn should_render(&self, app: &Canopy<S>) -> Option<bool> {
         Some(app.should_render(&self.child))
     }
-    fn render(
-        &mut self,
-        app: &mut Canopy<S>,
-        colors: &mut ColorScheme,
-        w: &mut dyn Write,
-    ) -> Result<()> {
+    fn render(&self, app: &Canopy<S>, colors: &mut ColorScheme, w: &mut dyn Write) -> Result<()> {
         if let Some(a) = self.rect() {
             if app.on_focus_path(self) {
                 colors.set("frame/focused", w)?;
