@@ -152,12 +152,29 @@ pub trait Node<S>: StatefulNode {
 /// A postorder traversal of the nodes under e. Enabling skipping in the Walker
 /// results in all the nodes in a route straight back to the root being visited
 /// before exiting.
-pub fn postorder<S, R: Walker + Default>(
+pub fn postorder_mut<S, R: Walker + Default>(
     e: &mut dyn Node<S>,
     f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<R>,
 ) -> Result<R> {
     let mut v = R::default();
     e.children_mut(&mut |x| {
+        if !v.skip() {
+            v = v.join(postorder_mut(x, f)?);
+        }
+        Ok(())
+    })?;
+    Ok(v.join(f(e)?))
+}
+
+/// A postorder traversal of the nodes under e. Enabling skipping in the Walker
+/// results in all the nodes in a route straight back to the root being visited
+/// before exiting.
+pub fn postorder<S, R: Walker + Default>(
+    e: &dyn Node<S>,
+    f: &mut dyn FnMut(&dyn Node<S>) -> Result<R>,
+) -> Result<R> {
+    let mut v = R::default();
+    e.children(&mut |x| {
         if !v.skip() {
             v = v.join(postorder(x, f)?);
         }
@@ -210,7 +227,7 @@ mod tests {
             skipname: String,
         ) -> Result<Vec<String>> {
             let mut v: Vec<String> = vec![];
-            postorder(root, &mut |x| -> Result<SkipWalker> {
+            postorder_mut(root, &mut |x| -> Result<SkipWalker> {
                 skipper(app, x, skipname.clone(), &mut v)
             })?;
             Ok(v)

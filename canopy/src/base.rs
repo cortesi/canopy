@@ -1,3 +1,4 @@
+use duplicate::duplicate;
 use std::marker::PhantomData;
 use std::{fmt::Debug, io::Write};
 
@@ -7,7 +8,7 @@ use crate::{
     cursor,
     event::{key, mouse, tick, Event},
     layout::FixedLayout,
-    node::{postorder, preorder, EventOutcome, Node, Walker},
+    node::{postorder, postorder_mut, preorder, EventOutcome, Node, Walker},
     Error, Point, Result,
 };
 use crossterm::{
@@ -191,7 +192,7 @@ impl<S> Canopy<S> {
     }
 
     /// A node is on the focus path if it or any of its descendants have focus.
-    pub fn on_focus_path(&self, e: &mut dyn Node<S>) -> bool {
+    pub fn on_focus_path(&self, e: &dyn Node<S>) -> bool {
         let mut onpath = false;
         self.focus_path(e, &mut |_| -> Result<()> {
             onpath = true;
@@ -261,7 +262,7 @@ impl<S> Canopy<S> {
     /// Find the area of the current terminal focus node.
     pub fn get_focus_area(&self, e: &mut dyn Node<S>) -> Option<Rect> {
         let mut ret = None;
-        self.focus_path(e, &mut |x| -> Result<()> {
+        self.focus_path_mut(e, &mut |x| -> Result<()> {
             if ret == None {
                 ret = x.rect();
             }
@@ -273,14 +274,19 @@ impl<S> Canopy<S> {
 
     // Calls a closure on the currently focused node and all its parents to the
     // root.
-    pub fn focus_path<R: Walker + Default>(
+    #[duplicate(
+        method              reference(type)    traversal;
+        [focus_path]        [& type]           [postorder];
+        [focus_path_mut]    [&mut type]        [postorder_mut];
+    )]
+    pub fn method<R: Walker + Default>(
         &self,
-        e: &mut dyn Node<S>,
-        f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<R>,
+        e: reference([dyn Node<S>]),
+        f: &mut dyn FnMut(reference([dyn Node<S>])) -> Result<R>,
     ) -> Result<R> {
         let mut focus_seen = false;
         let mut ret = R::default();
-        postorder(e, &mut |x| -> Result<SkipWalker> {
+        traversal(e, &mut |x| -> Result<SkipWalker> {
             Ok(if focus_seen {
                 ret = ret.join(f(x)?);
                 SkipWalker::default()
@@ -300,7 +306,7 @@ impl<S> Canopy<S> {
     /// depth is 1.
     pub fn focus_depth(&self, e: &mut dyn Node<S>) -> usize {
         let mut total = 0;
-        self.focus_path(e, &mut |_| -> Result<()> {
+        self.focus_path_mut(e, &mut |_| -> Result<()> {
             total += 1;
             Ok(())
         })
@@ -311,7 +317,7 @@ impl<S> Canopy<S> {
     /// Pre-render sweep of the tree.
     pub(crate) fn pre_render(&mut self, e: &mut dyn Node<S>, w: &mut dyn Write) -> Result<()> {
         let mut seen = false;
-        self.focus_path(e, &mut |_| -> Result<()> {
+        self.focus_path_mut(e, &mut |_| -> Result<()> {
             seen = true;
             Ok(())
         })?;
@@ -326,7 +332,7 @@ impl<S> Canopy<S> {
     /// Post-render sweep of the tree.
     pub(crate) fn post_render(&mut self, e: &mut dyn Node<S>, w: &mut dyn Write) -> Result<()> {
         let mut seen = false;
-        self.focus_path(e, &mut |n| -> Result<()> {
+        self.focus_path_mut(e, &mut |n| -> Result<()> {
             if !seen {
                 if let Some(c) = n.cursor() {
                     if let Some(r) = n.rect() {
@@ -353,7 +359,7 @@ impl<S> Canopy<S> {
 
     /// Mark a tree of nodes for render.
     pub fn taint_tree(&self, e: &mut dyn Node<S>) -> Result<()> {
-        postorder(e, &mut |x| -> Result<()> {
+        postorder_mut(e, &mut |x| -> Result<()> {
             let r = x.state_mut();
             r.render_gen = self.render_gen;
             Ok(())
@@ -449,7 +455,7 @@ impl<S> Canopy<S> {
     pub fn key(&mut self, root: &mut dyn Node<S>, s: &mut S, k: key::Key) -> Result<EventOutcome> {
         let mut handled = false;
         self.clone()
-            .focus_path(root, &mut |x| -> Result<EventOutcome> {
+            .focus_path_mut(root, &mut |x| -> Result<EventOutcome> {
                 Ok(if handled {
                     EventOutcome::default()
                 } else {
@@ -545,7 +551,7 @@ pub fn locate<S, R: Walker + Default>(
 ) -> Result<R> {
     let mut seen = false;
     let mut ret = R::default();
-    postorder(e, &mut |inner| -> Result<SkipWalker> {
+    postorder_mut(e, &mut |inner| -> Result<SkipWalker> {
         Ok(if seen {
             if inner.rect().is_some() {
                 ret = ret.join(f(inner)?);
@@ -577,7 +583,7 @@ mod tests {
 
     pub fn focvec(app: &mut Canopy<utils::State>, root: &mut utils::TRoot) -> Result<Vec<String>> {
         let mut v = vec![];
-        app.clone().focus_path(root, &mut |x| -> Result<()> {
+        app.clone().focus_path_mut(root, &mut |x| -> Result<()> {
             let n = utils::get_name(app, x)?;
             v.push(n);
             Ok(())
