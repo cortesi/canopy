@@ -101,7 +101,7 @@ pub trait Node<S>: StatefulNode {
     }
 
     /// Called for each node on the focus path, after each render sweep.
-    fn cursor(&mut self) -> Option<cursor::Cursor> {
+    fn cursor(&self) -> Option<cursor::Cursor> {
         None
     }
 

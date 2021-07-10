@@ -176,7 +176,7 @@ impl<'a, S> Node<S> for InputLine<S> {
     fn can_focus(&self) -> bool {
         true
     }
-    fn cursor(&mut self) -> Option<cursor::Cursor> {
+    fn cursor(&self) -> Option<cursor::Cursor> {
         Some(cursor::Cursor {
             location: Point {
                 x: self.textbuf.cursor_display() as u16,
