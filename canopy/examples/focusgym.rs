@@ -2,6 +2,7 @@ use crossterm::{
     style::{Color, SetForegroundColor},
     QueueableCommand,
 };
+use duplicate::duplicate;
 use std::io::Write;
 
 use canopy;
@@ -91,8 +92,18 @@ impl Node<Handle> for Root {
             _ => EventOutcome::Ignore { skip: false },
         })
     }
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<Handle>) -> Result<()>) -> Result<()> {
-        f(&mut self.child)
+
+    #[duplicate(
+        method          reference(type);
+        [children]      [& type];
+        [children_mut]  [&mut type];
+    )]
+    fn method(
+        self: reference([Self]),
+        f: &mut dyn FnMut(reference([dyn Node<Handle>])) -> Result<()>,
+    ) -> Result<()> {
+        f(reference([self.child]))?;
+        Ok(())
     }
 }
 
@@ -218,8 +229,17 @@ impl Node<Handle> for Block {
             _ => EventOutcome::Ignore { skip: false },
         })
     }
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<Handle>) -> Result<()>) -> Result<()> {
-        for i in &mut self.children {
+
+    #[duplicate(
+        method          reference(type);
+        [children]      [& type];
+        [children_mut]  [&mut type];
+    )]
+    fn method(
+        self: reference([Self]),
+        f: &mut dyn FnMut(reference([dyn Node<Handle>])) -> Result<()>,
+    ) -> Result<()> {
+        for i in reference([self.children]) {
             f(i)?
         }
         Ok(())

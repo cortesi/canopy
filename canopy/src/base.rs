@@ -387,7 +387,7 @@ impl<S> Canopy<S> {
             e.render(self, colors, w)?;
         }
         colors.inc();
-        e.children(&mut |x| self.render_traversal(colors, x, w))?;
+        e.children_mut(&mut |x| self.render_traversal(colors, x, w))?;
         colors.dec();
         Ok(())
     }

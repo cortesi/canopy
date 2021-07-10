@@ -1,5 +1,6 @@
 #[cfg(test)]
 pub mod utils {
+    use duplicate::duplicate;
     use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
     use crate as canopy;
@@ -158,12 +159,18 @@ pub mod utils {
         ) -> Result<EventOutcome> {
             self.handle(s, "tick")
         }
-        fn children(
-            &mut self,
-            f: &mut dyn FnMut(&mut dyn Node<State>) -> Result<()>,
+
+        #[duplicate(
+            method          reference(type);
+            [children]      [& type];
+            [children_mut]  [&mut type];
+        )]
+        fn method(
+            self: reference([Self]),
+            f: &mut dyn FnMut(reference([dyn Node<State>])) -> Result<()>,
         ) -> Result<()> {
-            f(&mut self.a)?;
-            f(&mut self.b)?;
+            f(reference([self.a]))?;
+            f(reference([self.b]))?;
             Ok(())
         }
     }
@@ -216,12 +223,18 @@ pub mod utils {
         ) -> Result<EventOutcome> {
             self.handle(s, "tick")
         }
-        fn children(
-            &mut self,
-            f: &mut dyn FnMut(&mut dyn Node<State>) -> Result<()>,
+
+        #[duplicate(
+            method          reference(type);
+            [children]      [& type];
+            [children_mut]  [&mut type];
+        )]
+        fn method(
+            self: reference([Self]),
+            f: &mut dyn FnMut(reference([dyn Node<State>])) -> Result<()>,
         ) -> Result<()> {
-            f(&mut self.a)?;
-            f(&mut self.b)?;
+            f(reference([self.a]))?;
+            f(reference([self.b]))?;
             Ok(())
         }
     }

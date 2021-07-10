@@ -1,3 +1,4 @@
+use duplicate::duplicate;
 use std::io::Write;
 
 use canopy;
@@ -159,10 +160,19 @@ impl Node<Handle> for Root {
             _ => EventOutcome::Ignore { skip: false },
         })
     }
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<Handle>) -> Result<()>) -> Result<()> {
-        f(&mut self.statusbar)?;
-        f(&mut self.content)?;
-        if let Some(a) = &mut self.adder {
+
+    #[duplicate(
+        method          reference(type);
+        [children]      [& type];
+        [children_mut]  [&mut type];
+    )]
+    fn method(
+        self: reference([Self]),
+        f: &mut dyn FnMut(reference([dyn Node<Handle>])) -> Result<()>,
+    ) -> Result<()> {
+        f(reference([self.statusbar]))?;
+        f(reference([self.content]))?;
+        if let Some(a) = reference([self.adder]) {
             f(a)?;
         }
         Ok(())

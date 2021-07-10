@@ -138,8 +138,13 @@ pub trait Node<S>: StatefulNode {
         Ok(EventOutcome::Ignore { skip: false })
     }
 
+    /// Call a closure on this node's children.
+    fn children(&self, f: &mut dyn FnMut(&dyn Node<S>) -> Result<()>) -> Result<()> {
+        Ok(())
+    }
+
     /// Call a closure mutably on this node's children.
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<()>) -> Result<()> {
+    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<()>) -> Result<()> {
         Ok(())
     }
 }
@@ -152,7 +157,7 @@ pub fn postorder<S, R: Walker + Default>(
     f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<R>,
 ) -> Result<R> {
     let mut v = R::default();
-    e.children(&mut |x| {
+    e.children_mut(&mut |x| {
         if !v.skip() {
             v = v.join(postorder(x, f)?);
         }
@@ -169,7 +174,7 @@ pub fn preorder<S, W: Walker>(
 ) -> Result<W> {
     let mut v = f(e)?;
     if !v.skip() {
-        e.children(&mut |x| {
+        e.children_mut(&mut |x| {
             v = v.join(preorder(x, f)?);
             Ok(())
         })?;

@@ -14,3 +14,4 @@ scopeguard = "1.1.0"
 
 canopy-derive = { path = "../canopy-derive" }
 thiserror = "1.0.24"
+duplicate = "0.2.9"

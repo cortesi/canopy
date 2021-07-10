@@ -71,6 +71,7 @@ dependencies = [
  "canopy-derive",
  "color-backtrace",
  "crossterm",
+ "duplicate",
  "pad",
  "scopeguard",
  "textwrap",
@@ -110,6 +111,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "convert_case"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
+
+[[package]]
 name = "crossterm"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -132,6 +139,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a6966607622438301997d3dac0d2f6e9a90c68bb6bc1785ea98456ab93c0507"
 dependencies = [
  "winapi",
+]
+
+[[package]]
+name = "duplicate"
+version = "0.2.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75765becfb833f14b7daaa41bda609b06cf92429eb1de944205757c9a0aea9f5"
+dependencies = [
+ "convert_case",
+ "proc-macro-error",
 ]
 
 [[package]]
@@ -270,6 +287,30 @@ dependencies = [
  "redox_syscall",
  "smallvec",
  "winapi",
+]
+
+[[package]]
+name = "proc-macro-error"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da25490ff9892aab3fcf7c36f08cfb902dd3e71ca0f9f9517bea02a73a5ce38c"
+dependencies = [
+ "proc-macro-error-attr",
+ "proc-macro2",
+ "quote",
+ "syn",
+ "version_check",
+]
+
+[[package]]
+name = "proc-macro-error-attr"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1be40180e52ecc98ad80b184934baf3d0d29f979574e439af5a55274b35f869"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "version_check",
 ]
 
 [[package]]
@@ -441,6 +482,12 @@ name = "unicode-xid"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ccb82d61f80a663efe1f787a51b16b5a51e3314d6ac365b08639f52387b33f3"
+
+[[package]]
+name = "version_check"
+version = "0.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fecdca9a5291cc2b8dcf7dc02453fee791a280f3743cb0905f8822ae463b3fe"
 
 [[package]]
 name = "winapi"

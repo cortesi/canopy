@@ -1,3 +1,4 @@
+use duplicate::duplicate;
 use std::io::Write;
 use std::marker::PhantomData;
 
@@ -105,11 +106,16 @@ impl<S, N: canopy::Node<S> + FixedLayout<S>> FixedLayout<S> for Panes<S, N> {
 }
 
 impl<S, N: canopy::Node<S>> Node<S> for Panes<S, N> {
-    fn children(
-        &mut self,
-        f: &mut dyn FnMut(&mut dyn canopy::Node<S>) -> Result<()>,
+    #[duplicate(
+        method          reference(type);
+        [children]      [& type];
+        [children_mut]  [&mut type];
+    )]
+    fn method(
+        self: reference([Self]),
+        f: &mut dyn FnMut(reference([dyn Node<S>])) -> Result<()>,
     ) -> Result<()> {
-        for col in &mut self.children {
+        for col in reference([self.children]) {
             for row in col {
                 f(row)?
             }

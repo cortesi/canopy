@@ -216,7 +216,7 @@ where
         }
         Ok(())
     }
-    fn children(
+    fn children_mut(
         &mut self,
         f: &mut dyn FnMut(&mut dyn canopy::Node<S>) -> Result<()>,
     ) -> Result<()> {
