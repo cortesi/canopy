@@ -2,7 +2,7 @@ use crate::{
     colorscheme::ColorScheme,
     cursor,
     event::{key, mouse, tick},
-    Canopy, Point, Result, StatefulNode,
+    Canopy, Result, StatefulNode,
 };
 use std::{fmt::Debug, io::Write};
 
@@ -65,27 +65,6 @@ impl Walker for EventOutcome {
             (EventOutcome::Handle { .. }, EventOutcome::Handle { .. }) => {
                 EventOutcome::Handle { skip: false }
             }
-        }
-    }
-}
-
-pub struct SkipWalker {
-    pub has_skip: bool,
-}
-
-impl Default for SkipWalker {
-    fn default() -> Self {
-        SkipWalker { has_skip: false }
-    }
-}
-
-impl Walker for SkipWalker {
-    fn skip(&self) -> bool {
-        self.has_skip
-    }
-    fn join(&self, rhs: Self) -> Self {
-        SkipWalker {
-            has_skip: (self.has_skip | rhs.has_skip),
         }
     }
 }
@@ -198,40 +177,10 @@ pub fn preorder<S, W: Walker>(
     Ok(v)
 }
 
-// Calls a closure on the leaf node under (x, y), then all its parents to the
-// root.
-pub fn locate<S, R: Walker + Default>(
-    e: &mut dyn Node<S>,
-    p: Point,
-    f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<R>,
-) -> Result<R> {
-    let mut seen = false;
-    let mut ret = R::default();
-    postorder(e, &mut |inner| -> Result<SkipWalker> {
-        Ok(if seen {
-            if inner.rect().is_some() {
-                ret = ret.join(f(inner)?);
-            }
-            SkipWalker::default()
-        } else if let Some(a) = inner.rect() {
-            if a.contains_point(p) {
-                seen = true;
-                ret = ret.join(f(inner)?);
-                SkipWalker { has_skip: true }
-            } else {
-                SkipWalker::default()
-            }
-        } else {
-            SkipWalker::default()
-        })
-    })?;
-    Ok(ret)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tutils::utils;
+    use crate::{base::SkipWalker, tutils::utils};
 
     fn skipper(
         app: &mut Canopy<utils::State>,

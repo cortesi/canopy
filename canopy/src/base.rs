@@ -7,13 +7,34 @@ use crate::{
     cursor,
     event::{key, mouse, tick, Event},
     layout::FixedLayout,
-    node::{locate, postorder, preorder, EventOutcome, Node, SkipWalker, Walker},
-    Error, Result,
+    node::{postorder, preorder, EventOutcome, Node, Walker},
+    Error, Point, Result,
 };
 use crossterm::{
     cursor::{CursorShape, DisableBlinking, EnableBlinking, Hide, MoveTo, SetCursorShape, Show},
     QueueableCommand,
 };
+
+pub struct SkipWalker {
+    pub has_skip: bool,
+}
+
+impl Default for SkipWalker {
+    fn default() -> Self {
+        SkipWalker { has_skip: false }
+    }
+}
+
+impl Walker for SkipWalker {
+    fn skip(&self) -> bool {
+        self.has_skip
+    }
+    fn join(&self, rhs: Self) -> Self {
+        SkipWalker {
+            has_skip: (self.has_skip | rhs.has_skip),
+        }
+    }
+}
 
 /// The core of a Canopy app - this struct keeps track of the render and focus
 /// state, and provides functionality for interacting with node trees.
@@ -513,6 +534,36 @@ impl<S> Canopy<S> {
             Event::Tick(t) => self.tick(root, s, t),
         }
     }
+}
+
+// Calls a closure on the leaf node under (x, y), then all its parents to the
+// root.
+pub fn locate<S, R: Walker + Default>(
+    e: &mut dyn Node<S>,
+    p: Point,
+    f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<R>,
+) -> Result<R> {
+    let mut seen = false;
+    let mut ret = R::default();
+    postorder(e, &mut |inner| -> Result<SkipWalker> {
+        Ok(if seen {
+            if inner.rect().is_some() {
+                ret = ret.join(f(inner)?);
+            }
+            SkipWalker::default()
+        } else if let Some(a) = inner.rect() {
+            if a.contains_point(p) {
+                seen = true;
+                ret = ret.join(f(inner)?);
+                SkipWalker { has_skip: true }
+            } else {
+                SkipWalker::default()
+            }
+        } else {
+            SkipWalker::default()
+        })
+    })?;
+    Ok(ret)
 }
 
 #[cfg(test)]

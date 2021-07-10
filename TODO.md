@@ -3,7 +3,7 @@
 - Fixed-width text widget
 
 - Ergonomics:
-  - Better EventResult
+  - Better EventOutcome
   - Better error returns
 - Key binding management system
 - ctrl-c/ctrl-z
