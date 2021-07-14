@@ -23,7 +23,7 @@ pub struct List<S, N: Node<S> + ConstrainedWidthLayout<S>> {
     _marker: PhantomData<S>,
     items: Vec<Item<S, N>>,
     pub virt_origin: Option<Point>,
-    offset: u32,
+    offset: Point,
     focus: u32,
     state: NodeState,
 }
@@ -43,7 +43,7 @@ where
                     _marker: PhantomData,
                 })
                 .collect(),
-            offset: 0,
+            offset: Point::zero(),
             virt_origin: None,
             focus: 0,
             state: NodeState::default(),
