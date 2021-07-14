@@ -21,10 +21,15 @@ struct StatusBar {
 }
 
 impl Node<Handle> for StatusBar {
-    fn render(&self, _app: &Canopy<Handle>, style: &mut Style, w: &mut dyn Write) -> Result<()> {
+    fn render(
+        &self,
+        _app: &Canopy<Handle>,
+        style: &mut Style,
+        r: Rect,
+        w: &mut dyn Write,
+    ) -> Result<()> {
         style.push_layer("statusbar");
         style.set("statusbar/text", w)?;
-        let r = self.rect();
         block(w, r, ' ')?;
         w.queue(MoveTo(r.tl.x, r.tl.y))?;
         w.queue(Print("todo"))?;
@@ -34,7 +39,7 @@ impl Node<Handle> for StatusBar {
 
 impl FillLayout<Handle> for StatusBar {
     fn layout(&mut self, _app: &mut Canopy<Handle>, rect: Rect) -> Result<()> {
-        self.set_rect(rect);
+        self.set_rect(Some(rect));
         Ok(())
     }
 }
@@ -62,14 +67,16 @@ impl Root {
         let mut adder = frame::Frame::new(InputLine::new(""));
         app.set_focus(&mut adder.child)?;
         self.adder = Some(adder);
-        self.layout(app, self.rect())?;
+        if let Some(r) = self.rect() {
+            self.layout(app, r)?;
+        }
         Ok(EventOutcome::Handle { skip: false })
     }
 }
 
 impl FillLayout<Handle> for Root {
     fn layout(&mut self, app: &mut Canopy<Handle>, a: Rect) -> Result<()> {
-        self.set_rect(a);
+        self.set_rect(Some(a));
         if a.h > 2 {
             let sb = Rect {
                 tl: Point {

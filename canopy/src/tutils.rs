@@ -69,7 +69,7 @@ pub mod utils {
 
     impl layout::FillLayout<State> for TLeaf {
         fn layout(&mut self, _: &mut Canopy<State>, a: Rect) -> Result<()> {
-            self.set_rect(a);
+            self.set_rect(Some(a));
             Ok(())
         }
     }
@@ -78,7 +78,13 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(&self, _: &Canopy<State>, _c: &mut Style, w: &mut dyn Write) -> Result<()> {
+        fn render(
+            &self,
+            _: &Canopy<State>,
+            _c: &mut Style,
+            _: Rect,
+            w: &mut dyn Write,
+        ) -> Result<()> {
             tnode_render(self.name.clone(), w)
         }
         fn handle_key(
@@ -109,7 +115,7 @@ pub mod utils {
 
     impl layout::FillLayout<State> for TBranch {
         fn layout(&mut self, app: &mut Canopy<State>, rect: Rect) -> Result<()> {
-            self.set_rect(rect);
+            self.set_rect(Some(rect));
             let v = rect.split_vertical(2)?;
             app.resize(&mut self.a, v[0])?;
             app.resize(&mut self.b, v[1])?;
@@ -121,7 +127,13 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(&self, _: &Canopy<State>, _c: &mut Style, w: &mut dyn Write) -> Result<()> {
+        fn render(
+            &self,
+            _: &Canopy<State>,
+            _c: &mut Style,
+            _: Rect,
+            w: &mut dyn Write,
+        ) -> Result<()> {
             tnode_render(self.name.clone(), w)
         }
         fn handle_key(
@@ -166,7 +178,7 @@ pub mod utils {
 
     impl layout::FillLayout<State> for TRoot {
         fn layout(&mut self, app: &mut Canopy<State>, rect: Rect) -> Result<()> {
-            self.set_rect(rect);
+            self.set_rect(Some(rect));
             let v = rect.split_horizontal(2)?;
             app.resize(&mut self.a, v[0])?;
             app.resize(&mut self.b, v[1])?;
@@ -178,7 +190,13 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(&self, _: &Canopy<State>, _c: &mut Style, w: &mut dyn Write) -> Result<()> {
+        fn render(
+            &self,
+            _: &Canopy<State>,
+            _c: &mut Style,
+            _: Rect,
+            w: &mut dyn Write,
+        ) -> Result<()> {
             tnode_render(self.name.clone(), w)
         }
         fn handle_key(
@@ -229,8 +247,8 @@ pub mod utils {
                 next_event: None,
             }
         }
-        pub fn mouse_event(&self) -> Result<mouse::Mouse> {
-            let a = self.rect();
+        pub fn make_mouse_event(&self) -> Result<mouse::Mouse> {
+            let a = self.rect().unwrap();
             Ok(mouse::Mouse {
                 action: Some(mouse::Action::Down),
                 button: Some(mouse::Button::Left),
@@ -308,7 +326,7 @@ pub mod utils {
         let mut c = Cursor::new(Vec::new());
         let mut colors = Style::default();
 
-        x.render(app, &mut colors, &mut c)?;
+        x.render(app, &mut colors, Rect::default(), &mut c)?;
         c.seek(SeekFrom::Start(0))?;
         let mut out = Vec::new();
         c.read_to_end(&mut out)?;
@@ -354,7 +372,7 @@ pub mod utils {
             virt_origin: Point,
             rect: Rect,
         ) -> Result<()> {
-            self.set_rect(rect);
+            self.set_rect(Some(rect));
             self.virt_origin = virt_origin;
             Ok(())
         }

@@ -118,7 +118,7 @@ where
     N: canopy::Node<S> + FrameContent + FillLayout<S>,
 {
     fn layout(&mut self, app: &mut Canopy<S>, rect: Rect) -> Result<()> {
-        self.set_rect(rect);
+        self.set_rect(Some(rect));
         self.child.layout(app, rect.inner(1)?)?;
         Ok(())
     }
@@ -131,15 +131,14 @@ where
     fn should_render(&self, app: &Canopy<S>) -> Option<bool> {
         Some(app.should_render(&self.child))
     }
-    fn render(&self, app: &Canopy<S>, style: &mut Style, w: &mut dyn Write) -> Result<()> {
-        let a = self.rect();
+    fn render(&self, app: &Canopy<S>, style: &mut Style, r: Rect, w: &mut dyn Write) -> Result<()> {
         if app.on_focus_path(self) {
             style.set("frame/focused", w)?;
         } else {
             style.set("frame", w)?;
         };
 
-        let f = a.frame(1)?;
+        let f = r.frame(1)?;
         widgets::block(w, f.topleft, self.glyphs.topleft)?;
         widgets::block(w, f.topright, self.glyphs.topright)?;
         widgets::block(w, f.bottomleft, self.glyphs.bottomleft)?;

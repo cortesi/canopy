@@ -66,26 +66,31 @@ impl<'a, S> ConstrainedWidthLayout<S> for Text<S> {
         Ok(ret)
     }
     fn layout(&mut self, _app: &mut Canopy<S>, virt_origin: Point, rect: Rect) -> Result<()> {
-        self.set_rect(rect);
+        self.set_rect(Some(rect));
         self.virt_origin = Some(virt_origin);
         Ok(())
     }
 }
 
 impl<'a, S> Node<S> for Text<S> {
-    fn render(&self, _app: &Canopy<S>, style: &mut Style, w: &mut dyn Write) -> Result<()> {
+    fn render(
+        &self,
+        _app: &Canopy<S>,
+        style: &mut Style,
+        area: Rect,
+        w: &mut dyn Write,
+    ) -> Result<()> {
         let (fg, bg) = style.get("text");
         w.queue(SetForegroundColor(fg))?;
         w.queue(SetBackgroundColor(bg))?;
         if let (Some(lines), Some(vo)) = (self.lines.as_ref(), self.virt_origin) {
-            let rect = self.rect();
-            for i in 0..rect.h {
-                w.queue(MoveTo(rect.tl.x, rect.tl.y + i))?;
+            for i in 0..area.h {
+                w.queue(MoveTo(area.tl.x, area.tl.y + i))?;
                 if (vo.y + i) < lines.len() as u16 {
                     let l = &lines[(vo.y + i) as usize];
-                    w.queue(Print(&l[(vo.x) as usize..(vo.x + rect.w) as usize]))?;
+                    w.queue(Print(&l[(vo.x) as usize..(vo.x + area.w) as usize]))?;
                 } else {
-                    w.queue(Print(" ".repeat(rect.w as usize)))?;
+                    w.queue(Print(" ".repeat(area.w as usize)))?;
                 };
             }
         }

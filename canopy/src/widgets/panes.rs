@@ -49,7 +49,9 @@ where
             if self.children[x].is_empty() {
                 self.children.remove(x);
             }
-            self.layout(app, self.rect())?;
+            if let Some(r) = self.rect() {
+                self.layout(app, r)?;
+            }
             app.taint_tree(self)?;
         }
         Ok(())
@@ -98,7 +100,7 @@ where
     N: canopy::Node<S> + FillLayout<S>,
 {
     fn layout(&mut self, app: &mut Canopy<S>, rect: Rect) -> Result<()> {
-        self.set_rect(rect);
+        self.set_rect(Some(rect));
         let l = rect.split_panes(self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
@@ -126,7 +128,7 @@ impl<S, N: canopy::Node<S>> Node<S> for Panes<S, N> {
         }
         Ok(())
     }
-    fn render(&self, _: &Canopy<S>, _style: &mut Style, _: &mut dyn Write) -> Result<()> {
+    fn render(&self, _: &Canopy<S>, _style: &mut Style, _: Rect, _: &mut dyn Write) -> Result<()> {
         // FIXME - this should probably clear the area if the last node is
         // deleted.
         Ok(())

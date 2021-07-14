@@ -72,7 +72,7 @@ where
     }
 
     fn layout(&mut self, app: &mut Canopy<S>, virt_origin: Point, rect: Rect) -> Result<()> {
-        self.set_rect(rect);
+        self.set_rect(Some(rect));
         self.virt_origin = Some(virt_origin);
         Ok(())
     }
@@ -82,7 +82,13 @@ impl<S, N> Node<S> for List<S, N>
 where
     N: Node<S> + ConstrainedWidthLayout<S>,
 {
-    fn render(&self, _app: &Canopy<S>, colors: &mut Style, w: &mut dyn Write) -> Result<()> {
+    fn render(
+        &self,
+        _app: &Canopy<S>,
+        colors: &mut Style,
+        _: Rect,
+        w: &mut dyn Write,
+    ) -> Result<()> {
         Ok(())
     }
 }

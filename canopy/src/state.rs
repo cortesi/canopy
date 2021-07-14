@@ -16,7 +16,7 @@ pub struct NodeState {
     // phase.
     pub(crate) rendered_focus_gen: u64,
     // The area on screen that this node will render to.
-    pub rect: Rect,
+    pub rect: Option<Rect>,
 }
 
 /// The node state object - each node needs to keep one of these, and offer it
@@ -28,18 +28,20 @@ impl NodeState {
             focus_gen: 0,
             rendered_focus_gen: 0,
             render_skip_gen: 0,
-            rect: Rect::default(),
+            rect: None,
         }
     }
 }
 
 /// The interface implemented by all nodes that track state.
 pub trait StatefulNode {
+    /// Get a reference to the node's state object.
     fn state(&self) -> &NodeState;
 
+    /// Get a mutable reference to the node's state object.
     fn state_mut(&mut self) -> &mut NodeState;
 
-    fn rect(&self) -> Rect;
+    fn rect(&self) -> Option<Rect>;
 
-    fn set_rect(&mut self, r: Rect);
+    fn set_rect(&mut self, r: Option<Rect>);
 }

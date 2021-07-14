@@ -31,7 +31,7 @@ impl Root {
 
 impl FillLayout<Handle> for Root {
     fn layout(&mut self, app: &mut Canopy<Handle>, rect: Rect) -> Result<()> {
-        self.set_rect(rect);
+        self.set_rect(Some(rect));
         app.resize(&mut self.child, rect)?;
         Ok(())
     }

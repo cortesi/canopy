@@ -128,21 +128,23 @@ impl<S> Canopy<S> {
     }
 
     fn focus_dir(&mut self, e: &mut dyn Node<S>, dir: Direction) -> Result<EventOutcome> {
-        let mut seen = false;
-        if let Some(start) = self.get_focus_area(e) {
-            start.search(dir, &mut |p| -> Result<bool> {
-                if !e.rect().contains_point(p) {
-                    return Ok(true);
-                }
-                locate(e, p, &mut |x| {
-                    if !seen && x.can_focus() {
-                        seen = true;
-                        self.set_focus(x)?;
+        if let Some(r) = e.rect() {
+            let mut seen = false;
+            if let Some(start) = self.get_focus_area(e) {
+                start.search(dir, &mut |p| -> Result<bool> {
+                    if !r.contains_point(p) {
+                        return Ok(true);
                     }
-                    Ok(())
-                })?;
-                Ok(seen)
-            })?
+                    locate(e, p, &mut |x| {
+                        if !seen && x.can_focus() {
+                            seen = true;
+                            self.set_focus(x)?;
+                        }
+                        Ok(())
+                    })?;
+                    Ok(seen)
+                })?
+            }
         }
         Ok(EventOutcome::Handle { skip: false })
     }
@@ -262,7 +264,7 @@ impl<S> Canopy<S> {
         let mut ret = None;
         self.focus_path(e, &mut |x| -> Result<()> {
             if ret == None {
-                ret = Some(x.rect());
+                ret = x.rect();
             }
             Ok(())
         })
@@ -333,20 +335,21 @@ impl<S> Canopy<S> {
         self.focus_path_mut(e, &mut |n| -> Result<()> {
             if !seen {
                 if let Some(c) = n.cursor() {
-                    let r = n.rect();
-                    w.queue(MoveTo(r.tl.x + c.location.x, r.tl.y + c.location.y))?;
-                    w.queue(Show)?;
-                    if c.blink {
-                        w.queue(EnableBlinking)?;
-                    } else {
-                        w.queue(DisableBlinking)?;
+                    if let Some(r) = n.rect() {
+                        w.queue(MoveTo(r.tl.x + c.location.x, r.tl.y + c.location.y))?;
+                        w.queue(Show)?;
+                        if c.blink {
+                            w.queue(EnableBlinking)?;
+                        } else {
+                            w.queue(DisableBlinking)?;
+                        }
+                        w.queue(SetCursorShape(match c.shape {
+                            cursor::CursorShape::Block => CursorShape::Block,
+                            cursor::CursorShape::Line => CursorShape::Line,
+                            cursor::CursorShape::Underscore => CursorShape::UnderScore,
+                        }))?;
+                        seen = true;
                     }
-                    w.queue(SetCursorShape(match c.shape {
-                        cursor::CursorShape::Block => CursorShape::Block,
-                        cursor::CursorShape::Line => CursorShape::Line,
-                        cursor::CursorShape::Underscore => CursorShape::UnderScore,
-                    }))?;
-                    seen = true;
                 }
             }
             Ok(())
@@ -383,11 +386,13 @@ impl<S> Canopy<S> {
         w: &mut dyn Write,
     ) -> Result<()> {
         if self.should_render(e) {
-            if self.is_focused(e) {
-                let s = &mut e.state_mut();
-                s.rendered_focus_gen = self.focus_gen
+            if let Some(r) = e.rect() {
+                if self.is_focused(e) {
+                    let s = &mut e.state_mut();
+                    s.rendered_focus_gen = self.focus_gen
+                }
+                e.render(self, style, r, w)?;
             }
-            e.render(self, style, w)?;
         }
         style.inc();
         e.children_mut(&mut |x| self.render_traversal(style, x, w))?;
@@ -423,25 +428,29 @@ impl<S> Canopy<S> {
             Ok(if handled {
                 EventOutcome::default()
             } else {
-                let m = mouse::Mouse {
-                    action: m.action,
-                    button: m.button,
-                    modifiers: m.modifiers,
-                    loc: x.rect().rebase(m.loc)?,
-                };
-                match x.handle_mouse(self, s, m)? {
-                    EventOutcome::Ignore { skip } => {
-                        if skip {
-                            handled = true;
+                if let Some(r) = x.rect() {
+                    let m = mouse::Mouse {
+                        action: m.action,
+                        button: m.button,
+                        modifiers: m.modifiers,
+                        loc: r.rebase(m.loc)?,
+                    };
+                    match x.handle_mouse(self, s, m)? {
+                        EventOutcome::Ignore { skip } => {
+                            if skip {
+                                handled = true;
+                            }
+                            EventOutcome::Ignore { skip: false }
                         }
-                        EventOutcome::Ignore { skip: false }
+                        EventOutcome::Handle { .. } => {
+                            self.taint(x);
+                            handled = true;
+                            EventOutcome::Handle { skip: false }
+                        }
+                        itm => itm,
                     }
-                    EventOutcome::Handle { .. } => {
-                        self.taint(x);
-                        handled = true;
-                        EventOutcome::Handle { skip: false }
-                    }
-                    itm => itm,
+                } else {
+                    EventOutcome::default()
                 }
             })
         })
@@ -479,7 +488,7 @@ impl<S> Canopy<S> {
     where
         N: Node<S> + FillLayout<S>,
     {
-        if e.rect() == rect {
+        if e.rect() == Some(rect) {
             return Ok(());
         }
         e.layout(self, rect)?;
@@ -551,11 +560,14 @@ pub fn locate<S, R: Walker + Default>(
             ret = ret.join(f(inner)?);
             SkipWalker::default()
         } else {
-            let a = inner.rect();
-            if a.contains_point(p) {
-                seen = true;
-                ret = ret.join(f(inner)?);
-                SkipWalker { has_skip: true }
+            if let Some(a) = inner.rect() {
+                if a.contains_point(p) {
+                    seen = true;
+                    ret = ret.join(f(inner)?);
+                    SkipWalker { has_skip: true }
+                } else {
+                    SkipWalker::default()
+                }
             } else {
                 SkipWalker::default()
             }
@@ -824,7 +836,7 @@ mod tests {
         let mut s = utils::State::new();
         app.set_focus(&mut root)?;
         root.next_event = Some(acted);
-        let evt = root.a.a.mouse_event()?;
+        let evt = root.a.a.make_mouse_event()?;
         assert_eq!(app.mouse(&mut root, &mut s, evt)?, acted);
         assert_eq!(
             s.path,
@@ -853,7 +865,7 @@ mod tests {
             },
         )?;
         assert_eq!(
-            root.rect(),
+            root.rect().unwrap(),
             Rect {
                 tl: Point { x: 0, y: 0 },
                 w: SIZE,
@@ -861,7 +873,7 @@ mod tests {
             }
         );
         assert_eq!(
-            root.a.rect(),
+            root.a.rect().unwrap(),
             Rect {
                 tl: Point { x: 0, y: 0 },
                 w: SIZE / 2,
@@ -869,7 +881,7 @@ mod tests {
             }
         );
         assert_eq!(
-            root.b.rect(),
+            root.b.rect().unwrap(),
             Rect {
                 tl: Point { x: SIZE / 2, y: 0 },
                 w: SIZE / 2,
@@ -887,7 +899,7 @@ mod tests {
         )?;
 
         assert_eq!(
-            root.b.rect(),
+            root.b.rect().unwrap(),
             Rect {
                 tl: Point { x: 25, y: 0 },
                 w: 25,
