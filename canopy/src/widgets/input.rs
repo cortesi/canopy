@@ -129,14 +129,14 @@ impl<S> FillLayout<S> for InputLine<S> {
             return Err(Error::Layout("InputLine height must be exactly 1.".into()));
         }
         self.textbuf.set_display_width(rect.w as usize);
-        self.set_rect(Some(rect));
+        self.set_area(rect);
         Ok(())
     }
 }
 
 impl<S> frame::FrameContent for InputLine<S> {
     fn bounds(&self) -> Option<(Rect, Rect)> {
-        if let Some(r) = self.rect() {
+        if let Some(r) = self.area() {
             if self.textbuf.window.len >= self.textbuf.value.len() as u16 {
                 let r = Rect {
                     tl: Point { x: 0, y: 0 },

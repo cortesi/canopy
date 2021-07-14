@@ -41,7 +41,14 @@ pub trait StatefulNode {
     /// Get a mutable reference to the node's state object.
     fn state_mut(&mut self) -> &mut NodeState;
 
-    fn rect(&self) -> Option<Rect>;
+    /// Returns the area this node will render to, None if the node is hidden.
+    fn area(&self) -> Option<Rect>;
 
-    fn set_rect(&mut self, r: Option<Rect>);
+    /// Set the area rect.
+    fn set_area(&mut self, r: Rect);
+
+    /// Hides the element by setting area to None
+    fn hide(&mut self) {
+        self.state_mut().rect = None;
+    }
 }

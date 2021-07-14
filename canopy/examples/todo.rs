@@ -39,7 +39,7 @@ impl Node<Handle> for StatusBar {
 
 impl FillLayout<Handle> for StatusBar {
     fn layout(&mut self, _app: &mut Canopy<Handle>, rect: Rect) -> Result<()> {
-        self.set_rect(Some(rect));
+        self.set_area(rect);
         Ok(())
     }
 }
@@ -67,7 +67,7 @@ impl Root {
         let mut adder = frame::Frame::new(InputLine::new(""));
         app.set_focus(&mut adder.child)?;
         self.adder = Some(adder);
-        if let Some(r) = self.rect() {
+        if let Some(r) = self.area() {
             self.layout(app, r)?;
         }
         Ok(EventOutcome::Handle { skip: false })
@@ -76,7 +76,7 @@ impl Root {
 
 impl FillLayout<Handle> for Root {
     fn layout(&mut self, app: &mut Canopy<Handle>, a: Rect) -> Result<()> {
-        self.set_rect(Some(a));
+        self.set_area(a);
         if a.h > 2 {
             let sb = Rect {
                 tl: Point {

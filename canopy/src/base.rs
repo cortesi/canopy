@@ -128,7 +128,7 @@ impl<S> Canopy<S> {
     }
 
     fn focus_dir(&mut self, e: &mut dyn Node<S>, dir: Direction) -> Result<EventOutcome> {
-        if let Some(r) = e.rect() {
+        if let Some(r) = e.area() {
             let mut seen = false;
             if let Some(start) = self.get_focus_area(e) {
                 start.search(dir, &mut |p| -> Result<bool> {
@@ -264,7 +264,7 @@ impl<S> Canopy<S> {
         let mut ret = None;
         self.focus_path(e, &mut |x| -> Result<()> {
             if ret == None {
-                ret = x.rect();
+                ret = x.area();
             }
             Ok(())
         })
@@ -335,7 +335,7 @@ impl<S> Canopy<S> {
         self.focus_path_mut(e, &mut |n| -> Result<()> {
             if !seen {
                 if let Some(c) = n.cursor() {
-                    if let Some(r) = n.rect() {
+                    if let Some(r) = n.area() {
                         w.queue(MoveTo(r.tl.x + c.location.x, r.tl.y + c.location.y))?;
                         w.queue(Show)?;
                         if c.blink {
@@ -386,7 +386,7 @@ impl<S> Canopy<S> {
         w: &mut dyn Write,
     ) -> Result<()> {
         if self.should_render(e) {
-            if let Some(r) = e.rect() {
+            if let Some(r) = e.area() {
                 if self.is_focused(e) {
                     let s = &mut e.state_mut();
                     s.rendered_focus_gen = self.focus_gen
@@ -428,7 +428,7 @@ impl<S> Canopy<S> {
             Ok(if handled {
                 EventOutcome::default()
             } else {
-                if let Some(r) = x.rect() {
+                if let Some(r) = x.area() {
                     let m = mouse::Mouse {
                         action: m.action,
                         button: m.button,
@@ -488,7 +488,7 @@ impl<S> Canopy<S> {
     where
         N: Node<S> + FillLayout<S>,
     {
-        if e.rect() == Some(rect) {
+        if e.area() == Some(rect) {
             return Ok(());
         }
         e.layout(self, rect)?;
@@ -560,7 +560,7 @@ pub fn locate<S, R: Walker + Default>(
             ret = ret.join(f(inner)?);
             SkipWalker::default()
         } else {
-            if let Some(a) = inner.rect() {
+            if let Some(a) = inner.area() {
                 if a.contains_point(p) {
                     seen = true;
                     ret = ret.join(f(inner)?);
@@ -865,7 +865,7 @@ mod tests {
             },
         )?;
         assert_eq!(
-            root.rect().unwrap(),
+            root.area().unwrap(),
             Rect {
                 tl: Point { x: 0, y: 0 },
                 w: SIZE,
@@ -873,7 +873,7 @@ mod tests {
             }
         );
         assert_eq!(
-            root.a.rect().unwrap(),
+            root.a.area().unwrap(),
             Rect {
                 tl: Point { x: 0, y: 0 },
                 w: SIZE / 2,
@@ -881,7 +881,7 @@ mod tests {
             }
         );
         assert_eq!(
-            root.b.rect().unwrap(),
+            root.b.area().unwrap(),
             Rect {
                 tl: Point { x: SIZE / 2, y: 0 },
                 w: SIZE / 2,
@@ -899,7 +899,7 @@ mod tests {
         )?;
 
         assert_eq!(
-            root.b.rect().unwrap(),
+            root.b.area().unwrap(),
             Rect {
                 tl: Point { x: 25, y: 0 },
                 w: 25,

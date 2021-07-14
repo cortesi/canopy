@@ -55,7 +55,7 @@ impl Block {
 
 impl FillLayout<Handle> for Root {
     fn layout(&mut self, app: &mut Canopy<Handle>, a: Rect) -> Result<()> {
-        self.set_rect(Some(a));
+        self.set_area(a);
         app.resize(&mut self.child, a)?;
         Ok(())
     }
@@ -107,7 +107,7 @@ impl Node<Handle> for Root {
 
 impl Block {
     fn add(&mut self, app: &mut Canopy<Handle>) -> Result<EventOutcome> {
-        if let Some(r) = self.rect() {
+        if let Some(r) = self.area() {
             Ok(if self.children.len() == 0 {
                 EventOutcome::Ignore { skip: false }
             } else if self.size_limited(r) {
@@ -132,7 +132,7 @@ impl Block {
         }
     }
     fn split(&mut self, app: &mut Canopy<Handle>) -> Result<EventOutcome> {
-        if let Some(r) = self.rect() {
+        if let Some(r) = self.area() {
             Ok(if self.children.len() != 0 {
                 EventOutcome::Ignore { skip: false }
             } else if self.size_limited(r) {
@@ -151,7 +151,7 @@ impl Block {
 
 impl FillLayout<Handle> for Block {
     fn layout(&mut self, app: &mut Canopy<Handle>, rect: Rect) -> Result<()> {
-        self.set_rect(Some(rect));
+        self.set_area(rect);
         if self.children.len() > 0 {
             let sizes = if self.horizontal {
                 rect.split_horizontal(self.children.len() as u16)?

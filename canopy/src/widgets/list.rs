@@ -72,7 +72,7 @@ where
     }
 
     fn layout(&mut self, app: &mut Canopy<S>, virt_origin: Point, rect: Rect) -> Result<()> {
-        self.set_rect(Some(rect));
+        self.set_area(rect);
         self.virt_origin = Some(virt_origin);
         Ok(())
     }
