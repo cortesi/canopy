@@ -23,6 +23,7 @@ pub struct List<S, N: Node<S> + ConstrainedWidthLayout<S>> {
     _marker: PhantomData<S>,
     items: Vec<Item<S, N>>,
     pub virt_origin: Option<Point>,
+    // Offset within the virtual rectangle
     offset: Point,
     focus: u32,
     state: NodeState,
@@ -73,6 +74,9 @@ where
 
     fn layout(&mut self, app: &mut Canopy<S>, virt_origin: Point, rect: Rect) -> Result<()> {
         self.set_area(rect);
+
+        let view = rect.rebase(virt_origin);
+
         self.virt_origin = Some(virt_origin);
         Ok(())
     }

@@ -1,6 +1,6 @@
 use crate::{Error, Result};
 
-/// An exctent is a directionless 2 dimensional line segment.
+/// An exctent is a directionless one-dimensional line segment.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct Extent {
     /// The offset of this extent.

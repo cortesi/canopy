@@ -8,6 +8,7 @@ use std::io::Write;
 use canopy;
 use canopy::{
     event::{key, mouse},
+    geom::Frame,
     layout::FillLayout,
     runloop::runloop,
     style::{solarized, Style},
@@ -187,7 +188,7 @@ impl Node<Handle> for Block {
             ))?;
             block(w, a.inner(1)?, '\u{2588}')?;
             w.queue(SetForegroundColor(Color::Black))?;
-            solid_frame(w, a.frame(1)?, ' ')?;
+            solid_frame(w, Frame::new(a, 1)?, ' ')?;
         }
         Ok(())
     }

@@ -12,27 +12,6 @@ pub struct Rect {
     pub h: u16,
 }
 
-/// A frame extracted from a rectangle
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub struct Frame {
-    /// The top of the frame, not including corners
-    pub top: Rect,
-    /// The bottom of the frame, not including corners
-    pub bottom: Rect,
-    /// The left of the frame, not including corners
-    pub left: Rect,
-    /// The right of the frame, not including corners
-    pub right: Rect,
-    /// The top left corner
-    pub topleft: Rect,
-    /// The top right corner
-    pub topright: Rect,
-    /// The bottom left corner
-    pub bottomleft: Rect,
-    /// The bottom right corner
-    pub bottomright: Rect,
-}
-
 impl Default for Rect {
     fn default() -> Rect {
         Rect::new(0, 0, 0, 0)
@@ -47,18 +26,26 @@ impl Rect {
             h,
         }
     }
-    /// Given a point that falls within this rectangle, rebase the point to be
-    /// relative to our origin. If the point falls outside the rect, an error is
-    /// returned.
-    pub fn rebase(&self, pt: Point) -> Result<Point> {
-        if !self.contains_point(pt) {
-            return Err(Error::Geometry("co-ords outside rectangle".into()));
+
+    /// Clamp this rectangle, constraining it lie within another rectangle. The
+    /// size of the returned Rect is always equal to that of self. If self is
+    /// larger than the enclosing rectangle, return an error.
+    pub fn clamp(&self, rect: Rect) -> Result<Self> {
+        if rect.w < self.w || rect.h < self.h {
+            Err(Error::Geometry("can't clamp to smaller rectangle".into()))
+        } else {
+            Ok(Rect {
+                tl: self.tl.clamp(Rect {
+                    tl: rect.tl,
+                    h: rect.h.saturating_sub(self.h),
+                    w: rect.w.saturating_sub(self.w),
+                }),
+                w: self.w,
+                h: self.h,
+            })
         }
-        Ok(Point {
-            x: pt.x - self.tl.x,
-            y: pt.y - self.tl.y,
-        })
     }
+
     /// Does this rectangle contain the point?
     pub fn contains_point(&self, p: Point) -> bool {
         if p.x < self.tl.x || p.x >= self.tl.x + self.w {
@@ -67,6 +54,7 @@ impl Rect {
             !(p.y < self.tl.y || p.y >= self.tl.y + self.h)
         }
     }
+
     /// A safe function for scrolling the rectangle by an offset, which won't
     /// under- or overflow.
     pub fn scroll(&self, x: i16, y: i16) -> Rect {
@@ -76,6 +64,7 @@ impl Rect {
             h: self.h,
         }
     }
+
     /// Does this rectangle completely enclose the other?
     pub fn contains_rect(&self, other: Rect) -> bool {
         // The rectangle is completely contained if both the upper left and the
@@ -86,6 +75,7 @@ impl Rect {
                 y: other.tl.y + other.h - 1,
             })
     }
+
     /// Extracts an inner rectangle, given a border width.
     pub fn inner(&self, border: u16) -> Result<Rect> {
         if self.w < (border * 2) || self.h < (border * 2) {
@@ -100,76 +90,41 @@ impl Rect {
             h: self.h - (border * 2),
         })
     }
-    /// Extracts a frame for this rect, given a border width. The interior of the frame will match a call to inner() with the same arguments.
-    pub fn frame(&self, border: u16) -> Result<Frame> {
-        if self.w < (border * 2) || self.h < (border * 2) {
-            return Err(Error::Geometry("rectangle too small".into()));
+
+    /// Extract a horizontal section of this rect based on an extent.
+    pub fn hextract(&self, e: Extent) -> Result<Self> {
+        if !self.hextent().contains(e) {
+            Err(Error::Geometry("extract extent outside rectangle".into()))
+        } else {
+            Ok(Rect {
+                tl: Point {
+                    x: e.off,
+                    y: self.tl.y,
+                },
+                w: e.len,
+                h: self.h,
+            })
         }
-        Ok(Frame {
-            top: Rect {
-                tl: Point {
-                    x: self.tl.x + border,
-                    y: self.tl.y,
-                },
-                w: self.w - 2 * border,
-                h: border,
-            },
-            bottom: Rect {
-                tl: Point {
-                    x: self.tl.x + border,
-                    y: self.tl.y + self.h - border,
-                },
-                w: self.w - 2 * border,
-                h: border,
-            },
-            left: Rect {
-                tl: Point {
-                    x: self.tl.x,
-                    y: self.tl.y + border,
-                },
-                w: border,
-                h: self.h - 2 * border,
-            },
-            right: Rect {
-                tl: Point {
-                    x: self.tl.x + self.w - border,
-                    y: self.tl.y + border,
-                },
-                w: border,
-                h: self.h - 2 * border,
-            },
-            topleft: Rect {
-                tl: Point {
-                    x: self.tl.x,
-                    y: self.tl.y,
-                },
-                w: border,
-                h: border,
-            },
-            topright: Rect {
-                tl: Point {
-                    x: self.tl.x + self.w - border,
-                    y: self.tl.y,
-                },
-                w: border,
-                h: border,
-            },
-            bottomleft: Rect {
-                tl: Point {
-                    x: self.tl.x,
-                    y: self.tl.y + self.h - border,
-                },
-                w: border,
-                h: border,
-            },
-            bottomright: Rect {
-                tl: Point {
-                    x: self.tl.x + self.w - border,
-                    y: self.tl.y + self.h - border,
-                },
-                w: border,
-                h: border,
-            },
+    }
+
+    /// The horizontal extent of this rect.
+    pub fn hextent(&self) -> Extent {
+        Extent {
+            off: self.tl.x,
+            len: self.w,
+        }
+    }
+
+    /// Given a point that falls within this rectangle, rebase the point to be
+    /// relative to our origin. If the point falls outside the rect, an error is
+    /// returned.
+    pub fn rebase(&self, pt: Point) -> Result<Point> {
+        if !self.contains_point(pt) {
+            return Err(Error::Geometry("co-ords outside rectangle".into()));
+        }
+        Ok(Point {
+            x: pt.x - self.tl.x,
+            y: pt.y - self.tl.y,
         })
     }
 
@@ -196,25 +151,6 @@ impl Rect {
         }
     }
 
-    /// Clamp this rectangle, constraining it lie within another rectangle. The
-    /// size of the returned Rect is always equal to that of self. If self is
-    /// larger than the enclosing rectangle, return an error.
-    pub fn clamp(&self, rect: Rect) -> Result<Self> {
-        if rect.w < self.w || rect.h < self.h {
-            Err(Error::Geometry("can't clamp to smaller rectangle".into()))
-        } else {
-            Ok(Rect {
-                tl: self.tl.clamp(Rect {
-                    tl: rect.tl,
-                    h: rect.h.saturating_sub(self.h),
-                    w: rect.w.saturating_sub(self.w),
-                }),
-                w: self.w,
-                h: self.h,
-            })
-        }
-    }
-
     /// Splits the rectangle horizontally into n sections, as close to equally
     /// sized as possible.
     pub fn split_horizontal(&self, n: u16) -> Result<Vec<Rect>> {
@@ -234,6 +170,7 @@ impl Rect {
         }
         Ok(ret)
     }
+
     /// Splits the rectangle vertically into n sections, as close to equally
     /// sized as possible.
     pub fn split_vertical(&self, n: u16) -> Result<Vec<Rect>> {
@@ -253,6 +190,7 @@ impl Rect {
         }
         Ok(ret)
     }
+
     /// Splits the rectangle into columns, with each column split into rows.
     /// Returns a Vec of rects per column.
     pub fn split_panes(&self, spec: Vec<u16>) -> Result<Vec<Vec<Rect>>> {
@@ -276,6 +214,7 @@ impl Rect {
         }
         Ok(ret)
     }
+
     // Sweeps upwards from the top of the rectangle.
     pub fn search_up(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
         'outer: for y in (0..self.tl.y).rev() {
@@ -287,6 +226,7 @@ impl Rect {
         }
         Ok(())
     }
+
     // Sweeps downwards from the bottom of the rectangle.
     pub fn search_down(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
         'outer: for y in self.tl.y + self.h..u16::MAX {
@@ -298,6 +238,7 @@ impl Rect {
         }
         Ok(())
     }
+
     // Sweeps leftwards the left of the rectangle.
     pub fn search_left(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
         'outer: for x in (0..self.tl.x).rev() {
@@ -309,6 +250,7 @@ impl Rect {
         }
         Ok(())
     }
+
     // Sweeps rightwards from the right of the rectangle.
     pub fn search_right(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
         'outer: for x in self.tl.x + self.w..u16::MAX {
@@ -320,6 +262,7 @@ impl Rect {
         }
         Ok(())
     }
+
     // Sweeps to and fro from the right of the rectangle to the left.
     pub fn search(&self, dir: Direction, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
         match dir {
@@ -330,7 +273,7 @@ impl Rect {
         }
     }
 
-    /// Extract a section of this rect based on an extent.
+    /// Extract a slice of this rect based on a vertical extent.
     pub fn vextract(&self, e: Extent) -> Result<Self> {
         if !self.vextent().contains(e) {
             Err(Error::Geometry("extract extent outside rectangle".into()))
@@ -346,35 +289,11 @@ impl Rect {
         }
     }
 
-    /// Extract a horizontal section of this rect based on an extent.
-    pub fn hextract(&self, e: Extent) -> Result<Self> {
-        if !self.hextent().contains(e) {
-            Err(Error::Geometry("extract extent outside rectangle".into()))
-        } else {
-            Ok(Rect {
-                tl: Point {
-                    x: e.off,
-                    y: self.tl.y,
-                },
-                w: e.len,
-                h: self.h,
-            })
-        }
-    }
-
     /// The vertical extent of this rect.
     pub fn vextent(&self) -> Extent {
         Extent {
             off: self.tl.y,
             len: self.h,
-        }
-    }
-
-    /// The horizontal extent of this rect.
-    pub fn hextent(&self) -> Extent {
-        Extent {
-            off: self.tl.x,
-            len: self.w,
         }
     }
 }
@@ -585,61 +504,6 @@ mod tests {
                 },
                 w: 10,
                 h: 10
-            }
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn tframe() -> Result<()> {
-        let r = Rect {
-            tl: Point { x: 10, y: 10 },
-            w: 10,
-            h: 10,
-        };
-        assert_eq!(
-            r.frame(1)?,
-            Frame {
-                top: Rect {
-                    tl: Point { x: 11, y: 10 },
-                    w: 8,
-                    h: 1
-                },
-                bottom: Rect {
-                    tl: Point { x: 11, y: 19 },
-                    w: 8,
-                    h: 1
-                },
-                left: Rect {
-                    tl: Point { x: 10, y: 11 },
-                    w: 1,
-                    h: 8
-                },
-                right: Rect {
-                    tl: Point { x: 19, y: 11 },
-                    w: 1,
-                    h: 8
-                },
-                topleft: Rect {
-                    tl: Point { x: 10, y: 10 },
-                    w: 1,
-                    h: 1
-                },
-                topright: Rect {
-                    tl: Point { x: 19, y: 10 },
-                    w: 1,
-                    h: 1
-                },
-                bottomleft: Rect {
-                    tl: Point { x: 10, y: 19 },
-                    w: 1,
-                    h: 1
-                },
-                bottomright: Rect {
-                    tl: Point { x: 19, y: 19 },
-                    w: 1,
-                    h: 1
-                },
             }
         );
         Ok(())

@@ -7,7 +7,7 @@ use pad::PadStr;
 
 use crate as canopy;
 use crate::{
-    geom::Rect,
+    geom::{Frame as GFrame, Rect},
     layout::FillLayout,
     state::{NodeState, StatefulNode},
     style::Style,
@@ -138,7 +138,7 @@ where
             style.set("frame", w)?;
         };
 
-        let f = r.frame(1)?;
+        let f = GFrame::new(r, 1)?;
         widgets::block(w, f.topleft, self.glyphs.topleft)?;
         widgets::block(w, f.topright, self.glyphs.topright)?;
         widgets::block(w, f.bottomleft, self.glyphs.bottomleft)?;
