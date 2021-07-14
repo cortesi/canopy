@@ -6,7 +6,7 @@ use crate::{
     cursor,
     error::Error,
     event::key,
-    geom::{Extent, Point, Rect},
+    geom::{LineSegment, Point, Rect},
     layout::FillLayout,
     state::{NodeState, StatefulNode},
     style::Style,
@@ -24,7 +24,7 @@ pub struct TextBuf {
     pub value: String,
 
     cursor_pos: u16,
-    window: Extent,
+    window: LineSegment,
 }
 
 impl TextBuf {
@@ -32,7 +32,7 @@ impl TextBuf {
         TextBuf {
             value: start.to_owned(),
             cursor_pos: start.len() as u16,
-            window: Extent { off: 0, len: 0 },
+            window: LineSegment { off: 0, len: 0 },
         }
     }
     /// The location of the displayed cursor along the x axis
@@ -69,7 +69,7 @@ impl TextBuf {
     }
     /// Should be called during layout
     fn set_display_width(&mut self, val: usize) {
-        self.window = Extent {
+        self.window = LineSegment {
             off: self.window.off,
             len: val as u16,
         };

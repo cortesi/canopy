@@ -24,8 +24,8 @@ pub struct List<S, N: Node<S> + ConstrainedWidthLayout<S>> {
     items: Vec<Item<S, N>>,
     pub virt_origin: Option<Point>,
     // Offset within the virtual rectangle
-    offset: Point,
-    focus: u32,
+    pub offset: Point,
+    pub focus: u32,
     state: NodeState,
 }
 
@@ -72,10 +72,10 @@ where
         })
     }
 
-    fn layout(&mut self, app: &mut Canopy<S>, virt_origin: Point, rect: Rect) -> Result<()> {
+    fn layout(&mut self, _app: &mut Canopy<S>, virt_origin: Point, rect: Rect) -> Result<()> {
         self.set_area(rect);
 
-        let view = rect.rebase(virt_origin);
+        // let view = rect.rebase(virt_origin);
 
         self.virt_origin = Some(virt_origin);
         Ok(())
@@ -89,9 +89,9 @@ where
     fn render(
         &self,
         _app: &Canopy<S>,
-        colors: &mut Style,
+        _colors: &mut Style,
         _: Rect,
-        w: &mut dyn Write,
+        _w: &mut dyn Write,
     ) -> Result<()> {
         Ok(())
     }
@@ -106,7 +106,7 @@ mod tests {
     fn drawnodes() -> Result<()> {
         let mut app: Canopy<State> = Canopy::new();
         let mut lst = List::new(vec![TFixed::new(10, 10)]);
-        let r = lst.constrain(&mut app, 20)?;
+        let _ = lst.constrain(&mut app, 20)?;
         lst.layout(
             &mut app,
             Point::zero(),

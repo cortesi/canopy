@@ -1,4 +1,4 @@
-use super::{Direction, Extent, Point};
+use super::{Direction, LineSegment, Point};
 use crate::{Error, Result};
 
 /// A rectangle
@@ -55,16 +55,6 @@ impl Rect {
         }
     }
 
-    /// A safe function for scrolling the rectangle by an offset, which won't
-    /// under- or overflow.
-    pub fn scroll(&self, x: i16, y: i16) -> Rect {
-        Rect {
-            tl: self.tl.scroll(x, y),
-            w: self.w,
-            h: self.h,
-        }
-    }
-
     /// Does this rectangle completely enclose the other?
     pub fn contains_rect(&self, other: Rect) -> bool {
         // The rectangle is completely contained if both the upper left and the
@@ -92,7 +82,7 @@ impl Rect {
     }
 
     /// Extract a horizontal section of this rect based on an extent.
-    pub fn hextract(&self, e: Extent) -> Result<Self> {
+    pub fn hextract(&self, e: LineSegment) -> Result<Self> {
         if !self.hextent().contains(e) {
             Err(Error::Geometry("extract extent outside rectangle".into()))
         } else {
@@ -108,14 +98,24 @@ impl Rect {
     }
 
     /// The horizontal extent of this rect.
-    pub fn hextent(&self) -> Extent {
-        Extent {
+    pub fn hextent(&self) -> LineSegment {
+        LineSegment {
             off: self.tl.x,
             len: self.w,
         }
     }
 
-    /// Given a point that falls within this rectangle, rebase the point to be
+    pub fn intersect(&self, other: Rect) -> Option<Self> {
+        let h = self.hextent().intersect(other.hextent())?;
+        let v = self.vextent().intersect(other.vextent())?;
+        Some(Rect {
+            tl: Point { x: h.off, y: v.off },
+            w: h.len,
+            h: v.len,
+        })
+    }
+
+    /// Given a point that falls within this rectangle, shift the point to be
     /// relative to our origin. If the point falls outside the rect, an error is
     /// returned.
     pub fn rebase(&self, pt: Point) -> Result<Point> {
@@ -128,10 +128,20 @@ impl Rect {
         })
     }
 
-    /// Scroll this rectangle, constrained to be within another rectangle. The
+    /// A safe function for shifting the rectangle by an offset, which won't
+    /// under- or overflow.
+    pub fn shift(&self, x: i16, y: i16) -> Rect {
+        Rect {
+            tl: self.tl.scroll(x, y),
+            w: self.w,
+            h: self.h,
+        }
+    }
+
+    /// Shift this rectangle, constrained to be within another rectangle. The
     /// size of the returned Rect is always equal to that of self. If self is
     /// larger than the enclosing rectangle, self unchanged.
-    pub fn scroll_within(&self, x: i16, y: i16, rect: Rect) -> Self {
+    pub fn shift_within(&self, x: i16, y: i16, rect: Rect) -> Self {
         if rect.w < self.w || rect.h < self.h {
             *self
         } else {
@@ -274,7 +284,7 @@ impl Rect {
     }
 
     /// Extract a slice of this rect based on a vertical extent.
-    pub fn vextract(&self, e: Extent) -> Result<Self> {
+    pub fn vextract(&self, e: LineSegment) -> Result<Self> {
         if !self.vextent().contains(e) {
             Err(Error::Geometry("extract extent outside rectangle".into()))
         } else {
@@ -290,8 +300,8 @@ impl Rect {
     }
 
     /// The vertical extent of this rect.
-    pub fn vextent(&self) -> Extent {
-        Extent {
+    pub fn vextent(&self) -> LineSegment {
+        LineSegment {
             off: self.tl.y,
             len: self.h,
         }
@@ -407,6 +417,49 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn intersect() -> Result<()> {
+        let r = Rect {
+            tl: Point { x: 10, y: 10 },
+            w: 10,
+            h: 10,
+        };
+        let r2 = Rect {
+            tl: Point { x: 11, y: 11 },
+            w: 2,
+            h: 2,
+        };
+        assert_eq!(r.intersect(r2), Some(r2));
+        assert_eq!(r2.intersect(r), Some(r2));
+        assert_eq!(r.intersect(r), Some(r));
+        assert_eq!(
+            r.intersect(Rect {
+                tl: Point { x: 9, y: 9 },
+                w: 3,
+                h: 3,
+            }),
+            Some(Rect {
+                tl: Point { x: 10, y: 10 },
+                w: 2,
+                h: 2,
+            })
+        );
+        assert_eq!(
+            r.intersect(Rect {
+                tl: Point { x: 19, y: 19 },
+                w: 3,
+                h: 3,
+            }),
+            Some(Rect {
+                tl: Point { x: 19, y: 19 },
+                w: 1,
+                h: 1,
+            })
+        );
+        Ok(())
+    }
+
     #[test]
     fn inner() -> Result<()> {
         let r = Rect {
@@ -480,7 +533,7 @@ mod tests {
                 w: 10,
                 h: 10,
             }
-            .scroll(-10, -10),
+            .shift(-10, -10),
             Rect {
                 tl: Point { x: 0, y: 0 },
                 w: 10,
@@ -496,7 +549,7 @@ mod tests {
                 w: 10,
                 h: 10,
             }
-            .scroll(10, 10),
+            .shift(10, 10),
             Rect {
                 tl: Point {
                     x: u16::MAX,
@@ -578,7 +631,7 @@ mod tests {
                 w: 5,
                 h: 5,
             },
-            r.scroll_within(
+            r.shift_within(
                 1,
                 1,
                 Rect {
@@ -594,7 +647,7 @@ mod tests {
                 w: 5,
                 h: 5,
             },
-            r.scroll_within(
+            r.shift_within(
                 10,
                 10,
                 Rect {
@@ -606,7 +659,7 @@ mod tests {
         );
         // Degenerate case - trying to scroll within a smaller rect.
         assert_eq!(
-            r.scroll_within(
+            r.shift_within(
                 1,
                 1,
                 Rect {

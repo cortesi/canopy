@@ -63,7 +63,7 @@ where
 
     pub fn scroll_by(&mut self, app: &mut Canopy<S>, x: i16, y: i16) -> Result<EventOutcome> {
         if let Some(ss) = &mut self.scrollstate {
-            ss.window = ss.window.scroll_within(x, y, ss.virt);
+            ss.window = ss.window.shift_within(x, y, ss.virt);
             self.child.layout(app, ss.window.tl, ss.rect)?;
             app.taint_tree(self)?;
         }
