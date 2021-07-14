@@ -290,6 +290,9 @@ impl<S> Canopy<S> {
             Ok(if focus_seen {
                 ret = ret.join(f(x)?);
                 SkipWalker::default()
+            } else if x.area().is_none() {
+                // Hidden nodes don't hold focus
+                SkipWalker::default()
             } else if self.is_focused(x) {
                 focus_seen = true;
                 ret = ret.join(f(x)?);
@@ -385,23 +388,24 @@ impl<S> Canopy<S> {
         e: &mut dyn Node<S>,
         w: &mut dyn Write,
     ) -> Result<()> {
-        if self.should_render(e) {
-            if let Some(r) = e.area() {
+        if let Some(r) = e.area() {
+            if self.should_render(e) {
                 if self.is_focused(e) {
                     let s = &mut e.state_mut();
                     s.rendered_focus_gen = self.focus_gen
                 }
                 e.render(self, style, r, w)?;
             }
+            style.inc();
+            e.children_mut(&mut |x| self.render_traversal(style, x, w))?;
+            style.dec();
         }
-        style.inc();
-        e.children_mut(&mut |x| self.render_traversal(style, x, w))?;
-        style.dec();
         Ok(())
     }
 
     /// Render a tree of nodes. If force is true, all visible nodes are
-    /// rendered, otherwise we check the taint state.
+    /// rendered, otherwise we check the taint state. Hidden nodes and their
+    /// children are ignored.
     pub fn render(
         &mut self,
         e: &mut dyn Node<S>,
@@ -496,7 +500,8 @@ impl<S> Canopy<S> {
         Ok(())
     }
 
-    /// Propagate a tick event through the tree.
+    /// Propagate a tick event through the tree. All nodes get the event, even
+    /// if they are hidden.
     pub fn tick(
         &mut self,
         root: &mut dyn Node<S>,
@@ -569,7 +574,7 @@ pub fn locate<S, R: Walker + Default>(
                     SkipWalker::default()
                 }
             } else {
-                SkipWalker::default()
+                SkipWalker { has_skip: true }
             }
         })
     })?;
@@ -599,6 +604,7 @@ mod tests {
     fn tfocus_next() -> Result<()> {
         let mut app = Canopy::new();
         let mut root = utils::TRoot::new();
+        root.layout(&mut app, Rect::default())?;
 
         assert!(!app.is_focused(&root));
         app.focus_next(&mut root)?;
@@ -652,6 +658,7 @@ mod tests {
     fn tfoci() -> Result<()> {
         let mut app = Canopy::new();
         let mut root = utils::TRoot::new();
+        root.layout(&mut app, Rect::default())?;
 
         assert_eq!(focvec(&mut app, &mut root)?.len(), 0);
 
@@ -763,6 +770,7 @@ mod tests {
     fn tkey() -> Result<()> {
         let mut app = Canopy::new();
         let mut root = utils::TRoot::new();
+        root.layout(&mut app, Rect::default())?;
 
         let handled = EventOutcome::Handle { skip: false };
 

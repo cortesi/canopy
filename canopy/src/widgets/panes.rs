@@ -138,6 +138,7 @@ impl<S, N: canopy::Node<S>> Node<S> for Panes<S, N> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::geom::Point;
     use crate::tutils::utils;
 
     #[test]
@@ -145,15 +146,29 @@ mod tests {
         let mut app = Canopy::new();
         let tn = utils::TBranch::new("a");
         let mut p: Panes<utils::State, utils::TBranch> = Panes::new(tn);
+        let r = Rect {
+            tl: Point::zero(),
+            w: 100,
+            h: 100,
+        };
+        p.layout(&mut app, r)?;
+
         assert_eq!(p.shape(), vec![1]);
         let tn = utils::TBranch::new("b");
         p.insert_col(&mut app, tn)?;
+        p.layout(&mut app, r)?;
+
         assert_eq!(p.shape(), vec![1, 1]);
         app.set_focus(&mut p.children[0][0].a)?;
+        p.layout(&mut app, r)?;
+
         let tn = utils::TBranch::new("c");
         assert_eq!(p.focus_coords(&mut app), Some((0, 0)));
         p.insert_row(&mut app, tn)?;
+        p.layout(&mut app, r)?;
+
         assert_eq!(p.shape(), vec![2, 1]);
+
         app.set_focus(&mut p.children[1][0].a)?;
         assert_eq!(p.focus_coords(&mut app), Some((1, 0)));
         Ok(())
