@@ -24,14 +24,20 @@ struct ScrollState {
 /// with `FixedLayout` by managing a scrollable view onto the constrained
 /// widget.
 #[derive(StatefulNode)]
-pub struct Scroll<S, N: Node<S> + ConstrainedWidthLayout<S>> {
+pub struct Scroll<S, N>
+where
+    N: Node<S> + ConstrainedWidthLayout<S>,
+{
     _marker: PhantomData<S>,
     pub child: N,
     pub state: NodeState,
     scrollstate: Option<ScrollState>,
 }
 
-impl<S, N: Node<S> + ConstrainedWidthLayout<S>> Scroll<S, N> {
+impl<S, N> Scroll<S, N>
+where
+    N: Node<S> + ConstrainedWidthLayout<S>,
+{
     pub fn new(c: N) -> Self {
         Scroll {
             _marker: PhantomData,
@@ -129,7 +135,10 @@ where
     }
 }
 
-impl<S, N: Node<S> + ConstrainedWidthLayout<S>> Node<S> for Scroll<S, N> {
+impl<S, N> Node<S> for Scroll<S, N>
+where
+    N: Node<S> + ConstrainedWidthLayout<S>,
+{
     fn should_render(&self, app: &Canopy<S>) -> Option<bool> {
         Some(app.should_render(&self.child))
     }

@@ -19,7 +19,10 @@ pub struct Panes<S, N: canopy::Node<S>> {
     pub state: NodeState,
 }
 
-impl<S, N: canopy::Node<S> + FillLayout<S>> Panes<S, N> {
+impl<S, N> Panes<S, N>
+where
+    N: canopy::Node<S> + FillLayout<S>,
+{
     pub fn new(n: N) -> Self {
         Panes {
             children: vec![vec![n]],
@@ -90,7 +93,10 @@ impl<S, N: canopy::Node<S> + FillLayout<S>> Panes<S, N> {
     }
 }
 
-impl<S, N: canopy::Node<S> + FillLayout<S>> FillLayout<S> for Panes<S, N> {
+impl<S, N> FillLayout<S> for Panes<S, N>
+where
+    N: canopy::Node<S> + FillLayout<S>,
+{
     fn layout(&mut self, app: &mut Canopy<S>, rect: Rect) -> Result<()> {
         self.set_rect(rect);
         let l = rect.split_panes(self.shape())?;

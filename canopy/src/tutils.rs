@@ -7,7 +7,7 @@ pub mod utils {
     use crate::{
         colorscheme::ColorScheme,
         event::{key, mouse, tick},
-        layout, Canopy, EventOutcome, Node, NodeState, Rect, Result, StatefulNode,
+        layout, Canopy, EventOutcome, Node, NodeState, Point, Rect, Result, StatefulNode,
     };
 
     use crossterm::{style::Print, ExecutableCommand};
@@ -314,5 +314,48 @@ pub mod utils {
         let n: String = String::from_utf8_lossy(&out).into();
         let n = n.trim_matches(&vec!['<', '>'][..]);
         Ok(n.into())
+    }
+
+    // A fixed-size test node
+    #[derive(Debug, PartialEq, StatefulNode)]
+    pub struct TFixed {
+        state: NodeState,
+        pub w: u16,
+        pub h: u16,
+        pub virt_origin: Point,
+    }
+
+    impl TFixed {
+        pub fn new(w: u16, h: u16) -> Self {
+            TFixed {
+                state: NodeState::default(),
+                virt_origin: Point::zero(),
+                w,
+                h,
+            }
+        }
+    }
+
+    impl Node<State> for TFixed {}
+
+    impl layout::ConstrainedWidthLayout<State> for TFixed {
+        fn constrain(&mut self, _app: &mut Canopy<State>, _width: u16) -> Result<Rect> {
+            Ok(Rect {
+                tl: Point::zero(),
+                w: self.w,
+                h: self.h,
+            })
+        }
+
+        fn layout(
+            &mut self,
+            _app: &mut Canopy<State>,
+            virt_origin: Point,
+            rect: Rect,
+        ) -> Result<()> {
+            self.set_rect(rect);
+            self.virt_origin = virt_origin;
+            Ok(())
+        }
     }
 }

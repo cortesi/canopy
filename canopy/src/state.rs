@@ -15,6 +15,7 @@ pub struct NodeState {
     // The focus generation if this node held focus during the last rendering
     // phase.
     pub(crate) rendered_focus_gen: u64,
+    // The area on screen that this node will render to.
     pub rect: Rect,
 }
 

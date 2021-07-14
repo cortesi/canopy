@@ -95,7 +95,9 @@ pub trait Node<S>: StatefulNode {
         false
     }
 
-    /// Render the widget to a buffer. The default implementation does nothing.
+    /// Render the widget to a buffer, using the geometry that was set through
+    /// the node's Layout implementation. The default implementation does
+    /// nothing.
     fn render(&self, app: &Canopy<S>, colors: &mut ColorScheme, w: &mut dyn Write) -> Result<()> {
         Ok(())
     }

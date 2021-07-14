@@ -1,10 +1,9 @@
 use crate::geom::{Point, Rect};
 use crate::{Canopy, Result};
 
-/// A layout for nodes that provide no feedback on their internal geometry -
-/// they just fill the space specified. Examples include frames that fill any
-/// region we pass them, and widgets that have one fixed dimension, like a
-/// fixed-height status bar.
+/// A layout for nodes that simply fill the space specified. Examples include
+/// frames that fill any region we pass them, and widgets that have one fixed
+/// dimension, like a fixed-height status bar.
 pub trait FillLayout<S> {
     fn layout(&mut self, app: &mut Canopy<S>, rect: Rect) -> Result<()>;
 }

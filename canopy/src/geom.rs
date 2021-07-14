@@ -8,7 +8,7 @@ pub enum Direction {
     Right,
 }
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
 pub struct Point {
     pub x: u16,
     pub y: u16,
@@ -24,6 +24,9 @@ pub struct Extent {
 }
 
 impl Point {
+    pub fn zero() -> Self {
+        Point { x: 0, y: 0 }
+    }
     /// Shift the point by an offset, avoiding under- or overflow.
     pub fn scroll(&self, x: i16, y: i16) -> Self {
         let nx = if x < 0 {
