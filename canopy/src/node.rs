@@ -1,7 +1,7 @@
 use crate::{
-    colorscheme::ColorScheme,
     cursor,
     event::{key, mouse, tick},
+    style::Style,
     Canopy, Result, StatefulNode,
 };
 use duplicate::duplicate;
@@ -98,7 +98,7 @@ pub trait Node<S>: StatefulNode {
     /// Render the widget to a buffer, using the geometry that was set through
     /// the node's Layout implementation. The default implementation does
     /// nothing.
-    fn render(&self, app: &Canopy<S>, colors: &mut ColorScheme, w: &mut dyn Write) -> Result<()> {
+    fn render(&self, app: &Canopy<S>, style: &mut Style, w: &mut dyn Write) -> Result<()> {
         Ok(())
     }
 

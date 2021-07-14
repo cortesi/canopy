@@ -7,10 +7,10 @@ use std::io::Write;
 
 use canopy;
 use canopy::{
-    colorscheme::{solarized, ColorScheme},
     event::{key, mouse},
     layout::FillLayout,
     runloop::runloop,
+    style::{solarized, Style},
     widgets::{block, solid_frame},
     Canopy, EventOutcome, Node, NodeState, Rect, Result, StatefulNode,
 };
@@ -163,12 +163,7 @@ impl Node<Handle> for Block {
     fn can_focus(&self) -> bool {
         self.children.len() == 0
     }
-    fn render(
-        &self,
-        app: &Canopy<Handle>,
-        _colors: &mut ColorScheme,
-        w: &mut dyn Write,
-    ) -> Result<()> {
+    fn render(&self, app: &Canopy<Handle>, _colors: &mut Style, w: &mut dyn Write) -> Result<()> {
         if self.children.len() == 0 {
             w.queue(SetForegroundColor(
                 if app.is_focused(self) && self.children.len() == 0 {
@@ -242,7 +237,11 @@ pub fn main() -> Result<()> {
     let mut h = Handle {};
     let mut app = Canopy::new();
     let mut root = Root::new();
-    let mut colors = solarized::solarized_dark();
-    runloop(&mut app, &mut colors, &mut root, &mut h)?;
+    runloop(
+        &mut app,
+        &mut solarized::solarized_dark(),
+        &mut root,
+        &mut h,
+    )?;
     Ok(())
 }

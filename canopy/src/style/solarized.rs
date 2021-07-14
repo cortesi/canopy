@@ -1,4 +1,4 @@
-use super::ColorScheme;
+use super::Style;
 use crossterm::style::Color;
 
 pub const BASE03: Color = Color::Rgb {
@@ -82,8 +82,8 @@ pub const GREEN: Color = Color::Rgb {
     b: 0x00,
 };
 
-pub fn solarized_dark() -> ColorScheme {
-    let mut c = ColorScheme::default();
+pub fn solarized_dark() -> Style {
+    let mut c = Style::default();
     c.insert("/", Some(BASE0), Some(BASE03));
     c.insert("/frame", Some(BASE01), None);
     c.insert("/frame/focused", Some(BLUE), None);

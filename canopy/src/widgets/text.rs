@@ -1,9 +1,9 @@
 use crate as canopy;
 use crate::{
-    colorscheme::ColorScheme,
     geom::{Point, Rect},
     layout::ConstrainedWidthLayout,
     state::{NodeState, StatefulNode},
+    style::Style,
     Canopy, Node, Result,
 };
 use std::io::Write;
@@ -73,8 +73,8 @@ impl<'a, S> ConstrainedWidthLayout<S> for Text<S> {
 }
 
 impl<'a, S> Node<S> for Text<S> {
-    fn render(&self, _app: &Canopy<S>, colors: &mut ColorScheme, w: &mut dyn Write) -> Result<()> {
-        let (fg, bg) = colors.get("text");
+    fn render(&self, _app: &Canopy<S>, style: &mut Style, w: &mut dyn Write) -> Result<()> {
+        let (fg, bg) = style.get("text");
         w.queue(SetForegroundColor(fg))?;
         w.queue(SetBackgroundColor(bg))?;
         if let (Some(lines), Some(vo)) = (self.lines.as_ref(), self.virt_origin) {

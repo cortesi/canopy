@@ -5,9 +5,10 @@ pub mod utils {
 
     use crate as canopy;
     use crate::{
-        colorscheme::ColorScheme,
         event::{key, mouse, tick},
-        layout, Canopy, EventOutcome, Node, NodeState, Point, Rect, Result, StatefulNode,
+        layout,
+        style::Style,
+        Canopy, EventOutcome, Node, NodeState, Point, Rect, Result, StatefulNode,
     };
 
     use crossterm::{style::Print, ExecutableCommand};
@@ -77,7 +78,7 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(&self, _: &Canopy<State>, _c: &mut ColorScheme, w: &mut dyn Write) -> Result<()> {
+        fn render(&self, _: &Canopy<State>, _c: &mut Style, w: &mut dyn Write) -> Result<()> {
             tnode_render(self.name.clone(), w)
         }
         fn handle_key(
@@ -120,7 +121,7 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(&self, _: &Canopy<State>, _c: &mut ColorScheme, w: &mut dyn Write) -> Result<()> {
+        fn render(&self, _: &Canopy<State>, _c: &mut Style, w: &mut dyn Write) -> Result<()> {
             tnode_render(self.name.clone(), w)
         }
         fn handle_key(
@@ -177,7 +178,7 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(&self, _: &Canopy<State>, _c: &mut ColorScheme, w: &mut dyn Write) -> Result<()> {
+        fn render(&self, _: &Canopy<State>, _c: &mut Style, w: &mut dyn Write) -> Result<()> {
             tnode_render(self.name.clone(), w)
         }
         fn handle_key(
@@ -295,8 +296,8 @@ pub mod utils {
 
     pub fn trender(app: &mut Canopy<State>, r: &mut TRoot) -> Result<String> {
         let mut c = Cursor::new(Vec::new());
-        let mut colors = ColorScheme::default();
-        app.render(r, &mut colors, &mut c)?;
+        let mut style = Style::default();
+        app.render(r, &mut style, &mut c)?;
         c.seek(SeekFrom::Start(0))?;
         let mut out = Vec::new();
         c.read_to_end(&mut out)?;
@@ -305,7 +306,7 @@ pub mod utils {
 
     pub fn get_name(app: &mut Canopy<State>, x: &mut dyn Node<State>) -> Result<String> {
         let mut c = Cursor::new(Vec::new());
-        let mut colors = ColorScheme::default();
+        let mut colors = Style::default();
 
         x.render(app, &mut colors, &mut c)?;
         c.seek(SeekFrom::Start(0))?;

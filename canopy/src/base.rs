@@ -4,11 +4,11 @@ use std::{fmt::Debug, io::Write};
 
 use crate::geom::{Direction, Rect};
 use crate::{
-    colorscheme::ColorScheme,
     cursor,
     event::{key, mouse, tick, Event},
     layout::FillLayout,
     node::{postorder, postorder_mut, preorder, EventOutcome, Node, Walker},
+    style::Style,
     Error, Point, Result,
 };
 use crossterm::{
@@ -378,7 +378,7 @@ impl<S> Canopy<S> {
 
     fn render_traversal(
         &mut self,
-        colors: &mut ColorScheme,
+        style: &mut Style,
         e: &mut dyn Node<S>,
         w: &mut dyn Write,
     ) -> Result<()> {
@@ -387,11 +387,11 @@ impl<S> Canopy<S> {
                 let s = &mut e.state_mut();
                 s.rendered_focus_gen = self.focus_gen
             }
-            e.render(self, colors, w)?;
+            e.render(self, style, w)?;
         }
-        colors.inc();
-        e.children_mut(&mut |x| self.render_traversal(colors, x, w))?;
-        colors.dec();
+        style.inc();
+        e.children_mut(&mut |x| self.render_traversal(style, x, w))?;
+        style.dec();
         Ok(())
     }
 
@@ -400,11 +400,11 @@ impl<S> Canopy<S> {
     pub fn render(
         &mut self,
         e: &mut dyn Node<S>,
-        colors: &mut ColorScheme,
+        style: &mut Style,
         w: &mut dyn Write,
     ) -> Result<()> {
-        colors.reset();
-        self.render_traversal(colors, e, w)?;
+        style.reset();
+        self.render_traversal(style, e, w)?;
         self.render_gen += 1;
         self.last_focus_gen = self.focus_gen;
         Ok(())

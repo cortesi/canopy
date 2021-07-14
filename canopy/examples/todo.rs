@@ -3,11 +3,11 @@ use std::io::Write;
 
 use canopy;
 use canopy::{
-    colorscheme::{solarized, ColorScheme},
     event::{key, mouse},
     geom::{Point, Rect},
     layout::FillLayout,
     runloop::runloop,
+    style::{solarized, Style},
     widgets::{block, frame, InputLine, Scroll, Text},
     Canopy, EventOutcome, Node, NodeState, Result, StatefulNode,
 };
@@ -21,14 +21,9 @@ struct StatusBar {
 }
 
 impl Node<Handle> for StatusBar {
-    fn render(
-        &self,
-        _app: &Canopy<Handle>,
-        colors: &mut ColorScheme,
-        w: &mut dyn Write,
-    ) -> Result<()> {
-        colors.push_layer("statusbar");
-        colors.set("statusbar/text", w)?;
+    fn render(&self, _app: &Canopy<Handle>, style: &mut Style, w: &mut dyn Write) -> Result<()> {
+        style.push_layer("statusbar");
+        style.set("statusbar/text", w)?;
         let r = self.rect();
         block(w, r, ' ')?;
         w.queue(MoveTo(r.tl.x, r.tl.y))?;

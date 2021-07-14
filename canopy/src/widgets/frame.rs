@@ -7,10 +7,10 @@ use pad::PadStr;
 
 use crate as canopy;
 use crate::{
-    colorscheme::ColorScheme,
     geom::Rect,
     layout::FillLayout,
     state::{NodeState, StatefulNode},
+    style::Style,
     widgets, Canopy, Node, Result,
 };
 
@@ -131,12 +131,12 @@ where
     fn should_render(&self, app: &Canopy<S>) -> Option<bool> {
         Some(app.should_render(&self.child))
     }
-    fn render(&self, app: &Canopy<S>, colors: &mut ColorScheme, w: &mut dyn Write) -> Result<()> {
+    fn render(&self, app: &Canopy<S>, style: &mut Style, w: &mut dyn Write) -> Result<()> {
         let a = self.rect();
         if app.on_focus_path(self) {
-            colors.set("frame/focused", w)?;
+            style.set("frame/focused", w)?;
         } else {
-            colors.set("frame", w)?;
+            style.set("frame", w)?;
         };
 
         let f = a.frame(1)?;
@@ -195,7 +195,7 @@ where
                 horizactive = Some(f.bottom.hextract(eactive)?);
             }
             if vertactive.is_none() || horizactive.is_none() {
-                colors.set("frame/active", w)?;
+                style.set("frame/active", w)?;
             }
             if let Some(vc) = vertactive {
                 widgets::block(w, vc, self.glyphs.vertical_active)?;

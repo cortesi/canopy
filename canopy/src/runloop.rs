@@ -1,8 +1,8 @@
 use crate::{
-    colorscheme::ColorScheme,
     event::EventSource,
     geom::{Point, Rect},
     layout::FillLayout,
+    style::Style,
     Canopy, EventOutcome, Node, Result,
 };
 use crossterm::{
@@ -19,12 +19,7 @@ use scopeguard::defer;
 use std::io::Write;
 use std::panic;
 
-pub fn runloop<S, N>(
-    app: &mut Canopy<S>,
-    colors: &mut ColorScheme,
-    root: &mut N,
-    s: &mut S,
-) -> Result<()>
+pub fn runloop<S, N>(app: &mut Canopy<S>, colors: &mut Style, root: &mut N, s: &mut S) -> Result<()>
 where
     N: Node<S> + FillLayout<S>,
 {

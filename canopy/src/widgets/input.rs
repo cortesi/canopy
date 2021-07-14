@@ -3,13 +3,13 @@ use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
-    colorscheme::ColorScheme,
     cursor,
     error::Error,
     event::key,
     geom::{Extent, Point, Rect},
     layout::FillLayout,
     state::{NodeState, StatefulNode},
+    style::Style,
     widgets::frame,
     Canopy, EventOutcome, Node, Result,
 };
@@ -181,7 +181,7 @@ impl<'a, S> Node<S> for InputLine<S> {
             blink: true,
         })
     }
-    fn render(&self, _app: &Canopy<S>, colors: &mut ColorScheme, w: &mut dyn Write) -> Result<()> {
+    fn render(&self, _app: &Canopy<S>, colors: &mut Style, w: &mut dyn Write) -> Result<()> {
         colors.set("text", w)?;
         let r = self.rect();
         w.queue(MoveTo(r.tl.x, r.tl.y))?;

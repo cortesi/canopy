@@ -3,12 +3,12 @@ use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
-    colorscheme::ColorScheme,
     error::Result,
     geom::{Point, Rect},
     layout::ConstrainedWidthLayout,
     node::Node,
     state::{NodeState, StatefulNode},
+    style::Style,
     Canopy,
 };
 
@@ -82,7 +82,7 @@ impl<S, N> Node<S> for List<S, N>
 where
     N: Node<S> + ConstrainedWidthLayout<S>,
 {
-    fn render(&self, _app: &Canopy<S>, colors: &mut ColorScheme, w: &mut dyn Write) -> Result<()> {
+    fn render(&self, _app: &Canopy<S>, colors: &mut Style, w: &mut dyn Write) -> Result<()> {
         Ok(())
     }
 }

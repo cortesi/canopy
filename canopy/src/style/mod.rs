@@ -35,7 +35,7 @@ use std::collections::HashMap;
 /// we try the following lookups in order: ["foo/frame/selected",
 /// "/frame/selected", "foo", ""].
 #[derive(Debug, PartialEq, Clone)]
-pub struct ColorScheme {
+pub struct Style {
     colors: HashMap<Vec<String>, (Option<Color>, Option<Color>)>,
     // The current render level
     level: usize,
@@ -44,15 +44,15 @@ pub struct ColorScheme {
     layer_levels: Vec<usize>,
 }
 
-impl Default for ColorScheme {
+impl Default for Style {
     fn default() -> Self {
-        ColorScheme::new()
+        Style::new()
     }
 }
 
-impl ColorScheme {
+impl Style {
     pub fn new() -> Self {
-        let mut cs = ColorScheme {
+        let mut cs = Style {
             colors: HashMap::new(),
             level: 0,
             layers: vec!["".to_owned()],
@@ -180,7 +180,7 @@ mod tests {
 
     #[test]
     fn colorscheme_basic() -> Result<()> {
-        let mut c = ColorScheme::new();
+        let mut c = Style::new();
         c.insert("/", Some(Color::White), Some(Color::Black));
         c.insert("/one", Some(Color::Red), None);
         c.insert("/one/two", Some(Color::Blue), None);
@@ -235,7 +235,7 @@ mod tests {
     }
     #[test]
     fn colorscheme_layers() -> Result<()> {
-        let mut c = ColorScheme::new();
+        let mut c = Style::new();
         assert_eq!(c.layers, vec![""]);
         assert_eq!(c.layer_levels, vec![0]);
         assert_eq!(c.level, 0);
