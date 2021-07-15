@@ -16,15 +16,15 @@ impl LineSegment {
     }
 
     /// Does other lie within this extent.
-    pub fn contains(&self, other: LineSegment) -> bool {
+    pub fn contains(&self, other: &LineSegment) -> bool {
         self.off <= other.off && self.far() >= other.far()
     }
 
     /// Return the intersection between this line segment and other.
-    pub fn intersect(&self, other: LineSegment) -> Option<LineSegment> {
+    pub fn intersect(&self, other: &LineSegment) -> Option<LineSegment> {
         if self.contains(other) {
-            Some(other)
-        } else if other.contains(*self) {
+            Some(*other)
+        } else if other.contains(self) {
             Some(*self)
         } else if self.off <= other.off && other.off <= self.far() {
             Some(LineSegment {
@@ -51,7 +51,7 @@ impl LineSegment {
     ) -> Result<(LineSegment, LineSegment, LineSegment)> {
         if window.len == 0 {
             Err(Error::Geometry("window cannot be zero length".into()))
-        } else if !view.contains(window) {
+        } else if !view.contains(&window) {
             Err(Error::Geometry(format!(
                 "view {:?} does not contain window {:?}",
                 view, window,
@@ -93,30 +93,30 @@ mod tests {
         let l = LineSegment { off: 5, len: 5 };
 
         assert_eq!(
-            l.intersect(LineSegment { off: 6, len: 2 }),
+            l.intersect(&LineSegment { off: 6, len: 2 }),
             Some(LineSegment { off: 6, len: 2 })
         );
-        assert_eq!(l.intersect(LineSegment { off: 1, len: 10 }), Some(l));
+        assert_eq!(l.intersect(&LineSegment { off: 1, len: 10 }), Some(l));
         assert_eq!(
-            l.intersect(LineSegment { off: 6, len: 8 }),
+            l.intersect(&LineSegment { off: 6, len: 8 }),
             Some(LineSegment { off: 6, len: 4 })
         );
         assert_eq!(
-            l.intersect(LineSegment { off: 0, len: 8 }),
+            l.intersect(&LineSegment { off: 0, len: 8 }),
             Some(LineSegment { off: 5, len: 3 })
         );
-        assert_eq!(l.intersect(l), Some(l));
-        assert_eq!(l.intersect(LineSegment { off: 0, len: 2 }), None);
+        assert_eq!(l.intersect(&l), Some(l));
+        assert_eq!(l.intersect(&LineSegment { off: 0, len: 2 }), None);
         Ok(())
     }
 
     #[test]
     fn contains() -> Result<()> {
         let v = LineSegment { off: 1, len: 3 };
-        assert!(v.contains(LineSegment { off: 1, len: 3 }));
-        assert!(!v.contains(LineSegment { off: 1, len: 4 }));
-        assert!(!v.contains(LineSegment { off: 2, len: 3 }));
-        assert!(!v.contains(LineSegment { off: 0, len: 2 }));
+        assert!(v.contains(&LineSegment { off: 1, len: 3 }));
+        assert!(!v.contains(&LineSegment { off: 1, len: 4 }));
+        assert!(!v.contains(&LineSegment { off: 2, len: 3 }));
+        assert!(!v.contains(&LineSegment { off: 0, len: 2 }));
 
         Ok(())
     }

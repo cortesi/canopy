@@ -165,7 +165,7 @@ where
             let mut horizactive = None;
 
             // Is window equal to or larger than virt?
-            if window.vextent().contains(virt.vextent()) {
+            if window.vextent().contains(&virt.vextent()) {
                 widgets::block(w, f.right, self.glyphs.vertical)?;
             } else {
                 let (epre, eactive, epost) = f
@@ -173,25 +173,25 @@ where
                     .vextent()
                     .split_active(window.vextent(), virt.vextent())?;
 
-                widgets::block(w, f.right.vextract(epre)?, self.glyphs.vertical)?;
-                widgets::block(w, f.right.vextract(epost)?, self.glyphs.vertical)?;
+                widgets::block(w, f.right.vextract(&epre)?, self.glyphs.vertical)?;
+                widgets::block(w, f.right.vextract(&epost)?, self.glyphs.vertical)?;
 
-                vertactive = Some(f.right.vextract(eactive)?);
+                vertactive = Some(f.right.vextract(&eactive)?);
                 // colors.set("frame/active", w)?;
                 // widgets::block(w, f.right.vextract(eactive)?, self.glyphs.vertical_active)?;
             }
 
             // Is window equal to or larger than virt?
-            if window.hextent().contains(virt.hextent()) {
+            if window.hextent().contains(&virt.hextent()) {
                 widgets::block(w, f.bottom, self.glyphs.horizontal)?;
             } else {
                 let (epre, eactive, epost) = f
                     .bottom
                     .hextent()
                     .split_active(window.hextent(), virt.hextent())?;
-                widgets::block(w, f.bottom.hextract(epre)?, self.glyphs.horizontal)?;
-                widgets::block(w, f.bottom.hextract(epost)?, self.glyphs.horizontal)?;
-                horizactive = Some(f.bottom.hextract(eactive)?);
+                widgets::block(w, f.bottom.hextract(&epre)?, self.glyphs.horizontal)?;
+                widgets::block(w, f.bottom.hextract(&epost)?, self.glyphs.horizontal)?;
+                horizactive = Some(f.bottom.hextract(&eactive)?);
             }
             if vertactive.is_none() || horizactive.is_none() {
                 style.set("frame/active", w)?;

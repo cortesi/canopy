@@ -9,13 +9,14 @@ use crate::{
     node::Node,
     state::{NodeState, StatefulNode},
     style::Style,
+    widgets::frame::FrameContent,
     Canopy,
 };
 
 struct Item<S, N: Node<S> + ConstrainedWidthLayout<S>> {
     _marker: PhantomData<S>,
     itm: N,
-    width: u16,
+    size: Rect,
 }
 
 #[derive(StatefulNode)]
@@ -40,7 +41,7 @@ where
                 .into_iter()
                 .map(|x| Item {
                     itm: x,
-                    width: 0,
+                    size: Rect::default(),
                     _marker: PhantomData,
                 })
                 .collect(),
@@ -61,7 +62,7 @@ where
         let mut h = 0;
         for i in &mut self.items {
             let r = i.itm.constrain(app, width)?;
-            i.width = r.w;
+            i.size = r;
             w = w.max(r.w);
             h += r.h
         }
@@ -72,13 +73,41 @@ where
         })
     }
 
-    fn layout(&mut self, _app: &mut Canopy<S>, virt_origin: Point, rect: Rect) -> Result<()> {
-        self.set_area(rect);
-
-        // let view = rect.rebase(virt_origin);
-
+    fn layout(&mut self, app: &mut Canopy<S>, virt_origin: Point, screen_rect: Rect) -> Result<()> {
+        self.set_area(screen_rect);
+        let mut voffset = 0;
+        // The virtual screen location
+        let target_rect = screen_rect.at(&virt_origin);
+        for itm in &mut self.items {
+            // The virtual item rectangle
+            let item_rect = itm.size.shift(0, voffset as i16);
+            if let Some(r) = target_rect.intersect(&item_rect) {
+                itm.itm.layout(
+                    app,
+                    // The virtual coords are the intersection translated into
+                    // the co-ordinates of the item.
+                    item_rect.rebase_point(r.tl)?,
+                    // The screen rect is the intersection translated into the
+                    // target rect
+                    target_rect.rebase_rect(&r)?,
+                )?;
+            } else {
+                itm.itm.hide();
+            }
+            voffset += itm.size.h;
+        }
         self.virt_origin = Some(virt_origin);
         Ok(())
+    }
+}
+
+impl<S, N> FrameContent for List<S, N>
+where
+    N: Node<S> + ConstrainedWidthLayout<S>,
+{
+    fn bounds(&self) -> Option<(Rect, Rect)> {
+        None
+        // self.scrollstate.as_ref().map(|ss| (ss.window, ss.virt))
     }
 }
 
@@ -116,7 +145,7 @@ mod tests {
                 h: 10,
             },
         )?;
-        let itms: Vec<u16> = lst.items.iter().map(|i| i.width).collect();
+        let itms: Vec<u16> = lst.items.iter().map(|i| i.size.w).collect();
         println!("{:?}", itms);
 
         Ok(())

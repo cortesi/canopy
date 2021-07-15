@@ -437,7 +437,7 @@ impl<S> Canopy<S> {
                         action: m.action,
                         button: m.button,
                         modifiers: m.modifiers,
-                        loc: r.rebase(m.loc)?,
+                        loc: r.rebase_point(m.loc)?,
                     };
                     match x.handle_mouse(self, s, m)? {
                         EventOutcome::Ignore { skip } => {

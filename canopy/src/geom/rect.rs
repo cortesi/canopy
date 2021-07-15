@@ -27,6 +27,14 @@ impl Rect {
         }
     }
 
+    pub fn at(&self, p: &Point) -> Self {
+        Rect {
+            tl: *p,
+            w: self.w,
+            h: self.h,
+        }
+    }
+
     /// Clamp this rectangle, constraining it lie within another rectangle. The
     /// size of the returned Rect is always equal to that of self. If self is
     /// larger than the enclosing rectangle, return an error.
@@ -56,7 +64,7 @@ impl Rect {
     }
 
     /// Does this rectangle completely enclose the other?
-    pub fn contains_rect(&self, other: Rect) -> bool {
+    pub fn contains_rect(&self, other: &Rect) -> bool {
         // The rectangle is completely contained if both the upper left and the
         // lower right points are inside self.
         self.contains_point(other.tl)
@@ -82,7 +90,7 @@ impl Rect {
     }
 
     /// Extract a horizontal section of this rect based on an extent.
-    pub fn hextract(&self, e: LineSegment) -> Result<Self> {
+    pub fn hextract(&self, e: &LineSegment) -> Result<Self> {
         if !self.hextent().contains(e) {
             Err(Error::Geometry("extract extent outside rectangle".into()))
         } else {
@@ -105,9 +113,10 @@ impl Rect {
         }
     }
 
-    pub fn intersect(&self, other: Rect) -> Option<Self> {
-        let h = self.hextent().intersect(other.hextent())?;
-        let v = self.vextent().intersect(other.vextent())?;
+    /// Calculate the intersection of this rectangle and another.
+    pub fn intersect(&self, other: &Rect) -> Option<Self> {
+        let h = self.hextent().intersect(&other.hextent())?;
+        let v = self.vextent().intersect(&other.vextent())?;
         Some(Rect {
             tl: Point { x: h.off, y: v.off },
             w: h.len,
@@ -118,13 +127,27 @@ impl Rect {
     /// Given a point that falls within this rectangle, shift the point to be
     /// relative to our origin. If the point falls outside the rect, an error is
     /// returned.
-    pub fn rebase(&self, pt: Point) -> Result<Point> {
+    pub fn rebase_point(&self, pt: Point) -> Result<Point> {
         if !self.contains_point(pt) {
-            return Err(Error::Geometry("co-ords outside rectangle".into()));
+            return Err(Error::Geometry("rebase of non-contained point".into()));
         }
         Ok(Point {
             x: pt.x - self.tl.x,
             y: pt.y - self.tl.y,
+        })
+    }
+
+    /// Given a rectangle contained within this rectangle, shift the inner
+    /// rectangle to be relative to our origin. If the rect is not entirley
+    /// contained, an error is returned.
+    pub fn rebase_rect(&self, other: &Rect) -> Result<Rect> {
+        if !self.contains_rect(other) {
+            return Err(Error::Geometry("rebase of non-contained rect".into()));
+        }
+        Ok(Rect {
+            tl: self.rebase_point(other.tl)?,
+            w: other.w,
+            h: other.h,
         })
     }
 
@@ -203,7 +226,7 @@ impl Rect {
 
     /// Splits the rectangle into columns, with each column split into rows.
     /// Returns a Vec of rects per column.
-    pub fn split_panes(&self, spec: Vec<u16>) -> Result<Vec<Vec<Rect>>> {
+    pub fn split_panes(&self, spec: &Vec<u16>) -> Result<Vec<Vec<Rect>>> {
         let mut ret = vec![];
 
         let cols = split(self.w, spec.len() as u16)?;
@@ -284,7 +307,7 @@ impl Rect {
     }
 
     /// Extract a slice of this rect based on a vertical extent.
-    pub fn vextract(&self, e: LineSegment) -> Result<Self> {
+    pub fn vextract(&self, e: &LineSegment) -> Result<Self> {
         if !self.vextent().contains(e) {
             Err(Error::Geometry("extract extent outside rectangle".into()))
         } else {
@@ -430,11 +453,11 @@ mod tests {
             w: 2,
             h: 2,
         };
-        assert_eq!(r.intersect(r2), Some(r2));
-        assert_eq!(r2.intersect(r), Some(r2));
-        assert_eq!(r.intersect(r), Some(r));
+        assert_eq!(r.intersect(&r2), Some(r2));
+        assert_eq!(r2.intersect(&r), Some(r2));
+        assert_eq!(r.intersect(&r), Some(r));
         assert_eq!(
-            r.intersect(Rect {
+            r.intersect(&Rect {
                 tl: Point { x: 9, y: 9 },
                 w: 3,
                 h: 3,
@@ -446,7 +469,7 @@ mod tests {
             })
         );
         assert_eq!(
-            r.intersect(Rect {
+            r.intersect(&Rect {
                 tl: Point { x: 19, y: 19 },
                 w: 3,
                 h: 3,
@@ -491,12 +514,12 @@ mod tests {
         assert!(r.contains_point(Point { x: 19, y: 19 }));
         assert!(!r.contains_point(Point { x: 20, y: 21 }));
 
-        assert!(r.contains_rect(Rect {
+        assert!(r.contains_rect(&Rect {
             tl: Point { x: 10, y: 10 },
             w: 1,
             h: 1
         }));
-        assert!(r.contains_rect(r));
+        assert!(r.contains_rect(&r));
 
         Ok(())
     }
@@ -516,10 +539,16 @@ mod tests {
             w: 10,
             h: 10,
         };
-        assert_eq!(r.rebase(Point { x: 11, y: 11 })?, Point { x: 1, y: 1 });
-        assert_eq!(r.rebase(Point { x: 10, y: 10 })?, Point { x: 0, y: 0 });
+        assert_eq!(
+            r.rebase_point(Point { x: 11, y: 11 })?,
+            Point { x: 1, y: 1 }
+        );
+        assert_eq!(
+            r.rebase_point(Point { x: 10, y: 10 })?,
+            Point { x: 0, y: 0 }
+        );
 
-        if let Ok(_) = r.rebase(Point { x: 9, y: 9 }) {
+        if let Ok(_) = r.rebase_point(Point { x: 9, y: 9 }) {
             assert!(false);
         }
         Ok(())
@@ -723,7 +752,7 @@ mod tests {
             h: 40,
         };
         assert_eq!(
-            r.split_panes(vec![2, 2])?,
+            r.split_panes(&vec![2, 2])?,
             vec![
                 [
                     Rect {
@@ -752,7 +781,7 @@ mod tests {
             ],
         );
         assert_eq!(
-            r.split_panes(vec![2, 1])?,
+            r.split_panes(&vec![2, 1])?,
             vec![
                 vec![
                     Rect {

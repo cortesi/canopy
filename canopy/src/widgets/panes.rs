@@ -101,7 +101,7 @@ where
 {
     fn layout(&mut self, app: &mut Canopy<S>, rect: Rect) -> Result<()> {
         self.set_area(rect);
-        let l = rect.split_panes(self.shape())?;
+        let l = rect.split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
                 row.layout(app, l[ci][ri])?;
