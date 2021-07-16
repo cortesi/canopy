@@ -69,7 +69,7 @@ pub mod utils {
 
     impl layout::FillLayout<State> for TLeaf {
         fn layout(&mut self, _: &mut Canopy<State>, a: Rect) -> Result<()> {
-            self.set_area(a);
+            self.set_screen_area(a);
             Ok(())
         }
     }
@@ -115,7 +115,7 @@ pub mod utils {
 
     impl layout::FillLayout<State> for TBranch {
         fn layout(&mut self, app: &mut Canopy<State>, rect: Rect) -> Result<()> {
-            self.set_area(rect);
+            self.set_screen_area(rect);
             let v = rect.split_vertical(2)?;
             app.resize(&mut self.a, v[0])?;
             app.resize(&mut self.b, v[1])?;
@@ -178,7 +178,7 @@ pub mod utils {
 
     impl layout::FillLayout<State> for TRoot {
         fn layout(&mut self, app: &mut Canopy<State>, rect: Rect) -> Result<()> {
-            self.set_area(rect);
+            self.set_screen_area(rect);
             let v = rect.split_horizontal(2)?;
             app.resize(&mut self.a, v[0])?;
             app.resize(&mut self.b, v[1])?;
@@ -248,7 +248,7 @@ pub mod utils {
             }
         }
         pub fn make_mouse_event(&self) -> Result<mouse::Mouse> {
-            let a = self.area().unwrap();
+            let a = self.screen_area();
             Ok(mouse::Mouse {
                 action: Some(mouse::Action::Down),
                 button: Some(mouse::Button::Left),
@@ -372,7 +372,7 @@ pub mod utils {
             virt_origin: Point,
             rect: Rect,
         ) -> Result<()> {
-            self.set_area(rect);
+            self.set_screen_area(rect);
             self.virt_origin = virt_origin;
             Ok(())
         }

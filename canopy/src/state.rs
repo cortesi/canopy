@@ -16,7 +16,8 @@ pub struct NodeState {
     // phase.
     pub(crate) rendered_focus_gen: u64,
     // The area on screen that this node will render to.
-    pub rect: Option<Rect>,
+    pub rect: Rect,
+    pub hidden: bool,
 }
 
 /// The node state object - each node needs to keep one of these, and offer it
@@ -28,7 +29,8 @@ impl NodeState {
             focus_gen: 0,
             rendered_focus_gen: 0,
             render_skip_gen: 0,
-            rect: None,
+            rect: Rect::default(),
+            hidden: false,
         }
     }
 }
@@ -42,13 +44,22 @@ pub trait StatefulNode {
     fn state_mut(&mut self) -> &mut NodeState;
 
     /// Returns the area this node will render to, None if the node is hidden.
-    fn area(&self) -> Option<Rect>;
+    fn screen_area(&self) -> Rect {
+        self.state().rect
+    }
 
-    /// Set the area rect.
-    fn set_area(&mut self, r: Rect);
+    /// Set the screen area this node will draw to.
+    fn set_screen_area(&mut self, r: Rect) {
+        self.state_mut().rect = r
+    }
 
     /// Hides the element by setting area to None
     fn hide(&mut self) {
-        self.state_mut().rect = None;
+        self.state_mut().hidden = true;
+    }
+
+    /// Hides the element by setting area to None
+    fn is_hidden(&self) -> bool {
+        self.state().hidden
     }
 }

@@ -118,7 +118,7 @@ where
     N: canopy::Node<S> + FrameContent + FillLayout<S>,
 {
     fn layout(&mut self, app: &mut Canopy<S>, rect: Rect) -> Result<()> {
-        self.set_area(rect);
+        self.set_screen_area(rect);
         self.child.layout(app, rect.inner(1)?)?;
         Ok(())
     }

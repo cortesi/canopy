@@ -49,9 +49,7 @@ where
             if self.children[x].is_empty() {
                 self.children.remove(x);
             }
-            if let Some(r) = self.area() {
-                self.layout(app, r)?;
-            }
+            self.layout(app, self.screen_area())?;
             app.taint_tree(self)?;
         }
         Ok(())
@@ -100,7 +98,7 @@ where
     N: canopy::Node<S> + FillLayout<S>,
 {
     fn layout(&mut self, app: &mut Canopy<S>, rect: Rect) -> Result<()> {
-        self.set_area(rect);
+        self.set_screen_area(rect);
         let l = rect.split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {

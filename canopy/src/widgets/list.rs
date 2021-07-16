@@ -74,7 +74,7 @@ where
     }
 
     fn layout(&mut self, app: &mut Canopy<S>, virt_origin: Point, screen_rect: Rect) -> Result<()> {
-        self.set_area(screen_rect);
+        self.set_screen_area(screen_rect);
         let mut voffset = 0;
         // The virtual screen location
         let target_rect = screen_rect.at(&virt_origin);

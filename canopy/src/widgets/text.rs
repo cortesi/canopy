@@ -66,7 +66,7 @@ impl<'a, S> ConstrainedWidthLayout<S> for Text<S> {
         Ok(ret)
     }
     fn layout(&mut self, _app: &mut Canopy<S>, virt_origin: Point, rect: Rect) -> Result<()> {
-        self.set_area(rect);
+        self.set_screen_area(rect);
         self.virt_origin = Some(virt_origin);
         Ok(())
     }

@@ -85,7 +85,9 @@ impl<S> Canopy<S> {
     /// tainted, if the focus of the node has changed, or if the node's
     /// Node::should_render method is active.
     pub fn should_render(&self, e: &dyn Node<S>) -> bool {
-        if let Some(r) = e.should_render(self) {
+        if e.is_hidden() {
+            false
+        } else if let Some(r) = e.should_render(self) {
             r
         } else {
             self.is_tainted(e) || self.focus_changed(e)
@@ -128,23 +130,21 @@ impl<S> Canopy<S> {
     }
 
     fn focus_dir(&mut self, e: &mut dyn Node<S>, dir: Direction) -> Result<EventOutcome> {
-        if let Some(r) = e.area() {
-            let mut seen = false;
-            if let Some(start) = self.get_focus_area(e) {
-                start.search(dir, &mut |p| -> Result<bool> {
-                    if !r.contains_point(p) {
-                        return Ok(true);
+        let mut seen = false;
+        if let Some(start) = self.get_focus_area(e) {
+            start.search(dir, &mut |p| -> Result<bool> {
+                if !e.screen_area().contains_point(p) {
+                    return Ok(true);
+                }
+                locate(e, p, &mut |x| {
+                    if !seen && x.can_focus() {
+                        seen = true;
+                        self.set_focus(x)?;
                     }
-                    locate(e, p, &mut |x| {
-                        if !seen && x.can_focus() {
-                            seen = true;
-                            self.set_focus(x)?;
-                        }
-                        Ok(())
-                    })?;
-                    Ok(seen)
-                })?
-            }
+                    Ok(())
+                })?;
+                Ok(seen)
+            })?
         }
         Ok(EventOutcome::Handle { skip: false })
     }
@@ -264,7 +264,7 @@ impl<S> Canopy<S> {
         let mut ret = None;
         self.focus_path(e, &mut |x| -> Result<()> {
             if ret == None {
-                ret = x.area();
+                ret = Some(x.screen_area());
             }
             Ok(())
         })
@@ -290,7 +290,7 @@ impl<S> Canopy<S> {
             Ok(if focus_seen {
                 ret = ret.join(f(x)?);
                 SkipWalker::default()
-            } else if x.area().is_none() {
+            } else if x.is_hidden() {
                 // Hidden nodes don't hold focus
                 SkipWalker::default()
             } else if self.is_focused(x) {
@@ -338,21 +338,20 @@ impl<S> Canopy<S> {
         self.focus_path_mut(e, &mut |n| -> Result<()> {
             if !seen {
                 if let Some(c) = n.cursor() {
-                    if let Some(r) = n.area() {
-                        w.queue(MoveTo(r.tl.x + c.location.x, r.tl.y + c.location.y))?;
-                        w.queue(Show)?;
-                        if c.blink {
-                            w.queue(EnableBlinking)?;
-                        } else {
-                            w.queue(DisableBlinking)?;
-                        }
-                        w.queue(SetCursorShape(match c.shape {
-                            cursor::CursorShape::Block => CursorShape::Block,
-                            cursor::CursorShape::Line => CursorShape::Line,
-                            cursor::CursorShape::Underscore => CursorShape::UnderScore,
-                        }))?;
-                        seen = true;
+                    let r = n.screen_area();
+                    w.queue(MoveTo(r.tl.x + c.location.x, r.tl.y + c.location.y))?;
+                    w.queue(Show)?;
+                    if c.blink {
+                        w.queue(EnableBlinking)?;
+                    } else {
+                        w.queue(DisableBlinking)?;
                     }
+                    w.queue(SetCursorShape(match c.shape {
+                        cursor::CursorShape::Block => CursorShape::Block,
+                        cursor::CursorShape::Line => CursorShape::Line,
+                        cursor::CursorShape::Underscore => CursorShape::UnderScore,
+                    }))?;
+                    seen = true;
                 }
             }
             Ok(())
@@ -388,18 +387,16 @@ impl<S> Canopy<S> {
         e: &mut dyn Node<S>,
         w: &mut dyn Write,
     ) -> Result<()> {
-        if let Some(r) = e.area() {
-            if self.should_render(e) {
-                if self.is_focused(e) {
-                    let s = &mut e.state_mut();
-                    s.rendered_focus_gen = self.focus_gen
-                }
-                e.render(self, style, r, w)?;
+        if self.should_render(e) {
+            if self.is_focused(e) {
+                let s = &mut e.state_mut();
+                s.rendered_focus_gen = self.focus_gen
             }
-            style.inc();
-            e.children_mut(&mut |x| self.render_traversal(style, x, w))?;
-            style.dec();
+            e.render(self, style, e.screen_area(), w)?;
         }
+        style.inc();
+        e.children_mut(&mut |x| self.render_traversal(style, x, w))?;
+        style.dec();
         Ok(())
     }
 
@@ -431,31 +428,30 @@ impl<S> Canopy<S> {
         locate(root, m.loc, &mut |x| {
             Ok(if handled {
                 EventOutcome::default()
-            } else {
-                if let Some(r) = x.area() {
-                    let m = mouse::Mouse {
-                        action: m.action,
-                        button: m.button,
-                        modifiers: m.modifiers,
-                        loc: r.rebase_point(m.loc)?,
-                    };
-                    match x.handle_mouse(self, s, m)? {
-                        EventOutcome::Ignore { skip } => {
-                            if skip {
-                                handled = true;
-                            }
-                            EventOutcome::Ignore { skip: false }
-                        }
-                        EventOutcome::Handle { .. } => {
-                            self.taint(x);
+            } else if !x.is_hidden() {
+                let r = x.screen_area();
+                let m = mouse::Mouse {
+                    action: m.action,
+                    button: m.button,
+                    modifiers: m.modifiers,
+                    loc: r.rebase_point(m.loc)?,
+                };
+                match x.handle_mouse(self, s, m)? {
+                    EventOutcome::Ignore { skip } => {
+                        if skip {
                             handled = true;
-                            EventOutcome::Handle { skip: false }
                         }
-                        itm => itm,
+                        EventOutcome::Ignore { skip: false }
                     }
-                } else {
-                    EventOutcome::default()
+                    EventOutcome::Handle { .. } => {
+                        self.taint(x);
+                        handled = true;
+                        EventOutcome::Handle { skip: false }
+                    }
+                    itm => itm,
                 }
+            } else {
+                EventOutcome::default()
             })
         })
     }
@@ -492,7 +488,7 @@ impl<S> Canopy<S> {
     where
         N: Node<S> + FillLayout<S>,
     {
-        if e.area() == Some(rect) {
+        if e.screen_area() == rect {
             return Ok(());
         }
         e.layout(self, rect)?;
@@ -564,18 +560,17 @@ pub fn locate<S, R: Walker + Default>(
         Ok(if seen {
             ret = ret.join(f(inner)?);
             SkipWalker::default()
-        } else {
-            if let Some(a) = inner.area() {
-                if a.contains_point(p) {
-                    seen = true;
-                    ret = ret.join(f(inner)?);
-                    SkipWalker { has_skip: true }
-                } else {
-                    SkipWalker::default()
-                }
-            } else {
+        } else if !inner.is_hidden() {
+            let a = inner.screen_area();
+            if a.contains_point(p) {
+                seen = true;
+                ret = ret.join(f(inner)?);
                 SkipWalker { has_skip: true }
+            } else {
+                SkipWalker::default()
             }
+        } else {
+            SkipWalker { has_skip: true }
         })
     })?;
     Ok(ret)
@@ -873,7 +868,7 @@ mod tests {
             },
         )?;
         assert_eq!(
-            root.area().unwrap(),
+            root.screen_area(),
             Rect {
                 tl: Point { x: 0, y: 0 },
                 w: SIZE,
@@ -881,7 +876,7 @@ mod tests {
             }
         );
         assert_eq!(
-            root.a.area().unwrap(),
+            root.a.screen_area(),
             Rect {
                 tl: Point { x: 0, y: 0 },
                 w: SIZE / 2,
@@ -889,7 +884,7 @@ mod tests {
             }
         );
         assert_eq!(
-            root.b.area().unwrap(),
+            root.b.screen_area(),
             Rect {
                 tl: Point { x: SIZE / 2, y: 0 },
                 w: SIZE / 2,
@@ -907,7 +902,7 @@ mod tests {
         )?;
 
         assert_eq!(
-            root.b.area().unwrap(),
+            root.b.screen_area(),
             Rect {
                 tl: Point { x: 25, y: 0 },
                 w: 25,

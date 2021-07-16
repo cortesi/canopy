@@ -15,12 +15,6 @@ pub fn derive_statefulnode(input: proc_macro::TokenStream) -> proc_macro::TokenS
             fn state(&self) -> &canopy::NodeState {
                 &self.state
             }
-            fn area(&self) -> Option<canopy::geom::Rect> {
-                self.state().rect
-            }
-            fn set_area(&mut self, r: Rect) {
-                self.state_mut().rect = Some(r)
-            }
         }
     };
     proc_macro::TokenStream::from(expanded)

@@ -56,8 +56,8 @@ impl Block {
 
 impl FillLayout<Handle> for Root {
     fn layout(&mut self, app: &mut Canopy<Handle>, a: Rect) -> Result<()> {
-        self.set_area(a);
-        app.resize(&mut self.child, a)?;
+        self.set_screen_area(a);
+        self.child.layout(app, a)?;
         Ok(())
     }
 }
@@ -108,20 +108,17 @@ impl Node<Handle> for Root {
 
 impl Block {
     fn add(&mut self, app: &mut Canopy<Handle>) -> Result<EventOutcome> {
-        if let Some(r) = self.area() {
-            Ok(if self.children.len() == 0 {
-                EventOutcome::Ignore { skip: false }
-            } else if self.size_limited(r) {
-                EventOutcome::Handle { skip: false }
-            } else {
-                self.children.push(Block::new(!self.horizontal));
-                self.layout(app, r)?;
-                app.taint_tree(self)?;
-                EventOutcome::Handle { skip: false }
-            })
+        let r = self.screen_area();
+        Ok(if self.children.len() == 0 {
+            EventOutcome::Ignore { skip: false }
+        } else if self.size_limited(r) {
+            EventOutcome::Handle { skip: false }
         } else {
-            Ok(EventOutcome::Ignore { skip: false })
-        }
+            self.children.push(Block::new(!self.horizontal));
+            self.layout(app, r)?;
+            app.taint_tree(self)?;
+            EventOutcome::Handle { skip: false }
+        })
     }
     fn size_limited(&self, a: Rect) -> bool {
         if self.horizontal && a.w <= 4 {
@@ -133,26 +130,23 @@ impl Block {
         }
     }
     fn split(&mut self, app: &mut Canopy<Handle>) -> Result<EventOutcome> {
-        if let Some(r) = self.area() {
-            Ok(if self.children.len() != 0 {
-                EventOutcome::Ignore { skip: false }
-            } else if self.size_limited(r) {
-                EventOutcome::Handle { skip: false }
-            } else {
-                self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
-                self.layout(app, r)?;
-                app.taint_tree(self)?;
-                EventOutcome::Handle { skip: false }
-            })
+        let r = self.screen_area();
+        Ok(if self.children.len() != 0 {
+            EventOutcome::Ignore { skip: false }
+        } else if self.size_limited(r) {
+            EventOutcome::Handle { skip: false }
         } else {
-            Ok(EventOutcome::Ignore { skip: false })
-        }
+            self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
+            self.layout(app, r)?;
+            app.taint_tree(self)?;
+            EventOutcome::Handle { skip: false }
+        })
     }
 }
 
 impl FillLayout<Handle> for Block {
     fn layout(&mut self, app: &mut Canopy<Handle>, rect: Rect) -> Result<()> {
-        self.set_area(rect);
+        self.set_screen_area(rect);
         if self.children.len() > 0 {
             let sizes = if self.horizontal {
                 rect.split_horizontal(self.children.len() as u16)?

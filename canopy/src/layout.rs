@@ -1,10 +1,10 @@
 use crate::geom::{Point, Rect};
-use crate::{Canopy, Result};
+use crate::{Canopy, Result, StatefulNode};
 
 /// A layout for nodes that simply fill the space specified. Examples include
 /// frames that fill any region we pass them, and widgets that have one fixed
 /// dimension, like a fixed-height status bar.
-pub trait FillLayout<S> {
+pub trait FillLayout<S>: StatefulNode {
     fn layout(&mut self, app: &mut Canopy<S>, rect: Rect) -> Result<()>;
 }
 
@@ -19,7 +19,7 @@ pub trait FillLayout<S> {
 /// rectangle that encloses all its content. Now, the parent component can make
 /// a decision to render some sub-view of the virtual component rectangle onto
 /// the screen.
-pub trait ConstrainedWidthLayout<S> {
+pub trait ConstrainedWidthLayout<S>: StatefulNode {
     /// Constrain the width of the component. Returns a rectangle at the origin
     /// (0, 0) representing the virtual size of the component. A best-effort
     /// attempt is made to scale to within the width, but the returned rectangle
