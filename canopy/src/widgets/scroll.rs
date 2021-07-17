@@ -55,7 +55,7 @@ where
                 h: ss.window.h,
             }
             .clamp(ss.virt)?;
-            self.child.layout(app, ss.window.tl, ss.rect)?;
+            self.child.layout(app, ss.window, ss.rect)?;
             app.taint_tree(self)?;
         }
         Ok(EventOutcome::Handle { skip: false })
@@ -64,7 +64,7 @@ where
     pub fn scroll_by(&mut self, app: &mut Canopy<S>, x: i16, y: i16) -> Result<EventOutcome> {
         if let Some(ss) = &mut self.scrollstate {
             ss.window = ss.window.shift_within(x, y, ss.virt);
-            self.child.layout(app, ss.window.tl, ss.rect)?;
+            self.child.layout(app, ss.window, ss.rect)?;
             app.taint_tree(self)?;
         }
         Ok(EventOutcome::Handle { skip: false })
@@ -121,7 +121,7 @@ where
             virt,
             rect: rect,
         });
-        self.child.layout(app, view.tl, rect)?;
+        self.child.layout(app, view, rect)?;
         Ok(())
     }
 }

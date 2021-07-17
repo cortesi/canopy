@@ -76,24 +76,23 @@ where
     fn layout_children(
         &mut self,
         app: &mut Canopy<S>,
-        virt_origin: Point,
+        virt_rect: Rect,
         screen_rect: Rect,
     ) -> Result<()> {
         let mut voffset = 0;
         // The virtual screen location
-        let target_rect = screen_rect.at(&virt_origin);
         for itm in &mut self.items {
             // The virtual item rectangle
             let item_rect = itm.size.shift(0, voffset as i16);
-            if let Some(r) = target_rect.intersect(&item_rect) {
+            if let Some(r) = virt_rect.intersect(&item_rect) {
                 itm.itm.layout(
                     app,
                     // The virtual coords are the intersection translated into
                     // the co-ordinates of the item.
-                    item_rect.rebase_point(r.tl)?,
+                    item_rect.rebase_rect(&r)?,
                     // The screen rect is the intersection translated into the
                     // target rect
-                    target_rect.rebase_rect(&r)?,
+                    virt_rect.rebase_rect(&r)?,
                 )?;
             } else {
                 itm.itm.hide();
@@ -141,7 +140,11 @@ mod tests {
         let _ = lst.constrain(&mut app, 20)?;
         lst.layout(
             &mut app,
-            Point::zero(),
+            Rect {
+                tl: Point::zero(),
+                w: 10,
+                h: 10,
+            },
             Rect {
                 tl: Point::zero(),
                 w: 10,

@@ -45,19 +45,19 @@ pub trait ConstrainedWidthLayout<S>: StatefulNode {
     fn layout_children(
         &mut self,
         _app: &mut Canopy<S>,
-        _virt_origin: Point,
+        _virt_rect: Rect,
         _screen_rect: Rect,
     ) -> Result<()> {
         Ok(())
     }
 
-    fn layout(&mut self, app: &mut Canopy<S>, virt_origin: Point, screen_rect: Rect) -> Result<()> {
+    fn layout(&mut self, app: &mut Canopy<S>, virt_rect: Rect, screen_rect: Rect) -> Result<()> {
         self.set_screen_area(screen_rect);
         self.set_virt_area(Rect {
             tl: Point::zero(),
             w: screen_rect.w,
             h: screen_rect.h,
         });
-        self.layout_children(app, virt_origin, screen_rect)
+        self.layout_children(app, virt_rect, screen_rect)
     }
 }

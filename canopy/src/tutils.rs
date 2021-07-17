@@ -365,16 +365,5 @@ pub mod utils {
                 h: self.h,
             })
         }
-
-        fn layout(
-            &mut self,
-            _app: &mut Canopy<State>,
-            virt_origin: Point,
-            rect: Rect,
-        ) -> Result<()> {
-            self.set_screen_area(rect);
-            self.virt_origin = virt_origin;
-            Ok(())
-        }
     }
 }
