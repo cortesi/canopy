@@ -5,7 +5,14 @@ use crate::{Canopy, Result, StatefulNode};
 /// frames that fill any region we pass them, and widgets that have one fixed
 /// dimension, like a fixed-height status bar.
 pub trait FillLayout<S>: StatefulNode {
-    fn layout(&mut self, app: &mut Canopy<S>, rect: Rect) -> Result<()>;
+    fn layout_children(&mut self, _app: &mut Canopy<S>, _screen_rect: Rect) -> Result<()> {
+        Ok(())
+    }
+
+    fn layout(&mut self, app: &mut Canopy<S>, screen_rect: Rect) -> Result<()> {
+        self.set_screen_area(screen_rect);
+        self.layout_children(app, screen_rect)
+    }
 }
 
 /// A layout for nodes with geometry computed based on a width constraint. This
@@ -30,9 +37,27 @@ pub trait ConstrainedWidthLayout<S>: StatefulNode {
     /// This method may return None, in which case the component will attempt to
     /// render in whatever size it's laid out to.
     fn constrain(&mut self, app: &mut Canopy<S>, width: u16) -> Result<Rect>;
+
     /// Lay out a view onto the virtual component. The size of `rect` must be
     /// smaller than or equal to the rect returned by `constrain`, and
     /// `virt_origin` must be a point within the virtual component such that
     /// rect would fall entirely inside it.
-    fn layout(&mut self, app: &mut Canopy<S>, virt_origin: Point, rect: Rect) -> Result<()>;
+    fn layout_children(
+        &mut self,
+        _app: &mut Canopy<S>,
+        _virt_origin: Point,
+        _screen_rect: Rect,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    fn layout(&mut self, app: &mut Canopy<S>, virt_origin: Point, screen_rect: Rect) -> Result<()> {
+        self.set_screen_area(screen_rect);
+        self.set_virt_area(Rect {
+            tl: Point::zero(),
+            w: screen_rect.w,
+            h: screen_rect.h,
+        });
+        self.layout_children(app, virt_origin, screen_rect)
+    }
 }

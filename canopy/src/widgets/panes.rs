@@ -97,8 +97,7 @@ impl<S, N> FillLayout<S> for Panes<S, N>
 where
     N: canopy::Node<S> + FillLayout<S>,
 {
-    fn layout(&mut self, app: &mut Canopy<S>, rect: Rect) -> Result<()> {
-        self.set_screen_area(rect);
+    fn layout_children(&mut self, app: &mut Canopy<S>, rect: Rect) -> Result<()> {
         let l = rect.split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {

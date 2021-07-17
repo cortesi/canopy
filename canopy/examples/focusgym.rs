@@ -55,8 +55,7 @@ impl Block {
 }
 
 impl FillLayout<Handle> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle>, a: Rect) -> Result<()> {
-        self.set_screen_area(a);
+    fn layout_children(&mut self, app: &mut Canopy<Handle>, a: Rect) -> Result<()> {
         self.child.layout(app, a)?;
         Ok(())
     }
@@ -145,8 +144,7 @@ impl Block {
 }
 
 impl FillLayout<Handle> for Block {
-    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Rect) -> Result<()> {
-        self.set_screen_area(rect);
+    fn layout_children(&mut self, app: &mut Canopy<Handle>, rect: Rect) -> Result<()> {
         if self.children.len() > 0 {
             let sizes = if self.horizontal {
                 rect.split_horizontal(self.children.len() as u16)?

@@ -30,8 +30,7 @@ impl Root {
 }
 
 impl FillLayout<Handle> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle>, rect: Rect) -> Result<()> {
-        self.set_screen_area(rect);
+    fn layout_children(&mut self, app: &mut Canopy<Handle>, rect: Rect) -> Result<()> {
         self.child.layout(app, rect)?;
         Ok(())
     }

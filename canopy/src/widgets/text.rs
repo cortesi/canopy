@@ -65,11 +65,6 @@ impl<'a, S> ConstrainedWidthLayout<S> for Text<S> {
         self.lines = Some(split);
         Ok(ret)
     }
-    fn layout(&mut self, _app: &mut Canopy<S>, virt_origin: Point, rect: Rect) -> Result<()> {
-        self.set_screen_area(rect);
-        self.virt_origin = Some(virt_origin);
-        Ok(())
-    }
 }
 
 impl<'a, S> Node<S> for Text<S> {

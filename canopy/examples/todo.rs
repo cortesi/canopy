@@ -37,12 +37,7 @@ impl Node<Handle> for StatusBar {
     }
 }
 
-impl FillLayout<Handle> for StatusBar {
-    fn layout(&mut self, _app: &mut Canopy<Handle>, rect: Rect) -> Result<()> {
-        self.set_screen_area(rect);
-        Ok(())
-    }
-}
+impl FillLayout<Handle> for StatusBar {}
 
 #[derive(StatefulNode)]
 struct Root {
@@ -73,8 +68,7 @@ impl Root {
 }
 
 impl FillLayout<Handle> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle>, a: Rect) -> Result<()> {
-        self.set_screen_area(a);
+    fn layout_children(&mut self, app: &mut Canopy<Handle>, a: Rect) -> Result<()> {
         if a.h > 2 {
             let sb = Rect {
                 tl: Point {

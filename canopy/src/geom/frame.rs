@@ -96,6 +96,7 @@ impl Frame {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
 

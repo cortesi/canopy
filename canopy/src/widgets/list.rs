@@ -73,8 +73,12 @@ where
         })
     }
 
-    fn layout(&mut self, app: &mut Canopy<S>, virt_origin: Point, screen_rect: Rect) -> Result<()> {
-        self.set_screen_area(screen_rect);
+    fn layout_children(
+        &mut self,
+        app: &mut Canopy<S>,
+        virt_origin: Point,
+        screen_rect: Rect,
+    ) -> Result<()> {
         let mut voffset = 0;
         // The virtual screen location
         let target_rect = screen_rect.at(&virt_origin);
@@ -96,7 +100,6 @@ where
             }
             voffset += itm.size.h;
         }
-        self.virt_origin = Some(virt_origin);
         Ok(())
     }
 }
