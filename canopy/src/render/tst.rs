@@ -2,12 +2,15 @@ use super::Backend;
 use crate::{cursor, style::Color, Point, Rect, Result};
 
 pub struct TestRender {
-    renders: Vec<String>,
+    pub text: Vec<String>,
 }
 
 impl TestRender {
     pub fn new() -> Self {
-        TestRender { renders: vec![] }
+        TestRender { text: vec![] }
+    }
+    pub fn clear(&mut self) {
+        self.text = vec![];
     }
 }
 
@@ -16,7 +19,7 @@ impl Backend for TestRender {
         Ok(())
     }
 
-    fn show_cursor(&mut self, c: cursor::Cursor) -> Result<()> {
+    fn show_cursor(&mut self, _c: cursor::Cursor) -> Result<()> {
         Ok(())
     }
 
@@ -24,19 +27,20 @@ impl Backend for TestRender {
         Ok(())
     }
 
-    fn fg(&mut self, c: Color) -> Result<()> {
+    fn fg(&mut self, _c: Color) -> Result<()> {
         Ok(())
     }
 
-    fn bg(&mut self, c: Color) -> Result<()> {
+    fn bg(&mut self, _c: Color) -> Result<()> {
         Ok(())
     }
 
-    fn fill(&mut self, r: Rect, c: char) -> Result<()> {
+    fn fill(&mut self, _r: Rect, _c: char) -> Result<()> {
         Ok(())
     }
 
-    fn text(&mut self, loc: Point, txt: &str) -> Result<()> {
+    fn text(&mut self, _loc: Point, txt: &str) -> Result<()> {
+        self.text.push(txt.trim().into());
         Ok(())
     }
 }

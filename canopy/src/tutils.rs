@@ -1,7 +1,6 @@
 #[cfg(test)]
 pub mod utils {
     use duplicate::duplicate;
-    use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
     use crate as canopy;
     use crate::{
@@ -11,8 +10,6 @@ pub mod utils {
         style::Style,
         Canopy, EventOutcome, Node, NodeState, Point, Rect, Render, Result, StatefulNode,
     };
-
-    use crossterm::{style::Print, ExecutableCommand};
 
     pub const K_ANY: key::Key = key::Key(None, key::KeyCode::Char('a'));
 
@@ -63,9 +60,16 @@ pub mod utils {
         pub next_event: Option<EventOutcome>,
     }
 
-    pub fn tnode_render(n: String, w: &mut dyn Write) -> Result<()> {
-        w.execute(Print(format!("<{}>", n)))?;
-        Ok(())
+    pub fn tnode_render(n: String, rndr: &mut Render) -> Result<()> {
+        rndr.text(
+            "any",
+            Rect {
+                tl: Point { x: 0, y: 0 },
+                w: 100,
+                h: 100,
+            },
+            &format!("<{}>", n),
+        )
     }
 
     impl layout::FillLayout<State> for TLeaf {
@@ -79,9 +83,8 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(&self, _: &Canopy<State>, _rndr: &mut Render) -> Result<()> {
-            // tnode_render(self.name.clone(), w)
-            Ok(())
+        fn render(&self, _: &Canopy<State>, rndr: &mut Render) -> Result<()> {
+            tnode_render(self.name.clone(), rndr)
         }
         fn handle_key(
             &mut self,
@@ -124,8 +127,7 @@ pub mod utils {
             true
         }
         fn render(&self, _: &Canopy<State>, rndr: &mut Render) -> Result<()> {
-            // tnode_render(self.name.clone(), w)
-            Ok(())
+            tnode_render(self.name.clone(), rndr)
         }
         fn handle_key(
             &mut self,
@@ -182,8 +184,7 @@ pub mod utils {
             true
         }
         fn render(&self, _: &Canopy<State>, rndr: &mut Render) -> Result<()> {
-            // tnode_render(self.name.clone(), w)
-            Ok(())
+            tnode_render(self.name.clone(), rndr)
         }
         fn handle_key(
             &mut self,
@@ -299,29 +300,18 @@ pub mod utils {
     }
 
     pub fn trender(app: &mut Canopy<State>, r: &mut TRoot) -> Result<String> {
-        let mut c = Cursor::new(Vec::new());
-        let mut style = Style::default();
         let mut tr = TestRender::new();
-        let mut rndr = Render::new(&mut tr, style);
-
+        let mut rndr = Render::new(&mut tr, Style::default());
         app.render(&mut rndr, r)?;
-        c.seek(SeekFrom::Start(0))?;
-        let mut out = Vec::new();
-        c.read_to_end(&mut out)?;
-        Ok(String::from_utf8_lossy(&out).into())
+        Ok(tr.text.join(""))
     }
 
     pub fn get_name(app: &mut Canopy<State>, x: &mut dyn Node<State>) -> Result<String> {
-        let mut c = Cursor::new(Vec::new());
         let colors = Style::default();
         let mut tr = TestRender::new();
         let mut rndr = Render::new(&mut tr, colors);
-
         x.render(app, &mut rndr)?;
-        c.seek(SeekFrom::Start(0))?;
-        let mut out = Vec::new();
-        c.read_to_end(&mut out)?;
-        let n: String = String::from_utf8_lossy(&out).into();
+        let n = tr.text[0].clone();
         let n = n.trim_matches(&vec!['<', '>'][..]);
         Ok(n.into())
     }
