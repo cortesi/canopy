@@ -119,7 +119,7 @@ where
         self.scrollstate = Some(ScrollState {
             window: view,
             virt,
-            rect: rect,
+            rect,
         });
         self.child.layout(app, view, rect)?;
         Ok(())

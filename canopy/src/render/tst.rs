@@ -5,6 +5,12 @@ pub struct TestRender {
     pub text: Vec<String>,
 }
 
+impl Default for TestRender {
+    fn default() -> Self {
+        TestRender::new()
+    }
+}
+
 impl TestRender {
     pub fn new() -> Self {
         TestRender { text: vec![] }

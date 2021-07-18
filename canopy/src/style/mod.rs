@@ -1,13 +1,6 @@
-use std::io::Write;
-
 pub mod solarized;
-use crate::Result;
 
 pub use crossterm::style::Color;
-use crossterm::{
-    style::{SetBackgroundColor, SetForegroundColor},
-    QueueableCommand,
-};
 use std::collections::HashMap;
 
 /// A hierarchical color scheme manager.
@@ -108,14 +101,6 @@ impl Style {
         self.resolve(&self.layers, &self.parse_path(path))
     }
 
-    /// Set the fg and bg colors
-    pub fn set(&self, path: &str, w: &mut dyn Write) -> Result<()> {
-        let (fg, bg) = self.get(path);
-        w.queue(SetForegroundColor(fg))?;
-        w.queue(SetBackgroundColor(bg))?;
-        Ok(())
-    }
-
     fn parse_path(&self, path: &str) -> Vec<String> {
         path.split('/')
             .filter_map(|s| {
@@ -178,6 +163,7 @@ impl Style {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Result;
 
     #[test]
     fn colorscheme_basic() -> Result<()> {

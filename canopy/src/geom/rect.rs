@@ -226,7 +226,7 @@ impl Rect {
 
     /// Splits the rectangle into columns, with each column split into rows.
     /// Returns a Vec of rects per column.
-    pub fn split_panes(&self, spec: &Vec<u16>) -> Result<Vec<Vec<Rect>>> {
+    pub fn split_panes(&self, spec: &[u16]) -> Result<Vec<Vec<Rect>>> {
         let mut ret = vec![];
 
         let cols = split(self.w, spec.len() as u16)?;
