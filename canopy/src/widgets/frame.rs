@@ -182,11 +182,11 @@ where
                     .hextent()
                     .split_active(window.hextent(), virt.hextent())?;
 
-                rndr.fill(style, f.right.hextract(&epre)?, self.glyphs.horizontal)?;
-                rndr.fill(style, f.right.hextract(&epost)?, self.glyphs.horizontal)?;
+                rndr.fill(style, f.bottom.hextract(&epre)?, self.glyphs.horizontal)?;
+                rndr.fill(style, f.bottom.hextract(&epost)?, self.glyphs.horizontal)?;
                 rndr.fill(
                     style,
-                    f.right.hextract(&eactive)?,
+                    f.bottom.hextract(&eactive)?,
                     self.glyphs.horizontal_active,
                 )?;
             }

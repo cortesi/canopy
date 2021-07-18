@@ -120,12 +120,11 @@ impl<S> InputLine<S> {
 }
 
 impl<S> FillLayout<S> for InputLine<S> {
-    fn layout(&mut self, _app: &mut Canopy<S>, rect: Rect) -> Result<()> {
+    fn layout_children(&mut self, _app: &mut Canopy<S>, rect: Rect) -> Result<()> {
         if rect.h != 1 {
             return Err(Error::Layout("InputLine height must be exactly 1.".into()));
         }
         self.textbuf.set_display_width(rect.w as usize);
-        self.set_screen_area(rect);
         Ok(())
     }
 }
