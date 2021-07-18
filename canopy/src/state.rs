@@ -12,9 +12,9 @@ pub struct NodeState {
     pub(crate) render_gen: u64,
     pub(crate) render_skip_gen: u64,
     pub(crate) focus_gen: u64,
-    // The focus generation if this node held focus during the last rendering
-    // phase.
+    // The last render sweep during which this node held focus.
     pub(crate) rendered_focus_gen: u64,
+
     // The area on screen that this node will render to.
     pub(crate) screen_area: Rect,
     // The virtual area this node occupies. Only used if the layout supports it.

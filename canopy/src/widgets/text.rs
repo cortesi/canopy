@@ -20,7 +20,6 @@ use textwrap;
 #[derive(StatefulNode)]
 pub struct Text<S> {
     pub state: NodeState,
-    pub virt_origin: Option<Point>,
     pub raw: String,
     _marker: PhantomData<S>,
 
@@ -31,8 +30,6 @@ impl<S> Text<S> {
     pub fn new(raw: &str) -> Self {
         Text {
             state: NodeState::default(),
-
-            virt_origin: None,
 
             raw: raw.to_owned(),
             lines: None,
@@ -52,7 +49,6 @@ impl<'a, S> ConstrainedWidthLayout<S> for Text<S> {
                 });
             }
         }
-
         let mut split: Vec<String> = vec![];
         for i in textwrap::wrap(&self.raw, w as usize) {
             split.push(format!("{:width$}", i, width = w as usize))
@@ -73,12 +69,13 @@ impl<'a, S> Node<S> for Text<S> {
         w.queue(SetForegroundColor(fg))?;
         w.queue(SetBackgroundColor(bg))?;
         let area = self.screen_area();
-        if let (Some(lines), Some(vo)) = (self.lines.as_ref(), self.virt_origin) {
+        if let Some(lines) = self.lines.as_ref() {
+            let vo = self.virt_area();
             for i in 0..area.h {
                 w.queue(MoveTo(area.tl.x, area.tl.y + i))?;
-                if (vo.y + i) < lines.len() as u16 {
-                    let l = &lines[(vo.y + i) as usize];
-                    w.queue(Print(&l[(vo.x) as usize..(vo.x + area.w) as usize]))?;
+                if (vo.tl.y + i) < lines.len() as u16 {
+                    let l = &lines[(vo.tl.y + i) as usize];
+                    w.queue(Print(&l[(vo.tl.x) as usize..(vo.tl.x + area.w) as usize]))?;
                 } else {
                     w.queue(Print(" ".repeat(area.w as usize)))?;
                 };

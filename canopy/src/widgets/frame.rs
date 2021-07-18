@@ -192,7 +192,7 @@ where
                 widgets::block(w, f.bottom.hextract(&epost)?, self.glyphs.horizontal)?;
                 horizactive = Some(f.bottom.hextract(&eactive)?);
             }
-            if vertactive.is_none() || horizactive.is_none() {
+            if vertactive.is_some() || horizactive.is_some() {
                 style.set("frame/active", w)?;
             }
             if let Some(vc) = vertactive {

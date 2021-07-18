@@ -96,7 +96,9 @@ pub trait Node<S>: StatefulNode {
     }
 
     /// Render this widget using the geometry that was set through the node's
-    /// Layout implementation. The default implementation does nothing.
+    /// Layout implementation. Nodes with no children should always make sure
+    /// they redraw all of `self.screen_area()`. The default implementation does
+    /// nothing.
     fn render(&self, app: &Canopy<S>, style: &mut Style, w: &mut dyn Write) -> Result<()> {
         Ok(())
     }

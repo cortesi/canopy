@@ -43,12 +43,12 @@ impl Walker for SkipWalker {
 pub struct Canopy<S> {
     // A counter that is incremented every time focus changes. The current focus
     // will have a state `focus_gen` equal to this.
-    pub focus_gen: u64,
+    focus_gen: u64,
     // A counter that is incremented every time we render. All items that
     // require rendering during the current sweep will have a state `render_gen`
     // equal to this.
-    pub render_gen: u64,
-    pub last_focus_gen: u64,
+    render_gen: u64,
+    last_focus_gen: u64,
     _marker: PhantomData<S>,
 }
 
