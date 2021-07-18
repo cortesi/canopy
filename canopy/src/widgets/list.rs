@@ -77,7 +77,7 @@ where
         &mut self,
         app: &mut Canopy<S>,
         virt_rect: Rect,
-        screen_rect: Rect,
+        _screen_rect: Rect,
     ) -> Result<()> {
         let mut voffset = 0;
         // The virtual screen location
@@ -117,13 +117,7 @@ impl<S, N> Node<S> for List<S, N>
 where
     N: Node<S> + ConstrainedWidthLayout<S>,
 {
-    fn render(
-        &self,
-        _app: &Canopy<S>,
-        _colors: &mut Style,
-        _: Rect,
-        _w: &mut dyn Write,
-    ) -> Result<()> {
+    fn render(&self, _app: &Canopy<S>, _colors: &mut Style, _w: &mut dyn Write) -> Result<()> {
         Ok(())
     }
 }

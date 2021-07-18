@@ -1,7 +1,6 @@
 use crate::{
     cursor,
     event::{key, mouse, tick},
-    geom::Rect,
     style::Style,
     Canopy, Result, StatefulNode,
 };
@@ -96,16 +95,9 @@ pub trait Node<S>: StatefulNode {
         false
     }
 
-    /// Render the widget to a buffer, using the geometry that was set through
-    /// the node's Layout implementation. The default implementation does
-    /// nothing.
-    fn render(
-        &self,
-        app: &Canopy<S>,
-        style: &mut Style,
-        area: Rect,
-        w: &mut dyn Write,
-    ) -> Result<()> {
+    /// Render this widget using the geometry that was set through the node's
+    /// Layout implementation. The default implementation does nothing.
+    fn render(&self, app: &Canopy<S>, style: &mut Style, w: &mut dyn Write) -> Result<()> {
         Ok(())
     }
 

@@ -21,15 +21,10 @@ struct StatusBar {
 }
 
 impl Node<Handle> for StatusBar {
-    fn render(
-        &self,
-        _app: &Canopy<Handle>,
-        style: &mut Style,
-        r: Rect,
-        w: &mut dyn Write,
-    ) -> Result<()> {
+    fn render(&self, _app: &Canopy<Handle>, style: &mut Style, w: &mut dyn Write) -> Result<()> {
         style.push_layer("statusbar");
         style.set("statusbar/text", w)?;
+        let r = self.screen_area();
         block(w, r, ' ')?;
         w.queue(MoveTo(r.tl.x, r.tl.y))?;
         w.queue(Print("todo"))?;

@@ -392,7 +392,7 @@ impl<S> Canopy<S> {
                 let s = &mut e.state_mut();
                 s.rendered_focus_gen = self.focus_gen
             }
-            e.render(self, style, e.screen_area(), w)?;
+            e.render(self, style, w)?;
         }
         style.inc();
         e.children_mut(&mut |x| self.render_traversal(style, x, w))?;

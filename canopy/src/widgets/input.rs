@@ -181,14 +181,9 @@ impl<'a, S> Node<S> for InputLine<S> {
             blink: true,
         })
     }
-    fn render(
-        &self,
-        _app: &Canopy<S>,
-        colors: &mut Style,
-        r: Rect,
-        w: &mut dyn Write,
-    ) -> Result<()> {
+    fn render(&self, _app: &Canopy<S>, colors: &mut Style, w: &mut dyn Write) -> Result<()> {
         colors.set("text", w)?;
+        let r = self.screen_area();
         w.queue(MoveTo(r.tl.x, r.tl.y))?;
         w.queue(Print(&self.textbuf.text()))?;
         Ok(())

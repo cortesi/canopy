@@ -68,16 +68,11 @@ impl<'a, S> ConstrainedWidthLayout<S> for Text<S> {
 }
 
 impl<'a, S> Node<S> for Text<S> {
-    fn render(
-        &self,
-        _app: &Canopy<S>,
-        style: &mut Style,
-        area: Rect,
-        w: &mut dyn Write,
-    ) -> Result<()> {
+    fn render(&self, _app: &Canopy<S>, style: &mut Style, w: &mut dyn Write) -> Result<()> {
         let (fg, bg) = style.get("text");
         w.queue(SetForegroundColor(fg))?;
         w.queue(SetBackgroundColor(bg))?;
+        let area = self.screen_area();
         if let (Some(lines), Some(vo)) = (self.lines.as_ref(), self.virt_origin) {
             for i in 0..area.h {
                 w.queue(MoveTo(area.tl.x, area.tl.y + i))?;

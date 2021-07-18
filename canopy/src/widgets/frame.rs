@@ -130,14 +130,14 @@ where
     fn should_render(&self, app: &Canopy<S>) -> Option<bool> {
         Some(app.should_render(&self.child))
     }
-    fn render(&self, app: &Canopy<S>, style: &mut Style, r: Rect, w: &mut dyn Write) -> Result<()> {
+    fn render(&self, app: &Canopy<S>, style: &mut Style, w: &mut dyn Write) -> Result<()> {
         if app.on_focus_path(self) {
             style.set("frame/focused", w)?;
         } else {
             style.set("frame", w)?;
         };
 
-        let f = GFrame::new(r, 1)?;
+        let f = GFrame::new(self.screen_area(), 1)?;
         widgets::block(w, f.topleft, self.glyphs.topleft)?;
         widgets::block(w, f.topright, self.glyphs.topright)?;
         widgets::block(w, f.bottomleft, self.glyphs.bottomleft)?;

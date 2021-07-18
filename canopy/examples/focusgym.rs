@@ -163,13 +163,7 @@ impl Node<Handle> for Block {
     fn can_focus(&self) -> bool {
         self.children.len() == 0
     }
-    fn render(
-        &self,
-        app: &Canopy<Handle>,
-        _colors: &mut Style,
-        a: Rect,
-        w: &mut dyn Write,
-    ) -> Result<()> {
+    fn render(&self, app: &Canopy<Handle>, _colors: &mut Style, w: &mut dyn Write) -> Result<()> {
         if self.children.len() == 0 {
             w.queue(SetForegroundColor(
                 if app.is_focused(self) && self.children.len() == 0 {
@@ -178,6 +172,7 @@ impl Node<Handle> for Block {
                     Color::Blue
                 },
             ))?;
+            let a = self.screen_area();
             block(w, a.inner(1)?, '\u{2588}')?;
             w.queue(SetForegroundColor(Color::Black))?;
             solid_frame(w, Frame::new(a, 1)?, ' ')?;

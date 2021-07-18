@@ -78,13 +78,7 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(
-            &self,
-            _: &Canopy<State>,
-            _c: &mut Style,
-            _: Rect,
-            w: &mut dyn Write,
-        ) -> Result<()> {
+        fn render(&self, _: &Canopy<State>, _c: &mut Style, w: &mut dyn Write) -> Result<()> {
             tnode_render(self.name.clone(), w)
         }
         fn handle_key(
@@ -127,13 +121,7 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(
-            &self,
-            _: &Canopy<State>,
-            _c: &mut Style,
-            _: Rect,
-            w: &mut dyn Write,
-        ) -> Result<()> {
+        fn render(&self, _: &Canopy<State>, _c: &mut Style, w: &mut dyn Write) -> Result<()> {
             tnode_render(self.name.clone(), w)
         }
         fn handle_key(
@@ -190,13 +178,7 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(
-            &self,
-            _: &Canopy<State>,
-            _c: &mut Style,
-            _: Rect,
-            w: &mut dyn Write,
-        ) -> Result<()> {
+        fn render(&self, _: &Canopy<State>, _c: &mut Style, w: &mut dyn Write) -> Result<()> {
             tnode_render(self.name.clone(), w)
         }
         fn handle_key(
@@ -326,7 +308,7 @@ pub mod utils {
         let mut c = Cursor::new(Vec::new());
         let mut colors = Style::default();
 
-        x.render(app, &mut colors, Rect::default(), &mut c)?;
+        x.render(app, &mut colors, &mut c)?;
         c.seek(SeekFrom::Start(0))?;
         let mut out = Vec::new();
         c.read_to_end(&mut out)?;
