@@ -394,9 +394,9 @@ impl<S> Canopy<S> {
             }
             e.render(self, style, w)?;
         }
-        style.inc();
+        style.push();
         e.children_mut(&mut |x| self.render_traversal(style, x, w))?;
-        style.dec();
+        style.pop();
         Ok(())
     }
 

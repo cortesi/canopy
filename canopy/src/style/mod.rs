@@ -3,8 +3,9 @@ use std::io::Write;
 pub mod solarized;
 use crate::Result;
 
+pub use crossterm::style::Color;
 use crossterm::{
-    style::{Color, SetBackgroundColor, SetForegroundColor},
+    style::{SetBackgroundColor, SetForegroundColor},
     QueueableCommand,
 };
 use std::collections::HashMap;
@@ -70,13 +71,13 @@ impl Style {
     }
 
     // Increment a render level.
-    pub(crate) fn inc(&mut self) {
+    pub(crate) fn push(&mut self) {
         self.level += 1
     }
 
     // Decrement a render level. A layer pushed onto the stack with the  current
     // render level will be removed.
-    pub(crate) fn dec(&mut self) {
+    pub(crate) fn pop(&mut self) {
         if self.level != 0 {
             if self.layer_levels.last() == Some(&self.level) {
                 self.layers.pop();
@@ -241,41 +242,41 @@ mod tests {
         assert_eq!(c.level, 0);
 
         // A nop at this level
-        c.dec();
+        c.pop();
         assert_eq!(c.level, 0);
 
-        c.inc();
+        c.push();
         c.push_layer("foo");
         assert_eq!(c.level, 1);
         assert_eq!(c.layers, vec!["", "foo"]);
         assert_eq!(c.layer_levels, vec![0, 1]);
 
-        c.inc();
-        c.inc();
+        c.push();
+        c.push();
         c.push_layer("bar");
         assert_eq!(c.level, 3);
         assert_eq!(c.layers, vec!["", "foo", "bar"]);
         assert_eq!(c.layer_levels, vec![0, 1, 3]);
 
-        c.inc();
+        c.push();
         assert_eq!(c.level, 4);
 
-        c.dec();
+        c.pop();
         assert_eq!(c.level, 3);
         assert_eq!(c.layers, vec!["", "foo", "bar"]);
         assert_eq!(c.layer_levels, vec![0, 1, 3]);
 
-        c.dec();
+        c.pop();
         assert_eq!(c.level, 2);
         assert_eq!(c.layers, vec!["", "foo"]);
         assert_eq!(c.layer_levels, vec![0, 1]);
 
-        c.dec();
+        c.pop();
         assert_eq!(c.level, 1);
         assert_eq!(c.layers, vec!["", "foo"]);
         assert_eq!(c.layer_levels, vec![0, 1]);
 
-        c.dec();
+        c.pop();
         assert_eq!(c.level, 0);
         assert_eq!(c.layers, vec![""]);
         assert_eq!(c.layer_levels, vec![0]);
