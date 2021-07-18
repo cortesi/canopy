@@ -1,8 +1,6 @@
 use duplicate::duplicate;
-use std::io::Write;
 use std::marker::PhantomData;
 
-use crossterm::{cursor::MoveTo, style::Print, QueueableCommand};
 use pad::PadStr;
 
 use crate as canopy;
@@ -10,8 +8,7 @@ use crate::{
     geom::{Frame as GFrame, Rect},
     layout::FillLayout,
     state::{NodeState, StatefulNode},
-    style::Style,
-    widgets, Canopy, Node, Result,
+    Canopy, Node, Render, Result,
 };
 
 /// Defines the set of glyphs used to draw the frame
@@ -130,18 +127,19 @@ where
     fn should_render(&self, app: &Canopy<S>) -> Option<bool> {
         Some(app.should_render(&self.child))
     }
-    fn render(&self, app: &Canopy<S>, style: &mut Style, w: &mut dyn Write) -> Result<()> {
-        if app.on_focus_path(self) {
-            style.set("frame/focused", w)?;
+    fn render(&self, app: &Canopy<S>, rndr: &mut Render) -> Result<()> {
+        let style = if app.on_focus_path(self) {
+            "frame/focused"
         } else {
-            style.set("frame", w)?;
+            "frame"
         };
 
         let f = GFrame::new(self.screen_area(), 1)?;
-        widgets::block(w, f.topleft, self.glyphs.topleft)?;
-        widgets::block(w, f.topright, self.glyphs.topright)?;
-        widgets::block(w, f.bottomleft, self.glyphs.bottomleft)?;
-        widgets::block(w, f.bottomright, self.glyphs.bottomright)?;
+        rndr.fill(style, f.topleft, self.glyphs.topleft)?;
+        rndr.fill(style, f.topright, self.glyphs.topright)?;
+        rndr.fill(style, f.bottomleft, self.glyphs.bottomleft)?;
+        rndr.fill(style, f.bottomright, self.glyphs.bottomright)?;
+        rndr.fill(style, f.left, self.glyphs.vertical)?;
 
         let top = if f.top.w < 8 || self.child.title().is_none() {
             self.glyphs.horizontal.to_string().repeat(f.top.w as usize)
@@ -154,56 +152,44 @@ where
                 true,
             )
         };
+        rndr.text(style, f.top, &top)?;
 
-        w.queue(MoveTo(f.top.tl.x, f.top.tl.y))?;
-        w.queue(Print(top))?;
-
-        widgets::block(w, f.left, self.glyphs.vertical)?;
         if let Some((window, virt)) = self.child.bounds() {
-            let mut vertactive = None;
-            let mut horizactive = None;
-
             // Is window equal to or larger than virt?
             if window.vextent().contains(&virt.vextent()) {
-                widgets::block(w, f.right, self.glyphs.vertical)?;
+                rndr.fill(style, f.right, self.glyphs.vertical)?;
             } else {
                 let (epre, eactive, epost) = f
                     .right
                     .vextent()
                     .split_active(window.vextent(), virt.vextent())?;
 
-                widgets::block(w, f.right.vextract(&epre)?, self.glyphs.vertical)?;
-                widgets::block(w, f.right.vextract(&epost)?, self.glyphs.vertical)?;
-
-                vertactive = Some(f.right.vextract(&eactive)?);
-                // colors.set("frame/active", w)?;
-                // widgets::block(w, f.right.vextract(eactive)?, self.glyphs.vertical_active)?;
+                rndr.fill(style, f.right.vextract(&epre)?, self.glyphs.vertical)?;
+                rndr.fill(style, f.right.vextract(&epost)?, self.glyphs.vertical)?;
+                rndr.fill(
+                    style,
+                    f.right.vextract(&eactive)?,
+                    self.glyphs.vertical_active,
+                )?;
             }
 
             // Is window equal to or larger than virt?
             if window.hextent().contains(&virt.hextent()) {
-                widgets::block(w, f.bottom, self.glyphs.horizontal)?;
+                rndr.fill(style, f.bottom, self.glyphs.horizontal)?;
             } else {
                 let (epre, eactive, epost) = f
                     .bottom
                     .hextent()
                     .split_active(window.hextent(), virt.hextent())?;
-                widgets::block(w, f.bottom.hextract(&epre)?, self.glyphs.horizontal)?;
-                widgets::block(w, f.bottom.hextract(&epost)?, self.glyphs.horizontal)?;
-                horizactive = Some(f.bottom.hextract(&eactive)?);
+
+                rndr.fill(style, f.right.hextract(&epre)?, self.glyphs.horizontal)?;
+                rndr.fill(style, f.right.hextract(&epost)?, self.glyphs.horizontal)?;
+                rndr.fill(
+                    style,
+                    f.right.hextract(&eactive)?,
+                    self.glyphs.horizontal_active,
+                )?;
             }
-            if vertactive.is_some() || horizactive.is_some() {
-                style.set("frame/active", w)?;
-            }
-            if let Some(vc) = vertactive {
-                widgets::block(w, vc, self.glyphs.vertical_active)?;
-            }
-            if let Some(hc) = horizactive {
-                widgets::block(w, hc, self.glyphs.horizontal_active)?;
-            }
-        } else {
-            widgets::block(w, f.right, self.glyphs.vertical)?;
-            widgets::block(w, f.bottom, self.glyphs.horizontal)?;
         }
         Ok(())
     }

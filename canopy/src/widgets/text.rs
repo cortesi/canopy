@@ -3,17 +3,9 @@ use crate::{
     geom::{Point, Rect},
     layout::ConstrainedWidthLayout,
     state::{NodeState, StatefulNode},
-    style::Style,
-    Canopy, Node, Result,
+    Canopy, Node, Render, Result,
 };
-use std::io::Write;
 use std::marker::PhantomData;
-
-use crossterm::{
-    cursor::MoveTo,
-    style::{Print, SetBackgroundColor, SetForegroundColor},
-    QueueableCommand,
-};
 
 use textwrap;
 
@@ -64,20 +56,23 @@ impl<'a, S> ConstrainedWidthLayout<S> for Text<S> {
 }
 
 impl<'a, S> Node<S> for Text<S> {
-    fn render(&self, _app: &Canopy<S>, style: &mut Style, w: &mut dyn Write) -> Result<()> {
-        let (fg, bg) = style.get("text");
-        w.queue(SetForegroundColor(fg))?;
-        w.queue(SetBackgroundColor(bg))?;
+    fn render(&self, _app: &Canopy<S>, rndr: &mut Render) -> Result<()> {
         let area = self.screen_area();
+        let vo = self.virt_area();
         if let Some(lines) = self.lines.as_ref() {
-            let vo = self.virt_area();
             for i in 0..area.h {
-                w.queue(MoveTo(area.tl.x, area.tl.y + i))?;
+                let r = Rect {
+                    tl: Point {
+                        x: area.tl.x,
+                        y: area.tl.y + i,
+                    },
+                    w: area.w,
+                    h: 1,
+                };
                 if (vo.tl.y + i) < lines.len() as u16 {
-                    let l = &lines[(vo.tl.y + i) as usize];
-                    w.queue(Print(&l[(vo.tl.x) as usize..(vo.tl.x + area.w) as usize]))?;
+                    rndr.text("text", r, &lines[(vo.tl.y + i) as usize])?;
                 } else {
-                    w.queue(Print(" ".repeat(area.w as usize)))?;
+                    rndr.fill("text", r, ' ')?;
                 };
             }
         }

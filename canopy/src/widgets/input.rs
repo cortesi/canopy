@@ -1,4 +1,3 @@
-use std::io::Write;
 use std::marker::PhantomData;
 
 use crate as canopy;
@@ -9,12 +8,9 @@ use crate::{
     geom::{LineSegment, Point, Rect},
     layout::FillLayout,
     state::{NodeState, StatefulNode},
-    style::Style,
     widgets::frame,
-    Canopy, EventOutcome, Node, Result,
+    Canopy, EventOutcome, Node, Render, Result,
 };
-
-use crossterm::{cursor::MoveTo, style::Print, QueueableCommand};
 
 /// A text buffer that exposes edit functionality for a single line. It also
 /// keeps track of a display window that slides within the line, responding
@@ -181,13 +177,11 @@ impl<'a, S> Node<S> for InputLine<S> {
             blink: true,
         })
     }
-    fn render(&self, _app: &Canopy<S>, colors: &mut Style, w: &mut dyn Write) -> Result<()> {
-        colors.set("text", w)?;
-        let r = self.screen_area();
-        w.queue(MoveTo(r.tl.x, r.tl.y))?;
-        w.queue(Print(&self.textbuf.text()))?;
-        Ok(())
+
+    fn render(&self, _app: &Canopy<S>, rndr: &mut Render) -> Result<()> {
+        rndr.text("text", self.screen_area(), &self.textbuf.text())
     }
+
     fn handle_key(&mut self, _app: &mut Canopy<S>, _: &mut S, k: key::Key) -> Result<EventOutcome> {
         match k {
             key::Key(_, key::KeyCode::Left) => {

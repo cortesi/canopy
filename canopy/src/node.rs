@@ -1,11 +1,10 @@
 use crate::{
     cursor,
     event::{key, mouse, tick},
-    style::Style,
-    Canopy, Result, StatefulNode,
+    Canopy, Render, Result, StatefulNode,
 };
 use duplicate::duplicate;
-use std::{fmt::Debug, io::Write};
+use std::fmt::Debug;
 
 /// Walker is implemented for the return values of tree operations.
 pub trait Walker {
@@ -99,7 +98,7 @@ pub trait Node<S>: StatefulNode {
     /// Layout implementation. Nodes with no children should always make sure
     /// they redraw all of `self.screen_area()`. The default implementation does
     /// nothing.
-    fn render(&self, app: &Canopy<S>, style: &mut Style, w: &mut dyn Write) -> Result<()> {
+    fn render(&self, app: &Canopy<S>, r: &mut Render) -> Result<()> {
         Ok(())
     }
 

@@ -1,19 +1,13 @@
 use duplicate::duplicate;
+use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::{fmt::Debug, io::Write};
 
 use crate::geom::{Direction, Rect};
 use crate::{
-    cursor,
     event::{key, mouse, tick, Event},
     layout::FillLayout,
     node::{postorder, postorder_mut, preorder, EventOutcome, Node, Walker},
-    style::Style,
-    Error, Point, Result,
-};
-use crossterm::{
-    cursor::{CursorShape, DisableBlinking, EnableBlinking, Hide, MoveTo, SetCursorShape, Show},
-    QueueableCommand,
+    Error, Point, Render, Result,
 };
 
 pub struct SkipWalker {
@@ -318,7 +312,7 @@ impl<S> Canopy<S> {
     }
 
     /// Pre-render sweep of the tree.
-    pub(crate) fn pre_render(&mut self, e: &mut dyn Node<S>, w: &mut dyn Write) -> Result<()> {
+    pub(crate) fn pre_render(&mut self, e: &mut dyn Node<S>, rndr: &mut Render) -> Result<()> {
         let mut seen = false;
         self.focus_path_mut(e, &mut |_| -> Result<()> {
             seen = true;
@@ -327,30 +321,23 @@ impl<S> Canopy<S> {
         if !seen {
             self.focus_first(e)?;
         }
-        // FIXME: Maybe only hide if we know the cursor is visible?
-        w.queue(Hide {})?;
+        rndr.hide_cursor()?;
         Ok(())
     }
 
     /// Post-render sweep of the tree.
-    pub(crate) fn post_render(&mut self, e: &mut dyn Node<S>, w: &mut dyn Write) -> Result<()> {
+    pub(crate) fn post_render(&mut self, e: &mut dyn Node<S>, rndr: &mut Render) -> Result<()> {
         let mut seen = false;
         self.focus_path_mut(e, &mut |n| -> Result<()> {
             if !seen {
                 if let Some(c) = n.cursor() {
                     let r = n.screen_area();
-                    w.queue(MoveTo(r.tl.x + c.location.x, r.tl.y + c.location.y))?;
-                    w.queue(Show)?;
-                    if c.blink {
-                        w.queue(EnableBlinking)?;
-                    } else {
-                        w.queue(DisableBlinking)?;
-                    }
-                    w.queue(SetCursorShape(match c.shape {
-                        cursor::CursorShape::Block => CursorShape::Block,
-                        cursor::CursorShape::Line => CursorShape::Line,
-                        cursor::CursorShape::Underscore => CursorShape::UnderScore,
-                    }))?;
+                    let mut curs = c;
+                    curs.location = Point {
+                        x: curs.location.x + r.tl.x,
+                        y: curs.location.y + r.tl.y,
+                    };
+                    rndr.show_cursor("cursor", curs)?;
                     seen = true;
                 }
             }
@@ -381,36 +368,26 @@ impl<S> Canopy<S> {
         r.render_skip_gen = self.render_gen;
     }
 
-    fn render_traversal(
-        &mut self,
-        style: &mut Style,
-        e: &mut dyn Node<S>,
-        w: &mut dyn Write,
-    ) -> Result<()> {
+    fn render_traversal(&mut self, r: &mut Render, e: &mut dyn Node<S>) -> Result<()> {
         if self.should_render(e) {
             if self.is_focused(e) {
                 let s = &mut e.state_mut();
                 s.rendered_focus_gen = self.focus_gen
             }
-            e.render(self, style, w)?;
+            e.render(self, r)?;
         }
-        style.push();
-        e.children_mut(&mut |x| self.render_traversal(style, x, w))?;
-        style.pop();
+        r.push();
+        e.children_mut(&mut |x| self.render_traversal(r, x))?;
+        r.pop();
         Ok(())
     }
 
     /// Render a tree of nodes. If force is true, all visible nodes are
     /// rendered, otherwise we check the taint state. Hidden nodes and their
     /// children are ignored.
-    pub fn render(
-        &mut self,
-        e: &mut dyn Node<S>,
-        style: &mut Style,
-        w: &mut dyn Write,
-    ) -> Result<()> {
-        style.reset();
-        self.render_traversal(style, e, w)?;
+    pub fn render(&mut self, r: &mut Render, e: &mut dyn Node<S>) -> Result<()> {
+        r.reset();
+        self.render_traversal(r, e)?;
         self.render_gen += 1;
         self.last_focus_gen = self.focus_gen;
         Ok(())

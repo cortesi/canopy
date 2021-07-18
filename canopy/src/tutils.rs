@@ -7,8 +7,9 @@ pub mod utils {
     use crate::{
         event::{key, mouse, tick},
         layout,
+        render::tst::TestRender,
         style::Style,
-        Canopy, EventOutcome, Node, NodeState, Point, Rect, Result, StatefulNode,
+        Canopy, EventOutcome, Node, NodeState, Point, Rect, Render, Result, StatefulNode,
     };
 
     use crossterm::{style::Print, ExecutableCommand};
@@ -78,8 +79,9 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(&self, _: &Canopy<State>, _c: &mut Style, w: &mut dyn Write) -> Result<()> {
-            tnode_render(self.name.clone(), w)
+        fn render(&self, _: &Canopy<State>, _rndr: &mut Render) -> Result<()> {
+            // tnode_render(self.name.clone(), w)
+            Ok(())
         }
         fn handle_key(
             &mut self,
@@ -121,8 +123,9 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(&self, _: &Canopy<State>, _c: &mut Style, w: &mut dyn Write) -> Result<()> {
-            tnode_render(self.name.clone(), w)
+        fn render(&self, _: &Canopy<State>, rndr: &mut Render) -> Result<()> {
+            // tnode_render(self.name.clone(), w)
+            Ok(())
         }
         fn handle_key(
             &mut self,
@@ -178,8 +181,9 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(&self, _: &Canopy<State>, _c: &mut Style, w: &mut dyn Write) -> Result<()> {
-            tnode_render(self.name.clone(), w)
+        fn render(&self, _: &Canopy<State>, rndr: &mut Render) -> Result<()> {
+            // tnode_render(self.name.clone(), w)
+            Ok(())
         }
         fn handle_key(
             &mut self,
@@ -297,7 +301,10 @@ pub mod utils {
     pub fn trender(app: &mut Canopy<State>, r: &mut TRoot) -> Result<String> {
         let mut c = Cursor::new(Vec::new());
         let mut style = Style::default();
-        app.render(r, &mut style, &mut c)?;
+        let mut tr = TestRender::new();
+        let mut rndr = Render::new(&mut tr, style);
+
+        app.render(&mut rndr, r)?;
         c.seek(SeekFrom::Start(0))?;
         let mut out = Vec::new();
         c.read_to_end(&mut out)?;
@@ -306,9 +313,11 @@ pub mod utils {
 
     pub fn get_name(app: &mut Canopy<State>, x: &mut dyn Node<State>) -> Result<String> {
         let mut c = Cursor::new(Vec::new());
-        let mut colors = Style::default();
+        let colors = Style::default();
+        let mut tr = TestRender::new();
+        let mut rndr = Render::new(&mut tr, colors);
 
-        x.render(app, &mut colors, &mut c)?;
+        x.render(app, &mut rndr)?;
         c.seek(SeekFrom::Start(0))?;
         let mut out = Vec::new();
         c.read_to_end(&mut out)?;

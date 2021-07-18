@@ -81,6 +81,11 @@ pub const GREEN: Color = Color::Rgb {
     g: 0x99,
     b: 0x00,
 };
+pub const BLACK: Color = Color::Rgb {
+    r: 0x00,
+    g: 0x00,
+    b: 0x00,
+};
 
 pub fn solarized_dark() -> Style {
     let mut c = Style::default();
@@ -88,5 +93,16 @@ pub fn solarized_dark() -> Style {
     c.insert("/frame", Some(BASE01), None);
     c.insert("/frame/focused", Some(BLUE), None);
     c.insert("/frame/active", Some(BASE1), None);
+
+    c.insert("/blue", Some(BLUE), None);
+    c.insert("/red", Some(RED), None);
+    c.insert("/magenta", Some(MAGENTA), None);
+    c.insert("/violet", Some(VIOLET), None);
+    c.insert("/cyan", Some(CYAN), None);
+    c.insert("/green", Some(GREEN), None);
+    c.insert("/yellow", Some(YELLOW), None);
+    c.insert("/orange", Some(ORANGE), None);
+    c.insert("/black", Some(BLACK), None);
+
     c
 }

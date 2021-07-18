@@ -1,5 +1,4 @@
 use duplicate::duplicate;
-use std::io::Write;
 use std::marker::PhantomData;
 
 use crate as canopy;
@@ -7,8 +6,7 @@ use crate::{
     geom::Rect,
     layout::FillLayout,
     state::{NodeState, StatefulNode},
-    style::Style,
-    Canopy, Node, Result,
+    Canopy, Node, Render, Result,
 };
 
 /// Panes manages a set of child nodes arranged in a 2d grid.
@@ -125,7 +123,7 @@ impl<S, N: canopy::Node<S>> Node<S> for Panes<S, N> {
         }
         Ok(())
     }
-    fn render(&self, _: &Canopy<S>, _style: &mut Style, _: &mut dyn Write) -> Result<()> {
+    fn render(&self, _: &Canopy<S>, rndr: &mut Render) -> Result<()> {
         // FIXME - this should probably clear the area if the last node is
         // deleted.
         Ok(())

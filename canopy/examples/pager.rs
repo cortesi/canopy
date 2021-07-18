@@ -6,7 +6,7 @@ use canopy;
 use canopy::{
     event::{key, mouse},
     layout::FillLayout,
-    runloop::runloop,
+    render::term::runloop,
     style::solarized,
     widgets::{frame, Scroll, Text},
     Canopy, EventOutcome, Node, NodeState, Rect, Result, StatefulNode,
@@ -93,8 +93,7 @@ pub fn main() -> Result<()> {
         let mut h = Handle {};
         let contents = fs::read_to_string(args[1].clone())?;
         let mut root = Root::new(contents);
-        let mut style = solarized::solarized_dark();
-        runloop(&mut app, &mut style, &mut root, &mut h)?;
+        runloop(&mut app, solarized::solarized_dark(), &mut root, &mut h)?;
     }
     Ok(())
 }

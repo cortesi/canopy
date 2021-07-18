@@ -1,17 +1,15 @@
 use duplicate::duplicate;
-use std::io::Write;
 
 use canopy;
 use canopy::{
     event::{key, mouse},
     geom::{Point, Rect},
     layout::FillLayout,
-    runloop::runloop,
-    style::{solarized, Style},
-    widgets::{block, frame, InputLine, Scroll, Text},
-    Canopy, EventOutcome, Node, NodeState, Result, StatefulNode,
+    render::term::runloop,
+    style::solarized,
+    widgets::{frame, InputLine, Scroll, Text},
+    Canopy, EventOutcome, Node, NodeState, Render, Result, StatefulNode,
 };
-use crossterm::{cursor::MoveTo, style::Print, QueueableCommand};
 
 struct Handle {}
 
@@ -21,13 +19,9 @@ struct StatusBar {
 }
 
 impl Node<Handle> for StatusBar {
-    fn render(&self, _app: &Canopy<Handle>, style: &mut Style, w: &mut dyn Write) -> Result<()> {
-        style.push_layer("statusbar");
-        style.set("statusbar/text", w)?;
-        let r = self.screen_area();
-        block(w, r, ' ')?;
-        w.queue(MoveTo(r.tl.x, r.tl.y))?;
-        w.queue(Print("todo"))?;
+    fn render(&self, _app: &Canopy<Handle>, rndr: &mut Render) -> Result<()> {
+        rndr.style.push_layer("statusbar");
+        rndr.text("text", self.screen_area(), "todo")?;
         Ok(())
     }
 }
@@ -170,6 +164,6 @@ pub fn main() -> Result<()> {
     let mut root = Root::new(String::new());
     let mut colors = solarized::solarized_dark();
     colors.insert("statusbar", Some(solarized::BASE02), Some(solarized::BASE1));
-    runloop(&mut app, &mut colors, &mut root, &mut h)?;
+    runloop(&mut app, colors, &mut root, &mut h)?;
     Ok(())
 }

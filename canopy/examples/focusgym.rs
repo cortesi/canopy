@@ -1,19 +1,13 @@
-use crossterm::{
-    style::{Color, SetForegroundColor},
-    QueueableCommand,
-};
 use duplicate::duplicate;
-use std::io::Write;
 
 use canopy;
 use canopy::{
     event::{key, mouse},
     geom::Frame,
     layout::FillLayout,
-    runloop::runloop,
-    style::{solarized, Style},
-    widgets::{block, solid_frame},
-    Canopy, EventOutcome, Node, NodeState, Rect, Result, StatefulNode,
+    render::term::runloop,
+    style::solarized,
+    Canopy, EventOutcome, Node, NodeState, Rect, Render, Result, StatefulNode,
 };
 
 struct Handle {}
@@ -163,19 +157,17 @@ impl Node<Handle> for Block {
     fn can_focus(&self) -> bool {
         self.children.len() == 0
     }
-    fn render(&self, app: &Canopy<Handle>, _colors: &mut Style, w: &mut dyn Write) -> Result<()> {
+    fn render(&self, app: &Canopy<Handle>, rndr: &mut Render) -> Result<()> {
         if self.children.len() == 0 {
-            w.queue(SetForegroundColor(
-                if app.is_focused(self) && self.children.len() == 0 {
-                    Color::Magenta
-                } else {
-                    Color::Blue
-                },
-            ))?;
-            let a = self.screen_area();
-            block(w, a.inner(1)?, '\u{2588}')?;
-            w.queue(SetForegroundColor(Color::Black))?;
-            solid_frame(w, Frame::new(a, 1)?, ' ')?;
+            let bc = if app.is_focused(self) && self.children.len() == 0 {
+                "violet"
+            } else {
+                "blue"
+            };
+
+            let r = self.screen_area();
+            rndr.fill(bc, r.inner(1)?, '\u{2588}')?;
+            rndr.solid_frame("black", Frame::new(r, 1)?, ' ')?;
         }
         Ok(())
     }
@@ -237,11 +229,6 @@ pub fn main() -> Result<()> {
     let mut h = Handle {};
     let mut app = Canopy::new();
     let mut root = Root::new();
-    runloop(
-        &mut app,
-        &mut solarized::solarized_dark(),
-        &mut root,
-        &mut h,
-    )?;
+    runloop(&mut app, solarized::solarized_dark(), &mut root, &mut h)?;
     Ok(())
 }

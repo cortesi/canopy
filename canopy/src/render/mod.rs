@@ -1,17 +1,21 @@
-use crate::{geom, style::Color, style::Style, Result};
+use crate::{cursor, geom, style::Color, style::Style, Result};
 
 pub mod term;
+pub mod tst;
 
 pub trait Backend {
     fn fg(&mut self, c: Color) -> Result<()>;
     fn bg(&mut self, c: Color) -> Result<()>;
     fn fill(&mut self, r: geom::Rect, c: char) -> Result<()>;
     fn text(&mut self, loc: geom::Point, txt: &str) -> Result<()>;
+    fn show_cursor(&mut self, c: cursor::Cursor) -> Result<()>;
+    fn hide_cursor(&mut self) -> Result<()>;
+    fn flush(&mut self) -> Result<()>;
 }
 
 pub struct Render<'a> {
     backend: &'a mut dyn Backend,
-    style: Style,
+    pub style: Style,
 }
 
 impl<'a> Render<'a> {
@@ -20,9 +24,34 @@ impl<'a> Render<'a> {
     }
 
     /// Fill a rectangle with a specified character.
+    pub fn hide_cursor(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    /// Fill a rectangle with a specified character.
+    pub fn show_cursor(&mut self, color: &str, c: cursor::Cursor) -> Result<()> {
+        self.backend.fg(self.style.fg(color))?;
+        self.backend.show_cursor(c)?;
+        Ok(())
+    }
+
+    /// Fill a rectangle with a specified character.
     pub fn fill(&mut self, color: &str, r: geom::Rect, c: char) -> Result<()> {
         self.backend.fg(self.style.fg(color))?;
         self.backend.fill(r, c)
+    }
+
+    /// Draw a solid frame
+    pub fn solid_frame(&mut self, color: &str, f: geom::Frame, c: char) -> Result<()> {
+        self.fill(color, f.top, c)?;
+        self.fill(color, f.left, c)?;
+        self.fill(color, f.right, c)?;
+        self.fill(color, f.bottom, c)?;
+        self.fill(color, f.topleft, c)?;
+        self.fill(color, f.topright, c)?;
+        self.fill(color, f.bottomleft, c)?;
+        self.fill(color, f.bottomright, c)?;
+        Ok(())
     }
 
     /// Print text in the first line of the specified rectangle. If the text is
@@ -31,18 +60,26 @@ impl<'a> Render<'a> {
     pub fn text(&mut self, color: &str, r: geom::Rect, txt: &str) -> Result<()> {
         self.backend.fg(self.style.fg(color))?;
         self.backend.bg(self.style.bg(color))?;
-        if txt.len() >= r.w as usize {
-            self.backend.text(r.tl, &txt[..r.w as usize])
+        if txt.len() > r.w as usize {
+            self.backend
+                .text(r.tl, &txt.chars().take(r.w as usize).collect::<String>())
         } else {
             self.backend.text(r.tl, txt)?;
             self.backend
                 .text(r.tl, &" ".repeat(r.w as usize - txt.len()))
         }
     }
+
     pub fn push(&mut self) {
         self.style.push();
     }
     pub fn pop(&mut self) {
         self.style.pop();
+    }
+    pub fn reset(&mut self) {
+        self.style.reset();
+    }
+    pub fn flush(&mut self) -> Result<()> {
+        self.backend.flush()
     }
 }

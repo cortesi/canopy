@@ -1,4 +1,3 @@
-use std::io::Write;
 use std::marker::PhantomData;
 
 use crate as canopy;
@@ -8,9 +7,8 @@ use crate::{
     layout::ConstrainedWidthLayout,
     node::Node,
     state::{NodeState, StatefulNode},
-    style::Style,
     widgets::frame::FrameContent,
-    Canopy,
+    Canopy, Render,
 };
 
 struct Item<S, N: Node<S> + ConstrainedWidthLayout<S>> {
@@ -117,7 +115,7 @@ impl<S, N> Node<S> for List<S, N>
 where
     N: Node<S> + ConstrainedWidthLayout<S>,
 {
-    fn render(&self, _app: &Canopy<S>, _colors: &mut Style, _w: &mut dyn Write) -> Result<()> {
+    fn render(&self, _app: &Canopy<S>, _rndr: &mut Render) -> Result<()> {
         Ok(())
     }
 }
