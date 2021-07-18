@@ -1,4 +1,4 @@
-use crate::geom::{Point, Rect};
+use crate::geom::Rect;
 use crate::{Canopy, Result, StatefulNode};
 
 /// A layout for nodes that simply fill the space specified. Examples include
@@ -53,11 +53,7 @@ pub trait ConstrainedWidthLayout<S>: StatefulNode {
 
     fn layout(&mut self, app: &mut Canopy<S>, virt_rect: Rect, screen_rect: Rect) -> Result<()> {
         self.set_screen_area(screen_rect);
-        self.set_virt_area(Rect {
-            tl: Point::zero(),
-            w: screen_rect.w,
-            h: screen_rect.h,
-        });
+        self.set_virt_area(virt_rect);
         self.layout_children(app, virt_rect, screen_rect)
     }
 }

@@ -21,7 +21,11 @@ struct StatusBar {
 impl Node<Handle> for StatusBar {
     fn render(&self, _app: &Canopy<Handle>, rndr: &mut Render) -> Result<()> {
         rndr.style.push_layer("statusbar");
-        rndr.text("text", self.screen_area(), "todo")?;
+        let sa = self.screen_area();
+        if sa.h > 1 {
+            panic!("{:?}", sa);
+        }
+        rndr.text("statusbar/text", self.screen_area(), "todo")?;
         Ok(())
     }
 }
@@ -163,7 +167,11 @@ pub fn main() -> Result<()> {
     let mut h = Handle {};
     let mut root = Root::new(String::new());
     let mut colors = solarized::solarized_dark();
-    colors.insert("statusbar", Some(solarized::BASE02), Some(solarized::BASE1));
+    colors.insert(
+        "statusbar/text",
+        Some(solarized::BASE02),
+        Some(solarized::BASE1),
+    );
     runloop(&mut app, colors, &mut root, &mut h)?;
     Ok(())
 }
