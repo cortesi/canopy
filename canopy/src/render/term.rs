@@ -1,5 +1,6 @@
 use std::io::Write;
 use std::panic;
+use std::process::exit;
 
 use color_backtrace::{default_output_stream, BacktracePrinter};
 use scopeguard::defer;
@@ -22,7 +23,7 @@ use crossterm::{
     style::{Color, SetBackgroundColor, SetForegroundColor},
     terminal::size,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-    QueueableCommand,
+    ExecutableCommand, QueueableCommand,
 };
 
 pub struct Term<'a> {
@@ -79,6 +80,14 @@ impl<'a> Backend for Term<'a> {
         self.fp.queue(MoveTo(loc.x, loc.y))?;
         self.fp.queue(Print(txt))?;
         Ok(())
+    }
+
+    #[allow(unused_must_use)]
+    fn exit(&mut self, code: i32) -> ! {
+        self.fp.execute(LeaveAlternateScreen);
+        self.fp.execute(DisableMouseCapture);
+        self.fp.execute(Show);
+        exit(code)
     }
 }
 

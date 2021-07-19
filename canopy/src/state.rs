@@ -66,12 +66,12 @@ pub trait StatefulNode {
         self.state_mut().virt_area = r
     }
 
-    /// Hides the element by setting area to None
+    /// Hides the element
     fn hide(&mut self) {
         self.state_mut().hidden = true;
     }
 
-    /// Hides the element by setting area to None
+    /// Is this element hidden?
     fn is_hidden(&self) -> bool {
         self.state().hidden
     }

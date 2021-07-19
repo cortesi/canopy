@@ -49,4 +49,8 @@ impl Backend for TestRender {
         self.text.push(txt.trim().into());
         Ok(())
     }
+
+    fn exit(&mut self, _code: i32) -> ! {
+        unreachable!()
+    }
 }

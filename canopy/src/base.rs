@@ -33,7 +33,7 @@ impl Walker for SkipWalker {
 
 /// The core of a Canopy app - this struct keeps track of the render and focus
 /// state, and provides functionality for interacting with node trees.
-#[derive(Debug, PartialEq, Copy)]
+#[derive(Debug, PartialEq)]
 pub struct Canopy<S> {
     // A counter that is incremented every time focus changes. The current focus
     // will have a state `focus_gen` equal to this.
@@ -44,19 +44,6 @@ pub struct Canopy<S> {
     render_gen: u64,
     last_focus_gen: u64,
     _marker: PhantomData<S>,
-}
-
-// Derive isn't smart enough to notice that the type argument to Canopy doesn't
-// need to be Clone, so we manually implement.
-impl<S> Clone for Canopy<S> {
-    fn clone(&self) -> Canopy<S> {
-        Canopy {
-            focus_gen: self.focus_gen,
-            render_gen: self.render_gen,
-            last_focus_gen: self.last_focus_gen,
-            _marker: PhantomData,
-        }
-    }
 }
 
 impl<S> Default for Canopy<S> {
@@ -266,36 +253,20 @@ impl<S> Canopy<S> {
         ret
     }
 
-    /// Calls a closure on the currently focused node and all its parents to the
-    /// root.
-    #[duplicate(
-        method              reference(type)    traversal;
-        [focus_path]        [& type]           [postorder];
-        [focus_path_mut]    [&mut type]        [postorder_mut];
-    )]
-    pub fn method<R: Walker + Default>(
+    pub fn focus_path<R: Walker + Default>(
         &self,
-        e: reference([dyn Node<S>]),
-        f: &mut dyn FnMut(reference([dyn Node<S>])) -> Result<R>,
+        e: &dyn Node<S>,
+        f: &mut dyn FnMut(&dyn Node<S>) -> Result<R>,
     ) -> Result<R> {
-        let mut focus_seen = false;
-        let mut ret = R::default();
-        traversal(e, &mut |x| -> Result<SkipWalker> {
-            Ok(if focus_seen {
-                ret = ret.join(f(x)?);
-                SkipWalker::default()
-            } else if x.is_hidden() {
-                // Hidden nodes don't hold focus
-                SkipWalker::default()
-            } else if self.is_focused(x) {
-                focus_seen = true;
-                ret = ret.join(f(x)?);
-                SkipWalker { has_skip: true }
-            } else {
-                SkipWalker::default()
-            })
-        })?;
-        Ok(ret)
+        focus_path(self.focus_gen, e, f)
+    }
+
+    pub fn focus_path_mut<R: Walker + Default>(
+        &self,
+        e: &mut dyn Node<S>,
+        f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<R>,
+    ) -> Result<R> {
+        focus_path_mut(self.focus_gen, e, f)
     }
 
     /// Returns the focal depth of the specified node. If the node is not part
@@ -321,6 +292,8 @@ impl<S> Canopy<S> {
         if !seen {
             self.focus_first(e)?;
         }
+        // The cursor is disabled before every render sweep, otherwise we would
+        // see it visibly on screen during redraws.
         rndr.hide_cursor()?;
         Ok(())
     }
@@ -437,27 +410,26 @@ impl<S> Canopy<S> {
     /// handled only once, and then ignored.
     pub fn key(&mut self, root: &mut dyn Node<S>, s: &mut S, k: key::Key) -> Result<EventOutcome> {
         let mut handled = false;
-        self.clone()
-            .focus_path_mut(root, &mut |x| -> Result<EventOutcome> {
-                Ok(if handled {
-                    EventOutcome::default()
-                } else {
-                    match x.handle_key(self, s, k)? {
-                        EventOutcome::Ignore { skip } => {
-                            if skip {
-                                handled = true;
-                            }
-                            EventOutcome::Ignore { skip: false }
-                        }
-                        EventOutcome::Handle { .. } => {
-                            self.taint(x);
+        focus_path_mut(self.focus_gen, root, &mut |x| -> Result<EventOutcome> {
+            Ok(if handled {
+                EventOutcome::default()
+            } else {
+                match x.handle_key(self, s, k)? {
+                    EventOutcome::Ignore { skip } => {
+                        if skip {
                             handled = true;
-                            EventOutcome::Handle { skip: false }
                         }
-                        itm => itm,
+                        EventOutcome::Ignore { skip: false }
                     }
-                })
+                    EventOutcome::Handle { .. } => {
+                        self.taint(x);
+                        handled = true;
+                        EventOutcome::Handle { skip: false }
+                    }
+                    itm => itm,
+                }
             })
+        })
     }
 
     /// Propagate a resize event through the tree of nodes.
@@ -524,6 +496,38 @@ impl<S> Canopy<S> {
     }
 }
 
+/// Calls a closure on the currently focused node and all its parents to the
+/// root.
+#[duplicate(
+        method              reference(type)    traversal;
+        [focus_path]        [& type]           [postorder];
+        [focus_path_mut]    [&mut type]        [postorder_mut];
+    )]
+fn method<S, R: Walker + Default>(
+    focus_gen: u64,
+    e: reference([dyn Node<S>]),
+    f: &mut dyn FnMut(reference([dyn Node<S>])) -> Result<R>,
+) -> Result<R> {
+    let mut focus_seen = false;
+    let mut ret = R::default();
+    traversal(e, &mut |x| -> Result<SkipWalker> {
+        Ok(if focus_seen {
+            ret = ret.join(f(x)?);
+            SkipWalker::default()
+        } else if x.is_hidden() {
+            // Hidden nodes don't hold focus
+            SkipWalker::default()
+        } else if x.state().focus_gen == focus_gen {
+            focus_seen = true;
+            ret = ret.join(f(x)?);
+            SkipWalker { has_skip: true }
+        } else {
+            SkipWalker::default()
+        })
+    })?;
+    Ok(ret)
+}
+
 // Calls a closure on the leaf node under (x, y), then all its parents to the
 // root.
 pub fn locate<S, R: Walker + Default>(
@@ -564,7 +568,7 @@ mod tests {
 
     pub fn focvec(app: &mut Canopy<utils::State>, root: &mut utils::TRoot) -> Result<Vec<String>> {
         let mut v = vec![];
-        app.clone().focus_path_mut(root, &mut |x| -> Result<()> {
+        focus_path_mut(app.focus_gen, root, &mut |x| -> Result<()> {
             let n = utils::get_name(app, x)?;
             v.push(n);
             Ok(())

@@ -13,9 +13,9 @@ use textwrap;
 pub struct Text<S> {
     pub state: NodeState,
     pub raw: String,
-    _marker: PhantomData<S>,
-
     lines: Option<Vec<String>>,
+
+    _marker: PhantomData<S>,
 }
 
 impl<S> Text<S> {

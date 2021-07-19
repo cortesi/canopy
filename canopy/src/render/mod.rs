@@ -11,6 +11,7 @@ pub trait Backend {
     fn show_cursor(&mut self, c: cursor::Cursor) -> Result<()>;
     fn hide_cursor(&mut self) -> Result<()>;
     fn flush(&mut self) -> Result<()>;
+    fn exit(&mut self, code: i32) -> !;
 }
 
 pub struct Render<'a> {
