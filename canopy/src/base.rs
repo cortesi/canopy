@@ -394,7 +394,6 @@ impl<'a, S> Canopy<'a, S> {
                         handled = true;
                         EventOutcome::Handle { skip: false }
                     }
-                    itm => itm,
                 }
             } else {
                 EventOutcome::default()
@@ -422,7 +421,6 @@ impl<'a, S> Canopy<'a, S> {
                         handled = true;
                         EventOutcome::Handle { skip: false }
                     }
-                    itm => itm,
                 }
             })
         })
@@ -469,7 +467,6 @@ impl<'a, S> Canopy<'a, S> {
                         SkipWalker { has_skip: false }
                     }
                 }
-                EventOutcome::Exit => SkipWalker { has_skip: true },
             })
         })?;
         Ok(ret)
@@ -489,6 +486,11 @@ impl<'a, S> Canopy<'a, S> {
             }
             Event::Tick(t) => self.tick(root, s, t),
         }
+    }
+
+    /// Clean up render loop and exit the process.
+    pub fn exit(&mut self, code: i32) -> ! {
+        self.render.exit(code)
     }
 }
 

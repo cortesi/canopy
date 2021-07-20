@@ -97,4 +97,7 @@ impl<'a> Render<'a> {
     pub fn flush(&mut self) -> Result<()> {
         self.backend.flush()
     }
+    pub fn exit(&mut self, code: i32) -> ! {
+        self.backend.exit(code)
+    }
 }

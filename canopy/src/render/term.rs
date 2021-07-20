@@ -146,7 +146,7 @@ where
         },
     )?;
 
-    'outer: loop {
+    loop {
         let mut ignore = false;
         loop {
             if !ignore {
@@ -159,18 +159,10 @@ where
                 EventOutcome::Ignore { .. } => {
                     ignore = true;
                 }
-                EventOutcome::Exit => {
-                    break 'outer;
-                }
                 EventOutcome::Handle { .. } => {
                     ignore = false;
                 }
             }
         }
     }
-    let _ = panic::take_hook();
-    let mut stderr = std::io::stderr();
-    execute!(stderr, LeaveAlternateScreen, DisableMouseCapture, Show)?;
-    disable_raw_mode()?;
-    Ok(())
 }

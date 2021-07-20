@@ -140,7 +140,7 @@ impl Node<Handle> for Root {
                 app.taint_tree(self)?;
                 EventOutcome::Handle { skip: false }
             }
-            c if c == 'q' => EventOutcome::Exit,
+            c if c == 'q' => app.exit(0),
             _ => EventOutcome::Ignore { skip: false },
         })
     }

@@ -31,7 +31,6 @@ impl Walker for () {
 pub enum EventOutcome {
     Handle { skip: bool },
     Ignore { skip: bool },
-    Exit,
 }
 
 impl Default for EventOutcome {
@@ -45,26 +44,17 @@ impl Walker for EventOutcome {
         match self {
             EventOutcome::Handle { skip } => *skip,
             EventOutcome::Ignore { skip } => *skip,
-            EventOutcome::Exit => true,
         }
     }
     fn join(&self, rhs: Self) -> Self {
         // At the moment, we don't propagate the skip flag, because it gets used
         // by the traversal functions immediately on return.
         match (*self, rhs) {
-            (EventOutcome::Exit, _) | (_, EventOutcome::Exit) => EventOutcome::Exit,
             (EventOutcome::Ignore { .. }, EventOutcome::Ignore { .. }) => {
                 EventOutcome::Ignore { skip: false }
             }
-            (EventOutcome::Ignore { .. }, EventOutcome::Handle { .. }) => {
-                EventOutcome::Handle { skip: false }
-            }
-            (EventOutcome::Handle { .. }, EventOutcome::Ignore { .. }) => {
-                EventOutcome::Handle { skip: false }
-            }
-            (EventOutcome::Handle { .. }, EventOutcome::Handle { .. }) => {
-                EventOutcome::Handle { skip: false }
-            }
+            (_, EventOutcome::Handle { .. }) => EventOutcome::Handle { skip: false },
+            (EventOutcome::Handle { .. }, _) => EventOutcome::Handle { skip: false },
         }
     }
 }

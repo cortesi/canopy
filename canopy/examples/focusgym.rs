@@ -80,7 +80,7 @@ impl Node<Handle> for Root {
             c if c == 'h' || c == key::KeyCode::Left => app.focus_left(self)?,
             c if c == 'j' || c == key::KeyCode::Down => app.focus_down(self)?,
             c if c == 'k' || c == key::KeyCode::Up => app.focus_up(self)?,
-            c if c == 'q' => EventOutcome::Exit,
+            c if c == 'q' => app.exit(0),
             _ => EventOutcome::Ignore { skip: false },
         })
     }

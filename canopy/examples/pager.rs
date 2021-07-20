@@ -66,7 +66,7 @@ impl Node<Handle> for Root {
             c if c == 'l' || c == key::KeyCode::Up => self.child.child.right(app)?,
             c if c == ' ' || c == key::KeyCode::PageDown => self.child.child.page_down(app)?,
             c if c == key::KeyCode::PageUp => self.child.child.page_up(app)?,
-            c if c == 'q' => EventOutcome::Exit,
+            c if c == 'q' => app.exit(0),
             _ => EventOutcome::Ignore { skip: false },
         })
     }

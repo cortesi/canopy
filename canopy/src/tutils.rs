@@ -24,7 +24,6 @@ pub mod utils {
         }
         pub fn add_event(&mut self, n: &str, evt: &str, result: EventOutcome) {
             let outcome = match result {
-                EventOutcome::Exit => "exit",
                 EventOutcome::Handle { .. } => "handle",
                 EventOutcome::Ignore { .. } => "ignore",
             };
