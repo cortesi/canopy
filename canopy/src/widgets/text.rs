@@ -83,7 +83,7 @@ impl<'a, S> Node<S> for Text<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::render::tst::TestRender;
+    use crate::render::test::TestRender;
     use crate::tutils::utils;
 
     #[test]

@@ -123,7 +123,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::render::tst::TestRender;
+    use crate::render::test::TestRender;
     use crate::tutils::utils::{tcanopy, TFixed};
 
     #[test]

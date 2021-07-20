@@ -134,7 +134,7 @@ impl<S, N: canopy::Node<S>> Node<S> for Panes<S, N> {
 mod tests {
     use super::*;
     use crate::geom::Point;
-    use crate::render::tst::TestRender;
+    use crate::render::test::TestRender;
     use crate::tutils::utils;
 
     #[test]

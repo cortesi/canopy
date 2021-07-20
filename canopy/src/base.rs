@@ -558,7 +558,7 @@ mod tests {
     use super::*;
     use crate::{
         geom::{Point, Rect},
-        render::tst::TestRender,
+        render::test::TestRender,
         tutils::utils,
         StatefulNode,
     };

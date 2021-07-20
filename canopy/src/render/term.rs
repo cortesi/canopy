@@ -27,13 +27,13 @@ use crossterm::{
 };
 
 pub struct Term {
-    fp: Box<dyn Write>,
+    fp: std::io::Stderr,
 }
 
 impl Term {
     pub fn new() -> Term {
         Term {
-            fp: Box::new(std::io::stderr()),
+            fp: std::io::stderr(),
         }
     }
 }
@@ -95,6 +95,7 @@ impl Backend for Term {
         self.fp.execute(LeaveAlternateScreen);
         self.fp.execute(DisableMouseCapture);
         self.fp.execute(Show);
+        disable_raw_mode();
         exit(code)
     }
 
@@ -108,7 +109,7 @@ where
     N: Node<S> + FillLayout<S>,
 {
     let w = std::io::stderr();
-    let mut be = Term { fp: Box::new(w) };
+    let mut be = Term { fp: w };
     let mut app = Canopy::new(Render::new(&mut be, style));
 
     enable_raw_mode()?;
@@ -168,7 +169,6 @@ where
         }
     }
     let _ = panic::take_hook();
-
     let mut stderr = std::io::stderr();
     execute!(stderr, LeaveAlternateScreen, DisableMouseCapture, Show)?;
     disable_raw_mode()?;

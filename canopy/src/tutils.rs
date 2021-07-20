@@ -6,7 +6,7 @@ pub mod utils {
     use crate::{
         event::{key, mouse, tick},
         layout,
-        render::tst::TestRender,
+        render::test::TestRender,
         style::Style,
         Canopy, EventOutcome, Node, NodeState, Point, Rect, Render, Result, StatefulNode,
     };

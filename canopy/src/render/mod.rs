@@ -1,7 +1,7 @@
 use crate::{cursor, geom, style::Color, style::Style, Result};
 
 pub mod term;
-pub mod tst;
+pub mod test;
 
 pub trait Backend {
     fn fg(&mut self, c: Color) -> Result<()>;
