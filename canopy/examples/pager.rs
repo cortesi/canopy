@@ -89,11 +89,11 @@ pub fn main() -> Result<()> {
     if args.len() != 2 {
         println!("Usage: pager filename");
     } else {
-        let mut app = Canopy::new();
+        let colors = solarized::solarized_dark();
         let mut h = Handle {};
         let contents = fs::read_to_string(args[1].clone())?;
         let mut root = Root::new(contents);
-        runloop(&mut app, solarized::solarized_dark(), &mut root, &mut h)?;
+        runloop(colors, &mut root, &mut h)?;
     }
     Ok(())
 }

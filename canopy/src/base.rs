@@ -1,5 +1,4 @@
 use duplicate::duplicate;
-use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use crate::geom::{Direction, Rect};
@@ -33,8 +32,7 @@ impl Walker for SkipWalker {
 
 /// The core of a Canopy app - this struct keeps track of the render and focus
 /// state, and provides functionality for interacting with node trees.
-#[derive(Debug, PartialEq)]
-pub struct Canopy<S> {
+pub struct Canopy<'a, S> {
     // A counter that is incremented every time focus changes. The current focus
     // will have a state `focus_gen` equal to this.
     focus_gen: u64,
@@ -43,18 +41,16 @@ pub struct Canopy<S> {
     // equal to this.
     render_gen: u64,
     last_focus_gen: u64,
+
+    pub render: Render<'a>,
+
     _marker: PhantomData<S>,
 }
 
-impl<S> Default for Canopy<S> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<S> Canopy<S> {
-    pub fn new() -> Self {
+impl<'a, S> Canopy<'a, S> {
+    pub fn new(render: Render<'a>) -> Self {
         Canopy {
+            render,
             focus_gen: 1,
             render_gen: 1,
             last_focus_gen: 1,
@@ -283,7 +279,7 @@ impl<S> Canopy<S> {
     }
 
     /// Pre-render sweep of the tree.
-    pub(crate) fn pre_render(&mut self, e: &mut dyn Node<S>, rndr: &mut Render) -> Result<()> {
+    pub(crate) fn pre_render(&mut self, e: &mut dyn Node<S>) -> Result<()> {
         let mut seen = false;
         self.focus_path_mut(e, &mut |_| -> Result<()> {
             seen = true;
@@ -294,14 +290,14 @@ impl<S> Canopy<S> {
         }
         // The cursor is disabled before every render sweep, otherwise we would
         // see it visibly on screen during redraws.
-        rndr.hide_cursor()?;
+        self.render.hide_cursor()?;
         Ok(())
     }
 
     /// Post-render sweep of the tree.
-    pub(crate) fn post_render(&mut self, e: &mut dyn Node<S>, rndr: &mut Render) -> Result<()> {
+    pub(crate) fn post_render(&mut self, e: &mut dyn Node<S>) -> Result<()> {
         let mut seen = false;
-        self.focus_path_mut(e, &mut |n| -> Result<()> {
+        focus_path_mut(self.focus_gen, e, &mut |n| -> Result<()> {
             if !seen {
                 if let Some(c) = n.cursor() {
                     let r = n.screen_area();
@@ -310,7 +306,7 @@ impl<S> Canopy<S> {
                         x: curs.location.x + r.tl.x,
                         y: curs.location.y + r.tl.y,
                     };
-                    rndr.show_cursor("cursor", curs)?;
+                    self.render.show_cursor("cursor", curs)?;
                     seen = true;
                 }
             }
@@ -341,26 +337,26 @@ impl<S> Canopy<S> {
         r.render_skip_gen = self.render_gen;
     }
 
-    fn render_traversal(&mut self, r: &mut Render, e: &mut dyn Node<S>) -> Result<()> {
+    fn render_traversal(&mut self, e: &mut dyn Node<S>) -> Result<()> {
         if self.should_render(e) {
             if self.is_focused(e) {
                 let s = &mut e.state_mut();
                 s.rendered_focus_gen = self.focus_gen
             }
-            e.render(self, r)?;
+            e.render(self)?;
         }
-        r.push();
-        e.children_mut(&mut |x| self.render_traversal(r, x))?;
-        r.pop();
+        self.render.push();
+        e.children_mut(&mut |x| self.render_traversal(x))?;
+        self.render.pop();
         Ok(())
     }
 
     /// Render a tree of nodes. If force is true, all visible nodes are
     /// rendered, otherwise we check the taint state. Hidden nodes and their
     /// children are ignored.
-    pub fn render(&mut self, r: &mut Render, e: &mut dyn Node<S>) -> Result<()> {
-        r.reset();
-        self.render_traversal(r, e)?;
+    pub fn render(&mut self, e: &mut dyn Node<S>) -> Result<()> {
+        self.render.reset()?;
+        self.render_traversal(e)?;
         self.render_gen += 1;
         self.last_focus_gen = self.focus_gen;
         Ok(())
@@ -562,6 +558,7 @@ mod tests {
     use super::*;
     use crate::{
         geom::{Point, Rect},
+        render::tst::TestRender,
         tutils::utils,
         StatefulNode,
     };
@@ -569,7 +566,7 @@ mod tests {
     pub fn focvec(app: &mut Canopy<utils::State>, root: &mut utils::TRoot) -> Result<Vec<String>> {
         let mut v = vec![];
         focus_path_mut(app.focus_gen, root, &mut |x| -> Result<()> {
-            let n = utils::get_name(app, x)?;
+            let n = x.name().unwrap();
             v.push(n);
             Ok(())
         })?;
@@ -578,7 +575,9 @@ mod tests {
 
     #[test]
     fn tfocus_next() -> Result<()> {
-        let mut app = Canopy::new();
+        let (_, mut tr) = TestRender::create();
+        let mut app = utils::tcanopy(&mut tr);
+
         let mut root = utils::TRoot::new();
         root.layout(&mut app, Rect::default())?;
 
@@ -610,7 +609,9 @@ mod tests {
 
     #[test]
     fn tfocus_prev() -> Result<()> {
-        let mut app = Canopy::new();
+        let (_, mut tr) = TestRender::create();
+        let mut app = utils::tcanopy(&mut tr);
+
         let mut root = utils::TRoot::new();
 
         assert!(!app.is_focused(&root));
@@ -632,7 +633,9 @@ mod tests {
 
     #[test]
     fn tfoci() -> Result<()> {
-        let mut app = Canopy::new();
+        let (_, mut tr) = TestRender::create();
+        let mut app = utils::tcanopy(&mut tr);
+
         let mut root = utils::TRoot::new();
         root.layout(&mut app, Rect::default())?;
 
@@ -662,7 +665,8 @@ mod tests {
 
     #[test]
     fn tfocus_right() -> Result<()> {
-        let mut app = Canopy::new();
+        let (_, mut tr) = TestRender::create();
+        let mut app = utils::tcanopy(&mut tr);
         let mut root = utils::TRoot::new();
         const SIZE: u16 = 100;
         app.resize(
@@ -691,7 +695,8 @@ mod tests {
 
     #[test]
     fn ttick() -> Result<()> {
-        let mut app = Canopy::new();
+        let (_, mut tr) = TestRender::create();
+        let mut app = utils::tcanopy(&mut tr);
         let mut root = utils::TRoot::new();
 
         let handled = EventOutcome::Handle { skip: false };
@@ -744,7 +749,8 @@ mod tests {
 
     #[test]
     fn tkey() -> Result<()> {
-        let mut app = Canopy::new();
+        let (_, mut tr) = TestRender::create();
+        let mut app = utils::tcanopy(&mut tr);
         let mut root = utils::TRoot::new();
         root.layout(&mut app, Rect::default())?;
 
@@ -803,7 +809,8 @@ mod tests {
 
     #[test]
     fn tmouse() -> Result<()> {
-        let mut app = Canopy::new();
+        let (_, mut tr) = TestRender::create();
+        let mut app = utils::tcanopy(&mut tr);
         const SIZE: u16 = 100;
         let mut root = utils::TRoot::new();
         app.resize(
@@ -838,7 +845,8 @@ mod tests {
     #[test]
     fn tresize() -> Result<()> {
         const SIZE: u16 = 100;
-        let mut app = Canopy::new();
+        let (_, mut tr) = TestRender::create();
+        let mut app = utils::tcanopy(&mut tr);
         let mut root = utils::TRoot::new();
         app.resize(
             &mut root,
@@ -895,47 +903,65 @@ mod tests {
     }
     #[test]
     fn trender() -> Result<()> {
-        let mut app = Canopy::new();
         let mut root = utils::TRoot::new();
 
-        const SIZE: u16 = 100;
+        let (buf, mut tr) = TestRender::create();
+        let mut app = utils::tcanopy(&mut tr);
         app.resize(
             &mut root,
             Rect {
                 tl: Point { x: 0, y: 0 },
-                w: SIZE,
-                h: SIZE,
+                w: 100,
+                h: 100,
             },
         )?;
-
+        app.render(&mut root)?;
         assert_eq!(
-            utils::trender(&mut app, &mut root)?,
-            "<r><ba><ba:la><ba:lb><bb><bb:la><bb:lb>"
+            buf.lock()?.text,
+            vec!["<r>", "<ba>", "<ba:la>", "<ba:lb>", "<bb>", "<bb:la>", "<bb:lb>"]
         );
-        assert_eq!(utils::trender(&mut app, &mut root)?, "");
+
+        app.render(&mut root)?;
+        assert!(buf.lock()?.is_empty());
+
         app.taint(&mut root.a);
-        assert_eq!(utils::trender(&mut app, &mut root)?, "<ba>");
+        app.render(&mut root)?;
+        assert_eq!(buf.lock()?.text, vec!["<ba>"]);
+
         app.taint(&mut root.a.b);
-        assert_eq!(utils::trender(&mut app, &mut root)?, "<ba:lb>");
+        app.render(&mut root)?;
+        assert_eq!(buf.lock()?.text, vec!["<ba:lb>"]);
+
         app.taint_tree(&mut root.a)?;
-        assert_eq!(utils::trender(&mut app, &mut root)?, "<ba><ba:la><ba:lb>");
-        assert_eq!(utils::trender(&mut app, &mut root)?, "");
+        app.render(&mut root)?;
+        assert_eq!(buf.lock()?.text, vec!["<ba>", "<ba:la>", "<ba:lb>"]);
+
+        app.render(&mut root)?;
+        assert!(buf.lock()?.text.is_empty());
 
         app.set_focus(&mut root.a.a)?;
-        assert_eq!(utils::trender(&mut app, &mut root)?, "<ba:la>");
+        app.render(&mut root)?;
+        assert_eq!(buf.lock()?.text, vec!["<ba:la>"]);
+
         app.focus_next(&mut root)?;
-        assert_eq!(utils::trender(&mut app, &mut root)?, "<ba:la><ba:lb>");
-        assert_eq!(utils::trender(&mut app, &mut root)?, "");
+        app.render(&mut root)?;
+        assert_eq!(buf.lock()?.text, vec!["<ba:la>", "<ba:lb>"]);
+
         app.focus_prev(&mut root)?;
-        assert_eq!(utils::trender(&mut app, &mut root)?, "<ba:la><ba:lb>");
-        assert_eq!(utils::trender(&mut app, &mut root)?, "");
+        app.render(&mut root)?;
+        assert_eq!(buf.lock()?.text, vec!["<ba:la>", "<ba:lb>"]);
+
+        app.render(&mut root)?;
+        assert!(buf.lock()?.text.is_empty());
 
         Ok(())
     }
 
     #[test]
     fn ttaintskip() -> Result<()> {
-        let mut app = Canopy::new();
+        let (buf, mut tr) = TestRender::create();
+        let mut app = utils::tcanopy(&mut tr);
+
         let mut root = utils::TRoot::new();
         const SIZE: u16 = 100;
         app.resize(
@@ -946,10 +972,9 @@ mod tests {
                 h: SIZE,
             },
         )?;
-        utils::trender(&mut app, &mut root)?;
+        app.render(&mut root)?;
 
         let handled = EventOutcome::Handle { skip: false };
-
         let mut s = utils::State::new();
         app.set_focus(&mut root)?;
         root.next_event = Some(handled);
@@ -969,7 +994,8 @@ mod tests {
                 "bb:lb@tick->handle"
             ]
         );
-        assert_eq!(utils::trender(&mut app, &mut root)?, "<r><bb:lb>");
+        app.render(&mut root)?;
+        assert_eq!(buf.lock()?.text, vec!["<r>", "<bb:lb>"]);
         Ok(())
     }
 }

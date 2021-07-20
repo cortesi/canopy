@@ -1,6 +1,8 @@
 use crossterm;
 use std::sync::mpsc;
+use std::sync::{MutexGuard, PoisonError};
 
+use crate::render::tst::TestBuf;
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -29,6 +31,12 @@ impl From<crossterm::ErrorKind> for Error {
 
 impl From<mpsc::RecvError> for Error {
     fn from(e: mpsc::RecvError) -> Self {
+        Error::RunLoop(e.to_string())
+    }
+}
+
+impl From<PoisonError<MutexGuard<'_, TestBuf>>> for Error {
+    fn from(e: PoisonError<MutexGuard<'_, TestBuf>>) -> Self {
         Error::RunLoop(e.to_string())
     }
 }

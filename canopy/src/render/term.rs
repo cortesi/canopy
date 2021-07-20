@@ -26,11 +26,19 @@ use crossterm::{
     ExecutableCommand, QueueableCommand,
 };
 
-pub struct Term<'a> {
-    fp: &'a mut dyn Write,
+pub struct Term {
+    fp: Box<dyn Write>,
 }
 
-impl<'a> Backend for Term<'a> {
+impl Term {
+    pub fn new() -> Term {
+        Term {
+            fp: Box::new(std::io::stderr()),
+        }
+    }
+}
+
+impl Backend for Term {
     fn flush(&mut self) -> Result<()> {
         self.fp.flush()?;
         Ok(())
@@ -89,12 +97,20 @@ impl<'a> Backend for Term<'a> {
         self.fp.execute(Show);
         exit(code)
     }
+
+    fn reset(&mut self) -> Result<()> {
+        Ok(())
+    }
 }
 
-pub fn runloop<S, N>(app: &mut Canopy<S>, style: Style, root: &mut N, s: &mut S) -> Result<()>
+pub fn runloop<S, N>(style: Style, root: &mut N, s: &mut S) -> Result<()>
 where
     N: Node<S> + FillLayout<S>,
 {
+    let w = std::io::stderr();
+    let mut be = Term { fp: Box::new(w) };
+    let mut app = Canopy::new(Render::new(&mut be, style));
+
     enable_raw_mode()?;
     let mut w = std::io::stderr();
 
@@ -129,17 +145,14 @@ where
         },
     )?;
 
-    let mut be = Term { fp: &mut w };
-    let mut rndr = Render::new(&mut be, style);
-
     'outer: loop {
         let mut ignore = false;
         loop {
             if !ignore {
-                app.pre_render(root, &mut rndr)?;
-                app.render(&mut rndr, root)?;
-                app.post_render(root, &mut rndr)?;
-                rndr.flush()?;
+                app.pre_render(root)?;
+                app.render(root)?;
+                app.post_render(root)?;
+                app.render.flush()?;
             }
             match app.event(root, s, events.next()?)? {
                 EventOutcome::Ignore { .. } => {

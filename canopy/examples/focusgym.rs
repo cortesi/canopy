@@ -7,7 +7,7 @@ use canopy::{
     layout::FillLayout,
     render::term::runloop,
     style::solarized,
-    Canopy, EventOutcome, Node, NodeState, Rect, Render, Result, StatefulNode,
+    Canopy, EventOutcome, Node, NodeState, Rect, Result, StatefulNode,
 };
 
 struct Handle {}
@@ -157,7 +157,7 @@ impl Node<Handle> for Block {
     fn can_focus(&self) -> bool {
         self.children.len() == 0
     }
-    fn render(&self, app: &Canopy<Handle>, rndr: &mut Render) -> Result<()> {
+    fn render(&self, app: &mut Canopy<Handle>) -> Result<()> {
         if self.children.len() == 0 {
             let bc = if app.is_focused(self) && self.children.len() == 0 {
                 "violet"
@@ -166,8 +166,8 @@ impl Node<Handle> for Block {
             };
 
             let r = self.screen_area();
-            rndr.fill(bc, r.inner(1)?, '\u{2588}')?;
-            rndr.solid_frame("black", Frame::new(r, 1)?, ' ')?;
+            app.render.fill(bc, r.inner(1)?, '\u{2588}')?;
+            app.render.solid_frame("black", Frame::new(r, 1)?, ' ')?;
         }
         Ok(())
     }
@@ -226,9 +226,9 @@ impl Node<Handle> for Block {
 }
 
 pub fn main() -> Result<()> {
+    let colors = solarized::solarized_dark();
     let mut h = Handle {};
-    let mut app = Canopy::new();
     let mut root = Root::new();
-    runloop(&mut app, solarized::solarized_dark(), &mut root, &mut h)?;
+    runloop(colors, &mut root, &mut h)?;
     Ok(())
 }

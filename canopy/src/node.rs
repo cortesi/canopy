@@ -1,7 +1,7 @@
 use crate::{
     cursor,
     event::{key, mouse, tick},
-    Canopy, Render, Result, StatefulNode,
+    Canopy, Result, StatefulNode,
 };
 use duplicate::duplicate;
 use std::fmt::Debug;
@@ -78,6 +78,12 @@ impl Walker for EventOutcome {
 /// to all events.
 #[allow(unused_variables)]
 pub trait Node<S>: StatefulNode {
+    /// The name of this node, if it has one, for debugging and testing
+    /// purposes.
+    fn name(&self) -> Option<String> {
+        None
+    }
+
     /// Over-ride Canopy's usual render checking. If this function returns
     /// `Some(true)` or `Some(false)`, the response takes precedence over the
     /// taint and focus change checking that usually determines rendering
@@ -98,7 +104,7 @@ pub trait Node<S>: StatefulNode {
     /// Layout implementation. Nodes with no children should always make sure
     /// they redraw all of `self.screen_area()`. The default implementation does
     /// nothing.
-    fn render(&self, app: &Canopy<S>, r: &mut Render) -> Result<()> {
+    fn render(&self, app: &mut Canopy<S>) -> Result<()> {
         Ok(())
     }
 
@@ -191,13 +197,12 @@ mod tests {
     use crate::{base::SkipWalker, tutils::utils};
 
     fn skipper(
-        app: &mut Canopy<utils::State>,
         x: &mut dyn Node<utils::State>,
         skipname: String,
         v: &mut Vec<String>,
     ) -> Result<SkipWalker> {
         let mut ret = SkipWalker::default();
-        let n = utils::get_name(app, x)?;
+        let n = x.name().unwrap();
         if n == skipname {
             ret.has_skip = true
         }
@@ -207,38 +212,30 @@ mod tests {
 
     #[test]
     fn tpostorder() -> Result<()> {
-        fn skipon(
-            app: &mut Canopy<utils::State>,
-            root: &mut utils::TRoot,
-            skipname: String,
-        ) -> Result<Vec<String>> {
+        fn skipon(root: &mut utils::TRoot, skipname: String) -> Result<Vec<String>> {
             let mut v: Vec<String> = vec![];
             postorder_mut(root, &mut |x| -> Result<SkipWalker> {
-                skipper(app, x, skipname.clone(), &mut v)
+                skipper(x, skipname.clone(), &mut v)
             })?;
             Ok(v)
         }
 
-        let mut app = Canopy::new();
         let mut root = utils::TRoot::new();
+        assert_eq!(skipon(&mut root, "ba:la".into())?, ["ba:la", "ba", "r"]);
         assert_eq!(
-            skipon(&mut app, &mut root, "ba:la".into())?,
-            ["ba:la", "ba", "r"]
-        );
-        assert_eq!(
-            skipon(&mut app, &mut root, "ba:lb".into())?,
+            skipon(&mut root, "ba:lb".into())?,
             ["ba:la", "ba:lb", "ba", "r"]
         );
         assert_eq!(
-            skipon(&mut app, &mut root, "r".into())?,
+            skipon(&mut root, "r".into())?,
             ["ba:la", "ba:lb", "ba", "bb:la", "bb:lb", "bb", "r"]
         );
         assert_eq!(
-            skipon(&mut app, &mut root, "bb".into())?,
+            skipon(&mut root, "bb".into())?,
             ["ba:la", "ba:lb", "ba", "bb:la", "bb:lb", "bb", "r"]
         );
         assert_eq!(
-            skipon(&mut app, &mut root, "ba".into())?,
+            skipon(&mut root, "ba".into())?,
             ["ba:la", "ba:lb", "ba", "r"]
         );
         Ok(())
@@ -246,31 +243,26 @@ mod tests {
 
     #[test]
     fn tpreorder() -> Result<()> {
-        fn skipon(
-            app: &mut Canopy<utils::State>,
-            root: &mut utils::TRoot,
-            skipname: String,
-        ) -> Result<Vec<String>> {
+        fn skipon(root: &mut utils::TRoot, skipname: String) -> Result<Vec<String>> {
             let mut v = vec![];
             preorder(root, &mut |x| -> Result<SkipWalker> {
-                skipper(app, x, skipname.clone(), &mut v)
+                skipper(x, skipname.clone(), &mut v)
             })?;
             Ok(v)
         }
 
-        let mut app = Canopy::new();
         let mut root = utils::TRoot::new();
         assert_eq!(
-            skipon(&mut app, &mut root, "never".into())?,
+            skipon(&mut root, "never".into())?,
             ["r", "ba", "ba:la", "ba:lb", "bb", "bb:la", "bb:lb"]
         );
-        assert_eq!(skipon(&mut app, &mut root, "r".into())?, ["r"]);
+        assert_eq!(skipon(&mut root, "r".into())?, ["r"]);
         assert_eq!(
-            skipon(&mut app, &mut root, "ba".into())?,
+            skipon(&mut root, "ba".into())?,
             ["r", "ba", "bb", "bb:la", "bb:lb"]
         );
         assert_eq!(
-            skipon(&mut app, &mut root, "bb".into())?,
+            skipon(&mut root, "bb".into())?,
             ["r", "ba", "ba:la", "ba:lb", "bb"]
         );
         Ok(())

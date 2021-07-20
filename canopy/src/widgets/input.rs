@@ -9,7 +9,7 @@ use crate::{
     layout::FillLayout,
     state::{NodeState, StatefulNode},
     widgets::frame,
-    Canopy, EventOutcome, Node, Render, Result,
+    Canopy, EventOutcome, Node, Result,
 };
 
 /// A text buffer that exposes edit functionality for a single line. It also
@@ -177,8 +177,9 @@ impl<'a, S> Node<S> for InputLine<S> {
         })
     }
 
-    fn render(&self, _app: &Canopy<S>, rndr: &mut Render) -> Result<()> {
-        rndr.text("text", self.screen_area(), &self.textbuf.text())
+    fn render(&self, app: &mut Canopy<S>) -> Result<()> {
+        app.render
+            .text("text", self.screen_area(), &self.textbuf.text())
     }
 
     fn handle_key(&mut self, _app: &mut Canopy<S>, _: &mut S, k: key::Key) -> Result<EventOutcome> {

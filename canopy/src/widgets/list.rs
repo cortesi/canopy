@@ -8,7 +8,7 @@ use crate::{
     node::Node,
     state::{NodeState, StatefulNode},
     widgets::frame::FrameContent,
-    Canopy, Render,
+    Canopy,
 };
 
 struct Item<S, N: Node<S> + ConstrainedWidthLayout<S>> {
@@ -115,7 +115,7 @@ impl<S, N> Node<S> for List<S, N>
 where
     N: Node<S> + ConstrainedWidthLayout<S>,
 {
-    fn render(&self, _app: &Canopy<S>, _rndr: &mut Render) -> Result<()> {
+    fn render(&self, _app: &mut Canopy<S>) -> Result<()> {
         Ok(())
     }
 }
@@ -123,11 +123,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tutils::utils::{State, TFixed};
-    use crate::Canopy;
+    use crate::render::tst::TestRender;
+    use crate::tutils::utils::{tcanopy, TFixed};
+
     #[test]
     fn drawnodes() -> Result<()> {
-        let mut app: Canopy<State> = Canopy::new();
+        let (_, mut tr) = TestRender::create();
+        let mut app = tcanopy(&mut tr);
         let mut lst = List::new(vec![TFixed::new(10, 10)]);
         let _ = lst.constrain(&mut app, 20)?;
         lst.layout(

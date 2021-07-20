@@ -8,7 +8,7 @@ use canopy::{
     render::term::runloop,
     style::solarized,
     widgets::{frame, InputLine, Scroll, Text},
-    Canopy, EventOutcome, Node, NodeState, Render, Result, StatefulNode,
+    Canopy, EventOutcome, Node, NodeState, Result, StatefulNode,
 };
 
 struct Handle {}
@@ -19,13 +19,14 @@ struct StatusBar {
 }
 
 impl Node<Handle> for StatusBar {
-    fn render(&self, _app: &Canopy<Handle>, rndr: &mut Render) -> Result<()> {
-        rndr.style.push_layer("statusbar");
+    fn render(&self, app: &mut Canopy<Handle>) -> Result<()> {
+        app.render.style.push_layer("statusbar");
         let sa = self.screen_area();
         if sa.h > 1 {
             panic!("{:?}", sa);
         }
-        rndr.text("statusbar/text", self.screen_area(), "todo")?;
+        app.render
+            .text("statusbar/text", self.screen_area(), "todo")?;
         Ok(())
     }
 }
@@ -163,15 +164,14 @@ impl Node<Handle> for Root {
 }
 
 pub fn main() -> Result<()> {
-    let mut app = Canopy::new();
-    let mut h = Handle {};
-    let mut root = Root::new(String::new());
     let mut colors = solarized::solarized_dark();
     colors.insert(
         "statusbar/text",
         Some(solarized::BASE02),
         Some(solarized::BASE1),
     );
-    runloop(&mut app, colors, &mut root, &mut h)?;
+    let mut h = Handle {};
+    let mut root = Root::new(String::new());
+    runloop(colors, &mut root, &mut h)?;
     Ok(())
 }

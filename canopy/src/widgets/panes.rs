@@ -6,7 +6,7 @@ use crate::{
     geom::Rect,
     layout::FillLayout,
     state::{NodeState, StatefulNode},
-    Canopy, Node, Render, Result,
+    Canopy, Node, Result,
 };
 
 /// Panes manages a set of child nodes arranged in a 2d grid.
@@ -123,7 +123,7 @@ impl<S, N: canopy::Node<S>> Node<S> for Panes<S, N> {
         }
         Ok(())
     }
-    fn render(&self, _: &Canopy<S>, _rndr: &mut Render) -> Result<()> {
+    fn render(&self, _: &mut Canopy<S>) -> Result<()> {
         // FIXME - this should probably clear the area if the last node is
         // deleted.
         Ok(())
@@ -134,11 +134,13 @@ impl<S, N: canopy::Node<S>> Node<S> for Panes<S, N> {
 mod tests {
     use super::*;
     use crate::geom::Point;
+    use crate::render::tst::TestRender;
     use crate::tutils::utils;
 
     #[test]
     fn tlayout() -> Result<()> {
-        let mut app = Canopy::new();
+        let (_, mut tr) = TestRender::create();
+        let mut app = utils::tcanopy(&mut tr);
         let tn = utils::TBranch::new("a");
         let mut p: Panes<utils::State, utils::TBranch> = Panes::new(tn);
         let r = Rect {

@@ -12,10 +12,11 @@ pub trait Backend {
     fn hide_cursor(&mut self) -> Result<()>;
     fn flush(&mut self) -> Result<()>;
     fn exit(&mut self, code: i32) -> !;
+    fn reset(&mut self) -> Result<()>;
 }
 
 pub struct Render<'a> {
-    backend: &'a mut dyn Backend,
+    pub backend: &'a mut dyn Backend,
     pub style: Style,
 }
 
@@ -88,8 +89,10 @@ impl<'a> Render<'a> {
     pub fn pop(&mut self) {
         self.style.pop();
     }
-    pub fn reset(&mut self) {
+    pub fn reset(&mut self) -> Result<()> {
+        self.backend.reset()?;
         self.style.reset();
+        Ok(())
     }
     pub fn flush(&mut self) -> Result<()> {
         self.backend.flush()

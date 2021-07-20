@@ -80,11 +80,15 @@ pub mod utils {
     }
 
     impl Node<State> for TLeaf {
+        fn name(&self) -> Option<String> {
+            Some(self.name.clone())
+        }
+
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(&self, _: &Canopy<State>, rndr: &mut Render) -> Result<()> {
-            tnode_render(self.name.clone(), rndr)
+        fn render(&self, app: &mut Canopy<State>) -> Result<()> {
+            tnode_render(self.name.clone(), &mut app.render)
         }
         fn handle_key(
             &mut self,
@@ -123,11 +127,15 @@ pub mod utils {
     }
 
     impl Node<State> for TBranch {
+        fn name(&self) -> Option<String> {
+            Some(self.name.clone())
+        }
+
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(&self, _: &Canopy<State>, rndr: &mut Render) -> Result<()> {
-            tnode_render(self.name.clone(), rndr)
+        fn render(&self, app: &mut Canopy<State>) -> Result<()> {
+            tnode_render(self.name.clone(), &mut app.render)
         }
         fn handle_key(
             &mut self,
@@ -180,11 +188,15 @@ pub mod utils {
     }
 
     impl Node<State> for TRoot {
+        fn name(&self) -> Option<String> {
+            Some(self.name.clone())
+        }
+
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(&self, _: &Canopy<State>, rndr: &mut Render) -> Result<()> {
-            tnode_render(self.name.clone(), rndr)
+        fn render(&self, app: &mut Canopy<State>) -> Result<()> {
+            tnode_render(self.name.clone(), &mut app.render)
         }
         fn handle_key(
             &mut self,
@@ -299,21 +311,8 @@ pub mod utils {
         }
     }
 
-    pub fn trender(app: &mut Canopy<State>, r: &mut TRoot) -> Result<String> {
-        let mut tr = TestRender::new();
-        let mut rndr = Render::new(&mut tr, Style::default());
-        app.render(&mut rndr, r)?;
-        Ok(tr.text.join(""))
-    }
-
-    pub fn get_name(app: &mut Canopy<State>, x: &mut dyn Node<State>) -> Result<String> {
-        let colors = Style::default();
-        let mut tr = TestRender::new();
-        let mut rndr = Render::new(&mut tr, colors);
-        x.render(app, &mut rndr)?;
-        let n = tr.text[0].clone();
-        let n = n.trim_matches(&vec!['<', '>'][..]);
-        Ok(n.into())
+    pub fn tcanopy<'a>(tr: &'a mut TestRender) -> Canopy<'a, State> {
+        Canopy::new(Render::new(tr, Style::default()))
     }
 
     // A fixed-size test node

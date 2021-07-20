@@ -3,7 +3,7 @@ use crate::{
     geom::{Point, Rect},
     layout::ConstrainedWidthLayout,
     state::{NodeState, StatefulNode},
-    Canopy, Node, Render, Result,
+    Canopy, Node, Result,
 };
 use std::marker::PhantomData;
 
@@ -56,7 +56,7 @@ impl<'a, S> ConstrainedWidthLayout<S> for Text<S> {
 }
 
 impl<'a, S> Node<S> for Text<S> {
-    fn render(&self, _app: &Canopy<S>, rndr: &mut Render) -> Result<()> {
+    fn render(&self, app: &mut Canopy<S>) -> Result<()> {
         let area = self.screen_area();
         let vo = self.virt_area();
         if let Some(lines) = self.lines.as_ref() {
@@ -70,9 +70,9 @@ impl<'a, S> Node<S> for Text<S> {
                     h: 1,
                 };
                 if (vo.tl.y + i) < lines.len() as u16 {
-                    rndr.text("text", r, &lines[(vo.tl.y + i) as usize])?;
+                    app.render.text("text", r, &lines[(vo.tl.y + i) as usize])?;
                 } else {
-                    rndr.fill("text", r, ' ')?;
+                    app.render.fill("text", r, ' ')?;
                 };
             }
         }
@@ -83,11 +83,15 @@ impl<'a, S> Node<S> for Text<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::render::tst::TestRender;
+    use crate::tutils::utils;
+
     #[test]
     fn text_sizing() -> Result<()> {
-        let mut app = Canopy::new();
+        let (_, mut tr) = TestRender::create();
+        let mut app = utils::tcanopy(&mut tr);
         let txt = "aaa bbb ccc\nddd eee fff\nggg hhh iii";
-        let mut t: Text<()> = Text::new(txt);
+        let mut t: Text<utils::State> = Text::new(txt);
         t.constrain(&mut app, 7)?;
         let expected: Vec<String> = vec![
             "aaa bbb".into(),
