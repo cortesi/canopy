@@ -26,9 +26,9 @@ pub trait FillLayout<S>: StatefulNode {
 }
 
 /// A layout for nodes with geometry computed based on a width constraint. This
-/// defines a two-stage layout process where the node is first constrained, and
-/// computes a virtual rectangle, then some sub-view of the virtual rectangle is
-/// laid out on the screen.
+/// defines a two-stage layout process where the node is first constrained,
+/// computing a virtual rectangle, then some sub-view of the virtual rectangle
+/// is laid out on the screen.
 ///
 /// For instance, imagine laying out a paragraph of text. First we `constrain`
 /// the Node by specifying the text width. The component then calculates the
@@ -42,7 +42,7 @@ pub trait ConstrainedWidthLayout<S>: StatefulNode {
     /// attempt is made to scale to within the width, but the returned rectangle
     /// may be larger or smaller than the given constraints. This method should
     /// be used in the `layout` method of a parent, and should be followed by a
-    /// call to layout with the established geometry.
+    /// call to the child's `layout` method with the established geometry.
     ///
     /// This method may return None, in which case the component will attempt to
     /// render in whatever size it's laid out to.
@@ -57,11 +57,15 @@ pub trait ConstrainedWidthLayout<S>: StatefulNode {
         Ok(())
     }
 
-    /// Lay out this component and all its children. Implementers should use
-    /// `set_screen_area` and `set_virt_area` save the layout information to the
-    /// node state, and then call `self.layout_children`. The default
-    /// implementation already does both of these things, so most implementers
-    /// will only need to override `layout_children`.
+    /// Lay out this component and all its children. The `virt_rect` argument
+    /// must be a sub-rectcangle of the return value from the previous call to
+    /// `constrain`, and its size must be equal to `screen_rect`.
+    ///
+    /// Implementers should use `set_screen_area` and `set_virt_area` save the
+    /// layout information to the node state, and then call
+    /// `self.layout_children`. The default implementation already does both of
+    /// these things, so most implementers will only need to override
+    /// `layout_children`.
     fn layout(&mut self, app: &mut Canopy<S>, virt_rect: Rect, screen_rect: Rect) -> Result<()> {
         self.set_screen_area(screen_rect);
         self.set_virt_area(virt_rect);
