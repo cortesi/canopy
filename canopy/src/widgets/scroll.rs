@@ -1,4 +1,3 @@
-use duplicate::duplicate;
 use std::marker::PhantomData;
 
 use crate as canopy;
@@ -144,15 +143,11 @@ where
         Some(app.should_render(&self.child))
     }
 
-    #[duplicate(
-        method          reference(type);
-        [children]      [& type];
-        [children_mut]  [&mut type];
-    )]
-    fn method(
-        self: reference([Self]),
-        f: &mut dyn FnMut(reference([dyn Node<S>])) -> Result<()>,
-    ) -> Result<()> {
-        f(reference([self.child]))
+    fn children(&self, f: &mut dyn FnMut(&dyn Node<S>) -> Result<()>) -> Result<()> {
+        f(&self.child)
+    }
+
+    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<()>) -> Result<()> {
+        f(&mut self.child)
     }
 }

@@ -30,8 +30,8 @@ pub struct Term {
     fp: std::io::Stderr,
 }
 
-impl Term {
-    pub fn new() -> Term {
+impl Default for Term {
+    fn default() -> Term {
         Term {
             fp: std::io::stderr(),
         }
@@ -108,8 +108,7 @@ pub fn runloop<S, N>(style: Style, root: &mut N, s: &mut S) -> Result<()>
 where
     N: Node<S> + FillLayout<S>,
 {
-    let w = std::io::stderr();
-    let mut be = Term { fp: w };
+    let mut be = Term::default();
     let mut app = Canopy::new(Render::new(&mut be, style));
 
     enable_raw_mode()?;
@@ -131,7 +130,7 @@ where
         {
             execute!(stderr, LeaveAlternateScreen, DisableMouseCapture, Show);
             disable_raw_mode();
-            BacktracePrinter::new().print_panic_info(&pi, &mut default_output_stream());
+            BacktracePrinter::new().print_panic_info(pi, &mut default_output_stream());
         }
     }));
 
