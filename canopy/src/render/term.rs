@@ -136,14 +136,7 @@ where
 
     let events = EventSource::new(200);
     let size = size()?;
-    app.resize(
-        root,
-        Rect {
-            tl: Point { x: 0, y: 0 },
-            w: size.0,
-            h: size.1,
-        },
-    )?;
+    app.resize(root, Rect::new(0, 0, size.0, size.1))?;
 
     loop {
         let mut ignore = false;

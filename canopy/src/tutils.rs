@@ -60,15 +60,7 @@ pub mod utils {
     }
 
     pub fn tnode_render(n: String, rndr: &mut Render) -> Result<()> {
-        rndr.text(
-            "any",
-            Rect {
-                tl: Point { x: 0, y: 0 },
-                w: 100,
-                h: 100,
-            },
-            &format!("<{}>", n),
-        )
+        rndr.text("any", Rect::new(0, 0, 100, 100), &format!("<{}>", n))
     }
 
     impl layout::FillLayout<State> for TLeaf {

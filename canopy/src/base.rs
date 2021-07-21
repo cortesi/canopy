@@ -558,12 +558,7 @@ pub fn locate<S, R: Walker + Default>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        geom::{Point, Rect},
-        render::test::TestRender,
-        tutils::utils,
-        StatefulNode,
-    };
+    use crate::{geom::Rect, render::test::TestRender, tutils::utils, StatefulNode};
 
     pub fn focvec(app: &mut Canopy<utils::State>, root: &mut utils::TRoot) -> Result<Vec<String>> {
         let mut v = vec![];
@@ -671,14 +666,7 @@ mod tests {
         let mut app = utils::tcanopy(&mut tr);
         let mut root = utils::TRoot::new();
         const SIZE: u16 = 100;
-        app.resize(
-            &mut root,
-            Rect {
-                tl: Point { x: 0, y: 0 },
-                w: SIZE,
-                h: SIZE,
-            },
-        )?;
+        app.resize(&mut root, Rect::new(0, 0, SIZE, SIZE))?;
 
         app.set_focus(&mut root.a.a)?;
         app.focus_right(&mut root)?;
@@ -815,14 +803,7 @@ mod tests {
         let mut app = utils::tcanopy(&mut tr);
         const SIZE: u16 = 100;
         let mut root = utils::TRoot::new();
-        app.resize(
-            &mut root,
-            Rect {
-                tl: Point { x: 0, y: 0 },
-                w: SIZE,
-                h: SIZE,
-            },
-        )?;
+        app.resize(&mut root, Rect::new(0, 0, SIZE, SIZE))?;
 
         let acted = EventOutcome::Handle { skip: false };
 
@@ -850,56 +831,14 @@ mod tests {
         let (_, mut tr) = TestRender::create();
         let mut app = utils::tcanopy(&mut tr);
         let mut root = utils::TRoot::new();
-        app.resize(
-            &mut root,
-            Rect {
-                tl: Point { x: 0, y: 0 },
-                w: SIZE,
-                h: SIZE,
-            },
-        )?;
-        assert_eq!(
-            root.screen_area(),
-            Rect {
-                tl: Point { x: 0, y: 0 },
-                w: SIZE,
-                h: SIZE
-            }
-        );
-        assert_eq!(
-            root.a.screen_area(),
-            Rect {
-                tl: Point { x: 0, y: 0 },
-                w: SIZE / 2,
-                h: SIZE
-            }
-        );
-        assert_eq!(
-            root.b.screen_area(),
-            Rect {
-                tl: Point { x: SIZE / 2, y: 0 },
-                w: SIZE / 2,
-                h: SIZE
-            }
-        );
+        app.resize(&mut root, Rect::new(0, 0, SIZE, SIZE))?;
+        assert_eq!(root.screen_area(), Rect::new(0, 0, SIZE, SIZE));
+        assert_eq!(root.a.screen_area(), Rect::new(0, 0, SIZE / 2, SIZE));
+        assert_eq!(root.b.screen_area(), Rect::new(SIZE / 2, 0, SIZE / 2, SIZE));
 
-        app.resize(
-            &mut root,
-            Rect {
-                tl: Point { x: 0, y: 0 },
-                w: 50,
-                h: 50,
-            },
-        )?;
+        app.resize(&mut root, Rect::new(0, 0, 50, 50))?;
 
-        assert_eq!(
-            root.b.screen_area(),
-            Rect {
-                tl: Point { x: 25, y: 0 },
-                w: 25,
-                h: 50
-            }
-        );
+        assert_eq!(root.b.screen_area(), Rect::new(25, 0, 25, 50));
 
         Ok(())
     }
@@ -909,14 +848,7 @@ mod tests {
 
         let (buf, mut tr) = TestRender::create();
         let mut app = utils::tcanopy(&mut tr);
-        app.resize(
-            &mut root,
-            Rect {
-                tl: Point { x: 0, y: 0 },
-                w: 100,
-                h: 100,
-            },
-        )?;
+        app.resize(&mut root, Rect::new(0, 0, 100, 100))?;
         app.render(&mut root)?;
         assert_eq!(
             buf.lock()?.text,
@@ -966,14 +898,7 @@ mod tests {
 
         let mut root = utils::TRoot::new();
         const SIZE: u16 = 100;
-        app.resize(
-            &mut root,
-            Rect {
-                tl: Point { x: 0, y: 0 },
-                w: SIZE,
-                h: SIZE,
-            },
-        )?;
+        app.resize(&mut root, Rect::new(0, 0, SIZE, SIZE))?;
         app.render(&mut root)?;
 
         let handled = EventOutcome::Handle { skip: false };

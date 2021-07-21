@@ -3,7 +3,7 @@ use duplicate::duplicate;
 use canopy;
 use canopy::{
     event::{key, mouse},
-    geom::{Point, Rect},
+    geom::Rect,
     layout::FillLayout,
     render::term::runloop,
     style::solarized,
@@ -65,14 +65,7 @@ impl FillLayout<Handle> for Root {
     fn layout_children(&mut self, app: &mut Canopy<Handle>) -> Result<()> {
         let a = self.screen_area();
         if a.h > 2 {
-            let sb = Rect {
-                tl: Point {
-                    x: a.tl.x,
-                    y: a.tl.y + a.h - 1,
-                },
-                w: a.w,
-                h: 1,
-            };
+            let sb = Rect::new(a.tl.x, a.tl.y + a.h - 1, a.w, 1);
             let ct = Rect {
                 tl: a.tl,
                 w: a.w,
@@ -84,17 +77,7 @@ impl FillLayout<Handle> for Root {
             self.content.layout(app, a)?;
         }
         if let Some(add) = &mut self.adder {
-            add.layout(
-                app,
-                Rect {
-                    tl: Point {
-                        x: a.tl.x + 2,
-                        y: a.tl.y + a.h / 2,
-                    },
-                    w: a.w - 4,
-                    h: 3,
-                },
-            )?;
+            add.layout(app, Rect::new(a.tl.x + 2, a.tl.y + a.h / 2, a.w - 4, 3))?;
         }
         Ok(())
     }

@@ -79,14 +79,12 @@ impl Rect {
         if self.w < (border * 2) || self.h < (border * 2) {
             return Err(Error::Geometry("rectangle too small".into()));
         }
-        Ok(Rect {
-            tl: Point {
-                x: self.tl.x + border,
-                y: self.tl.y + border,
-            },
-            w: self.w - (border * 2),
-            h: self.h - (border * 2),
-        })
+        Ok(Rect::new(
+            self.tl.x + border,
+            self.tl.y + border,
+            self.w - (border * 2),
+            self.h - (border * 2),
+        ))
     }
 
     /// Extract a horizontal section of this rect based on an extent.
@@ -94,14 +92,7 @@ impl Rect {
         if !self.hextent().contains(e) {
             Err(Error::Geometry("extract extent outside rectangle".into()))
         } else {
-            Ok(Rect {
-                tl: Point {
-                    x: e.off,
-                    y: self.tl.y,
-                },
-                w: e.len,
-                h: self.h,
-            })
+            Ok(Rect::new(e.off, self.tl.y, e.len, self.h))
         }
     }
 
@@ -117,11 +108,7 @@ impl Rect {
     pub fn intersect(&self, other: &Rect) -> Option<Self> {
         let h = self.hextent().intersect(&other.hextent())?;
         let v = self.vextent().intersect(&other.vextent())?;
-        Some(Rect {
-            tl: Point { x: h.off, y: v.off },
-            w: h.len,
-            h: v.len,
-        })
+        Some(Rect::new(h.off, v.off, h.len, v.len))
     }
 
     /// Given a point that falls within this rectangle, shift the point to be
@@ -191,14 +178,7 @@ impl Rect {
         let mut off: u16 = self.tl.x;
         let mut ret = vec![];
         for i in 0..n {
-            ret.push(Rect {
-                tl: Point {
-                    x: off,
-                    y: self.tl.y,
-                },
-                w: widths[i as usize],
-                h: self.h,
-            });
+            ret.push(Rect::new(off, self.tl.y, widths[i as usize], self.h));
             off += widths[i as usize];
         }
         Ok(ret)
@@ -211,14 +191,7 @@ impl Rect {
         let mut off: u16 = self.tl.y;
         let mut ret = vec![];
         for i in 0..n {
-            ret.push(Rect {
-                tl: Point {
-                    x: self.tl.x,
-                    y: off,
-                },
-                w: self.w,
-                h: heights[i as usize],
-            });
+            ret.push(Rect::new(self.tl.x, off, self.w, heights[i as usize]));
             off += heights[i as usize];
         }
         Ok(ret)
@@ -311,14 +284,7 @@ impl Rect {
         if !self.vextent().contains(e) {
             Err(Error::Geometry("extract extent outside rectangle".into()))
         } else {
-            Ok(Rect {
-                tl: Point {
-                    x: self.tl.x,
-                    y: e.off,
-                },
-                w: self.w,
-                h: e.len,
-            })
+            Ok(Rect::new(self.tl.x, e.off, self.w, e.len))
         }
     }
 
@@ -351,16 +317,8 @@ mod tests {
 
     #[test]
     fn tsearch() -> Result<()> {
-        let bounds = Rect {
-            tl: Point { x: 0, y: 0 },
-            w: 6,
-            h: 6,
-        };
-        let r = Rect {
-            tl: Point { x: 2, y: 2 },
-            w: 2,
-            h: 2,
-        };
+        let bounds = Rect::new(0, 0, 6, 6);
+        let r = Rect::new(2, 2, 2, 2);
 
         let mut v: Vec<Point> = vec![];
         r.search_up(&mut |p| {
@@ -443,82 +401,39 @@ mod tests {
 
     #[test]
     fn intersect() -> Result<()> {
-        let r = Rect {
-            tl: Point { x: 10, y: 10 },
-            w: 10,
-            h: 10,
-        };
-        let r2 = Rect {
-            tl: Point { x: 11, y: 11 },
-            w: 2,
-            h: 2,
-        };
+        let r = Rect::new(10, 10, 10, 10);
+        let r2 = Rect::new(11, 11, 2, 2);
         assert_eq!(r.intersect(&r2), Some(r2));
         assert_eq!(r2.intersect(&r), Some(r2));
         assert_eq!(r.intersect(&r), Some(r));
         assert_eq!(
-            r.intersect(&Rect {
-                tl: Point { x: 9, y: 9 },
-                w: 3,
-                h: 3,
-            }),
-            Some(Rect {
-                tl: Point { x: 10, y: 10 },
-                w: 2,
-                h: 2,
-            })
+            r.intersect(&Rect::new(9, 9, 3, 3)),
+            Some(Rect::new(10, 10, 2, 2))
         );
         assert_eq!(
-            r.intersect(&Rect {
-                tl: Point { x: 19, y: 19 },
-                w: 3,
-                h: 3,
-            }),
-            Some(Rect {
-                tl: Point { x: 19, y: 19 },
-                w: 1,
-                h: 1,
-            })
+            r.intersect(&Rect::new(19, 19, 3, 3)),
+            Some(Rect::new(19, 19, 1, 1))
         );
         Ok(())
     }
 
     #[test]
     fn inner() -> Result<()> {
-        let r = Rect {
-            tl: Point { x: 0, y: 0 },
-            w: 10,
-            h: 10,
-        };
-        assert_eq!(
-            r.inner(1)?,
-            Rect {
-                tl: Point { x: 1, y: 1 },
-                w: 8,
-                h: 8,
-            },
-        );
+        let r = Rect::new(0, 0, 10, 10);
+        assert_eq!(r.inner(1)?, Rect::new(1, 1, 8, 8),);
         Ok(())
     }
 
     #[test]
     fn contains() -> Result<()> {
-        let r = Rect {
-            tl: Point { x: 10, y: 10 },
-            w: 10,
-            h: 10,
-        };
+        let r = Rect::new(10, 10, 10, 10);
         assert!(r.contains_point(Point { x: 10, y: 10 }));
         assert!(!r.contains_point(Point { x: 9, y: 10 }));
         assert!(!r.contains_point(Point { x: 20, y: 20 }));
         assert!(r.contains_point(Point { x: 19, y: 19 }));
         assert!(!r.contains_point(Point { x: 20, y: 21 }));
 
-        assert!(r.contains_rect(&Rect {
-            tl: Point { x: 10, y: 10 },
-            w: 1,
-            h: 1
-        }));
+        assert!(r.contains_rect(&Rect::new(10, 10, 1, 1)));
         assert!(r.contains_rect(&r));
 
         Ok(())
@@ -534,11 +449,7 @@ mod tests {
 
     #[test]
     fn trebase() -> Result<()> {
-        let r = Rect {
-            tl: Point { x: 10, y: 10 },
-            w: 10,
-            h: 10,
-        };
+        let r = Rect::new(10, 10, 10, 10);
         assert_eq!(
             r.rebase_point(Point { x: 11, y: 11 })?,
             Point { x: 1, y: 1 }
@@ -557,36 +468,12 @@ mod tests {
     #[test]
     fn tscroll() -> Result<()> {
         assert_eq!(
-            Rect {
-                tl: Point { x: 5, y: 5 },
-                w: 10,
-                h: 10,
-            }
-            .shift(-10, -10),
-            Rect {
-                tl: Point { x: 0, y: 0 },
-                w: 10,
-                h: 10
-            }
+            Rect::new(5, 5, 10, 10).shift(-10, -10),
+            Rect::new(0, 0, 10, 10)
         );
         assert_eq!(
-            Rect {
-                tl: Point {
-                    x: u16::MAX - 5,
-                    y: u16::MAX - 5,
-                },
-                w: 10,
-                h: 10,
-            }
-            .shift(10, 10),
-            Rect {
-                tl: Point {
-                    x: u16::MAX,
-                    y: u16::MAX,
-                },
-                w: 10,
-                h: 10
-            }
+            Rect::new(u16::MAX - 5, u16::MAX - 5, 10, 10).shift(10, 10),
+            Rect::new(u16::MAX, u16::MAX, 10, 10)
         );
         Ok(())
     }
@@ -594,111 +481,33 @@ mod tests {
     #[test]
     fn trect_clamp() -> Result<()> {
         assert_eq!(
-            Rect {
-                tl: Point { x: 11, y: 11 },
-                w: 5,
-                h: 5,
-            }
-            .clamp(Rect {
-                tl: Point { x: 10, y: 10 },
-                w: 10,
-                h: 10,
-            })?,
-            Rect {
-                tl: Point { x: 11, y: 11 },
-                w: 5,
-                h: 5,
-            },
+            Rect::new(11, 11, 5, 5).clamp(Rect::new(10, 10, 10, 10))?,
+            Rect::new(11, 11, 5, 5),
         );
         assert_eq!(
-            Rect {
-                tl: Point { x: 19, y: 19 },
-                w: 5,
-                h: 5,
-            }
-            .clamp(Rect {
-                tl: Point { x: 10, y: 10 },
-                w: 10,
-                h: 10,
-            })?,
-            Rect {
-                tl: Point { x: 15, y: 15 },
-                w: 5,
-                h: 5,
-            },
+            Rect::new(19, 19, 5, 5).clamp(Rect::new(10, 10, 10, 10))?,
+            Rect::new(15, 15, 5, 5),
         );
         assert_eq!(
-            Rect {
-                tl: Point { x: 5, y: 5 },
-                w: 5,
-                h: 5,
-            }
-            .clamp(Rect {
-                tl: Point { x: 10, y: 10 },
-                w: 10,
-                h: 10,
-            })?,
-            Rect {
-                tl: Point { x: 10, y: 10 },
-                w: 5,
-                h: 5,
-            },
+            Rect::new(5, 5, 5, 5).clamp(Rect::new(10, 10, 10, 10))?,
+            Rect::new(10, 10, 5, 5),
         );
         Ok(())
     }
 
     #[test]
     fn trect_scroll_within() -> Result<()> {
-        let r = Rect {
-            tl: Point { x: 10, y: 10 },
-            w: 5,
-            h: 5,
-        };
+        let r = Rect::new(10, 10, 5, 5);
         assert_eq!(
-            Rect {
-                tl: Point { x: 11, y: 11 },
-                w: 5,
-                h: 5,
-            },
-            r.shift_within(
-                1,
-                1,
-                Rect {
-                    tl: Point { x: 10, y: 10 },
-                    w: 10,
-                    h: 10,
-                },
-            )
+            Rect::new(11, 11, 5, 5),
+            r.shift_within(1, 1, Rect::new(10, 10, 10, 10),)
         );
         assert_eq!(
-            Rect {
-                tl: Point { x: 15, y: 15 },
-                w: 5,
-                h: 5,
-            },
-            r.shift_within(
-                10,
-                10,
-                Rect {
-                    tl: Point { x: 10, y: 10 },
-                    w: 10,
-                    h: 10,
-                },
-            )
+            Rect::new(15, 15, 5, 5),
+            r.shift_within(10, 10, Rect::new(10, 10, 10, 10),)
         );
         // Degenerate case - trying to scroll within a smaller rect.
-        assert_eq!(
-            r.shift_within(
-                1,
-                1,
-                Rect {
-                    tl: Point { x: 10, y: 10 },
-                    w: 2,
-                    h: 2,
-                },
-            ),
-            r
-        );
+        assert_eq!(r.shift_within(1, 1, Rect::new(10, 10, 2, 2),), r);
         Ok(())
     }
 
@@ -707,99 +516,34 @@ mod tests {
         let p = Point { x: 15, y: 15 };
         assert_eq!(
             Point { x: 10, y: 10 },
-            p.scroll_within(
-                -10,
-                -10,
-                Rect {
-                    tl: Point { x: 10, y: 10 },
-                    w: 10,
-                    h: 10,
-                },
-            )
+            p.scroll_within(-10, -10, Rect::new(10, 10, 10, 10),)
         );
         assert_eq!(
             Point { x: 20, y: 20 },
-            p.scroll_within(
-                10,
-                10,
-                Rect {
-                    tl: Point { x: 10, y: 10 },
-                    w: 10,
-                    h: 10,
-                },
-            )
+            p.scroll_within(10, 10, Rect::new(10, 10, 10, 10),)
         );
         assert_eq!(
             Point { x: 16, y: 15 },
-            p.scroll_within(
-                1,
-                0,
-                Rect {
-                    tl: Point { x: 10, y: 10 },
-                    w: 10,
-                    h: 10,
-                },
-            )
+            p.scroll_within(1, 0, Rect::new(10, 10, 10, 10),)
         );
         Ok(())
     }
 
     #[test]
     fn tsplit_panes() -> Result<()> {
-        let r = Rect {
-            tl: Point { x: 10, y: 10 },
-            w: 40,
-            h: 40,
-        };
+        let r = Rect::new(10, 10, 40, 40);
         assert_eq!(
             r.split_panes(&vec![2, 2])?,
             vec![
-                [
-                    Rect {
-                        tl: Point { x: 10, y: 10 },
-                        w: 20,
-                        h: 20
-                    },
-                    Rect {
-                        tl: Point { x: 10, y: 30 },
-                        w: 20,
-                        h: 20
-                    }
-                ],
-                [
-                    Rect {
-                        tl: Point { x: 30, y: 10 },
-                        w: 20,
-                        h: 20
-                    },
-                    Rect {
-                        tl: Point { x: 30, y: 30 },
-                        w: 20,
-                        h: 20
-                    }
-                ]
+                [Rect::new(10, 10, 20, 20), Rect::new(10, 30, 20, 20)],
+                [Rect::new(30, 10, 20, 20), Rect::new(30, 30, 20, 20)]
             ],
         );
         assert_eq!(
             r.split_panes(&vec![2, 1])?,
             vec![
-                vec![
-                    Rect {
-                        tl: Point { x: 10, y: 10 },
-                        w: 20,
-                        h: 20
-                    },
-                    Rect {
-                        tl: Point { x: 10, y: 30 },
-                        w: 20,
-                        h: 20
-                    }
-                ],
-                vec![Rect {
-                    tl: Point { x: 30, y: 10 },
-                    w: 20,
-                    h: 40
-                }],
+                vec![Rect::new(10, 10, 20, 20), Rect::new(10, 30, 20, 20)],
+                vec![Rect::new(30, 10, 20, 40)],
             ],
         );
         Ok(())

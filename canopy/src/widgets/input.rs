@@ -134,29 +134,14 @@ impl<S> frame::FrameContent for InputLine<S> {
     fn bounds(&self) -> Option<(Rect, Rect)> {
         let r = self.screen_area();
         if self.textbuf.window.len >= self.textbuf.value.len() as u16 {
-            let r = Rect {
-                tl: Point { x: 0, y: 0 },
-                w: r.w,
-                h: 1,
-            };
+            let r = Rect::new(0, 0, r.w, 1);
             Some((r, r))
         } else {
-            let view = Rect {
-                tl: Point { x: 0, y: 0 },
-                w: self.textbuf.value.len() as u16,
-                h: 1,
-            };
+            let view = Rect::new(0, 0, self.textbuf.value.len() as u16, 1);
             Some((
-                Rect {
-                    tl: Point {
-                        x: self.textbuf.window.off,
-                        y: 0,
-                    },
-                    w: self.textbuf.window.len,
-                    h: 1,
-                }
-                .clamp(view)
-                .unwrap(),
+                Rect::new(self.textbuf.window.off, 0, self.textbuf.window.len, 1)
+                    .clamp(view)
+                    .unwrap(),
                 view,
             ))
         }

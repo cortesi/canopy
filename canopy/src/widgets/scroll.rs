@@ -111,11 +111,7 @@ where
     fn layout_children(&mut self, app: &mut Canopy<S>) -> Result<()> {
         let rect = self.screen_area();
         let virt = self.child.constrain(app, rect.w)?;
-        let view = Rect {
-            tl: Point { x: 0, y: 0 },
-            w: rect.w,
-            h: rect.h,
-        };
+        let view = Rect::new(0, 0, rect.w, rect.h);
         self.scrollstate = Some(ScrollState {
             window: view,
             virt,

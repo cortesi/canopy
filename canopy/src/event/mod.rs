@@ -44,11 +44,7 @@ impl EventSource {
                     let oevt = match evt {
                         event::Event::Key(e) => Event::Key(e.into()),
                         event::Event::Mouse(e) => Event::Mouse(e.into()),
-                        event::Event::Resize(x, y) => Event::Resize(geom::Rect {
-                            tl: geom::Point { x: 0, y: 0 },
-                            w: x,
-                            h: y,
-                        }),
+                        event::Event::Resize(x, y) => Event::Resize(crate::Rect::new(0, 0, x, y)),
                     };
                     let ret = evt_tx.send(oevt);
                     if ret.is_err() {

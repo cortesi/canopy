@@ -61,14 +61,7 @@ impl<'a, S> Node<S> for Text<S> {
         let vo = self.virt_area();
         if let Some(lines) = self.lines.as_ref() {
             for i in 0..area.h {
-                let r = Rect {
-                    tl: Point {
-                        x: area.tl.x,
-                        y: area.tl.y + i,
-                    },
-                    w: area.w,
-                    h: 1,
-                };
+                let r = Rect::new(area.tl.x, area.tl.y + i, area.w, 1);
                 if (vo.tl.y + i) < lines.len() as u16 {
                     app.render.text("text", r, &lines[(vo.tl.y + i) as usize])?;
                 } else {

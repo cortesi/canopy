@@ -1,4 +1,4 @@
-use super::{Point, Rect};
+use super::Rect;
 use crate::{Error, Result};
 
 /// A frame extracted from a rectangle
@@ -28,70 +28,29 @@ impl Frame {
             return Err(Error::Geometry("rectangle too small".into()));
         }
         Ok(Frame {
-            top: Rect {
-                tl: Point {
-                    x: rect.tl.x + border,
-                    y: rect.tl.y,
-                },
-                w: rect.w - 2 * border,
-                h: border,
-            },
-            bottom: Rect {
-                tl: Point {
-                    x: rect.tl.x + border,
-                    y: rect.tl.y + rect.h - border,
-                },
-                w: rect.w - 2 * border,
-                h: border,
-            },
-            left: Rect {
-                tl: Point {
-                    x: rect.tl.x,
-                    y: rect.tl.y + border,
-                },
-                w: border,
-                h: rect.h - 2 * border,
-            },
-            right: Rect {
-                tl: Point {
-                    x: rect.tl.x + rect.w - border,
-                    y: rect.tl.y + border,
-                },
-                w: border,
-                h: rect.h - 2 * border,
-            },
-            topleft: Rect {
-                tl: Point {
-                    x: rect.tl.x,
-                    y: rect.tl.y,
-                },
-                w: border,
-                h: border,
-            },
-            topright: Rect {
-                tl: Point {
-                    x: rect.tl.x + rect.w - border,
-                    y: rect.tl.y,
-                },
-                w: border,
-                h: border,
-            },
-            bottomleft: Rect {
-                tl: Point {
-                    x: rect.tl.x,
-                    y: rect.tl.y + rect.h - border,
-                },
-                w: border,
-                h: border,
-            },
-            bottomright: Rect {
-                tl: Point {
-                    x: rect.tl.x + rect.w - border,
-                    y: rect.tl.y + rect.h - border,
-                },
-                w: border,
-                h: border,
-            },
+            top: Rect::new(rect.tl.x + border, rect.tl.y, rect.w - 2 * border, border),
+            bottom: Rect::new(
+                rect.tl.x + border,
+                rect.tl.y + rect.h - border,
+                rect.w - 2 * border,
+                border,
+            ),
+            left: Rect::new(rect.tl.x, rect.tl.y + border, border, rect.h - 2 * border),
+            right: Rect::new(
+                rect.tl.x + rect.w - border,
+                rect.tl.y + border,
+                border,
+                rect.h - 2 * border,
+            ),
+            topleft: Rect::new(rect.tl.x, rect.tl.y, border, border),
+            topright: Rect::new(rect.tl.x + rect.w - border, rect.tl.y, border, border),
+            bottomleft: Rect::new(rect.tl.x, rect.tl.y + rect.h - border, border, border),
+            bottomright: Rect::new(
+                rect.tl.x + rect.w - border,
+                rect.tl.y + rect.h - border,
+                border,
+                border,
+            ),
         })
     }
 }
@@ -102,54 +61,18 @@ mod tests {
 
     #[test]
     fn tframe() -> Result<()> {
-        let r = Rect {
-            tl: Point { x: 10, y: 10 },
-            w: 10,
-            h: 10,
-        };
+        let r = Rect::new(10, 10, 10, 10);
         assert_eq!(
             Frame::new(r, 1)?,
             Frame {
-                top: Rect {
-                    tl: Point { x: 11, y: 10 },
-                    w: 8,
-                    h: 1
-                },
-                bottom: Rect {
-                    tl: Point { x: 11, y: 19 },
-                    w: 8,
-                    h: 1
-                },
-                left: Rect {
-                    tl: Point { x: 10, y: 11 },
-                    w: 1,
-                    h: 8
-                },
-                right: Rect {
-                    tl: Point { x: 19, y: 11 },
-                    w: 1,
-                    h: 8
-                },
-                topleft: Rect {
-                    tl: Point { x: 10, y: 10 },
-                    w: 1,
-                    h: 1
-                },
-                topright: Rect {
-                    tl: Point { x: 19, y: 10 },
-                    w: 1,
-                    h: 1
-                },
-                bottomleft: Rect {
-                    tl: Point { x: 10, y: 19 },
-                    w: 1,
-                    h: 1
-                },
-                bottomright: Rect {
-                    tl: Point { x: 19, y: 19 },
-                    w: 1,
-                    h: 1
-                },
+                top: Rect::new(11, 10, 8, 1),
+                bottom: Rect::new(11, 19, 8, 1),
+                left: Rect::new(10, 11, 1, 8),
+                right: Rect::new(19, 11, 1, 8),
+                topleft: Rect::new(10, 10, 1, 1),
+                topright: Rect::new(19, 10, 1, 1),
+                bottomleft: Rect::new(10, 19, 1, 1),
+                bottomright: Rect::new(19, 19, 1, 1),
             }
         );
         Ok(())
