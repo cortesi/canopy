@@ -21,7 +21,6 @@ struct Item<S, N: Node<S> + ConstrainedWidthLayout<S>> {
 pub struct List<S, N: Node<S> + ConstrainedWidthLayout<S>> {
     _marker: PhantomData<S>,
     items: Vec<Item<S, N>>,
-    pub virt_origin: Option<Point>,
     // Offset within the virtual rectangle
     pub offset: Point,
     pub focus: u32,
@@ -44,11 +43,11 @@ where
                 })
                 .collect(),
             offset: Point::zero(),
-            virt_origin: None,
             focus: 0,
             state: NodeState::default(),
         }
     }
+    pub fn scroll_line(&mut self) {}
 }
 
 impl<S, N> ConstrainedWidthLayout<S> for List<S, N>
@@ -71,13 +70,10 @@ where
         })
     }
 
-    fn layout_children(
-        &mut self,
-        app: &mut Canopy<S>,
-        virt_rect: Rect,
-        _screen_rect: Rect,
-    ) -> Result<()> {
+    fn layout_children(&mut self, app: &mut Canopy<S>) -> Result<()> {
+        let virt_rect = self.virt_area();
         let mut voffset = 0;
+
         // The virtual screen location
         for itm in &mut self.items {
             // The virtual item rectangle
@@ -116,6 +112,18 @@ where
     N: Node<S> + ConstrainedWidthLayout<S>,
 {
     fn render(&self, _app: &mut Canopy<S>) -> Result<()> {
+        Ok(())
+    }
+    fn children(&self, f: &mut dyn FnMut(&dyn Node<S>) -> Result<()>) -> Result<()> {
+        for i in &self.items {
+            f(&i.itm)?
+        }
+        Ok(())
+    }
+    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<()>) -> Result<()> {
+        for i in self.items.iter_mut() {
+            f(&mut i.itm)?
+        }
         Ok(())
     }
 }

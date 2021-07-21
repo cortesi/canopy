@@ -9,7 +9,7 @@ use canopy::{
     render::term::runloop,
     style::solarized,
     widgets::{frame, Scroll, Text},
-    Canopy, EventOutcome, Node, NodeState, Rect, Result, StatefulNode,
+    Canopy, EventOutcome, Node, NodeState, Result, StatefulNode,
 };
 
 struct Handle {}
@@ -30,9 +30,8 @@ impl Root {
 }
 
 impl FillLayout<Handle> for Root {
-    fn layout_children(&mut self, app: &mut Canopy<Handle>, rect: Rect) -> Result<()> {
-        self.child.layout(app, rect)?;
-        Ok(())
+    fn layout_children(&mut self, app: &mut Canopy<Handle>) -> Result<()> {
+        self.child.layout(app, self.screen_area())
     }
 }
 

@@ -3,7 +3,6 @@ use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
-    geom::Rect,
     layout::FillLayout,
     state::{NodeState, StatefulNode},
     Canopy, Node, Result,
@@ -95,8 +94,8 @@ impl<S, N> FillLayout<S> for Panes<S, N>
 where
     N: canopy::Node<S> + FillLayout<S>,
 {
-    fn layout_children(&mut self, app: &mut Canopy<S>, rect: Rect) -> Result<()> {
-        let l = rect.split_panes(&self.shape())?;
+    fn layout_children(&mut self, app: &mut Canopy<S>) -> Result<()> {
+        let l = self.screen_area().split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
                 row.layout(app, l[ci][ri])?;
@@ -133,7 +132,7 @@ impl<S, N: canopy::Node<S>> Node<S> for Panes<S, N> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::geom::Point;
+    use crate::geom::{Point, Rect};
     use crate::render::test::TestRender;
     use crate::tutils::utils;
 

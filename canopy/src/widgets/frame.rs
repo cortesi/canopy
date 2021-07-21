@@ -114,9 +114,8 @@ impl<S, N> FillLayout<S> for Frame<S, N>
 where
     N: canopy::Node<S> + FrameContent + FillLayout<S>,
 {
-    fn layout_children(&mut self, app: &mut Canopy<S>, rect: Rect) -> Result<()> {
-        self.child.layout(app, rect.inner(1)?)?;
-        Ok(())
+    fn layout_children(&mut self, app: &mut Canopy<S>) -> Result<()> {
+        self.child.layout(app, self.screen_area().inner(1)?)
     }
 }
 

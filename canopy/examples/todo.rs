@@ -62,7 +62,8 @@ impl Root {
 }
 
 impl FillLayout<Handle> for Root {
-    fn layout_children(&mut self, app: &mut Canopy<Handle>, a: Rect) -> Result<()> {
+    fn layout_children(&mut self, app: &mut Canopy<Handle>) -> Result<()> {
+        let a = self.screen_area();
         if a.h > 2 {
             let sb = Rect {
                 tl: Point {

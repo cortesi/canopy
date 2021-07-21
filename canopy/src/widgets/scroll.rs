@@ -109,7 +109,8 @@ impl<S, N> FillLayout<S> for Scroll<S, N>
 where
     N: Node<S> + ConstrainedWidthLayout<S>,
 {
-    fn layout_children(&mut self, app: &mut Canopy<S>, rect: Rect) -> Result<()> {
+    fn layout_children(&mut self, app: &mut Canopy<S>) -> Result<()> {
+        let rect = self.screen_area();
         let virt = self.child.constrain(app, rect.w)?;
         let view = Rect {
             tl: Point { x: 0, y: 0 },
