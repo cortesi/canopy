@@ -1,4 +1,4 @@
-use crate::geom::View;
+use crate::geom::{Rect, ViewPort};
 
 pub use canopy_derive::StatefulNode;
 
@@ -17,7 +17,7 @@ pub struct NodeState {
 
     // The view for this node. The inner rectangle always has the same size as
     // the screen_area.
-    pub view: View,
+    pub view: ViewPort,
     pub(crate) hidden: bool,
 }
 
@@ -31,7 +31,7 @@ impl NodeState {
             rendered_focus_gen: 0,
             render_skip_gen: 0,
             hidden: false,
-            view: View::default(),
+            view: ViewPort::default(),
         }
     }
 }
@@ -43,6 +43,18 @@ pub trait StatefulNode {
 
     /// Get a mutable reference to the node's state object.
     fn state_mut(&mut self) -> &mut NodeState;
+
+    fn screen(&self) -> Rect {
+        self.state().view.screen()
+    }
+
+    fn view(&self) -> Rect {
+        self.state().view.view()
+    }
+
+    fn outer(&self) -> Rect {
+        self.state().view.outer()
+    }
 
     /// Hides the element
     fn hide(&mut self) {

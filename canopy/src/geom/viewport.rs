@@ -2,24 +2,24 @@ use super::{Point, Rect};
 use crate::error;
 use crate::Result;
 
-/// View manages three rectangles in concert: `outer` is the total virtual size
+/// ViewPort manages three rectangles in concert: `outer` is the total virtual size
 /// of the node, `view` is some sub-rectangle of virtual that is painted to
 /// `screen`, a rectangle of the same size on the physical screen.
 ///
-/// View maintains a number of constraints:
+/// ViewPort maintains a number of constraints:
 ///  - `view` is always contained within `outer`
 ///  - `view` and `screen` always have the same size
 ///  - `view`'s size only changes when `screen` is resized
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub struct View {
+pub struct ViewPort {
     screen: Point,
     view: Rect,
     outer: Rect,
 }
 
-impl Default for View {
-    fn default() -> View {
-        View {
+impl Default for ViewPort {
+    fn default() -> ViewPort {
+        ViewPort {
             outer: Rect::default(),
             view: Rect::default(),
             screen: Point::default(),
@@ -27,14 +27,14 @@ impl Default for View {
     }
 }
 
-impl View {
+impl ViewPort {
     /// Create a new View with the given outer and inner rectangles. The view
     /// rectangle must be fully contained within the outer rectangle.
-    pub fn new(outer: Rect, view: Rect) -> Result<View> {
+    pub fn new(outer: Rect, view: Rect) -> Result<ViewPort> {
         if !outer.contains_rect(&view) {
             Err(error::Error::Geometry("view not contained in outer".into()))
         } else {
-            Ok(View {
+            Ok(ViewPort {
                 outer: outer,
                 view: view,
                 screen: Point::default(),
@@ -160,7 +160,7 @@ mod tests {
 
     #[test]
     fn view_set_inner() -> Result<()> {
-        let mut v = View::new(Rect::new(0, 0, 100, 100), Rect::new(50, 50, 10, 10))?;
+        let mut v = ViewPort::new(Rect::new(0, 0, 100, 100), Rect::new(50, 50, 10, 10))?;
 
         let err = v.set_inner(Rect::new(0, 0, 190, 190));
         assert!(err.is_err());
@@ -173,7 +173,7 @@ mod tests {
 
     #[test]
     fn view_resize_outer() -> Result<()> {
-        let mut v = View::new(Rect::new(0, 0, 100, 100), Rect::new(50, 50, 10, 10))?;
+        let mut v = ViewPort::new(Rect::new(0, 0, 100, 100), Rect::new(50, 50, 10, 10))?;
 
         v.resize_outer(Rect::new(0, 0, 90, 90));
         assert_eq!(v.outer, Rect::new(0, 0, 90, 90));
@@ -193,7 +193,7 @@ mod tests {
 
     #[test]
     fn view_movement() -> Result<()> {
-        let mut v = View::new(Rect::new(0, 0, 100, 100), Rect::new(0, 0, 10, 10))?;
+        let mut v = ViewPort::new(Rect::new(0, 0, 100, 100), Rect::new(0, 0, 10, 10))?;
 
         v.scroll_by(10, 10);
         assert_eq!(v.view, Rect::new(10, 10, 10, 10),);

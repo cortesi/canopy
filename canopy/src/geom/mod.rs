@@ -2,12 +2,12 @@ mod frame;
 mod linesegment;
 mod point;
 mod rect;
-mod view;
+mod viewport;
 
 pub use frame::Frame;
 pub use linesegment::LineSegment;
 pub use point::Point;
-pub use view::View;
+pub use viewport::ViewPort;
 
 pub use rect::Rect;
 

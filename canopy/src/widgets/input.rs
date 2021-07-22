@@ -5,7 +5,7 @@ use crate::{
     cursor,
     error::Error,
     event::key,
-    geom::{LineSegment, Point, Rect, View},
+    geom::{LineSegment, Point, Rect, ViewPort},
     layout::Layout,
     state::{NodeState, StatefulNode},
     widgets::frame,
@@ -121,10 +121,10 @@ impl<S> InputLine<S> {
         let r = self.state().view.screen();
         if self.textbuf.window.len >= self.textbuf.value.len() as u16 {
             let r = Rect::new(0, 0, r.w, 1);
-            self.state_mut().view = View::new(r, r)?;
+            self.state_mut().view = ViewPort::new(r, r)?;
         } else {
             let view = Rect::new(0, 0, self.textbuf.value.len() as u16, 1);
-            self.state_mut().view = View::new(
+            self.state_mut().view = ViewPort::new(
                 Rect::new(self.textbuf.window.off, 0, self.textbuf.window.len, 1)
                     .clamp(view)
                     .unwrap(),

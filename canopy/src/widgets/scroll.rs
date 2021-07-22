@@ -80,6 +80,7 @@ where
     N: Node<S> + ConstrainedWidthLayout<S>,
 {
     fn layout_children(&mut self, app: &mut Canopy<S>) -> Result<()> {
+        // $r.state().view.screen() ==>> $r.screen()
         let rect = self.state().view.screen();
         self.child.constrain(app, rect.w)?;
         self.child.layout(app, rect)?;
