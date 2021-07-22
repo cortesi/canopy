@@ -63,7 +63,7 @@ pub mod utils {
         rndr.text("any", Rect::new(0, 0, 100, 100), &format!("<{}>", n))
     }
 
-    impl layout::FillLayout<State> for TLeaf {
+    impl layout::Layout<State> for TLeaf {
         fn layout(&mut self, _: &mut Canopy<State>, a: Rect) -> Result<()> {
             self.set_screen_area(a);
             Ok(())
@@ -107,7 +107,7 @@ pub mod utils {
         }
     }
 
-    impl layout::FillLayout<State> for TBranch {
+    impl layout::Layout<State> for TBranch {
         fn layout(&mut self, app: &mut Canopy<State>, rect: Rect) -> Result<()> {
             self.set_screen_area(rect);
             let v = rect.split_vertical(2)?;
@@ -168,7 +168,7 @@ pub mod utils {
         }
     }
 
-    impl layout::FillLayout<State> for TRoot {
+    impl layout::Layout<State> for TRoot {
         fn layout(&mut self, app: &mut Canopy<State>, rect: Rect) -> Result<()> {
             self.set_screen_area(rect);
             let v = rect.split_horizontal(2)?;
@@ -329,12 +329,14 @@ pub mod utils {
     impl Node<State> for TFixed {}
 
     impl layout::ConstrainedWidthLayout<State> for TFixed {
-        fn constrain(&mut self, _app: &mut Canopy<State>, _width: u16) -> Result<Rect> {
-            Ok(Rect {
+        fn constrain(&mut self, _app: &mut Canopy<State>, _width: u16) -> Result<()> {
+            let (w, h) = (self.w, self.h);
+            self.state_mut().view.resize_outer(Rect {
                 tl: Point::zero(),
-                w: self.w,
-                h: self.h,
-            })
+                w: w,
+                h: h,
+            });
+            Ok(())
         }
     }
 }

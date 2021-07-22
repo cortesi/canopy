@@ -4,7 +4,7 @@ use std::fs;
 use canopy;
 use canopy::{
     event::{key, mouse},
-    layout::FillLayout,
+    layout::Layout,
     render::term::runloop,
     style::solarized,
     widgets::{frame, Scroll, Text},
@@ -28,7 +28,7 @@ impl Root {
     }
 }
 
-impl FillLayout<Handle> for Root {
+impl Layout<Handle> for Root {
     fn layout_children(&mut self, app: &mut Canopy<Handle>) -> Result<()> {
         self.child.layout(app, self.screen_area())
     }
@@ -40,13 +40,13 @@ impl Node<Handle> for Root {
     }
     fn handle_mouse(
         &mut self,
-        app: &mut Canopy<Handle>,
+        _app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<EventOutcome> {
         Ok(match k {
-            c if c == mouse::Action::ScrollDown => self.child.child.down(app)?,
-            c if c == mouse::Action::ScrollUp => self.child.child.up(app)?,
+            c if c == mouse::Action::ScrollDown => self.child.child.down()?,
+            c if c == mouse::Action::ScrollUp => self.child.child.up()?,
             _ => EventOutcome::Ignore { skip: false },
         })
     }
@@ -57,13 +57,13 @@ impl Node<Handle> for Root {
         k: key::Key,
     ) -> Result<EventOutcome> {
         Ok(match k {
-            c if c == 'g' => self.child.child.scroll_to(app, 0, 0)?,
-            c if c == 'j' || c == key::KeyCode::Down => self.child.child.down(app)?,
-            c if c == 'k' || c == key::KeyCode::Up => self.child.child.up(app)?,
-            c if c == 'h' || c == key::KeyCode::Left => self.child.child.left(app)?,
-            c if c == 'l' || c == key::KeyCode::Up => self.child.child.right(app)?,
-            c if c == ' ' || c == key::KeyCode::PageDown => self.child.child.page_down(app)?,
-            c if c == key::KeyCode::PageUp => self.child.child.page_up(app)?,
+            c if c == 'g' => self.child.child.scroll_to(0, 0)?,
+            c if c == 'j' || c == key::KeyCode::Down => self.child.child.down()?,
+            c if c == 'k' || c == key::KeyCode::Up => self.child.child.up()?,
+            c if c == 'h' || c == key::KeyCode::Left => self.child.child.left()?,
+            c if c == 'l' || c == key::KeyCode::Up => self.child.child.right()?,
+            c if c == ' ' || c == key::KeyCode::PageDown => self.child.child.page_down()?,
+            c if c == key::KeyCode::PageUp => self.child.child.page_up()?,
             c if c == 'q' => app.exit(0),
             _ => EventOutcome::Ignore { skip: false },
         })

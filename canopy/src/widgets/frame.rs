@@ -5,8 +5,8 @@ use pad::PadStr;
 
 use crate as canopy;
 use crate::{
-    geom::{Frame as GFrame, Rect},
-    layout::FillLayout,
+    geom::Frame as GFrame,
+    layout::Layout,
     state::{NodeState, StatefulNode},
     Canopy, Node, Result,
 };
@@ -66,12 +66,6 @@ pub trait FrameContent {
     fn title(&self) -> Option<String> {
         None
     }
-    /// Return the bounds of the frame content as a `(window, virtual)` tuple
-    /// where virtual is the virtual size of the element, and view is some
-    /// sub-rectangle of the element that is currently being viewed.
-    fn bounds(&self) -> Option<(Rect, Rect)> {
-        None
-    }
 }
 
 /// A frame around an element.
@@ -83,7 +77,7 @@ pub trait FrameContent {
 #[derive(StatefulNode)]
 pub struct Frame<S, N>
 where
-    N: canopy::Node<S> + FrameContent + FillLayout<S>,
+    N: canopy::Node<S> + FrameContent + Layout<S>,
 {
     _marker: PhantomData<S>,
     pub child: N,
@@ -93,7 +87,7 @@ where
 
 impl<S, N> Frame<S, N>
 where
-    N: canopy::Node<S> + FrameContent + FillLayout<S>,
+    N: canopy::Node<S> + FrameContent + Layout<S>,
 {
     pub fn new(c: N) -> Self {
         Frame {
@@ -110,9 +104,9 @@ where
     }
 }
 
-impl<S, N> FillLayout<S> for Frame<S, N>
+impl<S, N> Layout<S> for Frame<S, N>
 where
-    N: canopy::Node<S> + FrameContent + FillLayout<S>,
+    N: canopy::Node<S> + FrameContent + Layout<S>,
 {
     fn layout_children(&mut self, app: &mut Canopy<S>) -> Result<()> {
         self.child.layout(app, self.screen_area().inner(1)?)
@@ -121,7 +115,7 @@ where
 
 impl<S, N> Node<S> for Frame<S, N>
 where
-    N: canopy::Node<S> + FrameContent + FillLayout<S>,
+    N: canopy::Node<S> + FrameContent + Layout<S>,
 {
     fn should_render(&self, app: &Canopy<S>) -> Option<bool> {
         Some(app.should_render(&self.child))
@@ -155,46 +149,46 @@ where
         };
         app.render.text(style, f.top, &top)?;
 
-        if let Some((window, virt)) = self.child.bounds() {
-            // Is window equal to or larger than virt?
-            if window.vextent().contains(&virt.vextent()) {
-                app.render.fill(style, f.right, self.glyphs.vertical)?;
-            } else {
-                let (epre, eactive, epost) = f
-                    .right
-                    .vextent()
-                    .split_active(window.vextent(), virt.vextent())?;
+        let view = self.child.state().view;
 
-                app.render
-                    .fill(style, f.right.vextract(&epre)?, self.glyphs.vertical)?;
-                app.render
-                    .fill(style, f.right.vextract(&epost)?, self.glyphs.vertical)?;
-                app.render.fill(
-                    style,
-                    f.right.vextract(&eactive)?,
-                    self.glyphs.vertical_active,
-                )?;
-            }
+        // Is window equal to or larger than virt?
+        if view.view().vextent().contains(&view.outer().vextent()) {
+            app.render.fill(style, f.right, self.glyphs.vertical)?;
+        } else {
+            let (epre, eactive, epost) = f
+                .right
+                .vextent()
+                .split_active(view.outer().vextent(), view.view().vextent())?;
 
-            // Is window equal to or larger than virt?
-            if window.hextent().contains(&virt.hextent()) {
-                app.render.fill(style, f.bottom, self.glyphs.horizontal)?;
-            } else {
-                let (epre, eactive, epost) = f
-                    .bottom
-                    .hextent()
-                    .split_active(window.hextent(), virt.hextent())?;
+            app.render
+                .fill(style, f.right.vextract(&epre)?, self.glyphs.vertical)?;
+            app.render
+                .fill(style, f.right.vextract(&epost)?, self.glyphs.vertical)?;
+            app.render.fill(
+                style,
+                f.right.vextract(&eactive)?,
+                self.glyphs.vertical_active,
+            )?;
+        }
 
-                app.render
-                    .fill(style, f.bottom.hextract(&epre)?, self.glyphs.horizontal)?;
-                app.render
-                    .fill(style, f.bottom.hextract(&epost)?, self.glyphs.horizontal)?;
-                app.render.fill(
-                    style,
-                    f.bottom.hextract(&eactive)?,
-                    self.glyphs.horizontal_active,
-                )?;
-            }
+        // Is window equal to or larger than virt?
+        if view.view().hextent().contains(&view.outer().hextent()) {
+            app.render.fill(style, f.bottom, self.glyphs.horizontal)?;
+        } else {
+            let (epre, eactive, epost) = f
+                .bottom
+                .hextent()
+                .split_active(view.outer().hextent(), view.view().hextent())?;
+
+            app.render
+                .fill(style, f.bottom.hextract(&epre)?, self.glyphs.horizontal)?;
+            app.render
+                .fill(style, f.bottom.hextract(&epost)?, self.glyphs.horizontal)?;
+            app.render.fill(
+                style,
+                f.bottom.hextract(&eactive)?,
+                self.glyphs.horizontal_active,
+            )?;
         }
         Ok(())
     }

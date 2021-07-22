@@ -5,8 +5,8 @@ use crate::{
     cursor,
     error::Error,
     event::key,
-    geom::{LineSegment, Point, Rect},
-    layout::FillLayout,
+    geom::{LineSegment, Point, Rect, View},
+    layout::Layout,
     state::{NodeState, StatefulNode},
     widgets::frame,
     Canopy, EventOutcome, Node, Result,
@@ -117,9 +117,25 @@ impl<S> InputLine<S> {
             textbuf: TextBuf::new(txt),
         }
     }
+    fn resize(&mut self) -> Result<()> {
+        let r = self.screen_area();
+        if self.textbuf.window.len >= self.textbuf.value.len() as u16 {
+            let r = Rect::new(0, 0, r.w, 1);
+            self.state_mut().view = View::new(r, r)?;
+        } else {
+            let view = Rect::new(0, 0, self.textbuf.value.len() as u16, 1);
+            self.state_mut().view = View::new(
+                Rect::new(self.textbuf.window.off, 0, self.textbuf.window.len, 1)
+                    .clamp(view)
+                    .unwrap(),
+                view,
+            )?;
+        }
+        Ok(())
+    }
 }
 
-impl<S> FillLayout<S> for InputLine<S> {
+impl<S> Layout<S> for InputLine<S> {
     fn layout_children(&mut self, _app: &mut Canopy<S>) -> Result<()> {
         let rect = self.screen_area();
         if rect.h != 1 {
@@ -130,23 +146,7 @@ impl<S> FillLayout<S> for InputLine<S> {
     }
 }
 
-impl<S> frame::FrameContent for InputLine<S> {
-    fn bounds(&self) -> Option<(Rect, Rect)> {
-        let r = self.screen_area();
-        if self.textbuf.window.len >= self.textbuf.value.len() as u16 {
-            let r = Rect::new(0, 0, r.w, 1);
-            Some((r, r))
-        } else {
-            let view = Rect::new(0, 0, self.textbuf.value.len() as u16, 1);
-            Some((
-                Rect::new(self.textbuf.window.off, 0, self.textbuf.window.len, 1)
-                    .clamp(view)
-                    .unwrap(),
-                view,
-            ))
-        }
-    }
-}
+impl<S> frame::FrameContent for InputLine<S> {}
 
 impl<'a, S> Node<S> for InputLine<S> {
     fn can_focus(&self) -> bool {
@@ -184,6 +184,7 @@ impl<'a, S> Node<S> for InputLine<S> {
             }
             _ => return Ok(EventOutcome::Ignore { skip: false }),
         };
+        self.resize()?;
         Ok(EventOutcome::Handle { skip: false })
     }
 }

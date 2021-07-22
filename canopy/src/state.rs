@@ -1,4 +1,4 @@
-use crate::geom::Rect;
+use crate::geom::{Rect, View};
 
 pub use canopy_derive::StatefulNode;
 
@@ -17,8 +17,9 @@ pub struct NodeState {
 
     // The area on screen that this node will render to.
     pub(crate) screen_area: Rect,
-    // The virtual area this node occupies. Only used if the layout supports it.
-    pub(crate) virt_area: Rect,
+    // The view for this node. The inner rectangle always has the same size as
+    // the screen_area.
+    pub view: View,
     pub(crate) hidden: bool,
 }
 
@@ -32,8 +33,8 @@ impl NodeState {
             rendered_focus_gen: 0,
             render_skip_gen: 0,
             screen_area: Rect::default(),
-            virt_area: Rect::default(),
             hidden: false,
+            view: View::default(),
         }
     }
 }
@@ -54,16 +55,6 @@ pub trait StatefulNode {
     /// Set the screen area this node will draw to.
     fn set_screen_area(&mut self, r: Rect) {
         self.state_mut().screen_area = r
-    }
-
-    /// Returns the area this node will render to, None if the node is hidden.
-    fn virt_area(&self) -> Rect {
-        self.state().virt_area
-    }
-
-    /// Set the screen area this node will draw to.
-    fn set_virt_area(&mut self, r: Rect) {
-        self.state_mut().virt_area = r
     }
 
     /// Hides the element

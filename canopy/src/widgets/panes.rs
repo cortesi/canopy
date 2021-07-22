@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
-    layout::FillLayout,
+    layout::Layout,
     state::{NodeState, StatefulNode},
     Canopy, Node, Result,
 };
@@ -18,7 +18,7 @@ pub struct Panes<S, N: canopy::Node<S>> {
 
 impl<S, N> Panes<S, N>
 where
-    N: canopy::Node<S> + FillLayout<S>,
+    N: canopy::Node<S> + Layout<S>,
 {
     pub fn new(n: N) -> Self {
         Panes {
@@ -90,9 +90,9 @@ where
     }
 }
 
-impl<S, N> FillLayout<S> for Panes<S, N>
+impl<S, N> Layout<S> for Panes<S, N>
 where
-    N: canopy::Node<S> + FillLayout<S>,
+    N: canopy::Node<S> + Layout<S>,
 {
     fn layout_children(&mut self, app: &mut Canopy<S>) -> Result<()> {
         let l = self.screen_area().split_panes(&self.shape())?;

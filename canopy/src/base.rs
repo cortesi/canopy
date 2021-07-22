@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use crate::geom::{Direction, Rect};
 use crate::{
     event::{key, mouse, tick, Event},
-    layout::FillLayout,
+    layout::Layout,
     node::{postorder, postorder_mut, preorder, EventOutcome, Node, Walker},
     Error, Point, Render, Result,
 };
@@ -429,7 +429,7 @@ impl<'a, S> Canopy<'a, S> {
     /// Propagate a resize event through the tree of nodes.
     pub fn resize<N>(&mut self, e: &mut N, rect: Rect) -> Result<()>
     where
-        N: Node<S> + FillLayout<S>,
+        N: Node<S> + Layout<S>,
     {
         if e.screen_area() == rect {
             return Ok(());
@@ -475,7 +475,7 @@ impl<'a, S> Canopy<'a, S> {
     /// Propagate an event through the tree.
     pub fn event<N>(&mut self, root: &mut N, s: &mut S, e: Event) -> Result<EventOutcome>
     where
-        N: Node<S> + FillLayout<S>,
+        N: Node<S> + Layout<S>,
     {
         match e {
             Event::Key(k) => self.key(root, s, k),

@@ -1,6 +1,6 @@
 use crate as canopy;
 use crate::{
-    geom::{Point, Rect},
+    geom::Rect,
     layout::ConstrainedWidthLayout,
     state::{NodeState, StatefulNode},
     Canopy, Node, Result,
@@ -31,34 +31,26 @@ impl<S> Text<S> {
 }
 
 impl<'a, S> ConstrainedWidthLayout<S> for Text<S> {
-    fn constrain(&mut self, _app: &mut Canopy<S>, w: u16) -> Result<Rect> {
-        if let Some(l) = &self.lines {
-            if !l.is_empty() && l[0].len() == w as usize {
-                return Ok(Rect {
-                    tl: Point { x: 0, y: 0 },
-                    w,
-                    h: l.len() as u16,
-                });
+    fn constrain(&mut self, _app: &mut Canopy<S>, w: u16) -> Result<()> {
+        // Only resize if the width has changed
+        if self.state_mut().view.outer().w != w {
+            let mut split: Vec<String> = vec![];
+            for i in textwrap::wrap(&self.raw, w as usize) {
+                split.push(format!("{:width$}", i, width = w as usize))
             }
+            self.state_mut()
+                .view
+                .resize_outer(Rect::new(0, 0, w, split.len() as u16));
+            self.lines = Some(split);
         }
-        let mut split: Vec<String> = vec![];
-        for i in textwrap::wrap(&self.raw, w as usize) {
-            split.push(format!("{:width$}", i, width = w as usize))
-        }
-        let ret = Rect {
-            tl: Point { x: 0, y: 0 },
-            w,
-            h: split.len() as u16,
-        };
-        self.lines = Some(split);
-        Ok(ret)
+        Ok(())
     }
 }
 
 impl<'a, S> Node<S> for Text<S> {
     fn render(&self, app: &mut Canopy<S>) -> Result<()> {
         let area = self.screen_area();
-        let vo = self.virt_area();
+        let vo = self.state.view.view();
         if let Some(lines) = self.lines.as_ref() {
             for i in 0..area.h {
                 let r = Rect::new(area.tl.x, area.tl.y + i, area.w, 1);

@@ -4,7 +4,7 @@ use canopy;
 use canopy::{
     event::{key, mouse},
     geom::Rect,
-    layout::FillLayout,
+    layout::Layout,
     render::term::runloop,
     style::solarized,
     widgets::{frame, InputLine, Scroll, Text},
@@ -31,7 +31,7 @@ impl Node<Handle> for StatusBar {
     }
 }
 
-impl FillLayout<Handle> for StatusBar {}
+impl Layout<Handle> for StatusBar {}
 
 #[derive(StatefulNode)]
 struct Root {
@@ -61,7 +61,7 @@ impl Root {
     }
 }
 
-impl FillLayout<Handle> for Root {
+impl Layout<Handle> for Root {
     fn layout_children(&mut self, app: &mut Canopy<Handle>) -> Result<()> {
         let a = self.screen_area();
         if a.h > 2 {
@@ -89,13 +89,13 @@ impl Node<Handle> for Root {
     }
     fn handle_mouse(
         &mut self,
-        app: &mut Canopy<Handle>,
+        _app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<EventOutcome> {
         Ok(match k {
-            c if c == mouse::Action::ScrollDown => self.content.child.down(app)?,
-            c if c == mouse::Action::ScrollUp => self.content.child.up(app)?,
+            c if c == mouse::Action::ScrollDown => self.content.child.down()?,
+            c if c == mouse::Action::ScrollUp => self.content.child.up()?,
             _ => EventOutcome::Ignore { skip: false },
         })
     }
@@ -107,13 +107,13 @@ impl Node<Handle> for Root {
     ) -> Result<EventOutcome> {
         Ok(match k {
             c if c == 'a' => self.open_adder(app)?,
-            c if c == 'g' => self.content.child.scroll_to(app, 0, 0)?,
-            c if c == 'j' || c == key::KeyCode::Down => self.content.child.down(app)?,
-            c if c == 'k' || c == key::KeyCode::Up => self.content.child.up(app)?,
-            c if c == 'h' || c == key::KeyCode::Left => self.content.child.left(app)?,
-            c if c == 'l' || c == key::KeyCode::Up => self.content.child.right(app)?,
-            c if c == ' ' || c == key::KeyCode::PageDown => self.content.child.page_down(app)?,
-            c if c == key::KeyCode::PageUp => self.content.child.page_up(app)?,
+            c if c == 'g' => self.content.child.scroll_to(0, 0)?,
+            c if c == 'j' || c == key::KeyCode::Down => self.content.child.down()?,
+            c if c == 'k' || c == key::KeyCode::Up => self.content.child.up()?,
+            c if c == 'h' || c == key::KeyCode::Left => self.content.child.left()?,
+            c if c == 'l' || c == key::KeyCode::Up => self.content.child.right()?,
+            c if c == ' ' || c == key::KeyCode::PageDown => self.content.child.page_down()?,
+            c if c == key::KeyCode::PageUp => self.content.child.page_up()?,
             c if c == key::KeyCode::Enter => {
                 self.adder = None;
                 app.taint_tree(self)?;

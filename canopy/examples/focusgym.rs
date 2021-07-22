@@ -4,7 +4,7 @@ use canopy;
 use canopy::{
     event::{key, mouse},
     geom::Frame,
-    layout::FillLayout,
+    layout::Layout,
     render::term::runloop,
     style::solarized,
     Canopy, EventOutcome, Node, NodeState, Rect, Result, StatefulNode,
@@ -48,7 +48,7 @@ impl Block {
     }
 }
 
-impl FillLayout<Handle> for Root {
+impl Layout<Handle> for Root {
     fn layout_children(&mut self, app: &mut Canopy<Handle>) -> Result<()> {
         self.child.layout(app, self.screen_area())
     }
@@ -136,7 +136,7 @@ impl Block {
     }
 }
 
-impl FillLayout<Handle> for Block {
+impl Layout<Handle> for Block {
     fn layout_children(&mut self, app: &mut Canopy<Handle>) -> Result<()> {
         let rect = self.screen_area();
         if self.children.len() > 0 {

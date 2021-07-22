@@ -4,7 +4,7 @@ use crate::{Canopy, Result, StatefulNode};
 /// A layout for nodes that simply fill the space specified. Examples include
 /// frames that fill any region we pass them, and widgets that have one fixed
 /// dimension, like a fixed-height status bar.
-pub trait FillLayout<S>: StatefulNode {
+pub trait Layout<S>: StatefulNode {
     /// Lay out this node's children. Implementers should call `layout` or
     /// `hide` on each child. The screen area for this node has already been set
     /// in the `layout` method, and is available through the `screen_area`
@@ -37,16 +37,14 @@ pub trait FillLayout<S>: StatefulNode {
 /// a decision to render some sub-view of the virtual component rectangle onto
 /// the screen.
 pub trait ConstrainedWidthLayout<S>: StatefulNode {
-    /// Constrain the width of the component. Returns a rectangle at the origin
-    /// (0, 0) representing the virtual size of the component. A best-effort
-    /// attempt is made to scale to within the width, but the returned rectangle
-    /// may be larger or smaller than the given constraints. This method should
-    /// be used in the `layout` method of a parent, and should be followed by a
-    /// call to the child's `layout` method with the established geometry.
-    ///
-    /// This method may return None, in which case the component will attempt to
-    /// render in whatever size it's laid out to.
-    fn constrain(&mut self, app: &mut Canopy<S>, width: u16) -> Result<Rect>;
+    /// Constrain the width of the component. This should operate on
+    /// `self.state_mut().view` to set the appropriate sizes. A best-effort
+    /// attempt should be made to scale to within the width, but the view's
+    /// outer rectangle may be larger or smaller than the constraint. This
+    /// method should be used in the `layout` method of a parent, and should be
+    /// followed by a call to the child's `layout` method with the established
+    /// geometry.
+    fn constrain(&mut self, app: &mut Canopy<S>, width: u16) -> Result<()>;
 
     /// Lay out this node's children. Implementers should call `layout` or
     /// `hide` on each child. The screen and virtual areas for this node have
@@ -66,9 +64,9 @@ pub trait ConstrainedWidthLayout<S>: StatefulNode {
     /// `self.layout_children`. The default implementation already does both of
     /// these things, so most implementers will only need to override
     /// `layout_children`.
-    fn layout(&mut self, app: &mut Canopy<S>, virt_rect: Rect, screen_rect: Rect) -> Result<()> {
+    fn layout(&mut self, app: &mut Canopy<S>, screen_rect: Rect) -> Result<()> {
         self.set_screen_area(screen_rect);
-        self.set_virt_area(virt_rect);
+        self.state_mut().view.resize_inner(screen_rect)?;
         self.layout_children(app)
     }
 }

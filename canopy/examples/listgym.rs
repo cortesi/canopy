@@ -5,7 +5,7 @@ use canopy;
 use canopy::{
     event::{key, mouse},
     geom::{Point, Rect},
-    layout::{ConstrainedWidthLayout, FillLayout},
+    layout::{ConstrainedWidthLayout, Layout},
     render::term::runloop,
     style::solarized,
     widgets::{frame, List, Scroll},
@@ -45,8 +45,10 @@ impl Node<Handle> for Block {
 }
 
 impl ConstrainedWidthLayout<Handle> for Block {
-    fn constrain(&mut self, _app: &mut Canopy<Handle>, _width: u16) -> Result<Rect> {
-        Ok(self.size)
+    fn constrain(&mut self, _app: &mut Canopy<Handle>, _width: u16) -> Result<()> {
+        let sz = self.size;
+        self.state_mut().view.resize_outer(sz);
+        Ok(())
     }
 }
 
@@ -66,7 +68,7 @@ impl Root {
     }
 }
 
-impl FillLayout<Handle> for Root {
+impl Layout<Handle> for Root {
     fn layout_children(&mut self, app: &mut Canopy<Handle>) -> Result<()> {
         self.content.layout(app, self.screen_area())
     }
@@ -78,13 +80,13 @@ impl Node<Handle> for Root {
     }
     fn handle_mouse(
         &mut self,
-        app: &mut Canopy<Handle>,
+        _app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<EventOutcome> {
         Ok(match k {
-            c if c == mouse::Action::ScrollDown => self.content.child.down(app)?,
-            c if c == mouse::Action::ScrollUp => self.content.child.up(app)?,
+            c if c == mouse::Action::ScrollDown => self.content.child.down()?,
+            c if c == mouse::Action::ScrollUp => self.content.child.up()?,
             _ => EventOutcome::Ignore { skip: false },
         })
     }
@@ -95,13 +97,13 @@ impl Node<Handle> for Root {
         k: key::Key,
     ) -> Result<EventOutcome> {
         Ok(match k {
-            c if c == 'g' => self.content.child.scroll_to(app, 0, 0)?,
-            c if c == 'j' || c == key::KeyCode::Down => self.content.child.down(app)?,
-            c if c == 'k' || c == key::KeyCode::Up => self.content.child.up(app)?,
-            c if c == 'h' || c == key::KeyCode::Left => self.content.child.left(app)?,
-            c if c == 'l' || c == key::KeyCode::Up => self.content.child.right(app)?,
-            c if c == ' ' || c == key::KeyCode::PageDown => self.content.child.page_down(app)?,
-            c if c == key::KeyCode::PageUp => self.content.child.page_up(app)?,
+            c if c == 'g' => self.content.child.scroll_to(0, 0)?,
+            c if c == 'j' || c == key::KeyCode::Down => self.content.child.down()?,
+            c if c == 'k' || c == key::KeyCode::Up => self.content.child.up()?,
+            c if c == 'h' || c == key::KeyCode::Left => self.content.child.left()?,
+            c if c == 'l' || c == key::KeyCode::Up => self.content.child.right()?,
+            c if c == ' ' || c == key::KeyCode::PageDown => self.content.child.page_down()?,
+            c if c == key::KeyCode::PageUp => self.content.child.page_up()?,
             c if c == 'q' => app.exit(0),
             _ => EventOutcome::Ignore { skip: false },
         })

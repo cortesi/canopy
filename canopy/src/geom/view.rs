@@ -4,9 +4,19 @@ use crate::Result;
 
 /// View manages two rectangles in concert - an outer rectangle and a view
 /// rectangle that is free to move within the outer rectangle.
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct View {
     view: Rect,
     outer: Rect,
+}
+
+impl Default for View {
+    fn default() -> View {
+        View {
+            outer: Rect::default(),
+            view: Rect::default(),
+        }
+    }
 }
 
 impl View {
@@ -22,6 +32,9 @@ impl View {
             })
         }
     }
+
+    /// Scroll the view to the specified position. The view is clamped within
+    /// the outer rectangle.
     pub fn scroll_to(&mut self, x: u16, y: u16) {
         let r = Rect::new(x, y, self.view.w, self.view.h);
         // We unwrap here, because this can only be an error if view is larger
@@ -90,6 +103,15 @@ impl View {
         // which can't be the case.
         self.view = view.clamp(outer).unwrap();
         self.outer = outer;
+    }
+
+    /// Resize the inner rectangle to match the argument. The inner rectangle is
+    /// shifted to fit. If the inner rectangle is larger than the outer
+    /// rectangle, an error is returned.
+    pub fn resize_inner(&mut self, size: Rect) -> Result<()> {
+        let view = size.at(&self.view.tl);
+        self.view = view.clamp(self.outer)?;
+        Ok(())
     }
 
     /// Set the inner rectangle. The inner rectangle is shifted to fit. If the

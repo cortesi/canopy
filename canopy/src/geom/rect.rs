@@ -27,6 +27,7 @@ impl Rect {
         }
     }
 
+    /// Return a rect with the same size, with the top left at the given point.
     pub fn at(&self, p: &Point) -> Self {
         Rect {
             tl: *p,

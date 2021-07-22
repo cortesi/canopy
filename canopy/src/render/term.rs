@@ -10,7 +10,7 @@ use crate::{
     cursor,
     event::EventSource,
     geom::{Point, Rect},
-    layout::FillLayout,
+    layout::Layout,
     render::Render,
     style::Style,
     Canopy, EventOutcome, Node, Result,
@@ -106,7 +106,7 @@ impl Backend for Term {
 
 pub fn runloop<S, N>(style: Style, root: &mut N, s: &mut S) -> Result<()>
 where
-    N: Node<S> + FillLayout<S>,
+    N: Node<S> + Layout<S>,
 {
     let mut be = Term::default();
     let mut app = Canopy::new(Render::new(&mut be, style));
