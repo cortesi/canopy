@@ -21,12 +21,12 @@ struct StatusBar {
 impl Node<Handle> for StatusBar {
     fn render(&self, app: &mut Canopy<Handle>) -> Result<()> {
         app.render.style.push_layer("statusbar");
-        let sa = self.screen_area();
+        let sa = self.state().view.screen();
         if sa.h > 1 {
             panic!("{:?}", sa);
         }
         app.render
-            .text("statusbar/text", self.screen_area(), "todo")?;
+            .text("statusbar/text", self.state().view.screen(), "todo")?;
         Ok(())
     }
 }
@@ -56,14 +56,14 @@ impl Root {
         let mut adder = frame::Frame::new(InputLine::new(""));
         app.set_focus(&mut adder.child)?;
         self.adder = Some(adder);
-        self.layout(app, self.screen_area())?;
+        self.layout(app, self.state().view.screen())?;
         Ok(EventOutcome::Handle { skip: false })
     }
 }
 
 impl Layout<Handle> for Root {
     fn layout_children(&mut self, app: &mut Canopy<Handle>) -> Result<()> {
-        let a = self.screen_area();
+        let a = self.state().view.screen();
         if a.h > 2 {
             let sb = Rect::new(a.tl.x, a.tl.y + a.h - 1, a.w, 1);
             let ct = Rect {

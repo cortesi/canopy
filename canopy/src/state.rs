@@ -1,4 +1,4 @@
-use crate::geom::{Rect, View};
+use crate::geom::View;
 
 pub use canopy_derive::StatefulNode;
 
@@ -15,8 +15,6 @@ pub struct NodeState {
     // The last render sweep during which this node held focus.
     pub(crate) rendered_focus_gen: u64,
 
-    // The area on screen that this node will render to.
-    pub(crate) screen_area: Rect,
     // The view for this node. The inner rectangle always has the same size as
     // the screen_area.
     pub view: View,
@@ -32,7 +30,6 @@ impl NodeState {
             focus_gen: 0,
             rendered_focus_gen: 0,
             render_skip_gen: 0,
-            screen_area: Rect::default(),
             hidden: false,
             view: View::default(),
         }
@@ -46,16 +43,6 @@ pub trait StatefulNode {
 
     /// Get a mutable reference to the node's state object.
     fn state_mut(&mut self) -> &mut NodeState;
-
-    /// Returns the area this node will render to, None if the node is hidden.
-    fn screen_area(&self) -> Rect {
-        self.state().screen_area
-    }
-
-    /// Set the screen area this node will draw to.
-    fn set_screen_area(&mut self, r: Rect) {
-        self.state_mut().screen_area = r
-    }
 
     /// Hides the element
     fn hide(&mut self) {

@@ -46,7 +46,7 @@ where
             if self.children[x].is_empty() {
                 self.children.remove(x);
             }
-            self.layout(app, self.screen_area())?;
+            self.layout(app, self.state().view.screen())?;
             app.taint_tree(self)?;
         }
         Ok(())
@@ -95,7 +95,7 @@ where
     N: canopy::Node<S> + Layout<S>,
 {
     fn layout_children(&mut self, app: &mut Canopy<S>) -> Result<()> {
-        let l = self.screen_area().split_panes(&self.shape())?;
+        let l = self.state().view.screen().split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
                 row.layout(app, l[ci][ri])?;

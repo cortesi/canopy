@@ -49,7 +49,7 @@ impl<'a, S> ConstrainedWidthLayout<S> for Text<S> {
 
 impl<'a, S> Node<S> for Text<S> {
     fn render(&self, app: &mut Canopy<S>) -> Result<()> {
-        let area = self.screen_area();
+        let area = self.state().view.screen();
         let vo = self.state.view.view();
         if let Some(lines) = self.lines.as_ref() {
             for i in 0..area.h {

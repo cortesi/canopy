@@ -50,7 +50,7 @@ impl Block {
 
 impl Layout<Handle> for Root {
     fn layout_children(&mut self, app: &mut Canopy<Handle>) -> Result<()> {
-        self.child.layout(app, self.screen_area())
+        self.child.layout(app, self.state().view.screen())
     }
 }
 
@@ -100,7 +100,7 @@ impl Node<Handle> for Root {
 
 impl Block {
     fn add(&mut self, app: &mut Canopy<Handle>) -> Result<EventOutcome> {
-        let r = self.screen_area();
+        let r = self.state().view.screen();
         Ok(if self.children.len() == 0 {
             EventOutcome::Ignore { skip: false }
         } else if self.size_limited(r) {
@@ -122,7 +122,7 @@ impl Block {
         }
     }
     fn split(&mut self, app: &mut Canopy<Handle>) -> Result<EventOutcome> {
-        let r = self.screen_area();
+        let r = self.state().view.screen();
         Ok(if self.children.len() != 0 {
             EventOutcome::Ignore { skip: false }
         } else if self.size_limited(r) {
@@ -138,7 +138,7 @@ impl Block {
 
 impl Layout<Handle> for Block {
     fn layout_children(&mut self, app: &mut Canopy<Handle>) -> Result<()> {
-        let rect = self.screen_area();
+        let rect = self.state().view.screen();
         if self.children.len() > 0 {
             let sizes = if self.horizontal {
                 rect.split_horizontal(self.children.len() as u16)?
@@ -165,7 +165,7 @@ impl Node<Handle> for Block {
                 "blue"
             };
 
-            let r = self.screen_area();
+            let r = self.state().view.screen();
             app.render.fill(bc, r.inner(1)?, '\u{2588}')?;
             app.render.solid_frame("black", Frame::new(r, 1)?, ' ')?;
         }

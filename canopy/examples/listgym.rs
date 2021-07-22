@@ -38,8 +38,11 @@ impl Block {
 
 impl Node<Handle> for Block {
     fn render(&self, app: &mut Canopy<Handle>) -> Result<()> {
-        app.render
-            .fill(&self.color, self.screen_area().inner(1)?, '\u{2588}')?;
+        app.render.fill(
+            &self.color,
+            self.state().view.screen().inner(1)?,
+            '\u{2588}',
+        )?;
         Ok(())
     }
 }
@@ -70,7 +73,7 @@ impl Root {
 
 impl Layout<Handle> for Root {
     fn layout_children(&mut self, app: &mut Canopy<Handle>) -> Result<()> {
-        self.content.layout(app, self.screen_area())
+        self.content.layout(app, self.state().view.screen())
     }
 }
 

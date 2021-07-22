@@ -118,7 +118,7 @@ impl<S> InputLine<S> {
         }
     }
     fn resize(&mut self) -> Result<()> {
-        let r = self.screen_area();
+        let r = self.state().view.screen();
         if self.textbuf.window.len >= self.textbuf.value.len() as u16 {
             let r = Rect::new(0, 0, r.w, 1);
             self.state_mut().view = View::new(r, r)?;
@@ -137,7 +137,7 @@ impl<S> InputLine<S> {
 
 impl<S> Layout<S> for InputLine<S> {
     fn layout_children(&mut self, _app: &mut Canopy<S>) -> Result<()> {
-        let rect = self.screen_area();
+        let rect = self.state().view.screen();
         if rect.h != 1 {
             return Err(Error::Layout("InputLine height must be exactly 1.".into()));
         }
@@ -165,7 +165,7 @@ impl<'a, S> Node<S> for InputLine<S> {
 
     fn render(&self, app: &mut Canopy<S>) -> Result<()> {
         app.render
-            .text("text", self.screen_area(), &self.textbuf.text())
+            .text("text", self.state().view.screen(), &self.textbuf.text())
     }
 
     fn handle_key(&mut self, _app: &mut Canopy<S>, _: &mut S, k: key::Key) -> Result<EventOutcome> {

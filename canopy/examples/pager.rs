@@ -30,7 +30,7 @@ impl Root {
 
 impl Layout<Handle> for Root {
     fn layout_children(&mut self, app: &mut Canopy<Handle>) -> Result<()> {
-        self.child.layout(app, self.screen_area())
+        self.child.layout(app, self.state().view.screen())
     }
 }
 

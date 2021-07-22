@@ -109,7 +109,7 @@ where
     N: canopy::Node<S> + FrameContent + Layout<S>,
 {
     fn layout_children(&mut self, app: &mut Canopy<S>) -> Result<()> {
-        self.child.layout(app, self.screen_area().inner(1)?)
+        self.child.layout(app, self.state.view.screen().inner(1)?)
     }
 }
 
@@ -127,7 +127,7 @@ where
             "frame"
         };
 
-        let f = GFrame::new(self.screen_area(), 1)?;
+        let f = GFrame::new(self.state().view.screen(), 1)?;
         app.render.fill(style, f.topleft, self.glyphs.topleft)?;
         app.render.fill(style, f.topright, self.glyphs.topright)?;
         app.render

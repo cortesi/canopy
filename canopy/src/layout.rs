@@ -20,7 +20,7 @@ pub trait Layout<S>: StatefulNode {
     /// does both of these things, so most implementers will only need to
     /// override `layout_children`.
     fn layout(&mut self, app: &mut Canopy<S>, screen_rect: Rect) -> Result<()> {
-        self.set_screen_area(screen_rect);
+        self.state_mut().view.set_fill(screen_rect);
         self.layout_children(app)
     }
 }
@@ -65,7 +65,7 @@ pub trait ConstrainedWidthLayout<S>: StatefulNode {
     /// these things, so most implementers will only need to override
     /// `layout_children`.
     fn layout(&mut self, app: &mut Canopy<S>, screen_rect: Rect) -> Result<()> {
-        self.set_screen_area(screen_rect);
+        self.state_mut().view.set_screen(screen_rect)?;
         self.state_mut().view.resize_inner(screen_rect)?;
         self.layout_children(app)
     }

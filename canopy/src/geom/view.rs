@@ -1,11 +1,18 @@
-use super::Rect;
+use super::{Point, Rect};
 use crate::error;
 use crate::Result;
 
-/// View manages two rectangles in concert - an outer rectangle and a view
-/// rectangle that is free to move within the outer rectangle.
+/// View manages three rectangles in concert: `outer` is the total virtual size
+/// of the node, `view` is some sub-rectangle of virtual that is painted to
+/// `screen`, a rectangle of the same size on the physical screen.
+///
+/// View maintains a number of constraints:
+///  - `view` is always contained within `outer`
+///  - `view` and `screen` always have the same size
+///  - `view`'s size only changes when `screen` is resized
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct View {
+    screen: Point,
     view: Rect,
     outer: Rect,
 }
@@ -15,6 +22,7 @@ impl Default for View {
         View {
             outer: Rect::default(),
             view: Rect::default(),
+            screen: Point::default(),
         }
     }
 }
@@ -29,6 +37,7 @@ impl View {
             Ok(View {
                 outer: outer,
                 view: view,
+                screen: Point::default(),
             })
         }
     }
@@ -79,6 +88,11 @@ impl View {
     }
 
     /// Return the inner view area.
+    pub fn screen(&self) -> Rect {
+        self.view.at(&self.screen)
+    }
+
+    /// Return the inner view area.
     pub fn view(&self) -> Rect {
         self.view
     }
@@ -103,6 +117,23 @@ impl View {
         // which can't be the case.
         self.view = view.clamp(outer).unwrap();
         self.outer = outer;
+    }
+
+    /// Set the screen rect. The view is resized and shifted to fit. If the view
+    /// would end up larger than the outer rectangle, an error is returned.
+    pub fn set_screen(&mut self, screen: Rect) -> Result<()> {
+        let view = screen.at(&self.view.tl);
+        self.view = view.clamp(self.outer)?;
+        self.screen = screen.tl;
+        Ok(())
+    }
+
+    /// Set the screen rect and adjust the view and outer rects to be the same
+    /// size. This is useful for nodes that fill whatever space they're given.
+    pub fn set_fill(&mut self, screen: Rect) {
+        self.screen = screen.tl;
+        self.outer = screen.at(&Point::default());
+        self.view = self.outer;
     }
 
     /// Resize the inner rectangle to match the argument. The inner rectangle is
