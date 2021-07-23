@@ -1,8 +1,9 @@
 use crate::{
     cursor,
     event::{key, mouse, tick},
+    geom::Rect,
     geom::Size,
-    Canopy, Rect, Result, StatefulNode,
+    Canopy, Result, StatefulNode,
 };
 use duplicate::duplicate;
 use std::fmt::Debug;
@@ -133,12 +134,16 @@ pub trait Node<S>: StatefulNode {
         Ok(EventOutcome::Ignore { skip: false })
     }
 
-    /// Call a closure on this node's children.
+    /// Call a closure on this node's children. The order in which children are
+    /// processed must match `children_mut`. The default implementation assumes
+    /// this node has no children, and just returns.
     fn children(&self, f: &mut dyn FnMut(&dyn Node<S>) -> Result<()>) -> Result<()> {
         Ok(())
     }
 
-    /// Call a closure mutably on this node's children.
+    /// Call a closure mutably on this node's children. The order in which
+    /// children are processed must match `children`. The default implementation
+    /// assumes this node has no children, and just returns.
     fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<()>) -> Result<()> {
         Ok(())
     }

@@ -5,9 +5,10 @@ pub mod utils {
     use crate as canopy;
     use crate::{
         event::{key, mouse, tick},
+        geom::{Point, Rect},
         render::test::TestRender,
         style::Style,
-        Canopy, EventOutcome, Node, NodeState, Point, Rect, Render, Result, StatefulNode,
+        Canopy, EventOutcome, Node, NodeState, Render, Result, StatefulNode,
     };
 
     pub const K_ANY: key::Key = key::Key(None, key::KeyCode::Char('a'));

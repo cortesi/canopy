@@ -1,6 +1,6 @@
 
 - Explicit colors - at the moment, we can only get colors from our color scheme
-- Design actions, and use to signal Exit
+- Actions
 - Ergonomics:
   - Better EventOutcome
   - Better error returns
@@ -15,6 +15,5 @@
   - At the moment, it's only client is the internal code, so it only implements
     logging of text. We should make it more complete for general use.
 
-- Unit test set_shell, find a better name
 
 

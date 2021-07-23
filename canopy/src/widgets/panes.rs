@@ -3,8 +3,9 @@ use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
+    geom::Rect,
     state::{NodeState, StatefulNode},
-    Canopy, Node, Rect, Result,
+    Canopy, Node, Result,
 };
 
 // Panes manages a set of child nodes arranged in a 2d grid.

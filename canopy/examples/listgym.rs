@@ -7,7 +7,7 @@ use canopy::{
     geom::Size,
     render::term::runloop,
     style::solarized,
-    widgets::{frame, List, Scroll},
+    widgets::{frame, List},
     Canopy, EventOutcome, Node, NodeState, Result, StatefulNode,
 };
 
@@ -47,7 +47,7 @@ impl Node<Handle> for Block {
 #[derive(StatefulNode)]
 struct Root {
     state: NodeState,
-    content: frame::Frame<Handle, Scroll<Handle, List<Handle, Block>>>,
+    content: frame::Frame<Handle, List<Handle, Block>>,
 }
 
 impl Root {
@@ -55,7 +55,7 @@ impl Root {
         let nodes: Vec<Block> = (0..100).map(|_| Block::new()).collect();
         Root {
             state: NodeState::default(),
-            content: frame::Frame::new(Scroll::new(List::new(nodes))),
+            content: frame::Frame::new(List::new(nodes)),
         }
     }
 }
@@ -70,11 +70,13 @@ impl Node<Handle> for Root {
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<EventOutcome> {
-        Ok(match k {
-            c if c == mouse::Action::ScrollDown => self.content.child.down()?,
-            c if c == mouse::Action::ScrollUp => self.content.child.up()?,
-            _ => EventOutcome::Ignore { skip: false },
-        })
+        let v = &mut self.content.child.state_mut().viewport;
+        match k {
+            c if c == mouse::Action::ScrollDown => v.down(),
+            c if c == mouse::Action::ScrollUp => v.up(),
+            _ => return Ok(EventOutcome::Ignore { skip: false }),
+        };
+        Ok(EventOutcome::Handle { skip: false })
     }
     fn handle_key(
         &mut self,
@@ -82,17 +84,19 @@ impl Node<Handle> for Root {
         _: &mut Handle,
         k: key::Key,
     ) -> Result<EventOutcome> {
-        Ok(match k {
-            c if c == 'g' => self.content.child.scroll_to(0, 0)?,
-            c if c == 'j' || c == key::KeyCode::Down => self.content.child.down()?,
-            c if c == 'k' || c == key::KeyCode::Up => self.content.child.up()?,
-            c if c == 'h' || c == key::KeyCode::Left => self.content.child.left()?,
-            c if c == 'l' || c == key::KeyCode::Up => self.content.child.right()?,
-            c if c == ' ' || c == key::KeyCode::PageDown => self.content.child.page_down()?,
-            c if c == key::KeyCode::PageUp => self.content.child.page_up()?,
+        let v = &mut self.content.child.state_mut().viewport;
+        match k {
+            c if c == 'g' => v.scroll_to(0, 0),
+            c if c == 'j' || c == key::KeyCode::Down => v.down(),
+            c if c == 'k' || c == key::KeyCode::Up => v.up(),
+            c if c == 'h' || c == key::KeyCode::Left => v.left(),
+            c if c == 'l' || c == key::KeyCode::Up => v.right(),
+            c if c == ' ' || c == key::KeyCode::PageDown => v.page_down(),
+            c if c == key::KeyCode::PageUp => v.page_up(),
             c if c == 'q' => app.exit(0),
-            _ => EventOutcome::Ignore { skip: false },
-        })
+            _ => return Ok(EventOutcome::Ignore { skip: false }),
+        };
+        Ok(EventOutcome::Handle { skip: false })
     }
 
     #[duplicate(

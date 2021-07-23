@@ -4,8 +4,9 @@ use std::marker::PhantomData;
 use crate::geom::{Direction, Rect};
 use crate::{
     event::{key, mouse, tick, Event},
+    geom::Point,
     node::{postorder, postorder_mut, preorder, EventOutcome, Node, Walker},
-    Error, Point, Render, Result,
+    Error, Render, Result,
 };
 
 pub struct SkipWalker {
@@ -35,12 +36,15 @@ pub struct Canopy<'a, S> {
     // A counter that is incremented every time focus changes. The current focus
     // will have a state `focus_gen` equal to this.
     focus_gen: u64,
+    // Stores the focus_gen during the last render. Used to detect if focus has
+    // changed.
+    last_focus_gen: u64,
     // A counter that is incremented every time we render. All items that
     // require rendering during the current sweep will have a state `render_gen`
     // equal to this.
     render_gen: u64,
-    last_focus_gen: u64,
 
+    /// The active render backend.
     pub render: Render<'a>,
 
     _marker: PhantomData<S>,
@@ -425,8 +429,7 @@ impl<'a, S> Canopy<'a, S> {
         })
     }
 
-    /// Resize the screen. This first sets the outer rect of the viewport, then
-    /// calls layout on the root node to resize the tree.
+    /// Handle a screen resize. This calls layout and taints the tree.
     pub fn resize<N>(&mut self, e: &mut N, rect: Rect) -> Result<()>
     where
         N: Node<S>,

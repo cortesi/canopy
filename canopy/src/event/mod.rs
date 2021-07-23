@@ -2,7 +2,7 @@ pub mod key;
 pub mod mouse;
 pub mod tick;
 
-use crate::geom;
+use crate::geom::Rect;
 
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc;
@@ -15,7 +15,7 @@ use crossterm::event;
 pub enum Event {
     Key(key::Key),
     Mouse(mouse::Mouse),
-    Resize(geom::Rect),
+    Resize(Rect),
     Tick(tick::Tick),
 }
 
@@ -44,7 +44,7 @@ impl EventSource {
                     let oevt = match evt {
                         event::Event::Key(e) => Event::Key(e.into()),
                         event::Event::Mouse(e) => Event::Mouse(e.into()),
-                        event::Event::Resize(x, y) => Event::Resize(crate::Rect::new(0, 0, x, y)),
+                        event::Event::Resize(x, y) => Event::Resize(Rect::new(0, 0, x, y)),
                     };
                     let ret = evt_tx.send(oevt);
                     if ret.is_err() {

@@ -4,10 +4,11 @@ use std::fs;
 use canopy;
 use canopy::{
     event::{key, mouse},
+    geom::Rect,
     render::term::runloop,
     style::solarized,
     widgets::{frame, Text},
-    Canopy, EventOutcome, Node, NodeState, Rect, Result, StatefulNode,
+    Canopy, EventOutcome, Node, NodeState, Result, StatefulNode,
 };
 
 struct Handle {}
@@ -38,16 +39,17 @@ impl Node<Handle> for Root {
     }
     fn handle_mouse(
         &mut self,
-        _app: &mut Canopy<Handle>,
+        app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<EventOutcome> {
         let v = &mut self.child.child.state_mut().viewport;
         match k {
             c if c == mouse::Action::ScrollDown => v.down(),
-            c if c == mouse::Action::ScrollUp => v.down(),
+            c if c == mouse::Action::ScrollUp => v.up(),
             _ => return Ok(EventOutcome::Ignore { skip: false }),
         };
+        app.taint_tree(self)?;
         Ok(EventOutcome::Handle { skip: false })
     }
     fn handle_key(
@@ -68,7 +70,6 @@ impl Node<Handle> for Root {
             c if c == 'q' => app.exit(0),
             _ => return Ok(EventOutcome::Ignore { skip: false }),
         }
-        self.layout(app, self.screen())?;
         app.taint_tree(self)?;
         Ok(EventOutcome::Handle { skip: false })
     }

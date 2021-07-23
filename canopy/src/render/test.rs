@@ -1,5 +1,10 @@
 use super::Backend;
-use crate::{cursor, style::Color, Point, Rect, Result};
+use crate::{
+    cursor,
+    geom::{Point, Rect},
+    style::Color,
+    Result,
+};
 use std::sync::{Arc, Mutex};
 
 /// A handle to a vector that contains the result of the render.

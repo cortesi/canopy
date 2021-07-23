@@ -69,7 +69,7 @@ impl<'a> Render<'a> {
         self.backend.text(r.tl, out)?;
         if out.len() < r.w as usize {
             self.backend.fill(
-                crate::Rect::new(
+                geom::Rect::new(
                     r.tl.x + out.len() as u16,
                     r.tl.y,
                     r.w - out.len() as u16,

@@ -4,9 +4,10 @@ use canopy;
 use canopy::{
     event::{key, mouse},
     geom::Frame,
+    geom::Rect,
     render::term::runloop,
     style::solarized,
-    Canopy, EventOutcome, Node, NodeState, Rect, Result, StatefulNode,
+    Canopy, EventOutcome, Node, NodeState, Result, StatefulNode,
 };
 
 struct Handle {}
