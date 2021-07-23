@@ -49,7 +49,7 @@ impl Block {
 
 impl Node<Handle> for Root {
     fn layout(&mut self, app: &mut Canopy<Handle>, screen: Rect) -> Result<()> {
-        self.state_mut().viewport.set_screen(screen)?;
+        self.state_mut().viewport.set_fill(screen);
         self.child.layout(app, screen)
     }
 
@@ -136,6 +136,7 @@ impl Block {
 
 impl Node<Handle> for Block {
     fn layout(&mut self, app: &mut Canopy<Handle>, screen: Rect) -> Result<()> {
+        self.state_mut().viewport.set_fill(screen);
         if self.children.len() > 0 {
             let sizes = if self.horizontal {
                 screen.split_horizontal(self.children.len() as u16)?

@@ -5,10 +5,10 @@ pub mod utils {
     use crate as canopy;
     use crate::{
         event::{key, mouse, tick},
+        geom::Size,
         render::test::TestRender,
         style::Style,
         Canopy, EventOutcome, Node, NodeState, Point, Rect, Render, Result, StatefulNode,
-        WidthConstrained,
     };
 
     pub const K_ANY: key::Key = key::Key(None, key::KeyCode::Char('a'));
@@ -64,11 +64,6 @@ pub mod utils {
     }
 
     impl Node<State> for TLeaf {
-        fn layout(&mut self, _: &mut Canopy<State>, a: Rect) -> Result<()> {
-            self.state_mut().viewport.set_fill(a);
-            Ok(())
-        }
-
         fn name(&self) -> Option<String> {
             Some(self.name.clone())
         }
@@ -109,8 +104,8 @@ pub mod utils {
         fn layout(&mut self, app: &mut Canopy<State>, rect: Rect) -> Result<()> {
             self.state_mut().viewport.set_fill(rect);
             let v = rect.split_vertical(2)?;
-            app.resize(&mut self.a, v[0])?;
-            app.resize(&mut self.b, v[1])?;
+            self.a.layout(app, v[0])?;
+            self.b.layout(app, v[1])?;
             Ok(())
         }
 
@@ -168,8 +163,8 @@ pub mod utils {
         fn layout(&mut self, app: &mut Canopy<State>, rect: Rect) -> Result<()> {
             self.state_mut().viewport.set_fill(rect);
             let v = rect.split_horizontal(2)?;
-            app.resize(&mut self.a, v[0])?;
-            app.resize(&mut self.b, v[1])?;
+            self.a.layout(app, v[0])?;
+            self.b.layout(app, v[1])?;
             Ok(())
         }
 
@@ -309,21 +304,7 @@ pub mod utils {
         pub virt_origin: Point,
     }
 
-    impl WidthConstrained<State> for TFixed {
-        fn constrain(&mut self, _app: &mut Canopy<State>, _: u16) -> Result<()> {
-            let (w, h) = (self.w, self.h);
-            self.state_mut()
-                .viewport
-                .resize_outer(Rect::new(0, 0, w, h));
-            Ok(())
-        }
-    }
-
-    impl Node<State> for TFixed {
-        fn layout(&mut self, _app: &mut Canopy<State>, screen: Rect) -> Result<()> {
-            self.state_mut().viewport.set_screen(screen)
-        }
-    }
+    impl Node<State> for TFixed {}
 
     impl TFixed {
         pub fn new(w: u16, h: u16) -> Self {

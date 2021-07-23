@@ -425,14 +425,13 @@ impl<'a, S> Canopy<'a, S> {
         })
     }
 
-    /// Propagate a resize event through the tree of nodes.
+    /// Resize the screen. This first sets the outer rect of the viewport, then
+    /// calls layout on the root node to resize the tree.
     pub fn resize<N>(&mut self, e: &mut N, rect: Rect) -> Result<()>
     where
         N: Node<S>,
     {
-        if e.screen() == rect {
-            return Ok(());
-        }
+        e.state_mut().viewport.resize_outer(rect.into());
         e.layout(self, rect)?;
         self.taint_tree(e)?;
         Ok(())

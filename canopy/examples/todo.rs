@@ -18,9 +18,6 @@ struct StatusBar {
 }
 
 impl Node<Handle> for StatusBar {
-    fn layout(&mut self, _app: &mut Canopy<Handle>, screen: Rect) -> Result<()> {
-        self.state_mut().viewport.set_screen(screen)
-    }
     fn render(&self, app: &mut Canopy<Handle>) -> Result<()> {
         app.render.style.push_layer("statusbar");
         let sa = self.screen();

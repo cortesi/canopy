@@ -8,13 +8,12 @@ use crate::{Canopy, Result};
 /// rectangle that encloses all its content. Now, the parent component can make
 /// a decision to render some sub-view of the virtual component rectangle onto
 /// the screen.
-pub trait WidthConstrained<S> {
+pub trait _WidthConstrained<S> {
     /// Constrain the width of the component. This should operate on
-    /// `self.state_mut().viewport` to set the appropriate sizes. A best-effort
-    /// attempt should be made to scale to within the width, but the view's
-    /// outer rectangle may be larger or smaller than the constraint. This
-    /// method should be used in the `layout` method of a parent, and should be
-    /// followed by a call to the child's `layout` method with the established
-    /// geometry.
+    /// `self.state_mut().viewport` to set the appropriate outer size. A
+    /// best-effort attempt should be made to scale to within the width, but the
+    /// result may be larger or smaller than the constraint. This method should
+    /// be used in the `layout` method of a parent, and should be followed by a
+    /// call to the child's `layout` method.
     fn constrain(&mut self, app: &mut Canopy<S>, width: u16) -> Result<()>;
 }

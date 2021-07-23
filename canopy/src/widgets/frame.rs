@@ -107,11 +107,6 @@ impl<S, N> Node<S> for Frame<S, N>
 where
     N: canopy::Node<S> + FrameContent,
 {
-    fn layout(&mut self, app: &mut Canopy<S>, screen: Rect) -> Result<()> {
-        self.state_mut().viewport.set_screen(screen)?;
-        self.child.layout(app, screen.inner(1)?)
-    }
-
     fn should_render(&self, app: &Canopy<S>) -> Option<bool> {
         Some(app.should_render(&self.child))
     }
@@ -147,13 +142,17 @@ where
         let view = self.child.state().viewport;
 
         // Is window equal to or larger than virt?
-        if view.view().vextent().contains(&view.outer().vextent()) {
+        if view
+            .view()
+            .vextent()
+            .contains(&view.outer().rect().vextent())
+        {
             app.render.fill(style, f.right, self.glyphs.vertical)?;
         } else {
             let (epre, eactive, epost) = f
                 .right
                 .vextent()
-                .split_active(view.outer().vextent(), view.view().vextent())?;
+                .split_active(view.outer().rect().vextent(), view.view().vextent())?;
 
             app.render
                 .fill(style, f.right.vextract(&epre)?, self.glyphs.vertical)?;
@@ -167,13 +166,17 @@ where
         }
 
         // Is window equal to or larger than virt?
-        if view.view().hextent().contains(&view.outer().hextent()) {
+        if view
+            .view()
+            .hextent()
+            .contains(&view.outer().rect().hextent())
+        {
             app.render.fill(style, f.bottom, self.glyphs.horizontal)?;
         } else {
             let (epre, eactive, epost) = f
                 .bottom
                 .hextent()
-                .split_active(view.outer().hextent(), view.view().hextent())?;
+                .split_active(view.outer().rect().hextent(), view.view().hextent())?;
 
             app.render
                 .fill(style, f.bottom.hextract(&epre)?, self.glyphs.horizontal)?;

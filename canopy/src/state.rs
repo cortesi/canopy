@@ -1,4 +1,7 @@
-use crate::geom::{Rect, ViewPort};
+use crate::{
+    geom::{Rect, Size, ViewPort},
+    Result,
+};
 
 pub use canopy_derive::StatefulNode;
 
@@ -44,6 +47,10 @@ pub trait StatefulNode {
     /// Get a mutable reference to the node's state object.
     fn state_mut(&mut self) -> &mut NodeState;
 
+    fn set_shell(&mut self, size: Size, screen: Rect) -> Result<()> {
+        self.state_mut().viewport.set_shell(size, screen)
+    }
+
     /// Get the screen rect from the viewport.
     fn screen(&self) -> Rect {
         self.state().viewport.screen()
@@ -55,7 +62,7 @@ pub trait StatefulNode {
     }
 
     /// Get the outer rect from the viewport.
-    fn outer(&self) -> Rect {
+    fn outer(&self) -> Size {
         self.state().viewport.outer()
     }
 

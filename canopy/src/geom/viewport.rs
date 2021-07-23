@@ -1,4 +1,4 @@
-use super::{Point, Rect};
+use super::{Point, Rect, Size};
 use crate::error;
 use crate::Result;
 
@@ -14,13 +14,13 @@ use crate::Result;
 pub struct ViewPort {
     screen: Point,
     view: Rect,
-    outer: Rect,
+    outer: Size,
 }
 
 impl Default for ViewPort {
     fn default() -> ViewPort {
         ViewPort {
-            outer: Rect::default(),
+            outer: Size::default(),
             view: Rect::default(),
             screen: Point::default(),
         }
@@ -30,8 +30,8 @@ impl Default for ViewPort {
 impl ViewPort {
     /// Create a new View with the given outer and inner rectangles. The view
     /// rectangle must be fully contained within the outer rectangle.
-    pub fn new(outer: Rect, view: Rect) -> Result<ViewPort> {
-        if !outer.contains_rect(&view) {
+    pub fn new(outer: Size, view: Rect) -> Result<ViewPort> {
+        if !outer.rect().contains_rect(&view) {
             Err(error::Error::Geometry("view not contained in outer".into()))
         } else {
             Ok(ViewPort {
@@ -48,13 +48,13 @@ impl ViewPort {
         let r = Rect::new(x, y, self.view.w, self.view.h);
         // We unwrap here, because this can only be an error if view is larger
         // than outer, which we ensure is not the case.
-        self.view = r.clamp(self.outer).unwrap();
+        self.view = r.clamp(self.outer.rect()).unwrap();
     }
 
     /// Scroll the view by the given offsets. The view rectangle is clamped
     /// within the outer rectangle.
     pub fn scroll_by(&mut self, x: i16, y: i16) {
-        self.view = self.view.shift_within(x, y, self.outer)
+        self.view = self.view.shift_within(x, y, self.outer.rect())
     }
 
     /// Scroll the view up by the height of the view rectangle.
@@ -98,7 +98,7 @@ impl ViewPort {
     }
 
     /// Return the enclosing area.
-    pub fn outer(&self) -> Rect {
+    pub fn outer(&self) -> Size {
         self.outer
     }
 
@@ -106,16 +106,16 @@ impl ViewPort {
     /// possible, but is shifted if needed. If the view rectangle is larger than
     /// the new outer size, it is resized to be equal to outer and located at 0,
     /// 0.
-    pub fn resize_outer(&mut self, outer: Rect) {
+    pub fn resize_outer(&mut self, outer: Size) {
         let view = if outer.w < self.view.w || outer.h < self.view.h {
-            outer
+            outer.rect()
         } else {
             self.view
         };
 
         // We can unwrap, because this only errors if view is larger than outer,
         // which can't be the case.
-        self.view = view.clamp(outer).unwrap();
+        self.view = view.clamp(outer.rect()).unwrap();
         self.outer = outer;
     }
 
@@ -123,7 +123,7 @@ impl ViewPort {
     /// would end up larger than the outer rectangle, an error is returned.
     pub fn set_screen(&mut self, screen: Rect) -> Result<()> {
         let view = screen.at(&self.view.tl);
-        self.view = view.clamp(self.outer)?;
+        self.view = view.clamp(self.outer.rect())?;
         self.screen = screen.tl;
         Ok(())
     }
@@ -132,8 +132,8 @@ impl ViewPort {
     /// size. This is useful for nodes that fill whatever space they're given.
     pub fn set_fill(&mut self, screen: Rect) {
         self.screen = screen.tl;
-        self.outer = screen.at(&Point::default());
-        self.view = self.outer;
+        self.outer = screen.into();
+        self.view = screen.into();
     }
 
     /// Resize the inner rectangle to match the argument. The inner rectangle is
@@ -141,7 +141,7 @@ impl ViewPort {
     /// rectangle, an error is returned.
     pub fn resize_inner(&mut self, size: Rect) -> Result<()> {
         let view = size.at(&self.view.tl);
-        self.view = view.clamp(self.outer)?;
+        self.view = view.clamp(self.outer.rect())?;
         Ok(())
     }
 
@@ -149,7 +149,15 @@ impl ViewPort {
     /// inner rectangle is larger than the outer rectangle, an error is
     /// returned.
     pub fn set_inner(&mut self, inner: Rect) -> Result<()> {
-        self.view = inner.clamp(self.outer)?;
+        self.view = inner.clamp(self.outer.rect())?;
+        Ok(())
+    }
+
+    /// Set both the outer and screen rects at once. FIXME: Need a better name.
+    pub fn set_shell(&mut self, size: Size, screen: Rect) -> Result<()> {
+        self.outer = size;
+        self.screen = screen.tl;
+        self.view = screen.at(&self.view.tl).clamp(self.outer.rect())?;
         Ok(())
     }
 }
@@ -159,8 +167,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn view_set_shell() -> Result<()> {
+        let mut v = ViewPort::new(Size::new(100, 100), Rect::new(50, 50, 10, 10))?;
+
+        let err = v.set_shell(Size::new(10, 10), Rect::new(0, 0, 190, 190));
+        assert!(err.is_err());
+
+        Ok(())
+    }
+
+    #[test]
     fn view_set_inner() -> Result<()> {
-        let mut v = ViewPort::new(Rect::new(0, 0, 100, 100), Rect::new(50, 50, 10, 10))?;
+        let mut v = ViewPort::new(Size::new(100, 100), Rect::new(50, 50, 10, 10))?;
 
         let err = v.set_inner(Rect::new(0, 0, 190, 190));
         assert!(err.is_err());
@@ -173,19 +191,19 @@ mod tests {
 
     #[test]
     fn view_resize_outer() -> Result<()> {
-        let mut v = ViewPort::new(Rect::new(0, 0, 100, 100), Rect::new(50, 50, 10, 10))?;
+        let mut v = ViewPort::new(Size::new(100, 100), Rect::new(50, 50, 10, 10))?;
 
-        v.resize_outer(Rect::new(0, 0, 90, 90));
-        assert_eq!(v.outer, Rect::new(0, 0, 90, 90));
+        v.resize_outer(Size::new(90, 90));
+        assert_eq!(v.outer, Size::new(90, 90));
         assert_eq!(v.view, Rect::new(50, 50, 10, 10));
 
-        v.resize_outer(Rect::new(0, 0, 50, 50));
+        v.resize_outer(Size::new(50, 50));
         assert_eq!(v.view, Rect::new(40, 40, 10, 10));
 
-        v.resize_outer(Rect::new(0, 0, 50, 50));
+        v.resize_outer(Size::new(50, 50));
         assert_eq!(v.view, Rect::new(40, 40, 10, 10));
 
-        v.resize_outer(Rect::new(0, 0, 5, 5));
+        v.resize_outer(Size::new(5, 5));
         assert_eq!(v.view, Rect::new(0, 0, 5, 5));
 
         Ok(())
@@ -193,7 +211,7 @@ mod tests {
 
     #[test]
     fn view_movement() -> Result<()> {
-        let mut v = ViewPort::new(Rect::new(0, 0, 100, 100), Rect::new(0, 0, 10, 10))?;
+        let mut v = ViewPort::new(Size::new(100, 100), Rect::new(0, 0, 10, 10))?;
 
         v.scroll_by(10, 10);
         assert_eq!(v.view, Rect::new(10, 10, 10, 10),);

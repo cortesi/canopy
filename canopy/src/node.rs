@@ -1,6 +1,7 @@
 use crate::{
     cursor,
     event::{key, mouse, tick},
+    geom::Size,
     Canopy, Rect, Result, StatefulNode,
 };
 use duplicate::duplicate;
@@ -142,11 +143,29 @@ pub trait Node<S>: StatefulNode {
         Ok(())
     }
 
+    /// Compute the outer size of the node, if it had to be displayed in the
+    /// target area. In practice, nodes will usually either constrain themselves
+    /// based on the width or the height of the target area, not both. The
+    /// resulting size may be smaller or larger than the target. If non-trivial
+    /// computation is done to compute the size (e.g. reflowing text), it should
+    /// be saved for use by future calls. This method may be called multiple
+    /// times for a given node during a render sweep, so re-fitting to the same
+    /// size should be a no-op. This function should not change the node's
+    /// viewport parameters itself.
+    ///
+    /// The default implementation just returns the target value.
+    fn fit(&mut self, app: &mut Canopy<S>, target: Size) -> Result<Size> {
+        Ok(target)
+    }
+
     /// Lay out this component and all its children in the given screen rect.
     ///
     /// Implementers must set its own viewport screen area, using `set_fill` or
     /// `set_screen`, and then call the `layout` method on all children.
-    fn layout(&mut self, app: &mut Canopy<S>, screen_rect: Rect) -> Result<()>;
+    fn layout(&mut self, app: &mut Canopy<S>, screen_rect: Rect) -> Result<()> {
+        let v = self.fit(app, screen_rect.into())?;
+        self.set_shell(v, screen_rect)
+    }
 }
 
 /// A postorder traversal of the nodes under e. Enabling skipping in the Walker

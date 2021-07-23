@@ -3,9 +3,8 @@ use std::marker::PhantomData;
 use crate as canopy;
 use crate::{
     cursor,
-    error::Error,
     event::key,
-    geom::{LineSegment, Point, Rect, ViewPort},
+    geom::{LineSegment, Point, Size},
     state::{NodeState, StatefulNode},
     widgets::frame,
     Canopy, EventOutcome, Node, Result,
@@ -30,10 +29,12 @@ impl TextBuf {
             window: LineSegment { off: 0, len: 0 },
         }
     }
+
     /// The location of the displayed cursor along the x axis
     fn cursor_display(&self) -> u16 {
         self.cursor_pos - self.window.off
     }
+
     fn text(&self) -> String {
         let end = self.window.far().min(self.value.len() as u16) as usize;
         let mut v = self.value[self.window.off as usize..end].to_owned();
@@ -41,6 +42,7 @@ impl TextBuf {
         v = v + &" ".repeat(extra);
         v
     }
+
     fn fix_window(&mut self) {
         if self.cursor_pos > self.value.len() as u16 {
             self.cursor_pos = self.value.len() as u16
@@ -62,6 +64,7 @@ impl TextBuf {
             self.window.off += delta as u16;
         }
     }
+
     /// Should be called during layout
     fn set_display_width(&mut self, val: usize) {
         self.window = LineSegment {
@@ -116,22 +119,6 @@ impl<S> InputLine<S> {
             textbuf: TextBuf::new(txt),
         }
     }
-    fn resize(&mut self) -> Result<()> {
-        let r = self.screen();
-        if self.textbuf.window.len >= self.textbuf.value.len() as u16 {
-            let r = Rect::new(0, 0, r.w, 1);
-            self.state_mut().viewport = ViewPort::new(r, r)?;
-        } else {
-            let view = Rect::new(0, 0, self.textbuf.value.len() as u16, 1);
-            self.state_mut().viewport = ViewPort::new(
-                Rect::new(self.textbuf.window.off, 0, self.textbuf.window.len, 1)
-                    .clamp(view)
-                    .unwrap(),
-                view,
-            )?;
-        }
-        Ok(())
-    }
 }
 
 impl<S> frame::FrameContent for InputLine<S> {}
@@ -140,6 +127,7 @@ impl<'a, S> Node<S> for InputLine<S> {
     fn can_focus(&self) -> bool {
         true
     }
+
     fn cursor(&self) -> Option<cursor::Cursor> {
         Some(cursor::Cursor {
             location: Point {
@@ -155,7 +143,7 @@ impl<'a, S> Node<S> for InputLine<S> {
         app.render.text("text", self.screen(), &self.textbuf.text())
     }
 
-    fn handle_key(&mut self, _app: &mut Canopy<S>, _: &mut S, k: key::Key) -> Result<EventOutcome> {
+    fn handle_key(&mut self, app: &mut Canopy<S>, _: &mut S, k: key::Key) -> Result<EventOutcome> {
         match k {
             key::Key(_, key::KeyCode::Left) => {
                 self.textbuf.left();
@@ -171,16 +159,18 @@ impl<'a, S> Node<S> for InputLine<S> {
             }
             _ => return Ok(EventOutcome::Ignore { skip: false }),
         };
-        self.resize()?;
+        self.layout(app, self.screen())?;
         Ok(EventOutcome::Handle { skip: false })
     }
 
-    fn layout(&mut self, _app: &mut Canopy<S>, screen: Rect) -> Result<()> {
-        if screen.h != 1 {
-            return Err(Error::Layout("InputLine height must be exactly 1.".into()));
+    fn fit(&mut self, _app: &mut Canopy<S>, sz: Size) -> Result<Size> {
+        self.textbuf.set_display_width(sz.w as usize);
+        let tbl = self.textbuf.value.len() as u16;
+        if self.textbuf.window.len >= tbl {
+            Ok(sz)
+        } else {
+            Ok(Size::new(tbl as u16, 1))
         }
-        self.textbuf.set_display_width(screen.w as usize);
-        Ok(())
     }
 }
 

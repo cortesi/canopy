@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
+    geom::Size,
     node::{EventOutcome, Node},
     state::{NodeState, StatefulNode},
     widgets::frame::FrameContent,
@@ -92,9 +93,12 @@ where
         f(&mut self.child)
     }
 
+    fn fit(&mut self, a: &mut Canopy<S>, s: Size) -> Result<Size> {
+        self.child.fit(a, s)
+    }
+
     fn layout(&mut self, app: &mut Canopy<S>, screen: Rect) -> Result<()> {
         self.state_mut().viewport.set_fill(screen);
-        self.child.layout(app, screen)?;
-        Ok(())
+        self.child.layout(app, screen)
     }
 }

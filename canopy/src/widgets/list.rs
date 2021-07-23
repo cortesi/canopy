@@ -3,17 +3,17 @@ use std::marker::PhantomData;
 use crate as canopy;
 use crate::{
     error::Result,
-    geom::{Point, Rect},
+    geom::{Point, Rect, Size},
     node::Node,
     state::{NodeState, StatefulNode},
     widgets::frame::FrameContent,
-    Canopy, WidthConstrained,
+    Canopy,
 };
 
 #[derive(StatefulNode)]
 pub struct List<S, N>
 where
-    N: Node<S> + WidthConstrained<S>,
+    N: Node<S>,
 {
     _marker: PhantomData<S>,
     items: Vec<N>,
@@ -25,7 +25,7 @@ where
 
 impl<S, N> List<S, N>
 where
-    N: Node<S> + WidthConstrained<S>,
+    N: Node<S>,
 {
     pub fn new(c: Vec<N>) -> Self {
         List {
@@ -38,32 +38,22 @@ where
     }
 }
 
-impl<S, N> WidthConstrained<S> for List<S, N>
-where
-    N: Node<S> + WidthConstrained<S>,
-{
-    fn constrain(&mut self, app: &mut Canopy<S>, width: u16) -> Result<()> {
-        let mut w = 0;
-        let mut h = 0;
-        for i in &mut self.items {
-            i.constrain(app, width)?;
-            let v = i.outer();
-            w = w.max(v.w);
-            h += v.h
-        }
-        self.state_mut()
-            .viewport
-            .resize_outer(Rect::new(0, 0, w, h));
-        Ok(())
-    }
-}
-
-impl<S, N> FrameContent for List<S, N> where N: Node<S> + WidthConstrained<S> {}
+impl<S, N> FrameContent for List<S, N> where N: Node<S> {}
 
 impl<S, N> Node<S> for List<S, N>
 where
-    N: Node<S> + WidthConstrained<S>,
+    N: Node<S>,
 {
+    fn fit(&mut self, app: &mut Canopy<S>, r: Size) -> Result<Size> {
+        let mut w = 0;
+        let mut h = 0;
+        for i in &mut self.items {
+            let v = i.fit(app, r)?;
+            w = w.max(v.w);
+            h += v.h
+        }
+        Ok(Size { w, h })
+    }
     fn render(&self, _app: &mut Canopy<S>) -> Result<()> {
         Ok(())
     }
@@ -115,7 +105,7 @@ mod tests {
         let (_, mut tr) = TestRender::create();
         let mut app = tcanopy(&mut tr);
         let mut lst = List::new(vec![TFixed::new(10, 10)]);
-        let _ = lst.constrain(&mut app, 20)?;
+        let _ = lst.fit(&mut app, Size::new(20, 20))?;
         // lst.layout(
         //     &mut app,
         //     Rect {

@@ -29,7 +29,8 @@ impl Root {
 
 impl Node<Handle> for Root {
     fn layout(&mut self, app: &mut Canopy<Handle>, screen: Rect) -> Result<()> {
-        self.state_mut().viewport.set_screen(screen)?;
+        let v = self.fit(app, screen.into())?;
+        self.set_shell(v, screen)?;
         self.child.layout(app, screen)
     }
     fn can_focus(&self) -> bool {

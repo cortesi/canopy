@@ -1,8 +1,8 @@
 use crate as canopy;
 use crate::{
-    geom::Rect,
+    geom::{Rect, Size},
     state::{NodeState, StatefulNode},
-    Canopy, Node, Result, WidthConstrained,
+    Canopy, Node, Result,
 };
 use std::marker::PhantomData;
 
@@ -29,24 +29,21 @@ impl<S> Text<S> {
     }
 }
 
-impl<'a, S> WidthConstrained<S> for Text<S> {
-    fn constrain(&mut self, _app: &mut Canopy<S>, w: u16) -> Result<()> {
-        // Only resize if the width has changed
-        if self.state_mut().viewport.outer().w != w {
-            let mut split: Vec<String> = vec![];
-            for i in textwrap::wrap(&self.raw, w as usize) {
-                split.push(format!("{:width$}", i, width = w as usize))
-            }
-            self.state_mut()
-                .viewport
-                .resize_outer(Rect::new(0, 0, w, split.len() as u16));
-            self.lines = Some(split);
-        }
-        Ok(())
-    }
-}
-
 impl<'a, S> Node<S> for Text<S> {
+    fn fit(&mut self, _app: &mut Canopy<S>, s: Size) -> Result<Size> {
+        // Only resize if the width has changed
+        if self.state().viewport.outer().w != s.w {
+            let mut split: Vec<String> = vec![];
+            for i in textwrap::wrap(&self.raw, s.w as usize) {
+                split.push(format!("{:width$}", i, width = s.w as usize))
+            }
+            let len = split.len() as u16;
+            self.lines = Some(split);
+            Ok(Size::new(s.w, len))
+        } else {
+            Ok(self.outer())
+        }
+    }
     fn layout(&mut self, _app: &mut Canopy<S>, screen_rect: Rect) -> Result<()> {
         self.state_mut().viewport.set_screen(screen_rect)
     }
@@ -79,7 +76,7 @@ mod tests {
         let mut app = utils::tcanopy(&mut tr);
         let txt = "aaa bbb ccc\nddd eee fff\nggg hhh iii";
         let mut t: Text<utils::State> = Text::new(txt);
-        t.constrain(&mut app, 7)?;
+        t.fit(&mut app, Size::new(7, 10))?;
         let expected: Vec<String> = vec![
             "aaa bbb".into(),
             "ccc    ".into(),
