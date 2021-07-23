@@ -1,4 +1,4 @@
-use super::{Point, Rect, Size};
+use super::{LineSegment, Point, Rect, Size};
 use crate::error;
 use crate::Result;
 
@@ -116,6 +116,43 @@ impl ViewPort {
         self.screen = screen.tl;
         self.view = screen.at(&self.view.tl).clamp(self.outer.rect())?;
         Ok(())
+    }
+
+    /// Calculates the (pre, active, post) rectangles needed to draw a vertical
+    /// scroll bar for this viewport in the specified margin rect (usually a
+    /// right or left vertical margin). Returns None if no scroll bar is needed.
+    pub fn vactive(&self, margin: Rect) -> Result<Option<(Rect, Rect, Rect)>> {
+        if self.view.h == self.outer.h {
+            Ok(None)
+        } else {
+            let (pre, active, post) = margin
+                .vextent()
+                .split_active(self.outer().rect().vextent(), self.view().vextent())?;
+            Ok(Some((
+                margin.vextract(&pre)?,
+                margin.vextract(&active)?,
+                margin.vextract(&post)?,
+            )))
+        }
+    }
+
+    /// Calculates the (pre, active, post) rectangles needed to draw a
+    /// horizontal scroll bar for this viewport in the specified margin rect
+    /// (usually a bottom horizontal margin). Returns None if no scroll bar is
+    /// needed.
+    pub fn hactive(&self, margin: Rect) -> Result<Option<(Rect, Rect, Rect)>> {
+        if self.view.w == self.outer.w {
+            Ok(None)
+        } else {
+            let (pre, active, post) = margin
+                .hextent()
+                .split_active(self.outer().rect().hextent(), self.view().hextent())?;
+            Ok(Some((
+                margin.hextract(&pre)?,
+                margin.hextract(&active)?,
+                margin.hextract(&post)?,
+            )))
+        }
     }
 }
 

@@ -5,7 +5,7 @@ use pad::PadStr;
 
 use crate as canopy;
 use crate::{
-    geom::Frame as GFrame,
+    geom::{Frame as GFrame, Rect},
     state::{NodeState, StatefulNode},
     Canopy, Node, Result,
 };
@@ -107,6 +107,11 @@ impl<S, N> Node<S> for Frame<S, N>
 where
     N: canopy::Node<S> + FrameContent,
 {
+    fn layout(&mut self, app: &mut Canopy<S>, screen: Rect) -> Result<()> {
+        let v = self.fit(app, screen.into())?;
+        self.update_view(v, screen)?;
+        self.child.layout(app, screen.inner(1)?)
+    }
     fn should_render(&self, app: &Canopy<S>) -> Option<bool> {
         Some(app.should_render(&self.child))
     }
@@ -139,55 +144,24 @@ where
         };
         app.render.text(style, f.top, &top)?;
 
-        let view = self.child.state().viewport;
-
-        // Is window equal to or larger than virt?
-        if view
-            .view()
-            .vextent()
-            .contains(&view.outer().rect().vextent())
-        {
+        if let Some((pre, active, post)) = self.state().viewport.vactive(f.right)? {
+            app.render.fill(style, pre, self.glyphs.vertical)?;
+            app.render.fill(style, post, self.glyphs.vertical)?;
+            app.render
+                .fill(style, active, self.glyphs.vertical_active)?;
+        } else {
             app.render.fill(style, f.right, self.glyphs.vertical)?;
-        } else {
-            let (epre, eactive, epost) = f
-                .right
-                .vextent()
-                .split_active(view.outer().rect().vextent(), view.view().vextent())?;
-
-            app.render
-                .fill(style, f.right.vextract(&epre)?, self.glyphs.vertical)?;
-            app.render
-                .fill(style, f.right.vextract(&epost)?, self.glyphs.vertical)?;
-            app.render.fill(
-                style,
-                f.right.vextract(&eactive)?,
-                self.glyphs.vertical_active,
-            )?;
         }
 
-        // Is window equal to or larger than virt?
-        if view
-            .view()
-            .hextent()
-            .contains(&view.outer().rect().hextent())
-        {
+        if let Some((pre, active, post)) = self.state().viewport.hactive(f.bottom)? {
+            app.render.fill(style, pre, self.glyphs.horizontal)?;
+            app.render.fill(style, post, self.glyphs.horizontal)?;
+            app.render
+                .fill(style, active, self.glyphs.horizontal_active)?;
+        } else {
             app.render.fill(style, f.bottom, self.glyphs.horizontal)?;
-        } else {
-            let (epre, eactive, epost) = f
-                .bottom
-                .hextent()
-                .split_active(view.outer().rect().hextent(), view.view().hextent())?;
-
-            app.render
-                .fill(style, f.bottom.hextract(&epre)?, self.glyphs.horizontal)?;
-            app.render
-                .fill(style, f.bottom.hextract(&epost)?, self.glyphs.horizontal)?;
-            app.render.fill(
-                style,
-                f.bottom.hextract(&eactive)?,
-                self.glyphs.horizontal_active,
-            )?;
         }
+
         Ok(())
     }
     #[duplicate(
