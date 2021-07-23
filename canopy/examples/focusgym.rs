@@ -66,6 +66,7 @@ impl Node<Handle> for Root {
             _ => EventOutcome::Ignore { skip: false },
         })
     }
+
     fn handle_key(
         &mut self,
         app: &mut Canopy<Handle>,
@@ -83,16 +84,16 @@ impl Node<Handle> for Root {
         })
     }
 
-    #[duplicate(
-        method          reference(type);
-        [children]      [& type];
-        [children_mut]  [&mut type];
-    )]
-    fn method(
-        self: reference([Self]),
-        f: &mut dyn FnMut(reference([dyn Node<Handle>])) -> Result<()>,
+    fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle>) -> Result<()>) -> Result<()> {
+        f(&self.child)?;
+        Ok(())
+    }
+
+    fn children_mut(
+        &mut self,
+        f: &mut dyn FnMut(&mut dyn Node<Handle>) -> Result<()>,
     ) -> Result<()> {
-        f(reference([self.child]))?;
+        f(&mut self.child)?;
         Ok(())
     }
 }
@@ -150,9 +151,11 @@ impl Node<Handle> for Block {
         }
         Ok(())
     }
+
     fn can_focus(&self) -> bool {
         self.children.len() == 0
     }
+
     fn render(&self, app: &mut Canopy<Handle>) -> Result<()> {
         if self.children.len() == 0 {
             let bc = if app.is_focused(self) && self.children.len() == 0 {
@@ -167,6 +170,7 @@ impl Node<Handle> for Block {
         }
         Ok(())
     }
+
     fn handle_mouse(
         &mut self,
         app: &mut Canopy<Handle>,
@@ -189,6 +193,7 @@ impl Node<Handle> for Block {
             _ => EventOutcome::Ignore { skip: false },
         })
     }
+
     fn handle_key(
         &mut self,
         app: &mut Canopy<Handle>,

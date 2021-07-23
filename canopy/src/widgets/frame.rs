@@ -107,7 +107,7 @@ where
 {
     fn layout(&mut self, app: &mut Canopy<S>, screen: Rect) -> Result<()> {
         let v = self.fit(app, screen.into())?;
-        self.update_view(v, screen)?;
+        self.update_view(v, screen);
         self.child.layout(app, screen.inner(1)?)
     }
     fn should_render(&self, app: &Canopy<S>) -> Option<bool> {

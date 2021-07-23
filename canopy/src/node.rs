@@ -169,7 +169,8 @@ pub trait Node<S>: StatefulNode {
     /// `set_screen`, and then call the `layout` method on all children.
     fn layout(&mut self, app: &mut Canopy<S>, screen_rect: Rect) -> Result<()> {
         let v = self.fit(app, screen_rect.into())?;
-        self.update_view(v, screen_rect)
+        self.update_view(v, screen_rect);
+        Ok(())
     }
 }
 

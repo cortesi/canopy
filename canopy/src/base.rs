@@ -99,6 +99,7 @@ impl<'a, S> Canopy<'a, S> {
         }
         false
     }
+
     /// Focus the specified node.
     pub fn set_focus(&mut self, e: &mut dyn Node<S>) -> Result<EventOutcome> {
         if e.can_focus() {
@@ -109,7 +110,8 @@ impl<'a, S> Canopy<'a, S> {
         Err(Error::Focus("node does not accept focus".into()))
     }
 
-    fn focus_dir(&mut self, e: &mut dyn Node<S>, dir: Direction) -> Result<EventOutcome> {
+    /// Move focus in a specified direction within the subtree.
+    pub fn focus_dir(&mut self, e: &mut dyn Node<S>, dir: Direction) -> Result<EventOutcome> {
         let mut seen = false;
         if let Some(start) = self.get_focus_area(e) {
             start.search(dir, &mut |p| -> Result<bool> {
@@ -252,6 +254,8 @@ impl<'a, S> Canopy<'a, S> {
         ret
     }
 
+    /// Call a closure on every node in the current focus path, from the focused
+    /// leaf to the root.
     pub fn focus_path<R: Walker + Default>(
         &self,
         e: &dyn Node<S>,
@@ -260,6 +264,8 @@ impl<'a, S> Canopy<'a, S> {
         focus_path(self.focus_gen, e, f)
     }
 
+    /// Call a closure mutably on every node in the current focus path, from the
+    /// focused leaf to the root.
     pub fn focus_path_mut<R: Walker + Default>(
         &self,
         e: &mut dyn Node<S>,

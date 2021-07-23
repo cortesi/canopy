@@ -11,6 +11,7 @@
   - Functions to dump the tree of nodes
     - Define name() for all built-in node types
   - Log-to-file
+  - Add node names for relevant errors
 - Improve the test render backend
   - At the moment, it's only client is the internal code, so it only implements
     logging of text. We should make it more complete for general use.

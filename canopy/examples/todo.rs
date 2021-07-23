@@ -48,6 +48,7 @@ impl Root {
             adder: None,
         }
     }
+
     fn open_adder(&mut self, app: &mut Canopy<Handle>) -> Result<EventOutcome> {
         let mut adder = frame::Frame::new(InputLine::new(""));
         app.set_focus(&mut adder.child)?;
@@ -59,6 +60,7 @@ impl Root {
 
 impl Node<Handle> for Root {
     fn layout(&mut self, app: &mut Canopy<Handle>, a: Rect) -> Result<()> {
+        self.state_mut().viewport.set_fill(a);
         if a.h > 2 {
             let sb = Rect::new(a.tl.x, a.tl.y + a.h - 1, a.w, 1);
             let ct = Rect {
@@ -76,9 +78,11 @@ impl Node<Handle> for Root {
         }
         Ok(())
     }
+
     fn can_focus(&self) -> bool {
         true
     }
+
     fn handle_mouse(
         &mut self,
         _app: &mut Canopy<Handle>,
@@ -93,6 +97,7 @@ impl Node<Handle> for Root {
         };
         Ok(EventOutcome::Handle { skip: false })
     }
+
     fn handle_key(
         &mut self,
         app: &mut Canopy<Handle>,

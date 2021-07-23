@@ -1,7 +1,4 @@
-use crate::{
-    geom::{Rect, Size, ViewPort},
-    Result,
-};
+use crate::geom::{Rect, Size, ViewPort};
 
 pub use canopy_derive::StatefulNode;
 
@@ -47,7 +44,7 @@ pub trait StatefulNode {
     /// Get a mutable reference to the node's state object.
     fn state_mut(&mut self) -> &mut NodeState;
 
-    fn update_view(&mut self, size: Size, screen: Rect) -> Result<()> {
+    fn update_view(&mut self, size: Size, screen: Rect) {
         self.state_mut().viewport.update(size, screen)
     }
 

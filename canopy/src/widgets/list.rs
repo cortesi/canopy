@@ -69,7 +69,7 @@ where
     }
     fn layout(&mut self, app: &mut Canopy<S>, screen: Rect) -> Result<()> {
         let v = self.fit(app, screen.into())?;
-        self.update_view(v, screen)?;
+        self.update_view(v, screen);
 
         let view = &self.state().viewport.clone();
         let mut voffset = 0;

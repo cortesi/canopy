@@ -39,7 +39,7 @@ impl Rect {
     /// Clamp this rectangle, constraining it lie within another rectangle. The
     /// size of the returned Rect is always equal to that of self. If self is
     /// larger than the enclosing rectangle, return an error.
-    pub fn clamp(&self, rect: Rect) -> Result<Self> {
+    pub fn clamp_within(&self, rect: Rect) -> Result<Self> {
         if rect.w < self.w || rect.h < self.h {
             Err(Error::Geometry("can't clamp to smaller rectangle".into()))
         } else {
@@ -492,15 +492,15 @@ mod tests {
     #[test]
     fn trect_clamp() -> Result<()> {
         assert_eq!(
-            Rect::new(11, 11, 5, 5).clamp(Rect::new(10, 10, 10, 10))?,
+            Rect::new(11, 11, 5, 5).clamp_within(Rect::new(10, 10, 10, 10))?,
             Rect::new(11, 11, 5, 5),
         );
         assert_eq!(
-            Rect::new(19, 19, 5, 5).clamp(Rect::new(10, 10, 10, 10))?,
+            Rect::new(19, 19, 5, 5).clamp_within(Rect::new(10, 10, 10, 10))?,
             Rect::new(15, 15, 5, 5),
         );
         assert_eq!(
-            Rect::new(5, 5, 5, 5).clamp(Rect::new(10, 10, 10, 10))?,
+            Rect::new(5, 5, 5, 5).clamp_within(Rect::new(10, 10, 10, 10))?,
             Rect::new(10, 10, 5, 5),
         );
         Ok(())
