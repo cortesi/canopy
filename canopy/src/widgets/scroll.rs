@@ -2,11 +2,10 @@ use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
-    layout::{ConstrainedWidthLayout, Layout},
     node::{EventOutcome, Node},
     state::{NodeState, StatefulNode},
     widgets::frame::FrameContent,
-    Canopy, Result,
+    Canopy, Rect, Result,
 };
 
 /// `Scroll` is an adapter that turns a node with `ConstrainedLayout` into one
@@ -15,7 +14,7 @@ use crate::{
 #[derive(StatefulNode)]
 pub struct Scroll<S, N>
 where
-    N: Node<S> + ConstrainedWidthLayout<S>,
+    N: Node<S>,
 {
     _marker: PhantomData<S>,
     pub child: N,
@@ -24,7 +23,7 @@ where
 
 impl<S, N> Scroll<S, N>
 where
-    N: Node<S> + ConstrainedWidthLayout<S>,
+    N: Node<S>,
 {
     pub fn new(c: N) -> Self {
         Scroll {
@@ -35,64 +34,51 @@ where
     }
 
     pub fn scroll_to(&mut self, x: u16, y: u16) -> Result<EventOutcome> {
-        self.child.state_mut().view.scroll_to(x, y);
+        self.child.state_mut().viewport.scroll_to(x, y);
         Ok(EventOutcome::Handle { skip: false })
     }
 
     pub fn scroll_by(&mut self, x: i16, y: i16) -> Result<EventOutcome> {
-        self.child.state_mut().view.scroll_by(x, y);
+        self.child.state_mut().viewport.scroll_by(x, y);
         Ok(EventOutcome::Handle { skip: false })
     }
 
     pub fn page_up(&mut self) -> Result<EventOutcome> {
-        self.child.state_mut().view.page_up();
+        self.child.state_mut().viewport.page_up();
         Ok(EventOutcome::Handle { skip: false })
     }
 
     pub fn page_down(&mut self) -> Result<EventOutcome> {
-        self.child.state_mut().view.page_down();
+        self.child.state_mut().viewport.page_down();
         Ok(EventOutcome::Handle { skip: false })
     }
 
     pub fn up(&mut self) -> Result<EventOutcome> {
-        self.child.state_mut().view.up();
+        self.child.state_mut().viewport.up();
         Ok(EventOutcome::Handle { skip: false })
     }
 
     pub fn down(&mut self) -> Result<EventOutcome> {
-        self.child.state_mut().view.down();
+        self.child.state_mut().viewport.down();
         Ok(EventOutcome::Handle { skip: false })
     }
 
     pub fn left(&mut self) -> Result<EventOutcome> {
-        self.child.state_mut().view.left();
+        self.child.state_mut().viewport.left();
         Ok(EventOutcome::Handle { skip: false })
     }
 
     pub fn right(&mut self) -> Result<EventOutcome> {
-        self.child.state_mut().view.right();
+        self.child.state_mut().viewport.right();
         Ok(EventOutcome::Handle { skip: false })
     }
 }
 
-impl<S, N> Layout<S> for Scroll<S, N>
-where
-    N: Node<S> + ConstrainedWidthLayout<S>,
-{
-    fn layout_children(&mut self, app: &mut Canopy<S>) -> Result<()> {
-        // $r.state().view.screen() ==>> $r.screen()
-        let rect = self.state().view.screen();
-        self.child.constrain(app, rect.w)?;
-        self.child.layout(app, rect)?;
-        Ok(())
-    }
-}
-
-impl<S, N> FrameContent for Scroll<S, N> where N: Node<S> + ConstrainedWidthLayout<S> {}
+impl<S, N> FrameContent for Scroll<S, N> where N: Node<S> {}
 
 impl<S, N> Node<S> for Scroll<S, N>
 where
-    N: Node<S> + ConstrainedWidthLayout<S>,
+    N: Node<S>,
 {
     fn should_render(&self, app: &Canopy<S>) -> Option<bool> {
         Some(app.should_render(&self.child))
@@ -104,5 +90,11 @@ where
 
     fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<()>) -> Result<()> {
         f(&mut self.child)
+    }
+
+    fn layout(&mut self, app: &mut Canopy<S>, screen: Rect) -> Result<()> {
+        self.state_mut().viewport.set_fill(screen);
+        self.child.layout(app, screen)?;
+        Ok(())
     }
 }

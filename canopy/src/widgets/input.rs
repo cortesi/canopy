@@ -6,7 +6,6 @@ use crate::{
     error::Error,
     event::key,
     geom::{LineSegment, Point, Rect, ViewPort},
-    layout::Layout,
     state::{NodeState, StatefulNode},
     widgets::frame,
     Canopy, EventOutcome, Node, Result,
@@ -118,30 +117,19 @@ impl<S> InputLine<S> {
         }
     }
     fn resize(&mut self) -> Result<()> {
-        let r = self.state().view.screen();
+        let r = self.screen();
         if self.textbuf.window.len >= self.textbuf.value.len() as u16 {
             let r = Rect::new(0, 0, r.w, 1);
-            self.state_mut().view = ViewPort::new(r, r)?;
+            self.state_mut().viewport = ViewPort::new(r, r)?;
         } else {
             let view = Rect::new(0, 0, self.textbuf.value.len() as u16, 1);
-            self.state_mut().view = ViewPort::new(
+            self.state_mut().viewport = ViewPort::new(
                 Rect::new(self.textbuf.window.off, 0, self.textbuf.window.len, 1)
                     .clamp(view)
                     .unwrap(),
                 view,
             )?;
         }
-        Ok(())
-    }
-}
-
-impl<S> Layout<S> for InputLine<S> {
-    fn layout_children(&mut self, _app: &mut Canopy<S>) -> Result<()> {
-        let rect = self.state().view.screen();
-        if rect.h != 1 {
-            return Err(Error::Layout("InputLine height must be exactly 1.".into()));
-        }
-        self.textbuf.set_display_width(rect.w as usize);
         Ok(())
     }
 }
@@ -164,8 +152,7 @@ impl<'a, S> Node<S> for InputLine<S> {
     }
 
     fn render(&self, app: &mut Canopy<S>) -> Result<()> {
-        app.render
-            .text("text", self.state().view.screen(), &self.textbuf.text())
+        app.render.text("text", self.screen(), &self.textbuf.text())
     }
 
     fn handle_key(&mut self, _app: &mut Canopy<S>, _: &mut S, k: key::Key) -> Result<EventOutcome> {
@@ -186,6 +173,14 @@ impl<'a, S> Node<S> for InputLine<S> {
         };
         self.resize()?;
         Ok(EventOutcome::Handle { skip: false })
+    }
+
+    fn layout(&mut self, _app: &mut Canopy<S>, screen: Rect) -> Result<()> {
+        if screen.h != 1 {
+            return Err(Error::Layout("InputLine height must be exactly 1.".into()));
+        }
+        self.textbuf.set_display_width(screen.w as usize);
+        Ok(())
     }
 }
 

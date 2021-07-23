@@ -4,7 +4,6 @@ use canopy;
 use canopy::{
     event::{key, mouse},
     geom::Frame,
-    layout::Layout,
     render::term::runloop,
     style::solarized,
     Canopy, EventOutcome, Node, NodeState, Rect, Result, StatefulNode,
@@ -48,13 +47,12 @@ impl Block {
     }
 }
 
-impl Layout<Handle> for Root {
-    fn layout_children(&mut self, app: &mut Canopy<Handle>) -> Result<()> {
-        self.child.layout(app, self.state().view.screen())
-    }
-}
-
 impl Node<Handle> for Root {
+    fn layout(&mut self, app: &mut Canopy<Handle>, screen: Rect) -> Result<()> {
+        self.state_mut().viewport.set_screen(screen)?;
+        self.child.layout(app, screen)
+    }
+
     fn handle_mouse(
         &mut self,
         app: &mut Canopy<Handle>,
@@ -100,7 +98,7 @@ impl Node<Handle> for Root {
 
 impl Block {
     fn add(&mut self, app: &mut Canopy<Handle>) -> Result<EventOutcome> {
-        let r = self.state().view.screen();
+        let r = self.screen();
         Ok(if self.children.len() == 0 {
             EventOutcome::Ignore { skip: false }
         } else if self.size_limited(r) {
@@ -122,7 +120,7 @@ impl Block {
         }
     }
     fn split(&mut self, app: &mut Canopy<Handle>) -> Result<EventOutcome> {
-        let r = self.state().view.screen();
+        let r = self.screen();
         Ok(if self.children.len() != 0 {
             EventOutcome::Ignore { skip: false }
         } else if self.size_limited(r) {
@@ -136,14 +134,13 @@ impl Block {
     }
 }
 
-impl Layout<Handle> for Block {
-    fn layout_children(&mut self, app: &mut Canopy<Handle>) -> Result<()> {
-        let rect = self.state().view.screen();
+impl Node<Handle> for Block {
+    fn layout(&mut self, app: &mut Canopy<Handle>, screen: Rect) -> Result<()> {
         if self.children.len() > 0 {
             let sizes = if self.horizontal {
-                rect.split_horizontal(self.children.len() as u16)?
+                screen.split_horizontal(self.children.len() as u16)?
             } else {
-                rect.split_vertical(self.children.len() as u16)?
+                screen.split_vertical(self.children.len() as u16)?
             };
             for i in 0..self.children.len() {
                 app.resize(&mut self.children[i], sizes[i])?
@@ -151,9 +148,6 @@ impl Layout<Handle> for Block {
         }
         Ok(())
     }
-}
-
-impl Node<Handle> for Block {
     fn can_focus(&self) -> bool {
         self.children.len() == 0
     }
@@ -165,7 +159,7 @@ impl Node<Handle> for Block {
                 "blue"
             };
 
-            let r = self.state().view.screen();
+            let r = self.screen();
             app.render.fill(bc, r.inner(1)?, '\u{2588}')?;
             app.render.solid_frame("black", Frame::new(r, 1)?, ' ')?;
         }

@@ -17,7 +17,7 @@ pub struct NodeState {
 
     // The view for this node. The inner rectangle always has the same size as
     // the screen_area.
-    pub view: ViewPort,
+    pub viewport: ViewPort,
     pub(crate) hidden: bool,
 }
 
@@ -31,7 +31,7 @@ impl NodeState {
             rendered_focus_gen: 0,
             render_skip_gen: 0,
             hidden: false,
-            view: ViewPort::default(),
+            viewport: ViewPort::default(),
         }
     }
 }
@@ -44,16 +44,19 @@ pub trait StatefulNode {
     /// Get a mutable reference to the node's state object.
     fn state_mut(&mut self) -> &mut NodeState;
 
+    /// Get the screen rect from the viewport.
     fn screen(&self) -> Rect {
-        self.state().view.screen()
+        self.state().viewport.screen()
     }
 
+    /// Get the view rect from the viewport.
     fn view(&self) -> Rect {
-        self.state().view.view()
+        self.state().viewport.view()
     }
 
+    /// Get the outer rect from the viewport.
     fn outer(&self) -> Rect {
-        self.state().view.outer()
+        self.state().viewport.outer()
     }
 
     /// Hides the element

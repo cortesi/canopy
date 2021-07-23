@@ -4,11 +4,10 @@ use std::fs;
 use canopy;
 use canopy::{
     event::{key, mouse},
-    layout::Layout,
     render::term::runloop,
     style::solarized,
     widgets::{frame, Scroll, Text},
-    Canopy, EventOutcome, Node, NodeState, Result, StatefulNode,
+    Canopy, EventOutcome, Node, NodeState, Rect, Result, StatefulNode,
 };
 
 struct Handle {}
@@ -28,13 +27,11 @@ impl Root {
     }
 }
 
-impl Layout<Handle> for Root {
-    fn layout_children(&mut self, app: &mut Canopy<Handle>) -> Result<()> {
-        self.child.layout(app, self.state().view.screen())
-    }
-}
-
 impl Node<Handle> for Root {
+    fn layout(&mut self, app: &mut Canopy<Handle>, screen: Rect) -> Result<()> {
+        self.state_mut().viewport.set_screen(screen)?;
+        self.child.layout(app, screen)
+    }
     fn can_focus(&self) -> bool {
         true
     }

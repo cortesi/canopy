@@ -4,7 +4,6 @@ use canopy;
 use canopy::{
     event::{key, mouse},
     geom::Rect,
-    layout::Layout,
     render::term::runloop,
     style::solarized,
     widgets::{frame, InputLine, Scroll, Text},
@@ -19,19 +18,19 @@ struct StatusBar {
 }
 
 impl Node<Handle> for StatusBar {
+    fn layout(&mut self, _app: &mut Canopy<Handle>, screen: Rect) -> Result<()> {
+        self.state_mut().viewport.set_screen(screen)
+    }
     fn render(&self, app: &mut Canopy<Handle>) -> Result<()> {
         app.render.style.push_layer("statusbar");
-        let sa = self.state().view.screen();
+        let sa = self.screen();
         if sa.h > 1 {
             panic!("{:?}", sa);
         }
-        app.render
-            .text("statusbar/text", self.state().view.screen(), "todo")?;
+        app.render.text("statusbar/text", self.screen(), "todo")?;
         Ok(())
     }
 }
-
-impl Layout<Handle> for StatusBar {}
 
 #[derive(StatefulNode)]
 struct Root {
@@ -56,14 +55,13 @@ impl Root {
         let mut adder = frame::Frame::new(InputLine::new(""));
         app.set_focus(&mut adder.child)?;
         self.adder = Some(adder);
-        self.layout(app, self.state().view.screen())?;
+        self.layout(app, self.screen())?;
         Ok(EventOutcome::Handle { skip: false })
     }
 }
 
-impl Layout<Handle> for Root {
-    fn layout_children(&mut self, app: &mut Canopy<Handle>) -> Result<()> {
-        let a = self.state().view.screen();
+impl Node<Handle> for Root {
+    fn layout(&mut self, app: &mut Canopy<Handle>, a: Rect) -> Result<()> {
         if a.h > 2 {
             let sb = Rect::new(a.tl.x, a.tl.y + a.h - 1, a.w, 1);
             let ct = Rect {
@@ -81,9 +79,6 @@ impl Layout<Handle> for Root {
         }
         Ok(())
     }
-}
-
-impl Node<Handle> for Root {
     fn can_focus(&self) -> bool {
         true
     }

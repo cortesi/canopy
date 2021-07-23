@@ -1,7 +1,7 @@
 use crate::{
     cursor,
     event::{key, mouse, tick},
-    Canopy, Result, StatefulNode,
+    Canopy, Rect, Result, StatefulNode,
 };
 use duplicate::duplicate;
 use std::fmt::Debug;
@@ -141,6 +141,12 @@ pub trait Node<S>: StatefulNode {
     fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<()>) -> Result<()> {
         Ok(())
     }
+
+    /// Lay out this component and all its children in the given screen rect.
+    ///
+    /// Implementers must set its own viewport screen area, using `set_fill` or
+    /// `set_screen`, and then call the `layout` method on all children.
+    fn layout(&mut self, app: &mut Canopy<S>, screen_rect: Rect) -> Result<()>;
 }
 
 /// A postorder traversal of the nodes under e. Enabling skipping in the Walker

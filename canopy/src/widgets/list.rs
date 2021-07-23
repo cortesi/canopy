@@ -4,22 +4,19 @@ use crate as canopy;
 use crate::{
     error::Result,
     geom::{Point, Rect},
-    layout::ConstrainedWidthLayout,
     node::Node,
     state::{NodeState, StatefulNode},
     widgets::frame::FrameContent,
-    Canopy,
+    Canopy, WidthConstrained,
 };
 
-struct Item<S, N: Node<S> + ConstrainedWidthLayout<S>> {
-    _marker: PhantomData<S>,
-    itm: N,
-}
-
 #[derive(StatefulNode)]
-pub struct List<S, N: Node<S> + ConstrainedWidthLayout<S>> {
+pub struct List<S, N>
+where
+    N: Node<S> + WidthConstrained<S>,
+{
     _marker: PhantomData<S>,
-    items: Vec<Item<S, N>>,
+    items: Vec<N>,
     // Offset within the virtual rectangle
     pub offset: Point,
     pub focus: u32,
@@ -28,84 +25,75 @@ pub struct List<S, N: Node<S> + ConstrainedWidthLayout<S>> {
 
 impl<S, N> List<S, N>
 where
-    N: Node<S> + ConstrainedWidthLayout<S>,
+    N: Node<S> + WidthConstrained<S>,
 {
     pub fn new(c: Vec<N>) -> Self {
         List {
             _marker: PhantomData,
-            items: c
-                .into_iter()
-                .map(|x| Item {
-                    itm: x,
-                    _marker: PhantomData,
-                })
-                .collect(),
+            items: c,
             offset: Point::zero(),
             focus: 0,
             state: NodeState::default(),
         }
     }
-    pub fn scroll_line(&mut self) {}
-}
 
-impl<S, N> ConstrainedWidthLayout<S> for List<S, N>
-where
-    N: Node<S> + ConstrainedWidthLayout<S>,
-{
     fn constrain(&mut self, app: &mut Canopy<S>, width: u16) -> Result<()> {
         let mut w = 0;
         let mut h = 0;
         for i in &mut self.items {
-            i.itm.constrain(app, width)?;
-            let v = i.itm.state().view.outer();
+            i.constrain(app, width)?;
+            let v = i.outer();
             w = w.max(v.w);
             h += v.h
         }
-        self.state_mut().view.resize_outer(Rect::new(0, 0, w, h));
-        Ok(())
-    }
-
-    fn layout_children(&mut self, app: &mut Canopy<S>) -> Result<()> {
-        let view = self.state().view;
-
-        let mut voffset = 0;
-        for itm in &mut self.items {
-            // The virtual item rectangle
-            let item_rect = itm.itm.state().view.view().shift(0, voffset as i16);
-            if let Some(r) = view.view().intersect(&item_rect) {
-                itm.itm.layout(
-                    app,
-                    // The virtual coords are the intersection translated into
-                    // the co-ordinates of the item.
-                    item_rect.rebase_rect(&r)?,
-                )?;
-            } else {
-                itm.itm.hide();
-            }
-            voffset += itm.itm.state().view.view().h;
-        }
+        self.state_mut()
+            .viewport
+            .resize_outer(Rect::new(0, 0, w, h));
         Ok(())
     }
 }
 
-impl<S, N> FrameContent for List<S, N> where N: Node<S> + ConstrainedWidthLayout<S> {}
+impl<S, N> FrameContent for List<S, N> where N: Node<S> + WidthConstrained<S> {}
 
 impl<S, N> Node<S> for List<S, N>
 where
-    N: Node<S> + ConstrainedWidthLayout<S>,
+    N: Node<S> + WidthConstrained<S>,
 {
     fn render(&self, _app: &mut Canopy<S>) -> Result<()> {
         Ok(())
     }
     fn children(&self, f: &mut dyn FnMut(&dyn Node<S>) -> Result<()>) -> Result<()> {
         for i in &self.items {
-            f(&i.itm)?
+            f(i)?
         }
         Ok(())
     }
     fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<()>) -> Result<()> {
         for i in self.items.iter_mut() {
-            f(&mut i.itm)?
+            f(i)?
+        }
+        Ok(())
+    }
+
+    fn layout(&mut self, app: &mut Canopy<S>, screen: Rect) -> Result<()> {
+        self.state_mut().viewport.set_screen(screen);
+        let view = self.state().viewport;
+
+        let mut voffset = 0;
+        for itm in &mut self.items {
+            // The virtual item rectangle
+            let item_rect = itm.view().shift(0, voffset as i16);
+            if let Some(r) = view.view().intersect(&item_rect) {
+                itm.layout(
+                    app,
+                    // The virtual coords are the intersection translated into
+                    // the co-ordinates of the item.
+                    item_rect.rebase_rect(&r)?,
+                )?;
+            } else {
+                itm.hide();
+            }
+            voffset += itm.view().h;
         }
         Ok(())
     }

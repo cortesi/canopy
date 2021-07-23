@@ -5,11 +5,10 @@ use canopy;
 use canopy::{
     event::{key, mouse},
     geom::{Point, Rect},
-    layout::{ConstrainedWidthLayout, Layout},
     render::term::runloop,
     style::solarized,
     widgets::{frame, List, Scroll},
-    Canopy, EventOutcome, Node, NodeState, Result, StatefulNode,
+    Canopy, EventOutcome, Node, NodeState, Result, StatefulNode, WidthConstrained,
 };
 
 struct Handle {}
@@ -38,19 +37,18 @@ impl Block {
 
 impl Node<Handle> for Block {
     fn render(&self, app: &mut Canopy<Handle>) -> Result<()> {
-        app.render.fill(
-            &self.color,
-            self.state().view.screen().inner(1)?,
-            '\u{2588}',
-        )?;
-        Ok(())
+        app.render
+            .fill(&self.color, self.screen().inner(1)?, '\u{2588}')
+    }
+    fn layout(&mut self, _app: &mut Canopy<Handle>, screen: Rect) -> Result<()> {
+        self.state_mut().viewport.set_screen(screen)
     }
 }
 
-impl ConstrainedWidthLayout<Handle> for Block {
+impl WidthConstrained<Handle> for Block {
     fn constrain(&mut self, _app: &mut Canopy<Handle>, _width: u16) -> Result<()> {
         let sz = self.size;
-        self.state_mut().view.resize_outer(sz);
+        self.state_mut().viewport.resize_outer(sz);
         Ok(())
     }
 }
@@ -71,13 +69,11 @@ impl Root {
     }
 }
 
-impl Layout<Handle> for Root {
-    fn layout_children(&mut self, app: &mut Canopy<Handle>) -> Result<()> {
-        self.content.layout(app, self.state().view.screen())
-    }
-}
-
 impl Node<Handle> for Root {
+    fn layout(&mut self, app: &mut Canopy<Handle>, screen: Rect) -> Result<()> {
+        self.state_mut().viewport.set_screen(screen)?;
+        self.content.layout(app, screen)
+    }
     fn can_focus(&self) -> bool {
         true
     }

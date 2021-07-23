@@ -6,9 +6,8 @@ use pad::PadStr;
 use crate as canopy;
 use crate::{
     geom::Frame as GFrame,
-    layout::Layout,
     state::{NodeState, StatefulNode},
-    Canopy, Node, Result,
+    Canopy, Node, Rect, Result,
 };
 
 /// Defines the set of glyphs used to draw the frame
@@ -77,7 +76,7 @@ pub trait FrameContent {
 #[derive(StatefulNode)]
 pub struct Frame<S, N>
 where
-    N: canopy::Node<S> + FrameContent + Layout<S>,
+    N: canopy::Node<S> + FrameContent,
 {
     _marker: PhantomData<S>,
     pub child: N,
@@ -87,7 +86,7 @@ where
 
 impl<S, N> Frame<S, N>
 where
-    N: canopy::Node<S> + FrameContent + Layout<S>,
+    N: canopy::Node<S> + FrameContent,
 {
     pub fn new(c: N) -> Self {
         Frame {
@@ -104,19 +103,15 @@ where
     }
 }
 
-impl<S, N> Layout<S> for Frame<S, N>
-where
-    N: canopy::Node<S> + FrameContent + Layout<S>,
-{
-    fn layout_children(&mut self, app: &mut Canopy<S>) -> Result<()> {
-        self.child.layout(app, self.state.view.screen().inner(1)?)
-    }
-}
-
 impl<S, N> Node<S> for Frame<S, N>
 where
-    N: canopy::Node<S> + FrameContent + Layout<S>,
+    N: canopy::Node<S> + FrameContent,
 {
+    fn layout(&mut self, app: &mut Canopy<S>, screen: Rect) -> Result<()> {
+        self.state_mut().viewport.set_screen(screen)?;
+        self.child.layout(app, screen.inner(1)?)
+    }
+
     fn should_render(&self, app: &Canopy<S>) -> Option<bool> {
         Some(app.should_render(&self.child))
     }
@@ -127,7 +122,7 @@ where
             "frame"
         };
 
-        let f = GFrame::new(self.state().view.screen(), 1)?;
+        let f = GFrame::new(self.screen(), 1)?;
         app.render.fill(style, f.topleft, self.glyphs.topleft)?;
         app.render.fill(style, f.topright, self.glyphs.topright)?;
         app.render
@@ -149,7 +144,7 @@ where
         };
         app.render.text(style, f.top, &top)?;
 
-        let view = self.child.state().view;
+        let view = self.child.state().viewport;
 
         // Is window equal to or larger than virt?
         if view.view().vextent().contains(&view.outer().vextent()) {

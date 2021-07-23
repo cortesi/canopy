@@ -5,10 +5,10 @@ pub mod utils {
     use crate as canopy;
     use crate::{
         event::{key, mouse, tick},
-        layout,
         render::test::TestRender,
         style::Style,
         Canopy, EventOutcome, Node, NodeState, Point, Rect, Render, Result, StatefulNode,
+        WidthConstrained,
     };
 
     pub const K_ANY: key::Key = key::Key(None, key::KeyCode::Char('a'));
@@ -63,14 +63,12 @@ pub mod utils {
         rndr.text("any", Rect::new(0, 0, 100, 100), &format!("<{}>", n))
     }
 
-    impl layout::Layout<State> for TLeaf {
+    impl Node<State> for TLeaf {
         fn layout(&mut self, _: &mut Canopy<State>, a: Rect) -> Result<()> {
-            self.state_mut().view.set_fill(a);
+            self.state_mut().viewport.set_fill(a);
             Ok(())
         }
-    }
 
-    impl Node<State> for TLeaf {
         fn name(&self) -> Option<String> {
             Some(self.name.clone())
         }
@@ -107,17 +105,15 @@ pub mod utils {
         }
     }
 
-    impl layout::Layout<State> for TBranch {
+    impl Node<State> for TBranch {
         fn layout(&mut self, app: &mut Canopy<State>, rect: Rect) -> Result<()> {
-            self.state_mut().view.set_fill(rect);
+            self.state_mut().viewport.set_fill(rect);
             let v = rect.split_vertical(2)?;
             app.resize(&mut self.a, v[0])?;
             app.resize(&mut self.b, v[1])?;
             Ok(())
         }
-    }
 
-    impl Node<State> for TBranch {
         fn name(&self) -> Option<String> {
             Some(self.name.clone())
         }
@@ -168,17 +164,15 @@ pub mod utils {
         }
     }
 
-    impl layout::Layout<State> for TRoot {
+    impl Node<State> for TRoot {
         fn layout(&mut self, app: &mut Canopy<State>, rect: Rect) -> Result<()> {
-            self.state_mut().view.set_fill(rect);
+            self.state_mut().viewport.set_fill(rect);
             let v = rect.split_horizontal(2)?;
             app.resize(&mut self.a, v[0])?;
             app.resize(&mut self.b, v[1])?;
             Ok(())
         }
-    }
 
-    impl Node<State> for TRoot {
         fn name(&self) -> Option<String> {
             Some(self.name.clone())
         }
@@ -238,7 +232,7 @@ pub mod utils {
             }
         }
         pub fn make_mouse_event(&self) -> Result<mouse::Mouse> {
-            let a = self.state().view.screen();
+            let a = self.screen();
             Ok(mouse::Mouse {
                 action: Some(mouse::Action::Down),
                 button: Some(mouse::Button::Left),
@@ -315,6 +309,22 @@ pub mod utils {
         pub virt_origin: Point,
     }
 
+    impl WidthConstrained<State> for TFixed {
+        fn constrain(&mut self, _app: &mut Canopy<State>, _: u16) -> Result<()> {
+            let (w, h) = (self.w, self.h);
+            self.state_mut()
+                .viewport
+                .resize_outer(Rect::new(0, 0, w, h));
+            Ok(())
+        }
+    }
+
+    impl Node<State> for TFixed {
+        fn layout(&mut self, _app: &mut Canopy<State>, screen: Rect) -> Result<()> {
+            self.state_mut().viewport.set_screen(screen)
+        }
+    }
+
     impl TFixed {
         pub fn new(w: u16, h: u16) -> Self {
             TFixed {
@@ -323,20 +333,6 @@ pub mod utils {
                 w,
                 h,
             }
-        }
-    }
-
-    impl Node<State> for TFixed {}
-
-    impl layout::ConstrainedWidthLayout<State> for TFixed {
-        fn constrain(&mut self, _app: &mut Canopy<State>, _width: u16) -> Result<()> {
-            let (w, h) = (self.w, self.h);
-            self.state_mut().view.resize_outer(Rect {
-                tl: Point::zero(),
-                w: w,
-                h: h,
-            });
-            Ok(())
         }
     }
 }

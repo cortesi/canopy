@@ -4,7 +4,6 @@ use std::marker::PhantomData;
 use crate::geom::{Direction, Rect};
 use crate::{
     event::{key, mouse, tick, Event},
-    layout::Layout,
     node::{postorder, postorder_mut, preorder, EventOutcome, Node, Walker},
     Error, Point, Render, Result,
 };
@@ -110,7 +109,7 @@ impl<'a, S> Canopy<'a, S> {
         let mut seen = false;
         if let Some(start) = self.get_focus_area(e) {
             start.search(dir, &mut |p| -> Result<bool> {
-                if !e.state().view.screen().contains_point(p) {
+                if !e.screen().contains_point(p) {
                     return Ok(true);
                 }
                 locate(e, p, &mut |x| {
@@ -241,7 +240,7 @@ impl<'a, S> Canopy<'a, S> {
         let mut ret = None;
         self.focus_path(e, &mut |x| -> Result<()> {
             if ret == None {
-                ret = Some(x.state().view.screen());
+                ret = Some(x.screen());
             }
             Ok(())
         })
@@ -300,7 +299,7 @@ impl<'a, S> Canopy<'a, S> {
         focus_path_mut(self.focus_gen, e, &mut |n| -> Result<()> {
             if !seen {
                 if let Some(c) = n.cursor() {
-                    let r = n.state().view.screen();
+                    let r = n.screen();
                     let mut curs = c;
                     curs.location = Point {
                         x: curs.location.x + r.tl.x,
@@ -375,7 +374,7 @@ impl<'a, S> Canopy<'a, S> {
             Ok(if handled {
                 EventOutcome::default()
             } else if !x.is_hidden() {
-                let r = x.state().view.screen();
+                let r = x.screen();
                 let m = mouse::Mouse {
                     action: m.action,
                     button: m.button,
@@ -429,9 +428,9 @@ impl<'a, S> Canopy<'a, S> {
     /// Propagate a resize event through the tree of nodes.
     pub fn resize<N>(&mut self, e: &mut N, rect: Rect) -> Result<()>
     where
-        N: Node<S> + Layout<S>,
+        N: Node<S>,
     {
-        if e.state().view.screen() == rect {
+        if e.screen() == rect {
             return Ok(());
         }
         e.layout(self, rect)?;
@@ -475,7 +474,7 @@ impl<'a, S> Canopy<'a, S> {
     /// Propagate an event through the tree.
     pub fn event<N>(&mut self, root: &mut N, s: &mut S, e: Event) -> Result<EventOutcome>
     where
-        N: Node<S> + Layout<S>,
+        N: Node<S>,
     {
         match e {
             Event::Key(k) => self.key(root, s, k),
@@ -540,7 +539,7 @@ pub fn locate<S, R: Walker + Default>(
             ret = ret.join(f(inner)?);
             SkipWalker::default()
         } else if !inner.is_hidden() {
-            let a = inner.state().view.screen();
+            let a = inner.screen();
             if a.contains_point(p) {
                 seen = true;
                 ret = ret.join(f(inner)?);
@@ -832,19 +831,13 @@ mod tests {
         let mut app = utils::tcanopy(&mut tr);
         let mut root = utils::TRoot::new();
         app.resize(&mut root, Rect::new(0, 0, SIZE, SIZE))?;
-        assert_eq!(root.state().view.screen(), Rect::new(0, 0, SIZE, SIZE));
-        assert_eq!(
-            root.a.state().view.screen(),
-            Rect::new(0, 0, SIZE / 2, SIZE)
-        );
-        assert_eq!(
-            root.b.state().view.screen(),
-            Rect::new(SIZE / 2, 0, SIZE / 2, SIZE)
-        );
+        assert_eq!(root.screen(), Rect::new(0, 0, SIZE, SIZE));
+        assert_eq!(root.a.screen(), Rect::new(0, 0, SIZE / 2, SIZE));
+        assert_eq!(root.b.screen(), Rect::new(SIZE / 2, 0, SIZE / 2, SIZE));
 
         app.resize(&mut root, Rect::new(0, 0, 50, 50))?;
 
-        assert_eq!(root.b.state().view.screen(), Rect::new(25, 0, 25, 50));
+        assert_eq!(root.b.screen(), Rect::new(25, 0, 25, 50));
 
         Ok(())
     }

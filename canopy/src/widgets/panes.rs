@@ -3,9 +3,8 @@ use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
-    layout::Layout,
     state::{NodeState, StatefulNode},
-    Canopy, Node, Result,
+    Canopy, Node, Rect, Result,
 };
 
 /// Panes manages a set of child nodes arranged in a 2d grid.
@@ -18,7 +17,7 @@ pub struct Panes<S, N: canopy::Node<S>> {
 
 impl<S, N> Panes<S, N>
 where
-    N: canopy::Node<S> + Layout<S>,
+    N: canopy::Node<S>,
 {
     pub fn new(n: N) -> Self {
         Panes {
@@ -46,7 +45,7 @@ where
             if self.children[x].is_empty() {
                 self.children.remove(x);
             }
-            self.layout(app, self.state().view.screen())?;
+            self.layout(app, self.screen())?;
             app.taint_tree(self)?;
         }
         Ok(())
@@ -90,21 +89,6 @@ where
     }
 }
 
-impl<S, N> Layout<S> for Panes<S, N>
-where
-    N: canopy::Node<S> + Layout<S>,
-{
-    fn layout_children(&mut self, app: &mut Canopy<S>) -> Result<()> {
-        let l = self.state().view.screen().split_panes(&self.shape())?;
-        for (ci, col) in self.children.iter_mut().enumerate() {
-            for (ri, row) in col.iter_mut().enumerate() {
-                row.layout(app, l[ci][ri])?;
-            }
-        }
-        Ok(())
-    }
-}
-
 impl<S, N: canopy::Node<S>> Node<S> for Panes<S, N> {
     #[duplicate(
         method          reference(type);
@@ -126,6 +110,16 @@ impl<S, N: canopy::Node<S>> Node<S> for Panes<S, N> {
     fn render(&self, _: &mut Canopy<S>) -> Result<()> {
         // FIXME - this should probably clear the area if the last node is
         // deleted.
+        Ok(())
+    }
+
+    fn layout(&mut self, app: &mut Canopy<S>, screen: Rect) -> Result<()> {
+        let l = self.screen().split_panes(&self.shape())?;
+        for (ci, col) in self.children.iter_mut().enumerate() {
+            for (ri, row) in col.iter_mut().enumerate() {
+                row.layout(app, l[ci][ri])?;
+            }
+        }
         Ok(())
     }
 }
