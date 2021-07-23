@@ -2,7 +2,7 @@ use crate as canopy;
 use crate::{
     geom::Rect,
     state::{NodeState, StatefulNode},
-    Canopy, Node, Result,
+    Canopy, Node, Result, WidthConstrained,
 };
 use std::marker::PhantomData;
 
@@ -27,6 +27,9 @@ impl<S> Text<S> {
             _marker: PhantomData,
         }
     }
+}
+
+impl<'a, S> WidthConstrained<S> for Text<S> {
     fn constrain(&mut self, _app: &mut Canopy<S>, w: u16) -> Result<()> {
         // Only resize if the width has changed
         if self.state_mut().viewport.outer().w != w {
@@ -44,7 +47,7 @@ impl<S> Text<S> {
 }
 
 impl<'a, S> Node<S> for Text<S> {
-    fn layout(&mut self, app: &mut Canopy<S>, screen_rect: Rect) -> Result<()> {
+    fn layout(&mut self, _app: &mut Canopy<S>, screen_rect: Rect) -> Result<()> {
         self.state_mut().viewport.set_screen(screen_rect)
     }
     fn render(&self, app: &mut Canopy<S>) -> Result<()> {

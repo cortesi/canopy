@@ -36,7 +36,12 @@ where
             state: NodeState::default(),
         }
     }
+}
 
+impl<S, N> WidthConstrained<S> for List<S, N>
+where
+    N: Node<S> + WidthConstrained<S>,
+{
     fn constrain(&mut self, app: &mut Canopy<S>, width: u16) -> Result<()> {
         let mut w = 0;
         let mut h = 0;
@@ -76,7 +81,7 @@ where
     }
 
     fn layout(&mut self, app: &mut Canopy<S>, screen: Rect) -> Result<()> {
-        self.state_mut().viewport.set_screen(screen);
+        self.state_mut().viewport.set_screen(screen)?;
         let view = self.state().viewport;
 
         let mut voffset = 0;

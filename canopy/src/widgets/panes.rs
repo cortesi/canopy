@@ -7,7 +7,7 @@ use crate::{
     Canopy, Node, Rect, Result,
 };
 
-/// Panes manages a set of child nodes arranged in a 2d grid.
+// Panes manages a set of child nodes arranged in a 2d grid.
 #[derive(StatefulNode)]
 pub struct Panes<S, N: canopy::Node<S>> {
     _marker: PhantomData<S>,
@@ -114,7 +114,7 @@ impl<S, N: canopy::Node<S>> Node<S> for Panes<S, N> {
     }
 
     fn layout(&mut self, app: &mut Canopy<S>, screen: Rect) -> Result<()> {
-        let l = self.screen().split_panes(&self.shape())?;
+        let l = screen.split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
                 row.layout(app, l[ci][ri])?;

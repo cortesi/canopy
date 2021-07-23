@@ -1,5 +1,4 @@
-use crate::geom::Rect;
-use crate::{Canopy, Result, StatefulNode};
+use crate::{Canopy, Result};
 
 /// Implemented by nodes with geometry computed based on a width constraint.
 ///
