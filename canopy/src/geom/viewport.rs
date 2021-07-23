@@ -127,7 +127,7 @@ impl ViewPort {
         } else {
             let (pre, active, post) = margin
                 .vextent()
-                .split_active(self.outer().rect().vextent(), self.view().vextent())?;
+                .split_active(self.view().vextent(), self.outer().rect().vextent())?;
             Ok(Some((
                 margin.vextract(&pre)?,
                 margin.vextract(&active)?,
@@ -146,7 +146,7 @@ impl ViewPort {
         } else {
             let (pre, active, post) = margin
                 .hextent()
-                .split_active(self.outer().rect().hextent(), self.view().hextent())?;
+                .split_active(self.view().hextent(), self.outer().rect().hextent())?;
             Ok(Some((
                 margin.hextract(&pre)?,
                 margin.hextract(&active)?,

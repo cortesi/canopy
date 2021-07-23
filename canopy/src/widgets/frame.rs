@@ -141,7 +141,7 @@ where
             app.render.fill(style, f.top, self.glyphs.horizontal)?;
         }
 
-        if let Some((pre, active, post)) = self.state().viewport.vactive(f.right)? {
+        if let Some((pre, active, post)) = self.child.state().viewport.vactive(f.right)? {
             app.render.fill(style, pre, self.glyphs.vertical)?;
             app.render.fill(style, post, self.glyphs.vertical)?;
             app.render
@@ -150,7 +150,7 @@ where
             app.render.fill(style, f.right, self.glyphs.vertical)?;
         }
 
-        if let Some((pre, active, post)) = self.state().viewport.hactive(f.bottom)? {
+        if let Some((pre, active, post)) = self.child.state().viewport.hactive(f.bottom)? {
             app.render.fill(style, pre, self.glyphs.horizontal)?;
             app.render.fill(style, post, self.glyphs.horizontal)?;
             app.render
