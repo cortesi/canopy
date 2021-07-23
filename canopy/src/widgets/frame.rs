@@ -58,15 +58,6 @@ pub const SINGLE_THICK: FrameGlyphs = FrameGlyphs {
     vertical_active: '█',
 };
 
-/// This trait must be implemented for nodes that are direct children of the
-/// frame.
-pub trait FrameContent {
-    /// The title for this element, if any.
-    fn title(&self) -> Option<String> {
-        None
-    }
-}
-
 /// A frame around an element.
 ///
 /// Colors:
@@ -76,17 +67,18 @@ pub trait FrameContent {
 #[derive(StatefulNode)]
 pub struct Frame<S, N>
 where
-    N: canopy::Node<S> + FrameContent,
+    N: canopy::Node<S>,
 {
     _marker: PhantomData<S>,
     pub child: N,
     pub state: NodeState,
     pub glyphs: FrameGlyphs,
+    pub title: Option<String>,
 }
 
 impl<S, N> Frame<S, N>
 where
-    N: canopy::Node<S> + FrameContent,
+    N: canopy::Node<S>,
 {
     pub fn new(c: N) -> Self {
         Frame {
@@ -94,6 +86,7 @@ where
             child: c,
             state: NodeState::default(),
             glyphs: SINGLE,
+            title: None,
         }
     }
     /// Build a frame with a specified glyph set
@@ -101,11 +94,16 @@ where
         self.glyphs = glyphs;
         self
     }
+    /// Build a frame with a specified title
+    pub fn with_title(mut self, title: String) -> Self {
+        self.title = Some(title);
+        self
+    }
 }
 
 impl<S, N> Node<S> for Frame<S, N>
 where
-    N: canopy::Node<S> + FrameContent,
+    N: canopy::Node<S>,
 {
     fn layout(&mut self, app: &mut Canopy<S>, screen: Rect) -> Result<()> {
         let v = self.fit(app, screen.into())?;
@@ -131,18 +129,17 @@ where
             .fill(style, f.bottomright, self.glyphs.bottomright)?;
         app.render.fill(style, f.left, self.glyphs.vertical)?;
 
-        let top = if f.top.w < 8 || self.child.title().is_none() {
-            self.glyphs.horizontal.to_string().repeat(f.top.w as usize)
-        } else {
-            let t = format!(" {} ", self.child.title().unwrap());
-            t.pad(
+        if let Some(title) = &self.title {
+            title.pad(
                 f.top.w as usize,
                 self.glyphs.horizontal,
                 pad::Alignment::Left,
                 true,
-            )
-        };
-        app.render.text(style, f.top, &top)?;
+            );
+            app.render.text(style, f.top, &title)?;
+        } else {
+            app.render.fill(style, f.top, self.glyphs.horizontal)?;
+        }
 
         if let Some((pre, active, post)) = self.state().viewport.vactive(f.right)? {
             app.render.fill(style, pre, self.glyphs.vertical)?;

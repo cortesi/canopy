@@ -6,7 +6,7 @@ use canopy::{
     event::{key, mouse},
     render::term::runloop,
     style::solarized,
-    widgets::{frame, Scroll, Text},
+    widgets::{frame, Text},
     Canopy, EventOutcome, Node, NodeState, Rect, Result, StatefulNode,
 };
 
@@ -15,14 +15,14 @@ struct Handle {}
 #[derive(StatefulNode)]
 struct Root {
     state: NodeState,
-    child: frame::Frame<Handle, Scroll<Handle, Text<Handle>>>,
+    child: frame::Frame<Handle, Text<Handle>>,
 }
 
 impl Root {
     fn new(contents: String) -> Self {
         Root {
             state: NodeState::default(),
-            child: frame::Frame::new(Scroll::new(Text::new(&contents))),
+            child: frame::Frame::new(Text::new(&contents)),
         }
     }
 }
@@ -42,11 +42,13 @@ impl Node<Handle> for Root {
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<EventOutcome> {
-        Ok(match k {
-            c if c == mouse::Action::ScrollDown => self.child.child.down()?,
-            c if c == mouse::Action::ScrollUp => self.child.child.up()?,
-            _ => EventOutcome::Ignore { skip: false },
-        })
+        let v = &mut self.child.child.state_mut().viewport;
+        match k {
+            c if c == mouse::Action::ScrollDown => v.down(),
+            c if c == mouse::Action::ScrollUp => v.down(),
+            _ => return Ok(EventOutcome::Ignore { skip: false }),
+        };
+        Ok(EventOutcome::Handle { skip: false })
     }
     fn handle_key(
         &mut self,
@@ -54,17 +56,21 @@ impl Node<Handle> for Root {
         _: &mut Handle,
         k: key::Key,
     ) -> Result<EventOutcome> {
-        Ok(match k {
-            c if c == 'g' => self.child.child.scroll_to(0, 0)?,
-            c if c == 'j' || c == key::KeyCode::Down => self.child.child.down()?,
-            c if c == 'k' || c == key::KeyCode::Up => self.child.child.up()?,
-            c if c == 'h' || c == key::KeyCode::Left => self.child.child.left()?,
-            c if c == 'l' || c == key::KeyCode::Up => self.child.child.right()?,
-            c if c == ' ' || c == key::KeyCode::PageDown => self.child.child.page_down()?,
-            c if c == key::KeyCode::PageUp => self.child.child.page_up()?,
+        let v = &mut self.child.child.state_mut().viewport;
+        match k {
+            c if c == 'g' => v.scroll_to(0, 0),
+            c if c == 'j' || c == key::KeyCode::Down => v.down(),
+            c if c == 'k' || c == key::KeyCode::Up => v.up(),
+            c if c == 'h' || c == key::KeyCode::Left => v.left(),
+            c if c == 'l' || c == key::KeyCode::Up => v.right(),
+            c if c == ' ' || c == key::KeyCode::PageDown => v.page_down(),
+            c if c == key::KeyCode::PageUp => v.page_up(),
             c if c == 'q' => app.exit(0),
-            _ => EventOutcome::Ignore { skip: false },
-        })
+            _ => return Ok(EventOutcome::Ignore { skip: false }),
+        }
+        self.layout(app, self.screen())?;
+        app.taint_tree(self)?;
+        Ok(EventOutcome::Handle { skip: false })
     }
 
     fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle>) -> Result<()>) -> Result<()> {

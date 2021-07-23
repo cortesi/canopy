@@ -5,7 +5,6 @@ use crate::{
     geom::Size,
     node::{EventOutcome, Node},
     state::{NodeState, StatefulNode},
-    widgets::frame::FrameContent,
     Canopy, Rect, Result,
 };
 
@@ -74,8 +73,6 @@ where
         Ok(EventOutcome::Handle { skip: false })
     }
 }
-
-impl<S, N> FrameContent for Scroll<S, N> where N: Node<S> {}
 
 impl<S, N> Node<S> for Scroll<S, N>
 where

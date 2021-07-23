@@ -46,7 +46,7 @@ impl<'a, S> Node<S> for Text<S> {
     }
     fn render(&self, app: &mut Canopy<S>) -> Result<()> {
         let area = self.screen();
-        let vo = self.state.viewport.view();
+        let vo = self.view();
         if let Some(lines) = self.lines.as_ref() {
             for i in 0..area.h {
                 let r = Rect::new(area.tl.x, area.tl.y + i, area.w, 1);

@@ -6,7 +6,6 @@ use crate::{
     geom::{Point, Rect, Size},
     node::Node,
     state::{NodeState, StatefulNode},
-    widgets::frame::FrameContent,
     Canopy,
 };
 
@@ -37,8 +36,6 @@ where
         }
     }
 }
-
-impl<S, N> FrameContent for List<S, N> where N: Node<S> {}
 
 impl<S, N> Node<S> for List<S, N>
 where
@@ -74,7 +71,7 @@ where
         let v = self.fit(app, screen.into())?;
         self.update_view(v, screen)?;
 
-        let view = self.state().viewport;
+        let view = &self.state().viewport.clone();
         let mut voffset = 0;
         for itm in &mut self.items {
             // The virtual item rectangle

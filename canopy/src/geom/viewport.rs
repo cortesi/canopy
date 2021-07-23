@@ -1,4 +1,4 @@
-use super::{LineSegment, Point, Rect, Size};
+use super::{Point, Rect, Size};
 use crate::error;
 use crate::Result;
 
@@ -10,7 +10,7 @@ use crate::Result;
 ///  - `view` is always contained within `outer`
 ///  - `view` and `screen` always have the same size
 ///  - `view`'s size only changes when `screen` is resized
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ViewPort {
     screen: Point,
     view: Rect,

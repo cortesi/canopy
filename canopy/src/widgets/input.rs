@@ -6,7 +6,6 @@ use crate::{
     event::key,
     geom::{LineSegment, Point, Size},
     state::{NodeState, StatefulNode},
-    widgets::frame,
     Canopy, EventOutcome, Node, Result,
 };
 
@@ -120,8 +119,6 @@ impl<S> InputLine<S> {
         }
     }
 }
-
-impl<S> frame::FrameContent for InputLine<S> {}
 
 impl<'a, S> Node<S> for InputLine<S> {
     fn can_focus(&self) -> bool {
