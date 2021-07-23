@@ -44,16 +44,6 @@ impl<S, N> Node<S> for List<S, N>
 where
     N: Node<S>,
 {
-    fn fit(&mut self, app: &mut Canopy<S>, r: Size) -> Result<Size> {
-        let mut w = 0;
-        let mut h = 0;
-        for i in &mut self.items {
-            let v = i.fit(app, r)?;
-            w = w.max(v.w);
-            h += v.h
-        }
-        Ok(Size { w, h })
-    }
     fn render(&self, _app: &mut Canopy<S>) -> Result<()> {
         Ok(())
     }
@@ -70,10 +60,21 @@ where
         Ok(())
     }
 
+    fn fit(&mut self, app: &mut Canopy<S>, r: Size) -> Result<Size> {
+        let mut w = 0;
+        let mut h = 0;
+        for i in &mut self.items {
+            let v = i.fit(app, r)?;
+            w = w.max(v.w);
+            h += v.h
+        }
+        Ok(Size { w, h })
+    }
     fn layout(&mut self, app: &mut Canopy<S>, screen: Rect) -> Result<()> {
-        self.state_mut().viewport.set_screen(screen)?;
-        let view = self.state().viewport;
+        let v = self.fit(app, screen.into())?;
+        self.update_view(v, screen)?;
 
+        let view = self.state().viewport;
         let mut voffset = 0;
         for itm in &mut self.items {
             // The virtual item rectangle

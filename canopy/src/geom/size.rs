@@ -1,4 +1,4 @@
-use super::{LineSegment, Point, Rect};
+use super::{Point, Rect};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct Size {

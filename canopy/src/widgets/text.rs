@@ -44,9 +44,6 @@ impl<'a, S> Node<S> for Text<S> {
             Ok(self.outer())
         }
     }
-    fn layout(&mut self, _app: &mut Canopy<S>, screen_rect: Rect) -> Result<()> {
-        self.state_mut().viewport.set_screen(screen_rect)
-    }
     fn render(&self, app: &mut Canopy<S>) -> Result<()> {
         let area = self.screen();
         let vo = self.state.viewport.view();

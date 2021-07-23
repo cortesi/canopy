@@ -5,7 +5,6 @@ pub mod utils {
     use crate as canopy;
     use crate::{
         event::{key, mouse, tick},
-        geom::Size,
         render::test::TestRender,
         style::Style,
         Canopy, EventOutcome, Node, NodeState, Point, Rect, Render, Result, StatefulNode,

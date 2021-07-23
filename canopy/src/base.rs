@@ -431,7 +431,6 @@ impl<'a, S> Canopy<'a, S> {
     where
         N: Node<S>,
     {
-        e.state_mut().viewport.resize_outer(rect.into());
         e.layout(self, rect)?;
         self.taint_tree(e)?;
         Ok(())

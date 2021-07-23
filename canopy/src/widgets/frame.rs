@@ -7,7 +7,7 @@ use crate as canopy;
 use crate::{
     geom::Frame as GFrame,
     state::{NodeState, StatefulNode},
-    Canopy, Node, Rect, Result,
+    Canopy, Node, Result,
 };
 
 /// Defines the set of glyphs used to draw the frame
