@@ -24,7 +24,8 @@ impl Node<Handle> for StatusBar {
         if sa.h > 1 {
             panic!("{:?}", sa);
         }
-        app.render.text("statusbar/text", self.screen(), "todo")?;
+        app.render
+            .text("statusbar/text", self.screen().first_line(), "todo")?;
         Ok(())
     }
 }

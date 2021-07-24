@@ -137,7 +137,8 @@ impl<'a, S> Node<S> for InputLine<S> {
     }
 
     fn render(&self, app: &mut Canopy<S>) -> Result<()> {
-        app.render.text("text", self.screen(), &self.textbuf.text())
+        app.render
+            .text("text", self.screen().first_line(), &self.textbuf.text())
     }
 
     fn handle_key(&mut self, app: &mut Canopy<S>, _: &mut S, k: key::Key) -> Result<EventOutcome> {

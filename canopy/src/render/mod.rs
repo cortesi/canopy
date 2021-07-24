@@ -66,20 +66,15 @@ impl<'a> Render<'a> {
     /// Print text in the first line of the specified rectangle. If the text is
     /// wider than the rectangle, it will be truncated; if it is shorter, it
     /// will be padded.
-    pub fn text(&mut self, color: &str, r: geom::Rect, txt: &str) -> Result<()> {
+    pub fn text(&mut self, color: &str, l: geom::Line, txt: &str) -> Result<()> {
         self.backend.fg(self.style.fg(color))?;
         self.backend.bg(self.style.bg(color))?;
 
-        let out = &txt.chars().take(r.w as usize).collect::<String>();
-        self.backend.text(r.tl, out)?;
-        if out.len() < r.w as usize {
+        let out = &txt.chars().take(l.w as usize).collect::<String>();
+        self.backend.text(l.tl, out)?;
+        if out.len() < l.w as usize {
             self.backend.fill(
-                geom::Rect::new(
-                    r.tl.x + out.len() as u16,
-                    r.tl.y,
-                    r.w - out.len() as u16,
-                    r.h,
-                ),
+                geom::Rect::new(l.tl.x + out.len() as u16, l.tl.y, l.w - out.len() as u16, 1),
                 ' ',
             )?;
         }

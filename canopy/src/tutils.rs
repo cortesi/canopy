@@ -5,7 +5,7 @@ pub mod utils {
     use crate as canopy;
     use crate::{
         event::{key, mouse, tick},
-        geom::{Point, Rect},
+        geom::{Line, Point, Rect},
         render::test::TestRender,
         style::Style,
         Canopy, EventOutcome, Node, NodeState, Render, Result, StatefulNode,
@@ -60,7 +60,7 @@ pub mod utils {
     }
 
     pub fn tnode_render(n: String, rndr: &mut Render) -> Result<()> {
-        rndr.text("any", Rect::new(0, 0, 100, 100), &format!("<{}>", n))
+        rndr.text("any", Line::new(0, 0, 100), &format!("<{}>", n))
     }
 
     impl Node<State> for TLeaf {

@@ -1,6 +1,6 @@
 use crate as canopy;
 use crate::{
-    geom::{Rect, Size},
+    geom::{Line, Size},
     state::{NodeState, StatefulNode},
     Canopy, Node, Result,
 };
@@ -49,11 +49,11 @@ impl<'a, S> Node<S> for Text<S> {
         let vo = self.view();
         if let Some(lines) = self.lines.as_ref() {
             for i in 0..area.h {
-                let r = Rect::new(area.tl.x, area.tl.y + i, area.w, 1);
+                let l = Line::new(area.tl.x, area.tl.y + i, area.w);
                 if (vo.tl.y + i) < lines.len() as u16 {
-                    app.render.text("text", r, &lines[(vo.tl.y + i) as usize])?;
+                    app.render.text("text", l, &lines[(vo.tl.y + i) as usize])?;
                 } else {
-                    app.render.fill("text", r, ' ')?;
+                    app.render.fill("text", l.into(), ' ')?;
                 };
             }
         }

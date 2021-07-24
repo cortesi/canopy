@@ -1,4 +1,4 @@
-use super::{Direction, LineSegment, Point, Size};
+use super::{Direction, Line, LineSegment, Point, Size};
 use crate::{Error, Result};
 
 /// A rectangle
@@ -298,6 +298,13 @@ impl Rect {
             len: self.h,
         }
     }
+
+    pub fn first_line(&self) -> Line {
+        Line {
+            tl: self.tl,
+            w: self.w,
+        }
+    }
 }
 
 impl From<Size> for Rect {
@@ -306,6 +313,16 @@ impl From<Size> for Rect {
             tl: Point::default(),
             w: s.w,
             h: s.h,
+        }
+    }
+}
+
+impl From<Line> for Rect {
+    fn from(l: Line) -> Rect {
+        Rect {
+            tl: l.tl,
+            w: l.w,
+            h: 1,
         }
     }
 }
