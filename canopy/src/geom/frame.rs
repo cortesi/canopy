@@ -25,7 +25,9 @@ pub struct Frame {
 impl Frame {
     pub fn new(rect: Rect, border: u16) -> Result<Self> {
         if rect.w < (border * 2) || rect.h < (border * 2) {
-            return Err(Error::Geometry("rectangle too small".into()));
+            return Err(Error::Geometry(
+                "rectangle too small to calculate frame".into(),
+            ));
         }
         Ok(Frame {
             top: Rect::new(rect.tl.x + border, rect.tl.y, rect.w - 2 * border, border),

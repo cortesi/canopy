@@ -78,7 +78,9 @@ impl Rect {
     /// Extracts an inner rectangle, given a border width.
     pub fn inner(&self, border: u16) -> Result<Rect> {
         if self.w < (border * 2) || self.h < (border * 2) {
-            return Err(Error::Geometry("rectangle too small".into()));
+            return Err(Error::Geometry(
+                "rectangle too small to calculate inner".into(),
+            ));
         }
         Ok(Rect::new(
             self.tl.x + border,

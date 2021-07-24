@@ -9,8 +9,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("unknown")]
-    Unknown(String),
     #[error("focus")]
     Focus(String),
     #[error("render")]

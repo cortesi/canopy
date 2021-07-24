@@ -4,7 +4,7 @@ use rand::Rng;
 use canopy;
 use canopy::{
     event::{key, mouse},
-    geom::Size,
+    geom::{Rect, Size},
     render::term::runloop,
     style::solarized,
     widgets::{frame, List},
@@ -61,9 +61,16 @@ impl Root {
 }
 
 impl Node<Handle> for Root {
+    fn layout(&mut self, app: &mut Canopy<Handle>, screen: Rect) -> Result<()> {
+        let v = self.fit(app, screen.into())?;
+        self.update_view(v, screen);
+        self.content.layout(app, screen)
+    }
+
     fn can_focus(&self) -> bool {
         true
     }
+
     fn handle_mouse(
         &mut self,
         _app: &mut Canopy<Handle>,
@@ -78,6 +85,7 @@ impl Node<Handle> for Root {
         };
         Ok(EventOutcome::Handle { skip: false })
     }
+
     fn handle_key(
         &mut self,
         app: &mut Canopy<Handle>,

@@ -18,3 +18,5 @@
 
 
 
+User traps
+  - Not implementing layout if a node has children

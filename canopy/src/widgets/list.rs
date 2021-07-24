@@ -75,13 +75,14 @@ where
         let mut voffset = 0;
         for itm in &mut self.items {
             // The virtual item rectangle
-            let item_rect = itm.view().shift(0, voffset as i16);
+            let fitrect = itm.fit(app, screen.into())?.rect();
+            let item_rect = fitrect.shift(0, voffset as i16);
             if let Some(r) = view.view().intersect(&item_rect) {
                 itm.layout(
                     app,
-                    // The virtual coords are the intersection translated into
-                    // the co-ordinates of the item.
-                    item_rect.rebase_rect(&r)?,
+                    // The screen coords are the intersection translated into
+                    // screen rect.
+                    view.view().rebase_rect(&r)?,
                 )?;
             } else {
                 itm.hide();
