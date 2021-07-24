@@ -1,4 +1,4 @@
-use crate::{cursor, geom, style::Color, style::Style, Result};
+use crate::{cursor, geom, geom::ViewPort, style::Color, style::Style, Result};
 
 pub mod term;
 pub mod test;
@@ -18,11 +18,16 @@ pub trait Backend {
 pub struct Render<'a> {
     pub backend: &'a mut dyn Backend,
     pub style: Style,
+    pub viewport: ViewPort,
 }
 
 impl<'a> Render<'a> {
     pub fn new(backend: &mut dyn Backend, style: Style) -> Render {
-        Render { backend, style }
+        Render {
+            backend,
+            style,
+            viewport: ViewPort::default(),
+        }
     }
 
     /// Fill a rectangle with a specified character.
@@ -84,17 +89,21 @@ impl<'a> Render<'a> {
     pub fn push(&mut self) {
         self.style.push();
     }
+
     pub fn pop(&mut self) {
         self.style.pop();
     }
+
     pub fn reset(&mut self) -> Result<()> {
         self.backend.reset()?;
         self.style.reset();
         Ok(())
     }
+
     pub fn flush(&mut self) -> Result<()> {
         self.backend.flush()
     }
+
     pub fn exit(&mut self, code: i32) -> ! {
         self.backend.exit(code)
     }

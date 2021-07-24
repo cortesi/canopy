@@ -1,4 +1,4 @@
-use super::{Rect, Size};
+use super::{Point, Rect, Size};
 use crate::error;
 use crate::Result;
 
@@ -166,11 +166,88 @@ impl ViewPort {
             )))
         }
     }
+
+    /// Project a point in virtual space to the screen. If the point is not
+    /// on-screen, return None.
+    pub fn project_point(&self, p: Point) -> Option<Point> {
+        if self.view.contains_point(p) {
+            let rp = self.view.rebase_point(p).unwrap();
+            // We know view is not larger than screen, so we can unwrap.
+            Some(Point {
+                x: self.screen.tl.x + rp.x,
+                y: self.screen.tl.y + rp.y,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Project a rect in virtual space to the screen. If the virtual rect and
+    /// the screen rect partially overlap, just the overlap is returned.
+    pub fn project_rect(&self, r: Rect) -> Option<Rect> {
+        if let Some(o) = self.view.intersect(&r) {
+            let r = self.view.rebase_rect(&o).unwrap();
+            Some(Rect {
+                tl: self.screen.tl.scroll(r.tl.x as i16, r.tl.y as i16),
+                w: r.w,
+                h: r.h,
+            })
+        } else {
+            None
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn view_project_rect() -> Result<()> {
+        let v = ViewPort::new(
+            Size::new(100, 100),
+            Rect::new(30, 30, 10, 10),
+            Rect::new(50, 50, 10, 10),
+        )?;
+
+        assert!(v.project_rect(Rect::new(10, 10, 10, 10)).is_none());
+        assert_eq!(
+            v.project_rect(Rect::new(30, 30, 10, 10)),
+            Some(Rect::new(50, 50, 10, 10))
+        );
+        assert_eq!(
+            v.project_rect(Rect::new(20, 20, 15, 15)),
+            Some(Rect::new(50, 50, 5, 5))
+        );
+        assert_eq!(
+            v.project_rect(Rect::new(35, 35, 15, 15)),
+            Some(Rect::new(55, 55, 5, 5))
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn view_project_point() -> Result<()> {
+        let v = ViewPort::new(
+            Size::new(100, 100),
+            Rect::new(30, 30, 10, 10),
+            Rect::new(50, 50, 10, 10),
+        )?;
+
+        assert!(v.project_point(Point { x: 10, y: 10 }).is_none());
+        assert_eq!(
+            v.project_point(Point { x: 30, y: 30 }),
+            Some(Point { x: 50, y: 50 }),
+        );
+        assert_eq!(
+            v.project_point(Point { x: 35, y: 35 }),
+            Some(Point { x: 55, y: 55 }),
+        );
+        assert_eq!(v.project_point(Point { x: 90, y: 90 }), None,);
+
+        Ok(())
+    }
 
     #[test]
     fn view_update() -> Result<()> {
