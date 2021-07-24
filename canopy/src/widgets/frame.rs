@@ -159,6 +159,10 @@ where
             app.render.fill(style, f.bottom, self.glyphs.horizontal)?;
         }
 
+        for r in self.view().inner(1)?.sub(&self.child.view()) {
+            app.render.fill(style, r, ' ')?;
+        }
+
         Ok(())
     }
     #[duplicate(
