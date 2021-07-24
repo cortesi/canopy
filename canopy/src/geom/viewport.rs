@@ -9,7 +9,7 @@ use crate::Result;
 ///
 /// The `view` rect is maintained to be as large as possible, while always being
 /// smaller than or equal to both view and screen.
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ViewPort {
     screen: Rect,
     view: Rect,

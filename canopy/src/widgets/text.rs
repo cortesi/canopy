@@ -45,11 +45,10 @@ impl<'a, S> Node<S> for Text<S> {
         }
     }
     fn render(&self, app: &mut Canopy<S>) -> Result<()> {
-        let area = self.screen();
         let vo = self.view();
         if let Some(lines) = self.lines.as_ref() {
-            for i in 0..area.h {
-                let l = Line::new(area.tl.x, area.tl.y + i, area.w);
+            for i in 0..vo.h {
+                let l = Line::new(vo.tl.x, vo.tl.y + i, vo.w);
                 if (vo.tl.y + i) < lines.len() as u16 {
                     app.render.text("text", l, &lines[(vo.tl.y + i) as usize])?;
                 } else {

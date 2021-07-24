@@ -5,7 +5,7 @@ pub mod utils {
     use crate as canopy;
     use crate::{
         event::{key, mouse, tick},
-        geom::{Line, Point, Rect},
+        geom::{Point, Rect},
         render::test::TestRender,
         style::Style,
         Canopy, EventOutcome, Node, NodeState, Render, Result, StatefulNode,
@@ -59,10 +59,6 @@ pub mod utils {
         pub next_event: Option<EventOutcome>,
     }
 
-    pub fn tnode_render(n: String, rndr: &mut Render) -> Result<()> {
-        rndr.text("any", Line::new(0, 0, 100), &format!("<{}>", n))
-    }
-
     impl Node<State> for TLeaf {
         fn name(&self) -> Option<String> {
             Some(self.name.clone())
@@ -72,7 +68,11 @@ pub mod utils {
             true
         }
         fn render(&self, app: &mut Canopy<State>) -> Result<()> {
-            tnode_render(self.name.clone(), &mut app.render)
+            app.render.text(
+                "any",
+                self.view().first_line(),
+                &format!("<{}>", self.name.clone()),
+            )
         }
         fn handle_key(
             &mut self,
@@ -117,7 +117,11 @@ pub mod utils {
             true
         }
         fn render(&self, app: &mut Canopy<State>) -> Result<()> {
-            tnode_render(self.name.clone(), &mut app.render)
+            app.render.text(
+                "any",
+                self.view().first_line(),
+                &format!("<{}>", self.name.clone()),
+            )
         }
         fn handle_key(
             &mut self,
@@ -176,7 +180,11 @@ pub mod utils {
             true
         }
         fn render(&self, app: &mut Canopy<State>) -> Result<()> {
-            tnode_render(self.name.clone(), &mut app.render)
+            app.render.text(
+                "any",
+                self.view().first_line(),
+                &format!("<{}>", self.name.clone()),
+            )
         }
         fn handle_key(
             &mut self,

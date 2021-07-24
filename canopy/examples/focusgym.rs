@@ -163,10 +163,9 @@ impl Node<Handle> for Block {
             } else {
                 "blue"
             };
-
-            let r = self.screen();
-            app.render.fill(bc, r.inner(1)?, '\u{2588}')?;
-            app.render.solid_frame("black", Frame::new(r, 1)?, ' ')?;
+            app.render.fill(bc, self.view().inner(1)?, '\u{2588}')?;
+            app.render
+                .solid_frame("black", Frame::new(self.view(), 1)?, ' ')?;
         }
         Ok(())
     }

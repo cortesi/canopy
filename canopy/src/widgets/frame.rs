@@ -120,7 +120,7 @@ where
             "frame"
         };
 
-        let f = GFrame::new(self.screen(), 1)?;
+        let f = GFrame::new(self.view(), 1)?;
         app.render.fill(style, f.topleft, self.glyphs.topleft)?;
         app.render.fill(style, f.topright, self.glyphs.topright)?;
         app.render

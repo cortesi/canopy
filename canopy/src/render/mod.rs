@@ -37,17 +37,24 @@ impl<'a> Render<'a> {
 
     /// Fill a rectangle with a specified character.
     pub fn show_cursor(&mut self, color: &str, c: cursor::Cursor) -> Result<()> {
-        self.backend.fg(self.style.fg(color))?;
-        self.backend.bg(self.style.bg(color))?;
-        self.backend.show_cursor(c)?;
+        if let Some(loc) = self.viewport.project_point(c.location) {
+            let mut c = c.clone();
+            c.location = loc;
+            self.backend.fg(self.style.fg(color))?;
+            self.backend.bg(self.style.bg(color))?;
+            self.backend.show_cursor(c)?;
+        }
         Ok(())
     }
 
     /// Fill a rectangle with a specified character.
     pub fn fill(&mut self, color: &str, r: geom::Rect, c: char) -> Result<()> {
-        self.backend.fg(self.style.fg(color))?;
-        self.backend.bg(self.style.bg(color))?;
-        self.backend.fill(r, c)
+        if let Some(dst) = self.viewport.project_rect(r) {
+            self.backend.fg(self.style.fg(color))?;
+            self.backend.bg(self.style.bg(color))?;
+            self.backend.fill(dst, c)?;
+        }
+        Ok(())
     }
 
     /// Draw a solid frame
@@ -67,16 +74,28 @@ impl<'a> Render<'a> {
     /// wider than the rectangle, it will be truncated; if it is shorter, it
     /// will be padded.
     pub fn text(&mut self, color: &str, l: geom::Line, txt: &str) -> Result<()> {
-        self.backend.fg(self.style.fg(color))?;
-        self.backend.bg(self.style.bg(color))?;
+        if let Some((offset, dst)) = self.viewport.project_line(l) {
+            self.backend.fg(self.style.fg(color))?;
+            self.backend.bg(self.style.bg(color))?;
 
-        let out = &txt.chars().take(l.w as usize).collect::<String>();
-        self.backend.text(l.tl, out)?;
-        if out.len() < l.w as usize {
-            self.backend.fill(
-                geom::Rect::new(l.tl.x + out.len() as u16, l.tl.y, l.w - out.len() as u16, 1),
-                ' ',
-            )?;
+            let out = &txt
+                .chars()
+                .skip(offset as usize)
+                .take(l.w as usize)
+                .collect::<String>();
+
+            self.backend.text(dst.tl, out)?;
+            if out.len() < dst.w as usize {
+                self.backend.fill(
+                    geom::Rect::new(
+                        dst.tl.x + out.len() as u16,
+                        dst.tl.y,
+                        dst.w - out.len() as u16,
+                        1,
+                    ),
+                    ' ',
+                )?;
+            }
         }
         Ok(())
     }

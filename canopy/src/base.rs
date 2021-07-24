@@ -309,13 +309,7 @@ impl<'a, S> Canopy<'a, S> {
         focus_path_mut(self.focus_gen, e, &mut |n| -> Result<()> {
             if !seen {
                 if let Some(c) = n.cursor() {
-                    let r = n.screen();
-                    let mut curs = c;
-                    curs.location = Point {
-                        x: curs.location.x + r.tl.x,
-                        y: curs.location.y + r.tl.y,
-                    };
-                    self.render.show_cursor("cursor", curs)?;
+                    self.render.show_cursor("cursor", c)?;
                     seen = true;
                 }
             }
@@ -352,6 +346,7 @@ impl<'a, S> Canopy<'a, S> {
                 let s = &mut e.state_mut();
                 s.rendered_focus_gen = self.focus_gen
             }
+            self.render.viewport = e.state().viewport;
             e.render(self)?;
         }
         self.render.push();

@@ -20,12 +20,8 @@ struct StatusBar {
 impl Node<Handle> for StatusBar {
     fn render(&self, app: &mut Canopy<Handle>) -> Result<()> {
         app.render.style.push_layer("statusbar");
-        let sa = self.screen();
-        if sa.h > 1 {
-            panic!("{:?}", sa);
-        }
         app.render
-            .text("statusbar/text", self.screen().first_line(), "todo")?;
+            .text("statusbar/text", self.view().first_line(), "todo")?;
         Ok(())
     }
 }
