@@ -155,8 +155,8 @@ pub trait Node<S>: StatefulNode {
     /// computation is done to compute the size (e.g. reflowing text), it should
     /// be saved for use by future calls. This method may be called multiple
     /// times for a given node during a render sweep, so re-fitting to the same
-    /// size should be a no-op. This function should not change the node's
-    /// viewport parameters itself.
+    /// size should be cheap and return consistent results. This function should
+    /// not change the node's viewport parameters itself.
     ///
     /// The default implementation just returns the target value.
     fn fit(&mut self, app: &mut Canopy<S>, target: Size) -> Result<Size> {
@@ -165,8 +165,8 @@ pub trait Node<S>: StatefulNode {
 
     /// Lay out this component and all its children in the given screen rect.
     ///
-    /// Implementers must set its own viewport screen area, using `set_fill` or
-    /// `set_screen`, and then call the `layout` method on all children.
+    /// Implementers must set their own viewport screen area `update_view`, and
+    /// then call the `layout` method on all children.
     fn layout(&mut self, app: &mut Canopy<S>, screen_rect: Rect) -> Result<()> {
         let v = self.fit(app, screen_rect.into())?;
         self.update_view(v, screen_rect);

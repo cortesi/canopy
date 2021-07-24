@@ -4,7 +4,7 @@ use rand::Rng;
 use canopy;
 use canopy::{
     event::{key, mouse},
-    geom::{Rect, Size},
+    geom::{Frame, Rect, Size},
     render::term::runloop,
     style::solarized,
     widgets::{frame, List},
@@ -36,8 +36,16 @@ impl Block {
 
 impl Node<Handle> for Block {
     fn render(&self, app: &mut Canopy<Handle>) -> Result<()> {
-        app.render
-            .fill(&self.color, self.view().inner(1)?, '\u{2588}')
+        app.render.fill(
+            &self.color,
+            self.size.rect().at(&self.view().tl).inner(1)?,
+            '\u{2588}',
+        )?;
+        app.render.solid_frame(
+            "",
+            Frame::new(self.size.rect().at(&self.view().tl), 1)?,
+            ' ',
+        )
     }
     fn fit(&mut self, _app: &mut Canopy<Handle>, _screen: Size) -> Result<Size> {
         Ok(self.size)
@@ -104,6 +112,8 @@ impl Node<Handle> for Root {
             c if c == 'q' => app.exit(0),
             _ => return Ok(EventOutcome::Ignore { skip: false }),
         };
+        self.layout(app, self.screen())?;
+        app.taint_tree(self)?;
         Ok(EventOutcome::Handle { skip: false })
     }
 

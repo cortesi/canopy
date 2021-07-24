@@ -68,6 +68,11 @@ pub trait StatefulNode {
         self.state_mut().hidden = true;
     }
 
+    /// Hides the element
+    fn unhide(&mut self) {
+        self.state_mut().hidden = false;
+    }
+
     /// Is this element hidden?
     fn is_hidden(&self) -> bool {
         self.state().hidden

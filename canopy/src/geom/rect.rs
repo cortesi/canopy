@@ -315,6 +315,10 @@ impl Rect {
         self.w == 0 || self.h == 0
     }
 
+    pub fn size(&self) -> Size {
+        (*self).into()
+    }
+
     /// Subtract a rectangle from this one, returning a set of rectangles
     /// describing what remains.
     pub fn sub(&self, other: &Rect) -> Vec<Rect> {

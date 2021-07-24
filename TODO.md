@@ -1,6 +1,7 @@
 
 - Explicit colors - at the moment, we can only get colors from our color scheme
 - Actions
+- Add a built-in Color abstraction
 - Ergonomics:
   - Better EventOutcome
   - Better error returns
@@ -20,3 +21,10 @@
 
 User traps
   - Not implementing layout if a node has children
+  - Not remembering both layout and taint after making a node modification
+  - Not remembering to clear unused space
+
+
+Bugs
+  - Pressing "a" repeatedly in focusgym crashes
+  - Frame active bar changes height during scroll

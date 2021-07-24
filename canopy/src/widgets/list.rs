@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use crate as canopy;
 use crate::{
     error::Result,
-    geom::{Point, Rect, Size},
+    geom::{Point, Rect, Size, ViewPort},
     node::Node,
     state::{NodeState, StatefulNode},
     Canopy,
@@ -41,9 +41,6 @@ impl<S, N> Node<S> for List<S, N>
 where
     N: Node<S>,
 {
-    fn render(&self, _app: &mut Canopy<S>) -> Result<()> {
-        Ok(())
-    }
     fn children(&self, f: &mut dyn FnMut(&dyn Node<S>) -> Result<()>) -> Result<()> {
         for i in &self.items {
             f(i)?
@@ -67,28 +64,30 @@ where
         }
         Ok(Size { w, h })
     }
+
     fn layout(&mut self, app: &mut Canopy<S>, screen: Rect) -> Result<()> {
         let v = self.fit(app, screen.into())?;
         self.update_view(v, screen);
 
-        let view = &self.state().viewport.clone();
+        let vport = &self.state().viewport.clone();
         let mut voffset = 0;
         for itm in &mut self.items {
-            // The virtual item rectangle
-            let fitrect = itm.fit(app, screen.into())?.rect();
-            let item_rect = fitrect.shift(0, voffset as i16);
-            if let Some(r) = view.view().intersect(&item_rect) {
-                itm.layout(
-                    app,
-                    // The screen coords are the intersection translated into
-                    // screen rect.
-                    view.view().rebase_rect(&r)?,
-                )?;
+            let item_rect = itm.fit(app, screen.into())?.rect().shift(0, voffset as i16);
+            if let Some(r) = vport.project_rect(item_rect) {
+                // Then we lay out the item to make sure we also lay out sub-items
+                itm.layout(app, r)?;
+                itm.unhide();
             } else {
                 itm.hide();
             }
-            voffset += itm.view().h;
+            voffset += itm.outer().h;
         }
+        Ok(())
+    }
+
+    fn render(&self, app: &mut Canopy<S>) -> Result<()> {
+        // FIXME: only paint needed areas
+        app.render.fill("", self.view(), ' ')?;
         Ok(())
     }
 }
