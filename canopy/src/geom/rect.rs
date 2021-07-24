@@ -111,7 +111,12 @@ impl Rect {
     pub fn intersect(&self, other: &Rect) -> Option<Self> {
         let h = self.hextent().intersect(&other.hextent())?;
         let v = self.vextent().intersect(&other.vextent())?;
-        Some(Rect::new(h.off, v.off, h.len, v.len))
+        let r = Rect::new(h.off, v.off, h.len, v.len);
+        if r.is_empty() {
+            None
+        } else {
+            Some(r)
+        }
     }
 
     /// Given a point that falls within this rectangle, shift the point to be
@@ -305,6 +310,57 @@ impl Rect {
             w: self.w,
         }
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.w == 0 || self.h == 0
+    }
+
+    /// Subtract a rectangle from this one, returning a set of rectangles
+    /// describing what remains.
+    pub fn sub(&self, other: &Rect) -> Vec<Rect> {
+        if other == self {
+            vec![]
+        } else if let Some(isec) = self.intersect(other) {
+            let rects = vec![
+                // Left
+                Rect {
+                    tl: self.tl,
+                    h: self.h,
+                    w: isec.tl.x - self.tl.x,
+                },
+                // Right
+                Rect {
+                    tl: Point {
+                        x: isec.tl.x + isec.w,
+                        y: self.tl.y,
+                    },
+                    h: self.h,
+                    w: (self.tl.x + self.w) - isec.tl.x - isec.w,
+                },
+                // Top
+                Rect {
+                    tl: Point {
+                        x: isec.tl.x,
+                        y: self.tl.y,
+                    },
+                    h: isec.tl.y - self.tl.y,
+                    w: isec.w,
+                },
+                // Bottom
+                Rect {
+                    tl: Point {
+                        x: isec.tl.x,
+                        y: isec.tl.y + isec.h,
+                    },
+                    h: (self.tl.x + self.h) - isec.tl.y - isec.h,
+                    w: isec.w,
+                },
+            ];
+            rects.into_iter().filter(|x| !x.is_empty()).collect()
+        } else {
+            vec![*self]
+        }
+    }
 }
 
 impl From<Size> for Rect {
@@ -344,6 +400,50 @@ fn split(len: u16, n: u16) -> Result<Vec<u16>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rect_sub() -> Result<()> {
+        assert_eq!(
+            Rect::new(10, 10, 10, 10).sub(&Rect::new(20, 20, 20, 20)),
+            vec![Rect::new(10, 10, 10, 10)],
+        );
+        assert_eq!(
+            Rect::new(10, 10, 10, 10).sub(&Rect::new(0, 0, 0, 0)),
+            vec![Rect::new(10, 10, 10, 10)],
+        );
+
+        assert_eq!(
+            Rect::new(10, 10, 10, 10).sub(&Rect::new(10, 10, 5, 5)),
+            vec![Rect::new(15, 10, 5, 10), Rect::new(10, 15, 5, 5),],
+        );
+
+        assert_eq!(
+            Rect::new(10, 10, 10, 10).sub(&Rect::new(15, 15, 5, 5)),
+            vec![Rect::new(10, 10, 5, 10), Rect::new(15, 10, 5, 5),],
+        );
+
+        assert_eq!(
+            Rect::new(10, 10, 10, 10).sub(&Rect::new(15, 15, 5, 5)),
+            vec![Rect::new(10, 10, 5, 10), Rect::new(15, 10, 5, 5),],
+        );
+
+        assert_eq!(
+            Rect::new(10, 10, 10, 10).sub(&Rect::new(12, 12, 6, 6)),
+            vec![
+                Rect::new(10, 10, 2, 10),
+                Rect::new(18, 10, 2, 10),
+                Rect::new(12, 10, 6, 2),
+                Rect::new(12, 18, 6, 2),
+            ],
+        );
+
+        assert_eq!(
+            Rect::new(10, 10, 10, 10).sub(&Rect::new(10, 10, 10, 5)),
+            vec![Rect::new(10, 15, 10, 5),],
+        );
+
+        Ok(())
+    }
 
     #[test]
     fn tsearch() -> Result<()> {

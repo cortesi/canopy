@@ -8,7 +8,7 @@ use crate::{
     Canopy, Node, Result,
 };
 
-// Panes manages a set of child nodes arranged in a 2d grid.
+/// Panes manages a set of child nodes arranged in a 2d grid.
 #[derive(StatefulNode)]
 pub struct Panes<S, N: canopy::Node<S>> {
     _marker: PhantomData<S>,

@@ -37,7 +37,7 @@ impl Block {
 impl Node<Handle> for Block {
     fn render(&self, app: &mut Canopy<Handle>) -> Result<()> {
         app.render
-            .fill(&self.color, self.screen().inner(1)?, '\u{2588}')
+            .fill(&self.color, self.view().inner(1)?, '\u{2588}')
     }
     fn fit(&mut self, _app: &mut Canopy<Handle>, _screen: Size) -> Result<Size> {
         Ok(self.size)
