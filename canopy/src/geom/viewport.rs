@@ -1,4 +1,4 @@
-use super::{Point, Rect, Size};
+use super::{Line, Point, Rect, Size};
 use crate::error;
 use crate::Result;
 
@@ -196,11 +196,56 @@ impl ViewPort {
             None
         }
     }
+
+    /// Project a line in virtual space to the screen. Returns an offset from
+    /// the start of the input line, plus a Line that is the projected region.
+    pub fn project_line(&self, l: Line) -> Option<(u16, Line)> {
+        if let Some(o) = self.view.intersect(&l.rect()) {
+            let rebase = self.view.rebase_rect(&o).unwrap();
+            Some((
+                o.tl.x - l.tl.x,
+                Line {
+                    tl: self
+                        .screen
+                        .tl
+                        .scroll(rebase.tl.x as i16, rebase.tl.y as i16),
+                    w: rebase.w,
+                },
+            ))
+        } else {
+            None
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn view_project_line() -> Result<()> {
+        let v = ViewPort::new(
+            Size::new(100, 100),
+            Rect::new(30, 30, 10, 10),
+            Rect::new(50, 50, 10, 10),
+        )?;
+
+        assert!(v.project_line(Line::new(10, 10, 10)).is_none());
+        assert_eq!(
+            v.project_line(Line::new(30, 30, 10)),
+            Some((0, Line::new(50, 50, 10)))
+        );
+        assert_eq!(
+            v.project_line(Line::new(20, 30, 15)),
+            Some((10, Line::new(50, 50, 5)))
+        );
+        assert_eq!(
+            v.project_line(Line::new(35, 30, 10)),
+            Some((0, Line::new(55, 50, 5)))
+        );
+
+        Ok(())
+    }
 
     #[test]
     fn view_project_rect() -> Result<()> {
