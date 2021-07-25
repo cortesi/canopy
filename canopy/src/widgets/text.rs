@@ -13,6 +13,8 @@ pub struct Text<S> {
     pub state: NodeState,
     pub raw: String,
     lines: Option<Vec<String>>,
+    fixed_width: Option<u16>,
+    current_size: Size,
 
     _marker: PhantomData<S>,
 }
@@ -25,24 +27,37 @@ impl<S> Text<S> {
             raw: raw.to_owned(),
             lines: None,
             _marker: PhantomData,
+            fixed_width: None,
+            current_size: Size::default(),
         }
+    }
+    /// Add a fixed width, ignoring fit parameters
+    pub fn with_fixed_width(mut self, width: u16) -> Self {
+        self.fixed_width = Some(width);
+        self
     }
 }
 
 impl<'a, S> Node<S> for Text<S> {
     fn fit(&mut self, _app: &mut Canopy<S>, s: Size) -> Result<Size> {
-        // Only resize if the width has changed
-        if self.state().viewport.outer().w != s.w {
-            let mut split: Vec<String> = vec![];
-            for i in textwrap::wrap(&self.raw, s.w as usize) {
-                split.push(format!("{:width$}", i, width = s.w as usize))
-            }
-            let len = split.len() as u16;
-            self.lines = Some(split);
-            Ok(Size::new(s.w, len))
+        let w = if let Some(w) = self.fixed_width {
+            w
         } else {
-            Ok(self.outer())
+            s.w
+        };
+        // Only resize if the width has changed
+        if self.current_size.w != w {
+            let mut split: Vec<String> = vec![];
+            for i in textwrap::wrap(&self.raw, w as usize) {
+                split.push(format!("{:width$}", i, width = w as usize))
+            }
+            self.current_size = Size {
+                w,
+                h: split.len() as u16,
+            };
+            self.lines = Some(split);
         }
+        Ok(self.current_size)
     }
     fn render(&self, app: &mut Canopy<S>) -> Result<()> {
         let vo = self.view();

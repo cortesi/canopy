@@ -1,4 +1,3 @@
-use duplicate::duplicate;
 use rand::Rng;
 
 use canopy;
@@ -7,17 +6,18 @@ use canopy::{
     geom::{Frame, Rect, Size},
     render::term::runloop,
     style::solarized,
-    widgets::{frame, List},
+    widgets::{frame, List, Text},
     Canopy, EventOutcome, Node, NodeState, Result, StatefulNode,
 };
+
+const TEXT: &str = "What a struggle must have gone on during long centuries between the several kinds of trees, each annually scattering its seeds by the thousand; what war between insect and insect — between insects, snails, and other animals with birds and beasts of prey — all striving to increase, all feeding on each other, or on the trees, their seeds and seedlings, or on the other plants which first clothed the ground and thus checked the growth of the trees.";
 
 struct Handle {}
 
 #[derive(StatefulNode)]
 struct Block {
     state: NodeState,
-    color: String,
-    size: Size,
+    child: Text<Handle>,
 }
 
 impl Block {
@@ -25,30 +25,34 @@ impl Block {
         let mut rng = rand::thread_rng();
         Block {
             state: NodeState::default(),
-            color: "blue".into(),
-            size: Size {
-                w: rng.gen_range(5..100),
-                h: rng.gen_range(5..20),
-            },
+            child: Text::new(TEXT).with_fixed_width(rng.gen_range(10..100)),
         }
     }
 }
 
 impl Node<Handle> for Block {
-    fn render(&self, app: &mut Canopy<Handle>) -> Result<()> {
-        app.render.fill(
-            &self.color,
-            self.size.rect().at(&self.view().tl).inner(1)?,
-            '\u{2588}',
-        )?;
-        app.render.solid_frame(
-            "",
-            Frame::new(self.size.rect().at(&self.view().tl), 1)?,
-            ' ',
-        )
+    fn fit(&mut self, app: &mut Canopy<Handle>, target: Size) -> Result<Size> {
+        Ok(self.child.fit(app, target)?)
     }
-    fn fit(&mut self, _app: &mut Canopy<Handle>, _screen: Size) -> Result<Size> {
-        Ok(self.size)
+
+    fn layout(&mut self, app: &mut Canopy<Handle>, screen: Rect) -> Result<()> {
+        self.child.layout(app, screen)?;
+        let f = self.fit(app, screen.into())?;
+        self.update_view(f, screen);
+        Ok(())
+    }
+
+    fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle>) -> Result<()>) -> Result<()> {
+        f(&self.child)?;
+        Ok(())
+    }
+
+    fn children_mut(
+        &mut self,
+        f: &mut dyn FnMut(&mut dyn Node<Handle>) -> Result<()>,
+    ) -> Result<()> {
+        f(&mut self.child)?;
+        Ok(())
     }
 }
 
@@ -117,16 +121,16 @@ impl Node<Handle> for Root {
         Ok(EventOutcome::Handle { skip: false })
     }
 
-    #[duplicate(
-        method          reference(type);
-        [children]      [& type];
-        [children_mut]  [&mut type];
-    )]
-    fn method(
-        self: reference([Self]),
-        f: &mut dyn FnMut(reference([dyn Node<Handle>])) -> Result<()>,
+    fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle>) -> Result<()>) -> Result<()> {
+        f(&self.content)?;
+        Ok(())
+    }
+
+    fn children_mut(
+        &mut self,
+        f: &mut dyn FnMut(&mut dyn Node<Handle>) -> Result<()>,
     ) -> Result<()> {
-        f(reference([self.content]))?;
+        f(&mut self.content)?;
         Ok(())
     }
 }

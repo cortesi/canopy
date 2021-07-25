@@ -23,6 +23,7 @@ User traps
   - Not implementing layout if a node has children
   - Not remembering both layout and taint after making a node modification
   - Not remembering to clear unused space
+  - Not remembering to implement children and children_mut
 
 
 Bugs
