@@ -111,12 +111,7 @@ impl Rect {
     pub fn intersect(&self, other: &Rect) -> Option<Self> {
         let h = self.hextent().intersect(&other.hextent())?;
         let v = self.vextent().intersect(&other.vextent())?;
-        let r = Rect::new(h.off, v.off, h.len, v.len);
-        if r.is_empty() {
-            None
-        } else {
-            Some(r)
-        }
+        Some(Rect::new(h.off, v.off, h.len, v.len))
     }
 
     /// Given a point that falls within this rectangle, shift the point to be

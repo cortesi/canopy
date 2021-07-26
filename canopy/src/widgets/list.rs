@@ -130,7 +130,7 @@ where
 
     fn render(&self, app: &mut Canopy<S>) -> Result<()> {
         for r in self.clear.iter() {
-            app.render.fill("", *r, 'x')?;
+            app.render.fill("", *r, ' ')?;
         }
         Ok(())
     }

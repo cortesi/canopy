@@ -20,7 +20,8 @@ impl LineSegment {
         self.off <= other.off && self.far() >= other.far()
     }
 
-    /// Return the intersection between this line segment and other.
+    /// Return the intersection between this line segment and other. The line
+    /// segment returned will always have a non-zero length.
     pub fn intersect(&self, other: &LineSegment) -> Option<LineSegment> {
         if self.len == 0 || other.len == 0 {
             None
