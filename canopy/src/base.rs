@@ -6,7 +6,7 @@ use crate::{
     event::{key, mouse, tick, Event},
     geom::Point,
     node::{postorder, postorder_mut, preorder, EventOutcome, Node, Walker},
-    Error, Render, Result,
+    Error, Render, Result, StatefulNode,
 };
 
 pub struct SkipWalker {
@@ -348,10 +348,16 @@ impl<'a, S> Canopy<'a, S> {
             }
             self.render.viewport = e.state().viewport;
             e.render(self)?;
+
+            // This is a new node - we don't want it perpetually stuck in
+            // render, so we need to update its render_gen.
+            if e.state().render_gen == 0 {
+                e.state_mut().render_gen = self.render_gen;
+            }
+            self.render.push();
+            e.children_mut(&mut |x| self.render_traversal(x))?;
+            self.render.pop();
         }
-        self.render.push();
-        e.children_mut(&mut |x| self.render_traversal(x))?;
-        self.render.pop();
         Ok(())
     }
 
@@ -435,7 +441,7 @@ impl<'a, S> Canopy<'a, S> {
     where
         N: Node<S>,
     {
-        e.layout(self, rect)?;
+        fit_and_update(self, rect, e)?;
         self.taint_tree(e)?;
         Ok(())
     }
@@ -525,6 +531,18 @@ fn method<S, R: Walker + Default>(
         })
     })?;
     Ok(ret)
+}
+
+/// A convenience method that fits the component to the screen rect, updates its
+/// view, then calls layout on it to lay out its children.
+pub fn fit_and_update<N, S>(app: &mut Canopy<S>, screen: Rect, n: &mut N) -> Result<()>
+where
+    N: Node<S> + StatefulNode,
+{
+    let fit = n.fit(app, screen.size())?;
+    n.update_view(fit, screen);
+    n.layout(app, screen)?;
+    Ok(())
 }
 
 // Calls a closure on the leaf node under (x, y), then all its parents to the
@@ -666,8 +684,8 @@ mod tests {
         let (_, mut tr) = TestRender::create();
         let mut app = utils::tcanopy(&mut tr);
         let mut root = utils::TRoot::new();
-        const SIZE: u16 = 100;
-        app.resize(&mut root, Rect::new(0, 0, SIZE, SIZE))?;
+
+        fit_and_update(&mut app, Rect::new(0, 0, 100, 100), &mut root)?;
 
         app.set_focus(&mut root.a.a)?;
         app.focus_right(&mut root)?;
@@ -804,10 +822,9 @@ mod tests {
         let mut app = utils::tcanopy(&mut tr);
         const SIZE: u16 = 100;
         let mut root = utils::TRoot::new();
-        app.resize(&mut root, Rect::new(0, 0, SIZE, SIZE))?;
+        fit_and_update(&mut app, Rect::new(0, 0, SIZE, SIZE), &mut root)?;
 
         let acted = EventOutcome::Handle { skip: false };
-
         let mut s = utils::State::new();
         app.set_focus(&mut root)?;
         root.next_event = Some(acted);
@@ -832,7 +849,9 @@ mod tests {
         let (_, mut tr) = TestRender::create();
         let mut app = utils::tcanopy(&mut tr);
         let mut root = utils::TRoot::new();
-        app.resize(&mut root, Rect::new(0, 0, SIZE, SIZE))?;
+
+        fit_and_update(&mut app, Rect::new(0, 0, SIZE, SIZE), &mut root)?;
+
         assert_eq!(root.screen(), Rect::new(0, 0, SIZE, SIZE));
         assert_eq!(root.a.screen(), Rect::new(0, 0, SIZE / 2, SIZE));
         assert_eq!(root.b.screen(), Rect::new(SIZE / 2, 0, SIZE / 2, SIZE));
@@ -846,10 +865,10 @@ mod tests {
     #[test]
     fn trender() -> Result<()> {
         let mut root = utils::TRoot::new();
-
         let (buf, mut tr) = TestRender::create();
         let mut app = utils::tcanopy(&mut tr);
-        app.resize(&mut root, Rect::new(0, 0, 100, 100))?;
+        fit_and_update(&mut app, Rect::new(0, 0, 100, 100), &mut root)?;
+
         app.render(&mut root)?;
         assert_eq!(
             buf.lock()?.text,
@@ -899,7 +918,8 @@ mod tests {
 
         let mut root = utils::TRoot::new();
         const SIZE: u16 = 100;
-        app.resize(&mut root, Rect::new(0, 0, SIZE, SIZE))?;
+        fit_and_update(&mut app, Rect::new(0, 0, SIZE, SIZE), &mut root)?;
+
         app.render(&mut root)?;
 
         let handled = EventOutcome::Handle { skip: false };

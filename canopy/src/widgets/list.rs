@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use crate as canopy;
 use crate::{
     error::Result,
-    geom::{Point, Rect, Size, ViewPort},
+    geom::{Point, Rect, Size},
     node::Node,
     state::{NodeState, StatefulNode},
     Canopy,
@@ -47,6 +47,7 @@ where
         }
         Ok(())
     }
+
     fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<()>) -> Result<()> {
         for i in self.items.iter_mut() {
             f(i)?
@@ -66,16 +67,13 @@ where
     }
 
     fn layout(&mut self, app: &mut Canopy<S>, screen: Rect) -> Result<()> {
-        let v = self.fit(app, screen.into())?;
-        self.update_view(v, screen);
-
-        let vport = &self.state().viewport.clone();
-        let mut voffset = 0;
+        let myvp = self.state().viewport;
+        let mut voffset: u16 = 0;
         for itm in &mut self.items {
-            let item_rect = itm.fit(app, screen.into())?.rect().shift(0, voffset as i16);
-            if let Some(r) = vport.project_rect(item_rect) {
-                // Then we lay out the item to make sure we also lay out sub-items
-                itm.layout(app, r)?;
+            let item_virt = itm.fit(app, screen.into())?.rect().shift(0, voffset as i16);
+            if let Some(vp) = myvp.map(item_virt)? {
+                itm.state_mut().viewport = vp;
+                itm.layout(app, vp.screen())?;
                 itm.unhide();
             } else {
                 itm.hide();

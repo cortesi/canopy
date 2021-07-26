@@ -5,6 +5,7 @@ pub mod utils {
     use crate as canopy;
     use crate::{
         event::{key, mouse, tick},
+        fit_and_update,
         geom::{Point, Rect},
         render::test::TestRender,
         style::Style,
@@ -102,10 +103,9 @@ pub mod utils {
 
     impl Node<State> for TBranch {
         fn layout(&mut self, app: &mut Canopy<State>, rect: Rect) -> Result<()> {
-            self.state_mut().viewport.set_fill(rect);
             let v = rect.split_vertical(2)?;
-            self.a.layout(app, v[0])?;
-            self.b.layout(app, v[1])?;
+            fit_and_update(app, v[0], &mut self.a)?;
+            fit_and_update(app, v[1], &mut self.b)?;
             Ok(())
         }
 
@@ -165,10 +165,9 @@ pub mod utils {
 
     impl Node<State> for TRoot {
         fn layout(&mut self, app: &mut Canopy<State>, rect: Rect) -> Result<()> {
-            self.state_mut().viewport.set_fill(rect);
             let v = rect.split_horizontal(2)?;
-            self.a.layout(app, v[0])?;
-            self.b.layout(app, v[1])?;
+            fit_and_update(app, v[0], &mut self.a)?;
+            fit_and_update(app, v[1], &mut self.b)?;
             Ok(())
         }
 

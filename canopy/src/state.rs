@@ -44,6 +44,7 @@ pub trait StatefulNode {
     /// Get a mutable reference to the node's state object.
     fn state_mut(&mut self) -> &mut NodeState;
 
+    /// Update the view outer and screen rects.
     fn update_view(&mut self, size: Size, screen: Rect) {
         self.state_mut().viewport.update(size, screen)
     }

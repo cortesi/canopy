@@ -3,7 +3,8 @@ use rand::Rng;
 use canopy;
 use canopy::{
     event::{key, mouse},
-    geom::{Frame, Rect, Size},
+    fit_and_update,
+    geom::{Rect, Size},
     render::term::runloop,
     style::solarized,
     widgets::{frame, List, Text},
@@ -25,7 +26,7 @@ impl Block {
         let mut rng = rand::thread_rng();
         Block {
             state: NodeState::default(),
-            child: Text::new(TEXT).with_fixed_width(rng.gen_range(10..100)),
+            child: Text::new(TEXT).with_fixed_width(rng.gen_range(10..150)),
         }
     }
 }
@@ -36,23 +37,18 @@ impl Node<Handle> for Block {
     }
 
     fn layout(&mut self, app: &mut Canopy<Handle>, screen: Rect) -> Result<()> {
-        self.child.layout(app, screen)?;
-        let f = self.fit(app, screen.into())?;
-        self.update_view(f, screen);
-        Ok(())
+        fit_and_update(app, screen, &mut self.child)
     }
 
     fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle>) -> Result<()>) -> Result<()> {
-        f(&self.child)?;
-        Ok(())
+        f(&self.child)
     }
 
     fn children_mut(
         &mut self,
         f: &mut dyn FnMut(&mut dyn Node<Handle>) -> Result<()>,
     ) -> Result<()> {
-        f(&mut self.child)?;
-        Ok(())
+        f(&mut self.child)
     }
 }
 
@@ -74,9 +70,7 @@ impl Root {
 
 impl Node<Handle> for Root {
     fn layout(&mut self, app: &mut Canopy<Handle>, screen: Rect) -> Result<()> {
-        let v = self.fit(app, screen.into())?;
-        self.update_view(v, screen);
-        self.content.layout(app, screen)
+        fit_and_update(app, screen, &mut self.content)
     }
 
     fn can_focus(&self) -> bool {
@@ -85,7 +79,7 @@ impl Node<Handle> for Root {
 
     fn handle_mouse(
         &mut self,
-        _app: &mut Canopy<Handle>,
+        app: &mut Canopy<Handle>,
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<EventOutcome> {
@@ -95,6 +89,8 @@ impl Node<Handle> for Root {
             c if c == mouse::Action::ScrollUp => v.up(),
             _ => return Ok(EventOutcome::Ignore { skip: false }),
         };
+        self.layout(app, self.screen())?;
+        app.taint_tree(self)?;
         Ok(EventOutcome::Handle { skip: false })
     }
 

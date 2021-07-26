@@ -5,6 +5,7 @@ use pad::PadStr;
 
 use crate as canopy;
 use crate::{
+    fit_and_update,
     geom::{Frame as GFrame, Rect},
     state::{NodeState, StatefulNode},
     Canopy, Node, Result,
@@ -106,9 +107,7 @@ where
     N: canopy::Node<S>,
 {
     fn layout(&mut self, app: &mut Canopy<S>, screen: Rect) -> Result<()> {
-        let v = self.fit(app, screen.into())?;
-        self.update_view(v, screen);
-        self.child.layout(app, screen.inner(1)?)
+        fit_and_update(app, screen.inner(1)?, &mut self.child)
     }
     fn should_render(&self, app: &Canopy<S>) -> Option<bool> {
         Some(app.should_render(&self.child))

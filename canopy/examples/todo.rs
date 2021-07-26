@@ -3,6 +3,7 @@ use duplicate::duplicate;
 use canopy;
 use canopy::{
     event::{key, mouse},
+    fit_and_update,
     geom::Rect,
     render::term::runloop,
     style::solarized,
@@ -57,7 +58,6 @@ impl Root {
 
 impl Node<Handle> for Root {
     fn layout(&mut self, app: &mut Canopy<Handle>, a: Rect) -> Result<()> {
-        self.state_mut().viewport.set_fill(a);
         if a.h > 2 {
             let sb = Rect::new(a.tl.x, a.tl.y + a.h - 1, a.w, 1);
             let ct = Rect {
@@ -65,13 +65,17 @@ impl Node<Handle> for Root {
                 w: a.w,
                 h: a.h - 1,
             };
-            self.statusbar.layout(app, sb)?;
-            self.content.layout(app, ct)?;
+            fit_and_update(app, sb, &mut self.statusbar)?;
+            fit_and_update(app, ct, &mut self.content)?;
         } else {
-            self.content.layout(app, a)?;
+            fit_and_update(app, a, &mut self.content)?;
         }
         if let Some(add) = &mut self.adder {
-            add.layout(app, Rect::new(a.tl.x + 2, a.tl.y + a.h / 2, a.w - 4, 3))?;
+            fit_and_update(
+                app,
+                Rect::new(a.tl.x + 2, a.tl.y + a.h / 2, a.w - 4, 3),
+                add,
+            )?;
         }
         Ok(())
     }

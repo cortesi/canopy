@@ -4,6 +4,7 @@ use std::fs;
 use canopy;
 use canopy::{
     event::{key, mouse},
+    fit_and_update,
     geom::Rect,
     render::term::runloop,
     style::solarized,
@@ -29,11 +30,6 @@ impl Root {
 }
 
 impl Node<Handle> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle>, screen: Rect) -> Result<()> {
-        let v = self.fit(app, screen.into())?;
-        self.update_view(v, screen);
-        self.child.layout(app, screen)
-    }
     fn can_focus(&self) -> bool {
         true
     }
@@ -72,6 +68,10 @@ impl Node<Handle> for Root {
         }
         app.taint_tree(self)?;
         Ok(EventOutcome::Handle { skip: false })
+    }
+
+    fn layout(&mut self, app: &mut Canopy<Handle>, screen: Rect) -> Result<()> {
+        fit_and_update(app, screen, &mut self.child)
     }
 
     fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle>) -> Result<()>) -> Result<()> {

@@ -92,14 +92,6 @@ pub trait Node<S>: StatefulNode {
         false
     }
 
-    /// Render this widget using the geometry that was set through the node's
-    /// Layout implementation. Nodes with no children should always make sure
-    /// they redraw all of `self.screen_area()`. The default implementation does
-    /// nothing.
-    fn render(&self, app: &mut Canopy<S>) -> Result<()> {
-        Ok(())
-    }
-
     /// Called for each node on the focus path, after each render sweep.
     fn cursor(&self) -> Option<cursor::Cursor> {
         None
@@ -164,13 +156,25 @@ pub trait Node<S>: StatefulNode {
         Ok(target)
     }
 
-    /// Lay out this component and all its children in the given screen rect.
+    /// Lay out this component's children.
     ///
-    /// Implementers must set their own viewport screen area `update_view`, and
-    /// then call the `layout` method on all children.
+    /// This method is called after the node is laid out by its parent.
+    /// Implementers should call `fit` on all children, and then lay them out by
+    /// changing the child's viewport.
+    ///
+    /// The default does nothing, which is appropriate for nodes that have no
+    /// children.
     fn layout(&mut self, app: &mut Canopy<S>, screen_rect: Rect) -> Result<()> {
-        let v = self.fit(app, screen_rect.into())?;
-        self.update_view(v, screen_rect);
+        // let v = self.fit(app, screen_rect.into())?;
+        // self.update_view(v, screen_rect);
+        Ok(())
+    }
+
+    /// Render this widget using the geometry that was set through the node's
+    /// Layout implementation. Nodes with no children should always make sure
+    /// they redraw all of `self.screen_area()`. The default implementation does
+    /// nothing.
+    fn render(&self, app: &mut Canopy<S>) -> Result<()> {
         Ok(())
     }
 }

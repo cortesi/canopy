@@ -86,12 +86,12 @@ impl ViewPort {
         self.scroll_by(1, 0);
     }
 
-    /// Return the inner view area.
+    /// Return the screen region.
     pub fn screen(&self) -> Rect {
         self.screen
     }
 
-    /// Return the inner view area.
+    /// Return the view area.
     pub fn view(&self) -> Rect {
         self.view
     }
@@ -216,11 +216,110 @@ impl ViewPort {
             None
         }
     }
+
+    /// Given a rectangle within our outer, calculate the intersection with our
+    /// current view, and generate a ViewPort that would correctly display the
+    /// child on our screen.
+    pub fn map(&self, child: Rect) -> Result<Option<ViewPort>> {
+        if let Some(i) = self.view.intersect(&child) {
+            let view_relative = self.view.rebase_rect(&i).unwrap();
+            Ok(Some(ViewPort {
+                outer: child.size(),
+                // The view is the intersection relative to the child's outer
+                view: Rect::new(i.tl.x - child.tl.x, i.tl.y - child.tl.y, i.w, i.h),
+                screen: Rect::new(
+                    self.screen.tl.x + view_relative.tl.x,
+                    self.screen.tl.y + view_relative.tl.y,
+                    i.w,
+                    i.h,
+                ),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn view_map() -> Result<()> {
+        let v = ViewPort::new(
+            Size::new(100, 100),
+            Rect::new(30, 30, 20, 20),
+            Rect::new(200, 200, 20, 20),
+        )?;
+
+        // No overlap with view
+        assert!(v.map(Rect::new(10, 10, 2, 2),)?.is_none(),);
+
+        assert_eq!(
+            v.map(Rect::new(30, 30, 10, 10),)?,
+            Some(ViewPort::new(
+                Size::new(10, 10),
+                Rect::new(0, 0, 10, 10),
+                Rect::new(200, 200, 10, 10),
+            )?)
+        );
+
+        assert_eq!(
+            v.map(Rect::new(40, 40, 10, 10),)?,
+            Some(ViewPort::new(
+                Size::new(10, 10),
+                Rect::new(0, 0, 10, 10),
+                Rect::new(210, 210, 10, 10),
+            )?)
+        );
+
+        assert_eq!(
+            v.map(Rect::new(25, 25, 10, 10),)?,
+            Some(ViewPort::new(
+                Size::new(10, 10),
+                Rect::new(5, 5, 5, 5),
+                Rect::new(200, 200, 5, 5),
+            )?)
+        );
+
+        assert_eq!(
+            v.map(Rect::new(35, 35, 10, 10),)?,
+            Some(ViewPort::new(
+                Size::new(10, 10),
+                Rect::new(0, 0, 10, 10),
+                Rect::new(205, 205, 10, 10),
+            )?)
+        );
+
+        assert_eq!(
+            v.map(Rect::new(45, 45, 10, 10),)?,
+            Some(ViewPort::new(
+                Size::new(10, 10),
+                Rect::new(0, 0, 5, 5),
+                Rect::new(215, 215, 5, 5),
+            )?)
+        );
+
+        assert_eq!(
+            v.map(Rect::new(30, 21, 10, 10),)?,
+            Some(ViewPort::new(
+                Size::new(10, 10),
+                Rect::new(0, 9, 10, 1),
+                Rect::new(200, 200, 10, 1),
+            )?)
+        );
+
+        assert_eq!(
+            v.map(Rect::new(30, 49, 10, 10),)?,
+            Some(ViewPort::new(
+                Size::new(10, 10),
+                Rect::new(0, 0, 10, 1),
+                Rect::new(200, 219, 10, 1),
+            )?)
+        );
+
+        Ok(())
+    }
 
     #[test]
     fn view_project_line() -> Result<()> {

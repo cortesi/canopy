@@ -11,7 +11,7 @@ pub mod render;
 pub mod style;
 pub mod widgets;
 
-pub use base::Canopy;
+pub use base::{fit_and_update, Canopy};
 pub use error::{Error, Result};
 pub use node::{EventOutcome, Node};
 pub use render::Render;
