@@ -5,7 +5,8 @@ use crate::Result;
 /// ViewPort manages three rectangles in concert: `outer` is the total virtual
 /// size of the node, `view` is some sub-rectangle of `outer`. The `screen`, is
 /// a rectangle on the physical screen that this node paints to. It is larger
-/// than or equal to view.
+/// than or equal to view. If the screen is larger than the view, the view will
+/// be positioned in the top-left corner of the screen.
 ///
 /// The `view` rect is maintained to be as large as possible, while always being
 /// smaller than or equal to both view and screen.

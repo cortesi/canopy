@@ -158,7 +158,13 @@ where
             app.render.fill(style, f.bottom, self.glyphs.horizontal)?;
         }
 
-        for r in self.view().inner(1)?.sub(&self.child.view()) {
+        // Our child is always positioned in our upper-left corner, so negative
+        // space is to the right and below.
+        for r in self
+            .view()
+            .inner(1)?
+            .sub(&self.child.outer().rect().shift(1, 1))
+        {
             app.render.fill(style, r, ' ')?;
         }
 

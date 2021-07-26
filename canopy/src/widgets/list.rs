@@ -20,6 +20,9 @@ where
     pub offset: Point,
     pub focus: u32,
     state: NodeState,
+
+    // Cached set of rectangles to clear during rendering
+    clear: Vec<Rect>,
 }
 
 impl<S, N> List<S, N>
@@ -33,6 +36,7 @@ where
             offset: Point::zero(),
             focus: 0,
             state: NodeState::default(),
+            clear: vec![],
         }
     }
 }
@@ -69,12 +73,46 @@ where
     fn layout(&mut self, app: &mut Canopy<S>, screen: Rect) -> Result<()> {
         let myvp = self.state().viewport;
         let mut voffset: u16 = 0;
+        self.clear = vec![];
         for itm in &mut self.items {
-            let item_virt = itm.fit(app, screen.into())?.rect().shift(0, voffset as i16);
+            let item_view = itm.fit(app, screen.into())?.rect();
+            let item_virt = item_view.shift(0, voffset as i16);
             if let Some(vp) = myvp.map(item_virt)? {
                 itm.state_mut().viewport = vp;
                 itm.layout(app, vp.screen())?;
                 itm.unhide();
+
+                // At this point, the item's screen rect has been calculated to
+                // be the same size as its view, which may be smaller than our
+                // own view. We need to clear anything to the left or to the
+                // right of the screen rect in our own view.
+
+                // First, we calculate the area of our view the child will draw
+                // on. We know we can unwrap here, because the views intersect
+                // by definition.
+                let drawn = myvp.view().intersect(&item_virt).unwrap();
+
+                // Now, if there is space to the left, we clear it.
+                let left = Rect::new(
+                    myvp.view().tl.x,
+                    drawn.tl.y,
+                    drawn.tl.x - myvp.view().tl.x,
+                    drawn.h,
+                );
+                if !left.is_empty() {
+                    self.clear.push(left);
+                }
+
+                // And, if there is space to the right, we clear it.
+                let right = Rect::new(
+                    drawn.tl.x + drawn.w,
+                    drawn.tl.y,
+                    myvp.view().w - drawn.w - left.w,
+                    drawn.h,
+                );
+                if !right.is_empty() {
+                    self.clear.push(right);
+                }
             } else {
                 itm.hide();
             }
@@ -84,8 +122,9 @@ where
     }
 
     fn render(&self, app: &mut Canopy<S>) -> Result<()> {
-        // FIXME: only paint needed areas
-        app.render.fill("", self.view(), ' ')?;
+        for r in self.clear.iter() {
+            app.render.fill("", *r, ' ')?;
+        }
         Ok(())
     }
 }
