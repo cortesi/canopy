@@ -64,7 +64,8 @@ pub trait StatefulNode {
         self.state().viewport.outer()
     }
 
-    /// Hides the element
+    /// Hides the element and all its descendants from rendering. The nodes are
+    /// still included in the tree.
     fn hide(&mut self) {
         self.state_mut().hidden = true;
     }

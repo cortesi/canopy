@@ -341,14 +341,15 @@ impl<'a, S> Canopy<'a, S> {
     }
 
     fn render_traversal(&mut self, e: &mut dyn Node<S>) -> Result<()> {
-        if self.should_render(e) {
-            if self.is_focused(e) {
-                let s = &mut e.state_mut();
-                s.rendered_focus_gen = self.focus_gen
+        if !e.is_hidden() {
+            if self.should_render(e) {
+                if self.is_focused(e) {
+                    let s = &mut e.state_mut();
+                    s.rendered_focus_gen = self.focus_gen
+                }
+                self.render.viewport = e.state().viewport;
+                e.render(self)?;
             }
-            self.render.viewport = e.state().viewport;
-            e.render(self)?;
-
             // This is a new node - we don't want it perpetually stuck in
             // render, so we need to update its render_gen.
             if e.state().render_gen == 0 {
