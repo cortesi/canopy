@@ -1,3 +1,4 @@
+use rand::seq::SliceRandom;
 use rand::Rng;
 
 use canopy;
@@ -13,12 +14,15 @@ use canopy::{
 
 const TEXT: &str = "What a struggle must have gone on during long centuries between the several kinds of trees, each annually scattering its seeds by the thousand; what war between insect and insect — between insects, snails, and other animals with birds and beasts of prey — all striving to increase, all feeding on each other, or on the trees, their seeds and seedlings, or on the other plants which first clothed the ground and thus checked the growth of the trees.";
 
+const COLORS: &'static [&str] = &["red", "blue", "green"];
+
 struct Handle {}
 
 #[derive(StatefulNode)]
 struct Block {
     state: NodeState,
     child: Text<Handle>,
+    color: String,
 }
 
 impl Block {
@@ -27,6 +31,7 @@ impl Block {
         Block {
             state: NodeState::default(),
             child: Text::new(TEXT).with_fixed_width(rng.gen_range(10..150)),
+            color: String::from(*(COLORS.choose(&mut rng).unwrap())),
         }
     }
 }
@@ -50,6 +55,11 @@ impl Node<Handle> for Block {
         f: &mut dyn FnMut(&mut dyn Node<Handle>) -> Result<()>,
     ) -> Result<()> {
         f(&mut self.child)
+    }
+
+    fn render(&self, app: &mut Canopy<Handle>) -> Result<()> {
+        app.render.style.push_layer(&self.color);
+        Ok(())
     }
 }
 
@@ -133,7 +143,11 @@ impl Node<Handle> for Root {
 }
 
 pub fn main() -> Result<()> {
-    let colors = solarized::solarized_dark();
+    let mut colors = solarized::solarized_dark();
+    colors.insert("red/text", Some(solarized::RED), None);
+    colors.insert("blue/text", Some(solarized::BLUE), None);
+    colors.insert("green/text", Some(solarized::GREEN), None);
+
     let mut h = Handle {};
     let mut root = Root::new();
     runloop(colors, &mut root, &mut h)?;

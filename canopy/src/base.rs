@@ -342,6 +342,7 @@ impl<'a, S> Canopy<'a, S> {
 
     fn render_traversal(&mut self, e: &mut dyn Node<S>) -> Result<()> {
         if !e.is_hidden() {
+            self.render.push();
             if self.should_render(e) {
                 if self.is_focused(e) {
                     let s = &mut e.state_mut();
@@ -355,7 +356,6 @@ impl<'a, S> Canopy<'a, S> {
             if e.state().render_gen == 0 {
                 e.state_mut().render_gen = self.render_gen;
             }
-            self.render.push();
             e.children_mut(&mut |x| self.render_traversal(x))?;
             self.render.pop();
         }

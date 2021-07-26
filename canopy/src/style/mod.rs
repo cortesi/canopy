@@ -49,8 +49,8 @@ impl Style {
         let mut cs = Style {
             colors: HashMap::new(),
             level: 0,
-            layers: vec!["".to_owned()],
-            layer_levels: vec![0],
+            layers: vec![],
+            layer_levels: vec![],
         };
         cs.insert("/", Some(Color::White), Some(Color::Black));
         cs
@@ -59,7 +59,7 @@ impl Style {
     // Reset all layers and levels.
     pub(crate) fn reset(&mut self) {
         self.level = 0;
-        self.layers = vec!["".to_owned()];
+        self.layers = vec![];
         self.layer_levels = vec![0];
     }
 
@@ -166,13 +166,22 @@ mod tests {
     use crate::Result;
 
     #[test]
-    fn colorscheme_basic() -> Result<()> {
+    fn style_parse_path() -> Result<()> {
+        let c = Style::new();
+        assert_eq!(c.parse_path("/one/two"), vec!["one", "two"]);
+        assert_eq!(c.parse_path("one/two"), vec!["one", "two"]);
+        assert!(c.parse_path("").is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn style_resolve() -> Result<()> {
         let mut c = Style::new();
-        c.insert("/", Some(Color::White), Some(Color::Black));
-        c.insert("/one", Some(Color::Red), None);
-        c.insert("/one/two", Some(Color::Blue), None);
-        c.insert("/one/two/target", Some(Color::Green), None);
-        c.insert("/frame/border", Some(Color::Yellow), None);
+        c.insert("", Some(Color::White), Some(Color::Black));
+        c.insert("one", Some(Color::Red), None);
+        c.insert("one/two", Some(Color::Blue), None);
+        c.insert("one/two/target", Some(Color::Green), None);
+        c.insert("frame/border", Some(Color::Yellow), None);
 
         assert_eq!(
             c.resolve(
@@ -218,13 +227,24 @@ mod tests {
             ),
             (Color::Yellow, Color::Black)
         );
+        assert_eq!(
+            c.resolve(
+                &vec!["one".to_string(), "two".to_string()],
+                &vec!["frame".to_string(), "border".to_string()],
+            ),
+            (Color::Yellow, Color::Black)
+        );
+        assert_eq!(
+            c.resolve(&vec!["frame".to_string()], &vec!["border".to_string()],),
+            (Color::Yellow, Color::Black)
+        );
         Ok(())
     }
     #[test]
-    fn colorscheme_layers() -> Result<()> {
+    fn style_layers() -> Result<()> {
         let mut c = Style::new();
-        assert_eq!(c.layers, vec![""]);
-        assert_eq!(c.layer_levels, vec![0]);
+        assert!(c.layers.is_empty());
+        assert_eq!(c.layer_levels, vec![]);
         assert_eq!(c.level, 0);
 
         // A nop at this level
@@ -234,38 +254,43 @@ mod tests {
         c.push();
         c.push_layer("foo");
         assert_eq!(c.level, 1);
-        assert_eq!(c.layers, vec!["", "foo"]);
-        assert_eq!(c.layer_levels, vec![0, 1]);
+        assert_eq!(c.layers, vec!["foo"]);
+        assert_eq!(c.layer_levels, vec![1]);
 
         c.push();
         c.push();
         c.push_layer("bar");
         assert_eq!(c.level, 3);
-        assert_eq!(c.layers, vec!["", "foo", "bar"]);
-        assert_eq!(c.layer_levels, vec![0, 1, 3]);
+        assert_eq!(c.layers, vec!["foo", "bar"]);
+        assert_eq!(c.layer_levels, vec![1, 3]);
 
         c.push();
         assert_eq!(c.level, 4);
 
         c.pop();
         assert_eq!(c.level, 3);
-        assert_eq!(c.layers, vec!["", "foo", "bar"]);
-        assert_eq!(c.layer_levels, vec![0, 1, 3]);
+        assert_eq!(c.layers, vec!["foo", "bar"]);
+        assert_eq!(c.layer_levels, vec![1, 3]);
 
         c.pop();
         assert_eq!(c.level, 2);
-        assert_eq!(c.layers, vec!["", "foo"]);
-        assert_eq!(c.layer_levels, vec![0, 1]);
+        assert_eq!(c.layers, vec!["foo"]);
+        assert_eq!(c.layer_levels, vec![1]);
 
         c.pop();
         assert_eq!(c.level, 1);
-        assert_eq!(c.layers, vec!["", "foo"]);
-        assert_eq!(c.layer_levels, vec![0, 1]);
+        assert_eq!(c.layers, vec!["foo"]);
+        assert_eq!(c.layer_levels, vec![1]);
 
         c.pop();
         assert_eq!(c.level, 0);
-        assert_eq!(c.layers, vec![""]);
-        assert_eq!(c.layer_levels, vec![0]);
+        assert!(c.layers.is_empty());
+        assert!(c.layer_levels.is_empty());
+
+        c.pop();
+        assert_eq!(c.level, 0);
+        assert!(c.layers.is_empty());
+        assert!(c.layer_levels.is_empty());
 
         Ok(())
     }
