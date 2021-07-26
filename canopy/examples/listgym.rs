@@ -36,8 +36,9 @@ impl Node<Handle> for Block {
         Ok(self.child.fit(app, target)?)
     }
 
-    fn layout(&mut self, app: &mut Canopy<Handle>, screen: Rect) -> Result<()> {
-        fit_and_update(app, screen, &mut self.child)
+    fn layout(&mut self, _app: &mut Canopy<Handle>, _screen: Rect) -> Result<()> {
+        self.child.state_mut().viewport = self.state().viewport;
+        Ok(())
     }
 
     fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle>) -> Result<()>) -> Result<()> {
