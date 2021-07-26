@@ -70,9 +70,8 @@ impl<'a> Render<'a> {
         Ok(())
     }
 
-    /// Print text in the first line of the specified rectangle. If the text is
-    /// wider than the rectangle, it will be truncated; if it is shorter, it
-    /// will be padded.
+    /// Print text in the specified line. If the text is wider than the
+    /// rectangle, it will be truncated; if it is shorter, it will be padded.
     pub fn text(&mut self, color: &str, l: geom::Line, txt: &str) -> Result<()> {
         if let Some((offset, dst)) = self.viewport.project_line(l) {
             self.backend.fg(self.style.fg(color))?;

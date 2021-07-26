@@ -91,7 +91,7 @@ impl Rect {
     }
 
     /// Extract a horizontal section of this rect based on an extent.
-    pub fn hextract(&self, e: &LineSegment) -> Result<Self> {
+    pub fn hslice(&self, e: &LineSegment) -> Result<Self> {
         if !self.hextent().contains(e) {
             Err(Error::Geometry("extract extent outside rectangle".into()))
         } else {
@@ -288,7 +288,7 @@ impl Rect {
     }
 
     /// Extract a slice of this rect based on a vertical extent.
-    pub fn vextract(&self, e: &LineSegment) -> Result<Self> {
+    pub fn vslice(&self, e: &LineSegment) -> Result<Self> {
         if !self.vextent().contains(e) {
             Err(Error::Geometry("extract extent outside rectangle".into()))
         } else {

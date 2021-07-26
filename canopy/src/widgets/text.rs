@@ -63,8 +63,11 @@ impl<'a, S> Node<S> for Text<S> {
         let vo = self.view();
         if let Some(lines) = self.lines.as_ref() {
             for i in vo.tl.y..(vo.tl.y + vo.h) {
-                app.render
-                    .text("text", Line::new(vo.tl.x, i, vo.w), &lines[i as usize])?;
+                let out = &lines[i as usize]
+                    .chars()
+                    .skip(vo.tl.x as usize)
+                    .collect::<String>();
+                app.render.text("text", Line::new(vo.tl.x, i, vo.w), out)?;
             }
         }
         Ok(())

@@ -113,6 +113,13 @@ where
                 if !right.is_empty() {
                     self.clear.push(right);
                 }
+            } else if let Some(isect) = myvp.view().vextent().intersect(&item_virt.vextent()) {
+                // There was no intersection of the rects, but the vertical
+                // extent of the item overlaps with our view. This means that
+                // item is not on screen because it's off to the left of us, but
+                // we still need to clear its full row.
+                self.clear.push(myvp.view().vslice(&isect)?);
+                itm.hide();
             } else {
                 itm.hide();
             }
@@ -123,7 +130,7 @@ where
 
     fn render(&self, app: &mut Canopy<S>) -> Result<()> {
         for r in self.clear.iter() {
-            app.render.fill("", *r, ' ')?;
+            app.render.fill("", *r, 'x')?;
         }
         Ok(())
     }

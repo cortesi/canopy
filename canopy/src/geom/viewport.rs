@@ -142,9 +142,9 @@ impl ViewPort {
                 .vextent()
                 .split_active(self.view().vextent(), self.outer().rect().vextent())?;
             Ok(Some((
-                margin.vextract(&pre)?,
-                margin.vextract(&active)?,
-                margin.vextract(&post)?,
+                margin.vslice(&pre)?,
+                margin.vslice(&active)?,
+                margin.vslice(&post)?,
             )))
         }
     }
@@ -161,9 +161,9 @@ impl ViewPort {
                 .hextent()
                 .split_active(self.view().hextent(), self.outer().rect().hextent())?;
             Ok(Some((
-                margin.hextract(&pre)?,
-                margin.hextract(&active)?,
-                margin.hextract(&post)?,
+                margin.hslice(&pre)?,
+                margin.hslice(&active)?,
+                margin.hslice(&post)?,
             )))
         }
     }

@@ -22,16 +22,18 @@ impl LineSegment {
 
     /// Return the intersection between this line segment and other.
     pub fn intersect(&self, other: &LineSegment) -> Option<LineSegment> {
-        if self.contains(other) {
+        if self.len == 0 || other.len == 0 {
+            None
+        } else if self.contains(other) {
             Some(*other)
         } else if other.contains(self) {
             Some(*self)
-        } else if self.off <= other.off && other.off <= self.far() {
+        } else if self.off <= other.off && other.off < self.far() {
             Some(LineSegment {
                 off: other.off,
                 len: self.far() - other.off,
             })
-        } else if other.off <= self.off && self.off <= other.far() {
+        } else if other.off <= self.off && self.off < other.far() {
             Some(LineSegment {
                 off: self.off,
                 len: other.far() - self.off,
@@ -107,6 +109,9 @@ mod tests {
         );
         assert_eq!(l.intersect(&l), Some(l));
         assert_eq!(l.intersect(&LineSegment { off: 0, len: 2 }), None);
+        assert_eq!(l.intersect(&LineSegment { off: 10, len: 2 }), None);
+        assert_eq!(l.intersect(&LineSegment { off: 5, len: 0 }), None);
+        assert_eq!(l.intersect(&LineSegment { off: 0, len: 5 }), None);
         Ok(())
     }
 
