@@ -9,7 +9,7 @@ use canopy::{
     render::term::runloop,
     style::solarized,
     widgets::{frame, Text},
-    Canopy, EventOutcome, Node, NodeState, Result, StatefulNode,
+    Canopy, Node, NodeState, Outcome, Result, StatefulNode,
 };
 
 struct Handle {}
@@ -38,22 +38,22 @@ impl Node<Handle, ()> for Root {
         app: &mut Canopy<Handle, ()>,
         _: &mut Handle,
         k: mouse::Mouse,
-    ) -> Result<EventOutcome> {
+    ) -> Result<Outcome<()>> {
         let v = &mut self.child.child.state_mut().viewport;
         match k {
             c if c == mouse::Action::ScrollDown => v.down(),
             c if c == mouse::Action::ScrollUp => v.up(),
-            _ => return Ok(EventOutcome::Ignore { skip: false }),
+            _ => return Ok(Outcome::ignore()),
         };
         app.taint_tree(self)?;
-        Ok(EventOutcome::Handle { skip: false })
+        Ok(Outcome::handle())
     }
     fn handle_key(
         &mut self,
         app: &mut Canopy<Handle, ()>,
         _: &mut Handle,
         k: key::Key,
-    ) -> Result<EventOutcome> {
+    ) -> Result<Outcome<()>> {
         let v = &mut self.child.child.state_mut().viewport;
         match k {
             c if c == 'g' => v.scroll_to(0, 0),
@@ -64,10 +64,10 @@ impl Node<Handle, ()> for Root {
             c if c == ' ' || c == key::KeyCode::PageDown => v.page_down(),
             c if c == key::KeyCode::PageUp => v.page_up(),
             c if c == 'q' => app.exit(0),
-            _ => return Ok(EventOutcome::Ignore { skip: false }),
+            _ => return Ok(Outcome::ignore()),
         }
         app.taint_tree(self)?;
-        Ok(EventOutcome::Handle { skip: false })
+        Ok(Outcome::handle())
     }
 
     fn layout(&mut self, app: &mut Canopy<Handle, ()>, screen: Rect) -> Result<()> {

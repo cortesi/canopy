@@ -6,7 +6,7 @@ use crate::{
     event::key,
     geom::{LineSegment, Point, Size},
     state::{NodeState, StatefulNode},
-    Actions, Canopy, EventOutcome, Node, Result,
+    Actions, Canopy, Node, Outcome, Result,
 };
 
 /// A text buffer that exposes edit functionality for a single line. It also
@@ -141,12 +141,7 @@ impl<'a, S, A: Actions> Node<S, A> for InputLine<S> {
             .text("text", self.view().first_line(), &self.textbuf.text())
     }
 
-    fn handle_key(
-        &mut self,
-        app: &mut Canopy<S, A>,
-        _: &mut S,
-        k: key::Key,
-    ) -> Result<EventOutcome> {
+    fn handle_key(&mut self, app: &mut Canopy<S, A>, _: &mut S, k: key::Key) -> Result<Outcome<A>> {
         match k {
             key::Key(_, key::KeyCode::Left) => {
                 self.textbuf.left();
@@ -160,10 +155,10 @@ impl<'a, S, A: Actions> Node<S, A> for InputLine<S> {
             key::Key(_, key::KeyCode::Char(c)) => {
                 self.textbuf.insert(c);
             }
-            _ => return Ok(EventOutcome::Ignore { skip: false }),
+            _ => return Ok(Outcome::ignore()),
         };
         self.layout(app, self.screen())?;
-        Ok(EventOutcome::Handle { skip: false })
+        Ok(Outcome::handle())
     }
 
     fn fit(&mut self, _app: &mut Canopy<S, A>, sz: Size) -> Result<Size> {

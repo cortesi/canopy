@@ -1,6 +1,7 @@
 mod actions;
 mod base;
 mod node;
+mod outcome;
 mod state;
 mod tutils;
 
@@ -15,6 +16,7 @@ pub mod widgets;
 pub use actions::Actions;
 pub use base::{fit_and_update, Canopy};
 pub use error::{Error, Result};
-pub use node::{EventOutcome, Node};
+pub use node::Node;
+pub use outcome::Outcome;
 pub use render::Render;
 pub use state::{NodeState, StatefulNode};

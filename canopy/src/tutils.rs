@@ -9,7 +9,7 @@ pub mod utils {
         geom::{Point, Rect},
         render::test::TestRender,
         style::Style,
-        Canopy, EventOutcome, Node, NodeState, Render, Result, StatefulNode,
+        Canopy, Node, NodeState, Outcome, Render, Result, StatefulNode,
     };
 
     pub const K_ANY: key::Key = key::Key(None, key::KeyCode::Char('a'));
@@ -23,10 +23,11 @@ pub mod utils {
         pub fn new() -> Self {
             State { path: vec![] }
         }
-        pub fn add_event(&mut self, n: &str, evt: &str, result: EventOutcome) {
+        pub fn add_event(&mut self, n: &str, evt: &str, result: Outcome<()>) {
             let outcome = match result {
-                EventOutcome::Handle { .. } => "handle",
-                EventOutcome::Ignore { .. } => "ignore",
+                Outcome::Handle { .. } => "handle",
+                Outcome::Ignore { .. } => "ignore",
+                Outcome::Skip { .. } => "skip",
             };
             self.path.push(format!("{}@{}->{}", n, evt, outcome))
         }
@@ -37,7 +38,7 @@ pub mod utils {
         state: NodeState,
         name: String,
 
-        pub next_event: Option<EventOutcome>,
+        pub next_event: Option<Outcome<()>>,
         pub a: TBranch,
         pub b: TBranch,
     }
@@ -47,7 +48,7 @@ pub mod utils {
         state: NodeState,
         name: String,
 
-        pub next_event: Option<EventOutcome>,
+        pub next_event: Option<Outcome<()>>,
         pub a: TLeaf,
         pub b: TLeaf,
     }
@@ -57,7 +58,7 @@ pub mod utils {
         state: NodeState,
         name: String,
 
-        pub next_event: Option<EventOutcome>,
+        pub next_event: Option<Outcome<()>>,
     }
 
     impl Node<State, ()> for TLeaf {
@@ -80,7 +81,7 @@ pub mod utils {
             _: &mut Canopy<State, ()>,
             s: &mut State,
             _: key::Key,
-        ) -> Result<EventOutcome> {
+        ) -> Result<Outcome<()>> {
             self.handle(s, "key")
         }
         fn handle_mouse(
@@ -88,7 +89,7 @@ pub mod utils {
             _: &mut Canopy<State, ()>,
             s: &mut State,
             _: mouse::Mouse,
-        ) -> Result<EventOutcome> {
+        ) -> Result<Outcome<()>> {
             self.handle(s, "mouse")
         }
         fn handle_action(
@@ -96,7 +97,7 @@ pub mod utils {
             _: &mut Canopy<State, ()>,
             s: &mut State,
             _: (),
-        ) -> Result<EventOutcome> {
+        ) -> Result<Outcome<()>> {
             self.handle(s, "action")
         }
     }
@@ -128,7 +129,7 @@ pub mod utils {
             _: &mut Canopy<State, ()>,
             s: &mut State,
             _: key::Key,
-        ) -> Result<EventOutcome> {
+        ) -> Result<Outcome<()>> {
             self.handle(s, "key")
         }
         fn handle_mouse(
@@ -136,7 +137,7 @@ pub mod utils {
             _: &mut Canopy<State, ()>,
             s: &mut State,
             _: mouse::Mouse,
-        ) -> Result<EventOutcome> {
+        ) -> Result<Outcome<()>> {
             self.handle(s, "mouse")
         }
         fn handle_action(
@@ -144,7 +145,7 @@ pub mod utils {
             _: &mut Canopy<State, ()>,
             s: &mut State,
             _: (),
-        ) -> Result<EventOutcome> {
+        ) -> Result<Outcome<()>> {
             self.handle(s, "action")
         }
 
@@ -190,7 +191,7 @@ pub mod utils {
             _: &mut Canopy<State, ()>,
             s: &mut State,
             _: key::Key,
-        ) -> Result<EventOutcome> {
+        ) -> Result<Outcome<()>> {
             self.handle(s, "key")
         }
         fn handle_mouse(
@@ -198,7 +199,7 @@ pub mod utils {
             _: &mut Canopy<State, ()>,
             s: &mut State,
             _: mouse::Mouse,
-        ) -> Result<EventOutcome> {
+        ) -> Result<Outcome<()>> {
             self.handle(s, "mouse")
         }
         fn handle_action(
@@ -206,7 +207,7 @@ pub mod utils {
             _: &mut Canopy<State, ()>,
             s: &mut State,
             _: (),
-        ) -> Result<EventOutcome> {
+        ) -> Result<Outcome<()>> {
             self.handle(s, "action")
         }
 
@@ -242,14 +243,14 @@ pub mod utils {
                 loc: a.tl,
             })
         }
-        fn handle(&mut self, s: &mut State, evt: &str) -> Result<EventOutcome> {
-            let ret = if let Some(x) = self.next_event {
+        fn handle(&mut self, s: &mut State, evt: &str) -> Result<Outcome<()>> {
+            let ret = if let Some(x) = self.next_event.clone() {
                 self.next_event = None;
                 x
             } else {
-                EventOutcome::Ignore { skip: false }
+                Outcome::ignore()
             };
-            s.add_event(&self.name, evt, ret);
+            s.add_event(&self.name, evt, ret.clone());
             Ok(ret)
         }
     }
@@ -264,14 +265,14 @@ pub mod utils {
                 next_event: None,
             }
         }
-        fn handle(&mut self, s: &mut State, evt: &str) -> Result<EventOutcome> {
-            let ret = if let Some(x) = self.next_event {
+        fn handle(&mut self, s: &mut State, evt: &str) -> Result<Outcome<()>> {
+            let ret = if let Some(x) = self.next_event.clone() {
                 self.next_event = None;
                 x
             } else {
-                EventOutcome::Ignore { skip: false }
+                Outcome::ignore()
             };
-            s.add_event(&self.name, evt, ret);
+            s.add_event(&self.name, evt, ret.clone());
             Ok(ret)
         }
     }
@@ -286,14 +287,14 @@ pub mod utils {
                 next_event: None,
             }
         }
-        fn handle(&mut self, s: &mut State, evt: &str) -> Result<EventOutcome> {
-            let ret = if let Some(x) = self.next_event {
+        fn handle(&mut self, s: &mut State, evt: &str) -> Result<Outcome<()>> {
+            let ret = if let Some(x) = self.next_event.clone() {
                 self.next_event = None;
-                x
+                x.clone()
             } else {
-                EventOutcome::Ignore { skip: false }
+                Outcome::ignore()
             };
-            s.add_event(&self.name, evt, ret);
+            s.add_event(&self.name, evt, ret.clone());
             Ok(ret)
         }
     }

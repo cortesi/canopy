@@ -12,7 +12,7 @@ use crate::{
     geom::{Point, Rect},
     render::Render,
     style::Style,
-    Actions, Canopy, EventOutcome, Node, Result,
+    Actions, Canopy, Node, Outcome, Result,
 };
 use crossterm::{
     cursor::{CursorShape, DisableBlinking, EnableBlinking, Hide, MoveTo, SetCursorShape, Show},
@@ -147,11 +147,14 @@ where
                 app.render.flush()?;
             }
             match app.event(root, s, events.next()?)? {
-                EventOutcome::Ignore { .. } => {
+                Outcome::Ignore { .. } => {
                     ignore = true;
                 }
-                EventOutcome::Handle { .. } => {
+                Outcome::Handle { .. } => {
                     ignore = false;
+                }
+                Outcome::Skip { .. } => {
+                    ignore = true;
                 }
             }
         }

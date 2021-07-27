@@ -1,3 +1,3 @@
-pub trait Actions: Send + Copy + Clone {}
+pub trait Actions: Send + Copy + Clone + PartialEq {}
 
 impl Actions for () {}

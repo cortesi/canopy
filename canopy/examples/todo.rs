@@ -8,7 +8,7 @@ use canopy::{
     render::term::runloop,
     style::solarized,
     widgets::{frame, InputLine, Text},
-    Canopy, EventOutcome, Node, NodeState, Result, StatefulNode,
+    Canopy, Node, NodeState, Outcome, Result, StatefulNode,
 };
 
 struct Handle {}
@@ -47,12 +47,12 @@ impl Root {
         }
     }
 
-    fn open_adder(&mut self, app: &mut Canopy<Handle, ()>) -> Result<EventOutcome> {
+    fn open_adder(&mut self, app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
         let mut adder = frame::Frame::new(InputLine::new(""));
         app.set_focus(&mut adder.child)?;
         self.adder = Some(adder);
         self.layout(app, self.screen())?;
-        Ok(EventOutcome::Handle { skip: false })
+        Ok(Outcome::handle())
     }
 }
 
@@ -89,14 +89,14 @@ impl Node<Handle, ()> for Root {
         _app: &mut Canopy<Handle, ()>,
         _: &mut Handle,
         k: mouse::Mouse,
-    ) -> Result<EventOutcome> {
+    ) -> Result<Outcome<()>> {
         let v = &mut self.content.child.state_mut().viewport;
         match k {
             c if c == mouse::Action::ScrollDown => v.down(),
             c if c == mouse::Action::ScrollUp => v.up(),
-            _ => return Ok(EventOutcome::Ignore { skip: false }),
+            _ => return Ok(Outcome::ignore()),
         };
-        Ok(EventOutcome::Handle { skip: false })
+        Ok(Outcome::handle())
     }
 
     fn handle_key(
@@ -104,7 +104,7 @@ impl Node<Handle, ()> for Root {
         app: &mut Canopy<Handle, ()>,
         _: &mut Handle,
         k: key::Key,
-    ) -> Result<EventOutcome> {
+    ) -> Result<Outcome<()>> {
         let v = &mut self.content.child.state_mut().viewport;
         match k {
             c if c == 'a' => {
@@ -126,9 +126,9 @@ impl Node<Handle, ()> for Root {
                 app.taint_tree(self)?;
             }
             c if c == 'q' => app.exit(0),
-            _ => return Ok(EventOutcome::Ignore { skip: false }),
+            _ => return Ok(Outcome::ignore()),
         };
-        Ok(EventOutcome::Handle { skip: false })
+        Ok(Outcome::handle())
     }
 
     #[duplicate(

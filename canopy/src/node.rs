@@ -3,10 +3,9 @@ use crate::{
     event::{key, mouse},
     geom::Rect,
     geom::Size,
-    Actions, Canopy, Result, StatefulNode,
+    Actions, Canopy, Outcome, Result, StatefulNode,
 };
 use duplicate::duplicate;
-use std::fmt::Debug;
 
 /// Walker is implemented for the return values of tree operations.
 pub trait Walker {
@@ -21,43 +20,6 @@ impl Walker for () {
     fn join(&self, _: Self) -> Self {}
     fn skip(&self) -> bool {
         false
-    }
-}
-
-/// Signal that the event has been handled. The skip parameter has different
-/// meanings for different types of tree traversals. For pre-order traversals,
-/// enabling skip skips the subtree of the present node. For leaf-to-root
-/// traversals, skip stops processing completely and skips the rest of the nodes
-/// on the path.
-#[derive(Debug, PartialEq, Copy, Clone)]
-pub enum EventOutcome {
-    Handle { skip: bool },
-    Ignore { skip: bool },
-}
-
-impl Default for EventOutcome {
-    fn default() -> Self {
-        EventOutcome::Ignore { skip: false }
-    }
-}
-
-impl Walker for EventOutcome {
-    fn skip(&self) -> bool {
-        match self {
-            EventOutcome::Handle { skip } => *skip,
-            EventOutcome::Ignore { skip } => *skip,
-        }
-    }
-    fn join(&self, rhs: Self) -> Self {
-        // At the moment, we don't propagate the skip flag, because it gets used
-        // by the traversal functions immediately on return.
-        match (*self, rhs) {
-            (EventOutcome::Ignore { .. }, EventOutcome::Ignore { .. }) => {
-                EventOutcome::Ignore { skip: false }
-            }
-            (_, EventOutcome::Handle { .. }) => EventOutcome::Handle { skip: false },
-            (EventOutcome::Handle { .. }, _) => EventOutcome::Handle { skip: false },
-        }
     }
 }
 
@@ -101,13 +63,8 @@ pub trait Node<S, A: Actions>: StatefulNode {
     /// event was ignored. Only nodes that have focus may handle key input, so
     /// this method is only called if focused() returns true. The default
     /// implementation ignores input.
-    fn handle_key(
-        &mut self,
-        app: &mut Canopy<S, A>,
-        s: &mut S,
-        k: key::Key,
-    ) -> Result<EventOutcome> {
-        Ok(EventOutcome::Ignore { skip: false })
+    fn handle_key(&mut self, app: &mut Canopy<S, A>, s: &mut S, k: key::Key) -> Result<Outcome<A>> {
+        Ok(Outcome::ignore())
     }
 
     /// Handle a mouse event just for this node. Return EventResult::Ignore if
@@ -117,13 +74,13 @@ pub trait Node<S, A: Actions>: StatefulNode {
         app: &mut Canopy<S, A>,
         s: &mut S,
         k: mouse::Mouse,
-    ) -> Result<EventOutcome> {
-        Ok(EventOutcome::Ignore { skip: false })
+    ) -> Result<Outcome<A>> {
+        Ok(Outcome::ignore())
     }
 
     /// Handle a periodic tick event.
-    fn handle_action(&mut self, app: &mut Canopy<S, A>, s: &mut S, k: A) -> Result<EventOutcome> {
-        Ok(EventOutcome::Ignore { skip: false })
+    fn handle_action(&mut self, app: &mut Canopy<S, A>, s: &mut S, k: A) -> Result<Outcome<A>> {
+        Ok(Outcome::ignore())
     }
 
     /// Call a closure on this node's children. The order in which children are

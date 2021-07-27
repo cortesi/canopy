@@ -7,7 +7,7 @@ use canopy::{
     geom::Rect,
     render::term::runloop,
     style::solarized,
-    Canopy, EventOutcome, Node, NodeState, Result, StatefulNode,
+    Canopy, Node, NodeState, Outcome, Result, StatefulNode,
 };
 
 struct Handle {}
@@ -59,11 +59,11 @@ impl Node<Handle, ()> for Root {
         app: &mut Canopy<Handle, ()>,
         _: &mut Handle,
         k: mouse::Mouse,
-    ) -> Result<EventOutcome> {
+    ) -> Result<Outcome<()>> {
         Ok(match k {
             c if c == mouse::Action::ScrollDown => app.focus_next(self)?,
             c if c == mouse::Action::ScrollUp => app.focus_prev(self)?,
-            _ => EventOutcome::Ignore { skip: false },
+            _ => Outcome::ignore(),
         })
     }
 
@@ -72,7 +72,7 @@ impl Node<Handle, ()> for Root {
         app: &mut Canopy<Handle, ()>,
         _: &mut Handle,
         k: key::Key,
-    ) -> Result<EventOutcome> {
+    ) -> Result<Outcome<()>> {
         Ok(match k {
             c if c == key::KeyCode::Tab => app.focus_next(self)?,
             c if c == 'l' || c == key::KeyCode::Right => app.focus_right(self)?,
@@ -80,7 +80,7 @@ impl Node<Handle, ()> for Root {
             c if c == 'j' || c == key::KeyCode::Down => app.focus_down(self)?,
             c if c == 'k' || c == key::KeyCode::Up => app.focus_up(self)?,
             c if c == 'q' => app.exit(0),
-            _ => EventOutcome::Ignore { skip: false },
+            _ => Outcome::ignore(),
         })
     }
 
@@ -99,17 +99,17 @@ impl Node<Handle, ()> for Root {
 }
 
 impl Block {
-    fn add(&mut self, app: &mut Canopy<Handle, ()>) -> Result<EventOutcome> {
+    fn add(&mut self, app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
         let r = self.screen();
         Ok(if self.children.len() == 0 {
-            EventOutcome::Ignore { skip: false }
+            Outcome::ignore()
         } else if self.size_limited(r) {
-            EventOutcome::Handle { skip: false }
+            Outcome::handle()
         } else {
             self.children.push(Block::new(!self.horizontal));
             self.layout(app, r)?;
             app.taint_tree(self)?;
-            EventOutcome::Handle { skip: false }
+            Outcome::handle()
         })
     }
     fn size_limited(&self, a: Rect) -> bool {
@@ -121,17 +121,17 @@ impl Block {
             false
         }
     }
-    fn split(&mut self, app: &mut Canopy<Handle, ()>) -> Result<EventOutcome> {
+    fn split(&mut self, app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
         let r = self.screen();
         Ok(if self.children.len() != 0 {
-            EventOutcome::Ignore { skip: false }
+            Outcome::ignore()
         } else if self.size_limited(r) {
-            EventOutcome::Handle { skip: false }
+            Outcome::handle()
         } else {
             self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
             self.layout(app, r)?;
             app.taint_tree(self)?;
-            EventOutcome::Handle { skip: false }
+            Outcome::handle()
         })
     }
 }
@@ -175,7 +175,7 @@ impl Node<Handle, ()> for Block {
         app: &mut Canopy<Handle, ()>,
         _: &mut Handle,
         k: mouse::Mouse,
-    ) -> Result<EventOutcome> {
+    ) -> Result<Outcome<()>> {
         Ok(match k {
             c if c == mouse::Action::Down + mouse::Button::Left => {
                 app.taint_tree(self)?;
@@ -186,10 +186,10 @@ impl Node<Handle, ()> for Block {
                 if app.is_focused(self) {
                     app.focus_next(self)?;
                 };
-                EventOutcome::Handle { skip: false }
+                Outcome::handle()
             }
             c if c == mouse::Action::Down + mouse::Button::Right => self.add(app)?,
-            _ => EventOutcome::Ignore { skip: false },
+            _ => Outcome::ignore(),
         })
     }
 
@@ -198,14 +198,14 @@ impl Node<Handle, ()> for Block {
         app: &mut Canopy<Handle, ()>,
         _: &mut Handle,
         k: key::Key,
-    ) -> Result<EventOutcome> {
+    ) -> Result<Outcome<()>> {
         Ok(match k {
             c if c == 's' => {
                 self.split(app)?;
                 app.focus_next(self)?
             }
             c if c == 'a' => self.add(app)?,
-            _ => EventOutcome::Ignore { skip: false },
+            _ => Outcome::ignore(),
         })
     }
 

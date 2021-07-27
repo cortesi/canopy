@@ -5,8 +5,8 @@ use crate::geom::{Direction, Rect};
 use crate::{
     event::{key, mouse, Event},
     geom::Point,
-    node::{postorder, postorder_mut, preorder, EventOutcome, Node, Walker},
-    Actions, Error, Render, Result, StatefulNode,
+    node::{postorder, postorder_mut, preorder, Node, Walker},
+    Actions, Error, Outcome, Render, Result, StatefulNode,
 };
 
 pub struct SkipWalker {
@@ -103,17 +103,17 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
     }
 
     /// Focus the specified node.
-    pub fn set_focus(&mut self, e: &mut dyn Node<S, A>) -> Result<EventOutcome> {
+    pub fn set_focus(&mut self, e: &mut dyn Node<S, A>) -> Result<Outcome<A>> {
         if e.can_focus() {
             self.focus_gen += 1;
             e.state_mut().focus_gen = self.focus_gen;
-            return Ok(EventOutcome::Handle { skip: false });
+            return Ok(Outcome::handle());
         }
         Err(Error::Focus("node does not accept focus".into()))
     }
 
     /// Move focus in a specified direction within the subtree.
-    pub fn focus_dir(&mut self, e: &mut dyn Node<S, A>, dir: Direction) -> Result<EventOutcome> {
+    pub fn focus_dir(&mut self, e: &mut dyn Node<S, A>, dir: Direction) -> Result<Outcome<A>> {
         let mut seen = false;
         if let Some(start) = self.get_focus_area(e) {
             start.search(dir, &mut |p| -> Result<bool> {
@@ -130,32 +130,32 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
                 Ok(seen)
             })?
         }
-        Ok(EventOutcome::Handle { skip: false })
+        Ok(Outcome::handle())
     }
 
     /// Move focus to the right of the currently focused node within the subtree.
-    pub fn focus_right(&mut self, e: &mut dyn Node<S, A>) -> Result<EventOutcome> {
+    pub fn focus_right(&mut self, e: &mut dyn Node<S, A>) -> Result<Outcome<A>> {
         self.focus_dir(e, Direction::Right)
     }
 
     /// Move focus to the left of the currently focused node within the subtree.
-    pub fn focus_left(&mut self, e: &mut dyn Node<S, A>) -> Result<EventOutcome> {
+    pub fn focus_left(&mut self, e: &mut dyn Node<S, A>) -> Result<Outcome<A>> {
         self.focus_dir(e, Direction::Left)
     }
 
     /// Move focus upward of the currently focused node within the subtree.
-    pub fn focus_up(&mut self, e: &mut dyn Node<S, A>) -> Result<EventOutcome> {
+    pub fn focus_up(&mut self, e: &mut dyn Node<S, A>) -> Result<Outcome<A>> {
         self.focus_dir(e, Direction::Up)
     }
 
     /// Move focus downward of the currently focused node within the subtree.
-    pub fn focus_down(&mut self, e: &mut dyn Node<S, A>) -> Result<EventOutcome> {
+    pub fn focus_down(&mut self, e: &mut dyn Node<S, A>) -> Result<Outcome<A>> {
         self.focus_dir(e, Direction::Down)
     }
 
     /// Focus the first node that accepts focus in the pre-order traversal of
     /// the subtree.
-    pub fn focus_first(&mut self, e: &mut dyn Node<S, A>) -> Result<EventOutcome> {
+    pub fn focus_first(&mut self, e: &mut dyn Node<S, A>) -> Result<Outcome<A>> {
         let mut focus_set = false;
         preorder(e, &mut |x| -> Result<SkipWalker> {
             Ok(if !focus_set && x.can_focus() {
@@ -166,7 +166,7 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
                 SkipWalker::default()
             })
         })?;
-        Ok(EventOutcome::Handle { skip: false })
+        Ok(Outcome::handle())
     }
 
     /// Does the node have terminal focus?
@@ -198,7 +198,7 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
 
     /// Focus the next node in the pre-order traversal of a node. If no node
     /// with focus is found, we focus the first node we can find instead.
-    pub fn focus_next(&mut self, e: &mut dyn Node<S, A>) -> Result<EventOutcome> {
+    pub fn focus_next(&mut self, e: &mut dyn Node<S, A>) -> Result<Outcome<A>> {
         let mut focus_set = false;
         let mut focus_seen = false;
         preorder(e, &mut |x| -> Result<()> {
@@ -217,13 +217,13 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
         if !focus_set {
             self.focus_first(e)
         } else {
-            Ok(EventOutcome::Handle { skip: false })
+            Ok(Outcome::handle())
         }
     }
 
     /// Focus the previous node in the pre-order traversal of a node. If no
     /// node with focus is found, we focus the first node we can find instead.
-    pub fn focus_prev(&mut self, e: &mut dyn Node<S, A>) -> Result<EventOutcome> {
+    pub fn focus_prev(&mut self, e: &mut dyn Node<S, A>) -> Result<Outcome<A>> {
         let current = self.focus_gen;
         let mut focus_seen = false;
         let mut first = true;
@@ -240,7 +240,7 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
             }
             Ok(())
         })?;
-        Ok(EventOutcome::Handle { skip: false })
+        Ok(Outcome::handle())
     }
 
     /// Find the area of the current terminal focus node.
@@ -382,11 +382,11 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
         root: &mut dyn Node<S, A>,
         s: &mut S,
         m: mouse::Mouse,
-    ) -> Result<EventOutcome> {
+    ) -> Result<Outcome<A>> {
         let mut handled = false;
         locate(root, m.loc, &mut |x| {
             Ok(if handled {
-                EventOutcome::default()
+                Outcome::handle()
             } else if !x.is_hidden() {
                 let r = x.screen();
                 let m = mouse::Mouse {
@@ -395,51 +395,48 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
                     modifiers: m.modifiers,
                     loc: r.rebase_point(m.loc)?,
                 };
-                match x.handle_mouse(self, s, m)? {
-                    EventOutcome::Ignore { skip } => {
-                        if skip {
+                let oc = x.handle_mouse(self, s, m)?;
+                match &oc {
+                    Outcome::Ignore(v) => {
+                        if v.skip {
                             handled = true;
                         }
-                        EventOutcome::Ignore { skip: false }
                     }
-                    EventOutcome::Handle { .. } => {
+                    Outcome::Handle(_) => {
                         self.taint(x);
                         handled = true;
-                        EventOutcome::Handle { skip: false }
                     }
-                }
+                    _ => {}
+                };
+                oc
             } else {
-                EventOutcome::default()
+                Outcome::default()
             })
         })
     }
 
     /// Propagate a key event through the focus and all its ancestors. Keys
     /// handled only once, and then ignored.
-    pub fn key(
-        &mut self,
-        root: &mut dyn Node<S, A>,
-        s: &mut S,
-        k: key::Key,
-    ) -> Result<EventOutcome> {
+    pub fn key(&mut self, root: &mut dyn Node<S, A>, s: &mut S, k: key::Key) -> Result<Outcome<A>> {
         let mut handled = false;
-        focus_path_mut(self.focus_gen, root, &mut |x| -> Result<EventOutcome> {
+        focus_path_mut(self.focus_gen, root, &mut |x| -> Result<Outcome<A>> {
             Ok(if handled {
-                EventOutcome::default()
+                Outcome::handle()
             } else {
-                match x.handle_key(self, s, k)? {
-                    EventOutcome::Ignore { skip } => {
-                        if skip {
+                let oc = x.handle_key(self, s, k)?;
+                match &oc {
+                    Outcome::Ignore(v) => {
+                        if v.skip {
                             handled = true;
                         }
-                        EventOutcome::Ignore { skip: false }
                     }
-                    EventOutcome::Handle { .. } => {
+                    Outcome::Handle(_) => {
                         self.taint(x);
                         handled = true;
-                        EventOutcome::Handle { skip: false }
                     }
-                }
+                    _ => {}
+                };
+                oc
             })
         })
     }
@@ -456,34 +453,35 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
 
     /// Propagate a tick event through the tree. All nodes get the event, even
     /// if they are hidden.
-    pub fn action(&mut self, root: &mut dyn Node<S, A>, s: &mut S, t: A) -> Result<EventOutcome> {
-        let mut ret = EventOutcome::default();
+    pub fn action(&mut self, root: &mut dyn Node<S, A>, s: &mut S, t: A) -> Result<Outcome<A>> {
+        let mut ret = Outcome::default();
         preorder(root, &mut |x| -> Result<SkipWalker> {
             let v = x.handle_action(self, s, t)?;
-            ret = ret.join(v);
+            ret = ret.join(v.clone());
             Ok(match v {
-                EventOutcome::Handle { skip } => {
+                Outcome::Handle(v) => {
                     self.taint(x);
-                    if skip {
+                    if v.skip {
                         SkipWalker { has_skip: true }
                     } else {
                         SkipWalker { has_skip: false }
                     }
                 }
-                EventOutcome::Ignore { skip } => {
-                    if skip {
+                Outcome::Ignore(v) => {
+                    if v.skip {
                         SkipWalker { has_skip: true }
                     } else {
                         SkipWalker { has_skip: false }
                     }
                 }
+                Outcome::Skip => SkipWalker { has_skip: true },
             })
         })?;
         Ok(ret)
     }
 
     /// Propagate an event through the tree.
-    pub fn event<N>(&mut self, root: &mut N, s: &mut S, e: Event<A>) -> Result<EventOutcome>
+    pub fn event<N>(&mut self, root: &mut N, s: &mut S, e: Event<A>) -> Result<Outcome<A>>
     where
         N: Node<S, A>,
     {
@@ -492,7 +490,7 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
             Event::Mouse(m) => self.mouse(root, s, m),
             Event::Resize(r) => {
                 self.resize(root, r)?;
-                Ok(EventOutcome::Handle { skip: false })
+                Ok(Outcome::handle())
             }
             Event::Action(t) => self.action(root, s, t),
         }
@@ -584,7 +582,9 @@ pub fn locate<S, A: Actions, R: Walker + Default>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{geom::Rect, render::test::TestRender, tutils::utils, StatefulNode};
+    use crate::{
+        geom::Rect, outcome::Ignore, render::test::TestRender, tutils::utils, StatefulNode,
+    };
 
     pub fn focvec(
         app: &mut Canopy<utils::State, ()>,
@@ -718,12 +718,12 @@ mod tests {
         let mut app = utils::tcanopy(&mut tr);
         let mut root = utils::TRoot::new();
 
-        let handled = EventOutcome::Handle { skip: false };
-        let ignore = EventOutcome::Ignore { skip: false };
+        let handled = Outcome::handle();
+        let ignore = Outcome::ignore();
 
         let mut s = utils::State::new();
         app.set_focus(&mut root)?;
-        root.next_event = Some(handled);
+        root.next_event = Some(handled.clone());
         assert_eq!(app.action(&mut root, &mut s, ())?, handled);
         assert_eq!(
             s.path,
@@ -740,7 +740,7 @@ mod tests {
 
         let mut s = utils::State::new();
         app.set_focus(&mut root)?;
-        root.a.next_event = Some(EventOutcome::Ignore { skip: true });
+        root.a.next_event = Some(Outcome::Ignore(Ignore::default().with_skip()));
         assert_eq!(app.action(&mut root, &mut s, ())?, ignore);
         assert_eq!(
             s.path,
@@ -755,12 +755,12 @@ mod tests {
 
         let mut s = utils::State::new();
         app.set_focus(&mut root)?;
-        root.a.next_event = Some(EventOutcome::Ignore { skip: true });
-        root.b.next_event = Some(EventOutcome::Handle { skip: true });
+        root.a.next_event = Some(Outcome::Ignore(Ignore::default().with_skip()));
+        root.b.next_event = Some(Outcome::Ignore(Ignore::default().with_skip()));
         assert_eq!(app.action(&mut root, &mut s, ())?, handled);
         assert_eq!(
             s.path,
-            vec!["r@action->ignore", "ba@action->ignore", "bb@action->handle",]
+            vec!["r@action->ignore", "ba@action->ignore", "bb@->handle",]
         );
 
         Ok(())
@@ -773,27 +773,27 @@ mod tests {
         let mut root = utils::TRoot::new();
         root.layout(&mut app, Rect::default())?;
 
-        let handled = EventOutcome::Handle { skip: false };
+        let handled = Outcome::handle();
 
         let mut s = utils::State::new();
         app.set_focus(&mut root)?;
-        root.next_event = Some(handled);
+        root.next_event = Some(handled.clone());
         assert_eq!(app.key(&mut root, &mut s, utils::K_ANY)?, handled);
         assert_eq!(s.path, vec!["r@key->handle"]);
 
         let mut s = utils::State::new();
         app.set_focus(&mut root.a.a)?;
-        root.a.a.next_event = Some(handled);
+        root.a.a.next_event = Some(handled.clone());
         assert_eq!(app.key(&mut root, &mut s, utils::K_ANY)?, handled);
         assert_eq!(s.path, vec!["ba:la@key->handle"]);
 
         let mut s = utils::State::new();
-        root.a.next_event = Some(handled);
+        root.a.next_event = Some(handled.clone());
         assert_eq!(app.key(&mut root, &mut s, utils::K_ANY)?, handled);
         assert_eq!(s.path, vec!["ba:la@key->ignore", "ba@key->handle"]);
 
         let mut s = utils::State::new();
-        root.next_event = Some(handled);
+        root.next_event = Some(handled.clone());
         assert_eq!(app.key(&mut root, &mut s, utils::K_ANY)?, handled);
         assert_eq!(
             s.path,
@@ -802,23 +802,20 @@ mod tests {
 
         let mut s = utils::State::new();
         app.set_focus(&mut root.a)?;
-        root.a.next_event = Some(handled);
+        root.a.next_event = Some(handled.clone());
         assert_eq!(app.key(&mut root, &mut s, utils::K_ANY)?, handled);
         assert_eq!(s.path, vec!["ba@key->handle"]);
 
         let mut s = utils::State::new();
-        root.next_event = Some(handled);
+        root.next_event = Some(handled.clone());
         assert_eq!(app.key(&mut root, &mut s, utils::K_ANY)?, handled);
         assert_eq!(s.path, vec!["ba@key->ignore", "r@key->handle"]);
 
-        assert_eq!(
-            app.key(&mut root, &mut s, utils::K_ANY)?,
-            EventOutcome::Ignore { skip: false }
-        );
+        assert_eq!(app.key(&mut root, &mut s, utils::K_ANY)?, Outcome::ignore());
 
         let mut s = utils::State::new();
         app.set_focus(&mut root.a.b)?;
-        root.a.next_event = Some(EventOutcome::Ignore { skip: true });
+        root.a.next_event = Some(Outcome::Ignore(Ignore::default().with_skip()));
         root.next_event = Some(handled);
         app.key(&mut root, &mut s, utils::K_ANY)?;
         assert_eq!(s.path, vec!["ba:lb@key->ignore", "ba@key->ignore"]);
@@ -834,10 +831,10 @@ mod tests {
         let mut root = utils::TRoot::new();
         fit_and_update(&mut app, Rect::new(0, 0, SIZE, SIZE), &mut root)?;
 
-        let acted = EventOutcome::Handle { skip: false };
+        let acted = Outcome::handle();
         let mut s = utils::State::new();
         app.set_focus(&mut root)?;
-        root.next_event = Some(acted);
+        root.next_event = Some(acted.clone());
         let evt = root.a.a.make_mouse_event()?;
         assert_eq!(app.mouse(&mut root, &mut s, evt)?, acted);
         assert_eq!(
@@ -845,7 +842,7 @@ mod tests {
             vec!["ba:la@mouse->ignore", "ba@mouse->ignore", "r@mouse->handle"]
         );
 
-        root.a.a.next_event = Some(acted);
+        root.a.a.next_event = Some(acted.clone());
         let mut s = utils::State::new();
         assert_eq!(app.mouse(&mut root, &mut s, evt)?, acted);
         assert_eq!(s.path, vec!["ba:la@mouse->handle"]);
@@ -932,12 +929,12 @@ mod tests {
 
         app.render(&mut root)?;
 
-        let handled = EventOutcome::Handle { skip: false };
+        let handled = Outcome::handle();
         let mut s = utils::State::new();
         app.set_focus(&mut root)?;
-        root.next_event = Some(handled);
-        root.a.a.next_event = Some(handled);
-        root.b.b.next_event = Some(handled);
+        root.next_event = Some(handled.clone());
+        root.a.a.next_event = Some(handled.clone());
+        root.b.b.next_event = Some(handled.clone());
         app.skip_taint(&mut root.a.a);
         assert_eq!(app.action(&mut root, &mut s, ())?, handled);
         assert_eq!(
