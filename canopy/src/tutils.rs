@@ -4,7 +4,7 @@ pub mod utils {
 
     use crate as canopy;
     use crate::{
-        event::{key, mouse, tick},
+        event::{key, mouse},
         fit_and_update,
         geom::{Point, Rect},
         render::test::TestRender,
@@ -60,7 +60,7 @@ pub mod utils {
         pub next_event: Option<EventOutcome>,
     }
 
-    impl Node<State> for TLeaf {
+    impl Node<State, ()> for TLeaf {
         fn name(&self) -> Option<String> {
             Some(self.name.clone())
         }
@@ -68,7 +68,7 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(&self, app: &mut Canopy<State>) -> Result<()> {
+        fn render(&self, app: &mut Canopy<State, ()>) -> Result<()> {
             app.render.text(
                 "any",
                 self.view().first_line(),
@@ -77,7 +77,7 @@ pub mod utils {
         }
         fn handle_key(
             &mut self,
-            _: &mut Canopy<State>,
+            _: &mut Canopy<State, ()>,
             s: &mut State,
             _: key::Key,
         ) -> Result<EventOutcome> {
@@ -85,24 +85,24 @@ pub mod utils {
         }
         fn handle_mouse(
             &mut self,
-            _: &mut Canopy<State>,
+            _: &mut Canopy<State, ()>,
             s: &mut State,
             _: mouse::Mouse,
         ) -> Result<EventOutcome> {
             self.handle(s, "mouse")
         }
-        fn handle_tick(
+        fn handle_action(
             &mut self,
-            _: &mut Canopy<State>,
+            _: &mut Canopy<State, ()>,
             s: &mut State,
-            _: tick::Tick,
+            _: (),
         ) -> Result<EventOutcome> {
-            self.handle(s, "tick")
+            self.handle(s, "action")
         }
     }
 
-    impl Node<State> for TBranch {
-        fn layout(&mut self, app: &mut Canopy<State>, rect: Rect) -> Result<()> {
+    impl Node<State, ()> for TBranch {
+        fn layout(&mut self, app: &mut Canopy<State, ()>, rect: Rect) -> Result<()> {
             let v = rect.split_vertical(2)?;
             fit_and_update(app, v[0], &mut self.a)?;
             fit_and_update(app, v[1], &mut self.b)?;
@@ -116,7 +116,7 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(&self, app: &mut Canopy<State>) -> Result<()> {
+        fn render(&self, app: &mut Canopy<State, ()>) -> Result<()> {
             app.render.text(
                 "any",
                 self.view().first_line(),
@@ -125,7 +125,7 @@ pub mod utils {
         }
         fn handle_key(
             &mut self,
-            _: &mut Canopy<State>,
+            _: &mut Canopy<State, ()>,
             s: &mut State,
             _: key::Key,
         ) -> Result<EventOutcome> {
@@ -133,19 +133,19 @@ pub mod utils {
         }
         fn handle_mouse(
             &mut self,
-            _: &mut Canopy<State>,
+            _: &mut Canopy<State, ()>,
             s: &mut State,
             _: mouse::Mouse,
         ) -> Result<EventOutcome> {
             self.handle(s, "mouse")
         }
-        fn handle_tick(
+        fn handle_action(
             &mut self,
-            _: &mut Canopy<State>,
+            _: &mut Canopy<State, ()>,
             s: &mut State,
-            _: tick::Tick,
+            _: (),
         ) -> Result<EventOutcome> {
-            self.handle(s, "tick")
+            self.handle(s, "action")
         }
 
         #[duplicate(
@@ -155,7 +155,7 @@ pub mod utils {
         )]
         fn method(
             self: reference([Self]),
-            f: &mut dyn FnMut(reference([dyn Node<State>])) -> Result<()>,
+            f: &mut dyn FnMut(reference([dyn Node<State, ()>])) -> Result<()>,
         ) -> Result<()> {
             f(reference([self.a]))?;
             f(reference([self.b]))?;
@@ -163,8 +163,8 @@ pub mod utils {
         }
     }
 
-    impl Node<State> for TRoot {
-        fn layout(&mut self, app: &mut Canopy<State>, rect: Rect) -> Result<()> {
+    impl Node<State, ()> for TRoot {
+        fn layout(&mut self, app: &mut Canopy<State, ()>, rect: Rect) -> Result<()> {
             let v = rect.split_horizontal(2)?;
             fit_and_update(app, v[0], &mut self.a)?;
             fit_and_update(app, v[1], &mut self.b)?;
@@ -178,7 +178,7 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(&self, app: &mut Canopy<State>) -> Result<()> {
+        fn render(&self, app: &mut Canopy<State, ()>) -> Result<()> {
             app.render.text(
                 "any",
                 self.view().first_line(),
@@ -187,7 +187,7 @@ pub mod utils {
         }
         fn handle_key(
             &mut self,
-            _: &mut Canopy<State>,
+            _: &mut Canopy<State, ()>,
             s: &mut State,
             _: key::Key,
         ) -> Result<EventOutcome> {
@@ -195,19 +195,19 @@ pub mod utils {
         }
         fn handle_mouse(
             &mut self,
-            _: &mut Canopy<State>,
+            _: &mut Canopy<State, ()>,
             s: &mut State,
             _: mouse::Mouse,
         ) -> Result<EventOutcome> {
             self.handle(s, "mouse")
         }
-        fn handle_tick(
+        fn handle_action(
             &mut self,
-            _: &mut Canopy<State>,
+            _: &mut Canopy<State, ()>,
             s: &mut State,
-            _: tick::Tick,
+            _: (),
         ) -> Result<EventOutcome> {
-            self.handle(s, "tick")
+            self.handle(s, "action")
         }
 
         #[duplicate(
@@ -217,7 +217,7 @@ pub mod utils {
         )]
         fn method(
             self: reference([Self]),
-            f: &mut dyn FnMut(reference([dyn Node<State>])) -> Result<()>,
+            f: &mut dyn FnMut(reference([dyn Node<State, ()>])) -> Result<()>,
         ) -> Result<()> {
             f(reference([self.a]))?;
             f(reference([self.b]))?;
@@ -298,7 +298,7 @@ pub mod utils {
         }
     }
 
-    pub fn tcanopy<'a>(tr: &'a mut TestRender) -> Canopy<'a, State> {
+    pub fn tcanopy<'a>(tr: &'a mut TestRender) -> Canopy<'a, State, ()> {
         Canopy::new(Render::new(tr, Style::default()))
     }
 
@@ -311,7 +311,7 @@ pub mod utils {
         pub virt_origin: Point,
     }
 
-    impl Node<State> for TFixed {}
+    impl Node<State, ()> for TFixed {}
 
     impl TFixed {
         pub fn new(w: u16, h: u16) -> Self {

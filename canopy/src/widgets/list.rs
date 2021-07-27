@@ -6,15 +6,15 @@ use crate::{
     geom::{Point, Rect, Size},
     node::Node,
     state::{NodeState, StatefulNode},
-    Canopy,
+    Actions, Canopy,
 };
 
 #[derive(StatefulNode)]
-pub struct List<S, N>
+pub struct List<S, A: Actions, N>
 where
-    N: Node<S>,
+    N: Node<S, A>,
 {
-    _marker: PhantomData<S>,
+    _marker: PhantomData<(S, A)>,
     items: Vec<N>,
     // Offset within the virtual rectangle
     pub offset: Point,
@@ -25,9 +25,9 @@ where
     clear: Vec<Rect>,
 }
 
-impl<S, N> List<S, N>
+impl<S, A: Actions, N> List<S, A, N>
 where
-    N: Node<S>,
+    N: Node<S, A>,
 {
     pub fn new(c: Vec<N>) -> Self {
         List {
@@ -41,25 +41,25 @@ where
     }
 }
 
-impl<S, N> Node<S> for List<S, N>
+impl<S, A: Actions, N> Node<S, A> for List<S, A, N>
 where
-    N: Node<S>,
+    N: Node<S, A>,
 {
-    fn children(&self, f: &mut dyn FnMut(&dyn Node<S>) -> Result<()>) -> Result<()> {
+    fn children(&self, f: &mut dyn FnMut(&dyn Node<S, A>) -> Result<()>) -> Result<()> {
         for i in &self.items {
             f(i)?
         }
         Ok(())
     }
 
-    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<()>) -> Result<()> {
+    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node<S, A>) -> Result<()>) -> Result<()> {
         for i in self.items.iter_mut() {
             f(i)?
         }
         Ok(())
     }
 
-    fn fit(&mut self, app: &mut Canopy<S>, r: Size) -> Result<Size> {
+    fn fit(&mut self, app: &mut Canopy<S, A>, r: Size) -> Result<Size> {
         let mut w = 0;
         let mut h = 0;
         for i in &mut self.items {
@@ -70,7 +70,7 @@ where
         Ok(Size { w, h })
     }
 
-    fn layout(&mut self, app: &mut Canopy<S>, screen: Rect) -> Result<()> {
+    fn layout(&mut self, app: &mut Canopy<S, A>, screen: Rect) -> Result<()> {
         let myvp = self.state().viewport;
         let mut voffset: u16 = 0;
         self.clear = vec![];
@@ -92,7 +92,10 @@ where
                 // by definition.
                 let drawn = myvp.view().intersect(&item_virt).unwrap();
 
-                // Now, if there is space to the left, we clear it.
+                // Now, if there is space to the left, we clear it. In practice,
+                // given map's node positioning, there will never be space to
+                // the left, but the reasons are slightly subtle. Ditch this
+                // code, or keep it, in case behaviour changes?
                 let left = Rect::new(
                     myvp.view().tl.x,
                     drawn.tl.y,
@@ -103,7 +106,7 @@ where
                     self.clear.push(left);
                 }
 
-                // And, if there is space to the right, we clear it.
+                // Now, if there is space to the right, we clear it.
                 let right = Rect::new(
                     drawn.tl.x + drawn.w,
                     drawn.tl.y,
@@ -128,7 +131,7 @@ where
         Ok(())
     }
 
-    fn render(&self, app: &mut Canopy<S>) -> Result<()> {
+    fn render(&self, app: &mut Canopy<S, A>) -> Result<()> {
         for r in self.clear.iter() {
             app.render.fill("", *r, ' ')?;
         }

@@ -8,7 +8,7 @@ use crate::{
     fit_and_update,
     geom::{Frame as GFrame, Rect},
     state::{NodeState, StatefulNode},
-    Canopy, Node, Result,
+    Actions, Canopy, Node, Result,
 };
 
 /// Defines the set of glyphs used to draw the frame
@@ -66,20 +66,20 @@ pub const SINGLE_THICK: FrameGlyphs = FrameGlyphs {
 ///     frame/focused   frame border if we hold focus
 ///     frame/active    color of active area indicator
 #[derive(StatefulNode)]
-pub struct Frame<S, N>
+pub struct Frame<S, A: Actions, N>
 where
-    N: canopy::Node<S>,
+    N: Node<S, A>,
 {
-    _marker: PhantomData<S>,
+    _marker: PhantomData<(S, A)>,
     pub child: N,
     pub state: NodeState,
     pub glyphs: FrameGlyphs,
     pub title: Option<String>,
 }
 
-impl<S, N> Frame<S, N>
+impl<S, A: Actions, N> Frame<S, A, N>
 where
-    N: canopy::Node<S>,
+    N: Node<S, A>,
 {
     pub fn new(c: N) -> Self {
         Frame {
@@ -102,17 +102,17 @@ where
     }
 }
 
-impl<S, N> Node<S> for Frame<S, N>
+impl<S, A: Actions, N> Node<S, A> for Frame<S, A, N>
 where
-    N: canopy::Node<S>,
+    N: Node<S, A>,
 {
-    fn layout(&mut self, app: &mut Canopy<S>, screen: Rect) -> Result<()> {
+    fn layout(&mut self, app: &mut Canopy<S, A>, screen: Rect) -> Result<()> {
         fit_and_update(app, screen.inner(1)?, &mut self.child)
     }
-    fn should_render(&self, app: &Canopy<S>) -> Option<bool> {
+    fn should_render(&self, app: &Canopy<S, A>) -> Option<bool> {
         Some(app.should_render(&self.child))
     }
-    fn render(&self, app: &mut Canopy<S>) -> Result<()> {
+    fn render(&self, app: &mut Canopy<S, A>) -> Result<()> {
         let style = if app.on_focus_path(self) {
             "frame/focused"
         } else {
@@ -177,7 +177,7 @@ where
     )]
     fn method(
         self: reference([Self]),
-        f: &mut dyn FnMut(reference([dyn Node<S>])) -> Result<()>,
+        f: &mut dyn FnMut(reference([dyn Node<S, A>])) -> Result<()>,
     ) -> Result<()> {
         f(reference([self.child]))
     }

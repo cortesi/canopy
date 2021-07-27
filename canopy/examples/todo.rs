@@ -18,8 +18,8 @@ struct StatusBar {
     state: NodeState,
 }
 
-impl Node<Handle> for StatusBar {
-    fn render(&self, app: &mut Canopy<Handle>) -> Result<()> {
+impl Node<Handle, ()> for StatusBar {
+    fn render(&self, app: &mut Canopy<Handle, ()>) -> Result<()> {
         app.render.style.push_layer("statusbar");
         app.render
             .text("statusbar/text", self.view().first_line(), "todo")?;
@@ -30,9 +30,9 @@ impl Node<Handle> for StatusBar {
 #[derive(StatefulNode)]
 struct Root {
     state: NodeState,
-    content: frame::Frame<Handle, Text<Handle>>,
+    content: frame::Frame<Handle, (), Text<Handle>>,
     statusbar: StatusBar,
-    adder: Option<frame::Frame<Handle, InputLine<Handle>>>,
+    adder: Option<frame::Frame<Handle, (), InputLine<Handle>>>,
 }
 
 impl Root {
@@ -47,7 +47,7 @@ impl Root {
         }
     }
 
-    fn open_adder(&mut self, app: &mut Canopy<Handle>) -> Result<EventOutcome> {
+    fn open_adder(&mut self, app: &mut Canopy<Handle, ()>) -> Result<EventOutcome> {
         let mut adder = frame::Frame::new(InputLine::new(""));
         app.set_focus(&mut adder.child)?;
         self.adder = Some(adder);
@@ -56,8 +56,8 @@ impl Root {
     }
 }
 
-impl Node<Handle> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle>, a: Rect) -> Result<()> {
+impl Node<Handle, ()> for Root {
+    fn layout(&mut self, app: &mut Canopy<Handle, ()>, a: Rect) -> Result<()> {
         if a.h > 2 {
             let sb = Rect::new(a.tl.x, a.tl.y + a.h - 1, a.w, 1);
             let ct = Rect {
@@ -86,7 +86,7 @@ impl Node<Handle> for Root {
 
     fn handle_mouse(
         &mut self,
-        _app: &mut Canopy<Handle>,
+        _app: &mut Canopy<Handle, ()>,
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<EventOutcome> {
@@ -101,7 +101,7 @@ impl Node<Handle> for Root {
 
     fn handle_key(
         &mut self,
-        app: &mut Canopy<Handle>,
+        app: &mut Canopy<Handle, ()>,
         _: &mut Handle,
         k: key::Key,
     ) -> Result<EventOutcome> {
@@ -138,7 +138,7 @@ impl Node<Handle> for Root {
     )]
     fn method(
         self: reference([Self]),
-        f: &mut dyn FnMut(reference([dyn Node<Handle>])) -> Result<()>,
+        f: &mut dyn FnMut(reference([dyn Node<Handle, ()>])) -> Result<()>,
     ) -> Result<()> {
         f(reference([self.statusbar]))?;
         f(reference([self.content]))?;

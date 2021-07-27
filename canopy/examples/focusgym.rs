@@ -48,15 +48,15 @@ impl Block {
     }
 }
 
-impl Node<Handle> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle>, screen: Rect) -> Result<()> {
+impl Node<Handle, ()> for Root {
+    fn layout(&mut self, app: &mut Canopy<Handle, ()>, screen: Rect) -> Result<()> {
         self.state_mut().viewport.set_fill(screen);
         self.child.layout(app, screen)
     }
 
     fn handle_mouse(
         &mut self,
-        app: &mut Canopy<Handle>,
+        app: &mut Canopy<Handle, ()>,
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<EventOutcome> {
@@ -69,7 +69,7 @@ impl Node<Handle> for Root {
 
     fn handle_key(
         &mut self,
-        app: &mut Canopy<Handle>,
+        app: &mut Canopy<Handle, ()>,
         _: &mut Handle,
         k: key::Key,
     ) -> Result<EventOutcome> {
@@ -84,14 +84,14 @@ impl Node<Handle> for Root {
         })
     }
 
-    fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle>) -> Result<()>) -> Result<()> {
+    fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle, ()>) -> Result<()>) -> Result<()> {
         f(&self.child)?;
         Ok(())
     }
 
     fn children_mut(
         &mut self,
-        f: &mut dyn FnMut(&mut dyn Node<Handle>) -> Result<()>,
+        f: &mut dyn FnMut(&mut dyn Node<Handle, ()>) -> Result<()>,
     ) -> Result<()> {
         f(&mut self.child)?;
         Ok(())
@@ -99,7 +99,7 @@ impl Node<Handle> for Root {
 }
 
 impl Block {
-    fn add(&mut self, app: &mut Canopy<Handle>) -> Result<EventOutcome> {
+    fn add(&mut self, app: &mut Canopy<Handle, ()>) -> Result<EventOutcome> {
         let r = self.screen();
         Ok(if self.children.len() == 0 {
             EventOutcome::Ignore { skip: false }
@@ -121,7 +121,7 @@ impl Block {
             false
         }
     }
-    fn split(&mut self, app: &mut Canopy<Handle>) -> Result<EventOutcome> {
+    fn split(&mut self, app: &mut Canopy<Handle, ()>) -> Result<EventOutcome> {
         let r = self.screen();
         Ok(if self.children.len() != 0 {
             EventOutcome::Ignore { skip: false }
@@ -136,8 +136,8 @@ impl Block {
     }
 }
 
-impl Node<Handle> for Block {
-    fn layout(&mut self, app: &mut Canopy<Handle>, screen: Rect) -> Result<()> {
+impl Node<Handle, ()> for Block {
+    fn layout(&mut self, app: &mut Canopy<Handle, ()>, screen: Rect) -> Result<()> {
         self.state_mut().viewport.set_fill(screen);
         if self.children.len() > 0 {
             let sizes = if self.horizontal {
@@ -156,7 +156,7 @@ impl Node<Handle> for Block {
         self.children.len() == 0
     }
 
-    fn render(&self, app: &mut Canopy<Handle>) -> Result<()> {
+    fn render(&self, app: &mut Canopy<Handle, ()>) -> Result<()> {
         if self.children.len() == 0 {
             let bc = if app.is_focused(self) && self.children.len() == 0 {
                 "violet"
@@ -172,7 +172,7 @@ impl Node<Handle> for Block {
 
     fn handle_mouse(
         &mut self,
-        app: &mut Canopy<Handle>,
+        app: &mut Canopy<Handle, ()>,
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<EventOutcome> {
@@ -195,7 +195,7 @@ impl Node<Handle> for Block {
 
     fn handle_key(
         &mut self,
-        app: &mut Canopy<Handle>,
+        app: &mut Canopy<Handle, ()>,
         _: &mut Handle,
         k: key::Key,
     ) -> Result<EventOutcome> {
@@ -216,7 +216,7 @@ impl Node<Handle> for Block {
     )]
     fn method(
         self: reference([Self]),
-        f: &mut dyn FnMut(reference([dyn Node<Handle>])) -> Result<()>,
+        f: &mut dyn FnMut(reference([dyn Node<Handle, ()>])) -> Result<()>,
     ) -> Result<()> {
         for i in reference([self.children]) {
             f(i)?

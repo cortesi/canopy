@@ -2,7 +2,7 @@ use crate as canopy;
 use crate::{
     geom::{Line, Size},
     state::{NodeState, StatefulNode},
-    Canopy, Node, Result,
+    Actions, Canopy, Node, Result,
 };
 use std::marker::PhantomData;
 
@@ -38,8 +38,8 @@ impl<S> Text<S> {
     }
 }
 
-impl<'a, S> Node<S> for Text<S> {
-    fn fit(&mut self, _app: &mut Canopy<S>, s: Size) -> Result<Size> {
+impl<'a, S, A: Actions> Node<S, A> for Text<S> {
+    fn fit(&mut self, _app: &mut Canopy<S, A>, s: Size) -> Result<Size> {
         let w = if let Some(w) = self.fixed_width {
             w
         } else {
@@ -59,7 +59,7 @@ impl<'a, S> Node<S> for Text<S> {
         }
         Ok(self.current_size)
     }
-    fn render(&self, app: &mut Canopy<S>) -> Result<()> {
+    fn render(&self, app: &mut Canopy<S, A>) -> Result<()> {
         let vo = self.view();
         if let Some(lines) = self.lines.as_ref() {
             for i in vo.tl.y..(vo.tl.y + vo.h) {

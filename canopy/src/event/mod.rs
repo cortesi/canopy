@@ -2,9 +2,8 @@ pub mod key;
 pub mod mouse;
 pub mod tick;
 
-use crate::geom::Rect;
+use crate::{geom::Rect, Actions};
 
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
@@ -12,31 +11,44 @@ use std::time::Duration;
 use crossterm::event;
 
 #[derive(Debug, PartialEq)]
-pub enum Event {
+pub enum Event<A> {
     Key(key::Key),
     Mouse(mouse::Mouse),
     Resize(Rect),
-    Tick(tick::Tick),
+    Action(A),
 }
 
-pub struct EventSource {
-    rx: mpsc::Receiver<Event>,
-    tx: mpsc::Sender<Event>,
+pub struct EventSource<A> {
+    rx: mpsc::Receiver<Event<A>>,
+    tx: mpsc::Sender<Event<A>>,
 }
 
-static TICKRATE: AtomicU32 = AtomicU32::new(200);
-
-impl EventSource {
-    pub fn new(millis: u32) -> Self {
+impl<A: 'static + Actions> EventSource<A> {
+    pub fn new() -> Self {
         let (tx, rx) = mpsc::channel();
         let es = EventSource { rx, tx };
-        es.set_tickrate(millis);
         es.spawn();
         es
     }
 
-    pub fn spawn(&self) {
+    /// Convenience function that spawns a thread that periodically pumps the
+    /// specified event into the app.
+    pub fn periodic(&self, millis: u64, action: A) {
         let tick_tx = self.tx.clone();
+        thread::spawn(move || loop {
+            if tick_tx.send(Event::Action(action)).is_err() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(millis));
+        });
+    }
+
+    /// Get a channel to pump events into the app
+    pub fn tx(&self) -> mpsc::Sender<Event<A>> {
+        self.tx.clone()
+    }
+
+    pub fn spawn(&self) {
         let evt_tx = self.tx.clone();
         thread::spawn(move || loop {
             match event::read() {
@@ -60,21 +72,9 @@ impl EventSource {
                 }
             }
         });
-        thread::spawn(move || loop {
-            if tick_tx.send(Event::Tick(tick::Tick {})).is_err() {
-                break;
-            }
-            thread::sleep(Duration::from_millis(
-                TICKRATE.load(Ordering::Relaxed).into(),
-            ));
-        });
     }
 
-    pub fn set_tickrate(&self, millis: u32) {
-        TICKRATE.store(millis, Ordering::Relaxed)
-    }
-
-    pub fn next(&self) -> Result<Event, mpsc::RecvError> {
+    pub fn next(&self) -> Result<Event<A>, mpsc::RecvError> {
         self.rx.recv()
     }
 }

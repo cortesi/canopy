@@ -17,7 +17,7 @@ struct Handle {}
 #[derive(StatefulNode)]
 struct Root {
     state: NodeState,
-    child: frame::Frame<Handle, Text<Handle>>,
+    child: frame::Frame<Handle, (), Text<Handle>>,
 }
 
 impl Root {
@@ -29,13 +29,13 @@ impl Root {
     }
 }
 
-impl Node<Handle> for Root {
+impl Node<Handle, ()> for Root {
     fn can_focus(&self) -> bool {
         true
     }
     fn handle_mouse(
         &mut self,
-        app: &mut Canopy<Handle>,
+        app: &mut Canopy<Handle, ()>,
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<EventOutcome> {
@@ -50,7 +50,7 @@ impl Node<Handle> for Root {
     }
     fn handle_key(
         &mut self,
-        app: &mut Canopy<Handle>,
+        app: &mut Canopy<Handle, ()>,
         _: &mut Handle,
         k: key::Key,
     ) -> Result<EventOutcome> {
@@ -70,17 +70,17 @@ impl Node<Handle> for Root {
         Ok(EventOutcome::Handle { skip: false })
     }
 
-    fn layout(&mut self, app: &mut Canopy<Handle>, screen: Rect) -> Result<()> {
+    fn layout(&mut self, app: &mut Canopy<Handle, ()>, screen: Rect) -> Result<()> {
         fit_and_update(app, screen, &mut self.child)
     }
 
-    fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle>) -> Result<()>) -> Result<()> {
+    fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle, ()>) -> Result<()>) -> Result<()> {
         f(&self.child)
     }
 
     fn children_mut(
         &mut self,
-        f: &mut dyn FnMut(&mut dyn Node<Handle>) -> Result<()>,
+        f: &mut dyn FnMut(&mut dyn Node<Handle, ()>) -> Result<()>,
     ) -> Result<()> {
         f(&mut self.child)
     }

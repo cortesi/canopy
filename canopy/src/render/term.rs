@@ -12,7 +12,7 @@ use crate::{
     geom::{Point, Rect},
     render::Render,
     style::Style,
-    Canopy, EventOutcome, Node, Result,
+    Actions, Canopy, EventOutcome, Node, Result,
 };
 use crossterm::{
     cursor::{CursorShape, DisableBlinking, EnableBlinking, Hide, MoveTo, SetCursorShape, Show},
@@ -103,9 +103,9 @@ impl Backend for Term {
     }
 }
 
-pub fn runloop<S, N>(style: Style, root: &mut N, s: &mut S) -> Result<()>
+pub fn runloop<S, A: 'static + Actions, N>(style: Style, root: &mut N, s: &mut S) -> Result<()>
 where
-    N: Node<S>,
+    N: Node<S, A>,
 {
     let mut be = Term::default();
     let mut app = Canopy::new(Render::new(&mut be, style));
@@ -133,7 +133,7 @@ where
         }
     }));
 
-    let events = EventSource::new(200);
+    let events = EventSource::new();
     let size = size()?;
     app.resize(root, Rect::new(0, 0, size.0, size.1))?;
 

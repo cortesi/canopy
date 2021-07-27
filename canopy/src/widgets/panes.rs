@@ -5,20 +5,20 @@ use crate as canopy;
 use crate::{
     geom::Rect,
     state::{NodeState, StatefulNode},
-    Canopy, Node, Result,
+    Actions, Canopy, Node, Result,
 };
 
 /// Panes manages a set of child nodes arranged in a 2d grid.
 #[derive(StatefulNode)]
-pub struct Panes<S, N: canopy::Node<S>> {
-    _marker: PhantomData<S>,
+pub struct Panes<S, A: Actions, N: Node<S, A>> {
+    _marker: PhantomData<(S, A)>,
     pub children: Vec<Vec<N>>,
     pub state: NodeState,
 }
 
-impl<S, N> Panes<S, N>
+impl<S, A: Actions, N> Panes<S, A, N>
 where
-    N: canopy::Node<S>,
+    N: Node<S, A>,
 {
     pub fn new(n: N) -> Self {
         Panes {
@@ -28,7 +28,7 @@ where
         }
     }
     /// Get the offset of the current focus in the children vector.
-    pub fn focus_coords(&mut self, app: &Canopy<S>) -> Option<(usize, usize)> {
+    pub fn focus_coords(&mut self, app: &Canopy<S, A>) -> Option<(usize, usize)> {
         for (x, col) in self.children.iter_mut().enumerate() {
             for (y, row) in col.iter_mut().enumerate() {
                 if app.on_focus_path(row) {
@@ -39,7 +39,7 @@ where
         None
     }
     /// Delete the focus node. If a column ends up empty, it is removed.
-    pub fn delete_focus(&mut self, app: &mut Canopy<S>) -> Result<()> {
+    pub fn delete_focus(&mut self, app: &mut Canopy<S, A>) -> Result<()> {
         if let Some((x, y)) = self.focus_coords(app) {
             app.focus_next(self)?;
             self.children[x].remove(y);
@@ -53,9 +53,9 @@ where
     }
     /// Insert a node, splitting vertically. If we have a focused node, the new
     /// node is inserted in a row beneath it. If not, a new column is added.
-    pub fn insert_row(&mut self, app: &Canopy<S>, n: N) -> Result<()>
+    pub fn insert_row(&mut self, app: &Canopy<S, A>, n: N) -> Result<()>
     where
-        N: canopy::Node<S>,
+        N: Node<S, A>,
     {
         if let Some((x, y)) = self.focus_coords(app) {
             self.children[x].insert(y, n);
@@ -66,9 +66,9 @@ where
     }
     /// Insert a node in a new column. If we have a focused node, the new node
     /// is added in a new column to the right.
-    pub fn insert_col(&mut self, app: &mut Canopy<S>, mut n: N) -> Result<()>
+    pub fn insert_col(&mut self, app: &mut Canopy<S, A>, mut n: N) -> Result<()>
     where
-        N: canopy::Node<S>,
+        N: Node<S, A>,
     {
         let coords = self.focus_coords(app);
         app.focus_next(&mut n)?;
@@ -90,7 +90,7 @@ where
     }
 }
 
-impl<S, N: canopy::Node<S>> Node<S> for Panes<S, N> {
+impl<S, A: Actions, N: Node<S, A>> Node<S, A> for Panes<S, A, N> {
     #[duplicate(
         method          reference(type);
         [children]      [& type];
@@ -98,7 +98,7 @@ impl<S, N: canopy::Node<S>> Node<S> for Panes<S, N> {
     )]
     fn method(
         self: reference([Self]),
-        f: &mut dyn FnMut(reference([dyn Node<S>])) -> Result<()>,
+        f: &mut dyn FnMut(reference([dyn Node<S, A>])) -> Result<()>,
     ) -> Result<()> {
         for col in reference([self.children]) {
             for row in col {
@@ -108,13 +108,13 @@ impl<S, N: canopy::Node<S>> Node<S> for Panes<S, N> {
         Ok(())
     }
 
-    fn render(&self, _: &mut Canopy<S>) -> Result<()> {
+    fn render(&self, _: &mut Canopy<S, A>) -> Result<()> {
         // FIXME - this should probably clear the area if the last node is
         // deleted.
         Ok(())
     }
 
-    fn layout(&mut self, app: &mut Canopy<S>, screen: Rect) -> Result<()> {
+    fn layout(&mut self, app: &mut Canopy<S, A>, screen: Rect) -> Result<()> {
         let l = screen.split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
@@ -137,7 +137,7 @@ mod tests {
         let (_, mut tr) = TestRender::create();
         let mut app = utils::tcanopy(&mut tr);
         let tn = utils::TBranch::new("a");
-        let mut p: Panes<utils::State, utils::TBranch> = Panes::new(tn);
+        let mut p: Panes<utils::State, (), utils::TBranch> = Panes::new(tn);
         let r = Rect {
             tl: Point::zero(),
             w: 100,

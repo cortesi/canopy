@@ -1,9 +1,9 @@
 use crate::{
     cursor,
-    event::{key, mouse, tick},
+    event::{key, mouse},
     geom::Rect,
     geom::Size,
-    Canopy, Result, StatefulNode,
+    Actions, Canopy, Result, StatefulNode,
 };
 use duplicate::duplicate;
 use std::fmt::Debug;
@@ -69,7 +69,7 @@ impl Walker for EventOutcome {
 /// The type paramter `S` is the application backing store object that is passed
 /// to all events.
 #[allow(unused_variables)]
-pub trait Node<S>: StatefulNode {
+pub trait Node<S, A: Actions>: StatefulNode {
     /// The name of this node, if it has one, for debugging and testing
     /// purposes.
     fn name(&self) -> Option<String> {
@@ -82,7 +82,7 @@ pub trait Node<S>: StatefulNode {
     /// behaviour. Implementing this method should only be needed in rare
     /// circumstances, like container nodes that need to respond to changes in
     /// sub-nodes. The default implementation returns `None`.
-    fn should_render(&self, app: &Canopy<S>) -> Option<bool> {
+    fn should_render(&self, app: &Canopy<S, A>) -> Option<bool> {
         None
     }
 
@@ -101,7 +101,12 @@ pub trait Node<S>: StatefulNode {
     /// event was ignored. Only nodes that have focus may handle key input, so
     /// this method is only called if focused() returns true. The default
     /// implementation ignores input.
-    fn handle_key(&mut self, app: &mut Canopy<S>, s: &mut S, k: key::Key) -> Result<EventOutcome> {
+    fn handle_key(
+        &mut self,
+        app: &mut Canopy<S, A>,
+        s: &mut S,
+        k: key::Key,
+    ) -> Result<EventOutcome> {
         Ok(EventOutcome::Ignore { skip: false })
     }
 
@@ -109,7 +114,7 @@ pub trait Node<S>: StatefulNode {
     /// the event was ignored. The default implementation ignores mouse input.
     fn handle_mouse(
         &mut self,
-        app: &mut Canopy<S>,
+        app: &mut Canopy<S, A>,
         s: &mut S,
         k: mouse::Mouse,
     ) -> Result<EventOutcome> {
@@ -117,26 +122,21 @@ pub trait Node<S>: StatefulNode {
     }
 
     /// Handle a periodic tick event.
-    fn handle_tick(
-        &mut self,
-        app: &mut Canopy<S>,
-        s: &mut S,
-        k: tick::Tick,
-    ) -> Result<EventOutcome> {
+    fn handle_action(&mut self, app: &mut Canopy<S, A>, s: &mut S, k: A) -> Result<EventOutcome> {
         Ok(EventOutcome::Ignore { skip: false })
     }
 
     /// Call a closure on this node's children. The order in which children are
     /// processed must match `children_mut`. The default implementation assumes
     /// this node has no children, and just returns.
-    fn children(&self, f: &mut dyn FnMut(&dyn Node<S>) -> Result<()>) -> Result<()> {
+    fn children(&self, f: &mut dyn FnMut(&dyn Node<S, A>) -> Result<()>) -> Result<()> {
         Ok(())
     }
 
     /// Call a closure mutably on this node's children. The order in which
     /// children are processed must match `children`. The default implementation
     /// assumes this node has no children, and just returns.
-    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<()>) -> Result<()> {
+    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node<S, A>) -> Result<()>) -> Result<()> {
         Ok(())
     }
 
@@ -152,7 +152,7 @@ pub trait Node<S>: StatefulNode {
     /// itself.
     ///
     /// The default implementation just returns the target value.
-    fn fit(&mut self, app: &mut Canopy<S>, target: Size) -> Result<Size> {
+    fn fit(&mut self, app: &mut Canopy<S, A>, target: Size) -> Result<Size> {
         Ok(target)
     }
 
@@ -164,9 +164,7 @@ pub trait Node<S>: StatefulNode {
     ///
     /// The default does nothing, which is appropriate for nodes that have no
     /// children.
-    fn layout(&mut self, app: &mut Canopy<S>, screen_rect: Rect) -> Result<()> {
-        // let v = self.fit(app, screen_rect.into())?;
-        // self.update_view(v, screen_rect);
+    fn layout(&mut self, app: &mut Canopy<S, A>, screen_rect: Rect) -> Result<()> {
         Ok(())
     }
 
@@ -174,7 +172,7 @@ pub trait Node<S>: StatefulNode {
     /// Layout implementation. Nodes with no children should always make sure
     /// they redraw all of `self.screen_area()`. The default implementation does
     /// nothing.
-    fn render(&self, app: &mut Canopy<S>) -> Result<()> {
+    fn render(&self, app: &mut Canopy<S, A>) -> Result<()> {
         Ok(())
     }
 }
@@ -187,9 +185,9 @@ pub trait Node<S>: StatefulNode {
     [postorder]        [& type]         [children];
     [postorder_mut]    [&mut type]      [children_mut];
 )]
-pub fn method<S, R: Walker + Default>(
-    e: reference([dyn Node<S>]),
-    f: &mut dyn FnMut(reference([dyn Node<S>])) -> Result<R>,
+pub fn method<S, A: Actions, R: Walker + Default>(
+    e: reference([dyn Node<S, A>]),
+    f: &mut dyn FnMut(reference([dyn Node<S, A>])) -> Result<R>,
 ) -> Result<R> {
     let mut v = R::default();
     e.children(&mut |x| {
@@ -203,9 +201,9 @@ pub fn method<S, R: Walker + Default>(
 
 // A preorder traversal of the nodes under e. Enabling skipping in the walker
 // prunes all children of the currently visited node out of the traversal.
-pub fn preorder<S, W: Walker>(
-    e: &mut dyn Node<S>,
-    f: &mut dyn FnMut(&mut dyn Node<S>) -> Result<W>,
+pub fn preorder<S, A: Actions, W: Walker>(
+    e: &mut dyn Node<S, A>,
+    f: &mut dyn FnMut(&mut dyn Node<S, A>) -> Result<W>,
 ) -> Result<W> {
     let mut v = f(e)?;
     if !v.skip() {
@@ -223,7 +221,7 @@ mod tests {
     use crate::{base::SkipWalker, tutils::utils};
 
     fn skipper(
-        x: &mut dyn Node<utils::State>,
+        x: &mut dyn Node<utils::State, ()>,
         skipname: String,
         v: &mut Vec<String>,
     ) -> Result<SkipWalker> {

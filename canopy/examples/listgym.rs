@@ -36,29 +36,43 @@ impl Block {
     }
 }
 
-impl Node<Handle> for Block {
-    fn fit(&mut self, app: &mut Canopy<Handle>, target: Size) -> Result<Size> {
+impl Node<Handle, ()> for Block {
+    fn fit(&mut self, app: &mut Canopy<Handle, ()>, target: Size) -> Result<Size> {
         Ok(self.child.fit(app, target)?)
     }
 
-    fn layout(&mut self, _app: &mut Canopy<Handle>, _screen: Rect) -> Result<()> {
+    fn layout(&mut self, _app: &mut Canopy<Handle, ()>, _screen: Rect) -> Result<()> {
         self.child.state_mut().viewport = self.state().viewport;
         Ok(())
     }
 
-    fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle>) -> Result<()>) -> Result<()> {
+    fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle, ()>) -> Result<()>) -> Result<()> {
         f(&self.child)
     }
 
     fn children_mut(
         &mut self,
-        f: &mut dyn FnMut(&mut dyn Node<Handle>) -> Result<()>,
+        f: &mut dyn FnMut(&mut dyn Node<Handle, ()>) -> Result<()>,
     ) -> Result<()> {
         f(&mut self.child)
     }
 
-    fn render(&self, app: &mut Canopy<Handle>) -> Result<()> {
+    fn render(&self, app: &mut Canopy<Handle, ()>) -> Result<()> {
         app.render.style.push_layer(&self.color);
+        Ok(())
+    }
+}
+
+#[derive(StatefulNode)]
+struct StatusBar {
+    state: NodeState,
+}
+
+impl Node<Handle, ()> for StatusBar {
+    fn render(&self, app: &mut Canopy<Handle, ()>) -> Result<()> {
+        app.render.style.push_layer("statusbar");
+        app.render
+            .text("text", self.view().first_line(), "listgym")?;
         Ok(())
     }
 }
@@ -66,7 +80,8 @@ impl Node<Handle> for Block {
 #[derive(StatefulNode)]
 struct Root {
     state: NodeState,
-    content: frame::Frame<Handle, List<Handle, Block>>,
+    content: frame::Frame<Handle, (), List<Handle, (), Block>>,
+    statusbar: StatusBar,
 }
 
 impl Root {
@@ -75,13 +90,24 @@ impl Root {
         Root {
             state: NodeState::default(),
             content: frame::Frame::new(List::new(nodes)),
+            statusbar: StatusBar {
+                state: NodeState::default(),
+            },
         }
     }
 }
 
-impl Node<Handle> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle>, screen: Rect) -> Result<()> {
-        fit_and_update(app, screen, &mut self.content)
+impl Node<Handle, ()> for Root {
+    fn layout(&mut self, app: &mut Canopy<Handle, ()>, screen: Rect) -> Result<()> {
+        let sb = Rect::new(screen.tl.x, screen.tl.y + screen.h - 1, screen.w, 1);
+        let ct = Rect {
+            tl: screen.tl,
+            w: screen.w,
+            h: screen.h - 1,
+        };
+        fit_and_update(app, sb, &mut self.statusbar)?;
+        fit_and_update(app, ct, &mut self.content)?;
+        Ok(())
     }
 
     fn can_focus(&self) -> bool {
@@ -90,7 +116,7 @@ impl Node<Handle> for Root {
 
     fn handle_mouse(
         &mut self,
-        app: &mut Canopy<Handle>,
+        app: &mut Canopy<Handle, ()>,
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<EventOutcome> {
@@ -107,7 +133,7 @@ impl Node<Handle> for Root {
 
     fn handle_key(
         &mut self,
-        app: &mut Canopy<Handle>,
+        app: &mut Canopy<Handle, ()>,
         _: &mut Handle,
         k: key::Key,
     ) -> Result<EventOutcome> {
@@ -128,15 +154,17 @@ impl Node<Handle> for Root {
         Ok(EventOutcome::Handle { skip: false })
     }
 
-    fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle>) -> Result<()>) -> Result<()> {
+    fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle, ()>) -> Result<()>) -> Result<()> {
+        f(&self.statusbar)?;
         f(&self.content)?;
         Ok(())
     }
 
     fn children_mut(
         &mut self,
-        f: &mut dyn FnMut(&mut dyn Node<Handle>) -> Result<()>,
+        f: &mut dyn FnMut(&mut dyn Node<Handle, ()>) -> Result<()>,
     ) -> Result<()> {
+        f(&mut self.statusbar)?;
         f(&mut self.content)?;
         Ok(())
     }
@@ -147,6 +175,8 @@ pub fn main() -> Result<()> {
     colors.insert("red/text", Some(solarized::RED), None);
     colors.insert("blue/text", Some(solarized::BLUE), None);
     colors.insert("green/text", Some(solarized::GREEN), None);
+
+    colors.insert("statusbar/text", Some(solarized::BLUE), None);
 
     let mut h = Handle {};
     let mut root = Root::new();
