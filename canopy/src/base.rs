@@ -601,7 +601,7 @@ mod tests {
         Ok(v)
     }
 
-    fn run_evt(
+    fn run_test(
         func: impl FnOnce(Arc<Mutex<TestBuf>>, Canopy<State, TActions>, TRoot, State) -> Result<()>,
     ) -> Result<()> {
         let (buf, mut tr) = TestRender::create();
@@ -613,7 +613,7 @@ mod tests {
 
     #[test]
     fn tfocus_next() -> Result<()> {
-        run_evt(|_, mut app, mut root, _| {
+        run_test(|_, mut app, mut root, _| {
             assert!(!app.is_focused(&root));
             app.focus_next(&mut root)?;
             assert!(app.is_focused(&root));
@@ -643,7 +643,7 @@ mod tests {
 
     #[test]
     fn tfocus_prev() -> Result<()> {
-        run_evt(|_, mut app, mut root, _| {
+        run_test(|_, mut app, mut root, _| {
             assert!(!app.is_focused(&root));
             app.focus_prev(&mut root)?;
             assert!(app.is_focused(&root.b.b));
@@ -665,7 +665,7 @@ mod tests {
 
     #[test]
     fn tfoci() -> Result<()> {
-        run_evt(|_, mut app, mut root, _| {
+        run_test(|_, mut app, mut root, _| {
             assert_eq!(focvec(&mut app, &mut root)?.len(), 0);
 
             assert!(!app.on_focus_path(&mut root));
@@ -694,7 +694,7 @@ mod tests {
 
     #[test]
     fn tfocus_right() -> Result<()> {
-        run_evt(|_, mut app, mut root, _| {
+        run_test(|_, mut app, mut root, _| {
             app.set_focus(&mut root.a.a)?;
             app.focus_right(&mut root)?;
             assert!(app.is_focused(&root.b.a));
@@ -714,7 +714,7 @@ mod tests {
 
     #[test]
     fn taction() -> Result<()> {
-        run_evt(|_, mut app, mut root, mut s| {
+        run_test(|_, mut app, mut root, mut s| {
             app.set_focus(&mut root)?;
             root.next_outcome = Some(Outcome::handle_and_continue());
             assert_eq!(
@@ -736,7 +736,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_evt(|_, mut app, mut root, mut s| {
+        run_test(|_, mut app, mut root, mut s| {
             app.set_focus(&mut root)?;
             root.a.next_outcome = Some(Outcome::Ignore(Ignore::default().with_skip()));
             assert_eq!(
@@ -761,7 +761,7 @@ mod tests {
 
     #[test]
     fn tkey() -> Result<()> {
-        run_evt(|_, mut app, mut root, mut s| {
+        run_test(|_, mut app, mut root, mut s| {
             app.set_focus(&mut root)?;
             root.next_outcome = Some(Outcome::handle());
             assert!(app.key(&mut root, &mut s, K_ANY)?.is_handled());
@@ -769,7 +769,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_evt(|_, mut app, mut root, mut s| {
+        run_test(|_, mut app, mut root, mut s| {
             app.set_focus(&mut root.a.a)?;
             root.a.a.next_outcome = Some(Outcome::handle());
             assert!(app.key(&mut root, &mut s, K_ANY)?.is_handled());
@@ -777,7 +777,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_evt(|_, mut app, mut root, mut s| {
+        run_test(|_, mut app, mut root, mut s| {
             app.set_focus(&mut root.a.a)?;
             root.a.next_outcome = Some(Outcome::handle());
             assert!(app.key(&mut root, &mut s, K_ANY)?.is_handled());
@@ -785,7 +785,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_evt(|_, mut app, mut root, mut s| {
+        run_test(|_, mut app, mut root, mut s| {
             app.set_focus(&mut root.a.a)?;
             root.next_outcome = Some(Outcome::handle());
             assert!(app.key(&mut root, &mut s, K_ANY)?.is_handled());
@@ -796,7 +796,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_evt(|_, mut app, mut root, mut s| {
+        run_test(|_, mut app, mut root, mut s| {
             app.set_focus(&mut root.a)?;
             root.a.next_outcome = Some(Outcome::handle());
             assert!(app.key(&mut root, &mut s, K_ANY)?.is_handled());
@@ -804,7 +804,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_evt(|_, mut app, mut root, mut s| {
+        run_test(|_, mut app, mut root, mut s| {
             app.set_focus(&mut root.a)?;
             root.next_outcome = Some(Outcome::handle());
             assert!(app.key(&mut root, &mut s, K_ANY)?.is_handled());
@@ -813,7 +813,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_evt(|_, mut app, mut root, mut s| {
+        run_test(|_, mut app, mut root, mut s| {
             app.set_focus(&mut root.a.b)?;
             root.a.next_outcome = Some(Outcome::Ignore(Ignore::default().with_skip()));
             root.next_outcome = Some(Outcome::handle());
@@ -822,7 +822,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_evt(|_, mut app, mut root, mut s| {
+        run_test(|_, mut app, mut root, mut s| {
             app.set_focus(&mut root.a.a)?;
             root.a.a.next_outcome = Some(Outcome::handle_with_action(TActions::One));
             app.key(&mut root, &mut s, K_ANY)?;
@@ -837,7 +837,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_evt(|_, mut app, mut root, mut s| {
+        run_test(|_, mut app, mut root, mut s| {
             app.set_focus(&mut root.a.b)?;
             root.a.next_outcome = Some(Outcome::handle_with_action(TActions::One));
             app.key(&mut root, &mut s, K_ANY)?;
@@ -857,7 +857,7 @@ mod tests {
 
     #[test]
     fn tmouse() -> Result<()> {
-        run_evt(|_, mut app, mut root, mut s| {
+        run_test(|_, mut app, mut root, mut s| {
             app.set_focus(&mut root)?;
             root.next_outcome = Some(Outcome::handle());
             let evt = root.a.a.make_mouse_event()?;
@@ -869,7 +869,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_evt(|_, mut app, mut root, mut s| {
+        run_test(|_, mut app, mut root, mut s| {
             root.a.a.next_outcome = Some(Outcome::handle());
             let evt = root.a.a.make_mouse_event()?;
             assert!(app.mouse(&mut root, &mut s, evt)?.is_handled());
@@ -882,7 +882,7 @@ mod tests {
 
     #[test]
     fn tresize() -> Result<()> {
-        run_evt(|_, mut app, mut root, _| {
+        run_test(|_, mut app, mut root, _| {
             let size = 100;
             assert_eq!(root.screen(), Rect::new(0, 0, size, size));
             assert_eq!(root.a.screen(), Rect::new(0, 0, size / 2, size));
@@ -897,7 +897,7 @@ mod tests {
     }
     #[test]
     fn trender() -> Result<()> {
-        run_evt(|buf, mut app, mut root, _| {
+        run_test(|buf, mut app, mut root, _| {
             app.render(&mut root)?;
             assert_eq!(
                 buf.lock()?.text,
@@ -945,7 +945,7 @@ mod tests {
 
     #[test]
     fn ttaintskip() -> Result<()> {
-        run_evt(|buf, mut app, mut root, _| {
+        run_test(|buf, mut app, mut root, _| {
             app.render(&mut root)?;
             let mut s = State::new();
             app.set_focus(&mut root)?;
