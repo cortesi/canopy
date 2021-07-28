@@ -54,21 +54,20 @@ pub trait Node<S, A: Actions>: StatefulNode {
         false
     }
 
-    /// Called for each node on the focus path, after each render sweep.
+    /// Called for each node on the focus path, after each render sweep. The
+    /// first node that returns a ``cursor::Cursor`` specification controls the
+    /// cursor. If no node returns a cursor, cursor display is disabled.
     fn cursor(&self) -> Option<cursor::Cursor> {
         None
     }
 
-    /// Handle a key event just for this node. Return EventResult::Ingore if the
-    /// event was ignored. Only nodes that have focus may handle key input, so
-    /// this method is only called if focused() returns true. The default
-    /// implementation ignores input.
+    /// Handle a key event. This event is only called for nodes that are on the
+    /// focus path. The default implementation ignores input.
     fn handle_key(&mut self, app: &mut Canopy<S, A>, s: &mut S, k: key::Key) -> Result<Outcome<A>> {
         Ok(Outcome::ignore())
     }
 
-    /// Handle a mouse event just for this node. Return EventResult::Ignore if
-    /// the event was ignored. The default implementation ignores mouse input.
+    /// Handle a mouse event.The default implementation ignores mouse input.
     fn handle_mouse(
         &mut self,
         app: &mut Canopy<S, A>,
@@ -78,7 +77,7 @@ pub trait Node<S, A: Actions>: StatefulNode {
         Ok(Outcome::ignore())
     }
 
-    /// Handle a periodic tick event.
+    /// Handle a broadcast action.
     fn handle_action(&mut self, app: &mut Canopy<S, A>, s: &mut S, k: A) -> Result<Outcome<A>> {
         Ok(Outcome::ignore())
     }

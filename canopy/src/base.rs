@@ -458,16 +458,13 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
     /// Propagate a tick event through the tree. All nodes get the event, even
     /// if they are hidden.
     pub fn action(&mut self, root: &mut dyn Node<S, A>, s: &mut S, t: A) -> Result<Outcome<A>> {
-        let mut ret = Outcome::default();
-        preorder(root, &mut |x| -> Result<SkipWalker> {
+        preorder(root, &mut |x| -> Result<Outcome<A>> {
             let o = x.handle_action(self, s, t)?;
-            ret = ret.join(o.clone());
             if o.is_handled() {
                 self.taint(x);
             }
-            Ok(SkipWalker::new(o.has_skip()))
-        })?;
-        Ok(ret)
+            Ok(o)
+        })
     }
 
     /// Propagate an event through the tree.
