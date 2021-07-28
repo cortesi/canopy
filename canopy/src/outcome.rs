@@ -3,7 +3,6 @@ use crate::{node::Walker, Actions};
 #[derive(Debug, PartialEq, Clone)]
 pub struct Handle<A: Actions> {
     pub skip: bool,
-    pub broadcast: Vec<A>,
     pub actions: Vec<A>,
 }
 
@@ -11,7 +10,6 @@ impl<A: Actions> Default for Handle<A> {
     fn default() -> Handle<A> {
         Handle {
             skip: true,
-            broadcast: vec![],
             actions: vec![],
         }
     }
@@ -20,10 +18,6 @@ impl<A: Actions> Default for Handle<A> {
 impl<A: Actions> Handle<A> {
     pub fn with_action(mut self, action: A) -> Self {
         self.actions.push(action);
-        self
-    }
-    pub fn with_broadcast(mut self, action: A) -> Self {
-        self.broadcast.push(action);
         self
     }
     pub fn and_continue(mut self) -> Self {
@@ -111,14 +105,10 @@ impl<A: Actions> Walker for Outcome<A> {
                 let mut actions = h1.actions.clone();
                 actions.extend(h2.actions);
 
-                let mut broadcast = h1.broadcast.clone();
-                broadcast.extend(h2.broadcast);
-
                 Outcome::Handle(Handle {
                     // Skip is not inherited on join
                     skip: false,
                     actions,
-                    broadcast,
                 })
             }
             (Outcome::Handle(h), _) => Outcome::Handle(h.clone()),

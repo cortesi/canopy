@@ -9,7 +9,7 @@ use crate::{
     Actions, Error, Outcome, Render, Result, StatefulNode,
 };
 
-pub struct SkipWalker {
+pub(crate) struct SkipWalker {
     pub has_skip: bool,
 }
 
@@ -390,33 +390,40 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
         m: mouse::Mouse,
     ) -> Result<Outcome<A>> {
         let mut handled = false;
+        let mut actions: Vec<A> = vec![];
         locate(root, m.loc, &mut |x| {
-            Ok(if handled {
-                Outcome::handle()
-            } else if !x.is_hidden() {
-                let r = x.screen();
-                let m = mouse::Mouse {
-                    action: m.action,
-                    button: m.button,
-                    modifiers: m.modifiers,
-                    loc: r.rebase_point(m.loc)?,
-                };
-                let oc = x.handle_mouse(self, s, m)?;
-                match &oc {
-                    Outcome::Ignore(v) => {
-                        if v.skip {
-                            handled = true;
-                        }
+            let oc = if handled {
+                let mut hdl = Outcome::default();
+                for a in &actions {
+                    hdl = hdl.join(x.handle_event_action(self, s, *a)?);
+                    if hdl.has_skip() {
+                        break;
                     }
-                    Outcome::Handle(_) => {
-                        self.taint(x);
-                        handled = true;
-                    }
-                };
-                oc
+                }
+                hdl
             } else {
-                Outcome::default()
-            })
+                let hdl = x.handle_mouse(
+                    self,
+                    s,
+                    mouse::Mouse {
+                        action: m.action,
+                        button: m.button,
+                        modifiers: m.modifiers,
+                        loc: x.screen().rebase_point(m.loc)?,
+                    },
+                )?;
+                if let Outcome::Handle(h) = &hdl {
+                    actions = h.actions.clone()
+                }
+                hdl.clone()
+            };
+            if oc.has_skip() {
+                handled = true;
+            } else if oc.is_handled() {
+                self.taint(x);
+                handled = true;
+            }
+            Ok(oc)
         })
     }
 
@@ -442,17 +449,12 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
                 }
                 hdl.clone()
             };
-            match &oc {
-                Outcome::Ignore(v) => {
-                    if v.skip {
-                        handled = true;
-                    }
-                }
-                Outcome::Handle(_) => {
-                    self.taint(x);
-                    handled = true;
-                }
-            };
+            if oc.has_skip() {
+                handled = true;
+            } else if oc.is_handled() {
+                self.taint(x);
+                handled = true;
+            }
             Ok(oc)
         })
     }
@@ -585,7 +587,7 @@ mod tests {
     use super::*;
     use crate::{
         geom::Rect,
-        outcome::Ignore,
+        outcome::{Handle, Ignore},
         render::test::{TestBuf, TestRender},
         tutils::utils::*,
     };
@@ -852,6 +854,27 @@ mod tests {
             Ok(())
         })?;
 
+        run_test(|_, mut app, mut root, mut s| {
+            app.set_focus(&mut root.a.b)?;
+            root.a.b.next_outcome = Some(Outcome::Handle(
+                Handle::default()
+                    .with_action(TActions::One)
+                    .with_action(TActions::Two),
+            ));
+            app.key(&mut root, &mut s, K_ANY)?;
+            assert_eq!(
+                s.path,
+                vec![
+                    "ba:lb@key->handle",
+                    "ba@eaction:one->ignore",
+                    "ba@eaction:two->ignore",
+                    "r@eaction:one->ignore",
+                    "r@eaction:two->ignore",
+                ]
+            );
+            Ok(())
+        })?;
+
         Ok(())
     }
 
@@ -874,6 +897,29 @@ mod tests {
             let evt = root.a.a.make_mouse_event()?;
             assert!(app.mouse(&mut root, &mut s, evt)?.is_handled());
             assert_eq!(s.path, vec!["ba:la@mouse->handle"]);
+            Ok(())
+        })?;
+
+        run_test(|_, mut app, mut root, mut s| {
+            root.a.a.next_outcome = Some(Outcome::handle());
+            let evt = root.a.a.make_mouse_event()?;
+            assert!(app.mouse(&mut root, &mut s, evt)?.is_handled());
+            assert_eq!(s.path, vec!["ba:la@mouse->handle"]);
+            Ok(())
+        })?;
+
+        run_test(|_, mut app, mut root, mut s| {
+            root.a.a.next_outcome = Some(Outcome::handle_with_action(TActions::One));
+            let evt = root.a.a.make_mouse_event()?;
+            assert!(app.mouse(&mut root, &mut s, evt)?.is_handled());
+            assert_eq!(
+                s.path,
+                vec![
+                    "ba:la@mouse->handle",
+                    "ba@eaction:one->ignore",
+                    "r@eaction:one->ignore",
+                ]
+            );
             Ok(())
         })?;
 
