@@ -455,11 +455,13 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
         Ok(())
     }
 
-    /// Propagate a tick event through the tree. All nodes get the event, even
-    /// if they are hidden.
-    pub fn action(&mut self, root: &mut dyn Node<S, A>, s: &mut S, t: A) -> Result<Outcome<A>> {
+    /// Broadcast an action through the tree. All nodes get the event, even if
+    /// they are hidden. Enabling skip on the returned Outcome prevents
+    /// propagation to a node's children. Nodes that handle an action are
+    /// automatically tainted.
+    pub fn broadcast(&mut self, root: &mut dyn Node<S, A>, s: &mut S, t: A) -> Result<Outcome<A>> {
         preorder(root, &mut |x| -> Result<Outcome<A>> {
-            let o = x.handle_action(self, s, t)?;
+            let o = x.handle_broadcast(self, s, t)?;
             if o.is_handled() {
                 self.taint(x);
             }
@@ -479,7 +481,7 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
                 self.resize(root, r)?;
                 Ok(Outcome::handle())
             }
-            Event::Action(t) => self.action(root, s, t),
+            Event::Action(t) => self.broadcast(root, s, t),
         }
     }
 
@@ -711,34 +713,34 @@ mod tests {
         app.set_focus(&mut root)?;
         root.next_event = Some(Outcome::handle_and_continue());
         assert_eq!(
-            app.action(&mut root, &mut s, ())?,
+            app.broadcast(&mut root, &mut s, ())?,
             Outcome::handle_and_continue()
         );
         assert_eq!(
             s.path,
             vec![
-                "r@action->handle",
-                "ba@action->ignore",
-                "ba:la@action->ignore",
-                "ba:lb@action->ignore",
-                "bb@action->ignore",
-                "bb:la@action->ignore",
-                "bb:lb@action->ignore"
+                "r@broadcast->handle",
+                "ba@broadcast->ignore",
+                "ba:la@broadcast->ignore",
+                "ba:lb@broadcast->ignore",
+                "bb@broadcast->ignore",
+                "bb:la@broadcast->ignore",
+                "bb:lb@broadcast->ignore"
             ]
         );
 
         let mut s = utils::State::new();
         app.set_focus(&mut root)?;
         root.a.next_event = Some(Outcome::Ignore(Ignore::default().with_skip()));
-        assert_eq!(app.action(&mut root, &mut s, ())?, ignore);
+        assert_eq!(app.broadcast(&mut root, &mut s, ())?, ignore);
         assert_eq!(
             s.path,
             vec![
-                "r@action->ignore",
-                "ba@action->ignore",
-                "bb@action->ignore",
-                "bb:la@action->ignore",
-                "bb:lb@action->ignore"
+                "r@broadcast->ignore",
+                "ba@broadcast->ignore",
+                "bb@broadcast->ignore",
+                "bb:la@broadcast->ignore",
+                "bb:lb@broadcast->ignore"
             ]
         );
 
@@ -746,15 +748,15 @@ mod tests {
         app.set_focus(&mut root)?;
         root.a.next_event = Some(Outcome::ignore_and_skip());
         root.b.b.next_event = Some(Outcome::handle());
-        assert_eq!(app.action(&mut root, &mut s, ())?, Outcome::handle());
+        assert_eq!(app.broadcast(&mut root, &mut s, ())?, Outcome::handle());
         assert_eq!(
             s.path,
             vec![
-                "r@action->ignore",
-                "ba@action->ignore",
-                "bb@action->ignore",
-                "bb:la@action->ignore",
-                "bb:lb@action->handle",
+                "r@broadcast->ignore",
+                "ba@broadcast->ignore",
+                "bb@broadcast->ignore",
+                "bb:la@broadcast->ignore",
+                "bb:lb@broadcast->handle",
             ]
         );
 
@@ -927,17 +929,17 @@ mod tests {
         root.a.a.next_event = Some(Outcome::handle());
         root.b.b.next_event = Some(Outcome::handle());
         app.skip_taint(&mut root.a.a);
-        assert!(app.action(&mut root, &mut s, ())?.is_handled());
+        assert!(app.broadcast(&mut root, &mut s, ())?.is_handled());
         assert_eq!(
             s.path,
             vec![
-                "r@action->handle",
-                "ba@action->ignore",
-                "ba:la@action->handle",
-                "ba:lb@action->ignore",
-                "bb@action->ignore",
-                "bb:la@action->ignore",
-                "bb:lb@action->handle"
+                "r@broadcast->handle",
+                "ba@broadcast->ignore",
+                "ba:la@broadcast->handle",
+                "ba:lb@broadcast->ignore",
+                "bb@broadcast->ignore",
+                "bb:la@broadcast->ignore",
+                "bb:lb@broadcast->handle"
             ]
         );
         app.render(&mut root)?;

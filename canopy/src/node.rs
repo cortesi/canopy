@@ -77,8 +77,19 @@ pub trait Node<S, A: Actions>: StatefulNode {
         Ok(Outcome::ignore())
     }
 
+    /// Handle a an action returned by an event handler on one of our
+    /// descendents.
+    fn handle_event_action(
+        &mut self,
+        app: &mut Canopy<S, A>,
+        s: &mut S,
+        k: A,
+    ) -> Result<Outcome<A>> {
+        Ok(Outcome::ignore())
+    }
+
     /// Handle a broadcast action.
-    fn handle_action(&mut self, app: &mut Canopy<S, A>, s: &mut S, k: A) -> Result<Outcome<A>> {
+    fn handle_broadcast(&mut self, app: &mut Canopy<S, A>, s: &mut S, k: A) -> Result<Outcome<A>> {
         Ok(Outcome::ignore())
     }
 

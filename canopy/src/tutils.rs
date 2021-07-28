@@ -91,13 +91,21 @@ pub mod utils {
         ) -> Result<Outcome<()>> {
             self.handle(s, "mouse")
         }
-        fn handle_action(
+        fn handle_broadcast(
             &mut self,
             _: &mut Canopy<State, ()>,
             s: &mut State,
             _: (),
         ) -> Result<Outcome<()>> {
-            self.handle(s, "action")
+            self.handle(s, "broadcast")
+        }
+        fn handle_event_action(
+            &mut self,
+            _: &mut Canopy<State, ()>,
+            s: &mut State,
+            _: (),
+        ) -> Result<Outcome<()>> {
+            self.handle(s, "eaction")
         }
     }
 
@@ -116,6 +124,7 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
+
         fn render(&self, app: &mut Canopy<State, ()>) -> Result<()> {
             app.render.text(
                 "any",
@@ -123,6 +132,7 @@ pub mod utils {
                 &format!("<{}>", self.name.clone()),
             )
         }
+
         fn handle_key(
             &mut self,
             _: &mut Canopy<State, ()>,
@@ -131,6 +141,7 @@ pub mod utils {
         ) -> Result<Outcome<()>> {
             self.handle(s, "key")
         }
+
         fn handle_mouse(
             &mut self,
             _: &mut Canopy<State, ()>,
@@ -139,13 +150,23 @@ pub mod utils {
         ) -> Result<Outcome<()>> {
             self.handle(s, "mouse")
         }
-        fn handle_action(
+
+        fn handle_broadcast(
             &mut self,
             _: &mut Canopy<State, ()>,
             s: &mut State,
             _: (),
         ) -> Result<Outcome<()>> {
-            self.handle(s, "action")
+            self.handle(s, "broadcast")
+        }
+
+        fn handle_event_action(
+            &mut self,
+            _: &mut Canopy<State, ()>,
+            s: &mut State,
+            _: (),
+        ) -> Result<Outcome<()>> {
+            self.handle(s, "eaction")
         }
 
         #[duplicate(
@@ -178,6 +199,7 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
+
         fn render(&self, app: &mut Canopy<State, ()>) -> Result<()> {
             app.render.text(
                 "any",
@@ -185,6 +207,7 @@ pub mod utils {
                 &format!("<{}>", self.name.clone()),
             )
         }
+
         fn handle_key(
             &mut self,
             _: &mut Canopy<State, ()>,
@@ -193,6 +216,7 @@ pub mod utils {
         ) -> Result<Outcome<()>> {
             self.handle(s, "key")
         }
+
         fn handle_mouse(
             &mut self,
             _: &mut Canopy<State, ()>,
@@ -201,13 +225,23 @@ pub mod utils {
         ) -> Result<Outcome<()>> {
             self.handle(s, "mouse")
         }
-        fn handle_action(
+
+        fn handle_broadcast(
             &mut self,
             _: &mut Canopy<State, ()>,
             s: &mut State,
             _: (),
         ) -> Result<Outcome<()>> {
-            self.handle(s, "action")
+            self.handle(s, "broadcast")
+        }
+
+        fn handle_event_action(
+            &mut self,
+            _: &mut Canopy<State, ()>,
+            s: &mut State,
+            _: (),
+        ) -> Result<Outcome<()>> {
+            self.handle(s, "eaction")
         }
 
         #[duplicate(
@@ -233,6 +267,7 @@ pub mod utils {
                 next_event: None,
             }
         }
+
         pub fn make_mouse_event(&self) -> Result<mouse::Mouse> {
             let a = self.screen();
             Ok(mouse::Mouse {
@@ -242,6 +277,7 @@ pub mod utils {
                 loc: a.tl,
             })
         }
+
         fn handle(&mut self, s: &mut State, evt: &str) -> Result<Outcome<()>> {
             let ret = if let Some(x) = self.next_event.clone() {
                 self.next_event = None;
