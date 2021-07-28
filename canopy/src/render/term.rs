@@ -153,9 +153,6 @@ where
                 Outcome::Handle { .. } => {
                     ignore = false;
                 }
-                Outcome::Skip { .. } => {
-                    ignore = true;
-                }
             }
         }
     }

@@ -13,6 +13,12 @@ pub struct SkipWalker {
     pub has_skip: bool,
 }
 
+impl SkipWalker {
+    pub fn new(skip: bool) -> Self {
+        SkipWalker { has_skip: skip }
+    }
+}
+
 impl Default for SkipWalker {
     fn default() -> Self {
         SkipWalker { has_skip: false }
@@ -161,9 +167,9 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
             Ok(if !focus_set && x.can_focus() {
                 self.set_focus(x)?;
                 focus_set = true;
-                SkipWalker { has_skip: true }
+                SkipWalker::new(true)
             } else {
-                SkipWalker::default()
+                SkipWalker::new(false)
             })
         })?;
         Ok(Outcome::handle())
@@ -406,7 +412,6 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
                         self.taint(x);
                         handled = true;
                     }
-                    _ => {}
                 };
                 oc
             } else {
@@ -434,7 +439,6 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
                         self.taint(x);
                         handled = true;
                     }
-                    _ => {}
                 };
                 oc
             })
@@ -456,26 +460,12 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
     pub fn action(&mut self, root: &mut dyn Node<S, A>, s: &mut S, t: A) -> Result<Outcome<A>> {
         let mut ret = Outcome::default();
         preorder(root, &mut |x| -> Result<SkipWalker> {
-            let v = x.handle_action(self, s, t)?;
-            ret = ret.join(v.clone());
-            Ok(match v {
-                Outcome::Handle(v) => {
-                    self.taint(x);
-                    if v.skip {
-                        SkipWalker { has_skip: true }
-                    } else {
-                        SkipWalker { has_skip: false }
-                    }
-                }
-                Outcome::Ignore(v) => {
-                    if v.skip {
-                        SkipWalker { has_skip: true }
-                    } else {
-                        SkipWalker { has_skip: false }
-                    }
-                }
-                Outcome::Skip => SkipWalker { has_skip: true },
-            })
+            let o = x.handle_action(self, s, t)?;
+            ret = ret.join(o.clone());
+            if o.is_handled() {
+                self.taint(x);
+            }
+            Ok(SkipWalker::new(o.has_skip()))
         })?;
         Ok(ret)
     }
@@ -519,16 +509,16 @@ fn method<S, A: Actions, R: Walker + Default>(
     traversal(e, &mut |x| -> Result<SkipWalker> {
         Ok(if focus_seen {
             ret = ret.join(f(x)?);
-            SkipWalker::default()
+            SkipWalker::new(false)
         } else if x.is_hidden() {
             // Hidden nodes don't hold focus
-            SkipWalker::default()
+            SkipWalker::new(false)
         } else if x.state().focus_gen == focus_gen {
             focus_seen = true;
             ret = ret.join(f(x)?);
-            SkipWalker { has_skip: true }
+            SkipWalker::new(true)
         } else {
-            SkipWalker::default()
+            SkipWalker::new(false)
         })
     })?;
     Ok(ret)
@@ -562,18 +552,18 @@ pub fn locate<S, A: Actions, R: Walker + Default>(
     postorder_mut(e, &mut |inner| -> Result<SkipWalker> {
         Ok(if seen {
             ret = ret.join(f(inner)?);
-            SkipWalker::default()
+            SkipWalker::new(false)
         } else if !inner.is_hidden() {
             let a = inner.screen();
             if a.contains_point(p) {
                 seen = true;
                 ret = ret.join(f(inner)?);
-                SkipWalker { has_skip: true }
+                SkipWalker::new(true)
             } else {
-                SkipWalker::default()
+                SkipWalker::new(false)
             }
         } else {
-            SkipWalker { has_skip: true }
+            SkipWalker::new(true)
         })
     })?;
     Ok(ret)
@@ -718,13 +708,15 @@ mod tests {
         let mut app = utils::tcanopy(&mut tr);
         let mut root = utils::TRoot::new();
 
-        let handled = Outcome::handle();
         let ignore = Outcome::ignore();
 
         let mut s = utils::State::new();
         app.set_focus(&mut root)?;
-        root.next_event = Some(handled.clone());
-        assert_eq!(app.action(&mut root, &mut s, ())?, handled);
+        root.next_event = Some(Outcome::handle_and_continue());
+        assert_eq!(
+            app.action(&mut root, &mut s, ())?,
+            Outcome::handle_and_continue()
+        );
         assert_eq!(
             s.path,
             vec![
@@ -755,12 +747,18 @@ mod tests {
 
         let mut s = utils::State::new();
         app.set_focus(&mut root)?;
-        root.a.next_event = Some(Outcome::Ignore(Ignore::default().with_skip()));
-        root.b.next_event = Some(Outcome::Ignore(Ignore::default().with_skip()));
-        assert_eq!(app.action(&mut root, &mut s, ())?, handled);
+        root.a.next_event = Some(Outcome::ignore_and_skip());
+        root.b.b.next_event = Some(Outcome::handle());
+        assert_eq!(app.action(&mut root, &mut s, ())?, Outcome::handle());
         assert_eq!(
             s.path,
-            vec!["r@action->ignore", "ba@action->ignore", "bb@->handle",]
+            vec![
+                "r@action->ignore",
+                "ba@action->ignore",
+                "bb@action->ignore",
+                "bb:la@action->ignore",
+                "bb:lb@action->handle",
+            ]
         );
 
         Ok(())
@@ -773,28 +771,26 @@ mod tests {
         let mut root = utils::TRoot::new();
         root.layout(&mut app, Rect::default())?;
 
-        let handled = Outcome::handle();
-
         let mut s = utils::State::new();
         app.set_focus(&mut root)?;
-        root.next_event = Some(handled.clone());
-        assert_eq!(app.key(&mut root, &mut s, utils::K_ANY)?, handled);
+        root.next_event = Some(Outcome::handle());
+        assert!(app.key(&mut root, &mut s, utils::K_ANY)?.is_handled());
         assert_eq!(s.path, vec!["r@key->handle"]);
 
         let mut s = utils::State::new();
         app.set_focus(&mut root.a.a)?;
-        root.a.a.next_event = Some(handled.clone());
-        assert_eq!(app.key(&mut root, &mut s, utils::K_ANY)?, handled);
+        root.a.a.next_event = Some(Outcome::handle());
+        assert!(app.key(&mut root, &mut s, utils::K_ANY)?.is_handled());
         assert_eq!(s.path, vec!["ba:la@key->handle"]);
 
         let mut s = utils::State::new();
-        root.a.next_event = Some(handled.clone());
-        assert_eq!(app.key(&mut root, &mut s, utils::K_ANY)?, handled);
+        root.a.next_event = Some(Outcome::handle());
+        assert!(app.key(&mut root, &mut s, utils::K_ANY)?.is_handled());
         assert_eq!(s.path, vec!["ba:la@key->ignore", "ba@key->handle"]);
 
         let mut s = utils::State::new();
-        root.next_event = Some(handled.clone());
-        assert_eq!(app.key(&mut root, &mut s, utils::K_ANY)?, handled);
+        root.next_event = Some(Outcome::handle());
+        assert!(app.key(&mut root, &mut s, utils::K_ANY)?.is_handled());
         assert_eq!(
             s.path,
             vec!["ba:la@key->ignore", "ba@key->ignore", "r@key->handle"]
@@ -802,13 +798,13 @@ mod tests {
 
         let mut s = utils::State::new();
         app.set_focus(&mut root.a)?;
-        root.a.next_event = Some(handled.clone());
-        assert_eq!(app.key(&mut root, &mut s, utils::K_ANY)?, handled);
+        root.a.next_event = Some(Outcome::handle());
+        assert!(app.key(&mut root, &mut s, utils::K_ANY)?.is_handled());
         assert_eq!(s.path, vec!["ba@key->handle"]);
 
         let mut s = utils::State::new();
-        root.next_event = Some(handled.clone());
-        assert_eq!(app.key(&mut root, &mut s, utils::K_ANY)?, handled);
+        root.next_event = Some(Outcome::handle());
+        assert!(app.key(&mut root, &mut s, utils::K_ANY)?.is_handled());
         assert_eq!(s.path, vec!["ba@key->ignore", "r@key->handle"]);
 
         assert_eq!(app.key(&mut root, &mut s, utils::K_ANY)?, Outcome::ignore());
@@ -816,7 +812,7 @@ mod tests {
         let mut s = utils::State::new();
         app.set_focus(&mut root.a.b)?;
         root.a.next_event = Some(Outcome::Ignore(Ignore::default().with_skip()));
-        root.next_event = Some(handled);
+        root.next_event = Some(Outcome::handle());
         app.key(&mut root, &mut s, utils::K_ANY)?;
         assert_eq!(s.path, vec!["ba:lb@key->ignore", "ba@key->ignore"]);
 
@@ -831,20 +827,19 @@ mod tests {
         let mut root = utils::TRoot::new();
         fit_and_update(&mut app, Rect::new(0, 0, SIZE, SIZE), &mut root)?;
 
-        let acted = Outcome::handle();
         let mut s = utils::State::new();
         app.set_focus(&mut root)?;
-        root.next_event = Some(acted.clone());
+        root.next_event = Some(Outcome::handle());
         let evt = root.a.a.make_mouse_event()?;
-        assert_eq!(app.mouse(&mut root, &mut s, evt)?, acted);
+        assert!(app.mouse(&mut root, &mut s, evt)?.is_handled());
         assert_eq!(
             s.path,
             vec!["ba:la@mouse->ignore", "ba@mouse->ignore", "r@mouse->handle"]
         );
 
-        root.a.a.next_event = Some(acted.clone());
+        root.a.a.next_event = Some(Outcome::handle());
         let mut s = utils::State::new();
-        assert_eq!(app.mouse(&mut root, &mut s, evt)?, acted);
+        assert!(app.mouse(&mut root, &mut s, evt)?.is_handled());
         assert_eq!(s.path, vec!["ba:la@mouse->handle"]);
 
         Ok(())
@@ -929,14 +924,13 @@ mod tests {
 
         app.render(&mut root)?;
 
-        let handled = Outcome::handle();
         let mut s = utils::State::new();
         app.set_focus(&mut root)?;
-        root.next_event = Some(handled.clone());
-        root.a.a.next_event = Some(handled.clone());
-        root.b.b.next_event = Some(handled.clone());
+        root.next_event = Some(Outcome::handle_and_continue());
+        root.a.a.next_event = Some(Outcome::handle());
+        root.b.b.next_event = Some(Outcome::handle());
         app.skip_taint(&mut root.a.a);
-        assert_eq!(app.action(&mut root, &mut s, ())?, handled);
+        assert!(app.action(&mut root, &mut s, ())?.is_handled());
         assert_eq!(
             s.path,
             vec![

@@ -54,7 +54,6 @@ impl Ignore {
 pub enum Outcome<A: Actions> {
     Handle(Handle<A>),
     Ignore(Ignore),
-    Skip,
 }
 
 impl<A: Actions> Default for Outcome<A> {
@@ -64,24 +63,39 @@ impl<A: Actions> Default for Outcome<A> {
 }
 
 impl<A: Actions> Outcome<A> {
+    /// An Ingore outcome that doesn't skip.
     pub fn ignore() -> Outcome<A> {
         Outcome::Ignore(Ignore::default())
     }
+    /// An Ingore outcome that with skipping enabled.
+    pub fn ignore_and_skip() -> Outcome<A> {
+        Outcome::Ignore(Ignore::default().with_skip())
+    }
+    /// A Handle outcome that skips.
     pub fn handle() -> Outcome<A> {
         Outcome::Handle(Handle::default())
     }
-    pub fn skip() -> Outcome<A> {
-        Outcome::Skip
+    /// A Handle outcome that with skipping disabled.
+    pub fn handle_and_continue() -> Outcome<A> {
+        Outcome::Handle(Handle::default().and_continue())
+    }
+    pub fn has_skip(&self) -> bool {
+        match self {
+            Outcome::Handle(Handle { skip, .. }) => *skip,
+            Outcome::Ignore(Ignore { skip, .. }) => *skip,
+        }
+    }
+    pub fn is_handled(&self) -> bool {
+        match self {
+            Outcome::Handle(_) => true,
+            Outcome::Ignore(_) => false,
+        }
     }
 }
 
 impl<A: Actions> Walker for Outcome<A> {
     fn skip(&self) -> bool {
-        match self {
-            Outcome::Skip => true,
-            Outcome::Handle(Handle { skip, .. }) => *skip,
-            Outcome::Ignore(Ignore { skip, .. }) => *skip,
-        }
+        self.has_skip()
     }
     fn join(&self, rhs: Self) -> Self {
         // At the moment, we don't propagate the skip flag, because it gets used

@@ -27,7 +27,6 @@ pub mod utils {
             let outcome = match result {
                 Outcome::Handle { .. } => "handle",
                 Outcome::Ignore { .. } => "ignore",
-                Outcome::Skip { .. } => "skip",
             };
             self.path.push(format!("{}@{}->{}", n, evt, outcome))
         }
