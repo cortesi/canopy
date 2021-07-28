@@ -12,10 +12,13 @@
     - Define name() for all built-in node types
   - Log-to-file
   - Add node names for relevant errors
+  - Benchmarking and integration tests
+- Testing
   - Improve the test render backend
     - At the moment, it's only client is the internal code, so it only implements
       logging of text. We should make it more complete for general use.
-  - Benchmarking and integration tests
+  - Integration tests
+  - Benchmarks
 
 
 User traps
@@ -26,5 +29,5 @@ User traps
 
 
 Bugs
-  - Pressing "a" repeatedly in focusgym crashes
   - Frame active bar changes height during scroll
+  - Apps crash if terminal is too small. We should just not display in this case.
