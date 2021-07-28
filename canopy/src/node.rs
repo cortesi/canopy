@@ -188,7 +188,7 @@ mod tests {
     use crate::{base::SkipWalker, tutils::utils};
 
     fn skipper(
-        x: &mut dyn Node<utils::State, ()>,
+        x: &mut dyn Node<utils::State, utils::TActions>,
         skipname: String,
         v: &mut Vec<String>,
     ) -> Result<SkipWalker> {

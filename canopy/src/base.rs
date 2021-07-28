@@ -424,24 +424,36 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
     /// handled only once, and then ignored.
     pub fn key(&mut self, root: &mut dyn Node<S, A>, s: &mut S, k: key::Key) -> Result<Outcome<A>> {
         let mut handled = false;
+        let mut actions: Vec<A> = vec![];
         focus_path_mut(self.focus_gen, root, &mut |x| -> Result<Outcome<A>> {
-            Ok(if handled {
-                Outcome::handle()
-            } else {
-                let oc = x.handle_key(self, s, k)?;
-                match &oc {
-                    Outcome::Ignore(v) => {
-                        if v.skip {
-                            handled = true;
-                        }
+            let oc = if handled {
+                let mut hdl = Outcome::default();
+                for a in &actions {
+                    hdl = hdl.join(x.handle_event_action(self, s, *a)?);
+                    if hdl.has_skip() {
+                        break;
                     }
-                    Outcome::Handle(_) => {
-                        self.taint(x);
+                }
+                hdl
+            } else {
+                let hdl = x.handle_key(self, s, k)?;
+                if let Outcome::Handle(h) = &hdl {
+                    actions = h.actions.clone()
+                }
+                hdl.clone()
+            };
+            match &oc {
+                Outcome::Ignore(v) => {
+                    if v.skip {
                         handled = true;
                     }
-                };
-                oc
-            })
+                }
+                Outcome::Handle(_) => {
+                    self.taint(x);
+                    handled = true;
+                }
+            };
+            Ok(oc)
         })
     }
 
@@ -572,13 +584,14 @@ pub fn locate<S, A: Actions, R: Walker + Default>(
 mod tests {
     use super::*;
     use crate::{
-        geom::Rect, outcome::Ignore, render::test::TestRender, tutils::utils, StatefulNode,
+        geom::Rect,
+        outcome::Ignore,
+        render::test::{TestBuf, TestRender},
+        tutils::utils::*,
     };
+    use std::sync::{Arc, Mutex};
 
-    pub fn focvec(
-        app: &mut Canopy<utils::State, ()>,
-        root: &mut utils::TRoot,
-    ) -> Result<Vec<String>> {
+    pub fn focvec(app: &mut Canopy<State, TActions>, root: &mut TRoot) -> Result<Vec<String>> {
         let mut v = vec![];
         focus_path_mut(app.focus_gen, root, &mut |x| -> Result<()> {
             let n = x.name().unwrap();
@@ -588,362 +601,378 @@ mod tests {
         Ok(v)
     }
 
+    fn run_evt(
+        func: impl FnOnce(Arc<Mutex<TestBuf>>, Canopy<State, TActions>, TRoot, State) -> Result<()>,
+    ) -> Result<()> {
+        let (buf, mut tr) = TestRender::create();
+        let mut app = tcanopy(&mut tr);
+        let mut root = TRoot::new();
+        fit_and_update(&mut app, Rect::new(0, 0, 100, 100), &mut root)?;
+        func(buf, app, root, State::new())
+    }
+
     #[test]
     fn tfocus_next() -> Result<()> {
-        let (_, mut tr) = TestRender::create();
-        let mut app = utils::tcanopy(&mut tr);
+        run_evt(|_, mut app, mut root, _| {
+            assert!(!app.is_focused(&root));
+            app.focus_next(&mut root)?;
+            assert!(app.is_focused(&root));
 
-        let mut root = utils::TRoot::new();
-        root.layout(&mut app, Rect::default())?;
+            app.focus_next(&mut root)?;
+            assert!(app.is_focused(&root.a));
+            assert!(app.is_focus_ancestor(&mut root));
+            assert!(!app.is_focus_ancestor(&mut root.a));
 
-        assert!(!app.is_focused(&root));
-        app.focus_next(&mut root)?;
-        assert!(app.is_focused(&root));
+            app.focus_next(&mut root)?;
+            assert!(app.is_focused(&root.a.a));
+            assert!(app.is_focus_ancestor(&mut root.a));
+            app.focus_next(&mut root)?;
+            assert!(app.is_focused(&root.a.b));
+            assert!(app.is_focus_ancestor(&mut root.a));
+            app.focus_next(&mut root)?;
+            assert!(app.is_focused(&root.b));
 
-        app.focus_next(&mut root)?;
-        assert!(app.is_focused(&root.a));
-        assert!(app.is_focus_ancestor(&mut root));
-        assert!(!app.is_focus_ancestor(&mut root.a));
-
-        app.focus_next(&mut root)?;
-        assert!(app.is_focused(&root.a.a));
-        assert!(app.is_focus_ancestor(&mut root.a));
-        app.focus_next(&mut root)?;
-        assert!(app.is_focused(&root.a.b));
-        assert!(app.is_focus_ancestor(&mut root.a));
-        app.focus_next(&mut root)?;
-        assert!(app.is_focused(&root.b));
-
-        app.set_focus(&mut root.b.b)?;
-        assert!(app.is_focus_ancestor(&mut root.b));
-        app.focus_next(&mut root)?;
-        assert!(app.is_focused(&root));
-
+            app.set_focus(&mut root.b.b)?;
+            assert!(app.is_focus_ancestor(&mut root.b));
+            app.focus_next(&mut root)?;
+            assert!(app.is_focused(&root));
+            Ok(())
+        })?;
         Ok(())
     }
 
     #[test]
     fn tfocus_prev() -> Result<()> {
-        let (_, mut tr) = TestRender::create();
-        let mut app = utils::tcanopy(&mut tr);
+        run_evt(|_, mut app, mut root, _| {
+            assert!(!app.is_focused(&root));
+            app.focus_prev(&mut root)?;
+            assert!(app.is_focused(&root.b.b));
 
-        let mut root = utils::TRoot::new();
+            app.focus_prev(&mut root)?;
+            assert!(app.is_focused(&root.b.a));
 
-        assert!(!app.is_focused(&root));
-        app.focus_prev(&mut root)?;
-        assert!(app.is_focused(&root.b.b));
+            app.focus_prev(&mut root)?;
+            assert!(app.is_focused(&root.b));
 
-        app.focus_prev(&mut root)?;
-        assert!(app.is_focused(&root.b.a));
+            app.set_focus(&mut root)?;
+            app.focus_prev(&mut root)?;
+            assert!(app.is_focused(&root.b.b));
 
-        app.focus_prev(&mut root)?;
-        assert!(app.is_focused(&root.b));
-
-        app.set_focus(&mut root)?;
-        app.focus_prev(&mut root)?;
-        assert!(app.is_focused(&root.b.b));
-
+            Ok(())
+        })?;
         Ok(())
     }
 
     #[test]
     fn tfoci() -> Result<()> {
-        let (_, mut tr) = TestRender::create();
-        let mut app = utils::tcanopy(&mut tr);
+        run_evt(|_, mut app, mut root, _| {
+            assert_eq!(focvec(&mut app, &mut root)?.len(), 0);
 
-        let mut root = utils::TRoot::new();
-        root.layout(&mut app, Rect::default())?;
+            assert!(!app.on_focus_path(&mut root));
+            assert!(!app.on_focus_path(&mut root.a));
 
-        assert_eq!(focvec(&mut app, &mut root)?.len(), 0);
+            app.set_focus(&mut root.a.a)?;
+            assert!(app.on_focus_path(&mut root));
+            assert!(app.on_focus_path(&mut root.a));
+            assert!(!app.on_focus_path(&mut root.b));
 
-        assert!(!app.on_focus_path(&mut root));
-        assert!(!app.on_focus_path(&mut root.a));
+            assert_eq!(focvec(&mut app, &mut root)?, vec!["ba:la", "ba", "r"]);
 
-        app.set_focus(&mut root.a.a)?;
-        assert!(app.on_focus_path(&mut root));
-        assert!(app.on_focus_path(&mut root.a));
-        assert!(!app.on_focus_path(&mut root.b));
+            app.set_focus(&mut root.a)?;
+            assert_eq!(focvec(&mut app, &mut root)?, vec!["ba", "r"]);
 
-        assert_eq!(focvec(&mut app, &mut root)?, vec!["ba:la", "ba", "r"]);
+            app.set_focus(&mut root)?;
+            assert_eq!(focvec(&mut app, &mut root)?, vec!["r"]);
 
-        app.set_focus(&mut root.a)?;
-        assert_eq!(focvec(&mut app, &mut root)?, vec!["ba", "r"]);
-
-        app.set_focus(&mut root)?;
-        assert_eq!(focvec(&mut app, &mut root)?, vec!["r"]);
-
-        app.set_focus(&mut root.b.a)?;
-        assert_eq!(focvec(&mut app, &mut root)?, vec!["bb:la", "bb", "r"]);
+            app.set_focus(&mut root.b.a)?;
+            assert_eq!(focvec(&mut app, &mut root)?, vec!["bb:la", "bb", "r"]);
+            Ok(())
+        })?;
 
         Ok(())
     }
 
     #[test]
     fn tfocus_right() -> Result<()> {
-        let (_, mut tr) = TestRender::create();
-        let mut app = utils::tcanopy(&mut tr);
-        let mut root = utils::TRoot::new();
+        run_evt(|_, mut app, mut root, _| {
+            app.set_focus(&mut root.a.a)?;
+            app.focus_right(&mut root)?;
+            assert!(app.is_focused(&root.b.a));
+            app.focus_right(&mut root)?;
+            assert!(app.is_focused(&root.b.a));
 
-        fit_and_update(&mut app, Rect::new(0, 0, 100, 100), &mut root)?;
-
-        app.set_focus(&mut root.a.a)?;
-        app.focus_right(&mut root)?;
-        assert!(app.is_focused(&root.b.a));
-        app.focus_right(&mut root)?;
-        assert!(app.is_focused(&root.b.a));
-
-        app.set_focus(&mut root.a.b)?;
-        app.focus_right(&mut root)?;
-        assert!(app.is_focused(&root.b.b));
-        app.focus_right(&mut root)?;
-        assert!(app.is_focused(&root.b.b));
+            app.set_focus(&mut root.a.b)?;
+            app.focus_right(&mut root)?;
+            assert!(app.is_focused(&root.b.b));
+            app.focus_right(&mut root)?;
+            assert!(app.is_focused(&root.b.b));
+            Ok(())
+        })?;
 
         Ok(())
     }
 
     #[test]
     fn taction() -> Result<()> {
-        let (_, mut tr) = TestRender::create();
-        let mut app = utils::tcanopy(&mut tr);
-        let mut root = utils::TRoot::new();
+        run_evt(|_, mut app, mut root, mut s| {
+            app.set_focus(&mut root)?;
+            root.next_outcome = Some(Outcome::handle_and_continue());
+            assert_eq!(
+                app.broadcast(&mut root, &mut s, TActions::One)?,
+                Outcome::handle_and_continue()
+            );
+            assert_eq!(
+                s.path,
+                vec![
+                    "r@broadcast:one->handle",
+                    "ba@broadcast:one->ignore",
+                    "ba:la@broadcast:one->ignore",
+                    "ba:lb@broadcast:one->ignore",
+                    "bb@broadcast:one->ignore",
+                    "bb:la@broadcast:one->ignore",
+                    "bb:lb@broadcast:one->ignore"
+                ]
+            );
+            Ok(())
+        })?;
 
-        let ignore = Outcome::ignore();
-
-        let mut s = utils::State::new();
-        app.set_focus(&mut root)?;
-        root.next_event = Some(Outcome::handle_and_continue());
-        assert_eq!(
-            app.broadcast(&mut root, &mut s, ())?,
-            Outcome::handle_and_continue()
-        );
-        assert_eq!(
-            s.path,
-            vec![
-                "r@broadcast->handle",
-                "ba@broadcast->ignore",
-                "ba:la@broadcast->ignore",
-                "ba:lb@broadcast->ignore",
-                "bb@broadcast->ignore",
-                "bb:la@broadcast->ignore",
-                "bb:lb@broadcast->ignore"
-            ]
-        );
-
-        let mut s = utils::State::new();
-        app.set_focus(&mut root)?;
-        root.a.next_event = Some(Outcome::Ignore(Ignore::default().with_skip()));
-        assert_eq!(app.broadcast(&mut root, &mut s, ())?, ignore);
-        assert_eq!(
-            s.path,
-            vec![
-                "r@broadcast->ignore",
-                "ba@broadcast->ignore",
-                "bb@broadcast->ignore",
-                "bb:la@broadcast->ignore",
-                "bb:lb@broadcast->ignore"
-            ]
-        );
-
-        let mut s = utils::State::new();
-        app.set_focus(&mut root)?;
-        root.a.next_event = Some(Outcome::ignore_and_skip());
-        root.b.b.next_event = Some(Outcome::handle());
-        assert_eq!(app.broadcast(&mut root, &mut s, ())?, Outcome::handle());
-        assert_eq!(
-            s.path,
-            vec![
-                "r@broadcast->ignore",
-                "ba@broadcast->ignore",
-                "bb@broadcast->ignore",
-                "bb:la@broadcast->ignore",
-                "bb:lb@broadcast->handle",
-            ]
-        );
+        run_evt(|_, mut app, mut root, mut s| {
+            app.set_focus(&mut root)?;
+            root.a.next_outcome = Some(Outcome::Ignore(Ignore::default().with_skip()));
+            assert_eq!(
+                app.broadcast(&mut root, &mut s, TActions::One)?,
+                Outcome::ignore(),
+            );
+            assert_eq!(
+                s.path,
+                vec![
+                    "r@broadcast:one->ignore",
+                    "ba@broadcast:one->ignore",
+                    "bb@broadcast:one->ignore",
+                    "bb:la@broadcast:one->ignore",
+                    "bb:lb@broadcast:one->ignore"
+                ]
+            );
+            Ok(())
+        })?;
 
         Ok(())
     }
 
     #[test]
     fn tkey() -> Result<()> {
-        let (_, mut tr) = TestRender::create();
-        let mut app = utils::tcanopy(&mut tr);
-        let mut root = utils::TRoot::new();
-        root.layout(&mut app, Rect::default())?;
+        run_evt(|_, mut app, mut root, mut s| {
+            app.set_focus(&mut root)?;
+            root.next_outcome = Some(Outcome::handle());
+            assert!(app.key(&mut root, &mut s, K_ANY)?.is_handled());
+            assert_eq!(s.path, vec!["r@key->handle"]);
+            Ok(())
+        })?;
 
-        let mut s = utils::State::new();
-        app.set_focus(&mut root)?;
-        root.next_event = Some(Outcome::handle());
-        assert!(app.key(&mut root, &mut s, utils::K_ANY)?.is_handled());
-        assert_eq!(s.path, vec!["r@key->handle"]);
+        run_evt(|_, mut app, mut root, mut s| {
+            app.set_focus(&mut root.a.a)?;
+            root.a.a.next_outcome = Some(Outcome::handle());
+            assert!(app.key(&mut root, &mut s, K_ANY)?.is_handled());
+            assert_eq!(s.path, vec!["ba:la@key->handle"]);
+            Ok(())
+        })?;
 
-        let mut s = utils::State::new();
-        app.set_focus(&mut root.a.a)?;
-        root.a.a.next_event = Some(Outcome::handle());
-        assert!(app.key(&mut root, &mut s, utils::K_ANY)?.is_handled());
-        assert_eq!(s.path, vec!["ba:la@key->handle"]);
+        run_evt(|_, mut app, mut root, mut s| {
+            app.set_focus(&mut root.a.a)?;
+            root.a.next_outcome = Some(Outcome::handle());
+            assert!(app.key(&mut root, &mut s, K_ANY)?.is_handled());
+            assert_eq!(s.path, vec!["ba:la@key->ignore", "ba@key->handle"]);
+            Ok(())
+        })?;
 
-        let mut s = utils::State::new();
-        root.a.next_event = Some(Outcome::handle());
-        assert!(app.key(&mut root, &mut s, utils::K_ANY)?.is_handled());
-        assert_eq!(s.path, vec!["ba:la@key->ignore", "ba@key->handle"]);
+        run_evt(|_, mut app, mut root, mut s| {
+            app.set_focus(&mut root.a.a)?;
+            root.next_outcome = Some(Outcome::handle());
+            assert!(app.key(&mut root, &mut s, K_ANY)?.is_handled());
+            assert_eq!(
+                s.path,
+                vec!["ba:la@key->ignore", "ba@key->ignore", "r@key->handle"]
+            );
+            Ok(())
+        })?;
 
-        let mut s = utils::State::new();
-        root.next_event = Some(Outcome::handle());
-        assert!(app.key(&mut root, &mut s, utils::K_ANY)?.is_handled());
-        assert_eq!(
-            s.path,
-            vec!["ba:la@key->ignore", "ba@key->ignore", "r@key->handle"]
-        );
+        run_evt(|_, mut app, mut root, mut s| {
+            app.set_focus(&mut root.a)?;
+            root.a.next_outcome = Some(Outcome::handle());
+            assert!(app.key(&mut root, &mut s, K_ANY)?.is_handled());
+            assert_eq!(s.path, vec!["ba@key->handle"]);
+            Ok(())
+        })?;
 
-        let mut s = utils::State::new();
-        app.set_focus(&mut root.a)?;
-        root.a.next_event = Some(Outcome::handle());
-        assert!(app.key(&mut root, &mut s, utils::K_ANY)?.is_handled());
-        assert_eq!(s.path, vec!["ba@key->handle"]);
+        run_evt(|_, mut app, mut root, mut s| {
+            app.set_focus(&mut root.a)?;
+            root.next_outcome = Some(Outcome::handle());
+            assert!(app.key(&mut root, &mut s, K_ANY)?.is_handled());
+            assert_eq!(s.path, vec!["ba@key->ignore", "r@key->handle"]);
+            assert_eq!(app.key(&mut root, &mut s, K_ANY)?, Outcome::ignore());
+            Ok(())
+        })?;
 
-        let mut s = utils::State::new();
-        root.next_event = Some(Outcome::handle());
-        assert!(app.key(&mut root, &mut s, utils::K_ANY)?.is_handled());
-        assert_eq!(s.path, vec!["ba@key->ignore", "r@key->handle"]);
+        run_evt(|_, mut app, mut root, mut s| {
+            app.set_focus(&mut root.a.b)?;
+            root.a.next_outcome = Some(Outcome::Ignore(Ignore::default().with_skip()));
+            root.next_outcome = Some(Outcome::handle());
+            app.key(&mut root, &mut s, K_ANY)?;
+            assert_eq!(s.path, vec!["ba:lb@key->ignore", "ba@key->ignore"]);
+            Ok(())
+        })?;
 
-        assert_eq!(app.key(&mut root, &mut s, utils::K_ANY)?, Outcome::ignore());
+        run_evt(|_, mut app, mut root, mut s| {
+            app.set_focus(&mut root.a.a)?;
+            root.a.a.next_outcome = Some(Outcome::handle_with_action(TActions::One));
+            app.key(&mut root, &mut s, K_ANY)?;
+            assert_eq!(
+                s.path,
+                vec![
+                    "ba:la@key->handle",
+                    "ba@eaction:one->ignore",
+                    "r@eaction:one->ignore",
+                ]
+            );
+            Ok(())
+        })?;
 
-        let mut s = utils::State::new();
-        app.set_focus(&mut root.a.b)?;
-        root.a.next_event = Some(Outcome::Ignore(Ignore::default().with_skip()));
-        root.next_event = Some(Outcome::handle());
-        app.key(&mut root, &mut s, utils::K_ANY)?;
-        assert_eq!(s.path, vec!["ba:lb@key->ignore", "ba@key->ignore"]);
+        run_evt(|_, mut app, mut root, mut s| {
+            app.set_focus(&mut root.a.b)?;
+            root.a.next_outcome = Some(Outcome::handle_with_action(TActions::One));
+            app.key(&mut root, &mut s, K_ANY)?;
+            assert_eq!(
+                s.path,
+                vec![
+                    "ba:lb@key->ignore",
+                    "ba@key->handle",
+                    "r@eaction:one->ignore",
+                ]
+            );
+            Ok(())
+        })?;
 
         Ok(())
     }
 
     #[test]
     fn tmouse() -> Result<()> {
-        let (_, mut tr) = TestRender::create();
-        let mut app = utils::tcanopy(&mut tr);
-        const SIZE: u16 = 100;
-        let mut root = utils::TRoot::new();
-        fit_and_update(&mut app, Rect::new(0, 0, SIZE, SIZE), &mut root)?;
+        run_evt(|_, mut app, mut root, mut s| {
+            app.set_focus(&mut root)?;
+            root.next_outcome = Some(Outcome::handle());
+            let evt = root.a.a.make_mouse_event()?;
+            assert!(app.mouse(&mut root, &mut s, evt)?.is_handled());
+            assert_eq!(
+                s.path,
+                vec!["ba:la@mouse->ignore", "ba@mouse->ignore", "r@mouse->handle"]
+            );
+            Ok(())
+        })?;
 
-        let mut s = utils::State::new();
-        app.set_focus(&mut root)?;
-        root.next_event = Some(Outcome::handle());
-        let evt = root.a.a.make_mouse_event()?;
-        assert!(app.mouse(&mut root, &mut s, evt)?.is_handled());
-        assert_eq!(
-            s.path,
-            vec!["ba:la@mouse->ignore", "ba@mouse->ignore", "r@mouse->handle"]
-        );
-
-        root.a.a.next_event = Some(Outcome::handle());
-        let mut s = utils::State::new();
-        assert!(app.mouse(&mut root, &mut s, evt)?.is_handled());
-        assert_eq!(s.path, vec!["ba:la@mouse->handle"]);
+        run_evt(|_, mut app, mut root, mut s| {
+            root.a.a.next_outcome = Some(Outcome::handle());
+            let evt = root.a.a.make_mouse_event()?;
+            assert!(app.mouse(&mut root, &mut s, evt)?.is_handled());
+            assert_eq!(s.path, vec!["ba:la@mouse->handle"]);
+            Ok(())
+        })?;
 
         Ok(())
     }
 
     #[test]
     fn tresize() -> Result<()> {
-        const SIZE: u16 = 100;
-        let (_, mut tr) = TestRender::create();
-        let mut app = utils::tcanopy(&mut tr);
-        let mut root = utils::TRoot::new();
+        run_evt(|_, mut app, mut root, _| {
+            let size = 100;
+            assert_eq!(root.screen(), Rect::new(0, 0, size, size));
+            assert_eq!(root.a.screen(), Rect::new(0, 0, size / 2, size));
+            assert_eq!(root.b.screen(), Rect::new(size / 2, 0, size / 2, size));
 
-        fit_and_update(&mut app, Rect::new(0, 0, SIZE, SIZE), &mut root)?;
+            app.resize(&mut root, Rect::new(0, 0, 50, 50))?;
 
-        assert_eq!(root.screen(), Rect::new(0, 0, SIZE, SIZE));
-        assert_eq!(root.a.screen(), Rect::new(0, 0, SIZE / 2, SIZE));
-        assert_eq!(root.b.screen(), Rect::new(SIZE / 2, 0, SIZE / 2, SIZE));
-
-        app.resize(&mut root, Rect::new(0, 0, 50, 50))?;
-
-        assert_eq!(root.b.screen(), Rect::new(25, 0, 25, 50));
-
+            assert_eq!(root.b.screen(), Rect::new(25, 0, 25, 50));
+            Ok(())
+        })?;
         Ok(())
     }
     #[test]
     fn trender() -> Result<()> {
-        let mut root = utils::TRoot::new();
-        let (buf, mut tr) = TestRender::create();
-        let mut app = utils::tcanopy(&mut tr);
-        fit_and_update(&mut app, Rect::new(0, 0, 100, 100), &mut root)?;
+        run_evt(|buf, mut app, mut root, _| {
+            app.render(&mut root)?;
+            assert_eq!(
+                buf.lock()?.text,
+                vec!["<r>", "<ba>", "<ba:la>", "<ba:lb>", "<bb>", "<bb:la>", "<bb:lb>"]
+            );
 
-        app.render(&mut root)?;
-        assert_eq!(
-            buf.lock()?.text,
-            vec!["<r>", "<ba>", "<ba:la>", "<ba:lb>", "<bb>", "<bb:la>", "<bb:lb>"]
-        );
+            app.render(&mut root)?;
+            assert!(buf.lock()?.is_empty());
 
-        app.render(&mut root)?;
-        assert!(buf.lock()?.is_empty());
+            app.taint(&mut root.a);
+            app.render(&mut root)?;
+            assert_eq!(buf.lock()?.text, vec!["<ba>"]);
 
-        app.taint(&mut root.a);
-        app.render(&mut root)?;
-        assert_eq!(buf.lock()?.text, vec!["<ba>"]);
+            app.taint(&mut root.a.b);
+            app.render(&mut root)?;
+            assert_eq!(buf.lock()?.text, vec!["<ba:lb>"]);
 
-        app.taint(&mut root.a.b);
-        app.render(&mut root)?;
-        assert_eq!(buf.lock()?.text, vec!["<ba:lb>"]);
+            app.taint_tree(&mut root.a)?;
+            app.render(&mut root)?;
+            assert_eq!(buf.lock()?.text, vec!["<ba>", "<ba:la>", "<ba:lb>"]);
 
-        app.taint_tree(&mut root.a)?;
-        app.render(&mut root)?;
-        assert_eq!(buf.lock()?.text, vec!["<ba>", "<ba:la>", "<ba:lb>"]);
+            app.render(&mut root)?;
+            assert!(buf.lock()?.text.is_empty());
 
-        app.render(&mut root)?;
-        assert!(buf.lock()?.text.is_empty());
+            app.set_focus(&mut root.a.a)?;
+            app.render(&mut root)?;
+            assert_eq!(buf.lock()?.text, vec!["<ba:la>"]);
 
-        app.set_focus(&mut root.a.a)?;
-        app.render(&mut root)?;
-        assert_eq!(buf.lock()?.text, vec!["<ba:la>"]);
+            app.focus_next(&mut root)?;
+            app.render(&mut root)?;
+            assert_eq!(buf.lock()?.text, vec!["<ba:la>", "<ba:lb>"]);
 
-        app.focus_next(&mut root)?;
-        app.render(&mut root)?;
-        assert_eq!(buf.lock()?.text, vec!["<ba:la>", "<ba:lb>"]);
+            app.focus_prev(&mut root)?;
+            app.render(&mut root)?;
+            assert_eq!(buf.lock()?.text, vec!["<ba:la>", "<ba:lb>"]);
 
-        app.focus_prev(&mut root)?;
-        app.render(&mut root)?;
-        assert_eq!(buf.lock()?.text, vec!["<ba:la>", "<ba:lb>"]);
+            app.render(&mut root)?;
+            assert!(buf.lock()?.text.is_empty());
 
-        app.render(&mut root)?;
-        assert!(buf.lock()?.text.is_empty());
+            Ok(())
+        })?;
 
         Ok(())
     }
 
     #[test]
     fn ttaintskip() -> Result<()> {
-        let (buf, mut tr) = TestRender::create();
-        let mut app = utils::tcanopy(&mut tr);
+        run_evt(|buf, mut app, mut root, _| {
+            app.render(&mut root)?;
+            let mut s = State::new();
+            app.set_focus(&mut root)?;
+            root.next_outcome = Some(Outcome::handle_and_continue());
+            root.a.a.next_outcome = Some(Outcome::handle());
+            root.b.b.next_outcome = Some(Outcome::handle());
+            app.skip_taint(&mut root.a.a);
+            assert!(app
+                .broadcast(&mut root, &mut s, TActions::Two)?
+                .is_handled());
+            assert_eq!(
+                s.path,
+                vec![
+                    "r@broadcast:two->handle",
+                    "ba@broadcast:two->ignore",
+                    "ba:la@broadcast:two->handle",
+                    "ba:lb@broadcast:two->ignore",
+                    "bb@broadcast:two->ignore",
+                    "bb:la@broadcast:two->ignore",
+                    "bb:lb@broadcast:two->handle"
+                ]
+            );
+            app.render(&mut root)?;
+            assert_eq!(buf.lock()?.text, vec!["<r>", "<bb:lb>"]);
+            Ok(())
+        })?;
 
-        let mut root = utils::TRoot::new();
-        const SIZE: u16 = 100;
-        fit_and_update(&mut app, Rect::new(0, 0, SIZE, SIZE), &mut root)?;
-
-        app.render(&mut root)?;
-
-        let mut s = utils::State::new();
-        app.set_focus(&mut root)?;
-        root.next_event = Some(Outcome::handle_and_continue());
-        root.a.a.next_event = Some(Outcome::handle());
-        root.b.b.next_event = Some(Outcome::handle());
-        app.skip_taint(&mut root.a.a);
-        assert!(app.broadcast(&mut root, &mut s, ())?.is_handled());
-        assert_eq!(
-            s.path,
-            vec![
-                "r@broadcast->handle",
-                "ba@broadcast->ignore",
-                "ba:la@broadcast->handle",
-                "ba:lb@broadcast->ignore",
-                "bb@broadcast->ignore",
-                "bb:la@broadcast->ignore",
-                "bb:lb@broadcast->handle"
-            ]
-        );
-        app.render(&mut root)?;
-        assert_eq!(buf.lock()?.text, vec!["<r>", "<bb:lb>"]);
         Ok(())
     }
 }

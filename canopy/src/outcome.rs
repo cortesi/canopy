@@ -75,16 +75,22 @@ impl<A: Actions> Outcome<A> {
     pub fn handle() -> Outcome<A> {
         Outcome::Handle(Handle::default())
     }
+    /// A Handle outcome that with skipping disabled, and an associated action.
+    pub fn handle_with_action(a: A) -> Outcome<A> {
+        Outcome::Handle(Handle::default().with_action(a).and_continue())
+    }
     /// A Handle outcome that with skipping disabled.
     pub fn handle_and_continue() -> Outcome<A> {
         Outcome::Handle(Handle::default().and_continue())
     }
+    /// Does this outcome have skip enabled?
     pub fn has_skip(&self) -> bool {
         match self {
             Outcome::Handle(Handle { skip, .. }) => *skip,
             Outcome::Ignore(Ignore { skip, .. }) => *skip,
         }
     }
+    /// Is this outcome a Handle outcome?
     pub fn is_handled(&self) -> bool {
         match self {
             Outcome::Handle(_) => true,

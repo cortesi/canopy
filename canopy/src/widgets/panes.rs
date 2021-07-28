@@ -137,7 +137,7 @@ mod tests {
         let (_, mut tr) = TestRender::create();
         let mut app = utils::tcanopy(&mut tr);
         let tn = utils::TBranch::new("a");
-        let mut p: Panes<utils::State, (), utils::TBranch> = Panes::new(tn);
+        let mut p: Panes<utils::State, utils::TActions, utils::TBranch> = Panes::new(tn);
         let r = Rect {
             tl: Point::zero(),
             w: 100,
