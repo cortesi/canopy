@@ -1,5 +1,5 @@
 mod actions;
-mod base;
+mod canopy;
 mod node;
 mod outcome;
 mod state;
@@ -14,7 +14,7 @@ pub mod style;
 pub mod widgets;
 
 pub use actions::Actions;
-pub use base::{fit_and_update, Canopy};
+pub use canopy::{fit_and_update, Canopy};
 pub use error::{Error, Result};
 pub use node::Node;
 pub use outcome::Outcome;

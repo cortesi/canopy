@@ -13,14 +13,18 @@ soon as I feel it's worth anyone else's time.**
 
 In some forests, each tree spreads its branches wide to maximise access to
 sunlight, but also carefully avoids touching the foliage of its neighbours. This
-phenomenon is called "crown shyness" - the forest canopy becomes a beautiful
-organic tiling of the sky.
+phenomenon is called "crown shyness" - the forest canopy becomes an organic
+tiling of the sky.
 
 **Canopy** works just the same, but in your terminal. Interface elements are
 arranged in an ordered tree, with each node managing only its children, who
 manage their own children in turn, until the leaf nodes tile the screen without
 overlap. All interface operations are defined cleanly as traversals of this node
 tree.
+
+Canopy is a libarary for building serious, functional terminal user interfaces.
+It features:
+
 
 
 ## Concepts
@@ -113,7 +117,10 @@ event taints the node, unless the **EventResult::no_render** flag on the
 response object is true.
 
 
-### Tick
+
+### Actions
+
+## Tick
 
 <img width=300 style="padding: 20px;" src=".assets/tick.png">
 
@@ -128,14 +135,14 @@ the traversal continues to a sibling.
 Nodes that handle a tick event are automatically tainted.
 
 
-### Actions
-
 
 ### Cursor management
 
 For historical reasons, terminals don't distinguish between the location of the
-visible cursor shown to users and the draw location for rendering. Canopy
-simplifies this by introducing a separate cursor rendering sweep after widget
-rendering. This gives all nodes on the focus path the opportunity to define a
-cursor location and style without needing to consider rendering or render order.
+visible cursor and the draw location for rendering. Drawing with the cursor
+turned on will result in a visible cursor moving over the screen. Canopy manages
+this by turning cursors off during rendering, and then enabling the cursor
+during a separate cursor sweep afterwards. The cursor sweep gives all nodes on
+the focus path the opportunity to define a cursor location and style using the
+`cursor` method on the Node trait.
 

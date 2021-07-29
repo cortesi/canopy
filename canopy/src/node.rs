@@ -185,7 +185,7 @@ pub fn preorder<S, A: Actions, W: Walker>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{base::SkipWalker, tutils::utils};
+    use crate::{canopy::SkipWalker, tutils::utils};
 
     fn skipper(
         x: &mut dyn Node<utils::State, utils::TActions>,
