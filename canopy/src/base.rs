@@ -36,6 +36,45 @@ impl Walker for SkipWalker {
     }
 }
 
+macro_rules! process_event(
+    (
+        $slf:expr,
+        $actions:expr,
+        $handled:expr,
+        $s:expr,
+        $k:expr,
+        $x:expr,
+        $proc:expr
+    ) => {
+        {
+            let oc = if *$handled {
+                let mut hdl = Outcome::default();
+                for a in $actions {
+                    hdl = hdl.join($x.handle_event_action($slf, $s, *a)?);
+                    if hdl.has_skip() {
+                        break;
+                    }
+                }
+                hdl
+            } else {
+                let hdl = $proc?;
+                if let Outcome::Handle(h) = &hdl {
+                    *$actions = h.actions.clone()
+                }
+                if hdl.has_skip() {
+                    *$handled = true;
+                } else if hdl.is_handled() {
+                    $slf.taint($x);
+                    *$handled = true;
+                }
+                hdl.clone()
+            };
+            Ok(oc)
+
+        }
+    };
+);
+
 /// The core of a Canopy app - this struct keeps track of the render and focus
 /// state, and provides functionality for interacting with node trees.
 pub struct Canopy<'a, S, A: Actions> {
@@ -392,17 +431,14 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
         let mut handled = false;
         let mut actions: Vec<A> = vec![];
         locate(root, m.loc, &mut |x| {
-            let oc = if handled {
-                let mut hdl = Outcome::default();
-                for a in &actions {
-                    hdl = hdl.join(x.handle_event_action(self, s, *a)?);
-                    if hdl.has_skip() {
-                        break;
-                    }
-                }
-                hdl
-            } else {
-                let hdl = x.handle_mouse(
+            process_event!(
+                self,
+                &mut actions,
+                &mut handled,
+                s,
+                k,
+                x,
+                x.handle_mouse(
                     self,
                     s,
                     mouse::Mouse {
@@ -411,19 +447,8 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
                         modifiers: m.modifiers,
                         loc: x.screen().rebase_point(m.loc)?,
                     },
-                )?;
-                if let Outcome::Handle(h) = &hdl {
-                    actions = h.actions.clone()
-                }
-                hdl.clone()
-            };
-            if oc.has_skip() {
-                handled = true;
-            } else if oc.is_handled() {
-                self.taint(x);
-                handled = true;
-            }
-            Ok(oc)
+                )
+            )
         })
     }
 
@@ -432,30 +457,16 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
     pub fn key(&mut self, root: &mut dyn Node<S, A>, s: &mut S, k: key::Key) -> Result<Outcome<A>> {
         let mut handled = false;
         let mut actions: Vec<A> = vec![];
-        focus_path_mut(self.focus_gen, root, &mut |x| -> Result<Outcome<A>> {
-            let oc = if handled {
-                let mut hdl = Outcome::default();
-                for a in &actions {
-                    hdl = hdl.join(x.handle_event_action(self, s, *a)?);
-                    if hdl.has_skip() {
-                        break;
-                    }
-                }
-                hdl
-            } else {
-                let hdl = x.handle_key(self, s, k)?;
-                if let Outcome::Handle(h) = &hdl {
-                    actions = h.actions.clone()
-                }
-                hdl.clone()
-            };
-            if oc.has_skip() {
-                handled = true;
-            } else if oc.is_handled() {
-                self.taint(x);
-                handled = true;
-            }
-            Ok(oc)
+        focus_path_mut(self.focus_gen, root, &mut move |x| -> Result<Outcome<A>> {
+            process_event!(
+                self,
+                &mut actions,
+                &mut handled,
+                s,
+                k,
+                x,
+                x.handle_key(self, s, k)
+            )
         })
     }
 
