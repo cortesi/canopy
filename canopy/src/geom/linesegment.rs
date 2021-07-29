@@ -63,11 +63,15 @@ impl LineSegment {
             // Compute the fraction each section occupies of the view.
             let pref = (window.off - view.off) as f64 / view.len as f64;
             let postf = (view.far() - window.far()) as f64 / view.len as f64;
+            let lenf = self.len as f64;
 
-            // Now compute the true true length in terms of the space
-            let pre = (pref * self.len as f64).floor() as u16;
-            let post = (postf * self.len as f64).floor() as u16;
-            let active = self.len - pre - post;
+            // Now compute the true true length in terms of the space. It's
+            // important for the active portion to remain the same length
+            // regardless of position in the face of rounding, so we compute it
+            // first, then compute the other values in terms of it.
+            let active = (lenf - (pref * lenf) - (postf * lenf)).ceil();
+            let pre = (pref * self.len as f64).floor();
+            let post = lenf - active - pre;
 
             Ok((
                 LineSegment {
@@ -76,11 +80,11 @@ impl LineSegment {
                 },
                 LineSegment {
                     off: self.off + pre as u16,
-                    len: active,
+                    len: active as u16,
                 },
                 LineSegment {
-                    off: self.off + pre + active,
-                    len: post,
+                    off: self.off + pre as u16 + active as u16,
+                    len: post as u16,
                 },
             ))
         }

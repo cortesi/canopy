@@ -29,5 +29,4 @@ User traps
 
 
 Bugs
-  - Frame active bar changes height during scroll
   - Apps crash if terminal is too small. We should just not display in this case.
