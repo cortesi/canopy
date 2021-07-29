@@ -36,24 +36,32 @@ impl Walker for SkipWalker {
     }
 }
 
+// This is extracted from the event processing functions on Canopy, because the
+// code is brittle and complicated, and is identical bar a single method call.
 macro_rules! process_event(
     (
         $slf:expr,
         $actions:expr,
         $handled:expr,
-        $s:expr,
-        $k:expr,
-        $x:expr,
+        $halt:expr,
+        $state:expr,
+        $node:expr,
         $proc:expr
     ) => {
         {
-            let oc = if *$handled {
+            let oc = if *$halt {
+                Outcome::default()
+            } else if *$handled {
                 let mut hdl = Outcome::default();
                 for a in $actions {
-                    hdl = hdl.join($x.handle_event_action($slf, $s, *a)?);
+                    hdl = hdl.join($node.handle_event_action($slf, $state, *a)?);
                     if hdl.has_skip() {
-                        break;
+                        *$halt = true;
+                        break
                     }
+                }
+                if let Outcome::Handle(h) = &hdl {
+                    *$actions = h.actions.clone()
                 }
                 hdl
             } else {
@@ -62,9 +70,10 @@ macro_rules! process_event(
                     *$actions = h.actions.clone()
                 }
                 if hdl.has_skip() {
-                    *$handled = true;
-                } else if hdl.is_handled() {
-                    $slf.taint($x);
+                    *$halt = true;
+                }
+                if hdl.is_handled() {
+                    $slf.taint($node);
                     *$handled = true;
                 }
                 hdl.clone()
@@ -429,14 +438,15 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
         m: mouse::Mouse,
     ) -> Result<Outcome<A>> {
         let mut handled = false;
+        let mut halt = false;
         let mut actions: Vec<A> = vec![];
         locate(root, m.loc, &mut |x| {
             process_event!(
                 self,
                 &mut actions,
                 &mut handled,
+                &mut halt,
                 s,
-                k,
                 x,
                 x.handle_mouse(
                     self,
@@ -456,14 +466,15 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
     /// handled only once, and then ignored.
     pub fn key(&mut self, root: &mut dyn Node<S, A>, s: &mut S, k: key::Key) -> Result<Outcome<A>> {
         let mut handled = false;
+        let mut halt = false;
         let mut actions: Vec<A> = vec![];
         focus_path_mut(self.focus_gen, root, &mut move |x| -> Result<Outcome<A>> {
             process_event!(
                 self,
                 &mut actions,
                 &mut handled,
+                &mut halt,
                 s,
-                k,
                 x,
                 x.handle_key(self, s, k)
             )
@@ -754,7 +765,7 @@ mod tests {
             root.a.next_outcome = Some(Outcome::Ignore(Ignore::default().with_skip()));
             assert_eq!(
                 app.broadcast(&mut root, &mut s, TActions::One)?,
-                Outcome::ignore(),
+                Outcome::ignore_and_skip(),
             );
             assert_eq!(
                 s.path,
@@ -772,6 +783,8 @@ mod tests {
         Ok(())
     }
 
+    // These tests double as tests for the process_event macro - no need to
+    // duplicate the details in the mouse specific tests.
     #[test]
     fn tkey() -> Result<()> {
         run_test(|_, mut app, mut root, mut s| {
@@ -873,16 +886,32 @@ mod tests {
                     .with_action(TActions::Two),
             ));
             app.key(&mut root, &mut s, K_ANY)?;
+            assert_eq!(s.path, vec!["ba:lb@key->handle",]);
+            Ok(())
+        })?;
+
+        run_test(|_, mut app, mut root, mut s| {
+            app.set_focus(&mut root.a.b)?;
+            root.a.b.next_outcome = Some(Outcome::handle_with_action(TActions::One));
+            root.a.next_outcome = Some(Outcome::handle_with_action(TActions::Two));
+            app.key(&mut root, &mut s, K_ANY)?;
             assert_eq!(
                 s.path,
                 vec![
                     "ba:lb@key->handle",
-                    "ba@eaction:one->ignore",
-                    "ba@eaction:two->ignore",
-                    "r@eaction:one->ignore",
+                    "ba@eaction:one->handle",
                     "r@eaction:two->ignore",
                 ]
             );
+            Ok(())
+        })?;
+
+        run_test(|_, mut app, mut root, mut s| {
+            app.set_focus(&mut root.a.b)?;
+            root.a.b.next_outcome = Some(Outcome::handle_with_action(TActions::One));
+            root.a.next_outcome = Some(Outcome::ignore_and_skip());
+            app.key(&mut root, &mut s, K_ANY)?;
+            assert_eq!(s.path, vec!["ba:lb@key->handle", "ba@eaction:one->ignore",]);
             Ok(())
         })?;
 
@@ -952,6 +981,7 @@ mod tests {
         })?;
         Ok(())
     }
+
     #[test]
     fn trender() -> Result<()> {
         run_test(|buf, mut app, mut root, _| {

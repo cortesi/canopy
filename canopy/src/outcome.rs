@@ -61,7 +61,7 @@ impl<A: Actions> Outcome<A> {
     pub fn ignore() -> Outcome<A> {
         Outcome::Ignore(Ignore::default())
     }
-    /// An Ingore outcome that with skipping enabled.
+    /// An Ingore outcome with skipping enabled.
     pub fn ignore_and_skip() -> Outcome<A> {
         Outcome::Ignore(Ignore::default().with_skip())
     }
@@ -69,11 +69,11 @@ impl<A: Actions> Outcome<A> {
     pub fn handle() -> Outcome<A> {
         Outcome::Handle(Handle::default())
     }
-    /// A Handle outcome that with skipping disabled, and an associated action.
+    /// A Handle outcome with skipping disabled, and an associated action.
     pub fn handle_with_action(a: A) -> Outcome<A> {
         Outcome::Handle(Handle::default().with_action(a).and_continue())
     }
-    /// A Handle outcome that with skipping disabled.
+    /// A Handle outcome with skipping disabled.
     pub fn handle_and_continue() -> Outcome<A> {
         Outcome::Handle(Handle::default().and_continue())
     }
@@ -104,16 +104,24 @@ impl<A: Actions> Walker for Outcome<A> {
             (Outcome::Handle(h1), Outcome::Handle(h2)) => {
                 let mut actions = h1.actions.clone();
                 actions.extend(h2.actions);
-
                 Outcome::Handle(Handle {
-                    // Skip is not inherited on join
-                    skip: false,
+                    skip: h1.skip || h2.skip,
                     actions,
                 })
             }
-            (Outcome::Handle(h), _) => Outcome::Handle(h.clone()),
-            (_, Outcome::Handle(h)) => Outcome::Handle(h),
-            _ => Outcome::ignore(),
+            (Outcome::Handle(h), Outcome::Ignore(ign)) => {
+                let mut ret = h.clone();
+                ret.skip = h.skip || ign.skip;
+                Outcome::Handle(ret)
+            }
+            (Outcome::Ignore(ign), Outcome::Handle(h)) => {
+                let mut ret = h.clone();
+                ret.skip = h.skip || ign.skip;
+                Outcome::Handle(h)
+            }
+            (Outcome::Ignore(ign), Outcome::Ignore(ign2)) => Outcome::Ignore(Ignore {
+                skip: ign.skip || ign2.skip,
+            }),
         }
     }
 }
