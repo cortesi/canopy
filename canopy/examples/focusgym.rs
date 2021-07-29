@@ -103,7 +103,7 @@ impl Block {
         let r = self.screen();
         Ok(if self.children.len() == 0 {
             Outcome::ignore()
-        } else if self.size_limited(r) {
+        } else if self.size_limited(self.children[0].screen()) {
             Outcome::handle()
         } else {
             self.children.push(Block::new(!self.horizontal));
