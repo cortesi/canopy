@@ -9,16 +9,22 @@ use crate::{
     Actions, Canopy,
 };
 
+/// ListItem should be implemented by items to be displayed in a `List`.
+pub trait ListItem {
+    fn set_selected(&mut self, _state: bool) {}
+}
+
 #[derive(StatefulNode)]
 pub struct List<S, A: Actions, N>
 where
-    N: Node<S, A>,
+    N: Node<S, A> + ListItem,
 {
     _marker: PhantomData<(S, A)>,
     items: Vec<N>,
+
     // Offset within the virtual rectangle
     pub offset: Point,
-    pub focus: u32,
+    pub selected: usize,
     state: NodeState,
 
     // Cached set of rectangles to clear during rendering
@@ -27,24 +33,43 @@ where
 
 impl<S, A: Actions, N> List<S, A, N>
 where
-    N: Node<S, A>,
+    N: Node<S, A> + ListItem,
 {
-    pub fn new(c: Vec<N>) -> Self {
-        List {
+    pub fn new(items: Vec<N>) -> Self {
+        let mut l = List {
             _marker: PhantomData,
-            items: c,
+            items: items,
             offset: Point::zero(),
-            focus: 0,
+            selected: 0,
             state: NodeState::default(),
             clear: vec![],
+        };
+        if l.items.len() > 0 {
+            l.select(0);
         }
+        l
+    }
+    pub fn select_next(&mut self) {
+        self.select(self.selected.saturating_add(1))
+    }
+    pub fn select_prev(&mut self) {
+        self.select(self.selected.saturating_sub(1))
+    }
+    pub fn select(&mut self, offset: usize) {
+        self.items[self.selected].set_selected(false);
+        self.selected = offset.clamp(0, self.items.len() - 1);
+        self.items[self.selected].set_selected(true);
     }
 }
 
 impl<S, A: Actions, N> Node<S, A> for List<S, A, N>
 where
-    N: Node<S, A>,
+    N: Node<S, A> + ListItem,
 {
+    fn can_focus(&self) -> bool {
+        true
+    }
+
     fn children(&self, f: &mut dyn FnMut(&dyn Node<S, A>) -> Result<()>) -> Result<()> {
         for i in &self.items {
             f(i)?
@@ -119,8 +144,8 @@ where
             } else if let Some(isect) = myvp.view().vextent().intersect(&item_virt.vextent()) {
                 // There was no intersection of the rects, but the vertical
                 // extent of the item overlaps with our view. This means that
-                // item is not on screen because it's off to the left of us, but
-                // we still need to clear its full row.
+                // item is not on screen because it's off to the left of our
+                // view, but we still need to clear its full row.
                 self.clear.push(myvp.view().vslice(&isect)?);
                 itm.hide();
             } else {
@@ -142,23 +167,135 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::render::test::TestRender;
-    use crate::tutils::utils::{tcanopy, TFixed};
+    use crate::{
+        fit_and_update,
+        render::test::TestRender,
+        tutils::utils::{tcanopy, State, TActions, TFixed},
+    };
+
+    pub fn views(lst: &List<State, TActions, TFixed>) -> Vec<Rect> {
+        let mut v = vec![];
+        lst.children(&mut |x: &dyn Node<State, TActions>| {
+            v.push(if x.is_hidden() {
+                Rect::default()
+            } else {
+                x.view()
+            });
+            Ok(())
+        })
+        .unwrap();
+        v
+    }
+
+    #[test]
+    fn select() -> Result<()> {
+        // Empty initilization shouldn't fail
+        let _: List<State, TActions, TFixed> = List::new(Vec::new());
+
+        let mut lst = List::new(vec![
+            TFixed::new(10, 10),
+            TFixed::new(10, 10),
+            TFixed::new(10, 10),
+        ]);
+        assert_eq!(lst.selected, 0);
+        lst.select_prev();
+        assert_eq!(lst.selected, 0);
+        lst.select_next();
+        assert_eq!(lst.selected, 1);
+        lst.select_next();
+        lst.select_next();
+        assert_eq!(lst.selected, 2);
+
+        Ok(())
+    }
 
     #[test]
     fn drawnodes() -> Result<()> {
         let (_, mut tr) = TestRender::create();
         let mut app = tcanopy(&mut tr);
-        let mut lst = List::new(vec![TFixed::new(10, 10)]);
-        let _ = lst.fit(&mut app, Size::new(20, 20))?;
-        // lst.layout(
-        //     &mut app,
-        //     Rect {
-        //         tl: Point::zero(),
-        //         w: 10,
-        //         h: 10,
-        //     },
-        // )?;
+        let rw = 20;
+        let rh = 10;
+        let mut lst = List::new(vec![
+            TFixed::new(rw, rh),
+            TFixed::new(rw, rh),
+            TFixed::new(rw, rh),
+        ]);
+        fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
+
+        fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
+        assert_eq!(
+            views(&lst),
+            vec![
+                Rect::new(0, 0, 10, 10),
+                Rect::new(0, 0, 0, 0),
+                Rect::new(0, 0, 0, 0),
+            ]
+        );
+        lst.state_mut().viewport.scroll_by(0, 5);
+        fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
+        assert_eq!(
+            views(&lst),
+            vec![
+                Rect::new(0, 5, 10, 5),
+                Rect::new(0, 0, 10, 5),
+                Rect::new(0, 0, 0, 0),
+            ]
+        );
+
+        lst.state_mut().viewport.scroll_by(0, 5);
+        fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
+        assert_eq!(
+            views(&lst),
+            vec![
+                Rect::new(0, 0, 0, 0),
+                Rect::new(0, 0, 10, 10),
+                Rect::new(0, 0, 0, 0),
+            ]
+        );
+
+        lst.state_mut().viewport.scroll_by(0, 10);
+        fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
+        assert_eq!(
+            views(&lst),
+            vec![
+                Rect::new(0, 0, 0, 0),
+                Rect::new(0, 0, 0, 0),
+                Rect::new(0, 0, 10, 10),
+            ]
+        );
+
+        lst.state_mut().viewport.scroll_by(0, 10);
+        fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
+        assert_eq!(
+            views(&lst),
+            vec![
+                Rect::new(0, 0, 0, 0),
+                Rect::new(0, 0, 0, 0),
+                Rect::new(0, 0, 10, 10),
+            ]
+        );
+
+        lst.state_mut().viewport.scroll_to(5, 0);
+        fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
+        assert_eq!(
+            views(&lst),
+            vec![
+                Rect::new(5, 0, 10, 10),
+                Rect::new(0, 0, 0, 0),
+                Rect::new(0, 0, 0, 0),
+            ]
+        );
+
+        lst.state_mut().viewport.scroll_by(0, 5);
+        fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
+        assert_eq!(
+            views(&lst),
+            vec![
+                Rect::new(5, 5, 10, 5),
+                Rect::new(5, 0, 10, 5),
+                Rect::new(0, 0, 0, 0),
+            ]
+        );
 
         Ok(())
     }

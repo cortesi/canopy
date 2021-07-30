@@ -6,9 +6,10 @@ pub mod utils {
     use crate::{
         event::{key, mouse},
         fit_and_update,
-        geom::{Point, Rect},
+        geom::{Rect, Size},
         render::test::TestRender,
         style::Style,
+        widgets::list::ListItem,
         Actions, Canopy, Node, NodeState, Outcome, Render, Result, StatefulNode,
     };
 
@@ -361,19 +362,26 @@ pub mod utils {
         state: NodeState,
         pub w: u16,
         pub h: u16,
-        pub virt_origin: Point,
     }
 
-    impl Node<State, TActions> for TFixed {}
+    impl Node<State, TActions> for TFixed {
+        fn fit(&mut self, _app: &mut Canopy<State, TActions>, _target: Size) -> Result<Size> {
+            Ok(Size {
+                w: self.w,
+                h: self.h,
+            })
+        }
+    }
 
     impl TFixed {
         pub fn new(w: u16, h: u16) -> Self {
             TFixed {
                 state: NodeState::default(),
-                virt_origin: Point::zero(),
                 w,
                 h,
             }
         }
     }
+
+    impl ListItem for TFixed {}
 }

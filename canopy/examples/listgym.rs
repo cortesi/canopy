@@ -8,7 +8,7 @@ use canopy::{
     geom::{Rect, Size},
     render::term::runloop,
     style::solarized,
-    widgets::{frame, List, Text},
+    widgets::{frame, list::*, Text},
     Canopy, Node, NodeState, Outcome, Result, StatefulNode,
 };
 
@@ -23,6 +23,7 @@ struct Block {
     state: NodeState,
     child: Text<Handle>,
     color: String,
+    selected: bool,
 }
 
 impl Block {
@@ -32,17 +33,31 @@ impl Block {
             state: NodeState::default(),
             child: Text::new(TEXT).with_fixed_width(rng.gen_range(10..150)),
             color: String::from(*(COLORS.choose(&mut rng).unwrap())),
+            selected: false,
         }
+    }
+}
+
+impl ListItem for Block {
+    fn set_selected(&mut self, state: bool) {
+        self.selected = state
     }
 }
 
 impl Node<Handle, ()> for Block {
     fn fit(&mut self, app: &mut Canopy<Handle, ()>, target: Size) -> Result<Size> {
-        Ok(self.child.fit(app, target)?)
+        Ok(self.child.fit(
+            app,
+            Size {
+                w: target.w - 2,
+                h: target.h,
+            },
+        )?)
     }
 
-    fn layout(&mut self, _app: &mut Canopy<Handle, ()>, _screen: Rect) -> Result<()> {
-        self.child.state_mut().viewport = self.state().viewport;
+    fn layout(&mut self, app: &mut Canopy<Handle, ()>, screen: Rect) -> Result<()> {
+        let sub = Rect::new(screen.tl.x + 2, screen.tl.y, screen.w - 2, screen.h);
+        fit_and_update(app, sub, &mut self.child)?;
         Ok(())
     }
 
@@ -58,6 +73,15 @@ impl Node<Handle, ()> for Block {
     }
 
     fn render(&self, app: &mut Canopy<Handle, ()>) -> Result<()> {
+        let v = self.view();
+        let status = Rect::new(v.tl.x, v.tl.y, 1, v.h);
+        if self.selected {
+            app.render.fill("blue", status, '\u{2588}')?;
+        } else {
+            app.render.fill("", status, ' ')?;
+        }
+        let buf = Rect::new(v.tl.x + 1, v.tl.y, 1, v.h);
+        app.render.fill("", buf, ' ')?;
         app.render.style.push_layer(&self.color);
         Ok(())
     }
@@ -142,6 +166,8 @@ impl Node<Handle, ()> for Root {
             c if c == 'g' => v.scroll_to(0, 0),
             c if c == 'j' || c == key::KeyCode::Down => v.down(),
             c if c == 'k' || c == key::KeyCode::Up => v.up(),
+            c if c == 'J' || c == key::KeyCode::Down => self.content.child.select_next(),
+            c if c == 'K' || c == key::KeyCode::Up => self.content.child.select_prev(),
             c if c == 'h' || c == key::KeyCode::Left => v.left(),
             c if c == 'l' || c == key::KeyCode::Up => v.right(),
             c if c == ' ' || c == key::KeyCode::PageDown => v.page_down(),
