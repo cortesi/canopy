@@ -5,7 +5,7 @@ use canopy;
 use canopy::{
     event::{key, mouse},
     fit_and_update,
-    geom::{Rect, Size},
+    geom::{Rect, Size, ViewPort},
     render::term::runloop,
     style::solarized,
     widgets::{frame, list::*, Text},
@@ -46,18 +46,36 @@ impl ListItem for Block {
 
 impl Node<Handle, ()> for Block {
     fn fit(&mut self, app: &mut Canopy<Handle, ()>, target: Size) -> Result<Size> {
-        Ok(self.child.fit(
+        self.child.fit(
             app,
             Size {
                 w: target.w - 2,
                 h: target.h,
             },
-        )?)
+        )
     }
 
     fn layout(&mut self, app: &mut Canopy<Handle, ()>, screen: Rect) -> Result<()> {
-        let sub = Rect::new(screen.tl.x + 2, screen.tl.y, screen.w - 2, screen.h);
-        fit_and_update(app, sub, &mut self.child)?;
+        let outer = self.child.fit(
+            app,
+            Size {
+                w: screen.w.saturating_sub(2),
+                h: screen.h,
+            },
+        )?;
+        let screen = Rect::new(
+            screen.tl.x + 2,
+            screen.tl.y,
+            screen.w.saturating_sub(2),
+            screen.h,
+        );
+        let view = Rect {
+            tl: self.view().tl,
+            w: self.view().w.saturating_sub(2),
+            h: self.view().h,
+        };
+        self.child.state_mut().viewport = ViewPort::new(outer, view, screen)?;
+
         Ok(())
     }
 

@@ -28,9 +28,9 @@ impl Rect {
     }
 
     /// Return a rect with the same size, with the top left at the given point.
-    pub fn at(&self, p: &Point) -> Self {
+    pub fn at(&self, p: impl Into<Point>) -> Self {
         Rect {
-            tl: *p,
+            tl: p.into(),
             w: self.w,
             h: self.h,
         }

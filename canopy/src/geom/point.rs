@@ -46,3 +46,10 @@ impl Point {
         Point { x: nx, y: ny }.clamp(rect)
     }
 }
+
+impl From<(u16, u16)> for Point {
+    #[inline]
+    fn from(v: (u16, u16)) -> Point {
+        Point { x: v.0, y: v.1 }
+    }
+}
