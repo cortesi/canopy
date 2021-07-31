@@ -58,18 +58,9 @@ impl Root {
 
 impl Node<Handle, ()> for Root {
     fn layout(&mut self, app: &mut Canopy<Handle, ()>, a: Rect) -> Result<()> {
-        if a.h > 2 {
-            let sb = Rect::new(a.tl.x, a.tl.y + a.h - 1, a.w, 1);
-            let ct = Rect {
-                tl: a.tl,
-                w: a.w,
-                h: a.h - 1,
-            };
-            fit_and_update(app, sb, &mut self.statusbar)?;
-            fit_and_update(app, ct, &mut self.content)?;
-        } else {
-            fit_and_update(app, a, &mut self.content)?;
-        }
+        let (ct, sb) = a.carve_vend(1);
+        fit_and_update(app, sb, &mut self.statusbar)?;
+        fit_and_update(app, ct, &mut self.content)?;
         if let Some(add) = &mut self.adder {
             fit_and_update(
                 app,

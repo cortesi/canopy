@@ -56,26 +56,14 @@ impl Node<Handle, ()> for Block {
     }
 
     fn layout(&mut self, app: &mut Canopy<Handle, ()>, screen: Rect) -> Result<()> {
-        let outer = self.child.fit(
-            app,
-            Size {
-                w: screen.w.saturating_sub(2),
-                h: screen.h,
-            },
-        )?;
-        let screen = Rect::new(
-            screen.tl.x + 2,
-            screen.tl.y,
-            screen.w.saturating_sub(2),
-            screen.h,
-        );
+        let (_, screen) = screen.carve_hstart(2);
+        let outer = self.child.fit(app, screen.into())?;
         let view = Rect {
             tl: self.view().tl,
             w: self.view().w.saturating_sub(2),
             h: self.view().h,
         };
         self.child.state_mut().viewport = ViewPort::new(outer, view, screen)?;
-
         Ok(())
     }
 
@@ -141,12 +129,7 @@ impl Root {
 
 impl Node<Handle, ()> for Root {
     fn layout(&mut self, app: &mut Canopy<Handle, ()>, screen: Rect) -> Result<()> {
-        let sb = Rect::new(screen.tl.x, screen.tl.y + screen.h - 1, screen.w, 1);
-        let ct = Rect {
-            tl: screen.tl,
-            w: screen.w,
-            h: screen.h - 1,
-        };
+        let (ct, sb) = screen.carve_vend(1);
         fit_and_update(app, sb, &mut self.statusbar)?;
         fit_and_update(app, ct, &mut self.content)?;
         Ok(())
