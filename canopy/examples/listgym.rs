@@ -162,17 +162,17 @@ impl Node<Handle, ()> for Root {
         _: &mut Handle,
         k: key::Key,
     ) -> Result<Outcome<()>> {
-        let v = &mut self.content.child.state_mut().viewport;
+        let lst = &mut self.content.child;
         match k {
-            c if c == 'g' => v.scroll_to(0, 0),
-            c if c == 'j' || c == key::KeyCode::Down => v.down(),
-            c if c == 'k' || c == key::KeyCode::Up => v.up(),
-            c if c == 'J' || c == key::KeyCode::Down => self.content.child.select_next(),
-            c if c == 'K' || c == key::KeyCode::Up => self.content.child.select_prev(),
-            c if c == 'h' || c == key::KeyCode::Left => v.left(),
-            c if c == 'l' || c == key::KeyCode::Up => v.right(),
-            c if c == ' ' || c == key::KeyCode::PageDown => v.page_down(),
-            c if c == key::KeyCode::PageUp => v.page_up(),
+            c if c == 'g' => lst.scroll_to(0, 0),
+            c if c == 'J' => lst.scroll_down(),
+            c if c == 'K' => lst.scroll_up(),
+            c if c == 'j' || c == key::KeyCode::Down => lst.select_next(),
+            c if c == 'k' || c == key::KeyCode::Up => lst.select_prev(),
+            c if c == 'h' || c == key::KeyCode::Left => lst.scroll_left(),
+            c if c == 'l' || c == key::KeyCode::Right => lst.scroll_right(),
+            c if c == ' ' || c == key::KeyCode::PageDown => lst.page_down(),
+            c if c == key::KeyCode::PageUp => lst.page_up(),
             c if c == 'q' => app.exit(0),
             _ => return Ok(Outcome::ignore()),
         };
