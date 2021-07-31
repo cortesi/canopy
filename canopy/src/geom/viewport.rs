@@ -170,7 +170,8 @@ impl ViewPort {
 
     /// Project a point in virtual space to the screen. If the point is not
     /// on-screen, return None.
-    pub fn project_point(&self, p: Point) -> Option<Point> {
+    pub fn project_point(&self, p: impl Into<Point>) -> Option<Point> {
+        let p = p.into();
         if self.view.contains_point(p) {
             let rp = self.view.rebase_point(p).unwrap();
             // We know view is not larger than screen, so we can unwrap.
@@ -380,16 +381,10 @@ mod tests {
             Rect::new(50, 50, 10, 10),
         )?;
 
-        assert!(v.project_point(Point { x: 10, y: 10 }).is_none());
-        assert_eq!(
-            v.project_point(Point { x: 30, y: 30 }),
-            Some(Point { x: 50, y: 50 }),
-        );
-        assert_eq!(
-            v.project_point(Point { x: 35, y: 35 }),
-            Some(Point { x: 55, y: 55 }),
-        );
-        assert_eq!(v.project_point(Point { x: 90, y: 90 }), None,);
+        assert!(v.project_point((10, 10)).is_none());
+        assert_eq!(v.project_point((30, 30)), Some(Point { x: 50, y: 50 }),);
+        assert_eq!(v.project_point((35, 35)), Some(Point { x: 55, y: 55 }),);
+        assert_eq!(v.project_point((90, 90)), None,);
 
         Ok(())
     }

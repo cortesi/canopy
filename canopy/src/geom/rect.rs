@@ -56,7 +56,8 @@ impl Rect {
     }
 
     /// Does this rectangle contain the point?
-    pub fn contains_point(&self, p: Point) -> bool {
+    pub fn contains_point(&self, p: impl Into<Point>) -> bool {
+        let p = p.into();
         if p.x < self.tl.x || p.x >= self.tl.x + self.w {
             false
         } else {
@@ -117,7 +118,8 @@ impl Rect {
     /// Given a point that falls within this rectangle, shift the point to be
     /// relative to our origin. If the point falls outside the rect, an error is
     /// returned.
-    pub fn rebase_point(&self, pt: Point) -> Result<Point> {
+    pub fn rebase_point(&self, pt: impl Into<Point>) -> Result<Point> {
+        let pt = pt.into();
         if !self.contains_point(pt) {
             return Err(Error::Geometry("rebase of non-contained point".into()));
         }
@@ -212,7 +214,7 @@ impl Rect {
             let mut colret = vec![];
             for height in split(self.h, spec[ci])? {
                 colret.push(Rect {
-                    tl: Point { x, y },
+                    tl: (x, y).into(),
                     w: *width,
                     h: height,
                 });
@@ -556,11 +558,11 @@ mod tests {
     #[test]
     fn contains() -> Result<()> {
         let r = Rect::new(10, 10, 10, 10);
-        assert!(r.contains_point(Point { x: 10, y: 10 }));
-        assert!(!r.contains_point(Point { x: 9, y: 10 }));
-        assert!(!r.contains_point(Point { x: 20, y: 20 }));
-        assert!(r.contains_point(Point { x: 19, y: 19 }));
-        assert!(!r.contains_point(Point { x: 20, y: 21 }));
+        assert!(r.contains_point((10, 10)));
+        assert!(!r.contains_point((9, 10)));
+        assert!(!r.contains_point((20, 20)));
+        assert!(r.contains_point((19, 19)));
+        assert!(!r.contains_point((20, 21)));
 
         assert!(r.contains_rect(&Rect::new(10, 10, 1, 1)));
         assert!(r.contains_rect(&r));
@@ -579,16 +581,9 @@ mod tests {
     #[test]
     fn trebase() -> Result<()> {
         let r = Rect::new(10, 10, 10, 10);
-        assert_eq!(
-            r.rebase_point(Point { x: 11, y: 11 })?,
-            Point { x: 1, y: 1 }
-        );
-        assert_eq!(
-            r.rebase_point(Point { x: 10, y: 10 })?,
-            Point { x: 0, y: 0 }
-        );
-
-        if let Ok(_) = r.rebase_point(Point { x: 9, y: 9 }) {
+        assert_eq!(r.rebase_point((11, 11))?, Point { x: 1, y: 1 });
+        assert_eq!(r.rebase_point((10, 10))?, Point { x: 0, y: 0 });
+        if let Ok(_) = r.rebase_point((9, 9)) {
             assert!(false);
         }
         Ok(())

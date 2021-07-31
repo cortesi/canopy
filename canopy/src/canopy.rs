@@ -579,11 +579,12 @@ where
 // root.
 pub fn locate<S, A: Actions, R: Walker + Default>(
     e: &mut dyn Node<S, A>,
-    p: Point,
+    p: impl Into<Point>,
     f: &mut dyn FnMut(&mut dyn Node<S, A>) -> Result<R>,
 ) -> Result<R> {
     let mut seen = false;
     let mut ret = R::default();
+    let p = p.into();
     postorder_mut(e, &mut |inner| -> Result<SkipWalker> {
         Ok(if seen {
             ret = ret.join(f(inner)?);

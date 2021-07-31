@@ -8,7 +8,7 @@ pub struct Point {
 
 impl Point {
     pub fn zero() -> Self {
-        Point { x: 0, y: 0 }
+        (0, 0).into()
     }
     /// Shift the point by an offset, avoiding under- or overflow.
     pub fn scroll(&self, x: i16, y: i16) -> Self {
@@ -22,7 +22,7 @@ impl Point {
         } else {
             self.y.saturating_add(y.abs() as u16)
         };
-        Point { x: nx, y: ny }
+        (nx, ny).into()
     }
     /// Clamp a point, constraining it to fall within `rect`.
     pub fn clamp(&self, rect: Rect) -> Self {
