@@ -36,6 +36,78 @@ impl Rect {
         }
     }
 
+    /// Carve a rectangle with a fixed width out of the start of the horizontal
+    /// extent of this rect. Returns a (left, right) tuple. Left is either empty
+    /// or has the full width specified.
+    ///
+    ///```
+    /// use canopy::geom::Rect;
+    /// # fn main() {
+    /// let r = Rect::new(5, 5, 10, 10);
+    /// assert_eq!(r.carve_hstart(2), (Rect::new(5, 5, 2, 10), Rect::new(7, 5, 8, 10)));
+    /// assert_eq!(r.carve_hstart(20), (Rect::new(5, 5, 0, 10), Rect::new(5, 5, 10, 10)));
+    /// # }
+    ///```
+    pub fn carve_hstart(&self, width: u16) -> (Rect, Rect) {
+        let (h, t) = self.hextent().carve_start(width);
+        // We can unwrap, because both extents are within our range by definition.
+        (self.hslice(&h).unwrap(), self.hslice(&t).unwrap())
+    }
+
+    /// Carve a rectangle with a fixed width out of the end of the horizontal
+    /// extent of this rect. Returns a (left, right) tuple. Right is either empty
+    /// or has the full width specified.
+    ///
+    ///```
+    /// use canopy::geom::Rect;
+    /// # fn main() {
+    /// let r = Rect::new(5, 5, 10, 10);
+    /// assert_eq!(r.carve_hend(2), (Rect::new(5, 5, 8, 10), Rect::new(13, 5, 2, 10)));
+    /// assert_eq!(r.carve_hend(20), (Rect::new(5, 5, 10, 10), Rect::new(15, 5, 0, 10)));
+    /// # }
+    ///```
+    pub fn carve_hend(&self, height: u16) -> (Rect, Rect) {
+        let (h, t) = self.hextent().carve_end(height);
+        // We can unwrap, because both extents are within our range by definition.
+        (self.hslice(&h).unwrap(), self.hslice(&t).unwrap())
+    }
+
+    /// Carve a rectangle with a fixed width out of the start of the vertical
+    /// extent of this rect. Returns a (top, bottom) tuple. Top is either empty
+    /// or has the height width specified.
+    ///
+    ///```
+    /// use canopy::geom::Rect;
+    /// # fn main() {
+    /// let r = Rect::new(5, 5, 10, 10);
+    /// assert_eq!(r.carve_vstart(2), (Rect::new(5, 5, 10, 2), Rect::new(5, 7, 10, 8)));
+    /// assert_eq!(r.carve_vstart(20), (Rect::new(5, 5, 10, 0), Rect::new(5, 5, 10, 10)));
+    /// # }
+    ///```
+    pub fn carve_vstart(&self, height: u16) -> (Rect, Rect) {
+        let (h, t) = self.vextent().carve_start(height);
+        // We can unwrap, because both extents are within our range by definition.
+        (self.vslice(&h).unwrap(), self.vslice(&t).unwrap())
+    }
+
+    /// Carve a rectangle with a fixed width out of the end of the vertical
+    /// extent of this rect. Returns a (top, bottom) tuple. Bottom is either empty
+    /// or has the full height specified.
+    ///
+    ///```
+    /// use canopy::geom::Rect;
+    /// # fn main() {
+    /// let r = Rect::new(5, 5, 10, 10);
+    /// assert_eq!(r.carve_vend(2), (Rect::new(5, 5, 10, 8), Rect::new(5, 13, 10, 2)));
+    /// assert_eq!(r.carve_vend(20), (Rect::new(5, 5, 10, 10), Rect::new(5, 15, 10, 0)));
+    /// # }
+    ///```
+    pub fn carve_vend(&self, height: u16) -> (Rect, Rect) {
+        let (h, t) = self.vextent().carve_end(height);
+        // We can unwrap, because both extents are within our range by definition.
+        (self.vslice(&h).unwrap(), self.vslice(&t).unwrap())
+    }
+
     /// Clamp this rectangle, constraining it lie within another rectangle. The
     /// size of the returned Rect is always equal to that of self. If self is
     /// larger than the enclosing rectangle, return an error.

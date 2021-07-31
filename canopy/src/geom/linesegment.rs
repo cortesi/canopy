@@ -11,8 +11,87 @@ pub struct LineSegment {
 
 impl LineSegment {
     /// The far limit of the extent.
+    ///
+    ///```
+    /// use canopy::geom::LineSegment;
+    /// # fn main() {
+    /// let s = LineSegment{ off: 5, len: 5};
+    /// assert_eq!(s.far(), 10);
+    /// # }
+    ///```
     pub fn far(&self) -> u16 {
         self.off + self.len
+    }
+
+    /// Carve off a fixed-size portion from the start of this LineSegment,
+    /// returning a (head, tail) tuple. If the segment is too short to carve out
+    /// the width specified, the length of the head will be zero.
+    ///
+    ///```
+    /// use canopy::geom::LineSegment;
+    /// # fn main() {
+    /// let s = LineSegment{ off: 5, len: 5};
+    /// assert_eq!(s.carve_start(2), (LineSegment{off: 5, len: 2}, LineSegment{off: 7, len: 3}));
+    /// assert_eq!(s.carve_start(10), (LineSegment{off: 5, len: 0}, LineSegment{off: 5, len: 5}));
+    /// # }
+    ///```
+    pub fn carve_start(&self, n: u16) -> (LineSegment, LineSegment) {
+        if self.len < n {
+            (
+                LineSegment {
+                    off: self.off,
+                    len: 0,
+                },
+                *self,
+            )
+        } else {
+            (
+                LineSegment {
+                    off: self.off,
+                    len: n,
+                },
+                LineSegment {
+                    off: self.off + n,
+                    len: self.len - n,
+                },
+            )
+        }
+    }
+
+    /// Carve off a fixed-size portion from the end of this LineSegment,
+    /// returning a (head, tail) tuple. If the segment is too short to carve out
+    /// the width specified, the length of the tail will be zero.
+    ///
+    ///```
+    /// use canopy::geom::LineSegment;
+    /// # fn main() {
+    /// let s = LineSegment{ off: 5, len: 5};
+    /// assert_eq!(s.carve_end(2), (LineSegment{off: 5, len: 3}, LineSegment{off: 8, len: 2}));
+    /// assert_eq!(s.carve_end(10), (LineSegment{off: 5, len: 5}, LineSegment{off: 10, len: 0}));
+    /// # }
+    ///```
+    pub fn carve_end(&self, n: u16) -> (LineSegment, LineSegment) {
+        if self.len < n {
+            (
+                *self,
+                LineSegment {
+                    off: self.far(),
+                    len: 0,
+                },
+            )
+        } else {
+            let s = LineSegment {
+                off: self.off,
+                len: self.len - n,
+            };
+            (
+                s,
+                LineSegment {
+                    off: s.far(),
+                    len: n,
+                },
+            )
+        }
     }
 
     /// Does other lie within this extent.
