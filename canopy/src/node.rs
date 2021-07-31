@@ -1,7 +1,6 @@
 use crate::{
     cursor,
     event::{key, mouse},
-    geom::Rect,
     geom::Size,
     Actions, Canopy, Outcome, Result, StatefulNode,
 };
@@ -131,7 +130,7 @@ pub trait Node<S, A: Actions>: StatefulNode {
     ///
     /// The default does nothing, which is appropriate for nodes that have no
     /// children.
-    fn layout(&mut self, app: &mut Canopy<S, A>, screen_rect: Rect) -> Result<()> {
+    fn layout(&mut self, app: &mut Canopy<S, A>) -> Result<()> {
         Ok(())
     }
 

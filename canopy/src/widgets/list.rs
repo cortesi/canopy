@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use crate as canopy;
 use crate::{
     error::Result,
-    geom::{Point, Rect, Size},
+    geom::{Rect, Size},
     node::Node,
     state::{NodeState, StatefulNode},
     Actions, Canopy,
@@ -127,16 +127,16 @@ where
         Ok(Size { w, h })
     }
 
-    fn layout(&mut self, app: &mut Canopy<S, A>, screen: Rect) -> Result<()> {
+    fn layout(&mut self, app: &mut Canopy<S, A>) -> Result<()> {
         let myvp = self.state().viewport;
         let mut voffset: u16 = 0;
         self.clear = vec![];
         for itm in &mut self.items {
-            let item_view = itm.fit(app, screen.into())?.rect();
+            let item_view = itm.fit(app, myvp.screen().into())?.rect();
             let item_virt = item_view.shift(0, voffset as i16);
             if let Some(vp) = myvp.map(item_virt)? {
                 itm.state_mut().viewport = vp;
-                itm.layout(app, vp.screen())?;
+                itm.layout(app)?;
                 itm.unhide();
 
                 // At this point, the item's screen rect has been calculated to

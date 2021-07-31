@@ -51,13 +51,14 @@ impl Root {
         let mut adder = frame::Frame::new(InputLine::new(""));
         app.set_focus(&mut adder.child)?;
         self.adder = Some(adder);
-        self.layout(app, self.screen())?;
+        self.layout(app)?;
         Ok(Outcome::handle())
     }
 }
 
 impl Node<Handle, ()> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle, ()>, a: Rect) -> Result<()> {
+    fn layout(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
+        let a = self.screen();
         let (ct, sb) = a.carve_vend(1);
         fit_and_update(app, sb, &mut self.statusbar)?;
         fit_and_update(app, ct, &mut self.content)?;

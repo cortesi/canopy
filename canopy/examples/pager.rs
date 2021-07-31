@@ -5,7 +5,6 @@ use canopy;
 use canopy::{
     event::{key, mouse},
     fit_and_update,
-    geom::Rect,
     render::term::runloop,
     style::solarized,
     widgets::{frame, Text},
@@ -70,8 +69,8 @@ impl Node<Handle, ()> for Root {
         Ok(Outcome::handle())
     }
 
-    fn layout(&mut self, app: &mut Canopy<Handle, ()>, screen: Rect) -> Result<()> {
-        fit_and_update(app, screen, &mut self.child)
+    fn layout(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
+        fit_and_update(app, self.screen(), &mut self.child)
     }
 
     fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle, ()>) -> Result<()>) -> Result<()> {

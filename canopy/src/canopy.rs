@@ -571,7 +571,7 @@ where
 {
     let fit = n.fit(app, screen.size())?;
     n.update_view(fit, screen);
-    n.layout(app, screen)?;
+    n.layout(app)?;
     Ok(())
 }
 

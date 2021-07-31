@@ -6,7 +6,7 @@ pub mod utils {
     use crate::{
         event::{key, mouse},
         fit_and_update,
-        geom::{Rect, Size},
+        geom::Size,
         render::test::TestRender,
         style::Style,
         widgets::list::ListItem,
@@ -128,8 +128,8 @@ pub mod utils {
     }
 
     impl Node<State, TActions> for TBranch {
-        fn layout(&mut self, app: &mut Canopy<State, TActions>, rect: Rect) -> Result<()> {
-            let v = rect.split_vertical(2)?;
+        fn layout(&mut self, app: &mut Canopy<State, TActions>) -> Result<()> {
+            let v = self.screen().split_vertical(2)?;
             fit_and_update(app, v[0], &mut self.a)?;
             fit_and_update(app, v[1], &mut self.b)?;
             Ok(())
@@ -203,8 +203,8 @@ pub mod utils {
     }
 
     impl Node<State, TActions> for TRoot {
-        fn layout(&mut self, app: &mut Canopy<State, TActions>, rect: Rect) -> Result<()> {
-            let v = rect.split_horizontal(2)?;
+        fn layout(&mut self, app: &mut Canopy<State, TActions>) -> Result<()> {
+            let v = self.screen().split_horizontal(2)?;
             fit_and_update(app, v[0], &mut self.a)?;
             fit_and_update(app, v[1], &mut self.b)?;
             Ok(())

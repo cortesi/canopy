@@ -157,7 +157,7 @@ impl<'a, S, A: Actions> Node<S, A> for InputLine<S> {
             }
             _ => return Ok(Outcome::ignore()),
         };
-        self.layout(app, self.screen())?;
+        self.layout(app)?;
         Ok(Outcome::handle())
     }
 

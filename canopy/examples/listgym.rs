@@ -55,8 +55,8 @@ impl Node<Handle, ()> for Block {
         )
     }
 
-    fn layout(&mut self, app: &mut Canopy<Handle, ()>, screen: Rect) -> Result<()> {
-        let (_, screen) = screen.carve_hstart(2);
+    fn layout(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
+        let (_, screen) = self.screen().carve_hstart(2);
         let outer = self.child.fit(app, screen.into())?;
         let view = Rect {
             tl: self.view().tl,
@@ -128,8 +128,8 @@ impl Root {
 }
 
 impl Node<Handle, ()> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle, ()>, screen: Rect) -> Result<()> {
-        let (ct, sb) = screen.carve_vend(1);
+    fn layout(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
+        let (ct, sb) = self.screen().carve_vend(1);
         fit_and_update(app, sb, &mut self.statusbar)?;
         fit_and_update(app, ct, &mut self.content)?;
         Ok(())
@@ -151,7 +151,7 @@ impl Node<Handle, ()> for Root {
             c if c == mouse::Action::ScrollUp => v.up(),
             _ => return Ok(Outcome::ignore()),
         };
-        self.layout(app, self.screen())?;
+        self.layout(app)?;
         app.taint_tree(self)?;
         Ok(Outcome::handle())
     }
@@ -176,7 +176,7 @@ impl Node<Handle, ()> for Root {
             c if c == 'q' => app.exit(0),
             _ => return Ok(Outcome::ignore()),
         };
-        self.layout(app, self.screen())?;
+        self.layout(app)?;
         app.taint_tree(self)?;
         Ok(Outcome::handle())
     }

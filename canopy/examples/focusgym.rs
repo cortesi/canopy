@@ -3,6 +3,7 @@ use duplicate::duplicate;
 use canopy;
 use canopy::{
     event::{key, mouse},
+    fit_and_update,
     geom::Frame,
     geom::Rect,
     render::term::runloop,
@@ -49,9 +50,8 @@ impl Block {
 }
 
 impl Node<Handle, ()> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle, ()>, screen: Rect) -> Result<()> {
-        self.state_mut().viewport.set_fill(screen);
-        self.child.layout(app, screen)
+    fn layout(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
+        fit_and_update(app, self.screen(), &mut self.child)
     }
 
     fn handle_mouse(
@@ -100,14 +100,13 @@ impl Node<Handle, ()> for Root {
 
 impl Block {
     fn add(&mut self, app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
-        let r = self.screen();
         Ok(if self.children.len() == 0 {
             Outcome::ignore()
         } else if self.size_limited(self.children[0].screen()) {
             Outcome::handle()
         } else {
             self.children.push(Block::new(!self.horizontal));
-            self.layout(app, r)?;
+            self.layout(app)?;
             app.taint_tree(self)?;
             Outcome::handle()
         })
@@ -129,7 +128,7 @@ impl Block {
             Outcome::handle()
         } else {
             self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
-            self.layout(app, r)?;
+            self.layout(app)?;
             app.taint_tree(self)?;
             Outcome::handle()
         })
@@ -137,7 +136,8 @@ impl Block {
 }
 
 impl Node<Handle, ()> for Block {
-    fn layout(&mut self, app: &mut Canopy<Handle, ()>, screen: Rect) -> Result<()> {
+    fn layout(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
+        let screen = self.screen();
         self.state_mut().viewport.set_fill(screen);
         if self.children.len() > 0 {
             let sizes = if self.horizontal {
@@ -146,7 +146,7 @@ impl Node<Handle, ()> for Block {
                 screen.split_vertical(self.children.len() as u16)?
             };
             for i in 0..self.children.len() {
-                app.resize(&mut self.children[i], sizes[i])?
+                fit_and_update(app, sizes[i], &mut self.children[i])?;
             }
         }
         Ok(())

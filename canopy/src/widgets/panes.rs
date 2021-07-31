@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
-    geom::Rect,
+    fit_and_update,
     state::{NodeState, StatefulNode},
     Actions, Canopy, Node, Result,
 };
@@ -46,7 +46,7 @@ where
             if self.children[x].is_empty() {
                 self.children.remove(x);
             }
-            self.layout(app, self.screen())?;
+            self.layout(app)?;
             app.taint_tree(self)?;
         }
         Ok(())
@@ -114,11 +114,11 @@ impl<S, A: Actions, N: Node<S, A>> Node<S, A> for Panes<S, A, N> {
         Ok(())
     }
 
-    fn layout(&mut self, app: &mut Canopy<S, A>, screen: Rect) -> Result<()> {
-        let l = screen.split_panes(&self.shape())?;
+    fn layout(&mut self, app: &mut Canopy<S, A>) -> Result<()> {
+        let l = self.screen().split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
-                row.layout(app, l[ci][ri])?;
+                fit_and_update(app, l[ci][ri], row)?;
             }
         }
         Ok(())
@@ -128,9 +128,11 @@ impl<S, A: Actions, N: Node<S, A>> Node<S, A> for Panes<S, A, N> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::geom::{Point, Rect};
-    use crate::render::test::TestRender;
-    use crate::tutils::utils;
+    use crate::{
+        geom::{Point, Rect},
+        render::test::TestRender,
+        tutils::utils,
+    };
 
     #[test]
     fn tlayout() -> Result<()> {
@@ -143,21 +145,21 @@ mod tests {
             w: 100,
             h: 100,
         };
-        p.layout(&mut app, r)?;
+        fit_and_update(&mut app, r, &mut p)?;
 
         assert_eq!(p.shape(), vec![1]);
         let tn = utils::TBranch::new("b");
         p.insert_col(&mut app, tn)?;
-        p.layout(&mut app, r)?;
+        fit_and_update(&mut app, r, &mut p)?;
 
         assert_eq!(p.shape(), vec![1, 1]);
         app.set_focus(&mut p.children[0][0].a)?;
-        p.layout(&mut app, r)?;
+        fit_and_update(&mut app, r, &mut p)?;
 
         let tn = utils::TBranch::new("c");
         assert_eq!(p.focus_coords(&mut app), Some((0, 0)));
         p.insert_row(&mut app, tn)?;
-        p.layout(&mut app, r)?;
+        fit_and_update(&mut app, r, &mut p)?;
 
         assert_eq!(p.shape(), vec![2, 1]);
 
