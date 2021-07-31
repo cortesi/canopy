@@ -20,14 +20,11 @@ where
     N: Node<S, A> + ListItem,
 {
     _marker: PhantomData<(S, A)>,
-    items: Vec<N>,
-
-    // Offset within the virtual rectangle
-    pub offset: Point,
-    pub selected: usize,
     state: NodeState,
 
-    // Cached set of rectangles to clear during rendering
+    items: Vec<N>,
+    pub selected: usize,
+    // Cached set of rectangles to clear during the next render.
     clear: Vec<Rect>,
 }
 
@@ -39,7 +36,6 @@ where
         let mut l = List {
             _marker: PhantomData,
             items: items,
-            offset: Point::zero(),
             selected: 0,
             state: NodeState::default(),
             clear: vec![],
@@ -64,6 +60,10 @@ where
         self.selected = offset.clamp(0, self.items.len() - 1);
         self.items[self.selected].set_selected(true);
     }
+
+    /// Fix the focus after a scroll operation.
+    fn fix_focus(&self) {}
+
     /// Scroll the viewport to a specified location.
     pub fn scroll_to(&mut self, x: u16, y: u16) {
         self.state_mut().viewport.scroll_to(x, y);
