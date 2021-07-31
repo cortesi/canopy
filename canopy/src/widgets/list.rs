@@ -14,6 +14,32 @@ pub trait ListItem {
     fn set_selected(&mut self, _state: bool) {}
 }
 
+pub struct Item<S, A: Actions, N>
+where
+    N: Node<S, A> + ListItem,
+{
+    itm: N,
+    virt: Rect,
+
+    _marker: PhantomData<(S, A)>,
+}
+
+impl<S, A: Actions, N> Item<S, A, N>
+where
+    N: Node<S, A> + ListItem,
+{
+    fn new(itm: N) -> Self {
+        Item {
+            _marker: PhantomData,
+            virt: Rect::default(),
+            itm,
+        }
+    }
+    fn set_selected(&mut self, state: bool) {
+        self.itm.set_selected(state)
+    }
+}
+
 #[derive(StatefulNode)]
 pub struct List<S, A: Actions, N>
 where
@@ -22,9 +48,10 @@ where
     _marker: PhantomData<(S, A)>,
     state: NodeState,
 
-    items: Vec<N>,
+    items: Vec<Item<S, A, N>>,
     pub selected: usize,
-    // Cached set of rectangles to clear during the next render.
+
+    // Set of rectangles to clear during the next render.
     clear: Vec<Rect>,
 }
 
@@ -35,7 +62,7 @@ where
     pub fn new(items: Vec<N>) -> Self {
         let mut l = List {
             _marker: PhantomData,
-            items: items,
+            items: items.into_iter().map(move |x| Item::new(x)).collect(),
             selected: 0,
             state: NodeState::default(),
             clear: vec![],
@@ -59,38 +86,113 @@ where
         self.items[self.selected].set_selected(false);
         self.selected = offset.clamp(0, self.items.len() - 1);
         self.items[self.selected].set_selected(true);
+        self.fix_view();
     }
-
-    /// Fix the focus after a scroll operation.
-    fn fix_focus(&self) {}
 
     /// Scroll the viewport to a specified location.
     pub fn scroll_to(&mut self, x: u16, y: u16) {
         self.state_mut().viewport.scroll_to(x, y);
+        self.fix_selection();
     }
     /// Scroll the viewport down by one line.
     pub fn scroll_down(&mut self) {
         self.state_mut().viewport.down();
+        self.fix_selection();
     }
     /// Scroll the viewport up by one line.
     pub fn scroll_up(&mut self) {
         self.state_mut().viewport.up();
+        self.fix_selection();
     }
     /// Scroll the viewport left by one column.
     pub fn scroll_left(&mut self) {
         self.state_mut().viewport.left();
+        self.fix_selection();
     }
     /// Scroll the viewport right by one column.
     pub fn scroll_right(&mut self) {
         self.state_mut().viewport.right();
+        self.fix_selection();
     }
     /// Scroll the viewport down by one page.
     pub fn page_down(&mut self) {
         self.state_mut().viewport.page_down();
+        self.fix_selection();
     }
     /// Scroll the viewport up by one page.
     pub fn page_up(&mut self) {
         self.state_mut().viewport.page_up();
+        self.fix_selection();
+    }
+
+    /// Fix the selected item after a scroll operation.
+    fn fix_selection(&mut self) {
+        let (start, end) = self.view_range();
+        if self.selected < start {
+            self.select(start);
+            return;
+        }
+        if self.selected > end {
+            self.select(end);
+            return;
+        }
+    }
+
+    /// Fix the view after a selection change operation.
+    fn fix_view(&mut self) {
+        let virt = self.items[self.selected].virt;
+        let view = self.view();
+        if let Some(v) = virt.intersect(&view) {
+            if v.size() == virt.size() {
+                return;
+            }
+        }
+        let (start, end) = self.view_range();
+        // We know there isn't an entire overlap
+        if self.selected <= start {
+            self.state_mut().viewport.scroll_to(view.tl.x, virt.tl.y);
+        } else if self.selected >= end {
+            if virt.h >= view.h {
+                self.state_mut().viewport.scroll_to(view.tl.x, virt.tl.y);
+            } else {
+                let y = virt.tl.y - (view.h - virt.h);
+                self.state_mut().viewport.scroll_to(view.tl.x, y);
+            }
+        }
+    }
+
+    /// Calculate which items are in the list's view window, and return their
+    /// offsets and sizes.
+    fn in_view(&self) -> Vec<usize> {
+        let view = self.view();
+        let mut ret = vec![];
+        for (idx, itm) in self.items.iter().enumerate() {
+            if view.intersect(&itm.virt).is_some() {
+                ret.push(idx);
+            }
+        }
+        ret
+    }
+
+    /// The first and last items of the view. (0, 0) if the lis empty.
+    fn view_range(&self) -> (usize, usize) {
+        let v = self.in_view();
+        if let (Some(f), Some(l)) = (v.first(), v.last()) {
+            (*f, *l)
+        } else {
+            (0, 0)
+        }
+    }
+
+    /// Calculate and return the outer viewport rectangles of all items.
+    fn refresh_views(&mut self, app: &mut Canopy<S, A>, r: Size) -> Result<()> {
+        let mut voffset: u16 = 0;
+        for itm in &mut self.items {
+            let item_view = itm.itm.fit(app, r)?.rect();
+            itm.virt = item_view.shift(0, voffset as i16);
+            voffset += item_view.h;
+        }
+        Ok(())
     }
 }
 
@@ -104,14 +206,14 @@ where
 
     fn children(&self, f: &mut dyn FnMut(&dyn Node<S, A>) -> Result<()>) -> Result<()> {
         for i in &self.items {
-            f(i)?
+            f(&i.itm)?
         }
         Ok(())
     }
 
     fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node<S, A>) -> Result<()>) -> Result<()> {
         for i in self.items.iter_mut() {
-            f(i)?
+            f(&mut i.itm)?
         }
         Ok(())
     }
@@ -119,25 +221,22 @@ where
     fn fit(&mut self, app: &mut Canopy<S, A>, r: Size) -> Result<Size> {
         let mut w = 0;
         let mut h = 0;
+        self.refresh_views(app, r)?;
         for i in &mut self.items {
-            let v = i.fit(app, r)?;
-            w = w.max(v.w);
-            h += v.h
+            w = w.max(i.virt.w);
+            h += i.virt.h
         }
         Ok(Size { w, h })
     }
 
     fn layout(&mut self, app: &mut Canopy<S, A>) -> Result<()> {
         let myvp = self.state().viewport;
-        let mut voffset: u16 = 0;
         self.clear = vec![];
         for itm in &mut self.items {
-            let item_view = itm.fit(app, myvp.screen().into())?.rect();
-            let item_virt = item_view.shift(0, voffset as i16);
-            if let Some(vp) = myvp.map(item_virt)? {
-                itm.state_mut().viewport = vp;
-                itm.layout(app)?;
-                itm.unhide();
+            if let Some(vp) = myvp.map(itm.virt)? {
+                itm.itm.state_mut().viewport = vp;
+                itm.itm.layout(app)?;
+                itm.itm.unhide();
 
                 // At this point, the item's screen rect has been calculated to
                 // be the same size as its view, which may be smaller than our
@@ -147,7 +246,7 @@ where
                 // First, we calculate the area of our view the child will draw
                 // on. We know we can unwrap here, because the views intersect
                 // by definition.
-                let drawn = myvp.view().intersect(&item_virt).unwrap();
+                let drawn = myvp.view().intersect(&itm.virt).unwrap();
 
                 // Now, if there is space to the left, we clear it. In practice,
                 // given map's node positioning, there will never be space to
@@ -173,17 +272,16 @@ where
                 if !right.is_empty() {
                     self.clear.push(right);
                 }
-            } else if let Some(isect) = myvp.view().vextent().intersect(&item_virt.vextent()) {
+            } else if let Some(isect) = myvp.view().vextent().intersect(&itm.virt.vextent()) {
                 // There was no intersection of the rects, but the vertical
                 // extent of the item overlaps with our view. This means that
                 // item is not on screen because it's off to the left of our
                 // view, but we still need to clear its full row.
                 self.clear.push(myvp.view().vslice(&isect)?);
-                itm.hide();
+                itm.itm.hide();
             } else {
-                itm.hide();
+                itm.itm.hide();
             }
-            voffset += itm.outer().h;
         }
         Ok(())
     }
