@@ -164,6 +164,12 @@ impl Node<Handle, ()> for Root {
     ) -> Result<Outcome<()>> {
         let lst = &mut self.content.child;
         match k {
+            c if c == 'a' => {
+                lst.insert_after(Block::new());
+            }
+            c if c == 'A' => {
+                lst.append(Block::new());
+            }
             c if c == 'C' => {
                 lst.clear();
             }

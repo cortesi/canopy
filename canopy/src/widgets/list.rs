@@ -78,6 +78,26 @@ where
         self.items.len()
     }
 
+    /// Insert an item at the given index.
+    pub fn insert(&mut self, index: usize, itm: N) {
+        self.items
+            .insert(index.clamp(0, self.len()), Item::new(itm));
+        self.fix_selection();
+    }
+
+    /// Insert an item after the current selection.
+    pub fn insert_after(&mut self, itm: N) {
+        self.items
+            .insert((self.selected + 1).clamp(0, self.len()), Item::new(itm));
+        self.fix_selection();
+    }
+
+    /// Append an item to the end of the list.
+    pub fn append(&mut self, itm: N) {
+        self.items.insert(self.len(), Item::new(itm));
+        self.fix_selection();
+    }
+
     /// Clear all items.
     pub fn clear(&mut self) -> Vec<N> {
         self.items.drain(..).map(move |x| x.itm).collect()
@@ -124,6 +144,7 @@ where
     /// it lies within the list.
     pub fn select(&mut self, offset: usize) {
         if self.len() != 0 {
+            self.selected = self.selected.clamp(0, self.len() - 1);
             self.items[self.selected].set_selected(false);
             self.selected = offset.clamp(0, self.items.len() - 1);
             self.items[self.selected].set_selected(true);
@@ -179,10 +200,11 @@ where
         if self.selected < start {
             self.select(start);
             return;
-        }
-        if self.selected > end {
+        } else if self.selected > end {
             self.select(end);
             return;
+        } else {
+            self.select(self.selected);
         }
     }
 
@@ -190,8 +212,8 @@ where
     fn fix_view(&mut self) {
         let virt = self.items[self.selected].virt;
         let view = self.view();
-        if let Some(v) = virt.intersect(&view) {
-            if v.size() == virt.size() {
+        if let Some(v) = virt.vextent().intersect(&view.vextent()) {
+            if v.len == virt.h {
                 return;
             }
         }
@@ -209,13 +231,14 @@ where
         }
     }
 
-    /// Calculate which items are in the list's view window, and return their
-    /// offsets and sizes.
+    /// Calculate which items are in the list's vertical window, and return
+    /// their offsets and sizes. Items that are offscreen to the side are also
+    /// returned, so the returned vector is guaranteed to be a contiguous range.
     fn in_view(&self) -> Vec<usize> {
         let view = self.view();
         let mut ret = vec![];
         for (idx, itm) in self.items.iter().enumerate() {
-            if view.intersect(&itm.virt).is_some() {
+            if view.vextent().intersect(&itm.virt.vextent()).is_some() {
                 ret.push(idx);
             }
         }
