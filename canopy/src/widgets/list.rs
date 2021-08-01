@@ -72,14 +72,31 @@ where
         }
         l
     }
+
+    pub fn len(&self) -> usize {
+        self.items.len()
+    }
+
+    /// Move selection to the next item in the list, if possible.
+    pub fn select_first(&mut self) {
+        self.select(0)
+    }
+
+    /// Move selection to the next item in the list, if possible.
+    pub fn select_last(&mut self) {
+        self.select(self.len())
+    }
+
     /// Move selection to the next item in the list, if possible.
     pub fn select_next(&mut self) {
         self.select(self.selected.saturating_add(1))
     }
+
     /// Move selection to the next previous the list, if possible.
     pub fn select_prev(&mut self) {
         self.select(self.selected.saturating_sub(1))
     }
+
     /// Select an item at a specified offset, clamping the offset to make sure
     /// it lies within the list.
     pub fn select(&mut self, offset: usize) {
@@ -94,31 +111,37 @@ where
         self.state_mut().viewport.scroll_to(x, y);
         self.fix_selection();
     }
+
     /// Scroll the viewport down by one line.
     pub fn scroll_down(&mut self) {
         self.state_mut().viewport.down();
         self.fix_selection();
     }
+
     /// Scroll the viewport up by one line.
     pub fn scroll_up(&mut self) {
         self.state_mut().viewport.up();
         self.fix_selection();
     }
+
     /// Scroll the viewport left by one column.
     pub fn scroll_left(&mut self) {
         self.state_mut().viewport.left();
         self.fix_selection();
     }
+
     /// Scroll the viewport right by one column.
     pub fn scroll_right(&mut self) {
         self.state_mut().viewport.right();
         self.fix_selection();
     }
+
     /// Scroll the viewport down by one page.
     pub fn page_down(&mut self) {
         self.state_mut().viewport.page_down();
         self.fix_selection();
     }
+
     /// Scroll the viewport up by one page.
     pub fn page_up(&mut self) {
         self.state_mut().viewport.page_up();

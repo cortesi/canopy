@@ -164,7 +164,8 @@ impl Node<Handle, ()> for Root {
     ) -> Result<Outcome<()>> {
         let lst = &mut self.content.child;
         match k {
-            c if c == 'g' => lst.scroll_to(0, 0),
+            c if c == 'g' => lst.select_first(),
+            c if c == 'G' => lst.select_last(),
             c if c == 'J' => lst.scroll_down(),
             c if c == 'K' => lst.scroll_up(),
             c if c == 'j' || c == key::KeyCode::Down => lst.select_next(),
