@@ -118,6 +118,9 @@ impl<S> InputLine<S> {
             textbuf: TextBuf::new(txt),
         }
     }
+    pub fn text(&self) -> String {
+        self.textbuf.text()
+    }
 }
 
 impl<'a, S, A: Actions> Node<S, A> for InputLine<S> {

@@ -116,7 +116,7 @@ struct Root {
 
 impl Root {
     fn new() -> Self {
-        let nodes: Vec<Block> = (0..100).map(|_| Block::new()).collect();
+        let nodes: Vec<Block> = (0..10).map(|_| Block::new()).collect();
         Root {
             state: NodeState::default(),
             content: frame::Frame::new(List::new(nodes)),

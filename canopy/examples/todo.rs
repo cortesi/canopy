@@ -4,14 +4,66 @@ use canopy;
 use canopy::{
     event::{key, mouse},
     fit_and_update,
-    geom::Rect,
+    geom::{Rect, Size},
     render::term::runloop,
     style::solarized,
-    widgets::{frame, InputLine, Text},
+    widgets::{frame, list::*, InputLine, Text},
     Canopy, Node, NodeState, Outcome, Result, StatefulNode,
 };
 
 struct Handle {}
+
+#[derive(StatefulNode)]
+struct TodoItem {
+    state: NodeState,
+    child: Text<Handle>,
+    selected: bool,
+}
+
+impl TodoItem {
+    fn new(text: &str) -> Self {
+        TodoItem {
+            state: NodeState::default(),
+            child: Text::new(text),
+            selected: false,
+        }
+    }
+}
+
+impl ListItem for TodoItem {
+    fn set_selected(&mut self, state: bool) {
+        self.selected = state
+    }
+}
+
+impl Node<Handle, ()> for TodoItem {
+    fn fit(&mut self, app: &mut Canopy<Handle, ()>, target: Size) -> Result<Size> {
+        self.child.fit(app, target)
+    }
+
+    fn layout(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
+        fit_and_update(app, self.screen(), &mut self.child)?;
+        Ok(())
+    }
+
+    fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle, ()>) -> Result<()>) -> Result<()> {
+        f(&self.child)
+    }
+
+    fn children_mut(
+        &mut self,
+        f: &mut dyn FnMut(&mut dyn Node<Handle, ()>) -> Result<()>,
+    ) -> Result<()> {
+        f(&mut self.child)
+    }
+
+    fn render(&self, app: &mut Canopy<Handle, ()>) -> Result<()> {
+        if self.selected {
+            app.render.style.push_layer("blue");
+        }
+        Ok(())
+    }
+}
 
 #[derive(StatefulNode)]
 struct StatusBar {
@@ -30,16 +82,16 @@ impl Node<Handle, ()> for StatusBar {
 #[derive(StatefulNode)]
 struct Root {
     state: NodeState,
-    content: frame::Frame<Handle, (), Text<Handle>>,
+    content: frame::Frame<Handle, (), List<Handle, (), TodoItem>>,
     statusbar: StatusBar,
     adder: Option<frame::Frame<Handle, (), InputLine<Handle>>>,
 }
 
 impl Root {
-    fn new(contents: String) -> Self {
+    fn new() -> Self {
         Root {
             state: NodeState::default(),
-            content: frame::Frame::new(Text::new(&contents)),
+            content: frame::Frame::new(List::new(vec![])),
             statusbar: StatusBar {
                 state: NodeState::default(),
             },
@@ -97,29 +149,34 @@ impl Node<Handle, ()> for Root {
         _: &mut Handle,
         k: key::Key,
     ) -> Result<Outcome<()>> {
-        let v = &mut self.content.child.state_mut().viewport;
-        match k {
-            c if c == 'a' => {
-                self.open_adder(app)?;
-            }
-            c if c == 'g' => v.scroll_to(0, 0),
-            c if c == 'j' || c == key::KeyCode::Down => v.down(),
-            c if c == 'k' || c == key::KeyCode::Up => v.up(),
-            c if c == 'h' || c == key::KeyCode::Left => v.left(),
-            c if c == 'l' || c == key::KeyCode::Up => v.right(),
-            c if c == ' ' || c == key::KeyCode::PageDown => v.page_down(),
-            c if c == key::KeyCode::PageUp => v.page_up(),
-            c if c == key::KeyCode::Enter => {
-                self.adder = None;
-                app.taint_tree(self)?;
-            }
-            c if c == key::KeyCode::Esc => {
-                self.adder = None;
-                app.taint_tree(self)?;
-            }
-            c if c == 'q' => app.exit(0),
-            _ => return Ok(Outcome::ignore()),
-        };
+        let lst = &mut self.content.child;
+        if let Some(adder) = &mut self.adder {
+            match k {
+                c if c == key::KeyCode::Enter => {
+                    lst.append(TodoItem::new(&adder.child.text()));
+                    self.adder = None;
+                }
+                c if c == key::KeyCode::Esc => {
+                    self.adder = None;
+                }
+                _ => return Ok(Outcome::ignore()),
+            };
+        } else {
+            match k {
+                c if c == 'a' => {
+                    self.open_adder(app)?;
+                }
+                c if c == 'g' => lst.select_first(),
+                c if c == 'j' || c == key::KeyCode::Down => lst.select_next(),
+                c if c == 'k' || c == key::KeyCode::Up => lst.select_prev(),
+                c if c == ' ' || c == key::KeyCode::PageDown => lst.page_down(),
+                c if c == key::KeyCode::PageUp => lst.page_up(),
+                c if c == 'q' => app.exit(0),
+                _ => return Ok(Outcome::ignore()),
+            };
+        }
+        self.layout(app)?;
+        app.taint_tree(self)?;
         Ok(Outcome::handle())
     }
 
@@ -149,7 +206,7 @@ pub fn main() -> Result<()> {
         Some(solarized::BASE1),
     );
     let mut h = Handle {};
-    let mut root = Root::new(String::new());
+    let mut root = Root::new();
     runloop(colors, &mut root, &mut h)?;
     Ok(())
 }

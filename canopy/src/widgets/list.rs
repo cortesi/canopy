@@ -40,6 +40,7 @@ where
     }
 }
 
+/// Manage and display a list of items.
 #[derive(StatefulNode)]
 pub struct List<S, A: Actions, N>
 where

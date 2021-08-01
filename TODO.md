@@ -1,4 +1,8 @@
 
+
+- Spacing widgets to center and pad content
+- Attributes in style
+  - https://docs.rs/crossterm/0.20.0/crossterm/style/enum.Attribute.html#platform-specific-notes
 - Explicit colors - at the moment, we can only get colors from our color scheme
 - Add a built-in Color abstraction
 
