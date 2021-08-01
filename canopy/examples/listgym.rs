@@ -164,6 +164,12 @@ impl Node<Handle, ()> for Root {
     ) -> Result<Outcome<()>> {
         let lst = &mut self.content.child;
         match k {
+            c if c == 'C' => {
+                lst.clear();
+            }
+            c if c == 'd' => {
+                lst.delete_selected();
+            }
             c if c == 'g' => lst.select_first(),
             c if c == 'G' => lst.select_last(),
             c if c == 'J' => lst.scroll_down(),

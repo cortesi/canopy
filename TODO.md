@@ -5,7 +5,9 @@
   - Better error returns
 - Key binding management system
 - ctrl-c/ctrl-z
-- text line widget
+- Widgets
+  - text line widget
+  - markdown
 - serialization/deserialization for color scheme
 - Better debugging and monitoring story
   - Functions to dump the tree of nodes

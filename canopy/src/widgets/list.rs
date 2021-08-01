@@ -9,7 +9,7 @@ use crate::{
     Actions, Canopy,
 };
 
-/// ListItem should be implemented by items to be displayed in a `List`.
+/// ListItem must be implemented by items displayed in a `List`.
 pub trait ListItem {
     fn set_selected(&mut self, _state: bool) {}
 }
@@ -73,8 +73,31 @@ where
         l
     }
 
+    /// The number of items in the list.
     pub fn len(&self) -> usize {
         self.items.len()
+    }
+
+    /// Clear all items.
+    pub fn clear(&mut self) -> Vec<N> {
+        self.items.drain(..).map(move |x| x.itm).collect()
+    }
+
+    /// Move selection to the next item in the list, if possible.
+    pub fn delete_item(&mut self, offset: usize) -> Option<N> {
+        if self.len() > 0 && !(offset > self.len() - 1) {
+            let itm = self.items.remove(offset);
+            if offset <= self.selected {
+                self.select_prev();
+            }
+            Some(itm.itm)
+        } else {
+            None
+        }
+    }
+
+    pub fn delete_selected(&mut self) -> Option<N> {
+        self.delete_item(self.selected)
     }
 
     /// Move selection to the next item in the list, if possible.
@@ -100,10 +123,12 @@ where
     /// Select an item at a specified offset, clamping the offset to make sure
     /// it lies within the list.
     pub fn select(&mut self, offset: usize) {
-        self.items[self.selected].set_selected(false);
-        self.selected = offset.clamp(0, self.items.len() - 1);
-        self.items[self.selected].set_selected(true);
-        self.fix_view();
+        if self.len() != 0 {
+            self.items[self.selected].set_selected(false);
+            self.selected = offset.clamp(0, self.items.len() - 1);
+            self.items[self.selected].set_selected(true);
+            self.fix_view();
+        }
     }
 
     /// Scroll the viewport to a specified location.
