@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 use crate as canopy;
 use crate::{
     fit_and_update,
+    geom::ViewPort,
     state::{NodeState, StatefulNode},
     Actions, Canopy, Node, Result,
 };
@@ -107,8 +108,8 @@ impl<S, A: Actions, N: Node<S, A>> Node<S, A> for Panes<S, A, N> {
         Ok(())
     }
 
-    fn render(&mut self, app: &mut Canopy<S, A>) -> Result<()> {
-        let l = self.screen().split_panes(&self.shape())?;
+    fn render(&mut self, app: &mut Canopy<S, A>, vp: ViewPort) -> Result<()> {
+        let l = vp.screen().split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
                 fit_and_update(app, l[ci][ri], row)?;

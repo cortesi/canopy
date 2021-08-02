@@ -55,17 +55,17 @@ impl Node<Handle, ()> for Block {
         )
     }
 
-    fn render(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
-        let (_, screen) = self.screen().carve_hstart(2);
+    fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
+        let (_, screen) = vp.screen().carve_hstart(2);
         let outer = self.child.fit(app, screen.into())?;
         let view = Rect {
-            tl: self.view().tl,
-            w: self.view().w.saturating_sub(2),
-            h: self.view().h,
+            tl: vp.view().tl,
+            w: vp.view().w.saturating_sub(2),
+            h: vp.view().h,
         };
         self.child.state_mut().viewport = ViewPort::new(outer, view, screen)?;
 
-        let v = self.view();
+        let v = vp.view();
         let status = Rect::new(v.tl.x, v.tl.y, 1, v.h);
         if self.selected {
             app.render.fill("blue", status, '\u{2588}')?;
@@ -97,10 +97,9 @@ struct StatusBar {
 }
 
 impl Node<Handle, ()> for StatusBar {
-    fn render(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
         app.render.style.push_layer("statusbar");
-        app.render
-            .text("text", self.view().first_line(), "listgym")?;
+        app.render.text("text", vp.view().first_line(), "listgym")?;
         Ok(())
     }
 }
@@ -126,8 +125,8 @@ impl Root {
 }
 
 impl Node<Handle, ()> for Root {
-    fn render(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
-        let (ct, sb) = self.screen().carve_vend(1);
+    fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
+        let (ct, sb) = vp.screen().carve_vend(1);
         fit_and_update(app, sb, &mut self.statusbar)?;
         fit_and_update(app, ct, &mut self.content)?;
         Ok(())

@@ -6,7 +6,7 @@ pub mod utils {
     use crate::{
         event::{key, mouse},
         fit_and_update,
-        geom::Size,
+        geom::{Size, ViewPort},
         render::test::TestRender,
         style::Style,
         widgets::list::ListItem,
@@ -86,10 +86,10 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(&mut self, app: &mut Canopy<State, TActions>) -> Result<()> {
+        fn render(&mut self, app: &mut Canopy<State, TActions>, vp: ViewPort) -> Result<()> {
             app.render.text(
                 "any",
-                self.view().first_line(),
+                vp.view().first_line(),
                 &format!("<{}>", self.name.clone()),
             )
         }
@@ -136,14 +136,14 @@ pub mod utils {
             true
         }
 
-        fn render(&mut self, app: &mut Canopy<State, TActions>) -> Result<()> {
-            let v = self.screen().split_vertical(2)?;
+        fn render(&mut self, app: &mut Canopy<State, TActions>, vp: ViewPort) -> Result<()> {
+            let v = vp.screen().split_vertical(2)?;
             fit_and_update(app, v[0], &mut self.a)?;
             fit_and_update(app, v[1], &mut self.b)?;
 
             app.render.text(
                 "any",
-                self.view().first_line(),
+                vp.view().first_line(),
                 &format!("<{}>", self.name.clone()),
             )
         }
@@ -208,13 +208,13 @@ pub mod utils {
             true
         }
 
-        fn render(&mut self, app: &mut Canopy<State, TActions>) -> Result<()> {
-            let v = self.screen().split_horizontal(2)?;
+        fn render(&mut self, app: &mut Canopy<State, TActions>, vp: ViewPort) -> Result<()> {
+            let v = vp.screen().split_horizontal(2)?;
             fit_and_update(app, v[0], &mut self.a)?;
             fit_and_update(app, v[1], &mut self.b)?;
             app.render.text(
                 "any",
-                self.view().first_line(),
+                vp.view().first_line(),
                 &format!("<{}>", self.name.clone()),
             )
         }

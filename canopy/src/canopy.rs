@@ -405,7 +405,7 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
                     s.rendered_focus_gen = self.focus_gen
                 }
                 self.render.viewport = e.state().viewport;
-                e.render(self)?;
+                e.render(self, e.state().viewport)?;
             }
             // This is a new node - we don't want it perpetually stuck in
             // render, so we need to update its render_gen.

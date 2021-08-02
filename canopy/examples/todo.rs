@@ -4,7 +4,7 @@ use canopy;
 use canopy::{
     event::{key, mouse},
     fit_and_update,
-    geom::{Rect, Size},
+    geom::{Rect, Size, ViewPort},
     render::term::runloop,
     style::solarized,
     widgets::{frame, list::*, InputLine, Text},
@@ -52,8 +52,8 @@ impl Node<Handle, ()> for TodoItem {
         f(&mut self.child)
     }
 
-    fn render(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
-        fit_and_update(app, self.screen(), &mut self.child)?;
+    fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
+        fit_and_update(app, vp.screen(), &mut self.child)?;
         if self.selected {
             app.render.style.push_layer("blue");
         }
@@ -67,10 +67,10 @@ struct StatusBar {
 }
 
 impl Node<Handle, ()> for StatusBar {
-    fn render(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
         app.render.style.push_layer("statusbar");
         app.render
-            .text("statusbar/text", self.view().first_line(), "todo")?;
+            .text("statusbar/text", vp.view().first_line(), "todo")?;
         Ok(())
     }
 }
@@ -105,8 +105,8 @@ impl Root {
 }
 
 impl Node<Handle, ()> for Root {
-    fn render(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
-        let a = self.screen();
+    fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
+        let a = vp.screen();
         let (ct, sb) = a.carve_vend(1);
         fit_and_update(app, sb, &mut self.statusbar)?;
         fit_and_update(app, ct, &mut self.content)?;

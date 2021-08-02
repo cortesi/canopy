@@ -6,7 +6,7 @@ use pad::PadStr;
 use crate as canopy;
 use crate::{
     fit_and_update,
-    geom::Frame as GFrame,
+    geom::{Frame as GFrame, ViewPort},
     state::{NodeState, StatefulNode},
     Actions, Canopy, Node, Result,
 };
@@ -109,15 +109,15 @@ where
     fn should_render(&self, app: &Canopy<S, A>) -> Option<bool> {
         Some(app.should_render(&self.child))
     }
-    fn render(&mut self, app: &mut Canopy<S, A>) -> Result<()> {
-        fit_and_update(app, self.screen().inner(1)?, &mut self.child)?;
+    fn render(&mut self, app: &mut Canopy<S, A>, vp: ViewPort) -> Result<()> {
+        fit_and_update(app, vp.screen().inner(1)?, &mut self.child)?;
         let style = if app.on_focus_path(self) {
             "frame/focused"
         } else {
             "frame"
         };
 
-        let f = GFrame::new(self.view(), 1)?;
+        let f = GFrame::new(vp.view(), 1)?;
         app.render.fill(style, f.topleft, self.glyphs.topleft)?;
         app.render.fill(style, f.topright, self.glyphs.topright)?;
         app.render

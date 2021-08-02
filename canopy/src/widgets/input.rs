@@ -4,7 +4,7 @@ use crate as canopy;
 use crate::{
     cursor,
     event::key,
-    geom::{LineSegment, Point, Size},
+    geom::{LineSegment, Point, Size, ViewPort},
     state::{NodeState, StatefulNode},
     Actions, Canopy, Node, Outcome, Result,
 };
@@ -139,9 +139,9 @@ impl<'a, S, A: Actions> Node<S, A> for InputLine<S> {
         })
     }
 
-    fn render(&mut self, app: &mut Canopy<S, A>) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<S, A>, vp: ViewPort) -> Result<()> {
         app.render
-            .text("text", self.view().first_line(), &self.textbuf.text())
+            .text("text", vp.view().first_line(), &self.textbuf.text())
     }
 
     fn handle_key(

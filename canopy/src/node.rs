@@ -1,7 +1,7 @@
 use crate::{
     cursor,
     event::{key, mouse},
-    geom::Size,
+    geom::{Size, ViewPort},
     Actions, Canopy, Outcome, Result, StatefulNode,
 };
 use duplicate::duplicate;
@@ -132,7 +132,7 @@ pub trait Node<S, A: Actions>: StatefulNode {
     ///
     /// Nodes with no children should always make sure they redraw all of
     /// `self.screen_area()`. The default implementation does nothing.
-    fn render(&mut self, app: &mut Canopy<S, A>) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<S, A>, vp: ViewPort) -> Result<()> {
         Ok(())
     }
 }

@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use crate as canopy;
 use crate::{
     error::Result,
-    geom::{Rect, Size},
+    geom::{Rect, Size, ViewPort},
     node::Node,
     state::{NodeState, StatefulNode},
     Actions, Canopy,
@@ -301,8 +301,7 @@ where
         Ok(Size { w, h })
     }
 
-    fn render(&mut self, app: &mut Canopy<S, A>) -> Result<()> {
-        let myvp = self.state().viewport;
+    fn render(&mut self, app: &mut Canopy<S, A>, myvp: ViewPort) -> Result<()> {
         self.clear = vec![];
         for itm in &mut self.items {
             if let Some(vp) = myvp.map(itm.virt)? {

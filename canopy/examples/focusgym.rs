@@ -5,7 +5,7 @@ use canopy::{
     event::{key, mouse},
     fit_and_update,
     geom::Frame,
-    geom::Rect,
+    geom::{Rect, ViewPort},
     render::term::runloop,
     style::solarized,
     Canopy, Node, NodeState, Outcome, Result, StatefulNode,
@@ -50,8 +50,8 @@ impl Block {
 }
 
 impl Node<Handle, ()> for Root {
-    fn render(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
-        fit_and_update(app, self.screen(), &mut self.child)
+    fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
+        fit_and_update(app, vp.screen(), &mut self.child)
     }
 
     fn handle_mouse(
@@ -134,8 +134,8 @@ impl Block {
 }
 
 impl Node<Handle, ()> for Block {
-    fn render(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
-        let screen = self.screen();
+    fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
+        let screen = vp.screen();
         if self.children.len() > 0 {
             let sizes = if self.horizontal {
                 screen.split_horizontal(self.children.len() as u16)?
@@ -151,9 +151,9 @@ impl Node<Handle, ()> for Block {
             } else {
                 "blue"
             };
-            app.render.fill(bc, self.view().inner(1)?, '\u{2588}')?;
+            app.render.fill(bc, vp.view().inner(1)?, '\u{2588}')?;
             app.render
-                .solid_frame("black", Frame::new(self.view(), 1)?, ' ')?;
+                .solid_frame("black", Frame::new(vp.view(), 1)?, ' ')?;
         }
 
         Ok(())
