@@ -161,7 +161,7 @@ where
         for r in self
             .view()
             .inner(1)?
-            .sub(&self.child.outer().rect().shift(1, 1))
+            .sub(&self.child.size().rect().shift(1, 1))
         {
             app.render.fill(style, r, ' ')?;
         }

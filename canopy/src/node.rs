@@ -122,10 +122,16 @@ pub trait Node<S, A: Actions>: StatefulNode {
         Ok(target)
     }
 
-    /// Render this widget using the geometry that was set through the node's
-    /// Layout implementation. Nodes with no children should always make sure
-    /// they redraw all of `self.screen_area()`. The default implementation does
-    /// nothing.
+    /// Render this widget. The render method should:
+    ///
+    /// - Lay out any child nodes by manipulating their viewports. This will
+    ///   often involve calling the .fit method on the child nodes to get their
+    ///   dimensions.
+    /// - Render itself to screen. This node's viewport will already have been
+    ///   set by a parent.
+    ///
+    /// Nodes with no children should always make sure they redraw all of
+    /// `self.screen_area()`. The default implementation does nothing.
     fn render(&mut self, app: &mut Canopy<S, A>) -> Result<()> {
         Ok(())
     }

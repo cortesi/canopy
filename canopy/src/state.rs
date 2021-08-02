@@ -76,7 +76,7 @@ pub trait StatefulNode {
     }
 
     /// Get the outer rect from the viewport.
-    fn outer(&self) -> Size {
-        self.state().viewport.outer()
+    fn size(&self) -> Size {
+        self.state().viewport.size()
     }
 }

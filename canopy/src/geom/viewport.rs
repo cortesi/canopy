@@ -14,7 +14,7 @@ use crate::Result;
 pub struct ViewPort {
     screen: Rect,
     view: Rect,
-    outer: Size,
+    size: Size,
 }
 
 impl Default for ViewPort {
@@ -22,7 +22,7 @@ impl Default for ViewPort {
         ViewPort {
             screen: Rect::default(),
             view: Rect::default(),
-            outer: Size::default(),
+            size: Size::default(),
         }
     }
 }
@@ -35,7 +35,7 @@ impl ViewPort {
             Err(error::Error::Geometry("view not contained in outer".into()))
         } else {
             Ok(ViewPort {
-                outer: outer,
+                size: outer,
                 view: view,
                 screen: screen,
             })
@@ -48,13 +48,13 @@ impl ViewPort {
         let r = Rect::new(x, y, self.view.w, self.view.h);
         // We unwrap here, because this can only be an error if view is larger
         // than outer, which we ensure is not the case.
-        self.view = r.clamp_within(self.outer.rect()).unwrap();
+        self.view = r.clamp_within(self.size.rect()).unwrap();
     }
 
     /// Scroll the view by the given offsets. The view rectangle is clamped
     /// within the outer rectangle.
     pub fn scroll_by(&mut self, x: i16, y: i16) {
-        self.view = self.view.shift_within(x, y, self.outer.rect())
+        self.view = self.view.shift_within(x, y, self.size.rect())
     }
 
     /// Scroll the view up by the height of the view rectangle.
@@ -98,8 +98,8 @@ impl ViewPort {
     }
 
     /// Return the enclosing area.
-    pub fn outer(&self) -> Size {
-        self.outer
+    pub fn size(&self) -> Size {
+        self.size
     }
 
     /// Set the screen, view and outer rects all to the same size. This is
@@ -107,13 +107,13 @@ impl ViewPort {
     pub fn set_fill(&mut self, screen: Rect) {
         self.screen = screen;
         self.view = screen;
-        self.outer = screen.into();
+        self.size = screen.into();
     }
 
     /// Set both the outer and screen rects at once. View position is
     /// maintained, but it's resized to be as large as possible.
     pub fn update(&mut self, size: Size, screen: Rect) {
-        self.outer = size;
+        self.size = size;
         self.screen = screen;
 
         // Now we maintain our view invariants. We know the size of the view is
@@ -127,7 +127,7 @@ impl ViewPort {
             w,
             h,
         }
-        .clamp_within(self.outer.rect())
+        .clamp_within(self.size.rect())
         .unwrap();
     }
 
@@ -135,12 +135,12 @@ impl ViewPort {
     /// scroll bar for this viewport in the specified margin rect (usually a
     /// right or left vertical margin). Returns None if no scroll bar is needed.
     pub fn vactive(&self, margin: Rect) -> Result<Option<(Rect, Rect, Rect)>> {
-        if self.view.h == self.outer.h {
+        if self.view.h == self.size.h {
             Ok(None)
         } else {
             let (pre, active, post) = margin
                 .vextent()
-                .split_active(self.view().vextent(), self.outer().rect().vextent())?;
+                .split_active(self.view().vextent(), self.size().rect().vextent())?;
             Ok(Some((
                 margin.vslice(&pre)?,
                 margin.vslice(&active)?,
@@ -154,12 +154,12 @@ impl ViewPort {
     /// (usually a bottom horizontal margin). Returns None if no scroll bar is
     /// needed.
     pub fn hactive(&self, margin: Rect) -> Result<Option<(Rect, Rect, Rect)>> {
-        if self.view.w == self.outer.w {
+        if self.view.w == self.size.w {
             Ok(None)
         } else {
             let (pre, active, post) = margin
                 .hextent()
-                .split_active(self.view().hextent(), self.outer().rect().hextent())?;
+                .split_active(self.view().hextent(), self.size().rect().hextent())?;
             Ok(Some((
                 margin.hslice(&pre)?,
                 margin.hslice(&active)?,
@@ -226,7 +226,7 @@ impl ViewPort {
         if let Some(i) = self.view.intersect(&child) {
             let view_relative = self.view.rebase_rect(&i).unwrap();
             Ok(Some(ViewPort {
-                outer: child.size(),
+                size: child.size(),
                 // The view is the intersection relative to the child's outer
                 view: Rect::new(i.tl.x - child.tl.x, i.tl.y - child.tl.y, i.w, i.h),
                 screen: Rect::new(
