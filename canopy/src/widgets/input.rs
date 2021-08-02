@@ -139,12 +139,17 @@ impl<'a, S, A: Actions> Node<S, A> for InputLine<S> {
         })
     }
 
-    fn render(&self, app: &mut Canopy<S, A>) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<S, A>) -> Result<()> {
         app.render
             .text("text", self.view().first_line(), &self.textbuf.text())
     }
 
-    fn handle_key(&mut self, app: &mut Canopy<S, A>, _: &mut S, k: key::Key) -> Result<Outcome<A>> {
+    fn handle_key(
+        &mut self,
+        _app: &mut Canopy<S, A>,
+        _: &mut S,
+        k: key::Key,
+    ) -> Result<Outcome<A>> {
         match k {
             key::Key(_, key::KeyCode::Left) => {
                 self.textbuf.left();
@@ -160,7 +165,6 @@ impl<'a, S, A: Actions> Node<S, A> for InputLine<S> {
             }
             _ => return Ok(Outcome::ignore()),
         };
-        self.layout(app)?;
         Ok(Outcome::handle())
     }
 

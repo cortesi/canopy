@@ -301,13 +301,13 @@ where
         Ok(Size { w, h })
     }
 
-    fn layout(&mut self, app: &mut Canopy<S, A>) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<S, A>) -> Result<()> {
         let myvp = self.state().viewport;
         self.clear = vec![];
         for itm in &mut self.items {
             if let Some(vp) = myvp.map(itm.virt)? {
                 itm.itm.state_mut().viewport = vp;
-                itm.itm.layout(app)?;
+                app.taint_tree(&mut itm.itm)?;
                 itm.itm.unhide();
 
                 // At this point, the item's screen rect has been calculated to
@@ -355,10 +355,6 @@ where
                 itm.itm.hide();
             }
         }
-        Ok(())
-    }
-
-    fn render(&self, app: &mut Canopy<S, A>) -> Result<()> {
         for r in self.clear.iter() {
             app.render.fill("", *r, ' ')?;
         }
@@ -423,8 +419,7 @@ mod tests {
             TFixed::new(rw, rh),
         ]);
         fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
-
-        fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
+        app.render(&mut lst)?;
         assert_eq!(
             views(&lst),
             vec![
@@ -433,8 +428,11 @@ mod tests {
                 Rect::new(0, 0, 0, 0),
             ]
         );
+
         lst.state_mut().viewport.scroll_by(0, 5);
         fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
+        app.taint_tree(&mut lst)?;
+        app.render(&mut lst)?;
         assert_eq!(
             views(&lst),
             vec![
@@ -446,6 +444,8 @@ mod tests {
 
         lst.state_mut().viewport.scroll_by(0, 5);
         fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
+        app.taint_tree(&mut lst)?;
+        app.render(&mut lst)?;
         assert_eq!(
             views(&lst),
             vec![
@@ -457,6 +457,8 @@ mod tests {
 
         lst.state_mut().viewport.scroll_by(0, 10);
         fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
+        app.taint_tree(&mut lst)?;
+        app.render(&mut lst)?;
         assert_eq!(
             views(&lst),
             vec![
@@ -468,6 +470,8 @@ mod tests {
 
         lst.state_mut().viewport.scroll_by(0, 10);
         fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
+        app.taint_tree(&mut lst)?;
+        app.render(&mut lst)?;
         assert_eq!(
             views(&lst),
             vec![
@@ -479,6 +483,8 @@ mod tests {
 
         lst.state_mut().viewport.scroll_to(5, 0);
         fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
+        app.taint_tree(&mut lst)?;
+        app.render(&mut lst)?;
         assert_eq!(
             views(&lst),
             vec![
@@ -490,6 +496,8 @@ mod tests {
 
         lst.state_mut().viewport.scroll_by(0, 5);
         fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
+        app.taint_tree(&mut lst)?;
+        app.render(&mut lst)?;
         assert_eq!(
             views(&lst),
             vec![

@@ -1,6 +1,5 @@
 
 
-- Spacing widgets to center and pad content
 - Attributes in style
   - https://docs.rs/crossterm/0.20.0/crossterm/style/enum.Attribute.html#platform-specific-notes
 - Explicit colors - at the moment, we can only get colors from our color scheme
@@ -11,6 +10,8 @@
 - Key binding management system
 - ctrl-c/ctrl-z
 - Widgets
+  - Pad
+  - Center
   - text line widget
   - markdown
 - serialization/deserialization for color scheme

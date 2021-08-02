@@ -50,7 +50,7 @@ impl Block {
 }
 
 impl Node<Handle, ()> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
         fit_and_update(app, self.screen(), &mut self.child)
     }
 
@@ -106,7 +106,6 @@ impl Block {
             Outcome::handle()
         } else {
             self.children.push(Block::new(!self.horizontal));
-            self.layout(app)?;
             app.taint_tree(self)?;
             Outcome::handle()
         })
@@ -128,7 +127,6 @@ impl Block {
             Outcome::handle()
         } else {
             self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
-            self.layout(app)?;
             app.taint_tree(self)?;
             Outcome::handle()
         })
@@ -136,9 +134,8 @@ impl Block {
 }
 
 impl Node<Handle, ()> for Block {
-    fn layout(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
         let screen = self.screen();
-        self.state_mut().viewport.set_fill(screen);
         if self.children.len() > 0 {
             let sizes = if self.horizontal {
                 screen.split_horizontal(self.children.len() as u16)?
@@ -148,16 +145,7 @@ impl Node<Handle, ()> for Block {
             for i in 0..self.children.len() {
                 fit_and_update(app, sizes[i], &mut self.children[i])?;
             }
-        }
-        Ok(())
-    }
-
-    fn can_focus(&self) -> bool {
-        self.children.len() == 0
-    }
-
-    fn render(&self, app: &mut Canopy<Handle, ()>) -> Result<()> {
-        if self.children.len() == 0 {
+        } else {
             let bc = if app.is_focused(self) && self.children.len() == 0 {
                 "violet"
             } else {
@@ -167,7 +155,12 @@ impl Node<Handle, ()> for Block {
             app.render
                 .solid_frame("black", Frame::new(self.view(), 1)?, ' ')?;
         }
+
         Ok(())
+    }
+
+    fn can_focus(&self) -> bool {
+        self.children.len() == 0
     }
 
     fn handle_mouse(

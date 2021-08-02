@@ -44,6 +44,22 @@ pub trait StatefulNode {
     /// Get a mutable reference to the node's state object.
     fn state_mut(&mut self) -> &mut NodeState;
 
+    /// Hides the element and all its descendants from rendering. The nodes are
+    /// still included in the tree.
+    fn hide(&mut self) {
+        self.state_mut().hidden = true;
+    }
+
+    /// Hides the element
+    fn unhide(&mut self) {
+        self.state_mut().hidden = false;
+    }
+
+    /// Is this element hidden?
+    fn is_hidden(&self) -> bool {
+        self.state().hidden
+    }
+
     /// Update the view outer and screen rects.
     fn update_view(&mut self, size: Size, screen: Rect) {
         self.state_mut().viewport.update(size, screen)
@@ -62,21 +78,5 @@ pub trait StatefulNode {
     /// Get the outer rect from the viewport.
     fn outer(&self) -> Size {
         self.state().viewport.outer()
-    }
-
-    /// Hides the element and all its descendants from rendering. The nodes are
-    /// still included in the tree.
-    fn hide(&mut self) {
-        self.state_mut().hidden = true;
-    }
-
-    /// Hides the element
-    fn unhide(&mut self) {
-        self.state_mut().hidden = false;
-    }
-
-    /// Is this element hidden?
-    fn is_hidden(&self) -> bool {
-        self.state().hidden
     }
 }

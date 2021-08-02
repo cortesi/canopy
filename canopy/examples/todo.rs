@@ -41,11 +41,6 @@ impl Node<Handle, ()> for TodoItem {
         self.child.fit(app, target)
     }
 
-    fn layout(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
-        fit_and_update(app, self.screen(), &mut self.child)?;
-        Ok(())
-    }
-
     fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle, ()>) -> Result<()>) -> Result<()> {
         f(&self.child)
     }
@@ -57,7 +52,8 @@ impl Node<Handle, ()> for TodoItem {
         f(&mut self.child)
     }
 
-    fn render(&self, app: &mut Canopy<Handle, ()>) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
+        fit_and_update(app, self.screen(), &mut self.child)?;
         if self.selected {
             app.render.style.push_layer("blue");
         }
@@ -71,7 +67,7 @@ struct StatusBar {
 }
 
 impl Node<Handle, ()> for StatusBar {
-    fn render(&self, app: &mut Canopy<Handle, ()>) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
         app.render.style.push_layer("statusbar");
         app.render
             .text("statusbar/text", self.view().first_line(), "todo")?;
@@ -103,13 +99,13 @@ impl Root {
         let mut adder = frame::Frame::new(InputLine::new(""));
         app.set_focus(&mut adder.child)?;
         self.adder = Some(adder);
-        self.layout(app)?;
+        app.taint(self);
         Ok(Outcome::handle())
     }
 }
 
 impl Node<Handle, ()> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
         let a = self.screen();
         let (ct, sb) = a.carve_vend(1);
         fit_and_update(app, sb, &mut self.statusbar)?;
@@ -175,7 +171,6 @@ impl Node<Handle, ()> for Root {
                 _ => return Ok(Outcome::ignore()),
             };
         }
-        self.layout(app)?;
         app.taint_tree(self)?;
         Ok(Outcome::handle())
     }

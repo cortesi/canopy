@@ -32,6 +32,7 @@ impl Node<Handle, ()> for Root {
     fn can_focus(&self) -> bool {
         true
     }
+
     fn handle_mouse(
         &mut self,
         app: &mut Canopy<Handle, ()>,
@@ -47,6 +48,7 @@ impl Node<Handle, ()> for Root {
         app.taint_tree(self)?;
         Ok(Outcome::handle())
     }
+
     fn handle_key(
         &mut self,
         app: &mut Canopy<Handle, ()>,
@@ -69,7 +71,7 @@ impl Node<Handle, ()> for Root {
         Ok(Outcome::handle())
     }
 
-    fn layout(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
         fit_and_update(app, self.screen(), &mut self.child)
     }
 

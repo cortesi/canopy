@@ -106,13 +106,11 @@ impl<S, A: Actions, N> Node<S, A> for Frame<S, A, N>
 where
     N: Node<S, A>,
 {
-    fn layout(&mut self, app: &mut Canopy<S, A>) -> Result<()> {
-        fit_and_update(app, self.screen().inner(1)?, &mut self.child)
-    }
     fn should_render(&self, app: &Canopy<S, A>) -> Option<bool> {
         Some(app.should_render(&self.child))
     }
-    fn render(&self, app: &mut Canopy<S, A>) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<S, A>) -> Result<()> {
+        fit_and_update(app, self.screen().inner(1)?, &mut self.child)?;
         let style = if app.on_focus_path(self) {
             "frame/focused"
         } else {

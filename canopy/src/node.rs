@@ -122,23 +122,11 @@ pub trait Node<S, A: Actions>: StatefulNode {
         Ok(target)
     }
 
-    /// Lay out this component's children.
-    ///
-    /// This method is called after the node is laid out by its parent.
-    /// Implementers should call `fit` on all children, and then lay them out by
-    /// changing the child's viewport.
-    ///
-    /// The default does nothing, which is appropriate for nodes that have no
-    /// children.
-    fn layout(&mut self, app: &mut Canopy<S, A>) -> Result<()> {
-        Ok(())
-    }
-
     /// Render this widget using the geometry that was set through the node's
     /// Layout implementation. Nodes with no children should always make sure
     /// they redraw all of `self.screen_area()`. The default implementation does
     /// nothing.
-    fn render(&self, app: &mut Canopy<S, A>) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<S, A>) -> Result<()> {
         Ok(())
     }
 }

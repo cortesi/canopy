@@ -86,7 +86,7 @@ pub mod utils {
         fn can_focus(&self) -> bool {
             true
         }
-        fn render(&self, app: &mut Canopy<State, TActions>) -> Result<()> {
+        fn render(&mut self, app: &mut Canopy<State, TActions>) -> Result<()> {
             app.render.text(
                 "any",
                 self.view().first_line(),
@@ -128,13 +128,6 @@ pub mod utils {
     }
 
     impl Node<State, TActions> for TBranch {
-        fn layout(&mut self, app: &mut Canopy<State, TActions>) -> Result<()> {
-            let v = self.screen().split_vertical(2)?;
-            fit_and_update(app, v[0], &mut self.a)?;
-            fit_and_update(app, v[1], &mut self.b)?;
-            Ok(())
-        }
-
         fn name(&self) -> Option<String> {
             Some(self.name.clone())
         }
@@ -143,7 +136,11 @@ pub mod utils {
             true
         }
 
-        fn render(&self, app: &mut Canopy<State, TActions>) -> Result<()> {
+        fn render(&mut self, app: &mut Canopy<State, TActions>) -> Result<()> {
+            let v = self.screen().split_vertical(2)?;
+            fit_and_update(app, v[0], &mut self.a)?;
+            fit_and_update(app, v[1], &mut self.b)?;
+
             app.render.text(
                 "any",
                 self.view().first_line(),
@@ -203,13 +200,6 @@ pub mod utils {
     }
 
     impl Node<State, TActions> for TRoot {
-        fn layout(&mut self, app: &mut Canopy<State, TActions>) -> Result<()> {
-            let v = self.screen().split_horizontal(2)?;
-            fit_and_update(app, v[0], &mut self.a)?;
-            fit_and_update(app, v[1], &mut self.b)?;
-            Ok(())
-        }
-
         fn name(&self) -> Option<String> {
             Some(self.name.clone())
         }
@@ -218,7 +208,10 @@ pub mod utils {
             true
         }
 
-        fn render(&self, app: &mut Canopy<State, TActions>) -> Result<()> {
+        fn render(&mut self, app: &mut Canopy<State, TActions>) -> Result<()> {
+            let v = self.screen().split_horizontal(2)?;
+            fit_and_update(app, v[0], &mut self.a)?;
+            fit_and_update(app, v[1], &mut self.b)?;
             app.render.text(
                 "any",
                 self.view().first_line(),

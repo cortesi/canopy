@@ -55,7 +55,7 @@ impl Node<Handle, ()> for Block {
         )
     }
 
-    fn layout(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
         let (_, screen) = self.screen().carve_hstart(2);
         let outer = self.child.fit(app, screen.into())?;
         let view = Rect {
@@ -64,6 +64,18 @@ impl Node<Handle, ()> for Block {
             h: self.view().h,
         };
         self.child.state_mut().viewport = ViewPort::new(outer, view, screen)?;
+
+        let v = self.view();
+        let status = Rect::new(v.tl.x, v.tl.y, 1, v.h);
+        if self.selected {
+            app.render.fill("blue", status, '\u{2588}')?;
+        } else {
+            app.render.fill("", status, ' ')?;
+        }
+        let buf = Rect::new(v.tl.x + 1, v.tl.y, 1, v.h);
+        app.render.fill("", buf, ' ')?;
+        app.render.style.push_layer(&self.color);
+
         Ok(())
     }
 
@@ -77,20 +89,6 @@ impl Node<Handle, ()> for Block {
     ) -> Result<()> {
         f(&mut self.child)
     }
-
-    fn render(&self, app: &mut Canopy<Handle, ()>) -> Result<()> {
-        let v = self.view();
-        let status = Rect::new(v.tl.x, v.tl.y, 1, v.h);
-        if self.selected {
-            app.render.fill("blue", status, '\u{2588}')?;
-        } else {
-            app.render.fill("", status, ' ')?;
-        }
-        let buf = Rect::new(v.tl.x + 1, v.tl.y, 1, v.h);
-        app.render.fill("", buf, ' ')?;
-        app.render.style.push_layer(&self.color);
-        Ok(())
-    }
 }
 
 #[derive(StatefulNode)]
@@ -99,7 +97,7 @@ struct StatusBar {
 }
 
 impl Node<Handle, ()> for StatusBar {
-    fn render(&self, app: &mut Canopy<Handle, ()>) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
         app.render.style.push_layer("statusbar");
         app.render
             .text("text", self.view().first_line(), "listgym")?;
@@ -128,7 +126,7 @@ impl Root {
 }
 
 impl Node<Handle, ()> for Root {
-    fn layout(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<Handle, ()>) -> Result<()> {
         let (ct, sb) = self.screen().carve_vend(1);
         fit_and_update(app, sb, &mut self.statusbar)?;
         fit_and_update(app, ct, &mut self.content)?;
@@ -151,7 +149,6 @@ impl Node<Handle, ()> for Root {
             c if c == mouse::Action::ScrollUp => v.up(),
             _ => return Ok(Outcome::ignore()),
         };
-        self.layout(app)?;
         app.taint_tree(self)?;
         Ok(Outcome::handle())
     }
@@ -189,7 +186,6 @@ impl Node<Handle, ()> for Root {
             c if c == 'q' => app.exit(0),
             _ => return Ok(Outcome::ignore()),
         };
-        self.layout(app)?;
         app.taint_tree(self)?;
         Ok(Outcome::handle())
     }

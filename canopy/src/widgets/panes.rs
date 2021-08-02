@@ -46,7 +46,6 @@ where
             if self.children[x].is_empty() {
                 self.children.remove(x);
             }
-            self.layout(app)?;
             app.taint_tree(self)?;
         }
         Ok(())
@@ -108,19 +107,15 @@ impl<S, A: Actions, N: Node<S, A>> Node<S, A> for Panes<S, A, N> {
         Ok(())
     }
 
-    fn render(&self, _: &mut Canopy<S, A>) -> Result<()> {
-        // FIXME - this should probably clear the area if the last node is
-        // deleted.
-        Ok(())
-    }
-
-    fn layout(&mut self, app: &mut Canopy<S, A>) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<S, A>) -> Result<()> {
         let l = self.screen().split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
                 fit_and_update(app, l[ci][ri], row)?;
             }
         }
+        // FIXME - this should probably clear the area if the last node is
+        // deleted.
         Ok(())
     }
 }

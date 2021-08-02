@@ -487,6 +487,7 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
         N: Node<S, A>,
     {
         fit_and_update(self, rect, e)?;
+        // This should be more conservative
         self.taint_tree(e)?;
         Ok(())
     }
@@ -571,7 +572,6 @@ where
 {
     let fit = n.fit(app, screen.size())?;
     n.update_view(fit, screen);
-    n.layout(app)?;
     Ok(())
 }
 
@@ -720,6 +720,7 @@ mod tests {
     #[test]
     fn tfocus_right() -> Result<()> {
         run_test(|_, mut app, mut root, _| {
+            app.render(&mut root)?;
             app.set_focus(&mut root.a.a)?;
             app.focus_right(&mut root)?;
             assert!(app.is_focused(&root.b.a));
@@ -925,6 +926,7 @@ mod tests {
             app.set_focus(&mut root)?;
             root.next_outcome = Some(Outcome::handle());
             let evt = root.a.a.make_mouse_event()?;
+            app.render(&mut root)?;
             assert!(app.mouse(&mut root, &mut s, evt)?.is_handled());
             assert_eq!(
                 s.path,
@@ -936,6 +938,7 @@ mod tests {
         run_test(|_, mut app, mut root, mut s| {
             root.a.a.next_outcome = Some(Outcome::handle());
             let evt = root.a.a.make_mouse_event()?;
+            app.render(&mut root)?;
             assert!(app.mouse(&mut root, &mut s, evt)?.is_handled());
             assert_eq!(s.path, vec!["ba:la@mouse->handle"]);
             Ok(())
@@ -944,6 +947,7 @@ mod tests {
         run_test(|_, mut app, mut root, mut s| {
             root.a.a.next_outcome = Some(Outcome::handle());
             let evt = root.a.a.make_mouse_event()?;
+            app.render(&mut root)?;
             assert!(app.mouse(&mut root, &mut s, evt)?.is_handled());
             assert_eq!(s.path, vec!["ba:la@mouse->handle"]);
             Ok(())
@@ -952,6 +956,7 @@ mod tests {
         run_test(|_, mut app, mut root, mut s| {
             root.a.a.next_outcome = Some(Outcome::handle_with_action(TActions::One));
             let evt = root.a.a.make_mouse_event()?;
+            app.render(&mut root)?;
             assert!(app.mouse(&mut root, &mut s, evt)?.is_handled());
             assert_eq!(
                 s.path,
@@ -972,11 +977,12 @@ mod tests {
         run_test(|_, mut app, mut root, _| {
             let size = 100;
             assert_eq!(root.screen(), Rect::new(0, 0, size, size));
+            app.render(&mut root)?;
             assert_eq!(root.a.screen(), Rect::new(0, 0, size / 2, size));
             assert_eq!(root.b.screen(), Rect::new(size / 2, 0, size / 2, size));
 
             app.resize(&mut root, Rect::new(0, 0, 50, 50))?;
-
+            app.render(&mut root)?;
             assert_eq!(root.b.screen(), Rect::new(25, 0, 25, 50));
             Ok(())
         })?;
