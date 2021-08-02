@@ -4,15 +4,14 @@ use crate::Result;
 
 /// ViewPort manages three rectangles in concert: `outer` is the total virtual
 /// size of the node, `view` is some sub-rectangle of `outer`. The `screen`, is
-/// a rectangle on the physical screen that this node paints to. It is larger
-/// than or equal to view. If the screen is larger than the view, the view will
-/// be positioned in the top-left corner of the screen.
+/// a rectangle on the physical screen that this node paints to. It is equal in
+/// size to view.
 ///
 /// The `view` rect is maintained to be as large as possible, while always being
 /// smaller than or equal to both view and screen.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ViewPort {
-    screen: Rect,
+    screen: Point,
     view: Rect,
     size: Size,
 }
@@ -20,7 +19,7 @@ pub struct ViewPort {
 impl Default for ViewPort {
     fn default() -> ViewPort {
         ViewPort {
-            screen: Rect::default(),
+            screen: Point::default(),
             view: Rect::default(),
             size: Size::default(),
         }
@@ -30,14 +29,14 @@ impl Default for ViewPort {
 impl ViewPort {
     /// Create a new View with the given outer and inner rectangles. The view
     /// rectangle must be fully contained within the outer rectangle.
-    pub fn new(outer: Size, view: Rect, screen: Rect) -> Result<ViewPort> {
-        if !outer.rect().contains_rect(&view) {
+    pub fn new(size: Size, view: Rect, screen: Rect) -> Result<ViewPort> {
+        if !size.rect().contains_rect(&view) {
             Err(error::Error::Geometry("view not contained in outer".into()))
         } else {
             Ok(ViewPort {
-                size: outer,
-                view: view,
-                screen: screen,
+                size,
+                view,
+                screen: screen.tl,
             })
         }
     }
@@ -93,7 +92,7 @@ impl ViewPort {
 
     /// Return the screen region.
     pub fn screen(&self) -> Rect {
-        self.screen
+        self.view.at(self.screen)
     }
 
     /// Return the view area.
@@ -110,7 +109,7 @@ impl ViewPort {
     /// useful for nodes that fill whatever space they're given.
     pub fn set_fill(&self, screen: Rect) -> Self {
         let mut vp = self.clone();
-        vp.screen = screen;
+        vp.screen = screen.tl;
         vp.view = screen;
         vp.size = screen.into();
         vp
@@ -121,7 +120,7 @@ impl ViewPort {
     pub fn update(&self, size: Size, screen: Rect) -> Self {
         let mut vp = self.clone();
         vp.size = size;
-        vp.screen = screen;
+        vp.screen = screen.tl;
 
         // Now we maintain our view invariants. We know the size of the view is
         // the minimum in each dimension of the two enclosing rects.
@@ -184,8 +183,8 @@ impl ViewPort {
             let rp = self.view.rebase_point(p).unwrap();
             // We know view is not larger than screen, so we can unwrap.
             Some(Point {
-                x: self.screen.tl.x + rp.x,
-                y: self.screen.tl.y + rp.y,
+                x: self.screen.x + rp.x,
+                y: self.screen.y + rp.y,
             })
         } else {
             None
@@ -198,7 +197,7 @@ impl ViewPort {
         if let Some(o) = self.view.intersect(&r) {
             let r = self.view.rebase_rect(&o).unwrap();
             Some(Rect {
-                tl: self.screen.tl.scroll(r.tl.x as i16, r.tl.y as i16),
+                tl: self.screen.scroll(r.tl.x as i16, r.tl.y as i16),
                 w: r.w,
                 h: r.h,
             })
@@ -215,10 +214,7 @@ impl ViewPort {
             Some((
                 o.tl.x - l.tl.x,
                 Line {
-                    tl: self
-                        .screen
-                        .tl
-                        .scroll(rebase.tl.x as i16, rebase.tl.y as i16),
+                    tl: self.screen.scroll(rebase.tl.x as i16, rebase.tl.y as i16),
                     w: rebase.w,
                 },
             ))
@@ -237,12 +233,10 @@ impl ViewPort {
                 size: child.size(),
                 // The view is the intersection relative to the child's outer
                 view: Rect::new(i.tl.x - child.tl.x, i.tl.y - child.tl.y, i.w, i.h),
-                screen: Rect::new(
-                    self.screen.tl.x + view_relative.tl.x,
-                    self.screen.tl.y + view_relative.tl.y,
-                    i.w,
-                    i.h,
-                ),
+                screen: Point {
+                    x: self.screen.x + view_relative.tl.x,
+                    y: self.screen.y + view_relative.tl.y,
+                },
             }))
         } else {
             Ok(None)

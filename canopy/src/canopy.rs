@@ -487,7 +487,7 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
         N: Node<S, A>,
     {
         fit_and_update(self, rect, e)?;
-        // This should be more conservative
+        // This could be more conservative?
         self.taint_tree(e)?;
         Ok(())
     }
