@@ -1,8 +1,8 @@
 use crate as canopy;
 use crate::{
-    geom::{Line, Size, ViewPort},
+    geom::{Line, Size},
     state::{NodeState, StatefulNode},
-    Actions, Canopy, Node, Result,
+    Actions, Canopy, Node, Result, ViewPort,
 };
 use std::marker::PhantomData;
 

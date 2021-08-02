@@ -6,11 +6,11 @@ pub mod utils {
     use crate::{
         event::{key, mouse},
         fit_and_update,
-        geom::{Size, ViewPort},
+        geom::Size,
         render::test::TestRender,
         style::Style,
         widgets::list::ListItem,
-        Actions, Canopy, Node, NodeState, Outcome, Render, Result, StatefulNode,
+        Actions, Canopy, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
     };
 
     pub const K_ANY: key::Key = key::Key(None, key::KeyCode::Char('a'));

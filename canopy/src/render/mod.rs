@@ -1,4 +1,4 @@
-use crate::{cursor, geom, geom::ViewPort, style::Color, style::Style, Result};
+use crate::{cursor, geom, style::Color, style::Style, Result, ViewPort};
 
 pub mod term;
 pub mod test;

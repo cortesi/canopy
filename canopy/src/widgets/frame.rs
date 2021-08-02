@@ -6,9 +6,9 @@ use pad::PadStr;
 use crate as canopy;
 use crate::{
     fit_and_update,
-    geom::{Frame as GFrame, ViewPort},
+    geom::Frame as GFrame,
     state::{NodeState, StatefulNode},
-    Actions, Canopy, Node, Result,
+    Actions, Canopy, Node, Result, ViewPort,
 };
 
 /// Defines the set of glyphs used to draw the frame

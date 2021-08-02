@@ -1,8 +1,8 @@
 use crate::{
     cursor,
     event::{key, mouse},
-    geom::{Size, ViewPort},
-    Actions, Canopy, Outcome, Result, StatefulNode,
+    geom::Size,
+    Actions, Canopy, Outcome, Result, StatefulNode, ViewPort,
 };
 use duplicate::duplicate;
 

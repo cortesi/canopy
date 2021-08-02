@@ -1,5 +1,5 @@
-use super::{Line, Point, Rect, Size};
 use crate::error;
+use crate::geom::{Line, Point, Rect, Size};
 use crate::Result;
 
 /// ViewPort manages three rectangles in concert: `outer` is the total virtual
@@ -44,47 +44,51 @@ impl ViewPort {
 
     /// Scroll the view to the specified position. The view is clamped within
     /// the outer rectangle.
-    pub fn scroll_to(&mut self, x: u16, y: u16) {
+    pub fn scroll_to(&self, x: u16, y: u16) -> Self {
+        let mut vp = self.clone();
         let r = Rect::new(x, y, self.view.w, self.view.h);
         // We unwrap here, because this can only be an error if view is larger
         // than outer, which we ensure is not the case.
-        self.view = r.clamp_within(self.size.rect()).unwrap();
+        vp.view = r.clamp_within(self.size.rect()).unwrap();
+        vp
     }
 
     /// Scroll the view by the given offsets. The view rectangle is clamped
     /// within the outer rectangle.
-    pub fn scroll_by(&mut self, x: i16, y: i16) {
-        self.view = self.view.shift_within(x, y, self.size.rect())
+    pub fn scroll_by(&self, x: i16, y: i16) -> Self {
+        let mut vp = self.clone();
+        vp.view = self.view.shift_within(x, y, self.size.rect());
+        vp
     }
 
     /// Scroll the view up by the height of the view rectangle.
-    pub fn page_up(&mut self) {
-        self.scroll_by(0, -(self.view.h as i16));
+    pub fn page_up(&self) -> Self {
+        self.scroll_by(0, -(self.view.h as i16))
     }
 
     /// Scroll the view down by the height of the view rectangle.
-    pub fn page_down(&mut self) {
-        self.scroll_by(0, self.view.h as i16);
+    pub fn page_down(&self) -> Self {
+        self.scroll_by(0, self.view.h as i16)
     }
 
     /// Scroll the view up by one line.
-    pub fn up(&mut self) {
-        self.scroll_by(0, -1);
+    pub fn up(&self) -> Self {
+        self.scroll_by(0, -1)
     }
 
     /// Scroll the view down by one line.
-    pub fn down(&mut self) {
-        self.scroll_by(0, 1);
+    pub fn down(&self) -> Self {
+        self.scroll_by(0, 1)
     }
 
     /// Scroll the view left by one line.
-    pub fn left(&mut self) {
-        self.scroll_by(-1, 0);
+    pub fn left(&self) -> Self {
+        self.scroll_by(-1, 0)
     }
 
     /// Scroll the view right by one line.
-    pub fn right(&mut self) {
-        self.scroll_by(1, 0);
+    pub fn right(&self) -> Self {
+        self.scroll_by(1, 0)
     }
 
     /// Return the screen region.
@@ -104,17 +108,20 @@ impl ViewPort {
 
     /// Set the screen, view and outer rects all to the same size. This is
     /// useful for nodes that fill whatever space they're given.
-    pub fn set_fill(&mut self, screen: Rect) {
-        self.screen = screen;
-        self.view = screen;
-        self.size = screen.into();
+    pub fn set_fill(&self, screen: Rect) -> Self {
+        let mut vp = self.clone();
+        vp.screen = screen;
+        vp.view = screen;
+        vp.size = screen.into();
+        vp
     }
 
     /// Set both the outer and screen rects at once. View position is
     /// maintained, but it's resized to be as large as possible.
-    pub fn update(&mut self, size: Size, screen: Rect) {
-        self.size = size;
-        self.screen = screen;
+    pub fn update(&self, size: Size, screen: Rect) -> Self {
+        let mut vp = self.clone();
+        vp.size = size;
+        vp.screen = screen;
 
         // Now we maintain our view invariants. We know the size of the view is
         // the minimum in each dimension of the two enclosing rects.
@@ -122,13 +129,14 @@ impl ViewPort {
         let h = size.h.min(screen.h);
         // Now we just clamp the rect into the view. We know the rect will fit,
         // so we unwrap.
-        self.view = Rect {
+        vp.view = Rect {
             tl: self.view.tl,
             w,
             h,
         }
-        .clamp_within(self.size.rect())
+        .clamp_within(vp.size.rect())
         .unwrap();
+        vp
     }
 
     /// Calculates the (pre, active, post) rectangles needed to draw a vertical
@@ -391,22 +399,22 @@ mod tests {
 
     #[test]
     fn view_update() -> Result<()> {
-        let mut v = ViewPort::new(
+        let v = ViewPort::new(
             Size::new(100, 100),
             Rect::new(50, 50, 10, 10),
             Rect::new(50, 50, 10, 10),
         )?;
 
-        v.update(Size::new(50, 50), Rect::new(0, 0, 20, 20));
+        let v = v.update(Size::new(50, 50), Rect::new(0, 0, 20, 20));
         assert_eq!(v.view, Rect::new(30, 30, 20, 20));
 
-        v.update(Size::new(100, 100), Rect::new(0, 0, 20, 20));
+        let v = v.update(Size::new(100, 100), Rect::new(0, 0, 20, 20));
         assert_eq!(v.view, Rect::new(30, 30, 20, 20));
 
-        v.update(Size::new(10, 10), Rect::new(0, 0, 10, 10));
+        let v = v.update(Size::new(10, 10), Rect::new(0, 0, 10, 10));
         assert_eq!(v.view, Rect::new(0, 0, 10, 10));
 
-        v.update(Size::new(20, 20), Rect::new(0, 0, 20, 20));
+        let v = v.update(Size::new(20, 20), Rect::new(0, 0, 20, 20));
         assert_eq!(v.view, Rect::new(0, 0, 20, 20));
 
         Ok(())
@@ -414,28 +422,28 @@ mod tests {
 
     #[test]
     fn view_movement() -> Result<()> {
-        let mut v = ViewPort::new(
+        let v = ViewPort::new(
             Size::new(100, 100),
             Rect::new(0, 0, 10, 10),
             Rect::new(0, 0, 10, 10),
         )?;
 
-        v.scroll_by(10, 10);
+        let v = v.scroll_by(10, 10);
         assert_eq!(v.view, Rect::new(10, 10, 10, 10),);
 
-        v.scroll_by(-20, -20);
+        let v = v.scroll_by(-20, -20);
         assert_eq!(v.view, Rect::new(0, 0, 10, 10));
 
-        v.page_down();
+        let v = v.page_down();
         assert_eq!(v.view, Rect::new(0, 10, 10, 10));
 
-        v.page_up();
+        let v = v.page_up();
         assert_eq!(v.view, Rect::new(0, 0, 10, 10));
 
-        v.scroll_to(50, 50);
+        let v = v.scroll_to(50, 50);
         assert_eq!(v.view, Rect::new(50, 50, 10, 10));
 
-        v.scroll_to(150, 150);
+        let v = v.scroll_to(150, 150);
         assert_eq!(v.view, Rect::new(90, 90, 10, 10));
 
         Ok(())

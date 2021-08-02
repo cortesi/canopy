@@ -5,11 +5,10 @@ use canopy;
 use canopy::{
     event::{key, mouse},
     fit_and_update,
-    geom::ViewPort,
     render::term::runloop,
     style::solarized,
     widgets::{frame, Text},
-    Canopy, Node, NodeState, Outcome, Result, StatefulNode,
+    Canopy, Node, NodeState, Outcome, Result, StatefulNode, ViewPort,
 };
 
 struct Handle {}
@@ -56,15 +55,16 @@ impl Node<Handle, ()> for Root {
         _: &mut Handle,
         k: key::Key,
     ) -> Result<Outcome<()>> {
-        let v = &mut self.child.child.state_mut().viewport;
         match k {
-            c if c == 'g' => v.scroll_to(0, 0),
-            c if c == 'j' || c == key::KeyCode::Down => v.down(),
-            c if c == 'k' || c == key::KeyCode::Up => v.up(),
-            c if c == 'h' || c == key::KeyCode::Left => v.left(),
-            c if c == 'l' || c == key::KeyCode::Up => v.right(),
-            c if c == ' ' || c == key::KeyCode::PageDown => v.page_down(),
-            c if c == key::KeyCode::PageUp => v.page_up(),
+            c if c == 'g' => self.update_viewport(&|vp| vp.scroll_to(0, 0)),
+            c if c == 'j' || c == key::KeyCode::Down => self.update_viewport(&|vp| vp.down()),
+            c if c == 'k' || c == key::KeyCode::Up => self.update_viewport(&|vp| vp.up()),
+            c if c == 'h' || c == key::KeyCode::Left => self.update_viewport(&|vp| vp.left()),
+            c if c == 'l' || c == key::KeyCode::Up => self.update_viewport(&|vp| vp.right()),
+            c if c == ' ' || c == key::KeyCode::PageDown => {
+                self.update_viewport(&|vp| vp.page_down())
+            }
+            c if c == key::KeyCode::PageUp => self.update_viewport(&|vp| vp.page_up()),
             c if c == 'q' => app.exit(0),
             _ => return Ok(Outcome::ignore()),
         }

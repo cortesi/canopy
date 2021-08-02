@@ -4,11 +4,11 @@ use canopy;
 use canopy::{
     event::{key, mouse},
     fit_and_update,
-    geom::{Rect, Size, ViewPort},
+    geom::{Rect, Size},
     render::term::runloop,
     style::solarized,
     widgets::{frame, list::*, InputLine, Text},
-    Canopy, Node, NodeState, Outcome, Result, StatefulNode,
+    Canopy, Node, NodeState, Outcome, Result, StatefulNode, ViewPort,
 };
 
 struct Handle {}

@@ -4,6 +4,7 @@ mod node;
 mod outcome;
 mod state;
 mod tutils;
+pub mod viewport;
 
 pub mod cursor;
 pub mod error;
@@ -20,3 +21,4 @@ pub use node::Node;
 pub use outcome::Outcome;
 pub use render::Render;
 pub use state::{NodeState, StatefulNode};
+pub use viewport::ViewPort;

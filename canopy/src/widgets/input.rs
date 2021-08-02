@@ -4,9 +4,9 @@ use crate as canopy;
 use crate::{
     cursor,
     event::key,
-    geom::{LineSegment, Point, Size, ViewPort},
+    geom::{LineSegment, Point, Size},
     state::{NodeState, StatefulNode},
-    Actions, Canopy, Node, Outcome, Result,
+    Actions, Canopy, Node, Outcome, Result, ViewPort,
 };
 
 /// A text buffer that exposes edit functionality for a single line. It also

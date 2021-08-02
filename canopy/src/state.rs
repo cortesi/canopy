@@ -1,4 +1,7 @@
-use crate::geom::{Rect, Size, ViewPort};
+use crate::{
+    geom::{Rect, Size},
+    ViewPort,
+};
 
 pub use canopy_derive::StatefulNode;
 
@@ -60,11 +63,6 @@ pub trait StatefulNode {
         self.state().hidden
     }
 
-    /// Update the view outer and screen rects.
-    fn update_view(&mut self, size: Size, screen: Rect) {
-        self.state_mut().viewport.update(size, screen)
-    }
-
     /// Get the screen rect from the viewport.
     fn screen(&self) -> Rect {
         self.state().viewport.screen()
@@ -78,5 +76,13 @@ pub trait StatefulNode {
     /// Get the outer rect from the viewport.
     fn size(&self) -> Size {
         self.state().viewport.size()
+    }
+
+    fn update_viewport(&mut self, fun: &dyn Fn(ViewPort) -> ViewPort) {
+        self.set_viewport(fun(self.state().viewport))
+    }
+
+    fn set_viewport(&mut self, view: ViewPort) {
+        self.state_mut().viewport = view;
     }
 }

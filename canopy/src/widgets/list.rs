@@ -3,10 +3,10 @@ use std::marker::PhantomData;
 use crate as canopy;
 use crate::{
     error::Result,
-    geom::{Rect, Size, ViewPort},
+    geom::{Rect, Size},
     node::Node,
     state::{NodeState, StatefulNode},
-    Actions, Canopy,
+    Actions, Canopy, ViewPort,
 };
 
 /// ListItem must be implemented by items displayed in a `List`.
@@ -155,43 +155,43 @@ where
 
     /// Scroll the viewport to a specified location.
     pub fn scroll_to(&mut self, x: u16, y: u16) {
-        self.state_mut().viewport.scroll_to(x, y);
+        self.update_viewport(&|vp| vp.scroll_to(x, y));
         self.fix_selection();
     }
 
     /// Scroll the viewport down by one line.
     pub fn scroll_down(&mut self) {
-        self.state_mut().viewport.down();
+        self.update_viewport(&|vp| vp.down());
         self.fix_selection();
     }
 
     /// Scroll the viewport up by one line.
     pub fn scroll_up(&mut self) {
-        self.state_mut().viewport.up();
+        self.update_viewport(&|vp| vp.up());
         self.fix_selection();
     }
 
     /// Scroll the viewport left by one column.
     pub fn scroll_left(&mut self) {
-        self.state_mut().viewport.left();
+        self.update_viewport(&|vp| vp.left());
         self.fix_selection();
     }
 
     /// Scroll the viewport right by one column.
     pub fn scroll_right(&mut self) {
-        self.state_mut().viewport.right();
+        self.update_viewport(&|vp| vp.right());
         self.fix_selection();
     }
 
     /// Scroll the viewport down by one page.
     pub fn page_down(&mut self) {
-        self.state_mut().viewport.page_down();
+        self.update_viewport(&|vp| vp.page_down());
         self.fix_selection();
     }
 
     /// Scroll the viewport up by one page.
     pub fn page_up(&mut self) {
-        self.state_mut().viewport.page_up();
+        self.update_viewport(&|vp| vp.page_up());
         self.fix_selection();
     }
 
@@ -221,13 +221,13 @@ where
         let (start, end) = self.view_range();
         // We know there isn't an entire overlap
         if self.selected <= start {
-            self.state_mut().viewport.scroll_to(view.tl.x, virt.tl.y);
+            self.update_viewport(&|vp| vp.scroll_to(view.tl.x, virt.tl.y));
         } else if self.selected >= end {
             if virt.h >= view.h {
-                self.state_mut().viewport.scroll_to(view.tl.x, virt.tl.y);
+                self.update_viewport(&|vp| vp.scroll_to(view.tl.x, virt.tl.y));
             } else {
                 let y = virt.tl.y - (view.h - virt.h);
-                self.state_mut().viewport.scroll_to(view.tl.x, y);
+                self.update_viewport(&|vp| vp.scroll_to(view.tl.x, y));
             }
         }
     }
@@ -305,7 +305,7 @@ where
         self.clear = vec![];
         for itm in &mut self.items {
             if let Some(vp) = myvp.map(itm.virt)? {
-                itm.itm.state_mut().viewport = vp;
+                itm.itm.set_viewport(vp);
                 app.taint_tree(&mut itm.itm)?;
                 itm.itm.unhide();
 
@@ -428,7 +428,7 @@ mod tests {
             ]
         );
 
-        lst.state_mut().viewport.scroll_by(0, 5);
+        lst.update_viewport(&|vp| vp.scroll_by(0, 5));
         fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
         app.taint_tree(&mut lst)?;
         app.render(&mut lst)?;
@@ -441,7 +441,7 @@ mod tests {
             ]
         );
 
-        lst.state_mut().viewport.scroll_by(0, 5);
+        lst.update_viewport(&|vp| vp.scroll_by(0, 5));
         fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
         app.taint_tree(&mut lst)?;
         app.render(&mut lst)?;
@@ -454,7 +454,7 @@ mod tests {
             ]
         );
 
-        lst.state_mut().viewport.scroll_by(0, 10);
+        lst.update_viewport(&|vp| vp.scroll_by(0, 10));
         fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
         app.taint_tree(&mut lst)?;
         app.render(&mut lst)?;
@@ -467,7 +467,7 @@ mod tests {
             ]
         );
 
-        lst.state_mut().viewport.scroll_by(0, 10);
+        lst.update_viewport(&|vp| vp.scroll_by(0, 10));
         fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
         app.taint_tree(&mut lst)?;
         app.render(&mut lst)?;
@@ -480,7 +480,7 @@ mod tests {
             ]
         );
 
-        lst.state_mut().viewport.scroll_to(5, 0);
+        lst.update_viewport(&|vp| vp.scroll_to(5, 0));
         fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
         app.taint_tree(&mut lst)?;
         app.render(&mut lst)?;
@@ -493,7 +493,7 @@ mod tests {
             ]
         );
 
-        lst.state_mut().viewport.scroll_by(0, 5);
+        lst.update_viewport(&|vp| vp.scroll_by(0, 5));
         fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
         app.taint_tree(&mut lst)?;
         app.render(&mut lst)?;

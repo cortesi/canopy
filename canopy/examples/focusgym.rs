@@ -5,10 +5,10 @@ use canopy::{
     event::{key, mouse},
     fit_and_update,
     geom::Frame,
-    geom::{Rect, ViewPort},
+    geom::Rect,
     render::term::runloop,
     style::solarized,
-    Canopy, Node, NodeState, Outcome, Result, StatefulNode,
+    Canopy, Node, NodeState, Outcome, Result, StatefulNode, ViewPort,
 };
 
 struct Handle {}

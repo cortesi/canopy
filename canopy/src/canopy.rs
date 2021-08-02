@@ -571,7 +571,7 @@ where
     N: Node<S, A> + StatefulNode,
 {
     let fit = n.fit(app, screen.size())?;
-    n.update_view(fit, screen);
+    n.update_viewport(&|vp| vp.update(fit, screen));
     Ok(())
 }
 

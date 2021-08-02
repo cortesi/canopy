@@ -4,9 +4,8 @@ use std::marker::PhantomData;
 use crate as canopy;
 use crate::{
     fit_and_update,
-    geom::ViewPort,
     state::{NodeState, StatefulNode},
-    Actions, Canopy, Node, Result,
+    Actions, Canopy, Node, Result, ViewPort,
 };
 
 /// Panes manages a set of child nodes arranged in a 2d grid.
