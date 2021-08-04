@@ -4,9 +4,9 @@ use std::marker::PhantomData;
 use crate::geom::{Direction, Rect};
 use crate::{
     event::{key, mouse, Event},
-    geom::Point,
+    geom::{Point, Size},
     node::{postorder, postorder_mut, preorder, Node, Walker},
-    Actions, Error, Outcome, Render, Result, StatefulNode,
+    Actions, Error, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 
 pub(crate) struct SkipWalker {
@@ -481,14 +481,15 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
         })
     }
 
-    /// Handle a screen resize. This calls layout and taints the tree.
-    pub fn resize<N>(&mut self, e: &mut N, rect: Rect) -> Result<()>
+    /// Set the size on the root node, and taint the tree.
+    pub fn set_root_size<N>(&mut self, size: Size, n: &mut N) -> Result<()>
     where
-        N: Node<S, A>,
+        N: Node<S, A> + StatefulNode,
     {
-        fit_and_update(self, rect, e)?;
-        // This could be more conservative?
-        self.taint_tree(e)?;
+        let fit = n.fit(self, size)?;
+        let vp = ViewPort::new(fit, fit, Point::default())?;
+        n.set_viewport(vp);
+        self.taint_tree(n)?;
         Ok(())
     }
 
@@ -514,8 +515,8 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
         match e {
             Event::Key(k) => self.key(root, s, k),
             Event::Mouse(m) => self.mouse(root, s, m),
-            Event::Resize(r) => {
-                self.resize(root, r)?;
+            Event::Resize(s) => {
+                self.set_root_size(s, root)?;
                 Ok(Outcome::handle())
             }
             Event::Action(t) => self.broadcast(root, s, t),
@@ -632,7 +633,7 @@ mod tests {
         let (buf, mut tr) = TestRender::create();
         let mut app = tcanopy(&mut tr);
         let mut root = TRoot::new();
-        fit_and_update(&mut app, Rect::new(0, 0, 100, 100), &mut root)?;
+        app.set_root_size(Size::new(100, 100), &mut root)?;
         func(buf, app, root, State::new())
     }
 
@@ -981,7 +982,7 @@ mod tests {
             assert_eq!(root.a.screen(), Rect::new(0, 0, size / 2, size));
             assert_eq!(root.b.screen(), Rect::new(size / 2, 0, size / 2, size));
 
-            app.resize(&mut root, Rect::new(0, 0, 50, 50))?;
+            app.set_root_size(Size::new(50, 50), &mut root)?;
             app.render(&mut root)?;
             assert_eq!(root.b.screen(), Rect::new(25, 0, 25, 50));
             Ok(())

@@ -108,7 +108,7 @@ impl Rect {
         [self.vslice(&h).unwrap(), self.vslice(&t).unwrap()]
     }
 
-    /// Clamp this rectangle, constraining it lie within another rectangle. The
+    /// Clamp this rectangle, shifting it to lie within another rectangle. The
     /// size of the returned Rect is always equal to that of self. If self is
     /// larger than the enclosing rectangle, return an error.
     pub fn clamp_within(&self, rect: Rect) -> Result<Self> {

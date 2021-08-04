@@ -5,7 +5,6 @@ pub mod utils {
     use crate as canopy;
     use crate::{
         event::{key, mouse},
-        fit_and_update,
         geom::Size,
         render::test::TestRender,
         style::Style,
@@ -137,9 +136,9 @@ pub mod utils {
         }
 
         fn render(&mut self, app: &mut Canopy<State, TActions>, vp: ViewPort) -> Result<()> {
-            let v = vp.screen().split_vertical(2)?;
-            fit_and_update(app, v[0], &mut self.a)?;
-            fit_and_update(app, v[1], &mut self.b)?;
+            let parts = vp.split_vertical(2)?;
+            self.a.wrap(app, parts[0])?;
+            self.b.wrap(app, parts[1])?;
 
             app.render.text(
                 "any",
@@ -209,9 +208,10 @@ pub mod utils {
         }
 
         fn render(&mut self, app: &mut Canopy<State, TActions>, vp: ViewPort) -> Result<()> {
-            let v = vp.screen().split_horizontal(2)?;
-            fit_and_update(app, v[0], &mut self.a)?;
-            fit_and_update(app, v[1], &mut self.b)?;
+            let parts = vp.split_horizontal(2)?;
+            self.a.wrap(app, parts[0])?;
+            self.b.wrap(app, parts[1])?;
+
             app.render.text(
                 "any",
                 vp.view().first_line(),

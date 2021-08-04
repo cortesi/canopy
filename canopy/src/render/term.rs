@@ -9,7 +9,7 @@ use super::Backend;
 use crate::{
     cursor,
     event::EventSource,
-    geom::{Point, Rect},
+    geom::{Point, Rect, Size},
     render::Render,
     style::Style,
     Actions, Canopy, Node, Outcome, Result,
@@ -135,7 +135,7 @@ where
 
     let events = EventSource::new();
     let size = size()?;
-    app.resize(root, Rect::new(0, 0, size.0, size.1))?;
+    app.set_root_size(Size::new(size.0, size.1), root)?;
 
     loop {
         let mut ignore = false;

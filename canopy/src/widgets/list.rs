@@ -417,6 +417,7 @@ mod tests {
             TFixed::new(rw, rh),
             TFixed::new(rw, rh),
         ]);
+
         fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
         app.render(&mut lst)?;
         assert_eq!(

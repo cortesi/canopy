@@ -29,14 +29,20 @@ impl Default for ViewPort {
 impl ViewPort {
     /// Create a new View with the given outer and inner rectangles. The view
     /// rectangle must be fully contained within the outer rectangle.
-    pub fn new(size: Size, view: Rect, screen: Rect) -> Result<ViewPort> {
-        if !size.rect().contains_rect(&view) {
+    pub fn new(
+        size: impl Into<Size>,
+        view: impl Into<Rect>,
+        screen: impl Into<Point>,
+    ) -> Result<ViewPort> {
+        let view = view.into();
+        let size = size.into();
+        if !size.rect().contains_rect(&view.into()) {
             Err(error::Error::Geometry("view not contained in outer".into()))
         } else {
             Ok(ViewPort {
-                size,
-                view,
-                screen: screen.tl,
+                size: size,
+                view: view,
+                screen: screen.into(),
             })
         }
     }
@@ -88,6 +94,11 @@ impl ViewPort {
     /// Scroll the view right by one line.
     pub fn right(&self) -> Self {
         self.scroll_by(1, 0)
+    }
+
+    /// Return the screen region.
+    pub fn screen_pt(&self) -> Point {
+        self.screen
     }
 
     /// Return the screen region.
@@ -310,11 +321,7 @@ mod tests {
 
     #[test]
     fn view_map() -> Result<()> {
-        let v = ViewPort::new(
-            Size::new(100, 100),
-            Rect::new(30, 30, 20, 20),
-            Rect::new(200, 200, 20, 20),
-        )?;
+        let v = ViewPort::new(Size::new(100, 100), Rect::new(30, 30, 20, 20), (200, 200))?;
 
         // No overlap with view
         assert!(v.map(Rect::new(10, 10, 2, 2),)?.is_none(),);
@@ -324,7 +331,7 @@ mod tests {
             Some(ViewPort::new(
                 Size::new(10, 10),
                 Rect::new(0, 0, 10, 10),
-                Rect::new(200, 200, 10, 10),
+                (200, 200),
             )?)
         );
 
@@ -333,7 +340,7 @@ mod tests {
             Some(ViewPort::new(
                 Size::new(10, 10),
                 Rect::new(0, 0, 10, 10),
-                Rect::new(210, 210, 10, 10),
+                (210, 210),
             )?)
         );
 
@@ -342,7 +349,7 @@ mod tests {
             Some(ViewPort::new(
                 Size::new(10, 10),
                 Rect::new(5, 5, 5, 5),
-                Rect::new(200, 200, 5, 5),
+                (200, 200),
             )?)
         );
 
@@ -351,7 +358,7 @@ mod tests {
             Some(ViewPort::new(
                 Size::new(10, 10),
                 Rect::new(0, 0, 10, 10),
-                Rect::new(205, 205, 10, 10),
+                (205, 205),
             )?)
         );
 
@@ -360,7 +367,7 @@ mod tests {
             Some(ViewPort::new(
                 Size::new(10, 10),
                 Rect::new(0, 0, 5, 5),
-                Rect::new(215, 215, 5, 5),
+                (215, 215),
             )?)
         );
 
@@ -369,7 +376,7 @@ mod tests {
             Some(ViewPort::new(
                 Size::new(10, 10),
                 Rect::new(0, 9, 10, 1),
-                Rect::new(200, 200, 10, 1),
+                (200, 200),
             )?)
         );
 
@@ -378,7 +385,7 @@ mod tests {
             Some(ViewPort::new(
                 Size::new(10, 10),
                 Rect::new(0, 0, 10, 1),
-                Rect::new(200, 219, 10, 1),
+                (200, 219),
             )?)
         );
 
@@ -387,11 +394,7 @@ mod tests {
 
     #[test]
     fn view_project_line() -> Result<()> {
-        let v = ViewPort::new(
-            Size::new(100, 100),
-            Rect::new(30, 30, 10, 10),
-            Rect::new(50, 50, 10, 10),
-        )?;
+        let v = ViewPort::new(Size::new(100, 100), Rect::new(30, 30, 10, 10), (50, 50))?;
 
         assert!(v.project_line(Line::new(10, 10, 10)).is_none());
         assert_eq!(
@@ -412,11 +415,7 @@ mod tests {
 
     #[test]
     fn view_project_rect() -> Result<()> {
-        let v = ViewPort::new(
-            Size::new(100, 100),
-            Rect::new(30, 30, 10, 10),
-            Rect::new(50, 50, 10, 10),
-        )?;
+        let v = ViewPort::new(Size::new(100, 100), Rect::new(30, 30, 10, 10), (50, 50))?;
 
         assert!(v.project_rect(Rect::new(10, 10, 10, 10)).is_none());
         assert_eq!(
@@ -437,11 +436,7 @@ mod tests {
 
     #[test]
     fn view_project_point() -> Result<()> {
-        let v = ViewPort::new(
-            Size::new(100, 100),
-            Rect::new(30, 30, 10, 10),
-            Rect::new(50, 50, 10, 10),
-        )?;
+        let v = ViewPort::new(Size::new(100, 100), Rect::new(30, 30, 10, 10), (50, 50))?;
 
         assert!(v.project_point((10, 10)).is_none());
         assert_eq!(v.project_point((30, 30)), Some(Point { x: 50, y: 50 }),);
@@ -453,11 +448,7 @@ mod tests {
 
     #[test]
     fn view_update() -> Result<()> {
-        let v = ViewPort::new(
-            Size::new(100, 100),
-            Rect::new(50, 50, 10, 10),
-            Rect::new(50, 50, 10, 10),
-        )?;
+        let v = ViewPort::new(Size::new(100, 100), Rect::new(50, 50, 10, 10), (50, 50))?;
 
         let v = v.update(Size::new(50, 50), Rect::new(0, 0, 20, 20));
         assert_eq!(v.view, Rect::new(30, 30, 20, 20));
@@ -476,11 +467,7 @@ mod tests {
 
     #[test]
     fn view_movement() -> Result<()> {
-        let v = ViewPort::new(
-            Size::new(100, 100),
-            Rect::new(0, 0, 10, 10),
-            Rect::new(0, 0, 10, 10),
-        )?;
+        let v = ViewPort::new(Size::new(100, 100), Rect::new(0, 0, 10, 10), (0, 0))?;
 
         let v = v.scroll_by(10, 10);
         assert_eq!(v.view, Rect::new(10, 10, 10, 10),);

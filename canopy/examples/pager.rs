@@ -4,7 +4,6 @@ use std::fs;
 use canopy;
 use canopy::{
     event::{key, mouse},
-    fit_and_update,
     render::term::runloop,
     style::solarized,
     widgets::{frame, Text},
@@ -74,8 +73,7 @@ impl Node<Handle, ()> for Root {
     }
 
     fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
-        // self.child.wrap(app, vp)
-        fit_and_update(app, vp.screen(), &mut self.child)
+        self.child.wrap(app, vp)
     }
 
     fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle, ()>) -> Result<()>) -> Result<()> {

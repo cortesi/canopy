@@ -146,7 +146,7 @@ pub trait Node<S, A: Actions>: StatefulNode {
         self.set_viewport(ViewPort::new(
             fit,
             vp.view().clone().clamp_within(fit.into())?,
-            vp.screen(),
+            vp.screen_pt(),
         )?);
         Ok(())
     }

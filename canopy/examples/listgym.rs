@@ -62,7 +62,7 @@ impl Node<Handle, ()> for Block {
             w: vp.view().w.saturating_sub(2),
             h: vp.view().h,
         };
-        self.child.state_mut().viewport = ViewPort::new(outer, view, screen)?;
+        self.child.state_mut().viewport = ViewPort::new(outer, view, screen.tl)?;
 
         let v = vp.view();
         let status = Rect::new(v.tl.x, v.tl.y, 1, v.h);

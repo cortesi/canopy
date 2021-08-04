@@ -2,7 +2,7 @@ pub mod key;
 pub mod mouse;
 pub mod tick;
 
-use crate::{geom::Rect, Actions};
+use crate::{geom::Size, Actions};
 
 use std::sync::mpsc;
 use std::thread;
@@ -14,7 +14,7 @@ use crossterm::event;
 pub enum Event<A> {
     Key(key::Key),
     Mouse(mouse::Mouse),
-    Resize(Rect),
+    Resize(Size),
     Action(A),
 }
 
@@ -56,7 +56,7 @@ impl<A: 'static + Actions> EventSource<A> {
                     let oevt = match evt {
                         event::Event::Key(e) => Event::Key(e.into()),
                         event::Event::Mouse(e) => Event::Mouse(e.into()),
-                        event::Event::Resize(x, y) => Event::Resize(Rect::new(0, 0, x, y)),
+                        event::Event::Resize(x, y) => Event::Resize(Size::new(x, y)),
                     };
                     let ret = evt_tx.send(oevt);
                     if ret.is_err() {
