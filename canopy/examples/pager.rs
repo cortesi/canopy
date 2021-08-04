@@ -5,7 +5,6 @@ use canopy;
 use canopy::{
     event::{key, mouse},
     fit_and_update,
-    geom::Size,
     render::term::runloop,
     style::solarized,
     widgets::{frame, Text},

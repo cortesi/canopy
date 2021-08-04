@@ -107,7 +107,7 @@ impl Root {
 impl Node<Handle, ()> for Root {
     fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
         let a = vp.screen();
-        let (ct, sb) = a.carve_vend(1);
+        let [ct, sb] = a.carve_vend(1);
         fit_and_update(app, sb, &mut self.statusbar)?;
         fit_and_update(app, ct, &mut self.content)?;
         if let Some(add) = &mut self.adder {

@@ -243,10 +243,8 @@ impl ViewPort {
         }
     }
 
-    /// Split this viewport horizontally into N sub-viewports.
-    pub fn split_horizontal(&self, n: u16) -> Result<Vec<ViewPort>> {
-        let mut ret = vec![];
-        let views = self.size().rect().split_horizontal(n)?;
+    fn sizerects_to_vp(&self, views: Vec<Rect>) -> Vec<ViewPort> {
+        let mut ret = Vec::with_capacity(views.len());
         for i in views {
             let view = if let Some(r) = i.intersect(&self.view) {
                 r
@@ -262,29 +260,47 @@ impl ViewPort {
                 },
             });
         }
-        Ok(ret)
+        ret
     }
 
-    /// Split this viewport vertically into N sub-viewports.
+    /// Carve a rectangle with a fixed width out of the start of the horizontal
+    /// extent of this viewport. Returns a [left, right] vector. Left is either
+    /// empty or has the exact width specified.
+    pub fn carve_hstart(&self, n: u16) -> Result<Vec<ViewPort>> {
+        Ok(self.sizerects_to_vp(self.size().rect().carve_hstart(n).into()))
+    }
+
+    /// Carve a rectangle with a fixed width out of the end of the horizontal
+    /// extent of this viewport. Returns a [left, right] vector. Right is either
+    /// empty or has the exact width specified.
+    pub fn carve_hend(&self, n: u16) -> Result<Vec<ViewPort>> {
+        Ok(self.sizerects_to_vp(self.size().rect().carve_hend(n).into()))
+    }
+
+    /// Carve a rectangle with a fixed width out of the start of the vertical
+    /// extent of this viewport. Returns a [top, bottom] vector. Top is either
+    /// empty or has the exact width specified.
+    pub fn carve_vstart(&self, n: u16) -> Result<Vec<ViewPort>> {
+        Ok(self.sizerects_to_vp(self.size().rect().carve_vstart(n).into()))
+    }
+
+    /// Carve a rectangle with a fixed width out of the end of the vertical
+    /// extent of this viewport. Returns a [top, bottom] vector. Bottom is
+    /// either empty or has the exact width specified.
+    pub fn carve_vend(&self, n: u16) -> Result<Vec<ViewPort>> {
+        Ok(self.sizerects_to_vp(self.size().rect().carve_vend(n).into()))
+    }
+
+    /// Splits the rectangle horizontally into n sections, as close to equally
+    /// sized as possible.
+    pub fn split_horizontal(&self, n: u16) -> Result<Vec<ViewPort>> {
+        Ok(self.sizerects_to_vp(self.size().rect().split_horizontal(n)?))
+    }
+
+    /// Splits the viewport vertically into n sections, as close to equally
+    /// sized as possible.
     pub fn split_vertical(&self, n: u16) -> Result<Vec<ViewPort>> {
-        let mut ret = vec![];
-        let views = self.size().rect().split_vertical(n)?;
-        for i in views {
-            let view = if let Some(r) = i.intersect(&self.view) {
-                r
-            } else {
-                Rect::default()
-            };
-            ret.push(ViewPort {
-                size: i.size(),
-                view: view,
-                screen: Point {
-                    x: (view.tl.x - self.view.tl.x) + self.screen.x,
-                    y: (view.tl.y - self.view.tl.y) + self.screen.y,
-                },
-            });
-        }
-        Ok(ret)
+        Ok(self.sizerects_to_vp(self.size().rect().split_vertical(n)?))
     }
 }
 

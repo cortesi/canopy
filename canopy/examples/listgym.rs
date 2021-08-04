@@ -4,7 +4,6 @@ use rand::Rng;
 use canopy;
 use canopy::{
     event::{key, mouse},
-    fit_and_update,
     geom::{Rect, Size},
     render::term::runloop,
     style::solarized,
@@ -56,7 +55,7 @@ impl Node<Handle, ()> for Block {
     }
 
     fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
-        let (_, screen) = vp.screen().carve_hstart(2);
+        let [_, screen] = vp.screen().carve_hstart(2);
         let outer = self.child.fit(app, screen.into())?;
         let view = Rect {
             tl: vp.view().tl,
@@ -126,9 +125,9 @@ impl Root {
 
 impl Node<Handle, ()> for Root {
     fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
-        let (ct, sb) = vp.screen().carve_vend(1);
-        fit_and_update(app, sb, &mut self.statusbar)?;
-        fit_and_update(app, ct, &mut self.content)?;
+        let parts = vp.carve_vend(1)?;
+        self.statusbar.wrap(app, parts[1])?;
+        self.content.wrap(app, parts[0])?;
         Ok(())
     }
 
