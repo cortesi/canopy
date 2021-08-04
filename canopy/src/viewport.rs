@@ -242,6 +242,50 @@ impl ViewPort {
             Ok(None)
         }
     }
+
+    /// Split this viewport horizontally into N sub-viewports.
+    pub fn split_horizontal(&self, n: u16) -> Result<Vec<ViewPort>> {
+        let mut ret = vec![];
+        let views = self.size().rect().split_horizontal(n)?;
+        for i in views {
+            let view = if let Some(r) = i.intersect(&self.view) {
+                r
+            } else {
+                Rect::default()
+            };
+            ret.push(ViewPort {
+                size: i.size(),
+                view: view,
+                screen: Point {
+                    x: (view.tl.x - self.view.tl.x) + self.screen.x,
+                    y: (view.tl.y - self.view.tl.y) + self.screen.y,
+                },
+            });
+        }
+        Ok(ret)
+    }
+
+    /// Split this viewport vertically into N sub-viewports.
+    pub fn split_vertical(&self, n: u16) -> Result<Vec<ViewPort>> {
+        let mut ret = vec![];
+        let views = self.size().rect().split_vertical(n)?;
+        for i in views {
+            let view = if let Some(r) = i.intersect(&self.view) {
+                r
+            } else {
+                Rect::default()
+            };
+            ret.push(ViewPort {
+                size: i.size(),
+                view: view,
+                screen: Point {
+                    x: (view.tl.x - self.view.tl.x) + self.screen.x,
+                    y: (view.tl.y - self.view.tl.y) + self.screen.y,
+                },
+            });
+        }
+        Ok(ret)
+    }
 }
 
 #[cfg(test)]

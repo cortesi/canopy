@@ -6,7 +6,7 @@ use crate::{
     event::{key, mouse, Event},
     geom::Point,
     node::{postorder, postorder_mut, preorder, Node, Walker},
-    Actions, Error, Outcome, Render, Result, StatefulNode,
+    Actions, Error, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 
 pub(crate) struct SkipWalker {

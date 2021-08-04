@@ -399,7 +399,7 @@ impl Rect {
                 Rect {
                     tl: self.tl,
                     h: self.h,
-                    w: isec.tl.x - self.tl.x,
+                    w: isec.tl.x.saturating_sub(self.tl.x),
                 },
                 // Right
                 Rect {
@@ -408,7 +408,7 @@ impl Rect {
                         y: self.tl.y,
                     },
                     h: self.h,
-                    w: (self.tl.x + self.w) - isec.tl.x - isec.w,
+                    w: (self.tl.x + self.w).saturating_sub(isec.tl.x + isec.w),
                 },
                 // Top
                 Rect {
@@ -416,7 +416,7 @@ impl Rect {
                         x: isec.tl.x,
                         y: self.tl.y,
                     },
-                    h: isec.tl.y - self.tl.y,
+                    h: isec.tl.y.saturating_sub(self.tl.y),
                     w: isec.w,
                 },
                 // Bottom
@@ -425,7 +425,7 @@ impl Rect {
                         x: isec.tl.x,
                         y: isec.tl.y + isec.h,
                     },
-                    h: (self.tl.x + self.h) - isec.tl.y - isec.h,
+                    h: (self.tl.x + self.h).saturating_sub(isec.tl.y + isec.h),
                     w: isec.w,
                 },
             ];

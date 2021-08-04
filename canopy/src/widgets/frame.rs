@@ -109,6 +109,7 @@ where
     fn should_render(&self, app: &Canopy<S, A>) -> Option<bool> {
         Some(app.should_render(&self.child))
     }
+
     fn render(&mut self, app: &mut Canopy<S, A>, vp: ViewPort) -> Result<()> {
         fit_and_update(app, vp.screen().inner(1)?, &mut self.child)?;
         let style = if app.on_focus_path(self) {

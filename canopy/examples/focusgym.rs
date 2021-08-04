@@ -3,9 +3,8 @@ use duplicate::duplicate;
 use canopy;
 use canopy::{
     event::{key, mouse},
-    fit_and_update,
     geom::Frame,
-    geom::Rect,
+    geom::Size,
     render::term::runloop,
     style::solarized,
     Canopy, Node, NodeState, Outcome, Result, StatefulNode, ViewPort,
@@ -51,7 +50,7 @@ impl Block {
 
 impl Node<Handle, ()> for Root {
     fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
-        fit_and_update(app, vp.screen(), &mut self.child)
+        self.child.wrap(app, vp)
     }
 
     fn handle_mouse(
@@ -102,7 +101,7 @@ impl Block {
     fn add(&mut self, app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
         Ok(if self.children.len() == 0 {
             Outcome::ignore()
-        } else if self.size_limited(self.children[0].screen()) {
+        } else if self.size_limited(self.children[0].view().into()) {
             Outcome::handle()
         } else {
             self.children.push(Block::new(!self.horizontal));
@@ -110,7 +109,7 @@ impl Block {
             Outcome::handle()
         })
     }
-    fn size_limited(&self, a: Rect) -> bool {
+    fn size_limited(&self, a: Size) -> bool {
         if self.horizontal && a.w <= 4 {
             true
         } else if !self.horizontal && a.h <= 4 {
@@ -120,10 +119,9 @@ impl Block {
         }
     }
     fn split(&mut self, app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
-        let r = self.screen();
         Ok(if self.children.len() != 0 {
             Outcome::ignore()
-        } else if self.size_limited(r) {
+        } else if self.size_limited(self.view().into()) {
             Outcome::handle()
         } else {
             self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
@@ -135,15 +133,15 @@ impl Block {
 
 impl Node<Handle, ()> for Block {
     fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
-        let screen = vp.screen();
         if self.children.len() > 0 {
-            let sizes = if self.horizontal {
-                screen.split_horizontal(self.children.len() as u16)?
+            let vps = if self.horizontal {
+                vp.split_horizontal(self.children.len() as u16)?
             } else {
-                screen.split_vertical(self.children.len() as u16)?
+                vp.split_vertical(self.children.len() as u16)?
             };
             for i in 0..self.children.len() {
-                fit_and_update(app, sizes[i], &mut self.children[i])?;
+                self.children[i].wrap(app, vps[i])?;
+                // fit_and_update(app, sizes[i], &mut self.children[i])?;
             }
         } else {
             let bc = if app.is_focused(self) && self.children.len() == 0 {
