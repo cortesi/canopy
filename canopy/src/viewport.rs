@@ -1,5 +1,5 @@
 use crate::error;
-use crate::geom::{Line, Point, Rect, Size};
+use crate::geom::{Frame, Line, Point, Rect, Size};
 use crate::Result;
 
 /// ViewPort manages three rectangles in concert: `outer` is the total virtual
@@ -254,22 +254,28 @@ impl ViewPort {
         }
     }
 
-    fn sizerects_to_vp(&self, views: Vec<Rect>) -> Vec<ViewPort> {
+    /// Turns a view rectangle into a sub-viewport.
+    fn view_to_vp(&self, v: Rect) -> ViewPort {
+        let isect = if let Some(r) = v.intersect(&self.view) {
+            r
+        } else {
+            Rect::default()
+        };
+        ViewPort {
+            size: v.size(),
+            view: isect,
+            screen: Point {
+                x: (isect.tl.x - self.view.tl.x) + self.screen.x,
+                y: (isect.tl.y - self.view.tl.y) + self.screen.y,
+            },
+        }
+    }
+
+    /// Turns a vector of view rectangles into sub-viewports.
+    fn views_to_vp(&self, views: Vec<Rect>) -> Vec<ViewPort> {
         let mut ret = Vec::with_capacity(views.len());
         for i in views {
-            let view = if let Some(r) = i.intersect(&self.view) {
-                r
-            } else {
-                Rect::default()
-            };
-            ret.push(ViewPort {
-                size: i.size(),
-                view: view,
-                screen: Point {
-                    x: (view.tl.x - self.view.tl.x) + self.screen.x,
-                    y: (view.tl.y - self.view.tl.y) + self.screen.y,
-                },
-            });
+            ret.push(self.view_to_vp(i));
         }
         ret
     }
@@ -278,40 +284,47 @@ impl ViewPort {
     /// extent of this viewport. Returns a [left, right] vector. Left is either
     /// empty or has the exact width specified.
     pub fn carve_hstart(&self, n: u16) -> Result<Vec<ViewPort>> {
-        Ok(self.sizerects_to_vp(self.size().rect().carve_hstart(n).into()))
+        Ok(self.views_to_vp(self.size().rect().carve_hstart(n).into()))
     }
 
     /// Carve a rectangle with a fixed width out of the end of the horizontal
     /// extent of this viewport. Returns a [left, right] vector. Right is either
     /// empty or has the exact width specified.
     pub fn carve_hend(&self, n: u16) -> Result<Vec<ViewPort>> {
-        Ok(self.sizerects_to_vp(self.size().rect().carve_hend(n).into()))
+        Ok(self.views_to_vp(self.size().rect().carve_hend(n).into()))
     }
 
     /// Carve a rectangle with a fixed width out of the start of the vertical
     /// extent of this viewport. Returns a [top, bottom] vector. Top is either
     /// empty or has the exact width specified.
     pub fn carve_vstart(&self, n: u16) -> Result<Vec<ViewPort>> {
-        Ok(self.sizerects_to_vp(self.size().rect().carve_vstart(n).into()))
+        Ok(self.views_to_vp(self.size().rect().carve_vstart(n).into()))
     }
 
     /// Carve a rectangle with a fixed width out of the end of the vertical
     /// extent of this viewport. Returns a [top, bottom] vector. Bottom is
     /// either empty or has the exact width specified.
     pub fn carve_vend(&self, n: u16) -> Result<Vec<ViewPort>> {
-        Ok(self.sizerects_to_vp(self.size().rect().carve_vend(n).into()))
+        Ok(self.views_to_vp(self.size().rect().carve_vend(n).into()))
     }
 
     /// Splits the rectangle horizontally into n sections, as close to equally
     /// sized as possible.
     pub fn split_horizontal(&self, n: u16) -> Result<Vec<ViewPort>> {
-        Ok(self.sizerects_to_vp(self.size().rect().split_horizontal(n)?))
+        Ok(self.views_to_vp(self.size().rect().split_horizontal(n)?))
     }
 
     /// Splits the viewport vertically into n sections, as close to equally
     /// sized as possible.
     pub fn split_vertical(&self, n: u16) -> Result<Vec<ViewPort>> {
-        Ok(self.sizerects_to_vp(self.size().rect().split_vertical(n)?))
+        Ok(self.views_to_vp(self.size().rect().split_vertical(n)?))
+    }
+
+    /// Frames the current viewport, and returns a `geom::Frame` object and a sub-viewport.
+    pub fn frame(&self, n: u16) -> Result<(Frame, ViewPort)> {
+        let sv = self.view_to_vp(self.size().rect().inner(n)?);
+        let f = Frame::new(self.size().into(), n)?;
+        Ok((f, sv))
     }
 }
 
