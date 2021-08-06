@@ -320,17 +320,60 @@ impl ViewPort {
         Ok(self.views_to_vp(self.size().rect().split_vertical(n)?))
     }
 
-    /// Frames the current viewport, and returns a `geom::Frame` object and a sub-viewport.
+    /// Produce a sub-viewport that is framed by the current viewport. Returns a
+    /// `geom::Frame` object and a sub-viewport.
     pub fn frame(&self, n: u16) -> Result<(Frame, ViewPort)> {
         let sv = self.view_to_vp(self.size().rect().inner(n)?);
         let f = Frame::new(self.size().into(), n)?;
         Ok((f, sv))
+    }
+
+    /// Produce a sub-viewport that wraps a node with the given fit size. The
+    /// sub-node is positioned at (0, 0) within the current node. Screen
+    /// location is maintained, and we try to fit the new view to the current
+    /// view. If the target fit is smaller than the current view, the result is
+    /// simply a view with the same size as the node positioned at (0, 0).
+    pub fn wrap(&self, fit: impl Into<Size>) -> Result<ViewPort> {
+        let fit = fit.into();
+        let view = if self.view.size().contains(&fit) {
+            fit.rect()
+        } else if fit.contains(&self.view.size()) {
+            self.view().clamp_within(fit)?
+        } else {
+            if let Some(v) = fit.rect().intersect(&self.view) {
+                v
+            } else {
+                // At this point, the views are completely disjoint so we return a zero rect.
+                Rect::default()
+            }
+        };
+        ViewPort::new(fit, view, self.screen_pt())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wrap() -> Result<()> {
+        let v = ViewPort::new(Size::new(100, 100), Rect::new(30, 30, 20, 20), (200, 200))?;
+
+        assert_eq!(v.wrap(Size::new(100, 100))?, v);
+        assert_eq!(
+            v.wrap(Size::new(50, 50))?,
+            ViewPort::new(Size::new(50, 50), Rect::new(30, 30, 20, 20), (200, 200))?
+        );
+        assert_eq!(
+            v.wrap(Size::new(10, 10)).unwrap(),
+            ViewPort::new(Size::new(10, 10), Rect::new(0, 0, 10, 10), (200, 200)).unwrap()
+        );
+        assert_eq!(
+            v.wrap(Size::new(10, 200)).unwrap(),
+            ViewPort::new(Size::new(10, 200), Rect::new(0, 0, 0, 0), (200, 200)).unwrap()
+        );
+        Ok(())
+    }
 
     #[test]
     fn view_map() -> Result<()> {

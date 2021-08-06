@@ -136,18 +136,14 @@ pub trait Node<S, A: Actions>: StatefulNode {
         Ok(())
     }
 
-    /// Adjust this node so that the specified viewport wraps it. This means
-    /// fitting the child to the current node's `size()`, then adjusting the child's
-    /// view to place as much of of it on screen as possible. Usually, this method
-    /// would be used by a node that also passes the child's fit back through it's
-    /// own `fit` method.
-    fn wrap(&mut self, app: &mut Canopy<S, A>, vp: ViewPort) -> Result<()> {
-        let fit = self.fit(app, vp.size())?;
-        self.set_viewport(ViewPort::new(
-            fit,
-            vp.view().clone().clamp_within(fit.into())?,
-            vp.screen_pt(),
-        )?);
+    /// Adjust this node so that the specified parent viewport wraps it. This
+    /// means fitting the child to the current node's `size()`, then adjusting
+    /// the child's view to place as much of of it on screen as possible.
+    /// Usually, this method would be used by a node that also passes the
+    /// child's fit back through it's own `fit` method.
+    fn wrap(&mut self, app: &mut Canopy<S, A>, parent_vp: ViewPort) -> Result<()> {
+        let fit = self.fit(app, parent_vp.size())?;
+        self.set_viewport(parent_vp.wrap(fit)?);
         Ok(())
     }
 }

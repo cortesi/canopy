@@ -24,6 +24,10 @@ impl Size {
             h: self.h,
         }
     }
+    /// True if this Size can completely enclose the target size in both dimensions.
+    pub fn contains(&self, other: &Size) -> bool {
+        self.w >= other.w && self.h >= other.h
+    }
 }
 
 impl From<Rect> for Size {

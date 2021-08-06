@@ -111,7 +111,8 @@ impl Rect {
     /// Clamp this rectangle, shifting it to lie within another rectangle. The
     /// size of the returned Rect is always equal to that of self. If self is
     /// larger than the enclosing rectangle, return an error.
-    pub fn clamp_within(&self, rect: Rect) -> Result<Self> {
+    pub fn clamp_within(&self, rect: impl Into<Rect>) -> Result<Self> {
+        let rect = rect.into();
         if rect.w < self.w || rect.h < self.h {
             Err(Error::Geometry("can't clamp to smaller rectangle".into()))
         } else {
@@ -137,15 +138,24 @@ impl Rect {
         }
     }
 
-    /// Does this rectangle completely enclose the other?
+    /// Does this rectangle completely enclose the other? If other is
+    /// zero-sized but its origin lies within this rect, it's considered
+    /// contained.
     pub fn contains_rect(&self, other: &Rect) -> bool {
         // The rectangle is completely contained if both the upper left and the
-        // lower right points are inside self.
-        self.contains_point(other.tl)
-            && self.contains_point(Point {
-                x: other.tl.x + other.w - 1,
-                y: other.tl.y + other.h - 1,
-            })
+        // lower right points are inside self. There's a subtlety here: if other
+        // is zero-sized, but it's origin lies within this rect, it is
+        // considered contained. The saturating_subs below make sure that this
+        // doesn't crash.
+        if other.is_empty() {
+            self.contains_point(other.tl)
+        } else {
+            self.contains_point(other.tl)
+                && self.contains_point(Point {
+                    x: (other.tl.x + other.w).saturating_sub(1),
+                    y: (other.tl.y + other.h).saturating_sub(1),
+                })
+        }
     }
 
     /// Extracts an inner rectangle, given a border width.
@@ -637,6 +647,7 @@ mod tests {
         assert!(!r.contains_point((20, 21)));
 
         assert!(r.contains_rect(&Rect::new(10, 10, 1, 1)));
+        assert!(r.contains_rect(&Rect::new(10, 10, 0, 0)));
         assert!(r.contains_rect(&r));
 
         Ok(())

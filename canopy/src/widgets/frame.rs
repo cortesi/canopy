@@ -111,14 +111,15 @@ where
     }
 
     fn render(&mut self, app: &mut Canopy<S, A>, vp: ViewPort) -> Result<()> {
-        fit_and_update(app, vp.screen().inner(1)?, &mut self.child)?;
+        let (f, vp) = vp.frame(1)?;
+        self.child.set_viewport(vp);
+
         let style = if app.on_focus_path(self) {
             "frame/focused"
         } else {
             "frame"
         };
 
-        let f = GFrame::new(vp.view(), 1)?;
         app.render.fill(style, f.topleft, self.glyphs.topleft)?;
         app.render.fill(style, f.topright, self.glyphs.topright)?;
         app.render
