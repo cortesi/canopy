@@ -55,16 +55,16 @@ impl Node<Handle, ()> for Block {
     }
 
     fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
-        let [_, screen] = vp.screen().carve_hstart(2);
+        let [_, screen] = vp.screen_rect().carve_hstart(2);
         let outer = self.child.fit(app, screen.into())?;
         let view = Rect {
-            tl: vp.view().tl,
-            w: vp.view().w.saturating_sub(2),
-            h: vp.view().h,
+            tl: vp.view_rect().tl,
+            w: vp.view_rect().w.saturating_sub(2),
+            h: vp.view_rect().h,
         };
         self.child.state_mut().viewport = ViewPort::new(outer, view, screen.tl)?;
 
-        let v = vp.view();
+        let v = vp.view_rect();
         let status = Rect::new(v.tl.x, v.tl.y, 1, v.h);
         if self.selected {
             app.render.fill("blue", status, '\u{2588}')?;
@@ -98,7 +98,8 @@ struct StatusBar {
 impl Node<Handle, ()> for StatusBar {
     fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
         app.render.style.push_layer("statusbar");
-        app.render.text("text", vp.view().first_line(), "listgym")?;
+        app.render
+            .text("text", vp.view_rect().first_line(), "listgym")?;
         Ok(())
     }
 }

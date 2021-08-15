@@ -141,7 +141,7 @@ impl<'a, S, A: Actions> Node<S, A> for InputLine<S> {
 
     fn render(&mut self, app: &mut Canopy<S, A>, vp: ViewPort) -> Result<()> {
         app.render
-            .text("text", vp.view().first_line(), &self.textbuf.text())
+            .text("text", vp.view_rect().first_line(), &self.textbuf.text())
     }
 
     fn handle_key(

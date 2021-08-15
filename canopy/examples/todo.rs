@@ -70,7 +70,7 @@ impl Node<Handle, ()> for StatusBar {
     fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
         app.render.style.push_layer("statusbar");
         app.render
-            .text("statusbar/text", vp.view().first_line(), "todo")?;
+            .text("statusbar/text", vp.view_rect().first_line(), "todo")?;
         Ok(())
     }
 }
@@ -110,7 +110,7 @@ impl Node<Handle, ()> for Root {
         self.statusbar.wrap(app, parts[1])?;
         self.content.wrap(app, parts[0])?;
 
-        let a = vp.screen();
+        let a = vp.screen_rect();
         if let Some(add) = &mut self.adder {
             fit_and_update(
                 app,

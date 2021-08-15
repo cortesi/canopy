@@ -1,7 +1,7 @@
 use crate::{
     cursor,
     event::{key, mouse},
-    geom::Size,
+    geom::{Frame, Size},
     Actions, Canopy, Outcome, Result, StatefulNode, ViewPort,
 };
 use duplicate::duplicate;
@@ -137,14 +137,29 @@ pub trait Node<S, A: Actions>: StatefulNode {
     }
 
     /// Adjust this node so that the specified parent viewport wraps it. This
-    /// means fitting the child to the current node's `size()`, then adjusting
-    /// the child's view to place as much of of it on screen as possible.
-    /// Usually, this method would be used by a node that also passes the
-    /// child's fit back through it's own `fit` method.
+    /// means fitting this node to the parent viewport, then adjusting its view
+    /// to place as much of of it on screen as possible. Usually, this method
+    /// would be used by a node that also passes the child's fit back through
+    /// it's own `fit` method.
     fn wrap(&mut self, app: &mut Canopy<S, A>, parent_vp: ViewPort) -> Result<()> {
         let fit = self.fit(app, parent_vp.size())?;
         self.set_viewport(parent_vp.wrap(fit)?);
         Ok(())
+    }
+
+    /// Adjust this node so that the parent's screen rectangle frames it with a
+    /// given margin. This means fitting the child to the viewport, then
+    /// adjusting the child's view to place as much of of it on screen as
+    /// possible. Usually, this method would be used by a node that also passes
+    /// the child's fit back through it's own `fit` method.
+    fn frame(&mut self, app: &mut Canopy<S, A>, parent_vp: ViewPort, border: u16) -> Result<Frame> {
+        let fit = self.fit(app, parent_vp.view_rect().inner(border).into())?;
+        let screen = parent_vp.screen_rect().inner(border);
+        self.update_viewport(&|vp| vp.update(fit, screen));
+        Ok(Frame::new(
+            parent_vp.screen_rect().at(parent_vp.view_rect().tl),
+            border,
+        )?)
     }
 }
 

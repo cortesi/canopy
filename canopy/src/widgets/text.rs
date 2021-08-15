@@ -60,7 +60,7 @@ impl<'a, S, A: Actions> Node<S, A> for Text<S> {
         Ok(self.current_size)
     }
     fn render(&mut self, app: &mut Canopy<S, A>, vp: ViewPort) -> Result<()> {
-        let vo = vp.view();
+        let vo = vp.view_rect();
         if let Some(lines) = self.lines.as_ref() {
             for i in vo.tl.y..(vo.tl.y + vo.h) {
                 let out = &lines[i as usize]

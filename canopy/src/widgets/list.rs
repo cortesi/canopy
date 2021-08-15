@@ -317,16 +317,16 @@ where
                 // First, we calculate the area of our view the child will draw
                 // on. We know we can unwrap here, because the views intersect
                 // by definition.
-                let drawn = myvp.view().intersect(&itm.virt).unwrap();
+                let drawn = myvp.view_rect().intersect(&itm.virt).unwrap();
 
                 // Now, if there is space to the left, we clear it. In practice,
                 // given map's node positioning, there will never be space to
                 // the left, but the reasons are slightly subtle. Ditch this
                 // code, or keep it, in case behaviour changes?
                 let left = Rect::new(
-                    myvp.view().tl.x,
+                    myvp.view_rect().tl.x,
                     drawn.tl.y,
-                    drawn.tl.x - myvp.view().tl.x,
+                    drawn.tl.x - myvp.view_rect().tl.x,
                     drawn.h,
                 );
                 if !left.is_empty() {
@@ -337,18 +337,18 @@ where
                 let right = Rect::new(
                     drawn.tl.x + drawn.w,
                     drawn.tl.y,
-                    myvp.view().w - drawn.w - left.w,
+                    myvp.view_rect().w - drawn.w - left.w,
                     drawn.h,
                 );
                 if !right.is_empty() {
                     self.clear.push(right);
                 }
-            } else if let Some(isect) = myvp.view().vextent().intersect(&itm.virt.vextent()) {
+            } else if let Some(isect) = myvp.view_rect().vextent().intersect(&itm.virt.vextent()) {
                 // There was no intersection of the rects, but the vertical
                 // extent of the item overlaps with our view. This means that
                 // item is not on screen because it's off to the left of our
                 // view, but we still need to clear its full row.
-                self.clear.push(myvp.view().vslice(&isect)?);
+                self.clear.push(myvp.view_rect().vslice(&isect)?);
                 itm.itm.hide();
             } else {
                 itm.itm.hide();

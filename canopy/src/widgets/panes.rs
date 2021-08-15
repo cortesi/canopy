@@ -108,7 +108,7 @@ impl<S, A: Actions, N: Node<S, A>> Node<S, A> for Panes<S, A, N> {
     }
 
     fn render(&mut self, app: &mut Canopy<S, A>, vp: ViewPort) -> Result<()> {
-        let l = vp.screen().split_panes(&self.shape())?;
+        let l = vp.screen_rect().split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
                 fit_and_update(app, l[ci][ri], row)?;

@@ -158,19 +158,19 @@ impl Rect {
         }
     }
 
-    /// Extracts an inner rectangle, given a border width.
-    pub fn inner(&self, border: u16) -> Result<Rect> {
+    /// Extracts an inner rectangle, given a border width. If the border width
+    /// would exceed the size of the Rect, we return a zero rect.
+    pub fn inner(&self, border: u16) -> Rect {
         if self.w < (border * 2) || self.h < (border * 2) {
-            return Err(Error::Geometry(
-                "rectangle too small to calculate inner".into(),
-            ));
+            Rect::default()
+        } else {
+            Rect::new(
+                self.tl.x + border,
+                self.tl.y + border,
+                self.w - (border * 2),
+                self.h - (border * 2),
+            )
         }
-        Ok(Rect::new(
-            self.tl.x + border,
-            self.tl.y + border,
-            self.w - (border * 2),
-            self.h - (border * 2),
-        ))
     }
 
     /// Extract a horizontal section of this rect based on an extent.
@@ -633,7 +633,7 @@ mod tests {
     #[test]
     fn inner() -> Result<()> {
         let r = Rect::new(0, 0, 10, 10);
-        assert_eq!(r.inner(1)?, Rect::new(1, 1, 8, 8),);
+        assert_eq!(r.inner(1), Rect::new(1, 1, 8, 8),);
         Ok(())
     }
 

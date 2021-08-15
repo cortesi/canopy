@@ -5,8 +5,6 @@ use pad::PadStr;
 
 use crate as canopy;
 use crate::{
-    fit_and_update,
-    geom::Frame as GFrame,
     state::{NodeState, StatefulNode},
     Actions, Canopy, Node, Result, ViewPort,
 };
@@ -111,8 +109,7 @@ where
     }
 
     fn render(&mut self, app: &mut Canopy<S, A>, vp: ViewPort) -> Result<()> {
-        let (f, vp) = vp.frame(1)?;
-        self.child.set_viewport(vp);
+        let f = self.child.frame(app, vp, 1)?;
 
         let style = if app.on_focus_path(self) {
             "frame/focused"
@@ -162,7 +159,7 @@ where
         // space is to the right and below.
         for r in self
             .view()
-            .inner(1)?
+            .inner(1)
             .sub(&self.child.size().rect().shift(1, 1))
         {
             app.render.fill(style, r, ' ')?;

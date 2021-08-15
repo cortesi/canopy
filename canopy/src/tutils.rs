@@ -88,7 +88,7 @@ pub mod utils {
         fn render(&mut self, app: &mut Canopy<State, TActions>, vp: ViewPort) -> Result<()> {
             app.render.text(
                 "any",
-                vp.view().first_line(),
+                vp.view_rect().first_line(),
                 &format!("<{}>", self.name.clone()),
             )
         }
@@ -142,7 +142,7 @@ pub mod utils {
 
             app.render.text(
                 "any",
-                vp.view().first_line(),
+                vp.view_rect().first_line(),
                 &format!("<{}>", self.name.clone()),
             )
         }
@@ -214,7 +214,7 @@ pub mod utils {
 
             app.render.text(
                 "any",
-                vp.view().first_line(),
+                vp.view_rect().first_line(),
                 &format!("<{}>", self.name.clone()),
             )
         }

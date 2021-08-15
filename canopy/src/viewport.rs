@@ -1,14 +1,13 @@
 use crate::error;
-use crate::geom::{Frame, Line, Point, Rect, Size};
+use crate::geom::{Line, Point, Rect, Size};
 use crate::Result;
 
-/// ViewPort manages three rectangles in concert: `outer` is the total virtual
-/// size of the node, `view` is some sub-rectangle of `outer`. The `screen`, is
-/// a rectangle on the physical screen that this node paints to. It is equal in
-/// size to view.
-///
-/// The `view` rect is maintained to be as large as possible, while always being
-/// smaller than or equal to both view and screen.
+/// ViewPort manages three values in concert:
+///  - `size` is the total virtual size of the node (equivalent to a Rect at 0,
+///    0).
+///  - `view` is some sub-rectangle of `size` that is being displayed.
+///  - `screen`, is a rectangle on the physical screen that this node paints to,
+///    equal in size to view.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ViewPort {
     screen: Point,
@@ -97,17 +96,12 @@ impl ViewPort {
     }
 
     /// Return the screen region.
-    pub fn screen_pt(&self) -> Point {
-        self.screen
-    }
-
-    /// Return the screen region.
-    pub fn screen(&self) -> Rect {
+    pub fn screen_rect(&self) -> Rect {
         self.view.at(self.screen)
     }
 
     /// Return the view area.
-    pub fn view(&self) -> Rect {
+    pub fn view_rect(&self) -> Rect {
         self.view
     }
 
@@ -158,7 +152,7 @@ impl ViewPort {
         } else {
             let (pre, active, post) = margin
                 .vextent()
-                .split_active(self.view().vextent(), self.size().rect().vextent())?;
+                .split_active(self.view_rect().vextent(), self.size().rect().vextent())?;
             Ok(Some((
                 margin.vslice(&pre)?,
                 margin.vslice(&active)?,
@@ -177,7 +171,7 @@ impl ViewPort {
         } else {
             let (pre, active, post) = margin
                 .hextent()
-                .split_active(self.view().hextent(), self.size().rect().hextent())?;
+                .split_active(self.view_rect().hextent(), self.size().rect().hextent())?;
             Ok(Some((
                 margin.hslice(&pre)?,
                 margin.hslice(&active)?,
@@ -254,7 +248,8 @@ impl ViewPort {
         }
     }
 
-    /// Turns a view rectangle into a sub-viewport.
+    /// Turns a view rectangle into a sub-viewport. The outer size of the
+    /// viewport remains the same.
     fn view_to_vp(&self, v: Rect) -> ViewPort {
         let isect = if let Some(r) = v.intersect(&self.view) {
             r
@@ -320,14 +315,6 @@ impl ViewPort {
         Ok(self.views_to_vp(self.size().rect().split_vertical(n)?))
     }
 
-    /// Produce a sub-viewport that is framed by the current viewport. Returns a
-    /// `geom::Frame` object and a sub-viewport.
-    pub fn frame(&self, n: u16) -> Result<(Frame, ViewPort)> {
-        let sv = self.view_to_vp(self.size().rect().inner(n)?);
-        let f = Frame::new(self.size().into(), n)?;
-        Ok((f, sv))
-    }
-
     /// Produce a sub-viewport that wraps a node with the given fit size. The
     /// sub-node is positioned at (0, 0) within the current node. Screen
     /// location is maintained, and we try to fit the new view to the current
@@ -338,7 +325,7 @@ impl ViewPort {
         let view = if self.view.size().contains(&fit) {
             fit.rect()
         } else if fit.contains(&self.view.size()) {
-            self.view().clamp_within(fit)?
+            self.view_rect().clamp_within(fit)?
         } else {
             if let Some(v) = fit.rect().intersect(&self.view) {
                 v
@@ -347,7 +334,7 @@ impl ViewPort {
                 Rect::default()
             }
         };
-        ViewPort::new(fit, view, self.screen_pt())
+        ViewPort::new(fit, view, self.screen)
     }
 }
 
@@ -368,6 +355,7 @@ mod tests {
             v.wrap(Size::new(10, 10)).unwrap(),
             ViewPort::new(Size::new(10, 10), Rect::new(0, 0, 10, 10), (200, 200)).unwrap()
         );
+        // No overlap - view is a zero rect.
         assert_eq!(
             v.wrap(Size::new(10, 200)).unwrap(),
             ViewPort::new(Size::new(10, 200), Rect::new(0, 0, 0, 0), (200, 200)).unwrap()

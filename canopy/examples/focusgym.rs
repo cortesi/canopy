@@ -149,9 +149,9 @@ impl Node<Handle, ()> for Block {
             } else {
                 "blue"
             };
-            app.render.fill(bc, vp.view().inner(1)?, '\u{2588}')?;
+            app.render.fill(bc, vp.view_rect().inner(1), '\u{2588}')?;
             app.render
-                .solid_frame("black", Frame::new(vp.view(), 1)?, ' ')?;
+                .solid_frame("black", Frame::new(vp.view_rect(), 1)?, ' ')?;
         }
 
         Ok(())

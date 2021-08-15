@@ -65,12 +65,12 @@ pub trait StatefulNode {
 
     /// Get the screen rect from the viewport.
     fn screen(&self) -> Rect {
-        self.state().viewport.screen()
+        self.state().viewport.screen_rect()
     }
 
     /// Get the view rect from the viewport.
     fn view(&self) -> Rect {
-        self.state().viewport.view()
+        self.state().viewport.view_rect()
     }
 
     /// Get the outer rect from the viewport.
