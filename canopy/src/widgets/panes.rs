@@ -3,7 +3,6 @@ use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
-    fit_and_update,
     state::{NodeState, StatefulNode},
     Actions, Canopy, Node, Result, ViewPort,
 };
@@ -111,7 +110,7 @@ impl<S, A: Actions, N: Node<S, A>> Node<S, A> for Panes<S, A, N> {
         let l = vp.screen_rect().split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
-                fit_and_update(app, l[ci][ri], row)?;
+                row.place(app, l[ci][ri])?;
             }
         }
         // FIXME - this should probably clear the area if the last node is
@@ -140,21 +139,21 @@ mod tests {
             w: 100,
             h: 100,
         };
-        fit_and_update(&mut app, r, &mut p)?;
+        p.place(&mut app, r)?;
 
         assert_eq!(p.shape(), vec![1]);
         let tn = utils::TBranch::new("b");
         p.insert_col(&mut app, tn)?;
-        fit_and_update(&mut app, r, &mut p)?;
+        p.place(&mut app, r)?;
 
         assert_eq!(p.shape(), vec![1, 1]);
         app.set_focus(&mut p.children[0][0].a)?;
-        fit_and_update(&mut app, r, &mut p)?;
+        p.place(&mut app, r)?;
 
         let tn = utils::TBranch::new("c");
         assert_eq!(p.focus_coords(&mut app), Some((0, 0)));
         p.insert_row(&mut app, tn)?;
-        fit_and_update(&mut app, r, &mut p)?;
+        p.place(&mut app, r)?;
 
         assert_eq!(p.shape(), vec![2, 1]);
 

@@ -1,7 +1,7 @@
 use crate::{
     cursor,
     event::{key, mouse},
-    geom::{Frame, Size},
+    geom::{Frame, Rect, Size},
     Actions, Canopy, Outcome, Result, StatefulNode, ViewPort,
 };
 use duplicate::duplicate;
@@ -161,6 +161,14 @@ pub trait Node<S, A: Actions>: StatefulNode {
             parent_vp.screen_rect().at(parent_vp.view_rect().tl),
             border,
         ))
+    }
+
+    /// Place a node in a given screen rectangle. This fits the node to the
+    /// region, and updates its viewport.
+    fn place(&mut self, app: &mut Canopy<S, A>, screen: Rect) -> Result<()> {
+        let fit = self.fit(app, screen.size())?;
+        self.update_viewport(&|vp| vp.update(fit, screen));
+        Ok(())
     }
 }
 

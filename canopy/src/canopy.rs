@@ -561,21 +561,6 @@ fn method<S, A: Actions, R: Walker + Default>(
     Ok(ret)
 }
 
-/// A convenience method that fits the component to the screen rect, updates its
-/// view, then calls layout on it to lay out its children.
-pub fn fit_and_update<S, A: Actions, N>(
-    app: &mut Canopy<S, A>,
-    screen: Rect,
-    n: &mut N,
-) -> Result<()>
-where
-    N: Node<S, A> + StatefulNode,
-{
-    let fit = n.fit(app, screen.size())?;
-    n.update_viewport(&|vp| vp.update(fit, screen));
-    Ok(())
-}
-
 // Calls a closure on the leaf node under (x, y), then all its parents to the
 // root.
 pub fn locate<S, A: Actions, R: Walker + Default>(

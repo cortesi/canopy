@@ -368,7 +368,6 @@ where
 mod tests {
     use super::*;
     use crate::{
-        fit_and_update,
         render::test::TestRender,
         tutils::utils::{tcanopy, State, TActions, TFixed},
     };
@@ -421,7 +420,7 @@ mod tests {
             TFixed::new(rw, rh),
         ]);
 
-        fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
+        lst.place(&mut app, Rect::new(0, 0, 10, 10))?;
         app.render(&mut lst)?;
         assert_eq!(
             views(&lst),
@@ -433,7 +432,7 @@ mod tests {
         );
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 5));
-        fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
+        lst.place(&mut app, Rect::new(0, 0, 10, 10))?;
         app.taint_tree(&mut lst)?;
         app.render(&mut lst)?;
         assert_eq!(
@@ -446,7 +445,7 @@ mod tests {
         );
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 5));
-        fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
+        lst.place(&mut app, Rect::new(0, 0, 10, 10))?;
         app.taint_tree(&mut lst)?;
         app.render(&mut lst)?;
         assert_eq!(
@@ -459,7 +458,7 @@ mod tests {
         );
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 10));
-        fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
+        lst.place(&mut app, Rect::new(0, 0, 10, 10))?;
         app.taint_tree(&mut lst)?;
         app.render(&mut lst)?;
         assert_eq!(
@@ -472,7 +471,7 @@ mod tests {
         );
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 10));
-        fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
+        lst.place(&mut app, Rect::new(0, 0, 10, 10))?;
         app.taint_tree(&mut lst)?;
         app.render(&mut lst)?;
         assert_eq!(
@@ -485,7 +484,7 @@ mod tests {
         );
 
         lst.update_viewport(&|vp| vp.scroll_to(5, 0));
-        fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
+        lst.place(&mut app, Rect::new(0, 0, 10, 10))?;
         app.taint_tree(&mut lst)?;
         app.render(&mut lst)?;
         assert_eq!(
@@ -498,7 +497,7 @@ mod tests {
         );
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 5));
-        fit_and_update(&mut app, Rect::new(0, 0, 10, 10), &mut lst)?;
+        lst.place(&mut app, Rect::new(0, 0, 10, 10))?;
         app.taint_tree(&mut lst)?;
         app.render(&mut lst)?;
         assert_eq!(

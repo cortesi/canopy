@@ -3,7 +3,6 @@ use duplicate::duplicate;
 use canopy;
 use canopy::{
     event::{key, mouse},
-    fit_and_update,
     geom::{Rect, Size},
     render::term::runloop,
     style::solarized,
@@ -112,11 +111,7 @@ impl Node<Handle, ()> for Root {
 
         let a = vp.screen_rect();
         if let Some(add) = &mut self.adder {
-            fit_and_update(
-                app,
-                Rect::new(a.tl.x + 2, a.tl.y + a.h / 2, a.w - 4, 3),
-                add,
-            )?;
+            add.place(app, Rect::new(a.tl.x + 2, a.tl.y + a.h / 2, a.w - 4, 3))?;
         }
         Ok(())
     }

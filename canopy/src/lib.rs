@@ -14,7 +14,7 @@ pub mod render;
 pub mod style;
 pub mod widgets;
 
-pub use crate::canopy::{fit_and_update, Canopy};
+pub use crate::canopy::Canopy;
 pub use actions::Actions;
 pub use error::{Error, Result};
 pub use node::Node;
