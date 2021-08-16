@@ -171,7 +171,7 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
         let mut seen = false;
         if let Some(start) = self.get_focus_area(e) {
             start.search(dir, &mut |p| -> Result<bool> {
-                if !e.screen().contains_point(p) {
+                if !e.vp().screen_rect().contains_point(p) {
                     return Ok(true);
                 }
                 locate(e, p, &mut |x| {
@@ -302,7 +302,7 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
         let mut ret = None;
         self.focus_path(e, &mut |x| -> Result<()> {
             if ret == None {
-                ret = Some(x.screen());
+                ret = Some(x.vp().screen_rect());
             }
             Ok(())
         })
@@ -455,7 +455,7 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
                         action: m.action,
                         button: m.button,
                         modifiers: m.modifiers,
-                        loc: x.screen().rebase_point(m.loc)?,
+                        loc: x.vp().screen_rect().rebase_point(m.loc)?,
                     },
                 )
             )
@@ -591,7 +591,7 @@ pub fn locate<S, A: Actions, R: Walker + Default>(
             ret = ret.join(f(inner)?);
             SkipWalker::new(false)
         } else if !inner.is_hidden() {
-            let a = inner.screen();
+            let a = inner.vp().screen_rect();
             if a.contains_point(p) {
                 seen = true;
                 ret = ret.join(f(inner)?);
@@ -977,14 +977,17 @@ mod tests {
     fn tresize() -> Result<()> {
         run_test(|_, mut app, mut root, _| {
             let size = 100;
-            assert_eq!(root.screen(), Rect::new(0, 0, size, size));
+            assert_eq!(root.vp().screen_rect(), Rect::new(0, 0, size, size));
             app.render(&mut root)?;
-            assert_eq!(root.a.screen(), Rect::new(0, 0, size / 2, size));
-            assert_eq!(root.b.screen(), Rect::new(size / 2, 0, size / 2, size));
+            assert_eq!(root.a.vp().screen_rect(), Rect::new(0, 0, size / 2, size));
+            assert_eq!(
+                root.b.vp().screen_rect(),
+                Rect::new(size / 2, 0, size / 2, size)
+            );
 
             app.set_root_size(Size::new(50, 50), &mut root)?;
             app.render(&mut root)?;
-            assert_eq!(root.b.screen(), Rect::new(25, 0, 25, 50));
+            assert_eq!(root.b.vp().screen_rect(), Rect::new(25, 0, 25, 50));
             Ok(())
         })?;
         Ok(())

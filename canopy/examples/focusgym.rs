@@ -101,7 +101,7 @@ impl Block {
     fn add(&mut self, app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
         Ok(if self.children.len() == 0 {
             Outcome::ignore()
-        } else if self.size_limited(self.children[0].view().into()) {
+        } else if self.size_limited(self.children[0].vp().view_rect().into()) {
             Outcome::handle()
         } else {
             self.children.push(Block::new(!self.horizontal));
@@ -121,7 +121,7 @@ impl Block {
     fn split(&mut self, app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
         Ok(if self.children.len() != 0 {
             Outcome::ignore()
-        } else if self.size_limited(self.view().into()) {
+        } else if self.size_limited(self.vp().view_rect().into()) {
             Outcome::handle()
         } else {
             self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];

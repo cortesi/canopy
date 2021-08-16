@@ -158,9 +158,10 @@ where
         // Our child is always positioned in our upper-left corner, so negative
         // space is to the right and below.
         for r in self
-            .view()
+            .vp()
+            .view_rect()
             .inner(1)
-            .sub(&self.child.size().rect().shift(1, 1))
+            .sub(&self.child.vp().size().rect().shift(1, 1))
         {
             app.render.fill(style, r, ' ')?;
         }

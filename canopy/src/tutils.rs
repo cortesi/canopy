@@ -280,7 +280,7 @@ pub mod utils {
         }
 
         pub fn make_mouse_event(&self) -> Result<mouse::Mouse> {
-            let a = self.screen();
+            let a = self.vp().screen_rect();
             Ok(mouse::Mouse {
                 action: Some(mouse::Action::Down),
                 button: Some(mouse::Button::Left),

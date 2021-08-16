@@ -63,21 +63,6 @@ pub trait StatefulNode {
         self.state().hidden
     }
 
-    /// Get the screen rect from the viewport.
-    fn screen(&self) -> Rect {
-        self.state().viewport.screen_rect()
-    }
-
-    /// Get the view rect from the viewport.
-    fn view(&self) -> Rect {
-        self.state().viewport.view_rect()
-    }
-
-    /// Get the outer rect from the viewport.
-    fn size(&self) -> Size {
-        self.state().viewport.size()
-    }
-
     /// Get the node's ViewPort.
     fn vp(&self) -> ViewPort {
         self.state().viewport
