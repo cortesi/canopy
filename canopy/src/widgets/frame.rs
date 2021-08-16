@@ -132,7 +132,7 @@ where
                 pad::Alignment::Left,
                 true,
             );
-            app.render.text(style, f.top.first_line(), &title)?;
+            app.render.text(style, f.top.first_line(), title)?;
         } else {
             app.render.fill(style, f.top, self.glyphs.horizontal)?;
         }

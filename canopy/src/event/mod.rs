@@ -23,14 +23,16 @@ pub struct EventSource<A> {
     tx: mpsc::Sender<Event<A>>,
 }
 
-impl<A: 'static + Actions> EventSource<A> {
-    pub fn new() -> Self {
+impl<A: 'static + Actions> Default for EventSource<A> {
+    fn default() -> Self {
         let (tx, rx) = mpsc::channel();
         let es = EventSource { rx, tx };
         es.spawn();
         es
     }
+}
 
+impl<A: 'static + Actions> EventSource<A> {
     /// Convenience function that spawns a thread that periodically pumps the
     /// specified event into the app.
     pub fn periodic(&self, millis: u64, action: A) {

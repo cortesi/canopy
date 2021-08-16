@@ -38,7 +38,7 @@ impl<'a> Render<'a> {
     /// Fill a rectangle with a specified character.
     pub fn show_cursor(&mut self, color: &str, c: cursor::Cursor) -> Result<()> {
         if let Some(loc) = self.viewport.project_point(c.location) {
-            let mut c = c.clone();
+            let mut c = c;
             c.location = loc;
             self.backend.fg(self.style.fg(color))?;
             self.backend.bg(self.style.bg(color))?;

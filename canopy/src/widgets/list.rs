@@ -63,15 +63,20 @@ where
     pub fn new(items: Vec<N>) -> Self {
         let mut l = List {
             _marker: PhantomData,
-            items: items.into_iter().map(move |x| Item::new(x)).collect(),
+            items: items.into_iter().map(Item::new).collect(),
             selected: 0,
             state: NodeState::default(),
             clear: vec![],
         };
-        if l.items.len() > 0 {
+        if !l.is_empty() {
             l.select(0);
         }
         l
+    }
+
+    /// The number of items in the list.
+    pub fn is_empty(&self) -> bool {
+        self.items.len() == 0
     }
 
     /// The number of items in the list.
@@ -106,7 +111,7 @@ where
 
     /// Move selection to the next item in the list, if possible.
     pub fn delete_item(&mut self, offset: usize) -> Option<N> {
-        if self.len() > 0 && !(offset > self.len() - 1) {
+        if !self.is_empty() && offset < self.len() {
             let itm = self.items.remove(offset);
             if offset <= self.selected {
                 self.select_prev();
@@ -144,7 +149,7 @@ where
     /// Select an item at a specified offset, clamping the offset to make sure
     /// it lies within the list.
     pub fn select(&mut self, offset: usize) {
-        if self.len() != 0 {
+        if !self.is_empty() {
             self.selected = self.selected.clamp(0, self.len() - 1);
             self.items[self.selected].set_selected(false);
             self.selected = offset.clamp(0, self.items.len() - 1);
@@ -200,10 +205,8 @@ where
         let (start, end) = self.view_range();
         if self.selected < start {
             self.select(start);
-            return;
         } else if self.selected > end {
             self.select(end);
-            return;
         } else {
             self.select(self.selected);
         }

@@ -35,12 +35,12 @@ impl ViewPort {
     ) -> Result<ViewPort> {
         let view = view.into();
         let size = size.into();
-        if !size.rect().contains_rect(&view.into()) {
+        if !size.rect().contains_rect(&view) {
             Err(error::Error::Geometry("view not contained in outer".into()))
         } else {
             Ok(ViewPort {
-                size: size,
-                view: view,
+                size,
+                view,
                 screen: screen.into(),
             })
         }
@@ -49,7 +49,7 @@ impl ViewPort {
     /// Scroll the view to the specified position. The view is clamped within
     /// the outer rectangle.
     pub fn scroll_to(&self, x: u16, y: u16) -> Self {
-        let mut vp = self.clone();
+        let mut vp = *self;
         let r = Rect::new(x, y, self.view.w, self.view.h);
         // We unwrap here, because this can only be an error if view is larger
         // than outer, which we ensure is not the case.
@@ -60,7 +60,7 @@ impl ViewPort {
     /// Scroll the view by the given offsets. The view rectangle is clamped
     /// within the outer rectangle.
     pub fn scroll_by(&self, x: i16, y: i16) -> Self {
-        let mut vp = self.clone();
+        let mut vp = *self;
         vp.view = self.view.shift_within(x, y, self.size.rect());
         vp
     }
@@ -113,7 +113,7 @@ impl ViewPort {
     /// Set the screen, view and outer rects all to the same size. This is
     /// useful for nodes that fill whatever space they're given.
     pub fn set_fill(&self, screen: Rect) -> Self {
-        let mut vp = self.clone();
+        let mut vp = *self;
         vp.screen = screen.tl;
         vp.view = screen;
         vp.size = screen.into();
@@ -123,7 +123,7 @@ impl ViewPort {
     /// Set both the outer and screen rects at once. View position is
     /// maintained, but it's resized to be as large as possible.
     pub fn update(&self, size: Size, screen: Rect) -> Self {
-        let mut vp = self.clone();
+        let mut vp = *self;
         vp.size = size;
         vp.screen = screen.tl;
 

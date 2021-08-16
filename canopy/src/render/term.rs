@@ -133,7 +133,7 @@ where
         }
     }));
 
-    let events = EventSource::new();
+    let events = EventSource::default();
     let size = size()?;
     app.set_root_size(Size::new(size.0, size.1), root)?;
 

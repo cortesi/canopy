@@ -1,7 +1,4 @@
-use crate::{
-    geom::{Rect, Size},
-    ViewPort,
-};
+use crate::ViewPort;
 
 pub use canopy_derive::StatefulNode;
 

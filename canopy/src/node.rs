@@ -157,10 +157,7 @@ pub trait Node<S, A: Actions>: StatefulNode {
         self.update_viewport(&|vp| vp.update(fit, screen));
         // Return a frame for drawing the screen boundary, but in the view
         // rect's co-ordinate system.
-        Ok(Frame::new(
-            parent_vp.screen_rect().at(parent_vp.view_rect().tl),
-            border,
-        )?)
+        Frame::new(parent_vp.screen_rect().at(parent_vp.view_rect().tl), border)
     }
 }
 
