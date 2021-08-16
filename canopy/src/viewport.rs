@@ -36,7 +36,10 @@ impl ViewPort {
         let view = view.into();
         let size = size.into();
         if !size.rect().contains_rect(&view) {
-            Err(error::Error::Geometry("view not contained in outer".into()))
+            Err(error::Error::Geometry(format!(
+                "view {:?} not contained in size {:?}",
+                view, size,
+            )))
         } else {
             Ok(ViewPort {
                 size,

@@ -332,7 +332,7 @@ where
                     drawn.tl.x - myvp.view_rect().tl.x,
                     drawn.h,
                 );
-                if !left.is_empty() {
+                if !left.is_zero() {
                     self.clear.push(left);
                 }
 
@@ -343,7 +343,7 @@ where
                     myvp.view_rect().w - drawn.w - left.w,
                     drawn.h,
                 );
-                if !right.is_empty() {
+                if !right.is_zero() {
                     self.clear.push(right);
                 }
             } else if let Some(isect) = myvp.view_rect().vextent().intersect(&itm.virt.vextent()) {

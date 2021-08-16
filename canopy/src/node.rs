@@ -136,10 +136,10 @@ pub trait Node<S, A: Actions>: StatefulNode {
         Ok(())
     }
 
-    /// Adjust this node so that the specified parent viewport wraps it. Fits
-    /// this node to the parent viewport, then adjusts its view to place as much
-    /// of of it on screen as possible. Usually, this method would be used by a
-    /// node that also passes the child's fit back through it's own `fit`
+    /// Adjust this node so that the parent wraps it completely. This fits the
+    /// node to the parent viewport, then adjusts the node's view to place as
+    /// much of of it on screen as possible. Usually, this method would be used
+    /// by a node that also passes the child's fit back through it's own `fit`
     /// method.
     fn wrap(&mut self, app: &mut Canopy<S, A>, parent_vp: ViewPort) -> Result<()> {
         let fit = self.fit(app, parent_vp.size())?;
@@ -157,7 +157,10 @@ pub trait Node<S, A: Actions>: StatefulNode {
         self.update_viewport(&|vp| vp.update(fit, screen));
         // Return a frame for drawing the screen boundary, but in the view
         // rect's co-ordinate system.
-        Frame::new(parent_vp.screen_rect().at(parent_vp.view_rect().tl), border)
+        Ok(Frame::new(
+            parent_vp.screen_rect().at(parent_vp.view_rect().tl),
+            border,
+        ))
     }
 }
 
@@ -282,7 +285,7 @@ mod tests {
     }
 
     #[test]
-    fn twrap() -> Result<()> {
+    fn node_wrap() -> Result<()> {
         let (_, mut tr) = TestRender::create();
         let mut app = utils::tcanopy(&mut tr);
 
@@ -330,6 +333,41 @@ mod tests {
         assert_eq!(
             n.state().viewport,
             ViewPort::new(Size::new(20, 20), Rect::new(1, 1, 2, 2), (10, 10))?
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn node_frame() -> Result<()> {
+        let (_, mut tr) = TestRender::create();
+        let mut app = utils::tcanopy(&mut tr);
+
+        // If we have room, the adjustment just shifts the child node relative to the screen.
+        let mut n = utils::TFixed::new(5, 5);
+        let vp = ViewPort::new(Size::new(10, 10), Rect::new(0, 0, 10, 10), (10, 10))?;
+        n.frame(&mut app, vp, 1)?;
+        assert_eq!(
+            n.state().viewport,
+            ViewPort::new(Size::new(5, 5), Rect::new(0, 0, 5, 5), (11, 11))?
+        );
+
+        // If if the child node is too large, it is clipped to the bottom and left
+        let mut n = utils::TFixed::new(10, 10);
+        let vp = ViewPort::new(Size::new(10, 10), Rect::new(0, 0, 10, 10), (10, 10))?;
+        n.frame(&mut app, vp, 1)?;
+        assert_eq!(
+            n.state().viewport,
+            ViewPort::new(Size::new(10, 10), Rect::new(0, 0, 8, 8), (11, 11))?
+        );
+
+        // If if the parent is smaller than the frame would require, we get a zero view
+        let mut n = utils::TFixed::new(10, 10);
+        let vp = ViewPort::new(Size::new(0, 0), Rect::new(0, 0, 0, 0), (10, 10))?;
+        n.frame(&mut app, vp, 1)?;
+        assert_eq!(
+            n.state().viewport,
+            ViewPort::new(Size::new(10, 10), Rect::new(0, 0, 0, 0), (0, 0))?
         );
 
         Ok(())

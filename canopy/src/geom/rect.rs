@@ -14,7 +14,7 @@ pub struct Rect {
 
 impl Default for Rect {
     fn default() -> Rect {
-        Rect::new(0, 0, 0, 0)
+        Rect::zero()
     }
 }
 
@@ -25,6 +25,10 @@ impl Rect {
             w,
             h,
         }
+    }
+
+    pub fn zero() -> Rect {
+        Rect::new(0, 0, 0, 0)
     }
 
     /// Return a rect with the same size, with the top left at the given point.
@@ -131,10 +135,14 @@ impl Rect {
     /// Does this rectangle contain the point?
     pub fn contains_point(&self, p: impl Into<Point>) -> bool {
         let p = p.into();
-        if p.x < self.tl.x || p.x >= self.tl.x + self.w {
+        if self.is_zero() && p.is_zero() {
+            true
+        } else if p.x < self.tl.x || p.x >= self.tl.x + self.w {
+            false
+        } else if p.y < self.tl.y || p.y >= self.tl.y + self.h {
             false
         } else {
-            !(p.y < self.tl.y || p.y >= self.tl.y + self.h)
+            true
         }
     }
 
@@ -147,7 +155,7 @@ impl Rect {
         // is zero-sized, but it's origin lies within this rect, it is
         // considered contained. The saturating_subs below make sure that this
         // doesn't crash.
-        if other.is_empty() {
+        if other.is_zero() {
             self.contains_point(other.tl)
         } else {
             self.contains_point(other.tl)
@@ -390,7 +398,7 @@ impl Rect {
         }
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub fn is_zero(&self) -> bool {
         self.w == 0 || self.h == 0
     }
 
@@ -439,7 +447,7 @@ impl Rect {
                     w: isec.w,
                 },
             ];
-            rects.into_iter().filter(|x| !x.is_empty()).collect()
+            rects.into_iter().filter(|x| !x.is_zero()).collect()
         } else {
             vec![*self]
         }
@@ -649,6 +657,9 @@ mod tests {
         assert!(r.contains_rect(&Rect::new(10, 10, 1, 1)));
         assert!(r.contains_rect(&Rect::new(10, 10, 0, 0)));
         assert!(r.contains_rect(&r));
+
+        let r = Rect::new(0, 0, 0, 0);
+        assert!(r.contains_point((0, 0)));
 
         Ok(())
     }

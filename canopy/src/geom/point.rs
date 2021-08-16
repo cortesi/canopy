@@ -10,6 +10,9 @@ impl Point {
     pub fn zero() -> Self {
         (0, 0).into()
     }
+    pub fn is_zero(&self) -> bool {
+        self.x == 0 && self.y == 0
+    }
     /// Shift the point by an offset, avoiding under- or overflow.
     pub fn scroll(&self, x: i16, y: i16) -> Self {
         let nx = if x < 0 {

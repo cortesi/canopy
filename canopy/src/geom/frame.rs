@@ -1,5 +1,4 @@
 use super::Rect;
-use crate::{Error, Result};
 
 /// A frame extracted from a rectangle
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -23,49 +22,63 @@ pub struct Frame {
 }
 
 impl Frame {
-    pub fn new(rect: Rect, border: u16) -> Result<Self> {
+    /// Construct a new frame. If the rect is too small to fit the specified
+    /// frame, we return a zero Frame.
+    pub fn new(rect: Rect, border: u16) -> Self {
         if rect.w < (border * 2) || rect.h < (border * 2) {
-            return Err(Error::Geometry(
-                "rectangle too small to calculate frame".into(),
-            ));
+            Frame::zero()
+        } else {
+            Frame {
+                top: Rect::new(rect.tl.x + border, rect.tl.y, rect.w - 2 * border, border),
+                bottom: Rect::new(
+                    rect.tl.x + border,
+                    rect.tl.y + rect.h - border,
+                    rect.w - 2 * border,
+                    border,
+                ),
+                left: Rect::new(rect.tl.x, rect.tl.y + border, border, rect.h - 2 * border),
+                right: Rect::new(
+                    rect.tl.x + rect.w - border,
+                    rect.tl.y + border,
+                    border,
+                    rect.h - 2 * border,
+                ),
+                topleft: Rect::new(rect.tl.x, rect.tl.y, border, border),
+                topright: Rect::new(rect.tl.x + rect.w - border, rect.tl.y, border, border),
+                bottomleft: Rect::new(rect.tl.x, rect.tl.y + rect.h - border, border, border),
+                bottomright: Rect::new(
+                    rect.tl.x + rect.w - border,
+                    rect.tl.y + rect.h - border,
+                    border,
+                    border,
+                ),
+            }
         }
-        Ok(Frame {
-            top: Rect::new(rect.tl.x + border, rect.tl.y, rect.w - 2 * border, border),
-            bottom: Rect::new(
-                rect.tl.x + border,
-                rect.tl.y + rect.h - border,
-                rect.w - 2 * border,
-                border,
-            ),
-            left: Rect::new(rect.tl.x, rect.tl.y + border, border, rect.h - 2 * border),
-            right: Rect::new(
-                rect.tl.x + rect.w - border,
-                rect.tl.y + border,
-                border,
-                rect.h - 2 * border,
-            ),
-            topleft: Rect::new(rect.tl.x, rect.tl.y, border, border),
-            topright: Rect::new(rect.tl.x + rect.w - border, rect.tl.y, border, border),
-            bottomleft: Rect::new(rect.tl.x, rect.tl.y + rect.h - border, border, border),
-            bottomright: Rect::new(
-                rect.tl.x + rect.w - border,
-                rect.tl.y + rect.h - border,
-                border,
-                border,
-            ),
-        })
+    }
+    pub fn zero() -> Self {
+        Frame {
+            top: Rect::zero(),
+            bottom: Rect::zero(),
+            left: Rect::zero(),
+            right: Rect::zero(),
+            topleft: Rect::zero(),
+            topright: Rect::zero(),
+            bottomleft: Rect::zero(),
+            bottomright: Rect::zero(),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Result;
 
     #[test]
     fn tframe() -> Result<()> {
         let r = Rect::new(10, 10, 10, 10);
         assert_eq!(
-            Frame::new(r, 1)?,
+            Frame::new(r, 1),
             Frame {
                 top: Rect::new(11, 10, 8, 1),
                 bottom: Rect::new(11, 19, 8, 1),
