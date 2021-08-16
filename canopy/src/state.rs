@@ -78,6 +78,11 @@ pub trait StatefulNode {
         self.state().viewport.size()
     }
 
+    /// Get the node's ViewPort.
+    fn vp(&self) -> ViewPort {
+        self.state().viewport
+    }
+
     fn update_viewport(&mut self, fun: &dyn Fn(ViewPort) -> ViewPort) {
         self.set_viewport(fun(self.state().viewport))
     }

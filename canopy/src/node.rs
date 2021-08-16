@@ -136,26 +136,27 @@ pub trait Node<S, A: Actions>: StatefulNode {
         Ok(())
     }
 
-    /// Adjust this node so that the specified parent viewport wraps it. This
-    /// means fitting this node to the parent viewport, then adjusting its view
-    /// to place as much of of it on screen as possible. Usually, this method
-    /// would be used by a node that also passes the child's fit back through
-    /// it's own `fit` method.
+    /// Adjust this node so that the specified parent viewport wraps it. Fits
+    /// this node to the parent viewport, then adjusts its view to place as much
+    /// of of it on screen as possible. Usually, this method would be used by a
+    /// node that also passes the child's fit back through it's own `fit`
+    /// method.
     fn wrap(&mut self, app: &mut Canopy<S, A>, parent_vp: ViewPort) -> Result<()> {
         let fit = self.fit(app, parent_vp.size())?;
-        self.set_viewport(parent_vp.wrap(fit)?);
+        self.set_viewport(self.vp().update(fit, parent_vp.screen_rect()));
         Ok(())
     }
 
     /// Adjust this node so that the parent's screen rectangle frames it with a
-    /// given margin. This means fitting the child to the viewport, then
-    /// adjusting the child's view to place as much of of it on screen as
-    /// possible. Usually, this method would be used by a node that also passes
-    /// the child's fit back through it's own `fit` method.
+    /// given margin. Fits the child to the parent screen rect minus the border
+    /// margin, then adjusts the child's view to place as much of of it on
+    /// screen as possible.
     fn frame(&mut self, app: &mut Canopy<S, A>, parent_vp: ViewPort, border: u16) -> Result<Frame> {
-        let fit = self.fit(app, parent_vp.view_rect().inner(border).into())?;
+        let fit = self.fit(app, parent_vp.screen_rect().inner(border).into())?;
         let screen = parent_vp.screen_rect().inner(border);
         self.update_viewport(&|vp| vp.update(fit, screen));
+        // Return a frame for drawing the screen boundary, but in the view
+        // rect's co-ordinate system.
         Ok(Frame::new(
             parent_vp.screen_rect().at(parent_vp.view_rect().tl),
             border,
@@ -204,7 +205,12 @@ pub fn preorder<S, A: Actions, W: Walker>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{canopy::SkipWalker, tutils::utils};
+    use crate::{
+        canopy::SkipWalker,
+        geom::{Rect, Size},
+        render::test::TestRender,
+        tutils::utils,
+    };
 
     fn skipper(
         x: &mut dyn Node<utils::State, utils::TActions>,
@@ -275,6 +281,60 @@ mod tests {
             skipon(&mut root, "bb".into())?,
             ["r", "ba", "ba:la", "ba:lb", "bb"]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn twrap() -> Result<()> {
+        let (_, mut tr) = TestRender::create();
+        let mut app = utils::tcanopy(&mut tr);
+
+        // If the child is the same size as the parent, then wrap just produces
+        // the same viewport
+        let mut n = utils::TFixed::new(10, 10);
+        let vp = ViewPort::new(Size::new(10, 10), Rect::new(0, 0, 10, 10), (10, 10))?;
+        n.wrap(&mut app, vp)?;
+        assert_eq!(n.state().viewport, vp);
+
+        // If the child is smaller than parent, then wrap places the viewport at
+        // (0, 0)
+        let mut n = utils::TFixed::new(5, 5);
+        let vp = ViewPort::new(Size::new(10, 10), Rect::new(0, 0, 10, 10), (10, 10))?;
+        let expected = ViewPort::new(Size::new(5, 5), Rect::new(0, 0, 5, 5), (10, 10))?;
+        n.wrap(&mut app, vp)?;
+        assert_eq!(n.state().viewport, expected,);
+        n.update_viewport(&|vp| vp.right().down());
+        assert_eq!(n.state().viewport, expected,);
+
+        // If the child is larger than parent, then wrap places the viewport at
+        // (0, 0).
+        let mut n = utils::TFixed::new(20, 20);
+        let vp = ViewPort::new(Size::new(10, 10), Rect::new(0, 0, 10, 10), (10, 10))?;
+        n.wrap(&mut app, vp)?;
+        assert_eq!(
+            n.state().viewport,
+            ViewPort::new(Size::new(20, 20), Rect::new(0, 0, 10, 10), (10, 10))?
+        );
+        // The child can shift its view freely
+        n.update_viewport(&|x| x.right().down());
+        assert_eq!(
+            n.state().viewport,
+            ViewPort::new(Size::new(20, 20), Rect::new(1, 1, 10, 10), (10, 10))?
+        );
+        // And subsequent wraps maintain the child view position, if possible
+        n.wrap(&mut app, vp)?;
+        assert_eq!(
+            n.state().viewport,
+            ViewPort::new(Size::new(20, 20), Rect::new(1, 1, 10, 10), (10, 10))?
+        );
+        // When the parent viewport shrinks, we maintain position and resize
+        let shrink = ViewPort::new(Size::new(3, 3), Rect::new(0, 0, 2, 2), (10, 10))?;
+        n.wrap(&mut app, shrink)?;
+        assert_eq!(
+            n.state().viewport,
+            ViewPort::new(Size::new(20, 20), Rect::new(1, 1, 2, 2), (10, 10))?
+        );
+
         Ok(())
     }
 }

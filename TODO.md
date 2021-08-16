@@ -1,9 +1,10 @@
 
+# TODO
+
 - Attributes in style
   - https://docs.rs/crossterm/0.20.0/crossterm/style/enum.Attribute.html#platform-specific-notes
 - Explicit colors - at the moment, we can only get colors from our color scheme
 - Add a built-in Color abstraction
-
 - Ergonomics:
   - Better error returns
 - Key binding management system
@@ -28,11 +29,14 @@
   - Benchmarks
 
 
-User traps
+# User traps and inelegances
+
+  - Errors don't carry location information, so are often not useful for debugging
   - Not implementing layout if a node has children
   - Not remembering both layout and taint after making a node modification
   - Not remembering to clear unused space
   - Not remembering to implement children and children_mut
 
-Bugs
+# Bugs
+
   - Apps crash if terminal is too small. We should just not display in this case.
