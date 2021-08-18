@@ -2,7 +2,7 @@ use super::Backend;
 use crate::{
     cursor,
     geom::{Point, Rect},
-    style::Color,
+    style::Style,
     Result,
 };
 use std::sync::{Arc, Mutex};
@@ -58,11 +58,7 @@ impl Backend for TestRender {
         Ok(())
     }
 
-    fn fg(&mut self, _c: Color) -> Result<()> {
-        Ok(())
-    }
-
-    fn bg(&mut self, _c: Color) -> Result<()> {
+    fn style(&mut self, _s: Style) -> Result<()> {
         Ok(())
     }
 

@@ -3,21 +3,145 @@ pub mod solarized;
 pub use crossterm::style::Color;
 use std::collections::HashMap;
 
-/// A hierarchical color scheme manager.
+/// A text attribute.
+#[derive(Debug, PartialEq, Clone)]
+pub enum Attr {
+    Bold,
+    CrossedOut,
+    Dim,
+    Italic,
+    Overline,
+    Underline,
+}
+
+/// A set of active text attributes.
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct AttrSet {
+    pub bold: bool,
+    pub crossedout: bool,
+    pub dim: bool,
+    pub italic: bool,
+    pub overline: bool,
+    pub underline: bool,
+}
+
+impl Default for AttrSet {
+    /// Construct an empty set of text attributes.
+    fn default() -> Self {
+        AttrSet {
+            bold: false,
+            crossedout: false,
+            dim: false,
+            italic: false,
+            overline: false,
+            underline: false,
+        }
+    }
+}
+
+impl AttrSet {
+    /// Construct a set of text attributes with a single attribute turned on.
+    pub fn new(attr: Attr) -> Self {
+        Self::default().with(attr)
+    }
+    /// Is this attribute set empty?
+    pub fn is_empty(&self) -> bool {
+        !(self.bold
+            || self.dim
+            || self.italic
+            || self.crossedout
+            || self.overline
+            || self.underline)
+    }
+    /// A helper for progressive construction of attribute sets.
+    pub fn with(mut self, attr: Attr) -> Self {
+        match attr {
+            Attr::Bold => self.bold = true,
+            Attr::Dim => self.dim = true,
+            Attr::Italic => self.italic = true,
+            Attr::CrossedOut => self.crossedout = true,
+            Attr::Underline => self.underline = true,
+            Attr::Overline => self.overline = true,
+        };
+        self
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Style {
+    pub fg: Option<Color>,
+    pub bg: Option<Color>,
+    pub attrs: Option<AttrSet>,
+}
+
+impl Default for Style {
+    fn default() -> Self {
+        Style {
+            fg: None,
+            bg: None,
+            attrs: None,
+        }
+    }
+}
+
+impl Style {
+    /// Create a new Style a foreground color, but no background or attributes.
+    pub fn with_fg(mut self, fg: Color) -> Style {
+        Style {
+            fg: Some(fg),
+            bg: None,
+            attrs: None,
+        }
+    }
+
+    pub fn with_bg(mut self, bg: Color) -> Style {
+        self.bg = Some(bg);
+        self
+    }
+
+    pub fn with_attr(mut self, attr: Attr) -> Style {
+        if let Some(attrs) = self.attrs {
+            self.attrs = Some(attrs.with(attr));
+        } else {
+            self.attrs = Some(AttrSet::new(attr));
+        }
+        self
+    }
+
+    fn join(&self, other: &Style) -> Style {
+        Style {
+            fg: if self.fg.is_some() { self.fg } else { other.fg },
+            bg: if self.bg.is_some() { self.bg } else { other.bg },
+            attrs: if self.attrs.is_some() {
+                self.attrs
+            } else {
+                other.attrs
+            },
+        }
+    }
+
+    fn is_complete(&self) -> bool {
+        self.fg.is_some() && self.bg.is_some() && self.attrs.is_some()
+    }
+}
+
+/// A hierarchical style manager.
 ///
-/// Colors entered into the manager as '/'-separated paths, with each path
-/// mapping to optional foreground and an background colours. For example:
-//
-//      -> white, black
-//      /frame -> grey, None
-//      /frame/selected -> blue, None
-//
-// The first entry with the empty path is the global default. Every
-// `ColorScheme` is guaranteed to have a default, so color resolution always
-// succeeds.
-//
+/// `Style` objects are entered into the manager with '/'-separated paths. For
+/// example:
+///
+///   / white, black
+///   /frame -> grey, None
+///   /frame/selected -> blue, None
+///
+/// The first entry with the empty path is the global default. Every
+/// `StyleManager` is guaranteed to have a default Style object with non-None
+/// foreground and background colors, so style resolution always succeeds.
+///
+/// `Style` objects also contain text attributes.
+///
 /// During rendering, a node may push a name onto the stack of layers tracked by
-/// the `ColorScheme` object. Layers are maintained for a node and all its
+/// the `Style` object. Layers are maintained for a node and all its
 /// descendants, and `Canopy` manages poppping layers back off the stack at the
 /// appropriate time during rendering.
 ///
@@ -29,8 +153,8 @@ use std::collections::HashMap;
 /// we try the following lookups in order: ["foo/frame/selected",
 /// "/frame/selected", "foo", ""].
 #[derive(Debug, PartialEq, Clone)]
-pub struct Style {
-    colors: HashMap<Vec<String>, (Option<Color>, Option<Color>)>,
+pub struct StyleManager {
+    styles: HashMap<Vec<String>, Style>,
     // The current render level
     level: usize,
     // A list of selected layers, along with which render level they were set at
@@ -38,21 +162,26 @@ pub struct Style {
     layer_levels: Vec<usize>,
 }
 
-impl Default for Style {
+impl Default for StyleManager {
     fn default() -> Self {
-        Style::new()
+        StyleManager::new()
     }
 }
 
-impl Style {
+impl StyleManager {
     pub fn new() -> Self {
-        let mut cs = Style {
-            colors: HashMap::new(),
+        let mut cs = StyleManager {
+            styles: HashMap::new(),
             level: 0,
             layers: vec![],
             layer_levels: vec![],
         };
-        cs.insert("/", Some(Color::White), Some(Color::Black));
+        cs.insert(
+            "/",
+            Some(Color::White),
+            Some(Color::Black),
+            Some(AttrSet::default()),
+        );
         cs
     }
 
@@ -86,18 +215,8 @@ impl Style {
         self.layer_levels.push(self.level);
     }
 
-    /// Retrieve a foreground color.
-    pub fn fg(&self, path: &str) -> Color {
-        self.resolve(&self.layers, &self.parse_path(path)).0
-    }
-
-    /// Retrieve a background color.
-    pub fn bg(&self, path: &str) -> Color {
-        self.resolve(&self.layers, &self.parse_path(path)).1
-    }
-
-    /// Retrieve a (bg, fg) tuple.
-    pub fn get(&self, path: &str) -> (Color, Color) {
+    /// Retrieve a (bg, fg, attrs) tuple.
+    pub fn get(&self, path: &str) -> Style {
         self.resolve(&self.layers, &self.parse_path(path))
     }
 
@@ -114,49 +233,45 @@ impl Style {
     }
 
     /// Insert a colour tuple at a specified path.
-    pub fn insert(&mut self, path: &str, fg: Option<Color>, bg: Option<Color>) {
-        self.colors.insert(self.parse_path(path), (fg, bg));
+    pub fn insert(
+        &mut self,
+        path: &str,
+        fg: Option<Color>,
+        bg: Option<Color>,
+        attrs: Option<AttrSet>,
+    ) {
+        self.styles
+            .insert(self.parse_path(path), Style { fg, bg, attrs });
     }
 
     // Look up one suffix along a layer chain
-    fn lookup(&self, layers: &[String], suffix: &[String]) -> (Option<Color>, Option<Color>) {
-        let (mut fg, mut bg) = (None, None);
+    fn lookup(&self, layers: &[String], suffix: &[String]) -> Style {
+        let mut ret = Style::default();
         // Look up the path on all layers to the root.
         for i in 0..layers.len() + 1 {
             let mut v = layers[0..layers.len() - i].to_vec();
             v.extend(suffix.to_vec());
-            if let Some(c) = self.colors.get(&v) {
-                if fg.is_none() {
-                    fg = c.0
-                }
-                if bg.is_none() {
-                    bg = c.1
-                }
-                if fg.is_some() && bg.is_some() {
+            if let Some(c) = self.styles.get(&v) {
+                ret = ret.join(c);
+                if ret.is_complete() {
                     break;
                 }
             }
         }
-        (fg, bg)
+        ret
     }
 
-    /// Directly resolve a color tuple using a path and a layer specification,
+    /// Directly resolve a style using a path and a layer specification,
     /// ignoring `self.layers`.
-    pub fn resolve(&self, layers: &[String], path: &[String]) -> (Color, Color) {
-        let (mut fg, mut bg) = (None, None);
+    pub fn resolve(&self, layers: &[String], path: &[String]) -> Style {
+        let mut ret = Style::default();
         for i in 0..path.len() + 1 {
-            let parts = self.lookup(layers, &path[0..path.len() - i]);
-            if fg.is_none() {
-                fg = parts.0;
-            }
-            if bg.is_none() {
-                bg = parts.1;
-            }
-            if fg.is_some() && bg.is_some() {
+            ret = ret.join(&self.lookup(layers, &path[0..path.len() - i]));
+            if ret.is_complete() {
                 break;
             }
         }
-        (fg.unwrap(), bg.unwrap())
+        ret
     }
 }
 
@@ -167,7 +282,7 @@ mod tests {
 
     #[test]
     fn style_parse_path() -> Result<()> {
-        let c = Style::new();
+        let c = StyleManager::new();
         assert_eq!(c.parse_path("/one/two"), vec!["one", "two"]);
         assert_eq!(c.parse_path("one/two"), vec!["one", "two"]);
         assert!(c.parse_path("").is_empty());
@@ -176,19 +291,38 @@ mod tests {
 
     #[test]
     fn style_resolve() -> Result<()> {
-        let mut c = Style::new();
-        c.insert("", Some(Color::White), Some(Color::Black));
-        c.insert("one", Some(Color::Red), None);
-        c.insert("one/two", Some(Color::Blue), None);
-        c.insert("one/two/target", Some(Color::Green), None);
-        c.insert("frame/border", Some(Color::Yellow), None);
+        let mut c = StyleManager::new();
+        c.insert(
+            "",
+            Some(Color::White),
+            Some(Color::Black),
+            Some(AttrSet::default()),
+        );
+        c.insert("one", Some(Color::Red), None, Some(AttrSet::default()));
+        c.insert("one/two", Some(Color::Blue), None, Some(AttrSet::default()));
+        c.insert(
+            "one/two/target",
+            Some(Color::Green),
+            None,
+            Some(AttrSet::default()),
+        );
+        c.insert(
+            "frame/border",
+            Some(Color::Yellow),
+            None,
+            Some(AttrSet::default()),
+        );
 
         assert_eq!(
             c.resolve(
                 &vec!["one".to_string(), "two".to_string()],
                 &vec!["target".to_string(), "voing".to_string()],
             ),
-            (Color::Green, Color::Black)
+            Style {
+                fg: Some(Color::Green),
+                bg: Some(Color::Black),
+                attrs: Some(AttrSet::default()),
+            }
         );
 
         assert_eq!(
@@ -196,7 +330,11 @@ mod tests {
                 &vec!["one".to_string(), "two".to_string()],
                 &vec!["two".to_string(), "voing".to_string()],
             ),
-            (Color::Blue, Color::Black)
+            Style {
+                fg: Some(Color::Blue),
+                bg: Some(Color::Black),
+                attrs: Some(AttrSet::default()),
+            }
         );
 
         assert_eq!(
@@ -204,45 +342,69 @@ mod tests {
                 &vec!["one".to_string(), "two".to_string()],
                 &vec!["target".to_string()],
             ),
-            (Color::Green, Color::Black)
+            Style {
+                fg: Some(Color::Green),
+                bg: Some(Color::Black),
+                attrs: Some(AttrSet::default()),
+            }
         );
         assert_eq!(
             c.resolve(
                 &vec!["one".to_string(), "two".to_string()],
                 &vec!["nonexistent".to_string()],
             ),
-            (Color::Blue, Color::Black)
+            Style {
+                fg: Some(Color::Blue),
+                bg: Some(Color::Black),
+                attrs: Some(AttrSet::default()),
+            }
         );
         assert_eq!(
             c.resolve(
                 &vec!["somelayer".to_string()],
                 &vec!["nonexistent".to_string()],
             ),
-            (Color::White, Color::Black)
+            Style {
+                fg: Some(Color::White),
+                bg: Some(Color::Black),
+                attrs: Some(AttrSet::default()),
+            }
         );
         assert_eq!(
             c.resolve(
                 &vec!["one".to_string(), "two".to_string()],
                 &vec!["frame".to_string(), "border".to_string()],
             ),
-            (Color::Yellow, Color::Black)
+            Style {
+                fg: Some(Color::Yellow),
+                bg: Some(Color::Black),
+                attrs: Some(AttrSet::default()),
+            }
         );
         assert_eq!(
             c.resolve(
                 &vec!["one".to_string(), "two".to_string()],
                 &vec!["frame".to_string(), "border".to_string()],
             ),
-            (Color::Yellow, Color::Black)
+            Style {
+                fg: Some(Color::Yellow),
+                bg: Some(Color::Black),
+                attrs: Some(AttrSet::default()),
+            }
         );
         assert_eq!(
             c.resolve(&vec!["frame".to_string()], &vec!["border".to_string()],),
-            (Color::Yellow, Color::Black)
+            Style {
+                fg: Some(Color::Yellow),
+                bg: Some(Color::Black),
+                attrs: Some(AttrSet::default()),
+            }
         );
         Ok(())
     }
     #[test]
     fn style_layers() -> Result<()> {
-        let mut c = Style::new();
+        let mut c = StyleManager::new();
         assert!(c.layers.is_empty());
         assert_eq!(c.layer_levels, vec![]);
         assert_eq!(c.level, 0);

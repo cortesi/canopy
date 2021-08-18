@@ -1,11 +1,10 @@
-use crate::{cursor, geom, style::Color, style::Style, Result, ViewPort};
+use crate::{cursor, geom, style::Style, style::StyleManager, Result, ViewPort};
 
 pub mod term;
 pub mod test;
 
 pub trait Backend {
-    fn fg(&mut self, c: Color) -> Result<()>;
-    fn bg(&mut self, c: Color) -> Result<()>;
+    fn style(&mut self, style: Style) -> Result<()>;
     fn fill(&mut self, r: geom::Rect, c: char) -> Result<()>;
     fn text(&mut self, loc: geom::Point, txt: &str) -> Result<()>;
     fn show_cursor(&mut self, c: cursor::Cursor) -> Result<()>;
@@ -17,12 +16,12 @@ pub trait Backend {
 
 pub struct Render<'a> {
     pub backend: &'a mut dyn Backend,
-    pub style: Style,
+    pub style: StyleManager,
     pub viewport: ViewPort,
 }
 
 impl<'a> Render<'a> {
-    pub fn new(backend: &mut dyn Backend, style: Style) -> Render {
+    pub fn new(backend: &mut dyn Backend, style: StyleManager) -> Render {
         Render {
             backend,
             style,
@@ -40,8 +39,7 @@ impl<'a> Render<'a> {
         if let Some(loc) = self.viewport.project_point(c.location) {
             let mut c = c;
             c.location = loc;
-            self.backend.fg(self.style.fg(color))?;
-            self.backend.bg(self.style.bg(color))?;
+            self.backend.style(self.style.get(color))?;
             self.backend.show_cursor(c)?;
         }
         Ok(())
@@ -50,8 +48,7 @@ impl<'a> Render<'a> {
     /// Fill a rectangle with a specified character.
     pub fn fill(&mut self, color: &str, r: geom::Rect, c: char) -> Result<()> {
         if let Some(dst) = self.viewport.project_rect(r) {
-            self.backend.fg(self.style.fg(color))?;
-            self.backend.bg(self.style.bg(color))?;
+            self.backend.style(self.style.get(color))?;
             self.backend.fill(dst, c)?;
         }
         Ok(())
@@ -74,8 +71,7 @@ impl<'a> Render<'a> {
     /// rectangle, it will be truncated; if it is shorter, it will be padded.
     pub fn text(&mut self, color: &str, l: geom::Line, txt: &str) -> Result<()> {
         if let Some((offset, dst)) = self.viewport.project_line(l) {
-            self.backend.fg(self.style.fg(color))?;
-            self.backend.bg(self.style.bg(color))?;
+            self.backend.style(self.style.get(color))?;
 
             let out = &txt
                 .chars()

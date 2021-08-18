@@ -7,7 +7,7 @@ pub mod utils {
         event::{key, mouse},
         geom::Size,
         render::test::TestRender,
-        style::Style,
+        style::StyleManager,
         widgets::list::ListItem,
         Actions, Canopy, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
     };
@@ -346,7 +346,7 @@ pub mod utils {
     }
 
     pub fn tcanopy<'a>(tr: &'a mut TestRender) -> Canopy<'a, State, TActions> {
-        Canopy::new(Render::new(tr, Style::default()))
+        Canopy::new(Render::new(tr, StyleManager::default()))
     }
 
     // A fixed-size test node

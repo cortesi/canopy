@@ -195,6 +195,7 @@ pub fn main() -> Result<()> {
         "statusbar/text",
         Some(solarized::BASE02),
         Some(solarized::BASE1),
+        None,
     );
     let mut h = Handle {};
     let mut root = Root::new();

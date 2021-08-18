@@ -11,7 +11,7 @@ use crate::{
     event::EventSource,
     geom::{Point, Rect, Size},
     render::Render,
-    style::Style,
+    style::{Style, StyleManager},
     Actions, Canopy, Node, Outcome, Result,
 };
 use crossterm::{
@@ -19,7 +19,7 @@ use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
     style::Print,
-    style::{Color, SetBackgroundColor, SetForegroundColor},
+    style::{Attribute, SetAttribute, SetBackgroundColor, SetForegroundColor},
     terminal::size,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand, QueueableCommand,
@@ -64,13 +64,39 @@ impl Backend for Term {
         Ok(())
     }
 
-    fn fg(&mut self, c: Color) -> Result<()> {
-        self.fp.queue(SetForegroundColor(c))?;
-        Ok(())
-    }
-
-    fn bg(&mut self, c: Color) -> Result<()> {
-        self.fp.queue(SetBackgroundColor(c))?;
+    fn style(&mut self, s: Style) -> Result<()> {
+        // Order is important here - if we reset after setting foreground and
+        // background colors they are lost.
+        if let Some(attrs) = s.attrs {
+            if attrs.is_empty() {
+                self.fp.queue(SetAttribute(Attribute::Reset))?;
+            } else {
+                if attrs.bold {
+                    self.fp.queue(SetAttribute(Attribute::Bold))?;
+                }
+                if attrs.crossedout {
+                    self.fp.queue(SetAttribute(Attribute::CrossedOut))?;
+                }
+                if attrs.dim {
+                    self.fp.queue(SetAttribute(Attribute::Dim))?;
+                }
+                if attrs.italic {
+                    self.fp.queue(SetAttribute(Attribute::Italic))?;
+                }
+                if attrs.overline {
+                    self.fp.queue(SetAttribute(Attribute::OverLined))?;
+                }
+                if attrs.underline {
+                    self.fp.queue(SetAttribute(Attribute::Underlined))?;
+                }
+            }
+        }
+        if let Some(fg) = s.fg {
+            self.fp.queue(SetForegroundColor(fg))?;
+        }
+        if let Some(bg) = s.bg {
+            self.fp.queue(SetBackgroundColor(bg))?;
+        }
         Ok(())
     }
 
@@ -103,7 +129,11 @@ impl Backend for Term {
     }
 }
 
-pub fn runloop<S, A: 'static + Actions, N>(style: Style, root: &mut N, s: &mut S) -> Result<()>
+pub fn runloop<S, A: 'static + Actions, N>(
+    style: StyleManager,
+    root: &mut N,
+    s: &mut S,
+) -> Result<()>
 where
     N: Node<S, A>,
 {

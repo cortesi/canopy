@@ -1,4 +1,4 @@
-use super::Style;
+use super::StyleManager;
 use crossterm::style::Color;
 
 pub const BASE03: Color = Color::Rgb {
@@ -87,22 +87,87 @@ pub const BLACK: Color = Color::Rgb {
     b: 0x00,
 };
 
-pub fn solarized_dark() -> Style {
-    let mut c = Style::default();
-    c.insert("/", Some(BASE0), Some(BASE03));
-    c.insert("/frame", Some(BASE01), None);
-    c.insert("/frame/focused", Some(BLUE), None);
-    c.insert("/frame/active", Some(BASE1), None);
+pub fn solarized_dark() -> StyleManager {
+    let mut c = StyleManager::default();
+    c.insert(
+        "/",
+        Some(BASE0),
+        Some(BASE03),
+        Some(crate::style::AttrSet::default()),
+    );
+    c.insert(
+        "/frame",
+        Some(BASE01),
+        None,
+        Some(crate::style::AttrSet::default()),
+    );
+    c.insert(
+        "/frame/focused",
+        Some(BLUE),
+        None,
+        Some(crate::style::AttrSet::default()),
+    );
+    c.insert(
+        "/frame/active",
+        Some(BASE1),
+        None,
+        Some(crate::style::AttrSet::default()),
+    );
 
-    c.insert("/blue", Some(BLUE), None);
-    c.insert("/red", Some(RED), None);
-    c.insert("/magenta", Some(MAGENTA), None);
-    c.insert("/violet", Some(VIOLET), None);
-    c.insert("/cyan", Some(CYAN), None);
-    c.insert("/green", Some(GREEN), None);
-    c.insert("/yellow", Some(YELLOW), None);
-    c.insert("/orange", Some(ORANGE), None);
-    c.insert("/black", Some(BLACK), None);
+    c.insert(
+        "/blue",
+        Some(BLUE),
+        None,
+        Some(crate::style::AttrSet::default()),
+    );
+    c.insert(
+        "/red",
+        Some(RED),
+        None,
+        Some(crate::style::AttrSet::default()),
+    );
+    c.insert(
+        "/magenta",
+        Some(MAGENTA),
+        None,
+        Some(crate::style::AttrSet::default()),
+    );
+    c.insert(
+        "/violet",
+        Some(VIOLET),
+        None,
+        Some(crate::style::AttrSet::default()),
+    );
+    c.insert(
+        "/cyan",
+        Some(CYAN),
+        None,
+        Some(crate::style::AttrSet::default()),
+    );
+    c.insert(
+        "/green",
+        Some(GREEN),
+        None,
+        Some(crate::style::AttrSet::default()),
+    );
+    c.insert(
+        "/yellow",
+        Some(YELLOW),
+        None,
+        Some(crate::style::AttrSet::default()),
+    );
+    c.insert(
+        "/orange",
+        Some(ORANGE),
+        None,
+        Some(crate::style::AttrSet::default()),
+    );
+    c.insert(
+        "/black",
+        Some(BLACK),
+        None,
+        Some(crate::style::AttrSet::default()),
+    );
 
     c
 }
