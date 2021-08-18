@@ -67,16 +67,26 @@ impl AttrSet {
     }
 }
 
+/// A resolved style specification.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Style {
+    pub fg: Color,
+    pub bg: Color,
+    pub attrs: AttrSet,
+}
+
+/// A possibly partial style specification, which is stored in a StyleManager.
+/// Partial styles are completely resolved during the style resolution process.
+#[derive(Debug, PartialEq, Clone)]
+struct PartialStyle {
     pub fg: Option<Color>,
     pub bg: Option<Color>,
     pub attrs: Option<AttrSet>,
 }
 
-impl Default for Style {
+impl Default for PartialStyle {
     fn default() -> Self {
-        Style {
+        PartialStyle {
             fg: None,
             bg: None,
             attrs: None,
@@ -84,22 +94,26 @@ impl Default for Style {
     }
 }
 
-impl Style {
-    /// Create a new Style a foreground color, but no background or attributes.
-    pub fn with_fg(mut self, fg: Color) -> Style {
+impl PartialStyle {
+    pub fn resolve(&self) -> Style {
         Style {
-            fg: Some(fg),
-            bg: None,
-            attrs: None,
+            fg: self.fg.unwrap(),
+            bg: self.bg.unwrap(),
+            attrs: self.attrs.unwrap(),
         }
     }
 
-    pub fn with_bg(mut self, bg: Color) -> Style {
+    pub fn with_fg(mut self, fg: Color) -> PartialStyle {
+        self.fg = Some(fg);
+        self
+    }
+
+    pub fn with_bg(mut self, bg: Color) -> PartialStyle {
         self.bg = Some(bg);
         self
     }
 
-    pub fn with_attr(mut self, attr: Attr) -> Style {
+    pub fn with_attr(mut self, attr: Attr) -> PartialStyle {
         if let Some(attrs) = self.attrs {
             self.attrs = Some(attrs.with(attr));
         } else {
@@ -108,8 +122,8 @@ impl Style {
         self
     }
 
-    fn join(&self, other: &Style) -> Style {
-        Style {
+    fn join(&self, other: &PartialStyle) -> PartialStyle {
+        PartialStyle {
             fg: if self.fg.is_some() { self.fg } else { other.fg },
             bg: if self.bg.is_some() { self.bg } else { other.bg },
             attrs: if self.attrs.is_some() {
@@ -154,7 +168,7 @@ impl Style {
 /// "/frame/selected", "foo", ""].
 #[derive(Debug, PartialEq, Clone)]
 pub struct StyleManager {
-    styles: HashMap<Vec<String>, Style>,
+    styles: HashMap<Vec<String>, PartialStyle>,
     // The current render level
     level: usize,
     // A list of selected layers, along with which render level they were set at
@@ -215,7 +229,7 @@ impl StyleManager {
         self.layer_levels.push(self.level);
     }
 
-    /// Retrieve a (bg, fg, attrs) tuple.
+    /// Resolve a style path.
     pub fn get(&self, path: &str) -> Style {
         self.resolve(&self.layers, &self.parse_path(path))
     }
@@ -241,12 +255,12 @@ impl StyleManager {
         attrs: Option<AttrSet>,
     ) {
         self.styles
-            .insert(self.parse_path(path), Style { fg, bg, attrs });
+            .insert(self.parse_path(path), PartialStyle { fg, bg, attrs });
     }
 
     // Look up one suffix along a layer chain
-    fn lookup(&self, layers: &[String], suffix: &[String]) -> Style {
-        let mut ret = Style::default();
+    fn lookup(&self, layers: &[String], suffix: &[String]) -> PartialStyle {
+        let mut ret = PartialStyle::default();
         // Look up the path on all layers to the root.
         for i in 0..layers.len() + 1 {
             let mut v = layers[0..layers.len() - i].to_vec();
@@ -264,14 +278,14 @@ impl StyleManager {
     /// Directly resolve a style using a path and a layer specification,
     /// ignoring `self.layers`.
     pub fn resolve(&self, layers: &[String], path: &[String]) -> Style {
-        let mut ret = Style::default();
+        let mut ret = PartialStyle::default();
         for i in 0..path.len() + 1 {
             ret = ret.join(&self.lookup(layers, &path[0..path.len() - i]));
             if ret.is_complete() {
                 break;
             }
         }
-        ret
+        ret.resolve()
     }
 }
 
@@ -319,9 +333,9 @@ mod tests {
                 &vec!["target".to_string(), "voing".to_string()],
             ),
             Style {
-                fg: Some(Color::Green),
-                bg: Some(Color::Black),
-                attrs: Some(AttrSet::default()),
+                fg: Color::Green,
+                bg: Color::Black,
+                attrs: AttrSet::default(),
             }
         );
 
@@ -331,9 +345,9 @@ mod tests {
                 &vec!["two".to_string(), "voing".to_string()],
             ),
             Style {
-                fg: Some(Color::Blue),
-                bg: Some(Color::Black),
-                attrs: Some(AttrSet::default()),
+                fg: Color::Blue,
+                bg: Color::Black,
+                attrs: AttrSet::default(),
             }
         );
 
@@ -343,9 +357,9 @@ mod tests {
                 &vec!["target".to_string()],
             ),
             Style {
-                fg: Some(Color::Green),
-                bg: Some(Color::Black),
-                attrs: Some(AttrSet::default()),
+                fg: Color::Green,
+                bg: Color::Black,
+                attrs: AttrSet::default(),
             }
         );
         assert_eq!(
@@ -354,9 +368,9 @@ mod tests {
                 &vec!["nonexistent".to_string()],
             ),
             Style {
-                fg: Some(Color::Blue),
-                bg: Some(Color::Black),
-                attrs: Some(AttrSet::default()),
+                fg: Color::Blue,
+                bg: Color::Black,
+                attrs: AttrSet::default(),
             }
         );
         assert_eq!(
@@ -365,9 +379,9 @@ mod tests {
                 &vec!["nonexistent".to_string()],
             ),
             Style {
-                fg: Some(Color::White),
-                bg: Some(Color::Black),
-                attrs: Some(AttrSet::default()),
+                fg: Color::White,
+                bg: Color::Black,
+                attrs: AttrSet::default(),
             }
         );
         assert_eq!(
@@ -376,9 +390,9 @@ mod tests {
                 &vec!["frame".to_string(), "border".to_string()],
             ),
             Style {
-                fg: Some(Color::Yellow),
-                bg: Some(Color::Black),
-                attrs: Some(AttrSet::default()),
+                fg: Color::Yellow,
+                bg: Color::Black,
+                attrs: AttrSet::default(),
             }
         );
         assert_eq!(
@@ -387,17 +401,17 @@ mod tests {
                 &vec!["frame".to_string(), "border".to_string()],
             ),
             Style {
-                fg: Some(Color::Yellow),
-                bg: Some(Color::Black),
-                attrs: Some(AttrSet::default()),
+                fg: Color::Yellow,
+                bg: Color::Black,
+                attrs: AttrSet::default(),
             }
         );
         assert_eq!(
             c.resolve(&vec!["frame".to_string()], &vec!["border".to_string()],),
             Style {
-                fg: Some(Color::Yellow),
-                bg: Some(Color::Black),
-                attrs: Some(AttrSet::default()),
+                fg: Color::Yellow,
+                bg: Color::Black,
+                attrs: AttrSet::default(),
             }
         );
         Ok(())

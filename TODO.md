@@ -1,8 +1,11 @@
 
 # TODO
 
-- Explicit colors - at the moment, we can only get colors from our color scheme
-- Add a built-in Color abstraction
+- Style
+  - Improve style creation API ergonomics
+- Colors
+  - Explicit colors - at the moment, we can only get colors from our color scheme
+  - Add a built-in Color abstraction
 - Ergonomics:
   - Better error returns
 - Key binding management system
@@ -20,6 +23,7 @@
   - Add node names for relevant errors
   - Benchmarking and integration tests
 - Testing
+  - Inspection GUI?
   - Improve the test render backend
     - At the moment, its only client is the internal code, so it only implements
       logging of text. We should make it more complete for general use.

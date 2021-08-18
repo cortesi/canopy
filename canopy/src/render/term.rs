@@ -67,36 +67,30 @@ impl Backend for Term {
     fn style(&mut self, s: Style) -> Result<()> {
         // Order is important here - if we reset after setting foreground and
         // background colors they are lost.
-        if let Some(attrs) = s.attrs {
-            if attrs.is_empty() {
-                self.fp.queue(SetAttribute(Attribute::Reset))?;
-            } else {
-                if attrs.bold {
-                    self.fp.queue(SetAttribute(Attribute::Bold))?;
-                }
-                if attrs.crossedout {
-                    self.fp.queue(SetAttribute(Attribute::CrossedOut))?;
-                }
-                if attrs.dim {
-                    self.fp.queue(SetAttribute(Attribute::Dim))?;
-                }
-                if attrs.italic {
-                    self.fp.queue(SetAttribute(Attribute::Italic))?;
-                }
-                if attrs.overline {
-                    self.fp.queue(SetAttribute(Attribute::OverLined))?;
-                }
-                if attrs.underline {
-                    self.fp.queue(SetAttribute(Attribute::Underlined))?;
-                }
+        if s.attrs.is_empty() {
+            self.fp.queue(SetAttribute(Attribute::Reset))?;
+        } else {
+            if s.attrs.bold {
+                self.fp.queue(SetAttribute(Attribute::Bold))?;
+            }
+            if s.attrs.crossedout {
+                self.fp.queue(SetAttribute(Attribute::CrossedOut))?;
+            }
+            if s.attrs.dim {
+                self.fp.queue(SetAttribute(Attribute::Dim))?;
+            }
+            if s.attrs.italic {
+                self.fp.queue(SetAttribute(Attribute::Italic))?;
+            }
+            if s.attrs.overline {
+                self.fp.queue(SetAttribute(Attribute::OverLined))?;
+            }
+            if s.attrs.underline {
+                self.fp.queue(SetAttribute(Attribute::Underlined))?;
             }
         }
-        if let Some(fg) = s.fg {
-            self.fp.queue(SetForegroundColor(fg))?;
-        }
-        if let Some(bg) = s.bg {
-            self.fp.queue(SetBackgroundColor(bg))?;
-        }
+        self.fp.queue(SetForegroundColor(s.fg))?;
+        self.fp.queue(SetBackgroundColor(s.bg))?;
         Ok(())
     }
 
