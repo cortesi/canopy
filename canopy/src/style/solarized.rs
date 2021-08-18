@@ -1,5 +1,4 @@
-use super::StyleManager;
-use crossterm::style::Color;
+use super::{Color, StyleManager};
 
 pub const BASE03: Color = Color::Rgb {
     r: 0x00,

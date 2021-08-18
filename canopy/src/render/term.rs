@@ -11,7 +11,7 @@ use crate::{
     event::EventSource,
     geom::{Point, Rect, Size},
     render::Render,
-    style::{Style, StyleManager},
+    style::{Color, Style, StyleManager},
     Actions, Canopy, Node, Outcome, Result,
 };
 use crossterm::{
@@ -19,11 +19,34 @@ use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
     style::Print,
-    style::{Attribute, SetAttribute, SetBackgroundColor, SetForegroundColor},
+    style::{Attribute, Color as CColor, SetAttribute, SetBackgroundColor, SetForegroundColor},
     terminal::size,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand, QueueableCommand,
 };
+
+fn translate_color(c: Color) -> CColor {
+    match c {
+        Color::Black => CColor::Black,
+        Color::DarkGrey => CColor::DarkGrey,
+        Color::Red => CColor::Red,
+        Color::DarkRed => CColor::DarkRed,
+        Color::Green => CColor::Green,
+        Color::DarkGreen => CColor::DarkGreen,
+        Color::Yellow => CColor::Yellow,
+        Color::DarkYellow => CColor::DarkYellow,
+        Color::Blue => CColor::Blue,
+        Color::DarkBlue => CColor::DarkBlue,
+        Color::Magenta => CColor::Magenta,
+        Color::DarkMagenta => CColor::DarkMagenta,
+        Color::Cyan => CColor::Cyan,
+        Color::DarkCyan => CColor::DarkCyan,
+        Color::White => CColor::White,
+        Color::Grey => CColor::Grey,
+        Color::Rgb { r, g, b } => CColor::Rgb { r, g, b },
+        Color::AnsiValue(a) => CColor::AnsiValue(a),
+    }
+}
 
 pub struct Term {
     fp: std::io::Stderr,
@@ -89,8 +112,8 @@ impl Backend for Term {
                 self.fp.queue(SetAttribute(Attribute::Underlined))?;
             }
         }
-        self.fp.queue(SetForegroundColor(s.fg))?;
-        self.fp.queue(SetBackgroundColor(s.bg))?;
+        self.fp.queue(SetForegroundColor(translate_color(s.fg)))?;
+        self.fp.queue(SetBackgroundColor(translate_color(s.bg)))?;
         Ok(())
     }
 

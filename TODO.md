@@ -3,7 +3,6 @@
 
 - Colors
   - Explicit colors - at the moment, we can only get colors from our color scheme
-  - Add a built-in Color abstraction
 - Ergonomics:
   - Better error returns
 - Key binding management system

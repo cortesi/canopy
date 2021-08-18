@@ -35,43 +35,43 @@ impl<'a> Render<'a> {
     }
 
     /// Fill a rectangle with a specified character.
-    pub fn show_cursor(&mut self, color: &str, c: cursor::Cursor) -> Result<()> {
+    pub fn show_cursor(&mut self, style: &str, c: cursor::Cursor) -> Result<()> {
         if let Some(loc) = self.viewport.project_point(c.location) {
             let mut c = c;
             c.location = loc;
-            self.backend.style(self.style.get(color))?;
+            self.backend.style(self.style.get(style))?;
             self.backend.show_cursor(c)?;
         }
         Ok(())
     }
 
     /// Fill a rectangle with a specified character.
-    pub fn fill(&mut self, color: &str, r: geom::Rect, c: char) -> Result<()> {
+    pub fn fill(&mut self, style: &str, r: geom::Rect, c: char) -> Result<()> {
         if let Some(dst) = self.viewport.project_rect(r) {
-            self.backend.style(self.style.get(color))?;
+            self.backend.style(self.style.get(style))?;
             self.backend.fill(dst, c)?;
         }
         Ok(())
     }
 
     /// Draw a solid frame
-    pub fn solid_frame(&mut self, color: &str, f: geom::Frame, c: char) -> Result<()> {
-        self.fill(color, f.top, c)?;
-        self.fill(color, f.left, c)?;
-        self.fill(color, f.right, c)?;
-        self.fill(color, f.bottom, c)?;
-        self.fill(color, f.topleft, c)?;
-        self.fill(color, f.topright, c)?;
-        self.fill(color, f.bottomleft, c)?;
-        self.fill(color, f.bottomright, c)?;
+    pub fn solid_frame(&mut self, style: &str, f: geom::Frame, c: char) -> Result<()> {
+        self.fill(style, f.top, c)?;
+        self.fill(style, f.left, c)?;
+        self.fill(style, f.right, c)?;
+        self.fill(style, f.bottom, c)?;
+        self.fill(style, f.topleft, c)?;
+        self.fill(style, f.topright, c)?;
+        self.fill(style, f.bottomleft, c)?;
+        self.fill(style, f.bottomright, c)?;
         Ok(())
     }
 
     /// Print text in the specified line. If the text is wider than the
     /// rectangle, it will be truncated; if it is shorter, it will be padded.
-    pub fn text(&mut self, color: &str, l: geom::Line, txt: &str) -> Result<()> {
+    pub fn text(&mut self, style: &str, l: geom::Line, txt: &str) -> Result<()> {
         if let Some((offset, dst)) = self.viewport.project_line(l) {
-            self.backend.style(self.style.get(color))?;
+            self.backend.style(self.style.get(style))?;
 
             let out = &txt
                 .chars()

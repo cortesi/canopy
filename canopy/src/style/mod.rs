@@ -1,6 +1,7 @@
+mod color;
 pub mod solarized;
 
-pub use crossterm::style::Color;
+pub use color::Color;
 use std::collections::HashMap;
 
 /// A text attribute.
