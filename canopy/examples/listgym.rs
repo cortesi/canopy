@@ -207,25 +207,25 @@ impl Node<Handle, ()> for Root {
 
 pub fn main() -> Result<()> {
     let mut colors = solarized::solarized_dark();
-    colors.insert(
+    colors.add(
         "red/text",
         Some(solarized::RED),
         None,
         Some(canopy::style::AttrSet::default()),
     );
-    colors.insert(
+    colors.add(
         "blue/text",
         Some(solarized::BLUE),
         None,
         Some(canopy::style::AttrSet::default()),
     );
-    colors.insert(
+    colors.add(
         "green/text",
         Some(solarized::GREEN),
         None,
         Some(canopy::style::AttrSet::default()),
     );
-    colors.insert(
+    colors.add(
         "statusbar/text",
         Some(solarized::BLUE),
         None,

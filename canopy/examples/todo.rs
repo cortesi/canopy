@@ -191,7 +191,7 @@ impl Node<Handle, ()> for Root {
 
 pub fn main() -> Result<()> {
     let mut colors = solarized::solarized_dark();
-    colors.insert(
+    colors.add(
         "statusbar/text",
         Some(solarized::BASE02),
         Some(solarized::BASE1),

@@ -1,8 +1,6 @@
 
 # TODO
 
-- Style
-  - Improve style creation API ergonomics
 - Colors
   - Explicit colors - at the moment, we can only get colors from our color scheme
   - Add a built-in Color abstraction

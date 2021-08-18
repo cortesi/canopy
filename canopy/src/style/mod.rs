@@ -190,7 +190,7 @@ impl StyleManager {
             layers: vec![],
             layer_levels: vec![],
         };
-        cs.insert(
+        cs.add(
             "/",
             Some(Color::White),
             Some(Color::Black),
@@ -246,8 +246,45 @@ impl StyleManager {
             .collect()
     }
 
-    /// Insert a colour tuple at a specified path.
-    pub fn insert(
+    /// Insert a foreground color at a specified path.
+    pub fn add_fg(&mut self, path: &str, fg: Color) {
+        let parsed = self.parse_path(path);
+        if let Some(ps) = self.styles.get_mut(&parsed) {
+            ps.fg = Some(fg);
+        } else {
+            self.styles
+                .insert(parsed, PartialStyle::default().with_fg(fg));
+        }
+    }
+
+    /// Insert a background color at a specified path.
+    pub fn add_bg(&mut self, path: &str, bg: Color) {
+        let parsed = self.parse_path(path);
+        if let Some(ps) = self.styles.get_mut(&parsed) {
+            ps.bg = Some(bg);
+        } else {
+            self.styles
+                .insert(parsed, PartialStyle::default().with_bg(bg));
+        }
+    }
+
+    /// Insert a style attribute at a specified path.
+    pub fn add_attr(&mut self, path: &str, attr: Attr) {
+        let parsed = self.parse_path(path);
+        if let Some(ps) = self.styles.get_mut(&parsed) {
+            if let Some(attrs) = ps.attrs {
+                ps.attrs = Some(attrs.with(attr));
+            } else {
+                ps.attrs = Some(AttrSet::default().with(attr));
+            }
+        } else {
+            self.styles
+                .insert(parsed, PartialStyle::default().with_attr(attr));
+        }
+    }
+
+    /// Add a style at a specified path.
+    pub fn add(
         &mut self,
         path: &str,
         fg: Option<Color>,
@@ -277,7 +314,7 @@ impl StyleManager {
 
     /// Directly resolve a style using a path and a layer specification,
     /// ignoring `self.layers`.
-    pub fn resolve(&self, layers: &[String], path: &[String]) -> Style {
+    pub(crate) fn resolve(&self, layers: &[String], path: &[String]) -> Style {
         let mut ret = PartialStyle::default();
         for i in 0..path.len() + 1 {
             ret = ret.join(&self.lookup(layers, &path[0..path.len() - i]));
@@ -306,26 +343,16 @@ mod tests {
     #[test]
     fn style_resolve() -> Result<()> {
         let mut c = StyleManager::new();
-        c.insert(
+        c.add(
             "",
             Some(Color::White),
             Some(Color::Black),
             Some(AttrSet::default()),
         );
-        c.insert("one", Some(Color::Red), None, Some(AttrSet::default()));
-        c.insert("one/two", Some(Color::Blue), None, Some(AttrSet::default()));
-        c.insert(
-            "one/two/target",
-            Some(Color::Green),
-            None,
-            Some(AttrSet::default()),
-        );
-        c.insert(
-            "frame/border",
-            Some(Color::Yellow),
-            None,
-            Some(AttrSet::default()),
-        );
+        c.add_fg("one", Color::Red);
+        c.add_fg("one/two", Color::Blue);
+        c.add_fg("one/two/target", Color::Green);
+        c.add_fg("frame/border", Color::Yellow);
 
         assert_eq!(
             c.resolve(

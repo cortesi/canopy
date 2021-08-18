@@ -89,85 +89,25 @@ pub const BLACK: Color = Color::Rgb {
 
 pub fn solarized_dark() -> StyleManager {
     let mut c = StyleManager::default();
-    c.insert(
+    c.add(
         "/",
         Some(BASE0),
         Some(BASE03),
         Some(crate::style::AttrSet::default()),
     );
-    c.insert(
-        "/frame",
-        Some(BASE01),
-        None,
-        Some(crate::style::AttrSet::default()),
-    );
-    c.insert(
-        "/frame/focused",
-        Some(BLUE),
-        None,
-        Some(crate::style::AttrSet::default()),
-    );
-    c.insert(
-        "/frame/active",
-        Some(BASE1),
-        None,
-        Some(crate::style::AttrSet::default()),
-    );
+    c.add_fg("/frame", BASE01);
+    c.add_fg("/frame/focused", BLUE);
+    c.add_fg("/frame/active", BASE1);
 
-    c.insert(
-        "/blue",
-        Some(BLUE),
-        None,
-        Some(crate::style::AttrSet::default()),
-    );
-    c.insert(
-        "/red",
-        Some(RED),
-        None,
-        Some(crate::style::AttrSet::default()),
-    );
-    c.insert(
-        "/magenta",
-        Some(MAGENTA),
-        None,
-        Some(crate::style::AttrSet::default()),
-    );
-    c.insert(
-        "/violet",
-        Some(VIOLET),
-        None,
-        Some(crate::style::AttrSet::default()),
-    );
-    c.insert(
-        "/cyan",
-        Some(CYAN),
-        None,
-        Some(crate::style::AttrSet::default()),
-    );
-    c.insert(
-        "/green",
-        Some(GREEN),
-        None,
-        Some(crate::style::AttrSet::default()),
-    );
-    c.insert(
-        "/yellow",
-        Some(YELLOW),
-        None,
-        Some(crate::style::AttrSet::default()),
-    );
-    c.insert(
-        "/orange",
-        Some(ORANGE),
-        None,
-        Some(crate::style::AttrSet::default()),
-    );
-    c.insert(
-        "/black",
-        Some(BLACK),
-        None,
-        Some(crate::style::AttrSet::default()),
-    );
+    c.add_fg("/blue", BLUE);
+    c.add_fg("/red", RED);
+    c.add_fg("/magenta", MAGENTA);
+    c.add_fg("/violet", VIOLET);
+    c.add_fg("/cyan", CYAN);
+    c.add_fg("/green", GREEN);
+    c.add_fg("/yellow", YELLOW);
+    c.add_fg("/orange", ORANGE);
+    c.add_fg("/black", BLACK);
 
     c
 }
