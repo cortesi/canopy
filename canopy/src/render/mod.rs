@@ -3,9 +3,9 @@ use crate::{cursor, geom, style::Style, style::StyleManager, Result, ViewPort};
 pub mod term;
 pub mod test;
 
+/// Backend is the interface implemented by renderers.
 pub trait Backend {
     fn style(&mut self, style: Style) -> Result<()>;
-    fn fill(&mut self, r: geom::Rect, c: char) -> Result<()>;
     fn text(&mut self, loc: geom::Point, txt: &str) -> Result<()>;
     fn show_cursor(&mut self, c: cursor::Cursor) -> Result<()>;
     fn hide_cursor(&mut self) -> Result<()>;
@@ -29,13 +29,13 @@ impl<'a> Render<'a> {
         }
     }
 
-    /// Fill a rectangle with a specified character.
-    pub fn hide_cursor(&mut self) -> Result<()> {
+    /// Hide the cursor
+    pub(crate) fn hide_cursor(&mut self) -> Result<()> {
         self.backend.hide_cursor()
     }
 
-    /// Fill a rectangle with a specified character.
-    pub fn show_cursor(&mut self, style: &str, c: cursor::Cursor) -> Result<()> {
+    /// Show the cursor with a specified style
+    pub(crate) fn show_cursor(&mut self, style: &str, c: cursor::Cursor) -> Result<()> {
         if let Some(loc) = self.viewport.project_point(c.location) {
             let mut c = c;
             c.location = loc;
@@ -45,11 +45,21 @@ impl<'a> Render<'a> {
         Ok(())
     }
 
+    /// Fill a rectangle already projected onto the screen with a specified
+    /// character. Assumes style has already been set.
+    fn fill_screen(&mut self, dst: geom::Rect, c: char) -> Result<()> {
+        let line = c.to_string().repeat(dst.w as usize);
+        for n in 0..dst.h {
+            self.backend.text((dst.tl.x, dst.tl.y + n).into(), &line)?;
+        }
+        Ok(())
+    }
+
     /// Fill a rectangle with a specified character.
     pub fn fill(&mut self, style: &str, r: geom::Rect, c: char) -> Result<()> {
         if let Some(dst) = self.viewport.project_rect(r) {
             self.backend.style(self.style.get(style))?;
-            self.backend.fill(dst, c)?;
+            self.fill_screen(dst, c)?;
         }
         Ok(())
     }
@@ -81,7 +91,7 @@ impl<'a> Render<'a> {
 
             self.backend.text(dst.tl, out)?;
             if out.len() < dst.w as usize {
-                self.backend.fill(
+                self.fill_screen(
                     geom::Rect::new(
                         dst.tl.x + out.len() as u16,
                         dst.tl.y,
@@ -95,25 +105,25 @@ impl<'a> Render<'a> {
         Ok(())
     }
 
-    pub fn push(&mut self) {
+    pub(crate) fn push(&mut self) {
         self.style.push();
     }
 
-    pub fn pop(&mut self) {
+    pub(crate) fn pop(&mut self) {
         self.style.pop();
     }
 
-    pub fn reset(&mut self) -> Result<()> {
+    pub(crate) fn reset(&mut self) -> Result<()> {
         self.backend.reset()?;
         self.style.reset();
         Ok(())
     }
 
-    pub fn flush(&mut self) -> Result<()> {
+    pub(crate) fn flush(&mut self) -> Result<()> {
         self.backend.flush()
     }
 
-    pub fn exit(&mut self, code: i32) -> ! {
+    pub(crate) fn exit(&mut self, code: i32) -> ! {
         self.backend.exit(code)
     }
 }

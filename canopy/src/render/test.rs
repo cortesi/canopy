@@ -1,10 +1,5 @@
 use super::Backend;
-use crate::{
-    cursor,
-    geom::{Point, Rect},
-    style::Style,
-    Result,
-};
+use crate::{cursor, geom::Point, style::Style, Result};
 use std::sync::{Arc, Mutex};
 
 /// A handle to a vector that contains the result of the render.
@@ -59,10 +54,6 @@ impl Backend for TestRender {
     }
 
     fn style(&mut self, _s: Style) -> Result<()> {
-        Ok(())
-    }
-
-    fn fill(&mut self, _r: Rect, _c: char) -> Result<()> {
         Ok(())
     }
 

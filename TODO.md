@@ -1,7 +1,7 @@
 
 # TODO
 
-- Colors
+- Renderer
   - Explicit colors - at the moment, we can only get colors from our color scheme
 - Ergonomics:
   - Better error returns
@@ -12,20 +12,24 @@
   - Center
   - text line widget
   - markdown
+- use half-blocks to improve smootnness of scrollbars
 - serialization/deserialization for color scheme
 - Better debugging and monitoring story
+  - Inspector GUI
+    - Logs
+    - Active nodes tree
   - Functions to dump the tree of nodes
     - Define name() for all built-in node types
   - Log-to-file
   - Add node names for relevant errors
   - Benchmarking and integration tests
 - Testing
-  - Inspection GUI?
   - Improve the test render backend
     - At the moment, its only client is the internal code, so it only implements
       logging of text. We should make it more complete for general use.
   - Integration tests
   - Benchmarks
+  - Termion backend
 
 
 # User traps and inelegances

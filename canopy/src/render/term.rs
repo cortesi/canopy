@@ -9,7 +9,7 @@ use super::Backend;
 use crate::{
     cursor,
     event::EventSource,
-    geom::{Point, Rect, Size},
+    geom::{Point, Size},
     render::Render,
     style::{Color, Style, StyleManager},
     Actions, Canopy, Node, Outcome, Result,
@@ -114,15 +114,6 @@ impl Backend for Term {
         }
         self.fp.queue(SetForegroundColor(translate_color(s.fg)))?;
         self.fp.queue(SetBackgroundColor(translate_color(s.bg)))?;
-        Ok(())
-    }
-
-    fn fill(&mut self, r: Rect, c: char) -> Result<()> {
-        let line = c.to_string().repeat(r.w as usize);
-        for n in 0..r.h {
-            self.fp.queue(MoveTo(r.tl.x, r.tl.y + n))?;
-            self.fp.queue(Print(&line))?;
-        }
         Ok(())
     }
 
