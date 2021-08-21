@@ -58,7 +58,10 @@ impl Backend for TestRender {
     }
 
     fn text(&mut self, _loc: Point, txt: &str) -> Result<()> {
-        self.text.lock()?.text.push(txt.trim().into());
+        let txt = txt.trim();
+        if txt != "" {
+            self.text.lock()?.text.push(txt.trim().into());
+        }
         Ok(())
     }
 
