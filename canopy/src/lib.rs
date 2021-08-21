@@ -4,14 +4,15 @@ mod node;
 mod outcome;
 mod state;
 mod tutils;
-pub mod viewport;
 
 pub mod cursor;
 pub mod error;
 pub mod event;
 pub mod geom;
+pub mod inspector;
 pub mod render;
 pub mod style;
+pub mod viewport;
 pub mod widgets;
 
 pub use crate::canopy::Canopy;
