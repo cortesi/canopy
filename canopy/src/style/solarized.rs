@@ -97,6 +97,11 @@ pub fn solarized_dark() -> StyleManager {
     c.add_fg("/frame", BASE01);
     c.add_fg("/frame/focused", BLUE);
     c.add_fg("/frame/active", BASE1);
+    c.add_fg("/tab", BASE01);
+    c.add_fg("/tab/inactive", BASE1);
+    c.add_bg("/tab/inactive", BASE02);
+    c.add_fg("/tab/active", BASE3);
+    c.add_bg("/tab/active", BLUE);
 
     c.add_fg("/blue", BLUE);
     c.add_fg("/red", RED);

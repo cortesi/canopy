@@ -4,7 +4,8 @@ use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
-    event::key, Actions, Canopy, Node, NodeState, Outcome, Result, StatefulNode, ViewPort,
+    event::key, widgets::frame, Actions, Canopy, Node, NodeState, Outcome, Result, StatefulNode,
+    ViewPort,
 };
 
 #[derive(StatefulNode)]
@@ -15,7 +16,7 @@ where
 {
     state: NodeState,
     statusbar: statusbar::StatusBar<S, A, N>,
-    view: view::View<S, A, N>,
+    view: frame::Frame<S, A, view::View<S, A, N>>,
     _marker: PhantomData<(S, A, N)>,
 }
 
@@ -28,7 +29,7 @@ where
             _marker: PhantomData,
             state: NodeState::default(),
             statusbar: statusbar::StatusBar::new(),
-            view: view::View::new(),
+            view: frame::Frame::new(view::View::new()),
         }
     }
 }
@@ -89,10 +90,27 @@ where
     N: Node<S, A>,
 {
     fn handle_key(&mut self, app: &mut Canopy<S, A>, _: &mut S, k: key::Key) -> Result<Outcome<A>> {
-        if k == self.activate {
-            self.active = !self.active;
+        if self.active {
+            match k {
+                c if c == 'a' => {
+                    app.focus_first(&mut self.root)?;
+                }
+                c if c == self.activate => {
+                    if app.on_focus_path(&self.content) {
+                        self.active = false;
+                        app.taint_tree(self)?;
+                        app.focus_first(&mut self.root)?;
+                    } else {
+                        app.focus_first(self)?;
+                    }
+                }
+                _ => return Ok(Outcome::ignore()),
+            };
+        } else if k == self.activate {
+            self.active = true;
             app.taint_tree(self)?;
-        }
+            app.focus_first(self)?;
+        };
         Ok(Outcome::handle())
     }
 

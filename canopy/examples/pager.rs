@@ -4,6 +4,7 @@ use std::fs;
 use canopy;
 use canopy::{
     event::{key, mouse},
+    inspector::Inspector,
     render::term::runloop,
     style::solarized,
     widgets::{frame, Text},
@@ -96,7 +97,7 @@ pub fn main() -> Result<()> {
         let colors = solarized::solarized_dark();
         let mut h = Handle {};
         let contents = fs::read_to_string(args[1].clone())?;
-        let mut root = Root::new(contents);
+        let mut root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new(contents));
         runloop(colors, &mut root, &mut h)?;
     }
     Ok(())

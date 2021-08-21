@@ -70,13 +70,13 @@ impl Rect {
     /// assert_eq!(r.carve_hend(20), [Rect::new(5, 5, 10, 10), Rect::new(15, 5, 0, 10)]);
     /// # }
     ///```
-    pub fn carve_hend(&self, height: u16) -> [Rect; 2] {
-        let (h, t) = self.hextent().carve_end(height);
+    pub fn carve_hend(&self, width: u16) -> [Rect; 2] {
+        let (h, t) = self.hextent().carve_end(width);
         // We can unwrap, because both extents are within our range by definition.
         [self.hslice(&h).unwrap(), self.hslice(&t).unwrap()]
     }
 
-    /// Carve a rectangle with a fixed width out of the start of the vertical
+    /// Carve a rectangle with a fixed height out of the start of the vertical
     /// extent of this rect. Returns a [top, bottom] array. Top is either empty
     /// or has the exact height specified.
     ///
@@ -94,7 +94,7 @@ impl Rect {
         [self.vslice(&h).unwrap(), self.vslice(&t).unwrap()]
     }
 
-    /// Carve a rectangle with a fixed width out of the end of the vertical
+    /// Carve a rectangle with a fixed height out of the end of the vertical
     /// extent of this rect. Returns a [top, bottom] array. Bottom is either
     /// empty or has the exact height specified.
     ///

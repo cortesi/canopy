@@ -1,8 +1,10 @@
-pub mod frame;
 mod input;
-pub mod list;
 mod panes;
 mod text;
+
+pub mod frame;
+pub mod list;
+pub mod tabs;
 
 pub use input::InputLine;
 pub use panes::Panes;

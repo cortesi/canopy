@@ -18,9 +18,7 @@
   - Inspector GUI
     - Logs
     - Active nodes tree
-  - Functions to dump the tree of nodes
-    - Define name() for all built-in node types
-  - Log-to-file
+      - Define name() for all built-in node types
   - Add node names for relevant errors
   - Benchmarking and integration tests
 - Testing

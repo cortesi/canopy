@@ -5,6 +5,7 @@ use canopy::{
     event::{key, mouse},
     geom::Frame,
     geom::Size,
+    inspector::Inspector,
     render::term::runloop,
     style::solarized,
     Canopy, Node, NodeState, Outcome, Result, StatefulNode, ViewPort,
@@ -219,7 +220,7 @@ impl Node<Handle, ()> for Block {
 pub fn main() -> Result<()> {
     let colors = solarized::solarized_dark();
     let mut h = Handle {};
-    let mut root = Root::new();
+    let mut root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new());
     runloop(colors, &mut root, &mut h)?;
     Ok(())
 }

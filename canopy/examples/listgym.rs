@@ -5,6 +5,7 @@ use canopy;
 use canopy::{
     event::{key, mouse},
     geom::{Rect, Size},
+    inspector::Inspector,
     render::term::runloop,
     style::solarized,
     widgets::{frame, list::*, Text},
@@ -233,7 +234,7 @@ pub fn main() -> Result<()> {
     );
 
     let mut h = Handle {};
-    let mut root = Root::new();
+    let mut root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new());
     runloop(colors, &mut root, &mut h)?;
     Ok(())
 }
