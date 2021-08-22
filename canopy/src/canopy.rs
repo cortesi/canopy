@@ -101,8 +101,7 @@ pub struct Canopy<'a, S, A: Actions> {
     /// The active render backend.
     pub render: Render<'a>,
 
-    _marker: PhantomData<S>,
-    _marker2: PhantomData<A>,
+    _marker: PhantomData<(S, A)>,
 }
 
 impl<'a, S, A: Actions> Canopy<'a, S, A> {
@@ -113,7 +112,6 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
             render_gen: 1,
             last_focus_gen: 1,
             _marker: PhantomData,
-            _marker2: PhantomData,
         }
     }
 

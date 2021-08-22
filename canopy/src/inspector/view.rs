@@ -6,7 +6,6 @@ use crate::{
     ViewPort,
 };
 
-/// View
 #[derive(StatefulNode)]
 
 pub struct Logs<S, A: Actions, N>
@@ -39,7 +38,7 @@ where
     }
 }
 
-/// View
+/// View contains the body of the inspector.
 #[derive(StatefulNode)]
 
 pub struct View<S, A: Actions, N>
