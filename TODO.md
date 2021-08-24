@@ -3,6 +3,14 @@
 
 - Renderer
   - Explicit colors - at the moment, we can only get colors from our color scheme
+- Add IDs to node starte
+  - Will let us implment an inject() function that injects events at a given node.
+    - Question: is grafting the way to solve this?
+- Grafting
+  - Graft a Canopy instance and root onto a node tree. This would be a wrapper
+    around a (Canopy, Root) pair that implements the parent node interface.
+  - This would let us wrap complex sub-applications into a coherent generic
+    structure
 - Ergonomics:
   - Better error returns
 - Key binding management system

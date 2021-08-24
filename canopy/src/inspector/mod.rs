@@ -8,6 +8,9 @@ use crate::{
     ViewPort,
 };
 
+#[derive(Debug, PartialEq, Clone)]
+struct InspectorState {}
+
 #[derive(StatefulNode)]
 
 pub struct Content<S, A: Actions, N>

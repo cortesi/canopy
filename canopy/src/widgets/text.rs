@@ -38,7 +38,7 @@ impl<S> Text<S> {
     }
 }
 
-impl<'a, S, A: Actions> Node<S, A> for Text<S> {
+impl<S, A: Actions> Node<S, A> for Text<S> {
     fn fit(&mut self, _app: &mut Canopy<S, A>, s: Size) -> Result<Size> {
         let w = if let Some(w) = self.fixed_width {
             w
