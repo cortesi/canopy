@@ -29,8 +29,9 @@ impl Root {
 }
 
 impl Node<Handle, ()> for Root {
-    fn can_focus(&self) -> bool {
-        true
+    fn focus(&mut self, app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
+        app.set_focus(self);
+        Ok(Outcome::handle())
     }
 
     fn handle_mouse(

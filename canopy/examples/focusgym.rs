@@ -158,8 +158,13 @@ impl Node<Handle, ()> for Block {
         Ok(())
     }
 
-    fn can_focus(&self) -> bool {
-        self.children.len() == 0
+    fn focus(&mut self, app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
+        Ok(if self.children.len() == 0 {
+            app.set_focus(self);
+            Outcome::handle()
+        } else {
+            Outcome::ignore()
+        })
     }
 
     fn handle_mouse(
@@ -171,7 +176,7 @@ impl Node<Handle, ()> for Block {
         Ok(match k {
             c if c == mouse::Action::Down + mouse::Button::Left => {
                 app.taint_tree(self)?;
-                app.set_focus(self)?
+                self.focus(app)?
             }
             c if c == mouse::Action::Down + mouse::Button::Middle => {
                 self.split(app)?;

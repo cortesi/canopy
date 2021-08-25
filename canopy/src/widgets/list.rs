@@ -6,7 +6,7 @@ use crate::{
     geom::{Rect, Size},
     node::Node,
     state::{NodeState, StatefulNode},
-    Actions, Canopy, ViewPort,
+    Actions, Canopy, Outcome, ViewPort,
 };
 
 /// ListItem must be implemented by items displayed in a `List`.
@@ -275,8 +275,9 @@ impl<S, A: Actions, N> Node<S, A> for List<S, A, N>
 where
     N: Node<S, A> + ListItem,
 {
-    fn can_focus(&self) -> bool {
-        true
+    fn focus(&mut self, app: &mut Canopy<S, A>) -> Result<Outcome<A>> {
+        app.set_focus(self);
+        Ok(Outcome::handle())
     }
 
     fn children(&self, f: &mut dyn FnMut(&dyn Node<S, A>) -> Result<()>) -> Result<()> {

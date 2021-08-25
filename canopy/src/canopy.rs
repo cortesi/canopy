@@ -6,7 +6,7 @@ use crate::{
     event::{key, mouse, Event},
     geom::{Point, Size},
     node::{postorder, postorder_mut, preorder, Node, Walker},
-    Actions, Error, Outcome, Render, Result, StatefulNode, ViewPort,
+    Actions, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 
 pub(crate) struct SkipWalker {
@@ -155,13 +155,9 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
     }
 
     /// Focus the specified node.
-    pub fn set_focus(&mut self, e: &mut dyn Node<S, A>) -> Result<Outcome<A>> {
-        if e.can_focus() {
-            self.focus_gen += 1;
-            e.state_mut().focus_gen = self.focus_gen;
-            return Ok(Outcome::handle());
-        }
-        Err(Error::Focus("node does not accept focus".into()))
+    pub fn set_focus(&mut self, e: &mut dyn Node<S, A>) {
+        self.focus_gen += 1;
+        e.state_mut().focus_gen = self.focus_gen;
     }
 
     /// Move focus in a specified direction within the subtree.
@@ -173,10 +169,11 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
                     return Ok(true);
                 }
                 locate(e, p, &mut |x| {
-                    if !seen && x.can_focus() {
-                        seen = true;
-                        self.set_focus(x)?;
-                    }
+                    if !seen {
+                        if x.focus(self)?.is_handled() {
+                            seen = true;
+                        };
+                    };
                     Ok(())
                 })?;
                 Ok(seen)
@@ -210,8 +207,7 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
     pub fn focus_first(&mut self, e: &mut dyn Node<S, A>) -> Result<Outcome<A>> {
         let mut focus_set = false;
         preorder(e, &mut |x| -> Result<SkipWalker> {
-            Ok(if !focus_set && x.can_focus() {
-                self.set_focus(x)?;
+            Ok(if !focus_set && x.focus(self)?.is_handled() {
                 focus_set = true;
                 SkipWalker::new(true)
             } else {
@@ -256,8 +252,7 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
         preorder(e, &mut |x| -> Result<()> {
             if !focus_set {
                 if focus_seen {
-                    if x.can_focus() {
-                        self.set_focus(x)?;
+                    if x.focus(self)?.is_handled() {
                         focus_set = true;
                     }
                 } else if self.is_focused(x) {
@@ -286,8 +281,8 @@ impl<'a, S, A: Actions> Canopy<'a, S, A> {
             } else if !focus_seen {
                 if x.state().focus_gen == current {
                     focus_seen = true;
-                } else if x.can_focus() {
-                    self.set_focus(x)?;
+                } else {
+                    x.focus(self)?.is_handled();
                 }
             }
             Ok(())
@@ -641,7 +636,7 @@ mod tests {
             app.focus_next(&mut root)?;
             assert!(app.is_focused(&root.b));
 
-            app.set_focus(&mut root.b.b)?;
+            app.set_focus(&mut root.b.b);
             assert!(app.is_focus_ancestor(&mut root.b));
             app.focus_next(&mut root)?;
             assert!(app.is_focused(&root));
@@ -663,7 +658,7 @@ mod tests {
             app.focus_prev(&mut root)?;
             assert!(app.is_focused(&root.b));
 
-            app.set_focus(&mut root)?;
+            app.set_focus(&mut root);
             app.focus_prev(&mut root)?;
             assert!(app.is_focused(&root.b.b));
 
@@ -680,20 +675,20 @@ mod tests {
             assert!(!app.on_focus_path(&mut root));
             assert!(!app.on_focus_path(&mut root.a));
 
-            app.set_focus(&mut root.a.a)?;
+            app.set_focus(&mut root.a.a);
             assert!(app.on_focus_path(&mut root));
             assert!(app.on_focus_path(&mut root.a));
             assert!(!app.on_focus_path(&mut root.b));
 
             assert_eq!(focvec(&mut app, &mut root)?, vec!["ba:la", "ba", "r"]);
 
-            app.set_focus(&mut root.a)?;
+            app.set_focus(&mut root.a);
             assert_eq!(focvec(&mut app, &mut root)?, vec!["ba", "r"]);
 
-            app.set_focus(&mut root)?;
+            app.set_focus(&mut root);
             assert_eq!(focvec(&mut app, &mut root)?, vec!["r"]);
 
-            app.set_focus(&mut root.b.a)?;
+            app.set_focus(&mut root.b.a);
             assert_eq!(focvec(&mut app, &mut root)?, vec!["bb:la", "bb", "r"]);
             Ok(())
         })?;
@@ -705,13 +700,13 @@ mod tests {
     fn tfocus_right() -> Result<()> {
         run_test(|_, mut app, mut root, _| {
             app.render(&mut root)?;
-            app.set_focus(&mut root.a.a)?;
+            app.set_focus(&mut root.a.a);
             app.focus_right(&mut root)?;
             assert!(app.is_focused(&root.b.a));
             app.focus_right(&mut root)?;
             assert!(app.is_focused(&root.b.a));
 
-            app.set_focus(&mut root.a.b)?;
+            app.set_focus(&mut root.a.b);
             app.focus_right(&mut root)?;
             assert!(app.is_focused(&root.b.b));
             app.focus_right(&mut root)?;
@@ -725,7 +720,7 @@ mod tests {
     #[test]
     fn taction() -> Result<()> {
         run_test(|_, mut app, mut root, mut s| {
-            app.set_focus(&mut root)?;
+            app.set_focus(&mut root);
             root.next_outcome = Some(Outcome::handle_and_continue());
             assert_eq!(
                 app.broadcast(&mut root, &mut s, TActions::One)?,
@@ -747,7 +742,7 @@ mod tests {
         })?;
 
         run_test(|_, mut app, mut root, mut s| {
-            app.set_focus(&mut root)?;
+            app.set_focus(&mut root);
             root.a.next_outcome = Some(Outcome::Ignore(Ignore::default().with_skip()));
             assert_eq!(
                 app.broadcast(&mut root, &mut s, TActions::One)?,
@@ -774,7 +769,7 @@ mod tests {
     #[test]
     fn tkey() -> Result<()> {
         run_test(|_, mut app, mut root, mut s| {
-            app.set_focus(&mut root)?;
+            app.set_focus(&mut root);
             root.next_outcome = Some(Outcome::handle());
             assert!(app.key(&mut root, &mut s, K_ANY)?.is_handled());
             assert_eq!(s.path, vec!["r@key->handle"]);
@@ -782,7 +777,7 @@ mod tests {
         })?;
 
         run_test(|_, mut app, mut root, mut s| {
-            app.set_focus(&mut root.a.a)?;
+            app.set_focus(&mut root.a.a);
             root.a.a.next_outcome = Some(Outcome::handle());
             assert!(app.key(&mut root, &mut s, K_ANY)?.is_handled());
             assert_eq!(s.path, vec!["ba:la@key->handle"]);
@@ -790,7 +785,7 @@ mod tests {
         })?;
 
         run_test(|_, mut app, mut root, mut s| {
-            app.set_focus(&mut root.a.a)?;
+            app.set_focus(&mut root.a.a);
             root.a.next_outcome = Some(Outcome::handle());
             assert!(app.key(&mut root, &mut s, K_ANY)?.is_handled());
             assert_eq!(s.path, vec!["ba:la@key->ignore", "ba@key->handle"]);
@@ -798,7 +793,7 @@ mod tests {
         })?;
 
         run_test(|_, mut app, mut root, mut s| {
-            app.set_focus(&mut root.a.a)?;
+            app.set_focus(&mut root.a.a);
             root.next_outcome = Some(Outcome::handle());
             assert!(app.key(&mut root, &mut s, K_ANY)?.is_handled());
             assert_eq!(
@@ -809,7 +804,7 @@ mod tests {
         })?;
 
         run_test(|_, mut app, mut root, mut s| {
-            app.set_focus(&mut root.a)?;
+            app.set_focus(&mut root.a);
             root.a.next_outcome = Some(Outcome::handle());
             assert!(app.key(&mut root, &mut s, K_ANY)?.is_handled());
             assert_eq!(s.path, vec!["ba@key->handle"]);
@@ -817,7 +812,7 @@ mod tests {
         })?;
 
         run_test(|_, mut app, mut root, mut s| {
-            app.set_focus(&mut root.a)?;
+            app.set_focus(&mut root.a);
             root.next_outcome = Some(Outcome::handle());
             assert!(app.key(&mut root, &mut s, K_ANY)?.is_handled());
             assert_eq!(s.path, vec!["ba@key->ignore", "r@key->handle"]);
@@ -826,7 +821,7 @@ mod tests {
         })?;
 
         run_test(|_, mut app, mut root, mut s| {
-            app.set_focus(&mut root.a.b)?;
+            app.set_focus(&mut root.a.b);
             root.a.next_outcome = Some(Outcome::Ignore(Ignore::default().with_skip()));
             root.next_outcome = Some(Outcome::handle());
             app.key(&mut root, &mut s, K_ANY)?;
@@ -835,7 +830,7 @@ mod tests {
         })?;
 
         run_test(|_, mut app, mut root, mut s| {
-            app.set_focus(&mut root.a.a)?;
+            app.set_focus(&mut root.a.a);
             root.a.a.next_outcome = Some(Outcome::handle_with_action(TActions::One));
             app.key(&mut root, &mut s, K_ANY)?;
             assert_eq!(
@@ -850,7 +845,7 @@ mod tests {
         })?;
 
         run_test(|_, mut app, mut root, mut s| {
-            app.set_focus(&mut root.a.b)?;
+            app.set_focus(&mut root.a.b);
             root.a.next_outcome = Some(Outcome::handle_with_action(TActions::One));
             app.key(&mut root, &mut s, K_ANY)?;
             assert_eq!(
@@ -865,7 +860,7 @@ mod tests {
         })?;
 
         run_test(|_, mut app, mut root, mut s| {
-            app.set_focus(&mut root.a.b)?;
+            app.set_focus(&mut root.a.b);
             root.a.b.next_outcome = Some(Outcome::Handle(
                 Handle::default()
                     .with_action(TActions::One)
@@ -877,7 +872,7 @@ mod tests {
         })?;
 
         run_test(|_, mut app, mut root, mut s| {
-            app.set_focus(&mut root.a.b)?;
+            app.set_focus(&mut root.a.b);
             root.a.b.next_outcome = Some(Outcome::handle_with_action(TActions::One));
             root.a.next_outcome = Some(Outcome::handle_with_action(TActions::Two));
             app.key(&mut root, &mut s, K_ANY)?;
@@ -893,7 +888,7 @@ mod tests {
         })?;
 
         run_test(|_, mut app, mut root, mut s| {
-            app.set_focus(&mut root.a.b)?;
+            app.set_focus(&mut root.a.b);
             root.a.b.next_outcome = Some(Outcome::handle_with_action(TActions::One));
             root.a.next_outcome = Some(Outcome::ignore_and_skip());
             app.key(&mut root, &mut s, K_ANY)?;
@@ -907,7 +902,7 @@ mod tests {
     #[test]
     fn tmouse() -> Result<()> {
         run_test(|_, mut app, mut root, mut s| {
-            app.set_focus(&mut root)?;
+            app.set_focus(&mut root);
             root.next_outcome = Some(Outcome::handle());
             let evt = root.a.a.make_mouse_event()?;
             app.render(&mut root)?;
@@ -1003,7 +998,7 @@ mod tests {
             app.render(&mut root)?;
             assert!(buf.lock()?.text.is_empty());
 
-            app.set_focus(&mut root.a.a)?;
+            app.set_focus(&mut root.a.a);
             app.render(&mut root)?;
             assert_eq!(buf.lock()?.text, vec!["<ba:la>"]);
 
@@ -1029,7 +1024,7 @@ mod tests {
         run_test(|buf, mut app, mut root, _| {
             app.render(&mut root)?;
             let mut s = State::new();
-            app.set_focus(&mut root)?;
+            app.set_focus(&mut root);
             root.next_outcome = Some(Outcome::handle_and_continue());
             root.a.a.next_outcome = Some(Outcome::handle());
             root.b.b.next_outcome = Some(Outcome::handle());

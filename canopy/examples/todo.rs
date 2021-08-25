@@ -97,7 +97,7 @@ impl Root {
 
     fn open_adder(&mut self, app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
         let mut adder = frame::Frame::new(InputLine::new(""));
-        app.set_focus(&mut adder.child)?;
+        adder.child.focus(app)?;
         self.adder = Some(adder);
         app.taint(self);
         Ok(Outcome::handle())
@@ -117,8 +117,9 @@ impl Node<Handle, ()> for Root {
         Ok(())
     }
 
-    fn can_focus(&self) -> bool {
-        true
+    fn focus(&mut self, app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
+        app.set_focus(self);
+        Ok(Outcome::handle())
     }
 
     fn handle_mouse(

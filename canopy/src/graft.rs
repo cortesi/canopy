@@ -31,8 +31,9 @@ impl<'a, SO, AO: Actions, S, A: Actions> Node<SO, AO> for Graft<'a, S, A> {
 
     // We make an assumption that some node below us can hold terminal focus, so
     // we must too.
-    fn can_focus(&self) -> bool {
-        true
+    fn focus(&mut self, app: &mut Canopy<SO, AO>) -> Result<Outcome<AO>> {
+        app.set_focus(self);
+        Ok(Outcome::handle())
     }
 
     /// Handle a key event. This event is only called for nodes that are on the

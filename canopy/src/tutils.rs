@@ -82,8 +82,9 @@ pub mod utils {
             Some(self.name.clone())
         }
 
-        fn can_focus(&self) -> bool {
-            true
+        fn focus(&mut self, app: &mut Canopy<State, TActions>) -> Result<Outcome<TActions>> {
+            app.set_focus(self);
+            Ok(Outcome::handle())
         }
         fn render(&mut self, app: &mut Canopy<State, TActions>, vp: ViewPort) -> Result<()> {
             app.render.text(
@@ -131,8 +132,9 @@ pub mod utils {
             Some(self.name.clone())
         }
 
-        fn can_focus(&self) -> bool {
-            true
+        fn focus(&mut self, app: &mut Canopy<State, TActions>) -> Result<Outcome<TActions>> {
+            app.set_focus(self);
+            Ok(Outcome::handle())
         }
 
         fn render(&mut self, app: &mut Canopy<State, TActions>, vp: ViewPort) -> Result<()> {
@@ -203,8 +205,9 @@ pub mod utils {
             Some(self.name.clone())
         }
 
-        fn can_focus(&self) -> bool {
-            true
+        fn focus(&mut self, app: &mut Canopy<State, TActions>) -> Result<Outcome<TActions>> {
+            app.set_focus(self);
+            Ok(Outcome::handle())
         }
 
         fn render(&mut self, app: &mut Canopy<State, TActions>, vp: ViewPort) -> Result<()> {

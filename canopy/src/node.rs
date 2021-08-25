@@ -47,17 +47,18 @@ pub trait Node<S, A: Actions>: StatefulNode {
         None
     }
 
-    /// Can this node accept leaf focus? The default implementation returns
-    /// `false`.
-    fn can_focus(&self) -> bool {
-        false
-    }
-
     /// Called for each node on the focus path, after each render sweep. The
     /// first node that returns a ``cursor::Cursor`` specification controls the
     /// cursor. If no node returns a cursor, cursor display is disabled.
     fn cursor(&self) -> Option<cursor::Cursor> {
         None
+    }
+
+    /// Try to set focus to this node. If the node accepts focus, the node
+    /// should call `Canopy.set_focus` and return Outcome::Handled, otherwise
+    /// return Outcome::Ignore.
+    fn focus(&mut self, app: &mut Canopy<S, A>) -> Result<Outcome<A>> {
+        Ok(Outcome::ignore())
     }
 
     /// Handle a key event. This event is only called for nodes that are on the

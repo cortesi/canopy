@@ -12,6 +12,8 @@
   - This would let us wrap complex sub-applications into a coherent generic
     structure
 - Ergonomics:
+  - A derive macro to create children and children_mut
+    - This would mean shifting the traversal methods into a separate trait
   - Better error returns
 - Key binding management system
 - ctrl-c/ctrl-z

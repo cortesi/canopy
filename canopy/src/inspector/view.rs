@@ -55,8 +55,9 @@ impl<S, A: Actions, N> Node<S, A> for View<S, A, N>
 where
     N: Node<S, A>,
 {
-    fn can_focus(&self) -> bool {
-        true
+    fn focus(&mut self, app: &mut Canopy<S, A>) -> Result<Outcome<A>> {
+        app.set_focus(self);
+        Ok(Outcome::handle())
     }
 
     fn handle_key(&mut self, app: &mut Canopy<S, A>, _: &mut S, k: key::Key) -> Result<Outcome<A>> {

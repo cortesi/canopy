@@ -124,8 +124,9 @@ impl<S> InputLine<S> {
 }
 
 impl<'a, S, A: Actions> Node<S, A> for InputLine<S> {
-    fn can_focus(&self) -> bool {
-        true
+    fn focus(&mut self, app: &mut Canopy<S, A>) -> Result<Outcome<A>> {
+        app.set_focus(self);
+        Ok(Outcome::handle())
     }
 
     fn cursor(&self) -> Option<cursor::Cursor> {
