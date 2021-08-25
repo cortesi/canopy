@@ -5,14 +5,13 @@ use std::process::exit;
 use color_backtrace::{default_output_stream, BacktracePrinter};
 use scopeguard::defer;
 
-use super::Backend;
 use crate::{
-    backend::Render,
     cursor,
     event::EventSource,
     geom::{Point, Size},
+    render::Backend,
     style::{Color, Style, StyleManager},
-    Actions, Canopy, Node, Outcome, Result,
+    Actions, Canopy, Node, Outcome, Render, Result,
 };
 use crossterm::{
     cursor::{CursorShape, DisableBlinking, EnableBlinking, Hide, MoveTo, SetCursorShape, Show},

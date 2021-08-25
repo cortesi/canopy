@@ -3,6 +3,7 @@ mod canopy;
 mod graft;
 mod node;
 mod outcome;
+mod render;
 mod state;
 mod tutils;
 
@@ -18,10 +19,10 @@ pub mod widgets;
 
 pub use crate::canopy::Canopy;
 pub use actions::Actions;
-pub use backend::Render;
 pub use error::{Error, Result};
 pub use graft::Graft;
 pub use node::Node;
 pub use outcome::Outcome;
+pub use render::Render;
 pub use state::{NodeState, StatefulNode};
 pub use viewport::ViewPort;
