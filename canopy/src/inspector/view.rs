@@ -2,8 +2,8 @@ use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
-    event::key, widgets::tabs, Actions, Canopy, Node, NodeState, Outcome, Result, StatefulNode,
-    ViewPort,
+    event::key, widgets::tabs, Actions, Canopy, ControlBackend, Node, NodeState, Outcome, Render,
+    Result, StatefulNode, ViewPort,
 };
 
 #[derive(StatefulNode)]
@@ -20,8 +20,8 @@ impl<S, A: Actions, N> Node<S, A> for Logs<S, A, N>
 where
     N: Node<S, A>,
 {
-    fn render(&mut self, app: &mut Canopy<S, A>, vp: ViewPort) -> Result<()> {
-        app.render.fill("", vp.view_rect(), ' ')?;
+    fn render(&mut self, _app: &mut Canopy<S, A>, r: &mut Render, vp: ViewPort) -> Result<()> {
+        r.fill("", vp.view_rect(), ' ')?;
         Ok(())
     }
 }
@@ -60,7 +60,13 @@ where
         Ok(Outcome::handle())
     }
 
-    fn handle_key(&mut self, app: &mut Canopy<S, A>, _: &mut S, k: key::Key) -> Result<Outcome<A>> {
+    fn handle_key(
+        &mut self,
+        app: &mut Canopy<S, A>,
+        _: &mut dyn ControlBackend,
+        _: &mut S,
+        k: key::Key,
+    ) -> Result<Outcome<A>> {
         match k {
             c if c == key::KeyCode::Tab => self.tabs.next(app),
             _ => return Ok(Outcome::ignore()),
@@ -68,7 +74,7 @@ where
         Ok(Outcome::handle())
     }
 
-    fn render(&mut self, app: &mut Canopy<S, A>, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<S, A>, _r: &mut Render, vp: ViewPort) -> Result<()> {
         let parts = vp.carve_vstart(1)?;
         self.tabs.wrap(app, parts[0])?;
         self.logs.wrap(app, parts[1])?;

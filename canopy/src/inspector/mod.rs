@@ -4,8 +4,8 @@ use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
-    event::key, widgets::frame, Actions, Canopy, Node, NodeState, Outcome, Result, StatefulNode,
-    ViewPort,
+    event::key, widgets::frame, Actions, Canopy, ControlBackend, Node, NodeState, Outcome, Render,
+    Result, StatefulNode, ViewPort,
 };
 
 #[derive(Debug, PartialEq, Clone)]
@@ -41,7 +41,7 @@ impl<S, A: Actions, N> Node<S, A> for Content<S, A, N>
 where
     N: Node<S, A>,
 {
-    fn render(&mut self, app: &mut Canopy<S, A>, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<S, A>, _r: &mut Render, vp: ViewPort) -> Result<()> {
         let parts = vp.carve_vend(1)?;
         self.statusbar.wrap(app, parts[1])?;
         self.view.wrap(app, parts[0])?;
@@ -92,7 +92,13 @@ impl<S, A: Actions, N> Node<S, A> for Inspector<S, A, N>
 where
     N: Node<S, A>,
 {
-    fn handle_key(&mut self, app: &mut Canopy<S, A>, _: &mut S, k: key::Key) -> Result<Outcome<A>> {
+    fn handle_key(
+        &mut self,
+        app: &mut Canopy<S, A>,
+        _ctrl: &mut dyn ControlBackend,
+        _: &mut S,
+        k: key::Key,
+    ) -> Result<Outcome<A>> {
         if self.active {
             match k {
                 c if c == 'a' => {
@@ -117,8 +123,8 @@ where
         Ok(Outcome::handle())
     }
 
-    fn render(&mut self, app: &mut Canopy<S, A>, vp: ViewPort) -> Result<()> {
-        app.render.style.push_layer("inspector");
+    fn render(&mut self, app: &mut Canopy<S, A>, r: &mut Render, vp: ViewPort) -> Result<()> {
+        r.style.push_layer("inspector");
         if self.active {
             let parts = vp.split_horizontal(2)?;
             self.content.wrap(app, parts[0])?;

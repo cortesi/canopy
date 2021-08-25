@@ -8,7 +8,7 @@ use canopy::{
     inspector::Inspector,
     style::solarized,
     widgets::{frame, list::*, InputLine, Text},
-    Canopy, Node, NodeState, Outcome, Result, StatefulNode, ViewPort,
+    Canopy, ControlBackend, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 
 struct Handle {}
@@ -52,10 +52,10 @@ impl Node<Handle, ()> for TodoItem {
         f(&mut self.child)
     }
 
-    fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<Handle, ()>, r: &mut Render, vp: ViewPort) -> Result<()> {
         self.child.wrap(app, vp)?;
         if self.selected {
-            app.render.style.push_layer("blue");
+            r.style.push_layer("blue");
         }
         Ok(())
     }
@@ -67,10 +67,9 @@ struct StatusBar {
 }
 
 impl Node<Handle, ()> for StatusBar {
-    fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
-        app.render.style.push_layer("statusbar");
-        app.render
-            .text("statusbar/text", vp.view_rect().first_line(), "todo")?;
+    fn render(&mut self, _: &mut Canopy<Handle, ()>, r: &mut Render, vp: ViewPort) -> Result<()> {
+        r.style.push_layer("statusbar");
+        r.text("statusbar/text", vp.view_rect().first_line(), "todo")?;
         Ok(())
     }
 }
@@ -105,7 +104,7 @@ impl Root {
 }
 
 impl Node<Handle, ()> for Root {
-    fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<Handle, ()>, _: &mut Render, vp: ViewPort) -> Result<()> {
         let parts = vp.carve_vend(1)?;
         self.statusbar.wrap(app, parts[1])?;
         self.content.wrap(app, parts[0])?;
@@ -125,6 +124,7 @@ impl Node<Handle, ()> for Root {
     fn handle_mouse(
         &mut self,
         _app: &mut Canopy<Handle, ()>,
+        _: &mut dyn ControlBackend,
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<Outcome<()>> {
@@ -140,6 +140,7 @@ impl Node<Handle, ()> for Root {
     fn handle_key(
         &mut self,
         app: &mut Canopy<Handle, ()>,
+        ctrl: &mut dyn ControlBackend,
         _: &mut Handle,
         k: key::Key,
     ) -> Result<Outcome<()>> {
@@ -165,7 +166,7 @@ impl Node<Handle, ()> for Root {
                 c if c == 'k' || c == key::KeyCode::Up => lst.select_prev(),
                 c if c == ' ' || c == key::KeyCode::PageDown => lst.page_down(),
                 c if c == key::KeyCode::PageUp => lst.page_up(),
-                c if c == 'q' => app.exit(0),
+                c if c == 'q' => app.exit(ctrl, 0),
                 _ => return Ok(Outcome::ignore()),
             };
         }

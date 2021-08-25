@@ -2,9 +2,9 @@
 pub mod utils {
     use duplicate::duplicate;
 
-    use crate as canopy;
+    use crate::{self as canopy, ControlBackend};
     use crate::{
-        backend::test::TestRender,
+        backend::test::{TestControl, TestRender},
         event::{key, mouse},
         geom::Size,
         style::StyleManager,
@@ -86,8 +86,13 @@ pub mod utils {
             app.set_focus(self);
             Ok(Outcome::handle())
         }
-        fn render(&mut self, app: &mut Canopy<State, TActions>, vp: ViewPort) -> Result<()> {
-            app.render.text(
+        fn render(
+            &mut self,
+            _: &mut Canopy<State, TActions>,
+            r: &mut Render,
+            vp: ViewPort,
+        ) -> Result<()> {
+            r.text(
                 "any",
                 vp.view_rect().first_line(),
                 &format!("<{}>", self.name.clone()),
@@ -96,6 +101,7 @@ pub mod utils {
         fn handle_key(
             &mut self,
             _: &mut Canopy<State, TActions>,
+            _: &mut dyn ControlBackend,
             s: &mut State,
             _: key::Key,
         ) -> Result<Outcome<TActions>> {
@@ -104,6 +110,7 @@ pub mod utils {
         fn handle_mouse(
             &mut self,
             _: &mut Canopy<State, TActions>,
+            _: &mut dyn ControlBackend,
             s: &mut State,
             _: mouse::Mouse,
         ) -> Result<Outcome<TActions>> {
@@ -112,6 +119,7 @@ pub mod utils {
         fn handle_broadcast(
             &mut self,
             _: &mut Canopy<State, TActions>,
+            _: &mut dyn ControlBackend,
             s: &mut State,
             a: TActions,
         ) -> Result<Outcome<TActions>> {
@@ -120,6 +128,7 @@ pub mod utils {
         fn handle_event_action(
             &mut self,
             _: &mut Canopy<State, TActions>,
+            _: &mut dyn ControlBackend,
             s: &mut State,
             a: TActions,
         ) -> Result<Outcome<TActions>> {
@@ -137,12 +146,17 @@ pub mod utils {
             Ok(Outcome::handle())
         }
 
-        fn render(&mut self, app: &mut Canopy<State, TActions>, vp: ViewPort) -> Result<()> {
+        fn render(
+            &mut self,
+            app: &mut Canopy<State, TActions>,
+            r: &mut Render,
+            vp: ViewPort,
+        ) -> Result<()> {
             let parts = vp.split_vertical(2)?;
             self.a.wrap(app, parts[0])?;
             self.b.wrap(app, parts[1])?;
 
-            app.render.text(
+            r.text(
                 "any",
                 vp.view_rect().first_line(),
                 &format!("<{}>", self.name.clone()),
@@ -152,6 +166,7 @@ pub mod utils {
         fn handle_key(
             &mut self,
             _: &mut Canopy<State, TActions>,
+            _: &mut dyn ControlBackend,
             s: &mut State,
             _: key::Key,
         ) -> Result<Outcome<TActions>> {
@@ -161,6 +176,7 @@ pub mod utils {
         fn handle_mouse(
             &mut self,
             _: &mut Canopy<State, TActions>,
+            _: &mut dyn ControlBackend,
             s: &mut State,
             _: mouse::Mouse,
         ) -> Result<Outcome<TActions>> {
@@ -170,6 +186,7 @@ pub mod utils {
         fn handle_broadcast(
             &mut self,
             _: &mut Canopy<State, TActions>,
+            _: &mut dyn ControlBackend,
             s: &mut State,
             a: TActions,
         ) -> Result<Outcome<TActions>> {
@@ -179,6 +196,7 @@ pub mod utils {
         fn handle_event_action(
             &mut self,
             _: &mut Canopy<State, TActions>,
+            _: &mut dyn ControlBackend,
             s: &mut State,
             a: TActions,
         ) -> Result<Outcome<TActions>> {
@@ -210,12 +228,17 @@ pub mod utils {
             Ok(Outcome::handle())
         }
 
-        fn render(&mut self, app: &mut Canopy<State, TActions>, vp: ViewPort) -> Result<()> {
+        fn render(
+            &mut self,
+            app: &mut Canopy<State, TActions>,
+            r: &mut Render,
+            vp: ViewPort,
+        ) -> Result<()> {
             let parts = vp.split_horizontal(2)?;
             self.a.wrap(app, parts[0])?;
             self.b.wrap(app, parts[1])?;
 
-            app.render.text(
+            r.text(
                 "any",
                 vp.view_rect().first_line(),
                 &format!("<{}>", self.name.clone()),
@@ -225,6 +248,7 @@ pub mod utils {
         fn handle_key(
             &mut self,
             _: &mut Canopy<State, TActions>,
+            _: &mut dyn ControlBackend,
             s: &mut State,
             _: key::Key,
         ) -> Result<Outcome<TActions>> {
@@ -234,6 +258,7 @@ pub mod utils {
         fn handle_mouse(
             &mut self,
             _: &mut Canopy<State, TActions>,
+            _: &mut dyn ControlBackend,
             s: &mut State,
             _: mouse::Mouse,
         ) -> Result<Outcome<TActions>> {
@@ -243,6 +268,7 @@ pub mod utils {
         fn handle_broadcast(
             &mut self,
             _: &mut Canopy<State, TActions>,
+            _: &mut dyn ControlBackend,
             s: &mut State,
             a: TActions,
         ) -> Result<Outcome<TActions>> {
@@ -252,6 +278,7 @@ pub mod utils {
         fn handle_event_action(
             &mut self,
             _: &mut Canopy<State, TActions>,
+            _: &mut dyn ControlBackend,
             s: &mut State,
             a: TActions,
         ) -> Result<Outcome<TActions>> {
@@ -348,8 +375,12 @@ pub mod utils {
         }
     }
 
-    pub fn tcanopy<'a>(tr: &'a mut TestRender) -> Canopy<'a, State, TActions> {
-        Canopy::new(Render::new(tr, StyleManager::default()))
+    pub fn tcanopy(tr: &mut TestRender) -> (Canopy<State, TActions>, Render, impl ControlBackend) {
+        (
+            Canopy::new(),
+            Render::new(tr, StyleManager::default()),
+            TestControl {},
+        )
     }
 
     // A fixed-size test node

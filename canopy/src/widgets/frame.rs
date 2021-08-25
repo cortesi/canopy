@@ -6,7 +6,7 @@ use pad::PadStr;
 use crate as canopy;
 use crate::{
     state::{NodeState, StatefulNode},
-    Actions, Canopy, Node, Result, ViewPort,
+    Actions, Canopy, Node, Render, Result, ViewPort,
 };
 
 /// Defines the set of glyphs used to draw the frame
@@ -108,7 +108,7 @@ where
         Some(app.should_render(&self.child))
     }
 
-    fn render(&mut self, app: &mut Canopy<S, A>, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<S, A>, rndr: &mut Render, vp: ViewPort) -> Result<()> {
         let f = self.child.frame(app, vp, 1)?;
 
         let style = if app.on_focus_path(self) {
@@ -117,13 +117,11 @@ where
             "frame"
         };
 
-        app.render.fill(style, f.topleft, self.glyphs.topleft)?;
-        app.render.fill(style, f.topright, self.glyphs.topright)?;
-        app.render
-            .fill(style, f.bottomleft, self.glyphs.bottomleft)?;
-        app.render
-            .fill(style, f.bottomright, self.glyphs.bottomright)?;
-        app.render.fill(style, f.left, self.glyphs.vertical)?;
+        rndr.fill(style, f.topleft, self.glyphs.topleft)?;
+        rndr.fill(style, f.topright, self.glyphs.topright)?;
+        rndr.fill(style, f.bottomleft, self.glyphs.bottomleft)?;
+        rndr.fill(style, f.bottomright, self.glyphs.bottomright)?;
+        rndr.fill(style, f.left, self.glyphs.vertical)?;
 
         if let Some(title) = &self.title {
             title.pad(
@@ -132,27 +130,25 @@ where
                 pad::Alignment::Left,
                 true,
             );
-            app.render.text(style, f.top.first_line(), title)?;
+            rndr.text(style, f.top.first_line(), title)?;
         } else {
-            app.render.fill(style, f.top, self.glyphs.horizontal)?;
+            rndr.fill(style, f.top, self.glyphs.horizontal)?;
         }
 
         if let Some((pre, active, post)) = self.child.state().viewport.vactive(f.right)? {
-            app.render.fill(style, pre, self.glyphs.vertical)?;
-            app.render.fill(style, post, self.glyphs.vertical)?;
-            app.render
-                .fill(style, active, self.glyphs.vertical_active)?;
+            rndr.fill(style, pre, self.glyphs.vertical)?;
+            rndr.fill(style, post, self.glyphs.vertical)?;
+            rndr.fill(style, active, self.glyphs.vertical_active)?;
         } else {
-            app.render.fill(style, f.right, self.glyphs.vertical)?;
+            rndr.fill(style, f.right, self.glyphs.vertical)?;
         }
 
         if let Some((pre, active, post)) = self.child.state().viewport.hactive(f.bottom)? {
-            app.render.fill(style, pre, self.glyphs.horizontal)?;
-            app.render.fill(style, post, self.glyphs.horizontal)?;
-            app.render
-                .fill(style, active, self.glyphs.horizontal_active)?;
+            rndr.fill(style, pre, self.glyphs.horizontal)?;
+            rndr.fill(style, post, self.glyphs.horizontal)?;
+            rndr.fill(style, active, self.glyphs.horizontal_active)?;
         } else {
-            app.render.fill(style, f.bottom, self.glyphs.horizontal)?;
+            rndr.fill(style, f.bottom, self.glyphs.horizontal)?;
         }
 
         // Our child is always positioned in our upper-left corner, so negative
@@ -163,7 +159,7 @@ where
             .inner(1)
             .sub(&self.child.vp().size().rect().shift(1, 1))
         {
-            app.render.fill(style, r, ' ')?;
+            rndr.fill(style, r, ' ')?;
         }
 
         Ok(())

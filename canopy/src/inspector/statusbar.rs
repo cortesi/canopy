@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use crate as canopy;
-use crate::{Actions, Canopy, Node, NodeState, Result, StatefulNode, ViewPort};
+use crate::{Actions, Canopy, Node, NodeState, Render, Result, StatefulNode, ViewPort};
 
 #[derive(StatefulNode)]
 
@@ -29,10 +29,9 @@ impl<S, A: Actions, N> Node<S, A> for StatusBar<S, A, N>
 where
     N: Node<S, A>,
 {
-    fn render(&mut self, app: &mut Canopy<S, A>, vp: ViewPort) -> Result<()> {
-        app.render.style.push_layer("statusbar");
-        app.render
-            .text("statusbar/text", vp.view_rect().first_line(), "inspector")?;
+    fn render(&mut self, _app: &mut Canopy<S, A>, r: &mut Render, vp: ViewPort) -> Result<()> {
+        r.style.push_layer("statusbar");
+        r.text("statusbar/text", vp.view_rect().first_line(), "inspector")?;
         Ok(())
     }
 }

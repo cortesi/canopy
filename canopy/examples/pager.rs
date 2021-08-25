@@ -8,7 +8,7 @@ use canopy::{
     inspector::Inspector,
     style::solarized,
     widgets::{frame, Text},
-    Canopy, Node, NodeState, Outcome, Result, StatefulNode, ViewPort,
+    Canopy, ControlBackend, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 
 struct Handle {}
@@ -37,6 +37,7 @@ impl Node<Handle, ()> for Root {
     fn handle_mouse(
         &mut self,
         app: &mut Canopy<Handle, ()>,
+        _: &mut dyn ControlBackend,
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<Outcome<()>> {
@@ -53,6 +54,7 @@ impl Node<Handle, ()> for Root {
     fn handle_key(
         &mut self,
         app: &mut Canopy<Handle, ()>,
+        ctrl: &mut dyn ControlBackend,
         _: &mut Handle,
         k: key::Key,
     ) -> Result<Outcome<()>> {
@@ -67,14 +69,14 @@ impl Node<Handle, ()> for Root {
                 txt.update_viewport(&|vp| vp.page_down());
             }
             c if c == key::KeyCode::PageUp => txt.update_viewport(&|vp| vp.page_up()),
-            c if c == 'q' => app.exit(0),
+            c if c == 'q' => app.exit(ctrl, 0),
             _ => return Ok(Outcome::ignore()),
         }
         app.taint_tree(self)?;
         Ok(Outcome::handle())
     }
 
-    fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<Handle, ()>, _: &mut Render, vp: ViewPort) -> Result<()> {
         self.child.wrap(app, vp)
     }
 

@@ -2,7 +2,7 @@ use crate as canopy;
 use crate::{
     geom::{Line, Size},
     state::{NodeState, StatefulNode},
-    Actions, Canopy, Node, Result, ViewPort,
+    Actions, Canopy, Node, Render, Result, ViewPort,
 };
 use std::marker::PhantomData;
 
@@ -59,7 +59,7 @@ impl<S, A: Actions> Node<S, A> for Text<S> {
         }
         Ok(self.current_size)
     }
-    fn render(&mut self, app: &mut Canopy<S, A>, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, _app: &mut Canopy<S, A>, rndr: &mut Render, vp: ViewPort) -> Result<()> {
         let vo = vp.view_rect();
         if let Some(lines) = self.lines.as_ref() {
             for i in vo.tl.y..(vo.tl.y + vo.h) {
@@ -67,7 +67,7 @@ impl<S, A: Actions> Node<S, A> for Text<S> {
                     .chars()
                     .skip(vo.tl.x as usize)
                     .collect::<String>();
-                app.render.text("text", Line::new(vo.tl.x, i, vo.w), out)?;
+                rndr.text("text", Line::new(vo.tl.x, i, vo.w), out)?;
             }
         }
         Ok(())
@@ -83,7 +83,7 @@ mod tests {
     #[test]
     fn text_sizing() -> Result<()> {
         let (_, mut tr) = TestRender::create();
-        let mut app = utils::tcanopy(&mut tr);
+        let (mut app, _, _) = utils::tcanopy(&mut tr);
         let txt = "aaa bbb ccc\nddd eee fff\nggg hhh iii";
         let mut t: Text<utils::State> = Text::new(txt);
         t.fit(&mut app, Size::new(7, 10))?;

@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use crate as canopy;
 use crate::{
     state::{NodeState, StatefulNode},
-    Actions, Canopy, Node, Result, ViewPort,
+    Actions, Canopy, Node, Render, Result, ViewPort,
 };
 
 /// Panes manages a set of child nodes arranged in a 2d grid.
@@ -106,7 +106,7 @@ impl<S, A: Actions, N: Node<S, A>> Node<S, A> for Panes<S, A, N> {
         Ok(())
     }
 
-    fn render(&mut self, app: &mut Canopy<S, A>, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<S, A>, _rndr: &mut Render, vp: ViewPort) -> Result<()> {
         let l = vp.screen_rect().split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
@@ -131,7 +131,7 @@ mod tests {
     #[test]
     fn tlayout() -> Result<()> {
         let (_, mut tr) = TestRender::create();
-        let mut app = utils::tcanopy(&mut tr);
+        let (mut app, _, _) = utils::tcanopy(&mut tr);
         let tn = utils::TBranch::new("a");
         let mut p: Panes<utils::State, utils::TActions, utils::TBranch> = Panes::new(tn);
         let r = Rect {

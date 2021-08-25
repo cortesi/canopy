@@ -6,10 +6,11 @@ use color_backtrace::{default_output_stream, BacktracePrinter};
 use scopeguard::defer;
 
 use crate::{
+    control::ControlBackend,
     cursor,
     event::EventSource,
     geom::{Point, Size},
-    render::Backend,
+    render::RenderBackend,
     style::{Color, Style, StyleManager},
     Actions, Canopy, Node, Outcome, Render, Result,
 };
@@ -47,19 +48,49 @@ fn translate_color(c: Color) -> CColor {
     }
 }
 
-pub struct Crossterm {
+pub struct CrosstermControl {
     fp: std::io::Stderr,
 }
 
-impl Default for Crossterm {
-    fn default() -> Crossterm {
-        Crossterm {
+impl Default for CrosstermControl {
+    fn default() -> CrosstermControl {
+        CrosstermControl {
             fp: std::io::stderr(),
         }
     }
 }
 
-impl Backend for Crossterm {
+impl ControlBackend for CrosstermControl {
+    fn enter(&mut self) -> Result<()> {
+        enable_raw_mode()?;
+        self.fp.execute(EnterAlternateScreen)?;
+        self.fp.execute(EnableMouseCapture)?;
+        self.fp.execute(Hide)?;
+        disable_raw_mode()?;
+        Ok(())
+    }
+    fn exit(&mut self) -> Result<()> {
+        self.fp.execute(LeaveAlternateScreen)?;
+        self.fp.execute(DisableMouseCapture)?;
+        self.fp.execute(Show)?;
+        disable_raw_mode()?;
+        Ok(())
+    }
+}
+
+pub struct CrosstermRender {
+    fp: std::io::Stderr,
+}
+
+impl Default for CrosstermRender {
+    fn default() -> CrosstermRender {
+        CrosstermRender {
+            fp: std::io::stderr(),
+        }
+    }
+}
+
+impl RenderBackend for CrosstermRender {
     fn flush(&mut self) -> Result<()> {
         self.fp.flush()?;
         Ok(())
@@ -144,8 +175,11 @@ pub fn runloop<S, A: 'static + Actions, N>(
 where
     N: Node<S, A>,
 {
-    let mut be = Crossterm::default();
-    let mut app = Canopy::new(Render::new(&mut be, style));
+    let mut be = CrosstermRender::default();
+    let mut ctrl = CrosstermControl::default();
+    let mut render = Render::new(&mut be, style);
+
+    let mut app = Canopy::new();
 
     enable_raw_mode()?;
     let mut w = std::io::stderr();
@@ -178,12 +212,12 @@ where
         let mut ignore = false;
         loop {
             if !ignore {
-                app.pre_render(root)?;
-                app.render(root)?;
-                app.post_render(root)?;
-                app.render.flush()?;
+                app.pre_render(&mut render, root)?;
+                app.render(&mut render, root)?;
+                app.post_render(&mut render, root)?;
+                render.flush()?;
             }
-            match app.event(root, s, events.next()?)? {
+            match app.event(&mut ctrl, root, s, events.next()?)? {
                 Outcome::Ignore { .. } => {
                     ignore = true;
                 }

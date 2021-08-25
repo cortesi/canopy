@@ -2,7 +2,7 @@ use crate::{
     cursor,
     event::{key, mouse},
     geom::{Frame, Rect, Size},
-    Actions, Canopy, Outcome, Result, StatefulNode, ViewPort,
+    Actions, Canopy, ControlBackend, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 use duplicate::duplicate;
 
@@ -63,7 +63,13 @@ pub trait Node<S, A: Actions>: StatefulNode {
 
     /// Handle a key event. This event is only called for nodes that are on the
     /// focus path. The default implementation ignores input.
-    fn handle_key(&mut self, app: &mut Canopy<S, A>, s: &mut S, k: key::Key) -> Result<Outcome<A>> {
+    fn handle_key(
+        &mut self,
+        app: &mut Canopy<S, A>,
+        c: &mut dyn ControlBackend,
+        s: &mut S,
+        k: key::Key,
+    ) -> Result<Outcome<A>> {
         Ok(Outcome::ignore())
     }
 
@@ -71,6 +77,7 @@ pub trait Node<S, A: Actions>: StatefulNode {
     fn handle_mouse(
         &mut self,
         app: &mut Canopy<S, A>,
+        c: &mut dyn ControlBackend,
         s: &mut S,
         k: mouse::Mouse,
     ) -> Result<Outcome<A>> {
@@ -82,6 +89,7 @@ pub trait Node<S, A: Actions>: StatefulNode {
     fn handle_event_action(
         &mut self,
         app: &mut Canopy<S, A>,
+        c: &mut dyn ControlBackend,
         s: &mut S,
         k: A,
     ) -> Result<Outcome<A>> {
@@ -89,7 +97,13 @@ pub trait Node<S, A: Actions>: StatefulNode {
     }
 
     /// Handle a broadcast action.
-    fn handle_broadcast(&mut self, app: &mut Canopy<S, A>, s: &mut S, k: A) -> Result<Outcome<A>> {
+    fn handle_broadcast(
+        &mut self,
+        app: &mut Canopy<S, A>,
+        c: &mut dyn ControlBackend,
+        s: &mut S,
+        k: A,
+    ) -> Result<Outcome<A>> {
         Ok(Outcome::ignore())
     }
 
@@ -133,7 +147,7 @@ pub trait Node<S, A: Actions>: StatefulNode {
     ///
     /// Nodes with no children should always make sure they redraw all of
     /// `self.screen_area()`. The default implementation does nothing.
-    fn render(&mut self, app: &mut Canopy<S, A>, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<S, A>, r: &mut Render, vp: ViewPort) -> Result<()> {
         Ok(())
     }
 
@@ -296,7 +310,7 @@ mod tests {
     #[test]
     fn node_wrap() -> Result<()> {
         let (_, mut tr) = TestRender::create();
-        let mut app = utils::tcanopy(&mut tr);
+        let (mut app, _, _) = utils::tcanopy(&mut tr);
 
         // If the child is the same size as the parent, then wrap just produces
         // the same viewport
@@ -350,7 +364,7 @@ mod tests {
     #[test]
     fn node_frame() -> Result<()> {
         let (_, mut tr) = TestRender::create();
-        let mut app = utils::tcanopy(&mut tr);
+        let (mut app, _, _) = utils::tcanopy(&mut tr);
 
         // If we have room, the adjustment just shifts the child node relative to the screen.
         let mut n = utils::TFixed::new(5, 5);

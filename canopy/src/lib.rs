@@ -1,5 +1,6 @@
 mod actions;
 mod canopy;
+mod control;
 mod graft;
 mod node;
 mod outcome;
@@ -19,6 +20,7 @@ pub mod widgets;
 
 pub use crate::canopy::Canopy;
 pub use actions::Actions;
+pub use control::ControlBackend;
 pub use error::{Error, Result};
 pub use graft::Graft;
 pub use node::Node;

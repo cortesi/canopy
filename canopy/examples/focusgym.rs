@@ -8,7 +8,7 @@ use canopy::{
     geom::Size,
     inspector::Inspector,
     style::solarized,
-    Canopy, Node, NodeState, Outcome, Result, StatefulNode, ViewPort,
+    Canopy, ControlBackend, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 
 struct Handle {}
@@ -50,13 +50,14 @@ impl Block {
 }
 
 impl Node<Handle, ()> for Root {
-    fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<Handle, ()>, _: &mut Render, vp: ViewPort) -> Result<()> {
         self.child.wrap(app, vp)
     }
 
     fn handle_mouse(
         &mut self,
         app: &mut Canopy<Handle, ()>,
+        _: &mut dyn ControlBackend,
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<Outcome<()>> {
@@ -70,6 +71,7 @@ impl Node<Handle, ()> for Root {
     fn handle_key(
         &mut self,
         app: &mut Canopy<Handle, ()>,
+        ctrl: &mut dyn ControlBackend,
         _: &mut Handle,
         k: key::Key,
     ) -> Result<Outcome<()>> {
@@ -79,7 +81,7 @@ impl Node<Handle, ()> for Root {
             c if c == 'h' || c == key::KeyCode::Left => app.focus_left(self)?,
             c if c == 'j' || c == key::KeyCode::Down => app.focus_down(self)?,
             c if c == 'k' || c == key::KeyCode::Up => app.focus_up(self)?,
-            c if c == 'q' => app.exit(0),
+            c if c == 'q' => app.exit(ctrl, 0),
             _ => Outcome::ignore(),
         })
     }
@@ -133,7 +135,7 @@ impl Block {
 }
 
 impl Node<Handle, ()> for Block {
-    fn render(&mut self, app: &mut Canopy<Handle, ()>, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, app: &mut Canopy<Handle, ()>, r: &mut Render, vp: ViewPort) -> Result<()> {
         if self.children.len() > 0 {
             let vps = if self.horizontal {
                 vp.split_horizontal(self.children.len() as u16)?
@@ -150,9 +152,8 @@ impl Node<Handle, ()> for Block {
             } else {
                 "blue"
             };
-            app.render.fill(bc, vp.view_rect().inner(1), '\u{2588}')?;
-            app.render
-                .solid_frame("black", Frame::new(vp.view_rect(), 1), ' ')?;
+            r.fill(bc, vp.view_rect().inner(1), '\u{2588}')?;
+            r.solid_frame("black", Frame::new(vp.view_rect(), 1), ' ')?;
         }
 
         Ok(())
@@ -170,6 +171,7 @@ impl Node<Handle, ()> for Block {
     fn handle_mouse(
         &mut self,
         app: &mut Canopy<Handle, ()>,
+        _: &mut dyn ControlBackend,
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<Outcome<()>> {
@@ -193,6 +195,7 @@ impl Node<Handle, ()> for Block {
     fn handle_key(
         &mut self,
         app: &mut Canopy<Handle, ()>,
+        _: &mut dyn ControlBackend,
         _: &mut Handle,
         k: key::Key,
     ) -> Result<Outcome<()>> {

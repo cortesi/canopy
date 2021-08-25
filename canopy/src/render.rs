@@ -1,7 +1,7 @@
 use crate::{cursor, geom, style::Style, style::StyleManager, Result, ViewPort};
 
 /// Backend is the interface implemented by renderers.
-pub trait Backend {
+pub trait RenderBackend {
     fn style(&mut self, style: Style) -> Result<()>;
     fn text(&mut self, loc: geom::Point, txt: &str) -> Result<()>;
     fn show_cursor(&mut self, c: cursor::Cursor) -> Result<()>;
@@ -12,13 +12,13 @@ pub trait Backend {
 }
 
 pub struct Render<'a> {
-    pub backend: &'a mut dyn Backend,
+    pub backend: &'a mut dyn RenderBackend,
     pub style: StyleManager,
     pub viewport: ViewPort,
 }
 
 impl<'a> Render<'a> {
-    pub fn new(backend: &mut dyn Backend, style: StyleManager) -> Render {
+    pub fn new(backend: &mut dyn RenderBackend, style: StyleManager) -> Render {
         Render {
             backend,
             style,
@@ -118,9 +118,5 @@ impl<'a> Render<'a> {
 
     pub(crate) fn flush(&mut self) -> Result<()> {
         self.backend.flush()
-    }
-
-    pub(crate) fn exit(&mut self, code: i32) -> ! {
-        self.backend.exit(code)
     }
 }
