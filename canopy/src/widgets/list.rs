@@ -369,7 +369,7 @@ where
 mod tests {
     use super::*;
     use crate::{
-        render::test::TestRender,
+        backend::test::TestRender,
         tutils::utils::{tcanopy, State, TActions, TFixed},
     };
 

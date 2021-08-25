@@ -215,9 +215,9 @@ pub fn preorder<S, A: Actions, W: Walker>(
 mod tests {
     use super::*;
     use crate::{
+        backend::test::TestRender,
         canopy::SkipWalker,
         geom::{Rect, Size},
-        render::test::TestRender,
         tutils::utils,
     };
 

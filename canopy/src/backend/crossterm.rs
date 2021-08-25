@@ -7,10 +7,10 @@ use scopeguard::defer;
 
 use super::Backend;
 use crate::{
+    backend::Render,
     cursor,
     event::EventSource,
     geom::{Point, Size},
-    render::Render,
     style::{Color, Style, StyleManager},
     Actions, Canopy, Node, Outcome, Result,
 };
@@ -48,19 +48,19 @@ fn translate_color(c: Color) -> CColor {
     }
 }
 
-pub struct Term {
+pub struct Crossterm {
     fp: std::io::Stderr,
 }
 
-impl Default for Term {
-    fn default() -> Term {
-        Term {
+impl Default for Crossterm {
+    fn default() -> Crossterm {
+        Crossterm {
             fp: std::io::stderr(),
         }
     }
 }
 
-impl Backend for Term {
+impl Backend for Crossterm {
     fn flush(&mut self) -> Result<()> {
         self.fp.flush()?;
         Ok(())
@@ -145,7 +145,7 @@ pub fn runloop<S, A: 'static + Actions, N>(
 where
     N: Node<S, A>,
 {
-    let mut be = Term::default();
+    let mut be = Crossterm::default();
     let mut app = Canopy::new(Render::new(&mut be, style));
 
     enable_raw_mode()?;

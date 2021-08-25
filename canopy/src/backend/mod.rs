@@ -1,6 +1,6 @@
 use crate::{cursor, geom, style::Style, style::StyleManager, Result, ViewPort};
 
-pub mod term;
+pub mod crossterm;
 pub mod test;
 
 /// Backend is the interface implemented by renderers.

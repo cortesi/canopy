@@ -588,9 +588,9 @@ pub fn locate<S, A: Actions, R: Walker + Default>(
 mod tests {
     use super::*;
     use crate::{
+        backend::test::{TestBuf, TestRender},
         geom::Rect,
         outcome::{Handle, Ignore},
-        render::test::{TestBuf, TestRender},
         tutils::utils::*,
     };
     use std::sync::{Arc, Mutex};

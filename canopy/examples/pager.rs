@@ -3,9 +3,9 @@ use std::fs;
 
 use canopy;
 use canopy::{
+    backend::crossterm::runloop,
     event::{key, mouse},
     inspector::Inspector,
-    render::term::runloop,
     style::solarized,
     widgets::{frame, Text},
     Canopy, Node, NodeState, Outcome, Result, StatefulNode, ViewPort,

@@ -3,10 +3,10 @@ use rand::Rng;
 
 use canopy;
 use canopy::{
+    backend::crossterm::runloop,
     event::{key, mouse},
     geom::{Rect, Size},
     inspector::Inspector,
-    render::term::runloop,
     style::solarized,
     widgets::{frame, list::*, Text},
     Canopy, Node, NodeState, Outcome, Result, StatefulNode, ViewPort,

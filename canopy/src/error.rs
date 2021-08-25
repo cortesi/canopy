@@ -2,7 +2,7 @@ use crossterm;
 use std::sync::mpsc;
 use std::sync::{MutexGuard, PoisonError};
 
-use crate::render::test::TestBuf;
+use crate::backend::test::TestBuf;
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;

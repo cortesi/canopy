@@ -123,8 +123,8 @@ impl<S, A: Actions, N: Node<S, A>> Node<S, A> for Panes<S, A, N> {
 mod tests {
     use super::*;
     use crate::{
+        backend::test::TestRender,
         geom::{Point, Rect},
-        render::test::TestRender,
         tutils::utils,
     };
 

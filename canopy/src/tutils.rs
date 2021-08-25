@@ -4,9 +4,9 @@ pub mod utils {
 
     use crate as canopy;
     use crate::{
+        backend::test::TestRender,
         event::{key, mouse},
         geom::Size,
-        render::test::TestRender,
         style::StyleManager,
         widgets::list::ListItem,
         Actions, Canopy, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,

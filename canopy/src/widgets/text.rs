@@ -77,7 +77,7 @@ impl<S, A: Actions> Node<S, A> for Text<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::render::test::TestRender;
+    use crate::backend::test::TestRender;
     use crate::tutils::utils;
 
     #[test]
