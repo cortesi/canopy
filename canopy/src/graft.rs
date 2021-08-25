@@ -7,15 +7,21 @@ use crate::{
 };
 
 #[derive(StatefulNode)]
-pub struct Graft<'a, S, A: Actions> {
+pub struct Graft<S, A: Actions, N>
+where
+    N: Node<S, A>,
+{
     state: NodeState,
     appstate: S,
     core: Canopy<S, A>,
-    root: &'a mut dyn Node<S, A>,
+    root: N,
 }
 
-impl<'a, S, A: Actions> Graft<'a, S, A> {
-    pub fn new(appstate: S, root: &'a mut dyn Node<S, A>) -> Self {
+impl<S, A: Actions, N> Graft<S, A, N>
+where
+    N: Node<S, A>,
+{
+    pub fn new(appstate: S, root: N) -> Self {
         Graft {
             state: NodeState::default(),
             appstate,
@@ -25,7 +31,10 @@ impl<'a, S, A: Actions> Graft<'a, S, A> {
     }
 }
 
-impl<'a, SO, AO: Actions, S, A: Actions> Node<SO, AO> for Graft<'a, S, A> {
+impl<SO, AO: Actions, S, A: Actions, N> Node<SO, AO> for Graft<S, A, N>
+where
+    N: Node<S, A>,
+{
     fn name(&self) -> Option<String> {
         Some("graft".into())
     }
@@ -47,7 +56,7 @@ impl<'a, SO, AO: Actions, S, A: Actions> Node<SO, AO> for Graft<'a, S, A> {
         k: key::Key,
     ) -> Result<Outcome<AO>> {
         Ok(
-            match self.core.key(ctrl, self.root, &mut self.appstate, k)? {
+            match self.core.key(ctrl, &mut self.root, &mut self.appstate, k)? {
                 Outcome::Handle(_) => Outcome::<AO>::handle(),
                 Outcome::Ignore(_) => Outcome::ignore(),
             },
@@ -63,7 +72,10 @@ impl<'a, SO, AO: Actions, S, A: Actions> Node<SO, AO> for Graft<'a, S, A> {
         k: mouse::Mouse,
     ) -> Result<Outcome<AO>> {
         Ok(
-            match self.core.mouse(ctrl, self.root, &mut self.appstate, k)? {
+            match self
+                .core
+                .mouse(ctrl, &mut self.root, &mut self.appstate, k)?
+            {
                 Outcome::Handle(_) => Outcome::<AO>::handle(),
                 Outcome::Ignore(_) => Outcome::ignore(),
             },
@@ -75,7 +87,10 @@ impl<'a, SO, AO: Actions, S, A: Actions> Node<SO, AO> for Graft<'a, S, A> {
         self.root.fit(&mut self.core, target)
     }
 
-    fn render(&mut self, _app: &mut Canopy<SO, AO>, _: &mut Render, vp: ViewPort) -> Result<()> {
-        self.root.wrap(&mut self.core, vp)
+    fn render(&mut self, _app: &mut Canopy<SO, AO>, rndr: &mut Render, vp: ViewPort) -> Result<()> {
+        self.root.wrap(&mut self.core, vp)?;
+        self.core.pre_render(rndr, &mut self.root)?;
+        self.core.render(rndr, &mut self.root)?;
+        self.core.post_render(rndr, &mut self.root)
     }
 }

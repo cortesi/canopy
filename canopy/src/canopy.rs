@@ -100,7 +100,6 @@ pub struct Canopy<S, A: Actions> {
     // require rendering during the current sweep will have a state `render_gen`
     // equal to this.
     render_gen: u64,
-
     _marker: PhantomData<(S, A)>,
 }
 
