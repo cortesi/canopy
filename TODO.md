@@ -1,16 +1,18 @@
 
 # TODO
 
+
+- Grafting
+  - focus on/off into Node so we can handle this better
+    - Can we maintain focus?
+  - move tainting into Node, so we can taint tree if needed but maintain partial
+    rendering
+
 - Renderer
   - Explicit colors - at the moment, we can only get colors from our color scheme
-- Add IDs to node starte
+- Add IDs to node state
   - Will let us implment an inject() function that injects events at a given node.
     - Question: is grafting the way to solve this?
-- Grafting
-  - Graft a Canopy instance and root onto a node tree. This would be a wrapper
-    around a (Canopy, Root) pair that implements the parent node interface.
-  - This would let us wrap complex sub-applications into a coherent generic
-    structure
 - Ergonomics:
   - A derive macro to create children and children_mut
     - This would mean shifting the traversal methods into a separate trait

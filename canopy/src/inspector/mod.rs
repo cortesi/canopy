@@ -4,8 +4,8 @@ use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
-    event::key, widgets::frame, Actions, Canopy, ControlBackend, Node, NodeState, Outcome, Render,
-    Result, StatefulNode, ViewPort,
+    event::key, graft::Graft, widgets::frame, Actions, Canopy, ControlBackend, Node, NodeState,
+    Outcome, Render, Result, StatefulNode, ViewPort,
 };
 
 #[derive(Debug, PartialEq, Clone)]
@@ -13,20 +13,14 @@ struct InspectorState {}
 
 #[derive(StatefulNode)]
 
-pub struct Content<S, A: Actions, N>
-where
-    N: Node<S, A>,
-{
+pub struct Content<S, A: Actions> {
     state: NodeState,
-    statusbar: statusbar::StatusBar<S, A, N>,
-    view: frame::Frame<S, A, view::View<S, A, N>>,
-    _marker: PhantomData<(S, A, N)>,
+    statusbar: statusbar::StatusBar<S, A>,
+    view: frame::Frame<S, A, view::View<S, A>>,
+    _marker: PhantomData<(S, A)>,
 }
 
-impl<S, A: Actions, N> Content<S, A, N>
-where
-    N: Node<S, A>,
-{
+impl<A: Actions> Content<InspectorState, A> {
     pub fn new() -> Self {
         Content {
             _marker: PhantomData,
@@ -37,23 +31,31 @@ where
     }
 }
 
-impl<S, A: Actions, N> Node<S, A> for Content<S, A, N>
-where
-    N: Node<S, A>,
-{
-    fn render(&mut self, app: &mut Canopy<S, A>, _r: &mut Render, vp: ViewPort) -> Result<()> {
+impl<A: Actions> Node<InspectorState, A> for Content<InspectorState, A> {
+    fn render(
+        &mut self,
+        app: &mut Canopy<InspectorState, A>,
+        _r: &mut Render,
+        vp: ViewPort,
+    ) -> Result<()> {
         let parts = vp.carve_vend(1)?;
         self.statusbar.wrap(app, parts[1])?;
         self.view.wrap(app, parts[0])?;
         Ok(())
     }
 
-    fn children(&self, f: &mut dyn FnMut(&dyn Node<S, A>) -> Result<()>) -> Result<()> {
+    fn children(
+        &self,
+        f: &mut dyn FnMut(&dyn Node<InspectorState, A>) -> Result<()>,
+    ) -> Result<()> {
         f(&self.statusbar)?;
         f(&self.view)
     }
 
-    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node<S, A>) -> Result<()>) -> Result<()> {
+    fn children_mut(
+        &mut self,
+        f: &mut dyn FnMut(&mut dyn Node<InspectorState, A>) -> Result<()>,
+    ) -> Result<()> {
         f(&mut self.statusbar)?;
         f(&mut self.view)
     }
@@ -69,7 +71,7 @@ where
     root: N,
     active: bool,
     activate: key::Key,
-    content: Content<S, A, N>,
+    content: Graft<S, A, InspectorState, (), Content<InspectorState, ()>>,
 }
 
 impl<S, A: Actions, N> Inspector<S, A, N>
@@ -81,7 +83,7 @@ where
             _marker: PhantomData,
             state: NodeState::default(),
             active: false,
-            content: Content::new(),
+            content: Graft::new(InspectorState {}, Content::new()),
             root,
             activate,
         }

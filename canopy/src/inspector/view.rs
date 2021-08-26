@@ -8,28 +8,19 @@ use crate::{
 
 #[derive(StatefulNode)]
 
-pub struct Logs<S, A: Actions, N>
-where
-    N: Node<S, A>,
-{
+pub struct Logs<S, A: Actions> {
     state: NodeState,
-    _marker: PhantomData<(S, A, N)>,
+    _marker: PhantomData<(S, A)>,
 }
 
-impl<S, A: Actions, N> Node<S, A> for Logs<S, A, N>
-where
-    N: Node<S, A>,
-{
+impl<S, A: Actions> Node<S, A> for Logs<S, A> {
     fn render(&mut self, _app: &mut Canopy<S, A>, r: &mut Render, vp: ViewPort) -> Result<()> {
         r.fill("", vp.view_rect(), ' ')?;
         Ok(())
     }
 }
 
-impl<S, A: Actions, N> Logs<S, A, N>
-where
-    N: Node<S, A>,
-{
+impl<S, A: Actions> Logs<S, A> {
     pub fn new() -> Self {
         Logs {
             state: NodeState::default(),
@@ -41,20 +32,14 @@ where
 /// View contains the body of the inspector.
 #[derive(StatefulNode)]
 
-pub struct View<S, A: Actions, N>
-where
-    N: Node<S, A>,
-{
+pub struct View<S, A: Actions> {
     tabs: tabs::Tabs<S, A>,
-    logs: Logs<S, A, N>,
+    logs: Logs<S, A>,
     state: NodeState,
-    _marker: PhantomData<(S, A, N)>,
+    _marker: PhantomData<(S, A)>,
 }
 
-impl<S, A: Actions, N> Node<S, A> for View<S, A, N>
-where
-    N: Node<S, A>,
-{
+impl<S, A: Actions> Node<S, A> for View<S, A> {
     fn focus(&mut self, app: &mut Canopy<S, A>) -> Result<Outcome<A>> {
         app.set_focus(self);
         Ok(Outcome::handle())
@@ -92,10 +77,7 @@ where
     }
 }
 
-impl<S, A: Actions, N> View<S, A, N>
-where
-    N: Node<S, A>,
-{
+impl<S, A: Actions> View<S, A> {
     pub fn new() -> Self {
         View {
             state: NodeState::default(),

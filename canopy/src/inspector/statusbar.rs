@@ -5,18 +5,12 @@ use crate::{Actions, Canopy, Node, NodeState, Render, Result, StatefulNode, View
 
 #[derive(StatefulNode)]
 
-pub struct StatusBar<S, A: Actions, N>
-where
-    N: Node<S, A>,
-{
+pub struct StatusBar<S, A: Actions> {
     state: NodeState,
-    _marker: PhantomData<(S, A, N)>,
+    _marker: PhantomData<(S, A)>,
 }
 
-impl<S, A: Actions, N> StatusBar<S, A, N>
-where
-    N: Node<S, A>,
-{
+impl<S, A: Actions> StatusBar<S, A> {
     pub fn new() -> Self {
         StatusBar {
             state: NodeState::default(),
@@ -25,10 +19,7 @@ where
     }
 }
 
-impl<S, A: Actions, N> Node<S, A> for StatusBar<S, A, N>
-where
-    N: Node<S, A>,
-{
+impl<S, A: Actions> Node<S, A> for StatusBar<S, A> {
     fn render(&mut self, _app: &mut Canopy<S, A>, r: &mut Render, vp: ViewPort) -> Result<()> {
         r.style.push_layer("statusbar");
         r.text("statusbar/text", vp.view_rect().first_line(), "inspector")?;
