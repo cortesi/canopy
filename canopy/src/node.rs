@@ -23,9 +23,9 @@ impl Walker for () {
 }
 
 /// Nodes are the basic building-blocks of a Canopy UI. Nodes are composed in a
-/// tree structure, with each node responsible for managing its own children.
-/// Nodes keep track of the area of the screen that they are responsible for
-/// through the resize event.
+/// tree, with each node responsible for managing its own children. Nodes keep
+/// track of the area of the screen that they are responsible for through the
+/// resize event.
 ///
 /// The type paramter `S` is the application backing store object that is passed
 /// to all events.
