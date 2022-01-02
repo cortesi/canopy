@@ -6,7 +6,7 @@ edition = "2021"
 
 
 [dependencies]
-crossterm = "0.20.0"
+crossterm = "0.22.1"
 pad = "0.1.6"
 textwrap = "0.14.0"
 color-backtrace = "0.5.1"
@@ -14,7 +14,7 @@ scopeguard = "1.1.0"
 
 canopy-derive = { path = "../canopy-derive" }
 thiserror = "1.0.24"
-duplicate = "0.2.9"
+duplicate = "0.3.0"
 
 [dev-dependencies]
 rand = "0.8.3"
