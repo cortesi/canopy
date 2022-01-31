@@ -96,6 +96,6 @@ where
         self.core.taint_tree(&mut self.root)?;
         self.core.pre_render(rndr, &mut self.root)?;
         self.core.render(rndr, &mut self.root)?;
-        self.core.post_render(rndr, &mut self.root)
+        self.core.post_render(rndr, &self.root)
     }
 }
