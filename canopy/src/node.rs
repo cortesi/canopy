@@ -4,7 +4,7 @@ use crate::{
     geom::{Frame, Rect, Size},
     Actions, Canopy, ControlBackend, Outcome, Render, Result, StatefulNode, ViewPort,
 };
-use duplicate::duplicate;
+use duplicate::duplicate_item;
 
 /// Walker is implemented for the return values of tree operations.
 pub trait Walker {
@@ -190,7 +190,7 @@ pub trait Node<S, A: Actions>: StatefulNode {
 /// A postorder traversal of the nodes under e. Enabling skipping in the Walker
 /// results in all the nodes in a route straight back to the root being visited
 /// before exiting.
-#[duplicate(
+#[duplicate_item(
     method             reference(type)  children;
     [postorder]        [& type]         [children];
     [postorder_mut]    [&mut type]      [children_mut];

@@ -1,4 +1,4 @@
-use duplicate::duplicate;
+use duplicate::duplicate_item;
 use std::marker::PhantomData;
 
 use crate as canopy;
@@ -89,7 +89,7 @@ where
 }
 
 impl<S, A: Actions, N: Node<S, A>> Node<S, A> for Panes<S, A, N> {
-    #[duplicate(
+    #[duplicate_item(
         method          reference(type);
         [children]      [& type];
         [children_mut]  [&mut type];
@@ -151,14 +151,14 @@ mod tests {
         p.place(&mut app, r)?;
 
         let tn = utils::TBranch::new("c");
-        assert_eq!(p.focus_coords(&mut app), Some((0, 0)));
-        p.insert_row(&mut app, tn)?;
+        assert_eq!(p.focus_coords(&app), Some((0, 0)));
+        p.insert_row(&app, tn)?;
         p.place(&mut app, r)?;
 
         assert_eq!(p.shape(), vec![2, 1]);
 
         p.children[1][0].a.focus(&mut app)?;
-        assert_eq!(p.focus_coords(&mut app), Some((1, 0)));
+        assert_eq!(p.focus_coords(&app), Some((1, 0)));
         Ok(())
     }
 }

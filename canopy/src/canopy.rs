@@ -1,4 +1,4 @@
-use duplicate::duplicate;
+use duplicate::duplicate_item;
 use std::marker::PhantomData;
 use std::process::exit;
 
@@ -545,7 +545,7 @@ impl<'a, S, A: Actions> Canopy<S, A> {
 
 /// Calls a closure on the currently focused node and all its parents to the
 /// root.
-#[duplicate(
+#[duplicate_item(
         method              reference(type)    traversal;
         [focus_path]        [& type]           [postorder];
         [focus_path_mut]    [&mut type]        [postorder_mut];
@@ -652,20 +652,20 @@ mod tests {
 
             app.focus_next(&mut root)?;
             assert!(app.is_focused(&root.a));
-            assert!(app.is_focus_ancestor(&mut root));
-            assert!(!app.is_focus_ancestor(&mut root.a));
+            assert!(app.is_focus_ancestor(&root));
+            assert!(!app.is_focus_ancestor(&root.a));
 
             app.focus_next(&mut root)?;
             assert!(app.is_focused(&root.a.a));
-            assert!(app.is_focus_ancestor(&mut root.a));
+            assert!(app.is_focus_ancestor(&root.a));
             app.focus_next(&mut root)?;
             assert!(app.is_focused(&root.a.b));
-            assert!(app.is_focus_ancestor(&mut root.a));
+            assert!(app.is_focus_ancestor(&root.a));
             app.focus_next(&mut root)?;
             assert!(app.is_focused(&root.b));
 
             app.set_focus(&mut root.b.b);
-            assert!(app.is_focus_ancestor(&mut root.b));
+            assert!(app.is_focus_ancestor(&root.b));
             app.focus_next(&mut root)?;
             assert!(app.is_focused(&root));
             Ok(())
@@ -700,13 +700,13 @@ mod tests {
         run_test(|_, mut app, _, _, mut root, _| {
             assert_eq!(focvec(&mut app, &mut root)?.len(), 0);
 
-            assert!(!app.on_focus_path(&mut root));
-            assert!(!app.on_focus_path(&mut root.a));
+            assert!(!app.on_focus_path(&root));
+            assert!(!app.on_focus_path(&root.a));
 
             app.set_focus(&mut root.a.a);
-            assert!(app.on_focus_path(&mut root));
-            assert!(app.on_focus_path(&mut root.a));
-            assert!(!app.on_focus_path(&mut root.b));
+            assert!(app.on_focus_path(&root));
+            assert!(app.on_focus_path(&root.a));
+            assert!(!app.on_focus_path(&root.b));
 
             assert_eq!(focvec(&mut app, &mut root)?, vec!["ba:la", "ba", "r"]);
 

@@ -14,7 +14,7 @@ scopeguard = "1.1.0"
 
 canopy-derive = { path = "../canopy-derive" }
 thiserror = "1.0.30"
-duplicate = "0.3.0"
+duplicate = "0.4.0"
 
 [dev-dependencies]
 rand = "0.8.4"

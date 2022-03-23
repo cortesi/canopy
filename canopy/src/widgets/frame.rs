@@ -1,4 +1,4 @@
-use duplicate::duplicate;
+use duplicate::duplicate_item;
 use std::marker::PhantomData;
 
 use pad::PadStr;
@@ -164,7 +164,7 @@ where
 
         Ok(())
     }
-    #[duplicate(
+    #[duplicate_item(
         method          reference(type);
         [children]      [& type];
         [children_mut]  [&mut type];

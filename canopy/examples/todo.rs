@@ -1,4 +1,4 @@
-use duplicate::duplicate;
+use duplicate::duplicate_item;
 
 use canopy;
 use canopy::{
@@ -174,7 +174,7 @@ impl Node<Handle, ()> for Root {
         Ok(Outcome::handle())
     }
 
-    #[duplicate(
+    #[duplicate_item(
         method          reference(type);
         [children]      [& type];
         [children_mut]  [&mut type];

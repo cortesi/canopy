@@ -1,6 +1,6 @@
 #[cfg(test)]
 pub mod utils {
-    use duplicate::duplicate;
+    use duplicate::duplicate_item;
 
     use crate::{self as canopy, ControlBackend};
     use crate::{
@@ -203,7 +203,7 @@ pub mod utils {
             self.handle(s, &format!("eaction:{}", a.string()))
         }
 
-        #[duplicate(
+        #[duplicate_item(
             method          reference(type);
             [children]      [& type];
             [children_mut]  [&mut type];
@@ -285,7 +285,7 @@ pub mod utils {
             self.handle(s, &format!("eaction:{}", a.string()))
         }
 
-        #[duplicate(
+        #[duplicate_item(
             method          reference(type);
             [children]      [& type];
             [children_mut]  [&mut type];
