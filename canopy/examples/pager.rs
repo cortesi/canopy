@@ -92,7 +92,7 @@ impl Node<Handle, ()> for Root {
     }
 }
 
-pub fn main() -> Result<()> {
+pub fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
     if args.len() != 2 {
         println!("Usage: pager filename");

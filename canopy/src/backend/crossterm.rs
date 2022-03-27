@@ -8,7 +8,7 @@ use scopeguard::defer;
 
 use crate::{
     control::ControlBackend,
-    cursor,
+    cursor, error,
     event::{key, mouse, Event, EventSource},
     geom::{Point, Size},
     render::RenderBackend,
@@ -42,8 +42,33 @@ fn translate_color(c: Color) -> style::Color {
     }
 }
 
+fn translate_result<T>(e: crossterm::Result<T>) -> Result<T> {
+    match e {
+        Ok(t) => Ok(t),
+        Err(e) => Err(error::Error::Render(e.to_string())),
+    }
+}
+
 pub struct CrosstermControl {
     fp: std::io::Stderr,
+}
+
+impl CrosstermControl {
+    fn enter(&mut self) -> crossterm::Result<()> {
+        terminal::enable_raw_mode()?;
+        self.fp.execute(terminal::EnterAlternateScreen)?;
+        self.fp.execute(cevent::EnableMouseCapture)?;
+        self.fp.execute(ccursor::Hide)?;
+        terminal::disable_raw_mode()?;
+        Ok(())
+    }
+    fn exit(&mut self) -> crossterm::Result<()> {
+        self.fp.execute(terminal::LeaveAlternateScreen)?;
+        self.fp.execute(cevent::DisableMouseCapture)?;
+        self.fp.execute(ccursor::Show)?;
+        terminal::disable_raw_mode()?;
+        Ok(())
+    }
 }
 
 impl Default for CrosstermControl {
@@ -56,19 +81,10 @@ impl Default for CrosstermControl {
 
 impl ControlBackend for CrosstermControl {
     fn enter(&mut self) -> Result<()> {
-        terminal::enable_raw_mode()?;
-        self.fp.execute(terminal::EnterAlternateScreen)?;
-        self.fp.execute(cevent::EnableMouseCapture)?;
-        self.fp.execute(ccursor::Hide)?;
-        terminal::disable_raw_mode()?;
-        Ok(())
+        translate_result(self.enter())
     }
     fn exit(&mut self) -> Result<()> {
-        self.fp.execute(terminal::LeaveAlternateScreen)?;
-        self.fp.execute(cevent::DisableMouseCapture)?;
-        self.fp.execute(ccursor::Show)?;
-        terminal::disable_raw_mode()?;
-        Ok(())
+        translate_result(self.exit())
     }
 }
 
@@ -76,26 +92,18 @@ pub struct CrosstermRender {
     fp: std::io::Stderr,
 }
 
-impl Default for CrosstermRender {
-    fn default() -> CrosstermRender {
-        CrosstermRender {
-            fp: std::io::stderr(),
-        }
-    }
-}
-
-impl RenderBackend for CrosstermRender {
-    fn flush(&mut self) -> Result<()> {
+impl CrosstermRender {
+    fn flush(&mut self) -> crossterm::Result<()> {
         self.fp.flush()?;
         Ok(())
     }
 
-    fn hide_cursor(&mut self) -> Result<()> {
+    fn hide_cursor(&mut self) -> crossterm::Result<()> {
         self.fp.queue(ccursor::Hide {})?;
         Ok(())
     }
 
-    fn show_cursor(&mut self, c: cursor::Cursor) -> Result<()> {
+    fn show_cursor(&mut self, c: cursor::Cursor) -> crossterm::Result<()> {
         self.fp.queue(ccursor::MoveTo(c.location.x, c.location.y))?;
         if c.blink {
             self.fp.queue(ccursor::EnableBlinking)?;
@@ -111,7 +119,7 @@ impl RenderBackend for CrosstermRender {
         Ok(())
     }
 
-    fn style(&mut self, s: Style) -> Result<()> {
+    fn style(&mut self, s: Style) -> crossterm::Result<()> {
         // Order is important here - if we reset after setting foreground and
         // background colors they are lost.
         if s.attrs.is_empty() {
@@ -148,10 +156,40 @@ impl RenderBackend for CrosstermRender {
         Ok(())
     }
 
-    fn text(&mut self, loc: Point, txt: &str) -> Result<()> {
+    fn text(&mut self, loc: Point, txt: &str) -> crossterm::Result<()> {
         self.fp.queue(ccursor::MoveTo(loc.x, loc.y))?;
         self.fp.queue(style::Print(txt))?;
         Ok(())
+    }
+}
+
+impl Default for CrosstermRender {
+    fn default() -> CrosstermRender {
+        CrosstermRender {
+            fp: std::io::stderr(),
+        }
+    }
+}
+
+impl RenderBackend for CrosstermRender {
+    fn flush(&mut self) -> Result<()> {
+        translate_result(self.flush())
+    }
+
+    fn hide_cursor(&mut self) -> Result<()> {
+        translate_result(self.hide_cursor())
+    }
+
+    fn show_cursor(&mut self, c: cursor::Cursor) -> Result<()> {
+        translate_result(self.show_cursor(c))
+    }
+
+    fn style(&mut self, s: Style) -> Result<()> {
+        translate_result(self.style(s))
+    }
+
+    fn text(&mut self, loc: Point, txt: &str) -> Result<()> {
+        translate_result(self.text(loc, txt))
     }
 
     #[allow(unused_must_use)]
@@ -284,15 +322,16 @@ where
 
     let mut app = Canopy::new();
 
-    terminal::enable_raw_mode()?;
+    translate_result(terminal::enable_raw_mode())?;
     let mut w = std::io::stderr();
 
-    crossterm::execute!(
+    translate_result(crossterm::execute!(
         w,
         terminal::EnterAlternateScreen,
         cevent::EnableMouseCapture,
         ccursor::Hide
-    )?;
+    ))?;
+
     defer! {
         let mut stderr = std::io::stderr();
         #[allow(unused_must_use)]
@@ -319,7 +358,7 @@ where
 
     let events = EventSource::default();
     event_emitter(&events);
-    let size = terminal::size()?;
+    let size = translate_result(terminal::size())?;
     app.set_root_size(Size::new(size.0, size.1), root)?;
 
     loop {

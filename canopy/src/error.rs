@@ -1,4 +1,3 @@
-use crossterm;
 use std::sync::mpsc;
 use std::sync::{MutexGuard, PoisonError};
 
@@ -19,12 +18,8 @@ pub enum Error {
     Layout(String),
     #[error("runloop")]
     RunLoop(String),
-}
-
-impl From<crossterm::ErrorKind> for Error {
-    fn from(e: crossterm::ErrorKind) -> Self {
-        Error::Render(e.to_string())
-    }
+    #[error("internal")]
+    Internal(String),
 }
 
 impl From<mpsc::RecvError> for Error {
