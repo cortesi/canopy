@@ -1,3 +1,6 @@
+// Needed due to the semantics of the duplicate crate
+#![allow(clippy::needless_arbitrary_self_type)]
+
 mod actions;
 mod canopy;
 mod control;

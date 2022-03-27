@@ -8,21 +8,11 @@ use crate::Result;
 ///  - `view` is some sub-rectangle of `size` that is being displayed.
 ///  - `screen`, is a rectangle on the physical screen that this node paints to,
 ///    equal in size to view.
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ViewPort {
     screen: Point,
     view: Rect,
     size: Size,
-}
-
-impl Default for ViewPort {
-    fn default() -> ViewPort {
-        ViewPort {
-            screen: Point::default(),
-            view: Rect::default(),
-            size: Size::default(),
-        }
-    }
 }
 
 impl ViewPort {

@@ -1,7 +1,7 @@
 use crossterm::event as cevent;
 use std::ops::Add;
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Mods {
     pub shift: bool,
     pub ctrl: bool,
@@ -14,16 +14,6 @@ impl From<cevent::KeyModifiers> for Mods {
             shift: m.contains(cevent::KeyModifiers::SHIFT),
             ctrl: m.contains(cevent::KeyModifiers::CONTROL),
             alt: m.contains(cevent::KeyModifiers::ALT),
-        }
-    }
-}
-
-impl Default for Mods {
-    fn default() -> Self {
-        Mods {
-            shift: false,
-            ctrl: false,
-            alt: false,
         }
     }
 }

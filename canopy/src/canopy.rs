@@ -84,6 +84,7 @@ macro_rules! process_event(
 
 /// The core of a Canopy app - this struct keeps track of the render and focus
 /// state, and provides functionality for interacting with node trees.
+#[derive(Default)]
 pub struct Canopy<S, A: Actions> {
     // A counter that is incremented every time focus changes. The current focus
     // will have a state `focus_gen` equal to this.

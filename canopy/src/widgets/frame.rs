@@ -168,7 +168,7 @@ where
     }
     #[duplicate_item(
         method          reference(type);
-        [children]      [& type];
+        [children]      [&type];
         [children_mut]  [&mut type];
     )]
     fn method(

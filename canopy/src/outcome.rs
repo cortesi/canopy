@@ -26,15 +26,9 @@ impl<A: Actions> Handle<A> {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Default, Debug, PartialEq, Clone, Copy)]
 pub struct Ignore {
     pub skip: bool,
-}
-
-impl Default for Ignore {
-    fn default() -> Self {
-        Ignore { skip: false }
-    }
 }
 
 impl Ignore {

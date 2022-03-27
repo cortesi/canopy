@@ -31,6 +31,12 @@ impl<A: Actions> Content<InspectorState, A> {
     }
 }
 
+impl<A: Actions> Default for Content<InspectorState, A> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<A: Actions> Node<InspectorState, A> for Content<InspectorState, A> {
     fn render(
         &mut self,

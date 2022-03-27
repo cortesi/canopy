@@ -78,21 +78,11 @@ pub struct Style {
 
 /// A possibly partial style specification, which is stored in a StyleManager.
 /// Partial styles are completely resolved during the style resolution process.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Default, Debug, PartialEq, Clone)]
 struct PartialStyle {
     pub fg: Option<Color>,
     pub bg: Option<Color>,
     pub attrs: Option<AttrSet>,
-}
-
-impl Default for PartialStyle {
-    fn default() -> Self {
-        PartialStyle {
-            fg: None,
-            bg: None,
-            attrs: None,
-        }
-    }
 }
 
 impl PartialStyle {

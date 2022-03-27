@@ -2,6 +2,7 @@ use crate::{cursor, geom::Point, render::RenderBackend, style::Style, ControlBac
 use std::sync::{Arc, Mutex};
 
 /// A handle to a vector that contains the result of the render.
+#[derive(Default)]
 pub struct TestBuf {
     pub text: Vec<String>,
 }
@@ -9,12 +10,6 @@ pub struct TestBuf {
 impl TestBuf {
     pub fn is_empty(&self) -> bool {
         self.text.is_empty()
-    }
-}
-
-impl Default for TestBuf {
-    fn default() -> Self {
-        TestBuf { text: vec![] }
     }
 }
 
@@ -69,7 +64,7 @@ impl RenderBackend for TestRender {
 
     fn text(&mut self, _loc: Point, txt: &str) -> Result<()> {
         let txt = txt.trim();
-        if txt != "" {
+        if !txt.is_empty() {
             self.text.lock()?.text.push(txt.trim().into());
         }
         Ok(())
