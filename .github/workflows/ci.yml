@@ -2,19 +2,20 @@ on:
   push:
   pull_request:
 
-env: 
+env:
   CARGO_TERM_COLOR: always
 
 jobs:
   build_and_test:
-    name: Rust project - latest
-    runs-on: ubuntu-latest
+    name: canopy - ${{ matrix.os }} ${{ matrix.toolchain }}
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        toolchain:
-          - stable
-          - beta
-          - nightly
+        include:
+          - { toolchain: stable, os: ubuntu-latest }
+          - { toolchain: nightly, os: ubuntu-latest }
+          - { toolchain: stable, os: windows-latest }
+          - { toolchain: nightly, os: windows-latest }
     steps:
       - uses: actions/checkout@v2
       - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
