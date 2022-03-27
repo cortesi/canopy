@@ -126,7 +126,7 @@ pub trait Node<S, A: Actions>: StatefulNode {
     /// based on the width or the height of the target area, or neither, but not
     /// both. The resulting size may be smaller or larger than the target. If
     /// non-trivial computation is done to compute the size (e.g. reflowing
-    /// text), it should be saved for use by future calls. This method may be
+    /// text), it should be cached for use by future calls. This method may be
     /// called multiple times for a given node during a render sweep, so
     /// re-fitting to the same size should be cheap and return consistent
     /// results. This function should not change the node's viewport parameters

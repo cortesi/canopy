@@ -1,4 +1,3 @@
-use crossterm::event as cevent;
 use std::ops::Add;
 
 #[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
@@ -6,16 +5,6 @@ pub struct Mods {
     pub shift: bool,
     pub ctrl: bool,
     pub alt: bool,
-}
-
-impl From<cevent::KeyModifiers> for Mods {
-    fn from(m: cevent::KeyModifiers) -> Self {
-        Mods {
-            shift: m.contains(cevent::KeyModifiers::SHIFT),
-            ctrl: m.contains(cevent::KeyModifiers::CONTROL),
-            alt: m.contains(cevent::KeyModifiers::ALT),
-        }
-    }
 }
 
 impl Add<KeyCode> for Mods {
@@ -113,31 +102,6 @@ impl KeyCode {
     }
 }
 
-impl From<cevent::KeyCode> for KeyCode {
-    fn from(k: cevent::KeyCode) -> Self {
-        match k {
-            cevent::KeyCode::Backspace => KeyCode::Backspace,
-            cevent::KeyCode::Enter => KeyCode::Enter,
-            cevent::KeyCode::Left => KeyCode::Left,
-            cevent::KeyCode::Right => KeyCode::Right,
-            cevent::KeyCode::Up => KeyCode::Up,
-            cevent::KeyCode::Down => KeyCode::Down,
-            cevent::KeyCode::Home => KeyCode::Home,
-            cevent::KeyCode::End => KeyCode::End,
-            cevent::KeyCode::PageUp => KeyCode::PageUp,
-            cevent::KeyCode::PageDown => KeyCode::PageDown,
-            cevent::KeyCode::Tab => KeyCode::Tab,
-            cevent::KeyCode::BackTab => KeyCode::BackTab,
-            cevent::KeyCode::Delete => KeyCode::Delete,
-            cevent::KeyCode::Insert => KeyCode::Insert,
-            cevent::KeyCode::F(x) => KeyCode::F(x),
-            cevent::KeyCode::Char(c) => KeyCode::Char(c),
-            cevent::KeyCode::Null => KeyCode::Null,
-            cevent::KeyCode::Esc => KeyCode::Esc,
-        }
-    }
-}
-
 impl From<char> for KeyCode {
     fn from(c: char) -> Self {
         KeyCode::Char(c)
@@ -178,12 +142,6 @@ impl std::cmp::PartialEq<Key> for char {
 impl From<char> for Key {
     fn from(c: char) -> Self {
         Key(None, KeyCode::Char(c))
-    }
-}
-
-impl From<cevent::KeyEvent> for Key {
-    fn from(c: cevent::KeyEvent) -> Self {
-        Key(Some(c.modifiers.into()), c.code.into())
     }
 }
 

@@ -9,43 +9,36 @@ use scopeguard::defer;
 use crate::{
     control::ControlBackend,
     cursor,
-    event::{Event, EventSource},
+    event::{key, mouse, Event, EventSource},
     geom::{Point, Size},
     render::RenderBackend,
     style::{Color, Style, StyleManager},
     Actions, Canopy, Node, Outcome, Render, Result,
 };
 use crossterm::{
-    cursor::{CursorShape, DisableBlinking, EnableBlinking, Hide, MoveTo, SetCursorShape, Show},
-    event::{self, DisableMouseCapture, EnableMouseCapture},
-    execute,
-    style::Print,
-    style::{Attribute, Color as CColor, SetAttribute, SetBackgroundColor, SetForegroundColor},
-    terminal::size,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-    ExecutableCommand, QueueableCommand,
+    self, cursor as ccursor, event as cevent, style, terminal, ExecutableCommand, QueueableCommand,
 };
 
-fn translate_color(c: Color) -> CColor {
+fn translate_color(c: Color) -> style::Color {
     match c {
-        Color::Black => CColor::Black,
-        Color::DarkGrey => CColor::DarkGrey,
-        Color::Red => CColor::Red,
-        Color::DarkRed => CColor::DarkRed,
-        Color::Green => CColor::Green,
-        Color::DarkGreen => CColor::DarkGreen,
-        Color::Yellow => CColor::Yellow,
-        Color::DarkYellow => CColor::DarkYellow,
-        Color::Blue => CColor::Blue,
-        Color::DarkBlue => CColor::DarkBlue,
-        Color::Magenta => CColor::Magenta,
-        Color::DarkMagenta => CColor::DarkMagenta,
-        Color::Cyan => CColor::Cyan,
-        Color::DarkCyan => CColor::DarkCyan,
-        Color::White => CColor::White,
-        Color::Grey => CColor::Grey,
-        Color::Rgb { r, g, b } => CColor::Rgb { r, g, b },
-        Color::AnsiValue(a) => CColor::AnsiValue(a),
+        Color::Black => style::Color::Black,
+        Color::DarkGrey => style::Color::DarkGrey,
+        Color::Red => style::Color::Red,
+        Color::DarkRed => style::Color::DarkRed,
+        Color::Green => style::Color::Green,
+        Color::DarkGreen => style::Color::DarkGreen,
+        Color::Yellow => style::Color::Yellow,
+        Color::DarkYellow => style::Color::DarkYellow,
+        Color::Blue => style::Color::Blue,
+        Color::DarkBlue => style::Color::DarkBlue,
+        Color::Magenta => style::Color::Magenta,
+        Color::DarkMagenta => style::Color::DarkMagenta,
+        Color::Cyan => style::Color::Cyan,
+        Color::DarkCyan => style::Color::DarkCyan,
+        Color::White => style::Color::White,
+        Color::Grey => style::Color::Grey,
+        Color::Rgb { r, g, b } => style::Color::Rgb { r, g, b },
+        Color::AnsiValue(a) => style::Color::AnsiValue(a),
     }
 }
 
@@ -63,18 +56,18 @@ impl Default for CrosstermControl {
 
 impl ControlBackend for CrosstermControl {
     fn enter(&mut self) -> Result<()> {
-        enable_raw_mode()?;
-        self.fp.execute(EnterAlternateScreen)?;
-        self.fp.execute(EnableMouseCapture)?;
-        self.fp.execute(Hide)?;
-        disable_raw_mode()?;
+        terminal::enable_raw_mode()?;
+        self.fp.execute(terminal::EnterAlternateScreen)?;
+        self.fp.execute(cevent::EnableMouseCapture)?;
+        self.fp.execute(ccursor::Hide)?;
+        terminal::disable_raw_mode()?;
         Ok(())
     }
     fn exit(&mut self) -> Result<()> {
-        self.fp.execute(LeaveAlternateScreen)?;
-        self.fp.execute(DisableMouseCapture)?;
-        self.fp.execute(Show)?;
-        disable_raw_mode()?;
+        self.fp.execute(terminal::LeaveAlternateScreen)?;
+        self.fp.execute(cevent::DisableMouseCapture)?;
+        self.fp.execute(ccursor::Show)?;
+        terminal::disable_raw_mode()?;
         Ok(())
     }
 }
@@ -98,23 +91,23 @@ impl RenderBackend for CrosstermRender {
     }
 
     fn hide_cursor(&mut self) -> Result<()> {
-        self.fp.queue(Hide {})?;
+        self.fp.queue(ccursor::Hide {})?;
         Ok(())
     }
 
     fn show_cursor(&mut self, c: cursor::Cursor) -> Result<()> {
-        self.fp.queue(MoveTo(c.location.x, c.location.y))?;
+        self.fp.queue(ccursor::MoveTo(c.location.x, c.location.y))?;
         if c.blink {
-            self.fp.queue(EnableBlinking)?;
+            self.fp.queue(ccursor::EnableBlinking)?;
         } else {
-            self.fp.queue(DisableBlinking)?;
+            self.fp.queue(ccursor::DisableBlinking)?;
         }
-        self.fp.queue(SetCursorShape(match c.shape {
-            cursor::CursorShape::Block => CursorShape::Block,
-            cursor::CursorShape::Line => CursorShape::Line,
-            cursor::CursorShape::Underscore => CursorShape::UnderScore,
+        self.fp.queue(ccursor::SetCursorShape(match c.shape {
+            cursor::CursorShape::Block => ccursor::CursorShape::Block,
+            cursor::CursorShape::Line => ccursor::CursorShape::Line,
+            cursor::CursorShape::Underscore => ccursor::CursorShape::UnderScore,
         }))?;
-        self.fp.queue(Show)?;
+        self.fp.queue(ccursor::Show)?;
         Ok(())
     }
 
@@ -122,49 +115,134 @@ impl RenderBackend for CrosstermRender {
         // Order is important here - if we reset after setting foreground and
         // background colors they are lost.
         if s.attrs.is_empty() {
-            self.fp.queue(SetAttribute(Attribute::Reset))?;
+            self.fp
+                .queue(style::SetAttribute(style::Attribute::Reset))?;
         } else {
             if s.attrs.bold {
-                self.fp.queue(SetAttribute(Attribute::Bold))?;
+                self.fp.queue(style::SetAttribute(style::Attribute::Bold))?;
             }
             if s.attrs.crossedout {
-                self.fp.queue(SetAttribute(Attribute::CrossedOut))?;
+                self.fp
+                    .queue(style::SetAttribute(style::Attribute::CrossedOut))?;
             }
             if s.attrs.dim {
-                self.fp.queue(SetAttribute(Attribute::Dim))?;
+                self.fp.queue(style::SetAttribute(style::Attribute::Dim))?;
             }
             if s.attrs.italic {
-                self.fp.queue(SetAttribute(Attribute::Italic))?;
+                self.fp
+                    .queue(style::SetAttribute(style::Attribute::Italic))?;
             }
             if s.attrs.overline {
-                self.fp.queue(SetAttribute(Attribute::OverLined))?;
+                self.fp
+                    .queue(style::SetAttribute(style::Attribute::OverLined))?;
             }
             if s.attrs.underline {
-                self.fp.queue(SetAttribute(Attribute::Underlined))?;
+                self.fp
+                    .queue(style::SetAttribute(style::Attribute::Underlined))?;
             }
         }
-        self.fp.queue(SetForegroundColor(translate_color(s.fg)))?;
-        self.fp.queue(SetBackgroundColor(translate_color(s.bg)))?;
+        self.fp
+            .queue(style::SetForegroundColor(translate_color(s.fg)))?;
+        self.fp
+            .queue(style::SetBackgroundColor(translate_color(s.bg)))?;
         Ok(())
     }
 
     fn text(&mut self, loc: Point, txt: &str) -> Result<()> {
-        self.fp.queue(MoveTo(loc.x, loc.y))?;
-        self.fp.queue(Print(txt))?;
+        self.fp.queue(ccursor::MoveTo(loc.x, loc.y))?;
+        self.fp.queue(style::Print(txt))?;
         Ok(())
     }
 
     #[allow(unused_must_use)]
     fn exit(&mut self, code: i32) -> ! {
-        self.fp.execute(LeaveAlternateScreen);
-        self.fp.execute(DisableMouseCapture);
-        self.fp.execute(Show);
-        disable_raw_mode();
+        self.fp.execute(terminal::LeaveAlternateScreen);
+        self.fp.execute(cevent::DisableMouseCapture);
+        self.fp.execute(ccursor::Show);
+        terminal::disable_raw_mode();
         exit(code)
     }
 
     fn reset(&mut self) -> Result<()> {
         Ok(())
+    }
+}
+
+fn translate_key_modifiers(mods: cevent::KeyModifiers) -> key::Mods {
+    key::Mods {
+        shift: mods.contains(cevent::KeyModifiers::SHIFT),
+        ctrl: mods.contains(cevent::KeyModifiers::CONTROL),
+        alt: mods.contains(cevent::KeyModifiers::ALT),
+    }
+}
+
+fn translate_button(b: cevent::MouseButton) -> mouse::Button {
+    match b {
+        cevent::MouseButton::Left => mouse::Button::Left,
+        cevent::MouseButton::Right => mouse::Button::Right,
+        cevent::MouseButton::Middle => mouse::Button::Middle,
+    }
+}
+
+/// Translate a crossterm event into a canopy event
+fn translate_event<A>(e: cevent::Event) -> Event<A>
+where
+    A: 'static + Actions,
+{
+    match e {
+        cevent::Event::Key(k) => Event::Key(key::Key(
+            Some(translate_key_modifiers(k.modifiers)),
+            match k.code {
+                cevent::KeyCode::Backspace => key::KeyCode::Backspace,
+                cevent::KeyCode::Enter => key::KeyCode::Enter,
+                cevent::KeyCode::Left => key::KeyCode::Left,
+                cevent::KeyCode::Right => key::KeyCode::Right,
+                cevent::KeyCode::Up => key::KeyCode::Up,
+                cevent::KeyCode::Down => key::KeyCode::Down,
+                cevent::KeyCode::Home => key::KeyCode::Home,
+                cevent::KeyCode::End => key::KeyCode::End,
+                cevent::KeyCode::PageUp => key::KeyCode::PageUp,
+                cevent::KeyCode::PageDown => key::KeyCode::PageDown,
+                cevent::KeyCode::Tab => key::KeyCode::Tab,
+                cevent::KeyCode::BackTab => key::KeyCode::BackTab,
+                cevent::KeyCode::Delete => key::KeyCode::Delete,
+                cevent::KeyCode::Insert => key::KeyCode::Insert,
+                cevent::KeyCode::F(x) => key::KeyCode::F(x),
+                cevent::KeyCode::Char(c) => key::KeyCode::Char(c),
+                cevent::KeyCode::Null => key::KeyCode::Null,
+                cevent::KeyCode::Esc => key::KeyCode::Esc,
+            },
+        )),
+        cevent::Event::Mouse(m) => {
+            let mut button: Option<mouse::Button> = None;
+            let action = match m.kind {
+                cevent::MouseEventKind::Down(b) => {
+                    button = Some(translate_button(b));
+                    mouse::MouseAction::Down
+                }
+                cevent::MouseEventKind::Up(b) => {
+                    button = Some(translate_button(b));
+                    mouse::MouseAction::Up
+                }
+                cevent::MouseEventKind::Drag(b) => {
+                    button = Some(translate_button(b));
+                    mouse::MouseAction::Drag
+                }
+                cevent::MouseEventKind::Moved => mouse::MouseAction::Moved,
+                cevent::MouseEventKind::ScrollDown => mouse::MouseAction::ScrollDown,
+                cevent::MouseEventKind::ScrollUp => mouse::MouseAction::ScrollUp,
+            };
+            Event::Mouse(mouse::Mouse {
+                button,
+                action: Some(action),
+                loc: Point {
+                    x: m.column,
+                    y: m.row,
+                },
+                modifiers: Some(translate_key_modifiers(m.modifiers)),
+            })
+        }
+        cevent::Event::Resize(x, y) => Event::Resize(Size::new(x, y)),
     }
 }
 
@@ -174,14 +252,9 @@ where
 {
     let evt_tx = e.tx();
     thread::spawn(move || loop {
-        match event::read() {
+        match cevent::read() {
             Ok(evt) => {
-                let oevt = match evt {
-                    event::Event::Key(e) => Event::Key(e.into()),
-                    event::Event::Mouse(e) => Event::Mouse(e.into()),
-                    event::Event::Resize(x, y) => Event::Resize(Size::new(x, y)),
-                };
-                let ret = evt_tx.send(oevt);
+                let ret = evt_tx.send(translate_event(evt));
                 if ret.is_err() {
                     // FIXME: Do a bit more work here. Restore context,
                     // exit.
@@ -211,16 +284,21 @@ where
 
     let mut app = Canopy::new();
 
-    enable_raw_mode()?;
+    terminal::enable_raw_mode()?;
     let mut w = std::io::stderr();
 
-    execute!(w, EnterAlternateScreen, EnableMouseCapture, Hide)?;
+    crossterm::execute!(
+        w,
+        terminal::EnterAlternateScreen,
+        cevent::EnableMouseCapture,
+        ccursor::Hide
+    )?;
     defer! {
         let mut stderr = std::io::stderr();
         #[allow(unused_must_use)]
         {
-            execute!(stderr, LeaveAlternateScreen, DisableMouseCapture, Show);
-            disable_raw_mode();
+            crossterm::execute!(stderr, terminal::LeaveAlternateScreen, cevent::DisableMouseCapture, ccursor::Show);
+            terminal::disable_raw_mode();
         }
     }
 
@@ -228,15 +306,20 @@ where
         let mut stderr = std::io::stderr();
         #[allow(unused_must_use)]
         {
-            execute!(stderr, LeaveAlternateScreen, DisableMouseCapture, Show);
-            disable_raw_mode();
+            crossterm::execute!(
+                stderr,
+                terminal::LeaveAlternateScreen,
+                cevent::DisableMouseCapture,
+                ccursor::Show
+            );
+            terminal::disable_raw_mode();
             BacktracePrinter::new().print_panic_info(pi, &mut default_output_stream());
         }
     }));
 
     let events = EventSource::default();
     event_emitter(&events);
-    let size = size()?;
+    let size = terminal::size()?;
     app.set_root_size(Size::new(size.0, size.1), root)?;
 
     loop {

@@ -1,5 +1,4 @@
 use crate::{event::key, geom::Point};
-use crossterm::event::{self as cevent};
 use std::ops::Add;
 
 #[derive(Debug, PartialOrd, PartialEq, Eq, Clone, Copy)]
@@ -35,16 +34,6 @@ impl Add<MouseAction> for Button {
 
     fn add(self, other: MouseAction) -> Self::Output {
         other + self
-    }
-}
-
-impl From<cevent::MouseButton> for Button {
-    fn from(e: cevent::MouseButton) -> Self {
-        match e {
-            cevent::MouseButton::Left => Button::Left,
-            cevent::MouseButton::Right => Button::Right,
-            cevent::MouseButton::Middle => Button::Middle,
-        }
     }
 }
 
@@ -98,38 +87,6 @@ pub struct Mouse {
     pub button: Option<Button>,
     pub modifiers: Option<key::Mods>,
     pub loc: Point,
-}
-
-impl From<cevent::MouseEvent> for Mouse {
-    fn from(e: cevent::MouseEvent) -> Self {
-        let mut button: Option<Button> = None;
-        let action = match e.kind {
-            cevent::MouseEventKind::Down(b) => {
-                button = Some(b.into());
-                MouseAction::Down
-            }
-            cevent::MouseEventKind::Up(b) => {
-                button = Some(b.into());
-                MouseAction::Up
-            }
-            cevent::MouseEventKind::Drag(b) => {
-                button = Some(b.into());
-                MouseAction::Drag
-            }
-            cevent::MouseEventKind::Moved => MouseAction::Moved,
-            cevent::MouseEventKind::ScrollDown => MouseAction::ScrollDown,
-            cevent::MouseEventKind::ScrollUp => MouseAction::ScrollUp,
-        };
-        Mouse {
-            button,
-            action: Some(action),
-            loc: Point {
-                x: e.column,
-                y: e.row,
-            },
-            modifiers: Some(e.modifiers.into()),
-        }
-    }
 }
 
 impl std::cmp::PartialEq<Mouse> for Mouse {

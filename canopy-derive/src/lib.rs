@@ -7,7 +7,6 @@ pub fn derive_statefulnode(input: proc_macro::TokenStream) -> proc_macro::TokenS
     let name = input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let expanded = quote! {
-        // The generated impl.
         impl #impl_generics canopy::StatefulNode for #name #ty_generics #where_clause {
             fn state_mut(&mut self) -> &mut canopy::NodeState {
                 &mut self.state
