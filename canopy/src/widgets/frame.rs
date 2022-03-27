@@ -88,11 +88,13 @@ where
             title: None,
         }
     }
+
     /// Build a frame with a specified glyph set
     pub fn with_glyphs(mut self, glyphs: FrameGlyphs) -> Self {
         self.glyphs = glyphs;
         self
     }
+
     /// Build a frame with a specified title
     pub fn with_title(mut self, title: String) -> Self {
         self.title = Some(title);

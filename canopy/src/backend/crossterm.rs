@@ -1,6 +1,7 @@
 use std::io::Write;
 use std::panic;
 use std::process::exit;
+use std::thread;
 
 use color_backtrace::{default_output_stream, BacktracePrinter};
 use scopeguard::defer;
@@ -8,7 +9,7 @@ use scopeguard::defer;
 use crate::{
     control::ControlBackend,
     cursor,
-    event::EventSource,
+    event::{Event, EventSource},
     geom::{Point, Size},
     render::RenderBackend,
     style::{Color, Style, StyleManager},
@@ -16,7 +17,7 @@ use crate::{
 };
 use crossterm::{
     cursor::{CursorShape, DisableBlinking, EnableBlinking, Hide, MoveTo, SetCursorShape, Show},
-    event::{DisableMouseCapture, EnableMouseCapture},
+    event::{self, DisableMouseCapture, EnableMouseCapture},
     execute,
     style::Print,
     style::{Attribute, Color as CColor, SetAttribute, SetBackgroundColor, SetForegroundColor},
@@ -167,6 +168,35 @@ impl RenderBackend for CrosstermRender {
     }
 }
 
+fn event_emitter<A>(e: &EventSource<A>)
+where
+    A: 'static + Actions,
+{
+    let evt_tx = e.tx();
+    thread::spawn(move || loop {
+        match event::read() {
+            Ok(evt) => {
+                let oevt = match evt {
+                    event::Event::Key(e) => Event::Key(e.into()),
+                    event::Event::Mouse(e) => Event::Mouse(e.into()),
+                    event::Event::Resize(x, y) => Event::Resize(Size::new(x, y)),
+                };
+                let ret = evt_tx.send(oevt);
+                if ret.is_err() {
+                    // FIXME: Do a bit more work here. Restore context,
+                    // exit.
+                    return;
+                }
+            }
+            Err(_) => {
+                // FIXME: Do a bit more work here. Restore context,
+                // exit.
+                return;
+            }
+        }
+    });
+}
+
 pub fn runloop<S, A: 'static + Actions, N>(
     style: StyleManager,
     root: &mut N,
@@ -205,6 +235,7 @@ where
     }));
 
     let events = EventSource::default();
+    event_emitter(&events);
     let size = size()?;
     app.set_root_size(Size::new(size.0, size.1), root)?;
 

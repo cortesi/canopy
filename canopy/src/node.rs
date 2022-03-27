@@ -245,7 +245,7 @@ mod tests {
         if n == skipname {
             ret.has_skip = true
         }
-        v.push(n.into());
+        v.push(n);
         Ok(ret)
     }
 

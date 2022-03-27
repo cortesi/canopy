@@ -43,8 +43,8 @@ impl Node<Handle, ()> for Root {
     ) -> Result<Outcome<()>> {
         let v = &mut self.child.child.state_mut().viewport;
         match k {
-            c if c == mouse::Action::ScrollDown => v.down(),
-            c if c == mouse::Action::ScrollUp => v.up(),
+            c if c == mouse::MouseAction::ScrollDown => v.down(),
+            c if c == mouse::MouseAction::ScrollUp => v.up(),
             _ => return Ok(Outcome::ignore()),
         };
         app.taint_tree(self)?;

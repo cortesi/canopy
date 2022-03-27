@@ -11,6 +11,7 @@ use crate::{
     Actions, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 
+#[derive(Default)]
 pub(crate) struct SkipWalker {
     pub has_skip: bool,
 }
@@ -18,12 +19,6 @@ pub(crate) struct SkipWalker {
 impl SkipWalker {
     pub fn new(skip: bool) -> Self {
         SkipWalker { has_skip: skip }
-    }
-}
-
-impl Default for SkipWalker {
-    fn default() -> Self {
-        SkipWalker { has_skip: false }
     }
 }
 
@@ -167,10 +162,8 @@ impl<'a, S, A: Actions> Canopy<S, A> {
                     return Ok(true);
                 }
                 locate(e, p, &mut |x| {
-                    if !seen {
-                        if x.focus(self)?.is_handled() {
-                            seen = true;
-                        };
+                    if !seen && x.focus(self)?.is_handled() {
+                        seen = true;
                     };
                     Ok(())
                 })?;
@@ -575,8 +568,8 @@ fn method<S, A: Actions, R: Walker + Default>(
     Ok(ret)
 }
 
-// Calls a closure on the leaf node under (x, y), then all its parents to the
-// root.
+/// Calls a closure on the leaf node under (x, y), then all its parents to the
+/// root.
 pub fn locate<S, A: Actions, R: Walker + Default>(
     e: &mut dyn Node<S, A>,
     p: impl Into<Point>,

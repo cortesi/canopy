@@ -137,12 +137,9 @@ impl Rect {
         let p = p.into();
         if self.is_zero() && p.is_zero() {
             true
-        } else if p.x < self.tl.x || p.x >= self.tl.x + self.w {
-            false
-        } else if p.y < self.tl.y || p.y >= self.tl.y + self.h {
-            false
         } else {
-            true
+            !((p.x < self.tl.x || p.x >= self.tl.x + self.w)
+                || (p.y < self.tl.y || p.y >= self.tl.y + self.h))
         }
     }
 
@@ -677,9 +674,7 @@ mod tests {
         let r = Rect::new(10, 10, 10, 10);
         assert_eq!(r.rebase_point((11, 11))?, Point { x: 1, y: 1 });
         assert_eq!(r.rebase_point((10, 10))?, Point { x: 0, y: 0 });
-        if let Ok(_) = r.rebase_point((9, 9)) {
-            assert!(false);
-        }
+        assert!(r.rebase_point((9, 9)).is_err());
         Ok(())
     }
 
@@ -751,14 +746,14 @@ mod tests {
     fn tsplit_panes() -> Result<()> {
         let r = Rect::new(10, 10, 40, 40);
         assert_eq!(
-            r.split_panes(&vec![2, 2])?,
+            r.split_panes(&[2, 2])?,
             vec![
                 [Rect::new(10, 10, 20, 20), Rect::new(10, 30, 20, 20)],
                 [Rect::new(30, 10, 20, 20), Rect::new(30, 30, 20, 20)]
             ],
         );
         assert_eq!(
-            r.split_panes(&vec![2, 1])?,
+            r.split_panes(&[2, 1])?,
             vec![
                 vec![Rect::new(10, 10, 20, 20), Rect::new(10, 30, 20, 20)],
                 vec![Rect::new(30, 10, 20, 40)],

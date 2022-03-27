@@ -26,6 +26,7 @@ where
             _marker: PhantomData,
         }
     }
+
     /// Get the offset of the current focus in the children vector.
     pub fn focus_coords(&mut self, app: &Canopy<S, A>) -> Option<(usize, usize)> {
         for (x, col) in self.children.iter_mut().enumerate() {
@@ -37,6 +38,7 @@ where
         }
         None
     }
+
     /// Delete the focus node. If a column ends up empty, it is removed.
     pub fn delete_focus(&mut self, app: &mut Canopy<S, A>) -> Result<()> {
         if let Some((x, y)) = self.focus_coords(app) {
@@ -49,6 +51,7 @@ where
         }
         Ok(())
     }
+
     /// Insert a node, splitting vertically. If we have a focused node, the new
     /// node is inserted in a row beneath it. If not, a new column is added.
     pub fn insert_row(&mut self, app: &Canopy<S, A>, n: N) -> Result<()>
@@ -62,6 +65,7 @@ where
         }
         app.taint_tree(self)
     }
+
     /// Insert a node in a new column. If we have a focused node, the new node
     /// is added in a new column to the right.
     pub fn insert_col(&mut self, app: &mut Canopy<S, A>, mut n: N) -> Result<()>

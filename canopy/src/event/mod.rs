@@ -8,8 +8,6 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-use crossterm::event;
-
 #[derive(Debug, PartialEq)]
 pub enum Event<A> {
     Key(key::Key),
@@ -26,9 +24,7 @@ pub struct EventSource<A> {
 impl<A: 'static + Actions> Default for EventSource<A> {
     fn default() -> Self {
         let (tx, rx) = mpsc::channel();
-        let es = EventSource { rx, tx };
-        es.spawn();
-        es
+        EventSource { rx, tx }
     }
 }
 
@@ -48,32 +44,6 @@ impl<A: 'static + Actions> EventSource<A> {
     /// Get a channel to pump events into the app
     pub fn tx(&self) -> mpsc::Sender<Event<A>> {
         self.tx.clone()
-    }
-
-    pub fn spawn(&self) {
-        let evt_tx = self.tx.clone();
-        thread::spawn(move || loop {
-            match event::read() {
-                Ok(evt) => {
-                    let oevt = match evt {
-                        event::Event::Key(e) => Event::Key(e.into()),
-                        event::Event::Mouse(e) => Event::Mouse(e.into()),
-                        event::Event::Resize(x, y) => Event::Resize(Size::new(x, y)),
-                    };
-                    let ret = evt_tx.send(oevt);
-                    if ret.is_err() {
-                        // FIXME: Do a bit more work here. Restore context,
-                        // exit.
-                        return;
-                    }
-                }
-                Err(_) => {
-                    // FIXME: Do a bit more work here. Restore context,
-                    // exit.
-                    return;
-                }
-            }
-        });
     }
 
     pub fn next(&self) -> Result<Event<A>, mpsc::RecvError> {

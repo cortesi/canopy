@@ -62,8 +62,8 @@ impl Node<Handle, ()> for Root {
         k: mouse::Mouse,
     ) -> Result<Outcome<()>> {
         Ok(match k {
-            c if c == mouse::Action::ScrollDown => app.focus_next(self)?,
-            c if c == mouse::Action::ScrollUp => app.focus_prev(self)?,
+            c if c == mouse::MouseAction::ScrollDown => app.focus_next(self)?,
+            c if c == mouse::MouseAction::ScrollUp => app.focus_prev(self)?,
             _ => Outcome::ignore(),
         })
     }
@@ -176,18 +176,18 @@ impl Node<Handle, ()> for Block {
         k: mouse::Mouse,
     ) -> Result<Outcome<()>> {
         Ok(match k {
-            c if c == mouse::Action::Down + mouse::Button::Left => {
+            c if c == mouse::MouseAction::Down + mouse::Button::Left => {
                 app.taint_tree(self)?;
                 self.focus(app)?
             }
-            c if c == mouse::Action::Down + mouse::Button::Middle => {
+            c if c == mouse::MouseAction::Down + mouse::Button::Middle => {
                 self.split(app)?;
                 if app.is_focused(self) {
                     app.focus_next(self)?;
                 };
                 Outcome::handle()
             }
-            c if c == mouse::Action::Down + mouse::Button::Right => self.add(app)?,
+            c if c == mouse::MouseAction::Down + mouse::Button::Right => self.add(app)?,
             _ => Outcome::ignore(),
         })
     }

@@ -8,6 +8,8 @@ use crate::{
     ViewPort,
 };
 
+/// Graft is a node that can contain a complete sub-application. This lets us
+/// write re-usable, fully self-contained complex apps that can be embedded.
 #[derive(StatefulNode)]
 pub struct Graft<SO, AO, S, A: Actions, N>
 where
