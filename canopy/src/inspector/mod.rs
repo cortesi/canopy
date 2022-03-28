@@ -44,9 +44,9 @@ impl<A: Actions> Node<InspectorState, A> for Content<InspectorState, A> {
         _r: &mut Render,
         vp: ViewPort,
     ) -> Result<()> {
-        let parts = vp.carve_vend(1)?;
-        self.statusbar.wrap(app, parts[1])?;
-        self.view.wrap(app, parts[0])?;
+        let parts = vp.carve_vend(1);
+        self.statusbar.wrap(app, parts.1)?;
+        self.view.wrap(app, parts.0)?;
         Ok(())
     }
 

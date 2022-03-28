@@ -60,9 +60,9 @@ impl<S, A: Actions> Node<S, A> for View<S, A> {
     }
 
     fn render(&mut self, app: &mut Canopy<S, A>, _r: &mut Render, vp: ViewPort) -> Result<()> {
-        let parts = vp.carve_vstart(1)?;
-        self.tabs.wrap(app, parts[0])?;
-        self.logs.wrap(app, parts[1])?;
+        let (a, b) = vp.carve_vstart(1);
+        self.tabs.wrap(app, a)?;
+        self.logs.wrap(app, b)?;
         Ok(())
     }
 

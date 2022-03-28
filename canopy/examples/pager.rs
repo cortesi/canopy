@@ -1,7 +1,6 @@
 use std::env;
 use std::fs;
 
-use canopy;
 use canopy::{
     backend::crossterm::runloop,
     event::{key, mouse},
@@ -41,10 +40,10 @@ impl Node<Handle, ()> for Root {
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<Outcome<()>> {
-        let v = &mut self.child.child.state_mut().viewport;
+        let txt = &mut self.child.child;
         match k {
-            c if c == mouse::MouseAction::ScrollDown => v.down(),
-            c if c == mouse::MouseAction::ScrollUp => v.up(),
+            c if c == mouse::MouseAction::ScrollDown => txt.update_viewport(&|vp| vp.down()),
+            c if c == mouse::MouseAction::ScrollUp => txt.update_viewport(&|vp| vp.up()),
             _ => return Ok(Outcome::ignore()),
         };
         app.taint_tree(self)?;

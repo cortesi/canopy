@@ -1,6 +1,5 @@
 use duplicate::duplicate_item;
 
-use canopy;
 use canopy::{
     backend::crossterm::runloop,
     event::{key, mouse},
@@ -105,9 +104,9 @@ impl Root {
 
 impl Node<Handle, ()> for Root {
     fn render(&mut self, app: &mut Canopy<Handle, ()>, _: &mut Render, vp: ViewPort) -> Result<()> {
-        let parts = vp.carve_vend(1)?;
-        self.statusbar.wrap(app, parts[1])?;
-        self.content.wrap(app, parts[0])?;
+        let (a, b) = vp.carve_vend(1);
+        self.statusbar.wrap(app, b)?;
+        self.content.wrap(app, a)?;
 
         let a = vp.screen_rect();
         if let Some(add) = &mut self.adder {
@@ -128,10 +127,10 @@ impl Node<Handle, ()> for Root {
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<Outcome<()>> {
-        let v = &mut self.content.child.state_mut().viewport;
+        let v = &mut self.content.child;
         match k {
-            c if c == mouse::MouseAction::ScrollDown => v.down(),
-            c if c == mouse::MouseAction::ScrollUp => v.up(),
+            c if c == mouse::MouseAction::ScrollDown => v.update_viewport(&|vp| vp.down()),
+            c if c == mouse::MouseAction::ScrollUp => v.update_viewport(&|vp| vp.up()),
             _ => return Ok(Outcome::ignore()),
         };
         Ok(Outcome::handle())

@@ -1,6 +1,5 @@
 use duplicate::duplicate_item;
 
-use canopy;
 use canopy::{
     backend::crossterm::runloop,
     event::{key, mouse},
@@ -102,7 +101,7 @@ impl Node<Handle, ()> for Root {
 
 impl Block {
     fn add(&mut self, app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
-        Ok(if self.children.len() == 0 {
+        Ok(if self.children.is_empty() {
             Outcome::ignore()
         } else if self.size_limited(self.children[0].vp().view_rect().into()) {
             Outcome::handle()
@@ -113,16 +112,10 @@ impl Block {
         })
     }
     fn size_limited(&self, a: Size) -> bool {
-        if self.horizontal && a.w <= 4 {
-            true
-        } else if !self.horizontal && a.h <= 4 {
-            true
-        } else {
-            false
-        }
+        (self.horizontal && a.w <= 4) || (!self.horizontal && a.h <= 4)
     }
     fn split(&mut self, app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
-        Ok(if self.children.len() != 0 {
+        Ok(if self.children.is_empty() {
             Outcome::ignore()
         } else if self.size_limited(self.vp().view_rect().into()) {
             Outcome::handle()
@@ -136,7 +129,7 @@ impl Block {
 
 impl Node<Handle, ()> for Block {
     fn render(&mut self, app: &mut Canopy<Handle, ()>, r: &mut Render, vp: ViewPort) -> Result<()> {
-        if self.children.len() > 0 {
+        if self.children.is_empty() {
             let vps = if self.horizontal {
                 vp.split_horizontal(self.children.len() as u16)?
             } else {
@@ -144,10 +137,9 @@ impl Node<Handle, ()> for Block {
             };
             for i in 0..self.children.len() {
                 self.children[i].wrap(app, vps[i])?;
-                // fit_and_update(app, sizes[i], &mut self.children[i])?;
             }
         } else {
-            let bc = if app.is_focused(self) && self.children.len() == 0 {
+            let bc = if app.is_focused(self) && self.children.is_empty() {
                 "violet"
             } else {
                 "blue"
@@ -160,7 +152,7 @@ impl Node<Handle, ()> for Block {
     }
 
     fn focus(&mut self, app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
-        Ok(if self.children.len() == 0 {
+        Ok(if self.children.is_empty() {
             app.set_focus(self);
             Outcome::handle()
         } else {

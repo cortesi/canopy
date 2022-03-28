@@ -17,7 +17,7 @@ pub struct NodeState {
 
     // The view for this node. The inner rectangle always has the same size as
     // the screen_area.
-    pub viewport: ViewPort,
+    pub(crate) viewport: ViewPort,
     pub(crate) hidden: bool,
 }
 

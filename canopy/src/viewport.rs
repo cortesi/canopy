@@ -2,12 +2,12 @@ use crate::error;
 use crate::geom::{Line, Point, Rect, Size};
 use crate::Result;
 
-/// ViewPort manages three values in concert:
-///  - `size` is the total virtual size of the node (equivalent to a Rect at 0,
-///    0).
+/// A ViewPort manages the size of a node and its projection onto the screen.
+///
+/// It co-ordinates three values:
+///  - `size` is the total virtual size of the node.
 ///  - `view` is some sub-rectangle of `size` that is being displayed.
-///  - `screen`, is a rectangle on the physical screen that this node paints to,
-///    equal in size to view.
+///  - `screen`, is the point on the physical screen to paint the `view` at.
 #[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ViewPort {
     screen: Point,
@@ -269,31 +269,35 @@ impl ViewPort {
     }
 
     /// Carve a rectangle with a fixed width out of the start of the horizontal
-    /// extent of this viewport. Returns a [left, right] vector. Left is either
+    /// extent of this viewport. Returns a (left, right) tuple. Left is either
     /// empty or has the exact width specified.
-    pub fn carve_hstart(&self, n: u16) -> Result<Vec<ViewPort>> {
-        Ok(self.views_to_vp(self.size().rect().carve_hstart(n).into()))
+    pub fn carve_hstart(&self, n: u16) -> (ViewPort, ViewPort) {
+        let (a, b) = self.size().rect().carve_hstart(n);
+        (self.view_to_vp(a), self.view_to_vp(b))
     }
 
     /// Carve a rectangle with a fixed width out of the end of the horizontal
-    /// extent of this viewport. Returns a [left, right] vector. Right is either
+    /// extent of this viewport. Returns a (left, right) tuple. Right is either
     /// empty or has the exact width specified.
-    pub fn carve_hend(&self, n: u16) -> Result<Vec<ViewPort>> {
-        Ok(self.views_to_vp(self.size().rect().carve_hend(n).into()))
+    pub fn carve_hend(&self, n: u16) -> (ViewPort, ViewPort) {
+        let (a, b) = self.size().rect().carve_hend(n);
+        (self.view_to_vp(a), self.view_to_vp(b))
     }
 
     /// Carve a rectangle with a fixed width out of the start of the vertical
-    /// extent of this viewport. Returns a [top, bottom] vector. Top is either
+    /// extent of this viewport. Returns a (top, bottom) tuple. Top is either
     /// empty or has the exact width specified.
-    pub fn carve_vstart(&self, n: u16) -> Result<Vec<ViewPort>> {
-        Ok(self.views_to_vp(self.size().rect().carve_vstart(n).into()))
+    pub fn carve_vstart(&self, n: u16) -> (ViewPort, ViewPort) {
+        let (a, b) = self.size().rect().carve_vstart(n);
+        (self.view_to_vp(a), self.view_to_vp(b))
     }
 
     /// Carve a rectangle with a fixed width out of the end of the vertical
-    /// extent of this viewport. Returns a [top, bottom] vector. Bottom is
+    /// extent of this viewport. Returns a (top, bottom) tuple. Bottom is
     /// either empty or has the exact width specified.
-    pub fn carve_vend(&self, n: u16) -> Result<Vec<ViewPort>> {
-        Ok(self.views_to_vp(self.size().rect().carve_vend(n).into()))
+    pub fn carve_vend(&self, n: u16) -> (ViewPort, ViewPort) {
+        let (a, b) = self.size().rect().carve_vend(n);
+        (self.view_to_vp(a), self.view_to_vp(b))
     }
 
     /// Splits the rectangle horizontally into n sections, as close to equally

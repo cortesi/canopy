@@ -1,7 +1,6 @@
 use rand::seq::SliceRandom;
 use rand::Rng;
 
-use canopy;
 use canopy::{
     backend::crossterm::runloop,
     event::{key, mouse},
@@ -14,7 +13,7 @@ use canopy::{
 
 const TEXT: &str = "What a struggle must have gone on during long centuries between the several kinds of trees, each annually scattering its seeds by the thousand; what war between insect and insect — between insects, snails, and other animals with birds and beasts of prey — all striving to increase, all feeding on each other, or on the trees, their seeds and seedlings, or on the other plants which first clothed the ground and thus checked the growth of the trees.";
 
-const COLORS: &'static [&str] = &["red", "blue", "green"];
+const COLORS: &[&str] = &["red", "blue", "green"];
 
 struct Handle {}
 
@@ -56,14 +55,15 @@ impl Node<Handle, ()> for Block {
     }
 
     fn render(&mut self, app: &mut Canopy<Handle, ()>, r: &mut Render, vp: ViewPort) -> Result<()> {
-        let [_, screen] = vp.screen_rect().carve_hstart(2);
+        let (_, screen) = vp.screen_rect().carve_hstart(2);
         let outer = self.child.fit(app, screen.into())?;
         let view = Rect {
             tl: vp.view_rect().tl,
             w: vp.view_rect().w.saturating_sub(2),
             h: vp.view_rect().h,
         };
-        self.child.state_mut().viewport = ViewPort::new(outer, view, screen.tl)?;
+        self.child
+            .set_viewport(ViewPort::new(outer, view, screen.tl)?);
 
         let v = vp.view_rect();
         let status = Rect::new(v.tl.x, v.tl.y, 1, v.h);
@@ -131,9 +131,9 @@ impl Root {
 
 impl Node<Handle, ()> for Root {
     fn render(&mut self, app: &mut Canopy<Handle, ()>, _: &mut Render, vp: ViewPort) -> Result<()> {
-        let parts = vp.carve_vend(1)?;
-        self.statusbar.wrap(app, parts[1])?;
-        self.content.wrap(app, parts[0])?;
+        let (a, b) = vp.carve_vend(1);
+        self.statusbar.wrap(app, b)?;
+        self.content.wrap(app, a)?;
         Ok(())
     }
 
@@ -149,10 +149,10 @@ impl Node<Handle, ()> for Root {
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<Outcome<()>> {
-        let v = &mut self.content.child.state_mut().viewport;
+        let txt = &mut self.content.child;
         match k {
-            c if c == mouse::MouseAction::ScrollDown => v.down(),
-            c if c == mouse::MouseAction::ScrollUp => v.up(),
+            c if c == mouse::MouseAction::ScrollDown => txt.update_viewport(&|vp| vp.down()),
+            c if c == mouse::MouseAction::ScrollUp => txt.update_viewport(&|vp| vp.up()),
             _ => return Ok(Outcome::ignore()),
         };
         app.taint_tree(self)?;

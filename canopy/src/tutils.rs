@@ -366,7 +366,7 @@ pub mod utils {
         fn handle(&mut self, s: &mut State, evt: &str) -> Result<Outcome<TActions>> {
             let ret = if let Some(x) = self.next_outcome.clone() {
                 self.next_outcome = None;
-                x.clone()
+                x
             } else {
                 Outcome::ignore()
             };

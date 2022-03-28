@@ -347,8 +347,8 @@ mod tests {
 
         assert_eq!(
             c.resolve(
-                &vec!["one".to_string(), "two".to_string()],
-                &vec!["target".to_string(), "voing".to_string()],
+                &["one".to_string(), "two".to_string()],
+                &["target".to_string(), "voing".to_string()],
             ),
             Style {
                 fg: Color::Green,
@@ -359,8 +359,8 @@ mod tests {
 
         assert_eq!(
             c.resolve(
-                &vec!["one".to_string(), "two".to_string()],
-                &vec!["two".to_string(), "voing".to_string()],
+                &["one".to_string(), "two".to_string()],
+                &["two".to_string(), "voing".to_string()],
             ),
             Style {
                 fg: Color::Blue,
@@ -371,8 +371,8 @@ mod tests {
 
         assert_eq!(
             c.resolve(
-                &vec!["one".to_string(), "two".to_string()],
-                &vec!["target".to_string()],
+                &["one".to_string(), "two".to_string()],
+                &["target".to_string()],
             ),
             Style {
                 fg: Color::Green,
@@ -382,8 +382,8 @@ mod tests {
         );
         assert_eq!(
             c.resolve(
-                &vec!["one".to_string(), "two".to_string()],
-                &vec!["nonexistent".to_string()],
+                &["one".to_string(), "two".to_string()],
+                &["nonexistent".to_string()],
             ),
             Style {
                 fg: Color::Blue,
@@ -392,10 +392,7 @@ mod tests {
             }
         );
         assert_eq!(
-            c.resolve(
-                &vec!["somelayer".to_string()],
-                &vec!["nonexistent".to_string()],
-            ),
+            c.resolve(&["somelayer".to_string()], &["nonexistent".to_string()],),
             Style {
                 fg: Color::White,
                 bg: Color::Black,
@@ -404,8 +401,8 @@ mod tests {
         );
         assert_eq!(
             c.resolve(
-                &vec!["one".to_string(), "two".to_string()],
-                &vec!["frame".to_string(), "border".to_string()],
+                &["one".to_string(), "two".to_string()],
+                &["frame".to_string(), "border".to_string()],
             ),
             Style {
                 fg: Color::Yellow,
@@ -415,8 +412,8 @@ mod tests {
         );
         assert_eq!(
             c.resolve(
-                &vec!["one".to_string(), "two".to_string()],
-                &vec!["frame".to_string(), "border".to_string()],
+                &["one".to_string(), "two".to_string()],
+                &["frame".to_string(), "border".to_string()],
             ),
             Style {
                 fg: Color::Yellow,
@@ -425,7 +422,7 @@ mod tests {
             }
         );
         assert_eq!(
-            c.resolve(&vec!["frame".to_string()], &vec!["border".to_string()],),
+            c.resolve(&["frame".to_string()], &["border".to_string()],),
             Style {
                 fg: Color::Yellow,
                 bg: Color::Black,

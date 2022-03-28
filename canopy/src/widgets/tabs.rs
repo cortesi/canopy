@@ -47,7 +47,7 @@ impl<S, A: Actions> Node<S, A> for Tabs<S, A> {
             } else {
                 "tab/inactive"
             };
-            let [text, end] = rect.carve_hend(1);
+            let (text, end) = rect.carve_hend(1);
             r.text(styl, text.first_line(), &self.tabs[i])?;
             r.text("", end.first_line(), " ")?;
         }
