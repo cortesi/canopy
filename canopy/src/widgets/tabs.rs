@@ -24,13 +24,13 @@ impl<S, A: Actions> Tabs<S, A> {
             tabs,
         }
     }
-    pub fn next(&mut self, app: &mut Canopy<S, A>) {
+    pub fn next(&mut self) {
         self.active = (self.active + 1) % self.tabs.len();
-        app.taint(self);
+        self.taint();
     }
-    pub fn prev(&mut self, app: &mut Canopy<S, A>) {
+    pub fn prev(&mut self) {
         self.active = (self.active.wrapping_sub(1)) % self.tabs.len();
-        app.taint(self);
+        self.taint();
     }
 }
 

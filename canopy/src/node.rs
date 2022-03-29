@@ -235,6 +235,12 @@ pub trait Node<S, A: Actions>: StatefulNode {
             global_state.borrow_mut().focus_gen == s.focus_gen
         })
     }
+
+    /// Mark a this node for render.
+    fn taint(&mut self) {
+        let r = self.state_mut();
+        r.render_gen = STATE.with(|global_state| -> u64 { global_state.borrow().render_gen });
+    }
 }
 
 /// A postorder traversal of the nodes under e. Enabling skipping in the Walker

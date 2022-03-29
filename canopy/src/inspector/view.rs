@@ -47,13 +47,13 @@ impl<S, A: Actions> Node<S, A> for View<S, A> {
 
     fn handle_key(
         &mut self,
-        app: &mut Canopy<S, A>,
+        _app: &mut Canopy<S, A>,
         _: &mut dyn BackendControl,
         _: &mut S,
         k: key::Key,
     ) -> Result<Outcome<A>> {
         match k {
-            c if c == key::KeyCode::Tab => self.tabs.next(app),
+            c if c == key::KeyCode::Tab => self.tabs.next(),
             _ => return Ok(Outcome::ignore()),
         };
         Ok(Outcome::handle())

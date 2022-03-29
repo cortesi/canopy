@@ -72,7 +72,7 @@ macro_rules! process_event(
                     *$halt = true;
                 }
                 if hdl.is_handled() {
-                    $slf.taint($node);
+                    $node.taint();
                     *$handled = true;
                 }
                 hdl.clone()
@@ -309,12 +309,6 @@ impl<'a, S, A: Actions> Canopy<S, A> {
         Ok(())
     }
 
-    /// Mark a single node for render.
-    pub fn taint(&self, e: &mut dyn Node<S, A>) {
-        let r = e.state_mut();
-        r.render_gen = STATE.with(|global_state| -> u64 { global_state.borrow().render_gen });
-    }
-
     /// Mark that a node should skip the next render sweep.
     pub fn skip_taint(&self, e: &mut dyn Node<S, A>) {
         let r = e.state_mut();
@@ -448,7 +442,7 @@ impl<'a, S, A: Actions> Canopy<S, A> {
         preorder(root, &mut |x| -> Result<Outcome<A>> {
             let o = x.handle_broadcast(self, ctrl, s, t)?;
             if o.is_handled() {
-                self.taint(x);
+                x.taint();
             }
             Ok(o)
         })
@@ -952,11 +946,11 @@ mod tests {
             app.render(&mut r, &mut root)?;
             assert!(buf.lock()?.is_empty());
 
-            app.taint(&mut root.a);
+            root.a.taint();
             app.render(&mut r, &mut root)?;
             assert_eq!(buf.lock()?.text, vec!["<ba>"]);
 
-            app.taint(&mut root.a.b);
+            root.a.b.taint();
             app.render(&mut r, &mut root)?;
             assert_eq!(buf.lock()?.text, vec!["<ba:lb>"]);
 

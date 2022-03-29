@@ -97,7 +97,7 @@ impl Root {
         let mut adder = frame::Frame::new(InputLine::new(""));
         adder.child.handle_focus(app)?;
         self.adder = Some(adder);
-        app.taint(self);
+        self.taint();
         Ok(Outcome::handle())
     }
 }
