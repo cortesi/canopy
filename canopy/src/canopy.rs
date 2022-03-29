@@ -1,15 +1,37 @@
 use duplicate::duplicate_item;
+use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::process::exit;
 
 use crate::geom::{Direction, Rect};
 use crate::{
-    control::ControlBackend,
+    control::BackendControl,
     event::{key, mouse, Event},
     geom::{Point, Size},
     node::{postorder, postorder_mut, preorder, Node, Walker},
     Actions, Outcome, Render, Result, StatefulNode, ViewPort,
 };
+
+struct GlobalState {
+    // A counter that is incremented every time focus changes. The current focus
+    // will have a state `focus_gen` equal to this.
+    focus_gen: u64,
+    // Stores the focus_gen during the last render. Used to detect if focus has
+    // changed.
+    last_focus_gen: u64,
+    // A counter that is incremented every time we render. All items that
+    // require rendering during the current sweep will have a state `render_gen`
+    // equal to this.
+    render_gen: u64,
+}
+
+thread_local! {
+    static STATE: RefCell<GlobalState> = RefCell::new(GlobalState {
+        focus_gen: 1,
+        last_focus_gen: 1,
+        render_gen: 1
+    });
+}
 
 #[derive(Default)]
 pub(crate) struct SkipWalker {
@@ -86,25 +108,12 @@ macro_rules! process_event(
 /// state, and provides functionality for interacting with node trees.
 #[derive(Default)]
 pub struct Canopy<S, A: Actions> {
-    // A counter that is incremented every time focus changes. The current focus
-    // will have a state `focus_gen` equal to this.
-    focus_gen: u64,
-    // Stores the focus_gen during the last render. Used to detect if focus has
-    // changed.
-    last_focus_gen: u64,
-    // A counter that is incremented every time we render. All items that
-    // require rendering during the current sweep will have a state `render_gen`
-    // equal to this.
-    render_gen: u64,
     _marker: PhantomData<(S, A)>,
 }
 
 impl<'a, S, A: Actions> Canopy<S, A> {
     pub fn new() -> Self {
         Canopy {
-            focus_gen: 1,
-            render_gen: 1,
-            last_focus_gen: 1,
             _marker: PhantomData,
         }
     }
@@ -124,34 +133,40 @@ impl<'a, S, A: Actions> Canopy<S, A> {
 
     /// Is this node render tainted?
     pub fn is_tainted(&self, e: &dyn Node<S, A>) -> bool {
-        let s = e.state();
-        if self.render_gen == s.render_skip_gen {
-            false
-        } else {
-            // Tainting if render_gen is 0 lets us initialize a nodestate
-            // without knowing about the app state
-            self.render_gen == s.render_gen || s.render_gen == 0
-        }
+        STATE.with(|global_state| {
+            let s = e.state();
+            if global_state.borrow().render_gen == s.render_skip_gen {
+                false
+            } else {
+                // Tainting if render_gen is 0 lets us initialize a nodestate
+                // without knowing about the app state
+                global_state.borrow().render_gen == s.render_gen || s.render_gen == 0
+            }
+        })
     }
 
     /// Has the focus status of this node changed since the last render
     /// sweep?
     pub fn focus_changed(&self, e: &dyn Node<S, A>) -> bool {
-        let s = e.state();
-        if self.is_focused(e) {
-            if s.focus_gen != s.rendered_focus_gen {
+        STATE.with(|global_state| -> bool {
+            let s = e.state();
+            if self.is_focused(e) {
+                if s.focus_gen != s.rendered_focus_gen {
+                    return true;
+                }
+            } else if s.rendered_focus_gen == global_state.borrow().last_focus_gen {
                 return true;
             }
-        } else if s.rendered_focus_gen == self.last_focus_gen {
-            return true;
-        }
-        false
+            false
+        })
     }
 
     /// Focus the specified node.
     pub fn set_focus(&mut self, e: &mut dyn Node<S, A>) {
-        self.focus_gen += 1;
-        e.state_mut().focus_gen = self.focus_gen;
+        STATE.with(|global_state| {
+            global_state.borrow_mut().focus_gen += 1;
+            e.state_mut().focus_gen = global_state.borrow().focus_gen;
+        })
     }
 
     /// Move focus in a specified direction within the subtree.
@@ -211,8 +226,10 @@ impl<'a, S, A: Actions> Canopy<S, A> {
 
     /// Does the node have terminal focus?
     pub fn is_focused(&self, e: &dyn Node<S, A>) -> bool {
-        let s = e.state();
-        self.focus_gen == s.focus_gen
+        STATE.with(|global_state| -> bool {
+            let s = e.state();
+            global_state.borrow_mut().focus_gen == s.focus_gen
+        })
     }
 
     /// A node is on the focus path if it or any of its descendants have focus.
@@ -263,7 +280,7 @@ impl<'a, S, A: Actions> Canopy<S, A> {
     /// Focus the previous node in the pre-order traversal of a node. If no
     /// node with focus is found, we focus the first node we can find instead.
     pub fn focus_prev(&mut self, e: &mut dyn Node<S, A>) -> Result<Outcome<A>> {
-        let current = self.focus_gen;
+        let current = STATE.with(|global_state| -> u64 { global_state.borrow().focus_gen });
         let mut focus_seen = false;
         let mut first = true;
         preorder(e, &mut |x| -> Result<()> {
@@ -302,7 +319,8 @@ impl<'a, S, A: Actions> Canopy<S, A> {
         e: &dyn Node<S, A>,
         f: &mut dyn FnMut(&dyn Node<S, A>) -> Result<R>,
     ) -> Result<R> {
-        focus_path(self.focus_gen, e, f)
+        let focus_gen = STATE.with(|global_state| -> u64 { global_state.borrow().focus_gen });
+        focus_path(focus_gen, e, f)
     }
 
     /// Call a closure mutably on every node in the current focus path, from the
@@ -312,7 +330,8 @@ impl<'a, S, A: Actions> Canopy<S, A> {
         e: &mut dyn Node<S, A>,
         f: &mut dyn FnMut(&mut dyn Node<S, A>) -> Result<R>,
     ) -> Result<R> {
-        focus_path_mut(self.focus_gen, e, f)
+        let focus_gen = STATE.with(|global_state| -> u64 { global_state.borrow().focus_gen });
+        focus_path_mut(focus_gen, e, f)
     }
 
     /// Returns the focal depth of the specified node. If the node is not part
@@ -347,7 +366,8 @@ impl<'a, S, A: Actions> Canopy<S, A> {
     /// Post-render sweep of the tree.
     pub(crate) fn post_render(&mut self, r: &mut Render, e: &dyn Node<S, A>) -> Result<()> {
         let mut seen = false;
-        focus_path(self.focus_gen, e, &mut |n| -> Result<()> {
+        let focus_gen = STATE.with(|global_state| -> u64 { global_state.borrow().focus_gen });
+        focus_path(focus_gen, e, &mut |n| -> Result<()> {
             if !seen {
                 if let Some(c) = n.cursor() {
                     r.show_cursor("cursor", c)?;
@@ -363,7 +383,7 @@ impl<'a, S, A: Actions> Canopy<S, A> {
     pub fn taint_tree(&self, e: &mut dyn Node<S, A>) -> Result<()> {
         postorder_mut(e, &mut |x| -> Result<()> {
             let r = x.state_mut();
-            r.render_gen = self.render_gen;
+            r.render_gen = STATE.with(|global_state| -> u64 { global_state.borrow().render_gen });
             Ok(())
         })?;
         Ok(())
@@ -372,13 +392,13 @@ impl<'a, S, A: Actions> Canopy<S, A> {
     /// Mark a single node for render.
     pub fn taint(&self, e: &mut dyn Node<S, A>) {
         let r = e.state_mut();
-        r.render_gen = self.render_gen;
+        r.render_gen = STATE.with(|global_state| -> u64 { global_state.borrow().render_gen });
     }
 
     /// Mark that a node should skip the next render sweep.
     pub fn skip_taint(&self, e: &mut dyn Node<S, A>) {
         let r = e.state_mut();
-        r.render_skip_gen = self.render_gen;
+        r.render_skip_gen = STATE.with(|global_state| -> u64 { global_state.borrow().render_gen });
     }
 
     fn render_traversal(&mut self, r: &mut Render, e: &mut dyn Node<S, A>) -> Result<()> {
@@ -387,7 +407,8 @@ impl<'a, S, A: Actions> Canopy<S, A> {
             if self.should_render(e) {
                 if self.is_focused(e) {
                     let s = &mut e.state_mut();
-                    s.rendered_focus_gen = self.focus_gen
+                    s.rendered_focus_gen =
+                        STATE.with(|global_state| -> u64 { global_state.borrow().focus_gen });
                 }
                 r.viewport = e.state().viewport;
                 e.render(self, r, e.state().viewport)?;
@@ -395,7 +416,8 @@ impl<'a, S, A: Actions> Canopy<S, A> {
             // This is a new node - we don't want it perpetually stuck in
             // render, so we need to update its render_gen.
             if e.state().render_gen == 0 {
-                e.state_mut().render_gen = self.render_gen;
+                e.state_mut().render_gen =
+                    STATE.with(|global_state| -> u64 { global_state.borrow().render_gen });
             }
             e.children_mut(&mut |x| self.render_traversal(r, x))?;
             r.pop();
@@ -409,8 +431,11 @@ impl<'a, S, A: Actions> Canopy<S, A> {
     pub fn render(&mut self, r: &mut Render, e: &mut dyn Node<S, A>) -> Result<()> {
         r.reset()?;
         self.render_traversal(r, e)?;
-        self.render_gen += 1;
-        self.last_focus_gen = self.focus_gen;
+        STATE.with(|global_state| {
+            let mut gs = global_state.borrow_mut();
+            gs.render_gen += 1;
+            gs.last_focus_gen = gs.focus_gen;
+        });
         Ok(())
     }
 
@@ -418,7 +443,7 @@ impl<'a, S, A: Actions> Canopy<S, A> {
     /// ancestors. Events are handled only once, and then ignored.
     pub fn mouse(
         &mut self,
-        ctrl: &mut dyn ControlBackend,
+        ctrl: &mut dyn BackendControl,
         root: &mut dyn Node<S, A>,
         s: &mut S,
         m: mouse::Mouse,
@@ -454,7 +479,7 @@ impl<'a, S, A: Actions> Canopy<S, A> {
     /// handled only once, and then ignored.
     pub fn key(
         &mut self,
-        ctrl: &mut dyn ControlBackend,
+        ctrl: &mut dyn BackendControl,
         root: &mut dyn Node<S, A>,
         s: &mut S,
         k: key::Key,
@@ -462,7 +487,8 @@ impl<'a, S, A: Actions> Canopy<S, A> {
         let mut handled = false;
         let mut halt = false;
         let mut actions: Vec<A> = vec![];
-        focus_path_mut(self.focus_gen, root, &mut move |x| -> Result<Outcome<A>> {
+        let focus_gen = STATE.with(|global_state| -> u64 { global_state.borrow().focus_gen });
+        focus_path_mut(focus_gen, root, &mut move |x| -> Result<Outcome<A>> {
             process_event!(
                 self,
                 ctrl,
@@ -494,7 +520,7 @@ impl<'a, S, A: Actions> Canopy<S, A> {
     /// automatically tainted.
     pub fn broadcast(
         &mut self,
-        ctrl: &mut dyn ControlBackend,
+        ctrl: &mut dyn BackendControl,
         root: &mut dyn Node<S, A>,
         s: &mut S,
         t: A,
@@ -511,7 +537,7 @@ impl<'a, S, A: Actions> Canopy<S, A> {
     /// Propagate an event through the tree.
     pub fn event<N>(
         &mut self,
-        ctrl: &mut dyn ControlBackend,
+        ctrl: &mut dyn BackendControl,
         root: &mut N,
         s: &mut S,
         e: Event<A>,
@@ -531,7 +557,7 @@ impl<'a, S, A: Actions> Canopy<S, A> {
     }
 
     /// Clean up render loop and exit the process.
-    pub fn exit(&mut self, c: &mut dyn ControlBackend, code: i32) -> ! {
+    pub fn exit(&mut self, c: &mut dyn BackendControl, code: i32) -> ! {
         let _ = c.exit();
         exit(code)
     }
@@ -612,7 +638,8 @@ mod tests {
 
     pub fn focvec(app: &mut Canopy<State, TActions>, root: &mut TRoot) -> Result<Vec<String>> {
         let mut v = vec![];
-        focus_path_mut(app.focus_gen, root, &mut |x| -> Result<()> {
+        let focus_gen = STATE.with(|global_state| -> u64 { global_state.borrow().focus_gen });
+        focus_path_mut(focus_gen, root, &mut |x| -> Result<()> {
             let n = x.name().unwrap();
             v.push(n);
             Ok(())
@@ -625,7 +652,7 @@ mod tests {
             Arc<Mutex<TestBuf>>,
             Canopy<State, TActions>,
             Render,
-            &mut dyn ControlBackend,
+            &mut dyn BackendControl,
             TRoot,
             State,
         ) -> Result<()>,

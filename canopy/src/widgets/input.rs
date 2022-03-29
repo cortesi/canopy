@@ -6,7 +6,7 @@ use crate::{
     event::key,
     geom::{LineSegment, Point, Size},
     state::{NodeState, StatefulNode},
-    Actions, Canopy, ControlBackend, Node, Outcome, Render, Result, ViewPort,
+    Actions, BackendControl, Canopy, Node, Outcome, Render, Result, ViewPort,
 };
 
 /// A text buffer that exposes edit functionality for a single line. It also
@@ -147,7 +147,7 @@ impl<'a, S, A: Actions> Node<S, A> for InputLine<S> {
     fn handle_key(
         &mut self,
         _app: &mut Canopy<S, A>,
-        _: &mut dyn ControlBackend,
+        _: &mut dyn BackendControl,
         _: &mut S,
         k: key::Key,
     ) -> Result<Outcome<A>> {

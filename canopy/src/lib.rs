@@ -23,7 +23,7 @@ pub mod widgets;
 
 pub use crate::canopy::Canopy;
 pub use actions::Actions;
-pub use control::ControlBackend;
+pub use control::BackendControl;
 pub use error::{Error, Result};
 pub use graft::Graft;
 pub use node::Node;

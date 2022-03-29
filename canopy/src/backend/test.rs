@@ -1,4 +1,4 @@
-use crate::{cursor, geom::Point, render::RenderBackend, style::Style, ControlBackend, Result};
+use crate::{cursor, geom::Point, render::RenderBackend, style::Style, BackendControl, Result};
 use std::sync::{Arc, Mutex};
 
 /// A handle to a vector that contains the result of the render.
@@ -31,7 +31,7 @@ impl TestRender {
 
 pub struct TestControl {}
 
-impl ControlBackend for TestControl {
+impl BackendControl for TestControl {
     fn enter(&mut self) -> Result<()> {
         Ok(())
     }

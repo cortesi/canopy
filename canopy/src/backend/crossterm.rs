@@ -7,7 +7,7 @@ use color_backtrace::{default_output_stream, BacktracePrinter};
 use scopeguard::defer;
 
 use crate::{
-    control::ControlBackend,
+    control::BackendControl,
     cursor, error,
     event::{key, mouse, Event, EventSource},
     geom::{Point, Size},
@@ -79,7 +79,7 @@ impl Default for CrosstermControl {
     }
 }
 
-impl ControlBackend for CrosstermControl {
+impl BackendControl for CrosstermControl {
     fn enter(&mut self) -> Result<()> {
         translate_result(self.enter())
     }

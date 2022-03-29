@@ -4,7 +4,7 @@ use crate as canopy;
 use crate::{
     event::{key, mouse},
     geom::Size,
-    Actions, Canopy, ControlBackend, Node, NodeState, Outcome, Render, Result, StatefulNode,
+    Actions, BackendControl, Canopy, Node, NodeState, Outcome, Render, Result, StatefulNode,
     ViewPort,
 };
 
@@ -57,7 +57,7 @@ where
     fn handle_key(
         &mut self,
         _app: &mut Canopy<SO, AO>,
-        ctrl: &mut dyn ControlBackend,
+        ctrl: &mut dyn BackendControl,
         _s: &mut SO,
         k: key::Key,
     ) -> Result<Outcome<AO>> {
@@ -73,7 +73,7 @@ where
     fn handle_mouse(
         &mut self,
         _app: &mut Canopy<SO, AO>,
-        ctrl: &mut dyn ControlBackend,
+        ctrl: &mut dyn BackendControl,
         _s: &mut SO,
         k: mouse::Mouse,
     ) -> Result<Outcome<AO>> {

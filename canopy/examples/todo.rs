@@ -7,7 +7,7 @@ use canopy::{
     inspector::Inspector,
     style::solarized,
     widgets::{frame, list::*, InputLine, Text},
-    Canopy, ControlBackend, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
+    BackendControl, Canopy, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 
 struct Handle {}
@@ -123,7 +123,7 @@ impl Node<Handle, ()> for Root {
     fn handle_mouse(
         &mut self,
         _app: &mut Canopy<Handle, ()>,
-        _: &mut dyn ControlBackend,
+        _: &mut dyn BackendControl,
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<Outcome<()>> {
@@ -139,7 +139,7 @@ impl Node<Handle, ()> for Root {
     fn handle_key(
         &mut self,
         app: &mut Canopy<Handle, ()>,
-        ctrl: &mut dyn ControlBackend,
+        ctrl: &mut dyn BackendControl,
         _: &mut Handle,
         k: key::Key,
     ) -> Result<Outcome<()>> {

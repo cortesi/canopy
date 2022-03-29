@@ -2,7 +2,7 @@ use crate::{
     cursor,
     event::{key, mouse},
     geom::{Frame, Rect, Size},
-    Actions, Canopy, ControlBackend, Outcome, Render, Result, StatefulNode, ViewPort,
+    Actions, BackendControl, Canopy, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 use duplicate::duplicate_item;
 
@@ -66,7 +66,7 @@ pub trait Node<S, A: Actions>: StatefulNode {
     fn handle_key(
         &mut self,
         app: &mut Canopy<S, A>,
-        c: &mut dyn ControlBackend,
+        c: &mut dyn BackendControl,
         s: &mut S,
         k: key::Key,
     ) -> Result<Outcome<A>> {
@@ -77,7 +77,7 @@ pub trait Node<S, A: Actions>: StatefulNode {
     fn handle_mouse(
         &mut self,
         app: &mut Canopy<S, A>,
-        c: &mut dyn ControlBackend,
+        c: &mut dyn BackendControl,
         s: &mut S,
         k: mouse::Mouse,
     ) -> Result<Outcome<A>> {
@@ -89,7 +89,7 @@ pub trait Node<S, A: Actions>: StatefulNode {
     fn handle_event_action(
         &mut self,
         app: &mut Canopy<S, A>,
-        c: &mut dyn ControlBackend,
+        c: &mut dyn BackendControl,
         s: &mut S,
         k: A,
     ) -> Result<Outcome<A>> {
@@ -100,7 +100,7 @@ pub trait Node<S, A: Actions>: StatefulNode {
     fn handle_broadcast(
         &mut self,
         app: &mut Canopy<S, A>,
-        c: &mut dyn ControlBackend,
+        c: &mut dyn BackendControl,
         s: &mut S,
         k: A,
     ) -> Result<Outcome<A>> {
@@ -140,7 +140,7 @@ pub trait Node<S, A: Actions>: StatefulNode {
     /// Render this widget. The render method should:
     ///
     /// - Lay out any child nodes by manipulating their viewports. This will
-    ///   often involve calling the .fit method on the child nodes to get their
+    ///   often involve calling the `fit` method on the child nodes to get their
     ///   dimensions.
     /// - Render itself to screen. This node's viewport will already have been
     ///   set by a parent.

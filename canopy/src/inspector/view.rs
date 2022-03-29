@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
-    event::key, widgets::tabs, Actions, Canopy, ControlBackend, Node, NodeState, Outcome, Render,
+    event::key, widgets::tabs, Actions, BackendControl, Canopy, Node, NodeState, Outcome, Render,
     Result, StatefulNode, ViewPort,
 };
 
@@ -48,7 +48,7 @@ impl<S, A: Actions> Node<S, A> for View<S, A> {
     fn handle_key(
         &mut self,
         app: &mut Canopy<S, A>,
-        _: &mut dyn ControlBackend,
+        _: &mut dyn BackendControl,
         _: &mut S,
         k: key::Key,
     ) -> Result<Outcome<A>> {

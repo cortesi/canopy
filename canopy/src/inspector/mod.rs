@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
-    event::key, graft::Graft, widgets::frame, Actions, Canopy, ControlBackend, Node, NodeState,
+    event::key, graft::Graft, widgets::frame, Actions, BackendControl, Canopy, Node, NodeState,
     Outcome, Render, Result, StatefulNode, ViewPort,
 };
 
@@ -103,7 +103,7 @@ where
     fn handle_key(
         &mut self,
         app: &mut Canopy<S, A>,
-        _ctrl: &mut dyn ControlBackend,
+        _ctrl: &mut dyn BackendControl,
         _: &mut S,
         k: key::Key,
     ) -> Result<Outcome<A>> {

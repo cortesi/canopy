@@ -2,7 +2,7 @@
 pub mod utils {
     use duplicate::duplicate_item;
 
-    use crate::{self as canopy, ControlBackend};
+    use crate::{self as canopy, BackendControl};
     use crate::{
         backend::test::{TestControl, TestRender},
         event::{key, mouse},
@@ -101,7 +101,7 @@ pub mod utils {
         fn handle_key(
             &mut self,
             _: &mut Canopy<State, TActions>,
-            _: &mut dyn ControlBackend,
+            _: &mut dyn BackendControl,
             s: &mut State,
             _: key::Key,
         ) -> Result<Outcome<TActions>> {
@@ -110,7 +110,7 @@ pub mod utils {
         fn handle_mouse(
             &mut self,
             _: &mut Canopy<State, TActions>,
-            _: &mut dyn ControlBackend,
+            _: &mut dyn BackendControl,
             s: &mut State,
             _: mouse::Mouse,
         ) -> Result<Outcome<TActions>> {
@@ -119,7 +119,7 @@ pub mod utils {
         fn handle_broadcast(
             &mut self,
             _: &mut Canopy<State, TActions>,
-            _: &mut dyn ControlBackend,
+            _: &mut dyn BackendControl,
             s: &mut State,
             a: TActions,
         ) -> Result<Outcome<TActions>> {
@@ -128,7 +128,7 @@ pub mod utils {
         fn handle_event_action(
             &mut self,
             _: &mut Canopy<State, TActions>,
-            _: &mut dyn ControlBackend,
+            _: &mut dyn BackendControl,
             s: &mut State,
             a: TActions,
         ) -> Result<Outcome<TActions>> {
@@ -166,7 +166,7 @@ pub mod utils {
         fn handle_key(
             &mut self,
             _: &mut Canopy<State, TActions>,
-            _: &mut dyn ControlBackend,
+            _: &mut dyn BackendControl,
             s: &mut State,
             _: key::Key,
         ) -> Result<Outcome<TActions>> {
@@ -176,7 +176,7 @@ pub mod utils {
         fn handle_mouse(
             &mut self,
             _: &mut Canopy<State, TActions>,
-            _: &mut dyn ControlBackend,
+            _: &mut dyn BackendControl,
             s: &mut State,
             _: mouse::Mouse,
         ) -> Result<Outcome<TActions>> {
@@ -186,7 +186,7 @@ pub mod utils {
         fn handle_broadcast(
             &mut self,
             _: &mut Canopy<State, TActions>,
-            _: &mut dyn ControlBackend,
+            _: &mut dyn BackendControl,
             s: &mut State,
             a: TActions,
         ) -> Result<Outcome<TActions>> {
@@ -196,7 +196,7 @@ pub mod utils {
         fn handle_event_action(
             &mut self,
             _: &mut Canopy<State, TActions>,
-            _: &mut dyn ControlBackend,
+            _: &mut dyn BackendControl,
             s: &mut State,
             a: TActions,
         ) -> Result<Outcome<TActions>> {
@@ -248,7 +248,7 @@ pub mod utils {
         fn handle_key(
             &mut self,
             _: &mut Canopy<State, TActions>,
-            _: &mut dyn ControlBackend,
+            _: &mut dyn BackendControl,
             s: &mut State,
             _: key::Key,
         ) -> Result<Outcome<TActions>> {
@@ -258,7 +258,7 @@ pub mod utils {
         fn handle_mouse(
             &mut self,
             _: &mut Canopy<State, TActions>,
-            _: &mut dyn ControlBackend,
+            _: &mut dyn BackendControl,
             s: &mut State,
             _: mouse::Mouse,
         ) -> Result<Outcome<TActions>> {
@@ -268,7 +268,7 @@ pub mod utils {
         fn handle_broadcast(
             &mut self,
             _: &mut Canopy<State, TActions>,
-            _: &mut dyn ControlBackend,
+            _: &mut dyn BackendControl,
             s: &mut State,
             a: TActions,
         ) -> Result<Outcome<TActions>> {
@@ -278,7 +278,7 @@ pub mod utils {
         fn handle_event_action(
             &mut self,
             _: &mut Canopy<State, TActions>,
-            _: &mut dyn ControlBackend,
+            _: &mut dyn BackendControl,
             s: &mut State,
             a: TActions,
         ) -> Result<Outcome<TActions>> {
@@ -375,7 +375,7 @@ pub mod utils {
         }
     }
 
-    pub fn tcanopy(tr: &mut TestRender) -> (Canopy<State, TActions>, Render, impl ControlBackend) {
+    pub fn tcanopy(tr: &mut TestRender) -> (Canopy<State, TActions>, Render, impl BackendControl) {
         (
             Canopy::new(),
             Render::new(tr, StyleManager::default()),
