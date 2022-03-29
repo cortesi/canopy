@@ -78,7 +78,7 @@ struct Root {
     state: NodeState,
     content: frame::Frame<Handle, (), List<Handle, (), TodoItem>>,
     statusbar: StatusBar,
-    adder: Option<frame::Frame<Handle, (), InputLine<Handle>>>,
+    adder: Option<frame::Frame<Handle, (), InputLine<Handle, ()>>>,
 }
 
 impl Root {
@@ -95,7 +95,7 @@ impl Root {
 
     fn open_adder(&mut self, app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
         let mut adder = frame::Frame::new(InputLine::new(""));
-        adder.child.focus(app)?;
+        adder.child.handle_focus(app)?;
         self.adder = Some(adder);
         app.taint(self);
         Ok(Outcome::handle())
@@ -115,8 +115,8 @@ impl Node<Handle, ()> for Root {
         Ok(())
     }
 
-    fn focus(&mut self, app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
-        app.set_focus(self);
+    fn handle_focus(&mut self, _app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
+        self.set_focus();
         Ok(Outcome::handle())
     }
 

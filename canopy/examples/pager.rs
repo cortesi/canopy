@@ -28,8 +28,8 @@ impl Root {
 }
 
 impl Node<Handle, ()> for Root {
-    fn focus(&mut self, app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
-        app.set_focus(self);
+    fn handle_focus(&mut self, _app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
+        self.set_focus();
         Ok(Outcome::handle())
     }
 

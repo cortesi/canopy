@@ -33,7 +33,7 @@
   - Center
   - text line widget
   - markdown
-- use half-blocks to improve smootnness of scrollbars
+- use half-blocks to improve smoothness of scrollbars
 - serialization/deserialization for color scheme
 - Better debugging and monitoring story
   - Inspector GUI

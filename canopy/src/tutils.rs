@@ -82,8 +82,11 @@ pub mod utils {
             Some(self.name.clone())
         }
 
-        fn focus(&mut self, app: &mut Canopy<State, TActions>) -> Result<Outcome<TActions>> {
-            app.set_focus(self);
+        fn handle_focus(
+            &mut self,
+            _app: &mut Canopy<State, TActions>,
+        ) -> Result<Outcome<TActions>> {
+            self.set_focus();
             Ok(Outcome::handle())
         }
         fn render(
@@ -141,8 +144,11 @@ pub mod utils {
             Some(self.name.clone())
         }
 
-        fn focus(&mut self, app: &mut Canopy<State, TActions>) -> Result<Outcome<TActions>> {
-            app.set_focus(self);
+        fn handle_focus(
+            &mut self,
+            _app: &mut Canopy<State, TActions>,
+        ) -> Result<Outcome<TActions>> {
+            self.set_focus();
             Ok(Outcome::handle())
         }
 
@@ -223,8 +229,11 @@ pub mod utils {
             Some(self.name.clone())
         }
 
-        fn focus(&mut self, app: &mut Canopy<State, TActions>) -> Result<Outcome<TActions>> {
-            app.set_focus(self);
+        fn handle_focus(
+            &mut self,
+            _app: &mut Canopy<State, TActions>,
+        ) -> Result<Outcome<TActions>> {
+            self.set_focus();
             Ok(Outcome::handle())
         }
 

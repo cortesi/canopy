@@ -47,8 +47,8 @@ where
 
     // We make an assumption that some node below us can hold terminal focus, so
     // we must too.
-    fn focus(&mut self, app: &mut Canopy<SO, AO>) -> Result<Outcome<AO>> {
-        app.set_focus(self);
+    fn handle_focus(&mut self, _app: &mut Canopy<SO, AO>) -> Result<Outcome<AO>> {
+        self.set_focus();
         Ok(Outcome::handle())
     }
 

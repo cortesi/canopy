@@ -2,6 +2,7 @@ use crate::{
     cursor,
     event::{key, mouse},
     geom::{Frame, Rect, Size},
+    global::STATE,
     Actions, BackendControl, Canopy, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 use duplicate::duplicate_item;
@@ -55,9 +56,10 @@ pub trait Node<S, A: Actions>: StatefulNode {
     }
 
     /// Try to set focus to this node. If the node accepts focus, the node
-    /// should call `Canopy.set_focus` and return Outcome::Handled, otherwise
-    /// return Outcome::Ignore.
-    fn focus(&mut self, app: &mut Canopy<S, A>) -> Result<Outcome<A>> {
+    /// should call `self.set_focus()` and return Outcome::Handled, otherwise
+    /// return `Outcome::Ignore`. The default implementation just returns
+    /// `Outcome::Ignore`.
+    fn handle_focus(&mut self, app: &mut Canopy<S, A>) -> Result<Outcome<A>> {
         Ok(Outcome::ignore())
     }
 
@@ -73,7 +75,7 @@ pub trait Node<S, A: Actions>: StatefulNode {
         Ok(Outcome::ignore())
     }
 
-    /// Handle a mouse event.The default implementation ignores mouse input.
+    /// Handle a mouse event. The default implementation ignores mouse input.
     fn handle_mouse(
         &mut self,
         app: &mut Canopy<S, A>,
@@ -184,6 +186,14 @@ pub trait Node<S, A: Actions>: StatefulNode {
         let fit = self.fit(app, screen.size())?;
         self.update_viewport(&|vp| vp.update(fit, screen));
         Ok(())
+    }
+
+    /// Focus this node.
+    fn set_focus(&mut self) {
+        STATE.with(|global_state| {
+            global_state.borrow_mut().focus_gen += 1;
+            self.state_mut().focus_gen = global_state.borrow().focus_gen;
+        });
     }
 }
 

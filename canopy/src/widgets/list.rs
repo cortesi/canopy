@@ -275,8 +275,8 @@ impl<S, A: Actions, N> Node<S, A> for List<S, A, N>
 where
     N: Node<S, A> + ListItem,
 {
-    fn focus(&mut self, app: &mut Canopy<S, A>) -> Result<Outcome<A>> {
-        app.set_focus(self);
+    fn handle_focus(&mut self, _app: &mut Canopy<S, A>) -> Result<Outcome<A>> {
+        self.set_focus();
         Ok(Outcome::handle())
     }
 

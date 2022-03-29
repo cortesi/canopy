@@ -104,13 +104,13 @@ impl TextBuf {
 
 /// A single input line, one character high.
 #[derive(StatefulNode)]
-pub struct InputLine<S> {
+pub struct InputLine<S, A: Actions> {
     state: NodeState,
-    _marker: PhantomData<S>,
+    _marker: PhantomData<(S, A)>,
     pub textbuf: TextBuf,
 }
 
-impl<S> InputLine<S> {
+impl<S, A: Actions> InputLine<S, A> {
     pub fn new(txt: &str) -> Self {
         InputLine {
             state: NodeState::default(),
@@ -123,9 +123,9 @@ impl<S> InputLine<S> {
     }
 }
 
-impl<'a, S, A: Actions> Node<S, A> for InputLine<S> {
-    fn focus(&mut self, app: &mut Canopy<S, A>) -> Result<Outcome<A>> {
-        app.set_focus(self);
+impl<'a, S, A: Actions> Node<S, A> for InputLine<S, A> {
+    fn handle_focus(&mut self, _app: &mut Canopy<S, A>) -> Result<Outcome<A>> {
+        self.set_focus();
         Ok(Outcome::handle())
     }
 
