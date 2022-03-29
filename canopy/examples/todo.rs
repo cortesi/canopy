@@ -7,7 +7,7 @@ use canopy::{
     inspector::Inspector,
     style::solarized,
     widgets::{frame, list::*, InputLine, Text},
-    BackendControl, Canopy, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
+    BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 
 struct Handle {}
@@ -15,7 +15,7 @@ struct Handle {}
 #[derive(StatefulNode)]
 struct TodoItem {
     state: NodeState,
-    child: Text<Handle>,
+    child: Text<Handle, ()>,
     selected: bool,
 }
 
@@ -36,8 +36,8 @@ impl ListItem for TodoItem {
 }
 
 impl Node<Handle, ()> for TodoItem {
-    fn fit(&mut self, app: &mut Canopy<Handle, ()>, target: Size) -> Result<Size> {
-        self.child.fit(app, target)
+    fn fit(&mut self, target: Size) -> Result<Size> {
+        self.child.fit(target)
     }
 
     fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle, ()>) -> Result<()>) -> Result<()> {
@@ -51,8 +51,8 @@ impl Node<Handle, ()> for TodoItem {
         f(&mut self.child)
     }
 
-    fn render(&mut self, app: &mut Canopy<Handle, ()>, r: &mut Render, vp: ViewPort) -> Result<()> {
-        self.child.wrap(app, vp)?;
+    fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
+        self.child.wrap(vp)?;
         if self.selected {
             r.style.push_layer("blue");
         }
@@ -66,7 +66,7 @@ struct StatusBar {
 }
 
 impl Node<Handle, ()> for StatusBar {
-    fn render(&mut self, _: &mut Canopy<Handle, ()>, r: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
         r.style.push_layer("statusbar");
         r.text("statusbar/text", vp.view_rect().first_line(), "todo")?;
         Ok(())
@@ -93,9 +93,9 @@ impl Root {
         }
     }
 
-    fn open_adder(&mut self, app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
+    fn open_adder(&mut self) -> Result<Outcome<()>> {
         let mut adder = frame::Frame::new(InputLine::new(""));
-        adder.child.handle_focus(app)?;
+        adder.child.handle_focus()?;
         self.adder = Some(adder);
         self.taint();
         Ok(Outcome::handle())
@@ -103,26 +103,25 @@ impl Root {
 }
 
 impl Node<Handle, ()> for Root {
-    fn render(&mut self, app: &mut Canopy<Handle, ()>, _: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, _: &mut Render, vp: ViewPort) -> Result<()> {
         let (a, b) = vp.carve_vend(1);
-        self.statusbar.wrap(app, b)?;
-        self.content.wrap(app, a)?;
+        self.statusbar.wrap(b)?;
+        self.content.wrap(a)?;
 
         let a = vp.screen_rect();
         if let Some(add) = &mut self.adder {
-            add.place(app, Rect::new(a.tl.x + 2, a.tl.y + a.h / 2, a.w - 4, 3))?;
+            add.place(Rect::new(a.tl.x + 2, a.tl.y + a.h / 2, a.w - 4, 3))?;
         }
         Ok(())
     }
 
-    fn handle_focus(&mut self, _app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
+    fn handle_focus(&mut self) -> Result<Outcome<()>> {
         self.set_focus();
         Ok(Outcome::handle())
     }
 
     fn handle_mouse(
         &mut self,
-        _app: &mut Canopy<Handle, ()>,
         _: &mut dyn BackendControl,
         _: &mut Handle,
         k: mouse::Mouse,
@@ -138,7 +137,6 @@ impl Node<Handle, ()> for Root {
 
     fn handle_key(
         &mut self,
-        app: &mut Canopy<Handle, ()>,
         ctrl: &mut dyn BackendControl,
         _: &mut Handle,
         k: key::Key,
@@ -158,14 +156,14 @@ impl Node<Handle, ()> for Root {
         } else {
             match k {
                 c if c == 'a' => {
-                    self.open_adder(app)?;
+                    self.open_adder()?;
                 }
                 c if c == 'g' => lst.select_first(),
                 c if c == 'j' || c == key::KeyCode::Down => lst.select_next(),
                 c if c == 'k' || c == key::KeyCode::Up => lst.select_prev(),
                 c if c == ' ' || c == key::KeyCode::PageDown => lst.page_down(),
                 c if c == key::KeyCode::PageUp => lst.page_up(),
-                c if c == 'q' => app.exit(ctrl, 0),
+                c if c == 'q' => canopy::exit(ctrl, 0),
                 _ => return Ok(Outcome::ignore()),
             };
         }

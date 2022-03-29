@@ -6,7 +6,7 @@ use crate::{
     event::key,
     geom::{LineSegment, Point, Size},
     state::{NodeState, StatefulNode},
-    Actions, BackendControl, Canopy, Node, Outcome, Render, Result, ViewPort,
+    Actions, BackendControl, Node, Outcome, Render, Result, ViewPort,
 };
 
 /// A text buffer that exposes edit functionality for a single line. It also
@@ -124,7 +124,7 @@ impl<S, A: Actions> InputLine<S, A> {
 }
 
 impl<'a, S, A: Actions> Node<S, A> for InputLine<S, A> {
-    fn handle_focus(&mut self, _app: &mut Canopy<S, A>) -> Result<Outcome<A>> {
+    fn handle_focus(&mut self) -> Result<Outcome<A>> {
         self.set_focus();
         Ok(Outcome::handle())
     }
@@ -140,13 +140,12 @@ impl<'a, S, A: Actions> Node<S, A> for InputLine<S, A> {
         })
     }
 
-    fn render(&mut self, _app: &mut Canopy<S, A>, r: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
         r.text("text", vp.view_rect().first_line(), &self.textbuf.text())
     }
 
     fn handle_key(
         &mut self,
-        _app: &mut Canopy<S, A>,
         _: &mut dyn BackendControl,
         _: &mut S,
         k: key::Key,
@@ -169,7 +168,7 @@ impl<'a, S, A: Actions> Node<S, A> for InputLine<S, A> {
         Ok(Outcome::handle())
     }
 
-    fn fit(&mut self, _app: &mut Canopy<S, A>, sz: Size) -> Result<Size> {
+    fn fit(&mut self, sz: Size) -> Result<Size> {
         self.textbuf.set_display_width(sz.w as usize);
         let tbl = self.textbuf.value.len() as u16;
         if self.textbuf.window.len >= tbl {

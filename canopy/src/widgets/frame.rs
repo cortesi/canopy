@@ -6,7 +6,7 @@ use pad::PadStr;
 use crate as canopy;
 use crate::{
     state::{NodeState, StatefulNode},
-    Actions, Canopy, Node, Render, Result, ViewPort,
+    Actions, Node, Render, Result, ViewPort,
 };
 
 /// Defines the set of glyphs used to draw the frame
@@ -110,10 +110,10 @@ where
         self.child.should_render()
     }
 
-    fn render(&mut self, app: &mut Canopy<S, A>, rndr: &mut Render, vp: ViewPort) -> Result<()> {
-        let f = self.child.frame(app, vp, 1)?;
+    fn render(&mut self, rndr: &mut Render, vp: ViewPort) -> Result<()> {
+        let f = self.child.frame(vp, 1)?;
 
-        let style = if app.on_focus_path(self) {
+        let style = if canopy::on_focus_path(self) {
             "frame/focused"
         } else {
             "frame"

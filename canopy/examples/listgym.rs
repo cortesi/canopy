@@ -8,7 +8,7 @@ use canopy::{
     inspector::Inspector,
     style::solarized,
     widgets::{frame, list::*, Text},
-    BackendControl, Canopy, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
+    BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 
 const TEXT: &str = "What a struggle must have gone on during long centuries between the several kinds of trees, each annually scattering its seeds by the thousand; what war between insect and insect — between insects, snails, and other animals with birds and beasts of prey — all striving to increase, all feeding on each other, or on the trees, their seeds and seedlings, or on the other plants which first clothed the ground and thus checked the growth of the trees.";
@@ -20,7 +20,7 @@ struct Handle {}
 #[derive(StatefulNode)]
 struct Block {
     state: NodeState,
-    child: Text<Handle>,
+    child: Text<Handle, ()>,
     color: String,
     selected: bool,
 }
@@ -44,19 +44,16 @@ impl ListItem for Block {
 }
 
 impl Node<Handle, ()> for Block {
-    fn fit(&mut self, app: &mut Canopy<Handle, ()>, target: Size) -> Result<Size> {
-        self.child.fit(
-            app,
-            Size {
-                w: target.w - 2,
-                h: target.h,
-            },
-        )
+    fn fit(&mut self, target: Size) -> Result<Size> {
+        self.child.fit(Size {
+            w: target.w - 2,
+            h: target.h,
+        })
     }
 
-    fn render(&mut self, app: &mut Canopy<Handle, ()>, r: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
         let (_, screen) = vp.screen_rect().carve_hstart(2);
-        let outer = self.child.fit(app, screen.into())?;
+        let outer = self.child.fit(screen.into())?;
         let view = Rect {
             tl: vp.view_rect().tl,
             w: vp.view_rect().w.saturating_sub(2),
@@ -97,12 +94,7 @@ struct StatusBar {
 }
 
 impl Node<Handle, ()> for StatusBar {
-    fn render(
-        &mut self,
-        _app: &mut Canopy<Handle, ()>,
-        r: &mut Render,
-        vp: ViewPort,
-    ) -> Result<()> {
+    fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
         r.style.push_layer("statusbar");
         r.text("text", vp.view_rect().first_line(), "listgym")?;
         Ok(())
@@ -130,21 +122,20 @@ impl Root {
 }
 
 impl Node<Handle, ()> for Root {
-    fn render(&mut self, app: &mut Canopy<Handle, ()>, _: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, _: &mut Render, vp: ViewPort) -> Result<()> {
         let (a, b) = vp.carve_vend(1);
-        self.statusbar.wrap(app, b)?;
-        self.content.wrap(app, a)?;
+        self.statusbar.wrap(b)?;
+        self.content.wrap(a)?;
         Ok(())
     }
 
-    fn handle_focus(&mut self, _app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
+    fn handle_focus(&mut self) -> Result<Outcome<()>> {
         self.set_focus();
         Ok(Outcome::handle())
     }
 
     fn handle_mouse(
         &mut self,
-        _app: &mut Canopy<Handle, ()>,
         _: &mut dyn BackendControl,
         _: &mut Handle,
         k: mouse::Mouse,
@@ -161,7 +152,6 @@ impl Node<Handle, ()> for Root {
 
     fn handle_key(
         &mut self,
-        app: &mut Canopy<Handle, ()>,
         ctrl: &mut dyn BackendControl,
         _: &mut Handle,
         k: key::Key,
@@ -190,7 +180,7 @@ impl Node<Handle, ()> for Root {
             c if c == 'l' || c == key::KeyCode::Right => lst.scroll_right(),
             c if c == ' ' || c == key::KeyCode::PageDown => lst.page_down(),
             c if c == key::KeyCode::PageUp => lst.page_up(),
-            c if c == 'q' => app.exit(ctrl, 0),
+            c if c == 'q' => canopy::exit(ctrl, 0),
             _ => return Ok(Outcome::ignore()),
         };
         self.taint_tree()?;

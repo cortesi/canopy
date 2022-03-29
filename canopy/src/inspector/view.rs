@@ -2,8 +2,8 @@ use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
-    event::key, widgets::tabs, Actions, BackendControl, Canopy, Node, NodeState, Outcome, Render,
-    Result, StatefulNode, ViewPort,
+    event::key, widgets::tabs, Actions, BackendControl, Node, NodeState, Outcome, Render, Result,
+    StatefulNode, ViewPort,
 };
 
 #[derive(StatefulNode)]
@@ -14,7 +14,7 @@ pub struct Logs<S, A: Actions> {
 }
 
 impl<S, A: Actions> Node<S, A> for Logs<S, A> {
-    fn render(&mut self, _app: &mut Canopy<S, A>, r: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
         r.fill("", vp.view_rect(), ' ')?;
         Ok(())
     }
@@ -40,14 +40,13 @@ pub struct View<S, A: Actions> {
 }
 
 impl<S, A: Actions> Node<S, A> for View<S, A> {
-    fn handle_focus(&mut self, _app: &mut Canopy<S, A>) -> Result<Outcome<A>> {
+    fn handle_focus(&mut self) -> Result<Outcome<A>> {
         self.set_focus();
         Ok(Outcome::handle())
     }
 
     fn handle_key(
         &mut self,
-        _app: &mut Canopy<S, A>,
         _: &mut dyn BackendControl,
         _: &mut S,
         k: key::Key,
@@ -59,10 +58,10 @@ impl<S, A: Actions> Node<S, A> for View<S, A> {
         Ok(Outcome::handle())
     }
 
-    fn render(&mut self, app: &mut Canopy<S, A>, _r: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, vp: ViewPort) -> Result<()> {
         let (a, b) = vp.carve_vstart(1);
-        self.tabs.wrap(app, a)?;
-        self.logs.wrap(app, b)?;
+        self.tabs.wrap(a)?;
+        self.logs.wrap(b)?;
         Ok(())
     }
 

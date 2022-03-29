@@ -4,8 +4,8 @@ use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
-    event::key, graft::Graft, widgets::frame, Actions, BackendControl, Canopy, Node, NodeState,
-    Outcome, Render, Result, StatefulNode, ViewPort,
+    event::key, graft::Graft, widgets::frame, Actions, BackendControl, Node, NodeState, Outcome,
+    Render, Result, StatefulNode, ViewPort,
 };
 
 #[derive(Debug, PartialEq, Clone)]
@@ -38,15 +38,10 @@ impl<A: Actions> Default for Content<InspectorState, A> {
 }
 
 impl<A: Actions> Node<InspectorState, A> for Content<InspectorState, A> {
-    fn render(
-        &mut self,
-        app: &mut Canopy<InspectorState, A>,
-        _r: &mut Render,
-        vp: ViewPort,
-    ) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, vp: ViewPort) -> Result<()> {
         let parts = vp.carve_vend(1);
-        self.statusbar.wrap(app, parts.1)?;
-        self.view.wrap(app, parts.0)?;
+        self.statusbar.wrap(parts.1)?;
+        self.view.wrap(parts.0)?;
         Ok(())
     }
 
@@ -102,7 +97,6 @@ where
 {
     fn handle_key(
         &mut self,
-        app: &mut Canopy<S, A>,
         _ctrl: &mut dyn BackendControl,
         _: &mut S,
         k: key::Key,
@@ -110,15 +104,15 @@ where
         if self.active {
             match k {
                 c if c == 'a' => {
-                    app.focus_first(&mut self.root)?;
+                    canopy::focus_first(&mut self.root)?;
                 }
                 c if c == self.activate => {
-                    if app.on_focus_path(&self.content) {
+                    if canopy::on_focus_path(&self.content) {
                         self.active = false;
                         self.taint_tree()?;
-                        app.focus_first(&mut self.root)?;
+                        canopy::focus_first(&mut self.root)?;
                     } else {
-                        app.focus_first(self)?;
+                        canopy::focus_first(self)?;
                     }
                 }
                 _ => return Ok(Outcome::ignore()),
@@ -126,19 +120,19 @@ where
         } else if k == self.activate {
             self.active = true;
             self.taint_tree()?;
-            app.focus_first(self)?;
+            canopy::focus_first(self)?;
         };
         Ok(Outcome::handle())
     }
 
-    fn render(&mut self, app: &mut Canopy<S, A>, r: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
         r.style.push_layer("inspector");
         if self.active {
             let parts = vp.split_horizontal(2)?;
-            self.content.wrap(app, parts[0])?;
-            self.root.wrap(app, parts[1])?;
+            self.content.wrap(parts[0])?;
+            self.root.wrap(parts[1])?;
         } else {
-            self.root.wrap(app, vp)?;
+            self.root.wrap(vp)?;
         };
         Ok(())
     }

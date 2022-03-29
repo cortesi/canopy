@@ -2,24 +2,24 @@ use crate as canopy;
 use crate::{
     geom::{Line, Size},
     state::{NodeState, StatefulNode},
-    Actions, Canopy, Node, Render, Result, ViewPort,
+    Actions, Node, Render, Result, ViewPort,
 };
 use std::marker::PhantomData;
 
 use textwrap;
 
 #[derive(StatefulNode)]
-pub struct Text<S> {
+pub struct Text<S, A> {
     pub state: NodeState,
     pub raw: String,
     lines: Option<Vec<String>>,
     fixed_width: Option<u16>,
     current_size: Size,
 
-    _marker: PhantomData<S>,
+    _marker: PhantomData<(S, A)>,
 }
 
-impl<S> Text<S> {
+impl<S, A: Actions> Text<S, A> {
     pub fn new(raw: &str) -> Self {
         Text {
             state: NodeState::default(),
@@ -38,8 +38,8 @@ impl<S> Text<S> {
     }
 }
 
-impl<S, A: Actions> Node<S, A> for Text<S> {
-    fn fit(&mut self, _app: &mut Canopy<S, A>, s: Size) -> Result<Size> {
+impl<S, A: Actions> Node<S, A> for Text<S, A> {
+    fn fit(&mut self, s: Size) -> Result<Size> {
         let w = if let Some(w) = self.fixed_width {
             w
         } else {
@@ -59,7 +59,7 @@ impl<S, A: Actions> Node<S, A> for Text<S> {
         }
         Ok(self.current_size)
     }
-    fn render(&mut self, _app: &mut Canopy<S, A>, rndr: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, vp: ViewPort) -> Result<()> {
         let vo = vp.view_rect();
         if let Some(lines) = self.lines.as_ref() {
             for i in vo.tl.y..(vo.tl.y + vo.h) {
@@ -83,10 +83,10 @@ mod tests {
     #[test]
     fn text_sizing() -> Result<()> {
         let (_, mut tr) = TestRender::create();
-        let (mut app, _, _) = utils::tcanopy(&mut tr);
+        let (_, _) = utils::tcanopy(&mut tr);
         let txt = "aaa bbb ccc\nddd eee fff\nggg hhh iii";
-        let mut t: Text<utils::State> = Text::new(txt);
-        t.fit(&mut app, Size::new(7, 10))?;
+        let mut t: Text<utils::State, ()> = Text::new(txt);
+        t.fit(Size::new(7, 10))?;
         let expected: Vec<String> = vec![
             "aaa bbb".into(),
             "ccc    ".into(),

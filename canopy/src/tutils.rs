@@ -9,7 +9,7 @@ pub mod utils {
         geom::Size,
         style::StyleManager,
         widgets::list::ListItem,
-        Actions, Canopy, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
+        Actions, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
     };
 
     pub const K_ANY: key::Key = key::Key(None, key::KeyCode::Char('a'));
@@ -82,19 +82,11 @@ pub mod utils {
             Some(self.name.clone())
         }
 
-        fn handle_focus(
-            &mut self,
-            _app: &mut Canopy<State, TActions>,
-        ) -> Result<Outcome<TActions>> {
+        fn handle_focus(&mut self) -> Result<Outcome<TActions>> {
             self.set_focus();
             Ok(Outcome::handle())
         }
-        fn render(
-            &mut self,
-            _: &mut Canopy<State, TActions>,
-            r: &mut Render,
-            vp: ViewPort,
-        ) -> Result<()> {
+        fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
             r.text(
                 "any",
                 vp.view_rect().first_line(),
@@ -103,7 +95,6 @@ pub mod utils {
         }
         fn handle_key(
             &mut self,
-            _: &mut Canopy<State, TActions>,
             _: &mut dyn BackendControl,
             s: &mut State,
             _: key::Key,
@@ -112,7 +103,6 @@ pub mod utils {
         }
         fn handle_mouse(
             &mut self,
-            _: &mut Canopy<State, TActions>,
             _: &mut dyn BackendControl,
             s: &mut State,
             _: mouse::Mouse,
@@ -121,7 +111,6 @@ pub mod utils {
         }
         fn handle_broadcast(
             &mut self,
-            _: &mut Canopy<State, TActions>,
             _: &mut dyn BackendControl,
             s: &mut State,
             a: TActions,
@@ -130,7 +119,6 @@ pub mod utils {
         }
         fn handle_event_action(
             &mut self,
-            _: &mut Canopy<State, TActions>,
             _: &mut dyn BackendControl,
             s: &mut State,
             a: TActions,
@@ -144,23 +132,15 @@ pub mod utils {
             Some(self.name.clone())
         }
 
-        fn handle_focus(
-            &mut self,
-            _app: &mut Canopy<State, TActions>,
-        ) -> Result<Outcome<TActions>> {
+        fn handle_focus(&mut self) -> Result<Outcome<TActions>> {
             self.set_focus();
             Ok(Outcome::handle())
         }
 
-        fn render(
-            &mut self,
-            app: &mut Canopy<State, TActions>,
-            r: &mut Render,
-            vp: ViewPort,
-        ) -> Result<()> {
+        fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
             let parts = vp.split_vertical(2)?;
-            self.a.wrap(app, parts[0])?;
-            self.b.wrap(app, parts[1])?;
+            self.a.wrap(parts[0])?;
+            self.b.wrap(parts[1])?;
 
             r.text(
                 "any",
@@ -171,7 +151,6 @@ pub mod utils {
 
         fn handle_key(
             &mut self,
-            _: &mut Canopy<State, TActions>,
             _: &mut dyn BackendControl,
             s: &mut State,
             _: key::Key,
@@ -181,7 +160,6 @@ pub mod utils {
 
         fn handle_mouse(
             &mut self,
-            _: &mut Canopy<State, TActions>,
             _: &mut dyn BackendControl,
             s: &mut State,
             _: mouse::Mouse,
@@ -191,7 +169,6 @@ pub mod utils {
 
         fn handle_broadcast(
             &mut self,
-            _: &mut Canopy<State, TActions>,
             _: &mut dyn BackendControl,
             s: &mut State,
             a: TActions,
@@ -201,7 +178,6 @@ pub mod utils {
 
         fn handle_event_action(
             &mut self,
-            _: &mut Canopy<State, TActions>,
             _: &mut dyn BackendControl,
             s: &mut State,
             a: TActions,
@@ -229,23 +205,15 @@ pub mod utils {
             Some(self.name.clone())
         }
 
-        fn handle_focus(
-            &mut self,
-            _app: &mut Canopy<State, TActions>,
-        ) -> Result<Outcome<TActions>> {
+        fn handle_focus(&mut self) -> Result<Outcome<TActions>> {
             self.set_focus();
             Ok(Outcome::handle())
         }
 
-        fn render(
-            &mut self,
-            app: &mut Canopy<State, TActions>,
-            r: &mut Render,
-            vp: ViewPort,
-        ) -> Result<()> {
+        fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
             let parts = vp.split_horizontal(2)?;
-            self.a.wrap(app, parts[0])?;
-            self.b.wrap(app, parts[1])?;
+            self.a.wrap(parts[0])?;
+            self.b.wrap(parts[1])?;
 
             r.text(
                 "any",
@@ -256,7 +224,6 @@ pub mod utils {
 
         fn handle_key(
             &mut self,
-            _: &mut Canopy<State, TActions>,
             _: &mut dyn BackendControl,
             s: &mut State,
             _: key::Key,
@@ -266,7 +233,6 @@ pub mod utils {
 
         fn handle_mouse(
             &mut self,
-            _: &mut Canopy<State, TActions>,
             _: &mut dyn BackendControl,
             s: &mut State,
             _: mouse::Mouse,
@@ -276,7 +242,6 @@ pub mod utils {
 
         fn handle_broadcast(
             &mut self,
-            _: &mut Canopy<State, TActions>,
             _: &mut dyn BackendControl,
             s: &mut State,
             a: TActions,
@@ -286,7 +251,6 @@ pub mod utils {
 
         fn handle_event_action(
             &mut self,
-            _: &mut Canopy<State, TActions>,
             _: &mut dyn BackendControl,
             s: &mut State,
             a: TActions,
@@ -384,12 +348,8 @@ pub mod utils {
         }
     }
 
-    pub fn tcanopy(tr: &mut TestRender) -> (Canopy<State, TActions>, Render, impl BackendControl) {
-        (
-            Canopy::new(),
-            Render::new(tr, StyleManager::default()),
-            TestControl {},
-        )
+    pub fn tcanopy(tr: &mut TestRender) -> (Render, impl BackendControl) {
+        (Render::new(tr, StyleManager::default()), TestControl {})
     }
 
     // A fixed-size test node
@@ -401,7 +361,7 @@ pub mod utils {
     }
 
     impl Node<State, TActions> for TFixed {
-        fn fit(&mut self, _app: &mut Canopy<State, TActions>, _target: Size) -> Result<Size> {
+        fn fit(&mut self, _target: Size) -> Result<Size> {
             Ok(Size {
                 w: self.w,
                 h: self.h,

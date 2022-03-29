@@ -7,7 +7,7 @@ use canopy::{
     inspector::Inspector,
     style::solarized,
     widgets::{frame, Text},
-    BackendControl, Canopy, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
+    BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 
 struct Handle {}
@@ -15,7 +15,7 @@ struct Handle {}
 #[derive(StatefulNode)]
 struct Root {
     state: NodeState,
-    child: frame::Frame<Handle, (), Text<Handle>>,
+    child: frame::Frame<Handle, (), Text<Handle, ()>>,
 }
 
 impl Root {
@@ -28,14 +28,13 @@ impl Root {
 }
 
 impl Node<Handle, ()> for Root {
-    fn handle_focus(&mut self, _app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
+    fn handle_focus(&mut self) -> Result<Outcome<()>> {
         self.set_focus();
         Ok(Outcome::handle())
     }
 
     fn handle_mouse(
         &mut self,
-        _app: &mut Canopy<Handle, ()>,
         _: &mut dyn BackendControl,
         _: &mut Handle,
         k: mouse::Mouse,
@@ -52,7 +51,6 @@ impl Node<Handle, ()> for Root {
 
     fn handle_key(
         &mut self,
-        app: &mut Canopy<Handle, ()>,
         ctrl: &mut dyn BackendControl,
         _: &mut Handle,
         k: key::Key,
@@ -68,15 +66,15 @@ impl Node<Handle, ()> for Root {
                 txt.update_viewport(&|vp| vp.page_down());
             }
             c if c == key::KeyCode::PageUp => txt.update_viewport(&|vp| vp.page_up()),
-            c if c == 'q' => app.exit(ctrl, 0),
+            c if c == 'q' => canopy::exit(ctrl, 0),
             _ => return Ok(Outcome::ignore()),
         }
         self.taint_tree()?;
         Ok(Outcome::handle())
     }
 
-    fn render(&mut self, app: &mut Canopy<Handle, ()>, _: &mut Render, vp: ViewPort) -> Result<()> {
-        self.child.wrap(app, vp)
+    fn render(&mut self, _: &mut Render, vp: ViewPort) -> Result<()> {
+        self.child.wrap(vp)
     }
 
     fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle, ()>) -> Result<()>) -> Result<()> {

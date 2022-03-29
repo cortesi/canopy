@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use crate as canopy;
 use crate::{
     state::{NodeState, StatefulNode},
-    Actions, Canopy, Node, Render, Result, ViewPort,
+    Actions, Node, Render, Result, ViewPort,
 };
 
 /// A tab control managing a set of nodes with titles.
@@ -37,7 +37,7 @@ impl<S, A: Actions> Tabs<S, A> {
 }
 
 impl<S, A: Actions> Node<S, A> for Tabs<S, A> {
-    fn render(&mut self, _: &mut Canopy<S, A>, r: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
         for (i, rect) in vp
             .view_rect()
             .split_horizontal(self.tabs.len() as u16)?

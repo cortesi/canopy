@@ -7,7 +7,7 @@ use canopy::{
     geom::Size,
     inspector::Inspector,
     style::solarized,
-    BackendControl, Canopy, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
+    BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 
 struct Handle {}
@@ -49,38 +49,36 @@ impl Block {
 }
 
 impl Node<Handle, ()> for Root {
-    fn render(&mut self, app: &mut Canopy<Handle, ()>, _: &mut Render, vp: ViewPort) -> Result<()> {
-        self.child.wrap(app, vp)
+    fn render(&mut self, _: &mut Render, vp: ViewPort) -> Result<()> {
+        self.child.wrap(vp)
     }
 
     fn handle_mouse(
         &mut self,
-        app: &mut Canopy<Handle, ()>,
         _: &mut dyn BackendControl,
         _: &mut Handle,
         k: mouse::Mouse,
     ) -> Result<Outcome<()>> {
         Ok(match k {
-            c if c == mouse::MouseAction::ScrollDown => app.focus_next(self)?,
-            c if c == mouse::MouseAction::ScrollUp => app.focus_prev(self)?,
+            c if c == mouse::MouseAction::ScrollDown => canopy::focus_next(self)?,
+            c if c == mouse::MouseAction::ScrollUp => canopy::focus_prev(self)?,
             _ => Outcome::ignore(),
         })
     }
 
     fn handle_key(
         &mut self,
-        app: &mut Canopy<Handle, ()>,
         ctrl: &mut dyn BackendControl,
         _: &mut Handle,
         k: key::Key,
     ) -> Result<Outcome<()>> {
         Ok(match k {
-            c if c == key::KeyCode::Tab => app.focus_next(self)?,
-            c if c == 'l' || c == key::KeyCode::Right => app.focus_right(self)?,
-            c if c == 'h' || c == key::KeyCode::Left => app.focus_left(self)?,
-            c if c == 'j' || c == key::KeyCode::Down => app.focus_down(self)?,
-            c if c == 'k' || c == key::KeyCode::Up => app.focus_up(self)?,
-            c if c == 'q' => app.exit(ctrl, 0),
+            c if c == key::KeyCode::Tab => canopy::focus_next(self)?,
+            c if c == 'l' || c == key::KeyCode::Right => canopy::focus_right(self)?,
+            c if c == 'h' || c == key::KeyCode::Left => canopy::focus_left(self)?,
+            c if c == 'j' || c == key::KeyCode::Down => canopy::focus_down(self)?,
+            c if c == 'k' || c == key::KeyCode::Up => canopy::focus_up(self)?,
+            c if c == 'q' => canopy::exit(ctrl, 0),
             _ => Outcome::ignore(),
         })
     }
@@ -100,7 +98,7 @@ impl Node<Handle, ()> for Root {
 }
 
 impl Block {
-    fn add(&mut self, _app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
+    fn add(&mut self) -> Result<Outcome<()>> {
         Ok(if self.children.is_empty() {
             Outcome::ignore()
         } else if self.size_limited(self.children[0].vp().view_rect().into()) {
@@ -128,7 +126,7 @@ impl Block {
 }
 
 impl Node<Handle, ()> for Block {
-    fn render(&mut self, app: &mut Canopy<Handle, ()>, r: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
         if self.children.is_empty() {
             let vps = if self.horizontal {
                 vp.split_horizontal(self.children.len() as u16)?
@@ -136,7 +134,7 @@ impl Node<Handle, ()> for Block {
                 vp.split_vertical(self.children.len() as u16)?
             };
             for i in 0..self.children.len() {
-                self.children[i].wrap(app, vps[i])?;
+                self.children[i].wrap(vps[i])?;
             }
         } else {
             let bc = if self.is_focused() && self.children.is_empty() {
@@ -151,7 +149,7 @@ impl Node<Handle, ()> for Block {
         Ok(())
     }
 
-    fn handle_focus(&mut self, _app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
+    fn handle_focus(&mut self) -> Result<Outcome<()>> {
         Ok(if self.children.is_empty() {
             self.set_focus();
             Outcome::handle()
@@ -162,7 +160,6 @@ impl Node<Handle, ()> for Block {
 
     fn handle_mouse(
         &mut self,
-        app: &mut Canopy<Handle, ()>,
         _: &mut dyn BackendControl,
         _: &mut Handle,
         k: mouse::Mouse,
@@ -170,23 +167,22 @@ impl Node<Handle, ()> for Block {
         Ok(match k {
             c if c == mouse::MouseAction::Down + mouse::Button::Left => {
                 self.taint_tree()?;
-                self.handle_focus(app)?
+                self.handle_focus()?
             }
             c if c == mouse::MouseAction::Down + mouse::Button::Middle => {
                 self.split()?;
                 if self.is_focused() {
-                    app.focus_next(self)?;
+                    canopy::focus_next(self)?;
                 };
                 Outcome::handle()
             }
-            c if c == mouse::MouseAction::Down + mouse::Button::Right => self.add(app)?,
+            c if c == mouse::MouseAction::Down + mouse::Button::Right => self.add()?,
             _ => Outcome::ignore(),
         })
     }
 
     fn handle_key(
         &mut self,
-        app: &mut Canopy<Handle, ()>,
         _: &mut dyn BackendControl,
         _: &mut Handle,
         k: key::Key,
@@ -194,9 +190,9 @@ impl Node<Handle, ()> for Block {
         Ok(match k {
             c if c == 's' => {
                 self.split()?;
-                app.focus_next(self)?
+                canopy::focus_next(self)?
             }
-            c if c == 'a' => self.add(app)?,
+            c if c == 'a' => self.add()?,
             _ => Outcome::ignore(),
         })
     }

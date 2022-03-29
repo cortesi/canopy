@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use crate as canopy;
 use crate::{
     state::{NodeState, StatefulNode},
-    Actions, Canopy, Node, Render, Result, ViewPort,
+    Actions, Node, Render, Result, ViewPort,
 };
 
 /// Panes manages a set of child nodes arranged in a 2d grid.
@@ -28,10 +28,10 @@ where
     }
 
     /// Get the offset of the current focus in the children vector.
-    pub fn focus_coords(&mut self, app: &Canopy<S, A>) -> Option<(usize, usize)> {
+    pub fn focus_coords(&mut self) -> Option<(usize, usize)> {
         for (x, col) in self.children.iter_mut().enumerate() {
             for (y, row) in col.iter_mut().enumerate() {
-                if app.on_focus_path(row) {
+                if canopy::on_focus_path(row) {
                     return Some((x, y));
                 }
             }
@@ -40,9 +40,9 @@ where
     }
 
     /// Delete the focus node. If a column ends up empty, it is removed.
-    pub fn delete_focus(&mut self, app: &mut Canopy<S, A>) -> Result<()> {
-        if let Some((x, y)) = self.focus_coords(app) {
-            app.focus_next(self)?;
+    pub fn delete_focus(&mut self) -> Result<()> {
+        if let Some((x, y)) = self.focus_coords() {
+            canopy::focus_next(self)?;
             self.children[x].remove(y);
             if self.children[x].is_empty() {
                 self.children.remove(x);
@@ -54,11 +54,11 @@ where
 
     /// Insert a node, splitting vertically. If we have a focused node, the new
     /// node is inserted in a row beneath it. If not, a new column is added.
-    pub fn insert_row(&mut self, app: &Canopy<S, A>, n: N) -> Result<()>
+    pub fn insert_row(&mut self, n: N) -> Result<()>
     where
         N: Node<S, A>,
     {
-        if let Some((x, y)) = self.focus_coords(app) {
+        if let Some((x, y)) = self.focus_coords() {
             self.children[x].insert(y, n);
         } else {
             self.children.push(vec![n]);
@@ -68,12 +68,12 @@ where
 
     /// Insert a node in a new column. If we have a focused node, the new node
     /// is added in a new column to the right.
-    pub fn insert_col(&mut self, app: &mut Canopy<S, A>, mut n: N) -> Result<()>
+    pub fn insert_col(&mut self, mut n: N) -> Result<()>
     where
         N: Node<S, A>,
     {
-        let coords = self.focus_coords(app);
-        app.focus_next(&mut n)?;
+        let coords = self.focus_coords();
+        canopy::focus_next(&mut n)?;
         if let Some((x, _)) = coords {
             self.children.insert(x + 1, vec![n])
         } else {
@@ -110,11 +110,11 @@ impl<S, A: Actions, N: Node<S, A>> Node<S, A> for Panes<S, A, N> {
         Ok(())
     }
 
-    fn render(&mut self, app: &mut Canopy<S, A>, _rndr: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, _rndr: &mut Render, vp: ViewPort) -> Result<()> {
         let l = vp.screen_rect().split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
-                row.place(app, l[ci][ri])?;
+                row.place(l[ci][ri])?;
             }
         }
         // FIXME - this should probably clear the area if the last node is
@@ -135,7 +135,7 @@ mod tests {
     #[test]
     fn tlayout() -> Result<()> {
         let (_, mut tr) = TestRender::create();
-        let (mut app, _, _) = utils::tcanopy(&mut tr);
+        let (_, _) = utils::tcanopy(&mut tr);
         let tn = utils::TBranch::new("a");
         let mut p: Panes<utils::State, utils::TActions, utils::TBranch> = Panes::new(tn);
         let r = Rect {
@@ -143,26 +143,26 @@ mod tests {
             w: 100,
             h: 100,
         };
-        p.place(&mut app, r)?;
+        p.place(r)?;
 
         assert_eq!(p.shape(), vec![1]);
         let tn = utils::TBranch::new("b");
-        p.insert_col(&mut app, tn)?;
-        p.place(&mut app, r)?;
+        p.insert_col(tn)?;
+        p.place(r)?;
 
         assert_eq!(p.shape(), vec![1, 1]);
-        p.children[0][0].a.handle_focus(&mut app)?;
-        p.place(&mut app, r)?;
+        p.children[0][0].a.handle_focus()?;
+        p.place(r)?;
 
         let tn = utils::TBranch::new("c");
-        assert_eq!(p.focus_coords(&app), Some((0, 0)));
-        p.insert_row(&app, tn)?;
-        p.place(&mut app, r)?;
+        assert_eq!(p.focus_coords(), Some((0, 0)));
+        p.insert_row(tn)?;
+        p.place(r)?;
 
         assert_eq!(p.shape(), vec![2, 1]);
 
-        p.children[1][0].a.handle_focus(&mut app)?;
-        assert_eq!(p.focus_coords(&app), Some((1, 0)));
+        p.children[1][0].a.handle_focus()?;
+        assert_eq!(p.focus_coords(), Some((1, 0)));
         Ok(())
     }
 }

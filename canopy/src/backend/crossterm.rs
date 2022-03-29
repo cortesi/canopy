@@ -7,13 +7,14 @@ use color_backtrace::{default_output_stream, BacktracePrinter};
 use scopeguard::defer;
 
 use crate::{
+    self as canopy,
     control::BackendControl,
     cursor, error,
     event::{key, mouse, Event, EventSource},
     geom::{Point, Size},
     render::RenderBackend,
     style::{Color, Style, StyleManager},
-    Actions, Canopy, Node, Outcome, Render, Result,
+    Actions, Node, Outcome, Render, Result,
 };
 use crossterm::{
     self, cursor as ccursor, event as cevent, style, terminal, ExecutableCommand, QueueableCommand,
@@ -320,8 +321,6 @@ where
     let mut ctrl = CrosstermControl::default();
     let mut render = Render::new(&mut be, style);
 
-    let mut app = Canopy::new();
-
     translate_result(terminal::enable_raw_mode())?;
     let mut w = std::io::stderr();
 
@@ -359,18 +358,18 @@ where
     let events = EventSource::default();
     event_emitter(&events);
     let size = translate_result(terminal::size())?;
-    app.set_root_size(Size::new(size.0, size.1), root)?;
+    canopy::set_root_size(Size::new(size.0, size.1), root)?;
 
     loop {
         let mut ignore = false;
         loop {
             if !ignore {
-                app.pre_render(&mut render, root)?;
-                app.render(&mut render, root)?;
-                app.post_render(&mut render, root)?;
+                canopy::pre_render(&mut render, root)?;
+                canopy::render(&mut render, root)?;
+                canopy::post_render(&mut render, root)?;
                 render.flush()?;
             }
-            match app.event(&mut ctrl, root, s, events.next()?)? {
+            match canopy::event(&mut ctrl, root, s, events.next()?)? {
                 Outcome::Ignore { .. } => {
                     ignore = true;
                 }

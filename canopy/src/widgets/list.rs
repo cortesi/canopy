@@ -6,7 +6,7 @@ use crate::{
     geom::{Rect, Size},
     node::Node,
     state::{NodeState, StatefulNode},
-    Actions, Canopy, Outcome, Render, ViewPort,
+    Actions, Outcome, Render, ViewPort,
 };
 
 /// ListItem must be implemented by items displayed in a `List`.
@@ -260,10 +260,10 @@ where
     }
 
     /// Calculate and return the outer viewport rectangles of all items.
-    fn refresh_views(&mut self, app: &mut Canopy<S, A>, r: Size) -> Result<()> {
+    fn refresh_views(&mut self, r: Size) -> Result<()> {
         let mut voffset: u16 = 0;
         for itm in &mut self.items {
-            let item_view = itm.itm.fit(app, r)?.rect();
+            let item_view = itm.itm.fit(r)?.rect();
             itm.virt = item_view.shift(0, voffset as i16);
             voffset += item_view.h;
         }
@@ -275,7 +275,7 @@ impl<S, A: Actions, N> Node<S, A> for List<S, A, N>
 where
     N: Node<S, A> + ListItem,
 {
-    fn handle_focus(&mut self, _app: &mut Canopy<S, A>) -> Result<Outcome<A>> {
+    fn handle_focus(&mut self) -> Result<Outcome<A>> {
         self.set_focus();
         Ok(Outcome::handle())
     }
@@ -294,10 +294,10 @@ where
         Ok(())
     }
 
-    fn fit(&mut self, app: &mut Canopy<S, A>, r: Size) -> Result<Size> {
+    fn fit(&mut self, r: Size) -> Result<Size> {
         let mut w = 0;
         let mut h = 0;
-        self.refresh_views(app, r)?;
+        self.refresh_views(r)?;
         for i in &mut self.items {
             w = w.max(i.virt.w);
             h += i.virt.h
@@ -305,7 +305,7 @@ where
         Ok(Size { w, h })
     }
 
-    fn render(&mut self, _app: &mut Canopy<S, A>, rndr: &mut Render, myvp: ViewPort) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, myvp: ViewPort) -> Result<()> {
         self.clear = vec![];
         for itm in &mut self.items {
             if let Some(vp) = myvp.map(itm.virt)? {
@@ -412,7 +412,7 @@ mod tests {
     #[test]
     fn drawnodes() -> Result<()> {
         let (_, mut tr) = TestRender::create();
-        let (mut app, mut r, _) = tcanopy(&mut tr);
+        let (mut r, _) = tcanopy(&mut tr);
         let rw = 20;
         let rh = 10;
         let mut lst = List::new(vec![
@@ -421,8 +421,8 @@ mod tests {
             TFixed::new(rw, rh),
         ]);
 
-        lst.place(&mut app, Rect::new(0, 0, 10, 10))?;
-        app.render(&mut r, &mut lst)?;
+        lst.place(Rect::new(0, 0, 10, 10))?;
+        canopy::render(&mut r, &mut lst)?;
         assert_eq!(
             views(&lst),
             vec![
@@ -433,9 +433,9 @@ mod tests {
         );
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 5));
-        lst.place(&mut app, Rect::new(0, 0, 10, 10))?;
+        lst.place(Rect::new(0, 0, 10, 10))?;
         lst.taint_tree()?;
-        app.render(&mut r, &mut lst)?;
+        canopy::render(&mut r, &mut lst)?;
         assert_eq!(
             views(&lst),
             vec![
@@ -446,9 +446,9 @@ mod tests {
         );
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 5));
-        lst.place(&mut app, Rect::new(0, 0, 10, 10))?;
+        lst.place(Rect::new(0, 0, 10, 10))?;
         lst.taint_tree()?;
-        app.render(&mut r, &mut lst)?;
+        canopy::render(&mut r, &mut lst)?;
         assert_eq!(
             views(&lst),
             vec![
@@ -459,9 +459,9 @@ mod tests {
         );
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 10));
-        lst.place(&mut app, Rect::new(0, 0, 10, 10))?;
+        lst.place(Rect::new(0, 0, 10, 10))?;
         lst.taint_tree()?;
-        app.render(&mut r, &mut lst)?;
+        canopy::render(&mut r, &mut lst)?;
         assert_eq!(
             views(&lst),
             vec![
@@ -472,9 +472,9 @@ mod tests {
         );
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 10));
-        lst.place(&mut app, Rect::new(0, 0, 10, 10))?;
+        lst.place(Rect::new(0, 0, 10, 10))?;
         lst.taint_tree()?;
-        app.render(&mut r, &mut lst)?;
+        canopy::render(&mut r, &mut lst)?;
         assert_eq!(
             views(&lst),
             vec![
@@ -485,9 +485,9 @@ mod tests {
         );
 
         lst.update_viewport(&|vp| vp.scroll_to(5, 0));
-        lst.place(&mut app, Rect::new(0, 0, 10, 10))?;
+        lst.place(Rect::new(0, 0, 10, 10))?;
         lst.taint_tree()?;
-        app.render(&mut r, &mut lst)?;
+        canopy::render(&mut r, &mut lst)?;
         assert_eq!(
             views(&lst),
             vec![
@@ -498,9 +498,9 @@ mod tests {
         );
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 5));
-        lst.place(&mut app, Rect::new(0, 0, 10, 10))?;
+        lst.place(Rect::new(0, 0, 10, 10))?;
         lst.taint_tree()?;
-        app.render(&mut r, &mut lst)?;
+        canopy::render(&mut r, &mut lst)?;
         assert_eq!(
             views(&lst),
             vec![

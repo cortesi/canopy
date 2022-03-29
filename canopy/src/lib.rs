@@ -22,7 +22,7 @@ pub mod style;
 pub mod viewport;
 pub mod widgets;
 
-pub use crate::canopy::Canopy;
+pub use crate::canopy::*;
 pub use actions::Actions;
 pub use control::BackendControl;
 pub use error::{Error, Result};
