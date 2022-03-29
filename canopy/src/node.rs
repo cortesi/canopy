@@ -38,14 +38,16 @@ pub trait Node<S, A: Actions>: StatefulNode {
         None
     }
 
-    /// Over-ride Canopy's usual render checking. If this function returns
-    /// `Some(true)` or `Some(false)`, the response takes precedence over the
-    /// taint and focus change checking that usually determines rendering
-    /// behaviour. Implementing this method should only be needed in rare
-    /// circumstances, like container nodes that need to respond to changes in
-    /// sub-nodes. The default implementation returns `None`.
-    fn should_render(&self, app: &Canopy<S, A>) -> Option<bool> {
-        None
+    /// Should the node render in the next sweep? This checks if the node is
+    /// tainted, if the focus of the node has changed. Over-riding this method
+    /// should only be needed in rare circumstances, like container nodes that
+    /// need to respond to changes in sub-nodes.
+    fn should_render(&self) -> bool {
+        if self.is_hidden() {
+            false
+        } else {
+            self.is_tainted() || self.focus_changed()
+        }
     }
 
     /// Called for each node on the focus path, after each render sweep. The

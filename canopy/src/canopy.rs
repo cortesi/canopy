@@ -97,19 +97,6 @@ impl<'a, S, A: Actions> Canopy<S, A> {
         }
     }
 
-    /// Should the node render in the next sweep? This checks if the node is
-    /// tainted, if the focus of the node has changed, or if the node's
-    /// Node::should_render method is active.
-    pub fn should_render(&self, e: &dyn Node<S, A>) -> bool {
-        if e.is_hidden() {
-            false
-        } else if let Some(r) = e.should_render(self) {
-            r
-        } else {
-            e.is_tainted() || e.focus_changed()
-        }
-    }
-
     /// Move focus in a specified direction within the subtree.
     pub fn focus_dir(&mut self, e: &mut dyn Node<S, A>, dir: Direction) -> Result<Outcome<A>> {
         let mut seen = false;
@@ -337,7 +324,7 @@ impl<'a, S, A: Actions> Canopy<S, A> {
     fn render_traversal(&mut self, r: &mut Render, e: &mut dyn Node<S, A>) -> Result<()> {
         if !e.is_hidden() {
             r.push();
-            if self.should_render(e) {
+            if e.should_render() {
                 if e.is_focused() {
                     let s = &mut e.state_mut();
                     s.rendered_focus_gen =

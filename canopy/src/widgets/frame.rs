@@ -106,8 +106,8 @@ impl<S, A: Actions, N> Node<S, A> for Frame<S, A, N>
 where
     N: Node<S, A>,
 {
-    fn should_render(&self, app: &Canopy<S, A>) -> Option<bool> {
-        Some(app.should_render(&self.child))
+    fn should_render(&self) -> bool {
+        self.child.should_render()
     }
 
     fn render(&mut self, app: &mut Canopy<S, A>, rndr: &mut Render, vp: ViewPort) -> Result<()> {
