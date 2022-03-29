@@ -47,7 +47,7 @@ where
             if self.children[x].is_empty() {
                 self.children.remove(x);
             }
-            app.taint_tree(self)?;
+            self.taint_tree()?;
         }
         Ok(())
     }
@@ -63,7 +63,7 @@ where
         } else {
             self.children.push(vec![n]);
         }
-        app.taint_tree(self)
+        self.taint_tree()
     }
 
     /// Insert a node in a new column. If we have a focused node, the new node
@@ -79,7 +79,7 @@ where
         } else {
             self.children.push(vec![n])
         }
-        app.taint_tree(self)
+        self.taint_tree()
     }
 
     /// Returns the shape of the current child grid

@@ -115,7 +115,7 @@ where
                 c if c == self.activate => {
                     if app.on_focus_path(&self.content) {
                         self.active = false;
-                        app.taint_tree(self)?;
+                        self.taint_tree()?;
                         app.focus_first(&mut self.root)?;
                     } else {
                         app.focus_first(self)?;
@@ -125,7 +125,7 @@ where
             };
         } else if k == self.activate {
             self.active = true;
-            app.taint_tree(self)?;
+            self.taint_tree()?;
             app.focus_first(self)?;
         };
         Ok(Outcome::handle())

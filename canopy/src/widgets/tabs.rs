@@ -24,10 +24,12 @@ impl<S, A: Actions> Tabs<S, A> {
             tabs,
         }
     }
+
     pub fn next(&mut self) {
         self.active = (self.active + 1) % self.tabs.len();
         self.taint();
     }
+
     pub fn prev(&mut self) {
         self.active = (self.active.wrapping_sub(1)) % self.tabs.len();
         self.taint();

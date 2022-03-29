@@ -95,7 +95,7 @@ where
 
     fn render(&mut self, _: &mut Canopy<SO, AO>, rndr: &mut Render, vp: ViewPort) -> Result<()> {
         self.root.wrap(&mut self.core, vp)?;
-        self.core.taint_tree(&mut self.root)?;
+        self.root.taint_tree()?;
         self.core.pre_render(rndr, &mut self.root)?;
         self.core.render(rndr, &mut self.root)?;
         self.core.post_render(rndr, &self.root)

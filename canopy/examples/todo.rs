@@ -169,7 +169,7 @@ impl Node<Handle, ()> for Root {
                 _ => return Ok(Outcome::ignore()),
             };
         }
-        app.taint_tree(self)?;
+        self.taint_tree()?;
         Ok(Outcome::handle())
     }
 

@@ -299,22 +299,6 @@ impl<'a, S, A: Actions> Canopy<S, A> {
         Ok(())
     }
 
-    /// Mark a tree of nodes for render.
-    pub fn taint_tree(&self, e: &mut dyn Node<S, A>) -> Result<()> {
-        postorder_mut(e, &mut |x| -> Result<()> {
-            let r = x.state_mut();
-            r.render_gen = STATE.with(|global_state| -> u64 { global_state.borrow().render_gen });
-            Ok(())
-        })?;
-        Ok(())
-    }
-
-    /// Mark that a node should skip the next render sweep.
-    pub fn skip_taint(&self, e: &mut dyn Node<S, A>) {
-        let r = e.state_mut();
-        r.render_skip_gen = STATE.with(|global_state| -> u64 { global_state.borrow().render_gen });
-    }
-
     fn render_traversal(&mut self, r: &mut Render, e: &mut dyn Node<S, A>) -> Result<()> {
         if !e.is_hidden() {
             r.push();
@@ -424,7 +408,7 @@ impl<'a, S, A: Actions> Canopy<S, A> {
         let fit = n.fit(self, size)?;
         let vp = ViewPort::new(fit, fit, Point::default())?;
         n.set_viewport(vp);
-        self.taint_tree(n)?;
+        n.taint_tree()?;
         Ok(())
     }
 
@@ -954,7 +938,7 @@ mod tests {
             app.render(&mut r, &mut root)?;
             assert_eq!(buf.lock()?.text, vec!["<ba:lb>"]);
 
-            app.taint_tree(&mut root.a)?;
+            root.a.taint_tree()?;
             app.render(&mut r, &mut root)?;
             assert_eq!(buf.lock()?.text, vec!["<ba>", "<ba:la>", "<ba:lb>"]);
 
@@ -991,7 +975,7 @@ mod tests {
             root.next_outcome = Some(Outcome::handle_and_continue());
             root.a.a.next_outcome = Some(Outcome::handle());
             root.b.b.next_outcome = Some(Outcome::handle());
-            app.skip_taint(&mut root.a.a);
+            root.a.a.skip_taint();
             assert!(app
                 .broadcast(ctrl, &mut root, &mut s, TActions::Two)?
                 .is_handled());

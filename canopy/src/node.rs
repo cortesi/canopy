@@ -241,6 +241,24 @@ pub trait Node<S, A: Actions>: StatefulNode {
         let r = self.state_mut();
         r.render_gen = STATE.with(|global_state| -> u64 { global_state.borrow().render_gen });
     }
+
+    /// Mark that this node should skip the next render sweep.
+    fn skip_taint(&mut self) {
+        let r = self.state_mut();
+        r.render_skip_gen = STATE.with(|global_state| -> u64 { global_state.borrow().render_gen });
+    }
+
+    /// Mark a tree of nodes for render.
+    fn taint_tree(&mut self) -> Result<()>
+    where
+        Self: Sized,
+    {
+        postorder_mut(self, &mut |x| -> Result<()> {
+            x.taint();
+            Ok(())
+        })?;
+        Ok(())
+    }
 }
 
 /// A postorder traversal of the nodes under e. Enabling skipping in the Walker

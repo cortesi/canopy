@@ -35,7 +35,7 @@ impl Node<Handle, ()> for Root {
 
     fn handle_mouse(
         &mut self,
-        app: &mut Canopy<Handle, ()>,
+        _app: &mut Canopy<Handle, ()>,
         _: &mut dyn BackendControl,
         _: &mut Handle,
         k: mouse::Mouse,
@@ -46,7 +46,7 @@ impl Node<Handle, ()> for Root {
             c if c == mouse::MouseAction::ScrollUp => txt.update_viewport(&|vp| vp.up()),
             _ => return Ok(Outcome::ignore()),
         };
-        app.taint_tree(self)?;
+        self.taint_tree()?;
         Ok(Outcome::handle())
     }
 
@@ -71,7 +71,7 @@ impl Node<Handle, ()> for Root {
             c if c == 'q' => app.exit(ctrl, 0),
             _ => return Ok(Outcome::ignore()),
         }
-        app.taint_tree(self)?;
+        self.taint_tree()?;
         Ok(Outcome::handle())
     }
 

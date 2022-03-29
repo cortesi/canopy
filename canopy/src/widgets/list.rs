@@ -305,12 +305,12 @@ where
         Ok(Size { w, h })
     }
 
-    fn render(&mut self, app: &mut Canopy<S, A>, rndr: &mut Render, myvp: ViewPort) -> Result<()> {
+    fn render(&mut self, _app: &mut Canopy<S, A>, rndr: &mut Render, myvp: ViewPort) -> Result<()> {
         self.clear = vec![];
         for itm in &mut self.items {
             if let Some(vp) = myvp.map(itm.virt)? {
                 itm.itm.set_viewport(vp);
-                app.taint_tree(&mut itm.itm)?;
+                itm.itm.taint_tree()?;
                 itm.itm.unhide();
 
                 // At this point, the item's screen rect has been calculated to
@@ -434,7 +434,7 @@ mod tests {
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 5));
         lst.place(&mut app, Rect::new(0, 0, 10, 10))?;
-        app.taint_tree(&mut lst)?;
+        lst.taint_tree()?;
         app.render(&mut r, &mut lst)?;
         assert_eq!(
             views(&lst),
@@ -447,7 +447,7 @@ mod tests {
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 5));
         lst.place(&mut app, Rect::new(0, 0, 10, 10))?;
-        app.taint_tree(&mut lst)?;
+        lst.taint_tree()?;
         app.render(&mut r, &mut lst)?;
         assert_eq!(
             views(&lst),
@@ -460,7 +460,7 @@ mod tests {
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 10));
         lst.place(&mut app, Rect::new(0, 0, 10, 10))?;
-        app.taint_tree(&mut lst)?;
+        lst.taint_tree()?;
         app.render(&mut r, &mut lst)?;
         assert_eq!(
             views(&lst),
@@ -473,7 +473,7 @@ mod tests {
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 10));
         lst.place(&mut app, Rect::new(0, 0, 10, 10))?;
-        app.taint_tree(&mut lst)?;
+        lst.taint_tree()?;
         app.render(&mut r, &mut lst)?;
         assert_eq!(
             views(&lst),
@@ -486,7 +486,7 @@ mod tests {
 
         lst.update_viewport(&|vp| vp.scroll_to(5, 0));
         lst.place(&mut app, Rect::new(0, 0, 10, 10))?;
-        app.taint_tree(&mut lst)?;
+        lst.taint_tree()?;
         app.render(&mut r, &mut lst)?;
         assert_eq!(
             views(&lst),
@@ -499,7 +499,7 @@ mod tests {
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 5));
         lst.place(&mut app, Rect::new(0, 0, 10, 10))?;
-        app.taint_tree(&mut lst)?;
+        lst.taint_tree()?;
         app.render(&mut r, &mut lst)?;
         assert_eq!(
             views(&lst),

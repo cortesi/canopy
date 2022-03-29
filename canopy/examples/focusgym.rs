@@ -100,28 +100,28 @@ impl Node<Handle, ()> for Root {
 }
 
 impl Block {
-    fn add(&mut self, app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
+    fn add(&mut self, _app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
         Ok(if self.children.is_empty() {
             Outcome::ignore()
         } else if self.size_limited(self.children[0].vp().view_rect().into()) {
             Outcome::handle()
         } else {
             self.children.push(Block::new(!self.horizontal));
-            app.taint_tree(self)?;
+            self.taint_tree()?;
             Outcome::handle()
         })
     }
     fn size_limited(&self, a: Size) -> bool {
         (self.horizontal && a.w <= 4) || (!self.horizontal && a.h <= 4)
     }
-    fn split(&mut self, app: &mut Canopy<Handle, ()>) -> Result<Outcome<()>> {
+    fn split(&mut self) -> Result<Outcome<()>> {
         Ok(if self.children.is_empty() {
             Outcome::ignore()
         } else if self.size_limited(self.vp().view_rect().into()) {
             Outcome::handle()
         } else {
             self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
-            app.taint_tree(self)?;
+            self.taint_tree()?;
             Outcome::handle()
         })
     }
@@ -169,11 +169,11 @@ impl Node<Handle, ()> for Block {
     ) -> Result<Outcome<()>> {
         Ok(match k {
             c if c == mouse::MouseAction::Down + mouse::Button::Left => {
-                app.taint_tree(self)?;
+                self.taint_tree()?;
                 self.handle_focus(app)?
             }
             c if c == mouse::MouseAction::Down + mouse::Button::Middle => {
-                self.split(app)?;
+                self.split()?;
                 if self.is_focused() {
                     app.focus_next(self)?;
                 };
@@ -193,7 +193,7 @@ impl Node<Handle, ()> for Block {
     ) -> Result<Outcome<()>> {
         Ok(match k {
             c if c == 's' => {
-                self.split(app)?;
+                self.split()?;
                 app.focus_next(self)?
             }
             c if c == 'a' => self.add(app)?,
