@@ -195,6 +195,44 @@ pub trait Node<S, A: Actions>: StatefulNode {
             self.state_mut().focus_gen = global_state.borrow().focus_gen;
         });
     }
+
+    /// Is this node render tainted?
+    fn is_tainted(&self) -> bool {
+        STATE.with(|global_state| {
+            let s = self.state();
+            if global_state.borrow().render_gen == s.render_skip_gen {
+                false
+            } else {
+                // Tainting if render_gen is 0 lets us initialize a nodestate
+                // without knowing about the app state
+                global_state.borrow().render_gen == s.render_gen || s.render_gen == 0
+            }
+        })
+    }
+
+    /// Has the focus status of this node changed since the last render
+    /// sweep?
+    fn focus_changed(&self) -> bool {
+        STATE.with(|global_state| -> bool {
+            let s = self.state();
+            if self.is_focused() {
+                if s.focus_gen != s.rendered_focus_gen {
+                    return true;
+                }
+            } else if s.rendered_focus_gen == global_state.borrow().last_focus_gen {
+                return true;
+            }
+            false
+        })
+    }
+
+    /// Does the node have terminal focus?
+    fn is_focused(&self) -> bool {
+        STATE.with(|global_state| -> bool {
+            let s = self.state();
+            global_state.borrow_mut().focus_gen == s.focus_gen
+        })
+    }
 }
 
 /// A postorder traversal of the nodes under e. Enabling skipping in the Walker

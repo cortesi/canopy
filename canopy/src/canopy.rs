@@ -106,38 +106,8 @@ impl<'a, S, A: Actions> Canopy<S, A> {
         } else if let Some(r) = e.should_render(self) {
             r
         } else {
-            self.is_tainted(e) || self.focus_changed(e)
+            e.is_tainted() || e.focus_changed()
         }
-    }
-
-    /// Is this node render tainted?
-    pub fn is_tainted(&self, e: &dyn Node<S, A>) -> bool {
-        STATE.with(|global_state| {
-            let s = e.state();
-            if global_state.borrow().render_gen == s.render_skip_gen {
-                false
-            } else {
-                // Tainting if render_gen is 0 lets us initialize a nodestate
-                // without knowing about the app state
-                global_state.borrow().render_gen == s.render_gen || s.render_gen == 0
-            }
-        })
-    }
-
-    /// Has the focus status of this node changed since the last render
-    /// sweep?
-    pub fn focus_changed(&self, e: &dyn Node<S, A>) -> bool {
-        STATE.with(|global_state| -> bool {
-            let s = e.state();
-            if self.is_focused(e) {
-                if s.focus_gen != s.rendered_focus_gen {
-                    return true;
-                }
-            } else if s.rendered_focus_gen == global_state.borrow().last_focus_gen {
-                return true;
-            }
-            false
-        })
     }
 
     /// Move focus in a specified direction within the subtree.
@@ -195,14 +165,6 @@ impl<'a, S, A: Actions> Canopy<S, A> {
         Ok(Outcome::handle())
     }
 
-    /// Does the node have terminal focus?
-    pub fn is_focused(&self, e: &dyn Node<S, A>) -> bool {
-        STATE.with(|global_state| -> bool {
-            let s = e.state();
-            global_state.borrow_mut().focus_gen == s.focus_gen
-        })
-    }
-
     /// A node is on the focus path if it or any of its descendants have focus.
     pub fn on_focus_path(&self, e: &dyn Node<S, A>) -> bool {
         let mut onpath = false;
@@ -217,7 +179,7 @@ impl<'a, S, A: Actions> Canopy<S, A> {
     /// A node is on the focus path if it does not have focus itself, but some
     /// node below it does.
     pub fn is_focus_ancestor(&self, e: &dyn Node<S, A>) -> bool {
-        if self.is_focused(e) {
+        if e.is_focused() {
             false
         } else {
             self.on_focus_path(e)
@@ -235,7 +197,7 @@ impl<'a, S, A: Actions> Canopy<S, A> {
                     if x.handle_focus(self)?.is_handled() {
                         focus_set = true;
                     }
-                } else if self.is_focused(x) {
+                } else if x.is_focused() {
                     focus_seen = true;
                 }
             }
@@ -376,7 +338,7 @@ impl<'a, S, A: Actions> Canopy<S, A> {
         if !e.is_hidden() {
             r.push();
             if self.should_render(e) {
-                if self.is_focused(e) {
+                if e.is_focused() {
                     let s = &mut e.state_mut();
                     s.rendered_focus_gen =
                         STATE.with(|global_state| -> u64 { global_state.borrow().focus_gen });
@@ -638,28 +600,28 @@ mod tests {
     #[test]
     fn tfocus_next() -> Result<()> {
         run_test(|_, mut app, _, _, mut root, _| {
-            assert!(!app.is_focused(&root));
+            assert!(!root.is_focused());
             app.focus_next(&mut root)?;
-            assert!(app.is_focused(&root));
+            assert!(root.is_focused());
 
             app.focus_next(&mut root)?;
-            assert!(app.is_focused(&root.a));
+            assert!(root.a.is_focused());
             assert!(app.is_focus_ancestor(&root));
             assert!(!app.is_focus_ancestor(&root.a));
 
             app.focus_next(&mut root)?;
-            assert!(app.is_focused(&root.a.a));
+            assert!(root.a.a.is_focused());
             assert!(app.is_focus_ancestor(&root.a));
             app.focus_next(&mut root)?;
-            assert!(app.is_focused(&root.a.b));
+            assert!(root.a.b.is_focused());
             assert!(app.is_focus_ancestor(&root.a));
             app.focus_next(&mut root)?;
-            assert!(app.is_focused(&root.b));
+            assert!(root.b.is_focused());
 
             root.b.b.set_focus();
             assert!(app.is_focus_ancestor(&root.b));
             app.focus_next(&mut root)?;
-            assert!(app.is_focused(&root));
+            assert!(root.is_focused());
             Ok(())
         })?;
         Ok(())
@@ -668,19 +630,19 @@ mod tests {
     #[test]
     fn tfocus_prev() -> Result<()> {
         run_test(|_, mut app, _, _, mut root, _| {
-            assert!(!app.is_focused(&root));
+            assert!(!root.is_focused());
             app.focus_prev(&mut root)?;
-            assert!(app.is_focused(&root.b.b));
+            assert!(root.b.b.is_focused());
 
             app.focus_prev(&mut root)?;
-            assert!(app.is_focused(&root.b.a));
+            assert!(root.b.a.is_focused());
 
             app.focus_prev(&mut root)?;
-            assert!(app.is_focused(&root.b));
+            assert!(root.b.is_focused());
 
             root.set_focus();
             app.focus_prev(&mut root)?;
-            assert!(app.is_focused(&root.b.b));
+            assert!(root.b.b.is_focused());
 
             Ok(())
         })?;
@@ -722,15 +684,15 @@ mod tests {
             app.render(&mut r, &mut root)?;
             root.a.a.set_focus();
             app.focus_right(&mut root)?;
-            assert!(app.is_focused(&root.b.a));
+            assert!(root.b.a.is_focused());
             app.focus_right(&mut root)?;
-            assert!(app.is_focused(&root.b.a));
+            assert!(root.b.a.is_focused());
 
             root.a.b.set_focus();
             app.focus_right(&mut root)?;
-            assert!(app.is_focused(&root.b.b));
+            assert!(root.b.b.is_focused());
             app.focus_right(&mut root)?;
-            assert!(app.is_focused(&root.b.b));
+            assert!(root.b.b.is_focused());
             Ok(())
         })?;
 

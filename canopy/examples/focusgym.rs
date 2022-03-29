@@ -139,7 +139,7 @@ impl Node<Handle, ()> for Block {
                 self.children[i].wrap(app, vps[i])?;
             }
         } else {
-            let bc = if app.is_focused(self) && self.children.is_empty() {
+            let bc = if self.is_focused() && self.children.is_empty() {
                 "violet"
             } else {
                 "blue"
@@ -174,7 +174,7 @@ impl Node<Handle, ()> for Block {
             }
             c if c == mouse::MouseAction::Down + mouse::Button::Middle => {
                 self.split(app)?;
-                if app.is_focused(self) {
+                if self.is_focused() {
                     app.focus_next(self)?;
                 };
                 Outcome::handle()
