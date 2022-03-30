@@ -98,9 +98,7 @@ impl Block {
         (self.horizontal && a.w <= 4) || (!self.horizontal && a.h <= 4)
     }
     fn split(&mut self) -> Result<Outcome> {
-        Ok(if self.children.is_empty() {
-            Outcome::ignore()
-        } else if self.size_limited(self.vp().view_rect().into()) {
+        Ok(if self.size_limited(self.vp().view_rect().into()) {
             Outcome::handle()
         } else {
             self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
@@ -112,7 +110,7 @@ impl Block {
 
 impl Node for Block {
     fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
-        if self.children.is_empty() {
+        if !self.children.is_empty() {
             let vps = if self.horizontal {
                 vp.split_horizontal(self.children.len() as u16)?
             } else {
