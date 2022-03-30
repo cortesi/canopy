@@ -3,8 +3,8 @@ mod view;
 
 use crate as canopy;
 use crate::{
-    event::key, graft::Graft, widgets::frame, BackendControl, Node, NodeState, Outcome, Render,
-    Result, StatefulNode, ViewPort,
+    event::key, widgets::frame, BackendControl, Node, NodeState, Outcome, Render, Result,
+    StatefulNode, ViewPort,
 };
 
 #[derive(Debug, PartialEq, Clone)]
@@ -62,7 +62,7 @@ where
     root: N,
     active: bool,
     activate: key::Key,
-    content: Graft<Content>,
+    content: Content,
 }
 
 impl<N> Inspector<N>
@@ -73,7 +73,7 @@ where
         Inspector {
             state: NodeState::default(),
             active: false,
-            content: Graft::new(Content::new()),
+            content: Content::new(),
             root,
             activate,
         }
