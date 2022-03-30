@@ -81,10 +81,10 @@ impl Default for CrosstermControl {
 }
 
 impl BackendControl for CrosstermControl {
-    fn enter(&mut self) -> Result<()> {
+    fn start(&mut self) -> Result<()> {
         translate_result(self.enter())
     }
-    fn exit(&mut self) -> Result<()> {
+    fn stop(&mut self) -> Result<()> {
         translate_result(self.exit())
     }
 }

@@ -1,5 +1,4 @@
 use duplicate::duplicate_item;
-use std::process;
 
 use crate::geom::{Direction, Rect};
 use crate::{
@@ -8,7 +7,7 @@ use crate::{
     geom::{Point, Size},
     global::STATE,
     node::{postorder, postorder_mut, preorder, Node, Walker},
-    Outcome, Render, Result, StatefulNode, ViewPort,
+    Outcome, Render, Result, ViewPort,
 };
 
 #[derive(Default)]
@@ -33,8 +32,6 @@ impl Walker for SkipWalker {
     }
 }
 
-// This is extracted from the event processing functions on Canopy, because the
-// code is brittle and complicated, and is identical bar a single method call.
 macro_rules! process_event(
     (
         $slf:expr,
@@ -336,7 +333,7 @@ pub fn key(ctrl: &mut dyn BackendControl, root: &mut dyn Node, k: key::Key) -> R
 /// Set the size on the root node, and taint the tree.
 pub fn set_root_size<N>(size: Size, n: &mut N) -> Result<()>
 where
-    N: Node + StatefulNode,
+    N: Node,
 {
     let fit = n.fit(size)?;
     let vp = ViewPort::new(fit, fit, Point::default())?;
@@ -358,12 +355,6 @@ where
             Ok(Outcome::handle())
         }
     }
-}
-
-/// Clean up render loop and exit the process.
-pub fn exit(c: &mut dyn BackendControl, code: i32) -> ! {
-    let _ = c.exit();
-    process::exit(code)
 }
 
 /// Calls a closure on the currently focused node and all its parents to the
@@ -436,6 +427,7 @@ mod tests {
         geom::Rect,
         outcome::{Handle, Ignore},
         tutils::utils::*,
+        StatefulNode,
     };
     use std::sync::{Arc, Mutex};
 

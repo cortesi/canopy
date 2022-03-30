@@ -66,7 +66,7 @@ impl Node for Root {
             c if c == 'h' || c == key::KeyCode::Left => canopy::focus_left(self)?,
             c if c == 'j' || c == key::KeyCode::Down => canopy::focus_down(self)?,
             c if c == 'k' || c == key::KeyCode::Up => canopy::focus_up(self)?,
-            c if c == 'q' => canopy::exit(ctrl, 0),
+            c if c == 'q' => ctrl.exit(0),
             _ => Outcome::ignore(),
         })
     }

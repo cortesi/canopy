@@ -19,7 +19,7 @@
   - Improve ergonomics - adding a function that returns a handle which re-enters rendering?
 - Renderer
   - Explicit colors - at the moment, we can only get colors from our color scheme
-- Add IDs to node state
+- Add IDs to node state?
   - Will let us implment an inject() function that injects events at a given node.
     - Question: is grafting the way to solve this?
 - Ergonomics:
@@ -50,8 +50,8 @@
       logging of text. We should make it more complete for general use.
   - Integration tests
   - Benchmarks
-  - Termion backend
-    - Extract a common set of backend conversion traits
+- Termion backend
+  - Extract a common set of backend conversion traits
 
 
 # User traps and inelegances

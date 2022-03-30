@@ -32,10 +32,10 @@ impl TestRender {
 pub struct TestControl {}
 
 impl BackendControl for TestControl {
-    fn enter(&mut self) -> Result<()> {
+    fn start(&mut self) -> Result<()> {
         Ok(())
     }
-    fn exit(&mut self) -> Result<()> {
+    fn stop(&mut self) -> Result<()> {
         Ok(())
     }
 }

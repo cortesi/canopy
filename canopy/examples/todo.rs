@@ -148,7 +148,7 @@ impl Node for Root {
                 c if c == 'k' || c == key::KeyCode::Up => lst.select_prev(),
                 c if c == ' ' || c == key::KeyCode::PageDown => lst.page_down(),
                 c if c == key::KeyCode::PageUp => lst.page_up(),
-                c if c == 'q' => canopy::exit(ctrl, 0),
+                c if c == 'q' => ctrl.exit(0),
                 _ => return Ok(Outcome::ignore()),
             };
         }
