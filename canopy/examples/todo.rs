@@ -152,7 +152,7 @@ impl Node for Root {
                 _ => return Ok(Outcome::ignore()),
             };
         }
-        self.taint_tree()?;
+        canopy::taint_tree(self)?;
         Ok(Outcome::handle())
     }
 

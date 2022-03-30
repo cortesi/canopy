@@ -44,7 +44,7 @@ where
             if self.children[x].is_empty() {
                 self.children.remove(x);
             }
-            self.taint_tree()?;
+            canopy::taint_tree(self)?;
         }
         Ok(())
     }
@@ -60,7 +60,7 @@ where
         } else {
             self.children.push(vec![n]);
         }
-        self.taint_tree()
+        canopy::taint_tree(self)
     }
 
     /// Insert a node in a new column. If we have a focused node, the new node
@@ -76,7 +76,7 @@ where
         } else {
             self.children.push(vec![n])
         }
-        self.taint_tree()
+        canopy::taint_tree(self)
     }
 
     /// Returns the shape of the current child grid

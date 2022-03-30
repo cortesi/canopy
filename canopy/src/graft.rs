@@ -67,7 +67,7 @@ where
 
     fn render(&mut self, rndr: &mut Render, vp: ViewPort) -> Result<()> {
         self.root.wrap(vp)?;
-        self.root.taint_tree()?;
+        canopy::taint_tree(&mut self.root)?;
         canopy::pre_render(rndr, &mut self.root)?;
         canopy::render(rndr, &mut self.root)?;
         canopy::post_render(rndr, &self.root)

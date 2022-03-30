@@ -338,7 +338,7 @@ where
     let fit = n.fit(size)?;
     let vp = ViewPort::new(fit, fit, Point::default())?;
     n.set_viewport(vp);
-    n.taint_tree()?;
+    taint_tree(n)?;
     Ok(())
 }
 
@@ -417,6 +417,15 @@ pub fn locate<R: Walker + Default>(
         })
     })?;
     Ok(ret)
+}
+
+/// Mark a tree of nodes for render.
+pub fn taint_tree(e: &mut dyn Node) -> Result<()> {
+    postorder_mut(e, &mut |x| -> Result<()> {
+        x.taint();
+        Ok(())
+    })?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -763,7 +772,7 @@ mod tests {
             render(&mut r, &mut root)?;
             assert_eq!(buf.lock()?.text, vec!["<ba:lb>"]);
 
-            root.a.taint_tree()?;
+            taint_tree(&mut root.a)?;
             render(&mut r, &mut root)?;
             assert_eq!(buf.lock()?.text, vec!["<ba>", "<ba:la>", "<ba:lb>"]);
 
@@ -796,7 +805,7 @@ mod tests {
         run_test(|buf, mut r, _, mut root| {
             render(&mut r, &mut root)?;
             root.set_focus();
-            root.taint_tree()?;
+            taint_tree(&mut root)?;
             root.a.skip_taint();
             render(&mut r, &mut root)?;
 

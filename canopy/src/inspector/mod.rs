@@ -93,7 +93,7 @@ where
                 c if c == self.activate => {
                     if canopy::on_focus_path(&self.content) {
                         self.active = false;
-                        self.taint_tree()?;
+                        canopy::taint_tree(self)?;
                         canopy::focus_first(&mut self.root)?;
                     } else {
                         canopy::focus_first(self)?;
@@ -103,7 +103,7 @@ where
             };
         } else if k == self.activate {
             self.active = true;
-            self.taint_tree()?;
+            canopy::taint_tree(self)?;
             canopy::focus_first(self)?;
         };
         Ok(Outcome::handle())

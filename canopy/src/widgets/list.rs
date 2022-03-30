@@ -303,7 +303,7 @@ where
         for itm in &mut self.items {
             if let Some(vp) = myvp.map(itm.virt)? {
                 itm.itm.set_viewport(vp);
-                itm.itm.taint_tree()?;
+                canopy::taint_tree(&mut itm.itm)?;
                 itm.itm.unhide();
 
                 // At this point, the item's screen rect has been calculated to
@@ -427,7 +427,7 @@ mod tests {
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 5));
         lst.place(Rect::new(0, 0, 10, 10))?;
-        lst.taint_tree()?;
+        canopy::taint_tree(&mut lst)?;
         canopy::render(&mut r, &mut lst)?;
         assert_eq!(
             views(&lst),
@@ -440,7 +440,7 @@ mod tests {
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 5));
         lst.place(Rect::new(0, 0, 10, 10))?;
-        lst.taint_tree()?;
+        canopy::taint_tree(&mut lst)?;
         canopy::render(&mut r, &mut lst)?;
         assert_eq!(
             views(&lst),
@@ -453,7 +453,7 @@ mod tests {
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 10));
         lst.place(Rect::new(0, 0, 10, 10))?;
-        lst.taint_tree()?;
+        canopy::taint_tree(&mut lst)?;
         canopy::render(&mut r, &mut lst)?;
         assert_eq!(
             views(&lst),
@@ -466,7 +466,7 @@ mod tests {
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 10));
         lst.place(Rect::new(0, 0, 10, 10))?;
-        lst.taint_tree()?;
+        canopy::taint_tree(&mut lst)?;
         canopy::render(&mut r, &mut lst)?;
         assert_eq!(
             views(&lst),
@@ -479,7 +479,7 @@ mod tests {
 
         lst.update_viewport(&|vp| vp.scroll_to(5, 0));
         lst.place(Rect::new(0, 0, 10, 10))?;
-        lst.taint_tree()?;
+        canopy::taint_tree(&mut lst)?;
         canopy::render(&mut r, &mut lst)?;
         assert_eq!(
             views(&lst),
@@ -492,7 +492,7 @@ mod tests {
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 5));
         lst.place(Rect::new(0, 0, 10, 10))?;
-        lst.taint_tree()?;
+        canopy::taint_tree(&mut lst)?;
         canopy::render(&mut r, &mut lst)?;
         assert_eq!(
             views(&lst),

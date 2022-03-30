@@ -38,7 +38,7 @@ impl Node for Root {
             c if c == mouse::MouseAction::ScrollUp => txt.update_viewport(&|vp| vp.up()),
             _ => return Ok(Outcome::ignore()),
         };
-        self.taint_tree()?;
+        canopy::taint_tree(self)?;
         Ok(Outcome::handle())
     }
 
@@ -57,7 +57,7 @@ impl Node for Root {
             c if c == 'q' => ctrl.exit(0),
             _ => return Ok(Outcome::ignore()),
         }
-        self.taint_tree()?;
+        canopy::taint_tree(self)?;
         Ok(Outcome::handle())
     }
 
