@@ -1,24 +1,20 @@
-use std::marker::PhantomData;
-
 use crate as canopy;
 use crate::{
     state::{NodeState, StatefulNode},
-    Actions, Node, Render, Result, ViewPort,
+    Node, Render, Result, ViewPort,
 };
 
 /// A tab control managing a set of nodes with titles.
 #[derive(StatefulNode)]
-pub struct Tabs<S, A: Actions> {
-    _marker: PhantomData<(S, A)>,
+pub struct Tabs {
     pub state: NodeState,
     pub tabs: Vec<String>,
     pub active: usize,
 }
 
-impl<S, A: Actions> Tabs<S, A> {
+impl Tabs {
     pub fn new(tabs: Vec<String>) -> Self {
         Tabs {
-            _marker: PhantomData,
             state: NodeState::default(),
             active: 0,
             tabs,
@@ -36,7 +32,7 @@ impl<S, A: Actions> Tabs<S, A> {
     }
 }
 
-impl<S, A: Actions> Node<S, A> for Tabs<S, A> {
+impl Node for Tabs {
     fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
         for (i, rect) in vp
             .view_rect()

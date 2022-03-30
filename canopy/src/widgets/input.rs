@@ -1,12 +1,10 @@
-use std::marker::PhantomData;
-
 use crate as canopy;
 use crate::{
     cursor,
     event::key,
     geom::{LineSegment, Point, Size},
     state::{NodeState, StatefulNode},
-    Actions, BackendControl, Node, Outcome, Render, Result, ViewPort,
+    BackendControl, Node, Outcome, Render, Result, ViewPort,
 };
 
 /// A text buffer that exposes edit functionality for a single line. It also
@@ -104,17 +102,15 @@ impl TextBuf {
 
 /// A single input line, one character high.
 #[derive(StatefulNode)]
-pub struct InputLine<S, A: Actions> {
+pub struct InputLine {
     state: NodeState,
-    _marker: PhantomData<(S, A)>,
     pub textbuf: TextBuf,
 }
 
-impl<S, A: Actions> InputLine<S, A> {
+impl InputLine {
     pub fn new(txt: &str) -> Self {
         InputLine {
             state: NodeState::default(),
-            _marker: PhantomData,
             textbuf: TextBuf::new(txt),
         }
     }
@@ -123,8 +119,8 @@ impl<S, A: Actions> InputLine<S, A> {
     }
 }
 
-impl<'a, S, A: Actions> Node<S, A> for InputLine<S, A> {
-    fn handle_focus(&mut self) -> Result<Outcome<A>> {
+impl<'a> Node for InputLine {
+    fn handle_focus(&mut self) -> Result<Outcome> {
         self.set_focus();
         Ok(Outcome::handle())
     }
@@ -144,12 +140,7 @@ impl<'a, S, A: Actions> Node<S, A> for InputLine<S, A> {
         r.text("text", vp.view_rect().first_line(), &self.textbuf.text())
     }
 
-    fn handle_key(
-        &mut self,
-        _: &mut dyn BackendControl,
-        _: &mut S,
-        k: key::Key,
-    ) -> Result<Outcome<A>> {
+    fn handle_key(&mut self, _: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
         match k {
             key::Key(_, key::KeyCode::Left) => {
                 self.textbuf.left();

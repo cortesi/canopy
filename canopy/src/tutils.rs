@@ -1,6 +1,7 @@
 #[cfg(test)]
 pub mod utils {
     use duplicate::duplicate_item;
+    use std::cell::RefCell;
 
     use crate::{self as canopy, BackendControl};
     use crate::{
@@ -9,7 +10,7 @@ pub mod utils {
         geom::Size,
         style::StyleManager,
         widgets::list::ListItem,
-        Actions, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
+        Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
     };
 
     pub const K_ANY: key::Key = key::Key(None, key::KeyCode::Char('a'));
@@ -23,7 +24,10 @@ pub mod utils {
         pub fn new() -> Self {
             State { path: vec![] }
         }
-        pub fn add_event(&mut self, n: &str, evt: &str, result: Outcome<TActions>) {
+        pub fn reset(&mut self) {
+            self.path = vec![];
+        }
+        pub fn add_event(&mut self, n: &str, evt: &str, result: Outcome) {
             let outcome = match result {
                 Outcome::Handle { .. } => "handle",
                 Outcome::Ignore { .. } => "ignore",
@@ -32,29 +36,26 @@ pub mod utils {
         }
     }
 
-    #[derive(Debug, PartialEq, Clone, Copy)]
-    pub enum TActions {
-        One,
-        Two,
+    thread_local! {
+        pub (crate) static TSTATE: RefCell<State> = RefCell::new(State::new());
     }
 
-    impl TActions {
-        fn string(&self) -> String {
-            match *self {
-                TActions::One => "one".into(),
-                TActions::Two => "two".into(),
-            }
-        }
+    pub fn reset_state() {
+        TSTATE.with(|s| {
+            s.borrow_mut().reset();
+        });
     }
 
-    impl Actions for TActions {}
+    pub fn get_state() -> State {
+        TSTATE.with(|s| -> State { s.borrow().clone() })
+    }
 
     #[derive(Debug, PartialEq, StatefulNode)]
     pub struct TRoot {
         state: NodeState,
         name: String,
 
-        pub next_outcome: Option<Outcome<TActions>>,
+        pub next_outcome: Option<Outcome>,
         pub a: TBranch,
         pub b: TBranch,
     }
@@ -64,7 +65,7 @@ pub mod utils {
         state: NodeState,
         name: String,
 
-        pub next_outcome: Option<Outcome<TActions>>,
+        pub next_outcome: Option<Outcome>,
         pub a: TLeaf,
         pub b: TLeaf,
     }
@@ -74,15 +75,15 @@ pub mod utils {
         state: NodeState,
         name: String,
 
-        pub next_outcome: Option<Outcome<TActions>>,
+        pub next_outcome: Option<Outcome>,
     }
 
-    impl Node<State, TActions> for TLeaf {
+    impl Node for TLeaf {
         fn name(&self) -> Option<String> {
             Some(self.name.clone())
         }
 
-        fn handle_focus(&mut self) -> Result<Outcome<TActions>> {
+        fn handle_focus(&mut self) -> Result<Outcome> {
             self.set_focus();
             Ok(Outcome::handle())
         }
@@ -93,46 +94,20 @@ pub mod utils {
                 &format!("<{}>", self.name.clone()),
             )
         }
-        fn handle_key(
-            &mut self,
-            _: &mut dyn BackendControl,
-            s: &mut State,
-            _: key::Key,
-        ) -> Result<Outcome<TActions>> {
-            self.handle(s, "key")
+        fn handle_key(&mut self, _: &mut dyn BackendControl, _: key::Key) -> Result<Outcome> {
+            self.handle("key")
         }
-        fn handle_mouse(
-            &mut self,
-            _: &mut dyn BackendControl,
-            s: &mut State,
-            _: mouse::Mouse,
-        ) -> Result<Outcome<TActions>> {
-            self.handle(s, "mouse")
-        }
-        fn handle_broadcast(
-            &mut self,
-            _: &mut dyn BackendControl,
-            s: &mut State,
-            a: TActions,
-        ) -> Result<Outcome<TActions>> {
-            self.handle(s, &format!("broadcast:{}", a.string()))
-        }
-        fn handle_event_action(
-            &mut self,
-            _: &mut dyn BackendControl,
-            s: &mut State,
-            a: TActions,
-        ) -> Result<Outcome<TActions>> {
-            self.handle(s, &format!("eaction:{}", a.string()))
+        fn handle_mouse(&mut self, _: &mut dyn BackendControl, _: mouse::Mouse) -> Result<Outcome> {
+            self.handle("mouse")
         }
     }
 
-    impl Node<State, TActions> for TBranch {
+    impl Node for TBranch {
         fn name(&self) -> Option<String> {
             Some(self.name.clone())
         }
 
-        fn handle_focus(&mut self) -> Result<Outcome<TActions>> {
+        fn handle_focus(&mut self) -> Result<Outcome> {
             self.set_focus();
             Ok(Outcome::handle())
         }
@@ -149,40 +124,12 @@ pub mod utils {
             )
         }
 
-        fn handle_key(
-            &mut self,
-            _: &mut dyn BackendControl,
-            s: &mut State,
-            _: key::Key,
-        ) -> Result<Outcome<TActions>> {
-            self.handle(s, "key")
+        fn handle_key(&mut self, _: &mut dyn BackendControl, _: key::Key) -> Result<Outcome> {
+            self.handle("key")
         }
 
-        fn handle_mouse(
-            &mut self,
-            _: &mut dyn BackendControl,
-            s: &mut State,
-            _: mouse::Mouse,
-        ) -> Result<Outcome<TActions>> {
-            self.handle(s, "mouse")
-        }
-
-        fn handle_broadcast(
-            &mut self,
-            _: &mut dyn BackendControl,
-            s: &mut State,
-            a: TActions,
-        ) -> Result<Outcome<TActions>> {
-            self.handle(s, &format!("broadcast:{}", a.string()))
-        }
-
-        fn handle_event_action(
-            &mut self,
-            _: &mut dyn BackendControl,
-            s: &mut State,
-            a: TActions,
-        ) -> Result<Outcome<TActions>> {
-            self.handle(s, &format!("eaction:{}", a.string()))
+        fn handle_mouse(&mut self, _: &mut dyn BackendControl, _: mouse::Mouse) -> Result<Outcome> {
+            self.handle("mouse")
         }
 
         #[duplicate_item(
@@ -192,7 +139,7 @@ pub mod utils {
         )]
         fn method(
             self: reference([Self]),
-            f: &mut dyn FnMut(reference([dyn Node<State, TActions>])) -> Result<()>,
+            f: &mut dyn FnMut(reference([dyn Node])) -> Result<()>,
         ) -> Result<()> {
             f(reference([self.a]))?;
             f(reference([self.b]))?;
@@ -200,12 +147,12 @@ pub mod utils {
         }
     }
 
-    impl Node<State, TActions> for TRoot {
+    impl Node for TRoot {
         fn name(&self) -> Option<String> {
             Some(self.name.clone())
         }
 
-        fn handle_focus(&mut self) -> Result<Outcome<TActions>> {
+        fn handle_focus(&mut self) -> Result<Outcome> {
             self.set_focus();
             Ok(Outcome::handle())
         }
@@ -222,40 +169,12 @@ pub mod utils {
             )
         }
 
-        fn handle_key(
-            &mut self,
-            _: &mut dyn BackendControl,
-            s: &mut State,
-            _: key::Key,
-        ) -> Result<Outcome<TActions>> {
-            self.handle(s, "key")
+        fn handle_key(&mut self, _: &mut dyn BackendControl, _: key::Key) -> Result<Outcome> {
+            self.handle("key")
         }
 
-        fn handle_mouse(
-            &mut self,
-            _: &mut dyn BackendControl,
-            s: &mut State,
-            _: mouse::Mouse,
-        ) -> Result<Outcome<TActions>> {
-            self.handle(s, "mouse")
-        }
-
-        fn handle_broadcast(
-            &mut self,
-            _: &mut dyn BackendControl,
-            s: &mut State,
-            a: TActions,
-        ) -> Result<Outcome<TActions>> {
-            self.handle(s, &format!("broadcast:{}", a.string()))
-        }
-
-        fn handle_event_action(
-            &mut self,
-            _: &mut dyn BackendControl,
-            s: &mut State,
-            a: TActions,
-        ) -> Result<Outcome<TActions>> {
-            self.handle(s, &format!("eaction:{}", a.string()))
+        fn handle_mouse(&mut self, _: &mut dyn BackendControl, _: mouse::Mouse) -> Result<Outcome> {
+            self.handle("mouse")
         }
 
         #[duplicate_item(
@@ -265,7 +184,7 @@ pub mod utils {
         )]
         fn method(
             self: reference([Self]),
-            f: &mut dyn FnMut(reference([dyn Node<State, TActions>])) -> Result<()>,
+            f: &mut dyn FnMut(reference([dyn Node])) -> Result<()>,
         ) -> Result<()> {
             f(reference([self.a]))?;
             f(reference([self.b]))?;
@@ -292,14 +211,16 @@ pub mod utils {
             })
         }
 
-        fn handle(&mut self, s: &mut State, evt: &str) -> Result<Outcome<TActions>> {
+        fn handle(&mut self, evt: &str) -> Result<Outcome> {
             let ret = if let Some(x) = self.next_outcome.clone() {
                 self.next_outcome = None;
                 x
             } else {
                 Outcome::ignore()
             };
-            s.add_event(&self.name, evt, ret.clone());
+            TSTATE.with(|s| {
+                s.borrow_mut().add_event(&self.name, evt, ret.clone());
+            });
             Ok(ret)
         }
     }
@@ -314,14 +235,16 @@ pub mod utils {
                 next_outcome: None,
             }
         }
-        fn handle(&mut self, s: &mut State, evt: &str) -> Result<Outcome<TActions>> {
+        fn handle(&mut self, evt: &str) -> Result<Outcome> {
             let ret = if let Some(x) = self.next_outcome.clone() {
                 self.next_outcome = None;
                 x
             } else {
                 Outcome::ignore()
             };
-            s.add_event(&self.name, evt, ret.clone());
+            TSTATE.with(|s| {
+                s.borrow_mut().add_event(&self.name, evt, ret.clone());
+            });
             Ok(ret)
         }
     }
@@ -336,14 +259,16 @@ pub mod utils {
                 next_outcome: None,
             }
         }
-        fn handle(&mut self, s: &mut State, evt: &str) -> Result<Outcome<TActions>> {
+        fn handle(&mut self, evt: &str) -> Result<Outcome> {
             let ret = if let Some(x) = self.next_outcome.clone() {
                 self.next_outcome = None;
                 x
             } else {
                 Outcome::ignore()
             };
-            s.add_event(&self.name, evt, ret.clone());
+            TSTATE.with(|s| {
+                s.borrow_mut().add_event(&self.name, evt, ret.clone());
+            });
             Ok(ret)
         }
     }
@@ -360,7 +285,7 @@ pub mod utils {
         pub h: u16,
     }
 
-    impl Node<State, TActions> for TFixed {
+    impl Node for TFixed {
         fn fit(&mut self, _target: Size) -> Result<Size> {
             Ok(Size {
                 w: self.w,

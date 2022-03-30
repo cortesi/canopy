@@ -1,12 +1,11 @@
 use duplicate::duplicate_item;
-use std::marker::PhantomData;
 
 use pad::PadStr;
 
 use crate as canopy;
 use crate::{
     state::{NodeState, StatefulNode},
-    Actions, Node, Render, Result, ViewPort,
+    Node, Render, Result, ViewPort,
 };
 
 /// Defines the set of glyphs used to draw the frame
@@ -64,24 +63,22 @@ pub const SINGLE_THICK: FrameGlyphs = FrameGlyphs {
 ///     frame/focused   frame border if we hold focus
 ///     frame/active    color of active area indicator
 #[derive(StatefulNode)]
-pub struct Frame<S, A: Actions, N>
+pub struct Frame<N>
 where
-    N: Node<S, A>,
+    N: Node,
 {
-    _marker: PhantomData<(S, A)>,
     pub child: N,
     pub state: NodeState,
     pub glyphs: FrameGlyphs,
     pub title: Option<String>,
 }
 
-impl<S, A: Actions, N> Frame<S, A, N>
+impl<N> Frame<N>
 where
-    N: Node<S, A>,
+    N: Node,
 {
     pub fn new(c: N) -> Self {
         Frame {
-            _marker: PhantomData,
             child: c,
             state: NodeState::default(),
             glyphs: SINGLE,
@@ -102,9 +99,9 @@ where
     }
 }
 
-impl<S, A: Actions, N> Node<S, A> for Frame<S, A, N>
+impl<N> Node for Frame<N>
 where
-    N: Node<S, A>,
+    N: Node,
 {
     fn should_render(&self) -> bool {
         self.child.should_render()
@@ -173,7 +170,7 @@ where
     )]
     fn method(
         self: reference([Self]),
-        f: &mut dyn FnMut(reference([dyn Node<S, A>])) -> Result<()>,
+        f: &mut dyn FnMut(reference([dyn Node])) -> Result<()>,
     ) -> Result<()> {
         f(reference([self.child]))
     }

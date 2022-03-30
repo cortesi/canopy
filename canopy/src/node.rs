@@ -3,7 +3,7 @@ use crate::{
     event::{key, mouse},
     geom::{Frame, Rect, Size},
     global::STATE,
-    Actions, BackendControl, Outcome, Render, Result, StatefulNode, ViewPort,
+    BackendControl, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 use duplicate::duplicate_item;
 
@@ -31,7 +31,7 @@ impl Walker for () {
 /// The type paramter `S` is the application backing store object that is passed
 /// to all events.
 #[allow(unused_variables)]
-pub trait Node<S, A: Actions>: StatefulNode {
+pub trait Node: StatefulNode {
     /// The name of this node, if it has one, for debugging and testing
     /// purposes.
     fn name(&self) -> Option<String> {
@@ -61,63 +61,32 @@ pub trait Node<S, A: Actions>: StatefulNode {
     /// should call `self.set_focus()` and return Outcome::Handled, otherwise
     /// return `Outcome::Ignore`. The default implementation just returns
     /// `Outcome::Ignore`.
-    fn handle_focus(&mut self) -> Result<Outcome<A>> {
+    fn handle_focus(&mut self) -> Result<Outcome> {
         Ok(Outcome::ignore())
     }
 
     /// Handle a key event. This event is only called for nodes that are on the
     /// focus path. The default implementation ignores input.
-    fn handle_key(
-        &mut self,
-        c: &mut dyn BackendControl,
-        s: &mut S,
-        k: key::Key,
-    ) -> Result<Outcome<A>> {
+    fn handle_key(&mut self, c: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
         Ok(Outcome::ignore())
     }
 
     /// Handle a mouse event. The default implementation ignores mouse input.
-    fn handle_mouse(
-        &mut self,
-        c: &mut dyn BackendControl,
-        s: &mut S,
-        k: mouse::Mouse,
-    ) -> Result<Outcome<A>> {
-        Ok(Outcome::ignore())
-    }
-
-    /// Handle a an action returned by an event handler on one of our
-    /// descendents.
-    fn handle_event_action(
-        &mut self,
-        c: &mut dyn BackendControl,
-        s: &mut S,
-        k: A,
-    ) -> Result<Outcome<A>> {
-        Ok(Outcome::ignore())
-    }
-
-    /// Handle a broadcast action.
-    fn handle_broadcast(
-        &mut self,
-        c: &mut dyn BackendControl,
-        s: &mut S,
-        k: A,
-    ) -> Result<Outcome<A>> {
+    fn handle_mouse(&mut self, c: &mut dyn BackendControl, k: mouse::Mouse) -> Result<Outcome> {
         Ok(Outcome::ignore())
     }
 
     /// Call a closure on this node's children. The order in which children are
     /// processed must match `children_mut`. The default implementation assumes
     /// this node has no children, and just returns.
-    fn children(&self, f: &mut dyn FnMut(&dyn Node<S, A>) -> Result<()>) -> Result<()> {
+    fn children(&self, f: &mut dyn FnMut(&dyn Node) -> Result<()>) -> Result<()> {
         Ok(())
     }
 
     /// Call a closure mutably on this node's children. The order in which
     /// children are processed must match `children`. The default implementation
     /// assumes this node has no children, and just returns.
-    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node<S, A>) -> Result<()>) -> Result<()> {
+    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         Ok(())
     }
 
@@ -265,9 +234,9 @@ pub trait Node<S, A: Actions>: StatefulNode {
     [postorder]        [& type]         [children];
     [postorder_mut]    [&mut type]      [children_mut];
 )]
-pub fn method<S, A: Actions, R: Walker + Default>(
-    e: reference([dyn Node<S, A>]),
-    f: &mut dyn FnMut(reference([dyn Node<S, A>])) -> Result<R>,
+pub fn method<R: Walker + Default>(
+    e: reference([dyn Node]),
+    f: &mut dyn FnMut(reference([dyn Node])) -> Result<R>,
 ) -> Result<R> {
     let mut v = R::default();
     e.children(&mut |x| {
@@ -281,9 +250,9 @@ pub fn method<S, A: Actions, R: Walker + Default>(
 
 // A preorder traversal of the nodes under e. Enabling skipping in the walker
 // prunes all children of the currently visited node out of the traversal.
-pub fn preorder<S, A: Actions, W: Walker>(
-    e: &mut dyn Node<S, A>,
-    f: &mut dyn FnMut(&mut dyn Node<S, A>) -> Result<W>,
+pub fn preorder<W: Walker>(
+    e: &mut dyn Node,
+    f: &mut dyn FnMut(&mut dyn Node) -> Result<W>,
 ) -> Result<W> {
     let mut v = f(e)?;
     if !v.skip() {
@@ -304,11 +273,7 @@ mod tests {
         tutils::utils,
     };
 
-    fn skipper(
-        x: &mut dyn Node<utils::State, utils::TActions>,
-        skipname: String,
-        v: &mut Vec<String>,
-    ) -> Result<SkipWalker> {
+    fn skipper(x: &mut dyn Node, skipname: String, v: &mut Vec<String>) -> Result<SkipWalker> {
         let mut ret = SkipWalker::default();
         let n = x.name().unwrap();
         if n == skipname {

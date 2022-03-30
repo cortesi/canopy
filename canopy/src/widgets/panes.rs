@@ -1,29 +1,26 @@
 use duplicate::duplicate_item;
-use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
     state::{NodeState, StatefulNode},
-    Actions, Node, Render, Result, ViewPort,
+    Node, Render, Result, ViewPort,
 };
 
 /// Panes manages a set of child nodes arranged in a 2d grid.
 #[derive(StatefulNode)]
-pub struct Panes<S, A: Actions, N: Node<S, A>> {
-    _marker: PhantomData<(S, A)>,
+pub struct Panes<N: Node> {
     pub children: Vec<Vec<N>>,
     pub state: NodeState,
 }
 
-impl<S, A: Actions, N> Panes<S, A, N>
+impl<N> Panes<N>
 where
-    N: Node<S, A>,
+    N: Node,
 {
     pub fn new(n: N) -> Self {
         Panes {
             children: vec![vec![n]],
             state: NodeState::default(),
-            _marker: PhantomData,
         }
     }
 
@@ -56,7 +53,7 @@ where
     /// node is inserted in a row beneath it. If not, a new column is added.
     pub fn insert_row(&mut self, n: N) -> Result<()>
     where
-        N: Node<S, A>,
+        N: Node,
     {
         if let Some((x, y)) = self.focus_coords() {
             self.children[x].insert(y, n);
@@ -70,7 +67,7 @@ where
     /// is added in a new column to the right.
     pub fn insert_col(&mut self, mut n: N) -> Result<()>
     where
-        N: Node<S, A>,
+        N: Node,
     {
         let coords = self.focus_coords();
         canopy::focus_next(&mut n)?;
@@ -92,7 +89,7 @@ where
     }
 }
 
-impl<S, A: Actions, N: Node<S, A>> Node<S, A> for Panes<S, A, N> {
+impl<N: Node> Node for Panes<N> {
     #[duplicate_item(
         method          reference(type);
         [children]      [& type];
@@ -100,7 +97,7 @@ impl<S, A: Actions, N: Node<S, A>> Node<S, A> for Panes<S, A, N> {
     )]
     fn method(
         self: reference([Self]),
-        f: &mut dyn FnMut(reference([dyn Node<S, A>])) -> Result<()>,
+        f: &mut dyn FnMut(reference([dyn Node])) -> Result<()>,
     ) -> Result<()> {
         for col in reference([self.children]) {
             for row in col {
@@ -134,7 +131,7 @@ mod tests {
     #[test]
     fn tlayout() -> Result<()> {
         let tn = utils::TBranch::new("a");
-        let mut p: Panes<utils::State, utils::TActions, utils::TBranch> = Panes::new(tn);
+        let mut p: Panes<utils::TBranch> = Panes::new(tn);
         let r = Rect {
             tl: Point::zero(),
             w: 100,

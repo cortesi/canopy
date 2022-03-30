@@ -1,12 +1,10 @@
-use std::marker::PhantomData;
-
 use crate as canopy;
 use crate::{
     error::Result,
     geom::{Rect, Size},
     node::Node,
     state::{NodeState, StatefulNode},
-    Actions, Outcome, Render, ViewPort,
+    Outcome, Render, ViewPort,
 };
 
 /// ListItem must be implemented by items displayed in a `List`.
@@ -14,23 +12,20 @@ pub trait ListItem {
     fn set_selected(&mut self, _state: bool) {}
 }
 
-pub struct Item<S, A: Actions, N>
+pub struct Item<N>
 where
-    N: Node<S, A> + ListItem,
+    N: Node + ListItem,
 {
     itm: N,
     virt: Rect,
-
-    _marker: PhantomData<(S, A)>,
 }
 
-impl<S, A: Actions, N> Item<S, A, N>
+impl<N> Item<N>
 where
-    N: Node<S, A> + ListItem,
+    N: Node + ListItem,
 {
     fn new(itm: N) -> Self {
         Item {
-            _marker: PhantomData,
             virt: Rect::default(),
             itm,
         }
@@ -42,27 +37,25 @@ where
 
 /// Manage and display a list of items.
 #[derive(StatefulNode)]
-pub struct List<S, A: Actions, N>
+pub struct List<N>
 where
-    N: Node<S, A> + ListItem,
+    N: Node + ListItem,
 {
-    _marker: PhantomData<(S, A)>,
     state: NodeState,
 
-    items: Vec<Item<S, A, N>>,
+    items: Vec<Item<N>>,
     pub selected: usize,
 
     // Set of rectangles to clear during the next render.
     clear: Vec<Rect>,
 }
 
-impl<S, A: Actions, N> List<S, A, N>
+impl<N> List<N>
 where
-    N: Node<S, A> + ListItem,
+    N: Node + ListItem,
 {
     pub fn new(items: Vec<N>) -> Self {
         let mut l = List {
-            _marker: PhantomData,
             items: items.into_iter().map(Item::new).collect(),
             selected: 0,
             state: NodeState::default(),
@@ -271,23 +264,23 @@ where
     }
 }
 
-impl<S, A: Actions, N> Node<S, A> for List<S, A, N>
+impl<N> Node for List<N>
 where
-    N: Node<S, A> + ListItem,
+    N: Node + ListItem,
 {
-    fn handle_focus(&mut self) -> Result<Outcome<A>> {
+    fn handle_focus(&mut self) -> Result<Outcome> {
         self.set_focus();
         Ok(Outcome::handle())
     }
 
-    fn children(&self, f: &mut dyn FnMut(&dyn Node<S, A>) -> Result<()>) -> Result<()> {
+    fn children(&self, f: &mut dyn FnMut(&dyn Node) -> Result<()>) -> Result<()> {
         for i in &self.items {
             f(&i.itm)?
         }
         Ok(())
     }
 
-    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node<S, A>) -> Result<()>) -> Result<()> {
+    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         for i in self.items.iter_mut() {
             f(&mut i.itm)?
         }
@@ -370,12 +363,12 @@ mod tests {
     use super::*;
     use crate::{
         backend::test::TestRender,
-        tutils::utils::{tcanopy, State, TActions, TFixed},
+        tutils::utils::{tcanopy, TFixed},
     };
 
-    pub fn views(lst: &List<State, TActions, TFixed>) -> Vec<Rect> {
+    pub fn views(lst: &List<TFixed>) -> Vec<Rect> {
         let mut v = vec![];
-        lst.children(&mut |x: &dyn Node<State, TActions>| {
+        lst.children(&mut |x: &dyn Node| {
             v.push(if x.is_hidden() {
                 Rect::default()
             } else {
@@ -390,7 +383,7 @@ mod tests {
     #[test]
     fn select() -> Result<()> {
         // Empty initilization shouldn't fail
-        let _: List<State, TActions, TFixed> = List::new(Vec::new());
+        let _: List<TFixed> = List::new(Vec::new());
 
         let mut lst = List::new(vec![
             TFixed::new(10, 10),

@@ -1,42 +1,36 @@
-use std::marker::PhantomData;
-
 use crate as canopy;
 use crate::{
     event::{key, mouse},
     geom::Size,
-    Actions, BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
+    BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 
 /// Graft is a node that can contain a complete sub-application. This lets us
 /// write re-usable, fully self-contained complex apps that can be embedded.
 #[derive(StatefulNode)]
-pub struct Graft<SO, AO, S, A: Actions, N>
+pub struct Graft<N>
 where
-    N: Node<S, A>,
+    N: Node,
 {
-    _marker: PhantomData<(SO, AO, A)>,
     state: NodeState,
-    appstate: S,
     root: N,
 }
 
-impl<SO, AO, S, A: Actions, N> Graft<SO, AO, S, A, N>
+impl<N> Graft<N>
 where
-    N: Node<S, A>,
+    N: Node,
 {
-    pub fn new(appstate: S, root: N) -> Self {
+    pub fn new(root: N) -> Self {
         Graft {
-            _marker: PhantomData,
             state: NodeState::default(),
-            appstate,
             root,
         }
     }
 }
 
-impl<SO, AO: Actions, S, A: Actions, N> Node<SO, AO> for Graft<SO, AO, S, A, N>
+impl<N> Node for Graft<N>
 where
-    N: Node<S, A>,
+    N: Node,
 {
     fn name(&self) -> Option<String> {
         Some("graft".into())
@@ -44,40 +38,26 @@ where
 
     // We make an assumption that some node below us can hold terminal focus, so
     // we must too.
-    fn handle_focus(&mut self) -> Result<Outcome<AO>> {
+    fn handle_focus(&mut self) -> Result<Outcome> {
         self.set_focus();
         Ok(Outcome::handle())
     }
 
     /// Handle a key event. This event is only called for nodes that are on the
     /// focus path. The default implementation ignores input.
-    fn handle_key(
-        &mut self,
-        ctrl: &mut dyn BackendControl,
-        _s: &mut SO,
-        k: key::Key,
-    ) -> Result<Outcome<AO>> {
-        Ok(
-            match canopy::key(ctrl, &mut self.root, &mut self.appstate, k)? {
-                Outcome::Handle(_) => Outcome::<AO>::handle(),
-                Outcome::Ignore(_) => Outcome::ignore(),
-            },
-        )
+    fn handle_key(&mut self, ctrl: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
+        Ok(match canopy::key(ctrl, &mut self.root, k)? {
+            Outcome::Handle(_) => Outcome::handle(),
+            Outcome::Ignore(_) => Outcome::ignore(),
+        })
     }
 
     /// Handle a mouse event.The default implementation ignores mouse input.
-    fn handle_mouse(
-        &mut self,
-        ctrl: &mut dyn BackendControl,
-        _s: &mut SO,
-        k: mouse::Mouse,
-    ) -> Result<Outcome<AO>> {
-        Ok(
-            match canopy::mouse(ctrl, &mut self.root, &mut self.appstate, k)? {
-                Outcome::Handle(_) => Outcome::<AO>::handle(),
-                Outcome::Ignore(_) => Outcome::ignore(),
-            },
-        )
+    fn handle_mouse(&mut self, ctrl: &mut dyn BackendControl, k: mouse::Mouse) -> Result<Outcome> {
+        Ok(match canopy::mouse(ctrl, &mut self.root, k)? {
+            Outcome::Handle(_) => Outcome::handle(),
+            Outcome::Ignore(_) => Outcome::ignore(),
+        })
     }
 
     // Just reflect the fit from our root node

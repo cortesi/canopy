@@ -1,25 +1,17 @@
-use crate::{node::Walker, Actions};
+use crate::node::Walker;
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Handle<A: Actions> {
+pub struct Handle {
     pub skip: bool,
-    pub actions: Vec<A>,
 }
 
-impl<A: Actions> Default for Handle<A> {
-    fn default() -> Handle<A> {
-        Handle {
-            skip: true,
-            actions: vec![],
-        }
+impl Default for Handle {
+    fn default() -> Handle {
+        Handle { skip: true }
     }
 }
 
-impl<A: Actions> Handle<A> {
-    pub fn with_action(mut self, action: A) -> Self {
-        self.actions.push(action);
-        self
-    }
+impl Handle {
     pub fn and_continue(mut self) -> Self {
         self.skip = false;
         self
@@ -39,36 +31,32 @@ impl Ignore {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum Outcome<A: Actions> {
-    Handle(Handle<A>),
+pub enum Outcome {
+    Handle(Handle),
     Ignore(Ignore),
 }
 
-impl<A: Actions> Default for Outcome<A> {
+impl Default for Outcome {
     fn default() -> Self {
         Outcome::ignore()
     }
 }
 
-impl<A: Actions> Outcome<A> {
+impl Outcome {
     /// An Ingore outcome that doesn't skip.
-    pub fn ignore() -> Outcome<A> {
+    pub fn ignore() -> Outcome {
         Outcome::Ignore(Ignore::default())
     }
     /// An Ingore outcome with skipping enabled.
-    pub fn ignore_and_skip() -> Outcome<A> {
+    pub fn ignore_and_skip() -> Outcome {
         Outcome::Ignore(Ignore::default().with_skip())
     }
     /// A Handle outcome that skips.
-    pub fn handle() -> Outcome<A> {
+    pub fn handle() -> Outcome {
         Outcome::Handle(Handle::default())
     }
-    /// A Handle outcome with skipping disabled, and an associated action.
-    pub fn handle_with_action(a: A) -> Outcome<A> {
-        Outcome::Handle(Handle::default().with_action(a).and_continue())
-    }
     /// A Handle outcome with skipping disabled.
-    pub fn handle_and_continue() -> Outcome<A> {
+    pub fn handle_and_continue() -> Outcome {
         Outcome::Handle(Handle::default().and_continue())
     }
     /// Does this outcome have skip enabled?
@@ -87,7 +75,7 @@ impl<A: Actions> Outcome<A> {
     }
 }
 
-impl<A: Actions> Walker for Outcome<A> {
+impl Walker for Outcome {
     fn skip(&self) -> bool {
         self.has_skip()
     }
@@ -95,14 +83,9 @@ impl<A: Actions> Walker for Outcome<A> {
         // At the moment, we don't propagate the skip flag, because it gets used
         // by the traversal functions immediately on return.
         match (self, rhs) {
-            (Outcome::Handle(h1), Outcome::Handle(h2)) => {
-                let mut actions = h1.actions.clone();
-                actions.extend(h2.actions);
-                Outcome::Handle(Handle {
-                    skip: h1.skip || h2.skip,
-                    actions,
-                })
-            }
+            (Outcome::Handle(h1), Outcome::Handle(h2)) => Outcome::Handle(Handle {
+                skip: h1.skip || h2.skip,
+            }),
             (Outcome::Handle(h), Outcome::Ignore(ign)) => {
                 let mut ret = h.clone();
                 ret.skip = h.skip || ign.skip;

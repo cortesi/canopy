@@ -2,31 +2,27 @@ use crate as canopy;
 use crate::{
     geom::{Line, Size},
     state::{NodeState, StatefulNode},
-    Actions, Node, Render, Result, ViewPort,
+    Node, Render, Result, ViewPort,
 };
-use std::marker::PhantomData;
 
 use textwrap;
 
 #[derive(StatefulNode)]
-pub struct Text<S, A> {
+pub struct Text {
     pub state: NodeState,
     pub raw: String,
     lines: Option<Vec<String>>,
     fixed_width: Option<u16>,
     current_size: Size,
-
-    _marker: PhantomData<(S, A)>,
 }
 
-impl<S, A: Actions> Text<S, A> {
+impl Text {
     pub fn new(raw: &str) -> Self {
         Text {
             state: NodeState::default(),
 
             raw: raw.to_owned(),
             lines: None,
-            _marker: PhantomData,
             fixed_width: None,
             current_size: Size::default(),
         }
@@ -38,7 +34,7 @@ impl<S, A: Actions> Text<S, A> {
     }
 }
 
-impl<S, A: Actions> Node<S, A> for Text<S, A> {
+impl Node for Text {
     fn fit(&mut self, s: Size) -> Result<Size> {
         let w = if let Some(w) = self.fixed_width {
             w
@@ -77,12 +73,11 @@ impl<S, A: Actions> Node<S, A> for Text<S, A> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tutils::utils;
 
     #[test]
     fn text_sizing() -> Result<()> {
         let txt = "aaa bbb ccc\nddd eee fff\nggg hhh iii";
-        let mut t: Text<utils::State, ()> = Text::new(txt);
+        let mut t: Text = Text::new(txt);
         t.fit(Size::new(7, 10))?;
         let expected: Vec<String> = vec![
             "aaa bbb".into(),

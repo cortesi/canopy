@@ -1,11 +1,10 @@
 mod statusbar;
 mod view;
-use std::marker::PhantomData;
 
 use crate as canopy;
 use crate::{
-    event::key, graft::Graft, widgets::frame, Actions, BackendControl, Node, NodeState, Outcome,
-    Render, Result, StatefulNode, ViewPort,
+    event::key, graft::Graft, widgets::frame, BackendControl, Node, NodeState, Outcome, Render,
+    Result, StatefulNode, ViewPort,
 };
 
 #[derive(Debug, PartialEq, Clone)]
@@ -13,31 +12,29 @@ struct InspectorState {}
 
 #[derive(StatefulNode)]
 
-pub struct Content<S, A: Actions> {
+pub struct Content {
     state: NodeState,
-    statusbar: statusbar::StatusBar<S, A>,
-    view: frame::Frame<S, A, view::View<S, A>>,
-    _marker: PhantomData<(S, A)>,
+    view: frame::Frame<view::View>,
+    statusbar: statusbar::StatusBar,
 }
 
-impl<A: Actions> Content<InspectorState, A> {
+impl Content {
     pub fn new() -> Self {
         Content {
-            _marker: PhantomData,
             state: NodeState::default(),
-            statusbar: statusbar::StatusBar::new(),
             view: frame::Frame::new(view::View::new()),
+            statusbar: statusbar::StatusBar::new(),
         }
     }
 }
 
-impl<A: Actions> Default for Content<InspectorState, A> {
+impl Default for Content {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<A: Actions> Node<InspectorState, A> for Content<InspectorState, A> {
+impl Node for Content {
     fn render(&mut self, _r: &mut Render, vp: ViewPort) -> Result<()> {
         let parts = vp.carve_vend(1);
         self.statusbar.wrap(parts.1)?;
@@ -45,62 +42,49 @@ impl<A: Actions> Node<InspectorState, A> for Content<InspectorState, A> {
         Ok(())
     }
 
-    fn children(
-        &self,
-        f: &mut dyn FnMut(&dyn Node<InspectorState, A>) -> Result<()>,
-    ) -> Result<()> {
+    fn children(&self, f: &mut dyn FnMut(&dyn Node) -> Result<()>) -> Result<()> {
         f(&self.statusbar)?;
         f(&self.view)
     }
 
-    fn children_mut(
-        &mut self,
-        f: &mut dyn FnMut(&mut dyn Node<InspectorState, A>) -> Result<()>,
-    ) -> Result<()> {
+    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         f(&mut self.statusbar)?;
         f(&mut self.view)
     }
 }
 
 #[derive(StatefulNode)]
-pub struct Inspector<S, A: Actions, N>
+pub struct Inspector<N>
 where
-    N: Node<S, A>,
+    N: Node,
 {
-    _marker: PhantomData<(S, A)>,
     state: NodeState,
     root: N,
     active: bool,
     activate: key::Key,
-    content: Graft<S, A, InspectorState, (), Content<InspectorState, ()>>,
+    content: Graft<Content>,
 }
 
-impl<S, A: Actions, N> Inspector<S, A, N>
+impl<N> Inspector<N>
 where
-    N: Node<S, A>,
+    N: Node,
 {
     pub fn new(activate: key::Key, root: N) -> Self {
         Inspector {
-            _marker: PhantomData,
             state: NodeState::default(),
             active: false,
-            content: Graft::new(InspectorState {}, Content::new()),
+            content: Graft::new(Content::new()),
             root,
             activate,
         }
     }
 }
 
-impl<S, A: Actions, N> Node<S, A> for Inspector<S, A, N>
+impl<N> Node for Inspector<N>
 where
-    N: Node<S, A>,
+    N: Node,
 {
-    fn handle_key(
-        &mut self,
-        _ctrl: &mut dyn BackendControl,
-        _: &mut S,
-        k: key::Key,
-    ) -> Result<Outcome<A>> {
+    fn handle_key(&mut self, _ctrl: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
         if self.active {
             match k {
                 c if c == 'a' => {
@@ -137,14 +121,14 @@ where
         Ok(())
     }
 
-    fn children(&self, f: &mut dyn FnMut(&dyn Node<S, A>) -> Result<()>) -> Result<()> {
+    fn children(&self, f: &mut dyn FnMut(&dyn Node) -> Result<()>) -> Result<()> {
         if self.active {
             f(&self.content)?;
         }
         f(&self.root)
     }
 
-    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node<S, A>) -> Result<()>) -> Result<()> {
+    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         if self.active {
             f(&mut self.content)?;
         }

@@ -10,12 +10,10 @@ use canopy::{
     BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 
-struct Handle {}
-
 #[derive(StatefulNode)]
 struct TodoItem {
     state: NodeState,
-    child: Text<Handle, ()>,
+    child: Text,
     selected: bool,
 }
 
@@ -35,19 +33,16 @@ impl ListItem for TodoItem {
     }
 }
 
-impl Node<Handle, ()> for TodoItem {
+impl Node for TodoItem {
     fn fit(&mut self, target: Size) -> Result<Size> {
         self.child.fit(target)
     }
 
-    fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle, ()>) -> Result<()>) -> Result<()> {
+    fn children(&self, f: &mut dyn FnMut(&dyn Node) -> Result<()>) -> Result<()> {
         f(&self.child)
     }
 
-    fn children_mut(
-        &mut self,
-        f: &mut dyn FnMut(&mut dyn Node<Handle, ()>) -> Result<()>,
-    ) -> Result<()> {
+    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         f(&mut self.child)
     }
 
@@ -65,7 +60,7 @@ struct StatusBar {
     state: NodeState,
 }
 
-impl Node<Handle, ()> for StatusBar {
+impl Node for StatusBar {
     fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
         r.style.push_layer("statusbar");
         r.text("statusbar/text", vp.view_rect().first_line(), "todo")?;
@@ -76,9 +71,9 @@ impl Node<Handle, ()> for StatusBar {
 #[derive(StatefulNode)]
 struct Root {
     state: NodeState,
-    content: frame::Frame<Handle, (), List<Handle, (), TodoItem>>,
+    content: frame::Frame<List<TodoItem>>,
     statusbar: StatusBar,
-    adder: Option<frame::Frame<Handle, (), InputLine<Handle, ()>>>,
+    adder: Option<frame::Frame<InputLine>>,
 }
 
 impl Root {
@@ -93,7 +88,7 @@ impl Root {
         }
     }
 
-    fn open_adder(&mut self) -> Result<Outcome<()>> {
+    fn open_adder(&mut self) -> Result<Outcome> {
         let mut adder = frame::Frame::new(InputLine::new(""));
         adder.child.handle_focus()?;
         self.adder = Some(adder);
@@ -102,7 +97,7 @@ impl Root {
     }
 }
 
-impl Node<Handle, ()> for Root {
+impl Node for Root {
     fn render(&mut self, _: &mut Render, vp: ViewPort) -> Result<()> {
         let (a, b) = vp.carve_vend(1);
         self.statusbar.wrap(b)?;
@@ -115,17 +110,12 @@ impl Node<Handle, ()> for Root {
         Ok(())
     }
 
-    fn handle_focus(&mut self) -> Result<Outcome<()>> {
+    fn handle_focus(&mut self) -> Result<Outcome> {
         self.set_focus();
         Ok(Outcome::handle())
     }
 
-    fn handle_mouse(
-        &mut self,
-        _: &mut dyn BackendControl,
-        _: &mut Handle,
-        k: mouse::Mouse,
-    ) -> Result<Outcome<()>> {
+    fn handle_mouse(&mut self, _: &mut dyn BackendControl, k: mouse::Mouse) -> Result<Outcome> {
         let v = &mut self.content.child;
         match k {
             c if c == mouse::MouseAction::ScrollDown => v.update_viewport(&|vp| vp.down()),
@@ -135,12 +125,7 @@ impl Node<Handle, ()> for Root {
         Ok(Outcome::handle())
     }
 
-    fn handle_key(
-        &mut self,
-        ctrl: &mut dyn BackendControl,
-        _: &mut Handle,
-        k: key::Key,
-    ) -> Result<Outcome<()>> {
+    fn handle_key(&mut self, ctrl: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
         let lst = &mut self.content.child;
         if let Some(adder) = &mut self.adder {
             match k {
@@ -178,7 +163,7 @@ impl Node<Handle, ()> for Root {
     )]
     fn method(
         self: reference([Self]),
-        f: &mut dyn FnMut(reference([dyn Node<Handle, ()>])) -> Result<()>,
+        f: &mut dyn FnMut(reference([dyn Node])) -> Result<()>,
     ) -> Result<()> {
         f(reference([self.statusbar]))?;
         f(reference([self.content]))?;
@@ -197,8 +182,7 @@ pub fn main() -> Result<()> {
         Some(solarized::BASE1),
         None,
     );
-    let mut h = Handle {};
     let mut root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new());
-    runloop(colors, &mut root, &mut h)?;
+    runloop(colors, &mut root)?;
     Ok(())
 }

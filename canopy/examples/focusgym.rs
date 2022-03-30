@@ -10,8 +10,6 @@ use canopy::{
     BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 
-struct Handle {}
-
 #[derive(StatefulNode)]
 struct Root {
     state: NodeState,
@@ -48,17 +46,12 @@ impl Block {
     }
 }
 
-impl Node<Handle, ()> for Root {
+impl Node for Root {
     fn render(&mut self, _: &mut Render, vp: ViewPort) -> Result<()> {
         self.child.wrap(vp)
     }
 
-    fn handle_mouse(
-        &mut self,
-        _: &mut dyn BackendControl,
-        _: &mut Handle,
-        k: mouse::Mouse,
-    ) -> Result<Outcome<()>> {
+    fn handle_mouse(&mut self, _: &mut dyn BackendControl, k: mouse::Mouse) -> Result<Outcome> {
         Ok(match k {
             c if c == mouse::MouseAction::ScrollDown => canopy::focus_next(self)?,
             c if c == mouse::MouseAction::ScrollUp => canopy::focus_prev(self)?,
@@ -66,12 +59,7 @@ impl Node<Handle, ()> for Root {
         })
     }
 
-    fn handle_key(
-        &mut self,
-        ctrl: &mut dyn BackendControl,
-        _: &mut Handle,
-        k: key::Key,
-    ) -> Result<Outcome<()>> {
+    fn handle_key(&mut self, ctrl: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
         Ok(match k {
             c if c == key::KeyCode::Tab => canopy::focus_next(self)?,
             c if c == 'l' || c == key::KeyCode::Right => canopy::focus_right(self)?,
@@ -83,22 +71,19 @@ impl Node<Handle, ()> for Root {
         })
     }
 
-    fn children(&self, f: &mut dyn FnMut(&dyn Node<Handle, ()>) -> Result<()>) -> Result<()> {
+    fn children(&self, f: &mut dyn FnMut(&dyn Node) -> Result<()>) -> Result<()> {
         f(&self.child)?;
         Ok(())
     }
 
-    fn children_mut(
-        &mut self,
-        f: &mut dyn FnMut(&mut dyn Node<Handle, ()>) -> Result<()>,
-    ) -> Result<()> {
+    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         f(&mut self.child)?;
         Ok(())
     }
 }
 
 impl Block {
-    fn add(&mut self) -> Result<Outcome<()>> {
+    fn add(&mut self) -> Result<Outcome> {
         Ok(if self.children.is_empty() {
             Outcome::ignore()
         } else if self.size_limited(self.children[0].vp().view_rect().into()) {
@@ -112,7 +97,7 @@ impl Block {
     fn size_limited(&self, a: Size) -> bool {
         (self.horizontal && a.w <= 4) || (!self.horizontal && a.h <= 4)
     }
-    fn split(&mut self) -> Result<Outcome<()>> {
+    fn split(&mut self) -> Result<Outcome> {
         Ok(if self.children.is_empty() {
             Outcome::ignore()
         } else if self.size_limited(self.vp().view_rect().into()) {
@@ -125,7 +110,7 @@ impl Block {
     }
 }
 
-impl Node<Handle, ()> for Block {
+impl Node for Block {
     fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
         if self.children.is_empty() {
             let vps = if self.horizontal {
@@ -149,7 +134,7 @@ impl Node<Handle, ()> for Block {
         Ok(())
     }
 
-    fn handle_focus(&mut self) -> Result<Outcome<()>> {
+    fn handle_focus(&mut self) -> Result<Outcome> {
         Ok(if self.children.is_empty() {
             self.set_focus();
             Outcome::handle()
@@ -158,12 +143,7 @@ impl Node<Handle, ()> for Block {
         })
     }
 
-    fn handle_mouse(
-        &mut self,
-        _: &mut dyn BackendControl,
-        _: &mut Handle,
-        k: mouse::Mouse,
-    ) -> Result<Outcome<()>> {
+    fn handle_mouse(&mut self, _: &mut dyn BackendControl, k: mouse::Mouse) -> Result<Outcome> {
         Ok(match k {
             c if c == mouse::MouseAction::Down + mouse::Button::Left => {
                 self.taint_tree()?;
@@ -181,12 +161,7 @@ impl Node<Handle, ()> for Block {
         })
     }
 
-    fn handle_key(
-        &mut self,
-        _: &mut dyn BackendControl,
-        _: &mut Handle,
-        k: key::Key,
-    ) -> Result<Outcome<()>> {
+    fn handle_key(&mut self, _: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
         Ok(match k {
             c if c == 's' => {
                 self.split()?;
@@ -204,7 +179,7 @@ impl Node<Handle, ()> for Block {
     )]
     fn method(
         self: reference([Self]),
-        f: &mut dyn FnMut(reference([dyn Node<Handle, ()>])) -> Result<()>,
+        f: &mut dyn FnMut(reference([dyn Node])) -> Result<()>,
     ) -> Result<()> {
         for i in reference([self.children]) {
             f(i)?
@@ -215,8 +190,7 @@ impl Node<Handle, ()> for Block {
 
 pub fn main() -> Result<()> {
     let colors = solarized::solarized_dark();
-    let mut h = Handle {};
     let mut root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new());
-    runloop(colors, &mut root, &mut h)?;
+    runloop(colors, &mut root)?;
     Ok(())
 }

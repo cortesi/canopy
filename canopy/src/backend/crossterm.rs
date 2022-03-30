@@ -14,7 +14,7 @@ use crate::{
     geom::{Point, Size},
     render::RenderBackend,
     style::{Color, Style, StyleManager},
-    Actions, Node, Outcome, Render, Result,
+    Node, Outcome, Render, Result,
 };
 use crossterm::{
     self, cursor as ccursor, event as cevent, style, terminal, ExecutableCommand, QueueableCommand,
@@ -224,10 +224,7 @@ fn translate_button(b: cevent::MouseButton) -> mouse::Button {
 }
 
 /// Translate a crossterm event into a canopy event
-fn translate_event<A>(e: cevent::Event) -> Event<A>
-where
-    A: 'static + Actions,
-{
+fn translate_event(e: cevent::Event) -> Event {
     match e {
         cevent::Event::Key(k) => Event::Key(key::Key(
             Some(translate_key_modifiers(k.modifiers)),
@@ -285,10 +282,7 @@ where
     }
 }
 
-fn event_emitter<A>(e: &EventSource<A>)
-where
-    A: 'static + Actions,
-{
+fn event_emitter(e: &EventSource) {
     let evt_tx = e.tx();
     thread::spawn(move || loop {
         match cevent::read() {
@@ -309,13 +303,9 @@ where
     });
 }
 
-pub fn runloop<S, A: 'static + Actions, N>(
-    style: StyleManager,
-    root: &mut N,
-    s: &mut S,
-) -> Result<()>
+pub fn runloop<N>(style: StyleManager, root: &mut N) -> Result<()>
 where
-    N: Node<S, A>,
+    N: Node,
 {
     let mut be = CrosstermRender::default();
     let mut ctrl = CrosstermControl::default();
@@ -369,7 +359,7 @@ where
                 canopy::post_render(&mut render, root)?;
                 render.flush()?;
             }
-            match canopy::event(&mut ctrl, root, s, events.next()?)? {
+            match canopy::event(&mut ctrl, root, events.next()?)? {
                 Outcome::Ignore { .. } => {
                     ignore = true;
                 }
