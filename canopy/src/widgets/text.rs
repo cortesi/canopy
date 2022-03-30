@@ -77,13 +77,10 @@ impl<S, A: Actions> Node<S, A> for Text<S, A> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::test::TestRender;
     use crate::tutils::utils;
 
     #[test]
     fn text_sizing() -> Result<()> {
-        let (_, mut tr) = TestRender::create();
-        let (_, _) = utils::tcanopy(&mut tr);
         let txt = "aaa bbb ccc\nddd eee fff\nggg hhh iii";
         let mut t: Text<utils::State, ()> = Text::new(txt);
         t.fit(Size::new(7, 10))?;

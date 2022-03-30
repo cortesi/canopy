@@ -299,7 +299,6 @@ pub fn preorder<S, A: Actions, W: Walker>(
 mod tests {
     use super::*;
     use crate::{
-        backend::test::TestRender,
         canopy::SkipWalker,
         geom::{Rect, Size},
         tutils::utils,
@@ -379,9 +378,6 @@ mod tests {
 
     #[test]
     fn node_wrap() -> Result<()> {
-        let (_, mut tr) = TestRender::create();
-        let (_, _) = utils::tcanopy(&mut tr);
-
         // If the child is the same size as the parent, then wrap just produces
         // the same viewport
         let mut n = utils::TFixed::new(10, 10);
@@ -433,9 +429,6 @@ mod tests {
 
     #[test]
     fn node_frame() -> Result<()> {
-        let (_, mut tr) = TestRender::create();
-        let (_, _) = utils::tcanopy(&mut tr);
-
         // If we have room, the adjustment just shifts the child node relative to the screen.
         let mut n = utils::TFixed::new(5, 5);
         let vp = ViewPort::new(Size::new(10, 10), Rect::new(0, 0, 10, 10), (10, 10))?;

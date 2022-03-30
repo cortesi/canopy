@@ -127,15 +127,12 @@ impl<S, A: Actions, N: Node<S, A>> Node<S, A> for Panes<S, A, N> {
 mod tests {
     use super::*;
     use crate::{
-        backend::test::TestRender,
         geom::{Point, Rect},
         tutils::utils,
     };
 
     #[test]
     fn tlayout() -> Result<()> {
-        let (_, mut tr) = TestRender::create();
-        let (_, _) = utils::tcanopy(&mut tr);
         let tn = utils::TBranch::new("a");
         let mut p: Panes<utils::State, utils::TActions, utils::TBranch> = Panes::new(tn);
         let r = Rect {

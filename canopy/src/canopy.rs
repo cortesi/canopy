@@ -144,6 +144,7 @@ pub fn on_focus_path<S, A: Actions>(e: &dyn Node<S, A>) -> bool {
         onpath = true;
         Ok(())
     })
+    // We're safe to unwrap, because our closure can't return an error.
     .unwrap();
     onpath
 }
@@ -213,6 +214,7 @@ pub fn get_focus_area<S, A: Actions>(e: &dyn Node<S, A>) -> Option<Rect> {
         }
         Ok(())
     })
+    // We're safe to unwrap, because our closure can't return an error.
     .unwrap();
     ret
 }
@@ -226,6 +228,7 @@ pub fn focus_depth<S, A: Actions>(e: &dyn Node<S, A>) -> usize {
         total += 1;
         Ok(())
     })
+    // We're safe to unwrap, because our closure can't return an error.
     .unwrap();
     total
 }
@@ -664,8 +667,6 @@ mod tests {
         Ok(())
     }
 
-    // These tests double as tests for the process_event macro - no need to
-    // duplicate the details in the mouse specific tests.
     #[test]
     fn tkey() -> Result<()> {
         run_test(|_, _, ctrl, mut root, mut s| {
