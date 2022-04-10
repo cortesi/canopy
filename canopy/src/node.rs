@@ -1,3 +1,7 @@
+use std::time::Duration;
+
+use duplicate::duplicate_item;
+
 use crate::{
     cursor,
     event::{key, mouse},
@@ -5,7 +9,6 @@ use crate::{
     global::STATE,
     BackendControl, Outcome, Render, Result, StatefulNode, ViewPort,
 };
-use duplicate::duplicate_item;
 
 /// Walker is implemented for the return values of tree operations.
 pub trait Walker {
@@ -23,17 +26,11 @@ impl Walker for () {
     }
 }
 
-/// Nodes are the basic building-blocks of a Canopy UI. Nodes are composed in a
-/// tree, with each node responsible for managing its own children. Nodes keep
-/// track of the area of the screen that they are responsible for through the
-/// resize event.
-///
-/// The type paramter `S` is the application backing store object that is passed
-/// to all events.
+/// Nodes are the basic building-blocks of a Canopy UI. They are composed in a
+/// tree, with each node responsible for managing its own children.
 #[allow(unused_variables)]
 pub trait Node: StatefulNode {
-    /// The name of this node, if it has one, for debugging and testing
-    /// purposes.
+    /// The name of this node, if it has one, for debugging and testing.
     fn name(&self) -> Option<String> {
         None
     }
@@ -43,11 +40,7 @@ pub trait Node: StatefulNode {
     /// should only be needed in rare circumstances, like container nodes that
     /// need to respond to changes in sub-nodes.
     fn should_render(&self) -> bool {
-        if self.is_hidden() {
-            false
-        } else {
-            self.is_tainted() || self.focus_changed()
-        }
+        !self.is_hidden() && (self.is_tainted() || self.focus_changed())
     }
 
     /// Called for each node on the focus path, after each render sweep. The
@@ -57,21 +50,22 @@ pub trait Node: StatefulNode {
         None
     }
 
-    /// Try to set focus to this node. If the node accepts focus, the node
-    /// should call `self.set_focus()` and return Outcome::Handled, otherwise
-    /// return `Outcome::Ignore`. The default implementation just returns
-    /// `Outcome::Ignore`.
+    /// Handle a focus event. If the node accepts focus, the node should call
+    /// `self.set_focus()` and return Outcome::Handled, otherwise it should
+    /// return `Outcome::Ignore`, and the next node in the path to the root will
+    /// be tried. The default implementation just returns `Outcome::Ignore`.
     fn handle_focus(&mut self) -> Result<Outcome> {
         Ok(Outcome::ignore())
     }
 
-    /// Handle a key event. This event is only called for nodes that are on the
-    /// focus path. The default implementation ignores input.
+    /// Handle a key input event. This event is only called for nodes that are
+    /// on the focus path. The default implementation ignores input.
     fn handle_key(&mut self, c: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
         Ok(Outcome::ignore())
     }
 
-    /// Handle a mouse event. The default implementation ignores mouse input.
+    /// Handle a mouse input event. The default implementation ignores mouse
+    /// input.
     fn handle_mouse(&mut self, c: &mut dyn BackendControl, k: mouse::Mouse) -> Result<Outcome> {
         Ok(Outcome::ignore())
     }
@@ -104,6 +98,15 @@ pub trait Node: StatefulNode {
     /// The default implementation just returns the target value.
     fn fit(&mut self, target: Size) -> Result<Size> {
         Ok(target)
+    }
+
+    /// A scheduled poll endpoint. This function is called for every node the
+    /// first time it is seen during the pre-render sweep. Each time the
+    /// function returns a duration, a subsequent call is scheduled. If the
+    /// function returns None, the `poll` function is not called again. The
+    /// default implementation returns `None`.
+    fn poll(&self) -> Option<Duration> {
+        None
     }
 
     /// Render this widget. The render method should:

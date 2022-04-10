@@ -12,6 +12,7 @@ use crate::{
     cursor, error,
     event::{key, mouse, Event, EventSource},
     geom::{Point, Size},
+    global,
     render::RenderBackend,
     style::{Color, Style, StyleManager},
     Node, Outcome, Render, Result,
@@ -349,6 +350,7 @@ where
     event_emitter(&events);
     let size = translate_result(terminal::size())?;
     canopy::set_root_size(Size::new(size.0, size.1), root)?;
+    global::start_poller(events.tx());
 
     loop {
         let mut ignore = false;

@@ -1,27 +1,15 @@
 
 # TODO
 
+- Since we're now keeping global state in a threadlocal, we can simplify our
+  return type - we can signal handling by tweaking a global rather than
+  returning a Handled value.
 - Node polling
-  - Add a Redraw built-in message that signals asynchronously that the app needs to be redrawn
-  - Add the global event tx to the node state so we can access it without the app?
-    - Alternative: keep tx in the app, and add a setup() method to nodes
   - Add a redraw function to nodes to signal redraw
-  - Add a pre-render method to allow nodes to aggregate events
-
-
-- Grafting
-  - focus on/off into Node so we can handle this better
-    - Can we maintain focus?
-  - move tainting into Node, so we can taint tree if needed but maintain partial
-    rendering
-
 - ControlBackend
   - Improve ergonomics - adding a function that returns a handle which re-enters rendering?
 - Renderer
   - Explicit colors - at the moment, we can only get colors from our color scheme
-- Add IDs to node state?
-  - Will let us implment an inject() function that injects events at a given node.
-    - Question: is grafting the way to solve this?
 - Ergonomics:
   - A derive macro to create children and children_mut
     - This would mean shifting the traversal methods into a separate trait

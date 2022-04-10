@@ -218,8 +218,16 @@ pub fn focus_depth(e: &dyn Node) -> usize {
 /// Pre-render sweep of the tree.
 pub(crate) fn pre_render(r: &mut Render, e: &mut dyn Node) -> Result<()> {
     let mut seen = false;
-    focus_path(e, &mut |_| -> Result<()> {
-        seen = true;
+    preorder(e, &mut |x| -> Result<()> {
+        if x.is_focused() {
+            seen = true;
+        }
+        if !x.is_initialized() {
+            if let Some(d) = x.poll() {
+                STATE.with(|global_state| global_state.borrow_mut().poller.schedule(x.id(), d));
+            }
+            x.state_mut().initialized = true;
+        }
         Ok(())
     })?;
     if !seen {
@@ -331,10 +339,7 @@ pub fn key(ctrl: &mut dyn BackendControl, root: &mut dyn Node, k: key::Key) -> R
 }
 
 /// Set the size on the root node, and taint the tree.
-pub fn set_root_size<N>(size: Size, n: &mut N) -> Result<()>
-where
-    N: Node,
-{
+pub fn set_root_size(size: Size, n: &mut dyn Node) -> Result<()> {
     let fit = n.fit(size)?;
     let vp = ViewPort::new(fit, fit, Point::default())?;
     n.set_viewport(vp);
@@ -342,11 +347,26 @@ where
     Ok(())
 }
 
+/// Handle a poll event by traversing the complete node tree, and triggering
+/// poll on each ID in the poll set.
+fn poll(ids: Vec<u64>, root: &mut dyn Node) -> Result<Outcome> {
+    preorder(root, &mut |x| -> Result<SkipWalker> {
+        if ids.contains(&x.id()) {
+            if let Some(d) = x.poll() {
+                STATE.with(|global_state| global_state.borrow_mut().poller.schedule(x.id(), d));
+            }
+        };
+        Ok(SkipWalker::new(false))
+    })?;
+    Ok(Outcome::handle())
+}
+
 /// Propagate an event through the tree.
-pub fn event<N>(ctrl: &mut dyn BackendControl, root: &mut N, e: Event) -> Result<Outcome>
-where
-    N: Node,
-{
+pub(crate) fn event(
+    ctrl: &mut dyn BackendControl,
+    root: &mut dyn Node,
+    e: Event,
+) -> Result<Outcome> {
     match e {
         Event::Key(k) => key(ctrl, root, k),
         Event::Mouse(m) => mouse(ctrl, root, m),
@@ -354,6 +374,8 @@ where
             set_root_size(s, root)?;
             Ok(Outcome::handle())
         }
+        Event::Render => Ok(Outcome::handle()),
+        Event::Poll(ids) => poll(ids, root),
     }
 }
 

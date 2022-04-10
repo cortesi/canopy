@@ -24,10 +24,6 @@ manage their own children in turn, until the leaf nodes tile the screen without
 overlap. All interface operations are defined cleanly as traversals of this node
 tree.
 
-Canopy is a libarary for building serious, functional terminal user interfaces.
-It features:
-
-
 
 ## Concepts
 

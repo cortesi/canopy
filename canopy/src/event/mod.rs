@@ -1,6 +1,5 @@
 pub mod key;
 pub mod mouse;
-pub mod tick;
 
 use crate::geom::Size;
 
@@ -8,17 +7,19 @@ use std::sync::mpsc;
 
 /// This enum represents all the event types that drive the application.
 #[derive(Debug, PartialEq)]
-pub enum Event {
+pub(crate) enum Event {
     /// A keystroke
     Key(key::Key),
     /// A mouse action
     Mouse(mouse::Mouse),
     /// Terminal resize
     Resize(Size),
+    Poll(Vec<u64>),
+    Render,
 }
 
 /// An emitter that is polled by the application to retrieve events.
-pub struct EventSource {
+pub(crate) struct EventSource {
     rx: mpsc::Receiver<Event>,
     tx: mpsc::Sender<Event>,
 }
