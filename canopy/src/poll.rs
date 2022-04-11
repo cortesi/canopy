@@ -6,7 +6,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use crate::{event::Event, global::STATE};
+use crate::event::Event;
 
 /// A node that has a pending callback.
 struct PendingNode {
@@ -95,43 +95,47 @@ pub struct Poller {
     /// Handle for the scheduler thread
     handle: Option<thread::JoinHandle<()>>,
     pending: Arc<Mutex<PendingHeap>>,
+    event_tx: mpsc::Sender<Event>,
 }
 
 impl Poller {
-    pub fn new() -> Self {
+    pub(crate) fn new(event_tx: mpsc::Sender<Event>) -> Self {
         Self {
             handle: None,
             pending: Arc::new(Mutex::new(PendingHeap::default())),
+            event_tx,
         }
     }
 
+    /// Schedule a node to be polled. This function requires us to pass in the
+    /// tx channel, which means that a lock over the global state must already
+    /// be in place.
     pub fn schedule(&mut self, node_id: u64, duration: Duration) {
-        self.pending.lock().unwrap().add(node_id, duration);
+        let mut l = self.pending.lock().unwrap();
+        l.add(node_id, duration);
         if let Some(h) = self.handle.as_mut() {
             // The thread is running, let's wake it up.
             h.thread().unpark();
         } else {
-            // If we don't have a running thread yet and we're already
-            // initialized with a tx handle, start it up.
-            if let Some(tx) = STATE.with(|global_state| -> Option<mpsc::Sender<Event>> {
-                global_state.borrow().tx.clone()
-            }) {
-                let pending = self.pending.clone();
-                self.handle = Some(thread::spawn(move || loop {
-                    if let Some(d) = pending.lock().unwrap().current_wait() {
-                        thread::park_timeout(d);
-                    } else {
-                        // We have no current wait time, so we just park the thread.
-                        thread::park();
-                    };
-                    let ids = pending.lock().unwrap().collect();
-                    if !ids.is_empty() {
-                        if tx.send(Event::Poll(ids)).is_err() {
-                            break;
-                        }
+            let pending = self.pending.clone();
+            let tx = self.event_tx.clone();
+            self.handle = Some(thread::spawn(move || loop {
+                // Caution: moving this into the statement below means that we
+                // retain the lock over the thread park, causing deadlock.
+                let d = pending.lock().unwrap().current_wait();
+                if let Some(d) = d {
+                    thread::park_timeout(d);
+                } else {
+                    // We have no current wait time, so we just park the thread.
+                    thread::park();
+                };
+                let ids = pending.lock().unwrap().collect();
+                if !ids.is_empty() {
+                    if tx.send(Event::Poll(ids)).is_err() {
+                        break;
                     }
-                }));
-            }
+                }
+            }));
         }
     }
 }

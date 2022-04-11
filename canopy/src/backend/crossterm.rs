@@ -1,6 +1,7 @@
 use std::io::Write;
 use std::panic;
 use std::process::exit;
+use std::sync::mpsc;
 use std::thread;
 
 use color_backtrace::{default_output_stream, BacktracePrinter};
@@ -283,8 +284,7 @@ fn translate_event(e: cevent::Event) -> Event {
     }
 }
 
-fn event_emitter(e: &EventSource) {
-    let evt_tx = e.tx();
+fn event_emitter(evt_tx: mpsc::Sender<Event>) {
     thread::spawn(move || loop {
         match cevent::read() {
             Ok(evt) => {
@@ -346,11 +346,24 @@ where
         }
     }));
 
-    let events = EventSource::default();
-    event_emitter(&events);
+    let (rx, tx) = global::STATE.with(
+        |global_state| -> (mpsc::Receiver<Event>, mpsc::Sender<Event>) {
+            let mut s = global_state.borrow_mut();
+            let rx = if let Some(x) = s.event_rx.take() {
+                x
+            } else {
+                panic!("core event loop already initialized")
+            };
+            let tx = s.event_tx.clone();
+            (rx, tx)
+        },
+    );
+
+    let events = EventSource::new(rx);
+    event_emitter(tx.clone());
     let size = translate_result(terminal::size())?;
     canopy::set_root_size(Size::new(size.0, size.1), root)?;
-    global::start_poller(events.tx());
+    global::start_poller(tx);
 
     loop {
         let mut ignore = false;

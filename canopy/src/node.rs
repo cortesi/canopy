@@ -105,7 +105,7 @@ pub trait Node: StatefulNode {
     /// function returns a duration, a subsequent call is scheduled. If the
     /// function returns None, the `poll` function is not called again. The
     /// default implementation returns `None`.
-    fn poll(&self) -> Option<Duration> {
+    fn poll(&mut self) -> Option<Duration> {
         None
     }
 

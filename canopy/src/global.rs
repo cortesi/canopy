@@ -17,21 +17,31 @@ pub(crate) struct GlobalState {
     /// The poller is responsible for tracking nodes that have pending poll
     /// events, and scheduling their execution.
     pub poller: Poller,
-    pub tx: Option<mpsc::Sender<Event>>,
+
+    pub event_tx: mpsc::Sender<Event>,
+    pub event_rx: Option<mpsc::Receiver<Event>>,
+}
+
+impl GlobalState {
+    fn new() -> Self {
+        let (tx, rx) = mpsc::channel();
+        GlobalState {
+            focus_gen: 1,
+            last_focus_gen: 1,
+            render_gen: 1,
+            poller: Poller::new(tx.clone()),
+            event_tx: tx,
+            event_rx: Some(rx),
+        }
+    }
 }
 
 thread_local! {
-    pub (crate) static STATE: RefCell<GlobalState> = RefCell::new(GlobalState {
-        focus_gen: 1,
-        last_focus_gen: 1,
-        render_gen: 1,
-        poller: Poller::new(),
-        tx: None,
-    });
+    pub (crate) static STATE: RefCell<GlobalState> = RefCell::new(GlobalState::new());
 }
 
 pub(crate) fn start_poller(tx: mpsc::Sender<Event>) {
     STATE.with(|global_state| {
-        global_state.borrow_mut().tx = Some(tx);
+        global_state.borrow_mut().event_tx = tx;
     });
 }

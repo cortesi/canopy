@@ -21,23 +21,15 @@ pub(crate) enum Event {
 /// An emitter that is polled by the application to retrieve events.
 pub(crate) struct EventSource {
     rx: mpsc::Receiver<Event>,
-    tx: mpsc::Sender<Event>,
 }
 
-impl Default for EventSource {
-    fn default() -> Self {
-        let (tx, rx) = mpsc::channel();
-        EventSource { rx, tx }
+impl EventSource {
+    pub fn new(rx: mpsc::Receiver<Event>) -> Self {
+        EventSource { rx }
     }
 }
 
 impl EventSource {
-    /// Get a channel to pump events into the app. In practice, this will
-    /// usually be user-defined Event::Action events.
-    pub fn tx(&self) -> mpsc::Sender<Event> {
-        self.tx.clone()
-    }
-
     /// Retrieve the next event, blocking until an event is recieved or the
     /// underlying channel closes..
     pub fn next(&self) -> Result<Event, mpsc::RecvError> {
