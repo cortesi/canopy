@@ -17,6 +17,8 @@ pub(crate) struct GlobalState {
     /// The poller is responsible for tracking nodes that have pending poll
     /// events, and scheduling their execution.
     pub poller: Poller,
+    /// Has the tree been tainted? This reset to false before every event sweep.
+    pub taint: bool,
 
     pub event_tx: mpsc::Sender<Event>,
     pub event_rx: Option<mpsc::Receiver<Event>>,
@@ -29,6 +31,7 @@ impl GlobalState {
             focus_gen: 1,
             last_focus_gen: 1,
             render_gen: 1,
+            taint: false,
             poller: Poller::new(tx.clone()),
             event_tx: tx,
             event_rx: Some(rx),

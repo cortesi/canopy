@@ -207,7 +207,11 @@ pub trait Node: StatefulNode {
     /// Mark a this node for render.
     fn taint(&mut self) {
         let r = self.state_mut();
-        r.render_gen = STATE.with(|global_state| -> u64 { global_state.borrow().render_gen });
+        r.render_gen = STATE.with(|global_state| -> u64 {
+            let mut s = global_state.borrow_mut();
+            s.taint = true;
+            s.render_gen
+        });
     }
 
     /// Mark that this node should skip the next render sweep.

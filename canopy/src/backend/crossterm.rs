@@ -16,7 +16,7 @@ use crate::{
     global,
     render::RenderBackend,
     style::{Color, Style, StyleManager},
-    Node, Outcome, Render, Result,
+    Node, Render, Result,
 };
 use crossterm::{
     self, cursor as ccursor, event as cevent, style, terminal, ExecutableCommand, QueueableCommand,
@@ -366,22 +366,21 @@ where
     global::start_poller(tx);
 
     loop {
-        let mut ignore = false;
+        let mut tainted = true;
         loop {
-            if !ignore {
+            if tainted {
                 canopy::pre_render(&mut render, root)?;
                 canopy::render(&mut render, root)?;
                 canopy::post_render(&mut render, root)?;
                 render.flush()?;
             }
-            match canopy::event(&mut ctrl, root, events.next()?)? {
-                Outcome::Ignore { .. } => {
-                    ignore = true;
-                }
-                Outcome::Handle { .. } => {
-                    ignore = false;
-                }
-            }
+            canopy::event(&mut ctrl, root, events.next()?)?;
+            tainted = global::STATE.with(|global_state| -> bool {
+                let mut s = global_state.borrow_mut();
+                tainted = s.taint;
+                s.taint = false;
+                tainted
+            });
         }
     }
 }
