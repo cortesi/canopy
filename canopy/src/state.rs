@@ -1,4 +1,4 @@
-use crate::ViewPort;
+use crate::{global::STATE, ViewPort};
 use std::sync::atomic::AtomicU64;
 
 pub use canopy_derive::StatefulNode;
@@ -100,5 +100,67 @@ pub trait StatefulNode {
     /// called for the first time to schedule future polls.
     fn is_initialized(&self) -> bool {
         self.state().initialized
+    }
+
+    /// Focus this node.
+    fn set_focus(&mut self) {
+        STATE.with(|global_state| {
+            global_state.borrow_mut().focus_gen += 1;
+            self.state_mut().focus_gen = global_state.borrow().focus_gen;
+        });
+    }
+
+    /// Is this node render tainted?
+    fn is_tainted(&self) -> bool {
+        STATE.with(|global_state| {
+            let s = self.state();
+            if global_state.borrow().render_gen == s.render_skip_gen {
+                false
+            } else {
+                // Tainting if render_gen is 0 lets us initialize a nodestate
+                // without knowing about the app state
+                global_state.borrow().render_gen == s.render_gen || s.render_gen == 0
+            }
+        })
+    }
+
+    /// Does the node have terminal focus?
+    fn is_focused(&self) -> bool {
+        STATE.with(|global_state| -> bool {
+            let s = self.state();
+            global_state.borrow_mut().focus_gen == s.focus_gen
+        })
+    }
+
+    /// Mark a this node for render.
+    fn taint(&mut self) {
+        let r = self.state_mut();
+        r.render_gen = STATE.with(|global_state| -> u64 {
+            let mut s = global_state.borrow_mut();
+            s.taint = true;
+            s.render_gen
+        });
+    }
+
+    /// Mark that this node should skip the next render sweep.
+    fn skip_taint(&mut self) {
+        let r = self.state_mut();
+        r.render_skip_gen = STATE.with(|global_state| -> u64 { global_state.borrow().render_gen });
+    }
+
+    /// Has the focus status of this node changed since the last render
+    /// sweep?
+    fn focus_changed(&self) -> bool {
+        STATE.with(|global_state| -> bool {
+            let s = self.state();
+            if self.is_focused() {
+                if s.focus_gen != s.rendered_focus_gen {
+                    return true;
+                }
+            } else if s.rendered_focus_gen == global_state.borrow().last_focus_gen {
+                return true;
+            }
+            false
+        })
     }
 }

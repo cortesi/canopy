@@ -1,11 +1,15 @@
 
 # TODO
 
-- Since we're now keeping global state in a threadlocal, we can simplify our
-  return type - we can signal handling by tweaking a global rather than
-  returning a Handled value.
-- Node polling
-  - Add a redraw function to nodes to signal redraw
+- Better debugging and monitoring story
+  - Inspector GUI
+    - Logs
+    - Active nodes tree
+      - Define name() for all built-in node types
+    - Shrink/specify app area
+    - Screenshots of app area
+  - Add node names for relevant errors
+  - Benchmarking and integration tests
 - ControlBackend
   - Improve ergonomics - adding a function that returns a handle which re-enters rendering?
 - Renderer
@@ -23,15 +27,6 @@
   - markdown
 - use half-blocks to improve smoothness of scrollbars
 - serialization/deserialization for color scheme
-- Better debugging and monitoring story
-  - Inspector GUI
-    - Logs
-    - Active nodes tree
-      - Define name() for all built-in node types
-    - Shrink/specify app area
-    - Screenshots of app area
-  - Add node names for relevant errors
-  - Benchmarking and integration tests
 - Testing
   - Improve the test render backend
     - At the moment, its only client is the internal code, so it only implements

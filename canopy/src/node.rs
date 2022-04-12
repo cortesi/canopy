@@ -6,7 +6,6 @@ use crate::{
     cursor,
     event::{key, mouse},
     geom::{Frame, Rect, Size},
-    global::STATE,
     BackendControl, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 
@@ -100,10 +99,10 @@ pub trait Node: StatefulNode {
         Ok(target)
     }
 
-    /// A scheduled poll endpoint. This function is called for every node the
+    /// The scheduled poll endpoint. This function is called for every node the
     /// first time it is seen during the pre-render sweep. Each time the
     /// function returns a duration, a subsequent call is scheduled. If the
-    /// function returns None, the `poll` function is not called again. The
+    /// function returns None, the `poll` function is never called again. The
     /// default implementation returns `None`.
     fn poll(&mut self) -> Option<Duration> {
         None
@@ -124,10 +123,10 @@ pub trait Node: StatefulNode {
     }
 
     /// Adjust this node so that the parent wraps it completely. This fits the
-    /// node to the parent viewport, then adjusts the node's view to place as
-    /// much of of it on screen as possible. Usually, this method would be used
-    /// by a node that also passes the child's fit back through it's own `fit`
-    /// method.
+    /// node to the parent's virtual node size, then adjusts the node's view to
+    /// place as much of it within the paren'ts screen rectangle as possible.
+    /// Usually, this method would be used by a node that also passes the
+    /// child's fit back through it's own `fit` method.
     fn wrap(&mut self, parent_vp: ViewPort) -> Result<()> {
         let fit = self.fit(parent_vp.size())?;
         self.set_viewport(self.vp().update(fit, parent_vp.screen_rect()));
@@ -156,68 +155,6 @@ pub trait Node: StatefulNode {
         let fit = self.fit(screen.size())?;
         self.update_viewport(&|vp| vp.update(fit, screen));
         Ok(())
-    }
-
-    /// Focus this node.
-    fn set_focus(&mut self) {
-        STATE.with(|global_state| {
-            global_state.borrow_mut().focus_gen += 1;
-            self.state_mut().focus_gen = global_state.borrow().focus_gen;
-        });
-    }
-
-    /// Is this node render tainted?
-    fn is_tainted(&self) -> bool {
-        STATE.with(|global_state| {
-            let s = self.state();
-            if global_state.borrow().render_gen == s.render_skip_gen {
-                false
-            } else {
-                // Tainting if render_gen is 0 lets us initialize a nodestate
-                // without knowing about the app state
-                global_state.borrow().render_gen == s.render_gen || s.render_gen == 0
-            }
-        })
-    }
-
-    /// Has the focus status of this node changed since the last render
-    /// sweep?
-    fn focus_changed(&self) -> bool {
-        STATE.with(|global_state| -> bool {
-            let s = self.state();
-            if self.is_focused() {
-                if s.focus_gen != s.rendered_focus_gen {
-                    return true;
-                }
-            } else if s.rendered_focus_gen == global_state.borrow().last_focus_gen {
-                return true;
-            }
-            false
-        })
-    }
-
-    /// Does the node have terminal focus?
-    fn is_focused(&self) -> bool {
-        STATE.with(|global_state| -> bool {
-            let s = self.state();
-            global_state.borrow_mut().focus_gen == s.focus_gen
-        })
-    }
-
-    /// Mark a this node for render.
-    fn taint(&mut self) {
-        let r = self.state_mut();
-        r.render_gen = STATE.with(|global_state| -> u64 {
-            let mut s = global_state.borrow_mut();
-            s.taint = true;
-            s.render_gen
-        });
-    }
-
-    /// Mark that this node should skip the next render sweep.
-    fn skip_taint(&mut self) {
-        let r = self.state_mut();
-        r.render_skip_gen = STATE.with(|global_state| -> u64 { global_state.borrow().render_gen });
     }
 }
 

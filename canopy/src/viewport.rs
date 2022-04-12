@@ -88,17 +88,19 @@ impl ViewPort {
         self.scroll_by(1, 0)
     }
 
-    /// Return the screen region.
+    /// The screen region the node is being projected onto.
     pub fn screen_rect(&self) -> Rect {
         self.view.at(self.screen)
     }
 
-    /// Return the view area.
+    /// The sub-rectangle of the total virtual node that is being displayed on
+    /// screen. This is equal in size to `screen_rect`, but with origin
+    /// co-ordinates relative to the node's virtual size..
     pub fn view_rect(&self) -> Rect {
         self.view
     }
 
-    /// Return the enclosing area.
+    /// The total virtual size of the node.
     pub fn size(&self) -> Size {
         self.size
     }
