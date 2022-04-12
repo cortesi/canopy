@@ -1,29 +1,9 @@
+use super::logs::Logs;
 use crate as canopy;
 use crate::{
     event::key, widgets::tabs, BackendControl, Node, NodeState, Outcome, Render, Result,
     StatefulNode, ViewPort,
 };
-
-#[derive(StatefulNode)]
-
-pub struct Logs {
-    state: NodeState,
-}
-
-impl Node for Logs {
-    fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
-        r.fill("", vp.view_rect(), ' ')?;
-        Ok(())
-    }
-}
-
-impl Logs {
-    pub fn new() -> Self {
-        Logs {
-            state: NodeState::default(),
-        }
-    }
-}
 
 /// View contains the body of the inspector.
 #[derive(StatefulNode)]

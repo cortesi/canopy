@@ -1,3 +1,4 @@
+mod logs;
 mod statusbar;
 mod view;
 
@@ -78,6 +79,20 @@ where
             activate,
         }
     }
+
+    pub fn hide(&mut self) -> Result<Outcome> {
+        self.active = false;
+        canopy::taint_tree(self)?;
+        canopy::focus_first(&mut self.root)?;
+        Ok(Outcome::handle())
+    }
+
+    pub fn show(&mut self) -> Result<Outcome> {
+        self.active = true;
+        canopy::taint_tree(self)?;
+        canopy::focus_first(self)?;
+        Ok(Outcome::handle())
+    }
 }
 
 impl<N> Node for Inspector<N>
@@ -90,11 +105,12 @@ where
                 c if c == 'a' => {
                     canopy::focus_first(&mut self.root)?;
                 }
+                c if c == 'q' => {
+                    self.hide()?;
+                }
                 c if c == self.activate => {
                     if canopy::on_focus_path(&self.content) {
-                        self.active = false;
-                        canopy::taint_tree(self)?;
-                        canopy::focus_first(&mut self.root)?;
+                        self.hide()?;
                     } else {
                         canopy::focus_first(self)?;
                     }
@@ -102,9 +118,7 @@ where
                 _ => return Ok(Outcome::ignore()),
             };
         } else if k == self.activate {
-            self.active = true;
-            canopy::taint_tree(self)?;
-            canopy::focus_first(self)?;
+            self.show()?;
         };
         Ok(Outcome::handle())
     }

@@ -10,6 +10,7 @@
     - Screenshots of app area
   - Add node names for relevant errors
   - Benchmarking and integration tests
+- Further simplify Node trait by shifting wrap and friends into module namespace
 - ControlBackend
   - Improve ergonomics - adding a function that returns a handle which re-enters rendering?
 - Renderer
