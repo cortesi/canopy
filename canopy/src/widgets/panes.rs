@@ -114,8 +114,6 @@ impl<N: Node> Node for Panes<N> {
                 row.place(l[ci][ri])?;
             }
         }
-        // FIXME - this should probably clear the area if the last node is
-        // deleted.
         Ok(())
     }
 }

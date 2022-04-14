@@ -45,9 +45,6 @@ where
 
     items: Vec<Item<N>>,
     pub selected: usize,
-
-    // Set of rectangles to clear during the next render.
-    clear: Vec<Rect>,
 }
 
 impl<N> List<N>
@@ -59,7 +56,6 @@ where
             items: items.into_iter().map(Item::new).collect(),
             selected: 0,
             state: NodeState::default(),
-            clear: vec![],
         };
         if !l.is_empty() {
             l.select(0);
@@ -298,62 +294,15 @@ where
         Ok(Expanse { w, h })
     }
 
-    fn render(&mut self, rndr: &mut Render, myvp: ViewPort) -> Result<()> {
-        self.clear = vec![];
+    fn render(&mut self, _: &mut Render, myvp: ViewPort) -> Result<()> {
         for itm in &mut self.items {
             if let Some(vp) = myvp.map(itm.virt)? {
                 itm.itm.set_viewport(vp);
                 canopy::taint_tree(&mut itm.itm)?;
                 itm.itm.unhide();
-
-                // At this point, the item's screen rect has been calculated to
-                // be the same size as its view, which may be smaller than our
-                // own view. We need to clear anything to the left or to the
-                // right of the screen rect in our own view.
-
-                // First, we calculate the area of our view the child will draw
-                // on. We know we can unwrap here, because the views intersect
-                // by definition.
-                let drawn = myvp.view_rect().intersect(&itm.virt).unwrap();
-
-                // Now, if there is space to the left, we clear it. In practice,
-                // given map's node positioning, there will never be space to
-                // the left, but the reasons are slightly subtle. Ditch this
-                // code, or keep it, in case behaviour changes?
-                let left = Rect::new(
-                    myvp.view_rect().tl.x,
-                    drawn.tl.y,
-                    drawn.tl.x - myvp.view_rect().tl.x,
-                    drawn.h,
-                );
-                if !left.is_zero() {
-                    self.clear.push(left);
-                }
-
-                // Now, if there is space to the right, we clear it.
-                let right = Rect::new(
-                    drawn.tl.x + drawn.w,
-                    drawn.tl.y,
-                    myvp.view_rect().w - drawn.w - left.w,
-                    drawn.h,
-                );
-                if !right.is_zero() {
-                    self.clear.push(right);
-                }
-            } else if let Some(isect) = myvp.view_rect().vextent().intersection(&itm.virt.vextent())
-            {
-                // There was no intersection of the rects, but the vertical
-                // extent of the item overlaps with our view. This means that
-                // item is not on screen because it's off to the left of our
-                // view, but we still need to clear its full row.
-                self.clear.push(myvp.view_rect().vslice(&isect)?);
-                itm.itm.hide();
             } else {
                 itm.itm.hide();
             }
-        }
-        for r in self.clear.iter() {
-            rndr.fill("", *r, ' ')?;
         }
         Ok(())
     }
