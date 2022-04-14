@@ -3,8 +3,8 @@ use duplicate::duplicate_item;
 use canopy::{
     backend::crossterm::runloop,
     event::{key, mouse},
+    geom::Expanse,
     geom::Frame,
-    geom::Size,
     inspector::Inspector,
     style::solarized,
     BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
@@ -94,7 +94,7 @@ impl Block {
             Outcome::handle()
         })
     }
-    fn size_limited(&self, a: Size) -> bool {
+    fn size_limited(&self, a: Expanse) -> bool {
         (self.horizontal && a.w <= 4) || (!self.horizontal && a.h <= 4)
     }
     fn split(&mut self) -> Result<Outcome> {

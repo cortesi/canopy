@@ -1,6 +1,6 @@
 use crate as canopy;
 use crate::{
-    geom::{Line, Size},
+    geom::{Expanse, Line},
     state::{NodeState, StatefulNode},
     Node, Render, Result, ViewPort,
 };
@@ -13,7 +13,7 @@ pub struct Text {
     pub raw: String,
     lines: Option<Vec<String>>,
     fixed_width: Option<u16>,
-    current_size: Size,
+    current_size: Expanse,
 }
 
 impl Text {
@@ -24,7 +24,7 @@ impl Text {
             raw: raw.to_owned(),
             lines: None,
             fixed_width: None,
-            current_size: Size::default(),
+            current_size: Expanse::default(),
         }
     }
     /// Add a fixed width, ignoring fit parameters
@@ -35,7 +35,7 @@ impl Text {
 }
 
 impl Node for Text {
-    fn fit(&mut self, s: Size) -> Result<Size> {
+    fn fit(&mut self, s: Expanse) -> Result<Expanse> {
         let w = if let Some(w) = self.fixed_width {
             w
         } else {
@@ -47,7 +47,7 @@ impl Node for Text {
             for i in textwrap::wrap(&self.raw, w as usize) {
                 split.push(format!("{:width$}", i, width = w as usize))
             }
-            self.current_size = Size {
+            self.current_size = Expanse {
                 w,
                 h: split.len() as u16,
             };
@@ -78,7 +78,7 @@ mod tests {
     fn text_sizing() -> Result<()> {
         let txt = "aaa bbb ccc\nddd eee fff\nggg hhh iii";
         let mut t: Text = Text::new(txt);
-        t.fit(Size::new(7, 10))?;
+        t.fit(Expanse::new(7, 10))?;
         let expected: Vec<String> = vec![
             "aaa bbb".into(),
             "ccc    ".into(),

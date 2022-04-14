@@ -12,7 +12,7 @@ use crate::{
     control::BackendControl,
     cursor, error,
     event::{key, mouse, Event, EventSource},
-    geom::{Point, Size},
+    geom::{Expanse, Point},
     global,
     render::RenderBackend,
     style::{Color, Style, StyleManager},
@@ -280,7 +280,7 @@ fn translate_event(e: cevent::Event) -> Event {
                 modifiers: Some(translate_key_modifiers(m.modifiers)),
             })
         }
-        cevent::Event::Resize(x, y) => Event::Resize(Size::new(x, y)),
+        cevent::Event::Resize(x, y) => Event::Resize(Expanse::new(x, y)),
     }
 }
 
@@ -362,7 +362,7 @@ where
     let events = EventSource::new(rx);
     event_emitter(tx.clone());
     let size = translate_result(terminal::size())?;
-    canopy::set_root_size(Size::new(size.0, size.1), root)?;
+    canopy::set_root_size(Expanse::new(size.0, size.1), root)?;
     global::start_poller(tx);
 
     loop {

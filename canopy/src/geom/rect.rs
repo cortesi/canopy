@@ -1,4 +1,4 @@
-use super::{Direction, Line, LineSegment, Point, Size};
+use super::{Direction, Expanse, Line, LineSegment, Point};
 use crate::{Error, Result};
 
 /// A rectangle
@@ -27,6 +27,12 @@ impl Rect {
         }
     }
 
+    /// The width times the height of the rectangle
+    pub fn area(&self) -> u32 {
+        self.w as u32 * self.h as u32
+    }
+
+    /// Creat a zero-sized `Rect` at the origin.
     pub fn zero() -> Rect {
         Rect::new(0, 0, 0, 0)
     }
@@ -161,8 +167,8 @@ impl Rect {
 
     /// Calculate the intersection of this rectangle and another.
     pub fn intersect(&self, other: &Rect) -> Option<Self> {
-        let h = self.hextent().intersect(&other.hextent())?;
-        let v = self.vextent().intersect(&other.vextent())?;
+        let h = self.hextent().intersection(&other.hextent())?;
+        let v = self.vextent().intersection(&other.vextent())?;
         Some(Rect::new(h.off, v.off, h.len, v.len))
     }
 
@@ -359,11 +365,14 @@ impl Rect {
         }
     }
 
+    /// Does this rect have a zero size?
     pub fn is_zero(&self) -> bool {
-        self.w == 0 || self.h == 0
+        self.area() == 0
     }
 
-    pub fn size(&self) -> Size {
+    /// Return the `Expanse` of this rectangle, which has the same size as the
+    /// `Rect` but no location.
+    pub fn expanse(&self) -> Expanse {
         (*self).into()
     }
 
@@ -415,8 +424,8 @@ impl Rect {
     }
 }
 
-impl From<Size> for Rect {
-    fn from(s: Size) -> Rect {
+impl From<Expanse> for Rect {
+    fn from(s: Expanse) -> Rect {
         Rect {
             tl: Point::default(),
             w: s.w,

@@ -5,7 +5,7 @@ use duplicate::duplicate_item;
 use canopy::{
     backend::crossterm::runloop,
     event::{key, mouse},
-    geom::Size,
+    geom::Expanse,
     inspector::Inspector,
     style::solarized,
     widgets::{frame, list::*, Text},
@@ -48,7 +48,7 @@ impl Node for IntervalItem {
         Some(Duration::from_secs(1))
     }
 
-    fn fit(&mut self, target: Size) -> Result<Size> {
+    fn fit(&mut self, target: Expanse) -> Result<Expanse> {
         self.child.fit(target)
     }
 

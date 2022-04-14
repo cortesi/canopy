@@ -34,6 +34,7 @@
       logging of text. We should make it more complete for general use.
   - Integration tests
   - Benchmarks
+  - Fuzzing
 - Termion backend
   - Extract a common set of backend conversion traits
 
@@ -43,7 +44,6 @@
   - Errors don't carry location information, so are often not useful for debugging
   - Not implementing render if a node has children
   - Not remembering both layout and taint after making a node modification
-  - Not remembering to clear unused space
   - Not remembering to implement children and children_mut
 
 # Bugs

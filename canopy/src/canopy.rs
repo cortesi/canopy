@@ -4,7 +4,7 @@ use crate::geom::{Direction, Rect};
 use crate::{
     control::BackendControl,
     event::{key, mouse, Event},
-    geom::{Point, Size},
+    geom::{Coverage, Expanse, Point},
     global::STATE,
     node::{postorder, postorder_mut, preorder, Node, Walker},
     Outcome, Render, Result, ViewPort,
@@ -265,6 +265,27 @@ fn render_traversal(r: &mut Render, e: &mut dyn Node) -> Result<()> {
             }
             r.viewport = e.state().viewport;
             e.render(r, e.state().viewport)?;
+
+            // Now clear any regions not covered by the node's children.
+            let escreen = e.vp().screen_rect();
+            let mut c = Coverage::new(escreen.expanse());
+            e.children(&mut |n| {
+                if !n.is_hidden() {
+                    c.add(escreen.rebase_rect(&n.vp().screen_rect())?);
+                }
+                Ok(())
+            })?;
+
+            // We now have coverage, relative to this node's screen rectange. We
+            // rebase each rect back down to our virtual co-ordinates.
+            let sr = e.vp().view_rect();
+            if c.uncovered().len() > 2 {
+                panic!("\n\n{:?}\n{:?}\n{:?}", e.vp(), sr, c.uncovered());
+            }
+
+            for l in c.uncovered() {
+                r.fill("", l.rect().shift(sr.tl.x as i16, sr.tl.y as i16), ' ')?;
+            }
         }
         // This is a new node - we don't want it perpetually stuck in
         // render, so we need to update its render_gen.
@@ -339,7 +360,7 @@ pub fn key(ctrl: &mut dyn BackendControl, root: &mut dyn Node, k: key::Key) -> R
 }
 
 /// Set the size on the root node, and taint the tree.
-pub fn set_root_size(size: Size, n: &mut dyn Node) -> Result<()> {
+pub fn set_root_size(size: Expanse, n: &mut dyn Node) -> Result<()> {
     let fit = n.fit(size)?;
     let vp = ViewPort::new(fit, fit, Point::default())?;
     n.set_viewport(vp);
@@ -478,7 +499,7 @@ mod tests {
         let (buf, mut tr) = TestRender::create();
         let (r, mut c) = tcanopy(&mut tr);
         let mut root = TRoot::new();
-        set_root_size(Size::new(100, 100), &mut root)?;
+        set_root_size(Expanse::new(100, 100), &mut root)?;
         reset_state();
         func(buf, r, &mut c, root)
     }
@@ -766,7 +787,7 @@ mod tests {
                 Rect::new(size / 2, 0, size / 2, size)
             );
 
-            set_root_size(Size::new(50, 50), &mut root)?;
+            set_root_size(Expanse::new(50, 50), &mut root)?;
             render(&mut r, &mut root)?;
             assert_eq!(root.b.vp().screen_rect(), Rect::new(25, 0, 25, 50));
             Ok(())

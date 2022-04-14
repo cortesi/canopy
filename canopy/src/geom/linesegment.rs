@@ -15,6 +15,16 @@ impl LineSegment {
         self.off + self.len
     }
 
+    /// Return a line segment that encloses this line segment and another. If
+    /// the lines overlap or abut, this is equivalent to joining the segments.
+    pub fn enclose(&self, other: &LineSegment) -> LineSegment {
+        let off = self.off.min(other.off);
+        LineSegment {
+            off,
+            len: self.far().max(other.far()) - off,
+        }
+    }
+
     /// Carve off a fixed-size portion from the start of this LineSegment,
     /// returning a (head, tail) tuple. If the segment is too short to carve out
     /// the width specified, the length of the head will be zero.
@@ -68,14 +78,23 @@ impl LineSegment {
         }
     }
 
-    /// Does other lie within this extent.
+    /// Are these two line segments adjacent but non-overlapping?
+    pub fn abuts(&self, other: &LineSegment) -> bool {
+        self.far() == other.off || other.far() == self.off
+    }
+
+    /// Does other lie completely within this extent.
     pub fn contains(&self, other: &LineSegment) -> bool {
         self.off <= other.off && self.far() >= other.far()
     }
 
+    pub fn intersects(&self, other: &LineSegment) -> bool {
+        self.intersection(other).is_some()
+    }
+
     /// Return the intersection between this line segment and other. The line
     /// segment returned will always have a non-zero length.
-    pub fn intersect(&self, other: &LineSegment) -> Option<LineSegment> {
+    pub fn intersection(&self, other: &LineSegment) -> Option<LineSegment> {
         if self.len == 0 || other.len == 0 {
             None
         } else if self.contains(other) {
@@ -196,23 +215,23 @@ mod tests {
         let l = LineSegment { off: 5, len: 5 };
 
         assert_eq!(
-            l.intersect(&LineSegment { off: 6, len: 2 }),
+            l.intersection(&LineSegment { off: 6, len: 2 }),
             Some(LineSegment { off: 6, len: 2 })
         );
-        assert_eq!(l.intersect(&LineSegment { off: 1, len: 10 }), Some(l));
+        assert_eq!(l.intersection(&LineSegment { off: 1, len: 10 }), Some(l));
         assert_eq!(
-            l.intersect(&LineSegment { off: 6, len: 8 }),
+            l.intersection(&LineSegment { off: 6, len: 8 }),
             Some(LineSegment { off: 6, len: 4 })
         );
         assert_eq!(
-            l.intersect(&LineSegment { off: 0, len: 8 }),
+            l.intersection(&LineSegment { off: 0, len: 8 }),
             Some(LineSegment { off: 5, len: 3 })
         );
-        assert_eq!(l.intersect(&l), Some(l));
-        assert_eq!(l.intersect(&LineSegment { off: 0, len: 2 }), None);
-        assert_eq!(l.intersect(&LineSegment { off: 10, len: 2 }), None);
-        assert_eq!(l.intersect(&LineSegment { off: 5, len: 0 }), None);
-        assert_eq!(l.intersect(&LineSegment { off: 0, len: 5 }), None);
+        assert_eq!(l.intersection(&l), Some(l));
+        assert_eq!(l.intersection(&LineSegment { off: 0, len: 2 }), None);
+        assert_eq!(l.intersection(&LineSegment { off: 10, len: 2 }), None);
+        assert_eq!(l.intersection(&LineSegment { off: 5, len: 0 }), None);
+        assert_eq!(l.intersection(&LineSegment { off: 0, len: 5 }), None);
         Ok(())
     }
 
@@ -224,6 +243,46 @@ mod tests {
         assert!(!v.contains(&LineSegment { off: 2, len: 3 }));
         assert!(!v.contains(&LineSegment { off: 0, len: 2 }));
 
+        Ok(())
+    }
+
+    #[test]
+    fn abuts() -> Result<()> {
+        let v = LineSegment { off: 1, len: 3 };
+        assert!(!v.abuts(&LineSegment { off: 1, len: 3 }));
+        assert!(v.abuts(&LineSegment { off: 0, len: 1 }));
+        assert!(v.abuts(&LineSegment { off: 4, len: 4 }));
+        assert!(!v.abuts(&LineSegment { off: 3, len: 4 }));
+        Ok(())
+    }
+
+    fn check_enclosure(a: LineSegment, b: LineSegment, enclosure: LineSegment) {
+        assert_eq!(a.enclose(&b), enclosure);
+        assert_eq!(b.enclose(&a), enclosure);
+    }
+
+    #[test]
+    fn enclose() -> Result<()> {
+        check_enclosure(
+            LineSegment { off: 1, len: 3 },
+            LineSegment { off: 1, len: 3 },
+            LineSegment { off: 1, len: 3 },
+        );
+        check_enclosure(
+            LineSegment { off: 1, len: 3 },
+            LineSegment { off: 0, len: 3 },
+            LineSegment { off: 0, len: 4 },
+        );
+        check_enclosure(
+            LineSegment { off: 1, len: 3 },
+            LineSegment { off: 4, len: 3 },
+            LineSegment { off: 1, len: 6 },
+        );
+        check_enclosure(
+            LineSegment { off: 1, len: 3 },
+            LineSegment { off: 5, len: 3 },
+            LineSegment { off: 1, len: 7 },
+        );
         Ok(())
     }
 

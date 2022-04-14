@@ -2,7 +2,7 @@ use crate as canopy;
 use crate::{
     cursor,
     event::key,
-    geom::{LineSegment, Point, Size},
+    geom::{Expanse, LineSegment, Point},
     state::{NodeState, StatefulNode},
     BackendControl, Node, Outcome, Render, Result, ViewPort,
 };
@@ -159,13 +159,13 @@ impl<'a> Node for InputLine {
         Ok(Outcome::handle())
     }
 
-    fn fit(&mut self, sz: Size) -> Result<Size> {
+    fn fit(&mut self, sz: Expanse) -> Result<Expanse> {
         self.textbuf.set_display_width(sz.w as usize);
         let tbl = self.textbuf.value.len() as u16;
         if self.textbuf.window.len >= tbl {
             Ok(sz)
         } else {
-            Ok(Size::new(tbl as u16, 1))
+            Ok(Expanse::new(tbl as u16, 1))
         }
     }
 }

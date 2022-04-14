@@ -4,7 +4,7 @@ use rand::Rng;
 use canopy::{
     backend::crossterm::runloop,
     event::{key, mouse},
-    geom::{Rect, Size},
+    geom::{Expanse, Rect},
     inspector::Inspector,
     style::solarized,
     widgets::{frame, list::*, Text},
@@ -42,8 +42,8 @@ impl ListItem for Block {
 }
 
 impl Node for Block {
-    fn fit(&mut self, target: Size) -> Result<Size> {
-        self.child.fit(Size {
+    fn fit(&mut self, target: Expanse) -> Result<Expanse> {
+        self.child.fit(Expanse {
             w: target.w - 2,
             h: target.h,
         })

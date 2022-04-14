@@ -7,7 +7,7 @@ pub mod utils {
     use crate::{
         backend::test::{TestControl, TestRender},
         event::{key, mouse},
-        geom::Size,
+        geom::Expanse,
         style::StyleManager,
         widgets::list::ListItem,
         Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
@@ -286,8 +286,8 @@ pub mod utils {
     }
 
     impl Node for TFixed {
-        fn fit(&mut self, _target: Size) -> Result<Size> {
-            Ok(Size {
+        fn fit(&mut self, _target: Expanse) -> Result<Expanse> {
+            Ok(Expanse {
                 w: self.w,
                 h: self.h,
             })

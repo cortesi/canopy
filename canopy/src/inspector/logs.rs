@@ -1,7 +1,7 @@
 use crate as canopy;
 use crate::{
     event::key,
-    geom::{Rect, Size},
+    geom::{Expanse, Rect},
     widgets::{list::*, Text},
     Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
 };
@@ -31,8 +31,8 @@ impl ListItem for LogItem {
 }
 
 impl Node for LogItem {
-    fn fit(&mut self, target: Size) -> Result<Size> {
-        self.child.fit(Size {
+    fn fit(&mut self, target: Expanse) -> Result<Expanse> {
+        self.child.fit(Expanse {
             w: target.w - 2,
             h: target.h,
         })

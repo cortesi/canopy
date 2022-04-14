@@ -1,7 +1,7 @@
 use crate as canopy;
 use crate::{
     error::Result,
-    geom::{Rect, Size},
+    geom::{Expanse, Rect},
     node::Node,
     state::{NodeState, StatefulNode},
     Outcome, Render, ViewPort,
@@ -209,7 +209,7 @@ where
     fn fix_view(&mut self) {
         let virt = self.items[self.selected].virt;
         let view = self.vp().view_rect();
-        if let Some(v) = virt.vextent().intersect(&view.vextent()) {
+        if let Some(v) = virt.vextent().intersection(&view.vextent()) {
             if v.len == virt.h {
                 return;
             }
@@ -235,7 +235,7 @@ where
         let view = self.vp().view_rect();
         let mut ret = vec![];
         for (idx, itm) in self.items.iter().enumerate() {
-            if view.vextent().intersect(&itm.virt.vextent()).is_some() {
+            if view.vextent().intersection(&itm.virt.vextent()).is_some() {
                 ret.push(idx);
             }
         }
@@ -253,7 +253,7 @@ where
     }
 
     /// Calculate and return the outer viewport rectangles of all items.
-    fn refresh_views(&mut self, r: Size) -> Result<()> {
+    fn refresh_views(&mut self, r: Expanse) -> Result<()> {
         let mut voffset: u16 = 0;
         for itm in &mut self.items {
             let item_view = itm.itm.fit(r)?.rect();
@@ -287,7 +287,7 @@ where
         Ok(())
     }
 
-    fn fit(&mut self, r: Size) -> Result<Size> {
+    fn fit(&mut self, r: Expanse) -> Result<Expanse> {
         let mut w = 0;
         let mut h = 0;
         self.refresh_views(r)?;
@@ -295,7 +295,7 @@ where
             w = w.max(i.virt.w);
             h += i.virt.h
         }
-        Ok(Size { w, h })
+        Ok(Expanse { w, h })
     }
 
     fn render(&mut self, rndr: &mut Render, myvp: ViewPort) -> Result<()> {
@@ -340,7 +340,8 @@ where
                 if !right.is_zero() {
                     self.clear.push(right);
                 }
-            } else if let Some(isect) = myvp.view_rect().vextent().intersect(&itm.virt.vextent()) {
+            } else if let Some(isect) = myvp.view_rect().vextent().intersection(&itm.virt.vextent())
+            {
                 // There was no intersection of the rects, but the vertical
                 // extent of the item overlaps with our view. This means that
                 // item is not on screen because it's off to the left of our

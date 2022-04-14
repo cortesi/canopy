@@ -1,7 +1,7 @@
 pub mod key;
 pub mod mouse;
 
-use crate::geom::Size;
+use crate::geom::Expanse;
 
 use std::sync::mpsc;
 
@@ -13,7 +13,7 @@ pub(crate) enum Event {
     /// A mouse action
     Mouse(mouse::Mouse),
     /// Terminal resize
-    Resize(Size),
+    Resize(Expanse),
     Poll(Vec<u64>),
     Render,
 }

@@ -3,7 +3,7 @@ use duplicate::duplicate_item;
 use canopy::{
     backend::crossterm::runloop,
     event::{key, mouse},
-    geom::{Rect, Size},
+    geom::{Expanse, Rect},
     inspector::Inspector,
     style::solarized,
     widgets::{frame, list::*, InputLine, Text},
@@ -34,7 +34,7 @@ impl ListItem for TodoItem {
 }
 
 impl Node for TodoItem {
-    fn fit(&mut self, target: Size) -> Result<Size> {
+    fn fit(&mut self, target: Expanse) -> Result<Expanse> {
         self.child.fit(target)
     }
 
