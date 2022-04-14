@@ -5,10 +5,8 @@ pub mod utils {
 
     use crate::{self as canopy, BackendControl};
     use crate::{
-        backend::test::{TestControl, TestRender},
         event::{key, mouse},
         geom::Expanse,
-        style::StyleManager,
         widgets::list::ListItem,
         Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
     };

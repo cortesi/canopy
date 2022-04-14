@@ -81,9 +81,8 @@ impl Node for Logs {
         Some(Duration::from_millis(1000))
     }
 
-    fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, _: &mut Render, vp: ViewPort) -> Result<()> {
         self.list.wrap(vp)?;
-        // r.fill("", vp.view_rect(), ' ')?;
         Ok(())
     }
 

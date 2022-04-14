@@ -51,27 +51,11 @@ impl<'a> Render<'a> {
         coverage: &'a mut geom::Coverage,
     ) -> Self {
         Render {
-            backend: backend,
+            backend,
             style,
             viewport,
             coverage,
         }
-    }
-
-    /// Hide the cursor
-    pub(crate) fn hide_cursor(&mut self) -> Result<()> {
-        self.backend.hide_cursor()
-    }
-
-    /// Show the cursor with a specified style
-    pub(crate) fn show_cursor(&mut self, style: &str, c: cursor::Cursor) -> Result<()> {
-        if let Some(loc) = self.viewport.project_point(c.location) {
-            let mut c = c;
-            c.location = loc;
-            self.backend.style(self.style.get(style))?;
-            self.backend.show_cursor(c)?;
-        }
-        Ok(())
     }
 
     /// Fill a rectangle already projected onto the screen with a specified
@@ -134,9 +118,5 @@ impl<'a> Render<'a> {
             }
         }
         Ok(())
-    }
-
-    pub(crate) fn flush(&mut self) -> Result<()> {
-        self.backend.flush()
     }
 }

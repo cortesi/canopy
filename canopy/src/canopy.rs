@@ -319,6 +319,7 @@ pub fn render<R: RenderBackend>(
     e: &mut dyn Node,
 ) -> Result<()> {
     be.reset()?;
+    styl.reset();
     render_traversal(be, styl, e)?;
     STATE.with(|global_state| {
         let mut gs = global_state.borrow_mut();
@@ -489,13 +490,12 @@ pub fn taint_tree(e: &mut dyn Node) -> Result<()> {
 mod tests {
     use super::*;
     use crate::{
-        backend::test::{TestBuf, TestRender},
+        backend::test::TestRender,
         geom::Rect,
         outcome::{Handle, Ignore},
         tutils::utils::*,
         StatefulNode,
     };
-    use std::sync::{Arc, Mutex};
 
     pub fn focvec(root: &mut TRoot) -> Result<Vec<String>> {
         let mut v = vec![];

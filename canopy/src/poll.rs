@@ -130,10 +130,8 @@ impl Poller {
                     thread::park();
                 };
                 let ids = pending.lock().unwrap().collect();
-                if !ids.is_empty() {
-                    if tx.send(Event::Poll(ids)).is_err() {
-                        break;
-                    }
+                if !ids.is_empty() && tx.send(Event::Poll(ids)).is_err() {
+                    break;
                 }
             }));
         }

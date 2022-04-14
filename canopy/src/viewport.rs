@@ -194,7 +194,7 @@ impl ViewPort {
 
     /// Take a rectangle on the physical screen, and calculate the matching portion of the view rectangle.
     pub fn unproject(&self, r: Rect) -> Result<Rect> {
-        Ok(self.screen_rect().rebase_rect(&r)?)
+        self.screen_rect().rebase_rect(&r)
     }
 
     /// Project a rect in virtual space to the screen. If the virtual rect and
