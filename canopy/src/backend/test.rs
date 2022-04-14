@@ -1,4 +1,10 @@
-use crate::{cursor, geom::Point, render::RenderBackend, style::Style, BackendControl, Result};
+use crate::{
+    canopy, cursor,
+    geom::Point,
+    render::RenderBackend,
+    style::{Style, StyleManager},
+    BackendControl, Node, Result,
+};
 use std::sync::{Arc, Mutex};
 
 /// A handle to a vector that contains the result of the render.
@@ -26,6 +32,28 @@ impl TestRender {
         let tb = Arc::new(Mutex::new(TestBuf::default()));
         let tb2 = tb.clone();
         (tb, TestRender { text: tb2 })
+    }
+
+    pub fn render(&mut self, e: &mut dyn Node) -> Result<()> {
+        let mut sm = StyleManager::default();
+        canopy::render(self, &mut sm, e)?;
+        Ok(())
+    }
+
+    pub fn styleman(&self) -> StyleManager {
+        StyleManager::default()
+    }
+
+    pub fn control(&self) -> TestControl {
+        TestControl {}
+    }
+
+    pub fn buf_text(&self) -> Vec<String> {
+        self.text.lock().unwrap().text.clone()
+    }
+
+    pub fn buf_empty(&self) -> bool {
+        self.text.lock().unwrap().text.is_empty()
     }
 }
 

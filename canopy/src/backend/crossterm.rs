@@ -16,7 +16,7 @@ use crate::{
     global,
     render::RenderBackend,
     style::{Color, Style, StyleManager},
-    Node, Render, Result,
+    Node, Result,
 };
 use crossterm::{
     self, cursor as ccursor, event as cevent, style, terminal, ExecutableCommand, QueueableCommand,
@@ -304,13 +304,12 @@ fn event_emitter(evt_tx: mpsc::Sender<Event>) {
     });
 }
 
-pub fn runloop<N>(style: StyleManager, root: &mut N) -> Result<()>
+pub fn runloop<N>(style: &mut StyleManager, root: &mut N) -> Result<()>
 where
     N: Node,
 {
     let mut be = CrosstermRender::default();
     let mut ctrl = CrosstermControl::default();
-    let mut render = Render::new(&mut be, style);
 
     translate_result(terminal::enable_raw_mode())?;
     let mut w = std::io::stderr();
@@ -369,10 +368,10 @@ where
         let mut tainted = true;
         loop {
             if tainted {
-                canopy::pre_render(&mut render, root)?;
-                canopy::render(&mut render, root)?;
-                canopy::post_render(&mut render, root)?;
-                render.flush()?;
+                canopy::pre_render(&mut be, root)?;
+                canopy::render(&mut be, style, root)?;
+                canopy::post_render(&mut be, style, root)?;
+                translate_result(be.flush())?;
             }
             canopy::event(&mut ctrl, root, events.next()?)?;
             tainted = global::STATE.with(|global_state| -> bool {

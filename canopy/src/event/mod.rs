@@ -15,7 +15,6 @@ pub(crate) enum Event {
     /// Terminal resize
     Resize(Expanse),
     Poll(Vec<u64>),
-    Render,
 }
 
 /// An emitter that is polled by the application to retrieve events.

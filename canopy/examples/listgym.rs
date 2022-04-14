@@ -213,6 +213,6 @@ pub fn main() -> Result<()> {
     );
 
     let mut root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new());
-    runloop(colors, &mut root)?;
+    runloop(&mut colors, &mut root)?;
     Ok(())
 }

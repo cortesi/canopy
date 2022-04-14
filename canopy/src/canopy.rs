@@ -7,6 +7,8 @@ use crate::{
     geom::{Coverage, Expanse, Point},
     global::STATE,
     node::{postorder, postorder_mut, preorder, Node, Walker},
+    render::{show_cursor, RenderBackend},
+    style::StyleManager,
     Outcome, Render, Result, ViewPort,
 };
 
@@ -216,7 +218,7 @@ pub fn focus_depth(e: &dyn Node) -> usize {
 }
 
 /// Pre-render sweep of the tree.
-pub(crate) fn pre_render(r: &mut Render, e: &mut dyn Node) -> Result<()> {
+pub(crate) fn pre_render<R: RenderBackend>(r: &mut R, e: &mut dyn Node) -> Result<()> {
     let mut seen = false;
     preorder(e, &mut |x| -> Result<()> {
         if x.is_focused() {
@@ -240,12 +242,16 @@ pub(crate) fn pre_render(r: &mut Render, e: &mut dyn Node) -> Result<()> {
 }
 
 /// Post-render sweep of the tree.
-pub(crate) fn post_render(r: &mut Render, e: &dyn Node) -> Result<()> {
+pub(crate) fn post_render<R: RenderBackend>(
+    r: &mut R,
+    styl: &mut StyleManager,
+    e: &dyn Node,
+) -> Result<()> {
     let mut seen = false;
     focus_path(e, &mut |n| -> Result<()> {
         if !seen {
             if let Some(c) = n.cursor() {
-                r.show_cursor("cursor", c)?;
+                show_cursor(r, styl, n.vp(), "cursor", c)?;
                 seen = true;
             }
         }
@@ -254,24 +260,33 @@ pub(crate) fn post_render(r: &mut Render, e: &dyn Node) -> Result<()> {
     Ok(())
 }
 
-fn render_traversal(r: &mut Render, e: &mut dyn Node) -> Result<()> {
+fn render_traversal<R: RenderBackend>(
+    r: &mut R,
+    styl: &mut StyleManager,
+    e: &mut dyn Node,
+) -> Result<()> {
     if !e.is_hidden() {
-        r.push();
+        styl.push();
         if e.should_render() {
             if e.is_focused() {
                 let s = &mut e.state_mut();
                 s.rendered_focus_gen =
                     STATE.with(|global_state| -> u64 { global_state.borrow().focus_gen });
             }
-            r.viewport = e.state().viewport;
-            e.render(r, e.state().viewport)?;
 
-            // Now clear any regions not covered by the node's children.
+            let mut c = Coverage::new(e.vp().screen_rect().expanse());
+            let mut rndr = Render::new(r, styl, e.vp(), &mut c);
+
+            e.render(&mut rndr, e.state().viewport)?;
+
+            // Now add regions managed by children to coverage
             let escreen = e.vp().screen_rect();
-            let mut c = Coverage::new(escreen.expanse());
             e.children(&mut |n| {
                 if !n.is_hidden() {
-                    c.add(escreen.rebase_rect(&n.vp().screen_rect())?);
+                    let s = n.vp().screen_rect();
+                    if !s.is_zero() {
+                        rndr.coverage.add(escreen.rebase_rect(&s)?);
+                    }
                 }
                 Ok(())
             })?;
@@ -279,12 +294,8 @@ fn render_traversal(r: &mut Render, e: &mut dyn Node) -> Result<()> {
             // We now have coverage, relative to this node's screen rectange. We
             // rebase each rect back down to our virtual co-ordinates.
             let sr = e.vp().view_rect();
-            if c.uncovered().len() > 2 {
-                panic!("\n\n{:?}\n{:?}\n{:?}", e.vp(), sr, c.uncovered());
-            }
-
-            for l in c.uncovered() {
-                r.fill("", l.rect().shift(sr.tl.x as i16, sr.tl.y as i16), ' ')?;
+            for l in rndr.coverage.uncovered() {
+                rndr.fill("", l.rect().shift(sr.tl.x as i16, sr.tl.y as i16), ' ')?;
             }
         }
         // This is a new node - we don't want it perpetually stuck in
@@ -293,8 +304,8 @@ fn render_traversal(r: &mut Render, e: &mut dyn Node) -> Result<()> {
             e.state_mut().render_gen =
                 STATE.with(|global_state| -> u64 { global_state.borrow().render_gen });
         }
-        e.children_mut(&mut |x| render_traversal(r, x))?;
-        r.pop();
+        e.children_mut(&mut |x| render_traversal(r, styl, x))?;
+        styl.pop();
     }
     Ok(())
 }
@@ -302,9 +313,13 @@ fn render_traversal(r: &mut Render, e: &mut dyn Node) -> Result<()> {
 /// Render a tree of nodes. If force is true, all visible nodes are
 /// rendered, otherwise we check the taint state. Hidden nodes and their
 /// children are ignored.
-pub fn render(r: &mut Render, e: &mut dyn Node) -> Result<()> {
-    r.reset()?;
-    render_traversal(r, e)?;
+pub fn render<R: RenderBackend>(
+    be: &mut R,
+    styl: &mut StyleManager,
+    e: &mut dyn Node,
+) -> Result<()> {
+    be.reset()?;
+    render_traversal(be, styl, e)?;
     STATE.with(|global_state| {
         let mut gs = global_state.borrow_mut();
         gs.render_gen += 1;
@@ -395,7 +410,6 @@ pub(crate) fn event(
             set_root_size(s, root)?;
             Ok(Outcome::handle())
         }
-        Event::Render => Ok(Outcome::handle()),
         Event::Poll(ids) => poll(ids, root),
     }
 }
@@ -493,20 +507,17 @@ mod tests {
         Ok(v)
     }
 
-    fn run_test(
-        func: impl FnOnce(Arc<Mutex<TestBuf>>, Render, &mut dyn BackendControl, TRoot) -> Result<()>,
-    ) -> Result<()> {
-        let (buf, mut tr) = TestRender::create();
-        let (r, mut c) = tcanopy(&mut tr);
+    fn run_test(func: impl FnOnce(TestRender, TRoot) -> Result<()>) -> Result<()> {
+        let (_, tr) = TestRender::create();
         let mut root = TRoot::new();
         set_root_size(Expanse::new(100, 100), &mut root)?;
         reset_state();
-        func(buf, r, &mut c, root)
+        func(tr, root)
     }
 
     #[test]
     fn tfocus_next() -> Result<()> {
-        run_test(|_, _, _, mut root| {
+        run_test(|_, mut root| {
             assert!(!root.is_focused());
             focus_next(&mut root)?;
             assert!(root.is_focused());
@@ -536,7 +547,7 @@ mod tests {
 
     #[test]
     fn tfocus_prev() -> Result<()> {
-        run_test(|_, _, _, mut root| {
+        run_test(|_, mut root| {
             assert!(!root.is_focused());
             focus_prev(&mut root)?;
             assert!(root.b.b.is_focused());
@@ -558,7 +569,7 @@ mod tests {
 
     #[test]
     fn tfoci() -> Result<()> {
-        run_test(|_, _, _, mut root| {
+        run_test(|_, mut root| {
             assert_eq!(focvec(&mut root)?.len(), 0);
 
             assert!(!on_focus_path(&root));
@@ -587,8 +598,8 @@ mod tests {
 
     #[test]
     fn tfocus_right() -> Result<()> {
-        run_test(|_, mut r, _, mut root| {
-            render(&mut r, &mut root)?;
+        run_test(|mut tr, mut root| {
+            tr.render(&mut root)?;
             root.a.a.set_focus();
             focus_right(&mut root)?;
             assert!(root.b.a.is_focused());
@@ -608,37 +619,37 @@ mod tests {
 
     #[test]
     fn tkey() -> Result<()> {
-        run_test(|_, _, ctrl, mut root| {
+        run_test(|tr, mut root| {
             root.set_focus();
             root.next_outcome = Some(Outcome::handle());
-            assert!(key(ctrl, &mut root, K_ANY)?.is_handled());
+            assert!(key(&mut tr.control(), &mut root, K_ANY)?.is_handled());
             let s = get_state();
             assert_eq!(s.path, vec!["r@key->handle"]);
             Ok(())
         })?;
 
-        run_test(|_, _, ctrl, mut root| {
+        run_test(|tr, mut root| {
             root.a.a.set_focus();
             root.a.a.next_outcome = Some(Outcome::handle());
-            assert!(key(ctrl, &mut root, K_ANY)?.is_handled());
+            assert!(key(&mut tr.control(), &mut root, K_ANY)?.is_handled());
             let s = get_state();
             assert_eq!(s.path, vec!["ba:la@key->handle"]);
             Ok(())
         })?;
 
-        run_test(|_, _, ctrl, mut root| {
+        run_test(|tr, mut root| {
             root.a.a.set_focus();
             root.a.next_outcome = Some(Outcome::handle());
-            assert!(key(ctrl, &mut root, K_ANY)?.is_handled());
+            assert!(key(&mut tr.control(), &mut root, K_ANY)?.is_handled());
             let s = get_state();
             assert_eq!(s.path, vec!["ba:la@key->ignore", "ba@key->handle"]);
             Ok(())
         })?;
 
-        run_test(|_, _, ctrl, mut root| {
+        run_test(|tr, mut root| {
             root.a.a.set_focus();
             root.next_outcome = Some(Outcome::handle());
-            assert!(key(ctrl, &mut root, K_ANY)?.is_handled());
+            assert!(key(&mut tr.control(), &mut root, K_ANY)?.is_handled());
             let s = get_state();
             assert_eq!(
                 s.path,
@@ -647,77 +658,77 @@ mod tests {
             Ok(())
         })?;
 
-        run_test(|_, _, ctrl, mut root| {
+        run_test(|tr, mut root| {
             root.a.set_focus();
             root.a.next_outcome = Some(Outcome::handle());
-            assert!(key(ctrl, &mut root, K_ANY)?.is_handled());
+            assert!(key(&mut tr.control(), &mut root, K_ANY)?.is_handled());
             let s = get_state();
             assert_eq!(s.path, vec!["ba@key->handle"]);
             Ok(())
         })?;
 
-        run_test(|_, _, ctrl, mut root| {
+        run_test(|tr, mut root| {
             root.a.set_focus();
             root.next_outcome = Some(Outcome::handle());
-            assert!(key(ctrl, &mut root, K_ANY)?.is_handled());
+            assert!(key(&mut tr.control(), &mut root, K_ANY)?.is_handled());
             let s = get_state();
             assert_eq!(s.path, vec!["ba@key->ignore", "r@key->handle"]);
-            assert_eq!(key(ctrl, &mut root, K_ANY)?, Outcome::ignore());
+            assert_eq!(key(&mut tr.control(), &mut root, K_ANY)?, Outcome::ignore());
             Ok(())
         })?;
 
-        run_test(|_, _, ctrl, mut root| {
+        run_test(|tr, mut root| {
             root.a.b.set_focus();
             root.a.next_outcome = Some(Outcome::Ignore(Ignore::default().with_skip()));
             root.next_outcome = Some(Outcome::handle());
-            key(ctrl, &mut root, K_ANY)?;
+            key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba:lb@key->ignore", "ba@key->ignore"]);
             Ok(())
         })?;
 
-        run_test(|_, _, ctrl, mut root| {
+        run_test(|tr, mut root| {
             root.a.a.set_focus();
             root.a.a.next_outcome = Some(Outcome::handle());
-            key(ctrl, &mut root, K_ANY)?;
+            key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba:la@key->handle",]);
             Ok(())
         })?;
 
-        run_test(|_, _, ctrl, mut root| {
+        run_test(|tr, mut root| {
             root.a.b.set_focus();
             root.a.next_outcome = Some(Outcome::handle());
-            key(ctrl, &mut root, K_ANY)?;
+            key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba:lb@key->ignore", "ba@key->handle",]);
             Ok(())
         })?;
 
-        run_test(|_, _, ctrl, mut root| {
+        run_test(|tr, mut root| {
             root.a.b.set_focus();
             root.a.b.next_outcome = Some(Outcome::Handle(Handle::default()));
-            key(ctrl, &mut root, K_ANY)?;
+            key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba:lb@key->handle",]);
             Ok(())
         })?;
 
-        run_test(|_, _, ctrl, mut root| {
+        run_test(|tr, mut root| {
             root.a.b.set_focus();
             root.a.b.next_outcome = Some(Outcome::handle());
             root.a.next_outcome = Some(Outcome::handle());
-            key(ctrl, &mut root, K_ANY)?;
+            key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba:lb@key->handle",]);
             Ok(())
         })?;
 
-        run_test(|_, _, ctrl, mut root| {
+        run_test(|tr, mut root| {
             root.a.b.set_focus();
             root.a.b.next_outcome = Some(Outcome::handle());
             root.a.next_outcome = Some(Outcome::ignore_and_skip());
-            key(ctrl, &mut root, K_ANY)?;
+            key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba:lb@key->handle"]);
             Ok(())
@@ -728,12 +739,12 @@ mod tests {
 
     #[test]
     fn tmouse() -> Result<()> {
-        run_test(|_, mut r, ctrl, mut root| {
+        run_test(|mut tr, mut root| {
             root.set_focus();
             root.next_outcome = Some(Outcome::handle());
             let evt = root.a.a.make_mouse_event()?;
-            render(&mut r, &mut root)?;
-            assert!(mouse(ctrl, &mut root, evt)?.is_handled());
+            tr.render(&mut root)?;
+            assert!(mouse(&mut tr.control(), &mut root, evt)?.is_handled());
             let s = get_state();
             assert_eq!(
                 s.path,
@@ -742,31 +753,31 @@ mod tests {
             Ok(())
         })?;
 
-        run_test(|_, mut r, ctrl, mut root| {
+        run_test(|mut tr, mut root| {
             root.a.a.next_outcome = Some(Outcome::handle());
             let evt = root.a.a.make_mouse_event()?;
-            render(&mut r, &mut root)?;
-            assert!(mouse(ctrl, &mut root, evt)?.is_handled());
+            tr.render(&mut root)?;
+            assert!(mouse(&mut tr.control(), &mut root, evt)?.is_handled());
             let s = get_state();
             assert_eq!(s.path, vec!["ba:la@mouse->handle"]);
             Ok(())
         })?;
 
-        run_test(|_, mut r, ctrl, mut root| {
+        run_test(|mut tr, mut root| {
             root.a.a.next_outcome = Some(Outcome::handle());
             let evt = root.a.a.make_mouse_event()?;
-            render(&mut r, &mut root)?;
-            assert!(mouse(ctrl, &mut root, evt)?.is_handled());
+            tr.render(&mut root)?;
+            assert!(mouse(&mut tr.control(), &mut root, evt)?.is_handled());
             let s = get_state();
             assert_eq!(s.path, vec!["ba:la@mouse->handle"]);
             Ok(())
         })?;
 
-        run_test(|_, mut r, ctrl, mut root| {
+        run_test(|mut tr, mut root| {
             root.a.a.next_outcome = Some(Outcome::handle());
             let evt = root.a.a.make_mouse_event()?;
-            render(&mut r, &mut root)?;
-            assert!(mouse(ctrl, &mut root, evt)?.is_handled());
+            tr.render(&mut root)?;
+            assert!(mouse(&mut tr.control(), &mut root, evt)?.is_handled());
             let s = get_state();
             assert_eq!(s.path, vec!["ba:la@mouse->handle",]);
             Ok(())
@@ -777,10 +788,10 @@ mod tests {
 
     #[test]
     fn tresize() -> Result<()> {
-        run_test(|_, mut r, _, mut root| {
+        run_test(|mut tr, mut root| {
             let size = 100;
             assert_eq!(root.vp().screen_rect(), Rect::new(0, 0, size, size));
-            render(&mut r, &mut root)?;
+            tr.render(&mut root)?;
             assert_eq!(root.a.vp().screen_rect(), Rect::new(0, 0, size / 2, size));
             assert_eq!(
                 root.b.vp().screen_rect(),
@@ -788,7 +799,7 @@ mod tests {
             );
 
             set_root_size(Expanse::new(50, 50), &mut root)?;
-            render(&mut r, &mut root)?;
+            tr.render(&mut root)?;
             assert_eq!(root.b.vp().screen_rect(), Rect::new(25, 0, 25, 50));
             Ok(())
         })?;
@@ -797,45 +808,45 @@ mod tests {
 
     #[test]
     fn trender() -> Result<()> {
-        run_test(|buf, mut r, _, mut root| {
-            render(&mut r, &mut root)?;
+        run_test(|mut tr, mut root| {
+            tr.render(&mut root)?;
             assert_eq!(
-                buf.lock()?.text,
+                tr.buf_text(),
                 vec!["<r>", "<ba>", "<ba:la>", "<ba:lb>", "<bb>", "<bb:la>", "<bb:lb>"]
             );
 
-            render(&mut r, &mut root)?;
-            assert!(buf.lock()?.is_empty());
+            tr.render(&mut root)?;
+            assert!(tr.buf_empty());
 
             root.a.taint();
-            render(&mut r, &mut root)?;
-            assert_eq!(buf.lock()?.text, vec!["<ba>"]);
+            tr.render(&mut root)?;
+            assert_eq!(tr.buf_text(), vec!["<ba>"]);
 
             root.a.b.taint();
-            render(&mut r, &mut root)?;
-            assert_eq!(buf.lock()?.text, vec!["<ba:lb>"]);
+            tr.render(&mut root)?;
+            assert_eq!(tr.buf_text(), vec!["<ba:lb>"]);
 
             taint_tree(&mut root.a)?;
-            render(&mut r, &mut root)?;
-            assert_eq!(buf.lock()?.text, vec!["<ba>", "<ba:la>", "<ba:lb>"]);
+            tr.render(&mut root)?;
+            assert_eq!(tr.buf_text(), vec!["<ba>", "<ba:la>", "<ba:lb>"]);
 
-            render(&mut r, &mut root)?;
-            assert!(buf.lock()?.text.is_empty());
+            tr.render(&mut root)?;
+            assert!(tr.buf_empty());
 
             root.a.a.set_focus();
-            render(&mut r, &mut root)?;
-            assert_eq!(buf.lock()?.text, vec!["<ba:la>"]);
+            tr.render(&mut root)?;
+            assert_eq!(tr.buf_text(), vec!["<ba:la>"]);
 
             focus_next(&mut root)?;
-            render(&mut r, &mut root)?;
-            assert_eq!(buf.lock()?.text, vec!["<ba:la>", "<ba:lb>"]);
+            tr.render(&mut root)?;
+            assert_eq!(tr.buf_text(), vec!["<ba:la>", "<ba:lb>"]);
 
             focus_prev(&mut root)?;
-            render(&mut r, &mut root)?;
-            assert_eq!(buf.lock()?.text, vec!["<ba:la>", "<ba:lb>"]);
+            tr.render(&mut root)?;
+            assert_eq!(tr.buf_text(), vec!["<ba:la>", "<ba:lb>"]);
 
-            render(&mut r, &mut root)?;
-            assert!(buf.lock()?.text.is_empty());
+            tr.render(&mut root)?;
+            assert!(tr.buf_empty());
 
             Ok(())
         })?;
@@ -845,15 +856,15 @@ mod tests {
 
     #[test]
     fn ttaintskip() -> Result<()> {
-        run_test(|buf, mut r, _, mut root| {
-            render(&mut r, &mut root)?;
+        run_test(|mut tr, mut root| {
+            tr.render(&mut root)?;
             root.set_focus();
             taint_tree(&mut root)?;
             root.a.skip_taint();
-            render(&mut r, &mut root)?;
+            tr.render(&mut root)?;
 
             assert_eq!(
-                buf.lock()?.text,
+                tr.buf_text(),
                 vec!["<r>", "<ba:la>", "<ba:lb>", "<bb>", "<bb:la>", "<bb:lb>"]
             );
             Ok(())

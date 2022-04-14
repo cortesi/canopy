@@ -273,10 +273,6 @@ pub mod utils {
         }
     }
 
-    pub fn tcanopy(tr: &mut TestRender) -> (Render, impl BackendControl) {
-        (Render::new(tr, StyleManager::default()), TestControl {})
-    }
-
     // A fixed-size test node
     #[derive(Debug, PartialEq, StatefulNode)]
     pub struct TFixed {

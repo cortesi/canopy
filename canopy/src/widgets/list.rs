@@ -362,10 +362,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        backend::test::TestRender,
-        tutils::utils::{tcanopy, TFixed},
-    };
+    use crate::{backend::test::TestRender, tutils::utils::TFixed};
 
     pub fn views(lst: &List<TFixed>) -> Vec<Rect> {
         let mut v = vec![];
@@ -406,7 +403,7 @@ mod tests {
     #[test]
     fn drawnodes() -> Result<()> {
         let (_, mut tr) = TestRender::create();
-        let (mut r, _) = tcanopy(&mut tr);
+
         let rw = 20;
         let rh = 10;
         let mut lst = List::new(vec![
@@ -416,7 +413,7 @@ mod tests {
         ]);
 
         lst.place(Rect::new(0, 0, 10, 10))?;
-        canopy::render(&mut r, &mut lst)?;
+        tr.render(&mut lst)?;
         assert_eq!(
             views(&lst),
             vec![
@@ -429,7 +426,7 @@ mod tests {
         lst.update_viewport(&|vp| vp.scroll_by(0, 5));
         lst.place(Rect::new(0, 0, 10, 10))?;
         canopy::taint_tree(&mut lst)?;
-        canopy::render(&mut r, &mut lst)?;
+        tr.render(&mut lst)?;
         assert_eq!(
             views(&lst),
             vec![
@@ -442,7 +439,7 @@ mod tests {
         lst.update_viewport(&|vp| vp.scroll_by(0, 5));
         lst.place(Rect::new(0, 0, 10, 10))?;
         canopy::taint_tree(&mut lst)?;
-        canopy::render(&mut r, &mut lst)?;
+        tr.render(&mut lst)?;
         assert_eq!(
             views(&lst),
             vec![
@@ -455,7 +452,7 @@ mod tests {
         lst.update_viewport(&|vp| vp.scroll_by(0, 10));
         lst.place(Rect::new(0, 0, 10, 10))?;
         canopy::taint_tree(&mut lst)?;
-        canopy::render(&mut r, &mut lst)?;
+        tr.render(&mut lst)?;
         assert_eq!(
             views(&lst),
             vec![
@@ -468,7 +465,7 @@ mod tests {
         lst.update_viewport(&|vp| vp.scroll_by(0, 10));
         lst.place(Rect::new(0, 0, 10, 10))?;
         canopy::taint_tree(&mut lst)?;
-        canopy::render(&mut r, &mut lst)?;
+        tr.render(&mut lst)?;
         assert_eq!(
             views(&lst),
             vec![
@@ -481,7 +478,7 @@ mod tests {
         lst.update_viewport(&|vp| vp.scroll_to(5, 0));
         lst.place(Rect::new(0, 0, 10, 10))?;
         canopy::taint_tree(&mut lst)?;
-        canopy::render(&mut r, &mut lst)?;
+        tr.render(&mut lst)?;
         assert_eq!(
             views(&lst),
             vec![
@@ -494,7 +491,7 @@ mod tests {
         lst.update_viewport(&|vp| vp.scroll_by(0, 5));
         lst.place(Rect::new(0, 0, 10, 10))?;
         canopy::taint_tree(&mut lst)?;
-        canopy::render(&mut r, &mut lst)?;
+        tr.render(&mut lst)?;
         assert_eq!(
             views(&lst),
             vec![

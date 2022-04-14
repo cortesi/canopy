@@ -1,9 +1,8 @@
 use crate as canopy;
 use crate::{
-    event::key,
     geom::{Expanse, Rect},
     widgets::{list::*, Text},
-    Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
+    Node, NodeState, Render, Result, StatefulNode, ViewPort,
 };
 use std::time::Duration;
 

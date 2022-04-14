@@ -79,10 +79,10 @@ pub fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     if args.len() != 2 {
         println!("Usage: pager filename");
     } else {
-        let colors = solarized::solarized_dark();
+        let mut colors = solarized::solarized_dark();
         let contents = fs::read_to_string(args[1].clone())?;
         let mut root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new(contents));
-        runloop(colors, &mut root)?;
+        runloop(&mut colors, &mut root)?;
     }
     Ok(())
 }

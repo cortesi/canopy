@@ -191,7 +191,10 @@ impl Rect {
     /// contained, an error is returned.
     pub fn rebase_rect(&self, other: &Rect) -> Result<Rect> {
         if !self.contains_rect(other) {
-            return Err(Error::Geometry("rebase of non-contained rect".into()));
+            return Err(Error::Geometry(format!(
+                "rebase of non-contained rect - outer={:?} inner={:?}",
+                self, other,
+            )));
         }
         Ok(Rect {
             tl: self.rebase_point(other.tl)?,

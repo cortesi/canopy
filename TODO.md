@@ -49,3 +49,4 @@
 # Bugs
 
   - Apps crash if terminal is too small. We should just not display in this case.
+  - pager example seems to have problems with some special characters (like tabs?)
