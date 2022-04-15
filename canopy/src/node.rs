@@ -33,9 +33,10 @@ pub trait Node: StatefulNode {
     }
 
     /// Should the node render in the next sweep? This checks if the node is
-    /// tainted, if the focus of the node has changed. Over-riding this method
-    /// should only be needed in rare circumstances, like container nodes that
-    /// need to respond to changes in sub-nodes.
+    /// currently hidden, and if not, checks if the node is tainted or its focus
+    /// status has changed. Over-riding this method should only be needed
+    /// rarely, for instance when a container node needs to redraw if a sub-node
+    /// changes.
     fn should_render(&self) -> bool {
         !self.is_hidden() && (self.is_tainted() || self.focus_changed())
     }
@@ -67,9 +68,8 @@ pub trait Node: StatefulNode {
         Ok(Outcome::ignore())
     }
 
-    /// Call a closure mutably on this node's children. The order in which
-    /// children are processed must match `children`. The default implementation
-    /// assumes this node has no children, and just returns.
+    /// Call a closure mutably on this node's children. The default
+    /// implementation assumes this node has no children, and just returns.
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         Ok(())
     }

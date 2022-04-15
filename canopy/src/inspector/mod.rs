@@ -66,10 +66,12 @@ where
     N: Node,
 {
     pub fn new(activate: key::Key, root: N) -> Self {
+        let mut content = Content::new();
+        content.hide();
         Inspector {
             state: NodeState::default(),
             active: false,
-            content: Content::new(),
+            content,
             root,
             activate,
         }
@@ -77,14 +79,16 @@ where
 
     pub fn hide(&mut self) -> Result<Outcome> {
         self.active = false;
-        canopy::taint_tree(self)?;
+        self.content.hide();
+        canopy::taint_tree(self);
         canopy::focus_first(&mut self.root)?;
         Ok(Outcome::handle())
     }
 
     pub fn show(&mut self) -> Result<Outcome> {
         self.active = true;
-        canopy::taint_tree(self)?;
+        self.content.unhide();
+        canopy::taint_tree(self);
         canopy::focus_first(self)?;
         Ok(Outcome::handle())
     }
@@ -131,9 +135,7 @@ where
     }
 
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-        if self.active {
-            f(&mut self.content)?;
-        }
+        f(&mut self.content)?;
         f(&mut self.root)
     }
 }

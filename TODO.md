@@ -19,8 +19,6 @@
 - Renderer
   - Explicit colors - at the moment, we can only get colors from our color scheme
 - Ergonomics:
-  - A derive macro to create children and children_mut
-    - This would mean shifting the traversal methods into a separate trait
   - Better error returns
 - Key binding management system
 - ctrl-c/ctrl-z
@@ -50,7 +48,6 @@
   - Errors don't carry location information, so are often not useful for debugging
   - Not implementing render if a node has children
   - Not remembering both layout and taint after making a node modification
-  - Not remembering to implement children and children_mut
 
 # Bugs
 

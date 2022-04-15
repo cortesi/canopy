@@ -291,7 +291,7 @@ where
         for itm in &mut self.items {
             if let Some(vp) = myvp.map(itm.virt)? {
                 itm.itm.set_viewport(vp);
-                canopy::taint_tree(&mut itm.itm)?;
+                canopy::taint_tree(&mut itm.itm);
                 itm.itm.unhide();
             } else {
                 itm.itm.hide();
@@ -367,7 +367,7 @@ mod tests {
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 5));
         lst.place(Rect::new(0, 0, 10, 10))?;
-        canopy::taint_tree(&mut lst)?;
+        canopy::taint_tree(&mut lst);
         tr.render(&mut lst)?;
         assert_eq!(
             views(&mut lst),
@@ -380,7 +380,7 @@ mod tests {
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 5));
         lst.place(Rect::new(0, 0, 10, 10))?;
-        canopy::taint_tree(&mut lst)?;
+        canopy::taint_tree(&mut lst);
         tr.render(&mut lst)?;
         assert_eq!(
             views(&mut lst),
@@ -393,7 +393,7 @@ mod tests {
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 10));
         lst.place(Rect::new(0, 0, 10, 10))?;
-        canopy::taint_tree(&mut lst)?;
+        canopy::taint_tree(&mut lst);
         tr.render(&mut lst)?;
         assert_eq!(
             views(&mut lst),
@@ -406,7 +406,7 @@ mod tests {
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 10));
         lst.place(Rect::new(0, 0, 10, 10))?;
-        canopy::taint_tree(&mut lst)?;
+        canopy::taint_tree(&mut lst);
         tr.render(&mut lst)?;
         assert_eq!(
             views(&mut lst),
@@ -419,7 +419,7 @@ mod tests {
 
         lst.update_viewport(&|vp| vp.scroll_to(5, 0));
         lst.place(Rect::new(0, 0, 10, 10))?;
-        canopy::taint_tree(&mut lst)?;
+        canopy::taint_tree(&mut lst);
         tr.render(&mut lst)?;
         assert_eq!(
             views(&mut lst),
@@ -432,7 +432,7 @@ mod tests {
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 5));
         lst.place(Rect::new(0, 0, 10, 10))?;
-        canopy::taint_tree(&mut lst)?;
+        canopy::taint_tree(&mut lst);
         tr.render(&mut lst)?;
         assert_eq!(
             views(&mut lst),

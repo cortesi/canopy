@@ -1,6 +1,7 @@
 use crate as canopy;
 use crate::{
     geom::{Expanse, Rect},
+    taint_tree,
     widgets::{list::*, Text},
     Node, NodeState, Render, Result, StatefulNode, ViewPort,
 };
@@ -74,6 +75,7 @@ pub struct Logs {
 impl Node for Logs {
     fn poll(&mut self) -> Option<Duration> {
         self.list.append(LogItem::new("fooob"));
+        taint_tree(self);
         Some(Duration::from_millis(1000))
     }
 

@@ -142,7 +142,7 @@ impl Node for Root {
             c if c == 'q' => ctrl.exit(0),
             _ => return Ok(Outcome::ignore()),
         };
-        canopy::taint_tree(self)?;
+        canopy::taint_tree(self);
         Ok(Outcome::handle())
     }
 

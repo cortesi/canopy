@@ -42,14 +42,14 @@ where
             if self.children[x].is_empty() {
                 self.children.remove(x);
             }
-            canopy::taint_tree(self)?;
+            canopy::taint_tree(self);
         }
         Ok(())
     }
 
     /// Insert a node, splitting vertically. If we have a focused node, the new
     /// node is inserted in a row beneath it. If not, a new column is added.
-    pub fn insert_row(&mut self, n: N) -> Result<()>
+    pub fn insert_row(&mut self, n: N)
     where
         N: Node,
     {
@@ -58,7 +58,7 @@ where
         } else {
             self.children.push(vec![n]);
         }
-        canopy::taint_tree(self)
+        canopy::taint_tree(self);
     }
 
     /// Insert a node in a new column. If we have a focused node, the new node
@@ -74,7 +74,8 @@ where
         } else {
             self.children.push(vec![n])
         }
-        canopy::taint_tree(self)
+        canopy::taint_tree(self);
+        Ok(())
     }
 
     /// Returns the shape of the current child grid
@@ -138,7 +139,7 @@ mod tests {
 
         let tn = utils::TBranch::new("c");
         assert_eq!(p.focus_coords(), Some((0, 0)));
-        p.insert_row(tn)?;
+        p.insert_row(tn);
         p.place(r)?;
 
         assert_eq!(p.shape(), vec![2, 1]);

@@ -378,7 +378,7 @@ pub fn set_root_size(size: Expanse, n: &mut dyn Node) -> Result<()> {
     let fit = n.fit(size)?;
     let vp = ViewPort::new(fit, fit, Point::default())?;
     n.set_viewport(vp);
-    taint_tree(n)?;
+    taint_tree(n);
     Ok(())
 }
 
@@ -471,12 +471,13 @@ pub fn locate<R: Walker + Default>(
 }
 
 /// Mark a tree of nodes for render.
-pub fn taint_tree(e: &mut dyn Node) -> Result<()> {
+pub fn taint_tree(e: &mut dyn Node) {
     postorder(e, &mut |x| -> Result<()> {
         x.taint();
         Ok(())
-    })?;
-    Ok(())
+    })
+    // Unwrap is safe, because no operations in the closure can fail.
+    .unwrap();
 }
 
 #[cfg(test)]
@@ -819,7 +820,7 @@ mod tests {
             tr.render(&mut root)?;
             assert_eq!(tr.buf_text(), vec!["<ba:lb>"]);
 
-            taint_tree(&mut root.a)?;
+            taint_tree(&mut root.a);
             tr.render(&mut root)?;
             assert_eq!(tr.buf_text(), vec!["<ba>", "<ba:la>", "<ba:lb>"]);
 
@@ -852,7 +853,7 @@ mod tests {
         run_test(|mut tr, mut root| {
             tr.render(&mut root)?;
             root.set_focus();
-            taint_tree(&mut root)?;
+            taint_tree(&mut root);
             root.a.skip_taint();
             tr.render(&mut root)?;
 

@@ -83,7 +83,7 @@ impl Block {
             Outcome::handle()
         } else {
             self.children.push(Block::new(!self.horizontal));
-            canopy::taint_tree(self)?;
+            canopy::taint_tree(self);
             Outcome::handle()
         })
     }
@@ -95,7 +95,7 @@ impl Block {
             Outcome::handle()
         } else {
             self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
-            canopy::taint_tree(self)?;
+            canopy::taint_tree(self);
             Outcome::handle()
         })
     }
@@ -137,7 +137,7 @@ impl Node for Block {
     fn handle_mouse(&mut self, _: &mut dyn BackendControl, k: mouse::Mouse) -> Result<Outcome> {
         Ok(match k {
             c if c == mouse::MouseAction::Down + mouse::Button::Left => {
-                canopy::taint_tree(self)?;
+                canopy::taint_tree(self);
                 self.handle_focus()?
             }
             c if c == mouse::MouseAction::Down + mouse::Button::Middle => {
