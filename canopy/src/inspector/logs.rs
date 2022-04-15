@@ -1,9 +1,7 @@
 use std::{
     io::Write,
     sync::{Arc, Mutex},
-    thread,
 };
-use tracing;
 use tracing_subscriber::fmt;
 
 use crate as canopy;
@@ -148,7 +146,7 @@ impl Node for Logs {
             }
         }
         taint_tree(self);
-        Some(Duration::from_millis(1000))
+        Some(Duration::from_millis(100))
     }
 
     fn render(&mut self, _: &mut Render, vp: ViewPort) -> Result<()> {

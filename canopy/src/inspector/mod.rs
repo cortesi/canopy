@@ -36,7 +36,8 @@ impl Default for Content {
 }
 
 impl Node for Content {
-    fn render(&mut self, _r: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
+        r.style.push_layer("inspector");
         let parts = vp.carve_vend(1);
         self.statusbar.wrap(parts.1)?;
         self.view.wrap(parts.0)?;
@@ -122,8 +123,7 @@ where
         Ok(Outcome::handle())
     }
 
-    fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
-        r.style.push_layer("inspector");
+    fn render(&mut self, _r: &mut Render, vp: ViewPort) -> Result<()> {
         if self.active {
             let parts = vp.split_horizontal(2)?;
             self.content.wrap(parts[0])?;
