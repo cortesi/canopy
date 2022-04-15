@@ -65,11 +65,7 @@ impl Node for Root {
         self.child.wrap(vp)
     }
 
-    fn children(&self, f: &mut dyn FnMut(&dyn Node) -> Result<()>) -> Result<()> {
-        f(&self.child)
-    }
-
-    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         f(&mut self.child)
     }
 }

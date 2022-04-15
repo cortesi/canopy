@@ -1,7 +1,5 @@
 use std::time::Duration;
 
-use duplicate::duplicate_item;
-
 use canopy::{
     backend::crossterm::runloop,
     event::{key, mouse},
@@ -52,11 +50,7 @@ impl Node for IntervalItem {
         self.child.fit(target)
     }
 
-    fn children(&self, f: &mut dyn FnMut(&dyn Node) -> Result<()>) -> Result<()> {
-        f(&self.child)
-    }
-
-    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         f(&mut self.child)
     }
 
@@ -152,17 +146,9 @@ impl Node for Root {
         Ok(Outcome::handle())
     }
 
-    #[duplicate_item(
-        method          reference(type);
-        [children]      [& type];
-        [children_mut]  [&mut type];
-    )]
-    fn method(
-        self: reference([Self]),
-        f: &mut dyn FnMut(reference([dyn Node])) -> Result<()>,
-    ) -> Result<()> {
-        f(reference([self.statusbar]))?;
-        f(reference([self.content]))?;
+    fn children(self: &mut Self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+        f(&mut self.statusbar)?;
+        f(&mut self.content)?;
         Ok(())
     }
 }

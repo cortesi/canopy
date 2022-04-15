@@ -1,5 +1,3 @@
-use duplicate::duplicate_item;
-
 use pad::PadStr;
 
 use crate as canopy;
@@ -163,15 +161,7 @@ where
 
         Ok(())
     }
-    #[duplicate_item(
-        method          reference(type);
-        [children]      [&type];
-        [children_mut]  [&mut type];
-    )]
-    fn method(
-        self: reference([Self]),
-        f: &mut dyn FnMut(reference([dyn Node])) -> Result<()>,
-    ) -> Result<()> {
-        f(reference([self.child]))
+    fn children(self: &mut Self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+        f(&mut self.child)
     }
 }

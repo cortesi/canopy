@@ -43,12 +43,7 @@ impl Node for Content {
         Ok(())
     }
 
-    fn children(&self, f: &mut dyn FnMut(&dyn Node) -> Result<()>) -> Result<()> {
-        f(&self.statusbar)?;
-        f(&self.view)
-    }
-
-    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         f(&mut self.statusbar)?;
         f(&mut self.view)
     }
@@ -109,7 +104,7 @@ where
                     self.hide()?;
                 }
                 c if c == self.activate => {
-                    if canopy::on_focus_path(&self.content) {
+                    if canopy::on_focus_path(&mut self.content) {
                         self.hide()?;
                     } else {
                         canopy::focus_first(self)?;
@@ -135,14 +130,7 @@ where
         Ok(())
     }
 
-    fn children(&self, f: &mut dyn FnMut(&dyn Node) -> Result<()>) -> Result<()> {
-        if self.active {
-            f(&self.content)?;
-        }
-        f(&self.root)
-    }
-
-    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         if self.active {
             f(&mut self.content)?;
         }

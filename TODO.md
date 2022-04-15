@@ -1,6 +1,9 @@
 
 # TODO
 
+
+## 0.1
+
 - Better debugging and monitoring story
   - Inspector GUI
     - Logs
@@ -26,7 +29,6 @@
   - Center
   - text line widget
   - markdown
-- use half-blocks to improve smoothness of scrollbars
 - serialization/deserialization for color scheme
 - Testing
   - Improve the test render backend
@@ -35,8 +37,12 @@
   - Integration tests
   - Benchmarks
   - Fuzzing
+
+## 0.2
+
 - Termion backend
   - Extract a common set of backend conversion traits
+- use half-blocks to improve smoothness of scrollbars
 
 
 # User traps and inelegances

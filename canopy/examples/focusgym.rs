@@ -1,5 +1,3 @@
-use duplicate::duplicate_item;
-
 use canopy::{
     backend::crossterm::runloop,
     event::{key, mouse},
@@ -71,12 +69,7 @@ impl Node for Root {
         })
     }
 
-    fn children(&self, f: &mut dyn FnMut(&dyn Node) -> Result<()>) -> Result<()> {
-        f(&self.child)?;
-        Ok(())
-    }
-
-    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         f(&mut self.child)?;
         Ok(())
     }
@@ -170,16 +163,8 @@ impl Node for Block {
         })
     }
 
-    #[duplicate_item(
-        method          reference(type);
-        [children]      [& type];
-        [children_mut]  [&mut type];
-    )]
-    fn method(
-        self: reference([Self]),
-        f: &mut dyn FnMut(reference([dyn Node])) -> Result<()>,
-    ) -> Result<()> {
-        for i in reference([self.children]) {
+    fn children(self: &mut Self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+        for i in &mut self.children {
             f(i)?
         }
         Ok(())

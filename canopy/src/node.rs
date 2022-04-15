@@ -1,7 +1,5 @@
 use std::time::Duration;
 
-use duplicate::duplicate_item;
-
 use crate::{
     cursor,
     event::{key, mouse},
@@ -69,17 +67,10 @@ pub trait Node: StatefulNode {
         Ok(Outcome::ignore())
     }
 
-    /// Call a closure on this node's children. The order in which children are
-    /// processed must match `children_mut`. The default implementation assumes
-    /// this node has no children, and just returns.
-    fn children(&self, f: &mut dyn FnMut(&dyn Node) -> Result<()>) -> Result<()> {
-        Ok(())
-    }
-
     /// Call a closure mutably on this node's children. The order in which
     /// children are processed must match `children`. The default implementation
     /// assumes this node has no children, and just returns.
-    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         Ok(())
     }
 
@@ -161,19 +152,14 @@ pub trait Node: StatefulNode {
 /// A postorder traversal of the nodes under e. Enabling skipping in the Walker
 /// results in all the nodes in a route straight back to the root being visited
 /// before exiting.
-#[duplicate_item(
-    method             reference(type)  children;
-    [postorder]        [& type]         [children];
-    [postorder_mut]    [&mut type]      [children_mut];
-)]
-pub fn method<R: Walker + Default>(
-    e: reference([dyn Node]),
-    f: &mut dyn FnMut(reference([dyn Node])) -> Result<R>,
+pub fn postorder<R: Walker + Default>(
+    e: &mut dyn Node,
+    f: &mut dyn FnMut(&mut dyn Node) -> Result<R>,
 ) -> Result<R> {
     let mut v = R::default();
     e.children(&mut |x| {
         if !v.skip() {
-            v = v.join(method(x, f)?);
+            v = v.join(postorder(x, f)?);
         }
         Ok(())
     })?;
@@ -188,7 +174,7 @@ pub fn preorder<W: Walker>(
 ) -> Result<W> {
     let mut v = f(e)?;
     if !v.skip() {
-        e.children_mut(&mut |x| {
+        e.children(&mut |x| {
             v = v.join(preorder(x, f)?);
             Ok(())
         })?;
@@ -219,7 +205,7 @@ mod tests {
     fn tpostorder() -> Result<()> {
         fn skipon(root: &mut utils::TRoot, skipname: String) -> Result<Vec<String>> {
             let mut v: Vec<String> = vec![];
-            postorder_mut(root, &mut |x| -> Result<SkipWalker> {
+            postorder(root, &mut |x| -> Result<SkipWalker> {
                 skipper(x, skipname.clone(), &mut v)
             })?;
             Ok(v)

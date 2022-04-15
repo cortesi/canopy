@@ -59,26 +59,15 @@ impl Node for Block {
         };
         self.child
             .set_viewport(ViewPort::new(outer, view, screen.tl)?);
-
-        let v = vp.view_rect();
-        let status = Rect::new(v.tl.x, v.tl.y, 1, v.h);
         if self.selected {
-            r.fill("blue", status, '\u{2588}')?;
-        } else {
-            r.fill("", status, ' ')?;
+            let active = vp.view_rect().carve_hstart(1).0;
+            r.fill("blue", active, '\u{2588}')?;
         }
-        let buf = Rect::new(v.tl.x + 1, v.tl.y, 1, v.h);
-        r.fill("", buf, ' ')?;
         r.style.push_layer(&self.color);
-
         Ok(())
     }
 
-    fn children(&self, f: &mut dyn FnMut(&dyn Node) -> Result<()>) -> Result<()> {
-        f(&self.child)
-    }
-
-    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         f(&mut self.child)
     }
 }
@@ -172,13 +161,7 @@ impl Node for Root {
         Ok(Outcome::handle())
     }
 
-    fn children(&self, f: &mut dyn FnMut(&dyn Node) -> Result<()>) -> Result<()> {
-        f(&self.statusbar)?;
-        f(&self.content)?;
-        Ok(())
-    }
-
-    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         f(&mut self.statusbar)?;
         f(&mut self.content)?;
         Ok(())

@@ -1,5 +1,3 @@
-use duplicate::duplicate_item;
-
 use crate as canopy;
 use crate::{
     state::{NodeState, StatefulNode},
@@ -90,16 +88,8 @@ where
 }
 
 impl<N: Node> Node for Panes<N> {
-    #[duplicate_item(
-        method          reference(type);
-        [children]      [& type];
-        [children_mut]  [&mut type];
-    )]
-    fn method(
-        self: reference([Self]),
-        f: &mut dyn FnMut(reference([dyn Node])) -> Result<()>,
-    ) -> Result<()> {
-        for col in reference([self.children]) {
+    fn children(self: &mut Self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+        for col in &mut self.children {
             for row in col {
                 f(row)?
             }

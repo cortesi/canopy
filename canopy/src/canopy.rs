@@ -1,12 +1,10 @@
-use duplicate::duplicate_item;
-
 use crate::geom::{Direction, Rect};
 use crate::{
     control::BackendControl,
     event::{key, mouse, Event},
     geom::{Coverage, Expanse, Point},
     global::STATE,
-    node::{postorder, postorder_mut, preorder, Node, Walker},
+    node::{postorder, preorder, Node, Walker},
     render::{show_cursor, RenderBackend},
     style::StyleManager,
     Outcome, Render, Result, ViewPort,
@@ -122,7 +120,7 @@ pub fn focus_first(e: &mut dyn Node) -> Result<Outcome> {
 }
 
 /// A node is on the focus path if it or any of its descendants have focus.
-pub fn on_focus_path(e: &dyn Node) -> bool {
+pub fn on_focus_path(e: &mut dyn Node) -> bool {
     let mut onpath = false;
     focus_path(e, &mut |_| -> Result<()> {
         onpath = true;
@@ -135,7 +133,7 @@ pub fn on_focus_path(e: &dyn Node) -> bool {
 
 /// A node is on the focus path if it does not have focus itself, but some
 /// node below it does.
-pub fn is_focus_ancestor(e: &dyn Node) -> bool {
+pub fn is_focus_ancestor(e: &mut dyn Node) -> bool {
     if e.is_focused() {
         false
     } else {
@@ -190,7 +188,7 @@ pub fn focus_prev(e: &mut dyn Node) -> Result<Outcome> {
 }
 
 /// Find the area of the current terminal focus node.
-pub fn get_focus_area(e: &dyn Node) -> Option<Rect> {
+pub fn get_focus_area(e: &mut dyn Node) -> Option<Rect> {
     let mut ret = None;
     focus_path(e, &mut |x| -> Result<()> {
         if ret == None {
@@ -206,7 +204,7 @@ pub fn get_focus_area(e: &dyn Node) -> Option<Rect> {
 /// Returns the focal depth of the specified node. If the node is not part
 /// of the focus chain, the depth is 0. If the node is a leaf focus, the
 /// depth is 1.
-pub fn focus_depth(e: &dyn Node) -> usize {
+pub fn focus_depth(e: &mut dyn Node) -> usize {
     let mut total = 0;
     focus_path(e, &mut |_| -> Result<()> {
         total += 1;
@@ -245,7 +243,7 @@ pub(crate) fn pre_render<R: RenderBackend>(r: &mut R, e: &mut dyn Node) -> Resul
 pub(crate) fn post_render<R: RenderBackend>(
     r: &mut R,
     styl: &mut StyleManager,
-    e: &dyn Node,
+    e: &mut dyn Node,
 ) -> Result<()> {
     let mut seen = false;
     focus_path(e, &mut |n| -> Result<()> {
@@ -304,7 +302,7 @@ fn render_traversal<R: RenderBackend>(
             e.state_mut().render_gen =
                 STATE.with(|global_state| -> u64 { global_state.borrow().render_gen });
         }
-        e.children_mut(&mut |x| render_traversal(r, styl, x))?;
+        e.children(&mut |x| render_traversal(r, styl, x))?;
         styl.pop();
     }
     Ok(())
@@ -363,7 +361,7 @@ pub fn mouse(
 pub fn key(ctrl: &mut dyn BackendControl, root: &mut dyn Node, k: key::Key) -> Result<Outcome> {
     let mut handled = false;
     let mut halt = false;
-    focus_path_mut(root, &mut move |x| -> Result<Outcome> {
+    focus_path(root, &mut move |x| -> Result<Outcome> {
         process_event!(
             self,
             ctrl,
@@ -417,19 +415,14 @@ pub(crate) fn event(
 
 /// Calls a closure on the currently focused node and all its parents to the
 /// root.
-#[duplicate_item(
-        method              reference(type)    traversal;
-        [focus_path]        [& type]           [postorder];
-        [focus_path_mut]    [&mut type]        [postorder_mut];
-    )]
-fn method<R: Walker + Default>(
-    e: reference([dyn Node]),
-    f: &mut dyn FnMut(reference([dyn Node])) -> Result<R>,
+fn focus_path<R: Walker + Default>(
+    e: &mut dyn Node,
+    f: &mut dyn FnMut(&mut dyn Node) -> Result<R>,
 ) -> Result<R> {
     let mut focus_seen = false;
     let mut ret = R::default();
     let focus_gen = STATE.with(|global_state| -> u64 { global_state.borrow().focus_gen });
-    traversal(e, &mut |x| -> Result<SkipWalker> {
+    postorder(e, &mut |x| -> Result<SkipWalker> {
         Ok(if focus_seen {
             ret = ret.join(f(x)?);
             SkipWalker::new(false)
@@ -457,7 +450,7 @@ pub fn locate<R: Walker + Default>(
     let mut seen = false;
     let mut ret = R::default();
     let p = p.into();
-    postorder_mut(e, &mut |inner| -> Result<SkipWalker> {
+    postorder(e, &mut |inner| -> Result<SkipWalker> {
         Ok(if seen {
             ret = ret.join(f(inner)?);
             SkipWalker::new(false)
@@ -479,7 +472,7 @@ pub fn locate<R: Walker + Default>(
 
 /// Mark a tree of nodes for render.
 pub fn taint_tree(e: &mut dyn Node) -> Result<()> {
-    postorder_mut(e, &mut |x| -> Result<()> {
+    postorder(e, &mut |x| -> Result<()> {
         x.taint();
         Ok(())
     })?;
@@ -499,7 +492,7 @@ mod tests {
 
     pub fn focvec(root: &mut TRoot) -> Result<Vec<String>> {
         let mut v = vec![];
-        focus_path_mut(root, &mut |x| -> Result<()> {
+        focus_path(root, &mut |x| -> Result<()> {
             let n = x.name().unwrap();
             v.push(n);
             Ok(())
@@ -524,20 +517,20 @@ mod tests {
 
             focus_next(&mut root)?;
             assert!(root.a.is_focused());
-            assert!(is_focus_ancestor(&root));
-            assert!(!is_focus_ancestor(&root.a));
+            assert!(is_focus_ancestor(&mut root));
+            assert!(!is_focus_ancestor(&mut root.a));
 
             focus_next(&mut root)?;
             assert!(root.a.a.is_focused());
-            assert!(is_focus_ancestor(&root.a));
+            assert!(is_focus_ancestor(&mut root.a));
             focus_next(&mut root)?;
             assert!(root.a.b.is_focused());
-            assert!(is_focus_ancestor(&root.a));
+            assert!(is_focus_ancestor(&mut root.a));
             focus_next(&mut root)?;
             assert!(root.b.is_focused());
 
             root.b.b.set_focus();
-            assert!(is_focus_ancestor(&root.b));
+            assert!(is_focus_ancestor(&mut root.b));
             focus_next(&mut root)?;
             assert!(root.is_focused());
             Ok(())
@@ -572,13 +565,13 @@ mod tests {
         run_test(|_, mut root| {
             assert_eq!(focvec(&mut root)?.len(), 0);
 
-            assert!(!on_focus_path(&root));
-            assert!(!on_focus_path(&root.a));
+            assert!(!on_focus_path(&mut root));
+            assert!(!on_focus_path(&mut root.a));
 
             root.a.a.set_focus();
-            assert!(on_focus_path(&root));
-            assert!(on_focus_path(&root.a));
-            assert!(!on_focus_path(&root.b));
+            assert!(on_focus_path(&mut root));
+            assert!(on_focus_path(&mut root.a));
+            assert!(!on_focus_path(&mut root.b));
 
             assert_eq!(focvec(&mut root)?, vec!["ba:la", "ba", "r"]);
 

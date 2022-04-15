@@ -269,14 +269,7 @@ where
         Ok(Outcome::handle())
     }
 
-    fn children(&self, f: &mut dyn FnMut(&dyn Node) -> Result<()>) -> Result<()> {
-        for i in &self.items {
-            f(&i.itm)?
-        }
-        Ok(())
-    }
-
-    fn children_mut(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         for i in self.items.iter_mut() {
             f(&mut i.itm)?
         }
@@ -313,9 +306,9 @@ mod tests {
     use super::*;
     use crate::{backend::test::TestRender, tutils::utils::TFixed};
 
-    pub fn views(lst: &List<TFixed>) -> Vec<Rect> {
+    pub fn views(lst: &mut List<TFixed>) -> Vec<Rect> {
         let mut v = vec![];
-        lst.children(&mut |x: &dyn Node| {
+        lst.children(&mut |x: &mut dyn Node| {
             v.push(if x.is_hidden() {
                 Rect::default()
             } else {
@@ -364,7 +357,7 @@ mod tests {
         lst.place(Rect::new(0, 0, 10, 10))?;
         tr.render(&mut lst)?;
         assert_eq!(
-            views(&lst),
+            views(&mut lst),
             vec![
                 Rect::new(0, 0, 10, 10),
                 Rect::new(0, 0, 0, 0),
@@ -377,7 +370,7 @@ mod tests {
         canopy::taint_tree(&mut lst)?;
         tr.render(&mut lst)?;
         assert_eq!(
-            views(&lst),
+            views(&mut lst),
             vec![
                 Rect::new(0, 5, 10, 5),
                 Rect::new(0, 0, 10, 5),
@@ -390,7 +383,7 @@ mod tests {
         canopy::taint_tree(&mut lst)?;
         tr.render(&mut lst)?;
         assert_eq!(
-            views(&lst),
+            views(&mut lst),
             vec![
                 Rect::new(0, 0, 0, 0),
                 Rect::new(0, 0, 10, 10),
@@ -403,7 +396,7 @@ mod tests {
         canopy::taint_tree(&mut lst)?;
         tr.render(&mut lst)?;
         assert_eq!(
-            views(&lst),
+            views(&mut lst),
             vec![
                 Rect::new(0, 0, 0, 0),
                 Rect::new(0, 0, 0, 0),
@@ -416,7 +409,7 @@ mod tests {
         canopy::taint_tree(&mut lst)?;
         tr.render(&mut lst)?;
         assert_eq!(
-            views(&lst),
+            views(&mut lst),
             vec![
                 Rect::new(0, 0, 0, 0),
                 Rect::new(0, 0, 0, 0),
@@ -429,7 +422,7 @@ mod tests {
         canopy::taint_tree(&mut lst)?;
         tr.render(&mut lst)?;
         assert_eq!(
-            views(&lst),
+            views(&mut lst),
             vec![
                 Rect::new(5, 0, 10, 10),
                 Rect::new(0, 0, 0, 0),
@@ -442,7 +435,7 @@ mod tests {
         canopy::taint_tree(&mut lst)?;
         tr.render(&mut lst)?;
         assert_eq!(
-            views(&lst),
+            views(&mut lst),
             vec![
                 Rect::new(5, 5, 10, 5),
                 Rect::new(5, 0, 10, 5),
