@@ -84,7 +84,7 @@ impl Root {
 
     fn open_adder(&mut self) -> Result<Outcome> {
         let mut adder = frame::Frame::new(InputLine::new(""));
-        adder.child.handle_focus()?;
+        adder.child.set_focus();
         self.adder = Some(adder);
         self.taint();
         Ok(Outcome::handle())
@@ -104,9 +104,8 @@ impl Node for Root {
         Ok(())
     }
 
-    fn handle_focus(&mut self) -> Result<Outcome> {
-        self.set_focus();
-        Ok(Outcome::handle())
+    fn accept_focus(&mut self) -> bool {
+        true
     }
 
     fn handle_mouse(&mut self, _: &mut dyn BackendControl, k: mouse::Mouse) -> Result<Outcome> {

@@ -15,9 +15,8 @@ pub struct View {
 }
 
 impl Node for View {
-    fn handle_focus(&mut self) -> Result<Outcome> {
-        self.set_focus();
-        Ok(Outcome::handle())
+    fn accept_focus(&mut self) -> bool {
+        true
     }
 
     fn handle_key(&mut self, _: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {

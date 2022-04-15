@@ -80,9 +80,8 @@ pub mod utils {
             Some(self.name.clone())
         }
 
-        fn handle_focus(&mut self) -> Result<Outcome> {
-            self.set_focus();
-            Ok(Outcome::handle())
+        fn accept_focus(&mut self) -> bool {
+            true
         }
         fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
             r.text(
@@ -104,9 +103,8 @@ pub mod utils {
             Some(self.name.clone())
         }
 
-        fn handle_focus(&mut self) -> Result<Outcome> {
-            self.set_focus();
-            Ok(Outcome::handle())
+        fn accept_focus(&mut self) -> bool {
+            true
         }
 
         fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
@@ -141,9 +139,8 @@ pub mod utils {
             Some(self.name.clone())
         }
 
-        fn handle_focus(&mut self) -> Result<Outcome> {
-            self.set_focus();
-            Ok(Outcome::handle())
+        fn accept_focus(&mut self) -> bool {
+            true
         }
 
         fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {

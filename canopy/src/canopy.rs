@@ -73,7 +73,8 @@ pub fn focus_dir(e: &mut dyn Node, dir: Direction) -> Result<Outcome> {
                 return Ok(true);
             }
             locate(e, p, &mut |x| {
-                if !seen && x.handle_focus()?.is_handled() {
+                if !seen && x.accept_focus() {
+                    x.set_focus();
                     seen = true;
                 };
                 Ok(())
@@ -109,7 +110,8 @@ pub fn focus_down(e: &mut dyn Node) -> Result<Outcome> {
 pub fn focus_first(e: &mut dyn Node) -> Result<Outcome> {
     let mut focus_set = false;
     preorder(e, &mut |x| -> Result<SkipWalker> {
-        Ok(if !focus_set && x.handle_focus()?.is_handled() {
+        Ok(if !focus_set && x.accept_focus() {
+            x.set_focus();
             focus_set = true;
             SkipWalker::new(true)
         } else {
@@ -149,7 +151,8 @@ pub fn focus_next(e: &mut dyn Node) -> Result<Outcome> {
     preorder(e, &mut |x| -> Result<()> {
         if !focus_set {
             if focus_seen {
-                if x.handle_focus()?.is_handled() {
+                if x.accept_focus() {
+                    x.set_focus();
                     focus_set = true;
                 }
             } else if x.is_focused() {
@@ -179,7 +182,9 @@ pub fn focus_prev(e: &mut dyn Node) -> Result<Outcome> {
             if x.state().focus_gen == current {
                 focus_seen = true;
             } else {
-                x.handle_focus()?.is_handled();
+                if x.accept_focus() {
+                    x.set_focus();
+                }
             }
         }
         Ok(())

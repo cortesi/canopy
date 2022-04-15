@@ -125,20 +125,16 @@ impl Node for Block {
         Ok(())
     }
 
-    fn handle_focus(&mut self) -> Result<Outcome> {
-        Ok(if self.children.is_empty() {
-            self.set_focus();
-            Outcome::handle()
-        } else {
-            Outcome::ignore()
-        })
+    fn accept_focus(&mut self) -> bool {
+        self.children.is_empty()
     }
 
     fn handle_mouse(&mut self, _: &mut dyn BackendControl, k: mouse::Mouse) -> Result<Outcome> {
         Ok(match k {
             c if c == mouse::MouseAction::Down + mouse::Button::Left => {
                 canopy::taint_tree(self);
-                self.handle_focus()?
+                self.set_focus();
+                Outcome::handle()
             }
             c if c == mouse::MouseAction::Down + mouse::Button::Middle => {
                 self.split()?;

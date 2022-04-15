@@ -4,7 +4,7 @@ use crate::{
     geom::{Expanse, Rect},
     node::Node,
     state::{NodeState, StatefulNode},
-    Outcome, Render, ViewPort,
+    Render, ViewPort,
 };
 
 /// ListItem must be implemented by items displayed in a `List`.
@@ -264,9 +264,8 @@ impl<N> Node for List<N>
 where
     N: Node + ListItem,
 {
-    fn handle_focus(&mut self) -> Result<Outcome> {
-        self.set_focus();
-        Ok(Outcome::handle())
+    fn accept_focus(&mut self) -> bool {
+        true
     }
 
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {

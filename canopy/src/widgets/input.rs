@@ -120,9 +120,8 @@ impl InputLine {
 }
 
 impl<'a> Node for InputLine {
-    fn handle_focus(&mut self) -> Result<Outcome> {
-        self.set_focus();
-        Ok(Outcome::handle())
+    fn accept_focus(&mut self) -> bool {
+        true
     }
 
     fn cursor(&self) -> Option<cursor::Cursor> {

@@ -26,9 +26,8 @@ impl Root {
 }
 
 impl Node for Root {
-    fn handle_focus(&mut self) -> Result<Outcome> {
-        self.set_focus();
-        Ok(Outcome::handle())
+    fn accept_focus(&mut self) -> bool {
+        true
     }
 
     fn handle_mouse(&mut self, _: &mut dyn BackendControl, k: mouse::Mouse) -> Result<Outcome> {

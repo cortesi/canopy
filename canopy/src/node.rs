@@ -48,12 +48,10 @@ pub trait Node: StatefulNode {
         None
     }
 
-    /// Handle a focus event. If the node accepts focus, the node should call
-    /// `self.set_focus()` and return Outcome::Handled, otherwise it should
-    /// return `Outcome::Ignore`, and the next node in the path to the root will
-    /// be tried. The default implementation just returns `Outcome::Ignore`.
-    fn handle_focus(&mut self) -> Result<Outcome> {
-        Ok(Outcome::ignore())
+    /// Attempt to focus this node. If the node accepts focus, it should return
+    /// true, and if not return false. The default implementation returns false.
+    fn accept_focus(&mut self) -> bool {
+        false
     }
 
     /// Handle a key input event. This event is only called for nodes that are

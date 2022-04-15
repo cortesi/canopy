@@ -134,7 +134,7 @@ mod tests {
         p.place(r)?;
 
         assert_eq!(p.shape(), vec![1, 1]);
-        p.children[0][0].a.handle_focus()?;
+        p.children[0][0].a.set_focus();
         p.place(r)?;
 
         let tn = utils::TBranch::new("c");
@@ -144,7 +144,7 @@ mod tests {
 
         assert_eq!(p.shape(), vec![2, 1]);
 
-        p.children[1][0].a.handle_focus()?;
+        p.children[1][0].a.set_focus();
         assert_eq!(p.focus_coords(), Some((1, 0)));
         Ok(())
     }
