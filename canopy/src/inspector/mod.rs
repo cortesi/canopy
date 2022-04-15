@@ -8,9 +8,6 @@ use crate::{
     StatefulNode,
 };
 
-#[derive(Debug, PartialEq, Clone)]
-struct InspectorState {}
-
 #[derive(StatefulNode)]
 
 pub struct Content {
@@ -56,7 +53,7 @@ where
     N: Node,
 {
     state: NodeState,
-    root: N,
+    app: N,
     active: bool,
     activate: key::Key,
     content: Content,
@@ -71,7 +68,7 @@ where
             state: NodeState::default(),
             active: false,
             content: Content::new(),
-            root,
+            app: root,
             activate,
         };
         c.hide().unwrap();
@@ -82,7 +79,7 @@ where
         self.active = false;
         self.content.hide();
         canopy::taint_tree(self);
-        canopy::focus_first(&mut self.root)?;
+        canopy::focus_first(&mut self.app)?;
         Ok(Outcome::handle())
     }
 
@@ -90,7 +87,7 @@ where
         self.active = true;
         self.content.unhide();
         canopy::taint_tree(self);
-        canopy::focus_first(self)?;
+        canopy::focus_first(&mut self.content)?;
         Ok(Outcome::handle())
     }
 }
@@ -103,7 +100,7 @@ where
         if self.active {
             match k {
                 c if c == 'a' => {
-                    canopy::focus_first(&mut self.root)?;
+                    canopy::focus_first(&mut self.app)?;
                 }
                 c if c == 'q' => {
                     self.hide()?;
@@ -112,7 +109,7 @@ where
                     if canopy::on_focus_path(&mut self.content) {
                         self.hide()?;
                     } else {
-                        canopy::focus_first(self)?;
+                        canopy::focus_first(&mut self.content)?;
                     }
                 }
                 _ => return Ok(Outcome::ignore()),
@@ -128,15 +125,15 @@ where
         if self.active {
             let parts = vp.split_horizontal(2)?;
             fit(&mut self.content, parts[0])?;
-            fit(&mut self.root, parts[1])?;
+            fit(&mut self.app, parts[1])?;
         } else {
-            fit(&mut self.root, vp)?;
+            fit(&mut self.app, vp)?;
         };
         Ok(())
     }
 
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-        f(&mut self.content)?;
-        f(&mut self.root)
+        f(&mut self.app)?;
+        f(&mut self.content)
     }
 }

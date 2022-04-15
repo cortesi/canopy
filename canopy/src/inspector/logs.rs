@@ -142,12 +142,15 @@ impl Node for Logs {
             self.started = true;
         }
         {
-            let mut b = self.buf.lock().unwrap();
+            let buf = self.buf.clone();
+            let mut b = buf.lock().unwrap();
+            if !b.is_empty() {
+                taint_tree(self);
+            }
             for i in b.drain(0..) {
                 self.list.append(LogItem::new(&i));
             }
         }
-        self.taint();
         Some(Duration::from_millis(100))
     }
 
