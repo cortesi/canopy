@@ -66,15 +66,15 @@ where
     N: Node,
 {
     pub fn new(activate: key::Key, root: N) -> Self {
-        let mut content = Content::new();
-        content.hide();
-        Inspector {
+        let mut c = Inspector {
             state: NodeState::default(),
             active: false,
-            content,
+            content: Content::new(),
             root,
             activate,
-        }
+        };
+        c.hide().unwrap();
+        c
     }
 
     pub fn hide(&mut self) -> Result<Outcome> {
