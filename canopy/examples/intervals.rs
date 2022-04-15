@@ -7,7 +7,7 @@ use canopy::{
     inspector::Inspector,
     style::solarized,
     widgets::{frame, list::*, Text},
-    wrap, BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
+    wrap, BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode,
 };
 
 #[derive(StatefulNode)]
@@ -54,7 +54,8 @@ impl Node for IntervalItem {
         f(&mut self.child)
     }
 
-    fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, r: &mut Render) -> Result<()> {
+        let vp = self.vp();
         wrap(&mut self.child, vp)?;
         if self.selected {
             r.style.push_layer("blue");
@@ -69,9 +70,13 @@ struct StatusBar {
 }
 
 impl Node for StatusBar {
-    fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, r: &mut Render) -> Result<()> {
         r.style.push_layer("statusbar");
-        r.text("statusbar/text", vp.view_rect().first_line(), "intervals")?;
+        r.text(
+            "statusbar/text",
+            self.vp().view_rect().first_line(),
+            "intervals",
+        )?;
         Ok(())
     }
 }
@@ -103,8 +108,8 @@ impl Root {
 }
 
 impl Node for Root {
-    fn render(&mut self, _: &mut Render, vp: ViewPort) -> Result<()> {
-        let (a, b) = vp.carve_vend(1);
+    fn render(&mut self, _: &mut Render) -> Result<()> {
+        let (a, b) = self.vp().carve_vend(1);
         wrap(&mut self.statusbar, b)?;
         wrap(&mut self.content, a)?;
         Ok(())

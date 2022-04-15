@@ -107,7 +107,7 @@ pub trait Node: StatefulNode {
     ///
     /// Nodes with no children should always make sure they redraw all of
     /// `self.screen_area()`. The default implementation does nothing.
-    fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, r: &mut Render) -> Result<()> {
         Ok(())
     }
 }

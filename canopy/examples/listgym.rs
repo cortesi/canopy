@@ -49,7 +49,8 @@ impl Node for Block {
         })
     }
 
-    fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, r: &mut Render) -> Result<()> {
+        let vp = self.vp();
         let (_, screen) = vp.screen_rect().carve_hstart(2);
         let outer = self.child.fit(screen.into())?;
         let view = Rect {
@@ -78,9 +79,9 @@ struct StatusBar {
 }
 
 impl Node for StatusBar {
-    fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, r: &mut Render) -> Result<()> {
         r.style.push_layer("statusbar");
-        r.text("text", vp.view_rect().first_line(), "listgym")?;
+        r.text("text", self.vp().view_rect().first_line(), "listgym")?;
         Ok(())
     }
 }
@@ -106,8 +107,8 @@ impl Root {
 }
 
 impl Node for Root {
-    fn render(&mut self, _: &mut Render, vp: ViewPort) -> Result<()> {
-        let (a, b) = vp.carve_vend(1);
+    fn render(&mut self, _: &mut Render) -> Result<()> {
+        let (a, b) = self.vp().carve_vend(1);
         wrap(&mut self.statusbar, b)?;
         wrap(&mut self.content, a)?;
         Ok(())

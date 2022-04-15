@@ -1,5 +1,5 @@
 use crate as canopy;
-use crate::{Node, NodeState, Render, Result, StatefulNode, ViewPort};
+use crate::{Node, NodeState, Render, Result, StatefulNode};
 
 #[derive(StatefulNode)]
 
@@ -16,9 +16,13 @@ impl StatusBar {
 }
 
 impl Node for StatusBar {
-    fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, r: &mut Render) -> Result<()> {
         r.style.push_layer("statusbar");
-        r.text("statusbar/text", vp.view_rect().first_line(), "inspector")?;
+        r.text(
+            "statusbar/text",
+            self.vp().view_rect().first_line(),
+            "inspector",
+        )?;
         Ok(())
     }
 }

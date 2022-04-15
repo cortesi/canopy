@@ -7,7 +7,7 @@ pub mod utils {
         event::{key, mouse},
         geom::Expanse,
         widgets::list::ListItem,
-        wrap, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
+        wrap, Node, NodeState, Outcome, Render, Result, StatefulNode,
     };
 
     pub const K_ANY: key::Key = key::Key(None, key::KeyCode::Char('a'));
@@ -83,10 +83,10 @@ pub mod utils {
         fn accept_focus(&mut self) -> bool {
             true
         }
-        fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
+        fn render(&mut self, r: &mut Render) -> Result<()> {
             r.text(
                 "any",
-                vp.view_rect().first_line(),
+                self.vp().view_rect().first_line(),
                 &format!("<{}>", self.name.clone()),
             )
         }
@@ -107,14 +107,14 @@ pub mod utils {
             true
         }
 
-        fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
-            let parts = vp.split_vertical(2)?;
+        fn render(&mut self, r: &mut Render) -> Result<()> {
+            let parts = self.vp().split_vertical(2)?;
             wrap(&mut self.a, parts[0])?;
             wrap(&mut self.b, parts[1])?;
 
             r.text(
                 "any",
-                vp.view_rect().first_line(),
+                self.vp().view_rect().first_line(),
                 &format!("<{}>", self.name.clone()),
             )
         }
@@ -143,14 +143,14 @@ pub mod utils {
             true
         }
 
-        fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
-            let parts = vp.split_horizontal(2)?;
+        fn render(&mut self, r: &mut Render) -> Result<()> {
+            let parts = self.vp().split_horizontal(2)?;
             wrap(&mut self.a, parts[0])?;
             wrap(&mut self.b, parts[1])?;
 
             r.text(
                 "any",
-                vp.view_rect().first_line(),
+                self.vp().view_rect().first_line(),
                 &format!("<{}>", self.name.clone()),
             )
         }

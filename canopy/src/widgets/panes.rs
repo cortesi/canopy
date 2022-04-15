@@ -2,7 +2,7 @@ use crate as canopy;
 use crate::{
     place,
     state::{NodeState, StatefulNode},
-    Node, Render, Result, ViewPort,
+    Node, Render, Result,
 };
 
 /// Panes manages a set of child nodes arranged in a 2d grid.
@@ -99,8 +99,8 @@ impl<N: Node> Node for Panes<N> {
         Ok(())
     }
 
-    fn render(&mut self, _rndr: &mut Render, vp: ViewPort) -> Result<()> {
-        let l = vp.screen_rect().split_panes(&self.shape())?;
+    fn render(&mut self, _rndr: &mut Render) -> Result<()> {
+        let l = self.vp().screen_rect().split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
                 place(row, l[ci][ri])?;

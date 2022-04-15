@@ -4,7 +4,7 @@ use crate as canopy;
 use crate::{
     frame,
     state::{NodeState, StatefulNode},
-    Node, Render, Result, ViewPort,
+    Node, Render, Result,
 };
 
 /// Defines the set of glyphs used to draw the frame
@@ -106,7 +106,8 @@ where
         self.child.should_render()
     }
 
-    fn render(&mut self, rndr: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render) -> Result<()> {
+        let vp = self.vp();
         let f = frame(&mut self.child, vp, 1)?;
 
         let style = if canopy::on_focus_path(self) {

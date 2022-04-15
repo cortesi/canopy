@@ -7,7 +7,7 @@ use canopy::{
     inspector::Inspector,
     style::solarized,
     widgets::{frame, Text},
-    wrap, BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
+    wrap, BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode,
 };
 
 #[derive(StatefulNode)]
@@ -60,7 +60,8 @@ impl Node for Root {
         Ok(Outcome::handle())
     }
 
-    fn render(&mut self, _: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, _: &mut Render) -> Result<()> {
+        let vp = self.vp();
         wrap(&mut self.child, vp)
     }
 

@@ -4,7 +4,7 @@ use crate::{
     geom::{Expanse, Rect},
     node::Node,
     state::{NodeState, StatefulNode},
-    Render, ViewPort,
+    Render,
 };
 
 /// ListItem must be implemented by items displayed in a `List`.
@@ -286,9 +286,10 @@ where
         Ok(Expanse { w, h })
     }
 
-    fn render(&mut self, _: &mut Render, myvp: ViewPort) -> Result<()> {
+    fn render(&mut self, _: &mut Render) -> Result<()> {
+        let vp = self.vp();
         for itm in &mut self.items {
-            if let Some(vp) = myvp.map(itm.virt)? {
+            if let Some(vp) = vp.map(itm.virt)? {
                 itm.itm.set_viewport(vp);
                 canopy::taint_tree(&mut itm.itm);
                 itm.itm.unhide();

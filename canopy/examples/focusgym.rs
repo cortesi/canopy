@@ -5,7 +5,7 @@ use canopy::{
     geom::Frame,
     inspector::Inspector,
     style::solarized,
-    wrap, BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
+    wrap, BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode,
 };
 
 #[derive(StatefulNode)]
@@ -45,7 +45,8 @@ impl Block {
 }
 
 impl Node for Root {
-    fn render(&mut self, _: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, _: &mut Render) -> Result<()> {
+        let vp = self.vp();
         wrap(&mut self.child, vp)
     }
 
@@ -102,7 +103,8 @@ impl Block {
 }
 
 impl Node for Block {
-    fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, r: &mut Render) -> Result<()> {
+        let vp = self.vp();
         if !self.children.is_empty() {
             let vps = if self.horizontal {
                 vp.split_horizontal(self.children.len() as u16)?

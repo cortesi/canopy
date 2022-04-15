@@ -280,7 +280,7 @@ fn render_traversal<R: RenderBackend>(
             let mut c = Coverage::new(e.vp().screen_rect().expanse());
             let mut rndr = Render::new(r, styl, e.vp(), &mut c);
 
-            e.render(&mut rndr, e.state().viewport)?;
+            e.render(&mut rndr)?;
 
             // Now add regions managed by children to coverage
             let escreen = e.vp().screen_rect();

@@ -45,7 +45,8 @@ impl Node for LogItem {
         })
     }
 
-    fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, r: &mut Render) -> Result<()> {
+        let vp = self.vp();
         let (_, screen) = vp.screen_rect().carve_hstart(2);
         let outer = self.child.fit(screen.into())?;
         let view = Rect {
@@ -149,7 +150,8 @@ impl Node for Logs {
         Some(Duration::from_millis(100))
     }
 
-    fn render(&mut self, _: &mut Render, vp: ViewPort) -> Result<()> {
+    fn render(&mut self, _: &mut Render) -> Result<()> {
+        let vp = self.vp();
         wrap(&mut self.list, vp)?;
         Ok(())
     }

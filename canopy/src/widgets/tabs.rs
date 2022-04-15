@@ -1,7 +1,7 @@
 use crate as canopy;
 use crate::{
     state::{NodeState, StatefulNode},
-    Node, Render, Result, ViewPort,
+    Node, Render, Result,
 };
 
 /// A tab control managing a set of nodes with titles.
@@ -33,8 +33,9 @@ impl Tabs {
 }
 
 impl Node for Tabs {
-    fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
-        for (i, rect) in vp
+    fn render(&mut self, r: &mut Render) -> Result<()> {
+        for (i, rect) in self
+            .vp()
             .view_rect()
             .split_horizontal(self.tabs.len() as u16)?
             .iter()

@@ -2,7 +2,7 @@ use super::logs::Logs;
 use crate as canopy;
 use crate::{
     event::key, widgets::tabs, wrap, BackendControl, Node, NodeState, Outcome, Render, Result,
-    StatefulNode, ViewPort,
+    StatefulNode,
 };
 
 /// View contains the body of the inspector.
@@ -23,8 +23,8 @@ impl Node for View {
         Ok(Outcome::handle())
     }
 
-    fn render(&mut self, _r: &mut Render, vp: ViewPort) -> Result<()> {
-        let (a, b) = vp.carve_vstart(1);
+    fn render(&mut self, _r: &mut Render) -> Result<()> {
+        let (a, b) = self.vp().carve_vstart(1);
         wrap(&mut self.tabs, a)?;
         wrap(&mut self.logs, b)?;
         Ok(())
