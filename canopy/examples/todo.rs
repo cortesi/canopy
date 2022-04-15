@@ -1,12 +1,13 @@
 use canopy::{
     backend::crossterm::runloop,
     event::{key, mouse},
+    fit,
     geom::{Expanse, Rect},
     inspector::Inspector,
     place,
     style::solarized,
     widgets::{frame, list::*, InputLine, Text},
-    wrap, BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode,
+    BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode,
 };
 
 #[derive(StatefulNode)]
@@ -43,7 +44,7 @@ impl Node for TodoItem {
 
     fn render(&mut self, r: &mut Render) -> Result<()> {
         let vp = self.vp();
-        wrap(&mut self.child, vp)?;
+        fit(&mut self.child, vp)?;
         if self.selected {
             r.style.push_layer("blue");
         }
@@ -97,8 +98,8 @@ impl Node for Root {
     fn render(&mut self, _: &mut Render) -> Result<()> {
         let vp = self.vp();
         let (a, b) = vp.carve_vend(1);
-        wrap(&mut self.statusbar, b)?;
-        wrap(&mut self.content, a)?;
+        fit(&mut self.statusbar, b)?;
+        fit(&mut self.content, a)?;
 
         let a = vp.screen_rect();
         if let Some(add) = &mut self.adder {

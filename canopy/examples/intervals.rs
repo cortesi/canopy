@@ -3,11 +3,12 @@ use std::time::Duration;
 use canopy::{
     backend::crossterm::runloop,
     event::{key, mouse},
+    fit,
     geom::Expanse,
     inspector::Inspector,
     style::solarized,
     widgets::{frame, list::*, Text},
-    wrap, BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode,
+    BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode,
 };
 
 #[derive(StatefulNode)]
@@ -56,7 +57,7 @@ impl Node for IntervalItem {
 
     fn render(&mut self, r: &mut Render) -> Result<()> {
         let vp = self.vp();
-        wrap(&mut self.child, vp)?;
+        fit(&mut self.child, vp)?;
         if self.selected {
             r.style.push_layer("blue");
         }
@@ -110,8 +111,8 @@ impl Root {
 impl Node for Root {
     fn render(&mut self, _: &mut Render) -> Result<()> {
         let (a, b) = self.vp().carve_vend(1);
-        wrap(&mut self.statusbar, b)?;
-        wrap(&mut self.content, a)?;
+        fit(&mut self.statusbar, b)?;
+        fit(&mut self.content, a)?;
         Ok(())
     }
 

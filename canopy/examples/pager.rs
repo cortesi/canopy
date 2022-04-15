@@ -4,10 +4,11 @@ use std::fs;
 use canopy::{
     backend::crossterm::runloop,
     event::{key, mouse},
+    fit,
     inspector::Inspector,
     style::solarized,
     widgets::{frame, Text},
-    wrap, BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode,
+    BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode,
 };
 
 #[derive(StatefulNode)]
@@ -62,7 +63,7 @@ impl Node for Root {
 
     fn render(&mut self, _: &mut Render) -> Result<()> {
         let vp = self.vp();
-        wrap(&mut self.child, vp)
+        fit(&mut self.child, vp)
     }
 
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {

@@ -5,9 +5,10 @@ pub mod utils {
     use crate::{self as canopy, BackendControl};
     use crate::{
         event::{key, mouse},
+        fit,
         geom::Expanse,
         widgets::list::ListItem,
-        wrap, Node, NodeState, Outcome, Render, Result, StatefulNode,
+        Node, NodeState, Outcome, Render, Result, StatefulNode,
     };
 
     pub const K_ANY: key::Key = key::Key(None, key::KeyCode::Char('a'));
@@ -109,8 +110,8 @@ pub mod utils {
 
         fn render(&mut self, r: &mut Render) -> Result<()> {
             let parts = self.vp().split_vertical(2)?;
-            wrap(&mut self.a, parts[0])?;
-            wrap(&mut self.b, parts[1])?;
+            fit(&mut self.a, parts[0])?;
+            fit(&mut self.b, parts[1])?;
 
             r.text(
                 "any",
@@ -145,8 +146,8 @@ pub mod utils {
 
         fn render(&mut self, r: &mut Render) -> Result<()> {
             let parts = self.vp().split_horizontal(2)?;
-            wrap(&mut self.a, parts[0])?;
-            wrap(&mut self.b, parts[1])?;
+            fit(&mut self.a, parts[0])?;
+            fit(&mut self.b, parts[1])?;
 
             r.text(
                 "any",

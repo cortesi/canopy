@@ -1,11 +1,12 @@
 use canopy::{
     backend::crossterm::runloop,
     event::{key, mouse},
+    fit,
     geom::Expanse,
     geom::Frame,
     inspector::Inspector,
     style::solarized,
-    wrap, BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode,
+    BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode,
 };
 
 #[derive(StatefulNode)]
@@ -47,7 +48,7 @@ impl Block {
 impl Node for Root {
     fn render(&mut self, _: &mut Render) -> Result<()> {
         let vp = self.vp();
-        wrap(&mut self.child, vp)
+        fit(&mut self.child, vp)
     }
 
     fn handle_mouse(&mut self, _: &mut dyn BackendControl, k: mouse::Mouse) -> Result<Outcome> {
@@ -112,7 +113,7 @@ impl Node for Block {
                 vp.split_vertical(self.children.len() as u16)?
             };
             for i in 0..self.children.len() {
-                wrap(&mut self.children[i], vps[i])?;
+                fit(&mut self.children[i], vps[i])?;
             }
         } else {
             let bc = if self.is_focused() && self.children.is_empty() {

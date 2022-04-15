@@ -7,10 +7,11 @@ use tracing_subscriber::fmt;
 use crate as canopy;
 use crate::{
     event::key,
+    fit,
     geom::{Expanse, Rect},
     taint_tree,
     widgets::{list::*, Text},
-    wrap, BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
+    BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 use std::time::Duration;
 
@@ -152,7 +153,7 @@ impl Node for Logs {
 
     fn render(&mut self, _: &mut Render) -> Result<()> {
         let vp = self.vp();
-        wrap(&mut self.list, vp)?;
+        fit(&mut self.list, vp)?;
         Ok(())
     }
 

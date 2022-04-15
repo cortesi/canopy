@@ -1,7 +1,7 @@
 use super::logs::Logs;
 use crate as canopy;
 use crate::{
-    event::key, widgets::tabs, wrap, BackendControl, Node, NodeState, Outcome, Render, Result,
+    event::key, fit, widgets::tabs, BackendControl, Node, NodeState, Outcome, Render, Result,
     StatefulNode,
 };
 
@@ -25,8 +25,8 @@ impl Node for View {
 
     fn render(&mut self, _r: &mut Render) -> Result<()> {
         let (a, b) = self.vp().carve_vstart(1);
-        wrap(&mut self.tabs, a)?;
-        wrap(&mut self.logs, b)?;
+        fit(&mut self.tabs, a)?;
+        fit(&mut self.logs, b)?;
         Ok(())
     }
 
