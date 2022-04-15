@@ -5,7 +5,7 @@ use canopy::{
     geom::Frame,
     inspector::Inspector,
     style::solarized,
-    BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
+    wrap, BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 
 #[derive(StatefulNode)]
@@ -46,7 +46,7 @@ impl Block {
 
 impl Node for Root {
     fn render(&mut self, _: &mut Render, vp: ViewPort) -> Result<()> {
-        self.child.wrap(vp)
+        wrap(&mut self.child, vp)
     }
 
     fn handle_mouse(&mut self, _: &mut dyn BackendControl, k: mouse::Mouse) -> Result<Outcome> {
@@ -110,7 +110,7 @@ impl Node for Block {
                 vp.split_vertical(self.children.len() as u16)?
             };
             for i in 0..self.children.len() {
-                self.children[i].wrap(vps[i])?;
+                wrap(&mut self.children[i], vps[i])?;
             }
         } else {
             let bc = if self.is_focused() && self.children.is_empty() {

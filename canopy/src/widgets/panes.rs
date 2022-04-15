@@ -1,5 +1,6 @@
 use crate as canopy;
 use crate::{
+    place,
     state::{NodeState, StatefulNode},
     Node, Render, Result, ViewPort,
 };
@@ -102,7 +103,7 @@ impl<N: Node> Node for Panes<N> {
         let l = vp.screen_rect().split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
-                row.place(l[ci][ri])?;
+                place(row, l[ci][ri])?;
             }
         }
         Ok(())
@@ -126,21 +127,21 @@ mod tests {
             w: 100,
             h: 100,
         };
-        p.place(r)?;
+        place(&mut p, r)?;
 
         assert_eq!(p.shape(), vec![1]);
         let tn = utils::TBranch::new("b");
         p.insert_col(tn)?;
-        p.place(r)?;
+        place(&mut p, r)?;
 
         assert_eq!(p.shape(), vec![1, 1]);
         p.children[0][0].a.set_focus();
-        p.place(r)?;
+        place(&mut p, r)?;
 
         let tn = utils::TBranch::new("c");
         assert_eq!(p.focus_coords(), Some((0, 0)));
         p.insert_row(tn);
-        p.place(r)?;
+        place(&mut p, r)?;
 
         assert_eq!(p.shape(), vec![2, 1]);
 

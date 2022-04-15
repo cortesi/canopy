@@ -4,7 +4,7 @@ mod view;
 
 use crate as canopy;
 use crate::{
-    event::key, widgets::frame, BackendControl, Node, NodeState, Outcome, Render, Result,
+    event::key, widgets::frame, wrap, BackendControl, Node, NodeState, Outcome, Render, Result,
     StatefulNode, ViewPort,
 };
 
@@ -39,8 +39,8 @@ impl Node for Content {
     fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
         r.style.push_layer("inspector");
         let parts = vp.carve_vend(1);
-        self.statusbar.wrap(parts.1)?;
-        self.view.wrap(parts.0)?;
+        wrap(&mut self.statusbar, parts.1)?;
+        wrap(&mut self.view, parts.0)?;
         Ok(())
     }
 
@@ -126,10 +126,10 @@ where
     fn render(&mut self, _r: &mut Render, vp: ViewPort) -> Result<()> {
         if self.active {
             let parts = vp.split_horizontal(2)?;
-            self.content.wrap(parts[0])?;
-            self.root.wrap(parts[1])?;
+            wrap(&mut self.content, parts[0])?;
+            wrap(&mut self.root, parts[1])?;
         } else {
-            self.root.wrap(vp)?;
+            wrap(&mut self.root, vp)?;
         };
         Ok(())
     }

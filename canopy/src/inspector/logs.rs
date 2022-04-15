@@ -10,7 +10,7 @@ use crate::{
     geom::{Expanse, Rect},
     taint_tree,
     widgets::{list::*, Text},
-    BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
+    wrap, BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 use std::time::Duration;
 
@@ -150,7 +150,7 @@ impl Node for Logs {
     }
 
     fn render(&mut self, _: &mut Render, vp: ViewPort) -> Result<()> {
-        self.list.wrap(vp)?;
+        wrap(&mut self.list, vp)?;
         Ok(())
     }
 

@@ -4,6 +4,8 @@
 
 ## 0.1
 
+- Key binding management system
+  - Help system
 - Better debugging and monitoring story
   - Inspector GUI
     - Logs
@@ -17,17 +19,15 @@
     - Screenshots of app area
     - Graphs/stats
   - Add node names for relevant errors
-  - Benchmarking and integration tests
-- Further simplify Node trait by shifting wrap and friends into module namespace
 - ControlBackend
   - Improve ergonomics - adding a function that returns a handle which re-enters rendering?
 - Renderer
   - Explicit colors - at the moment, we can only get colors from our color scheme
 - Ergonomics:
   - Better error returns
-- Key binding management system
 - ctrl-c/ctrl-z
 - Widgets
+  - Editor
   - Pad
   - Center
   - text line widget
@@ -40,6 +40,9 @@
   - Integration tests
   - Benchmarks
   - Fuzzing
+- Areas that don't smell too good
+  - Numeric types and constant conversions in the geom module
+  - The Outcome type
 
 ## 0.2
 

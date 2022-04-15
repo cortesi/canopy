@@ -303,7 +303,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{backend::test::TestRender, tutils::utils::TFixed};
+    use crate::{backend::test::TestRender, place, tutils::utils::TFixed};
 
     pub fn views(lst: &mut List<TFixed>) -> Vec<Rect> {
         let mut v = vec![];
@@ -353,7 +353,7 @@ mod tests {
             TFixed::new(rw, rh),
         ]);
 
-        lst.place(Rect::new(0, 0, 10, 10))?;
+        place(&mut lst, Rect::new(0, 0, 10, 10))?;
         tr.render(&mut lst)?;
         assert_eq!(
             views(&mut lst),
@@ -365,7 +365,7 @@ mod tests {
         );
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 5));
-        lst.place(Rect::new(0, 0, 10, 10))?;
+        place(&mut lst, Rect::new(0, 0, 10, 10))?;
         canopy::taint_tree(&mut lst);
         tr.render(&mut lst)?;
         assert_eq!(
@@ -378,7 +378,7 @@ mod tests {
         );
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 5));
-        lst.place(Rect::new(0, 0, 10, 10))?;
+        place(&mut lst, Rect::new(0, 0, 10, 10))?;
         canopy::taint_tree(&mut lst);
         tr.render(&mut lst)?;
         assert_eq!(
@@ -391,7 +391,7 @@ mod tests {
         );
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 10));
-        lst.place(Rect::new(0, 0, 10, 10))?;
+        place(&mut lst, Rect::new(0, 0, 10, 10))?;
         canopy::taint_tree(&mut lst);
         tr.render(&mut lst)?;
         assert_eq!(
@@ -404,7 +404,7 @@ mod tests {
         );
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 10));
-        lst.place(Rect::new(0, 0, 10, 10))?;
+        place(&mut lst, Rect::new(0, 0, 10, 10))?;
         canopy::taint_tree(&mut lst);
         tr.render(&mut lst)?;
         assert_eq!(
@@ -417,7 +417,7 @@ mod tests {
         );
 
         lst.update_viewport(&|vp| vp.scroll_to(5, 0));
-        lst.place(Rect::new(0, 0, 10, 10))?;
+        place(&mut lst, Rect::new(0, 0, 10, 10))?;
         canopy::taint_tree(&mut lst);
         tr.render(&mut lst)?;
         assert_eq!(
@@ -430,7 +430,7 @@ mod tests {
         );
 
         lst.update_viewport(&|vp| vp.scroll_by(0, 5));
-        lst.place(Rect::new(0, 0, 10, 10))?;
+        place(&mut lst, Rect::new(0, 0, 10, 10))?;
         canopy::taint_tree(&mut lst);
         tr.render(&mut lst)?;
         assert_eq!(

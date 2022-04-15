@@ -26,7 +26,7 @@ pub use crate::canopy::*;
 pub use actions::Actions;
 pub use control::BackendControl;
 pub use error::{Error, Result};
-pub use node::Node;
+pub use node::*;
 pub use outcome::Outcome;
 pub use render::Render;
 pub use state::{NodeState, StatefulNode};

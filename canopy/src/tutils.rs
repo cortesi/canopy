@@ -7,7 +7,7 @@ pub mod utils {
         event::{key, mouse},
         geom::Expanse,
         widgets::list::ListItem,
-        Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
+        wrap, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
     };
 
     pub const K_ANY: key::Key = key::Key(None, key::KeyCode::Char('a'));
@@ -109,8 +109,8 @@ pub mod utils {
 
         fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
             let parts = vp.split_vertical(2)?;
-            self.a.wrap(parts[0])?;
-            self.b.wrap(parts[1])?;
+            wrap(&mut self.a, parts[0])?;
+            wrap(&mut self.b, parts[1])?;
 
             r.text(
                 "any",
@@ -145,8 +145,8 @@ pub mod utils {
 
         fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
             let parts = vp.split_horizontal(2)?;
-            self.a.wrap(parts[0])?;
-            self.b.wrap(parts[1])?;
+            wrap(&mut self.a, parts[0])?;
+            wrap(&mut self.b, parts[1])?;
 
             r.text(
                 "any",

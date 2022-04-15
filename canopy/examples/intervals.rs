@@ -7,7 +7,7 @@ use canopy::{
     inspector::Inspector,
     style::solarized,
     widgets::{frame, list::*, Text},
-    BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
+    wrap, BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 
 #[derive(StatefulNode)]
@@ -55,7 +55,7 @@ impl Node for IntervalItem {
     }
 
     fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
-        self.child.wrap(vp)?;
+        wrap(&mut self.child, vp)?;
         if self.selected {
             r.style.push_layer("blue");
         }
@@ -105,8 +105,8 @@ impl Root {
 impl Node for Root {
     fn render(&mut self, _: &mut Render, vp: ViewPort) -> Result<()> {
         let (a, b) = vp.carve_vend(1);
-        self.statusbar.wrap(b)?;
-        self.content.wrap(a)?;
+        wrap(&mut self.statusbar, b)?;
+        wrap(&mut self.content, a)?;
         Ok(())
     }
 

@@ -110,41 +110,41 @@ pub trait Node: StatefulNode {
     fn render(&mut self, r: &mut Render, vp: ViewPort) -> Result<()> {
         Ok(())
     }
+}
 
-    /// Adjust this node so that the parent wraps it completely. This fits the
-    /// node to the parent's virtual node size, then adjusts the node's view to
-    /// place as much of it within the paren'ts screen rectangle as possible.
-    /// Usually, this method would be used by a node that also passes the
-    /// child's fit back through it's own `fit` method.
-    fn wrap(&mut self, parent_vp: ViewPort) -> Result<()> {
-        let fit = self.fit(parent_vp.size())?;
-        self.set_viewport(self.vp().update(fit, parent_vp.screen_rect()));
-        Ok(())
-    }
+/// Adjust this node so that the parent wraps it completely. This fits the
+/// node to the parent's virtual node size, then adjusts the node's view to
+/// place as much of it within the paren'ts screen rectangle as possible.
+/// Usually, this method would be used by a node that also passes the
+/// child's fit back through it's own `fit` method.
+pub fn wrap(n: &mut dyn Node, parent_vp: ViewPort) -> Result<()> {
+    let fit = n.fit(parent_vp.size())?;
+    n.set_viewport(n.vp().update(fit, parent_vp.screen_rect()));
+    Ok(())
+}
 
-    /// Adjust this node so that the parent's screen rectangle frames it with a
-    /// given margin. Fits the child to the parent screen rect minus the border
-    /// margin, then adjusts the child's view to place as much of of it on
-    /// screen as possible.
-    fn frame(&mut self, parent_vp: ViewPort, border: u16) -> Result<Frame> {
-        let fit = self.fit(parent_vp.screen_rect().inner(border).into())?;
-        let screen = parent_vp.screen_rect().inner(border);
-        self.update_viewport(&|vp| vp.update(fit, screen));
-        // Return a frame for drawing the screen boundary, but in the view
-        // rect's co-ordinate system.
-        Ok(Frame::new(
-            parent_vp.screen_rect().at(parent_vp.view_rect().tl),
-            border,
-        ))
-    }
+/// Adjust this node so that the parent's screen rectangle frames it with a
+/// given margin. Fits the child to the parent screen rect minus the border
+/// margin, then adjusts the child's view to place as much of of it on
+/// screen as possible.
+pub fn frame(n: &mut dyn Node, parent_vp: ViewPort, border: u16) -> Result<Frame> {
+    let fit = n.fit(parent_vp.screen_rect().inner(border).into())?;
+    let screen = parent_vp.screen_rect().inner(border);
+    n.update_viewport(&|vp| vp.update(fit, screen));
+    // Return a frame for drawing the screen boundary, but in the view
+    // rect's co-ordinate system.
+    Ok(Frame::new(
+        parent_vp.screen_rect().at(parent_vp.view_rect().tl),
+        border,
+    ))
+}
 
-    /// Place a node in a given screen rectangle. This fits the node to the
-    /// region, and updates its viewport.
-    fn place(&mut self, screen: Rect) -> Result<()> {
-        let fit = self.fit(screen.expanse())?;
-        self.update_viewport(&|vp| vp.update(fit, screen));
-        Ok(())
-    }
+/// Place a node in a given screen rectangle. This fits the node to the
+/// region, and updates its viewport.
+pub fn place(n: &mut dyn Node, screen: Rect) -> Result<()> {
+    let fit = n.fit(screen.expanse())?;
+    n.update_viewport(&|vp| vp.update(fit, screen));
+    Ok(())
 }
 
 /// A postorder traversal of the nodes under e. Enabling skipping in the Walker
@@ -263,7 +263,7 @@ mod tests {
         // the same viewport
         let mut n = utils::TFixed::new(10, 10);
         let vp = ViewPort::new(Expanse::new(10, 10), Rect::new(0, 0, 10, 10), (10, 10))?;
-        n.wrap(vp)?;
+        wrap(&mut n, vp)?;
         assert_eq!(n.state().viewport, vp);
 
         // If the child is smaller than parent, then wrap places the viewport at
@@ -271,7 +271,7 @@ mod tests {
         let mut n = utils::TFixed::new(5, 5);
         let vp = ViewPort::new(Expanse::new(10, 10), Rect::new(0, 0, 10, 10), (10, 10))?;
         let expected = ViewPort::new(Expanse::new(5, 5), Rect::new(0, 0, 5, 5), (10, 10))?;
-        n.wrap(vp)?;
+        wrap(&mut n, vp)?;
         assert_eq!(n.state().viewport, expected,);
         n.update_viewport(&|vp| vp.right().down());
         assert_eq!(n.state().viewport, expected,);
@@ -280,7 +280,7 @@ mod tests {
         // (0, 0).
         let mut n = utils::TFixed::new(20, 20);
         let vp = ViewPort::new(Expanse::new(10, 10), Rect::new(0, 0, 10, 10), (10, 10))?;
-        n.wrap(vp)?;
+        wrap(&mut n, vp)?;
         assert_eq!(
             n.state().viewport,
             ViewPort::new(Expanse::new(20, 20), Rect::new(0, 0, 10, 10), (10, 10))?
@@ -292,14 +292,14 @@ mod tests {
             ViewPort::new(Expanse::new(20, 20), Rect::new(1, 1, 10, 10), (10, 10))?
         );
         // And subsequent wraps maintain the child view position, if possible
-        n.wrap(vp)?;
+        wrap(&mut n, vp)?;
         assert_eq!(
             n.state().viewport,
             ViewPort::new(Expanse::new(20, 20), Rect::new(1, 1, 10, 10), (10, 10))?
         );
         // When the parent viewport shrinks, we maintain position and resize
         let shrink = ViewPort::new(Expanse::new(3, 3), Rect::new(0, 0, 2, 2), (10, 10))?;
-        n.wrap(shrink)?;
+        wrap(&mut n, shrink)?;
         assert_eq!(
             n.state().viewport,
             ViewPort::new(Expanse::new(20, 20), Rect::new(1, 1, 2, 2), (10, 10))?
@@ -313,7 +313,7 @@ mod tests {
         // If we have room, the adjustment just shifts the child node relative to the screen.
         let mut n = utils::TFixed::new(5, 5);
         let vp = ViewPort::new(Expanse::new(10, 10), Rect::new(0, 0, 10, 10), (10, 10))?;
-        n.frame(vp, 1)?;
+        frame(&mut n, vp, 1)?;
         assert_eq!(
             n.state().viewport,
             ViewPort::new(Expanse::new(5, 5), Rect::new(0, 0, 5, 5), (11, 11))?
@@ -322,7 +322,7 @@ mod tests {
         // If if the child node is too large, it is clipped to the bottom and left
         let mut n = utils::TFixed::new(10, 10);
         let vp = ViewPort::new(Expanse::new(10, 10), Rect::new(0, 0, 10, 10), (10, 10))?;
-        n.frame(vp, 1)?;
+        frame(&mut n, vp, 1)?;
         assert_eq!(
             n.state().viewport,
             ViewPort::new(Expanse::new(10, 10), Rect::new(0, 0, 8, 8), (11, 11))?
@@ -331,7 +331,7 @@ mod tests {
         // If if the parent is smaller than the frame would require, we get a zero view
         let mut n = utils::TFixed::new(10, 10);
         let vp = ViewPort::new(Expanse::new(0, 0), Rect::new(0, 0, 0, 0), (10, 10))?;
-        n.frame(vp, 1)?;
+        frame(&mut n, vp, 1)?;
         assert_eq!(
             n.state().viewport,
             ViewPort::new(Expanse::new(10, 10), Rect::new(0, 0, 0, 0), (0, 0))?
