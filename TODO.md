@@ -7,10 +7,15 @@
 - Better debugging and monitoring story
   - Inspector GUI
     - Logs
+      - Level selection
+      - Coloration
+      - Filtering
+      - Follow
     - Active nodes tree
       - Define name() for all built-in node types
     - Shrink/specify app area
     - Screenshots of app area
+    - Graphs/stats
   - Add node names for relevant errors
   - Benchmarking and integration tests
 - Further simplify Node trait by shifting wrap and friends into module namespace

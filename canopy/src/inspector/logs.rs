@@ -1,9 +1,18 @@
+use std::{
+    io::Write,
+    sync::{Arc, Mutex},
+    thread,
+};
+use tracing;
+use tracing_subscriber::fmt;
+
 use crate as canopy;
 use crate::{
+    event::key,
     geom::{Expanse, Rect},
     taint_tree,
     widgets::{list::*, Text},
-    Node, NodeState, Render, Result, StatefulNode, ViewPort,
+    BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 use std::time::Duration;
 
@@ -66,15 +75,78 @@ impl Node for LogItem {
     }
 }
 
+struct LogWriter {
+    buf: Arc<Mutex<Vec<String>>>,
+}
+
+impl Write for LogWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.buf
+            .lock()
+            .unwrap()
+            .push(String::from_utf8_lossy(buf).to_string().trim().to_string());
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 #[derive(StatefulNode)]
 pub struct Logs {
     state: NodeState,
     list: List<LogItem>,
+    started: bool,
+    buf: Arc<Mutex<Vec<String>>>,
 }
 
 impl Node for Logs {
+    fn handle_key(&mut self, _ctrl: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
+        let lst = &mut self.list;
+        match k {
+            c if c == 'C' => {
+                lst.clear();
+            }
+            c if c == 'd' => {
+                lst.delete_selected();
+            }
+            c if c == 'g' => lst.select_first(),
+            c if c == 'G' => lst.select_last(),
+            c if c == 'J' => lst.scroll_down(),
+            c if c == 'K' => lst.scroll_up(),
+            c if c == 'j' || c == key::KeyCode::Down => lst.select_next(),
+            c if c == 'k' || c == key::KeyCode::Up => lst.select_prev(),
+            c if c == ' ' || c == key::KeyCode::PageDown => lst.page_down(),
+            c if c == key::KeyCode::PageUp => lst.page_up(),
+            _ => return Ok(Outcome::ignore()),
+        };
+        canopy::taint_tree(self);
+        Ok(Outcome::handle())
+    }
+
     fn poll(&mut self) -> Option<Duration> {
-        self.list.append(LogItem::new("fooob"));
+        if !self.started {
+            // Configure a custom event formatter
+            let format = fmt::format()
+                .with_level(true)
+                .with_line_number(true)
+                .with_ansi(false)
+                .without_time()
+                .compact();
+
+            let buf = self.buf.clone();
+            tracing_subscriber::fmt()
+                .with_writer(move || -> LogWriter { LogWriter { buf: buf.clone() } })
+                .event_format(format)
+                .init();
+            self.started = true;
+        }
+        {
+            let mut b = self.buf.lock().unwrap();
+            for i in b.drain(0..) {
+                self.list.append(LogItem::new(&i));
+            }
+        }
         taint_tree(self);
         Some(Duration::from_millis(1000))
     }
@@ -95,6 +167,8 @@ impl Logs {
         Logs {
             state: NodeState::default(),
             list: List::new(vec![]),
+            started: false,
+            buf: Arc::new(Mutex::new(vec![])),
         }
     }
 }

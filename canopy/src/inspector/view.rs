@@ -15,10 +15,6 @@ pub struct View {
 }
 
 impl Node for View {
-    fn accept_focus(&mut self) -> bool {
-        true
-    }
-
     fn handle_key(&mut self, _: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
         match k {
             c if c == key::KeyCode::Tab => self.tabs.next(),
