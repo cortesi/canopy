@@ -6,6 +6,9 @@
 
 - Key binding management system
   - Help system
+- Make module structure better
+  - The import situation is a bit confusing
+  - It's not clear where to find everything
 - Better debugging and monitoring story
   - Inspector GUI
     - Logs
@@ -32,7 +35,6 @@
   - Center
   - text line widget
   - markdown
-- serialization/deserialization for color scheme
 - Testing
   - Improve the test render backend
     - At the moment, its only client is the internal code, so it only implements
@@ -40,12 +42,13 @@
   - Integration tests
   - Benchmarks
   - Fuzzing
-- Areas that don't smell too good
+- Things that don't smell too good
   - Numeric types and constant conversions in the geom module
   - The Outcome type
 
 ## 0.2
 
+- serialization/deserialization for color scheme
 - Termion backend
   - Extract a common set of backend conversion traits
 - use half-blocks to improve smoothness of scrollbars

@@ -120,7 +120,7 @@ impl Node for Logs {
             c if c == key::KeyCode::PageUp => lst.page_up(),
             _ => return Ok(Outcome::ignore()),
         };
-        canopy::taint_tree(self);
+        taint_tree(self);
         Ok(Outcome::handle())
     }
 
@@ -147,7 +147,7 @@ impl Node for Logs {
                 self.list.append(LogItem::new(&i));
             }
         }
-        taint_tree(self);
+        self.taint();
         Some(Duration::from_millis(100))
     }
 

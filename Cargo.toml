@@ -2,6 +2,7 @@
 members = [
     "canopy",
     "canopy-derive",
+    "examples/*"
 ]
 default-members = [
     "canopy",

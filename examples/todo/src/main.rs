@@ -1,3 +1,5 @@
+use tracing;
+
 use canopy::{
     backend::crossterm::runloop,
     event::{key, mouse},
@@ -123,6 +125,7 @@ impl Node for Root {
     }
 
     fn handle_key(&mut self, ctrl: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
+        tracing::info!("here");
         let lst = &mut self.content.child;
         if let Some(adder) = &mut self.adder {
             match k {
@@ -172,6 +175,7 @@ pub fn main() -> Result<()> {
         None,
     );
     let mut root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new());
+    // let mut root = Root::new();
     runloop(&mut colors, &mut root)?;
     Ok(())
 }
