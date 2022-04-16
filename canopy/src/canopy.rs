@@ -3,7 +3,7 @@ use crate::{
     control::BackendControl,
     event::{key, mouse, Event},
     geom::{Coverage, Expanse, Point},
-    global::STATE,
+    global::{self, STATE},
     node::{postorder, preorder, Node, Walker},
     render::{show_cursor, RenderBackend},
     style::StyleManager,
@@ -238,6 +238,15 @@ pub(crate) fn pre_render<R: RenderBackend>(r: &mut R, e: &mut dyn Node) -> Resul
     if !seen {
         focus_first(e)?;
     }
+
+    if global::focus_changed() {
+        let fg = STATE.with(|global_state| global_state.borrow().focus_gen);
+        focus_path(e, &mut |n| -> Result<()> {
+            n.state_mut().focus_path_gen = fg;
+            Ok(())
+        })?;
+    }
+
     // The cursor is disabled before every render sweep, otherwise we would
     // see it visibly on screen during redraws.
     r.hide_cursor()?;
@@ -327,7 +336,7 @@ pub fn render<R: RenderBackend>(
     STATE.with(|global_state| {
         let mut gs = global_state.borrow_mut();
         gs.render_gen += 1;
-        gs.last_focus_gen = gs.focus_gen;
+        gs.last_render_focus_gen = gs.focus_gen;
     });
     Ok(())
 }
@@ -847,25 +856,6 @@ mod tests {
             tr.render(&mut root)?;
             assert!(tr.buf_empty());
 
-            Ok(())
-        })?;
-
-        Ok(())
-    }
-
-    #[test]
-    fn ttaintskip() -> Result<()> {
-        run_test(|mut tr, mut root| {
-            tr.render(&mut root)?;
-            root.set_focus();
-            taint_tree(&mut root);
-            root.a.skip_taint();
-            tr.render(&mut root)?;
-
-            assert_eq!(
-                tr.buf_text(),
-                vec!["<r>", "<ba:la>", "<ba:lb>", "<bb>", "<bb:la>", "<bb:lb>"]
-            );
             Ok(())
         })?;
 

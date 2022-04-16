@@ -1,4 +1,4 @@
-use crate::{global::STATE, ViewPort};
+use crate::{global, ViewPort};
 use std::sync::atomic::AtomicU64;
 
 pub use canopy_derive::StatefulNode;
@@ -15,14 +15,20 @@ pub struct NodeState {
     /// If this is equal to the global render_gen, we render during the current
     /// sweep.
     pub(crate) render_gen: u64,
-    /// A marker to tell us to skip a specified render generation.
-    pub(crate) render_skip_gen: u64,
     /// This node's focus generation. We increment the global focus counter when
     /// focus changes, invalidating the current focus generation without having
     /// to update all node states.
     pub(crate) focus_gen: u64,
+    /// Set to be equal to the focus_gen during a pre-render sweep, if focus has
+    /// changed.
+    pub(crate) focus_path_gen: u64,
     // The last render sweep during which this node held focus.
     pub(crate) rendered_focus_gen: u64,
+    /// Set to the `render_gen` during the pre-render sweep if focus has
+    /// changed, and this node was either on the old focus path, or is on the
+    /// new focus path.
+    pub(crate) focus_path_render_gen: u64,
+
     /// The view for this node. The inner rectangle always has the same size as
     /// the screen_area.
     pub(crate) viewport: ViewPort,
@@ -42,8 +48,9 @@ impl NodeState {
             id,
             render_gen: 0,
             focus_gen: 0,
+            focus_path_gen: 0,
+            focus_path_render_gen: 0,
             rendered_focus_gen: 0,
-            render_skip_gen: 0,
             hidden: false,
             viewport: ViewPort::default(),
             initialized: false,
@@ -104,7 +111,7 @@ pub trait StatefulNode {
 
     /// Focus this node.
     fn set_focus(&mut self) {
-        STATE.with(|global_state| {
+        global::STATE.with(|global_state| {
             global_state.borrow_mut().focus_gen += 1;
             self.state_mut().focus_gen = global_state.borrow().focus_gen;
         });
@@ -112,21 +119,18 @@ pub trait StatefulNode {
 
     /// Is this node render tainted?
     fn is_tainted(&self) -> bool {
-        STATE.with(|global_state| {
+        global::STATE.with(|global_state| {
             let s = self.state();
-            if global_state.borrow().render_gen == s.render_skip_gen {
-                false
-            } else {
-                // Tainting if render_gen is 0 lets us initialize a nodestate
-                // without knowing about the app state
-                global_state.borrow().render_gen == s.render_gen || s.render_gen == 0
-            }
+            let rg = global_state.borrow().render_gen;
+            // Tainting if render_gen is 0 lets us initialize a nodestate
+            // without knowing about the app state
+            rg == s.render_gen || s.render_gen == 0
         })
     }
 
     /// Does the node have terminal focus?
     fn is_focused(&self) -> bool {
-        STATE.with(|global_state| -> bool {
+        global::STATE.with(|global_state| -> bool {
             let s = self.state();
             global_state.borrow_mut().focus_gen == s.focus_gen
         })
@@ -135,32 +139,42 @@ pub trait StatefulNode {
     /// Mark a this node for render.
     fn taint(&mut self) {
         let r = self.state_mut();
-        r.render_gen = STATE.with(|global_state| -> u64 {
+        r.render_gen = global::STATE.with(|global_state| -> u64 {
             let mut s = global_state.borrow_mut();
             s.taint = true;
             s.render_gen
         });
     }
 
-    /// Mark that this node should skip the next render sweep.
-    fn skip_taint(&mut self) {
-        let r = self.state_mut();
-        r.render_skip_gen = STATE.with(|global_state| -> u64 { global_state.borrow().render_gen });
-    }
-
     /// Has the focus status of this node changed since the last render
     /// sweep?
     fn focus_changed(&self) -> bool {
-        STATE.with(|global_state| -> bool {
-            let s = self.state();
-            if self.is_focused() {
-                if s.focus_gen != s.rendered_focus_gen {
-                    return true;
-                }
-            } else if s.rendered_focus_gen == global_state.borrow().last_focus_gen {
-                return true;
-            }
+        if global::focus_changed() {
+            global::STATE.with(|global_state| -> bool {
+                let gs = global_state.borrow();
+                let s = self.state();
+                // Our focus has changed if we're the currently focused node, or
+                // if we were previously focused during the last sweep.
+                s.focus_gen == gs.focus_gen || s.focus_gen == gs.last_render_focus_gen
+            })
+        } else {
             false
-        })
+        }
+    }
+
+    /// Has the focus path status of this node changed since the last render
+    /// sweep?
+    fn focus_path_changed(&self) -> bool {
+        if global::focus_changed() {
+            global::STATE.with(|global_state| -> bool {
+                let gs = global_state.borrow();
+                let s = self.state();
+                // Our focus has changed if we're the currently on the focus path, or
+                // if we were previously focused during the last sweep.
+                s.focus_path_gen == gs.focus_gen || s.focus_path_gen == gs.last_render_focus_gen
+            })
+        } else {
+            false
+        }
     }
 }

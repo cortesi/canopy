@@ -33,12 +33,17 @@ pub trait Node: StatefulNode {
     }
 
     /// Should the node render in the next sweep? This checks if the node is
-    /// currently hidden, and if not, checks if the node is tainted or its focus
-    /// status has changed. Over-riding this method should only be needed
-    /// rarely, for instance when a container node needs to redraw if a sub-node
-    /// changes.
+    /// currently hidden, and if not, signals that we should render if:
+    ///
+    /// - the node is tainted
+    /// - its focus status has changed
+    /// - its focus path status has changed
+    ///
+    /// Over-riding this method should only be needed rarely, for instance when
+    /// a container node needs to redraw if a sub-node changes.
     fn should_render(&self) -> bool {
-        !self.is_hidden() && (self.is_tainted() || self.focus_changed())
+        !self.is_hidden()
+            && (self.is_tainted() || self.focus_changed() || self.focus_path_changed())
     }
 
     /// Called for each node on the focus path, after each render sweep. The
