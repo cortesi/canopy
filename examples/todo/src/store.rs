@@ -49,6 +49,12 @@ impl Store {
         })
     }
 
+    pub fn delete_todo(&self, id: i64) -> Result<()> {
+        self.conn
+            .execute("DELETE FROM todo WHERE id=?1;", rusqlite::params![id])?;
+        Ok(())
+    }
+
     pub fn todos(&self) -> Result<Vec<Todo>> {
         let mut stmt = self.conn.prepare("SELECT id, item FROM todo")?;
         let ret = stmt

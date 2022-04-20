@@ -44,7 +44,7 @@ where
     state: NodeState,
 
     items: Vec<Item<N>>,
-    pub selected: usize,
+    pub offset: usize,
 }
 
 impl<N> List<N>
@@ -54,7 +54,7 @@ where
     pub fn new(items: Vec<N>) -> Self {
         let mut l = List {
             items: items.into_iter().map(Item::new).collect(),
-            selected: 0,
+            offset: 0,
             state: NodeState::default(),
         };
         if !l.is_empty() {
@@ -83,7 +83,7 @@ where
     /// Insert an item after the current selection.
     pub fn insert_after(&mut self, itm: N) {
         self.items
-            .insert((self.selected + 1).clamp(0, self.len()), Item::new(itm));
+            .insert((self.offset + 1).clamp(0, self.len()), Item::new(itm));
         self.fix_selection();
     }
 
@@ -102,7 +102,7 @@ where
     pub fn delete_item(&mut self, offset: usize) -> Option<N> {
         if !self.is_empty() && offset < self.len() {
             let itm = self.items.remove(offset);
-            if offset <= self.selected {
+            if offset <= self.offset {
                 self.select_prev();
             }
             Some(itm.itm)
@@ -112,7 +112,7 @@ where
     }
 
     pub fn delete_selected(&mut self) -> Option<N> {
-        self.delete_item(self.selected)
+        self.delete_item(self.offset)
     }
 
     /// Move selection to the next item in the list, if possible.
@@ -127,22 +127,31 @@ where
 
     /// Move selection to the next item in the list, if possible.
     pub fn select_next(&mut self) {
-        self.select(self.selected.saturating_add(1))
+        self.select(self.offset.saturating_add(1))
     }
 
     /// Move selection to the next previous the list, if possible.
     pub fn select_prev(&mut self) {
-        self.select(self.selected.saturating_sub(1))
+        self.select(self.offset.saturating_sub(1))
+    }
+
+    /// The current selected item, if any
+    pub fn selected(&self) -> Option<&N> {
+        if !self.is_empty() {
+            Some(&self.items[self.offset].itm)
+        } else {
+            None
+        }
     }
 
     /// Select an item at a specified offset, clamping the offset to make sure
     /// it lies within the list.
     pub fn select(&mut self, offset: usize) {
         if !self.is_empty() {
-            self.selected = self.selected.clamp(0, self.len() - 1);
-            self.items[self.selected].set_selected(false);
-            self.selected = offset.clamp(0, self.items.len() - 1);
-            self.items[self.selected].set_selected(true);
+            self.offset = self.offset.clamp(0, self.len() - 1);
+            self.items[self.offset].set_selected(false);
+            self.offset = offset.clamp(0, self.items.len() - 1);
+            self.items[self.offset].set_selected(true);
             self.fix_view();
         }
     }
@@ -192,18 +201,18 @@ where
     /// Fix the selected item after a scroll operation.
     fn fix_selection(&mut self) {
         let (start, end) = self.view_range();
-        if self.selected < start {
+        if self.offset < start {
             self.select(start);
-        } else if self.selected > end {
+        } else if self.offset > end {
             self.select(end);
         } else {
-            self.select(self.selected);
+            self.select(self.offset);
         }
     }
 
     /// Fix the view after a selection change operation.
     fn fix_view(&mut self) {
-        let virt = self.items[self.selected].virt;
+        let virt = self.items[self.offset].virt;
         let view = self.vp().view_rect();
         if let Some(v) = virt.vextent().intersection(&view.vextent()) {
             if v.len == virt.h {
@@ -212,9 +221,9 @@ where
         }
         let (start, end) = self.view_range();
         // We know there isn't an entire overlap
-        if self.selected <= start {
+        if self.offset <= start {
             self.update_viewport(&|vp| vp.scroll_to(view.tl.x, virt.tl.y));
-        } else if self.selected >= end {
+        } else if self.offset >= end {
             if virt.h >= view.h {
                 self.update_viewport(&|vp| vp.scroll_to(view.tl.x, virt.tl.y));
             } else {
@@ -330,14 +339,14 @@ mod tests {
             TFixed::new(10, 10),
             TFixed::new(10, 10),
         ]);
-        assert_eq!(lst.selected, 0);
+        assert_eq!(lst.offset, 0);
         lst.select_prev();
-        assert_eq!(lst.selected, 0);
+        assert_eq!(lst.offset, 0);
         lst.select_next();
-        assert_eq!(lst.selected, 1);
+        assert_eq!(lst.offset, 1);
         lst.select_next();
         lst.select_next();
-        assert_eq!(lst.selected, 2);
+        assert_eq!(lst.offset, 2);
 
         Ok(())
     }

@@ -4,16 +4,13 @@ use std::env;
 
 use anyhow::Result;
 use canopy::{
-    self,
     backend::crossterm::runloop,
     event::{key, mouse},
-    fit,
     geom::{Expanse, Rect},
     inspector::Inspector,
-    place,
     style::solarized,
     widgets::{frame, list::*, InputLine, Text},
-    BackendControl, Node, NodeState, Outcome, Render, StatefulNode,
+    *,
 };
 
 #[derive(StatefulNode)]
@@ -172,6 +169,12 @@ impl Node for Root {
                     self.open_adder()?;
                 }
                 c if c == 'g' => lst.select_first(),
+                c if c == 'd' => {
+                    if let Some(t) = lst.selected() {
+                        store::get().delete_todo(t.todo.id).unwrap();
+                        lst.delete_selected();
+                    }
+                }
                 c if c == 'j' || c == key::KeyCode::Down => lst.select_next(),
                 c if c == 'k' || c == key::KeyCode::Up => lst.select_prev(),
                 c if c == ' ' || c == key::KeyCode::PageDown => lst.page_down(),
