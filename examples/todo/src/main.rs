@@ -1,6 +1,10 @@
-use tracing;
+mod store;
 
+use std::env;
+
+use anyhow::Result;
 use canopy::{
+    self,
     backend::crossterm::runloop,
     event::{key, mouse},
     fit,
@@ -9,7 +13,7 @@ use canopy::{
     place,
     style::solarized,
     widgets::{frame, list::*, InputLine, Text},
-    BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode,
+    BackendControl, Node, NodeState, Outcome, Render, StatefulNode,
 };
 
 #[derive(StatefulNode)]
@@ -17,14 +21,16 @@ struct TodoItem {
     state: NodeState,
     child: Text,
     selected: bool,
+    todo: store::Todo,
 }
 
 impl TodoItem {
-    fn new(text: &str) -> Self {
+    fn new(t: store::Todo) -> Self {
         TodoItem {
             state: NodeState::default(),
-            child: Text::new(text),
+            child: Text::new(&t.item),
             selected: false,
+            todo: t,
         }
     }
 }
@@ -36,15 +42,18 @@ impl ListItem for TodoItem {
 }
 
 impl Node for TodoItem {
-    fn fit(&mut self, target: Expanse) -> Result<Expanse> {
+    fn fit(&mut self, target: Expanse) -> canopy::Result<Expanse> {
         self.child.fit(target)
     }
 
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+    fn children(
+        &mut self,
+        f: &mut dyn FnMut(&mut dyn Node) -> canopy::Result<()>,
+    ) -> canopy::Result<()> {
         f(&mut self.child)
     }
 
-    fn render(&mut self, r: &mut Render) -> Result<()> {
+    fn render(&mut self, r: &mut Render) -> canopy::Result<()> {
         let vp = self.vp();
         fit(&mut self.child, vp)?;
         if self.selected {
@@ -60,7 +69,7 @@ struct StatusBar {
 }
 
 impl Node for StatusBar {
-    fn render(&mut self, r: &mut Render) -> Result<()> {
+    fn render(&mut self, r: &mut Render) -> canopy::Result<()> {
         r.style.push_layer("statusbar");
         r.text("statusbar/text", self.vp().view_rect().first_line(), "todo")?;
         Ok(())
@@ -76,28 +85,39 @@ struct Root {
 }
 
 impl Root {
-    fn new() -> Self {
-        Root {
+    fn new() -> Result<Self> {
+        let mut r = Root {
             state: NodeState::default(),
             content: frame::Frame::new(List::new(vec![])),
             statusbar: StatusBar {
                 state: NodeState::default(),
             },
             adder: None,
-        }
+        };
+        r.load()?;
+        Ok(r)
     }
 
-    fn open_adder(&mut self) -> Result<Outcome> {
+    fn open_adder(&mut self) -> canopy::Result<Outcome> {
         let mut adder = frame::Frame::new(InputLine::new(""));
         adder.child.set_focus();
         self.adder = Some(adder);
         self.taint();
         Ok(Outcome::handle())
     }
+
+    fn load(&mut self) -> canopy::Result<()> {
+        let s = store::get().todos().unwrap();
+        let todos = s.iter().map(|x| TodoItem::new(x.clone()));
+        for i in todos {
+            self.content.child.append(i);
+        }
+        Ok(())
+    }
 }
 
 impl Node for Root {
-    fn render(&mut self, _: &mut Render) -> Result<()> {
+    fn render(&mut self, _: &mut Render) -> canopy::Result<()> {
         let vp = self.vp();
         let (a, b) = vp.carve_vend(1);
         fit(&mut self.statusbar, b)?;
@@ -114,7 +134,11 @@ impl Node for Root {
         true
     }
 
-    fn handle_mouse(&mut self, _: &mut dyn BackendControl, k: mouse::Mouse) -> Result<Outcome> {
+    fn handle_mouse(
+        &mut self,
+        _: &mut dyn BackendControl,
+        k: mouse::Mouse,
+    ) -> canopy::Result<Outcome> {
         let v = &mut self.content.child;
         match k {
             c if c == mouse::MouseAction::ScrollDown => v.update_viewport(&|vp| vp.down()),
@@ -124,13 +148,17 @@ impl Node for Root {
         Ok(Outcome::handle())
     }
 
-    fn handle_key(&mut self, ctrl: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
-        tracing::info!("here");
+    fn handle_key(
+        &mut self,
+        ctrl: &mut dyn BackendControl,
+        k: key::Key,
+    ) -> canopy::Result<Outcome> {
         let lst = &mut self.content.child;
         if let Some(adder) = &mut self.adder {
             match k {
                 c if c == key::KeyCode::Enter => {
-                    lst.append(TodoItem::new(&adder.child.text()));
+                    let item = store::get().add_todo(&adder.child.text()).unwrap();
+                    lst.append(TodoItem::new(item));
                     self.adder = None;
                 }
                 c if c == key::KeyCode::Esc => {
@@ -156,7 +184,10 @@ impl Node for Root {
         Ok(Outcome::handle())
     }
 
-    fn children(self: &mut Self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+    fn children(
+        self: &mut Self,
+        f: &mut dyn FnMut(&mut dyn Node) -> canopy::Result<()>,
+    ) -> canopy::Result<()> {
         f(&mut self.statusbar)?;
         f(&mut self.content)?;
         if let Some(a) = &mut self.adder {
@@ -167,15 +198,21 @@ impl Node for Root {
 }
 
 pub fn main() -> Result<()> {
-    let mut colors = solarized::solarized_dark();
-    colors.add(
-        "statusbar/text",
-        Some(solarized::BASE02),
-        Some(solarized::BASE1),
-        None,
-    );
-    let mut root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new());
-    // let mut root = Root::new();
-    runloop(&mut colors, &mut root)?;
+    if let Some(path) = env::args().nth(1) {
+        store::open(&path)?;
+        let mut colors = solarized::solarized_dark();
+        colors.add(
+            "statusbar/text",
+            Some(solarized::BASE02),
+            Some(solarized::BASE1),
+            None,
+        );
+        let mut root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new()?);
+        // let mut root = Root::new();
+        runloop(&mut colors, &mut root)?;
+    } else {
+        println!("Specify a file path")
+    }
+
     Ok(())
 }

@@ -42,8 +42,7 @@ pub trait Node: StatefulNode {
     /// Over-riding this method should only be needed rarely, for instance when
     /// a container node needs to redraw if a sub-node changes.
     fn should_render(&self) -> bool {
-        !self.is_hidden()
-            && (self.is_tainted() || self.focus_changed() || self.focus_path_changed())
+        !self.is_hidden() && (self.is_tainted() || self.focus_changed())
     }
 
     /// Called for each node on the focus path, after each render sweep. The

@@ -5,5 +5,7 @@ edition = "2021"
 
 
 [dependencies]
+anyhow = "1.0.56"
 canopy = { path = "../../canopy" }
+rusqlite = "0.27.0"
 tracing = "0.1.34"

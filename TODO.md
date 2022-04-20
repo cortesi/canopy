@@ -16,16 +16,23 @@
       - Coloration
       - Filtering
       - Follow
+      - Search
     - Active nodes tree
       - Define name() for all built-in node types
     - Shrink/specify app area
     - Screenshots of app area
     - Graphs/stats
+    - Maybe enable inspector with an env variable?
   - Add node names for relevant errors
 - ControlBackend
   - Improve ergonomics - adding a function that returns a handle which re-enters rendering?
 - Renderer
   - Explicit colors - at the moment, we can only get colors from our color scheme
+- Support virtual cursors
+  - At the moment, we use the terminal cursor. This means we have to disable the
+    cursor display before a render sweep then re-enable it afterwards, causing
+    flickering under some rare circumstances. We could draw the cursor ourselves
+    in widgets that need one - is there a reason not to do this?
 - Ergonomics:
   - Better error returns
 - ctrl-c/ctrl-z
