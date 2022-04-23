@@ -60,8 +60,7 @@ where
     content: Content,
 }
 
-impl<N> canopy::Actions for Inspector<N> where N: Node {}
-
+#[derive_actions]
 impl<N> Inspector<N>
 where
     N: Node,

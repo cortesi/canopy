@@ -86,7 +86,7 @@ pub fn derive_actions(
         .collect();
 
     let expanded = quote! {
-        impl #impl_generics canopy::actions::Actions for #name #ty_generics #where_clause {
+        impl #impl_generics canopy::actions::Actions for #name #where_clause {
             fn actions() -> Vec<canopy::actions::Action> {
                 vec![#(canopy::actions::Action {
                         name: #names.to_string(),
@@ -109,6 +109,7 @@ pub fn derive_actions(
         #orig
         #expanded
     };
+    println!("{}", out.to_string());
     out.into()
 }
 

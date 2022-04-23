@@ -1,6 +1,6 @@
 use crate as canopy;
 use crate::{
-    place,
+    derive_actions, place,
     state::{NodeState, StatefulNode},
     Node, Render, Result,
 };
@@ -12,8 +12,7 @@ pub struct Panes<N: Node> {
     pub state: NodeState,
 }
 
-impl<N> canopy::Actions for Panes<N> where N: Node {}
-
+#[derive_actions]
 impl<N> Panes<N>
 where
     N: Node,
