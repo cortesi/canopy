@@ -20,6 +20,8 @@ pub enum Error {
     RunLoop(String),
     #[error("internal")]
     Internal(String),
+    #[error("unknown action")]
+    UnknownAction(String),
 }
 
 impl From<mpsc::RecvError> for Error {

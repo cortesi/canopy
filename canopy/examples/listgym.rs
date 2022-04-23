@@ -3,6 +3,7 @@ use rand::Rng;
 
 use canopy::{
     backend::crossterm::runloop,
+    derive_actions,
     event::{key, mouse},
     fit,
     geom::{Expanse, Rect},
@@ -24,6 +25,7 @@ struct Block {
     selected: bool,
 }
 
+#[derive_actions]
 impl Block {
     fn new() -> Self {
         let mut rng = rand::thread_rng();
@@ -79,6 +81,9 @@ struct StatusBar {
     state: NodeState,
 }
 
+#[derive_actions]
+impl StatusBar {}
+
 impl Node for StatusBar {
     fn render(&mut self, r: &mut Render) -> Result<()> {
         r.style.push_layer("statusbar");
@@ -94,6 +99,7 @@ struct Root {
     statusbar: StatusBar,
 }
 
+#[derive_actions]
 impl Root {
     fn new() -> Self {
         let nodes: Vec<Block> = (0..10).map(|_| Block::new()).collect();

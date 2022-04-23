@@ -72,6 +72,8 @@ where
     pub title: Option<String>,
 }
 
+impl<N> canopy::Actions for Frame<N> where N: Node {}
+
 impl<N> Frame<N>
 where
     N: Node,

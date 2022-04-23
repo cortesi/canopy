@@ -1,3 +1,19 @@
-pub trait Actions: core::fmt::Debug + Send + Copy + Clone + PartialEq {}
+use crate::Result;
 
-impl Actions for () {}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Action {
+    pub name: String,
+    pub docs: String,
+}
+
+pub trait Actions {
+    fn actions() -> Vec<Action>
+    where
+        Self: Sized,
+    {
+        vec![]
+    }
+    fn dispatch(&mut self, _name: &str) -> Result<()> {
+        Ok(())
+    }
+}

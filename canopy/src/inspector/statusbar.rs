@@ -1,5 +1,5 @@
 use crate as canopy;
-use crate::{Node, NodeState, Render, Result, StatefulNode};
+use crate::{derive_actions, Node, NodeState, Render, Result, StatefulNode};
 
 #[derive(StatefulNode)]
 
@@ -7,6 +7,7 @@ pub struct StatusBar {
     state: NodeState,
 }
 
+#[derive_actions]
 impl StatusBar {
     pub fn new() -> Self {
         StatusBar {

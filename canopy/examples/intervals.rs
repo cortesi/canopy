@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use canopy::{
     backend::crossterm::runloop,
+    derive_actions,
     event::{key, mouse},
     fit,
     geom::Expanse,
@@ -19,6 +20,7 @@ struct IntervalItem {
     value: u64,
 }
 
+#[derive_actions]
 impl IntervalItem {
     fn new() -> Self {
         IntervalItem {
@@ -70,6 +72,9 @@ struct StatusBar {
     state: NodeState,
 }
 
+#[derive_actions]
+impl StatusBar {}
+
 impl Node for StatusBar {
     fn render(&mut self, r: &mut Render) -> Result<()> {
         r.style.push_layer("statusbar");
@@ -89,6 +94,7 @@ struct Root {
     statusbar: StatusBar,
 }
 
+#[derive_actions]
 impl Root {
     fn new() -> Self {
         Root {

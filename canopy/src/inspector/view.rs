@@ -1,8 +1,8 @@
 use super::logs::Logs;
 use crate as canopy;
 use crate::{
-    event::key, fit, widgets::tabs, BackendControl, Node, NodeState, Outcome, Render, Result,
-    StatefulNode,
+    derive_actions, event::key, fit, widgets::tabs, BackendControl, Node, NodeState, Outcome,
+    Render, Result, StatefulNode,
 };
 
 /// View contains the body of the inspector.
@@ -36,6 +36,7 @@ impl Node for View {
     }
 }
 
+#[derive_actions]
 impl View {
     pub fn new() -> Self {
         View {

@@ -269,6 +269,8 @@ where
     }
 }
 
+impl<N> canopy::Actions for List<N> where N: Node + ListItem {}
+
 impl<N> Node for List<N>
 where
     N: Node + ListItem,

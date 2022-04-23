@@ -12,6 +12,8 @@ pub struct Panes<N: Node> {
     pub state: NodeState,
 }
 
+impl<N> canopy::Actions for Panes<N> where N: Node {}
+
 impl<N> Panes<N>
 where
     N: Node,

@@ -38,6 +38,7 @@ impl ListItem for TodoItem {
     }
 }
 
+#[derive_actions]
 impl Node for TodoItem {
     fn fit(&mut self, target: Expanse) -> canopy::Result<Expanse> {
         self.child.fit(target)
@@ -65,6 +66,9 @@ struct StatusBar {
     state: NodeState,
 }
 
+#[derive_actions]
+impl StatusBar {}
+
 impl Node for StatusBar {
     fn render(&mut self, r: &mut Render) -> canopy::Result<()> {
         r.style.push_layer("statusbar");
@@ -81,6 +85,7 @@ struct Root {
     adder: Option<frame::Frame<InputLine>>,
 }
 
+#[derive_actions]
 impl Root {
     fn new() -> Result<Self> {
         let mut r = Root {
