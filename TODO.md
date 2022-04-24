@@ -5,7 +5,14 @@
 ## 0.1
 
 - Key binding management system
+  - Key binding structure
+  - Actions improvements
+    - Arguments
+    - Multiple return types
+      - None, Result<Outcome>, Result<()>
   - Help system
+    - Will require a `Root` object
+  - Builder patttern extension to widgets so we can rename them
 - Make module structure better
   - The import situation is a bit confusing
   - It's not clear where to find everything
@@ -19,11 +26,13 @@
       - Search
     - Active nodes tree
       - Define name() for all built-in node types
+    - Command execution
     - Shrink/specify app area
     - Screenshots of app area
     - Graphs/stats
     - Maybe enable inspector with an env variable?
   - Add node names for relevant errors
+  - Add warning logs where needed to aid debugging
 - ControlBackend
   - Improve ergonomics - adding a function that returns a handle which re-enters rendering?
 - Renderer
@@ -34,6 +43,7 @@
     flickering under some rare circumstances. We could draw the cursor ourselves
     in widgets that need one - is there a reason not to do this?
 - Ergonomics:
+  - Action -> Command?
   - Better error returns
 - ctrl-c/ctrl-z
 - Widgets

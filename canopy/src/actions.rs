@@ -9,11 +9,7 @@ pub struct Action {
 pub trait Actions {
     fn actions() -> Vec<Action>
     where
-        Self: Sized,
-    {
-        vec![]
-    }
-    fn dispatch(&mut self, _name: &str) -> Result<()> {
-        Ok(())
-    }
+        Self: Sized;
+
+    fn dispatch(&mut self, _name: &str) -> Result<()>;
 }

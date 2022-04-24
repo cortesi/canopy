@@ -100,12 +100,13 @@ impl Root {
         Ok(r)
     }
 
-    fn open_adder(&mut self) -> canopy::Result<Outcome> {
+    #[action]
+    fn open_adder(&mut self) -> canopy::Result<()> {
         let mut adder = frame::Frame::new(InputLine::new(""));
         adder.child.set_focus();
         self.adder = Some(adder);
         self.taint();
-        Ok(Outcome::handle())
+        Ok(())
     }
 
     fn load(&mut self) -> canopy::Result<()> {

@@ -1,5 +1,6 @@
 use crate as canopy;
 use crate::{
+    derive_actions,
     error::Result,
     geom::{Expanse, Rect},
     node::Node,
@@ -47,6 +48,7 @@ where
     pub offset: usize,
 }
 
+#[derive_actions]
 impl<N> List<N>
 where
     N: Node + ListItem,
@@ -268,8 +270,6 @@ where
         Ok(())
     }
 }
-
-impl<N> canopy::Actions for List<N> where N: Node + ListItem {}
 
 impl<N> Node for List<N>
 where
