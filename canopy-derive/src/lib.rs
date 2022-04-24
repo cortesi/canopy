@@ -23,17 +23,17 @@ pub fn derive_statefulnode(input: proc_macro::TokenStream) -> proc_macro::TokenS
 }
 
 #[derive(Debug)]
-struct Action {
+struct Command {
     name: String,
     docs: String,
 }
 
-fn parse_action_method(method: &syn::ImplItemMethod) -> Option<Action> {
-    let mut is_action = false;
+fn parse_command_method(method: &syn::ImplItemMethod) -> Option<Command> {
+    let mut is_command = false;
     let mut docs = vec![];
     for a in &method.attrs {
-        if a.path.is_ident("action") {
-            is_action = true;
+        if a.path.is_ident("command") {
+            is_command = true;
         }
         if a.path.is_ident("doc") {
             for t in a.tokens.clone() {
@@ -46,8 +46,8 @@ fn parse_action_method(method: &syn::ImplItemMethod) -> Option<Action> {
             }
         }
     }
-    if is_action {
-        Some(Action {
+    if is_command {
+        Some(Command {
             name: method.sig.ident.to_string(),
             docs: docs.join("\n"),
         })
@@ -56,39 +56,39 @@ fn parse_action_method(method: &syn::ImplItemMethod) -> Option<Action> {
     }
 }
 
-/// Derive an implementation of the `Actions` trait. This macro should be added
-/// to the impl block of a struct. All methods that are annotated with `action`
-/// are added as actions, with their doc comments as the action documentation.
+/// Derive an implementation of the `Commands` trait. This macro should be added
+/// to the impl block of a struct. All methods that are annotated with `command`
+/// are added as commands, with their doc comments as the command documentation.
 #[proc_macro_attribute]
-pub fn derive_actions(
+pub fn derive_commands(
     _attr: proc_macro::TokenStream,
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as syn::ItemImpl);
     let orig = input.clone();
     let name = input.self_ty;
-    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    let (impl_generics, _, where_clause) = input.generics.split_for_impl();
 
-    let mut actions = vec![];
+    let mut commands = vec![];
     for i in input.items {
         if let syn::ImplItem::Method(m) = i {
-            if let Some(action) = parse_action_method(&m) {
-                actions.push(action);
+            if let Some(command) = parse_command_method(&m) {
+                commands.push(command);
             }
         }
     }
 
-    let names: Vec<String> = actions.iter().map(|x| x.name.clone()).collect();
-    let docs: Vec<String> = actions.iter().map(|x| x.docs.clone()).collect();
-    let idents: Vec<syn::Ident> = actions
+    let names: Vec<String> = commands.iter().map(|x| x.name.clone()).collect();
+    let docs: Vec<String> = commands.iter().map(|x| x.docs.clone()).collect();
+    let idents: Vec<syn::Ident> = commands
         .iter()
         .map(|x| syn::Ident::new(&x.name, proc_macro2::Span::call_site()))
         .collect();
 
     let expanded = quote! {
-        impl #impl_generics canopy::actions::Actions for #name #where_clause {
-            fn actions() -> Vec<canopy::actions::Action> {
-                vec![#(canopy::actions::Action {
+        impl #impl_generics canopy::commands::Commands for #name #where_clause {
+            fn commands() -> Vec<canopy::commands::Command> {
+                vec![#(canopy::commands::Command {
                         name: #names.to_string(),
                         docs: #docs.to_string(),
                     }),*]
@@ -100,7 +100,7 @@ pub fn derive_actions(
                             self.#idents()
                         }
                     ),*
-                    _ => Err(canopy::Error::UnknownAction(name.to_string())),
+                    _ => Err(canopy::Error::UnknownCommand(name.to_string())),
                 }
             }
         }
@@ -114,7 +114,7 @@ pub fn derive_actions(
 }
 
 #[proc_macro_attribute]
-pub fn action(
+pub fn command(
     _attr: proc_macro::TokenStream,
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {

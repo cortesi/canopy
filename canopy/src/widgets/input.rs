@@ -1,6 +1,6 @@
 use crate as canopy;
 use crate::{
-    cursor, derive_actions,
+    cursor, derive_commands,
     event::key,
     geom::{Expanse, LineSegment, Point},
     state::{NodeState, StatefulNode},
@@ -107,7 +107,7 @@ pub struct InputLine {
     pub textbuf: TextBuf,
 }
 
-#[derive_actions]
+#[derive_commands]
 impl InputLine {
     pub fn new(txt: &str) -> Self {
         InputLine {

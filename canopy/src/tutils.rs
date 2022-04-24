@@ -4,7 +4,7 @@ pub mod utils {
 
     use crate::{self as canopy, BackendControl};
     use crate::{
-        derive_actions,
+        derive_commands,
         event::{key, mouse},
         fit,
         geom::Expanse,
@@ -77,7 +77,7 @@ pub mod utils {
         pub next_outcome: Option<Outcome>,
     }
 
-    #[derive_actions]
+    #[derive_commands]
     impl Node for TLeaf {
         fn name(&self) -> Option<String> {
             Some(self.name.clone())
@@ -206,7 +206,7 @@ pub mod utils {
         }
     }
 
-    #[derive_actions]
+    #[derive_commands]
     impl TBranch {
         pub fn new(name: &str) -> Self {
             TBranch {
@@ -231,7 +231,7 @@ pub mod utils {
         }
     }
 
-    #[derive_actions]
+    #[derive_commands]
     impl TRoot {
         pub fn new() -> Self {
             TRoot {
@@ -273,7 +273,7 @@ pub mod utils {
         }
     }
 
-    #[derive_actions]
+    #[derive_commands]
     impl TFixed {
         pub fn new(w: u16, h: u16) -> Self {
             TFixed {

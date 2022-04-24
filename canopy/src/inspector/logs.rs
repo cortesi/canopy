@@ -6,7 +6,7 @@ use tracing_subscriber::fmt;
 
 use crate as canopy;
 use crate::{
-    derive_actions,
+    derive_commands,
     event::key,
     fit,
     geom::{Expanse, Rect},
@@ -23,7 +23,7 @@ struct LogItem {
     child: Text,
 }
 
-#[derive_actions]
+#[derive_commands]
 impl LogItem {
     fn new(txt: &str) -> Self {
         LogItem {
@@ -168,7 +168,7 @@ impl Node for Logs {
     }
 }
 
-#[derive_actions]
+#[derive_commands]
 impl Logs {
     pub fn new() -> Self {
         Logs {

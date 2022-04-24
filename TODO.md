@@ -6,7 +6,7 @@
 
 - Key binding management system
   - Key binding structure
-  - Actions improvements
+  - Commands improvements
     - Arguments
     - Multiple return types
       - None, Result<Outcome>, Result<()>

@@ -4,7 +4,7 @@ mod view;
 
 use crate as canopy;
 use crate::{
-    derive_actions, event::key, fit, widgets::frame, BackendControl, Node, NodeState, Outcome,
+    derive_commands, event::key, fit, widgets::frame, BackendControl, Node, NodeState, Outcome,
     Render, Result, StatefulNode,
 };
 
@@ -16,7 +16,7 @@ pub struct Content {
     statusbar: statusbar::StatusBar,
 }
 
-#[derive_actions]
+#[derive_commands]
 impl Content {
     pub fn new() -> Self {
         Content {
@@ -60,7 +60,7 @@ where
     content: Content,
 }
 
-#[derive_actions]
+#[derive_commands]
 impl<N> Inspector<N>
 where
     N: Node,

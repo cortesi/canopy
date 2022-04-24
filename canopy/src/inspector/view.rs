@@ -1,7 +1,7 @@
 use super::logs::Logs;
 use crate as canopy;
 use crate::{
-    derive_actions, event::key, fit, widgets::tabs, BackendControl, Node, NodeState, Outcome,
+    derive_commands, event::key, fit, widgets::tabs, BackendControl, Node, NodeState, Outcome,
     Render, Result, StatefulNode,
 };
 
@@ -36,7 +36,7 @@ impl Node for View {
     }
 }
 
-#[derive_actions]
+#[derive_commands]
 impl View {
     pub fn new() -> Self {
         View {

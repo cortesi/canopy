@@ -1,13 +1,13 @@
 use crate::Result;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Action {
+pub struct Command {
     pub name: String,
     pub docs: String,
 }
 
-pub trait Actions {
-    fn actions() -> Vec<Action>
+pub trait Commands {
+    fn commands() -> Vec<Command>
     where
         Self: Sized;
 

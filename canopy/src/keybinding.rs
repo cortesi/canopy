@@ -1,4 +1,4 @@
-use crate::{Action, Actions};
+use crate::{Command, Commands};
 
 /// The Keybindings struct manages the global set of key bindings for the app.
 pub struct Keybindings {}
@@ -8,14 +8,14 @@ impl Keybindings {
         Keybindings {}
     }
 
-    fn load(&mut self, f: fn() -> Vec<Action>) {}
+    fn load(&mut self, f: fn() -> Vec<Command>) {}
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate as canopy;
-    use crate::{action, derive_actions, Result};
+    use crate::{command, derive_commands, Result};
 
     #[test]
     fn kb_load() -> Result<()> {
@@ -28,17 +28,17 @@ mod tests {
 
         impl canopy::Node for Foo {}
 
-        #[derive_actions]
+        #[derive_commands]
 
         impl Foo {
-            #[action]
+            #[command]
             /// This is a comment.
             /// Multiline too!
             fn a(&mut self) -> canopy::Result<()> {
                 self.a_triggered = true;
                 Ok(())
             }
-            #[action]
+            #[command]
             fn b(&mut self) -> canopy::Result<()> {
                 self.b_triggered = true;
                 Ok(())
@@ -46,7 +46,7 @@ mod tests {
         }
 
         let mut kb = Keybindings::new();
-        kb.load(Foo::actions);
+        kb.load(Foo::commands);
 
         Ok(())
     }

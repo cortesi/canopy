@@ -3,7 +3,7 @@ use std::fs;
 
 use canopy::{
     backend::crossterm::runloop,
-    derive_actions,
+    derive_commands,
     event::{key, mouse},
     fit,
     inspector::Inspector,
@@ -18,7 +18,7 @@ struct Root {
     child: frame::Frame<Text>,
 }
 
-#[derive_actions]
+#[derive_commands]
 impl Root {
     fn new(contents: String) -> Self {
         Root {

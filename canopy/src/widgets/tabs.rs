@@ -1,6 +1,6 @@
 use crate as canopy;
 use crate::{
-    derive_actions,
+    derive_commands,
     state::{NodeState, StatefulNode},
     Node, Render, Result,
 };
@@ -13,7 +13,7 @@ pub struct Tabs {
     pub active: usize,
 }
 
-#[derive_actions]
+#[derive_commands]
 impl Tabs {
     pub fn new(tabs: Vec<String>) -> Self {
         Tabs {

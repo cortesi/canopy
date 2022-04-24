@@ -2,7 +2,7 @@ use pad::PadStr;
 
 use crate as canopy;
 use crate::{
-    derive_actions, frame,
+    derive_commands, frame,
     state::{NodeState, StatefulNode},
     Node, Render, Result,
 };
@@ -72,7 +72,7 @@ where
     pub title: Option<String>,
 }
 
-#[derive_actions]
+#[derive_commands]
 impl<N> Frame<N>
 where
     N: Node,

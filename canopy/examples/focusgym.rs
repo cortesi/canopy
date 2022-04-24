@@ -1,6 +1,6 @@
 use canopy::{
     backend::crossterm::runloop,
-    derive_actions,
+    derive_commands,
     event::{key, mouse},
     fit,
     geom::Expanse,
@@ -16,7 +16,7 @@ struct Root {
     child: Block,
 }
 
-#[derive_actions]
+#[derive_commands]
 impl Root {
     fn new() -> Self {
         Root {
@@ -37,7 +37,7 @@ struct Block {
     horizontal: bool,
 }
 
-#[derive_actions]
+#[derive_commands]
 impl Block {
     fn new(orientation: bool) -> Self {
         Block {

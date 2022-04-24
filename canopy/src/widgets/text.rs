@@ -1,6 +1,6 @@
 use crate as canopy;
 use crate::{
-    derive_actions,
+    derive_commands,
     geom::{Expanse, Line},
     state::{NodeState, StatefulNode},
     Node, Render, Result,
@@ -17,7 +17,7 @@ pub struct Text {
     current_size: Expanse,
 }
 
-#[derive_actions]
+#[derive_commands]
 impl Text {
     pub fn new(raw: &str) -> Self {
         Text {

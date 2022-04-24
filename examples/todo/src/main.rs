@@ -38,7 +38,7 @@ impl ListItem for TodoItem {
     }
 }
 
-#[derive_actions]
+#[derive_commands]
 impl Node for TodoItem {
     fn fit(&mut self, target: Expanse) -> canopy::Result<Expanse> {
         self.child.fit(target)
@@ -66,7 +66,7 @@ struct StatusBar {
     state: NodeState,
 }
 
-#[derive_actions]
+#[derive_commands]
 impl StatusBar {}
 
 impl Node for StatusBar {
@@ -85,7 +85,7 @@ struct Root {
     adder: Option<frame::Frame<InputLine>>,
 }
 
-#[derive_actions]
+#[derive_commands]
 impl Root {
     fn new() -> Result<Self> {
         let mut r = Root {
@@ -100,7 +100,7 @@ impl Root {
         Ok(r)
     }
 
-    #[action]
+    #[command]
     fn open_adder(&mut self) -> canopy::Result<()> {
         let mut adder = frame::Frame::new(InputLine::new(""));
         adder.child.set_focus();

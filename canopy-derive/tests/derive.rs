@@ -1,9 +1,9 @@
 use std::marker::PhantomData;
 
 use canopy;
-use canopy::actions::Actions;
-use canopy_derive::action;
-use canopy_derive::derive_actions;
+use canopy::commands::Commands;
+use canopy_derive::command;
+use canopy_derive::derive_commands;
 
 #[test]
 fn statefulnode() {
@@ -14,7 +14,7 @@ fn statefulnode() {
 }
 
 #[test]
-fn actions() {
+fn commands() {
     #[derive(canopy::StatefulNode)]
     struct Foo {
         state: canopy::NodeState,
@@ -24,16 +24,16 @@ fn actions() {
 
     impl canopy::Node for Foo {}
 
-    #[derive_actions]
+    #[derive_commands]
     impl Foo {
-        #[action]
+        #[command]
         /// This is a comment.
         /// Multiline too!
         fn a(&mut self) -> canopy::Result<()> {
             self.a_triggered = true;
             Ok(())
         }
-        #[action]
+        #[command]
         fn b(&mut self) -> canopy::Result<()> {
             self.b_triggered = true;
             Ok(())
@@ -41,13 +41,13 @@ fn actions() {
     }
 
     assert_eq!(
-        Foo::actions(),
+        Foo::commands(),
         [
-            canopy::actions::Action {
+            canopy::commands::Command {
                 name: "a".to_string(),
                 docs: " This is a comment.\n Multiline too!".to_string()
             },
-            canopy::actions::Action {
+            canopy::commands::Command {
                 name: "b".to_string(),
                 docs: "".to_string(),
             }
@@ -71,12 +71,12 @@ fn actions() {
         p: PhantomData<N>,
     }
 
-    #[derive_actions]
+    #[derive_commands]
     impl<N> Bar<N>
     where
         N: canopy::Node,
     {
-        #[action]
+        #[command]
         fn a(&mut self) -> canopy::Result<()> {
             self.a_triggered = true;
             Ok(())
@@ -84,8 +84,8 @@ fn actions() {
     }
 
     assert_eq!(
-        Bar::<Foo>::actions(),
-        [canopy::actions::Action {
+        Bar::<Foo>::commands(),
+        [canopy::commands::Command {
             name: "a".to_string(),
             docs: "".to_string()
         },]
