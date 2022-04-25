@@ -16,6 +16,10 @@
 - Make module structure better
   - The import situation is a bit confusing
   - It's not clear where to find everything
+- Root object
+  - Manage modal windows
+  - Command help system
+  - Key rebinding
 - Better debugging and monitoring story
   - Inspector GUI
     - Logs

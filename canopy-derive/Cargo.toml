@@ -13,6 +13,7 @@ syn = "1.0.86"
 quote = "1.0.15"
 proc-macro2 = "1.0.36"
 litrs = "0.2.3"
+convert_case = "0.5.0"
 
 [dev-dependencies]
 canopy = { path = "../canopy" }

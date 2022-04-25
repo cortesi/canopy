@@ -37,6 +37,10 @@ pub struct NodeState {
     // Has this node been initialized? This is used to determine if we need to
     // call the poll function during the pre-render sweep.
     pub(crate) initialized: bool,
+
+    /// Over-ride the node name, which is usually taken from the struct name
+    /// during the derive.
+    pub name: Option<String>,
 }
 
 /// The node state object - each node needs to keep one of these, and offer it
@@ -54,6 +58,7 @@ impl NodeState {
             hidden: false,
             viewport: ViewPort::default(),
             initialized: false,
+            name: None,
         }
     }
 }
@@ -62,6 +67,9 @@ impl NodeState {
 pub trait StatefulNode {
     /// Get a reference to the node's state object.
     fn state(&self) -> &NodeState;
+
+    /// The name of this node, if it has one, for debugging and testing.
+    fn name(&self) -> String;
 
     /// Get a mutable reference to the node's state object.
     fn state_mut(&mut self) -> &mut NodeState;
@@ -144,6 +152,12 @@ pub trait StatefulNode {
             s.taint = true;
             s.render_gen
         });
+    }
+
+    /// Set this node's name, over-riding the name derived from the struct name.
+    fn set_name(&mut self, name: &str) {
+        let r = self.state_mut();
+        r.name = Some(name.to_string());
     }
 
     /// Has the focus status of this node changed since the last render

@@ -1,14 +1,29 @@
+use std::collections::HashSet;
+
 use crate::{Command, Commands};
 
 /// The Keybindings struct manages the global set of key bindings for the app.
-pub struct Keybindings {}
+///
+/// When a key is pressed, it is first translated through the global key map
+/// into a set of possible action specifications. We then walk the tree of nodes
+/// from the focus to the root, trying each action specification in turn, until
+/// an action is handled by a node. If no action is handled, the key is ignored.
+pub struct Keybindings {
+    commands: HashSet<Command>,
+}
 
 impl Keybindings {
     pub fn new() -> Self {
-        Keybindings {}
+        Keybindings {
+            commands: HashSet::new(),
+        }
     }
 
-    fn load(&mut self, f: fn() -> Vec<Command>) {}
+    fn load(&mut self, f: fn() -> Vec<Command>) {
+        for i in f() {
+            self.commands.insert(i);
+        }
+    }
 }
 
 #[cfg(test)]

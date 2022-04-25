@@ -508,7 +508,7 @@ mod tests {
     pub fn focvec(root: &mut TRoot) -> Result<Vec<String>> {
         let mut v = vec![];
         focus_path(root, &mut |x| -> Result<()> {
-            let n = x.name().unwrap();
+            let n = x.name();
             v.push(n);
             Ok(())
         })?;

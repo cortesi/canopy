@@ -27,11 +27,6 @@ impl Walker for () {
 /// tree, with each node responsible for managing its own children.
 #[allow(unused_variables)]
 pub trait Node: StatefulNode + Commands {
-    /// The name of this node, if it has one, for debugging and testing.
-    fn name(&self) -> Option<String> {
-        None
-    }
-
     /// Should the node render in the next sweep? This checks if the node is
     /// currently hidden, and if not, signals that we should render if:
     ///
@@ -194,7 +189,7 @@ mod tests {
 
     fn skipper(x: &mut dyn Node, skipname: String, v: &mut Vec<String>) -> Result<SkipWalker> {
         let mut ret = SkipWalker::default();
-        let n = x.name().unwrap();
+        let n = x.name();
         if n == skipname {
             ret.has_skip = true
         }

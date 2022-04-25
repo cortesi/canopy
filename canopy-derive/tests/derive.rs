@@ -2,15 +2,22 @@ use std::marker::PhantomData;
 
 use canopy;
 use canopy::commands::Commands;
+use canopy::StatefulNode;
 use canopy_derive::command;
 use canopy_derive::derive_commands;
 
 #[test]
 fn statefulnode() {
     #[derive(canopy::StatefulNode)]
-    struct Foo {
+    struct FooBar {
         state: canopy::NodeState,
     }
+
+    let f = FooBar {
+        state: canopy::NodeState::default(),
+    };
+
+    assert_eq!(f.name(), "foo_bar");
 }
 
 #[test]
@@ -44,11 +51,11 @@ fn commands() {
         Foo::commands(),
         [
             canopy::commands::Command {
-                name: "a".to_string(),
+                command: "a".to_string(),
                 docs: " This is a comment.\n Multiline too!".to_string()
             },
             canopy::commands::Command {
-                name: "b".to_string(),
+                command: "b".to_string(),
                 docs: "".to_string(),
             }
         ]
@@ -86,7 +93,7 @@ fn commands() {
     assert_eq!(
         Bar::<Foo>::commands(),
         [canopy::commands::Command {
-            name: "a".to_string(),
+            command: "a".to_string(),
             docs: "".to_string()
         },]
     );

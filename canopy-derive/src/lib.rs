@@ -1,3 +1,4 @@
+use convert_case::{Case, Casing};
 use litrs::StringLit;
 use quote::quote;
 use syn::{parse_macro_input, DeriveInput};
@@ -9,6 +10,7 @@ pub fn derive_statefulnode(input: proc_macro::TokenStream) -> proc_macro::TokenS
     let input = parse_macro_input!(input as DeriveInput);
     let name = input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    let rname = &format!("{}", name.to_string().to_case(Case::Snake));
     let expanded = quote! {
         impl #impl_generics canopy::StatefulNode for #name #ty_generics #where_clause {
             fn state_mut(&mut self) -> &mut canopy::NodeState {
@@ -17,6 +19,13 @@ pub fn derive_statefulnode(input: proc_macro::TokenStream) -> proc_macro::TokenS
             fn state(&self) -> &canopy::NodeState {
                 &self.state
             }
+            fn name(&self) -> String {
+                if let Some(n) = &self.state.name {
+                    n.clone()
+                } else {
+                    #rname.to_string()
+                }
+            }
         }
     };
     proc_macro::TokenStream::from(expanded)
@@ -24,7 +33,7 @@ pub fn derive_statefulnode(input: proc_macro::TokenStream) -> proc_macro::TokenS
 
 #[derive(Debug)]
 struct Command {
-    name: String,
+    command: String,
     docs: String,
 }
 
@@ -48,7 +57,7 @@ fn parse_command_method(method: &syn::ImplItemMethod) -> Option<Command> {
     }
     if is_command {
         Some(Command {
-            name: method.sig.ident.to_string(),
+            command: method.sig.ident.to_string(),
             docs: docs.join("\n"),
         })
     } else {
@@ -78,18 +87,18 @@ pub fn derive_commands(
         }
     }
 
-    let names: Vec<String> = commands.iter().map(|x| x.name.clone()).collect();
+    let names: Vec<String> = commands.iter().map(|x| x.command.clone()).collect();
     let docs: Vec<String> = commands.iter().map(|x| x.docs.clone()).collect();
     let idents: Vec<syn::Ident> = commands
         .iter()
-        .map(|x| syn::Ident::new(&x.name, proc_macro2::Span::call_site()))
+        .map(|x| syn::Ident::new(&x.command, proc_macro2::Span::call_site()))
         .collect();
 
     let expanded = quote! {
         impl #impl_generics canopy::commands::Commands for #name #where_clause {
             fn commands() -> Vec<canopy::commands::Command> {
                 vec![#(canopy::commands::Command {
-                        name: #names.to_string(),
+                        command: #names.to_string(),
                         docs: #docs.to_string(),
                     }),*]
             }

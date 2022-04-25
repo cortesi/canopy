@@ -52,7 +52,6 @@ pub mod utils {
     #[derive(Debug, PartialEq, StatefulNode)]
     pub struct TRoot {
         state: NodeState,
-        name: String,
 
         pub next_outcome: Option<Outcome>,
         pub a: TBranch,
@@ -62,7 +61,6 @@ pub mod utils {
     #[derive(Debug, PartialEq, StatefulNode)]
     pub struct TBranch {
         state: NodeState,
-        name: String,
 
         pub next_outcome: Option<Outcome>,
         pub a: TLeaf,
@@ -72,17 +70,12 @@ pub mod utils {
     #[derive(Debug, PartialEq, StatefulNode)]
     pub struct TLeaf {
         state: NodeState,
-        name: String,
 
         pub next_outcome: Option<Outcome>,
     }
 
     #[derive_commands]
     impl Node for TLeaf {
-        fn name(&self) -> Option<String> {
-            Some(self.name.clone())
-        }
-
         fn accept_focus(&mut self) -> bool {
             true
         }
@@ -90,7 +83,7 @@ pub mod utils {
             r.text(
                 "any",
                 self.vp().view_rect().first_line(),
-                &format!("<{}>", self.name.clone()),
+                &format!("<{}>", self.name().clone()),
             )
         }
         fn handle_key(&mut self, _: &mut dyn BackendControl, _: key::Key) -> Result<Outcome> {
@@ -102,10 +95,6 @@ pub mod utils {
     }
 
     impl Node for TBranch {
-        fn name(&self) -> Option<String> {
-            Some(self.name.clone())
-        }
-
         fn accept_focus(&mut self) -> bool {
             true
         }
@@ -118,7 +107,7 @@ pub mod utils {
             r.text(
                 "any",
                 self.vp().view_rect().first_line(),
-                &format!("<{}>", self.name.clone()),
+                &format!("<{}>", self.name().clone()),
             )
         }
 
@@ -138,10 +127,6 @@ pub mod utils {
     }
 
     impl Node for TRoot {
-        fn name(&self) -> Option<String> {
-            Some(self.name.clone())
-        }
-
         fn accept_focus(&mut self) -> bool {
             true
         }
@@ -154,7 +139,7 @@ pub mod utils {
             r.text(
                 "any",
                 self.vp().view_rect().first_line(),
-                &format!("<{}>", self.name.clone()),
+                &format!("<{}>", self.name().clone()),
             )
         }
 
@@ -175,11 +160,12 @@ pub mod utils {
 
     impl TLeaf {
         pub fn new(name: &str) -> Self {
-            TLeaf {
+            let mut n = TLeaf {
                 state: NodeState::default(),
-                name: name.into(),
                 next_outcome: None,
-            }
+            };
+            n.set_name(&name);
+            n
         }
 
         pub fn make_mouse_event(&self) -> Result<mouse::Mouse> {
@@ -200,7 +186,7 @@ pub mod utils {
                 Outcome::ignore()
             };
             TSTATE.with(|s| {
-                s.borrow_mut().add_event(&self.name, evt, ret.clone());
+                s.borrow_mut().add_event(&self.name(), evt, ret.clone());
             });
             Ok(ret)
         }
@@ -209,13 +195,14 @@ pub mod utils {
     #[derive_commands]
     impl TBranch {
         pub fn new(name: &str) -> Self {
-            TBranch {
+            let mut n = TBranch {
                 state: NodeState::default(),
-                name: name.into(),
                 a: TLeaf::new(&(name.to_owned() + ":" + "la")),
                 b: TLeaf::new(&(name.to_owned() + ":" + "lb")),
                 next_outcome: None,
-            }
+            };
+            n.set_name(name);
+            n
         }
         fn handle(&mut self, evt: &str) -> Result<Outcome> {
             let ret = if let Some(x) = self.next_outcome.clone() {
@@ -225,7 +212,7 @@ pub mod utils {
                 Outcome::ignore()
             };
             TSTATE.with(|s| {
-                s.borrow_mut().add_event(&self.name, evt, ret.clone());
+                s.borrow_mut().add_event(&self.name(), evt, ret.clone());
             });
             Ok(ret)
         }
@@ -234,13 +221,14 @@ pub mod utils {
     #[derive_commands]
     impl TRoot {
         pub fn new() -> Self {
-            TRoot {
+            let mut n = TRoot {
                 state: NodeState::default(),
-                name: "r".into(),
                 a: TBranch::new("ba"),
                 b: TBranch::new("bb"),
                 next_outcome: None,
-            }
+            };
+            n.set_name("r");
+            n
         }
         fn handle(&mut self, evt: &str) -> Result<Outcome> {
             let ret = if let Some(x) = self.next_outcome.clone() {
@@ -250,7 +238,7 @@ pub mod utils {
                 Outcome::ignore()
             };
             TSTATE.with(|s| {
-                s.borrow_mut().add_event(&self.name, evt, ret.clone());
+                s.borrow_mut().add_event(&self.name(), evt, ret.clone());
             });
             Ok(ret)
         }
