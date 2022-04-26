@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+use comfy_table::{ContentArrangement, Table};
+
 use crate::Command;
 
 /// The Keybindings struct manages the global set of key bindings for the app.
@@ -23,6 +25,26 @@ impl KeyBindings {
         for i in cmds {
             self.commands.insert(i);
         }
+    }
+
+    /// Output keybindings to the terminal, formatted in a nice table. Make sure
+    /// the terminal is not being controlled by Canopy when you call this.
+    pub fn pretty_print(&self) {
+        let mut table = Table::new();
+        table.set_content_arrangement(ContentArrangement::Dynamic);
+        table.load_preset(comfy_table::presets::UTF8_FULL);
+
+        let mut cmds: Vec<&Command> = self.commands.iter().collect();
+        cmds.sort_by(|a, b| a.fullname().cmp(&b.fullname()));
+
+        for i in cmds {
+            table.add_row(vec![
+                comfy_table::Cell::new(i.fullname()).fg(comfy_table::Color::Green),
+                comfy_table::Cell::new(i.docs.clone()),
+            ]);
+        }
+
+        println!("{table}");
     }
 }
 

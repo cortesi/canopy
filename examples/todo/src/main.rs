@@ -80,7 +80,7 @@ impl Node for StatusBar {
 }
 
 #[derive(StatefulNode)]
-struct Root {
+struct Todo {
     state: NodeState,
     content: frame::Frame<List<TodoItem>>,
     statusbar: StatusBar,
@@ -88,9 +88,9 @@ struct Root {
 }
 
 #[derive_commands]
-impl Root {
+impl Todo {
     fn new() -> Result<Self> {
-        let mut r = Root {
+        let mut r = Todo {
             state: NodeState::default(),
             content: frame::Frame::new(List::new(vec![])),
             statusbar: StatusBar {
@@ -103,7 +103,8 @@ impl Root {
     }
 
     #[command]
-    fn open_adder(&mut self) -> canopy::Result<()> {
+    /// Open the editor to enter a new todo item.
+    fn enter_item(&mut self) -> canopy::Result<()> {
         let mut adder = frame::Frame::new(InputLine::new(""));
         adder.child.set_focus();
         self.adder = Some(adder);
@@ -121,7 +122,7 @@ impl Root {
     }
 }
 
-impl Node for Root {
+impl Node for Todo {
     fn render(&mut self, _: &mut Render) -> canopy::Result<()> {
         let vp = self.vp();
         let (a, b) = vp.carve_vend(1);
@@ -174,7 +175,7 @@ impl Node for Root {
         } else {
             match k {
                 c if c == 'a' => {
-                    self.open_adder()?;
+                    self.enter_item()?;
                 }
                 c if c == 'g' => lst.select_first(),
                 c if c == 'd' => {
@@ -221,9 +222,10 @@ pub fn main() -> Result<()> {
     let args = Args::parse();
     let mut kb = KeyBindings::new();
     kb.load(List::<TodoItem>::load_commands(None));
+    kb.load(Todo::load_commands(None));
 
     if args.commands {
-        println!("{}", kb);
+        kb.pretty_print();
         return Ok(());
     }
 
@@ -237,7 +239,7 @@ pub fn main() -> Result<()> {
             None,
         );
 
-        let mut root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new()?);
+        let mut root = Inspector::new(key::Ctrl + key::KeyCode::Right, Todo::new()?);
         runloop(&mut colors, &mut root)?;
     } else {
         println!("Specify a file path")

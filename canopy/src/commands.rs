@@ -36,6 +36,11 @@ impl Command {
     fn output(&self) -> String {
         format!("{}.{}\t\t{}", self.node_name, self.command, self.docs)
     }
+
+    /// A full command name, of the form nodename.command
+    pub fn fullname(&self) -> String {
+        format!("{}.{}", self.node_name, self.command)
+    }
 }
 
 impl Hash for Command {
