@@ -31,15 +31,52 @@ pub fn derive_statefulnode(input: proc_macro::TokenStream) -> proc_macro::TokenS
     proc_macro::TokenStream::from(expanded)
 }
 
+#[derive(Debug, Clone, Copy)]
+enum ReturnTypes {
+    Void,
+    Result,
+}
+
+impl quote::ToTokens for ReturnTypes {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        tokens.extend(match self {
+            ReturnTypes::Void => quote! {  canopy::commands::ReturnTypes::Void },
+            ReturnTypes::Result => quote! { canopy::commands::ReturnTypes::Result },
+        });
+    }
+}
+
 #[derive(Debug)]
 struct Command {
+    ident: syn::Ident,
     command: String,
     docs: String,
+    ret: ReturnTypes,
+}
+
+impl Command {
+    fn invocation(&self) -> proc_macro2::TokenStream {
+        let ident = &self.ident;
+        match self.ret {
+            ReturnTypes::Void => {
+                quote! { self.#ident() }
+            }
+            ReturnTypes::Result => {
+                quote! {self.#ident()? }
+            }
+        }
+    }
 }
 
 fn parse_command_method(method: &syn::ImplItemMethod) -> Option<Command> {
     let mut is_command = false;
     let mut docs = vec![];
+
+    let ret = match &method.sig.output {
+        syn::ReturnType::Default => ReturnTypes::Void,
+        syn::ReturnType::Type(_, _) => ReturnTypes::Result,
+    };
+
     for a in &method.attrs {
         if a.path.is_ident("command") {
             is_command = true;
@@ -57,8 +94,10 @@ fn parse_command_method(method: &syn::ImplItemMethod) -> Option<Command> {
     }
     if is_command {
         Some(Command {
+            ident: method.sig.ident.clone(),
             command: method.sig.ident.to_string(),
             docs: docs.join("\n"),
+            ret,
         })
     } else {
         None
@@ -98,10 +137,8 @@ pub fn derive_commands(
 
     let names: Vec<String> = commands.iter().map(|x| x.command.clone()).collect();
     let docs: Vec<String> = commands.iter().map(|x| x.docs.clone()).collect();
-    let idents: Vec<syn::Ident> = commands
-        .iter()
-        .map(|x| syn::Ident::new(&x.command, proc_macro2::Span::call_site()))
-        .collect();
+    let rets: Vec<ReturnTypes> = commands.iter().map(|x| x.ret).collect();
+    let invoke: Vec<proc_macro2::TokenStream> = commands.iter().map(|x| x.invocation()).collect();
 
     let expanded = quote! {
         impl #impl_generics canopy::commands::Commands for #name #where_clause {
@@ -110,6 +147,7 @@ pub fn derive_commands(
                         node_name: name.map_or(#default_node_name.to_string(), |n| n.to_string()),
                         command: #names.to_string(),
                         docs: #docs.to_string(),
+                        return_type: #rets,
                     }),*]
             }
             fn commands(&self) -> Vec<canopy::commands::Command> {
@@ -117,17 +155,20 @@ pub fn derive_commands(
                         node_name: self.name(),
                         command: #names.to_string(),
                         docs: #docs.to_string(),
+                        return_type: #rets,
                     }),*]
             }
             fn dispatch(&mut self, name: &str) -> canopy::Result<()> {
                 match name {
                     #(
                         #names => {
-                            self.#idents()
+                            #invoke;
                         }
                     ),*
-                    _ => Err(canopy::Error::UnknownCommand(name.to_string())),
-                }
+                    x if true => {},
+                    _ => return Err(canopy::Error::UnknownCommand(name.to_string())),
+                };
+                Ok(())
             }
         }
     };
@@ -135,7 +176,6 @@ pub fn derive_commands(
         #orig
         #expanded
     };
-    println!("{}", out.to_string());
     out.into()
 }
 

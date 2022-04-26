@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use canopy;
-use canopy::commands::Commands;
+use canopy::commands::{Commands, ReturnTypes};
 use canopy::StatefulNode;
 use canopy_derive::command;
 use canopy_derive::derive_commands;
@@ -27,6 +27,7 @@ fn commands() {
         state: canopy::NodeState,
         a_triggered: bool,
         b_triggered: bool,
+        c_triggered: bool,
     }
 
     impl canopy::Node for Foo {}
@@ -40,10 +41,16 @@ fn commands() {
             self.a_triggered = true;
             Ok(())
         }
+
         #[command]
         fn b(&mut self) -> canopy::Result<()> {
             self.b_triggered = true;
             Ok(())
+        }
+
+        #[command]
+        fn c(&mut self) {
+            self.c_triggered = true;
         }
     }
 
@@ -53,12 +60,20 @@ fn commands() {
             canopy::commands::Command {
                 node_name: "foo".to_string(),
                 command: "a".to_string(),
-                docs: " This is a comment.\n Multiline too!".to_string()
+                docs: " This is a comment.\n Multiline too!".to_string(),
+                return_type: ReturnTypes::Result,
             },
             canopy::commands::Command {
                 node_name: "foo".to_string(),
                 command: "b".to_string(),
                 docs: "".to_string(),
+                return_type: ReturnTypes::Result,
+            },
+            canopy::commands::Command {
+                node_name: "foo".to_string(),
+                command: "c".to_string(),
+                docs: "".to_string(),
+                return_type: ReturnTypes::Void,
             }
         ]
     );
@@ -66,9 +81,13 @@ fn commands() {
         state: canopy::NodeState::default(),
         a_triggered: false,
         b_triggered: false,
+        c_triggered: false,
     };
     f.dispatch("a").unwrap();
     assert!(f.a_triggered);
+
+    f.dispatch("c").unwrap();
+    assert!(f.c_triggered);
 
     #[derive(canopy::StatefulNode)]
     struct Bar<N>
@@ -97,7 +116,8 @@ fn commands() {
         [canopy::commands::Command {
             node_name: "bar".to_string(),
             command: "a".to_string(),
-            docs: "".to_string()
+            docs: "".to_string(),
+            return_type: ReturnTypes::Result,
         },]
     );
     assert_eq!(
@@ -105,7 +125,8 @@ fn commands() {
         [canopy::commands::Command {
             node_name: "xxx".to_string(),
             command: "a".to_string(),
-            docs: "".to_string()
+            docs: "".to_string(),
+            return_type: ReturnTypes::Result,
         },]
     );
 }

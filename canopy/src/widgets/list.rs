@@ -1,6 +1,6 @@
 use crate as canopy;
 use crate::{
-    derive_commands,
+    command, derive_commands,
     error::Result,
     geom::{Expanse, Rect},
     node::Node,
@@ -118,21 +118,25 @@ where
     }
 
     /// Move selection to the next item in the list, if possible.
+    #[command]
     pub fn select_first(&mut self) {
         self.select(0)
     }
 
     /// Move selection to the next item in the list, if possible.
+    #[command]
     pub fn select_last(&mut self) {
         self.select(self.len())
     }
 
     /// Move selection to the next item in the list, if possible.
+    #[command]
     pub fn select_next(&mut self) {
         self.select(self.offset.saturating_add(1))
     }
 
     /// Move selection to the next previous the list, if possible.
+    #[command]
     pub fn select_prev(&mut self) {
         self.select(self.offset.saturating_sub(1))
     }
@@ -165,36 +169,42 @@ where
     }
 
     /// Scroll the viewport down by one line.
+    #[command]
     pub fn scroll_down(&mut self) {
         self.update_viewport(&|vp| vp.down());
         self.fix_selection();
     }
 
     /// Scroll the viewport up by one line.
+    #[command]
     pub fn scroll_up(&mut self) {
         self.update_viewport(&|vp| vp.up());
         self.fix_selection();
     }
 
     /// Scroll the viewport left by one column.
+    #[command]
     pub fn scroll_left(&mut self) {
         self.update_viewport(&|vp| vp.left());
         self.fix_selection();
     }
 
     /// Scroll the viewport right by one column.
+    #[command]
     pub fn scroll_right(&mut self) {
         self.update_viewport(&|vp| vp.right());
         self.fix_selection();
     }
 
     /// Scroll the viewport down by one page.
+    #[command]
     pub fn page_down(&mut self) {
         self.update_viewport(&|vp| vp.page_down());
         self.fix_selection();
     }
 
     /// Scroll the viewport up by one page.
+    #[command]
     pub fn page_up(&mut self) {
         self.update_viewport(&|vp| vp.page_up());
         self.fix_selection();

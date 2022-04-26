@@ -1,8 +1,8 @@
-mod store;
-
 use std::env;
 
 use anyhow::Result;
+use clap::Parser;
+
 use canopy::{
     backend::crossterm::runloop,
     event::{key, mouse},
@@ -12,6 +12,8 @@ use canopy::{
     widgets::{frame, list::*, InputLine, Text},
     *,
 };
+
+mod store;
 
 #[derive(StatefulNode)]
 struct TodoItem {
@@ -206,7 +208,25 @@ impl Node for Root {
     }
 }
 
+/// Simple program to greet a person
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    /// Number of times to greet
+    #[clap(short, long)]
+    commands: bool,
+}
+
 pub fn main() -> Result<()> {
+    let args = Args::parse();
+    let mut kb = KeyBindings::new();
+    kb.load(List::<TodoItem>::load_commands(None));
+
+    if args.commands {
+        println!("{}", kb);
+        return Ok(());
+    }
+
     if let Some(path) = env::args().nth(1) {
         store::open(&path)?;
         let mut colors = solarized::solarized_dark();
@@ -216,9 +236,6 @@ pub fn main() -> Result<()> {
             Some(solarized::BASE1),
             None,
         );
-
-        let mut kb = KeyBindings::new();
-        kb.load(List::<TodoItem>::load_commands(None));
 
         let mut root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new()?);
         runloop(&mut colors, &mut root)?;
