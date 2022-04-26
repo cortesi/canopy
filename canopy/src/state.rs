@@ -68,7 +68,7 @@ pub trait StatefulNode {
     /// Get a reference to the node's state object.
     fn state(&self) -> &NodeState;
 
-    /// The name of this node, if it has one, for debugging and testing.
+    /// The name of this node, used for debugging and command dispatch.
     fn name(&self) -> String;
 
     /// Get a mutable reference to the node's state object.

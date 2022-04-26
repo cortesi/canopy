@@ -48,13 +48,15 @@ fn commands() {
     }
 
     assert_eq!(
-        Foo::commands(),
+        Foo::load_commands(None),
         [
             canopy::commands::Command {
+                node_name: "foo".to_string(),
                 command: "a".to_string(),
                 docs: " This is a comment.\n Multiline too!".to_string()
             },
             canopy::commands::Command {
+                node_name: "foo".to_string(),
                 command: "b".to_string(),
                 docs: "".to_string(),
             }
@@ -91,8 +93,17 @@ fn commands() {
     }
 
     assert_eq!(
-        Bar::<Foo>::commands(),
+        Bar::<Foo>::load_commands(None),
         [canopy::commands::Command {
+            node_name: "bar".to_string(),
+            command: "a".to_string(),
+            docs: "".to_string()
+        },]
+    );
+    assert_eq!(
+        Bar::<Foo>::load_commands(Some("xxx")),
+        [canopy::commands::Command {
+            node_name: "xxx".to_string(),
             command: "a".to_string(),
             docs: "".to_string()
         },]

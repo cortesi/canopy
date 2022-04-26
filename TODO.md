@@ -12,10 +12,6 @@
       - None, Result<Outcome>, Result<()>
   - Help system
     - Will require a `Root` object
-  - Builder patttern extension to widgets so we can rename them
-- Make module structure better
-  - The import situation is a bit confusing
-  - It's not clear where to find everything
 - Root object
   - Manage modal windows
   - Command help system
@@ -28,8 +24,6 @@
       - Filtering
       - Follow
       - Search
-    - Active nodes tree
-      - Define name() for all built-in node types
     - Command execution
     - Shrink/specify app area
     - Screenshots of app area
@@ -47,8 +41,10 @@
     flickering under some rare circumstances. We could draw the cursor ourselves
     in widgets that need one - is there a reason not to do this?
 - Ergonomics:
-  - Action -> Command?
   - Better error returns
+  - Make module structure better
+    - The import situation is a bit confusing
+    - It's not clear where to find everything
 - ctrl-c/ctrl-z
 - Widgets
   - Editor

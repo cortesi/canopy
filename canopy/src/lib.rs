@@ -29,7 +29,7 @@ pub use crate::canopy::*;
 pub use commands::{Command, Commands};
 pub use control::BackendControl;
 pub use error::{Error, Result};
-pub use keybinding::Keybindings;
+pub use keybinding::KeyBindings;
 pub use node::*;
 pub use outcome::Outcome;
 pub use render::Render;

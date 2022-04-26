@@ -216,8 +216,11 @@ pub fn main() -> Result<()> {
             Some(solarized::BASE1),
             None,
         );
+
+        let mut kb = KeyBindings::new();
+        kb.load(List::<TodoItem>::load_commands(None));
+
         let mut root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new()?);
-        // let mut root = Root::new();
         runloop(&mut colors, &mut root)?;
     } else {
         println!("Specify a file path")

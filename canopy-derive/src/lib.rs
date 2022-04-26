@@ -74,6 +74,15 @@ pub fn derive_commands(
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as syn::ItemImpl);
+
+    let tp = match *input.clone().self_ty {
+        syn::Type::Path(p) => p,
+        _ => panic!("unexpected input"),
+    };
+
+    // The default node name
+    let default_node_name = tp.path.segments[0].ident.to_string().to_case(Case::Snake);
+
     let orig = input.clone();
     let name = input.self_ty;
     let (impl_generics, _, where_clause) = input.generics.split_for_impl();
@@ -96,8 +105,16 @@ pub fn derive_commands(
 
     let expanded = quote! {
         impl #impl_generics canopy::commands::Commands for #name #where_clause {
-            fn commands() -> Vec<canopy::commands::Command> {
+            fn load_commands(name: Option<&str>) -> Vec<canopy::commands::Command> {
                 vec![#(canopy::commands::Command {
+                        node_name: name.map_or(#default_node_name.to_string(), |n| n.to_string()),
+                        command: #names.to_string(),
+                        docs: #docs.to_string(),
+                    }),*]
+            }
+            fn commands(&self) -> Vec<canopy::commands::Command> {
+                vec![#(canopy::commands::Command {
+                        node_name: self.name(),
                         command: #names.to_string(),
                         docs: #docs.to_string(),
                     }),*]

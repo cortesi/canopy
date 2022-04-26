@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::{Command, Commands};
+use crate::Command;
 
 /// The Keybindings struct manages the global set of key bindings for the app.
 ///
@@ -8,19 +8,19 @@ use crate::{Command, Commands};
 /// into a set of possible action specifications. We then walk the tree of nodes
 /// from the focus to the root, trying each action specification in turn, until
 /// an action is handled by a node. If no action is handled, the key is ignored.
-pub struct Keybindings {
+pub struct KeyBindings {
     commands: HashSet<Command>,
 }
 
-impl Keybindings {
+impl KeyBindings {
     pub fn new() -> Self {
-        Keybindings {
+        KeyBindings {
             commands: HashSet::new(),
         }
     }
 
-    fn load(&mut self, f: fn() -> Vec<Command>) {
-        for i in f() {
+    pub fn load(&mut self, cmds: Vec<Command>) {
+        for i in cmds {
             self.commands.insert(i);
         }
     }
@@ -30,7 +30,7 @@ impl Keybindings {
 mod tests {
     use super::*;
     use crate as canopy;
-    use crate::{command, derive_commands, Result};
+    use crate::{command, derive_commands, Commands, Result, StatefulNode};
 
     #[test]
     fn kb_load() -> Result<()> {
@@ -48,7 +48,7 @@ mod tests {
         impl Foo {
             #[command]
             /// This is a comment.
-            /// Multiline too!
+            //s Multiline too!
             fn a(&mut self) -> canopy::Result<()> {
                 self.a_triggered = true;
                 Ok(())
@@ -60,8 +60,8 @@ mod tests {
             }
         }
 
-        let mut kb = Keybindings::new();
-        kb.load(Foo::commands);
+        let mut kb = KeyBindings::new();
+        kb.load(Foo::load_commands(None));
 
         Ok(())
     }
