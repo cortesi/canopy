@@ -1,9 +1,71 @@
-use crate::{global, ViewPort};
+use crate::{error, global, Result, ViewPort};
+use convert_case::{Case, Casing};
 use std::sync::atomic::AtomicU64;
 
 pub use canopy_derive::StatefulNode;
 
 static CURRENT_ID: AtomicU64 = AtomicU64::new(0);
+
+/// A node name, which consists of lowercase ASCII alphanumeric characters, plus
+/// underscores.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct NodeName {
+    name: String,
+}
+
+impl NodeName {
+    /// Create a new NodeName, returning an error if the string contains invalid
+    /// characters.
+    fn new(name: &str) -> Result<Self> {
+        if !name.chars().all(|x| NodeName::validchar(&x)) {
+            return Err(error::Error::Invalid(name.into()));
+        }
+        Ok(Self {
+            name: name.to_string(),
+        })
+    }
+
+    /// Takes a string and munges it into a valid node name. It does this by
+    /// first converting the string to snake case, then removing all invalid
+    /// characters.
+    pub fn convert(name: &str) -> Self {
+        let name = name.to_case(Case::Snake);
+        NodeName {
+            name: name.chars().filter(NodeName::validchar).collect(),
+        }
+    }
+
+    fn validchar(c: &char) -> bool {
+        (c.is_ascii_alphanumeric() && c.is_lowercase()) || *c == '_'
+    }
+}
+
+impl std::fmt::Display for NodeName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+impl PartialEq<&str> for NodeName {
+    fn eq(&self, other: &&str) -> bool {
+        self.name == *other
+    }
+}
+
+impl PartialEq<String> for NodeName {
+    fn eq(&self, other: &String) -> bool {
+        self.name == *other
+    }
+}
+
+/// Converts a string into the standard node name format, and errors if it
+/// doesn't comply to the node name standard.
+impl TryFrom<&str> for NodeName {
+    type Error = error::Error;
+    fn try_from(name: &str) -> Result<Self> {
+        Self::new(name)
+    }
+}
 
 /// An opaque structure that Canopy uses to track node state. Each Node has to
 /// keep a NodeState structure, and offer it up through the `Node::state()`
@@ -40,7 +102,7 @@ pub struct NodeState {
 
     /// Over-ride the node name, which is usually taken from the struct name
     /// during the derive.
-    pub name: Option<String>,
+    pub name: Option<NodeName>,
 }
 
 /// The node state object - each node needs to keep one of these, and offer it
@@ -69,7 +131,7 @@ pub trait StatefulNode {
     fn state(&self) -> &NodeState;
 
     /// The name of this node, used for debugging and command dispatch.
-    fn name(&self) -> String;
+    fn name(&self) -> NodeName;
 
     /// Get a mutable reference to the node's state object.
     fn state_mut(&mut self) -> &mut NodeState;
@@ -155,9 +217,9 @@ pub trait StatefulNode {
     }
 
     /// Set this node's name, over-riding the name derived from the struct name.
-    fn set_name(&mut self, name: &str) {
+    fn set_name(&mut self, name: NodeName) {
         let r = self.state_mut();
-        r.name = Some(name.to_string());
+        r.name = Some(name);
     }
 
     /// Has the focus status of this node changed since the last render
@@ -190,5 +252,22 @@ pub trait StatefulNode {
         } else {
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Result;
+
+    #[test]
+    fn nodename() -> Result<()> {
+        assert_eq!(NodeName::try_from("foo").unwrap(), "foo");
+        assert!(NodeName::try_from("Foo").is_err());
+        assert_eq!(NodeName::convert("Foo"), "foo");
+        assert_eq!(NodeName::convert("FooBar"), "foo_bar");
+        assert_eq!(NodeName::convert("FooBar Voing"), "foo_bar_voing");
+
+        Ok(())
     }
 }

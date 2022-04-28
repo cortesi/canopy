@@ -193,7 +193,7 @@ mod tests {
         if n == skipname {
             ret.has_skip = true
         }
-        v.push(n);
+        v.push(n.to_string());
         Ok(ret)
     }
 
@@ -208,22 +208,22 @@ mod tests {
         }
 
         let mut root = utils::TRoot::new();
-        assert_eq!(skipon(&mut root, "ba:la".into())?, ["ba:la", "ba", "r"]);
+        assert_eq!(skipon(&mut root, "ba_la".into())?, ["ba_la", "ba", "r"]);
         assert_eq!(
-            skipon(&mut root, "ba:lb".into())?,
-            ["ba:la", "ba:lb", "ba", "r"]
+            skipon(&mut root, "ba_lb".into())?,
+            ["ba_la", "ba_lb", "ba", "r"]
         );
         assert_eq!(
             skipon(&mut root, "r".into())?,
-            ["ba:la", "ba:lb", "ba", "bb:la", "bb:lb", "bb", "r"]
+            ["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb", "r"]
         );
         assert_eq!(
             skipon(&mut root, "bb".into())?,
-            ["ba:la", "ba:lb", "ba", "bb:la", "bb:lb", "bb", "r"]
+            ["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb", "r"]
         );
         assert_eq!(
             skipon(&mut root, "ba".into())?,
-            ["ba:la", "ba:lb", "ba", "r"]
+            ["ba_la", "ba_lb", "ba", "r"]
         );
         Ok(())
     }
@@ -241,16 +241,16 @@ mod tests {
         let mut root = utils::TRoot::new();
         assert_eq!(
             skipon(&mut root, "never".into())?,
-            ["r", "ba", "ba:la", "ba:lb", "bb", "bb:la", "bb:lb"]
+            ["r", "ba", "ba_la", "ba_lb", "bb", "bb_la", "bb_lb"]
         );
         assert_eq!(skipon(&mut root, "r".into())?, ["r"]);
         assert_eq!(
             skipon(&mut root, "ba".into())?,
-            ["r", "ba", "bb", "bb:la", "bb:lb"]
+            ["r", "ba", "bb", "bb_la", "bb_lb"]
         );
         assert_eq!(
             skipon(&mut root, "bb".into())?,
-            ["r", "ba", "ba:la", "ba:lb", "bb"]
+            ["r", "ba", "ba_la", "ba_lb", "bb"]
         );
         Ok(())
     }

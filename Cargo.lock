@@ -110,6 +110,7 @@ dependencies = [
  "canopy-derive",
  "color-backtrace",
  "comfy-table",
+ "convert_case",
  "crossterm",
  "pad",
  "rand",
@@ -125,7 +126,6 @@ name = "canopy-derive"
 version = "0.1.0"
 dependencies = [
  "canopy",
- "convert_case",
  "litrs",
  "proc-macro2",
  "quote",

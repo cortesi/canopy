@@ -1,4 +1,3 @@
-use convert_case::{Case, Casing};
 use litrs::StringLit;
 use quote::quote;
 use syn::{parse_macro_input, DeriveInput};
@@ -10,7 +9,7 @@ pub fn derive_statefulnode(input: proc_macro::TokenStream) -> proc_macro::TokenS
     let input = parse_macro_input!(input as DeriveInput);
     let name = input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-    let rname = &format!("{}", name.to_string().to_case(Case::Snake));
+    let rname = name.to_string();
     let expanded = quote! {
         impl #impl_generics canopy::StatefulNode for #name #ty_generics #where_clause {
             fn state_mut(&mut self) -> &mut canopy::NodeState {
@@ -19,11 +18,11 @@ pub fn derive_statefulnode(input: proc_macro::TokenStream) -> proc_macro::TokenS
             fn state(&self) -> &canopy::NodeState {
                 &self.state
             }
-            fn name(&self) -> String {
+            fn name(&self) -> canopy::NodeName {
                 if let Some(n) = &self.state.name {
                     n.clone()
                 } else {
-                    #rname.to_string()
+                    canopy::NodeName::convert(#rname)
                 }
             }
         }
@@ -120,7 +119,7 @@ pub fn derive_commands(
     };
 
     // The default node name
-    let default_node_name = tp.path.segments[0].ident.to_string().to_case(Case::Snake);
+    let default_node_name = tp.path.segments[0].ident.to_string();
 
     let orig = input.clone();
     let name = input.self_ty;
@@ -144,7 +143,7 @@ pub fn derive_commands(
         impl #impl_generics canopy::commands::Commands for #name #where_clause {
             fn load_commands(name: Option<&str>) -> Vec<canopy::commands::Command> {
                 vec![#(canopy::commands::Command {
-                        node_name: name.map_or(#default_node_name.to_string(), |n| n.to_string()),
+                        node_name: canopy::NodeName::convert(name.map_or(#default_node_name, |n| n)),
                         command: #names.to_string(),
                         docs: #docs.to_string(),
                         return_type: #rets,

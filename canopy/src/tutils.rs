@@ -9,7 +9,7 @@ pub mod utils {
         fit,
         geom::Expanse,
         widgets::list::ListItem,
-        Node, NodeState, Outcome, Render, Result, StatefulNode,
+        Node, NodeName, NodeState, Outcome, Render, Result, StatefulNode,
     };
 
     pub const K_ANY: key::Key = key::Key(None, key::KeyCode::Char('a'));
@@ -26,7 +26,7 @@ pub mod utils {
         pub fn reset(&mut self) {
             self.path = vec![];
         }
-        pub fn add_event(&mut self, n: &str, evt: &str, result: Outcome) {
+        pub fn add_event(&mut self, n: &NodeName, evt: &str, result: Outcome) {
             let outcome = match result {
                 Outcome::Handle { .. } => "handle",
                 Outcome::Ignore { .. } => "ignore",
@@ -164,7 +164,7 @@ pub mod utils {
                 state: NodeState::default(),
                 next_outcome: None,
             };
-            n.set_name(&name);
+            n.set_name(name.try_into().unwrap());
             n
         }
 
@@ -197,11 +197,11 @@ pub mod utils {
         pub fn new(name: &str) -> Self {
             let mut n = TBranch {
                 state: NodeState::default(),
-                a: TLeaf::new(&(name.to_owned() + ":" + "la")),
-                b: TLeaf::new(&(name.to_owned() + ":" + "lb")),
+                a: TLeaf::new(&(name.to_owned() + "_" + "la")),
+                b: TLeaf::new(&(name.to_owned() + "_" + "lb")),
                 next_outcome: None,
             };
-            n.set_name(name);
+            n.set_name(name.try_into().unwrap());
             n
         }
         fn handle(&mut self, evt: &str) -> Result<Outcome> {
@@ -227,7 +227,7 @@ pub mod utils {
                 b: TBranch::new("bb"),
                 next_outcome: None,
             };
-            n.set_name("r");
+            n.set_name("r".try_into().unwrap());
             n
         }
         fn handle(&mut self, evt: &str) -> Result<Outcome> {

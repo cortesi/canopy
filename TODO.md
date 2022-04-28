@@ -5,17 +5,21 @@
 ## 0.1
 
 - Key binding management system
+  - Define and formalise the context type
   - Key binding structure
   - Commands improvements
     - Arguments
-    - Multiple return types
-      - None, Result<Outcome>, Result<()>
-  - Help system
-    - Will require a `Root` object
+    - Return types
+      - Let returns that are not Results be ignored for versatility
+      - Result<Outcome>?
+  - Restrict and enforce format of node names
 - Root object
   - Manage modal windows
   - Command help system
   - Key rebinding
+  - Standard commands
+    - Reloading/changing key bindings and color schemes
+    - Command mode pop
 - Better debugging and monitoring story
   - Inspector GUI
     - Logs

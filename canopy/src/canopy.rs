@@ -502,10 +502,10 @@ mod tests {
         geom::Rect,
         outcome::{Handle, Ignore},
         tutils::utils::*,
-        StatefulNode,
+        NodeName, StatefulNode,
     };
 
-    pub fn focvec(root: &mut TRoot) -> Result<Vec<String>> {
+    pub fn focvec(root: &mut TRoot) -> Result<Vec<NodeName>> {
         let mut v = vec![];
         focus_path(root, &mut |x| -> Result<()> {
             let n = x.name();
@@ -588,7 +588,7 @@ mod tests {
             assert!(on_focus_path(&mut root.a));
             assert!(!on_focus_path(&mut root.b));
 
-            assert_eq!(focvec(&mut root)?, vec!["ba:la", "ba", "r"]);
+            assert_eq!(focvec(&mut root)?, vec!["ba_la", "ba", "r"]);
 
             root.a.set_focus();
             assert_eq!(focvec(&mut root)?, vec!["ba", "r"]);
@@ -597,7 +597,7 @@ mod tests {
             assert_eq!(focvec(&mut root)?, vec!["r"]);
 
             root.b.a.set_focus();
-            assert_eq!(focvec(&mut root)?, vec!["bb:la", "bb", "r"]);
+            assert_eq!(focvec(&mut root)?, vec!["bb_la", "bb", "r"]);
             Ok(())
         })?;
 
@@ -641,7 +641,7 @@ mod tests {
             root.a.a.next_outcome = Some(Outcome::handle());
             assert!(key(&mut tr.control(), &mut root, K_ANY)?.is_handled());
             let s = get_state();
-            assert_eq!(s.path, vec!["ba:la@key->handle"]);
+            assert_eq!(s.path, vec!["ba_la@key->handle"]);
             Ok(())
         })?;
 
@@ -650,7 +650,7 @@ mod tests {
             root.a.next_outcome = Some(Outcome::handle());
             assert!(key(&mut tr.control(), &mut root, K_ANY)?.is_handled());
             let s = get_state();
-            assert_eq!(s.path, vec!["ba:la@key->ignore", "ba@key->handle"]);
+            assert_eq!(s.path, vec!["ba_la@key->ignore", "ba@key->handle"]);
             Ok(())
         })?;
 
@@ -661,7 +661,7 @@ mod tests {
             let s = get_state();
             assert_eq!(
                 s.path,
-                vec!["ba:la@key->ignore", "ba@key->ignore", "r@key->handle"]
+                vec!["ba_la@key->ignore", "ba@key->ignore", "r@key->handle"]
             );
             Ok(())
         })?;
@@ -691,7 +691,7 @@ mod tests {
             root.next_outcome = Some(Outcome::handle());
             key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
-            assert_eq!(s.path, vec!["ba:lb@key->ignore", "ba@key->ignore"]);
+            assert_eq!(s.path, vec!["ba_lb@key->ignore", "ba@key->ignore"]);
             Ok(())
         })?;
 
@@ -700,7 +700,7 @@ mod tests {
             root.a.a.next_outcome = Some(Outcome::handle());
             key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
-            assert_eq!(s.path, vec!["ba:la@key->handle",]);
+            assert_eq!(s.path, vec!["ba_la@key->handle",]);
             Ok(())
         })?;
 
@@ -709,7 +709,7 @@ mod tests {
             root.a.next_outcome = Some(Outcome::handle());
             key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
-            assert_eq!(s.path, vec!["ba:lb@key->ignore", "ba@key->handle",]);
+            assert_eq!(s.path, vec!["ba_lb@key->ignore", "ba@key->handle",]);
             Ok(())
         })?;
 
@@ -718,7 +718,7 @@ mod tests {
             root.a.b.next_outcome = Some(Outcome::Handle(Handle::default()));
             key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
-            assert_eq!(s.path, vec!["ba:lb@key->handle",]);
+            assert_eq!(s.path, vec!["ba_lb@key->handle",]);
             Ok(())
         })?;
 
@@ -728,7 +728,7 @@ mod tests {
             root.a.next_outcome = Some(Outcome::handle());
             key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
-            assert_eq!(s.path, vec!["ba:lb@key->handle",]);
+            assert_eq!(s.path, vec!["ba_lb@key->handle",]);
             Ok(())
         })?;
 
@@ -738,7 +738,7 @@ mod tests {
             root.a.next_outcome = Some(Outcome::ignore_and_skip());
             key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
-            assert_eq!(s.path, vec!["ba:lb@key->handle"]);
+            assert_eq!(s.path, vec!["ba_lb@key->handle"]);
             Ok(())
         })?;
 
@@ -756,7 +756,7 @@ mod tests {
             let s = get_state();
             assert_eq!(
                 s.path,
-                vec!["ba:la@mouse->ignore", "ba@mouse->ignore", "r@mouse->handle"]
+                vec!["ba_la@mouse->ignore", "ba@mouse->ignore", "r@mouse->handle"]
             );
             Ok(())
         })?;
@@ -767,7 +767,7 @@ mod tests {
             tr.render(&mut root)?;
             assert!(mouse(&mut tr.control(), &mut root, evt)?.is_handled());
             let s = get_state();
-            assert_eq!(s.path, vec!["ba:la@mouse->handle"]);
+            assert_eq!(s.path, vec!["ba_la@mouse->handle"]);
             Ok(())
         })?;
 
@@ -777,7 +777,7 @@ mod tests {
             tr.render(&mut root)?;
             assert!(mouse(&mut tr.control(), &mut root, evt)?.is_handled());
             let s = get_state();
-            assert_eq!(s.path, vec!["ba:la@mouse->handle"]);
+            assert_eq!(s.path, vec!["ba_la@mouse->handle"]);
             Ok(())
         })?;
 
@@ -787,7 +787,7 @@ mod tests {
             tr.render(&mut root)?;
             assert!(mouse(&mut tr.control(), &mut root, evt)?.is_handled());
             let s = get_state();
-            assert_eq!(s.path, vec!["ba:la@mouse->handle",]);
+            assert_eq!(s.path, vec!["ba_la@mouse->handle",]);
             Ok(())
         })?;
 
@@ -820,7 +820,7 @@ mod tests {
             tr.render(&mut root)?;
             assert_eq!(
                 tr.buf_text(),
-                vec!["<r>", "<ba>", "<ba:la>", "<ba:lb>", "<bb>", "<bb:la>", "<bb:lb>"]
+                vec!["<r>", "<ba>", "<ba_la>", "<ba_lb>", "<bb>", "<bb_la>", "<bb_lb>"]
             );
 
             tr.render(&mut root)?;
@@ -832,26 +832,26 @@ mod tests {
 
             root.a.b.taint();
             tr.render(&mut root)?;
-            assert_eq!(tr.buf_text(), vec!["<ba:lb>"]);
+            assert_eq!(tr.buf_text(), vec!["<ba_lb>"]);
 
             taint_tree(&mut root.a);
             tr.render(&mut root)?;
-            assert_eq!(tr.buf_text(), vec!["<ba>", "<ba:la>", "<ba:lb>"]);
+            assert_eq!(tr.buf_text(), vec!["<ba>", "<ba_la>", "<ba_lb>"]);
 
             tr.render(&mut root)?;
             assert!(tr.buf_empty());
 
             root.a.a.set_focus();
             tr.render(&mut root)?;
-            assert_eq!(tr.buf_text(), vec!["<ba:la>"]);
+            assert_eq!(tr.buf_text(), vec!["<ba_la>"]);
 
             focus_next(&mut root)?;
             tr.render(&mut root)?;
-            assert_eq!(tr.buf_text(), vec!["<ba:la>", "<ba:lb>"]);
+            assert_eq!(tr.buf_text(), vec!["<ba_la>", "<ba_lb>"]);
 
             focus_prev(&mut root)?;
             tr.render(&mut root)?;
-            assert_eq!(tr.buf_text(), vec!["<ba:la>", "<ba:lb>"]);
+            assert_eq!(tr.buf_text(), vec!["<ba_la>", "<ba_lb>"]);
 
             tr.render(&mut root)?;
             assert!(tr.buf_empty());

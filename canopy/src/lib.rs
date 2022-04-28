@@ -33,5 +33,5 @@ pub use keybinding::KeyBindings;
 pub use node::*;
 pub use outcome::Outcome;
 pub use render::Render;
-pub use state::{NodeState, StatefulNode};
+pub use state::{NodeName, NodeState, StatefulNode};
 pub use viewport::ViewPort;

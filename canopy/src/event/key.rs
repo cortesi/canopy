@@ -1,6 +1,6 @@
 use std::ops::Add;
 
-#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Mods {
     pub shift: bool,
     pub ctrl: bool,
@@ -63,7 +63,7 @@ pub const Alt: Mods = Mods {
     alt: true,
 };
 
-#[derive(Debug, PartialOrd, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialOrd, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum KeyCode {
     Backspace,
     Enter,
@@ -108,7 +108,7 @@ impl From<char> for KeyCode {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Key(pub Option<Mods>, pub KeyCode);
 
 impl std::cmp::PartialEq<KeyCode> for Key {

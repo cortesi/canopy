@@ -221,11 +221,11 @@ struct Args {
 pub fn main() -> Result<()> {
     let args = Args::parse();
     let mut kb = KeyBindings::new();
-    kb.load(List::<TodoItem>::load_commands(None));
-    kb.load(Todo::load_commands(None));
+    kb.load_commands(List::<TodoItem>::load_commands(None));
+    kb.load_commands(Todo::load_commands(None));
 
     if args.commands {
-        kb.pretty_print();
+        kb.pretty_print_commands();
         return Ok(());
     }
 

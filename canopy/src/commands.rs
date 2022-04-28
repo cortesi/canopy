@@ -1,4 +1,4 @@
-use crate::StatefulNode;
+use crate::{NodeName, StatefulNode};
 use std::hash::{Hash, Hasher};
 
 use crate::Result;
@@ -17,7 +17,7 @@ pub enum ReturnTypes {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Command {
     /// The name of the node.
-    pub node_name: String,
+    pub node_name: NodeName,
     /// The name of the command.
     pub command: String,
     /// A doc string taken from the method comment.
@@ -26,17 +26,7 @@ pub struct Command {
     pub return_type: ReturnTypes,
 }
 
-impl std::fmt::Display for Command {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.output())
-    }
-}
-
 impl Command {
-    fn output(&self) -> String {
-        format!("{}.{}\t\t{}", self.node_name, self.command, self.docs)
-    }
-
     /// A full command name, of the form nodename.command
     pub fn fullname(&self) -> String {
         format!("{}.{}", self.node_name, self.command)
@@ -45,7 +35,7 @@ impl Command {
 
 impl Hash for Command {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.command.hash(state);
+        self.fullname().hash(state);
     }
 }
 

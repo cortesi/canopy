@@ -20,6 +20,8 @@ pub enum Error {
     RunLoop(String),
     #[error("internal")]
     Internal(String),
+    #[error("invalid")]
+    Invalid(String),
     #[error("unknown command")]
     UnknownCommand(String),
 }
