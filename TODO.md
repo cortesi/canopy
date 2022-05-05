@@ -12,7 +12,6 @@
     - Return types
       - Let returns that are not Results be ignored for versatility
       - Result<Outcome>?
-  - Restrict and enforce format of node names
 - Root object
   - Manage modal windows
   - Command help system
@@ -46,6 +45,7 @@
     in widgets that need one - is there a reason not to do this?
 - Ergonomics:
   - Better error returns
+    - consider https://github.com/zkat/miette
   - Make module structure better
     - The import situation is a bit confusing
     - It's not clear where to find everything

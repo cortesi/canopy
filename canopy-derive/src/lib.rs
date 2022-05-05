@@ -143,7 +143,7 @@ pub fn derive_commands(
         impl #impl_generics canopy::commands::Commands for #name #where_clause {
             fn load_commands(name: Option<&str>) -> Vec<canopy::commands::Command> {
                 vec![#(canopy::commands::Command {
-                        node_name: canopy::NodeName::convert(name.map_or(#default_node_name, |n| n)),
+                        node: canopy::NodeName::convert(name.map_or(#default_node_name, |n| n)),
                         command: #names.to_string(),
                         docs: #docs.to_string(),
                         return_type: #rets,
@@ -151,7 +151,7 @@ pub fn derive_commands(
             }
             fn commands(&self) -> Vec<canopy::commands::Command> {
                 vec![#(canopy::commands::Command {
-                        node_name: self.name(),
+                        node: self.name(),
                         command: #names.to_string(),
                         docs: #docs.to_string(),
                         return_type: #rets,

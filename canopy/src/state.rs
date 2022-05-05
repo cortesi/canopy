@@ -6,6 +6,14 @@ pub use canopy_derive::StatefulNode;
 
 static CURRENT_ID: AtomicU64 = AtomicU64::new(0);
 
+pub fn valid_nodename_char(c: char) -> bool {
+    (c.is_ascii_alphanumeric() && c.is_lowercase()) || c == '_'
+}
+
+pub fn valid_nodename(name: &str) -> bool {
+    name.chars().all(valid_nodename_char)
+}
+
 /// A node name, which consists of lowercase ASCII alphanumeric characters, plus
 /// underscores.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -17,7 +25,7 @@ impl NodeName {
     /// Create a new NodeName, returning an error if the string contains invalid
     /// characters.
     fn new(name: &str) -> Result<Self> {
-        if !name.chars().all(|x| NodeName::validchar(&x)) {
+        if !valid_nodename(name) {
             return Err(error::Error::Invalid(name.into()));
         }
         Ok(Self {
@@ -31,12 +39,8 @@ impl NodeName {
     pub fn convert(name: &str) -> Self {
         let name = name.to_case(Case::Snake);
         NodeName {
-            name: name.chars().filter(NodeName::validchar).collect(),
+            name: name.chars().filter(|x| valid_nodename_char(*x)).collect(),
         }
-    }
-
-    fn validchar(c: &char) -> bool {
-        (c.is_ascii_alphanumeric() && c.is_lowercase()) || *c == '_'
     }
 }
 

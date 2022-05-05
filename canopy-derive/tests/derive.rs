@@ -58,19 +58,19 @@ fn commands() {
         Foo::load_commands(None),
         [
             canopy::commands::Command {
-                node_name: "foo".try_into().unwrap(),
+                node: "foo".try_into().unwrap(),
                 command: "a".to_string(),
                 docs: " This is a comment.\n Multiline too!".to_string(),
                 return_type: ReturnTypes::Result,
             },
             canopy::commands::Command {
-                node_name: "foo".try_into().unwrap(),
+                node: "foo".try_into().unwrap(),
                 command: "b".to_string(),
                 docs: "".to_string(),
                 return_type: ReturnTypes::Result,
             },
             canopy::commands::Command {
-                node_name: "foo".try_into().unwrap(),
+                node: "foo".try_into().unwrap(),
                 command: "c".to_string(),
                 docs: "".to_string(),
                 return_type: ReturnTypes::Void,
@@ -114,7 +114,7 @@ fn commands() {
     assert_eq!(
         Bar::<Foo>::load_commands(None),
         [canopy::commands::Command {
-            node_name: "bar".try_into().unwrap(),
+            node: "bar".try_into().unwrap(),
             command: "a".to_string(),
             docs: "".to_string(),
             return_type: ReturnTypes::Result,
@@ -123,7 +123,7 @@ fn commands() {
     assert_eq!(
         Bar::<Foo>::load_commands(Some("xxx")),
         [canopy::commands::Command {
-            node_name: "xxx".try_into().unwrap(),
+            node: "xxx".try_into().unwrap(),
             command: "a".to_string(),
             docs: "".to_string(),
             return_type: ReturnTypes::Result,
