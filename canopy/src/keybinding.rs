@@ -1,5 +1,5 @@
 use regex;
-use std::collections::HashMap;
+use std::{collections::HashMap, f32::consts::E};
 
 use comfy_table::{ContentArrangement, Table};
 
@@ -22,14 +22,11 @@ const DEFAULT_MODE: &str = "default";
 #[derive(Debug, Clone)]
 pub struct PathMatcher {
     expr: regex::Regex,
-    pub specificity: usize,
 }
 
 impl PathMatcher {
     pub fn new(path: &str) -> Result<Self> {
         let parts = path.split("/");
-        let specificity = parts.clone().filter(|x| !(*x == "*" || *x == "**")).count();
-
         let mut pattern = parts
             .filter_map(|x| {
                 if x == "*" {
@@ -51,44 +48,55 @@ impl PathMatcher {
             pattern = pattern.trim_end_matches('/').to_string();
         }
         let expr = regex::Regex::new(&pattern).map_err(|e| error::Error::Invalid(e.to_string()))?;
-        Ok(PathMatcher { specificity, expr })
+        Ok(PathMatcher { expr })
     }
 
-    /// Check whether the path filter matches a given path.
-    pub fn is_match(&self, path: &str) -> bool {
-        self.expr.is_match(path)
+    /// Check whether the path filter matches a given path. Returns the position
+    /// of the final match character in the path string. We use this returned
+    /// value to disambiguate when mulitple matches are active for a key - the
+    /// path with the largest match position wins.
+    pub fn check(&self, path: &str) -> Option<usize> {
+        Some(self.expr.find(path)?.end())
     }
 }
 
 struct BoundKey {
-    matcher: PathMatcher,
+    pathmatch: PathMatcher,
     commands: Vec<String>,
 }
 
-/// A Mode contains a set of bound keys.
-struct Mode {
+/// A KeyMode contains a set of bound keys.
+pub struct KeyMode {
     keys: HashMap<Key, Vec<BoundKey>>,
 }
 
-impl Mode {
+impl KeyMode {
     fn new() -> Self {
-        Mode {
+        KeyMode {
             keys: HashMap::new(),
         }
     }
     /// Insert a key binding into this set
-    fn insert(&mut self, key: Key, path_filter: PathMatcher, commands: Vec<String>) {
+    fn insert(&mut self, path_filter: PathMatcher, key: Key, commands: Vec<String>) {
         self.keys
             .entry(key)
             .or_insert_with(Vec::new)
             .push(BoundKey {
-                matcher: path_filter,
+                pathmatch: path_filter,
                 commands,
             });
     }
     /// Resolve a key with a given path filter to a list of commands.
-    pub fn resolve(&self, path: Vec<NodeName>, key: Key) -> Option<Vec<String>> {
-        unimplemented!();
+    pub fn resolve(&self, path: &str, key: Key) -> Option<Vec<String>> {
+        let mut ret = (0, None);
+        for k in self.keys.get(&key)? {
+            if let Some(p) = k.pathmatch.check(path) {
+                if ret.1.is_none() || p > ret.0 {
+                    ret = (p, Some(k.commands.clone()));
+                }
+            }
+        }
+        ret.1
     }
 }
 
@@ -100,13 +108,13 @@ impl Mode {
 /// an action is handled by a node. If no action is handled, the key is ignored.
 pub struct KeyBindings {
     commands: HashMap<String, Command>,
-    modes: HashMap<String, Mode>,
+    modes: HashMap<String, KeyMode>,
     current_mode: String,
 }
 
 impl KeyBindings {
     pub fn new() -> Self {
-        let default = Mode::new();
+        let default = KeyMode::new();
         let mut modes = HashMap::new();
         modes.insert(DEFAULT_MODE.to_string(), default);
         KeyBindings {
@@ -123,9 +131,9 @@ impl KeyBindings {
     /// Bind a key, within a given mode, with a given context to a list of commands.
     pub fn bind<K>(
         &mut self,
-        key: K,
         mode: &str,
-        context: &str,
+        key: K,
+        path_filter: &str,
         commands: Vec<String>,
     ) -> Result<()>
     where
@@ -134,8 +142,8 @@ impl KeyBindings {
         let key = key.into();
         self.modes
             .entry(mode.to_string())
-            .or_insert_with(Mode::new)
-            .insert(key, PathMatcher::new(context)?, commands);
+            .or_insert_with(KeyMode::new)
+            .insert(PathMatcher::new(path_filter)?, key, commands);
         Ok(())
     }
 
@@ -207,30 +215,72 @@ mod tests {
     #[test]
     fn pathfilter() -> Result<()> {
         let v = PathMatcher::new("")?;
-        assert!(v.is_match("/any/thing/"));
-        assert!(v.is_match("/"));
+        assert_eq!(v.check("/any/thing/"), Some(0));
+        assert_eq!(v.check("/"), Some(0));
 
         let v = PathMatcher::new("bar")?;
-        assert!(v.is_match("/foo/bar/"));
-        assert!(v.is_match("/bar/foo/"));
-        assert!(!v.is_match("/foo/foo/"));
+        assert_eq!(v.check("/foo/bar/"), Some(8));
+        assert_eq!(v.check("/bar/foo/"), Some(4));
+        assert!(v.check("/foo/foo/").is_none());
 
         let v = PathMatcher::new("foo/*/bar")?;
-        assert!(v.is_match("/foo/oink/oink/bar/"));
-        assert!(v.is_match("/foo/bar/"));
-        assert!(v.is_match("/oink/foo/bar/oink/"));
-        assert!(v.is_match("/foo/oink/oink/bar/"));
-        assert!(v.is_match("/foo/bar/voing/"));
+        assert_eq!(v.check("/foo/oink/oink/bar/"), Some(18));
+        assert_eq!(v.check("/foo/bar/"), Some(8));
+        assert_eq!(v.check("/oink/foo/bar/oink/"), Some(13));
+        assert_eq!(v.check("/foo/oink/oink/bar/"), Some(18));
+        assert_eq!(v.check("/foo/bar/voing/"), Some(8));
 
         let v = PathMatcher::new("/foo")?;
-        assert!(v.is_match("/foo/"));
-        assert!(v.is_match("/foo/bar/"));
-        assert!(!v.is_match("/bar/foo/bar/"));
+        assert_eq!(v.check("/foo/"), Some(4));
+        assert_eq!(v.check("/foo/bar/"), Some(4));
+        assert!(v.check("/bar/foo/bar/").is_none());
 
         let v = PathMatcher::new("foo/")?;
-        assert!(v.is_match("/foo/"));
-        assert!(v.is_match("/bar/foo/"));
-        assert!(!v.is_match("/foo/bar/"));
+        assert_eq!(v.check("/foo/"), Some(5));
+        assert_eq!(v.check("/bar/foo/"), Some(9));
+        assert!(v.check("/foo/bar/").is_none());
+
+        let v = PathMatcher::new("foo/*/bar/*/voing/")?;
+        assert_eq!(v.check("/foo/bar/voing/"), Some(15));
+        assert_eq!(v.check("/foo/x/bar/voing/"), Some(17));
+        assert_eq!(v.check("/foo/x/bar/x/voing/"), Some(19));
+        assert_eq!(v.check("/x/foo/x/bar/x/voing/"), Some(21));
+        assert!(v.check("/foo/x/bar/x/voing/x").is_none());
+
+        Ok(())
+    }
+
+    #[test]
+    fn keymode() -> Result<()> {
+        let mut m = KeyMode::new();
+        m.insert(
+            PathMatcher::new("foo")?,
+            'a'.into(),
+            vec!["a-foo".to_string()],
+        );
+        m.insert(
+            PathMatcher::new("bar")?,
+            'a'.into(),
+            vec!["a-bar".to_string()],
+        );
+        m.insert(PathMatcher::new("")?, 'b'.into(), vec!["b".to_string()]);
+
+        assert_eq!(
+            m.resolve("foo", 'a'.into()).unwrap(),
+            vec!["a-foo".to_string()]
+        );
+        assert_eq!(
+            m.resolve("bar", 'a'.into()).unwrap(),
+            vec!["a-bar".to_string()]
+        );
+        assert_eq!(
+            m.resolve("bar/foo", 'a'.into()).unwrap(),
+            vec!["a-foo".to_string()]
+        );
+        assert_eq!(
+            m.resolve("foo/bar", 'a'.into()).unwrap(),
+            vec!["a-bar".to_string()]
+        );
 
         Ok(())
     }
