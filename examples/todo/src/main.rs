@@ -7,7 +7,6 @@ use canopy::{
     backend::crossterm::runloop,
     event::{key, mouse},
     geom::{Expanse, Rect},
-    global,
     inspector::Inspector,
     style::solarized,
     widgets::{frame, list::*, InputLine, Text},

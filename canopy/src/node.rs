@@ -65,8 +65,8 @@ pub trait Node: StatefulNode + Commands {
         Ok(Outcome::ignore())
     }
 
-    /// Call a closure mutably on this node's children. The default
-    /// implementation assumes this node has no children, and just returns.
+    /// Call a closure on this node's children. The default implementation
+    /// assumes this node has no children, and just returns.
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         Ok(())
     }

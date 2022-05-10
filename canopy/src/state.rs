@@ -76,7 +76,7 @@ impl TryFrom<&str> for NodeName {
 /// method on request.
 #[derive(Debug, PartialEq)]
 pub struct NodeState {
-    // Is this node hidden?
+    // Unique node ID
     pub(crate) id: u64,
     /// If this is equal to the global render_gen, we render during the current
     /// sweep.

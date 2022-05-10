@@ -53,7 +53,7 @@ pub(crate) fn pre_render<R: RenderBackend>(r: &mut R, e: &mut dyn Node) -> Resul
 
     if global::focus_changed() {
         let fg = STATE.with(|global_state| global_state.borrow().focus_gen);
-        focus::walk_path(e, &mut |n| -> Result<()> {
+        focus::walk(e, &mut |n| -> Result<()> {
             n.state_mut().focus_path_gen = fg;
             Ok(())
         })?;
@@ -72,7 +72,7 @@ pub(crate) fn post_render<R: RenderBackend>(
     e: &mut dyn Node,
 ) -> Result<()> {
     let mut seen = false;
-    focus::walk_path(e, &mut |n| -> Result<()> {
+    focus::walk(e, &mut |n| -> Result<()> {
         if !seen {
             if let Some(c) = n.cursor() {
                 show_cursor(r, styl, n.vp(), "cursor", c)?;
@@ -191,7 +191,7 @@ pub fn mouse(
 pub fn key(ctrl: &mut dyn BackendControl, root: &mut dyn Node, k: key::Key) -> Result<Outcome> {
     let mut handled = false;
     let mut halt = false;
-    focus::walk_path(root, &mut move |x| -> Result<Outcome> {
+    focus::walk(root, &mut move |x| -> Result<Outcome> {
         Ok(if halt || handled {
             Outcome::default()
         } else {
@@ -296,18 +296,8 @@ mod tests {
         geom::Rect,
         outcome::{Handle, Ignore},
         tutils::utils::*,
-        NodeName, StatefulNode,
+        StatefulNode,
     };
-
-    pub fn focvec(root: &mut TRoot) -> Result<Vec<NodeName>> {
-        let mut v = vec![];
-        focus::walk_path(root, &mut |x| -> Result<()> {
-            let n = x.name();
-            v.push(n);
-            Ok(())
-        })?;
-        Ok(v)
-    }
 
     fn run_test(func: impl FnOnce(TestRender, TRoot) -> Result<()>) -> Result<()> {
         let (_, tr) = TestRender::create();
@@ -315,35 +305,6 @@ mod tests {
         set_root_size(Expanse::new(100, 100), &mut root)?;
         reset_state();
         func(tr, root)
-    }
-
-    #[test]
-    fn tfoci() -> Result<()> {
-        run_test(|_, mut root| {
-            assert_eq!(focvec(&mut root)?.len(), 0);
-
-            assert!(!focus::is_on_path(&mut root));
-            assert!(!focus::is_on_path(&mut root.a));
-
-            root.a.a.set_focus();
-            assert!(focus::is_on_path(&mut root));
-            assert!(focus::is_on_path(&mut root.a));
-            assert!(!focus::is_on_path(&mut root.b));
-
-            assert_eq!(focvec(&mut root)?, vec!["ba_la", "ba", "r"]);
-
-            root.a.set_focus();
-            assert_eq!(focvec(&mut root)?, vec!["ba", "r"]);
-
-            root.set_focus();
-            assert_eq!(focvec(&mut root)?, vec!["r"]);
-
-            root.b.a.set_focus();
-            assert_eq!(focvec(&mut root)?, vec!["bb_la", "bb", "r"]);
-            Ok(())
-        })?;
-
-        Ok(())
     }
 
     #[test]

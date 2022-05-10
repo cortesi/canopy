@@ -7,10 +7,10 @@ use crate::{
 };
 
 /// Is the specified node on the focus path? A node is on the focus path if it
-/// or any of its descendants have focus.
+/// has focus, or if it's the ancestor of a node with focus.
 pub fn is_on_path(n: &mut dyn Node) -> bool {
     let mut onpath = false;
-    walk_path(n, &mut |_| -> Result<()> {
+    walk(n, &mut |_| -> Result<()> {
         onpath = true;
         Ok(())
     })
@@ -19,9 +19,20 @@ pub fn is_on_path(n: &mut dyn Node) -> bool {
     onpath
 }
 
+/// Return the focus path for the subtree under `root`.
+pub fn path(root: &mut dyn Node) -> String {
+    let mut path = Vec::new();
+    walk(root, &mut |n| -> Result<()> {
+        path.insert(0, n.name().to_string());
+        Ok(())
+    })
+    .unwrap();
+    "/".to_string() + &path.join("/")
+}
+
 /// Call a closure on the currently focused node and all its ancestors to the
 /// root.
-pub fn walk_path<R: Walker + Default>(
+pub fn walk<R: Walker + Default>(
     root: &mut dyn Node,
     f: &mut dyn FnMut(&mut dyn Node) -> Result<R>,
 ) -> Result<R> {
@@ -49,7 +60,7 @@ pub fn walk_path<R: Walker + Default>(
 /// Find the area of the current terminal focus node under the specified `root`.
 pub fn get_area(root: &mut dyn Node) -> Option<Rect> {
     let mut ret = None;
-    walk_path(root, &mut |x| -> Result<()> {
+    walk(root, &mut |x| -> Result<()> {
         if ret == None {
             ret = Some(x.vp().screen_rect());
         }
@@ -181,7 +192,7 @@ pub fn shift_prev(root: &mut dyn Node) -> Result<Outcome> {
 /// depth is 1.
 pub fn focus_depth(n: &mut dyn Node) -> usize {
     let mut total = 0;
-    walk_path(n, &mut |_| -> Result<()> {
+    walk(n, &mut |_| -> Result<()> {
         total += 1;
         Ok(())
     })
@@ -203,6 +214,21 @@ mod tests {
         set_root_size(Expanse::new(100, 100), &mut root)?;
         reset_state();
         func(tr, root)
+    }
+
+    #[test]
+    fn tpath() -> Result<()> {
+        run_test(|_, mut root| {
+            assert_eq!(path(&mut root), "/".to_string());
+            shift_next(&mut root)?;
+            assert_eq!(path(&mut root), "/r".to_string());
+            shift_next(&mut root)?;
+            assert_eq!(path(&mut root), "/r/ba".to_string());
+            shift_next(&mut root)?;
+            assert_eq!(path(&mut root), "/r/ba/ba_la".to_string());
+            Ok(())
+        })?;
+        Ok(())
     }
 
     #[test]
@@ -272,6 +298,34 @@ mod tests {
             assert!(root.b.b.is_focused());
             shift_right(&mut root)?;
             assert!(root.b.b.is_focused());
+            Ok(())
+        })?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn tfoci() -> Result<()> {
+        run_test(|_, mut root| {
+            assert_eq!(path(&mut root), "/".to_string());
+
+            assert!(!is_on_path(&mut root));
+            assert!(!is_on_path(&mut root.a));
+
+            root.a.a.set_focus();
+            assert!(is_on_path(&mut root));
+            assert!(is_on_path(&mut root.a));
+            assert!(!is_on_path(&mut root.b));
+            assert_eq!(path(&mut root), "/r/ba/ba_la".to_string());
+
+            root.a.set_focus();
+            assert_eq!(path(&mut root), "/r/ba".to_string());
+
+            root.set_focus();
+            assert_eq!(path(&mut root), "/r".to_string());
+
+            root.b.a.set_focus();
+            assert_eq!(path(&mut root), "/r/bb/bb_la".to_string());
             Ok(())
         })?;
 
