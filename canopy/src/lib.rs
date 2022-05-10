@@ -18,6 +18,7 @@ pub mod commands;
 pub mod cursor;
 pub mod error;
 pub mod event;
+pub mod focus;
 pub mod geom;
 pub mod global;
 pub mod inspector;

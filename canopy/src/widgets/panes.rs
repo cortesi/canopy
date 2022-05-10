@@ -1,6 +1,6 @@
 use crate as canopy;
 use crate::{
-    derive_commands, place,
+    derive_commands, focus, place,
     state::{NodeState, StatefulNode},
     Node, Render, Result,
 };
@@ -28,7 +28,7 @@ where
     pub fn focus_coords(&mut self) -> Option<(usize, usize)> {
         for (x, col) in self.children.iter_mut().enumerate() {
             for (y, row) in col.iter_mut().enumerate() {
-                if canopy::on_focus_path(row) {
+                if focus::is_on_path(row) {
                     return Some((x, y));
                 }
             }
@@ -39,7 +39,7 @@ where
     /// Delete the focus node. If a column ends up empty, it is removed.
     pub fn delete_focus(&mut self) -> Result<()> {
         if let Some((x, y)) = self.focus_coords() {
-            canopy::focus_next(self)?;
+            focus::shift_next(self)?;
             self.children[x].remove(y);
             if self.children[x].is_empty() {
                 self.children.remove(x);
@@ -70,7 +70,7 @@ where
         N: Node,
     {
         let coords = self.focus_coords();
-        canopy::focus_next(&mut n)?;
+        focus::shift_next(&mut n)?;
         if let Some((x, _)) = coords {
             self.children.insert(x + 1, vec![n])
         } else {

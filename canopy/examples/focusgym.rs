@@ -2,7 +2,7 @@ use canopy::{
     backend::crossterm::runloop,
     derive_commands,
     event::{key, mouse},
-    fit,
+    fit, focus,
     geom::Expanse,
     geom::Frame,
     inspector::Inspector,
@@ -56,19 +56,19 @@ impl Node for Root {
 
     fn handle_mouse(&mut self, _: &mut dyn BackendControl, k: mouse::Mouse) -> Result<Outcome> {
         Ok(match k {
-            c if c == mouse::MouseAction::ScrollDown => canopy::focus_next(self)?,
-            c if c == mouse::MouseAction::ScrollUp => canopy::focus_prev(self)?,
+            c if c == mouse::MouseAction::ScrollDown => focus::shift_next(self)?,
+            c if c == mouse::MouseAction::ScrollUp => focus::shift_prev(self)?,
             _ => Outcome::ignore(),
         })
     }
 
     fn handle_key(&mut self, ctrl: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
         Ok(match k {
-            c if c == key::KeyCode::Tab => canopy::focus_next(self)?,
-            c if c == 'l' || c == key::KeyCode::Right => canopy::focus_right(self)?,
-            c if c == 'h' || c == key::KeyCode::Left => canopy::focus_left(self)?,
-            c if c == 'j' || c == key::KeyCode::Down => canopy::focus_down(self)?,
-            c if c == 'k' || c == key::KeyCode::Up => canopy::focus_up(self)?,
+            c if c == key::KeyCode::Tab => focus::shift_next(self)?,
+            c if c == 'l' || c == key::KeyCode::Right => focus::shift_right(self)?,
+            c if c == 'h' || c == key::KeyCode::Left => focus::shift_left(self)?,
+            c if c == 'j' || c == key::KeyCode::Down => focus::shift_down(self)?,
+            c if c == 'k' || c == key::KeyCode::Up => focus::shift_up(self)?,
             c if c == 'q' => ctrl.exit(0),
             _ => Outcome::ignore(),
         })
@@ -145,7 +145,7 @@ impl Node for Block {
             c if c == mouse::MouseAction::Down + mouse::Button::Middle => {
                 self.split()?;
                 if self.is_focused() {
-                    canopy::focus_next(self)?;
+                    focus::shift_next(self)?;
                 };
                 Outcome::handle()
             }
@@ -158,7 +158,7 @@ impl Node for Block {
         Ok(match k {
             c if c == 's' => {
                 self.split()?;
-                canopy::focus_next(self)?
+                focus::shift_next(self)?
             }
             c if c == 'a' => self.add()?,
             _ => Outcome::ignore(),

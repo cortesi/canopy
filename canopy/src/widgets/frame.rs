@@ -2,7 +2,7 @@ use pad::PadStr;
 
 use crate as canopy;
 use crate::{
-    derive_commands, frame,
+    derive_commands, focus, frame,
     state::{NodeState, StatefulNode},
     Node, Render, Result,
 };
@@ -111,7 +111,7 @@ where
         let vp = self.vp();
         let f = frame(&mut self.child, vp, 1)?;
 
-        let style = if canopy::on_focus_path(self) {
+        let style = if focus::is_on_path(self) {
             "frame/focused"
         } else {
             "frame"

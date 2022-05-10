@@ -4,8 +4,8 @@ mod view;
 
 use crate as canopy;
 use crate::{
-    derive_commands, event::key, fit, widgets::frame, BackendControl, Node, NodeState, Outcome,
-    Render, Result, StatefulNode,
+    derive_commands, event::key, fit, focus, widgets::frame, BackendControl, Node, NodeState,
+    Outcome, Render, Result, StatefulNode,
 };
 
 #[derive(StatefulNode)]
@@ -81,7 +81,7 @@ where
         self.active = false;
         self.content.hide();
         canopy::taint_tree(self);
-        canopy::focus_first(&mut self.app)?;
+        focus::shift_first(&mut self.app)?;
         Ok(Outcome::handle())
     }
 
@@ -89,7 +89,7 @@ where
         self.active = true;
         self.content.unhide();
         canopy::taint_tree(self);
-        canopy::focus_first(&mut self.content)?;
+        focus::shift_first(&mut self.content)?;
         Ok(Outcome::handle())
     }
 }
@@ -102,16 +102,16 @@ where
         if self.active {
             match k {
                 c if c == 'a' => {
-                    canopy::focus_first(&mut self.app)?;
+                    focus::shift_first(&mut self.app)?;
                 }
                 c if c == 'q' => {
                     self.hide()?;
                 }
                 c if c == self.activate => {
-                    if canopy::on_focus_path(&mut self.content) {
+                    if focus::is_on_path(&mut self.content) {
                         self.hide()?;
                     } else {
-                        canopy::focus_first(&mut self.content)?;
+                        focus::shift_first(&mut self.content)?;
                     }
                 }
                 _ => return Ok(Outcome::ignore()),
