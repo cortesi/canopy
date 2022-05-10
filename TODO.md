@@ -6,6 +6,7 @@
 
 - Key binding management system
   - Key from string conversion
+  - Mouse actions into binding system
   - Commands improvements
     - Arguments
     - Return types

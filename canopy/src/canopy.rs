@@ -32,38 +32,6 @@ impl Walker for SkipWalker {
     }
 }
 
-macro_rules! process_event(
-    (
-        $slf:expr,
-        $ctrl:expr,
-        $handled:expr,
-        $halt:expr,
-        $node:expr,
-        $proc:expr
-    ) => {
-        {
-            let oc = if *$halt {
-                Outcome::default()
-            } else if *$handled {
-                let hdl = Outcome::default();
-                hdl
-            } else {
-                let hdl = $proc?;
-                if hdl.has_skip() {
-                    *$halt = true;
-                }
-                if hdl.is_handled() {
-                    $node.taint();
-                    *$handled = true;
-                }
-                hdl.clone()
-            };
-            Ok(oc)
-
-        }
-    };
-);
-
 /// Move focus in a specified direction within the subtree.
 pub fn focus_dir(e: &mut dyn Node, dir: Direction) -> Result<Outcome> {
     let mut seen = false;
@@ -351,13 +319,10 @@ pub fn mouse(
     let mut handled = false;
     let mut halt = false;
     locate(root, m.loc, &mut |x| {
-        process_event!(
-            self,
-            ctrl,
-            &mut handled,
-            &mut halt,
-            x,
-            x.handle_mouse(
+        Ok(if halt || handled {
+            Outcome::default()
+        } else {
+            let hdl = x.handle_mouse(
                 ctrl,
                 mouse::Mouse {
                     action: m.action,
@@ -365,8 +330,16 @@ pub fn mouse(
                     modifiers: m.modifiers,
                     loc: x.vp().screen_rect().rebase_point(m.loc)?,
                 },
-            )
-        )
+            )?;
+            if hdl.has_skip() {
+                halt = true;
+            }
+            if hdl.is_handled() {
+                x.taint();
+                handled = true;
+            }
+            hdl.clone()
+        })
     })
 }
 
@@ -375,14 +348,19 @@ pub fn key(ctrl: &mut dyn BackendControl, root: &mut dyn Node, k: key::Key) -> R
     let mut handled = false;
     let mut halt = false;
     focus_path(root, &mut move |x| -> Result<Outcome> {
-        process_event!(
-            self,
-            ctrl,
-            &mut handled,
-            &mut halt,
-            x,
-            x.handle_key(ctrl, k)
-        )
+        Ok(if halt || handled {
+            Outcome::default()
+        } else {
+            let hdl = x.handle_key(ctrl, k)?;
+            if hdl.has_skip() {
+                halt = true;
+            }
+            if hdl.is_handled() {
+                x.taint();
+                handled = true;
+            }
+            hdl.clone()
+        })
     })
 }
 
