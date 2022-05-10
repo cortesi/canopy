@@ -1,11 +1,11 @@
 use regex;
-use std::{collections::HashMap, f32::consts::E};
+use std::collections::HashMap;
 
 use comfy_table::{ContentArrangement, Table};
 
-use crate::{error, event::key::Key, Command, NodeName, Result};
+use crate::{error, event::key::Key, Command, Result};
 
-const DEFAULT_MODE: &str = "default";
+const DEFAULT_MODE: &str = "";
 
 /// A match expression that can be applied to paths.
 ///
@@ -76,7 +76,7 @@ impl KeyMode {
             keys: HashMap::new(),
         }
     }
-    /// Insert a key binding into this set
+    /// Insert a key binding into this mode
     fn insert(&mut self, path_filter: PathMatcher, key: Key, commands: Vec<String>) {
         self.keys
             .entry(key)
@@ -106,26 +106,38 @@ impl KeyMode {
 /// into a set of possible action specifications. We then walk the tree of nodes
 /// from the focus to the root, trying each action specification in turn, until
 /// an action is handled by a node. If no action is handled, the key is ignored.
-pub struct KeyBindings {
+pub struct KeyMap {
     commands: HashMap<String, Command>,
     modes: HashMap<String, KeyMode>,
     current_mode: String,
 }
 
-impl KeyBindings {
+impl KeyMap {
     pub fn new() -> Self {
         let default = KeyMode::new();
         let mut modes = HashMap::new();
         modes.insert(DEFAULT_MODE.to_string(), default);
-        KeyBindings {
+        KeyMap {
             commands: HashMap::new(),
             current_mode: DEFAULT_MODE.into(),
             modes,
         }
     }
 
-    pub fn resolve(&self, path: Vec<String>, key: Key) -> Option<Vec<String>> {
-        unimplemented!();
+    pub fn set_mode(&mut self, mode: &str) -> Result<()> {
+        if mode != "" && !self.modes.contains_key(mode) {
+            Err(error::Error::Invalid(format!("Unknown mode: {}", mode)))
+        } else {
+            self.current_mode = mode.to_string();
+            Ok(())
+        }
+    }
+
+    pub fn resolve(&self, path: &str, key: Key) -> Option<Vec<String>> {
+        // Unwrap is safe, because we make it impossible for our current mode to
+        // be non-existent.
+        let m = self.modes.get(&self.current_mode).unwrap();
+        m.resolve(path, key)
     }
 
     /// Bind a key, within a given mode, with a given context to a list of commands.
@@ -206,7 +218,7 @@ mod tests {
             }
         }
 
-        let mut kb = KeyBindings::new();
+        let mut kb = KeyMap::new();
         kb.load_commands(Foo::load_commands(None));
 
         Ok(())
@@ -280,6 +292,28 @@ mod tests {
         assert_eq!(
             m.resolve("foo/bar", 'a'.into()).unwrap(),
             vec!["a-bar".to_string()]
+        );
+        assert_eq!(m.resolve("foo/bar", 'x'.into()), None,);
+        assert_eq!(m.resolve("nonexistent", 'a'.into()), None,);
+
+        Ok(())
+    }
+
+    #[test]
+    fn keymap() -> Result<()> {
+        let mut m = KeyMap::new();
+
+        m.bind("", 'a', "", vec!["a-default".to_string()])?;
+        m.bind("m", 'a', "", vec!["a-m".to_string()])?;
+
+        assert_eq!(
+            m.resolve("foo/bar", 'a'.into()).unwrap(),
+            vec!["a-default".to_string()]
+        );
+        m.set_mode("m")?;
+        assert_eq!(
+            m.resolve("foo/bar", 'a'.into()).unwrap(),
+            vec!["a-m".to_string()]
         );
 
         Ok(())

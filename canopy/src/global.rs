@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::sync::mpsc;
 
-use crate::{event::Event, poll::Poller};
+use crate::{event::Event, poll::Poller, KeyMap};
 
 pub(crate) struct GlobalState {
     /// A counter that is incremented every time focus changes. The current focus
@@ -21,6 +21,8 @@ pub(crate) struct GlobalState {
     /// Has the tree been tainted? This reset to false before every event sweep.
     pub taint: bool,
 
+    pub keymap: KeyMap,
+
     pub event_tx: mpsc::Sender<Event>,
     pub event_rx: Option<mpsc::Receiver<Event>>,
 }
@@ -36,12 +38,24 @@ impl GlobalState {
             poller: Poller::new(tx.clone()),
             event_tx: tx,
             event_rx: Some(rx),
+            keymap: KeyMap::new(),
         }
     }
 }
 
 thread_local! {
     pub (crate) static STATE: RefCell<GlobalState> = RefCell::new(GlobalState::new());
+}
+
+/// Has the focus changed since the last render sweep?
+
+pub fn keymap<F>(f: F)
+where
+    F: FnOnce(&mut KeyMap),
+{
+    STATE.with(|global_state| {
+        f(&mut global_state.borrow_mut().keymap);
+    });
 }
 
 /// Has the focus changed since the last render sweep?

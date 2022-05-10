@@ -7,6 +7,7 @@ use canopy::{
     backend::crossterm::runloop,
     event::{key, mouse},
     geom::{Expanse, Rect},
+    global,
     inspector::Inspector,
     style::solarized,
     widgets::{frame, list::*, InputLine, Text},
@@ -220,12 +221,16 @@ struct Args {
 
 pub fn main() -> Result<()> {
     let args = Args::parse();
-    let mut kb = KeyBindings::new();
-    kb.load_commands(List::<TodoItem>::load_commands(None));
-    kb.load_commands(Todo::load_commands(None));
+
+    global::keymap(|k| {
+        k.load_commands(List::<TodoItem>::load_commands(None));
+        k.load_commands(Todo::load_commands(None));
+    });
 
     if args.commands {
-        kb.pretty_print_commands();
+        global::keymap(|k| {
+            k.pretty_print_commands();
+        });
         return Ok(());
     }
 

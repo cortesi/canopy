@@ -370,8 +370,7 @@ pub fn mouse(
     })
 }
 
-/// Propagate a key event through the focus and all its ancestors. Keys
-/// handled only once, and then ignored.
+/// Propagate a key event through the focus and all its ancestors.
 pub fn key(ctrl: &mut dyn BackendControl, root: &mut dyn Node, k: key::Key) -> Result<Outcome> {
     let mut handled = false;
     let mut halt = false;

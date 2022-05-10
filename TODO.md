@@ -5,8 +5,7 @@
 ## 0.1
 
 - Key binding management system
-  - Define and formalise the context type
-  - Key binding structure
+  - Key from string conversion
   - Commands improvements
     - Arguments
     - Return types
