@@ -42,10 +42,9 @@ impl PathMatcher {
         if path.starts_with("/") {
             pattern = "^/".to_string() + &pattern;
         }
+        pattern = pattern.trim_end_matches('/').to_string();
         if path.ends_with("/") {
             pattern = pattern + "$";
-        } else {
-            pattern = pattern.trim_end_matches('/').to_string();
         }
         let expr = regex::Regex::new(&pattern).map_err(|e| error::Error::Invalid(e.to_string()))?;
         Ok(PathMatcher { expr })
@@ -227,36 +226,36 @@ mod tests {
     #[test]
     fn pathfilter() -> Result<()> {
         let v = PathMatcher::new("")?;
-        assert_eq!(v.check("/any/thing/"), Some(0));
+        assert_eq!(v.check("/any/thing"), Some(0));
         assert_eq!(v.check("/"), Some(0));
 
         let v = PathMatcher::new("bar")?;
-        assert_eq!(v.check("/foo/bar/"), Some(8));
-        assert_eq!(v.check("/bar/foo/"), Some(4));
-        assert!(v.check("/foo/foo/").is_none());
+        assert_eq!(v.check("/foo/bar"), Some(8));
+        assert_eq!(v.check("/bar/foo"), Some(4));
+        assert!(v.check("/foo/foo").is_none());
 
         let v = PathMatcher::new("foo/*/bar")?;
-        assert_eq!(v.check("/foo/oink/oink/bar/"), Some(18));
-        assert_eq!(v.check("/foo/bar/"), Some(8));
-        assert_eq!(v.check("/oink/foo/bar/oink/"), Some(13));
-        assert_eq!(v.check("/foo/oink/oink/bar/"), Some(18));
-        assert_eq!(v.check("/foo/bar/voing/"), Some(8));
+        assert_eq!(v.check("/foo/oink/oink/bar"), Some(18));
+        assert_eq!(v.check("/foo/bar"), Some(8));
+        assert_eq!(v.check("/oink/foo/bar/oink"), Some(13));
+        assert_eq!(v.check("/foo/oink/oink/bar"), Some(18));
+        assert_eq!(v.check("/foo/bar/voing"), Some(8));
 
         let v = PathMatcher::new("/foo")?;
-        assert_eq!(v.check("/foo/"), Some(4));
-        assert_eq!(v.check("/foo/bar/"), Some(4));
-        assert!(v.check("/bar/foo/bar/").is_none());
+        assert_eq!(v.check("/foo"), Some(4));
+        assert_eq!(v.check("/foo/bar"), Some(4));
+        assert!(v.check("/bar/foo/bar").is_none());
 
         let v = PathMatcher::new("foo/")?;
-        assert_eq!(v.check("/foo/"), Some(5));
-        assert_eq!(v.check("/bar/foo/"), Some(9));
-        assert!(v.check("/foo/bar/").is_none());
+        assert_eq!(v.check("/foo"), Some(4));
+        assert_eq!(v.check("/bar/foo"), Some(8));
+        assert!(v.check("/foo/bar").is_none());
 
         let v = PathMatcher::new("foo/*/bar/*/voing/")?;
-        assert_eq!(v.check("/foo/bar/voing/"), Some(15));
-        assert_eq!(v.check("/foo/x/bar/voing/"), Some(17));
-        assert_eq!(v.check("/foo/x/bar/x/voing/"), Some(19));
-        assert_eq!(v.check("/x/foo/x/bar/x/voing/"), Some(21));
+        assert_eq!(v.check("/foo/bar/voing"), Some(14));
+        assert_eq!(v.check("/foo/x/bar/voing"), Some(16));
+        assert_eq!(v.check("/foo/x/bar/x/voing"), Some(18));
+        assert_eq!(v.check("/x/foo/x/bar/x/voing"), Some(20));
         assert!(v.check("/foo/x/bar/x/voing/x").is_none());
 
         Ok(())
