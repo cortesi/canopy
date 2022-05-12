@@ -14,6 +14,8 @@ pub fn valid_nodename(name: &str) -> bool {
     name.chars().all(valid_nodename_char)
 }
 
+pub type NodeId = u64;
+
 /// A node name, which consists of lowercase ASCII alphanumeric characters, plus
 /// underscores.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -77,7 +79,8 @@ impl TryFrom<&str> for NodeName {
 #[derive(Debug, PartialEq)]
 pub struct NodeState {
     // Unique node ID
-    pub(crate) id: u64,
+    id: u64,
+
     /// If this is equal to the global render_gen, we render during the current
     /// sweep.
     pub(crate) render_gen: u64,
@@ -173,7 +176,7 @@ pub trait StatefulNode {
     }
 
     /// A unique ID for this node.
-    fn id(&self) -> u64 {
+    fn id(&self) -> NodeId {
         self.state().id
     }
 

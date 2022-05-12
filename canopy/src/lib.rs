@@ -34,5 +34,5 @@ pub use keymap::KeyMap;
 pub use node::*;
 pub use outcome::Outcome;
 pub use render::Render;
-pub use state::{NodeName, NodeState, StatefulNode};
+pub use state::{NodeId, NodeName, NodeState, StatefulNode};
 pub use viewport::ViewPort;

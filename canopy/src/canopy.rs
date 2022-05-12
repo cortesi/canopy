@@ -7,7 +7,7 @@ use crate::{
     node::{postorder, preorder, Node, Walker},
     render::{show_cursor, RenderBackend},
     style::StyleManager,
-    Outcome, Render, Result, ViewPort,
+    NodeId, Outcome, Render, Result, ViewPort,
 };
 
 #[derive(Default)]
@@ -288,6 +288,48 @@ pub fn taint_tree(e: &mut dyn Node) {
     .unwrap();
 }
 
+/// Call a closure on the node with the specified `id`, and all its ancestors to
+/// the specified `root`.
+pub fn walk_to_root<R: Walker + Default, T>(
+    root: &mut dyn Node,
+    id: T,
+    f: &mut dyn FnMut(&mut dyn Node) -> Result<R>,
+) -> Result<R>
+where
+    T: Into<NodeId>,
+{
+    let mut seen = false;
+    let mut ret = R::default();
+    let uid = id.into();
+    postorder(root, &mut |x| -> Result<SkipWalker> {
+        Ok(if seen {
+            ret = ret.join(f(x)?);
+            SkipWalker::new(false)
+        } else if x.id() == uid {
+            seen = true;
+            ret = ret.join(f(x)?);
+            SkipWalker::new(true)
+        } else {
+            SkipWalker::new(false)
+        })
+    })?;
+    Ok(ret)
+}
+
+/// Return the focus path for the subtree under `root`.
+pub fn node_path<T>(id: T, root: &mut dyn Node) -> String
+where
+    T: Into<NodeId>,
+{
+    let mut path = Vec::new();
+    walk_to_root(root, id, &mut |n| -> Result<()> {
+        path.insert(0, n.name().to_string());
+        Ok(())
+    })
+    .unwrap();
+    "/".to_string() + &path.join("/")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -424,6 +466,15 @@ mod tests {
             Ok(())
         })?;
 
+        Ok(())
+    }
+
+    #[test]
+    fn tnode_path() -> Result<()> {
+        run_test(|_, mut root| {
+            println!("HEREA: {}", node_path(root.a.a.id(), &mut root));
+            Ok(())
+        })?;
         Ok(())
     }
 
