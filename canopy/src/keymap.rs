@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use comfy_table::{ContentArrangement, Table};
 
-use crate::{error, event::key::Key, Command, Result};
+use crate::{error, event::key::Key, CommandDefinition, Result};
 
 const DEFAULT_MODE: &str = "";
 
@@ -106,7 +106,7 @@ impl KeyMode {
 /// from the focus to the root, trying each action specification in turn, until
 /// an action is handled by a node. If no action is handled, the key is ignored.
 pub struct KeyMap {
-    commands: HashMap<String, Command>,
+    commands: HashMap<String, CommandDefinition>,
     modes: HashMap<String, KeyMode>,
     current_mode: String,
 }
@@ -158,7 +158,7 @@ impl KeyMap {
         Ok(())
     }
 
-    pub fn load_commands(&mut self, cmds: Vec<Command>) {
+    pub fn load_commands(&mut self, cmds: Vec<CommandDefinition>) {
         for i in cmds {
             self.commands.insert(i.fullname(), i);
         }
@@ -167,7 +167,7 @@ impl KeyMap {
     /// Output keybindings to the terminal, formatted in a nice table. Make sure
     /// the terminal is not being controlled by Canopy when you call this.
     pub fn pretty_print_commands(&self) {
-        let mut cmds: Vec<&Command> = self.commands.values().collect();
+        let mut cmds: Vec<&CommandDefinition> = self.commands.values().collect();
         cmds.sort_by(|a, b| a.fullname().cmp(&b.fullname()));
 
         let mut table = Table::new();
@@ -187,7 +187,7 @@ impl KeyMap {
 mod tests {
     use super::*;
     use crate as canopy;
-    use crate::{command, derive_commands, Commands, Result, StatefulNode};
+    use crate::{command, derive_commands, CommandNode, Result, StatefulNode};
 
     #[test]
     fn kb_load() -> Result<()> {
@@ -201,7 +201,6 @@ mod tests {
         impl canopy::Node for Foo {}
 
         #[derive_commands]
-
         impl Foo {
             #[command]
             /// This is a comment.

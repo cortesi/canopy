@@ -4,7 +4,7 @@ use crate::{
     cursor,
     event::{key, mouse},
     geom::{Expanse, Frame, Rect},
-    BackendControl, Commands, Outcome, Render, Result, StatefulNode, ViewPort,
+    BackendControl, CommandNode, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 
 /// Walker is implemented for the return values of tree operations.
@@ -26,7 +26,7 @@ impl Walker for () {
 /// Nodes are the basic building-blocks of a Canopy UI. They are composed in a
 /// tree, with each node responsible for managing its own children.
 #[allow(unused_variables)]
-pub trait Node: StatefulNode + Commands {
+pub trait Node: StatefulNode + CommandNode {
     /// Should the node render in the next sweep? This checks if the node is
     /// currently hidden, and if not, signals that we should render if:
     ///

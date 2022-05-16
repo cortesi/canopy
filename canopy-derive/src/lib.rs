@@ -103,7 +103,7 @@ fn parse_command_method(method: &syn::ImplItemMethod) -> Option<Command> {
     }
 }
 
-/// Derive an implementation of the `Commands` trait. This macro should be added
+/// Derive an implementation of the `CommandNode` trait. This macro should be added
 /// to the impl block of a struct. All methods that are annotated with `command`
 /// are added as commands, with their doc comments as the command documentation.
 #[proc_macro_attribute]
@@ -140,17 +140,17 @@ pub fn derive_commands(
     let invoke: Vec<proc_macro2::TokenStream> = commands.iter().map(|x| x.invocation()).collect();
 
     let expanded = quote! {
-        impl #impl_generics canopy::commands::Commands for #name #where_clause {
-            fn load_commands(name: Option<&str>) -> Vec<canopy::commands::Command> {
-                vec![#(canopy::commands::Command {
+        impl #impl_generics canopy::commands::CommandNode for #name #where_clause {
+            fn load_commands(name: Option<&str>) -> Vec<canopy::commands::CommandDefinition> {
+                vec![#(canopy::commands::CommandDefinition {
                         node: canopy::NodeName::convert(name.map_or(#default_node_name, |n| n)),
                         command: #names.to_string(),
                         docs: #docs.to_string(),
                         return_type: #rets,
                     }),*]
             }
-            fn commands(&self) -> Vec<canopy::commands::Command> {
-                vec![#(canopy::commands::Command {
+            fn commands(&self) -> Vec<canopy::commands::CommandDefinition> {
+                vec![#(canopy::commands::CommandDefinition {
                         node: self.name(),
                         command: #names.to_string(),
                         docs: #docs.to_string(),

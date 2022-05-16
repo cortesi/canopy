@@ -27,7 +27,7 @@ pub mod viewport;
 pub mod widgets;
 
 pub use crate::canopy::*;
-pub use commands::{Command, Commands};
+pub use commands::{CommandDefinition, CommandNode};
 pub use control::BackendControl;
 pub use error::{Error, Result};
 pub use keymap::KeyMap;

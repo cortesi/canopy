@@ -316,7 +316,8 @@ where
     Ok(ret)
 }
 
-/// Return the focus path for the subtree under `root`.
+/// Return the node path for a specified node id, relative to the specified
+///`root`.
 pub fn node_path<T>(id: T, root: &mut dyn Node) -> String
 where
     T: Into<NodeId>,

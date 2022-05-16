@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use canopy;
-use canopy::commands::{Commands, ReturnTypes};
+use canopy::commands::{CommandNode, ReturnTypes};
 use canopy::StatefulNode;
 use canopy_derive::command;
 use canopy_derive::derive_commands;
@@ -57,19 +57,19 @@ fn commands() {
     assert_eq!(
         Foo::load_commands(None),
         [
-            canopy::commands::Command {
+            canopy::commands::CommandDefinition {
                 node: "foo".try_into().unwrap(),
                 command: "a".to_string(),
                 docs: " This is a comment.\n Multiline too!".to_string(),
                 return_type: ReturnTypes::Result,
             },
-            canopy::commands::Command {
+            canopy::commands::CommandDefinition {
                 node: "foo".try_into().unwrap(),
                 command: "b".to_string(),
                 docs: "".to_string(),
                 return_type: ReturnTypes::Result,
             },
-            canopy::commands::Command {
+            canopy::commands::CommandDefinition {
                 node: "foo".try_into().unwrap(),
                 command: "c".to_string(),
                 docs: "".to_string(),
@@ -113,7 +113,7 @@ fn commands() {
 
     assert_eq!(
         Bar::<Foo>::load_commands(None),
-        [canopy::commands::Command {
+        [canopy::commands::CommandDefinition {
             node: "bar".try_into().unwrap(),
             command: "a".to_string(),
             docs: "".to_string(),
@@ -122,7 +122,7 @@ fn commands() {
     );
     assert_eq!(
         Bar::<Foo>::load_commands(Some("xxx")),
-        [canopy::commands::Command {
+        [canopy::commands::CommandDefinition {
             node: "xxx".try_into().unwrap(),
             command: "a".to_string(),
             docs: "".to_string(),
