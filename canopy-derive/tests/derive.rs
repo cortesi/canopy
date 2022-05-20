@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use canopy;
-use canopy::commands::{CommandNode, ReturnTypes};
+use canopy::commands::{Command, CommandNode, ReturnTypes};
 use canopy::StatefulNode;
 use canopy_derive::command;
 use canopy_derive::derive_commands;
@@ -83,10 +83,18 @@ fn commands() {
         b_triggered: false,
         c_triggered: false,
     };
-    f.dispatch("a").unwrap();
+    f.dispatch(&Command {
+        node: "foo".try_into().unwrap(),
+        command: "a".try_into().unwrap(),
+    })
+    .unwrap();
     assert!(f.a_triggered);
 
-    f.dispatch("c").unwrap();
+    f.dispatch(&Command {
+        node: "foo".try_into().unwrap(),
+        command: "c".try_into().unwrap(),
+    })
+    .unwrap();
     assert!(f.c_triggered);
 
     #[derive(canopy::StatefulNode)]

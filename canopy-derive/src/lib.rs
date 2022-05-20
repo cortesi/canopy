@@ -157,15 +157,18 @@ pub fn derive_commands(
                         return_type: #rets,
                     }),*]
             }
-            fn dispatch(&mut self, name: &str) -> canopy::Result<()> {
-                match name {
+            fn dispatch(&mut self, cmd: &canopy::commands::Command) -> canopy::Result<()> {
+                if cmd.node != self.name() {
+                    return Err(canopy::Error::UnknownCommand(cmd.command.to_string()));
+                }
+                match cmd.command.as_str() {
                     #(
                         #names => {
                             #invoke;
                         }
                     ),*
                     x if true => {},
-                    _ => return Err(canopy::Error::UnknownCommand(name.to_string())),
+                    _ => return Err(canopy::Error::UnknownCommand(cmd.command.to_string())),
                 };
                 Ok(())
             }
