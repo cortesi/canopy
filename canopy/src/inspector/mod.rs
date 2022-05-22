@@ -82,7 +82,7 @@ where
         self.content.hide();
         canopy::taint_tree(self);
         focus::shift_first(&mut self.app)?;
-        Ok(Outcome::handle())
+        Ok(Outcome::Handle)
     }
 
     pub fn show(&mut self) -> Result<Outcome> {
@@ -90,7 +90,7 @@ where
         self.content.unhide();
         canopy::taint_tree(self);
         focus::shift_first(&mut self.content)?;
-        Ok(Outcome::handle())
+        Ok(Outcome::Handle)
     }
 }
 
@@ -114,12 +114,12 @@ where
                         focus::shift_first(&mut self.content)?;
                     }
                 }
-                _ => return Ok(Outcome::ignore()),
+                _ => return Ok(Outcome::Ignore),
             };
         } else if k == self.activate {
             self.show()?;
         };
-        Ok(Outcome::handle())
+        Ok(Outcome::Handle)
     }
 
     fn render(&mut self, _r: &mut Render) -> Result<()> {

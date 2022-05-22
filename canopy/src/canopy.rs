@@ -7,7 +7,7 @@ use crate::{
     node::{postorder, preorder, Node, Walk},
     render::{show_cursor, RenderBackend},
     style::StyleManager,
-    NodeId, Render, Result, ViewPort,
+    NodeId, Outcome, Render, Result, ViewPort,
 };
 
 /// Pre-render sweep of the tree.
@@ -144,11 +144,12 @@ pub fn mouse(ctrl: &mut dyn BackendControl, root: &mut dyn Node, m: mouse::Mouse
                 loc: x.vp().screen_rect().rebase_point(m.loc)?,
             },
         )?;
-        Ok(if hdl.is_handled() {
-            x.taint();
-            Walk::Handle(())
-        } else {
-            Walk::Continue
+        Ok(match hdl {
+            Outcome::Handle => {
+                x.taint();
+                Walk::Handle(())
+            }
+            Outcome::Ignore => Walk::Continue,
         })
     })?;
     Ok(())
@@ -157,18 +158,16 @@ pub fn mouse(ctrl: &mut dyn BackendControl, root: &mut dyn Node, m: mouse::Mouse
 /// Propagate a key event through the focus and all its ancestors.
 pub fn key(ctrl: &mut dyn BackendControl, root: &mut dyn Node, k: key::Key) -> Result<()> {
     let mut handled = false;
-    let mut halt = false;
     focus::walk(root, &mut move |x| -> Result<()> {
-        Ok(if halt || handled {
+        Ok(if handled {
             ()
         } else {
-            let hdl = x.handle_key(ctrl, k)?;
-            if hdl.has_skip() {
-                halt = true;
-            }
-            if hdl.is_handled() {
-                x.taint();
-                handled = true;
+            match x.handle_key(ctrl, k)? {
+                Outcome::Handle => {
+                    x.taint();
+                    handled = true;
+                }
+                Outcome::Ignore => (),
             }
             ()
         })
@@ -302,13 +301,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        backend::test::TestRender,
-        geom::Rect,
-        outcome::{Handle, Ignore, Outcome},
-        tutils::utils::*,
-        StatefulNode,
-    };
+    use crate::{backend::test::TestRender, geom::Rect, tutils::utils::*, StatefulNode};
 
     fn run_test(func: impl FnOnce(TestRender, TRoot) -> Result<()>) -> Result<()> {
         let (_, tr) = TestRender::create();
@@ -322,7 +315,7 @@ mod tests {
     fn tkey() -> Result<()> {
         run_test(|tr, mut root| {
             root.set_focus();
-            root.next_outcome = Some(Outcome::handle());
+            root.next_outcome = Some(Outcome::Handle);
             key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
             assert_eq!(s.path, vec!["r@key->handle"]);
@@ -331,7 +324,7 @@ mod tests {
 
         run_test(|tr, mut root| {
             root.a.a.set_focus();
-            root.a.a.next_outcome = Some(Outcome::handle());
+            root.a.a.next_outcome = Some(Outcome::Handle);
             key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@key->handle"]);
@@ -340,7 +333,7 @@ mod tests {
 
         run_test(|tr, mut root| {
             root.a.a.set_focus();
-            root.a.next_outcome = Some(Outcome::handle());
+            root.a.next_outcome = Some(Outcome::Handle);
             key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@key->ignore", "ba@key->handle"]);
@@ -349,7 +342,7 @@ mod tests {
 
         run_test(|tr, mut root| {
             root.a.a.set_focus();
-            root.next_outcome = Some(Outcome::handle());
+            root.next_outcome = Some(Outcome::Handle);
             key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
             assert_eq!(
@@ -361,7 +354,7 @@ mod tests {
 
         run_test(|tr, mut root| {
             root.a.set_focus();
-            root.a.next_outcome = Some(Outcome::handle());
+            root.a.next_outcome = Some(Outcome::Handle);
             key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba@key->handle"]);
@@ -370,7 +363,7 @@ mod tests {
 
         run_test(|tr, mut root| {
             root.a.set_focus();
-            root.next_outcome = Some(Outcome::handle());
+            root.next_outcome = Some(Outcome::Handle);
             key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba@key->ignore", "r@key->handle"]);
@@ -390,17 +383,20 @@ mod tests {
 
         run_test(|tr, mut root| {
             root.a.b.set_focus();
-            root.a.next_outcome = Some(Outcome::Ignore(Ignore::default().with_skip()));
-            root.next_outcome = Some(Outcome::handle());
+            root.a.next_outcome = Some(Outcome::Ignore);
+            root.next_outcome = Some(Outcome::Handle);
             key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
-            assert_eq!(s.path, vec!["ba_lb@key->ignore", "ba@key->ignore"]);
+            assert_eq!(
+                s.path,
+                vec!["ba_lb@key->ignore", "ba@key->ignore", "r@key->handle"]
+            );
             Ok(())
         })?;
 
         run_test(|tr, mut root| {
             root.a.a.set_focus();
-            root.a.a.next_outcome = Some(Outcome::handle());
+            root.a.a.next_outcome = Some(Outcome::Handle);
             key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@key->handle",]);
@@ -409,7 +405,7 @@ mod tests {
 
         run_test(|tr, mut root| {
             root.a.b.set_focus();
-            root.a.next_outcome = Some(Outcome::handle());
+            root.a.next_outcome = Some(Outcome::Handle);
             key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_lb@key->ignore", "ba@key->handle",]);
@@ -418,7 +414,7 @@ mod tests {
 
         run_test(|tr, mut root| {
             root.a.b.set_focus();
-            root.a.b.next_outcome = Some(Outcome::Handle(Handle::default()));
+            root.a.b.next_outcome = Some(Outcome::Handle);
             key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_lb@key->handle",]);
@@ -427,8 +423,8 @@ mod tests {
 
         run_test(|tr, mut root| {
             root.a.b.set_focus();
-            root.a.b.next_outcome = Some(Outcome::handle());
-            root.a.next_outcome = Some(Outcome::handle());
+            root.a.b.next_outcome = Some(Outcome::Handle);
+            root.a.next_outcome = Some(Outcome::Handle);
             key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_lb@key->handle",]);
@@ -451,7 +447,7 @@ mod tests {
     fn tmouse() -> Result<()> {
         run_test(|mut tr, mut root| {
             root.set_focus();
-            root.next_outcome = Some(Outcome::handle());
+            root.next_outcome = Some(Outcome::Handle);
             let evt = root.a.a.make_mouse_event()?;
             tr.render(&mut root)?;
             mouse(&mut tr.control(), &mut root, evt)?;
@@ -464,7 +460,7 @@ mod tests {
         })?;
 
         run_test(|mut tr, mut root| {
-            root.a.a.next_outcome = Some(Outcome::handle());
+            root.a.a.next_outcome = Some(Outcome::Handle);
             let evt = root.a.a.make_mouse_event()?;
             tr.render(&mut root)?;
             mouse(&mut tr.control(), &mut root, evt)?;
@@ -474,7 +470,7 @@ mod tests {
         })?;
 
         run_test(|mut tr, mut root| {
-            root.a.a.next_outcome = Some(Outcome::handle());
+            root.a.a.next_outcome = Some(Outcome::Handle);
             let evt = root.a.a.make_mouse_event()?;
             tr.render(&mut root)?;
             mouse(&mut tr.control(), &mut root, evt)?;
@@ -484,7 +480,7 @@ mod tests {
         })?;
 
         run_test(|mut tr, mut root| {
-            root.a.a.next_outcome = Some(Outcome::handle());
+            root.a.a.next_outcome = Some(Outcome::Handle);
             let evt = root.a.a.make_mouse_event()?;
             tr.render(&mut root)?;
             mouse(&mut tr.control(), &mut root, evt)?;

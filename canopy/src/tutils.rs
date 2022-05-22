@@ -183,7 +183,7 @@ pub mod utils {
                 self.next_outcome = None;
                 x
             } else {
-                Outcome::ignore()
+                Outcome::Ignore
             };
             TSTATE.with(|s| {
                 s.borrow_mut().add_event(&self.name(), evt, ret.clone());
@@ -209,7 +209,7 @@ pub mod utils {
                 self.next_outcome = None;
                 x
             } else {
-                Outcome::ignore()
+                Outcome::Ignore
             };
             TSTATE.with(|s| {
                 s.borrow_mut().add_event(&self.name(), evt, ret.clone());
@@ -235,7 +235,7 @@ pub mod utils {
                 self.next_outcome = None;
                 x
             } else {
-                Outcome::ignore()
+                Outcome::Ignore
             };
             TSTATE.with(|s| {
                 s.borrow_mut().add_event(&self.name(), evt, ret.clone());

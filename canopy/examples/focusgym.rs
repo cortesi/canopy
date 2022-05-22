@@ -58,7 +58,7 @@ impl Node for Root {
         Ok(match k {
             c if c == mouse::MouseAction::ScrollDown => focus::shift_next(self)?,
             c if c == mouse::MouseAction::ScrollUp => focus::shift_prev(self)?,
-            _ => Outcome::ignore(),
+            _ => Outcome::Ignore,
         })
     }
 
@@ -70,7 +70,7 @@ impl Node for Root {
             c if c == 'j' || c == key::KeyCode::Down => focus::shift_down(self)?,
             c if c == 'k' || c == key::KeyCode::Up => focus::shift_up(self)?,
             c if c == 'q' => ctrl.exit(0),
-            _ => Outcome::ignore(),
+            _ => Outcome::Ignore,
         })
     }
 
@@ -83,13 +83,13 @@ impl Node for Root {
 impl Block {
     fn add(&mut self) -> Result<Outcome> {
         Ok(if self.children.is_empty() {
-            Outcome::ignore()
+            Outcome::Ignore
         } else if self.size_limited(self.children[0].vp().view_rect().into()) {
-            Outcome::handle()
+            Outcome::Handle
         } else {
             self.children.push(Block::new(!self.horizontal));
             canopy::taint_tree(self);
-            Outcome::handle()
+            Outcome::Handle
         })
     }
     fn size_limited(&self, a: Expanse) -> bool {
@@ -97,11 +97,11 @@ impl Block {
     }
     fn split(&mut self) -> Result<Outcome> {
         Ok(if self.size_limited(self.vp().view_rect().into()) {
-            Outcome::handle()
+            Outcome::Handle
         } else {
             self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
             canopy::taint_tree(self);
-            Outcome::handle()
+            Outcome::Handle
         })
     }
 }
@@ -140,17 +140,17 @@ impl Node for Block {
             c if c == mouse::MouseAction::Down + mouse::Button::Left => {
                 canopy::taint_tree(self);
                 self.set_focus();
-                Outcome::handle()
+                Outcome::Handle
             }
             c if c == mouse::MouseAction::Down + mouse::Button::Middle => {
                 self.split()?;
                 if self.is_focused() {
                     focus::shift_next(self)?;
                 };
-                Outcome::handle()
+                Outcome::Handle
             }
             c if c == mouse::MouseAction::Down + mouse::Button::Right => self.add()?,
-            _ => Outcome::ignore(),
+            _ => Outcome::Ignore,
         })
     }
 
@@ -161,7 +161,7 @@ impl Node for Block {
                 focus::shift_next(self)?
             }
             c if c == 'a' => self.add()?,
-            _ => Outcome::ignore(),
+            _ => Outcome::Ignore,
         })
     }
 

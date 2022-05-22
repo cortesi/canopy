@@ -4,8 +4,14 @@ use crate::{
     cursor,
     event::{key, mouse},
     geom::{Expanse, Frame, Rect},
-    BackendControl, CommandNode, Outcome, Render, Result, StatefulNode, ViewPort,
+    BackendControl, CommandNode, Render, Result, StatefulNode, ViewPort,
 };
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Outcome {
+    Handle,
+    Ignore,
+}
 
 /// Walk is the return value from traversal closures.
 #[derive(PartialEq, Eq, Debug, Clone)]
@@ -61,13 +67,13 @@ pub trait Node: StatefulNode + CommandNode {
     /// Handle a key input event. This event is only called for nodes that are
     /// on the focus path. The default implementation ignores input.
     fn handle_key(&mut self, c: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
-        Ok(Outcome::ignore())
+        Ok(Outcome::Ignore)
     }
 
     /// Handle a mouse input event. The default implementation ignores mouse
     /// input.
     fn handle_mouse(&mut self, c: &mut dyn BackendControl, k: mouse::Mouse) -> Result<Outcome> {
-        Ok(Outcome::ignore())
+        Ok(Outcome::Ignore)
     }
 
     /// Call a closure on this node's children. If any child handler returns an

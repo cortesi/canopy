@@ -158,9 +158,9 @@ impl<'a> Node for InputLine {
             key::Key(_, key::KeyCode::Char(c)) => {
                 self.textbuf.insert(c);
             }
-            _ => return Ok(Outcome::ignore()),
+            _ => return Ok(Outcome::Ignore),
         };
-        Ok(Outcome::handle())
+        Ok(Outcome::Handle)
     }
 
     fn fit(&mut self, sz: Expanse) -> Result<Expanse> {

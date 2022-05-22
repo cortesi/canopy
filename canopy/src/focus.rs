@@ -85,7 +85,7 @@ pub fn shift_direction(root: &mut dyn Node, dir: Direction) -> Result<Outcome> {
             Ok(seen)
         })?
     }
-    Ok(Outcome::handle())
+    Ok(Outcome::Handle)
 }
 
 /// Move focus to the right of the currently focused node within the subtree at root.
@@ -121,7 +121,7 @@ pub fn shift_first(root: &mut dyn Node) -> Result<Outcome> {
             Walk::Continue
         })
     })?;
-    Ok(Outcome::handle())
+    Ok(Outcome::Handle)
 }
 
 /// A node is on the focus path if it does not have focus itself, but some
@@ -155,7 +155,7 @@ pub fn shift_next(root: &mut dyn Node) -> Result<Outcome> {
     if !focus_set {
         shift_first(root)
     } else {
-        Ok(Outcome::handle())
+        Ok(Outcome::Handle)
     }
 }
 
@@ -180,7 +180,7 @@ pub fn shift_prev(root: &mut dyn Node) -> Result<Outcome> {
         }
         Ok(Walk::Continue)
     })?;
-    Ok(Outcome::handle())
+    Ok(Outcome::Handle)
 }
 
 /// Returns the focal depth of the specified node. If the node is not part

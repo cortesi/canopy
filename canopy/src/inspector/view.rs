@@ -18,9 +18,9 @@ impl Node for View {
     fn handle_key(&mut self, _: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
         match k {
             c if c == key::KeyCode::Tab => self.tabs.next(),
-            _ => return Ok(Outcome::ignore()),
+            _ => return Ok(Outcome::Ignore),
         };
-        Ok(Outcome::handle())
+        Ok(Outcome::Handle)
     }
 
     fn render(&mut self, _r: &mut Render) -> Result<()> {

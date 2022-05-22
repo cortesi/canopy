@@ -149,9 +149,9 @@ impl Node for Todo {
         match k {
             c if c == mouse::MouseAction::ScrollDown => v.update_viewport(&|vp| vp.down()),
             c if c == mouse::MouseAction::ScrollUp => v.update_viewport(&|vp| vp.up()),
-            _ => return Ok(Outcome::ignore()),
+            _ => return Ok(Outcome::Ignore),
         };
-        Ok(Outcome::handle())
+        Ok(Outcome::Handle)
     }
 
     fn handle_key(
@@ -170,7 +170,7 @@ impl Node for Todo {
                 c if c == key::KeyCode::Esc => {
                     self.adder = None;
                 }
-                _ => return Ok(Outcome::ignore()),
+                _ => return Ok(Outcome::Ignore),
             };
         } else {
             match k {
@@ -189,11 +189,11 @@ impl Node for Todo {
                 c if c == ' ' || c == key::KeyCode::PageDown => lst.page_down(),
                 c if c == key::KeyCode::PageUp => lst.page_up(),
                 c if c == 'q' => ctrl.exit(0),
-                _ => return Ok(Outcome::ignore()),
+                _ => return Ok(Outcome::Ignore),
             };
         }
         canopy::taint_tree(self);
-        Ok(Outcome::handle())
+        Ok(Outcome::Handle)
     }
 
     fn children(

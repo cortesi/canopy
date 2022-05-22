@@ -120,10 +120,10 @@ impl Node for Logs {
             c if c == 'k' || c == key::KeyCode::Up => lst.select_prev(),
             c if c == ' ' || c == key::KeyCode::PageDown => lst.page_down(),
             c if c == key::KeyCode::PageUp => lst.page_up(),
-            _ => return Ok(Outcome::ignore()),
+            _ => return Ok(Outcome::Ignore),
         };
         taint_tree(self);
-        Ok(Outcome::handle())
+        Ok(Outcome::Handle)
     }
 
     fn poll(&mut self) -> Option<Duration> {

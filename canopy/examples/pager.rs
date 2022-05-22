@@ -38,10 +38,10 @@ impl Node for Root {
         match k {
             c if c == mouse::MouseAction::ScrollDown => txt.update_viewport(&|vp| vp.down()),
             c if c == mouse::MouseAction::ScrollUp => txt.update_viewport(&|vp| vp.up()),
-            _ => return Ok(Outcome::ignore()),
+            _ => return Ok(Outcome::Ignore),
         };
         canopy::taint_tree(self);
-        Ok(Outcome::handle())
+        Ok(Outcome::Handle)
     }
 
     fn handle_key(&mut self, ctrl: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
@@ -57,10 +57,10 @@ impl Node for Root {
             }
             c if c == key::KeyCode::PageUp => txt.update_viewport(&|vp| vp.page_up()),
             c if c == 'q' => ctrl.exit(0),
-            _ => return Ok(Outcome::ignore()),
+            _ => return Ok(Outcome::Ignore),
         }
         canopy::taint_tree(self);
-        Ok(Outcome::handle())
+        Ok(Outcome::Handle)
     }
 
     fn render(&mut self, _: &mut Render) -> Result<()> {
