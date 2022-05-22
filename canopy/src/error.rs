@@ -6,7 +6,7 @@ use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Error, Debug)]
+#[derive(PartialEq, Eq, Error, Debug, Clone)]
 pub enum Error {
     #[error("focus")]
     Focus(String),
@@ -24,6 +24,10 @@ pub enum Error {
     Invalid(String),
     #[error("unknown command")]
     UnknownCommand(String),
+
+    /// No result was generated on node traversal
+    #[error("no result")]
+    NoResult,
 }
 
 impl From<mpsc::RecvError> for Error {

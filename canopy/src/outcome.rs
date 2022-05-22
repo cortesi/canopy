@@ -11,13 +11,6 @@ impl Default for Handle {
     }
 }
 
-impl Handle {
-    pub fn and_continue(mut self) -> Self {
-        self.skip = false;
-        self
-    }
-}
-
 #[derive(Default, Debug, PartialEq, Clone, Copy)]
 pub struct Ignore {
     pub skip: bool,
@@ -47,17 +40,9 @@ impl Outcome {
     pub fn ignore() -> Outcome {
         Outcome::Ignore(Ignore::default())
     }
-    /// An Ingore outcome with skipping enabled.
-    pub fn ignore_and_skip() -> Outcome {
-        Outcome::Ignore(Ignore::default().with_skip())
-    }
     /// A Handle outcome that skips.
     pub fn handle() -> Outcome {
         Outcome::Handle(Handle::default())
-    }
-    /// A Handle outcome with skipping disabled.
-    pub fn handle_and_continue() -> Outcome {
-        Outcome::Handle(Handle::default().and_continue())
     }
     /// Does this outcome have skip enabled?
     pub fn has_skip(&self) -> bool {
@@ -80,8 +65,6 @@ impl Walker for Outcome {
         self.has_skip()
     }
     fn join(&self, rhs: Self) -> Self {
-        // At the moment, we don't propagate the skip flag, because it gets used
-        // by the traversal functions immediately on return.
         match (self, rhs) {
             (Outcome::Handle(h1), Outcome::Handle(h2)) => Outcome::Handle(Handle {
                 skip: h1.skip || h2.skip,

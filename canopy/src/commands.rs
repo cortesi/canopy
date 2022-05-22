@@ -66,7 +66,7 @@ pub trait CommandNode: StatefulNode {
 /// matching node::command in the following order:
 ///     - A pre-order traversal of the current node subtree
 ///     - The path from the current node to the root
-pub fn dispatch<T>(current_id: T, root: &mut dyn Node, cmd: &Command) -> Result<()>
+pub fn dispatch<T>(current_id: T, root: &mut dyn Node, _cmd: &Command) -> Result<()>
 where
     T: Into<NodeId>,
 {

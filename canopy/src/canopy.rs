@@ -457,16 +457,6 @@ mod tests {
             Ok(())
         })?;
 
-        run_test(|tr, mut root| {
-            root.a.b.set_focus();
-            root.a.b.next_outcome = Some(Outcome::handle());
-            root.a.next_outcome = Some(Outcome::ignore_and_skip());
-            key(&mut tr.control(), &mut root, K_ANY)?;
-            let s = get_state();
-            assert_eq!(s.path, vec!["ba_lb@key->handle"]);
-            Ok(())
-        })?;
-
         Ok(())
     }
 
