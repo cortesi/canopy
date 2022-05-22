@@ -4,7 +4,7 @@ use crate::{
     focus,
     geom::{Coverage, Expanse, Point},
     global::{self, STATE},
-    node::{postorder, preorder, Node, Walk, Walker},
+    node::{postorder, preorder, Node, Walk},
     render::{show_cursor, RenderBackend},
     style::StyleManager,
     NodeId, Render, Result, ViewPort,
@@ -259,30 +259,29 @@ pub fn taint_tree(e: &mut dyn Node) {
 
 /// Call a closure on the node with the specified `id`, and all its ancestors to
 /// the specified `root`.
-pub fn walk_to_root<R: Walker + Default, T>(
+pub fn walk_to_root<T>(
     root: &mut dyn Node,
     id: T,
-    f: &mut dyn FnMut(&mut dyn Node) -> Result<R>,
-) -> Result<R>
+    f: &mut dyn FnMut(&mut dyn Node) -> Result<()>,
+) -> Result<()>
 where
     T: Into<NodeId>,
 {
     let mut seen = false;
-    let mut ret = R::default();
     let uid = id.into();
     postorder(root, &mut |x| -> Result<Walk<()>> {
         Ok(if seen {
-            ret = ret.join(f(x)?);
+            f(x)?;
             Walk::Continue
         } else if x.id() == uid {
             seen = true;
-            ret = ret.join(f(x)?);
+            f(x)?;
             Walk::Skip
         } else {
             Walk::Continue
         })
     })?;
-    Ok(ret)
+    Ok(())
 }
 
 /// Return the node path for a specified node id, relative to the specified

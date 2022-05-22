@@ -3,7 +3,7 @@ use crate::{
     global::STATE,
     locate,
     node::{postorder, preorder, Node, Walk},
-    Outcome, Result, Walker,
+    Outcome, Result,
 };
 
 /// Is the specified node on the focus path? A node is on the focus path if it
@@ -32,29 +32,25 @@ pub fn path(root: &mut dyn Node) -> String {
 
 /// Call a closure on the currently focused node and all its ancestors to the
 /// root.
-pub fn walk<R: Walker + Default>(
-    root: &mut dyn Node,
-    f: &mut dyn FnMut(&mut dyn Node) -> Result<R>,
-) -> Result<R> {
+pub fn walk(root: &mut dyn Node, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
     let mut focus_seen = false;
-    let mut ret = R::default();
     let focus_gen = STATE.with(|global_state| -> u64 { global_state.borrow().focus_gen });
     postorder(root, &mut |x| -> Result<Walk<()>> {
         Ok(if focus_seen {
-            ret = ret.join(f(x)?);
+            f(x)?;
             Walk::Continue
         } else if x.is_hidden() {
             // Hidden nodes don't hold focus
             Walk::Continue
         } else if x.state().focus_gen == focus_gen {
             focus_seen = true;
-            ret = ret.join(f(x)?);
+            f(x)?;
             Walk::Skip
         } else {
             Walk::Continue
         })
     })?;
-    Ok(ret)
+    Ok(())
 }
 
 /// Find the area of the current terminal focus node under the specified `root`.

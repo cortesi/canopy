@@ -28,22 +28,6 @@ impl<T> Walk<T> {
     }
 }
 
-/// Walker is implemented for the return values of tree operations.
-pub trait Walker {
-    /// Join this item with another instance, returning a new value. This is
-    /// done to accumulate return values returned from node operations.
-    fn join(&self, rhs: Self) -> Self;
-    /// If skip is true, we skip further node processing and return.
-    fn skip(&self) -> bool;
-}
-
-impl Walker for () {
-    fn join(&self, _: Self) -> Self {}
-    fn skip(&self) -> bool {
-        false
-    }
-}
-
 /// Nodes are the basic building-blocks of a Canopy UI. They are composed in a
 /// tree, with each node responsible for managing its own children.
 #[allow(unused_variables)]

@@ -1,5 +1,3 @@
-use crate::node::Walker;
-
 #[derive(Debug, PartialEq, Clone)]
 pub struct Handle {
     pub skip: bool,
@@ -56,32 +54,6 @@ impl Outcome {
         match self {
             Outcome::Handle(_) => true,
             Outcome::Ignore(_) => false,
-        }
-    }
-}
-
-impl Walker for Outcome {
-    fn skip(&self) -> bool {
-        self.has_skip()
-    }
-    fn join(&self, rhs: Self) -> Self {
-        match (self, rhs) {
-            (Outcome::Handle(h1), Outcome::Handle(h2)) => Outcome::Handle(Handle {
-                skip: h1.skip || h2.skip,
-            }),
-            (Outcome::Handle(h), Outcome::Ignore(ign)) => {
-                let mut ret = h.clone();
-                ret.skip = h.skip || ign.skip;
-                Outcome::Handle(ret)
-            }
-            (Outcome::Ignore(ign), Outcome::Handle(h)) => {
-                let mut ret = h.clone();
-                ret.skip = h.skip || ign.skip;
-                Outcome::Handle(h)
-            }
-            (Outcome::Ignore(ign), Outcome::Ignore(ign2)) => Outcome::Ignore(Ignore {
-                skip: ign.skip || ign2.skip,
-            }),
         }
     }
 }
