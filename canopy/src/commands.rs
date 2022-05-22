@@ -1,4 +1,4 @@
-use crate::{postorder, Node, NodeId, NodeName, SkipWalker, StatefulNode};
+use crate::{postorder, Node, NodeId, NodeName, StatefulNode, Walk};
 
 use crate::Result;
 
@@ -72,7 +72,7 @@ where
 {
     let mut seen = false;
     let uid = current_id.into();
-    postorder(root, &mut |x| -> Result<SkipWalker> {
+    postorder(root, &mut |x| -> Result<Walk<()>> {
         Ok(if seen {
             // if x.dispatch(cmd).is_ok() {
             //     SkipWalker::Stop
@@ -81,13 +81,13 @@ where
             // }
             // Path to root
             //ret = ret.join(f(x)?);
-            SkipWalker::new(false)
+            Walk::Continue
         } else if x.id() == uid {
             seen = true;
             // ret = ret.join(f(x)?);
-            SkipWalker::new(true)
+            Walk::Skip
         } else {
-            SkipWalker::new(false)
+            Walk::Continue
         })
     })?;
     Ok(())

@@ -3,7 +3,7 @@ use crate::{
     global::STATE,
     locate,
     node::{postorder, preorder, Node, Walk},
-    Outcome, Result, SkipWalker, Walker,
+    Outcome, Result, Walker,
 };
 
 /// Is the specified node on the focus path? A node is on the focus path if it
@@ -39,19 +39,19 @@ pub fn walk<R: Walker + Default>(
     let mut focus_seen = false;
     let mut ret = R::default();
     let focus_gen = STATE.with(|global_state| -> u64 { global_state.borrow().focus_gen });
-    postorder(root, &mut |x| -> Result<SkipWalker> {
+    postorder(root, &mut |x| -> Result<Walk<()>> {
         Ok(if focus_seen {
             ret = ret.join(f(x)?);
-            SkipWalker::new(false)
+            Walk::Continue
         } else if x.is_hidden() {
             // Hidden nodes don't hold focus
-            SkipWalker::new(false)
+            Walk::Continue
         } else if x.state().focus_gen == focus_gen {
             focus_seen = true;
             ret = ret.join(f(x)?);
-            SkipWalker::new(true)
+            Walk::Skip
         } else {
-            SkipWalker::new(false)
+            Walk::Continue
         })
     })?;
     Ok(ret)

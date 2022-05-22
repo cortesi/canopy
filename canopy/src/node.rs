@@ -174,14 +174,14 @@ pub fn place(n: &mut dyn Node, screen: Rect) -> Result<()> {
 /// in a path back to the root are visited.
 /// - Walk::Handle stops the traversal and the contained value is returned.
 /// - Any error return stops the traversal and the error is returned.
-pub fn postorder_n<T>(
+pub fn postorder<T>(
     e: &mut dyn Node,
     f: &mut dyn FnMut(&mut dyn Node) -> Result<Walk<T>>,
 ) -> Result<Walk<T>> {
     let mut stop = None;
     e.children(&mut |x| {
         if stop.is_none() {
-            let v = postorder_n(x, f)?;
+            let v = postorder(x, f)?;
             if !v.is_continue() {
                 stop = Some(v)
             }
@@ -234,42 +234,14 @@ pub fn preorder<T>(
     })
 }
 
-/// A postorder traversal of the nodes under e. Enabling skipping in the Walker
-/// results in all the nodes in a route straight back to the root being visited
-/// before exiting.
-pub fn postorder<R: Walker + Default>(
-    e: &mut dyn Node,
-    f: &mut dyn FnMut(&mut dyn Node) -> Result<R>,
-) -> Result<R> {
-    let mut v = R::default();
-    e.children(&mut |x| {
-        if !v.skip() {
-            v = v.join(postorder(x, f)?);
-        }
-        Ok(())
-    })?;
-    Ok(v.join(f(e)?))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
-        canopy::SkipWalker,
         geom::{Expanse, Rect},
         tutils::utils,
         Error,
     };
-
-    fn skipper(x: &mut dyn Node, skipname: String, v: &mut Vec<String>) -> Result<SkipWalker> {
-        let mut ret = SkipWalker::default();
-        let n = x.name();
-        if n == skipname {
-            ret.has_skip = true
-        }
-        v.push(n.to_string());
-        Ok(ret)
-    }
 
     /// Tiny helper to turn arrays into owned String vecs to ease comparison.
     fn vc(a: &[&str]) -> Vec<String> {
@@ -334,11 +306,11 @@ mod tests {
     }
 
     #[test]
-    fn tpostorder_n() -> Result<()> {
+    fn tpostorder() -> Result<()> {
         fn trigger(name: &str, func: Result<Walk<()>>) -> (Vec<String>, Result<Walk<()>>) {
             let mut v: Vec<String> = vec![];
             let mut root = utils::TRoot::new();
-            let res = postorder_n(&mut root, &mut |x| -> Result<Walk<()>> {
+            let res = postorder(&mut root, &mut |x| -> Result<Walk<()>> {
                 v.push(x.name().to_string());
                 if x.name() == name {
                     func.clone()
@@ -404,37 +376,6 @@ mod tests {
             )
         );
 
-        Ok(())
-    }
-
-    #[test]
-    fn tpostorder() -> Result<()> {
-        fn skipon(root: &mut utils::TRoot, skipname: String) -> Result<Vec<String>> {
-            let mut v: Vec<String> = vec![];
-            postorder(root, &mut |x| -> Result<SkipWalker> {
-                skipper(x, skipname.clone(), &mut v)
-            })?;
-            Ok(v)
-        }
-
-        let mut root = utils::TRoot::new();
-        assert_eq!(skipon(&mut root, "ba_la".into())?, ["ba_la", "ba", "r"]);
-        assert_eq!(
-            skipon(&mut root, "ba_lb".into())?,
-            ["ba_la", "ba_lb", "ba", "r"]
-        );
-        assert_eq!(
-            skipon(&mut root, "r".into())?,
-            ["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb", "r"]
-        );
-        assert_eq!(
-            skipon(&mut root, "bb".into())?,
-            ["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb", "r"]
-        );
-        assert_eq!(
-            skipon(&mut root, "ba".into())?,
-            ["ba_la", "ba_lb", "ba", "r"]
-        );
         Ok(())
     }
 

@@ -10,28 +10,6 @@ use crate::{
     NodeId, Outcome, Render, Result, ViewPort,
 };
 
-#[derive(Default)]
-pub(crate) struct SkipWalker {
-    pub has_skip: bool,
-}
-
-impl SkipWalker {
-    pub fn new(skip: bool) -> Self {
-        SkipWalker { has_skip: skip }
-    }
-}
-
-impl Walker for SkipWalker {
-    fn skip(&self) -> bool {
-        self.has_skip
-    }
-    fn join(&self, rhs: Self) -> Self {
-        SkipWalker {
-            has_skip: (self.has_skip | rhs.has_skip),
-        }
-    }
-}
-
 /// Pre-render sweep of the tree.
 pub(crate) fn pre_render<R: RenderBackend>(r: &mut R, e: &mut dyn Node) -> Result<()> {
     let mut seen = false;
@@ -258,21 +236,21 @@ pub fn locate<R: Walker + Default>(
     let mut seen = false;
     let mut ret = R::default();
     let p = p.into();
-    postorder(e, &mut |inner| -> Result<SkipWalker> {
+    postorder(e, &mut |inner| -> Result<Walk<()>> {
         Ok(if seen {
             ret = ret.join(f(inner)?);
-            SkipWalker::new(false)
+            Walk::Continue
         } else if !inner.is_hidden() {
             let a = inner.vp().screen_rect();
             if a.contains_point(p) {
                 seen = true;
                 ret = ret.join(f(inner)?);
-                SkipWalker::new(true)
+                Walk::Skip
             } else {
-                SkipWalker::new(false)
+                Walk::Continue
             }
         } else {
-            SkipWalker::new(true)
+            Walk::Skip
         })
     })?;
     Ok(ret)
@@ -280,9 +258,9 @@ pub fn locate<R: Walker + Default>(
 
 /// Mark a tree of nodes for render.
 pub fn taint_tree(e: &mut dyn Node) {
-    postorder(e, &mut |x| -> Result<()> {
+    postorder(e, &mut |x| -> Result<Walk<()>> {
         x.taint();
-        Ok(())
+        Ok(Walk::Continue)
     })
     // Unwrap is safe, because no operations in the closure can fail.
     .unwrap();
@@ -301,16 +279,16 @@ where
     let mut seen = false;
     let mut ret = R::default();
     let uid = id.into();
-    postorder(root, &mut |x| -> Result<SkipWalker> {
+    postorder(root, &mut |x| -> Result<Walk<()>> {
         Ok(if seen {
             ret = ret.join(f(x)?);
-            SkipWalker::new(false)
+            Walk::Continue
         } else if x.id() == uid {
             seen = true;
             ret = ret.join(f(x)?);
-            SkipWalker::new(true)
+            Walk::Skip
         } else {
-            SkipWalker::new(false)
+            Walk::Continue
         })
     })?;
     Ok(ret)
