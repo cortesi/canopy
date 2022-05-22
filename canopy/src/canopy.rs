@@ -133,36 +133,25 @@ pub fn render<R: RenderBackend>(
 
 /// Propagate a mouse event through the node under the event and all its
 /// ancestors. Events are handled only once, and then ignored.
-pub fn mouse(
-    ctrl: &mut dyn BackendControl,
-    root: &mut dyn Node,
-    m: mouse::Mouse,
-) -> Result<Outcome> {
-    let mut handled = false;
-    let mut halt = false;
+pub fn mouse(ctrl: &mut dyn BackendControl, root: &mut dyn Node, m: mouse::Mouse) -> Result<()> {
     locate(root, m.loc, &mut |x| {
-        Ok(if halt || handled {
-            Outcome::default()
+        let hdl = x.handle_mouse(
+            ctrl,
+            mouse::Mouse {
+                action: m.action,
+                button: m.button,
+                modifiers: m.modifiers,
+                loc: x.vp().screen_rect().rebase_point(m.loc)?,
+            },
+        )?;
+        Ok(if hdl.is_handled() {
+            x.taint();
+            Walk::Handle(())
         } else {
-            let hdl = x.handle_mouse(
-                ctrl,
-                mouse::Mouse {
-                    action: m.action,
-                    button: m.button,
-                    modifiers: m.modifiers,
-                    loc: x.vp().screen_rect().rebase_point(m.loc)?,
-                },
-            )?;
-            if hdl.has_skip() {
-                halt = true;
-            }
-            if hdl.is_handled() {
-                x.taint();
-                handled = true;
-            }
-            hdl.clone()
+            Walk::Continue
         })
-    })
+    })?;
+    Ok(())
 }
 
 /// Propagate a key event through the focus and all its ancestors.
@@ -210,50 +199,52 @@ fn poll(ids: Vec<u64>, root: &mut dyn Node) -> Result<Outcome> {
 }
 
 /// Propagate an event through the tree.
-pub(crate) fn event(
-    ctrl: &mut dyn BackendControl,
-    root: &mut dyn Node,
-    e: Event,
-) -> Result<Outcome> {
+pub(crate) fn event(ctrl: &mut dyn BackendControl, root: &mut dyn Node, e: Event) -> Result<()> {
     match e {
-        Event::Key(k) => key(ctrl, root, k),
-        Event::Mouse(m) => mouse(ctrl, root, m),
+        Event::Key(k) => {
+            key(ctrl, root, k)?;
+        }
+        Event::Mouse(m) => {
+            mouse(ctrl, root, m)?;
+        }
         Event::Resize(s) => {
             set_root_size(s, root)?;
-            Ok(Outcome::handle())
         }
-        Event::Poll(ids) => poll(ids, root),
-    }
+        Event::Poll(ids) => {
+            poll(ids, root)?;
+        }
+    };
+    Ok(())
 }
 
 /// Calls a closure on the leaf node under (x, y), then all its parents to the
 /// root.
-pub fn locate<R: Walker + Default>(
+pub fn locate<R>(
     e: &mut dyn Node,
     p: impl Into<Point>,
-    f: &mut dyn FnMut(&mut dyn Node) -> Result<R>,
-) -> Result<R> {
+    f: &mut dyn FnMut(&mut dyn Node) -> Result<Walk<R>>,
+) -> Result<Walk<R>> {
     let mut seen = false;
-    let mut ret = R::default();
     let p = p.into();
-    postorder(e, &mut |inner| -> Result<Walk<()>> {
+    postorder(e, &mut |inner| -> Result<Walk<R>> {
         Ok(if seen {
-            ret = ret.join(f(inner)?);
-            Walk::Continue
+            f(inner)?
         } else if !inner.is_hidden() {
             let a = inner.vp().screen_rect();
             if a.contains_point(p) {
                 seen = true;
-                ret = ret.join(f(inner)?);
-                Walk::Skip
+                match f(inner)? {
+                    Walk::Continue => Walk::Skip,
+                    Walk::Skip => Walk::Skip,
+                    Walk::Handle(t) => Walk::Handle(t),
+                }
             } else {
                 Walk::Continue
             }
         } else {
             Walk::Skip
         })
-    })?;
-    Ok(ret)
+    })
 }
 
 /// Mark a tree of nodes for render.
@@ -454,7 +445,7 @@ mod tests {
             root.next_outcome = Some(Outcome::handle());
             let evt = root.a.a.make_mouse_event()?;
             tr.render(&mut root)?;
-            assert!(mouse(&mut tr.control(), &mut root, evt)?.is_handled());
+            mouse(&mut tr.control(), &mut root, evt)?;
             let s = get_state();
             assert_eq!(
                 s.path,
@@ -467,7 +458,7 @@ mod tests {
             root.a.a.next_outcome = Some(Outcome::handle());
             let evt = root.a.a.make_mouse_event()?;
             tr.render(&mut root)?;
-            assert!(mouse(&mut tr.control(), &mut root, evt)?.is_handled());
+            mouse(&mut tr.control(), &mut root, evt)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@mouse->handle"]);
             Ok(())
@@ -477,7 +468,7 @@ mod tests {
             root.a.a.next_outcome = Some(Outcome::handle());
             let evt = root.a.a.make_mouse_event()?;
             tr.render(&mut root)?;
-            assert!(mouse(&mut tr.control(), &mut root, evt)?.is_handled());
+            mouse(&mut tr.control(), &mut root, evt)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@mouse->handle"]);
             Ok(())
@@ -487,7 +478,7 @@ mod tests {
             root.a.a.next_outcome = Some(Outcome::handle());
             let evt = root.a.a.make_mouse_event()?;
             tr.render(&mut root)?;
-            assert!(mouse(&mut tr.control(), &mut root, evt)?.is_handled());
+            mouse(&mut tr.control(), &mut root, evt)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@mouse->handle",]);
             Ok(())

@@ -79,12 +79,12 @@ pub fn shift_direction(root: &mut dyn Node, dir: Direction) -> Result<Outcome> {
             if !root.vp().screen_rect().contains_point(p) {
                 return Ok(true);
             }
-            locate(root, p, &mut |x| {
+            locate(root, p, &mut |x| -> Result<Walk<()>> {
                 if !seen && x.accept_focus() {
                     x.set_focus();
                     seen = true;
                 };
-                Ok(())
+                Ok(Walk::Continue)
             })?;
             Ok(seen)
         })?
