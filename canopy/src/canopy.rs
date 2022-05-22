@@ -4,7 +4,7 @@ use crate::{
     focus,
     geom::{Coverage, Expanse, Point},
     global::{self, STATE},
-    node::{postorder, preorder, Node, Walker},
+    node::{postorder, preorder, Node, Walk, Walker},
     render::{show_cursor, RenderBackend},
     style::StyleManager,
     NodeId, Outcome, Render, Result, ViewPort,
@@ -35,7 +35,7 @@ impl Walker for SkipWalker {
 /// Pre-render sweep of the tree.
 pub(crate) fn pre_render<R: RenderBackend>(r: &mut R, e: &mut dyn Node) -> Result<()> {
     let mut seen = false;
-    preorder(e, &mut |x| -> Result<()> {
+    preorder(e, &mut |x| -> Result<Walk<()>> {
         if x.is_focused() {
             seen = true;
         }
@@ -45,7 +45,7 @@ pub(crate) fn pre_render<R: RenderBackend>(r: &mut R, e: &mut dyn Node) -> Resul
             }
             x.state_mut().initialized = true;
         }
-        Ok(())
+        Ok(Walk::Continue)
     })?;
     if !seen {
         focus::shift_first(e)?;
@@ -220,13 +220,13 @@ pub fn set_root_size(size: Expanse, n: &mut dyn Node) -> Result<()> {
 /// Handle a poll event by traversing the complete node tree, and triggering
 /// poll on each ID in the poll set.
 fn poll(ids: Vec<u64>, root: &mut dyn Node) -> Result<Outcome> {
-    preorder(root, &mut |x| -> Result<SkipWalker> {
+    preorder(root, &mut |x| -> Result<Walk<()>> {
         if ids.contains(&x.id()) {
             if let Some(d) = x.poll() {
                 STATE.with(|global_state| global_state.borrow_mut().poller.schedule(x.id(), d));
             }
         };
-        Ok(SkipWalker::new(false))
+        Ok(Walk::Continue)
     })?;
     Ok(Outcome::handle())
 }

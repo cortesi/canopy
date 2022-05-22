@@ -2,7 +2,7 @@ use crate::{
     geom::{Direction, Rect},
     global::STATE,
     locate,
-    node::{postorder, preorder, Node},
+    node::{postorder, preorder, Node, Walk},
     Outcome, Result, SkipWalker, Walker,
 };
 
@@ -116,13 +116,13 @@ pub fn shift_down(root: &mut dyn Node) -> Result<Outcome> {
 /// the subtree at root.
 pub fn shift_first(root: &mut dyn Node) -> Result<Outcome> {
     let mut focus_set = false;
-    preorder(root, &mut |x| -> Result<SkipWalker> {
+    preorder(root, &mut |x| -> Result<Walk<()>> {
         Ok(if !focus_set && x.accept_focus() {
             x.set_focus();
             focus_set = true;
-            SkipWalker::new(true)
+            Walk::Skip
         } else {
-            SkipWalker::new(false)
+            Walk::Continue
         })
     })?;
     Ok(Outcome::handle())
@@ -143,7 +143,7 @@ pub fn is_focus_ancestor(n: &mut dyn Node) -> bool {
 pub fn shift_next(root: &mut dyn Node) -> Result<Outcome> {
     let mut focus_set = false;
     let mut focus_seen = false;
-    preorder(root, &mut |x| -> Result<()> {
+    preorder(root, &mut |x| -> Result<Walk<()>> {
         if !focus_set {
             if focus_seen {
                 if x.accept_focus() {
@@ -154,7 +154,7 @@ pub fn shift_next(root: &mut dyn Node) -> Result<Outcome> {
                 focus_seen = true;
             }
         }
-        Ok(())
+        Ok(Walk::Continue)
     })?;
     if !focus_set {
         shift_first(root)
@@ -169,7 +169,7 @@ pub fn shift_prev(root: &mut dyn Node) -> Result<Outcome> {
     let current = STATE.with(|global_state| -> u64 { global_state.borrow().focus_gen });
     let mut focus_seen = false;
     let mut first = true;
-    preorder(root, &mut |x| -> Result<()> {
+    preorder(root, &mut |x| -> Result<Walk<()>> {
         // We skip the first node in the traversal
         if first {
             first = false
@@ -182,7 +182,7 @@ pub fn shift_prev(root: &mut dyn Node) -> Result<Outcome> {
                 }
             }
         }
-        Ok(())
+        Ok(Walk::Continue)
     })?;
     Ok(Outcome::handle())
 }

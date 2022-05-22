@@ -210,7 +210,7 @@ pub fn postorder_n<T>(
 /// - Walk::Skip prunes all children of the current node from the traversal.
 /// - Walk::Handle stops the traversal and the contained value is returned.
 /// - Any error return stops the traversal and the error is returned.
-pub fn preorder_n<T>(
+pub fn preorder<T>(
     e: &mut dyn Node,
     f: &mut dyn FnMut(&mut dyn Node) -> Result<Walk<T>>,
 ) -> Result<Walk<T>> {
@@ -218,7 +218,7 @@ pub fn preorder_n<T>(
     if res.is_continue() {
         e.children(&mut |x| {
             if res.is_continue() {
-                match preorder_n(x, f)? {
+                match preorder(x, f)? {
                     Walk::Skip => panic!("impossible"),
                     Walk::Continue => {}
                     Walk::Handle(t) => res = Walk::Handle(t),
@@ -251,22 +251,6 @@ pub fn postorder<R: Walker + Default>(
     Ok(v.join(f(e)?))
 }
 
-// A preorder traversal of the nodes under e. Enabling skipping in the walker
-// prunes all children of the currently visited node out of the traversal.
-pub fn preorder<W: Walker>(
-    e: &mut dyn Node,
-    f: &mut dyn FnMut(&mut dyn Node) -> Result<W>,
-) -> Result<W> {
-    let mut v = f(e)?;
-    if !v.skip() {
-        e.children(&mut |x| {
-            v = v.join(preorder(x, f)?);
-            Ok(())
-        })?;
-    }
-    Ok(v)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -293,11 +277,11 @@ mod tests {
     }
 
     #[test]
-    fn tpreorder_n() -> Result<()> {
+    fn tpreorder() -> Result<()> {
         fn trigger(name: &str, func: Result<Walk<()>>) -> (Vec<String>, Result<Walk<()>>) {
             let mut v: Vec<String> = vec![];
             let mut root = utils::TRoot::new();
-            let res = preorder_n(&mut root, &mut |x| -> Result<Walk<()>> {
+            let res = preorder(&mut root, &mut |x| -> Result<Walk<()>> {
                 v.push(x.name().to_string());
                 if x.name() == name {
                     func.clone()
@@ -450,33 +434,6 @@ mod tests {
         assert_eq!(
             skipon(&mut root, "ba".into())?,
             ["ba_la", "ba_lb", "ba", "r"]
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn tpreorder() -> Result<()> {
-        fn skipon(root: &mut utils::TRoot, skipname: String) -> Result<Vec<String>> {
-            let mut v = vec![];
-            preorder(root, &mut |x| -> Result<SkipWalker> {
-                skipper(x, skipname.clone(), &mut v)
-            })?;
-            Ok(v)
-        }
-
-        let mut root = utils::TRoot::new();
-        assert_eq!(
-            skipon(&mut root, "never".into())?,
-            ["r", "ba", "ba_la", "ba_lb", "bb", "bb_la", "bb_lb"]
-        );
-        assert_eq!(skipon(&mut root, "r".into())?, ["r"]);
-        assert_eq!(
-            skipon(&mut root, "ba".into())?,
-            ["r", "ba", "bb", "bb_la", "bb_lb"]
-        );
-        assert_eq!(
-            skipon(&mut root, "bb".into())?,
-            ["r", "ba", "ba_la", "ba_lb", "bb"]
         );
         Ok(())
     }
