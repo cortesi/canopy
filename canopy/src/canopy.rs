@@ -7,7 +7,7 @@ use crate::{
     node::{postorder, preorder, Node, Walk, Walker},
     render::{show_cursor, RenderBackend},
     style::StyleManager,
-    NodeId, Outcome, Render, Result, ViewPort,
+    NodeId, Render, Result, ViewPort,
 };
 
 /// Pre-render sweep of the tree.
@@ -155,12 +155,12 @@ pub fn mouse(ctrl: &mut dyn BackendControl, root: &mut dyn Node, m: mouse::Mouse
 }
 
 /// Propagate a key event through the focus and all its ancestors.
-pub fn key(ctrl: &mut dyn BackendControl, root: &mut dyn Node, k: key::Key) -> Result<Outcome> {
+pub fn key(ctrl: &mut dyn BackendControl, root: &mut dyn Node, k: key::Key) -> Result<()> {
     let mut handled = false;
     let mut halt = false;
-    focus::walk(root, &mut move |x| -> Result<Outcome> {
+    focus::walk(root, &mut move |x| -> Result<()> {
         Ok(if halt || handled {
-            Outcome::default()
+            ()
         } else {
             let hdl = x.handle_key(ctrl, k)?;
             if hdl.has_skip() {
@@ -170,7 +170,7 @@ pub fn key(ctrl: &mut dyn BackendControl, root: &mut dyn Node, k: key::Key) -> R
                 x.taint();
                 handled = true;
             }
-            hdl.clone()
+            ()
         })
     })
 }
@@ -186,7 +186,7 @@ pub fn set_root_size(size: Expanse, n: &mut dyn Node) -> Result<()> {
 
 /// Handle a poll event by traversing the complete node tree, and triggering
 /// poll on each ID in the poll set.
-fn poll(ids: Vec<u64>, root: &mut dyn Node) -> Result<Outcome> {
+fn poll(ids: Vec<u64>, root: &mut dyn Node) -> Result<()> {
     preorder(root, &mut |x| -> Result<Walk<()>> {
         if ids.contains(&x.id()) {
             if let Some(d) = x.poll() {
@@ -195,7 +195,7 @@ fn poll(ids: Vec<u64>, root: &mut dyn Node) -> Result<Outcome> {
         };
         Ok(Walk::Continue)
     })?;
-    Ok(Outcome::handle())
+    Ok(())
 }
 
 /// Propagate an event through the tree.
@@ -306,7 +306,7 @@ mod tests {
     use crate::{
         backend::test::TestRender,
         geom::Rect,
-        outcome::{Handle, Ignore},
+        outcome::{Handle, Ignore, Outcome},
         tutils::utils::*,
         StatefulNode,
     };
@@ -324,7 +324,7 @@ mod tests {
         run_test(|tr, mut root| {
             root.set_focus();
             root.next_outcome = Some(Outcome::handle());
-            assert!(key(&mut tr.control(), &mut root, K_ANY)?.is_handled());
+            key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
             assert_eq!(s.path, vec!["r@key->handle"]);
             Ok(())
@@ -333,7 +333,7 @@ mod tests {
         run_test(|tr, mut root| {
             root.a.a.set_focus();
             root.a.a.next_outcome = Some(Outcome::handle());
-            assert!(key(&mut tr.control(), &mut root, K_ANY)?.is_handled());
+            key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@key->handle"]);
             Ok(())
@@ -342,7 +342,7 @@ mod tests {
         run_test(|tr, mut root| {
             root.a.a.set_focus();
             root.a.next_outcome = Some(Outcome::handle());
-            assert!(key(&mut tr.control(), &mut root, K_ANY)?.is_handled());
+            key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@key->ignore", "ba@key->handle"]);
             Ok(())
@@ -351,7 +351,7 @@ mod tests {
         run_test(|tr, mut root| {
             root.a.a.set_focus();
             root.next_outcome = Some(Outcome::handle());
-            assert!(key(&mut tr.control(), &mut root, K_ANY)?.is_handled());
+            key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
             assert_eq!(
                 s.path,
@@ -363,7 +363,7 @@ mod tests {
         run_test(|tr, mut root| {
             root.a.set_focus();
             root.a.next_outcome = Some(Outcome::handle());
-            assert!(key(&mut tr.control(), &mut root, K_ANY)?.is_handled());
+            key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba@key->handle"]);
             Ok(())
@@ -372,10 +372,20 @@ mod tests {
         run_test(|tr, mut root| {
             root.a.set_focus();
             root.next_outcome = Some(Outcome::handle());
-            assert!(key(&mut tr.control(), &mut root, K_ANY)?.is_handled());
+            key(&mut tr.control(), &mut root, K_ANY)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba@key->ignore", "r@key->handle"]);
-            assert_eq!(key(&mut tr.control(), &mut root, K_ANY)?, Outcome::ignore());
+            key(&mut tr.control(), &mut root, K_ANY)?;
+            let s = get_state();
+            assert_eq!(
+                s.path,
+                vec![
+                    "ba@key->ignore",
+                    "r@key->handle",
+                    "ba@key->ignore",
+                    "r@key->ignore"
+                ]
+            );
             Ok(())
         })?;
 
