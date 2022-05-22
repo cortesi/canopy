@@ -5,7 +5,7 @@ pub use color::Color;
 use std::collections::HashMap;
 
 /// A text attribute.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Attr {
     Bold,
     CrossedOut,
@@ -16,7 +16,7 @@ pub enum Attr {
 }
 
 /// A set of active text attributes.
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct AttrSet {
     pub bold: bool,
     pub crossedout: bool,
@@ -69,7 +69,7 @@ impl AttrSet {
 }
 
 /// A resolved style specification.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Style {
     pub fg: Color,
     pub bg: Color,
@@ -78,7 +78,7 @@ pub struct Style {
 
 /// A possibly partial style specification, which is stored in a StyleManager.
 /// Partial styles are completely resolved during the style resolution process.
-#[derive(Default, Debug, PartialEq, Clone)]
+#[derive(Default, Debug, PartialEq, Eq, Clone)]
 struct PartialStyle {
     pub fg: Option<Color>,
     pub bg: Option<Color>,
@@ -157,7 +157,7 @@ impl PartialStyle {
 /// So given a layer stack ["foo"], and an attempt to look up "frame/selected",
 /// we try the following lookups in order: ["foo/frame/selected",
 /// "/frame/selected", "foo", ""].
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct StyleManager {
     styles: HashMap<Vec<String>, PartialStyle>,
     // The current render level

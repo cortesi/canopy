@@ -56,11 +56,9 @@ impl PendingHeap {
     }
 
     fn _current_wait(&self, now: SystemTime) -> Option<Duration> {
-        if let Some(top) = self.nodes.peek() {
-            Some(top.time.duration_since(now).unwrap_or(Duration::new(0, 0)))
-        } else {
-            None
-        }
+        self.nodes
+            .peek()
+            .map(|top| top.time.duration_since(now).unwrap_or(Duration::new(0, 0)))
     }
 
     /// Retrieve the current shortest wait time. We return None if no nodes are

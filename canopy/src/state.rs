@@ -76,7 +76,7 @@ impl TryFrom<&str> for NodeName {
 /// An opaque structure that Canopy uses to track node state. Each Node has to
 /// keep a NodeState structure, and offer it up through the `Node::state()`
 /// method on request.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct NodeState {
     // Unique node ID
     id: u64,

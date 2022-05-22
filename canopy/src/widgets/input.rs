@@ -10,7 +10,7 @@ use crate::{
 /// A text buffer that exposes edit functionality for a single line. It also
 /// keeps track of a display window that slides within the line, responding
 /// naturally to cursor movements.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TextBuf {
     pub value: String,
 
@@ -120,7 +120,7 @@ impl InputLine {
     }
 }
 
-impl<'a> Node for InputLine {
+impl Node for InputLine {
     fn accept_focus(&mut self) -> bool {
         true
     }

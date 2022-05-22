@@ -1,4 +1,3 @@
-use regex;
 use std::collections::HashMap;
 
 use comfy_table::{ContentArrangement, Table};
@@ -26,12 +25,12 @@ pub struct PathMatcher {
 
 impl PathMatcher {
     pub fn new(path: &str) -> Result<Self> {
-        let parts = path.split("/");
+        let parts = path.split('/');
         let mut pattern = parts
             .filter_map(|x| {
                 if x == "*" {
                     Some(String::from(r"[a-z0-9_/]*"))
-                } else if x != "" {
+                } else if !x.is_empty() {
                     Some(format!("{}/", regex::escape(x)))
                 } else {
                     None
@@ -39,12 +38,12 @@ impl PathMatcher {
             })
             .collect::<Vec<_>>()
             .join("");
-        if path.starts_with("/") {
+        if path.starts_with('/') {
             pattern = "^/".to_string() + &pattern;
         }
         pattern = pattern.trim_end_matches('/').to_string();
-        if path.ends_with("/") {
-            pattern = pattern + "$";
+        if path.ends_with('/') {
+            pattern += "$";
         }
         let expr = regex::Regex::new(&pattern).map_err(|e| error::Error::Invalid(e.to_string()))?;
         Ok(PathMatcher { expr })
@@ -111,6 +110,12 @@ pub struct KeyMap {
     current_mode: String,
 }
 
+impl Default for KeyMap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl KeyMap {
     pub fn new() -> Self {
         let default = KeyMode::new();
@@ -124,7 +129,7 @@ impl KeyMap {
     }
 
     pub fn set_mode(&mut self, mode: &str) -> Result<()> {
-        if mode != "" && !self.modes.contains_key(mode) {
+        if !mode.is_empty() && !self.modes.contains_key(mode) {
             Err(error::Error::Invalid(format!("Unknown mode: {}", mode)))
         } else {
             self.current_mode = mode.to_string();
@@ -168,7 +173,8 @@ impl KeyMap {
     /// the terminal is not being controlled by Canopy when you call this.
     pub fn pretty_print_commands(&self) {
         let mut cmds: Vec<&CommandDefinition> = self.commands.values().collect();
-        cmds.sort_by(|a, b| a.fullname().cmp(&b.fullname()));
+
+        cmds.sort_by_key(|a| a.fullname());
 
         let mut table = Table::new();
         table.set_content_arrangement(ContentArrangement::Dynamic);

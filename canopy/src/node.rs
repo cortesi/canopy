@@ -7,7 +7,7 @@ use crate::{
     BackendControl, CommandNode, Render, Result, StatefulNode, ViewPort,
 };
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Outcome {
     Handle,
     Ignore,

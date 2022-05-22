@@ -83,10 +83,9 @@ fn parse_command_method(method: &syn::ImplItemMethod) -> Option<Command> {
         if a.path.is_ident("doc") {
             for t in a.tokens.clone() {
                 if let proc_macro2::TokenTree::Literal(l) = t {
-                    match StringLit::try_from(l) {
-                        Ok(lit) => docs.push(lit.value().to_string()),
-                        Err(_) => {}
-                    };
+                    if let Ok(lit) = StringLit::try_from(l) {
+                        docs.push(lit.value().to_string())
+                    }
                 }
             }
         }
@@ -186,5 +185,5 @@ pub fn command(
     _attr: proc_macro::TokenStream,
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
-    proc_macro::TokenStream::from(input)
+    input
 }

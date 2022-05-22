@@ -16,14 +16,14 @@ impl Point {
     /// Shift the point by an offset, avoiding under- or overflow.
     pub fn scroll(&self, x: i16, y: i16) -> Self {
         let nx = if x < 0 {
-            self.x.saturating_sub(x.abs() as u16)
+            self.x.saturating_sub(x.unsigned_abs())
         } else {
-            self.x.saturating_add(x.abs() as u16)
+            self.x.saturating_add(x.unsigned_abs())
         };
         let ny = if y < 0 {
-            self.y.saturating_sub(y.abs() as u16)
+            self.y.saturating_sub(y.unsigned_abs())
         } else {
-            self.y.saturating_add(y.abs() as u16)
+            self.y.saturating_add(y.unsigned_abs())
         };
         (nx, ny).into()
     }
@@ -37,14 +37,14 @@ impl Point {
     /// Like scroll, but constrained within a rectangle.
     pub fn scroll_within(&self, x: i16, y: i16, rect: Rect) -> Self {
         let nx = if x < 0 {
-            self.x.saturating_sub(x.abs() as u16)
+            self.x.saturating_sub(x.unsigned_abs())
         } else {
-            self.x.saturating_add(x.abs() as u16)
+            self.x.saturating_add(x.unsigned_abs())
         };
         let ny = if y < 0 {
-            self.y.saturating_sub(y.abs() as u16)
+            self.y.saturating_sub(y.unsigned_abs())
         } else {
-            self.y.saturating_add(y.abs() as u16)
+            self.y.saturating_add(y.unsigned_abs())
         };
         Point { x: nx, y: ny }.clamp(rect)
     }

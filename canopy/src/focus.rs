@@ -172,10 +172,8 @@ pub fn shift_prev(root: &mut dyn Node) -> Result<Outcome> {
         } else if !focus_seen {
             if x.state().focus_gen == current {
                 focus_seen = true;
-            } else {
-                if x.accept_focus() {
-                    x.set_focus();
-                }
+            } else if x.accept_focus() {
+                x.set_focus();
             }
         }
         Ok(Walk::Continue)
