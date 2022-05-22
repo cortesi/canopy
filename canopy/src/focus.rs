@@ -9,62 +9,62 @@ use crate::{
 /// Is the specified node on the focus path? A node is on the focus path if it
 /// has focus, or if it's the ancestor of a node with focus.
 pub fn is_on_path(n: &mut dyn Node) -> bool {
-    let mut onpath = false;
-    walk(n, &mut |_| -> Result<()> {
-        onpath = true;
-        Ok(())
-    })
-    // We're safe to unwrap, because our closure can't return an error.
-    .unwrap();
-    onpath
+    walk(n, &mut |_| -> Result<Walk<bool>> { Ok(Walk::Handle(true)) })
+        // We're safe to unwrap, because our closure can't return an error.
+        .unwrap()
+        .unwrap_or(false)
 }
 
 /// Return the focus path for the subtree under `root`.
 pub fn path(root: &mut dyn Node) -> String {
     let mut path = Vec::new();
-    walk(root, &mut |n| -> Result<()> {
+    walk(root, &mut |n| -> Result<Walk<()>> {
         path.insert(0, n.name().to_string());
-        Ok(())
+        Ok(Walk::Continue)
     })
+    // We're safe to unwrap because our closure can't return an error.
     .unwrap();
     "/".to_string() + &path.join("/")
 }
 
 /// Call a closure on the currently focused node and all its ancestors to the
-/// root.
-pub fn walk(root: &mut dyn Node, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+/// root. If the closure returns Walk::Handle, traversal stops. Handle::Skip is
+/// ignored.
+pub fn walk<R>(
+    root: &mut dyn Node,
+    f: &mut dyn FnMut(&mut dyn Node) -> Result<Walk<R>>,
+) -> Result<Option<R>> {
     let mut focus_seen = false;
     let focus_gen = STATE.with(|global_state| -> u64 { global_state.borrow().focus_gen });
-    postorder(root, &mut |x| -> Result<Walk<()>> {
+    Ok(postorder(root, &mut |x| -> Result<Walk<R>> {
         Ok(if focus_seen {
-            f(x)?;
-            Walk::Continue
+            f(x)?
         } else if x.is_hidden() {
             // Hidden nodes don't hold focus
             Walk::Continue
         } else if x.state().focus_gen == focus_gen {
             focus_seen = true;
-            f(x)?;
-            Walk::Skip
+            // Force skip on continue so we trigger skipping in the postorder
+            // traversal.
+            match f(x)? {
+                Walk::Skip => Walk::Skip,
+                Walk::Continue => Walk::Skip,
+                Walk::Handle(t) => Walk::Handle(t),
+            }
         } else {
             Walk::Continue
         })
-    })?;
-    Ok(())
+    })?
+    .value())
 }
 
 /// Find the area of the current terminal focus node under the specified `root`.
 pub fn get_area(root: &mut dyn Node) -> Option<Rect> {
-    let mut ret = None;
-    walk(root, &mut |x| -> Result<()> {
-        if ret == None {
-            ret = Some(x.vp().screen_rect());
-        }
-        Ok(())
+    walk(root, &mut |x| -> Result<Walk<Rect>> {
+        Ok(Walk::Handle(x.vp().screen_rect()))
     })
     // We're safe to unwrap, because our closure can't return an error.
-    .unwrap();
-    ret
+    .unwrap()
 }
 
 /// Move focus in a specified direction within the subtree at root.
@@ -188,9 +188,9 @@ pub fn shift_prev(root: &mut dyn Node) -> Result<Outcome> {
 /// depth is 1.
 pub fn focus_depth(n: &mut dyn Node) -> usize {
     let mut total = 0;
-    walk(n, &mut |_| -> Result<()> {
+    walk(n, &mut |_| -> Result<Walk<()>> {
         total += 1;
-        Ok(())
+        Ok(Walk::Continue)
     })
     // We're safe to unwrap, because our closure can't return an error.
     .unwrap();

@@ -16,8 +16,8 @@ pub enum Outcome {
 /// Walk is the return value from traversal closures.
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Walk<T> {
-    /// Skip this node and continue walking. The exact meaning of Skip depends
-    /// on the traversal function being used.
+    /// Skip this node and continue walking. The meaning of Skip depends on the
+    /// traversal function being used.
     Skip,
     /// Handle an event with a possible return value and stop walking.
     Handle(T),
@@ -26,6 +26,12 @@ pub enum Walk<T> {
 }
 
 impl<T> Walk<T> {
+    pub fn value(self) -> Option<T> {
+        match self {
+            Walk::Handle(v) => Some(v),
+            _ => None,
+        }
+    }
     fn is_continue(&self) -> bool {
         match self {
             Walk::Skip | Walk::Handle(_) => false,

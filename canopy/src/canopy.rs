@@ -31,9 +31,9 @@ pub(crate) fn pre_render<R: RenderBackend>(r: &mut R, e: &mut dyn Node) -> Resul
 
     if global::focus_changed() {
         let fg = STATE.with(|global_state| global_state.borrow().focus_gen);
-        focus::walk(e, &mut |n| -> Result<()> {
+        focus::walk(e, &mut |n| -> Result<Walk<()>> {
             n.state_mut().focus_path_gen = fg;
-            Ok(())
+            Ok(Walk::Continue)
         })?;
     }
 
@@ -49,15 +49,13 @@ pub(crate) fn post_render<R: RenderBackend>(
     styl: &mut StyleManager,
     e: &mut dyn Node,
 ) -> Result<()> {
-    let mut seen = false;
-    focus::walk(e, &mut |n| -> Result<()> {
-        if !seen {
-            if let Some(c) = n.cursor() {
-                show_cursor(r, styl, n.vp(), "cursor", c)?;
-                seen = true;
-            }
-        }
-        Ok(())
+    focus::walk(e, &mut |n| -> Result<Walk<()>> {
+        Ok(if let Some(c) = n.cursor() {
+            show_cursor(r, styl, n.vp(), "cursor", c)?;
+            Walk::Handle(())
+        } else {
+            Walk::Continue
+        })
     })?;
     Ok(())
 }
@@ -157,21 +155,16 @@ pub fn mouse(ctrl: &mut dyn BackendControl, root: &mut dyn Node, m: mouse::Mouse
 
 /// Propagate a key event through the focus and all its ancestors.
 pub fn key(ctrl: &mut dyn BackendControl, root: &mut dyn Node, k: key::Key) -> Result<()> {
-    let mut handled = false;
-    focus::walk(root, &mut move |x| -> Result<()> {
-        Ok(if handled {
-            ()
-        } else {
-            match x.handle_key(ctrl, k)? {
-                Outcome::Handle => {
-                    x.taint();
-                    handled = true;
-                }
-                Outcome::Ignore => (),
+    focus::walk(root, &mut move |x| -> Result<Walk<()>> {
+        Ok(match x.handle_key(ctrl, k)? {
+            Outcome::Handle => {
+                x.taint();
+                Walk::Handle(())
             }
-            ()
+            Outcome::Ignore => Walk::Continue,
         })
-    })
+    })?;
+    Ok(())
 }
 
 /// Set the size on the root node, and taint the tree.
