@@ -47,6 +47,7 @@ thread_local! {
     static STATE: RefCell<Option<GlobalState>> = RefCell::new(Some(GlobalState::new()));
 }
 
+/// Operate on the global state. This function will panic if state is uninitialized.
 pub(crate) fn with<F, R>(f: F) -> R
 where
     F: FnOnce(&mut GlobalState) -> R,

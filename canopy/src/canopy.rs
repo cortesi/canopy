@@ -153,7 +153,11 @@ pub fn mouse(ctrl: &mut dyn BackendControl, root: &mut dyn Node, m: mouse::Mouse
 }
 
 /// Propagate a key event through the focus and all its ancestors.
-pub fn key(ctrl: &mut dyn BackendControl, root: &mut dyn Node, k: key::Key) -> Result<()> {
+pub fn key<T>(ctrl: &mut dyn BackendControl, root: &mut dyn Node, tk: T) -> Result<()>
+where
+    T: Into<key::Key>,
+{
+    let k = tk.into();
     focus::walk(root, &mut move |x| -> Result<Walk<()>> {
         Ok(match x.handle_key(ctrl, k)? {
             Outcome::Handle => {
@@ -308,7 +312,7 @@ mod tests {
         run_test(|tr, mut root| {
             root.set_focus();
             root.next_outcome = Some(Outcome::Handle);
-            key(&mut tr.control(), &mut root, K_ANY)?;
+            key(&mut tr.control(), &mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["r@key->handle"]);
             Ok(())
@@ -317,7 +321,7 @@ mod tests {
         run_test(|tr, mut root| {
             root.a.a.set_focus();
             root.a.a.next_outcome = Some(Outcome::Handle);
-            key(&mut tr.control(), &mut root, K_ANY)?;
+            key(&mut tr.control(), &mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@key->handle"]);
             Ok(())
@@ -326,7 +330,7 @@ mod tests {
         run_test(|tr, mut root| {
             root.a.a.set_focus();
             root.a.next_outcome = Some(Outcome::Handle);
-            key(&mut tr.control(), &mut root, K_ANY)?;
+            key(&mut tr.control(), &mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@key->ignore", "ba@key->handle"]);
             Ok(())
@@ -335,7 +339,7 @@ mod tests {
         run_test(|tr, mut root| {
             root.a.a.set_focus();
             root.next_outcome = Some(Outcome::Handle);
-            key(&mut tr.control(), &mut root, K_ANY)?;
+            key(&mut tr.control(), &mut root, 'a')?;
             let s = get_state();
             assert_eq!(
                 s.path,
@@ -347,7 +351,7 @@ mod tests {
         run_test(|tr, mut root| {
             root.a.set_focus();
             root.a.next_outcome = Some(Outcome::Handle);
-            key(&mut tr.control(), &mut root, K_ANY)?;
+            key(&mut tr.control(), &mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba@key->handle"]);
             Ok(())
@@ -356,10 +360,10 @@ mod tests {
         run_test(|tr, mut root| {
             root.a.set_focus();
             root.next_outcome = Some(Outcome::Handle);
-            key(&mut tr.control(), &mut root, K_ANY)?;
+            key(&mut tr.control(), &mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba@key->ignore", "r@key->handle"]);
-            key(&mut tr.control(), &mut root, K_ANY)?;
+            key(&mut tr.control(), &mut root, 'a')?;
             let s = get_state();
             assert_eq!(
                 s.path,
@@ -377,7 +381,7 @@ mod tests {
             root.a.b.set_focus();
             root.a.next_outcome = Some(Outcome::Ignore);
             root.next_outcome = Some(Outcome::Handle);
-            key(&mut tr.control(), &mut root, K_ANY)?;
+            key(&mut tr.control(), &mut root, 'a')?;
             let s = get_state();
             assert_eq!(
                 s.path,
@@ -389,7 +393,7 @@ mod tests {
         run_test(|tr, mut root| {
             root.a.a.set_focus();
             root.a.a.next_outcome = Some(Outcome::Handle);
-            key(&mut tr.control(), &mut root, K_ANY)?;
+            key(&mut tr.control(), &mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@key->handle",]);
             Ok(())
@@ -398,7 +402,7 @@ mod tests {
         run_test(|tr, mut root| {
             root.a.b.set_focus();
             root.a.next_outcome = Some(Outcome::Handle);
-            key(&mut tr.control(), &mut root, K_ANY)?;
+            key(&mut tr.control(), &mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_lb@key->ignore", "ba@key->handle",]);
             Ok(())
@@ -407,7 +411,7 @@ mod tests {
         run_test(|tr, mut root| {
             root.a.b.set_focus();
             root.a.b.next_outcome = Some(Outcome::Handle);
-            key(&mut tr.control(), &mut root, K_ANY)?;
+            key(&mut tr.control(), &mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_lb@key->handle",]);
             Ok(())
@@ -417,7 +421,7 @@ mod tests {
             root.a.b.set_focus();
             root.a.b.next_outcome = Some(Outcome::Handle);
             root.a.next_outcome = Some(Outcome::Handle);
-            key(&mut tr.control(), &mut root, K_ANY)?;
+            key(&mut tr.control(), &mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_lb@key->handle",]);
             Ok(())

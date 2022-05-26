@@ -10,8 +10,6 @@ pub mod utils {
         *,
     };
 
-    pub const K_ANY: key::Key = key::Key(None, key::KeyCode::Char('a'));
-
     #[derive(Debug, PartialEq, Clone)]
     pub struct State {
         pub path: Vec<String>,
