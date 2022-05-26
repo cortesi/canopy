@@ -189,8 +189,8 @@ pub trait StatefulNode {
     /// Focus this node.
     fn set_focus(&mut self) {
         global::with(|global_state| {
-            global_state.borrow_mut().focus_gen += 1;
-            self.state_mut().focus_gen = global_state.borrow().focus_gen;
+            global_state.focus_gen += 1;
+            self.state_mut().focus_gen = global_state.focus_gen;
         });
     }
 
@@ -198,7 +198,7 @@ pub trait StatefulNode {
     fn is_tainted(&self) -> bool {
         global::with(|global_state| {
             let s = self.state();
-            let rg = global_state.borrow().render_gen;
+            let rg = global_state.render_gen;
             // Tainting if render_gen is 0 lets us initialize a nodestate
             // without knowing about the app state
             rg == s.render_gen || s.render_gen == 0
@@ -209,15 +209,14 @@ pub trait StatefulNode {
     fn is_focused(&self) -> bool {
         global::with(|global_state| -> bool {
             let s = self.state();
-            global_state.borrow_mut().focus_gen == s.focus_gen
+            global_state.focus_gen == s.focus_gen
         })
     }
 
     /// Mark a this node for render.
     fn taint(&mut self) {
         let r = self.state_mut();
-        r.render_gen = global::with(|global_state| -> u64 {
-            let mut s = global_state.borrow_mut();
+        r.render_gen = global::with(|s| -> u64 {
             s.taint = true;
             s.render_gen
         });
@@ -233,8 +232,7 @@ pub trait StatefulNode {
     /// sweep?
     fn focus_changed(&self) -> bool {
         if global::focus_changed() {
-            global::with(|global_state| -> bool {
-                let gs = global_state.borrow();
+            global::with(|gs| -> bool {
                 let s = self.state();
                 // Our focus has changed if we're the currently focused node, or
                 // if we were previously focused during the last sweep.
@@ -249,8 +247,7 @@ pub trait StatefulNode {
     /// sweep?
     fn focus_path_changed(&self) -> bool {
         if global::focus_changed() {
-            global::with(|global_state| -> bool {
-                let gs = global_state.borrow();
+            global::with(|gs| -> bool {
                 let s = self.state();
                 // Our focus has changed if we're the currently on the focus path, or
                 // if we were previously focused during the last sweep.

@@ -44,14 +44,19 @@ impl GlobalState {
 }
 
 thread_local! {
-    static STATE: RefCell<GlobalState> = RefCell::new(GlobalState::new());
+    static STATE: RefCell<Option<GlobalState>> = RefCell::new(Some(GlobalState::new()));
 }
 
 pub(crate) fn with<F, R>(f: F) -> R
 where
-    F: FnOnce(&RefCell<GlobalState>) -> R,
+    F: FnOnce(&mut GlobalState) -> R,
 {
-    STATE.with(f)
+    STATE.with(|x| {
+        let mut s = x.borrow_mut().take().unwrap();
+        let v = f(&mut s);
+        x.borrow_mut().replace(s);
+        v
+    })
 }
 
 /// Operate on the global keymap
@@ -60,20 +65,17 @@ where
     F: FnOnce(&mut KeyMap),
 {
     with(|global_state| {
-        f(&mut global_state.borrow_mut().keymap);
+        f(&mut global_state.keymap);
     });
 }
 
 /// Has the focus changed since the last render sweep?
 pub(crate) fn focus_changed() -> bool {
-    with(|global_state| {
-        let gs = global_state.borrow();
-        gs.focus_gen != gs.last_render_focus_gen
-    })
+    with(|s| s.focus_gen != s.last_render_focus_gen)
 }
 
 pub(crate) fn start_poller(tx: mpsc::Sender<Event>) {
-    with(|global_state| {
-        global_state.borrow_mut().event_tx = tx;
+    with(|s| {
+        s.event_tx = tx;
     });
 }

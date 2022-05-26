@@ -345,18 +345,15 @@ where
         }
     }));
 
-    let (rx, tx) = global::with(
-        |global_state| -> (mpsc::Receiver<Event>, mpsc::Sender<Event>) {
-            let mut s = global_state.borrow_mut();
-            let rx = if let Some(x) = s.event_rx.take() {
-                x
-            } else {
-                panic!("core event loop already initialized")
-            };
-            let tx = s.event_tx.clone();
-            (rx, tx)
-        },
-    );
+    let (rx, tx) = global::with(|s| -> (mpsc::Receiver<Event>, mpsc::Sender<Event>) {
+        let rx = if let Some(x) = s.event_rx.take() {
+            x
+        } else {
+            panic!("core event loop already initialized")
+        };
+        let tx = s.event_tx.clone();
+        (rx, tx)
+    });
 
     let events = EventSource::new(rx);
     event_emitter(tx.clone());
@@ -374,8 +371,7 @@ where
                 translate_result(be.flush())?;
             }
             canopy::event(&mut ctrl, root, events.next()?)?;
-            tainted = global::with(|global_state| -> bool {
-                let mut s = global_state.borrow_mut();
+            tainted = global::with(|s| -> bool {
                 tainted = s.taint;
                 s.taint = false;
                 tainted

@@ -34,7 +34,7 @@ pub fn walk<R>(
     f: &mut dyn FnMut(&mut dyn Node) -> Result<Walk<R>>,
 ) -> Result<Option<R>> {
     let mut focus_seen = false;
-    let focus_gen = global::with(|global_state| -> u64 { global_state.borrow().focus_gen });
+    let focus_gen = global::with(|global_state| -> u64 { global_state.focus_gen });
     Ok(postorder(root, &mut |x| -> Result<Walk<R>> {
         Ok(if focus_seen {
             f(x)?
@@ -161,7 +161,7 @@ pub fn shift_next(root: &mut dyn Node) -> Result<Outcome> {
 /// Focus the previous node in the pre-order traversal of `root`. If no node
 /// with focus is found, we focus the first node we can find instead.
 pub fn shift_prev(root: &mut dyn Node) -> Result<Outcome> {
-    let current = global::with(|global_state| -> u64 { global_state.borrow().focus_gen });
+    let current = global::with(|global_state| -> u64 { global_state.focus_gen });
     let mut focus_seen = false;
     let mut first = true;
     preorder(root, &mut |x| -> Result<Walk<()>> {
