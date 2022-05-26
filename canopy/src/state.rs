@@ -188,7 +188,7 @@ pub trait StatefulNode {
 
     /// Focus this node.
     fn set_focus(&mut self) {
-        global::STATE.with(|global_state| {
+        global::with(|global_state| {
             global_state.borrow_mut().focus_gen += 1;
             self.state_mut().focus_gen = global_state.borrow().focus_gen;
         });
@@ -196,7 +196,7 @@ pub trait StatefulNode {
 
     /// Is this node render tainted?
     fn is_tainted(&self) -> bool {
-        global::STATE.with(|global_state| {
+        global::with(|global_state| {
             let s = self.state();
             let rg = global_state.borrow().render_gen;
             // Tainting if render_gen is 0 lets us initialize a nodestate
@@ -207,7 +207,7 @@ pub trait StatefulNode {
 
     /// Does the node have terminal focus?
     fn is_focused(&self) -> bool {
-        global::STATE.with(|global_state| -> bool {
+        global::with(|global_state| -> bool {
             let s = self.state();
             global_state.borrow_mut().focus_gen == s.focus_gen
         })
@@ -216,7 +216,7 @@ pub trait StatefulNode {
     /// Mark a this node for render.
     fn taint(&mut self) {
         let r = self.state_mut();
-        r.render_gen = global::STATE.with(|global_state| -> u64 {
+        r.render_gen = global::with(|global_state| -> u64 {
             let mut s = global_state.borrow_mut();
             s.taint = true;
             s.render_gen
@@ -233,7 +233,7 @@ pub trait StatefulNode {
     /// sweep?
     fn focus_changed(&self) -> bool {
         if global::focus_changed() {
-            global::STATE.with(|global_state| -> bool {
+            global::with(|global_state| -> bool {
                 let gs = global_state.borrow();
                 let s = self.state();
                 // Our focus has changed if we're the currently focused node, or
@@ -249,7 +249,7 @@ pub trait StatefulNode {
     /// sweep?
     fn focus_path_changed(&self) -> bool {
         if global::focus_changed() {
-            global::STATE.with(|global_state| -> bool {
+            global::with(|global_state| -> bool {
                 let gs = global_state.borrow();
                 let s = self.state();
                 // Our focus has changed if we're the currently on the focus path, or

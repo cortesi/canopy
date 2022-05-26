@@ -345,7 +345,7 @@ where
         }
     }));
 
-    let (rx, tx) = global::STATE.with(
+    let (rx, tx) = global::with(
         |global_state| -> (mpsc::Receiver<Event>, mpsc::Sender<Event>) {
             let mut s = global_state.borrow_mut();
             let rx = if let Some(x) = s.event_rx.take() {
@@ -374,7 +374,7 @@ where
                 translate_result(be.flush())?;
             }
             canopy::event(&mut ctrl, root, events.next()?)?;
-            tainted = global::STATE.with(|global_state| -> bool {
+            tainted = global::with(|global_state| -> bool {
                 let mut s = global_state.borrow_mut();
                 tainted = s.taint;
                 s.taint = false;

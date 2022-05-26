@@ -4,12 +4,10 @@ pub mod utils {
 
     use crate::{self as canopy, BackendControl};
     use crate::{
-        derive_commands,
         event::{key, mouse},
-        fit,
         geom::Expanse,
         widgets::list::ListItem,
-        Node, NodeName, NodeState, Outcome, Render, Result, StatefulNode,
+        *,
     };
 
     pub const K_ANY: key::Key = key::Key(None, key::KeyCode::Char('a'));
@@ -33,6 +31,9 @@ pub mod utils {
             };
             self.path.push(format!("{}@{}->{}", n, evt, outcome))
         }
+        pub fn add_command(&mut self, n: &NodeName, cmd: &str) {
+            self.path.push(format!("{}.{}()", n, cmd))
+        }
     }
 
     thread_local! {
@@ -46,7 +47,11 @@ pub mod utils {
     }
 
     pub fn get_state() -> State {
-        TSTATE.with(|s| -> State { s.borrow().clone() })
+        TSTATE.with(|s| s.borrow().clone())
+    }
+
+    pub fn state_path() -> Vec<String> {
+        TSTATE.with(|s| s.borrow().path.clone())
     }
 
     #[derive(Debug, PartialEq, StatefulNode)]
@@ -74,7 +79,6 @@ pub mod utils {
         pub next_outcome: Option<Outcome>,
     }
 
-    #[derive_commands]
     impl Node for TLeaf {
         fn accept_focus(&mut self) -> bool {
             true
@@ -158,6 +162,7 @@ pub mod utils {
         }
     }
 
+    #[derive_commands]
     impl TLeaf {
         pub fn new(name: &str) -> Self {
             let mut n = TLeaf {
@@ -166,6 +171,15 @@ pub mod utils {
             };
             n.set_name(name.try_into().unwrap());
             n
+        }
+
+        #[command]
+        /// A command that appears only on leaf nodes.
+        pub fn c_leaf(&self) -> Result<()> {
+            TSTATE.with(|s| {
+                s.borrow_mut().add_command(&self.name(), "c_leaf");
+            });
+            Ok(())
         }
 
         pub fn make_mouse_event(&self) -> Result<mouse::Mouse> {

@@ -3,7 +3,7 @@ use crate::{
     event::{key, mouse, Event},
     focus,
     geom::{Coverage, Expanse, Point},
-    global::{self, STATE},
+    global,
     node::{postorder, preorder, Node, Walk},
     render::{show_cursor, RenderBackend},
     style::StyleManager,
@@ -19,7 +19,7 @@ pub(crate) fn pre_render<R: RenderBackend>(r: &mut R, e: &mut dyn Node) -> Resul
         }
         if !x.is_initialized() {
             if let Some(d) = x.poll() {
-                STATE.with(|global_state| global_state.borrow_mut().poller.schedule(x.id(), d));
+                global::with(|global_state| global_state.borrow_mut().poller.schedule(x.id(), d));
             }
             x.state_mut().initialized = true;
         }
@@ -30,7 +30,7 @@ pub(crate) fn pre_render<R: RenderBackend>(r: &mut R, e: &mut dyn Node) -> Resul
     }
 
     if global::focus_changed() {
-        let fg = STATE.with(|global_state| global_state.borrow().focus_gen);
+        let fg = global::with(|global_state| global_state.borrow().focus_gen);
         focus::walk(e, &mut |n| -> Result<Walk<()>> {
             n.state_mut().focus_path_gen = fg;
             Ok(Walk::Continue)
@@ -71,7 +71,7 @@ fn render_traversal<R: RenderBackend>(
             if e.is_focused() {
                 let s = &mut e.state_mut();
                 s.rendered_focus_gen =
-                    STATE.with(|global_state| -> u64 { global_state.borrow().focus_gen });
+                    global::with(|global_state| -> u64 { global_state.borrow().focus_gen });
             }
 
             let mut c = Coverage::new(e.vp().screen_rect().expanse());
@@ -102,7 +102,7 @@ fn render_traversal<R: RenderBackend>(
         // render, so we need to update its render_gen.
         if e.state().render_gen == 0 {
             e.state_mut().render_gen =
-                STATE.with(|global_state| -> u64 { global_state.borrow().render_gen });
+                global::with(|global_state| -> u64 { global_state.borrow().render_gen });
         }
         e.children(&mut |x| render_traversal(r, styl, x))?;
         styl.pop();
@@ -121,7 +121,7 @@ pub fn render<R: RenderBackend>(
     be.reset()?;
     styl.reset();
     render_traversal(be, styl, e)?;
-    STATE.with(|global_state| {
+    global::with(|global_state| {
         let mut gs = global_state.borrow_mut();
         gs.render_gen += 1;
         gs.last_render_focus_gen = gs.focus_gen;
@@ -182,7 +182,7 @@ fn poll(ids: Vec<u64>, root: &mut dyn Node) -> Result<()> {
     preorder(root, &mut |x| -> Result<Walk<()>> {
         if ids.contains(&x.id()) {
             if let Some(d) = x.poll() {
-                STATE.with(|global_state| global_state.borrow_mut().poller.schedule(x.id(), d));
+                global::with(|global_state| global_state.borrow_mut().poller.schedule(x.id(), d));
             }
         };
         Ok(Walk::Continue)

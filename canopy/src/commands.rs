@@ -112,17 +112,26 @@ mod tests {
     fn tdispatch() -> Result<()> {
         let mut root = utils::TRoot::new();
 
-        println!(
-            "{:?}",
-            dispatch(
-                root.id(),
-                &mut root,
-                &Command {
-                    node: "root".try_into()?,
-                    command: "foo".into(),
-                },
-            )?
-        );
+        dispatch(
+            root.id(),
+            &mut root,
+            &Command {
+                node: "bb_la".try_into()?,
+                command: "c_leaf".into(),
+            },
+        )?;
+        assert_eq!(utils::state_path(), vec!["bb_la.c_leaf()"]);
+
+        utils::reset_state();
+        dispatch(
+            root.b.b.id(),
+            &mut root,
+            &Command {
+                node: "bb_la".try_into()?,
+                command: "c_leaf".into(),
+            },
+        )?;
+        assert!(utils::state_path().is_empty());
 
         Ok(())
     }
