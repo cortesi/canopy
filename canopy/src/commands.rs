@@ -1,4 +1,4 @@
-use crate::{postorder, Node, NodeId, NodeName, StatefulNode, Walk};
+use crate::{postorder, preorder, Error, Node, NodeId, NodeName, StatefulNode, Walk};
 
 use crate::Result;
 
@@ -66,29 +66,64 @@ pub trait CommandNode: StatefulNode {
 /// matching node::command in the following order:
 ///     - A pre-order traversal of the current node subtree
 ///     - The path from the current node to the root
-pub fn dispatch<T>(current_id: T, root: &mut dyn Node, _cmd: &Command) -> Result<()>
+pub fn dispatch<T>(current_id: T, root: &mut dyn Node, cmd: &Command) -> Result<()>
 where
     T: Into<NodeId>,
 {
     let mut seen = false;
     let uid = current_id.into();
     postorder(root, &mut |x| -> Result<Walk<()>> {
-        Ok(if seen {
-            // if x.dispatch(cmd).is_ok() {
-            //     SkipWalker::Stop
-            // } else {
-            //     SkipWalker::Continue
-            // }
-            // Path to root
-            //ret = ret.join(f(x)?);
-            Walk::Continue
+        if seen {
+            // We're now on the path to the root
+            match x.dispatch(cmd) {
+                Err(Error::UnknownCommand(_)) => Ok(Walk::Continue),
+                Err(e) => Err(e),
+                Ok(_) => Ok(Walk::Handle(())),
+            }
         } else if x.id() == uid {
             seen = true;
-            // ret = ret.join(f(x)?);
-            Walk::Skip
+            // Preorder traversal from the focus node into its descendants. Our
+            // focus node will be the first node visited.
+            match preorder(x, &mut |x| -> Result<Walk<()>> {
+                match x.dispatch(cmd) {
+                    Err(Error::UnknownCommand(_)) => Ok(Walk::Continue),
+                    Err(e) => Err(e),
+                    Ok(_) => Ok(Walk::Handle(())),
+                }
+            }) {
+                Err(Error::UnknownCommand(_)) => Ok(Walk::Continue),
+                Err(e) => Err(e),
+                Ok(Walk::Handle(t)) => Ok(Walk::Handle(t)),
+                Ok(v) => Ok(v),
+            }
         } else {
-            Walk::Continue
-        })
+            Ok(Walk::Continue)
+        }
     })?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tutils::utils;
+
+    #[test]
+    fn tdispatch() -> Result<()> {
+        let mut root = utils::TRoot::new();
+
+        println!(
+            "{:?}",
+            dispatch(
+                root.id(),
+                &mut root,
+                &Command {
+                    node: "root".try_into()?,
+                    command: "foo".into(),
+                },
+            )?
+        );
+
+        Ok(())
+    }
 }
