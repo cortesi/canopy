@@ -11,9 +11,9 @@ use crate::{
 };
 
 /// Pre-render sweep of the tree.
-pub(crate) fn pre_render<R: RenderBackend>(r: &mut R, e: &mut dyn Node) -> Result<()> {
+pub(crate) fn pre_render<R: RenderBackend>(r: &mut R, root: &mut dyn Node) -> Result<()> {
     let mut seen = false;
-    preorder(e, &mut |x| -> Result<Walk<()>> {
+    preorder(root, &mut |x| -> Result<Walk<()>> {
         if x.is_focused() {
             seen = true;
         }
@@ -26,12 +26,12 @@ pub(crate) fn pre_render<R: RenderBackend>(r: &mut R, e: &mut dyn Node) -> Resul
         Ok(Walk::Continue)
     })?;
     if !seen {
-        focus::shift_first(e)?;
+        focus::shift_first(root)?;
     }
 
     if global::focus_changed() {
-        let fg = global::with(|global_state| global_state.focus_gen);
-        focus::walk(e, &mut |n| -> Result<Walk<()>> {
+        let fg = global::focus_gen();
+        focus::walk(root, &mut |n| -> Result<Walk<()>> {
             n.state_mut().focus_path_gen = fg;
             Ok(Walk::Continue)
         })?;
@@ -47,9 +47,9 @@ pub(crate) fn pre_render<R: RenderBackend>(r: &mut R, e: &mut dyn Node) -> Resul
 pub(crate) fn post_render<R: RenderBackend>(
     r: &mut R,
     styl: &mut StyleManager,
-    e: &mut dyn Node,
+    root: &mut dyn Node,
 ) -> Result<()> {
-    focus::walk(e, &mut |n| -> Result<Walk<()>> {
+    focus::walk(root, &mut |n| -> Result<Walk<()>> {
         Ok(if let Some(c) = n.cursor() {
             show_cursor(r, styl, n.vp(), "cursor", c)?;
             Walk::Handle(())
@@ -63,25 +63,24 @@ pub(crate) fn post_render<R: RenderBackend>(
 fn render_traversal<R: RenderBackend>(
     r: &mut R,
     styl: &mut StyleManager,
-    e: &mut dyn Node,
+    root: &mut dyn Node,
 ) -> Result<()> {
-    if !e.is_hidden() {
+    if !root.is_hidden() {
         styl.push();
-        if e.should_render() {
-            if e.is_focused() {
-                let s = &mut e.state_mut();
-                s.rendered_focus_gen =
-                    global::with(|global_state| -> u64 { global_state.focus_gen });
+        if root.should_render() {
+            if root.is_focused() {
+                let s = &mut root.state_mut();
+                s.rendered_focus_gen = global::focus_gen();
             }
 
-            let mut c = Coverage::new(e.vp().screen_rect().expanse());
-            let mut rndr = Render::new(r, styl, e.vp(), &mut c);
+            let mut c = Coverage::new(root.vp().screen_rect().expanse());
+            let mut rndr = Render::new(r, styl, root.vp(), &mut c);
 
-            e.render(&mut rndr)?;
+            root.render(&mut rndr)?;
 
             // Now add regions managed by children to coverage
-            let escreen = e.vp().screen_rect();
-            e.children(&mut |n| {
+            let escreen = root.vp().screen_rect();
+            root.children(&mut |n| {
                 if !n.is_hidden() {
                     let s = n.vp().screen_rect();
                     if !s.is_zero() {
@@ -93,18 +92,18 @@ fn render_traversal<R: RenderBackend>(
 
             // We now have coverage, relative to this node's screen rectange. We
             // rebase each rect back down to our virtual co-ordinates.
-            let sr = e.vp().view_rect();
+            let sr = root.vp().view_rect();
             for l in rndr.coverage.uncovered() {
                 rndr.fill("", l.rect().shift(sr.tl.x as i16, sr.tl.y as i16), ' ')?;
             }
         }
         // This is a new node - we don't want it perpetually stuck in
         // render, so we need to update its render_gen.
-        if e.state().render_gen == 0 {
-            e.state_mut().render_gen =
+        if root.state().render_gen == 0 {
+            root.state_mut().render_gen =
                 global::with(|global_state| -> u64 { global_state.render_gen });
         }
-        e.children(&mut |x| render_traversal(r, styl, x))?;
+        root.children(&mut |x| render_traversal(r, styl, x))?;
         styl.pop();
     }
     Ok(())
@@ -116,11 +115,11 @@ fn render_traversal<R: RenderBackend>(
 pub fn render<R: RenderBackend>(
     be: &mut R,
     styl: &mut StyleManager,
-    e: &mut dyn Node,
+    root: &mut dyn Node,
 ) -> Result<()> {
     be.reset()?;
     styl.reset();
-    render_traversal(be, styl, e)?;
+    render_traversal(be, styl, root)?;
     global::with(|gs| {
         gs.render_gen += 1;
         gs.last_render_focus_gen = gs.focus_gen;
@@ -215,13 +214,13 @@ pub(crate) fn event(ctrl: &mut dyn BackendControl, root: &mut dyn Node, e: Event
 /// Calls a closure on the leaf node under (x, y), then all its parents to the
 /// root.
 pub fn locate<R>(
-    e: &mut dyn Node,
+    root: &mut dyn Node,
     p: impl Into<Point>,
     f: &mut dyn FnMut(&mut dyn Node) -> Result<Walk<R>>,
 ) -> Result<Walk<R>> {
     let mut seen = false;
     let p = p.into();
-    postorder(e, &mut |inner| -> Result<Walk<R>> {
+    postorder(root, &mut |inner| -> Result<Walk<R>> {
         Ok(if seen {
             f(inner)?
         } else if !inner.is_hidden() {

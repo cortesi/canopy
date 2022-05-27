@@ -75,6 +75,11 @@ pub(crate) fn focus_changed() -> bool {
     with(|s| s.focus_gen != s.last_render_focus_gen)
 }
 
+/// Has the focus changed since the last render sweep?
+pub(crate) fn focus_gen() -> u64 {
+    with(|s| s.focus_gen)
+}
+
 pub(crate) fn start_poller(tx: mpsc::Sender<Event>) {
     with(|s| {
         s.event_tx = tx;
