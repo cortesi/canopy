@@ -10,9 +10,8 @@ use crate::{
     event::key,
     fit,
     geom::{Expanse, Rect},
-    taint_tree,
     widgets::{list::*, Text},
-    BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
+    BackendControl, Canopy, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
 };
 use std::time::Duration;
 
@@ -48,7 +47,7 @@ impl Node for LogItem {
         })
     }
 
-    fn render(&mut self, r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &Canopy, r: &mut Render) -> Result<()> {
         let vp = self.vp();
         let (_, screen) = vp.screen_rect().carve_hstart(2);
         let outer = self.child.fit(screen.into())?;
@@ -103,7 +102,12 @@ pub struct Logs {
 }
 
 impl Node for Logs {
-    fn handle_key(&mut self, _ctrl: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
+    fn handle_key(
+        &mut self,
+        c: &mut Canopy,
+        _ctrl: &mut dyn BackendControl,
+        k: key::Key,
+    ) -> Result<Outcome> {
         let lst = &mut self.list;
         match k {
             c if c == 'C' => {
@@ -122,11 +126,11 @@ impl Node for Logs {
             c if c == key::KeyCode::PageUp => lst.page_up(),
             _ => return Ok(Outcome::Ignore),
         };
-        taint_tree(self);
+        c.taint_tree(self);
         Ok(Outcome::Handle)
     }
 
-    fn poll(&mut self) -> Option<Duration> {
+    fn poll(&mut self, c: &mut Canopy) -> Option<Duration> {
         if !self.started {
             // Configure a custom event formatter
             let format = fmt::format()
@@ -147,7 +151,7 @@ impl Node for Logs {
             let buf = self.buf.clone();
             let mut b = buf.lock().unwrap();
             if !b.is_empty() {
-                taint_tree(self);
+                c.taint_tree(self);
             }
             for i in b.drain(0..) {
                 self.list.append(LogItem::new(&i));
@@ -156,7 +160,7 @@ impl Node for Logs {
         Some(Duration::from_millis(100))
     }
 
-    fn render(&mut self, _: &mut Render) -> Result<()> {
+    fn render(&mut self, _: &Canopy, _: &mut Render) -> Result<()> {
         let vp = self.vp();
         fit(&mut self.list, vp)?;
         Ok(())

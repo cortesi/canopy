@@ -2,12 +2,11 @@ use canopy::{
     backend::crossterm::runloop,
     derive_commands,
     event::{key, mouse},
-    fit, focus,
     geom::Expanse,
     geom::Frame,
     inspector::Inspector,
     style::solarized,
-    BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode,
+    *,
 };
 
 #[derive(StatefulNode)]
@@ -49,27 +48,37 @@ impl Block {
 }
 
 impl Node for Root {
-    fn render(&mut self, _: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &Canopy, _: &mut Render) -> Result<()> {
         let vp = self.vp();
         fit(&mut self.child, vp)
     }
 
-    fn handle_mouse(&mut self, _: &mut dyn BackendControl, k: mouse::Mouse) -> Result<Outcome> {
+    fn handle_mouse(
+        &mut self,
+        c: &mut Canopy,
+        _: &mut dyn BackendControl,
+        k: mouse::Mouse,
+    ) -> Result<Outcome> {
         Ok(match k {
-            c if c == mouse::MouseAction::ScrollDown => focus::shift_next(self)?,
-            c if c == mouse::MouseAction::ScrollUp => focus::shift_prev(self)?,
+            ck if ck == mouse::MouseAction::ScrollDown => c.focus_next(self)?,
+            ck if ck == mouse::MouseAction::ScrollUp => c.focus_prev(self)?,
             _ => Outcome::Ignore,
         })
     }
 
-    fn handle_key(&mut self, ctrl: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
+    fn handle_key(
+        &mut self,
+        c: &mut Canopy,
+        ctrl: &mut dyn BackendControl,
+        k: key::Key,
+    ) -> Result<Outcome> {
         Ok(match k {
-            c if c == key::KeyCode::Tab => focus::shift_next(self)?,
-            c if c == 'l' || c == key::KeyCode::Right => focus::shift_right(self)?,
-            c if c == 'h' || c == key::KeyCode::Left => focus::shift_left(self)?,
-            c if c == 'j' || c == key::KeyCode::Down => focus::shift_down(self)?,
-            c if c == 'k' || c == key::KeyCode::Up => focus::shift_up(self)?,
-            c if c == 'q' => ctrl.exit(0),
+            ck if ck == key::KeyCode::Tab => c.focus_next(self)?,
+            ck if ck == 'l' || ck == key::KeyCode::Right => c.focus_right(self)?,
+            ck if ck == 'h' || ck == key::KeyCode::Left => c.focus_left(self)?,
+            ck if ck == 'j' || ck == key::KeyCode::Down => c.focus_down(self)?,
+            ck if ck == 'k' || ck == key::KeyCode::Up => c.focus_up(self)?,
+            ck if ck == 'q' => ctrl.exit(0),
             _ => Outcome::Ignore,
         })
     }
@@ -81,33 +90,33 @@ impl Node for Root {
 }
 
 impl Block {
-    fn add(&mut self) -> Result<Outcome> {
+    fn add(&mut self, c: &mut Canopy) -> Result<Outcome> {
         Ok(if self.children.is_empty() {
             Outcome::Ignore
         } else if self.size_limited(self.children[0].vp().view_rect().into()) {
             Outcome::Handle
         } else {
             self.children.push(Block::new(!self.horizontal));
-            canopy::taint_tree(self);
+            c.taint_tree(self);
             Outcome::Handle
         })
     }
     fn size_limited(&self, a: Expanse) -> bool {
         (self.horizontal && a.w <= 4) || (!self.horizontal && a.h <= 4)
     }
-    fn split(&mut self) -> Result<Outcome> {
+    fn split(&mut self, c: &mut Canopy) -> Result<Outcome> {
         Ok(if self.size_limited(self.vp().view_rect().into()) {
             Outcome::Handle
         } else {
             self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
-            canopy::taint_tree(self);
+            c.taint_tree(self);
             Outcome::Handle
         })
     }
 }
 
 impl Node for Block {
-    fn render(&mut self, r: &mut Render) -> Result<()> {
+    fn render(&mut self, c: &Canopy, r: &mut Render) -> Result<()> {
         let vp = self.vp();
         if !self.children.is_empty() {
             let vps = if self.horizontal {
@@ -119,7 +128,7 @@ impl Node for Block {
                 fit(&mut self.children[i], vps[i])?;
             }
         } else {
-            let bc = if self.is_focused() && self.children.is_empty() {
+            let bc = if self.is_focused(c) && self.children.is_empty() {
                 "violet"
             } else {
                 "blue"
@@ -135,32 +144,42 @@ impl Node for Block {
         self.children.is_empty()
     }
 
-    fn handle_mouse(&mut self, _: &mut dyn BackendControl, k: mouse::Mouse) -> Result<Outcome> {
+    fn handle_mouse(
+        &mut self,
+        c: &mut Canopy,
+        _: &mut dyn BackendControl,
+        k: mouse::Mouse,
+    ) -> Result<Outcome> {
         Ok(match k {
-            c if c == mouse::MouseAction::Down + mouse::Button::Left => {
-                canopy::taint_tree(self);
-                self.set_focus();
+            ck if ck == mouse::MouseAction::Down + mouse::Button::Left => {
+                c.taint_tree(self);
+                self.set_focus(c);
                 Outcome::Handle
             }
-            c if c == mouse::MouseAction::Down + mouse::Button::Middle => {
-                self.split()?;
-                if self.is_focused() {
-                    focus::shift_next(self)?;
+            ck if ck == mouse::MouseAction::Down + mouse::Button::Middle => {
+                self.split(c)?;
+                if self.is_focused(c) {
+                    c.focus_next(self)?;
                 };
                 Outcome::Handle
             }
-            c if c == mouse::MouseAction::Down + mouse::Button::Right => self.add()?,
+            ck if ck == mouse::MouseAction::Down + mouse::Button::Right => self.add(c)?,
             _ => Outcome::Ignore,
         })
     }
 
-    fn handle_key(&mut self, _: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
+    fn handle_key(
+        &mut self,
+        c: &mut Canopy,
+        _: &mut dyn BackendControl,
+        k: key::Key,
+    ) -> Result<Outcome> {
         Ok(match k {
-            c if c == 's' => {
-                self.split()?;
-                focus::shift_next(self)?
+            ck if ck == 's' => {
+                self.split(c)?;
+                c.focus_next(self)?
             }
-            c if c == 'a' => self.add()?,
+            ck if ck == 'a' => self.add(c)?,
             _ => Outcome::Ignore,
         })
     }

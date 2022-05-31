@@ -10,6 +10,7 @@ pub mod utils {
         *,
     };
 
+    /// Thread-local state tracked by test nodes.
     #[derive(Debug, PartialEq, Clone)]
     pub struct State {
         pub path: Vec<String>,
@@ -81,17 +82,27 @@ pub mod utils {
         fn accept_focus(&mut self) -> bool {
             true
         }
-        fn render(&mut self, r: &mut Render) -> Result<()> {
+        fn render(&mut self, _c: &Canopy, r: &mut Render) -> Result<()> {
             r.text(
                 "any",
                 self.vp().view_rect().first_line(),
                 &format!("<{}>", self.name().clone()),
             )
         }
-        fn handle_key(&mut self, _: &mut dyn BackendControl, _: key::Key) -> Result<Outcome> {
+        fn handle_key(
+            &mut self,
+            _: &mut Canopy,
+            _: &mut dyn BackendControl,
+            _: key::Key,
+        ) -> Result<Outcome> {
             self.handle("key")
         }
-        fn handle_mouse(&mut self, _: &mut dyn BackendControl, _: mouse::Mouse) -> Result<Outcome> {
+        fn handle_mouse(
+            &mut self,
+            _: &mut Canopy,
+            _: &mut dyn BackendControl,
+            _: mouse::Mouse,
+        ) -> Result<Outcome> {
             self.handle("mouse")
         }
     }
@@ -101,7 +112,7 @@ pub mod utils {
             true
         }
 
-        fn render(&mut self, r: &mut Render) -> Result<()> {
+        fn render(&mut self, _c: &Canopy, r: &mut Render) -> Result<()> {
             let parts = self.vp().split_vertical(2)?;
             fit(&mut self.a, parts[0])?;
             fit(&mut self.b, parts[1])?;
@@ -113,11 +124,21 @@ pub mod utils {
             )
         }
 
-        fn handle_key(&mut self, _: &mut dyn BackendControl, _: key::Key) -> Result<Outcome> {
+        fn handle_key(
+            &mut self,
+            _: &mut Canopy,
+            _: &mut dyn BackendControl,
+            _: key::Key,
+        ) -> Result<Outcome> {
             self.handle("key")
         }
 
-        fn handle_mouse(&mut self, _: &mut dyn BackendControl, _: mouse::Mouse) -> Result<Outcome> {
+        fn handle_mouse(
+            &mut self,
+            _: &mut Canopy,
+            _: &mut dyn BackendControl,
+            _: mouse::Mouse,
+        ) -> Result<Outcome> {
             self.handle("mouse")
         }
 
@@ -133,7 +154,7 @@ pub mod utils {
             true
         }
 
-        fn render(&mut self, r: &mut Render) -> Result<()> {
+        fn render(&mut self, _c: &Canopy, r: &mut Render) -> Result<()> {
             let parts = self.vp().split_horizontal(2)?;
             fit(&mut self.a, parts[0])?;
             fit(&mut self.b, parts[1])?;
@@ -145,11 +166,21 @@ pub mod utils {
             )
         }
 
-        fn handle_key(&mut self, _: &mut dyn BackendControl, _: key::Key) -> Result<Outcome> {
+        fn handle_key(
+            &mut self,
+            _: &mut Canopy,
+            _: &mut dyn BackendControl,
+            _: key::Key,
+        ) -> Result<Outcome> {
             self.handle("key")
         }
 
-        fn handle_mouse(&mut self, _: &mut dyn BackendControl, _: mouse::Mouse) -> Result<Outcome> {
+        fn handle_mouse(
+            &mut self,
+            _: &mut Canopy,
+            _: &mut dyn BackendControl,
+            _: mouse::Mouse,
+        ) -> Result<Outcome> {
             self.handle("mouse")
         }
 

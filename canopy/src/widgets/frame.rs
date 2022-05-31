@@ -2,9 +2,9 @@ use pad::PadStr;
 
 use crate as canopy;
 use crate::{
-    derive_commands, focus, frame,
+    derive_commands, frame,
     state::{NodeState, StatefulNode},
-    Node, Render, Result,
+    Canopy, Node, Render, Result,
 };
 
 /// Defines the set of glyphs used to draw the frame
@@ -103,15 +103,15 @@ impl<N> Node for Frame<N>
 where
     N: Node,
 {
-    fn should_render(&self) -> bool {
-        self.child.should_render()
+    fn should_render(&self, c: &Canopy) -> bool {
+        self.child.should_render(c)
     }
 
-    fn render(&mut self, rndr: &mut Render) -> Result<()> {
+    fn render(&mut self, c: &Canopy, rndr: &mut Render) -> Result<()> {
         let vp = self.vp();
         let f = frame(&mut self.child, vp, 1)?;
 
-        let style = if focus::is_on_path(self) {
+        let style = if c.is_on_focus_path(self) {
             "frame/focused"
         } else {
             "frame"

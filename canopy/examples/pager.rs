@@ -5,11 +5,10 @@ use canopy::{
     backend::crossterm::runloop,
     derive_commands,
     event::{key, mouse},
-    fit,
     inspector::Inspector,
     style::solarized,
     widgets::{frame, Text},
-    BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode,
+    *,
 };
 
 #[derive(StatefulNode)]
@@ -33,37 +32,47 @@ impl Node for Root {
         true
     }
 
-    fn handle_mouse(&mut self, _: &mut dyn BackendControl, k: mouse::Mouse) -> Result<Outcome> {
+    fn handle_mouse(
+        &mut self,
+        c: &mut Canopy,
+        _: &mut dyn BackendControl,
+        k: mouse::Mouse,
+    ) -> Result<Outcome> {
         let txt = &mut self.child.child;
         match k {
             c if c == mouse::MouseAction::ScrollDown => txt.update_viewport(&|vp| vp.down()),
             c if c == mouse::MouseAction::ScrollUp => txt.update_viewport(&|vp| vp.up()),
             _ => return Ok(Outcome::Ignore),
         };
-        canopy::taint_tree(self);
+        c.taint_tree(self);
         Ok(Outcome::Handle)
     }
 
-    fn handle_key(&mut self, ctrl: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
+    fn handle_key(
+        &mut self,
+        c: &mut Canopy,
+        ctrl: &mut dyn BackendControl,
+        k: key::Key,
+    ) -> Result<Outcome> {
         let txt = &mut self.child.child;
         match k {
-            c if c == 'g' => txt.update_viewport(&|vp| vp.scroll_to(0, 0)),
-            c if c == 'j' || c == key::KeyCode::Down => txt.update_viewport(&|vp| vp.down()),
-            c if c == 'k' || c == key::KeyCode::Up => txt.update_viewport(&|vp| vp.up()),
-            c if c == 'h' || c == key::KeyCode::Left => txt.update_viewport(&|vp| vp.left()),
-            c if c == 'l' || c == key::KeyCode::Up => txt.update_viewport(&|vp| vp.right()),
-            c if c == ' ' || c == key::KeyCode::PageDown => {
+            ck if ck == 'g' => txt.update_viewport(&|vp| vp.scroll_to(0, 0)),
+            ck if ck == 'j' || ck == key::KeyCode::Down => txt.update_viewport(&|vp| vp.down()),
+            ck if ck == 'k' || ck == key::KeyCode::Up => txt.update_viewport(&|vp| vp.up()),
+            ck if ck == 'h' || ck == key::KeyCode::Left => txt.update_viewport(&|vp| vp.left()),
+            ck if ck == 'l' || ck == key::KeyCode::Up => txt.update_viewport(&|vp| vp.right()),
+            ck if ck == ' ' || ck == key::KeyCode::PageDown => {
                 txt.update_viewport(&|vp| vp.page_down());
             }
-            c if c == key::KeyCode::PageUp => txt.update_viewport(&|vp| vp.page_up()),
-            c if c == 'q' => ctrl.exit(0),
+            ck if ck == key::KeyCode::PageUp => txt.update_viewport(&|vp| vp.page_up()),
+            ck if ck == 'q' => ctrl.exit(0),
             _ => return Ok(Outcome::Ignore),
         }
-        canopy::taint_tree(self);
+        c.taint_tree(self);
         Ok(Outcome::Handle)
     }
 
-    fn render(&mut self, _: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &Canopy, _: &mut Render) -> Result<()> {
         let vp = self.vp();
         fit(&mut self.child, vp)
     }

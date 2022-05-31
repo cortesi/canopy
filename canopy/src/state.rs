@@ -1,4 +1,4 @@
-use crate::{error, global, Result, ViewPort};
+use crate::{error, Canopy, Result, ViewPort};
 use convert_case::{Case, Casing};
 use std::sync::atomic::AtomicU64;
 
@@ -187,39 +187,30 @@ pub trait StatefulNode {
     }
 
     /// Focus this node.
-    fn set_focus(&mut self) {
-        global::with(|global_state| {
-            global_state.focus_gen += 1;
-            self.state_mut().focus_gen = global_state.focus_gen;
-        });
+    fn set_focus(&mut self, c: &mut Canopy) {
+        c.focus_gen += 1;
+        self.state_mut().focus_gen = c.focus_gen;
     }
 
     /// Is this node render tainted?
-    fn is_tainted(&self) -> bool {
-        global::with(|global_state| {
-            let s = self.state();
-            let rg = global_state.render_gen;
-            // Tainting if render_gen is 0 lets us initialize a nodestate
-            // without knowing about the app state
-            rg == s.render_gen || s.render_gen == 0
-        })
+    fn is_tainted(&self, c: &Canopy) -> bool {
+        let s = self.state();
+        // Tainting if render_gen is 0 lets us initialize a nodestate
+        // without knowing about the app state
+        c.render_gen == s.render_gen || s.render_gen == 0
     }
 
     /// Does the node have terminal focus?
-    fn is_focused(&self) -> bool {
-        global::with(|global_state| -> bool {
-            let s = self.state();
-            global_state.focus_gen == s.focus_gen
-        })
+    fn is_focused(&self, c: &Canopy) -> bool {
+        let s = self.state();
+        c.focus_gen == s.focus_gen
     }
 
     /// Mark a this node for render.
-    fn taint(&mut self) {
+    fn taint(&mut self, c: &mut Canopy) {
         let r = self.state_mut();
-        r.render_gen = global::with(|s| -> u64 {
-            s.taint = true;
-            s.render_gen
-        });
+        r.render_gen = c.render_gen;
+        c.taint = true;
     }
 
     /// Set this node's name, over-riding the name derived from the struct name.
@@ -230,14 +221,12 @@ pub trait StatefulNode {
 
     /// Has the focus status of this node changed since the last render
     /// sweep?
-    fn focus_changed(&self) -> bool {
-        if global::focus_changed() {
-            global::with(|gs| -> bool {
-                let s = self.state();
-                // Our focus has changed if we're the currently focused node, or
-                // if we were previously focused during the last sweep.
-                s.focus_gen == gs.focus_gen || s.focus_gen == gs.last_render_focus_gen
-            })
+    fn focus_changed(&self, c: &Canopy) -> bool {
+        if c.focus_changed() {
+            let s = self.state();
+            // Our focus has changed if we're the currently focused node, or
+            // if we were previously focused during the last sweep.
+            s.focus_gen == c.focus_gen || s.focus_gen == c.last_render_focus_gen
         } else {
             false
         }
@@ -245,14 +234,12 @@ pub trait StatefulNode {
 
     /// Has the focus path status of this node changed since the last render
     /// sweep?
-    fn focus_path_changed(&self) -> bool {
-        if global::focus_changed() {
-            global::with(|gs| -> bool {
-                let s = self.state();
-                // Our focus has changed if we're the currently on the focus path, or
-                // if we were previously focused during the last sweep.
-                s.focus_path_gen == gs.focus_gen || s.focus_path_gen == gs.last_render_focus_gen
-            })
+    fn focus_path_changed(&self, c: &Canopy) -> bool {
+        if c.focus_changed() {
+            let s = self.state();
+            // Our focus has changed if we're the currently on the focus path, or
+            // if we were previously focused during the last sweep.
+            s.focus_path_gen == c.focus_gen || s.focus_path_gen == c.last_render_focus_gen
         } else {
             false
         }

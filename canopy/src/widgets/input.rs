@@ -4,7 +4,7 @@ use crate::{
     event::key,
     geom::{Expanse, LineSegment, Point},
     state::{NodeState, StatefulNode},
-    BackendControl, Node, Outcome, Render, Result,
+    BackendControl, Canopy, Node, Outcome, Render, Result,
 };
 
 /// A text buffer that exposes edit functionality for a single line. It also
@@ -136,7 +136,7 @@ impl Node for InputLine {
         })
     }
 
-    fn render(&mut self, r: &mut Render) -> Result<()> {
+    fn render(&mut self, _: &Canopy, r: &mut Render) -> Result<()> {
         r.text(
             "text",
             self.vp().view_rect().first_line(),
@@ -144,7 +144,12 @@ impl Node for InputLine {
         )
     }
 
-    fn handle_key(&mut self, _: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
+    fn handle_key(
+        &mut self,
+        _c: &mut Canopy,
+        _: &mut dyn BackendControl,
+        k: key::Key,
+    ) -> Result<Outcome> {
         match k {
             key::Key(_, key::KeyCode::Left) => {
                 self.textbuf.left();

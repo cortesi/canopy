@@ -1,8 +1,8 @@
 use crate as canopy;
 use crate::{
-    derive_commands, focus, place,
+    derive_commands, place,
     state::{NodeState, StatefulNode},
-    Node, Render, Result,
+    Canopy, Node, Render, Result,
 };
 
 /// Panes manages a set of child nodes arranged in a 2d grid.
@@ -25,10 +25,10 @@ where
     }
 
     /// Get the offset of the current focus in the children vector.
-    pub fn focus_coords(&mut self) -> Option<(usize, usize)> {
+    pub fn focus_coords(&mut self, c: &Canopy) -> Option<(usize, usize)> {
         for (x, col) in self.children.iter_mut().enumerate() {
             for (y, row) in col.iter_mut().enumerate() {
-                if focus::is_on_path(row) {
+                if c.is_on_focus_path(row) {
                     return Some((x, y));
                 }
             }
@@ -37,46 +37,46 @@ where
     }
 
     /// Delete the focus node. If a column ends up empty, it is removed.
-    pub fn delete_focus(&mut self) -> Result<()> {
-        if let Some((x, y)) = self.focus_coords() {
-            focus::shift_next(self)?;
+    pub fn delete_focus(&mut self, c: &mut Canopy) -> Result<()> {
+        if let Some((x, y)) = self.focus_coords(c) {
+            c.focus_next(self)?;
             self.children[x].remove(y);
             if self.children[x].is_empty() {
                 self.children.remove(x);
             }
-            canopy::taint_tree(self);
+            c.taint_tree(self);
         }
         Ok(())
     }
 
     /// Insert a node, splitting vertically. If we have a focused node, the new
     /// node is inserted in a row beneath it. If not, a new column is added.
-    pub fn insert_row(&mut self, n: N)
+    pub fn insert_row(&mut self, c: &mut Canopy, n: N)
     where
         N: Node,
     {
-        if let Some((x, y)) = self.focus_coords() {
+        if let Some((x, y)) = self.focus_coords(c) {
             self.children[x].insert(y, n);
         } else {
             self.children.push(vec![n]);
         }
-        canopy::taint_tree(self);
+        c.taint_tree(self);
     }
 
     /// Insert a node in a new column. If we have a focused node, the new node
     /// is added in a new column to the right.
-    pub fn insert_col(&mut self, mut n: N) -> Result<()>
+    pub fn insert_col(&mut self, c: &mut Canopy, mut n: N) -> Result<()>
     where
         N: Node,
     {
-        let coords = self.focus_coords();
-        focus::shift_next(&mut n)?;
+        let coords = self.focus_coords(c);
+        c.focus_next(&mut n)?;
         if let Some((x, _)) = coords {
             self.children.insert(x + 1, vec![n])
         } else {
             self.children.push(vec![n])
         }
-        canopy::taint_tree(self);
+        c.taint_tree(self);
         Ok(())
     }
 
@@ -100,7 +100,7 @@ impl<N: Node> Node for Panes<N> {
         Ok(())
     }
 
-    fn render(&mut self, _rndr: &mut Render) -> Result<()> {
+    fn render(&mut self, _: &Canopy, _rndr: &mut Render) -> Result<()> {
         let l = self.vp().screen_rect().split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
@@ -121,6 +121,7 @@ mod tests {
 
     #[test]
     fn tlayout() -> Result<()> {
+        let mut c = Canopy::new();
         let tn = utils::TBranch::new("a");
         let mut p: Panes<utils::TBranch> = Panes::new(tn);
         let r = Rect {
@@ -132,22 +133,22 @@ mod tests {
 
         assert_eq!(p.shape(), vec![1]);
         let tn = utils::TBranch::new("b");
-        p.insert_col(tn)?;
+        p.insert_col(&mut c, tn)?;
         place(&mut p, r)?;
 
         assert_eq!(p.shape(), vec![1, 1]);
-        p.children[0][0].a.set_focus();
+        p.children[0][0].a.set_focus(&mut c);
         place(&mut p, r)?;
 
         let tn = utils::TBranch::new("c");
-        assert_eq!(p.focus_coords(), Some((0, 0)));
-        p.insert_row(tn);
+        assert_eq!(p.focus_coords(&c), Some((0, 0)));
+        p.insert_row(&mut c, tn);
         place(&mut p, r)?;
 
         assert_eq!(p.shape(), vec![2, 1]);
 
-        p.children[1][0].a.set_focus();
-        assert_eq!(p.focus_coords(), Some((1, 0)));
+        p.children[1][0].a.set_focus(&mut c);
+        assert_eq!(p.focus_coords(&c), Some((1, 0)));
         Ok(())
     }
 }

@@ -1,9 +1,9 @@
 use crate::{
-    canopy, cursor,
+    cursor,
     geom::Point,
     render::RenderBackend,
     style::{Style, StyleManager},
-    BackendControl, Node, Result,
+    BackendControl, Canopy, Node, Result,
 };
 use std::sync::{Arc, Mutex};
 
@@ -34,9 +34,9 @@ impl TestRender {
         (tb, TestRender { text: tb2 })
     }
 
-    pub fn render(&mut self, e: &mut dyn Node) -> Result<()> {
+    pub fn render(&mut self, c: &mut Canopy, e: &mut dyn Node) -> Result<()> {
         let mut sm = StyleManager::default();
-        canopy::render(self, &mut sm, e)?;
+        c.render(self, &mut sm, e)?;
         Ok(())
     }
 

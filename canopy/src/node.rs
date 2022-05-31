@@ -4,7 +4,7 @@ use crate::{
     cursor,
     event::{key, mouse},
     geom::{Expanse, Frame, Rect},
-    BackendControl, CommandNode, Render, Result, StatefulNode, ViewPort,
+    BackendControl, Canopy, CommandNode, Render, Result, StatefulNode, ViewPort,
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -53,8 +53,8 @@ pub trait Node: StatefulNode + CommandNode {
     ///
     /// Over-riding this method should only be needed rarely, for instance when
     /// a container node needs to redraw if a sub-node changes.
-    fn should_render(&self) -> bool {
-        !self.is_hidden() && (self.is_tainted() || self.focus_changed())
+    fn should_render(&self, c: &Canopy) -> bool {
+        !self.is_hidden() && (self.is_tainted(c) || self.focus_changed(c))
     }
 
     /// Called for each node on the focus path, after each render sweep. The
@@ -72,13 +72,23 @@ pub trait Node: StatefulNode + CommandNode {
 
     /// Handle a key input event. This event is only called for nodes that are
     /// on the focus path. The default implementation ignores input.
-    fn handle_key(&mut self, c: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
+    fn handle_key(
+        &mut self,
+        c: &mut Canopy,
+        b: &mut dyn BackendControl,
+        k: key::Key,
+    ) -> Result<Outcome> {
         Ok(Outcome::Ignore)
     }
 
     /// Handle a mouse input event. The default implementation ignores mouse
     /// input.
-    fn handle_mouse(&mut self, c: &mut dyn BackendControl, k: mouse::Mouse) -> Result<Outcome> {
+    fn handle_mouse(
+        &mut self,
+        c: &mut Canopy,
+        b: &mut dyn BackendControl,
+        k: mouse::Mouse,
+    ) -> Result<Outcome> {
         Ok(Outcome::Ignore)
     }
 
@@ -111,7 +121,7 @@ pub trait Node: StatefulNode + CommandNode {
     /// function returns a duration, a subsequent call is scheduled. If the
     /// function returns None, the `poll` function is never called again. The
     /// default implementation returns `None`.
-    fn poll(&mut self) -> Option<Duration> {
+    fn poll(&mut self, c: &mut Canopy) -> Option<Duration> {
         None
     }
 
@@ -125,7 +135,7 @@ pub trait Node: StatefulNode + CommandNode {
     ///
     /// Nodes with no children should always make sure they redraw all of
     /// `self.screen_area()`. The default implementation does nothing.
-    fn render(&mut self, r: &mut Render) -> Result<()> {
+    fn render(&mut self, c: &Canopy, r: &mut Render) -> Result<()> {
         Ok(())
     }
 }

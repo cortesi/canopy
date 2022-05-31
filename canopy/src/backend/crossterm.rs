@@ -13,10 +13,9 @@ use crate::{
     cursor, error,
     event::{key, mouse, Event, EventSource},
     geom::{Expanse, Point},
-    global,
     render::RenderBackend,
     style::{Color, Style, StyleManager},
-    Node, Result,
+    Canopy, Node, Result,
 };
 use crossterm::{
     self, cursor as ccursor, event as cevent, style, terminal, ExecutableCommand, QueueableCommand,
@@ -345,37 +344,32 @@ where
         }
     }));
 
-    let (rx, tx) = global::with(|s| -> (mpsc::Receiver<Event>, mpsc::Sender<Event>) {
-        let rx = if let Some(x) = s.event_rx.take() {
-            x
-        } else {
-            panic!("core event loop already initialized")
-        };
-        let tx = s.event_tx.clone();
-        (rx, tx)
-    });
+    let mut cnpy = Canopy::new();
+    let rx = if let Some(x) = cnpy.event_rx.take() {
+        x
+    } else {
+        panic!("core event loop already initialized")
+    };
 
     let events = EventSource::new(rx);
-    event_emitter(tx.clone());
+    event_emitter(cnpy.event_tx.clone());
     let size = translate_result(terminal::size())?;
-    canopy::set_root_size(Expanse::new(size.0, size.1), &mut root)?;
-    global::start_poller(tx);
+    cnpy.set_root_size(Expanse::new(size.0, size.1), &mut root)?;
+    cnpy.start_poller(cnpy.event_tx.clone());
 
     loop {
         let mut tainted = true;
         loop {
             if tainted {
-                canopy::pre_render(&mut be, &mut root)?;
-                canopy::render(&mut be, style, &mut root)?;
-                canopy::post_render(&mut be, style, &mut root)?;
+                cnpy.pre_render(&mut be, &mut root)?;
+                cnpy.render(&mut be, style, &mut root)?;
+                cnpy.post_render(&mut be, style, &mut root)?;
                 translate_result(be.flush())?;
             }
-            canopy::event(&mut ctrl, &mut root, events.next()?)?;
-            tainted = global::with(|s| -> bool {
-                tainted = s.taint;
-                s.taint = false;
-                tainted
-            });
+            cnpy.event(&mut ctrl, &mut root, events.next()?)?;
+
+            tainted = cnpy.taint;
+            cnpy.taint = false;
         }
     }
 }

@@ -4,12 +4,11 @@ use canopy::{
     backend::crossterm::runloop,
     derive_commands,
     event::{key, mouse},
-    fit,
     geom::Expanse,
     inspector::Inspector,
     style::solarized,
     widgets::{frame, list::*, Text},
-    BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode,
+    *,
 };
 
 #[derive(StatefulNode)]
@@ -43,9 +42,9 @@ impl ListItem for IntervalItem {
 }
 
 impl Node for IntervalItem {
-    fn poll(&mut self) -> Option<Duration> {
+    fn poll(&mut self, c: &mut Canopy) -> Option<Duration> {
         self.inc();
-        self.taint();
+        self.taint(c);
         Some(Duration::from_secs(1))
     }
 
@@ -57,7 +56,7 @@ impl Node for IntervalItem {
         f(&mut self.child)
     }
 
-    fn render(&mut self, r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &Canopy, r: &mut Render) -> Result<()> {
         let vp = self.vp();
         fit(&mut self.child, vp)?;
         if self.selected {
@@ -76,7 +75,7 @@ struct StatusBar {
 impl StatusBar {}
 
 impl Node for StatusBar {
-    fn render(&mut self, r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &Canopy, r: &mut Render) -> Result<()> {
         r.style.push_layer("statusbar");
         r.text(
             "statusbar/text",
@@ -106,16 +105,16 @@ impl Root {
         }
     }
 
-    fn add_item(&mut self) -> Result<Outcome> {
+    fn add_item(&mut self, c: &mut Canopy) -> Result<Outcome> {
         let lst = &mut self.content.child;
         lst.append(IntervalItem::new());
-        self.taint();
+        self.taint(c);
         Ok(Outcome::Handle)
     }
 }
 
 impl Node for Root {
-    fn render(&mut self, _: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &Canopy, _: &mut Render) -> Result<()> {
         let (a, b) = self.vp().carve_vend(1);
         fit(&mut self.statusbar, b)?;
         fit(&mut self.content, a)?;
@@ -126,7 +125,12 @@ impl Node for Root {
         true
     }
 
-    fn handle_mouse(&mut self, _: &mut dyn BackendControl, k: mouse::Mouse) -> Result<Outcome> {
+    fn handle_mouse(
+        &mut self,
+        _c: &mut Canopy,
+        _: &mut dyn BackendControl,
+        k: mouse::Mouse,
+    ) -> Result<Outcome> {
         let v = &mut self.content.child;
         match k {
             c if c == mouse::MouseAction::ScrollDown => v.update_viewport(&|vp| vp.down()),
@@ -136,24 +140,29 @@ impl Node for Root {
         Ok(Outcome::Handle)
     }
 
-    fn handle_key(&mut self, ctrl: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
+    fn handle_key(
+        &mut self,
+        c: &mut Canopy,
+        ctrl: &mut dyn BackendControl,
+        k: key::Key,
+    ) -> Result<Outcome> {
         let lst = &mut self.content.child;
         match k {
-            c if c == 'a' => {
-                self.add_item()?;
+            ck if ck == 'a' => {
+                self.add_item(c)?;
             }
-            c if c == 'd' => {
+            ck if ck == 'd' => {
                 lst.delete_selected();
             }
-            c if c == 'g' => lst.select_first(),
-            c if c == 'j' || c == key::KeyCode::Down => lst.select_next(),
-            c if c == 'k' || c == key::KeyCode::Up => lst.select_prev(),
-            c if c == ' ' || c == key::KeyCode::PageDown => lst.page_down(),
-            c if c == key::KeyCode::PageUp => lst.page_up(),
-            c if c == 'q' => ctrl.exit(0),
+            ck if ck == 'g' => lst.select_first(),
+            ck if ck == 'j' || ck == key::KeyCode::Down => lst.select_next(),
+            ck if ck == 'k' || ck == key::KeyCode::Up => lst.select_prev(),
+            ck if ck == ' ' || ck == key::KeyCode::PageDown => lst.page_down(),
+            ck if ck == key::KeyCode::PageUp => lst.page_up(),
+            ck if ck == 'q' => ctrl.exit(0),
             _ => return Ok(Outcome::Ignore),
         };
-        canopy::taint_tree(self);
+        c.taint_tree(self);
         Ok(Outcome::Handle)
     }
 

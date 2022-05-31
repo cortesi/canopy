@@ -3,14 +3,12 @@ use rand::Rng;
 
 use canopy::{
     backend::crossterm::runloop,
-    derive_commands,
     event::{key, mouse},
-    fit,
     geom::{Expanse, Rect},
     inspector::Inspector,
     style::solarized,
     widgets::{frame, list::*, Text},
-    BackendControl, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
+    *,
 };
 
 const TEXT: &str = "What a struggle must have gone on during long centuries between the several kinds of trees, each annually scattering its seeds by the thousand; what war between insect and insect — between insects, snails, and other animals with birds and beasts of prey — all striving to increase, all feeding on each other, or on the trees, their seeds and seedlings, or on the other plants which first clothed the ground and thus checked the growth of the trees.";
@@ -52,7 +50,7 @@ impl Node for Block {
         })
     }
 
-    fn render(&mut self, r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &Canopy, r: &mut Render) -> Result<()> {
         let vp = self.vp();
         let (_, screen) = vp.screen_rect().carve_hstart(2);
         let outer = self.child.fit(screen.into())?;
@@ -85,7 +83,7 @@ struct StatusBar {
 impl StatusBar {}
 
 impl Node for StatusBar {
-    fn render(&mut self, r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &Canopy, r: &mut Render) -> Result<()> {
         r.style.push_layer("statusbar");
         r.text("text", self.vp().view_rect().first_line(), "listgym")?;
         Ok(())
@@ -114,7 +112,7 @@ impl Root {
 }
 
 impl Node for Root {
-    fn render(&mut self, _: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &Canopy, _: &mut Render) -> Result<()> {
         let (a, b) = self.vp().carve_vend(1);
         fit(&mut self.statusbar, b)?;
         fit(&mut self.content, a)?;
@@ -125,18 +123,28 @@ impl Node for Root {
         true
     }
 
-    fn handle_mouse(&mut self, _: &mut dyn BackendControl, k: mouse::Mouse) -> Result<Outcome> {
+    fn handle_mouse(
+        &mut self,
+        c: &mut Canopy,
+        _: &mut dyn BackendControl,
+        k: mouse::Mouse,
+    ) -> Result<Outcome> {
         let txt = &mut self.content.child;
         match k {
             c if c == mouse::MouseAction::ScrollDown => txt.update_viewport(&|vp| vp.down()),
             c if c == mouse::MouseAction::ScrollUp => txt.update_viewport(&|vp| vp.up()),
             _ => return Ok(Outcome::Ignore),
         };
-        canopy::taint_tree(self);
+        c.taint_tree(self);
         Ok(Outcome::Handle)
     }
 
-    fn handle_key(&mut self, ctrl: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
+    fn handle_key(
+        &mut self,
+        c: &mut Canopy,
+        ctrl: &mut dyn BackendControl,
+        k: key::Key,
+    ) -> Result<Outcome> {
         let lst = &mut self.content.child;
         match k {
             c if c == 'a' => {
@@ -164,7 +172,7 @@ impl Node for Root {
             c if c == 'q' => ctrl.exit(0),
             _ => return Ok(Outcome::Ignore),
         };
-        canopy::taint_tree(self);
+        c.taint_tree(self);
         Ok(Outcome::Handle)
     }
 

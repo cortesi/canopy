@@ -4,7 +4,7 @@ mod view;
 
 use crate as canopy;
 use crate::{
-    derive_commands, event::key, fit, focus, widgets::frame, BackendControl, Node, NodeState,
+    derive_commands, event::key, fit, widgets::frame, BackendControl, Canopy, Node, NodeState,
     Outcome, Render, Result, StatefulNode,
 };
 
@@ -34,7 +34,7 @@ impl Default for Content {
 }
 
 impl Node for Content {
-    fn render(&mut self, r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &Canopy, r: &mut Render) -> Result<()> {
         r.style.push_layer("inspector");
         let parts = self.vp().carve_vend(1);
         fit(&mut self.statusbar, parts.1)?;
@@ -73,23 +73,23 @@ where
             app: root,
             activate,
         };
-        c.hide().unwrap();
+        c.content.hide();
         c
     }
 
-    pub fn hide(&mut self) -> Result<Outcome> {
+    pub fn hide_inspector(&mut self, c: &mut Canopy) -> Result<Outcome> {
         self.active = false;
         self.content.hide();
-        canopy::taint_tree(self);
-        focus::shift_first(&mut self.app)?;
+        c.taint_tree(self);
+        c.focus_first(&mut self.app)?;
         Ok(Outcome::Handle)
     }
 
-    pub fn show(&mut self) -> Result<Outcome> {
+    pub fn show_inspector(&mut self, c: &mut Canopy) -> Result<Outcome> {
         self.active = true;
         self.content.unhide();
-        canopy::taint_tree(self);
-        focus::shift_first(&mut self.content)?;
+        c.taint_tree(self);
+        c.focus_first(&mut self.content)?;
         Ok(Outcome::Handle)
     }
 }
@@ -98,31 +98,36 @@ impl<N> Node for Inspector<N>
 where
     N: Node,
 {
-    fn handle_key(&mut self, _ctrl: &mut dyn BackendControl, k: key::Key) -> Result<Outcome> {
+    fn handle_key(
+        &mut self,
+        c: &mut Canopy,
+        _ctrl: &mut dyn BackendControl,
+        k: key::Key,
+    ) -> Result<Outcome> {
         if self.active {
             match k {
-                c if c == 'a' => {
-                    focus::shift_first(&mut self.app)?;
+                ck if ck == 'a' => {
+                    c.focus_first(&mut self.app)?;
                 }
-                c if c == 'q' => {
-                    self.hide()?;
+                ck if ck == 'q' => {
+                    self.hide_inspector(c)?;
                 }
-                c if c == self.activate => {
-                    if focus::is_on_path(&mut self.content) {
-                        self.hide()?;
+                ck if ck == self.activate => {
+                    if c.is_on_focus_path(&mut self.content) {
+                        self.hide_inspector(c)?;
                     } else {
-                        focus::shift_first(&mut self.content)?;
+                        c.focus_first(&mut self.content)?;
                     }
                 }
                 _ => return Ok(Outcome::Ignore),
             };
         } else if k == self.activate {
-            self.show()?;
+            self.show_inspector(c)?;
         };
         Ok(Outcome::Handle)
     }
 
-    fn render(&mut self, _r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &Canopy, _r: &mut Render) -> Result<()> {
         let vp = self.vp();
         if self.active {
             let parts = vp.split_horizontal(2)?;
