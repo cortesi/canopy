@@ -80,8 +80,8 @@ pub fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     } else {
         let mut colors = solarized::solarized_dark();
         let contents = fs::read_to_string(args[1].clone())?;
-        let mut root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new(contents));
-        runloop(&mut colors, &mut root)?;
+        let root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new(contents));
+        runloop(&mut colors, root)?;
     }
     Ok(())
 }

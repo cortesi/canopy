@@ -304,7 +304,7 @@ fn event_emitter(evt_tx: mpsc::Sender<Event>) {
     });
 }
 
-pub fn runloop<N>(style: &mut StyleManager, root: &mut N) -> Result<()>
+pub fn runloop<N>(style: &mut StyleManager, mut root: N) -> Result<()>
 where
     N: Node,
 {
@@ -358,19 +358,19 @@ where
     let events = EventSource::new(rx);
     event_emitter(tx.clone());
     let size = translate_result(terminal::size())?;
-    canopy::set_root_size(Expanse::new(size.0, size.1), root)?;
+    canopy::set_root_size(Expanse::new(size.0, size.1), &mut root)?;
     global::start_poller(tx);
 
     loop {
         let mut tainted = true;
         loop {
             if tainted {
-                canopy::pre_render(&mut be, root)?;
-                canopy::render(&mut be, style, root)?;
-                canopy::post_render(&mut be, style, root)?;
+                canopy::pre_render(&mut be, &mut root)?;
+                canopy::render(&mut be, style, &mut root)?;
+                canopy::post_render(&mut be, style, &mut root)?;
                 translate_result(be.flush())?;
             }
-            canopy::event(&mut ctrl, root, events.next()?)?;
+            canopy::event(&mut ctrl, &mut root, events.next()?)?;
             tainted = global::with(|s| -> bool {
                 tainted = s.taint;
                 s.taint = false;

@@ -175,7 +175,7 @@ impl Node for Block {
 
 pub fn main() -> Result<()> {
     let mut colors = solarized::solarized_dark();
-    let mut root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new());
-    runloop(&mut colors, &mut root)?;
+    let root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new());
+    runloop(&mut colors, root)?;
     Ok(())
 }
