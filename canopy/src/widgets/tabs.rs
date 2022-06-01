@@ -35,7 +35,7 @@ impl Tabs {
 }
 
 impl Node for Tabs {
-    fn render(&mut self, c: &Canopy, r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &Canopy, r: &mut Render) -> Result<()> {
         for (i, rect) in self
             .vp()
             .view_rect()

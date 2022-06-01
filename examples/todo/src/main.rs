@@ -53,7 +53,7 @@ impl Node for TodoItem {
         f(&mut self.child)
     }
 
-    fn render(&mut self, r: &mut Render) -> canopy::Result<()> {
+    fn render(&mut self, _c: &Canopy, r: &mut Render) -> canopy::Result<()> {
         let vp = self.vp();
         fit(&mut self.child, vp)?;
         if self.selected {
@@ -72,7 +72,7 @@ struct StatusBar {
 impl StatusBar {}
 
 impl Node for StatusBar {
-    fn render(&mut self, r: &mut Render) -> canopy::Result<()> {
+    fn render(&mut self, _c: &Canopy, r: &mut Render) -> canopy::Result<()> {
         r.style.push_layer("statusbar");
         r.text("statusbar/text", self.vp().view_rect().first_line(), "todo")?;
         Ok(())
@@ -102,13 +102,12 @@ impl Todo {
         Ok(r)
     }
 
-    #[command]
     /// Open the editor to enter a new todo item.
-    fn enter_item(&mut self) -> canopy::Result<()> {
+    fn enter_item(&mut self, c: &mut Canopy) -> canopy::Result<()> {
         let mut adder = frame::Frame::new(InputLine::new(""));
-        adder.child.set_focus();
+        adder.child.set_focus(c);
         self.adder = Some(adder);
-        self.taint();
+        self.taint(c);
         Ok(())
     }
 
@@ -123,7 +122,7 @@ impl Todo {
 }
 
 impl Node for Todo {
-    fn render(&mut self, _: &mut Render) -> canopy::Result<()> {
+    fn render(&mut self, _c: &Canopy, _: &mut Render) -> canopy::Result<()> {
         let vp = self.vp();
         let (a, b) = vp.carve_vend(1);
         fit(&mut self.statusbar, b)?;
@@ -142,13 +141,14 @@ impl Node for Todo {
 
     fn handle_mouse(
         &mut self,
+        _c: &mut Canopy,
         _: &mut dyn BackendControl,
         k: mouse::Mouse,
     ) -> canopy::Result<Outcome> {
         let v = &mut self.content.child;
         match k {
-            c if c == mouse::MouseAction::ScrollDown => v.update_viewport(&|vp| vp.down()),
-            c if c == mouse::MouseAction::ScrollUp => v.update_viewport(&|vp| vp.up()),
+            ck if ck == mouse::MouseAction::ScrollDown => v.update_viewport(&|vp| vp.down()),
+            ck if ck == mouse::MouseAction::ScrollUp => v.update_viewport(&|vp| vp.up()),
             _ => return Ok(Outcome::Ignore),
         };
         Ok(Outcome::Handle)
@@ -156,6 +156,7 @@ impl Node for Todo {
 
     fn handle_key(
         &mut self,
+        c: &mut Canopy,
         ctrl: &mut dyn BackendControl,
         k: key::Key,
     ) -> canopy::Result<Outcome> {
@@ -174,25 +175,25 @@ impl Node for Todo {
             };
         } else {
             match k {
-                c if c == 'a' => {
-                    self.enter_item()?;
+                ck if ck == 'a' => {
+                    self.enter_item(c)?;
                 }
-                c if c == 'g' => lst.select_first(),
-                c if c == 'd' => {
+                ck if ck == 'g' => lst.select_first(),
+                ck if ck == 'd' => {
                     if let Some(t) = lst.selected() {
                         store::get().delete_todo(t.todo.id).unwrap();
                         lst.delete_selected();
                     }
                 }
-                c if c == 'j' || c == key::KeyCode::Down => lst.select_next(),
-                c if c == 'k' || c == key::KeyCode::Up => lst.select_prev(),
-                c if c == ' ' || c == key::KeyCode::PageDown => lst.page_down(),
-                c if c == key::KeyCode::PageUp => lst.page_up(),
-                c if c == 'q' => ctrl.exit(0),
+                ck if ck == 'j' || ck == key::KeyCode::Down => lst.select_next(),
+                ck if ck == 'k' || ck == key::KeyCode::Up => lst.select_prev(),
+                ck if ck == ' ' || ck == key::KeyCode::PageDown => lst.page_down(),
+                ck if ck == key::KeyCode::PageUp => lst.page_up(),
+                ck if ck == 'q' => ctrl.exit(0),
                 _ => return Ok(Outcome::Ignore),
             };
         }
-        canopy::taint_tree(self);
+        c.taint_tree(self);
         Ok(Outcome::Handle)
     }
 
@@ -219,19 +220,19 @@ struct Args {
 }
 
 pub fn main() -> Result<()> {
-    let args = Args::parse();
+    // let args = Args::parse();
 
-    global::keymap(|k| {
-        k.load_commands(List::<TodoItem>::load_commands(None));
-        k.load_commands(Todo::load_commands(None));
-    });
+    // global::keymap(|k| {
+    //     k.load_commands(List::<TodoItem>::load_commands(None));
+    //     k.load_commands(Todo::load_commands(None));
+    // });
 
-    if args.commands {
-        global::keymap(|k| {
-            k.pretty_print_commands();
-        });
-        return Ok(());
-    }
+    // if args.commands {
+    //     global::keymap(|k| {
+    //         k.pretty_print_commands();
+    //     });
+    //     return Ok(());
+    // }
 
     if let Some(path) = env::args().nth(1) {
         store::open(&path)?;
@@ -243,8 +244,10 @@ pub fn main() -> Result<()> {
             None,
         );
 
-        let mut root = Inspector::new(key::Ctrl + key::KeyCode::Right, Todo::new()?);
-        runloop(&mut colors, &mut root)?;
+        runloop(
+            &mut colors,
+            Inspector::new(key::Ctrl + key::KeyCode::Right, Todo::new()?),
+        )?;
     } else {
         println!("Specify a file path")
     }

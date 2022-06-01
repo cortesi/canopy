@@ -312,7 +312,6 @@ where
         for itm in &mut self.items {
             if let Some(vp) = vp.map(itm.virt)? {
                 itm.itm.set_viewport(vp);
-                // c.taint_tree(&mut itm.itm);
                 itm.itm.unhide();
             } else {
                 itm.itm.hide();

@@ -8,7 +8,6 @@ use color_backtrace::{default_output_stream, BacktracePrinter};
 use scopeguard::defer;
 
 use crate::{
-    self as canopy,
     control::BackendControl,
     cursor, error,
     event::{key, mouse, Event, EventSource},
