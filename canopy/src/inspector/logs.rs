@@ -6,12 +6,10 @@ use tracing_subscriber::fmt;
 
 use crate as canopy;
 use crate::{
-    derive_commands,
     event::key,
-    fit,
     geom::{Expanse, Rect},
     widgets::{list::*, Text},
-    BackendControl, Canopy, Node, NodeState, Outcome, Render, Result, StatefulNode, ViewPort,
+    *,
 };
 use std::time::Duration;
 
@@ -47,7 +45,7 @@ impl Node for LogItem {
         })
     }
 
-    fn render(&mut self, _c: &Canopy, r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
         let vp = self.vp();
         let (_, screen) = vp.screen_rect().carve_hstart(2);
         let outer = self.child.fit(screen.into())?;
@@ -104,7 +102,7 @@ pub struct Logs {
 impl Node for Logs {
     fn handle_key(
         &mut self,
-        c: &mut Canopy,
+        c: &mut dyn Core,
         _ctrl: &mut dyn BackendControl,
         k: key::Key,
     ) -> Result<Outcome> {
@@ -130,7 +128,7 @@ impl Node for Logs {
         Ok(Outcome::Handle)
     }
 
-    fn poll(&mut self, c: &mut Canopy) -> Option<Duration> {
+    fn poll(&mut self, c: &mut dyn Core) -> Option<Duration> {
         if !self.started {
             // Configure a custom event formatter
             let format = fmt::format()
@@ -160,7 +158,7 @@ impl Node for Logs {
         Some(Duration::from_millis(100))
     }
 
-    fn render(&mut self, _: &Canopy, _: &mut Render) -> Result<()> {
+    fn render(&mut self, _: &dyn Core, _: &mut Render) -> Result<()> {
         let vp = self.vp();
         fit(&mut self.list, vp)?;
         Ok(())

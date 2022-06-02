@@ -1,9 +1,8 @@
 use crate as canopy;
 use crate::{
-    derive_commands,
     geom::{Expanse, Line},
     state::{NodeState, StatefulNode},
-    Canopy, Node, Render, Result,
+    *,
 };
 
 use textwrap;
@@ -57,7 +56,7 @@ impl Node for Text {
         }
         Ok(self.current_size)
     }
-    fn render(&mut self, _c: &Canopy, rndr: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Core, rndr: &mut Render) -> Result<()> {
         let vo = self.vp().view_rect();
         if let Some(lines) = self.lines.as_ref() {
             for i in vo.tl.y..(vo.tl.y + vo.h) {

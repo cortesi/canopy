@@ -4,7 +4,7 @@ use crate as canopy;
 use crate::{
     derive_commands, frame,
     state::{NodeState, StatefulNode},
-    Canopy, Node, Render, Result,
+    Core, Node, Render, Result,
 };
 
 /// Defines the set of glyphs used to draw the frame
@@ -103,11 +103,11 @@ impl<N> Node for Frame<N>
 where
     N: Node,
 {
-    fn force_render(&self, c: &Canopy) -> bool {
+    fn force_render(&self, c: &dyn Core) -> bool {
         c.needs_render(&self.child)
     }
 
-    fn render(&mut self, c: &Canopy, rndr: &mut Render) -> Result<()> {
+    fn render(&mut self, c: &dyn Core, rndr: &mut Render) -> Result<()> {
         let vp = self.vp();
         let f = frame(&mut self.child, vp, 1)?;
 

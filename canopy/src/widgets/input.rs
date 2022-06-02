@@ -1,10 +1,9 @@
 use crate as canopy;
 use crate::{
-    cursor, derive_commands,
     event::key,
     geom::{Expanse, LineSegment, Point},
     state::{NodeState, StatefulNode},
-    BackendControl, Canopy, Node, Outcome, Render, Result,
+    *,
 };
 
 /// A text buffer that exposes edit functionality for a single line. It also
@@ -136,7 +135,7 @@ impl Node for InputLine {
         })
     }
 
-    fn render(&mut self, _: &Canopy, r: &mut Render) -> Result<()> {
+    fn render(&mut self, _: &dyn Core, r: &mut Render) -> Result<()> {
         r.text(
             "text",
             self.vp().view_rect().first_line(),
@@ -146,7 +145,7 @@ impl Node for InputLine {
 
     fn handle_key(
         &mut self,
-        _c: &mut Canopy,
+        _c: &mut dyn Core,
         _: &mut dyn BackendControl,
         k: key::Key,
     ) -> Result<Outcome> {

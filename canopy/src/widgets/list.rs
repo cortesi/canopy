@@ -1,11 +1,10 @@
 use crate as canopy;
 use crate::{
-    command, derive_commands,
     error::Result,
     geom::{Expanse, Rect},
     node::Node,
     state::{NodeState, StatefulNode},
-    Canopy, Render,
+    *,
 };
 
 /// ListItem must be implemented by items displayed in a `List`.
@@ -307,7 +306,7 @@ where
         Ok(Expanse { w, h })
     }
 
-    fn render(&mut self, _c: &Canopy, _: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {
         let vp = self.vp();
         for itm in &mut self.items {
             if let Some(vp) = vp.map(itm.virt)? {
@@ -324,7 +323,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{backend::test::TestRender, place, tutils::utils::TFixed};
+    use crate::{backend::test::TestRender, place, tutils::utils::TFixed, Core};
 
     pub fn views(lst: &mut List<TFixed>) -> Vec<Rect> {
         let mut v = vec![];

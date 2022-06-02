@@ -1,9 +1,6 @@
 use super::logs::Logs;
 use crate as canopy;
-use crate::{
-    derive_commands, event::key, fit, widgets::tabs, BackendControl, Canopy, Node, NodeState,
-    Outcome, Render, Result, StatefulNode,
-};
+use crate::{event::key, widgets::tabs, *};
 
 /// View contains the body of the inspector.
 #[derive(StatefulNode)]
@@ -17,7 +14,7 @@ pub struct View {
 impl Node for View {
     fn handle_key(
         &mut self,
-        c: &mut Canopy,
+        c: &mut dyn Core,
         _: &mut dyn BackendControl,
         k: key::Key,
     ) -> Result<Outcome> {
@@ -28,7 +25,7 @@ impl Node for View {
         Ok(Outcome::Handle)
     }
 
-    fn render(&mut self, _c: &Canopy, _r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Core, _r: &mut Render) -> Result<()> {
         let (a, b) = self.vp().carve_vstart(1);
         fit(&mut self.tabs, a)?;
         fit(&mut self.logs, b)?;

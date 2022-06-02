@@ -48,14 +48,14 @@ impl Block {
 }
 
 impl Node for Root {
-    fn render(&mut self, _c: &Canopy, _: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {
         let vp = self.vp();
         fit(&mut self.child, vp)
     }
 
     fn handle_mouse(
         &mut self,
-        c: &mut Canopy,
+        c: &mut dyn Core,
         _: &mut dyn BackendControl,
         k: mouse::Mouse,
     ) -> Result<Outcome> {
@@ -68,7 +68,7 @@ impl Node for Root {
 
     fn handle_key(
         &mut self,
-        c: &mut Canopy,
+        c: &mut dyn Core,
         ctrl: &mut dyn BackendControl,
         k: key::Key,
     ) -> Result<Outcome> {
@@ -90,7 +90,7 @@ impl Node for Root {
 }
 
 impl Block {
-    fn add(&mut self, c: &mut Canopy) -> Result<Outcome> {
+    fn add(&mut self, c: &mut dyn Core) -> Result<Outcome> {
         Ok(if self.children.is_empty() {
             Outcome::Ignore
         } else if self.size_limited(self.children[0].vp().view_rect().into()) {
@@ -104,7 +104,7 @@ impl Block {
     fn size_limited(&self, a: Expanse) -> bool {
         (self.horizontal && a.w <= 4) || (!self.horizontal && a.h <= 4)
     }
-    fn split(&mut self, c: &mut Canopy) -> Result<Outcome> {
+    fn split(&mut self, c: &mut dyn Core) -> Result<Outcome> {
         Ok(if self.size_limited(self.vp().view_rect().into()) {
             Outcome::Handle
         } else {
@@ -116,7 +116,7 @@ impl Block {
 }
 
 impl Node for Block {
-    fn render(&mut self, c: &Canopy, r: &mut Render) -> Result<()> {
+    fn render(&mut self, c: &dyn Core, r: &mut Render) -> Result<()> {
         let vp = self.vp();
         if !self.children.is_empty() {
             let vps = if self.horizontal {
@@ -146,7 +146,7 @@ impl Node for Block {
 
     fn handle_mouse(
         &mut self,
-        c: &mut Canopy,
+        c: &mut dyn Core,
         _: &mut dyn BackendControl,
         k: mouse::Mouse,
     ) -> Result<Outcome> {
@@ -170,7 +170,7 @@ impl Node for Block {
 
     fn handle_key(
         &mut self,
-        c: &mut Canopy,
+        c: &mut dyn Core,
         _: &mut dyn BackendControl,
         k: key::Key,
     ) -> Result<Outcome> {

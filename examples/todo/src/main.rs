@@ -53,7 +53,7 @@ impl Node for TodoItem {
         f(&mut self.child)
     }
 
-    fn render(&mut self, _c: &Canopy, r: &mut Render) -> canopy::Result<()> {
+    fn render(&mut self, _c: &dyn Core, r: &mut Render) -> canopy::Result<()> {
         let vp = self.vp();
         fit(&mut self.child, vp)?;
         if self.selected {
@@ -72,7 +72,7 @@ struct StatusBar {
 impl StatusBar {}
 
 impl Node for StatusBar {
-    fn render(&mut self, _c: &Canopy, r: &mut Render) -> canopy::Result<()> {
+    fn render(&mut self, _c: &dyn Core, r: &mut Render) -> canopy::Result<()> {
         r.style.push_layer("statusbar");
         r.text("statusbar/text", self.vp().view_rect().first_line(), "todo")?;
         Ok(())
@@ -103,11 +103,11 @@ impl Todo {
     }
 
     /// Open the editor to enter a new todo item.
-    fn enter_item(&mut self, c: &mut Canopy) -> canopy::Result<()> {
+    fn enter_item(&mut self, c: &mut dyn Core) -> canopy::Result<()> {
         let mut adder = frame::Frame::new(InputLine::new(""));
-        adder.child.set_focus(c);
+        c.set_focus(&mut adder.child);
         self.adder = Some(adder);
-        self.taint(c);
+        c.taint(self);
         Ok(())
     }
 
@@ -122,7 +122,7 @@ impl Todo {
 }
 
 impl Node for Todo {
-    fn render(&mut self, _c: &Canopy, _: &mut Render) -> canopy::Result<()> {
+    fn render(&mut self, _c: &dyn Core, _: &mut Render) -> canopy::Result<()> {
         let vp = self.vp();
         let (a, b) = vp.carve_vend(1);
         fit(&mut self.statusbar, b)?;
@@ -141,7 +141,7 @@ impl Node for Todo {
 
     fn handle_mouse(
         &mut self,
-        _c: &mut Canopy,
+        _c: &mut dyn Core,
         _: &mut dyn BackendControl,
         k: mouse::Mouse,
     ) -> canopy::Result<Outcome> {
@@ -156,7 +156,7 @@ impl Node for Todo {
 
     fn handle_key(
         &mut self,
-        c: &mut Canopy,
+        c: &mut dyn Core,
         ctrl: &mut dyn BackendControl,
         k: key::Key,
     ) -> canopy::Result<Outcome> {

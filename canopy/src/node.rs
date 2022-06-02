@@ -4,7 +4,7 @@ use crate::{
     cursor,
     event::{key, mouse},
     geom::{Expanse, Frame, Rect},
-    BackendControl, Canopy, CommandNode, Render, Result, StatefulNode, ViewPort,
+    BackendControl, CommandNode, Core, Render, Result, StatefulNode, ViewPort,
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -47,7 +47,7 @@ pub trait Node: StatefulNode + CommandNode {
     /// Force the node to render in the next sweep. Over-riding this method
     /// should only be needed rarely, for instance when a container node (e.g. a
     /// frame) needs to redraw if a child node changes.
-    fn force_render(&self, c: &Canopy) -> bool {
+    fn force_render(&self, c: &dyn Core) -> bool {
         false
     }
 
@@ -68,7 +68,7 @@ pub trait Node: StatefulNode + CommandNode {
     /// on the focus path. The default implementation ignores input.
     fn handle_key(
         &mut self,
-        c: &mut Canopy,
+        c: &mut dyn Core,
         b: &mut dyn BackendControl,
         k: key::Key,
     ) -> Result<Outcome> {
@@ -79,7 +79,7 @@ pub trait Node: StatefulNode + CommandNode {
     /// input.
     fn handle_mouse(
         &mut self,
-        c: &mut Canopy,
+        c: &mut dyn Core,
         b: &mut dyn BackendControl,
         k: mouse::Mouse,
     ) -> Result<Outcome> {
@@ -115,7 +115,7 @@ pub trait Node: StatefulNode + CommandNode {
     /// function returns a duration, a subsequent call is scheduled. If the
     /// function returns None, the `poll` function is never called again. The
     /// default implementation returns `None`.
-    fn poll(&mut self, c: &mut Canopy) -> Option<Duration> {
+    fn poll(&mut self, c: &mut dyn Core) -> Option<Duration> {
         None
     }
 
@@ -129,7 +129,7 @@ pub trait Node: StatefulNode + CommandNode {
     ///
     /// Nodes with no children should always make sure they redraw all of
     /// `self.screen_area()`. The default implementation does nothing.
-    fn render(&mut self, c: &Canopy, r: &mut Render) -> Result<()> {
+    fn render(&mut self, c: &dyn Core, r: &mut Render) -> Result<()> {
         Ok(())
     }
 }

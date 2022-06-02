@@ -11,30 +11,6 @@ use crate::{
     KeyMap, NodeId, Outcome, Render, Result, ViewPort,
 };
 
-pub struct Canopy {
-    /// A counter that is incremented every time focus changes. The current focus
-    /// will have a state `focus_gen` equal to this.
-    focus_gen: u64,
-    /// Stores the focus_gen during the last render. Used to detect if focus has
-    /// changed.
-    last_render_focus_gen: u64,
-
-    /// A counter that is incremented every time we render. All items that
-    /// require rendering during the current sweep will have a state `render_gen`
-    /// equal to this.
-    render_gen: u64,
-    /// The poller is responsible for tracking nodes that have pending poll
-    /// events, and scheduling their execution.
-    poller: Poller,
-    /// Has the tree been tainted? This reset to false before every event sweep.
-    pub taint: bool,
-
-    pub keymap: KeyMap,
-
-    pub(crate) event_tx: mpsc::Sender<Event>,
-    pub(crate) event_rx: Option<mpsc::Receiver<Event>>,
-}
-
 /// Call a closure on the currently focused node and all its ancestors to the
 /// root. If the closure returns Walk::Handle, traversal stops. Handle::Skip is
 /// ignored.
@@ -66,6 +42,249 @@ fn walk_focus_path_e<R>(
     .value())
 }
 
+pub trait Core {
+    fn is_on_focus_path(&self, n: &mut dyn Node) -> bool;
+    fn is_focused(&self, n: &dyn Node) -> bool;
+    fn is_focus_ancestor(&self, n: &mut dyn Node) -> bool;
+    fn focus_area(&self, root: &mut dyn Node) -> Option<Rect>;
+    fn focus_depth(&self, n: &mut dyn Node) -> usize;
+    fn focus_down(&mut self, root: &mut dyn Node) -> Result<Outcome>;
+    fn focus_first(&mut self, root: &mut dyn Node) -> Result<Outcome>;
+    fn focus_left(&mut self, root: &mut dyn Node) -> Result<Outcome>;
+    fn focus_next(&mut self, root: &mut dyn Node) -> Result<Outcome>;
+    fn focus_path(&self, root: &mut dyn Node) -> String;
+    fn focus_prev(&mut self, root: &mut dyn Node) -> Result<Outcome>;
+    fn focus_right(&mut self, root: &mut dyn Node) -> Result<Outcome>;
+    fn focus_up(&mut self, root: &mut dyn Node) -> Result<Outcome>;
+    fn needs_render(&self, n: &dyn Node) -> bool;
+    fn set_focus(&mut self, n: &mut dyn Node);
+    fn shift_focus(&mut self, root: &mut dyn Node, dir: Direction) -> Result<Outcome>;
+    fn taint(&mut self, n: &mut dyn Node);
+    fn taint_tree(&mut self, e: &mut dyn Node);
+}
+
+pub struct Canopy {
+    /// A counter that is incremented every time focus changes. The current focus
+    /// will have a state `focus_gen` equal to this.
+    focus_gen: u64,
+    /// Stores the focus_gen during the last render. Used to detect if focus has
+    /// changed.
+    last_render_focus_gen: u64,
+
+    /// A counter that is incremented every time we render. All items that
+    /// require rendering during the current sweep will have a state `render_gen`
+    /// equal to this.
+    render_gen: u64,
+    /// The poller is responsible for tracking nodes that have pending poll
+    /// events, and scheduling their execution.
+    poller: Poller,
+    /// Has the tree been tainted? This reset to false before every event sweep.
+    pub taint: bool,
+
+    pub keymap: KeyMap,
+
+    pub(crate) event_tx: mpsc::Sender<Event>,
+    pub(crate) event_rx: Option<mpsc::Receiver<Event>>,
+}
+
+impl Core for Canopy {
+    /// Does the node need to render in the next sweep? This checks if the node
+    /// is currently hidden, and if not, signals that we should render if:
+    ///
+    /// - the node is tainted
+    /// - its focus status has changed
+    /// - it is forcing a render
+    fn needs_render(&self, n: &dyn Node) -> bool {
+        !n.is_hidden() && (n.force_render(self) || self.is_tainted(n) || self.node_focus_changed(n))
+    }
+
+    /// Taint a node for render.
+    fn taint(&mut self, n: &mut dyn Node) {
+        let r = n.state_mut();
+        r.render_gen = self.render_gen;
+        self.taint = true;
+    }
+
+    /// Mark a tree of nodes for render.
+    fn taint_tree(&mut self, e: &mut dyn Node) {
+        postorder(e, &mut |x| -> Result<Walk<()>> {
+            self.taint(x);
+            Ok(Walk::Continue)
+        })
+        // Unwrap is safe, because no operations in the closure can fail.
+        .unwrap();
+    }
+
+    /// Is the specified node on the focus path? A node is on the focus path if it
+    /// has focus, or if it's the ancestor of a node with focus.
+    fn is_on_focus_path(&self, n: &mut dyn Node) -> bool {
+        self.walk_focus_path(n, &mut |_| -> Result<Walk<bool>> { Ok(Walk::Handle(true)) })
+            // We're safe to unwrap, because our closure can't return an error.
+            .unwrap()
+            .unwrap_or(false)
+    }
+
+    /// Return the focus path for the subtree under `root`.
+    fn focus_path(&self, root: &mut dyn Node) -> String {
+        let mut path = Vec::new();
+        self.walk_focus_path(root, &mut |n| -> Result<Walk<()>> {
+            path.insert(0, n.name().to_string());
+            Ok(Walk::Continue)
+        })
+        // We're safe to unwrap because our closure can't return an error.
+        .unwrap();
+        "/".to_string() + &path.join("/")
+    }
+
+    /// Find the area of the current terminal focus node under the specified `root`.
+    fn focus_area(&self, root: &mut dyn Node) -> Option<Rect> {
+        self.walk_focus_path(root, &mut |x| -> Result<Walk<Rect>> {
+            Ok(Walk::Handle(x.vp().screen_rect()))
+        })
+        // We're safe to unwrap, because our closure can't return an error.
+        .unwrap()
+    }
+
+    /// Move focus in a specified direction within the subtree at root.
+    fn shift_focus(&mut self, root: &mut dyn Node, dir: Direction) -> Result<Outcome> {
+        let mut seen = false;
+        if let Some(start) = self.focus_area(root) {
+            start.search(dir, &mut |p| -> Result<bool> {
+                if !root.vp().screen_rect().contains_point(p) {
+                    return Ok(true);
+                }
+                locate(root, p, &mut |x| -> Result<Walk<()>> {
+                    if !seen && x.accept_focus() {
+                        self.set_focus(x);
+                        seen = true;
+                    };
+                    Ok(Walk::Continue)
+                })?;
+                Ok(seen)
+            })?
+        }
+        Ok(Outcome::Handle)
+    }
+
+    /// Move focus to the right of the currently focused node within the subtree at root.
+    fn focus_right(&mut self, root: &mut dyn Node) -> Result<Outcome> {
+        self.shift_focus(root, Direction::Right)
+    }
+
+    /// Move focus to the left of the currently focused node within the subtree at root.
+    fn focus_left(&mut self, root: &mut dyn Node) -> Result<Outcome> {
+        self.shift_focus(root, Direction::Left)
+    }
+
+    /// Move focus upward of the currently focused node within the subtree at root.
+    fn focus_up(&mut self, root: &mut dyn Node) -> Result<Outcome> {
+        self.shift_focus(root, Direction::Up)
+    }
+
+    /// Move focus downward of the currently focused node within the subtree at root.
+    fn focus_down(&mut self, root: &mut dyn Node) -> Result<Outcome> {
+        self.shift_focus(root, Direction::Down)
+    }
+
+    /// Focus the first node that accepts focus in the pre-order traversal of
+    /// the subtree at root.
+    fn focus_first(&mut self, root: &mut dyn Node) -> Result<Outcome> {
+        let mut focus_set = false;
+        preorder(root, &mut |x| -> Result<Walk<()>> {
+            Ok(if !focus_set && x.accept_focus() {
+                self.set_focus(x);
+                focus_set = true;
+                Walk::Skip
+            } else {
+                Walk::Continue
+            })
+        })?;
+        Ok(Outcome::Handle)
+    }
+
+    /// A node is on the focus path if it does not have focus itself, but some
+    /// node below it does.
+    fn is_focus_ancestor(&self, n: &mut dyn Node) -> bool {
+        if self.is_focused(n) {
+            false
+        } else {
+            self.is_on_focus_path(n)
+        }
+    }
+
+    /// Focus the next node in the pre-order traversal of root. If no node with
+    /// focus is found, we focus the first node we can find instead.
+    fn focus_next(&mut self, root: &mut dyn Node) -> Result<Outcome> {
+        let mut focus_set = false;
+        let mut focus_seen = false;
+        preorder(root, &mut |x| -> Result<Walk<()>> {
+            if !focus_set {
+                if focus_seen {
+                    if x.accept_focus() {
+                        self.set_focus(x);
+                        focus_set = true;
+                    }
+                } else if self.is_focused(x) {
+                    focus_seen = true;
+                }
+            }
+            Ok(Walk::Continue)
+        })?;
+        if !focus_set {
+            self.focus_first(root)
+        } else {
+            Ok(Outcome::Handle)
+        }
+    }
+
+    /// Focus the previous node in the pre-order traversal of `root`. If no node
+    /// with focus is found, we focus the first node we can find instead.
+    fn focus_prev(&mut self, root: &mut dyn Node) -> Result<Outcome> {
+        let current = self.focus_gen;
+        let mut focus_seen = false;
+        let mut first = true;
+        preorder(root, &mut |x| -> Result<Walk<()>> {
+            // We skip the first node in the traversal
+            if first {
+                first = false
+            } else if !focus_seen {
+                if x.state().focus_gen == current {
+                    focus_seen = true;
+                } else if x.accept_focus() {
+                    self.set_focus(x);
+                }
+            }
+            Ok(Walk::Continue)
+        })?;
+        Ok(Outcome::Handle)
+    }
+
+    /// Returns the focal depth of the specified node. If the node is not part
+    /// of the focus chain, the depth is 0. If the node is a leaf focus, the
+    /// depth is 1.
+    fn focus_depth(&self, n: &mut dyn Node) -> usize {
+        let mut total = 0;
+        self.walk_focus_path(n, &mut |_| -> Result<Walk<()>> {
+            total += 1;
+            Ok(Walk::Continue)
+        })
+        // We're safe to unwrap, because our closure can't return an error.
+        .unwrap();
+        total
+    }
+
+    /// Focus a node.
+    fn set_focus(&mut self, n: &mut dyn Node) {
+        self.focus_gen += 1;
+        n.state_mut().focus_gen = self.focus_gen;
+    }
+
+    /// Does the node have terminal focus?
+    fn is_focused(&self, n: &dyn Node) -> bool {
+        n.state().focus_gen == self.focus_gen
+    }
+}
+
 impl Canopy {
     pub(crate) fn new() -> Self {
         let (tx, rx) = mpsc::channel();
@@ -79,17 +298,6 @@ impl Canopy {
             event_rx: Some(rx),
             keymap: KeyMap::new(),
         }
-    }
-
-    /// Focus a node.
-    pub fn set_focus(&mut self, n: &mut dyn Node) {
-        self.focus_gen += 1;
-        n.state_mut().focus_gen = self.focus_gen;
-    }
-
-    /// Does the node have terminal focus?
-    pub fn is_focused(&self, n: &dyn Node) -> bool {
-        n.state().focus_gen == self.focus_gen
     }
 
     /// Has the focus status of this node changed since the last render
@@ -116,23 +324,6 @@ impl Canopy {
         } else {
             false
         }
-    }
-
-    /// Should the node render in the next sweep? This checks if the node is
-    /// currently hidden, and if not, signals that we should render if:
-    ///
-    /// - the node is tainted
-    /// - its focus status has changed
-    /// - it is forcing a render
-    pub fn needs_render(&self, n: &dyn Node) -> bool {
-        !n.is_hidden() && (n.force_render(self) || self.is_tainted(n) || self.node_focus_changed(n))
-    }
-
-    /// Taint this node for render.
-    pub fn taint(&mut self, n: &mut dyn Node) {
-        let r = n.state_mut();
-        r.render_gen = self.render_gen;
-        self.taint = true;
     }
 
     /// Is this node render tainted?
@@ -365,16 +556,6 @@ impl Canopy {
         Ok(())
     }
 
-    /// Mark a tree of nodes for render.
-    pub fn taint_tree(&mut self, e: &mut dyn Node) {
-        postorder(e, &mut |x| -> Result<Walk<()>> {
-            self.taint(x);
-            Ok(Walk::Continue)
-        })
-        // Unwrap is safe, because no operations in the closure can fail.
-        .unwrap();
-    }
-
     /// Set the size on the root node, and taint the tree.
     pub fn set_root_size(&mut self, size: Expanse, n: &mut dyn Node) -> Result<()> {
         let fit = n.fit(size)?;
@@ -393,164 +574,6 @@ impl Canopy {
         f: &mut dyn FnMut(&mut dyn Node) -> Result<Walk<R>>,
     ) -> Result<Option<R>> {
         walk_focus_path_e(self.focus_gen, root, f)
-    }
-
-    /// Is the specified node on the focus path? A node is on the focus path if it
-    /// has focus, or if it's the ancestor of a node with focus.
-    pub fn is_on_focus_path(&self, n: &mut dyn Node) -> bool {
-        self.walk_focus_path(n, &mut |_| -> Result<Walk<bool>> { Ok(Walk::Handle(true)) })
-            // We're safe to unwrap, because our closure can't return an error.
-            .unwrap()
-            .unwrap_or(false)
-    }
-
-    /// Return the focus path for the subtree under `root`.
-    pub fn focus_path(&self, root: &mut dyn Node) -> String {
-        let mut path = Vec::new();
-        self.walk_focus_path(root, &mut |n| -> Result<Walk<()>> {
-            path.insert(0, n.name().to_string());
-            Ok(Walk::Continue)
-        })
-        // We're safe to unwrap because our closure can't return an error.
-        .unwrap();
-        "/".to_string() + &path.join("/")
-    }
-
-    /// Find the area of the current terminal focus node under the specified `root`.
-    pub fn focus_area(&self, root: &mut dyn Node) -> Option<Rect> {
-        self.walk_focus_path(root, &mut |x| -> Result<Walk<Rect>> {
-            Ok(Walk::Handle(x.vp().screen_rect()))
-        })
-        // We're safe to unwrap, because our closure can't return an error.
-        .unwrap()
-    }
-
-    /// Move focus in a specified direction within the subtree at root.
-    pub fn shift_focus(&mut self, root: &mut dyn Node, dir: Direction) -> Result<Outcome> {
-        let mut seen = false;
-        if let Some(start) = self.focus_area(root) {
-            start.search(dir, &mut |p| -> Result<bool> {
-                if !root.vp().screen_rect().contains_point(p) {
-                    return Ok(true);
-                }
-                locate(root, p, &mut |x| -> Result<Walk<()>> {
-                    if !seen && x.accept_focus() {
-                        self.set_focus(x);
-                        seen = true;
-                    };
-                    Ok(Walk::Continue)
-                })?;
-                Ok(seen)
-            })?
-        }
-        Ok(Outcome::Handle)
-    }
-
-    /// Move focus to the right of the currently focused node within the subtree at root.
-    pub fn focus_right(&mut self, root: &mut dyn Node) -> Result<Outcome> {
-        self.shift_focus(root, Direction::Right)
-    }
-
-    /// Move focus to the left of the currently focused node within the subtree at root.
-    pub fn focus_left(&mut self, root: &mut dyn Node) -> Result<Outcome> {
-        self.shift_focus(root, Direction::Left)
-    }
-
-    /// Move focus upward of the currently focused node within the subtree at root.
-    pub fn focus_up(&mut self, root: &mut dyn Node) -> Result<Outcome> {
-        self.shift_focus(root, Direction::Up)
-    }
-
-    /// Move focus downward of the currently focused node within the subtree at root.
-    pub fn focus_down(&mut self, root: &mut dyn Node) -> Result<Outcome> {
-        self.shift_focus(root, Direction::Down)
-    }
-
-    /// Focus the first node that accepts focus in the pre-order traversal of
-    /// the subtree at root.
-    pub fn focus_first(&mut self, root: &mut dyn Node) -> Result<Outcome> {
-        let mut focus_set = false;
-        preorder(root, &mut |x| -> Result<Walk<()>> {
-            Ok(if !focus_set && x.accept_focus() {
-                self.set_focus(x);
-                focus_set = true;
-                Walk::Skip
-            } else {
-                Walk::Continue
-            })
-        })?;
-        Ok(Outcome::Handle)
-    }
-
-    /// A node is on the focus path if it does not have focus itself, but some
-    /// node below it does.
-    pub fn is_focus_ancestor(&self, n: &mut dyn Node) -> bool {
-        if self.is_focused(n) {
-            false
-        } else {
-            self.is_on_focus_path(n)
-        }
-    }
-
-    /// Focus the next node in the pre-order traversal of root. If no node with
-    /// focus is found, we focus the first node we can find instead.
-    pub fn focus_next(&mut self, root: &mut dyn Node) -> Result<Outcome> {
-        let mut focus_set = false;
-        let mut focus_seen = false;
-        preorder(root, &mut |x| -> Result<Walk<()>> {
-            if !focus_set {
-                if focus_seen {
-                    if x.accept_focus() {
-                        self.set_focus(x);
-                        focus_set = true;
-                    }
-                } else if self.is_focused(x) {
-                    focus_seen = true;
-                }
-            }
-            Ok(Walk::Continue)
-        })?;
-        if !focus_set {
-            self.focus_first(root)
-        } else {
-            Ok(Outcome::Handle)
-        }
-    }
-
-    /// Focus the previous node in the pre-order traversal of `root`. If no node
-    /// with focus is found, we focus the first node we can find instead.
-    pub fn focus_prev(&mut self, root: &mut dyn Node) -> Result<Outcome> {
-        let current = self.focus_gen;
-        let mut focus_seen = false;
-        let mut first = true;
-        preorder(root, &mut |x| -> Result<Walk<()>> {
-            // We skip the first node in the traversal
-            if first {
-                first = false
-            } else if !focus_seen {
-                if x.state().focus_gen == current {
-                    focus_seen = true;
-                } else if x.accept_focus() {
-                    self.set_focus(x);
-                }
-            }
-            Ok(Walk::Continue)
-        })?;
-        Ok(Outcome::Handle)
-    }
-
-    /// Returns the focal depth of the specified node. If the node is not part
-    /// of the focus chain, the depth is 0. If the node is a leaf focus, the
-    /// depth is 1.
-    pub fn focus_depth(&self, n: &mut dyn Node) -> usize {
-        let mut total = 0;
-        self.walk_focus_path(n, &mut |_| -> Result<Walk<()>> {
-            total += 1;
-            Ok(Walk::Continue)
-        })
-        // We're safe to unwrap, because our closure can't return an error.
-        .unwrap();
-        total
     }
 }
 

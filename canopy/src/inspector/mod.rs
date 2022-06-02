@@ -3,10 +3,7 @@ mod statusbar;
 mod view;
 
 use crate as canopy;
-use crate::{
-    derive_commands, event::key, fit, widgets::frame, BackendControl, Canopy, Node, NodeState,
-    Outcome, Render, Result, StatefulNode,
-};
+use crate::{event::key, widgets::frame, *};
 
 #[derive(StatefulNode)]
 
@@ -34,7 +31,7 @@ impl Default for Content {
 }
 
 impl Node for Content {
-    fn render(&mut self, _c: &Canopy, r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
         r.style.push_layer("inspector");
         let parts = self.vp().carve_vend(1);
         fit(&mut self.statusbar, parts.1)?;
@@ -77,7 +74,7 @@ where
         c
     }
 
-    pub fn hide_inspector(&mut self, c: &mut Canopy) -> Result<Outcome> {
+    pub fn hide_inspector(&mut self, c: &mut dyn Core) -> Result<Outcome> {
         self.active = false;
         self.content.hide();
         c.taint_tree(self);
@@ -85,7 +82,7 @@ where
         Ok(Outcome::Handle)
     }
 
-    pub fn show_inspector(&mut self, c: &mut Canopy) -> Result<Outcome> {
+    pub fn show_inspector(&mut self, c: &mut dyn Core) -> Result<Outcome> {
         self.active = true;
         self.content.unhide();
         c.taint_tree(self);
@@ -100,7 +97,7 @@ where
 {
     fn handle_key(
         &mut self,
-        c: &mut Canopy,
+        c: &mut dyn Core,
         _ctrl: &mut dyn BackendControl,
         k: key::Key,
     ) -> Result<Outcome> {
@@ -127,7 +124,7 @@ where
         Ok(Outcome::Handle)
     }
 
-    fn render(&mut self, _c: &Canopy, _r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Core, _r: &mut Render) -> Result<()> {
         let vp = self.vp();
         if self.active {
             let parts = vp.split_horizontal(2)?;

@@ -34,7 +34,7 @@ impl Node for Root {
 
     fn handle_mouse(
         &mut self,
-        c: &mut Canopy,
+        c: &mut dyn Core,
         _: &mut dyn BackendControl,
         k: mouse::Mouse,
     ) -> Result<Outcome> {
@@ -50,7 +50,7 @@ impl Node for Root {
 
     fn handle_key(
         &mut self,
-        c: &mut Canopy,
+        c: &mut dyn Core,
         ctrl: &mut dyn BackendControl,
         k: key::Key,
     ) -> Result<Outcome> {
@@ -72,7 +72,7 @@ impl Node for Root {
         Ok(Outcome::Handle)
     }
 
-    fn render(&mut self, _c: &Canopy, _: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {
         let vp = self.vp();
         fit(&mut self.child, vp)
     }

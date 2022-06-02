@@ -1,8 +1,7 @@
 use crate as canopy;
 use crate::{
-    derive_commands,
     state::{NodeState, StatefulNode},
-    Canopy, Node, Render, Result,
+    *,
 };
 
 /// A tab control managing a set of nodes with titles.
@@ -23,19 +22,19 @@ impl Tabs {
         }
     }
 
-    pub fn next(&mut self, c: &mut Canopy) {
+    pub fn next(&mut self, c: &mut dyn Core) {
         self.active = (self.active + 1) % self.tabs.len();
         c.taint(self);
     }
 
-    pub fn prev(&mut self, c: &mut Canopy) {
+    pub fn prev(&mut self, c: &mut dyn Core) {
         self.active = (self.active.wrapping_sub(1)) % self.tabs.len();
         c.taint(self);
     }
 }
 
 impl Node for Tabs {
-    fn render(&mut self, _c: &Canopy, r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
         for (i, rect) in self
             .vp()
             .view_rect()
