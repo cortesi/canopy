@@ -128,7 +128,7 @@ impl Node for Block {
                 fit(&mut self.children[i], vps[i])?;
             }
         } else {
-            let bc = if self.is_focused(c) && self.children.is_empty() {
+            let bc = if c.is_focused(self) && self.children.is_empty() {
                 "violet"
             } else {
                 "blue"
@@ -153,12 +153,12 @@ impl Node for Block {
         Ok(match k {
             ck if ck == mouse::MouseAction::Down + mouse::Button::Left => {
                 c.taint_tree(self);
-                self.set_focus(c);
+                c.set_focus(self);
                 Outcome::Handle
             }
             ck if ck == mouse::MouseAction::Down + mouse::Button::Middle => {
                 self.split(c)?;
-                if self.is_focused(c) {
+                if c.is_focused(self) {
                     c.focus_next(self)?;
                 };
                 Outcome::Handle

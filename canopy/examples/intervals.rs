@@ -44,7 +44,7 @@ impl ListItem for IntervalItem {
 impl Node for IntervalItem {
     fn poll(&mut self, c: &mut Canopy) -> Option<Duration> {
         self.inc();
-        self.taint(c);
+        c.taint(self);
         Some(Duration::from_secs(1))
     }
 
@@ -108,7 +108,7 @@ impl Root {
     fn add_item(&mut self, c: &mut Canopy) -> Result<Outcome> {
         let lst = &mut self.content.child;
         lst.append(IntervalItem::new());
-        self.taint(c);
+        c.taint(self);
         Ok(Outcome::Handle)
     }
 }

@@ -103,8 +103,8 @@ impl<N> Node for Frame<N>
 where
     N: Node,
 {
-    fn should_render(&self, c: &Canopy) -> bool {
-        self.child.should_render(c)
+    fn force_render(&self, c: &Canopy) -> bool {
+        c.needs_render(&self.child)
     }
 
     fn render(&mut self, c: &Canopy, rndr: &mut Render) -> Result<()> {

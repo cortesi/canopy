@@ -44,17 +44,11 @@ impl<T> Walk<T> {
 /// tree, with each node responsible for managing its own children.
 #[allow(unused_variables)]
 pub trait Node: StatefulNode + CommandNode {
-    /// Should the node render in the next sweep? This checks if the node is
-    /// currently hidden, and if not, signals that we should render if:
-    ///
-    /// - the node is tainted
-    /// - its focus status has changed
-    /// - its focus path status has changed
-    ///
-    /// Over-riding this method should only be needed rarely, for instance when
-    /// a container node needs to redraw if a sub-node changes.
-    fn should_render(&self, c: &Canopy) -> bool {
-        !self.is_hidden() && (self.is_tainted(c) || self.focus_changed(c))
+    /// Force the node to render in the next sweep. Over-riding this method
+    /// should only be needed rarely, for instance when a container node (e.g. a
+    /// frame) needs to redraw if a child node changes.
+    fn force_render(&self, c: &Canopy) -> bool {
+        false
     }
 
     /// Called for each node on the focus path, after each render sweep. The

@@ -1,4 +1,4 @@
-use crate::{error, Canopy, Result, ViewPort};
+use crate::{error, Result, ViewPort};
 use convert_case::{Case, Casing};
 use std::sync::atomic::AtomicU64;
 
@@ -186,63 +186,10 @@ pub trait StatefulNode {
         self.state().initialized
     }
 
-    /// Focus this node.
-    fn set_focus(&mut self, c: &mut Canopy) {
-        c.focus_gen += 1;
-        self.state_mut().focus_gen = c.focus_gen;
-    }
-
-    /// Is this node render tainted?
-    fn is_tainted(&self, c: &Canopy) -> bool {
-        let s = self.state();
-        // Tainting if render_gen is 0 lets us initialize a nodestate
-        // without knowing about the app state
-        c.render_gen == s.render_gen || s.render_gen == 0
-    }
-
-    /// Does the node have terminal focus?
-    fn is_focused(&self, c: &Canopy) -> bool {
-        let s = self.state();
-        c.focus_gen == s.focus_gen
-    }
-
-    /// Mark a this node for render.
-    fn taint(&mut self, c: &mut Canopy) {
-        let r = self.state_mut();
-        r.render_gen = c.render_gen;
-        c.taint = true;
-    }
-
     /// Set this node's name, over-riding the name derived from the struct name.
     fn set_name(&mut self, name: NodeName) {
         let r = self.state_mut();
         r.name = Some(name);
-    }
-
-    /// Has the focus status of this node changed since the last render
-    /// sweep?
-    fn focus_changed(&self, c: &Canopy) -> bool {
-        if c.focus_changed() {
-            let s = self.state();
-            // Our focus has changed if we're the currently focused node, or
-            // if we were previously focused during the last sweep.
-            s.focus_gen == c.focus_gen || s.focus_gen == c.last_render_focus_gen
-        } else {
-            false
-        }
-    }
-
-    /// Has the focus path status of this node changed since the last render
-    /// sweep?
-    fn focus_path_changed(&self, c: &Canopy) -> bool {
-        if c.focus_changed() {
-            let s = self.state();
-            // Our focus has changed if we're the currently on the focus path, or
-            // if we were previously focused during the last sweep.
-            s.focus_path_gen == c.focus_gen || s.focus_path_gen == c.last_render_focus_gen
-        } else {
-            false
-        }
     }
 }
 

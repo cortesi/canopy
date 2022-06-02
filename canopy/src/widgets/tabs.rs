@@ -25,12 +25,12 @@ impl Tabs {
 
     pub fn next(&mut self, c: &mut Canopy) {
         self.active = (self.active + 1) % self.tabs.len();
-        self.taint(c);
+        c.taint(self);
     }
 
     pub fn prev(&mut self, c: &mut Canopy) {
         self.active = (self.active.wrapping_sub(1)) % self.tabs.len();
-        self.taint(c);
+        c.taint(self);
     }
 }
 

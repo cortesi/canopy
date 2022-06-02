@@ -14,18 +14,18 @@ use crate::{
 pub struct Canopy {
     /// A counter that is incremented every time focus changes. The current focus
     /// will have a state `focus_gen` equal to this.
-    pub focus_gen: u64,
+    focus_gen: u64,
     /// Stores the focus_gen during the last render. Used to detect if focus has
     /// changed.
-    pub last_render_focus_gen: u64,
+    last_render_focus_gen: u64,
 
     /// A counter that is incremented every time we render. All items that
     /// require rendering during the current sweep will have a state `render_gen`
     /// equal to this.
-    pub render_gen: u64,
+    render_gen: u64,
     /// The poller is responsible for tracking nodes that have pending poll
     /// events, and scheduling their execution.
-    pub poller: Poller,
+    poller: Poller,
     /// Has the tree been tainted? This reset to false before every event sweep.
     pub taint: bool,
 
@@ -81,6 +81,68 @@ impl Canopy {
         }
     }
 
+    /// Focus a node.
+    pub fn set_focus(&mut self, n: &mut dyn Node) {
+        self.focus_gen += 1;
+        n.state_mut().focus_gen = self.focus_gen;
+    }
+
+    /// Does the node have terminal focus?
+    pub fn is_focused(&self, n: &dyn Node) -> bool {
+        n.state().focus_gen == self.focus_gen
+    }
+
+    /// Has the focus status of this node changed since the last render
+    /// sweep?
+    pub fn node_focus_changed(&self, n: &dyn Node) -> bool {
+        if self.focus_changed() {
+            let s = n.state();
+            // Our focus has changed if we're the currently focused node, or
+            // if we were previously focused during the last sweep.
+            s.focus_gen == self.focus_gen || s.focus_gen == self.last_render_focus_gen
+        } else {
+            false
+        }
+    }
+
+    /// Has the focus path status of this node changed since the last render
+    /// sweep?
+    pub fn node_focus_path_changed(&self, n: &dyn Node) -> bool {
+        if self.focus_changed() {
+            let s = n.state();
+            // Our focus has changed if we're the currently on the focus path, or
+            // if we were previously focused during the last sweep.
+            s.focus_path_gen == self.focus_gen || s.focus_path_gen == self.last_render_focus_gen
+        } else {
+            false
+        }
+    }
+
+    /// Should the node render in the next sweep? This checks if the node is
+    /// currently hidden, and if not, signals that we should render if:
+    ///
+    /// - the node is tainted
+    /// - its focus status has changed
+    /// - it is forcing a render
+    pub fn needs_render(&self, n: &dyn Node) -> bool {
+        !n.is_hidden() && (n.force_render(self) || self.is_tainted(n) || self.node_focus_changed(n))
+    }
+
+    /// Taint this node for render.
+    pub fn taint(&mut self, n: &mut dyn Node) {
+        let r = n.state_mut();
+        r.render_gen = self.render_gen;
+        self.taint = true;
+    }
+
+    /// Is this node render tainted?
+    pub fn is_tainted(&self, n: &dyn Node) -> bool {
+        let s = n.state();
+        // Tainting if render_gen is 0 lets us initialize a nodestate
+        // without knowing about the app state
+        self.render_gen == s.render_gen || s.render_gen == 0
+    }
+
     /// Has the focus changed since the last render sweep?
     pub(crate) fn focus_changed(&self) -> bool {
         self.focus_gen != self.last_render_focus_gen
@@ -99,7 +161,7 @@ impl Canopy {
     ) -> Result<()> {
         let mut seen = false;
         preorder(root, &mut |x| -> Result<Walk<()>> {
-            if x.is_focused(self) {
+            if self.is_focused(x) {
                 seen = true;
             }
             if !x.is_initialized() {
@@ -132,24 +194,24 @@ impl Canopy {
         &mut self,
         r: &mut R,
         styl: &mut StyleManager,
-        root: &mut dyn Node,
+        n: &mut dyn Node,
     ) -> Result<()> {
-        if !root.is_hidden() {
+        if !n.is_hidden() {
             styl.push();
-            if root.should_render(self) {
-                if root.is_focused(self) {
-                    let s = &mut root.state_mut();
+            if self.needs_render(n) {
+                if self.is_focused(n) {
+                    let s = &mut n.state_mut();
                     s.rendered_focus_gen = self.focus_gen;
                 }
 
-                let mut c = Coverage::new(root.vp().screen_rect().expanse());
-                let mut rndr = Render::new(r, styl, root.vp(), &mut c);
+                let mut c = Coverage::new(n.vp().screen_rect().expanse());
+                let mut rndr = Render::new(r, styl, n.vp(), &mut c);
 
-                root.render(self, &mut rndr)?;
+                n.render(self, &mut rndr)?;
 
                 // Now add regions managed by children to coverage
-                let escreen = root.vp().screen_rect();
-                root.children(&mut |n| {
+                let escreen = n.vp().screen_rect();
+                n.children(&mut |n| {
                     if !n.is_hidden() {
                         let s = n.vp().screen_rect();
                         if !s.is_zero() {
@@ -161,17 +223,17 @@ impl Canopy {
 
                 // We now have coverage, relative to this node's screen rectange. We
                 // rebase each rect back down to our virtual co-ordinates.
-                let sr = root.vp().view_rect();
+                let sr = n.vp().view_rect();
                 for l in rndr.coverage.uncovered() {
                     rndr.fill("", l.rect().shift(sr.tl.x as i16, sr.tl.y as i16), ' ')?;
                 }
             }
             // This is a new node - we don't want it perpetually stuck in
             // render, so we need to update its render_gen.
-            if root.state().render_gen == 0 {
-                root.state_mut().render_gen = self.render_gen;
+            if n.state().render_gen == 0 {
+                n.state_mut().render_gen = self.render_gen;
             }
-            root.children(&mut |x| self.render_traversal(r, styl, x))?;
+            n.children(&mut |x| self.render_traversal(r, styl, x))?;
             styl.pop();
         }
         Ok(())
@@ -233,7 +295,7 @@ impl Canopy {
             )?;
             Ok(match hdl {
                 Outcome::Handle => {
-                    x.taint(self);
+                    self.taint(x);
                     Walk::Handle(())
                 }
                 Outcome::Ignore => Walk::Continue,
@@ -256,7 +318,7 @@ impl Canopy {
         walk_focus_path_e(self.focus_gen, root, &mut move |x| -> Result<Walk<()>> {
             Ok(match x.handle_key(self, ctrl, k)? {
                 Outcome::Handle => {
-                    x.taint(self);
+                    self.taint(x);
                     Walk::Handle(())
                 }
                 Outcome::Ignore => Walk::Continue,
@@ -306,7 +368,7 @@ impl Canopy {
     /// Mark a tree of nodes for render.
     pub fn taint_tree(&mut self, e: &mut dyn Node) {
         postorder(e, &mut |x| -> Result<Walk<()>> {
-            x.taint(self);
+            self.taint(x);
             Ok(Walk::Continue)
         })
         // Unwrap is safe, because no operations in the closure can fail.
@@ -373,7 +435,7 @@ impl Canopy {
                 }
                 locate(root, p, &mut |x| -> Result<Walk<()>> {
                     if !seen && x.accept_focus() {
-                        x.set_focus(self);
+                        self.set_focus(x);
                         seen = true;
                     };
                     Ok(Walk::Continue)
@@ -410,7 +472,7 @@ impl Canopy {
         let mut focus_set = false;
         preorder(root, &mut |x| -> Result<Walk<()>> {
             Ok(if !focus_set && x.accept_focus() {
-                x.set_focus(self);
+                self.set_focus(x);
                 focus_set = true;
                 Walk::Skip
             } else {
@@ -423,7 +485,7 @@ impl Canopy {
     /// A node is on the focus path if it does not have focus itself, but some
     /// node below it does.
     pub fn is_focus_ancestor(&self, n: &mut dyn Node) -> bool {
-        if n.is_focused(self) {
+        if self.is_focused(n) {
             false
         } else {
             self.is_on_focus_path(n)
@@ -439,10 +501,10 @@ impl Canopy {
             if !focus_set {
                 if focus_seen {
                     if x.accept_focus() {
-                        x.set_focus(self);
+                        self.set_focus(x);
                         focus_set = true;
                     }
-                } else if x.is_focused(self) {
+                } else if self.is_focused(x) {
                     focus_seen = true;
                 }
             }
@@ -469,7 +531,7 @@ impl Canopy {
                 if x.state().focus_gen == current {
                     focus_seen = true;
                 } else if x.accept_focus() {
-                    x.set_focus(self);
+                    self.set_focus(x);
                 }
             }
             Ok(Walk::Continue)
@@ -581,7 +643,7 @@ mod tests {
     #[test]
     fn tkey() -> Result<()> {
         run_test(|c, tr, mut root| {
-            root.set_focus(c);
+            c.set_focus(&mut root);
             root.next_outcome = Some(Outcome::Handle);
             c.key(&mut tr.control(), &mut root, 'a')?;
             let s = get_state();
@@ -590,7 +652,7 @@ mod tests {
         })?;
 
         run_test(|c, tr, mut root| {
-            root.a.a.set_focus(c);
+            c.set_focus(&mut root.a.a);
             root.a.a.next_outcome = Some(Outcome::Handle);
             c.key(&mut tr.control(), &mut root, 'a')?;
             let s = get_state();
@@ -599,7 +661,7 @@ mod tests {
         })?;
 
         run_test(|c, tr, mut root| {
-            root.a.a.set_focus(c);
+            c.set_focus(&mut root.a.a);
             root.a.next_outcome = Some(Outcome::Handle);
             c.key(&mut tr.control(), &mut root, 'a')?;
             let s = get_state();
@@ -608,7 +670,7 @@ mod tests {
         })?;
 
         run_test(|c, tr, mut root| {
-            root.a.a.set_focus(c);
+            c.set_focus(&mut root.a.a);
             root.next_outcome = Some(Outcome::Handle);
             c.key(&mut tr.control(), &mut root, 'a')?;
             let s = get_state();
@@ -620,7 +682,7 @@ mod tests {
         })?;
 
         run_test(|c, tr, mut root| {
-            root.a.set_focus(c);
+            c.set_focus(&mut root.a);
             root.a.next_outcome = Some(Outcome::Handle);
             c.key(&mut tr.control(), &mut root, 'a')?;
             let s = get_state();
@@ -629,7 +691,7 @@ mod tests {
         })?;
 
         run_test(|c, tr, mut root| {
-            root.a.set_focus(c);
+            c.set_focus(&mut root.a);
             root.next_outcome = Some(Outcome::Handle);
             c.key(&mut tr.control(), &mut root, 'a')?;
             let s = get_state();
@@ -649,7 +711,7 @@ mod tests {
         })?;
 
         run_test(|c, tr, mut root| {
-            root.a.b.set_focus(c);
+            c.set_focus(&mut root.a.b);
             root.a.next_outcome = Some(Outcome::Ignore);
             root.next_outcome = Some(Outcome::Handle);
             c.key(&mut tr.control(), &mut root, 'a')?;
@@ -662,7 +724,7 @@ mod tests {
         })?;
 
         run_test(|c, tr, mut root| {
-            root.a.a.set_focus(c);
+            c.set_focus(&mut root.a.a);
             root.a.a.next_outcome = Some(Outcome::Handle);
             c.key(&mut tr.control(), &mut root, 'a')?;
             let s = get_state();
@@ -671,7 +733,7 @@ mod tests {
         })?;
 
         run_test(|c, tr, mut root| {
-            root.a.b.set_focus(c);
+            c.set_focus(&mut root.a.b);
             root.a.next_outcome = Some(Outcome::Handle);
             c.key(&mut tr.control(), &mut root, 'a')?;
             let s = get_state();
@@ -680,7 +742,7 @@ mod tests {
         })?;
 
         run_test(|c, tr, mut root| {
-            root.a.b.set_focus(c);
+            c.set_focus(&mut root.a.b);
             root.a.b.next_outcome = Some(Outcome::Handle);
             c.key(&mut tr.control(), &mut root, 'a')?;
             let s = get_state();
@@ -689,7 +751,7 @@ mod tests {
         })?;
 
         run_test(|c, tr, mut root| {
-            root.a.b.set_focus(c);
+            c.set_focus(&mut root.a.b);
             root.a.b.next_outcome = Some(Outcome::Handle);
             root.a.next_outcome = Some(Outcome::Handle);
             c.key(&mut tr.control(), &mut root, 'a')?;
@@ -713,7 +775,7 @@ mod tests {
     #[test]
     fn tmouse() -> Result<()> {
         run_test(|c, mut tr, mut root| {
-            root.set_focus(c);
+            c.set_focus(&mut root);
             root.next_outcome = Some(Outcome::Handle);
             let evt = root.a.a.make_mouse_event()?;
             tr.render(c, &mut root)?;
@@ -791,11 +853,11 @@ mod tests {
             tr.render(c, &mut root)?;
             assert!(tr.buf_empty());
 
-            root.a.taint(c);
+            c.taint(&mut root.a);
             tr.render(c, &mut root)?;
             assert_eq!(tr.buf_text(), vec!["<ba>"]);
 
-            root.a.b.taint(c);
+            c.taint(&mut root.a.b);
             tr.render(c, &mut root)?;
             assert_eq!(tr.buf_text(), vec!["<ba_lb>"]);
 
@@ -806,7 +868,7 @@ mod tests {
             tr.render(c, &mut root)?;
             assert!(tr.buf_empty());
 
-            root.a.a.set_focus(c);
+            c.set_focus(&mut root.a.a);
             tr.render(c, &mut root)?;
             assert_eq!(tr.buf_text(), vec!["<ba_la>"]);
 
@@ -845,28 +907,28 @@ mod tests {
     #[test]
     fn focus_next() -> Result<()> {
         run_test(|c, _, mut root| {
-            assert!(!root.is_focused(c));
+            assert!(!c.is_focused(&root));
             c.focus_next(&mut root)?;
-            assert!(root.is_focused(c));
+            assert!(c.is_focused(&root));
 
             c.focus_next(&mut root)?;
-            assert!(root.a.is_focused(c));
+            assert!(c.is_focused(&root.a));
             assert!(c.is_focus_ancestor(&mut root));
             assert!(!c.is_focus_ancestor(&mut root.a));
 
             c.focus_next(&mut root)?;
-            assert!(root.a.a.is_focused(c));
+            assert!(c.is_focused(&root.a.a));
             assert!(c.is_focus_ancestor(&mut root.a));
             c.focus_next(&mut root)?;
-            assert!(root.a.b.is_focused(c));
+            assert!(c.is_focused(&root.a.b));
             assert!(c.is_focus_ancestor(&mut root.a));
             c.focus_next(&mut root)?;
-            assert!(root.b.is_focused(c));
+            assert!(c.is_focused(&root.b));
 
-            root.b.b.set_focus(c);
+            c.set_focus(&mut root.b.b);
             assert!(c.is_focus_ancestor(&mut root.b));
             c.focus_next(&mut root)?;
-            assert!(root.is_focused(c));
+            assert!(c.is_focused(&root));
             Ok(())
         })?;
         Ok(())
@@ -875,19 +937,19 @@ mod tests {
     #[test]
     fn focus_prev() -> Result<()> {
         run_test(|c, _, mut root| {
-            assert!(!root.is_focused(c));
+            assert!(!c.is_focused(&root));
             c.focus_prev(&mut root)?;
-            assert!(root.b.b.is_focused(c));
+            assert!(c.is_focused(&root.b.b));
 
             c.focus_prev(&mut root)?;
-            assert!(root.b.a.is_focused(c));
+            assert!(c.is_focused(&root.b.a));
 
             c.focus_prev(&mut root)?;
-            assert!(root.b.is_focused(c));
+            assert!(c.is_focused(&root.b));
 
-            root.set_focus(c);
+            c.set_focus(&mut root);
             c.focus_prev(&mut root)?;
-            assert!(root.b.b.is_focused(c));
+            assert!(c.is_focused(&root.b.b));
 
             Ok(())
         })?;
@@ -898,17 +960,17 @@ mod tests {
     fn tshift_right() -> Result<()> {
         run_test(|c, mut tr, mut root| {
             tr.render(c, &mut root)?;
-            root.a.a.set_focus(c);
+            c.set_focus(&mut root.a.a);
             c.focus_right(&mut root)?;
-            assert!(root.b.a.is_focused(c));
+            assert!(c.is_focused(&root.b.a));
             c.focus_right(&mut root)?;
-            assert!(root.b.a.is_focused(c));
+            assert!(c.is_focused(&root.b.a));
 
-            root.a.b.set_focus(c);
+            c.set_focus(&mut root.a.b);
             c.focus_right(&mut root)?;
-            assert!(root.b.b.is_focused(c));
+            assert!(c.is_focused(&root.b.b));
             c.focus_right(&mut root)?;
-            assert!(root.b.b.is_focused(c));
+            assert!(c.is_focused(&root.b.b));
             Ok(())
         })?;
 
@@ -923,19 +985,19 @@ mod tests {
             assert!(!c.is_on_focus_path(&mut root));
             assert!(!c.is_on_focus_path(&mut root.a));
 
-            root.a.a.set_focus(c);
+            c.set_focus(&mut root.a.a);
             assert!(c.is_on_focus_path(&mut root));
             assert!(c.is_on_focus_path(&mut root.a));
             assert!(!c.is_on_focus_path(&mut root.b));
             assert_eq!(c.focus_path(&mut root), "/r/ba/ba_la".to_string());
 
-            root.a.set_focus(c);
+            c.set_focus(&mut root.a);
             assert_eq!(c.focus_path(&mut root), "/r/ba".to_string());
 
-            root.set_focus(c);
+            c.set_focus(&mut root);
             assert_eq!(c.focus_path(&mut root), "/r".to_string());
 
-            root.b.a.set_focus(c);
+            c.set_focus(&mut root.b.a);
             assert_eq!(c.focus_path(&mut root), "/r/bb/bb_la".to_string());
             Ok(())
         })?;

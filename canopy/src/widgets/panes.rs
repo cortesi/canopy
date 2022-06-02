@@ -137,7 +137,7 @@ mod tests {
         place(&mut p, r)?;
 
         assert_eq!(p.shape(), vec![1, 1]);
-        p.children[0][0].a.set_focus(&mut c);
+        c.set_focus(&mut p.children[0][0].a);
         place(&mut p, r)?;
 
         let tn = utils::TBranch::new("c");
@@ -147,7 +147,7 @@ mod tests {
 
         assert_eq!(p.shape(), vec![2, 1]);
 
-        p.children[1][0].a.set_focus(&mut c);
+        c.set_focus(&mut p.children[1][0].a);
         assert_eq!(p.focus_coords(&c), Some((1, 0)));
         Ok(())
     }
