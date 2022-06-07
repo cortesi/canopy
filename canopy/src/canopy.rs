@@ -133,7 +133,7 @@ impl Core for Canopy {
         })
         // We're safe to unwrap because our closure can't return an error.
         .unwrap();
-        "/".to_string() + &path.join("/")
+        format!("/{}", path.join("/"))
     }
 
     /// Find the area of the current terminal focus node under the specified `root`.
@@ -646,7 +646,7 @@ where
         Ok(())
     })
     .unwrap();
-    "/".to_string() + &path.join("/")
+    format!("/{}", path.join("/"))
 }
 
 #[cfg(test)]

@@ -23,6 +23,7 @@ version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fcb51a0695d8f838b1ee009b3fbf66bda078cd64590202a864a8f3e8c4315c47"
 dependencies = [
+ "const-random",
  "getrandom",
  "once_cell",
  "version_check",
@@ -115,6 +116,7 @@ dependencies = [
  "pad",
  "rand",
  "regex",
+ "rhai",
  "scopeguard",
  "textwrap",
  "thiserror",
@@ -208,10 +210,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "const-random"
+version = "0.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f590d95d011aa80b063ffe3253422ed5aa462af4e9867d43ce8337562bac77c4"
+dependencies = [
+ "const-random-macro",
+ "proc-macro-hack",
+]
+
+[[package]]
+name = "const-random-macro"
+version = "0.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "615f6e27d000a2bffbc7f2f6a8669179378fa27ee4d0a509e985dfc0a7defb40"
+dependencies = [
+ "getrandom",
+ "lazy_static",
+ "proc-macro-hack",
+ "tiny-keccak",
+]
+
+[[package]]
 name = "convert_case"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb4a24b1aaf0fd0ce8b45161144d6f42cd91677fd5940fd431183eb023b3a2b8"
+
+[[package]]
+name = "core-error"
+version = "0.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "efcdb2972eb64230b4c50646d8498ff73f5128d196a90c7236eec4cbe8619b8f"
+dependencies = [
+ "version_check",
+]
 
 [[package]]
 name = "crossterm"
@@ -237,6 +270,12 @@ checksum = "2ae1b35a484aa10e07fe0638d02301c5ad24de82d310ccbd2f3693da5f09bf1c"
 dependencies = [
  "winapi",
 ]
+
+[[package]]
+name = "crunchy"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
 
 [[package]]
 name = "fallible-iterator"
@@ -326,6 +365,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "instant"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -336,6 +384,12 @@ name = "libc"
 version = "0.2.125"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5916d2ae698f6de9bfb891ad7a8d65c09d232dc58cc4ac433c7da3b2fd84bc2b"
+
+[[package]]
+name = "libm"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33a33a362ce288760ec6a508b94caaec573ae7d3bbbd91b87aa0bad4456839db"
 
 [[package]]
 name = "libsqlite3-sys"
@@ -414,12 +468,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "no-std-compat"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b93853da6d84c2e3c7d730d6473e8817692dd89be387eb01b94d7f108ecb5b8c"
+
+[[package]]
 name = "ntapi"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c28774a7fd2fbb4f0babd8237ce554b73af68021b5f695a3cebd6c59bac0980f"
 dependencies = [
  "winapi",
+]
+
+[[package]]
+name = "num-traits"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "578ede34cf02f8924ab9447f50c28075b4d3e5b269972345e7e0372b38c6cdcd"
+dependencies = [
+ "autocfg",
+ "libm",
 ]
 
 [[package]]
@@ -518,6 +588,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "proc-macro-hack"
+version = "0.5.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dbf0c48bc1d91375ae5c3cd81e3722dff1abcf81a30960240640d223f59fe0e5"
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -598,6 +674,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f497285884f3fcff424ffc933e56d7cbca511def0c9831a7f9b5f6153e3cc89b"
 
 [[package]]
+name = "rhai"
+version = "1.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f06953bb8b9e4307cb7ccc0d9d018e2ddd25a30d32831f631ce4fe8f17671f7"
+dependencies = [
+ "ahash",
+ "bitflags",
+ "core-error",
+ "instant",
+ "libm",
+ "no-std-compat",
+ "num-traits",
+ "rhai_codegen",
+ "smallvec",
+ "smartstring",
+]
+
+[[package]]
+name = "rhai_codegen"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75a39bc2aa9258b282ee5518dac493491a9c4c11a6d7361b9d2644c922fc6488"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "rusqlite"
 version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -676,10 +781,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2dd574626839106c320a323308629dcb1acfc96e32a8cba364ddc61ac23ee83"
 
 [[package]]
+name = "smartstring"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3fb72c633efbaa2dd666986505016c32c3044395ceaf881518399d2f4127ee29"
+dependencies = [
+ "autocfg",
+ "static_assertions",
+ "version_check",
+]
+
+[[package]]
 name = "smawk"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f67ad224767faa3c7d8b6d91985b78e70a1324408abcb1cfcc2be4c06bc06043"
+
+[[package]]
+name = "static_assertions"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "strsim"
@@ -770,6 +892,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5516c27b78311c50bf42c071425c560ac799b11c30b31f87e3081965fe5e0180"
 dependencies = [
  "once_cell",
+]
+
+[[package]]
+name = "tiny-keccak"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c9d3793400a45f954c52e73d068316d76b6f4e36977e3fcebb13a2721e80237"
+dependencies = [
+ "crunchy",
 ]
 
 [[package]]

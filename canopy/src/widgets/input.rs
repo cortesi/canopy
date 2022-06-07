@@ -33,10 +33,9 @@ impl TextBuf {
 
     fn text(&self) -> String {
         let end = self.window.far().min(self.value.len() as u16) as usize;
-        let mut v = self.value[self.window.off as usize..end].to_owned();
+        let v = self.value[self.window.off as usize..end].to_owned();
         let extra = self.window.len as usize - v.len();
-        v = v + &" ".repeat(extra);
-        v
+        format!("{}{}", v, " ".repeat(extra))
     }
 
     fn fix_window(&mut self) {

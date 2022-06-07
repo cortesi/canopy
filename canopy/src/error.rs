@@ -1,10 +1,21 @@
-use std::sync::mpsc;
-use std::sync::{MutexGuard, PoisonError};
+use std::{
+    fmt::Display,
+    sync::{mpsc, MutexGuard, PoisonError},
+};
 
 use crate::backend::test::TestBuf;
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(PartialEq, Eq, Error, Debug, Clone)]
+pub struct ParseError {}
+
+impl Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
 
 #[derive(PartialEq, Eq, Error, Debug, Clone)]
 pub enum Error {
@@ -24,6 +35,12 @@ pub enum Error {
     Invalid(String),
     #[error("unknown command")]
     UnknownCommand(String),
+
+    #[error("parse error")]
+    Parse(ParseError),
+
+    #[error("script run error")]
+    Script(String),
 
     /// No result was generated on node traversal
     #[error("no result")]

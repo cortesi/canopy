@@ -1,6 +1,8 @@
-use crate::{postorder, preorder, Error, Node, NodeId, NodeName, StatefulNode, Walk};
+use std::collections::HashMap;
 
-use crate::Result;
+use comfy_table::{ContentArrangement, Table};
+
+use crate::{postorder, preorder, Error, Node, NodeId, NodeName, Result, StatefulNode, Walk};
 
 /// The return type of a command.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -103,10 +105,49 @@ where
     Ok(())
 }
 
+pub struct CommandSet {
+    commands: HashMap<String, CommandDefinition>,
+}
+
+impl CommandSet {
+    pub fn new() -> Self {
+        CommandSet {
+            commands: HashMap::new(),
+        }
+    }
+
+    pub fn load_commands(&mut self, cmds: Vec<CommandDefinition>) {
+        for i in cmds {
+            self.commands.insert(i.fullname(), i);
+        }
+    }
+
+    /// Output keybindings to the terminal, formatted in a nice table. Make sure
+    /// the terminal is not being controlled by Canopy when you call this.
+    pub fn pretty_print(&self) {
+        let mut cmds: Vec<&CommandDefinition> = self.commands.values().collect();
+
+        cmds.sort_by_key(|a| a.fullname());
+
+        let mut table = Table::new();
+        table.set_content_arrangement(ContentArrangement::Dynamic);
+        table.load_preset(comfy_table::presets::UTF8_FULL);
+        for i in cmds {
+            table.add_row(vec![
+                comfy_table::Cell::new(i.fullname()).fg(comfy_table::Color::Green),
+                comfy_table::Cell::new(i.docs.clone()),
+            ]);
+        }
+        println!("{table}");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate as canopy;
     use crate::tutils::utils;
+    use crate::{command, derive_commands, CommandNode, Result, StatefulNode};
 
     #[test]
     fn tdispatch() -> Result<()> {
@@ -132,6 +173,39 @@ mod tests {
             },
         )?;
         assert!(utils::state_path().is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn load_commands() -> Result<()> {
+        #[derive(canopy::StatefulNode)]
+        struct Foo {
+            state: canopy::NodeState,
+            a_triggered: bool,
+            b_triggered: bool,
+        }
+
+        impl canopy::Node for Foo {}
+
+        #[derive_commands]
+        impl Foo {
+            #[command]
+            /// This is a comment.
+            //s Multiline too!
+            fn a(&mut self) -> canopy::Result<()> {
+                self.a_triggered = true;
+                Ok(())
+            }
+            #[command]
+            fn b(&mut self) -> canopy::Result<()> {
+                self.b_triggered = true;
+                Ok(())
+            }
+        }
+
+        let mut cs = CommandSet::new();
+        cs.load_commands(Foo::load_commands(None));
 
         Ok(())
     }
