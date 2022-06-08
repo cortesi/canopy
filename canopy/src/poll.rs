@@ -9,6 +9,7 @@ use std::{
 use crate::event::Event;
 
 /// A node that has a pending callback.
+#[derive(Debug)]
 struct PendingNode {
     time: SystemTime,
     node_id: u64,
@@ -37,7 +38,7 @@ impl Ord for PendingNode {
 }
 
 /// A heap that tracks the current list of pending callbacks.
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct PendingHeap {
     nodes: BinaryHeap<PendingNode>,
 }
@@ -89,6 +90,7 @@ impl PendingHeap {
 }
 
 /// The Poller is responsible for scheduling poll events for nodes.
+#[derive(Debug)]
 pub struct Poller {
     /// Handle for the scheduler thread
     handle: Option<thread::JoinHandle<()>>,

@@ -63,6 +63,7 @@ pub trait Core {
     fn taint_tree(&mut self, e: &mut dyn Node);
 }
 
+#[derive(Debug)]
 pub struct Canopy {
     /// A counter that is incremented every time focus changes. The current focus
     /// will have a state `focus_gen` equal to this.

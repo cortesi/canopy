@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 
-use comfy_table::{ContentArrangement, Table};
-
-use crate::{error, event::key::Key, CommandDefinition, Result};
+use crate::{error, event::key::Key, script, Result};
 
 const DEFAULT_MODE: &str = "";
 
@@ -58,12 +56,14 @@ impl PathMatcher {
     }
 }
 
+#[derive(Debug)]
 struct BoundKey {
     pathmatch: PathMatcher,
-    commands: Vec<String>,
+    script: script::Script,
 }
 
 /// A KeyMode contains a set of bound keys.
+#[derive(Debug)]
 pub struct KeyMode {
     keys: HashMap<Key, Vec<BoundKey>>,
 }
@@ -75,22 +75,22 @@ impl KeyMode {
         }
     }
     /// Insert a key binding into this mode
-    fn insert(&mut self, path_filter: PathMatcher, key: Key, commands: Vec<String>) {
+    fn insert(&mut self, path_filter: PathMatcher, key: Key, script: script::Script) {
         self.keys
             .entry(key)
             .or_insert_with(Vec::new)
             .push(BoundKey {
                 pathmatch: path_filter,
-                commands,
+                script,
             });
     }
-    /// Resolve a key with a given path filter to a list of commands.
-    pub fn resolve(&self, path: &str, key: Key) -> Option<Vec<String>> {
+    /// Resolve a key with a given path filter to a script.
+    pub fn resolve(&self, path: &str, key: Key) -> Option<&script::Script> {
         let mut ret = (0, None);
         for k in self.keys.get(&key)? {
             if let Some(p) = k.pathmatch.check(path) {
                 if ret.1.is_none() || p > ret.0 {
-                    ret = (p, Some(k.commands.clone()));
+                    ret = (p, Some(&k.script));
                 }
             }
         }
@@ -104,8 +104,8 @@ impl KeyMode {
 /// into a set of possible action specifications. We then walk the tree of nodes
 /// from the focus to the root, trying each action specification in turn, until
 /// an action is handled by a node. If no action is handled, the key is ignored.
+#[derive(Debug)]
 pub struct KeyMap {
-    commands: HashMap<String, CommandDefinition>,
     modes: HashMap<String, KeyMode>,
     current_mode: String,
 }
@@ -122,7 +122,6 @@ impl KeyMap {
         let mut modes = HashMap::new();
         modes.insert(DEFAULT_MODE.to_string(), default);
         KeyMap {
-            commands: HashMap::new(),
             current_mode: DEFAULT_MODE.into(),
             modes,
         }
@@ -137,7 +136,7 @@ impl KeyMap {
         }
     }
 
-    pub fn resolve(&self, path: &str, key: Key) -> Option<Vec<String>> {
+    pub fn resolve(&self, path: &str, key: Key) -> Option<&script::Script> {
         // Unwrap is safe, because we make it impossible for our current mode to
         // be non-existent.
         let m = self.modes.get(&self.current_mode).unwrap();
@@ -150,7 +149,7 @@ impl KeyMap {
         mode: &str,
         key: K,
         path_filter: &str,
-        commands: Vec<String>,
+        script: script::Script,
     ) -> Result<()>
     where
         Key: From<K>,
@@ -159,74 +158,15 @@ impl KeyMap {
         self.modes
             .entry(mode.to_string())
             .or_insert_with(KeyMode::new)
-            .insert(PathMatcher::new(path_filter)?, key, commands);
+            .insert(PathMatcher::new(path_filter)?, key, script);
         Ok(())
-    }
-
-    pub fn load_commands(&mut self, cmds: Vec<CommandDefinition>) {
-        for i in cmds {
-            self.commands.insert(i.fullname(), i);
-        }
-    }
-
-    /// Output keybindings to the terminal, formatted in a nice table. Make sure
-    /// the terminal is not being controlled by Canopy when you call this.
-    pub fn pretty_print_commands(&self) {
-        let mut cmds: Vec<&CommandDefinition> = self.commands.values().collect();
-
-        cmds.sort_by_key(|a| a.fullname());
-
-        let mut table = Table::new();
-        table.set_content_arrangement(ContentArrangement::Dynamic);
-        table.load_preset(comfy_table::presets::UTF8_FULL);
-        for i in cmds {
-            table.add_row(vec![
-                comfy_table::Cell::new(i.fullname()).fg(comfy_table::Color::Green),
-                comfy_table::Cell::new(i.docs.clone()),
-            ]);
-        }
-        println!("{table}");
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate as canopy;
-    use crate::{command, derive_commands, CommandNode, Result, StatefulNode};
-
-    #[test]
-    fn kb_load() -> Result<()> {
-        #[derive(canopy::StatefulNode)]
-        struct Foo {
-            state: canopy::NodeState,
-            a_triggered: bool,
-            b_triggered: bool,
-        }
-
-        impl canopy::Node for Foo {}
-
-        #[derive_commands]
-        impl Foo {
-            #[command]
-            /// This is a comment.
-            //s Multiline too!
-            fn a(&mut self) -> canopy::Result<()> {
-                self.a_triggered = true;
-                Ok(())
-            }
-            #[command]
-            fn b(&mut self) -> canopy::Result<()> {
-                self.b_triggered = true;
-                Ok(())
-            }
-        }
-
-        let mut kb = KeyMap::new();
-        kb.load_commands(Foo::load_commands(None));
-
-        Ok(())
-    }
+    use crate::{commands, script, Result};
 
     #[test]
     fn pathfilter() -> Result<()> {
@@ -268,37 +208,25 @@ mod tests {
 
     #[test]
     fn keymode() -> Result<()> {
-        let mut m = KeyMode::new();
-        m.insert(
-            PathMatcher::new("foo")?,
-            'a'.into(),
-            vec!["a-foo".to_string()],
-        );
-        m.insert(
-            PathMatcher::new("bar")?,
-            'a'.into(),
-            vec!["a-bar".to_string()],
-        );
-        m.insert(PathMatcher::new("")?, 'b'.into(), vec!["b".to_string()]);
+        let e = script::ScriptHost::new(&commands::CommandSet::new())?;
 
+        let mut m = KeyMode::new();
+        m.insert(PathMatcher::new("foo")?, 'a'.into(), e.compile("a_foo()")?);
+        m.insert(PathMatcher::new("bar")?, 'a'.into(), e.compile("a_bar()")?);
+        m.insert(PathMatcher::new("")?, 'b'.into(), e.compile("b()")?);
+
+        assert_eq!(m.resolve("foo", 'a'.into()).unwrap().source(), "a_foo()");
+        assert_eq!(m.resolve("bar", 'a'.into()).unwrap().source(), "a_bar()");
         assert_eq!(
-            m.resolve("foo", 'a'.into()).unwrap(),
-            vec!["a-foo".to_string()]
+            m.resolve("bar/foo", 'a'.into()).unwrap().source(),
+            "a_foo()"
         );
         assert_eq!(
-            m.resolve("bar", 'a'.into()).unwrap(),
-            vec!["a-bar".to_string()]
+            m.resolve("foo/bar", 'a'.into()).unwrap().source(),
+            "a_bar()"
         );
-        assert_eq!(
-            m.resolve("bar/foo", 'a'.into()).unwrap(),
-            vec!["a-foo".to_string()]
-        );
-        assert_eq!(
-            m.resolve("foo/bar", 'a'.into()).unwrap(),
-            vec!["a-bar".to_string()]
-        );
-        assert_eq!(m.resolve("foo/bar", 'x'.into()), None,);
-        assert_eq!(m.resolve("nonexistent", 'a'.into()), None,);
+        assert!(m.resolve("foo/bar", 'x'.into()).is_none());
+        assert!(m.resolve("nonexistent", 'a'.into()).is_none());
 
         Ok(())
     }
@@ -306,19 +234,17 @@ mod tests {
     #[test]
     fn keymap() -> Result<()> {
         let mut m = KeyMap::new();
+        let e = script::ScriptHost::new(&commands::CommandSet::new())?;
 
-        m.bind("", 'a', "", vec!["a-default".to_string()])?;
-        m.bind("m", 'a', "", vec!["a-m".to_string()])?;
+        m.bind("", 'a', "", e.compile("a_default()")?)?;
+        m.bind("m", 'a', "", e.compile("a_m()")?)?;
 
         assert_eq!(
-            m.resolve("foo/bar", 'a'.into()).unwrap(),
-            vec!["a-default".to_string()]
+            m.resolve("foo/bar", 'a'.into()).unwrap().source(),
+            "a_default()"
         );
         m.set_mode("m")?;
-        assert_eq!(
-            m.resolve("foo/bar", 'a'.into()).unwrap(),
-            vec!["a-m".to_string()]
-        );
+        assert_eq!(m.resolve("foo/bar", 'a'.into()).unwrap().source(), "a_m()");
 
         Ok(())
     }

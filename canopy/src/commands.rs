@@ -106,7 +106,7 @@ where
 }
 
 pub struct CommandSet {
-    commands: HashMap<String, CommandDefinition>,
+    pub commands: HashMap<String, CommandDefinition>,
 }
 
 impl CommandSet {
