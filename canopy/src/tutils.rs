@@ -6,7 +6,7 @@ pub mod utils {
     use crate::{
         backend::test::TestRender,
         event::{key, mouse},
-        geom::Expanse,
+        geom::{Direction, Expanse, Rect},
         widgets::list::ListItem,
         *,
     };
@@ -205,7 +205,7 @@ pub mod utils {
 
         #[command]
         /// A command that appears only on leaf nodes.
-        pub fn c_leaf(&self) -> Result<()> {
+        pub fn c_leaf(&self, _core: &dyn Core) -> Result<()> {
             TSTATE.with(|s| {
                 s.borrow_mut().add_command(&self.name(), "c_leaf");
             });
@@ -330,5 +330,59 @@ pub mod utils {
         c.set_root_size(Expanse::new(100, 100), &mut root)?;
         reset_state();
         func(&mut c, tr, root)
+    }
+
+    pub struct DummyCore {}
+
+    impl Core for DummyCore {
+        fn is_on_focus_path(&self, _n: &mut dyn Node) -> bool {
+            false
+        }
+        fn is_focused(&self, _n: &dyn Node) -> bool {
+            false
+        }
+        fn is_focus_ancestor(&self, _n: &mut dyn Node) -> bool {
+            false
+        }
+        fn focus_area(&self, _root: &mut dyn Node) -> Option<Rect> {
+            None
+        }
+        fn focus_depth(&self, _n: &mut dyn Node) -> usize {
+            0
+        }
+        fn focus_down(&mut self, _root: &mut dyn Node) -> Result<Outcome> {
+            Ok(Outcome::Handle)
+        }
+        fn focus_first(&mut self, _root: &mut dyn Node) -> Result<Outcome> {
+            Ok(Outcome::Handle)
+        }
+
+        fn focus_left(&mut self, _root: &mut dyn Node) -> Result<Outcome> {
+            Ok(Outcome::Handle)
+        }
+        fn focus_next(&mut self, _root: &mut dyn Node) -> Result<Outcome> {
+            Ok(Outcome::Handle)
+        }
+        fn focus_path(&self, _root: &mut dyn Node) -> String {
+            "".into()
+        }
+        fn focus_prev(&mut self, _root: &mut dyn Node) -> Result<Outcome> {
+            Ok(Outcome::Handle)
+        }
+        fn focus_right(&mut self, _root: &mut dyn Node) -> Result<Outcome> {
+            Ok(Outcome::Handle)
+        }
+        fn focus_up(&mut self, _root: &mut dyn Node) -> Result<Outcome> {
+            Ok(Outcome::Handle)
+        }
+        fn needs_render(&self, _n: &dyn Node) -> bool {
+            false
+        }
+        fn set_focus(&mut self, _n: &mut dyn Node) {}
+        fn shift_focus(&mut self, _root: &mut dyn Node, _dir: Direction) -> Result<Outcome> {
+            Ok(Outcome::Handle)
+        }
+        fn taint(&mut self, _n: &mut dyn Node) {}
+        fn taint_tree(&mut self, _e: &mut dyn Node) {}
     }
 }

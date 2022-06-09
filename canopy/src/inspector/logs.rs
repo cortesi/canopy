@@ -102,7 +102,7 @@ pub struct Logs {
 impl Node for Logs {
     fn handle_key(
         &mut self,
-        c: &mut dyn Core,
+        core: &mut dyn Core,
         _ctrl: &mut dyn BackendControl,
         k: key::Key,
     ) -> Result<Outcome> {
@@ -112,19 +112,19 @@ impl Node for Logs {
                 lst.clear();
             }
             c if c == 'd' => {
-                lst.delete_selected();
+                lst.delete_selected(core);
             }
-            c if c == 'g' => lst.select_first(),
-            c if c == 'G' => lst.select_last(),
-            c if c == 'J' => lst.scroll_down(),
-            c if c == 'K' => lst.scroll_up(),
-            c if c == 'j' || c == key::KeyCode::Down => lst.select_next(),
-            c if c == 'k' || c == key::KeyCode::Up => lst.select_prev(),
-            c if c == ' ' || c == key::KeyCode::PageDown => lst.page_down(),
-            c if c == key::KeyCode::PageUp => lst.page_up(),
+            c if c == 'g' => lst.select_first(core),
+            c if c == 'G' => lst.select_last(core),
+            c if c == 'J' => lst.scroll_down(core),
+            c if c == 'K' => lst.scroll_up(core),
+            c if c == 'j' || c == key::KeyCode::Down => lst.select_next(core),
+            c if c == 'k' || c == key::KeyCode::Up => lst.select_prev(core),
+            c if c == ' ' || c == key::KeyCode::PageDown => lst.page_down(core),
+            c if c == key::KeyCode::PageUp => lst.page_up(core),
             _ => return Ok(Outcome::Ignore),
         };
-        c.taint_tree(self);
+        core.taint_tree(self);
         Ok(Outcome::Handle)
     }
 

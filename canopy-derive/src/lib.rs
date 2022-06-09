@@ -47,7 +47,6 @@ impl quote::ToTokens for ReturnTypes {
 
 #[derive(Debug)]
 struct Command {
-    ident: syn::Ident,
     command: String,
     docs: String,
     ret: ReturnTypes,
@@ -55,13 +54,13 @@ struct Command {
 
 impl Command {
     fn invocation(&self) -> proc_macro2::TokenStream {
-        let ident = &self.ident;
+        let ident = syn::Ident::new(&self.command, proc_macro2::Span::call_site());
         match self.ret {
             ReturnTypes::Void => {
-                quote! { self.#ident() }
+                quote! { self.#ident(core) }
             }
             ReturnTypes::Result => {
-                quote! {self.#ident()? }
+                quote! {self.#ident(core)? }
             }
         }
     }
@@ -92,7 +91,6 @@ fn parse_command_method(method: &syn::ImplItemMethod) -> Option<Command> {
     }
     if is_command {
         Some(Command {
-            ident: method.sig.ident.clone(),
             command: method.sig.ident.to_string(),
             docs: docs.join("\n"),
             ret,
@@ -156,7 +154,7 @@ pub fn derive_commands(
                         return_type: #rets,
                     }),*]
             }
-            fn dispatch(&mut self, cmd: &canopy::commands::Command) -> canopy::Result<()> {
+            fn dispatch(&mut self, core: &dyn canopy::Core, cmd: &canopy::commands::Command) -> canopy::Result<()> {
                 if cmd.node != self.name() {
                     return Err(canopy::Error::UnknownCommand(cmd.command.to_string()));
                 }

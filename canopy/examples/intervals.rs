@@ -152,13 +152,13 @@ impl Node for Root {
                 self.add_item(c)?;
             }
             ck if ck == 'd' => {
-                lst.delete_selected();
+                lst.delete_selected(c);
             }
-            ck if ck == 'g' => lst.select_first(),
-            ck if ck == 'j' || ck == key::KeyCode::Down => lst.select_next(),
-            ck if ck == 'k' || ck == key::KeyCode::Up => lst.select_prev(),
-            ck if ck == ' ' || ck == key::KeyCode::PageDown => lst.page_down(),
-            ck if ck == key::KeyCode::PageUp => lst.page_up(),
+            ck if ck == 'g' => lst.select_first(c),
+            ck if ck == 'j' || ck == key::KeyCode::Down => lst.select_next(c),
+            ck if ck == 'k' || ck == key::KeyCode::Up => lst.select_prev(c),
+            ck if ck == ' ' || ck == key::KeyCode::PageDown => lst.page_down(c),
+            ck if ck == key::KeyCode::PageUp => lst.page_up(c),
             ck if ck == 'q' => ctrl.exit(0),
             _ => return Ok(Outcome::Ignore),
         };

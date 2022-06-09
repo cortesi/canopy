@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use comfy_table::{ContentArrangement, Table};
 
-use crate::{postorder, preorder, Error, Node, NodeId, NodeName, Result, StatefulNode, Walk};
+use crate::{postorder, preorder, Core, Error, Node, NodeId, NodeName, Result, StatefulNode, Walk};
 
 /// The return type of a command.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,14 +61,14 @@ pub trait CommandNode: StatefulNode {
     fn commands(&self) -> Vec<CommandDefinition>;
 
     /// Dispatch a command to this node.
-    fn dispatch(&mut self, cmd: &Command) -> Result<()>;
+    fn dispatch(&mut self, c: &dyn Core, cmd: &Command) -> Result<()>;
 }
 
 /// Dispatch a command relative to a node. This searches the node tree for a
 /// matching node::command in the following order:
 ///     - A pre-order traversal of the current node subtree
 ///     - The path from the current node to the root
-pub fn dispatch<T>(current_id: T, root: &mut dyn Node, cmd: &Command) -> Result<()>
+pub fn dispatch<T>(core: &dyn Core, current_id: T, root: &mut dyn Node, cmd: &Command) -> Result<()>
 where
     T: Into<NodeId>,
 {
@@ -77,7 +77,7 @@ where
     postorder(root, &mut |x| -> Result<Walk<()>> {
         if seen {
             // We're now on the path to the root
-            match x.dispatch(cmd) {
+            match x.dispatch(core, cmd) {
                 Err(Error::UnknownCommand(_)) => Ok(Walk::Continue),
                 Err(e) => Err(e),
                 Ok(_) => Ok(Walk::Handle(())),
@@ -87,7 +87,7 @@ where
             // Preorder traversal from the focus node into its descendants. Our
             // focus node will be the first node visited.
             match preorder(x, &mut |x| -> Result<Walk<()>> {
-                match x.dispatch(cmd) {
+                match x.dispatch(core, cmd) {
                     Err(Error::UnknownCommand(_)) => Ok(Walk::Continue),
                     Err(e) => Err(e),
                     Ok(_) => Ok(Walk::Handle(())),
@@ -147,35 +147,36 @@ impl CommandSet {
 mod tests {
     use super::*;
     use crate as canopy;
-    use crate::tutils::utils;
+    use crate::tutils::utils::*;
     use crate::{command, derive_commands, CommandNode, Result, StatefulNode};
 
     #[test]
     fn tdispatch() -> Result<()> {
-        let mut root = utils::TRoot::new();
+        run(|c, _, mut root| {
+            dispatch(
+                c,
+                root.id(),
+                &mut root,
+                &Command {
+                    node: "bb_la".try_into()?,
+                    command: "c_leaf".into(),
+                },
+            )?;
+            assert_eq!(state_path(), vec!["bb_la.c_leaf()"]);
 
-        dispatch(
-            root.id(),
-            &mut root,
-            &Command {
-                node: "bb_la".try_into()?,
-                command: "c_leaf".into(),
-            },
-        )?;
-        assert_eq!(utils::state_path(), vec!["bb_la.c_leaf()"]);
-
-        utils::reset_state();
-        dispatch(
-            root.b.b.id(),
-            &mut root,
-            &Command {
-                node: "bb_la".try_into()?,
-                command: "c_leaf".into(),
-            },
-        )?;
-        assert!(utils::state_path().is_empty());
-
-        Ok(())
+            reset_state();
+            dispatch(
+                c,
+                root.b.b.id(),
+                &mut root,
+                &Command {
+                    node: "bb_la".try_into()?,
+                    command: "c_leaf".into(),
+                },
+            )?;
+            assert!(state_path().is_empty());
+            Ok(())
+        })
     }
 
     #[test]
@@ -194,12 +195,12 @@ mod tests {
             #[command]
             /// This is a comment.
             //s Multiline too!
-            fn a(&mut self) -> canopy::Result<()> {
+            fn a(&mut self, _core: &dyn Core) -> canopy::Result<()> {
                 self.a_triggered = true;
                 Ok(())
             }
             #[command]
-            fn b(&mut self) -> canopy::Result<()> {
+            fn b(&mut self, _core: &dyn Core) -> canopy::Result<()> {
                 self.b_triggered = true;
                 Ok(())
             }
