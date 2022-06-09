@@ -70,9 +70,6 @@ impl ScriptHost {
                     SCRIPT_GLOBAL.with(|g| {
                         let mut b = g.borrow_mut();
                         let v = b.as_mut().unwrap();
-
-                        println!("dispatching {:?} {}", &ci, v.node_id);
-
                         commands::dispatch(v.core, v.node_id, v.root, &ci).unwrap();
                     });
                     Ok(())

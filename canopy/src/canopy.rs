@@ -80,12 +80,12 @@ pub struct Canopy {
     /// The poller is responsible for tracking nodes that have pending poll
     /// events, and scheduling their execution.
     poller: Poller,
-    /// Has the tree been tainted? This reset to false before every event sweep.
-    pub taint: bool,
+    /// Has the tree been tainted? Resets to false before every event sweep.
+    pub(crate) taint: bool,
 
-    pub keymap: KeyMap,
+    pub(crate) keymap: KeyMap,
 
-    pub commands: commands::CommandSet,
+    pub(crate) commands: commands::CommandSet,
 
     pub(crate) event_tx: mpsc::Sender<Event>,
     pub(crate) event_rx: Option<mpsc::Receiver<Event>>,
@@ -307,7 +307,7 @@ impl Canopy {
 
     /// Has the focus status of this node changed since the last render
     /// sweep?
-    pub fn node_focus_changed(&self, n: &dyn Node) -> bool {
+    fn node_focus_changed(&self, n: &dyn Node) -> bool {
         if self.focus_changed() {
             let s = n.state();
             // Our focus has changed if we're the currently focused node, or
@@ -332,7 +332,7 @@ impl Canopy {
     }
 
     /// Is this node render tainted?
-    pub fn is_tainted(&self, n: &dyn Node) -> bool {
+    fn is_tainted(&self, n: &dyn Node) -> bool {
         let s = n.state();
         // Tainting if render_gen is 0 lets us initialize a nodestate
         // without knowing about the app state
@@ -456,7 +456,7 @@ impl Canopy {
     /// Render a tree of nodes. If force is true, all visible nodes are
     /// rendered, otherwise we check the taint state. Hidden nodes and their
     /// children are ignored.
-    pub fn render<R: RenderBackend>(
+    pub(crate) fn render<R: RenderBackend>(
         &mut self,
         be: &mut R,
         styl: &mut StyleManager,
@@ -472,7 +472,7 @@ impl Canopy {
 
     /// Propagate a mouse event through the node under the event and all its
     /// ancestors. Events are handled only once, and then ignored.
-    pub fn mouse(
+    pub(crate) fn mouse(
         &mut self,
         ctrl: &mut dyn BackendControl,
         root: &mut dyn Node,
@@ -501,7 +501,7 @@ impl Canopy {
     }
 
     /// Propagate a key event through the focus and all its ancestors.
-    pub fn key<T>(
+    pub(crate) fn key<T>(
         &mut self,
         ctrl: &mut dyn BackendControl,
         root: &mut dyn Node,
@@ -562,7 +562,7 @@ impl Canopy {
     }
 
     /// Set the size on the root node, and taint the tree.
-    pub fn set_root_size(&mut self, size: Expanse, n: &mut dyn Node) -> Result<()> {
+    pub(crate) fn set_root_size(&mut self, size: Expanse, n: &mut dyn Node) -> Result<()> {
         let fit = n.fit(size)?;
         let vp = ViewPort::new(fit, fit, Point::default())?;
         n.set_viewport(vp);
@@ -573,7 +573,7 @@ impl Canopy {
     /// Call a closure on the currently focused node and all its ancestors to the
     /// root. If the closure returns Walk::Handle, traversal stops. Handle::Skip is
     /// ignored.
-    pub fn walk_focus_path<R>(
+    pub(crate) fn walk_focus_path<R>(
         &self,
         root: &mut dyn Node,
         f: &mut dyn FnMut(&mut dyn Node) -> Result<Walk<R>>,
