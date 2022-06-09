@@ -45,7 +45,10 @@ pub struct ScriptHost {
 
 impl ScriptHost {
     pub fn new(cmds: &commands::CommandSet) -> Result<Self> {
-        let engine = rhai::Engine::new();
+        let mut engine = rhai::Engine::new();
+        // We can't enable this yet - see:
+        //      https://github.com/rhaiscript/rhai/issues/574
+        // engine.set_strict_variables(true);
         let mut modules: HashMap<NodeName, rhai::Module> = HashMap::new();
         for i in cmds.commands.values() {
             if !modules.contains_key(&i.node) {
@@ -55,18 +58,22 @@ impl ScriptHost {
             let m = modules.get_mut(&i.node).unwrap();
             m.set_raw_fn(
                 i.command.to_string(),
-                rhai::FnNamespace::Global,
+                rhai::FnNamespace::Internal,
                 rhai::FnAccess::Public,
                 &[],
                 move |context, args| {
                     SCRIPT_GLOBAL.with(|g| {
                         let mut b = g.borrow_mut();
                         let v = b.as_mut().unwrap();
+
                         println!("{:?} {:?}", context, args);
                     });
                     Ok(())
                 },
             );
+        }
+        for (n, m) in modules {
+            engine.register_static_module(n.to_string(), m.into());
         }
         Ok(ScriptHost { engine })
     }
@@ -92,6 +99,23 @@ impl ScriptHost {
         self.engine
             .run_ast(&s.ast)
             .map_err(|e| error::Error::Script(e.to_string()))?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tutils::utils::*;
+
+    #[test]
+    fn texecute() -> Result<()> {
+        run(|c, _, mut root| {
+            let se = ScriptHost::new(&c.commands)?;
+            let scr = se.compile("t_leaf::c_leaf()")?;
+            se.execute(c, &mut root, &scr)?;
+            Ok(())
+        })?;
         Ok(())
     }
 }

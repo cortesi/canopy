@@ -4,6 +4,7 @@ pub mod utils {
 
     use crate::{self as canopy, BackendControl};
     use crate::{
+        backend::test::TestRender,
         event::{key, mouse},
         geom::Expanse,
         widgets::list::ListItem,
@@ -316,4 +317,18 @@ pub mod utils {
     }
 
     impl ListItem for TFixed {}
+
+    pub fn run(func: impl FnOnce(&mut Canopy, TestRender, TRoot) -> Result<()>) -> Result<()> {
+        let (_, tr) = TestRender::create();
+        let mut root = TRoot::new();
+        let mut c = Canopy::new();
+
+        c.commands.load_commands(TRoot::load_commands(None));
+        c.commands.load_commands(TLeaf::load_commands(None));
+        c.commands.load_commands(TBranch::load_commands(None));
+
+        c.set_root_size(Expanse::new(100, 100), &mut root)?;
+        reset_state();
+        func(&mut c, tr, root)
+    }
 }

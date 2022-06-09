@@ -105,6 +105,7 @@ where
     Ok(())
 }
 
+#[derive(Debug)]
 pub struct CommandSet {
     pub commands: HashMap<String, CommandDefinition>,
 }

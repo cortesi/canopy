@@ -1,6 +1,7 @@
 use std::sync::mpsc;
 
 use crate::{
+    commands,
     control::BackendControl,
     event::{key, mouse, Event},
     geom::{Coverage, Direction, Expanse, Point, Rect},
@@ -83,6 +84,8 @@ pub struct Canopy {
     pub taint: bool,
 
     pub keymap: KeyMap,
+
+    pub commands: commands::CommandSet,
 
     pub(crate) event_tx: mpsc::Sender<Event>,
     pub(crate) event_rx: Option<mpsc::Receiver<Event>>,
@@ -298,6 +301,7 @@ impl Canopy {
             event_tx: tx,
             event_rx: Some(rx),
             keymap: KeyMap::new(),
+            commands: commands::CommandSet::new(),
         }
     }
 
@@ -653,20 +657,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{backend::test::TestRender, geom::Rect, tutils::utils::*, StatefulNode};
-
-    fn run_test(func: impl FnOnce(&mut Canopy, TestRender, TRoot) -> Result<()>) -> Result<()> {
-        let (_, tr) = TestRender::create();
-        let mut root = TRoot::new();
-        let mut c = Canopy::new();
-        c.set_root_size(Expanse::new(100, 100), &mut root)?;
-        reset_state();
-        func(&mut c, tr, root)
-    }
+    use crate::{geom::Rect, tutils::utils::*, StatefulNode};
 
     #[test]
     fn tkey() -> Result<()> {
-        run_test(|c, tr, mut root| {
+        run(|c, tr, mut root| {
             c.set_focus(&mut root);
             root.next_outcome = Some(Outcome::Handle);
             c.key(&mut tr.control(), &mut root, 'a')?;
@@ -675,7 +670,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_test(|c, tr, mut root| {
+        run(|c, tr, mut root| {
             c.set_focus(&mut root.a.a);
             root.a.a.next_outcome = Some(Outcome::Handle);
             c.key(&mut tr.control(), &mut root, 'a')?;
@@ -684,7 +679,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_test(|c, tr, mut root| {
+        run(|c, tr, mut root| {
             c.set_focus(&mut root.a.a);
             root.a.next_outcome = Some(Outcome::Handle);
             c.key(&mut tr.control(), &mut root, 'a')?;
@@ -693,7 +688,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_test(|c, tr, mut root| {
+        run(|c, tr, mut root| {
             c.set_focus(&mut root.a.a);
             root.next_outcome = Some(Outcome::Handle);
             c.key(&mut tr.control(), &mut root, 'a')?;
@@ -705,7 +700,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_test(|c, tr, mut root| {
+        run(|c, tr, mut root| {
             c.set_focus(&mut root.a);
             root.a.next_outcome = Some(Outcome::Handle);
             c.key(&mut tr.control(), &mut root, 'a')?;
@@ -714,7 +709,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_test(|c, tr, mut root| {
+        run(|c, tr, mut root| {
             c.set_focus(&mut root.a);
             root.next_outcome = Some(Outcome::Handle);
             c.key(&mut tr.control(), &mut root, 'a')?;
@@ -734,7 +729,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_test(|c, tr, mut root| {
+        run(|c, tr, mut root| {
             c.set_focus(&mut root.a.b);
             root.a.next_outcome = Some(Outcome::Ignore);
             root.next_outcome = Some(Outcome::Handle);
@@ -747,7 +742,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_test(|c, tr, mut root| {
+        run(|c, tr, mut root| {
             c.set_focus(&mut root.a.a);
             root.a.a.next_outcome = Some(Outcome::Handle);
             c.key(&mut tr.control(), &mut root, 'a')?;
@@ -756,7 +751,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_test(|c, tr, mut root| {
+        run(|c, tr, mut root| {
             c.set_focus(&mut root.a.b);
             root.a.next_outcome = Some(Outcome::Handle);
             c.key(&mut tr.control(), &mut root, 'a')?;
@@ -765,7 +760,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_test(|c, tr, mut root| {
+        run(|c, tr, mut root| {
             c.set_focus(&mut root.a.b);
             root.a.b.next_outcome = Some(Outcome::Handle);
             c.key(&mut tr.control(), &mut root, 'a')?;
@@ -774,7 +769,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_test(|c, tr, mut root| {
+        run(|c, tr, mut root| {
             c.set_focus(&mut root.a.b);
             root.a.b.next_outcome = Some(Outcome::Handle);
             root.a.next_outcome = Some(Outcome::Handle);
@@ -789,7 +784,7 @@ mod tests {
 
     #[test]
     fn tnode_path() -> Result<()> {
-        run_test(|_c, _, mut root| {
+        run(|_c, _, mut root| {
             println!("HEREA: {}", node_path(root.a.a.id(), &mut root));
             Ok(())
         })?;
@@ -798,7 +793,7 @@ mod tests {
 
     #[test]
     fn tmouse() -> Result<()> {
-        run_test(|c, mut tr, mut root| {
+        run(|c, mut tr, mut root| {
             c.set_focus(&mut root);
             root.next_outcome = Some(Outcome::Handle);
             let evt = root.a.a.make_mouse_event()?;
@@ -812,7 +807,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_test(|c, mut tr, mut root| {
+        run(|c, mut tr, mut root| {
             root.a.a.next_outcome = Some(Outcome::Handle);
             let evt = root.a.a.make_mouse_event()?;
             tr.render(c, &mut root)?;
@@ -822,7 +817,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_test(|c, mut tr, mut root| {
+        run(|c, mut tr, mut root| {
             root.a.a.next_outcome = Some(Outcome::Handle);
             let evt = root.a.a.make_mouse_event()?;
             tr.render(c, &mut root)?;
@@ -832,7 +827,7 @@ mod tests {
             Ok(())
         })?;
 
-        run_test(|c, mut tr, mut root| {
+        run(|c, mut tr, mut root| {
             root.a.a.next_outcome = Some(Outcome::Handle);
             let evt = root.a.a.make_mouse_event()?;
             tr.render(c, &mut root)?;
@@ -847,7 +842,7 @@ mod tests {
 
     #[test]
     fn tresize() -> Result<()> {
-        run_test(|c, mut tr, mut root| {
+        run(|c, mut tr, mut root| {
             let size = 100;
             assert_eq!(root.vp().screen_rect(), Rect::new(0, 0, size, size));
             tr.render(c, &mut root)?;
@@ -867,7 +862,7 @@ mod tests {
 
     #[test]
     fn trender() -> Result<()> {
-        run_test(|c, mut tr, mut root| {
+        run(|c, mut tr, mut root| {
             tr.render(c, &mut root)?;
             assert_eq!(
                 tr.buf_text(),
@@ -915,7 +910,7 @@ mod tests {
 
     #[test]
     fn focus_path() -> Result<()> {
-        run_test(|c, _, mut root| {
+        run(|c, _, mut root| {
             assert_eq!(c.focus_path(&mut root), "/".to_string());
             c.focus_next(&mut root)?;
             assert_eq!(c.focus_path(&mut root), "/r".to_string());
@@ -930,7 +925,7 @@ mod tests {
 
     #[test]
     fn focus_next() -> Result<()> {
-        run_test(|c, _, mut root| {
+        run(|c, _, mut root| {
             assert!(!c.is_focused(&root));
             c.focus_next(&mut root)?;
             assert!(c.is_focused(&root));
@@ -960,7 +955,7 @@ mod tests {
 
     #[test]
     fn focus_prev() -> Result<()> {
-        run_test(|c, _, mut root| {
+        run(|c, _, mut root| {
             assert!(!c.is_focused(&root));
             c.focus_prev(&mut root)?;
             assert!(c.is_focused(&root.b.b));
@@ -982,7 +977,7 @@ mod tests {
 
     #[test]
     fn tshift_right() -> Result<()> {
-        run_test(|c, mut tr, mut root| {
+        run(|c, mut tr, mut root| {
             tr.render(c, &mut root)?;
             c.set_focus(&mut root.a.a);
             c.focus_right(&mut root)?;
@@ -1003,7 +998,7 @@ mod tests {
 
     #[test]
     fn tfoci() -> Result<()> {
-        run_test(|c, _, mut root| {
+        run(|c, _, mut root| {
             assert_eq!(c.focus_path(&mut root), "/".to_string());
 
             assert!(!c.is_on_focus_path(&mut root));
