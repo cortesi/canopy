@@ -657,7 +657,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{geom::Rect, tutils::utils::*, StatefulNode};
+    use crate::{geom::Rect, tutils::*, StatefulNode};
 
     #[test]
     fn tkey() -> Result<()> {

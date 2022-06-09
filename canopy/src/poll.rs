@@ -141,14 +141,14 @@ impl Poller {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{tutils::utils, Result, StatefulNode};
+    use crate::{tutils::*, Result, StatefulNode};
     #[test]
     fn pendingheap() -> Result<()> {
         let now = SystemTime::now();
 
         let mut ph = PendingHeap::default();
-        let n1 = utils::TLeaf::new("foo");
-        let n2 = utils::TLeaf::new("bar");
+        let n1 = TLeaf::new("foo");
+        let n2 = TLeaf::new("bar");
 
         assert_eq!(ph._current_wait(now), None);
         ph._add(now, n1.id(), Duration::from_secs(10));

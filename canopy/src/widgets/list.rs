@@ -326,7 +326,7 @@ mod tests {
     use crate::{
         backend::test::TestRender,
         place,
-        tutils::utils::{DummyCore, TFixed},
+        tutils::{DummyCore, TFixed},
         Core,
     };
 

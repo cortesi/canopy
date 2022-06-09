@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap};
 
 use rhai;
 
-use crate::{commands, error, Canopy, Node, NodeName, Result};
+use crate::{commands, error, Core, Node, NodeId, NodeName, Result};
 
 #[derive(Debug, Clone)]
 pub struct Script {
@@ -17,8 +17,9 @@ impl Script {
 }
 
 struct ScriptGlobal<'a> {
-    cnpy: &'a mut Canopy,
+    core: &'a dyn Core,
     root: &'a mut dyn Node,
+    node_id: NodeId,
 }
 
 thread_local! {
@@ -56,17 +57,23 @@ impl ScriptHost {
                 modules.insert(i.node.clone(), m);
             }
             let m = modules.get_mut(&i.node).unwrap();
+            let ci = commands::CommandInvocation {
+                node: i.node.clone(),
+                command: i.command.clone(),
+            };
             m.set_raw_fn(
                 i.command.to_string(),
                 rhai::FnNamespace::Internal,
                 rhai::FnAccess::Public,
                 &[],
-                move |context, args| {
+                move |_context, _args| {
                     SCRIPT_GLOBAL.with(|g| {
                         let mut b = g.borrow_mut();
                         let v = b.as_mut().unwrap();
 
-                        println!("{:?} {:?}", context, args);
+                        println!("dispatching {:?} {}", &ci, v.node_id);
+
+                        commands::dispatch(v.core, v.node_id, v.root, &ci).unwrap();
                     });
                     Ok(())
                 },
@@ -82,15 +89,25 @@ impl ScriptHost {
         let ast = self
             .engine
             .compile(source)
-            .map_err(|e| error::Error::Parse(error::ParseError {}))?;
+            .map_err(|_e| error::Error::Parse(error::ParseError {}))?;
         Ok(Script {
             ast,
             source: source.into(),
         })
     }
 
-    pub fn execute(&self, cnpy: &mut Canopy, root: &mut dyn Node, s: &Script) -> Result<()> {
-        let sg = ScriptGlobal { cnpy, root };
+    pub fn execute(
+        &self,
+        core: &dyn Core,
+        root: &mut dyn Node,
+        node_id: NodeId,
+        s: &Script,
+    ) -> Result<()> {
+        let sg = ScriptGlobal {
+            core,
+            root,
+            node_id,
+        };
         let _g = ScriptGuard {};
         SCRIPT_GLOBAL.with(|g| {
             *g.borrow_mut() = Some(unsafe { extend_lifetime(sg) });
@@ -106,14 +123,17 @@ impl ScriptHost {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tutils::utils::*;
+    use crate::tutils::*;
+    use crate::StatefulNode;
 
     #[test]
     fn texecute() -> Result<()> {
         run(|c, _, mut root| {
             let se = ScriptHost::new(&c.commands)?;
-            let scr = se.compile("t_leaf::c_leaf()")?;
-            se.execute(c, &mut root, &scr)?;
+            let scr = se.compile("bb_la::c_leaf()")?;
+            let id = root.a.a.id();
+            se.execute(c, &mut root, id, &scr)?;
+            assert_eq!(get_state().path, ["bb_la.c_leaf()"]);
             Ok(())
         })?;
         Ok(())

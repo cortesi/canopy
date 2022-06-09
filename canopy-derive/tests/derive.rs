@@ -1,7 +1,8 @@
 use std::marker::PhantomData;
 
 use canopy;
-use canopy::commands::{Command, CommandNode, ReturnTypes};
+use canopy::commands::{CommandInvocation, CommandNode, ReturnTypes};
+use canopy::tutils::*;
 use canopy::StatefulNode;
 use canopy_derive::command;
 use canopy_derive::derive_commands;
@@ -37,19 +38,19 @@ fn commands() {
         #[command]
         /// This is a comment.
         /// Multiline too!
-        fn a(&mut self) -> canopy::Result<()> {
+        fn a(&mut self, _core: &dyn canopy::Core) -> canopy::Result<()> {
             self.a_triggered = true;
             Ok(())
         }
 
         #[command]
-        fn b(&mut self) -> canopy::Result<()> {
+        fn b(&mut self, _core: &dyn canopy::Core) -> canopy::Result<()> {
             self.b_triggered = true;
             Ok(())
         }
 
         #[command]
-        fn c(&mut self) {
+        fn c(&mut self, _core: &dyn canopy::Core) {
             self.c_triggered = true;
         }
     }
@@ -83,17 +84,26 @@ fn commands() {
         b_triggered: false,
         c_triggered: false,
     };
-    f.dispatch(&Command {
-        node: "foo".try_into().unwrap(),
-        command: "a".try_into().unwrap(),
-    })
+
+    let dc = DummyCore {};
+
+    f.dispatch(
+        &dc,
+        &CommandInvocation {
+            node: "foo".try_into().unwrap(),
+            command: "a".try_into().unwrap(),
+        },
+    )
     .unwrap();
     assert!(f.a_triggered);
 
-    f.dispatch(&Command {
-        node: "foo".try_into().unwrap(),
-        command: "c".try_into().unwrap(),
-    })
+    f.dispatch(
+        &dc,
+        &CommandInvocation {
+            node: "foo".try_into().unwrap(),
+            command: "c".try_into().unwrap(),
+        },
+    )
     .unwrap();
     assert!(f.c_triggered);
 
@@ -113,7 +123,7 @@ fn commands() {
         N: canopy::Node,
     {
         #[command]
-        fn a(&mut self) -> canopy::Result<()> {
+        fn a(&mut self, _core: &dyn canopy::Core) -> canopy::Result<()> {
             self.a_triggered = true;
             Ok(())
         }

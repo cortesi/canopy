@@ -10,7 +10,7 @@ mod node;
 mod poll;
 mod render;
 mod state;
-mod tutils;
+pub mod tutils;
 
 pub mod backend;
 pub mod commands;

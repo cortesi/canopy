@@ -15,7 +15,7 @@ pub enum ReturnTypes {
 
 /// A parsed command invocation.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Command {
+pub struct CommandInvocation {
     /// The name of the node.
     pub node: NodeName,
     /// The name of the command.
@@ -61,14 +61,19 @@ pub trait CommandNode: StatefulNode {
     fn commands(&self) -> Vec<CommandDefinition>;
 
     /// Dispatch a command to this node.
-    fn dispatch(&mut self, c: &dyn Core, cmd: &Command) -> Result<()>;
+    fn dispatch(&mut self, c: &dyn Core, cmd: &CommandInvocation) -> Result<()>;
 }
 
 /// Dispatch a command relative to a node. This searches the node tree for a
 /// matching node::command in the following order:
 ///     - A pre-order traversal of the current node subtree
 ///     - The path from the current node to the root
-pub fn dispatch<T>(core: &dyn Core, current_id: T, root: &mut dyn Node, cmd: &Command) -> Result<()>
+pub fn dispatch<T>(
+    core: &dyn Core,
+    current_id: T,
+    root: &mut dyn Node,
+    cmd: &CommandInvocation,
+) -> Result<()>
 where
     T: Into<NodeId>,
 {
@@ -147,7 +152,7 @@ impl CommandSet {
 mod tests {
     use super::*;
     use crate as canopy;
-    use crate::tutils::utils::*;
+    use crate::tutils::*;
     use crate::{command, derive_commands, CommandNode, Result, StatefulNode};
 
     #[test]
@@ -157,7 +162,7 @@ mod tests {
                 c,
                 root.id(),
                 &mut root,
-                &Command {
+                &CommandInvocation {
                     node: "bb_la".try_into()?,
                     command: "c_leaf".into(),
                 },
@@ -169,7 +174,7 @@ mod tests {
                 c,
                 root.b.b.id(),
                 &mut root,
-                &Command {
+                &CommandInvocation {
                     node: "bb_la".try_into()?,
                     command: "c_leaf".into(),
                 },

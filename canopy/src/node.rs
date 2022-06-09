@@ -239,7 +239,7 @@ mod tests {
     use super::*;
     use crate::{
         geom::{Expanse, Rect},
-        tutils::utils,
+        tutils::*,
         Error,
     };
 
@@ -252,7 +252,7 @@ mod tests {
     fn tpreorder() -> Result<()> {
         fn trigger(name: &str, func: Result<Walk<()>>) -> (Vec<String>, Result<Walk<()>>) {
             let mut v: Vec<String> = vec![];
-            let mut root = utils::TRoot::new();
+            let mut root = TRoot::new();
             let res = preorder(&mut root, &mut |x| -> Result<Walk<()>> {
                 v.push(x.name().to_string());
                 if x.name() == name {
@@ -309,7 +309,7 @@ mod tests {
     fn tpostorder() -> Result<()> {
         fn trigger(name: &str, func: Result<Walk<()>>) -> (Vec<String>, Result<Walk<()>>) {
             let mut v: Vec<String> = vec![];
-            let mut root = utils::TRoot::new();
+            let mut root = TRoot::new();
             let res = postorder(&mut root, &mut |x| -> Result<Walk<()>> {
                 v.push(x.name().to_string());
                 if x.name() == name {
@@ -383,14 +383,14 @@ mod tests {
     fn node_fit() -> Result<()> {
         // If the child is the same size as the parent, then wrap just produces
         // the same viewport
-        let mut n = utils::TFixed::new(10, 10);
+        let mut n = TFixed::new(10, 10);
         let vp = ViewPort::new(Expanse::new(10, 10), Rect::new(0, 0, 10, 10), (10, 10))?;
         fit(&mut n, vp)?;
         assert_eq!(n.state().viewport, vp);
 
         // If the child is smaller than parent, then wrap places the viewport at
         // (0, 0)
-        let mut n = utils::TFixed::new(5, 5);
+        let mut n = TFixed::new(5, 5);
         let vp = ViewPort::new(Expanse::new(10, 10), Rect::new(0, 0, 10, 10), (10, 10))?;
         let expected = ViewPort::new(Expanse::new(5, 5), Rect::new(0, 0, 5, 5), (10, 10))?;
         fit(&mut n, vp)?;
@@ -400,7 +400,7 @@ mod tests {
 
         // If the child is larger than parent, then wrap places the viewport at
         // (0, 0).
-        let mut n = utils::TFixed::new(20, 20);
+        let mut n = TFixed::new(20, 20);
         let vp = ViewPort::new(Expanse::new(10, 10), Rect::new(0, 0, 10, 10), (10, 10))?;
         fit(&mut n, vp)?;
         assert_eq!(
@@ -433,7 +433,7 @@ mod tests {
     #[test]
     fn node_frame() -> Result<()> {
         // If we have room, the adjustment just shifts the child node relative to the screen.
-        let mut n = utils::TFixed::new(5, 5);
+        let mut n = TFixed::new(5, 5);
         let vp = ViewPort::new(Expanse::new(10, 10), Rect::new(0, 0, 10, 10), (10, 10))?;
         frame(&mut n, vp, 1)?;
         assert_eq!(
@@ -442,7 +442,7 @@ mod tests {
         );
 
         // If if the child node is too large, it is clipped to the bottom and left
-        let mut n = utils::TFixed::new(10, 10);
+        let mut n = TFixed::new(10, 10);
         let vp = ViewPort::new(Expanse::new(10, 10), Rect::new(0, 0, 10, 10), (10, 10))?;
         frame(&mut n, vp, 1)?;
         assert_eq!(
@@ -451,7 +451,7 @@ mod tests {
         );
 
         // If if the parent is smaller than the frame would require, we get a zero view
-        let mut n = utils::TFixed::new(10, 10);
+        let mut n = TFixed::new(10, 10);
         let vp = ViewPort::new(Expanse::new(0, 0), Rect::new(0, 0, 0, 0), (10, 10))?;
         frame(&mut n, vp, 1)?;
         assert_eq!(
