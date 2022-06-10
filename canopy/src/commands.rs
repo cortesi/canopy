@@ -59,7 +59,7 @@ pub trait CommandNode: StatefulNode {
     fn commands(&self) -> Vec<CommandDefinition>;
 
     /// Dispatch a command to this node.
-    fn dispatch(&mut self, c: &dyn Core, cmd: &CommandInvocation) -> Result<()>;
+    fn dispatch(&mut self, c: &mut dyn Core, cmd: &CommandInvocation) -> Result<()>;
 }
 
 /// Dispatch a command relative to a node. This searches the node tree for a
@@ -67,7 +67,7 @@ pub trait CommandNode: StatefulNode {
 ///     - A pre-order traversal of the current node subtree
 ///     - The path from the current node to the root
 pub fn dispatch<T>(
-    core: &dyn Core,
+    core: &mut dyn Core,
     current_id: T,
     root: &mut dyn Node,
     cmd: &CommandInvocation,
@@ -179,12 +179,12 @@ mod tests {
             #[command]
             /// This is a comment.
             //s Multiline too!
-            fn a(&mut self, _core: &dyn Core) -> canopy::Result<()> {
+            fn a(&mut self, _core: &mut dyn Core) -> canopy::Result<()> {
                 self.a_triggered = true;
                 Ok(())
             }
             #[command]
-            fn b(&mut self, _core: &dyn Core) -> canopy::Result<()> {
+            fn b(&mut self, _core: &mut dyn Core) -> canopy::Result<()> {
                 self.b_triggered = true;
                 Ok(())
             }

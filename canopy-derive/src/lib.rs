@@ -154,7 +154,7 @@ pub fn derive_commands(
                         return_type: #rets,
                     }),*]
             }
-            fn dispatch(&mut self, core: &dyn canopy::Core, cmd: &canopy::commands::CommandInvocation) -> canopy::Result<()> {
+            fn dispatch(&mut self, core: &mut dyn canopy::Core, cmd: &canopy::commands::CommandInvocation) -> canopy::Result<()> {
                 if cmd.node != self.name() {
                     return Err(canopy::Error::UnknownCommand(cmd.command.to_string()));
                 }

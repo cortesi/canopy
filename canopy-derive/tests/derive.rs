@@ -85,10 +85,10 @@ fn commands() {
         c_triggered: false,
     };
 
-    let dc = DummyCore {};
+    let mut dc = DummyCore {};
 
     f.dispatch(
-        &dc,
+        &mut dc,
         &CommandInvocation {
             node: "foo".try_into().unwrap(),
             command: "a".try_into().unwrap(),
@@ -98,7 +98,7 @@ fn commands() {
     assert!(f.a_triggered);
 
     f.dispatch(
-        &dc,
+        &mut dc,
         &CommandInvocation {
             node: "foo".try_into().unwrap(),
             command: "c".try_into().unwrap(),

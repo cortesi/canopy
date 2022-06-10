@@ -1,5 +1,3 @@
-use std::env;
-
 use anyhow::Result;
 use clap::Parser;
 
@@ -103,6 +101,7 @@ impl Todo {
     }
 
     /// Open the editor to enter a new todo item.
+    #[command]
     fn enter_item(&mut self, c: &mut dyn Core) -> canopy::Result<()> {
         let mut adder = frame::Frame::new(InputLine::new(""));
         c.set_focus(&mut adder.child);
@@ -217,6 +216,8 @@ struct Args {
     /// Number of times to greet
     #[clap(short, long)]
     commands: bool,
+
+    path: Option<String>,
 }
 
 pub fn main() -> Result<()> {
@@ -225,13 +226,15 @@ pub fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
     cnpy.load_commands::<List<TodoItem>>();
     cnpy.load_commands::<Todo>();
+    cnpy.bind_key('a', "", "todo::enter_item()")?;
+    cnpy.bind_key('g', "", "list::select_first()")?;
 
     if args.commands {
         cnpy.print_command_table(&mut std::io::stdout())?;
         return Ok(());
     }
 
-    if let Some(path) = env::args().nth(1) {
+    if let Some(path) = args.path {
         store::open(&path)?;
 
         cnpy.style.add(

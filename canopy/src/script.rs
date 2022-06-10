@@ -17,7 +17,7 @@ impl Script {
 }
 
 struct ScriptGlobal<'a> {
-    core: &'a dyn Core,
+    core: &'a mut dyn Core,
     root: &'a mut dyn Node,
     node_id: NodeId,
 }
@@ -26,7 +26,21 @@ thread_local! {
     static SCRIPT_GLOBAL: RefCell<Option<ScriptGlobal<'static>>> = RefCell::new(None);
 }
 
-struct ScriptGuard {}
+pub(crate) struct ScriptGuard {}
+
+impl ScriptGuard {
+    pub fn new(core: &mut dyn Core, root: &mut dyn Node, node_id: NodeId) -> Self {
+        let sg = ScriptGlobal {
+            core,
+            root,
+            node_id,
+        };
+        SCRIPT_GLOBAL.with(|g| {
+            *g.borrow_mut() = Some(unsafe { extend_lifetime(sg) });
+        });
+        ScriptGuard {}
+    }
+}
 
 impl Drop for ScriptGuard {
     fn drop(&mut self) {
@@ -41,7 +55,7 @@ unsafe fn extend_lifetime<'b>(r: ScriptGlobal<'b>) -> ScriptGlobal<'static> {
 }
 
 #[derive(Debug)]
-pub struct ScriptHost {
+pub(crate) struct ScriptHost {
     engine: rhai::Engine,
 }
 
@@ -98,23 +112,7 @@ impl ScriptHost {
         })
     }
 
-    pub fn execute(
-        &self,
-        core: &dyn Core,
-        root: &mut dyn Node,
-        node_id: NodeId,
-        s: &Script,
-    ) -> Result<()> {
-        let sg = ScriptGlobal {
-            core,
-            root,
-            node_id,
-        };
-        let _g = ScriptGuard {};
-        SCRIPT_GLOBAL.with(|g| {
-            *g.borrow_mut() = Some(unsafe { extend_lifetime(sg) });
-        });
-
+    pub fn execute(&self, s: &Script) -> Result<()> {
         self.engine
             .run_ast(&s.ast)
             .map_err(|e| error::Error::Script(e.to_string()))?;
@@ -133,7 +131,7 @@ mod tests {
         run(|c, _, mut root| {
             let scr = c.script_host.compile("bb_la::c_leaf()")?;
             let id = root.a.a.id();
-            c.script_host.execute(c, &mut root, id, &scr)?;
+            c.run_script(&mut root, id, &scr)?;
             assert_eq!(get_state().path, ["bb_la.c_leaf()"]);
             Ok(())
         })?;

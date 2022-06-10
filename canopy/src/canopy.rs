@@ -313,6 +313,17 @@ impl Canopy {
         }
     }
 
+    pub fn run_script(
+        &mut self,
+        root: &mut dyn Node,
+        node_id: NodeId,
+        s: &script::Script,
+    ) -> Result<()> {
+        let _g = script::ScriptGuard::new(self, root, node_id);
+        self.script_host.execute(s)?;
+        Ok(())
+    }
+
     /// Bind a key, within a given mode, with a given context to a list of commands.
     pub fn bind_key<K>(&mut self, key: K, path_filter: &str, script: &str) -> Result<()>
     where
