@@ -1,13 +1,17 @@
-use std::sync::mpsc;
+use std::{io::Write, sync::mpsc};
+
+use comfy_table::{ContentArrangement, Table};
 
 use crate::{
     commands,
     control::BackendControl,
+    error,
     event::{key, mouse, Event},
     geom::{Coverage, Direction, Expanse, Point, Rect},
     node::{postorder, preorder, Node, Walk},
     poll::Poller,
     render::{show_cursor, RenderBackend},
+    script,
     style::{solarized, StyleManager, StyleMap},
     KeyMap, NodeId, NodeName, Outcome, Render, Result, ViewPort,
 };
@@ -83,9 +87,11 @@ pub struct Canopy {
     /// Has the tree been tainted? Resets to false before every event sweep.
     pub(crate) taint: bool,
 
-    pub keymap: KeyMap,
+    pub(crate) script_host: script::ScriptHost,
+
+    pub(crate) keymap: KeyMap,
     pub style: StyleMap,
-    pub commands: commands::CommandSet,
+    pub(crate) commands: commands::CommandSet,
 
     pub(crate) event_tx: mpsc::Sender<Event>,
     pub(crate) event_rx: Option<mpsc::Receiver<Event>>,
@@ -302,14 +308,40 @@ impl Canopy {
             event_rx: Some(rx),
             keymap: KeyMap::new(),
             commands: commands::CommandSet::new(),
+            script_host: script::ScriptHost::new(),
             style: solarized::solarized_dark(),
         }
+    }
+
+    /// Bind a key, within a given mode, with a given context to a list of commands.
+    pub fn bind_key<K>(&mut self, key: K, path_filter: &str, script: &str) -> Result<()>
+    where
+        key::Key: From<K>,
+    {
+        self.bind_mode_key(key, "", path_filter, script)
+    }
+
+    /// Bind a key, within a given mode, with a given context to a list of commands.
+    pub fn bind_mode_key<K>(
+        &mut self,
+        key: K,
+        mode: &str,
+        path_filter: &str,
+        script: &str,
+    ) -> Result<()>
+    where
+        key::Key: From<K>,
+    {
+        self.keymap
+            .bind(mode, key, path_filter, self.script_host.compile(script)?)
     }
 
     /// Load the commands from a command node using the default node name
     /// derived from the name of the struct.
     pub fn load_commands<T: commands::CommandNode>(&mut self) {
-        self.commands.load_commands(<T>::default_commands())
+        let cmds = <T>::default_commands();
+        self.script_host.load(&cmds);
+        self.commands.commands(&cmds);
     }
 
     /// Load the commands from a command node, but rename the node. This
@@ -320,8 +352,27 @@ impl Canopy {
         for mut x in cmds.iter_mut() {
             x.node = n.clone();
         }
-        self.commands.load_commands(cmds);
+        self.script_host.load(&cmds);
+        self.commands.commands(&cmds);
         Ok(())
+    }
+
+    /// Output a formatted table of commands to a writer.
+    pub fn print_command_table(&self, w: &mut dyn Write) -> Result<()> {
+        let mut cmds: Vec<&commands::CommandDefinition> = self.commands.commands.values().collect();
+
+        cmds.sort_by_key(|a| a.fullname());
+
+        let mut table = Table::new();
+        table.set_content_arrangement(ContentArrangement::Dynamic);
+        table.load_preset(comfy_table::presets::UTF8_FULL);
+        for i in cmds {
+            table.add_row(vec![
+                comfy_table::Cell::new(i.fullname()).fg(comfy_table::Color::Green),
+                comfy_table::Cell::new(i.docs.clone()),
+            ]);
+        }
+        writeln!(w, "{table}").map_err(|x| error::Error::Internal(x.to_string()))
     }
 
     /// Has the focus status of this node changed since the last render

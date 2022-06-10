@@ -166,7 +166,7 @@ impl KeyMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{commands, script, Result};
+    use crate::{script, Result};
 
     #[test]
     fn pathfilter() -> Result<()> {
@@ -208,7 +208,7 @@ mod tests {
 
     #[test]
     fn keymode() -> Result<()> {
-        let e = script::ScriptHost::new(&commands::CommandSet::new())?;
+        let e = script::ScriptHost::new();
 
         let mut m = KeyMode::new();
         m.insert(PathMatcher::new("foo")?, 'a'.into(), e.compile("a_foo()")?);
@@ -234,7 +234,7 @@ mod tests {
     #[test]
     fn keymap() -> Result<()> {
         let mut m = KeyMap::new();
-        let e = script::ScriptHost::new(&commands::CommandSet::new())?;
+        let e = script::ScriptHost::new();
 
         m.bind("", 'a', "", e.compile("a_default()")?)?;
         m.bind("m", 'a', "", e.compile("a_m()")?)?;

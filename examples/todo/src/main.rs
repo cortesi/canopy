@@ -227,7 +227,7 @@ pub fn main() -> Result<()> {
     cnpy.load_commands::<Todo>();
 
     if args.commands {
-        cnpy.commands.pretty_print();
+        cnpy.print_command_table(&mut std::io::stdout())?;
         return Ok(());
     }
 

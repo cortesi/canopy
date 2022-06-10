@@ -40,18 +40,24 @@ unsafe fn extend_lifetime<'b>(r: ScriptGlobal<'b>) -> ScriptGlobal<'static> {
     std::mem::transmute::<ScriptGlobal<'b>, ScriptGlobal<'static>>(r)
 }
 
+#[derive(Debug)]
 pub struct ScriptHost {
     engine: rhai::Engine,
 }
 
 impl ScriptHost {
-    pub fn new(cmds: &commands::CommandSet) -> Result<Self> {
-        let mut engine = rhai::Engine::new();
+    pub fn new() -> Self {
+        ScriptHost {
+            engine: rhai::Engine::new(),
+        }
+    }
+
+    pub fn load(&mut self, cmds: &[commands::CommandDefinition]) {
         // We can't enable this yet - see:
         //      https://github.com/rhaiscript/rhai/issues/574
         // engine.set_strict_variables(true);
         let mut modules: HashMap<NodeName, rhai::Module> = HashMap::new();
-        for i in cmds.commands.values() {
+        for i in cmds {
             if !modules.contains_key(&i.node) {
                 let m = rhai::Module::new();
                 modules.insert(i.node.clone(), m);
@@ -77,9 +83,8 @@ impl ScriptHost {
             );
         }
         for (n, m) in modules {
-            engine.register_static_module(n.to_string(), m.into());
+            self.engine.register_static_module(n.to_string(), m.into());
         }
-        Ok(ScriptHost { engine })
     }
 
     pub fn compile(&self, source: &str) -> Result<Script> {
@@ -126,10 +131,9 @@ mod tests {
     #[test]
     fn texecute() -> Result<()> {
         run(|c, _, mut root| {
-            let se = ScriptHost::new(&c.commands)?;
-            let scr = se.compile("bb_la::c_leaf()")?;
+            let scr = c.script_host.compile("bb_la::c_leaf()")?;
             let id = root.a.a.id();
-            se.execute(c, &mut root, id, &scr)?;
+            c.script_host.execute(c, &mut root, id, &scr)?;
             assert_eq!(get_state().path, ["bb_la.c_leaf()"]);
             Ok(())
         })?;

@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use comfy_table::{ContentArrangement, Table};
-
 use crate::{postorder, preorder, Core, Error, Node, NodeId, NodeName, Result, StatefulNode, Walk};
 
 /// The return type of a command.
@@ -122,29 +120,10 @@ impl CommandSet {
         }
     }
 
-    pub fn load_commands(&mut self, cmds: Vec<CommandDefinition>) {
+    pub fn commands(&mut self, cmds: &[CommandDefinition]) {
         for i in cmds {
-            self.commands.insert(i.fullname(), i);
+            self.commands.insert(i.fullname(), i.clone());
         }
-    }
-
-    /// Output keybindings to the terminal, formatted in a nice table. Make sure
-    /// the terminal is not being controlled by Canopy when you call this.
-    pub fn pretty_print(&self) {
-        let mut cmds: Vec<&CommandDefinition> = self.commands.values().collect();
-
-        cmds.sort_by_key(|a| a.fullname());
-
-        let mut table = Table::new();
-        table.set_content_arrangement(ContentArrangement::Dynamic);
-        table.load_preset(comfy_table::presets::UTF8_FULL);
-        for i in cmds {
-            table.add_row(vec![
-                comfy_table::Cell::new(i.fullname()).fg(comfy_table::Color::Green),
-                comfy_table::Cell::new(i.docs.clone()),
-            ]);
-        }
-        println!("{table}");
     }
 }
 
@@ -212,7 +191,7 @@ mod tests {
         }
 
         let mut cs = CommandSet::new();
-        cs.load_commands(Foo::default_commands());
+        cs.commands(&Foo::default_commands());
 
         Ok(())
     }
