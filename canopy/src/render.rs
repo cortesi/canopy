@@ -1,4 +1,9 @@
-use crate::{cursor, geom, style::Style, style::StyleManager, Result, ViewPort};
+use crate::{
+    cursor, geom,
+    style::Style,
+    style::{StyleManager, StyleMap},
+    Result, ViewPort,
+};
 
 /// The trait implemented by renderers.
 pub trait RenderBackend {
@@ -22,6 +27,7 @@ pub trait RenderBackend {
 pub struct Render<'a> {
     backend: &'a mut dyn RenderBackend,
     pub style: &'a mut StyleManager,
+    pub stylemap: &'a StyleMap,
     viewport: ViewPort,
     pub coverage: &'a mut geom::Coverage,
 }
@@ -29,6 +35,7 @@ pub struct Render<'a> {
 /// Show the cursor with a specified style
 pub(crate) fn show_cursor(
     backend: &mut dyn RenderBackend,
+    smap: &StyleMap,
     styleman: &mut StyleManager,
     viewport: ViewPort,
     style: &str,
@@ -37,7 +44,7 @@ pub(crate) fn show_cursor(
     if let Some(loc) = viewport.project_point(c.location) {
         let mut c = c;
         c.location = loc;
-        backend.style(styleman.get(style))?;
+        backend.style(styleman.get(smap, style))?;
         backend.show_cursor(c)?;
     }
     Ok(())
@@ -46,6 +53,7 @@ pub(crate) fn show_cursor(
 impl<'a> Render<'a> {
     pub fn new(
         backend: &'a mut dyn RenderBackend,
+        stylemap: &'a StyleMap,
         style: &'a mut StyleManager,
         viewport: ViewPort,
         coverage: &'a mut geom::Coverage,
@@ -53,6 +61,7 @@ impl<'a> Render<'a> {
         Render {
             backend,
             style,
+            stylemap,
             viewport,
             coverage,
         }
@@ -72,7 +81,7 @@ impl<'a> Render<'a> {
     /// Fill a rectangle with a specified character.
     pub fn fill(&mut self, style: &str, r: geom::Rect, c: char) -> Result<()> {
         if let Some(dst) = self.viewport.project_rect(r) {
-            self.backend.style(self.style.get(style))?;
+            self.backend.style(self.style.get(self.stylemap, style))?;
             self.fill_screen(dst, c)?;
         }
         Ok(())
@@ -96,7 +105,7 @@ impl<'a> Render<'a> {
     pub fn text(&mut self, style: &str, l: geom::Line, txt: &str) -> Result<()> {
         if let Some((offset, dst)) = self.viewport.project_line(l) {
             self.coverage.add(self.viewport.unproject(dst.rect())?);
-            self.backend.style(self.style.get(style))?;
+            self.backend.style(self.style.get(self.stylemap, style))?;
 
             let out = &txt
                 .chars()

@@ -5,7 +5,6 @@ use canopy::{
     geom::Expanse,
     geom::Frame,
     inspector::Inspector,
-    style::solarized,
     *,
 };
 
@@ -193,8 +192,8 @@ impl Node for Block {
 }
 
 pub fn main() -> Result<()> {
-    let mut colors = solarized::solarized_dark();
+    let cnpy = Canopy::new();
     let root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new());
-    runloop(&mut colors, root)?;
+    runloop(cnpy, root)?;
     Ok(())
 }

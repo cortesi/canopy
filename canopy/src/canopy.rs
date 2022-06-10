@@ -8,7 +8,7 @@ use crate::{
     node::{postorder, preorder, Node, Walk},
     poll::Poller,
     render::{show_cursor, RenderBackend},
-    style::StyleManager,
+    style::{solarized, StyleManager, StyleMap},
     KeyMap, NodeId, Outcome, Render, Result, ViewPort,
 };
 
@@ -84,6 +84,8 @@ pub struct Canopy {
     pub(crate) taint: bool,
 
     pub(crate) keymap: KeyMap,
+
+    pub style: StyleMap,
 
     pub(crate) commands: commands::CommandSet,
 
@@ -290,7 +292,7 @@ impl Core for Canopy {
 }
 
 impl Canopy {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         let (tx, rx) = mpsc::channel();
         Canopy {
             focus_gen: 1,
@@ -302,6 +304,7 @@ impl Canopy {
             event_rx: Some(rx),
             keymap: KeyMap::new(),
             commands: commands::CommandSet::new(),
+            style: solarized::solarized_dark(),
         }
     }
 
@@ -401,7 +404,7 @@ impl Canopy {
                 }
 
                 let mut c = Coverage::new(n.vp().screen_rect().expanse());
-                let mut rndr = Render::new(r, styl, n.vp(), &mut c);
+                let mut rndr = Render::new(r, &self.style, styl, n.vp(), &mut c);
 
                 n.render(self, &mut rndr)?;
 
@@ -444,7 +447,7 @@ impl Canopy {
     ) -> Result<()> {
         self.walk_focus_path(root, &mut |n| -> Result<Walk<()>> {
             Ok(if let Some(c) = n.cursor() {
-                show_cursor(r, styl, n.vp(), "cursor", c)?;
+                show_cursor(r, &self.style, styl, n.vp(), "cursor", c)?;
                 Walk::Handle(())
             } else {
                 Walk::Continue
@@ -459,14 +462,18 @@ impl Canopy {
     pub(crate) fn render<R: RenderBackend>(
         &mut self,
         be: &mut R,
-        styl: &mut StyleManager,
         root: &mut dyn Node,
     ) -> Result<()> {
+        let mut styl = StyleManager::default();
         be.reset()?;
         styl.reset();
-        self.render_traversal(be, styl, root)?;
+
+        self.pre_render(be, root)?;
+        self.render_traversal(be, &mut styl, root)?;
         self.render_gen += 1;
         self.last_render_focus_gen = self.focus_gen;
+        self.post_render(be, &mut styl, root)?;
+
         Ok(())
     }
 
@@ -889,7 +896,7 @@ mod tests {
 
             c.set_focus(&mut root.a.a);
             tr.render(c, &mut root)?;
-            assert_eq!(tr.buf_text(), vec!["<ba_la>"]);
+            assert_eq!(tr.buf_text(), vec!["<r>", "<ba_la>"]);
 
             c.focus_next(&mut root)?;
             tr.render(c, &mut root)?;

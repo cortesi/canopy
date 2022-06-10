@@ -236,8 +236,9 @@ pub fn main() -> Result<()> {
 
     if let Some(path) = env::args().nth(1) {
         store::open(&path)?;
-        let mut colors = solarized::solarized_dark();
-        colors.add(
+
+        let mut cnpy = Canopy::new();
+        cnpy.style.add(
             "statusbar/text",
             Some(solarized::BASE02),
             Some(solarized::BASE1),
@@ -245,7 +246,7 @@ pub fn main() -> Result<()> {
         );
 
         runloop(
-            &mut colors,
+            cnpy,
             Inspector::new(key::Ctrl + key::KeyCode::Right, Todo::new()?),
         )?;
     } else {

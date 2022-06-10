@@ -13,7 +13,7 @@ use crate::{
     event::{key, mouse, Event, EventSource},
     geom::{Expanse, Point},
     render::RenderBackend,
-    style::{Color, Style, StyleManager},
+    style::{Color, Style},
     Canopy, Node, Result,
 };
 use crossterm::{
@@ -302,7 +302,7 @@ fn event_emitter(evt_tx: mpsc::Sender<Event>) {
     });
 }
 
-pub fn runloop<N>(style: &mut StyleManager, mut root: N) -> Result<()>
+pub fn runloop<N>(mut cnpy: Canopy, mut root: N) -> Result<()>
 where
     N: Node,
 {
@@ -343,7 +343,6 @@ where
         }
     }));
 
-    let mut cnpy = Canopy::new();
     let rx = if let Some(x) = cnpy.event_rx.take() {
         x
     } else {
@@ -360,9 +359,7 @@ where
         let mut tainted = true;
         loop {
             if tainted {
-                cnpy.pre_render(&mut be, &mut root)?;
-                cnpy.render(&mut be, style, &mut root)?;
-                cnpy.post_render(&mut be, style, &mut root)?;
+                cnpy.render(&mut be, &mut root)?;
                 translate_result(be.flush())?;
             }
             cnpy.event(&mut ctrl, &mut root, events.next()?)?;

@@ -35,8 +35,7 @@ impl TestRender {
     }
 
     pub fn render(&mut self, c: &mut Canopy, e: &mut dyn Node) -> Result<()> {
-        let mut sm = StyleManager::default();
-        c.render(self, &mut sm, e)?;
+        c.render(self, e)?;
         Ok(())
     }
 

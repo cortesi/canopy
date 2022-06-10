@@ -174,14 +174,14 @@ impl Node for Root {
 }
 
 pub fn main() -> Result<()> {
-    let mut colors = solarized::solarized_dark();
-    colors.add(
+    let mut cnpy = Canopy::new();
+    cnpy.style.add(
         "statusbar/text",
         Some(solarized::BASE02),
         Some(solarized::BASE1),
         None,
     );
     let root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new());
-    runloop(&mut colors, root)?;
+    runloop(cnpy, root)?;
     Ok(())
 }

@@ -130,6 +130,87 @@ impl PartialStyle {
     }
 }
 
+fn parse_path(path: &str) -> Vec<String> {
+    path.split('/')
+        .filter_map(|s| {
+            if !s.is_empty() {
+                Some(s.to_owned())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+#[derive(Debug)]
+pub struct StyleMap {
+    styles: HashMap<Vec<String>, PartialStyle>,
+}
+
+impl StyleMap {
+    pub fn new() -> Self {
+        let mut cs = StyleMap {
+            styles: HashMap::new(),
+        };
+        cs.add(
+            "/",
+            Some(Color::White),
+            Some(Color::Black),
+            Some(AttrSet::default()),
+        );
+        cs
+    }
+
+    /// Insert a foreground color at a specified path.
+    pub fn add_fg(&mut self, path: &str, fg: Color) {
+        let parsed = parse_path(path);
+        if let Some(ps) = self.styles.get_mut(&parsed) {
+            ps.fg = Some(fg);
+        } else {
+            self.styles
+                .insert(parsed, PartialStyle::default().with_fg(fg));
+        }
+    }
+
+    /// Insert a background color at a specified path.
+    pub fn add_bg(&mut self, path: &str, bg: Color) {
+        let parsed = parse_path(path);
+        if let Some(ps) = self.styles.get_mut(&parsed) {
+            ps.bg = Some(bg);
+        } else {
+            self.styles
+                .insert(parsed, PartialStyle::default().with_bg(bg));
+        }
+    }
+
+    /// Insert a style attribute at a specified path.
+    pub fn add_attr(&mut self, path: &str, attr: Attr) {
+        let parsed = parse_path(path);
+        if let Some(ps) = self.styles.get_mut(&parsed) {
+            if let Some(attrs) = ps.attrs {
+                ps.attrs = Some(attrs.with(attr));
+            } else {
+                ps.attrs = Some(AttrSet::default().with(attr));
+            }
+        } else {
+            self.styles
+                .insert(parsed, PartialStyle::default().with_attr(attr));
+        }
+    }
+
+    /// Add a style at a specified path.
+    pub fn add(
+        &mut self,
+        path: &str,
+        fg: Option<Color>,
+        bg: Option<Color>,
+        attrs: Option<AttrSet>,
+    ) {
+        self.styles
+            .insert(parse_path(path), PartialStyle { fg, bg, attrs });
+    }
+}
+
 /// A hierarchical style manager.
 ///
 /// `Style` objects are entered into the manager with '/'-separated paths. For
@@ -159,7 +240,6 @@ impl PartialStyle {
 /// "/frame/selected", "foo", ""].
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct StyleManager {
-    styles: HashMap<Vec<String>, PartialStyle>,
     // The current render level
     level: usize,
     // A list of selected layers, along with which render level they were set at
@@ -175,18 +255,11 @@ impl Default for StyleManager {
 
 impl StyleManager {
     pub fn new() -> Self {
-        let mut cs = StyleManager {
-            styles: HashMap::new(),
+        let cs = StyleManager {
             level: 0,
             layers: vec![],
             layer_levels: vec![],
         };
-        cs.add(
-            "/",
-            Some(Color::White),
-            Some(Color::Black),
-            Some(AttrSet::default()),
-        );
         cs
     }
 
@@ -221,79 +294,18 @@ impl StyleManager {
     }
 
     /// Resolve a style path.
-    pub fn get(&self, path: &str) -> Style {
-        self.resolve(&self.layers, &self.parse_path(path))
-    }
-
-    fn parse_path(&self, path: &str) -> Vec<String> {
-        path.split('/')
-            .filter_map(|s| {
-                if !s.is_empty() {
-                    Some(s.to_owned())
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
-    /// Insert a foreground color at a specified path.
-    pub fn add_fg(&mut self, path: &str, fg: Color) {
-        let parsed = self.parse_path(path);
-        if let Some(ps) = self.styles.get_mut(&parsed) {
-            ps.fg = Some(fg);
-        } else {
-            self.styles
-                .insert(parsed, PartialStyle::default().with_fg(fg));
-        }
-    }
-
-    /// Insert a background color at a specified path.
-    pub fn add_bg(&mut self, path: &str, bg: Color) {
-        let parsed = self.parse_path(path);
-        if let Some(ps) = self.styles.get_mut(&parsed) {
-            ps.bg = Some(bg);
-        } else {
-            self.styles
-                .insert(parsed, PartialStyle::default().with_bg(bg));
-        }
-    }
-
-    /// Insert a style attribute at a specified path.
-    pub fn add_attr(&mut self, path: &str, attr: Attr) {
-        let parsed = self.parse_path(path);
-        if let Some(ps) = self.styles.get_mut(&parsed) {
-            if let Some(attrs) = ps.attrs {
-                ps.attrs = Some(attrs.with(attr));
-            } else {
-                ps.attrs = Some(AttrSet::default().with(attr));
-            }
-        } else {
-            self.styles
-                .insert(parsed, PartialStyle::default().with_attr(attr));
-        }
-    }
-
-    /// Add a style at a specified path.
-    pub fn add(
-        &mut self,
-        path: &str,
-        fg: Option<Color>,
-        bg: Option<Color>,
-        attrs: Option<AttrSet>,
-    ) {
-        self.styles
-            .insert(self.parse_path(path), PartialStyle { fg, bg, attrs });
+    pub fn get(&self, smap: &StyleMap, path: &str) -> Style {
+        self.resolve(smap, &self.layers, &parse_path(path))
     }
 
     // Look up one suffix along a layer chain
-    fn lookup(&self, layers: &[String], suffix: &[String]) -> PartialStyle {
+    fn lookup(&self, smap: &StyleMap, layers: &[String], suffix: &[String]) -> PartialStyle {
         let mut ret = PartialStyle::default();
         // Look up the path on all layers to the root.
         for i in 0..layers.len() + 1 {
             let mut v = layers[0..layers.len() - i].to_vec();
             v.extend(suffix.to_vec());
-            if let Some(c) = self.styles.get(&v) {
+            if let Some(c) = smap.styles.get(&v) {
                 ret = ret.join(c);
                 if ret.is_complete() {
                     break;
@@ -305,10 +317,10 @@ impl StyleManager {
 
     /// Directly resolve a style using a path and a layer specification,
     /// ignoring `self.layers`.
-    pub(crate) fn resolve(&self, layers: &[String], path: &[String]) -> Style {
+    pub(crate) fn resolve(&self, smap: &StyleMap, layers: &[String], path: &[String]) -> Style {
         let mut ret = PartialStyle::default();
         for i in 0..path.len() + 1 {
-            ret = ret.join(&self.lookup(layers, &path[0..path.len() - i]));
+            ret = ret.join(&self.lookup(smap, layers, &path[0..path.len() - i]));
             if ret.is_complete() {
                 break;
             }
@@ -324,29 +336,31 @@ mod tests {
 
     #[test]
     fn style_parse_path() -> Result<()> {
-        let c = StyleManager::new();
-        assert_eq!(c.parse_path("/one/two"), vec!["one", "two"]);
-        assert_eq!(c.parse_path("one/two"), vec!["one", "two"]);
-        assert!(c.parse_path("").is_empty());
+        assert_eq!(parse_path("/one/two"), vec!["one", "two"]);
+        assert_eq!(parse_path("one/two"), vec!["one", "two"]);
+        assert!(parse_path("").is_empty());
         Ok(())
     }
 
     #[test]
     fn style_resolve() -> Result<()> {
-        let mut c = StyleManager::new();
-        c.add(
+        let mut smap = StyleMap::new();
+        smap.add(
             "",
             Some(Color::White),
             Some(Color::Black),
             Some(AttrSet::default()),
         );
-        c.add_fg("one", Color::Red);
-        c.add_fg("one/two", Color::Blue);
-        c.add_fg("one/two/target", Color::Green);
-        c.add_fg("frame/border", Color::Yellow);
+        smap.add_fg("one", Color::Red);
+        smap.add_fg("one/two", Color::Blue);
+        smap.add_fg("one/two/target", Color::Green);
+        smap.add_fg("frame/border", Color::Yellow);
+
+        let c = StyleManager::new();
 
         assert_eq!(
             c.resolve(
+                &smap,
                 &["one".to_string(), "two".to_string()],
                 &["target".to_string(), "voing".to_string()],
             ),
@@ -359,6 +373,7 @@ mod tests {
 
         assert_eq!(
             c.resolve(
+                &smap,
                 &["one".to_string(), "two".to_string()],
                 &["two".to_string(), "voing".to_string()],
             ),
@@ -371,6 +386,7 @@ mod tests {
 
         assert_eq!(
             c.resolve(
+                &smap,
                 &["one".to_string(), "two".to_string()],
                 &["target".to_string()],
             ),
@@ -382,6 +398,7 @@ mod tests {
         );
         assert_eq!(
             c.resolve(
+                &smap,
                 &["one".to_string(), "two".to_string()],
                 &["nonexistent".to_string()],
             ),
@@ -392,7 +409,11 @@ mod tests {
             }
         );
         assert_eq!(
-            c.resolve(&["somelayer".to_string()], &["nonexistent".to_string()],),
+            c.resolve(
+                &smap,
+                &["somelayer".to_string()],
+                &["nonexistent".to_string()],
+            ),
             Style {
                 fg: Color::White,
                 bg: Color::Black,
@@ -401,6 +422,7 @@ mod tests {
         );
         assert_eq!(
             c.resolve(
+                &smap,
                 &["one".to_string(), "two".to_string()],
                 &["frame".to_string(), "border".to_string()],
             ),
@@ -412,6 +434,7 @@ mod tests {
         );
         assert_eq!(
             c.resolve(
+                &smap,
                 &["one".to_string(), "two".to_string()],
                 &["frame".to_string(), "border".to_string()],
             ),
@@ -422,7 +445,7 @@ mod tests {
             }
         );
         assert_eq!(
-            c.resolve(&["frame".to_string()], &["border".to_string()],),
+            c.resolve(&smap, &["frame".to_string()], &["border".to_string()],),
             Style {
                 fg: Color::Yellow,
                 bg: Color::Black,

@@ -1,4 +1,4 @@
-use super::{Color, StyleManager};
+use super::{Color, StyleMap};
 
 pub const BASE03: Color = Color::Rgb {
     r: 0x00,
@@ -86,8 +86,8 @@ pub const BLACK: Color = Color::Rgb {
     b: 0x00,
 };
 
-pub fn solarized_dark() -> StyleManager {
-    let mut c = StyleManager::default();
+pub fn solarized_dark() -> StyleMap {
+    let mut c = StyleMap::new();
     c.add(
         "/",
         Some(BASE0),

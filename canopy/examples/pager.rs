@@ -6,7 +6,6 @@ use canopy::{
     derive_commands,
     event::{key, mouse},
     inspector::Inspector,
-    style::solarized,
     widgets::{frame, Text},
     *,
 };
@@ -87,10 +86,10 @@ pub fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     if args.len() != 2 {
         println!("Usage: pager filename");
     } else {
-        let mut colors = solarized::solarized_dark();
+        let cnpy = Canopy::new();
         let contents = fs::read_to_string(args[1].clone())?;
         let root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new(contents));
-        runloop(&mut colors, root)?;
+        runloop(cnpy, root)?;
     }
     Ok(())
 }
