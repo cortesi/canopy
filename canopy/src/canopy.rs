@@ -9,7 +9,7 @@ use crate::{
     poll::Poller,
     render::{show_cursor, RenderBackend},
     style::{solarized, StyleManager, StyleMap},
-    KeyMap, NodeId, Outcome, Render, Result, ViewPort,
+    KeyMap, NodeId, NodeName, Outcome, Render, Result, ViewPort,
 };
 
 /// Call a closure on the currently focused node and all its ancestors to the
@@ -83,11 +83,9 @@ pub struct Canopy {
     /// Has the tree been tainted? Resets to false before every event sweep.
     pub(crate) taint: bool,
 
-    pub(crate) keymap: KeyMap,
-
+    pub keymap: KeyMap,
     pub style: StyleMap,
-
-    pub(crate) commands: commands::CommandSet,
+    pub commands: commands::CommandSet,
 
     pub(crate) event_tx: mpsc::Sender<Event>,
     pub(crate) event_rx: Option<mpsc::Receiver<Event>>,
@@ -306,6 +304,24 @@ impl Canopy {
             commands: commands::CommandSet::new(),
             style: solarized::solarized_dark(),
         }
+    }
+
+    /// Load the commands from a command node using the default node name
+    /// derived from the name of the struct.
+    pub fn load_commands<T: commands::CommandNode>(&mut self) {
+        self.commands.load_commands(<T>::default_commands())
+    }
+
+    /// Load the commands from a command node, but rename the node. This
+    /// function is useful for loading commands from nodes that will be renamed.
+    pub fn load_commands_as<T: commands::CommandNode>(&mut self, name: &str) -> Result<()> {
+        let n: NodeName = name.try_into()?;
+        let mut cmds = <T>::default_commands();
+        for mut x in cmds.iter_mut() {
+            x.node = n.clone();
+        }
+        self.commands.load_commands(cmds);
+        Ok(())
     }
 
     /// Has the focus status of this node changed since the last render

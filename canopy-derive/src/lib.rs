@@ -138,9 +138,9 @@ pub fn derive_commands(
 
     let expanded = quote! {
         impl #impl_generics canopy::commands::CommandNode for #name #where_clause {
-            fn load_commands(name: Option<&str>) -> Vec<canopy::commands::CommandDefinition> {
+            fn default_commands() -> Vec<canopy::commands::CommandDefinition> {
                 vec![#(canopy::commands::CommandDefinition {
-                        node: canopy::NodeName::convert(name.map_or(#default_node_name, |n| n)),
+                        node: canopy::NodeName::convert(#default_node_name),
                         command: #names.to_string(),
                         docs: #docs.to_string(),
                         return_type: #rets,

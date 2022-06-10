@@ -220,24 +220,20 @@ struct Args {
 }
 
 pub fn main() -> Result<()> {
-    // let args = Args::parse();
+    let args = Args::parse();
 
-    // global::keymap(|k| {
-    //     k.load_commands(List::<TodoItem>::load_commands(None));
-    //     k.load_commands(Todo::load_commands(None));
-    // });
+    let mut cnpy = Canopy::new();
+    cnpy.load_commands::<List<TodoItem>>();
+    cnpy.load_commands::<Todo>();
 
-    // if args.commands {
-    //     global::keymap(|k| {
-    //         k.pretty_print_commands();
-    //     });
-    //     return Ok(());
-    // }
+    if args.commands {
+        cnpy.commands.pretty_print();
+        return Ok(());
+    }
 
     if let Some(path) = env::args().nth(1) {
         store::open(&path)?;
 
-        let mut cnpy = Canopy::new();
         cnpy.style.add(
             "statusbar/text",
             Some(solarized::BASE02),

@@ -321,17 +321,13 @@ pub fn run(func: impl FnOnce(&mut Canopy, TestRender, TRoot) -> Result<()>) -> R
     let mut root = TRoot::new();
     let mut c = Canopy::new();
 
-    c.commands.load_commands(TRoot::load_commands(Some("r")));
-    c.commands
-        .load_commands(TLeaf::load_commands(Some("ba_la")));
-    c.commands
-        .load_commands(TLeaf::load_commands(Some("ba_lb")));
-    c.commands
-        .load_commands(TLeaf::load_commands(Some("bb_la")));
-    c.commands
-        .load_commands(TLeaf::load_commands(Some("bb_lb")));
-    c.commands.load_commands(TBranch::load_commands(Some("ba")));
-    c.commands.load_commands(TBranch::load_commands(Some("bb")));
+    c.load_commands_as::<TRoot>("r")?;
+    c.load_commands_as::<TLeaf>("ba_la")?;
+    c.load_commands_as::<TLeaf>("ba_lb")?;
+    c.load_commands_as::<TLeaf>("bb_la")?;
+    c.load_commands_as::<TLeaf>("bb_lb")?;
+    c.load_commands_as::<TBranch>("ba")?;
+    c.load_commands_as::<TBranch>("bb")?;
 
     c.set_root_size(Expanse::new(100, 100), &mut root)?;
     reset_state();

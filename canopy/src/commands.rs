@@ -53,7 +53,7 @@ pub trait CommandNode: StatefulNode {
     /// name converted to snake case. This method is used to pre-load our key
     /// binding map, and the optional name specifier lets us cater for nodes
     /// that may be renamed at runtime.
-    fn load_commands(name: Option<&str>) -> Vec<CommandDefinition>
+    fn default_commands() -> Vec<CommandDefinition>
     where
         Self: Sized;
 
@@ -212,7 +212,7 @@ mod tests {
         }
 
         let mut cs = CommandSet::new();
-        cs.load_commands(Foo::load_commands(None));
+        cs.load_commands(Foo::default_commands());
 
         Ok(())
     }

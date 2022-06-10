@@ -56,7 +56,7 @@ fn commands() {
     }
 
     assert_eq!(
-        Foo::load_commands(None),
+        Foo::default_commands(),
         [
             canopy::commands::CommandDefinition {
                 node: "foo".try_into().unwrap(),
@@ -130,18 +130,9 @@ fn commands() {
     }
 
     assert_eq!(
-        Bar::<Foo>::load_commands(None),
+        Bar::<Foo>::default_commands(),
         [canopy::commands::CommandDefinition {
             node: "bar".try_into().unwrap(),
-            command: "a".to_string(),
-            docs: "".to_string(),
-            return_type: ReturnTypes::Result,
-        },]
-    );
-    assert_eq!(
-        Bar::<Foo>::load_commands(Some("xxx")),
-        [canopy::commands::CommandDefinition {
-            node: "xxx".try_into().unwrap(),
             command: "a".to_string(),
             docs: "".to_string(),
             return_type: ReturnTypes::Result,
