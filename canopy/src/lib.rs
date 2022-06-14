@@ -19,6 +19,7 @@ pub mod error;
 pub mod event;
 pub mod geom;
 pub mod inspector;
+pub mod path;
 pub mod script;
 pub mod style;
 pub mod viewport;

@@ -88,13 +88,14 @@ pub trait Node: StatefulNode + CommandNode {
 
     /// Call a closure on this node's children. If any child handler returns an
     /// error, processing terminates without visiting the remaining children.
-    /// The default implementation assumes this node has no children, and just
-    /// returns.
+    /// The order in which nodes are processed should match intuitive
+    /// next/previous relationships. The default implementation assumes this
+    /// node has no children, and just returns.
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         Ok(())
     }
 
-    /// Compute the outer size of the node, if it had to be displayed in the
+    /// Compute the outer size of the node if it had to be displayed in the
     /// target area. In practice, nodes will usually either constrain themselves
     /// based on the width or the height of the target area, or neither, but not
     /// both. The resulting size may be smaller or larger than the target. If
@@ -127,8 +128,7 @@ pub trait Node: StatefulNode + CommandNode {
     /// - Render itself to screen. This node's viewport will already have been
     ///   set by a parent.
     ///
-    /// Nodes with no children should always make sure they redraw all of
-    /// `self.screen_area()`. The default implementation does nothing.
+    /// The default implementation does nothing.
     fn render(&mut self, c: &dyn Core, r: &mut Render) -> Result<()> {
         Ok(())
     }

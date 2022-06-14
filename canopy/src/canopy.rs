@@ -9,6 +9,7 @@ use crate::{
     event::{key, mouse, Event},
     geom::{Coverage, Direction, Expanse, Point, Rect},
     node::{postorder, preorder, Node, Walk},
+    path::*,
     poll::Poller,
     render::{show_cursor, RenderBackend},
     script,
@@ -726,7 +727,7 @@ where
 
 /// Return the node path for a specified node id, relative to the specified
 ///`root`.
-pub fn node_path<T>(id: T, root: &mut dyn Node) -> String
+pub fn node_path<T>(id: T, root: &mut dyn Node) -> Path
 where
     T: Into<NodeId>,
 {
@@ -736,7 +737,7 @@ where
         Ok(())
     })
     .unwrap();
-    format!("/{}", path.join("/"))
+    path.into()
 }
 
 #[cfg(test)]
@@ -870,7 +871,11 @@ mod tests {
     #[test]
     fn tnode_path() -> Result<()> {
         run(|_c, _, mut root| {
-            println!("HEREA: {}", node_path(root.a.a.id(), &mut root));
+            assert_eq!(node_path(root.id(), &mut root), Path::new(&["r"]));
+            assert_eq!(
+                node_path(root.a.a.id(), &mut root),
+                Path::new(&["r", "ba", "ba_la"])
+            );
             Ok(())
         })?;
         Ok(())
