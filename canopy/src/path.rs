@@ -6,6 +6,9 @@ pub struct Path {
 }
 
 impl Path {
+    pub fn empty() -> Self {
+        Path { path: vec![] }
+    }
     pub fn new<T: AsRef<str>>(v: &[T]) -> Self {
         Path {
             path: v.iter().map(|x| x.as_ref().to_string()).collect(),

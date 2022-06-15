@@ -5,6 +5,7 @@ use crate::{
     backend::test::TestRender,
     event::{key, mouse},
     geom::{Direction, Expanse, Rect},
+    path::Path,
     widgets::list::ListItem,
     *,
 };
@@ -365,8 +366,8 @@ impl Core for DummyCore {
     fn focus_next(&mut self, _root: &mut dyn Node) -> Result<Outcome> {
         Ok(Outcome::Handle)
     }
-    fn focus_path(&self, _root: &mut dyn Node) -> String {
-        "".into()
+    fn focus_path(&self, _root: &mut dyn Node) -> Path {
+        Path::empty()
     }
     fn focus_prev(&mut self, _root: &mut dyn Node) -> Result<Outcome> {
         Ok(Outcome::Handle)

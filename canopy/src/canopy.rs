@@ -58,7 +58,7 @@ pub trait Core {
     fn focus_first(&mut self, root: &mut dyn Node) -> Result<Outcome>;
     fn focus_left(&mut self, root: &mut dyn Node) -> Result<Outcome>;
     fn focus_next(&mut self, root: &mut dyn Node) -> Result<Outcome>;
-    fn focus_path(&self, root: &mut dyn Node) -> String;
+    fn focus_path(&self, root: &mut dyn Node) -> Path;
     fn focus_prev(&mut self, root: &mut dyn Node) -> Result<Outcome>;
     fn focus_right(&mut self, root: &mut dyn Node) -> Result<Outcome>;
     fn focus_up(&mut self, root: &mut dyn Node) -> Result<Outcome>;
@@ -136,15 +136,15 @@ impl Core for Canopy {
     }
 
     /// Return the focus path for the subtree under `root`.
-    fn focus_path(&self, root: &mut dyn Node) -> String {
-        let mut path = Vec::new();
+    fn focus_path(&self, root: &mut dyn Node) -> Path {
+        let mut p = Vec::new();
         self.walk_focus_path(root, &mut |n| -> Result<Walk<()>> {
-            path.insert(0, n.name().to_string());
+            p.insert(0, n.name().to_string());
             Ok(Walk::Continue)
         })
         // We're safe to unwrap because our closure can't return an error.
         .unwrap();
-        format!("/{}", path.join("/"))
+        Path::new(&p)
     }
 
     /// Find the area of the current terminal focus node under the specified `root`.
@@ -1001,13 +1001,13 @@ mod tests {
     #[test]
     fn focus_path() -> Result<()> {
         run(|c, _, mut root| {
-            assert_eq!(c.focus_path(&mut root), "/".to_string());
+            assert_eq!(c.focus_path(&mut root), Path::empty());
             c.focus_next(&mut root)?;
-            assert_eq!(c.focus_path(&mut root), "/r".to_string());
+            assert_eq!(c.focus_path(&mut root), Path::new(&["r"]));
             c.focus_next(&mut root)?;
-            assert_eq!(c.focus_path(&mut root), "/r/ba".to_string());
+            assert_eq!(c.focus_path(&mut root), Path::new(&["r", "ba"]));
             c.focus_next(&mut root)?;
-            assert_eq!(c.focus_path(&mut root), "/r/ba/ba_la".to_string());
+            assert_eq!(c.focus_path(&mut root), Path::new(&["r", "ba", "ba_la"]));
             Ok(())
         })?;
         Ok(())
@@ -1089,7 +1089,7 @@ mod tests {
     #[test]
     fn tfoci() -> Result<()> {
         run(|c, _, mut root| {
-            assert_eq!(c.focus_path(&mut root), "/".to_string());
+            assert_eq!(c.focus_path(&mut root), Path::empty());
 
             assert!(!c.is_on_focus_path(&mut root));
             assert!(!c.is_on_focus_path(&mut root.a));
@@ -1098,16 +1098,16 @@ mod tests {
             assert!(c.is_on_focus_path(&mut root));
             assert!(c.is_on_focus_path(&mut root.a));
             assert!(!c.is_on_focus_path(&mut root.b));
-            assert_eq!(c.focus_path(&mut root), "/r/ba/ba_la".to_string());
+            assert_eq!(c.focus_path(&mut root), Path::new(&["r", "ba", "ba_la"]));
 
             c.set_focus(&mut root.a);
-            assert_eq!(c.focus_path(&mut root), "/r/ba".to_string());
+            assert_eq!(c.focus_path(&mut root), Path::new(&["r", "ba"]));
 
             c.set_focus(&mut root);
-            assert_eq!(c.focus_path(&mut root), "/r".to_string());
+            assert_eq!(c.focus_path(&mut root), Path::new(&["r"]));
 
             c.set_focus(&mut root.b.a);
-            assert_eq!(c.focus_path(&mut root), "/r/bb/bb_la".to_string());
+            assert_eq!(c.focus_path(&mut root), Path::new(&["r", "bb", "bb_la"]));
             Ok(())
         })?;
 
