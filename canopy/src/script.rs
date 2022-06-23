@@ -4,6 +4,8 @@ use rhai;
 
 use crate::{commands, error, Core, Node, NodeId, NodeName, Result};
 
+pub type ScriptId = u64;
+
 #[derive(Debug, Clone)]
 pub struct Script {
     ast: rhai::AST,
@@ -57,16 +59,20 @@ unsafe fn extend_lifetime<'b>(r: ScriptGlobal<'b>) -> ScriptGlobal<'static> {
 #[derive(Debug)]
 pub(crate) struct ScriptHost {
     engine: rhai::Engine,
+    scripts: HashMap<ScriptId, Script>,
+    current_id: u64,
 }
 
 impl ScriptHost {
     pub fn new() -> Self {
         ScriptHost {
             engine: rhai::Engine::new(),
+            scripts: HashMap::new(),
+            current_id: 0,
         }
     }
 
-    pub fn load(&mut self, cmds: &[commands::CommandDefinition]) {
+    pub fn load_commands(&mut self, cmds: &[commands::CommandDefinition]) {
         // We can't enable this yet - see:
         //      https://github.com/rhaiscript/rhai/issues/574
         // engine.set_strict_variables(true);
@@ -101,18 +107,24 @@ impl ScriptHost {
         }
     }
 
-    pub fn compile(&self, source: &str) -> Result<Script> {
+    /// Compile a script and store it. Returns a ScriptId that can be used to
+    /// execute the script later.
+    pub fn compile(&mut self, source: &str) -> Result<ScriptId> {
+        self.current_id += 1;
         let ast = self
             .engine
             .compile(source)
             .map_err(|_e| error::Error::Parse(error::ParseError {}))?;
-        Ok(Script {
+        let s = Script {
             ast,
             source: source.into(),
-        })
+        };
+        self.scripts.insert(self.current_id, s);
+        Ok(self.current_id)
     }
 
-    pub fn execute(&self, s: &Script) -> Result<()> {
+    pub fn execute(&self, sid: ScriptId) -> Result<()> {
+        let s = self.scripts.get(&sid).unwrap();
         self.engine
             .run_ast(&s.ast)
             .map_err(|e| error::Error::Script(e.to_string()))?;
@@ -131,7 +143,7 @@ mod tests {
         run(|c, _, mut root| {
             let scr = c.script_host.compile("bb_la::c_leaf()")?;
             let id = root.a.a.id();
-            c.run_script(&mut root, id, &scr)?;
+            c.run_script(&mut root, id, scr)?;
             assert_eq!(get_state().path, ["bb_la.c_leaf()"]);
             Ok(())
         })?;

@@ -9,11 +9,19 @@ impl Path {
     pub fn empty() -> Self {
         Path { path: vec![] }
     }
+
+    /// Pop an item off the end of the path, modifying it in place. Return None
+    /// if the path is empty.
+    pub fn pop(&mut self) -> Option<String> {
+        self.path.pop()
+    }
+
     pub fn new<T: AsRef<str>>(v: &[T]) -> Self {
         Path {
             path: v.iter().map(|x| x.as_ref().to_string()).collect(),
         }
     }
+
     pub fn to_string(&self) -> String {
         format!("/{}", self.path.join("/"))
     }

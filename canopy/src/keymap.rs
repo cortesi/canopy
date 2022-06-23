@@ -7,7 +7,7 @@ const DEFAULT_MODE: &str = "";
 #[derive(Debug)]
 struct BoundKey {
     pathmatch: PathMatcher,
-    script: script::Script,
+    script: script::ScriptId,
 }
 
 /// A KeyMode contains a set of bound keys.
@@ -23,7 +23,7 @@ impl KeyMode {
         }
     }
     /// Insert a key binding into this mode
-    fn insert(&mut self, path_filter: PathMatcher, key: Key, script: script::Script) {
+    fn insert(&mut self, path_filter: PathMatcher, key: Key, script: script::ScriptId) {
         self.keys
             .entry(key)
             .or_insert_with(Vec::new)
@@ -33,12 +33,12 @@ impl KeyMode {
             });
     }
     /// Resolve a key with a given path filter to a script.
-    pub fn resolve(&self, path: &Path, key: Key) -> Option<&script::Script> {
+    pub fn resolve(&self, path: &Path, key: Key) -> Option<script::ScriptId> {
         let mut ret = (0, None);
         for k in self.keys.get(&key)? {
             if let Some(p) = k.pathmatch.check(path) {
                 if ret.1.is_none() || p > ret.0 {
-                    ret = (p, Some(&k.script));
+                    ret = (p, Some(k.script));
                 }
             }
         }
@@ -84,7 +84,7 @@ impl KeyMap {
         }
     }
 
-    pub fn resolve(&self, path: &Path, key: Key) -> Option<&script::Script> {
+    pub fn resolve(&self, path: &Path, key: Key) -> Option<script::ScriptId> {
         // Unwrap is safe, because we make it impossible for our current mode to
         // be non-existent.
         let m = self.modes.get(&self.current_mode).unwrap();
@@ -97,7 +97,7 @@ impl KeyMap {
         mode: &str,
         key: K,
         path_filter: &str,
-        script: script::Script,
+        script: script::ScriptId,
     ) -> Result<()>
     where
         Key: From<K>,
@@ -118,29 +118,20 @@ mod tests {
 
     #[test]
     fn keymode() -> Result<()> {
-        let e = script::ScriptHost::new();
+        let mut e = script::ScriptHost::new();
 
         let mut m = KeyMode::new();
-        m.insert(PathMatcher::new("foo")?, 'a'.into(), e.compile("a_foo()")?);
-        m.insert(PathMatcher::new("bar")?, 'a'.into(), e.compile("a_bar()")?);
-        m.insert(PathMatcher::new("")?, 'b'.into(), e.compile("b()")?);
+        let a_foo = e.compile("x()")?;
+        let a_bar = e.compile("x()")?;
+        let b = e.compile("x()")?;
+        m.insert(PathMatcher::new("foo")?, 'a'.into(), a_foo);
+        m.insert(PathMatcher::new("bar")?, 'a'.into(), a_bar);
+        m.insert(PathMatcher::new("")?, 'b'.into(), b);
 
-        assert_eq!(
-            m.resolve(&"foo".into(), 'a'.into()).unwrap().source(),
-            "a_foo()"
-        );
-        assert_eq!(
-            m.resolve(&"bar".into(), 'a'.into()).unwrap().source(),
-            "a_bar()"
-        );
-        assert_eq!(
-            m.resolve(&"bar/foo".into(), 'a'.into()).unwrap().source(),
-            "a_foo()"
-        );
-        assert_eq!(
-            m.resolve(&"foo/bar".into(), 'a'.into()).unwrap().source(),
-            "a_bar()"
-        );
+        assert_eq!(m.resolve(&"foo".into(), 'a'.into()).unwrap(), a_foo);
+        assert_eq!(m.resolve(&"bar".into(), 'a'.into()).unwrap(), a_bar,);
+        assert_eq!(m.resolve(&"bar/foo".into(), 'a'.into()).unwrap(), a_foo,);
+        assert_eq!(m.resolve(&"foo/bar".into(), 'a'.into()).unwrap(), a_bar);
         assert!(m.resolve(&"foo/bar".into(), 'x'.into()).is_none());
         assert!(m.resolve(&"nonexistent".into(), 'a'.into()).is_none());
 
@@ -150,20 +141,17 @@ mod tests {
     #[test]
     fn keymap() -> Result<()> {
         let mut m = KeyMap::new();
-        let e = script::ScriptHost::new();
+        let mut e = script::ScriptHost::new();
 
-        m.bind("", 'a', "", e.compile("a_default()")?)?;
-        m.bind("m", 'a', "", e.compile("a_m()")?)?;
+        let a_default = e.compile("x()")?;
+        let a_m = e.compile("x()")?;
 
-        assert_eq!(
-            m.resolve(&"foo/bar".into(), 'a'.into()).unwrap().source(),
-            "a_default()"
-        );
+        m.bind("", 'a', "", a_default)?;
+        m.bind("m", 'a', "", a_m)?;
+
+        assert_eq!(m.resolve(&"foo/bar".into(), 'a'.into()).unwrap(), a_default);
         m.set_mode("m")?;
-        assert_eq!(
-            m.resolve(&"foo/bar".into(), 'a'.into()).unwrap().source(),
-            "a_m()"
-        );
+        assert_eq!(m.resolve(&"foo/bar".into(), 'a'.into()).unwrap(), a_m);
 
         Ok(())
     }

@@ -318,10 +318,10 @@ impl Canopy {
         &mut self,
         root: &mut dyn Node,
         node_id: NodeId,
-        s: &script::Script,
+        sid: script::ScriptId,
     ) -> Result<()> {
         let _g = script::ScriptGuard::new(self, root, node_id);
-        self.script_host.execute(s)?;
+        self.script_host.execute(sid)?;
         Ok(())
     }
 
@@ -352,7 +352,7 @@ impl Canopy {
     /// derived from the name of the struct.
     pub fn load_commands<T: commands::CommandNode>(&mut self) {
         let cmds = <T>::default_commands();
-        self.script_host.load(&cmds);
+        self.script_host.load_commands(&cmds);
         self.commands.commands(&cmds);
     }
 
@@ -364,7 +364,7 @@ impl Canopy {
         for mut x in cmds.iter_mut() {
             x.node = n.clone();
         }
-        self.script_host.load(&cmds);
+        self.script_host.load_commands(&cmds);
         self.commands.commands(&cmds);
         Ok(())
     }
@@ -597,15 +597,28 @@ impl Canopy {
         T: Into<key::Key>,
     {
         let k = tk.into();
-        walk_focus_path_e(self.focus_gen, root, &mut move |x| -> Result<Walk<()>> {
+        let mut path = self.focus_path(root);
+        let v = walk_focus_path_e(self.focus_gen, root, &mut |x| -> Result<
+            Walk<Option<(script::ScriptId, NodeId)>>,
+        > {
             Ok(match x.handle_key(self, ctrl, k)? {
                 Outcome::Handle => {
                     self.taint(x);
-                    Walk::Handle(())
+                    Walk::Handle(None)
                 }
-                Outcome::Ignore => Walk::Continue,
+                Outcome::Ignore => {
+                    if let Some(s) = self.keymap.resolve(&path, k) {
+                        Walk::Handle(Some((s, x.id())))
+                    } else {
+                        path.pop();
+                        Walk::Continue
+                    }
+                }
             })
         })?;
+        if let Some(Some((sid, nid))) = v {
+            self.run_script(root, nid, sid)?;
+        }
         Ok(())
     }
 
@@ -744,6 +757,23 @@ where
 mod tests {
     use super::*;
     use crate::{geom::Rect, tutils::*, StatefulNode};
+
+    #[test]
+    fn tbindings() -> Result<()> {
+        run(|c, tr, mut root| {
+            let sid = c.script_host.compile("ba_la::c_leaf()")?;
+            c.keymap.bind("", 'a', "", sid)?;
+
+            c.set_focus(&mut root.a.a);
+            c.key(&mut tr.control(), &mut root, 'a')?;
+
+            let s = get_state();
+            assert_eq!(s.path, vec!["ba_la@key->ignore", "ba_la.c_leaf()"]);
+
+            Ok(())
+        })?;
+        Ok(())
+    }
 
     #[test]
     fn tkey() -> Result<()> {

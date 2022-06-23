@@ -163,7 +163,7 @@ impl Node for Root {
             c if c == 'G' => lst.select_last(core),
             c if c == 'J' => lst.scroll_down(core),
             c if c == 'K' => lst.scroll_up(core),
-            c if c == 'j' || c == key::KeyCode::Down => lst.select_next(core),
+            // c if c == 'j' || c == key::KeyCode::Down => lst.select_next(core),
             c if c == 'k' || c == key::KeyCode::Up => lst.select_prev(core),
             c if c == 'h' || c == key::KeyCode::Left => lst.scroll_left(core),
             c if c == 'l' || c == key::KeyCode::Right => lst.scroll_right(core),
@@ -209,6 +209,8 @@ pub fn main() -> Result<()> {
         None,
         Some(canopy::style::AttrSet::default()),
     );
+
+    cnpy.bind_key('j', "root", "list::select_next()")?;
 
     let root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new());
     runloop(cnpy, root)?;
