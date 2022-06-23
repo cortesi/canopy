@@ -11,7 +11,7 @@ impl Add<KeyCode> for Mods {
     type Output = Key;
 
     fn add(self, other: KeyCode) -> Self::Output {
-        Key(Some(self), other)
+        Key(self, other)
     }
 }
 
@@ -19,7 +19,7 @@ impl Add<char> for Mods {
     type Output = Key;
 
     fn add(self, other: char) -> Self::Output {
-        Key(Some(self), other.into())
+        Key(self, other.into())
     }
 }
 
@@ -109,19 +109,17 @@ impl From<char> for KeyCode {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub struct Key(pub Option<Mods>, pub KeyCode);
+pub struct Key(pub Mods, pub KeyCode);
 
 impl std::cmp::PartialEq<KeyCode> for Key {
     fn eq(&self, c: &KeyCode) -> bool {
         let mut shift = false;
-        if let Some(mods) = self.0 {
-            if mods != Empty && mods != Shift {
-                return false;
-            }
-            if mods == Shift {
-                shift = true
-            }
-        };
+        if self.0 != Empty && self.0 != Shift {
+            return false;
+        }
+        if self.0 == Shift {
+            shift = true
+        }
         let sc = if shift { self.1.upper() } else { self.1 };
         *c == sc
     }
@@ -141,7 +139,13 @@ impl std::cmp::PartialEq<Key> for char {
 
 impl From<char> for Key {
     fn from(c: char) -> Self {
-        Key(None, KeyCode::Char(c))
+        Key(Empty, KeyCode::Char(c))
+    }
+}
+
+impl From<KeyCode> for Key {
+    fn from(c: KeyCode) -> Self {
+        Key(Empty, c)
     }
 }
 
@@ -151,17 +155,14 @@ mod tests {
 
     #[test]
     fn tkey() -> Result<()> {
-        assert_eq!(Shift + 'c', Key(Some(Shift), KeyCode::Char('c')));
+        assert_eq!(Shift + 'c', Key(Shift, KeyCode::Char('c')));
         assert!(Alt + 'c' != Shift + 'c');
         assert!('c' != Shift + 'c');
         assert!('C' == Shift + 'C');
         assert!('C' == 'C');
-        assert_eq!(
-            Shift + Alt + 'c',
-            Key(Some(Shift + Alt), KeyCode::Char('c'))
-        );
-        assert!(Key(Some(Empty), KeyCode::Char('c')) == 'c');
-        assert!('c' == Key(Some(Empty), KeyCode::Char('c')));
+        assert_eq!(Shift + Alt + 'c', Key(Shift + Alt, KeyCode::Char('c')));
+        assert!(Key(Empty, KeyCode::Char('c')) == 'c');
+        assert!('c' == Key(Empty, KeyCode::Char('c')));
 
         match Shift + 'c' {
             x if x == Shift + 'c' => println!("matched"),

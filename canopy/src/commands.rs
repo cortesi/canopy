@@ -83,7 +83,10 @@ where
             match x.dispatch(core, cmd) {
                 Err(Error::UnknownCommand(_)) => Ok(Walk::Continue),
                 Err(e) => Err(e),
-                Ok(_) => Ok(Walk::Handle(())),
+                Ok(_) => {
+                    core.taint_tree(x);
+                    Ok(Walk::Handle(()))
+                }
             }
         } else if x.id() == uid {
             seen = true;
@@ -93,7 +96,10 @@ where
                 match x.dispatch(core, cmd) {
                     Err(Error::UnknownCommand(_)) => Ok(Walk::Continue),
                     Err(e) => Err(e),
-                    Ok(_) => Ok(Walk::Handle(())),
+                    Ok(_) => {
+                        core.taint_tree(x);
+                        Ok(Walk::Handle(()))
+                    }
                 }
             }) {
                 Err(Error::UnknownCommand(_)) => Ok(Walk::Continue),

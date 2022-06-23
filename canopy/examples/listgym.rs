@@ -153,21 +153,12 @@ impl Node for Root {
             c if c == 'A' => {
                 lst.append(Block::new());
             }
-            c if c == 'C' => {
-                lst.clear();
-            }
             c if c == 'd' => {
                 lst.delete_selected(core);
             }
-            c if c == 'g' => lst.select_first(core),
-            c if c == 'G' => lst.select_last(core),
-            c if c == 'J' => lst.scroll_down(core),
-            c if c == 'K' => lst.scroll_up(core),
-            // c if c == 'j' || c == key::KeyCode::Down => lst.select_next(core),
-            c if c == 'k' || c == key::KeyCode::Up => lst.select_prev(core),
-            c if c == 'h' || c == key::KeyCode::Left => lst.scroll_left(core),
-            c if c == 'l' || c == key::KeyCode::Right => lst.scroll_right(core),
-            c if c == ' ' || c == key::KeyCode::PageDown => lst.page_down(core),
+            c if c == 'C' => {
+                lst.clear();
+            }
             c if c == key::KeyCode::PageUp => lst.page_up(core),
             c if c == 'q' => ctrl.exit(0),
             _ => return Ok(Outcome::Ignore),
@@ -209,8 +200,26 @@ pub fn main() -> Result<()> {
         None,
         Some(canopy::style::AttrSet::default()),
     );
+    cnpy.load_commands::<List<Block>>();
+
+    cnpy.bind_key('g', "root", "list::select_first()")?;
+    cnpy.bind_key('G', "root", "list::select_last()")?;
 
     cnpy.bind_key('j', "root", "list::select_next()")?;
+    cnpy.bind_key('k', "root", "list::select_prev()")?;
+    cnpy.bind_key(key::KeyCode::Down, "root", "list::select_next()")?;
+    cnpy.bind_key(key::KeyCode::Up, "root", "list::select_prev()")?;
+
+    cnpy.bind_key('J', "root", "list::scroll_down()")?;
+    cnpy.bind_key('K', "root", "list::scroll_up()")?;
+    cnpy.bind_key('h', "root", "list::scroll_left()")?;
+    cnpy.bind_key('l', "root", "list::scroll_right()")?;
+    cnpy.bind_key(key::KeyCode::Left, "root", "list::scroll_left()")?;
+    cnpy.bind_key(key::KeyCode::Right, "root", "list::scroll_right()")?;
+
+    cnpy.bind_key(key::KeyCode::PageDown, "root", "list::page_down()")?;
+    cnpy.bind_key(' ', "root", "list::page_down()")?;
+    cnpy.bind_key(key::KeyCode::PageUp, "root", "list::page_up()")?;
 
     let root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new());
     runloop(cnpy, root)?;

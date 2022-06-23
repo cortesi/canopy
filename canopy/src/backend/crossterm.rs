@@ -227,7 +227,7 @@ fn translate_button(b: cevent::MouseButton) -> mouse::Button {
 fn translate_event(e: cevent::Event) -> Event {
     match e {
         cevent::Event::Key(k) => Event::Key(key::Key(
-            Some(translate_key_modifiers(k.modifiers)),
+            translate_key_modifiers(k.modifiers),
             match k.code {
                 cevent::KeyCode::Backspace => key::KeyCode::Backspace,
                 cevent::KeyCode::Enter => key::KeyCode::Enter,
