@@ -87,16 +87,16 @@ impl Node for StatusBar {
 }
 
 #[derive(StatefulNode)]
-struct Root {
+struct Intervals {
     state: NodeState,
     content: frame::Frame<List<IntervalItem>>,
     statusbar: StatusBar,
 }
 
 #[derive_commands]
-impl Root {
+impl Intervals {
     fn new() -> Self {
-        Root {
+        Intervals {
             state: NodeState::default(),
             content: frame::Frame::new(List::new(vec![])),
             statusbar: StatusBar {
@@ -105,6 +105,7 @@ impl Root {
         }
     }
 
+    #[command]
     fn add_item(&mut self, c: &mut dyn Core) -> Result<Outcome> {
         let lst = &mut self.content.child;
         lst.append(IntervalItem::new());
@@ -113,7 +114,7 @@ impl Root {
     }
 }
 
-impl Node for Root {
+impl Node for Intervals {
     fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {
         let (a, b) = self.vp().carve_vend(1);
         fit(&mut self.statusbar, b)?;
@@ -125,31 +126,12 @@ impl Node for Root {
         true
     }
 
-    fn handle_mouse(&mut self, _c: &mut dyn Core, k: mouse::MouseEvent) -> Result<Outcome> {
-        let v = &mut self.content.child;
-        match k {
-            c if c == mouse::Action::ScrollDown => v.update_viewport(&|vp| vp.down()),
-            c if c == mouse::Action::ScrollUp => v.update_viewport(&|vp| vp.up()),
-            _ => return Ok(Outcome::Ignore),
-        };
-        Ok(Outcome::Handle)
-    }
-
     fn handle_key(&mut self, c: &mut dyn Core, k: key::Key) -> Result<Outcome> {
         let lst = &mut self.content.child;
         match k {
-            ck if ck == 'a' => {
-                self.add_item(c)?;
-            }
             ck if ck == 'd' => {
                 lst.delete_selected(c);
             }
-            ck if ck == 'g' => lst.select_first(c),
-            ck if ck == 'j' || ck == key::KeyCode::Down => lst.select_next(c),
-            ck if ck == 'k' || ck == key::KeyCode::Up => lst.select_prev(c),
-            ck if ck == ' ' || ck == key::KeyCode::PageDown => lst.page_down(c),
-            ck if ck == key::KeyCode::PageUp => lst.page_up(c),
-            ck if ck == 'q' => c.exit(0),
             _ => return Ok(Outcome::Ignore),
         };
         c.taint_tree(self);
@@ -171,7 +153,31 @@ pub fn main() -> Result<()> {
         Some(solarized::BASE1),
         None,
     );
-    let root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new());
+
+    cnpy.load_commands::<Root<Intervals>>();
+    cnpy.load_commands::<Intervals>();
+    cnpy.load_commands::<List<IntervalItem>>();
+
+    cnpy.bind_key('a', "intervals", "intervals::add_item()")?;
+    cnpy.bind_key('g', "intervals", "list::select_first()")?;
+    cnpy.bind_key('j', "intervals", "list::select_next()")?;
+    cnpy.bind_mouse(
+        mouse::Action::ScrollDown,
+        "intervals",
+        "list::select_next()",
+    )?;
+    cnpy.bind_key(key::KeyCode::Down, "intervals", "list::select_next()")?;
+    cnpy.bind_key('k', "intervals", "list::select_prev()")?;
+    cnpy.bind_key(key::KeyCode::Up, "intervals", "list::select_prev()")?;
+    cnpy.bind_mouse(mouse::Action::ScrollUp, "intervals", "list::select_prev()")?;
+
+    cnpy.bind_key(key::KeyCode::PageDown, "intervals", "list::page_down()")?;
+    cnpy.bind_key(' ', "intervals", "list::page_down()")?;
+    cnpy.bind_key(key::KeyCode::PageUp, "intervals", "list::page_up()")?;
+
+    cnpy.bind_key('q', "intervals", "root::quit()")?;
+
+    let root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new(Intervals::new()));
     runloop(cnpy, root)?;
     Ok(())
 }

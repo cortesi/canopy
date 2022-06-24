@@ -5,8 +5,7 @@
 ## 0.1
 
 - Key binding management system
-  - More testing of actions
-
+  - Port all examples to key bindings
   - Resolve the FIXMEs related to lowercase conversion of chars
   - Consolidate input events
   - Input to and from string conversion
@@ -15,6 +14,7 @@
     - Arguments
     - Return types
       - Let returns that are not Results be ignored for versatility
+        - Make list delete_selected a command and use it throughout
       - Result<Outcome>?
 - Root object
   - Manage modal windows
