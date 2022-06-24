@@ -33,6 +33,41 @@ impl Text {
         self.fixed_width = Some(width);
         self
     }
+
+    #[command]
+    pub fn scroll_to_top(&mut self, _c: &mut dyn Core) {
+        self.update_viewport(&|vp| vp.scroll_to(0, 0))
+    }
+
+    #[command]
+    pub fn scroll_down(&mut self, _c: &mut dyn Core) {
+        self.update_viewport(&|vp| vp.down())
+    }
+
+    #[command]
+    pub fn scroll_up(&mut self, _c: &mut dyn Core) {
+        self.update_viewport(&|vp| vp.up())
+    }
+
+    #[command]
+    pub fn scroll_left(&mut self, _c: &mut dyn Core) {
+        self.update_viewport(&|vp| vp.left())
+    }
+
+    #[command]
+    pub fn scroll_right(&mut self, _c: &mut dyn Core) {
+        self.update_viewport(&|vp| vp.right())
+    }
+
+    #[command]
+    pub fn page_down(&mut self, _c: &mut dyn Core) {
+        self.update_viewport(&|vp| vp.page_down())
+    }
+
+    #[command]
+    pub fn page_up(&mut self, _c: &mut dyn Core) {
+        self.update_viewport(&|vp| vp.page_up())
+    }
 }
 
 impl Node for Text {

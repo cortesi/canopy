@@ -39,7 +39,7 @@
     - Maybe enable inspector with an env variable?
   - Add node names for relevant errors
   - Add warning logs where needed to aid debugging
-- ControlBackend
+- Core
   - Improve ergonomics - adding a function that returns a handle which re-enters rendering?
 - Renderer
   - Explicit colors - at the moment, we can only get colors from our color scheme

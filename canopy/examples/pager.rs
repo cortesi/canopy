@@ -11,54 +11,24 @@ use canopy::{
 };
 
 #[derive(StatefulNode)]
-struct Root {
+struct Pager {
     state: NodeState,
     child: frame::Frame<Text>,
 }
 
 #[derive_commands]
-impl Root {
+impl Pager {
     fn new(contents: String) -> Self {
-        Root {
+        Pager {
             state: NodeState::default(),
             child: frame::Frame::new(Text::new(&contents)),
         }
     }
 }
 
-impl Node for Root {
+impl Node for Pager {
     fn accept_focus(&mut self) -> bool {
         true
-    }
-
-    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::MouseEvent) -> Result<Outcome> {
-        let txt = &mut self.child.child;
-        match k {
-            c if c == mouse::Action::ScrollDown => txt.update_viewport(&|vp| vp.down()),
-            c if c == mouse::Action::ScrollUp => txt.update_viewport(&|vp| vp.up()),
-            _ => return Ok(Outcome::Ignore),
-        };
-        c.taint_tree(self);
-        Ok(Outcome::Handle)
-    }
-
-    fn handle_key(&mut self, c: &mut dyn Core, k: key::Key) -> Result<Outcome> {
-        let txt = &mut self.child.child;
-        match k {
-            ck if ck == 'g' => txt.update_viewport(&|vp| vp.scroll_to(0, 0)),
-            ck if ck == 'j' || ck == key::KeyCode::Down => txt.update_viewport(&|vp| vp.down()),
-            ck if ck == 'k' || ck == key::KeyCode::Up => txt.update_viewport(&|vp| vp.up()),
-            ck if ck == 'h' || ck == key::KeyCode::Left => txt.update_viewport(&|vp| vp.left()),
-            ck if ck == 'l' || ck == key::KeyCode::Up => txt.update_viewport(&|vp| vp.right()),
-            ck if ck == ' ' || ck == key::KeyCode::PageDown => {
-                txt.update_viewport(&|vp| vp.page_down());
-            }
-            ck if ck == key::KeyCode::PageUp => txt.update_viewport(&|vp| vp.page_up()),
-            ck if ck == 'q' => c.exit(0),
-            _ => return Ok(Outcome::Ignore),
-        }
-        c.taint_tree(self);
-        Ok(Outcome::Handle)
     }
 
     fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {
@@ -76,9 +46,35 @@ pub fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     if args.len() != 2 {
         println!("Usage: pager filename");
     } else {
-        let cnpy = Canopy::new();
+        let mut cnpy = Canopy::new();
+        cnpy.load_commands::<Root<Pager>>();
+        cnpy.load_commands::<Text>();
+
+        cnpy.bind_key('g', "pager", "text::scroll_to_top()")?;
+
+        cnpy.bind_key('j', "pager", "text::scroll_down()")?;
+        cnpy.bind_key(key::KeyCode::Down, "pager", "text::scroll_down()")?;
+        cnpy.bind_mouse(mouse::Action::ScrollDown, "pager", "text::scroll_down()")?;
+        cnpy.bind_key('k', "pager", "text::scroll_up()")?;
+        cnpy.bind_key(key::KeyCode::Up, "pager", "text::scroll_up()")?;
+        cnpy.bind_mouse(mouse::Action::ScrollUp, "pager", "text::scroll_up()")?;
+
+        cnpy.bind_key('h', "pager", "text::scroll_left()")?;
+        cnpy.bind_key(key::KeyCode::Left, "pager", "text::scroll_left()")?;
+        cnpy.bind_key('l', "pager", "text::scroll_right()")?;
+        cnpy.bind_key(key::KeyCode::Right, "pager", "text::scroll_right()")?;
+
+        cnpy.bind_key(key::KeyCode::PageDown, "pager", "text::page_down()")?;
+        cnpy.bind_key(' ', "pager", "text::page_down()")?;
+        cnpy.bind_key(key::KeyCode::PageUp, "pager", "text::page_up()")?;
+
+        cnpy.bind_key('q', "root", "root::quit()")?;
+
         let contents = fs::read_to_string(args[1].clone())?;
-        let root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new(contents));
+        let root = Inspector::new(
+            key::Ctrl + key::KeyCode::Right,
+            Root::new(Pager::new(contents)),
+        );
         runloop(cnpy, root)?;
     }
     Ok(())
