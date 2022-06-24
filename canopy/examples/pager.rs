@@ -31,12 +31,7 @@ impl Node for Root {
         true
     }
 
-    fn handle_mouse(
-        &mut self,
-        c: &mut dyn Core,
-        _: &mut dyn BackendControl,
-        k: mouse::Mouse,
-    ) -> Result<Outcome> {
+    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::Mouse) -> Result<Outcome> {
         let txt = &mut self.child.child;
         match k {
             c if c == mouse::MouseAction::ScrollDown => txt.update_viewport(&|vp| vp.down()),
@@ -47,12 +42,7 @@ impl Node for Root {
         Ok(Outcome::Handle)
     }
 
-    fn handle_key(
-        &mut self,
-        c: &mut dyn Core,
-        ctrl: &mut dyn BackendControl,
-        k: key::Key,
-    ) -> Result<Outcome> {
+    fn handle_key(&mut self, c: &mut dyn Core, k: key::Key) -> Result<Outcome> {
         let txt = &mut self.child.child;
         match k {
             ck if ck == 'g' => txt.update_viewport(&|vp| vp.scroll_to(0, 0)),
@@ -64,7 +54,7 @@ impl Node for Root {
                 txt.update_viewport(&|vp| vp.page_down());
             }
             ck if ck == key::KeyCode::PageUp => txt.update_viewport(&|vp| vp.page_up()),
-            ck if ck == 'q' => ctrl.exit(0),
+            ck if ck == 'q' => c.exit(0),
             _ => return Ok(Outcome::Ignore),
         }
         c.taint_tree(self);

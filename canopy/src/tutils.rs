@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use crate::{self as canopy, BackendControl};
+use crate::{self as canopy};
 use crate::{
     backend::test::TestRender,
     event::{key, mouse},
@@ -89,20 +89,10 @@ impl Node for TLeaf {
             &format!("<{}>", self.name().clone()),
         )
     }
-    fn handle_key(
-        &mut self,
-        _: &mut dyn Core,
-        _: &mut dyn BackendControl,
-        _: key::Key,
-    ) -> Result<Outcome> {
+    fn handle_key(&mut self, _: &mut dyn Core, _: key::Key) -> Result<Outcome> {
         self.handle("key")
     }
-    fn handle_mouse(
-        &mut self,
-        _: &mut dyn Core,
-        _: &mut dyn BackendControl,
-        _: mouse::Mouse,
-    ) -> Result<Outcome> {
+    fn handle_mouse(&mut self, _: &mut dyn Core, _: mouse::Mouse) -> Result<Outcome> {
         self.handle("mouse")
     }
 }
@@ -124,21 +114,11 @@ impl Node for TBranch {
         )
     }
 
-    fn handle_key(
-        &mut self,
-        _: &mut dyn Core,
-        _: &mut dyn BackendControl,
-        _: key::Key,
-    ) -> Result<Outcome> {
+    fn handle_key(&mut self, _: &mut dyn Core, _: key::Key) -> Result<Outcome> {
         self.handle("key")
     }
 
-    fn handle_mouse(
-        &mut self,
-        _: &mut dyn Core,
-        _: &mut dyn BackendControl,
-        _: mouse::Mouse,
-    ) -> Result<Outcome> {
+    fn handle_mouse(&mut self, _: &mut dyn Core, _: mouse::Mouse) -> Result<Outcome> {
         self.handle("mouse")
     }
 
@@ -166,21 +146,11 @@ impl Node for TRoot {
         )
     }
 
-    fn handle_key(
-        &mut self,
-        _: &mut dyn Core,
-        _: &mut dyn BackendControl,
-        _: key::Key,
-    ) -> Result<Outcome> {
+    fn handle_key(&mut self, _: &mut dyn Core, _: key::Key) -> Result<Outcome> {
         self.handle("key")
     }
 
-    fn handle_mouse(
-        &mut self,
-        _: &mut dyn Core,
-        _: &mut dyn BackendControl,
-        _: mouse::Mouse,
-    ) -> Result<Outcome> {
+    fn handle_mouse(&mut self, _: &mut dyn Core, _: mouse::Mouse) -> Result<Outcome> {
         self.handle("mouse")
     }
 
@@ -387,4 +357,19 @@ impl Core for DummyCore {
     }
     fn taint(&mut self, _n: &mut dyn Node) {}
     fn taint_tree(&mut self, _e: &mut dyn Node) {}
+
+    /// Start the backend renderer.
+    fn start(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    /// Stop the backend renderer, releasing control of the terminal.
+    fn stop(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    /// Stop the render backend and exit the process.
+    fn exit(&mut self, _code: i32) -> ! {
+        panic!("exit in dummy core")
+    }
 }

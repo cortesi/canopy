@@ -100,12 +100,7 @@ pub struct Logs {
 }
 
 impl Node for Logs {
-    fn handle_key(
-        &mut self,
-        core: &mut dyn Core,
-        _ctrl: &mut dyn BackendControl,
-        k: key::Key,
-    ) -> Result<Outcome> {
+    fn handle_key(&mut self, core: &mut dyn Core, k: key::Key) -> Result<Outcome> {
         let lst = &mut self.list;
         match k {
             c if c == 'C' => {

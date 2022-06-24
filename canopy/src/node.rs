@@ -4,7 +4,7 @@ use crate::{
     cursor,
     event::{key, mouse},
     geom::{Expanse, Frame, Rect},
-    BackendControl, CommandNode, Core, Render, Result, StatefulNode, ViewPort,
+    CommandNode, Core, Render, Result, StatefulNode, ViewPort,
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -66,23 +66,13 @@ pub trait Node: StatefulNode + CommandNode {
 
     /// Handle a key input event. This event is only called for nodes that are
     /// on the focus path. The default implementation ignores input.
-    fn handle_key(
-        &mut self,
-        c: &mut dyn Core,
-        b: &mut dyn BackendControl,
-        k: key::Key,
-    ) -> Result<Outcome> {
+    fn handle_key(&mut self, c: &mut dyn Core, k: key::Key) -> Result<Outcome> {
         Ok(Outcome::Ignore)
     }
 
     /// Handle a mouse input event. The default implementation ignores mouse
     /// input.
-    fn handle_mouse(
-        &mut self,
-        c: &mut dyn Core,
-        b: &mut dyn BackendControl,
-        k: mouse::Mouse,
-    ) -> Result<Outcome> {
+    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::Mouse) -> Result<Outcome> {
         Ok(Outcome::Ignore)
     }
 

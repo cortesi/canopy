@@ -3,7 +3,7 @@ use crate::{
     geom::Point,
     render::RenderBackend,
     style::{Style, StyleManager},
-    BackendControl, Canopy, Node, Result,
+    Canopy, Node, Result,
 };
 use std::sync::{Arc, Mutex};
 
@@ -43,27 +43,12 @@ impl TestRender {
         StyleManager::default()
     }
 
-    pub fn control(&self) -> TestControl {
-        TestControl {}
-    }
-
     pub fn buf_text(&self) -> Vec<String> {
         self.text.lock().unwrap().text.clone()
     }
 
     pub fn buf_empty(&self) -> bool {
         self.text.lock().unwrap().text.is_empty()
-    }
-}
-
-pub struct TestControl {}
-
-impl BackendControl for TestControl {
-    fn start(&mut self) -> Result<()> {
-        Ok(())
-    }
-    fn stop(&mut self) -> Result<()> {
-        Ok(())
     }
 }
 

@@ -12,12 +12,7 @@ pub struct View {
 }
 
 impl Node for View {
-    fn handle_key(
-        &mut self,
-        c: &mut dyn Core,
-        _: &mut dyn BackendControl,
-        k: key::Key,
-    ) -> Result<Outcome> {
+    fn handle_key(&mut self, c: &mut dyn Core, k: key::Key) -> Result<Outcome> {
         match k {
             kc if kc == key::KeyCode::Tab => self.tabs.next(c),
             _ => return Ok(Outcome::Ignore),

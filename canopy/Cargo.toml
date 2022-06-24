@@ -1,6 +1,6 @@
 [package]
 name = "canopy"
-authors = ["Aldo Cortesi <aldo@corte.si>"]
+athors = ["Aldo Cortesi <aldo@corte.si>"]
 version = "0.0.1"
 edition = "2021"
 

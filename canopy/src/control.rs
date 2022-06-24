@@ -5,7 +5,7 @@ use std::process;
 /// suspend and resume rendering to permit us to fork out to another process
 /// that wants to control the terminal - for example, spawning an external
 /// editor.
-pub trait BackendControl {
+pub trait BackendControl: std::fmt::Debug {
     /// Start the backend renderer.
     fn start(&mut self) -> Result<()>;
 

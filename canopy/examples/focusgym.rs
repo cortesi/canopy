@@ -52,12 +52,7 @@ impl Node for Root {
         fit(&mut self.child, vp)
     }
 
-    fn handle_mouse(
-        &mut self,
-        c: &mut dyn Core,
-        _: &mut dyn BackendControl,
-        k: mouse::Mouse,
-    ) -> Result<Outcome> {
+    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::Mouse) -> Result<Outcome> {
         Ok(match k {
             ck if ck == mouse::MouseAction::ScrollDown => c.focus_next(self)?,
             ck if ck == mouse::MouseAction::ScrollUp => c.focus_prev(self)?,
@@ -65,19 +60,14 @@ impl Node for Root {
         })
     }
 
-    fn handle_key(
-        &mut self,
-        c: &mut dyn Core,
-        ctrl: &mut dyn BackendControl,
-        k: key::Key,
-    ) -> Result<Outcome> {
+    fn handle_key(&mut self, c: &mut dyn Core, k: key::Key) -> Result<Outcome> {
         Ok(match k {
             ck if ck == key::KeyCode::Tab => c.focus_next(self)?,
             ck if ck == 'l' || ck == key::KeyCode::Right => c.focus_right(self)?,
             ck if ck == 'h' || ck == key::KeyCode::Left => c.focus_left(self)?,
             ck if ck == 'j' || ck == key::KeyCode::Down => c.focus_down(self)?,
             ck if ck == 'k' || ck == key::KeyCode::Up => c.focus_up(self)?,
-            ck if ck == 'q' => ctrl.exit(0),
+            ck if ck == 'q' => c.exit(0),
             _ => Outcome::Ignore,
         })
     }
@@ -143,12 +133,7 @@ impl Node for Block {
         self.children.is_empty()
     }
 
-    fn handle_mouse(
-        &mut self,
-        c: &mut dyn Core,
-        _: &mut dyn BackendControl,
-        k: mouse::Mouse,
-    ) -> Result<Outcome> {
+    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::Mouse) -> Result<Outcome> {
         Ok(match k {
             ck if ck == mouse::MouseAction::Down + mouse::Button::Left => {
                 c.taint_tree(self);
@@ -167,12 +152,7 @@ impl Node for Block {
         })
     }
 
-    fn handle_key(
-        &mut self,
-        c: &mut dyn Core,
-        _: &mut dyn BackendControl,
-        k: key::Key,
-    ) -> Result<Outcome> {
+    fn handle_key(&mut self, c: &mut dyn Core, k: key::Key) -> Result<Outcome> {
         Ok(match k {
             ck if ck == 's' => {
                 self.split(c)?;

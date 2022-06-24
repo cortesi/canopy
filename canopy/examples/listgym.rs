@@ -147,12 +147,7 @@ impl Node for Root {
         true
     }
 
-    fn handle_mouse(
-        &mut self,
-        c: &mut dyn Core,
-        _: &mut dyn BackendControl,
-        k: mouse::Mouse,
-    ) -> Result<Outcome> {
+    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::Mouse) -> Result<Outcome> {
         let txt = &mut self.content.child;
         match k {
             c if c == mouse::MouseAction::ScrollDown => txt.update_viewport(&|vp| vp.down()),
@@ -163,14 +158,9 @@ impl Node for Root {
         Ok(Outcome::Handle)
     }
 
-    fn handle_key(
-        &mut self,
-        _core: &mut dyn Core,
-        ctrl: &mut dyn BackendControl,
-        k: key::Key,
-    ) -> Result<Outcome> {
+    fn handle_key(&mut self, core: &mut dyn Core, k: key::Key) -> Result<Outcome> {
         match k {
-            c if c == 'q' => ctrl.exit(0),
+            c if c == 'q' => core.exit(0),
             _ => Ok(Outcome::Ignore),
         }
     }

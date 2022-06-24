@@ -142,12 +142,7 @@ impl Node for InputLine {
         )
     }
 
-    fn handle_key(
-        &mut self,
-        _c: &mut dyn Core,
-        _: &mut dyn BackendControl,
-        k: key::Key,
-    ) -> Result<Outcome> {
+    fn handle_key(&mut self, _c: &mut dyn Core, k: key::Key) -> Result<Outcome> {
         match k {
             key::Key(_, key::KeyCode::Left) => {
                 self.textbuf.left();

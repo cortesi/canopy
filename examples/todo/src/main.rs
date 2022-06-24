@@ -138,12 +138,7 @@ impl Node for Todo {
         true
     }
 
-    fn handle_mouse(
-        &mut self,
-        _c: &mut dyn Core,
-        _: &mut dyn BackendControl,
-        k: mouse::Mouse,
-    ) -> canopy::Result<Outcome> {
+    fn handle_mouse(&mut self, _c: &mut dyn Core, k: mouse::Mouse) -> canopy::Result<Outcome> {
         let v = &mut self.content.child;
         match k {
             ck if ck == mouse::MouseAction::ScrollDown => v.update_viewport(&|vp| vp.down()),
@@ -153,12 +148,7 @@ impl Node for Todo {
         Ok(Outcome::Handle)
     }
 
-    fn handle_key(
-        &mut self,
-        c: &mut dyn Core,
-        ctrl: &mut dyn BackendControl,
-        k: key::Key,
-    ) -> canopy::Result<Outcome> {
+    fn handle_key(&mut self, c: &mut dyn Core, k: key::Key) -> canopy::Result<Outcome> {
         let lst = &mut self.content.child;
         if let Some(adder) = &mut self.adder {
             match k {
@@ -188,7 +178,7 @@ impl Node for Todo {
                 ck if ck == 'k' || ck == key::KeyCode::Up => lst.select_prev(c),
                 ck if ck == ' ' || ck == key::KeyCode::PageDown => lst.page_down(c),
                 ck if ck == key::KeyCode::PageUp => lst.page_up(c),
-                ck if ck == 'q' => ctrl.exit(0),
+                ck if ck == 'q' => c.exit(0),
                 _ => return Ok(Outcome::Ignore),
             };
         }

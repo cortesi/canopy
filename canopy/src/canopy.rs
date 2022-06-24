@@ -1,4 +1,4 @@
-use std::{io::Write, sync::mpsc};
+use std::{io::Write, process, sync::mpsc};
 
 use comfy_table::{ContentArrangement, Table};
 
@@ -67,6 +67,15 @@ pub trait Core {
     fn shift_focus(&mut self, root: &mut dyn Node, dir: Direction) -> Result<Outcome>;
     fn taint(&mut self, n: &mut dyn Node);
     fn taint_tree(&mut self, e: &mut dyn Node);
+
+    /// Start the backend renderer.
+    fn start(&mut self) -> Result<()>;
+
+    /// Stop the backend renderer, releasing control of the terminal.
+    fn stop(&mut self) -> Result<()>;
+
+    /// Stop the render backend and exit the process.
+    fn exit(&mut self, code: i32) -> !;
 }
 
 #[derive(Debug)]
@@ -89,13 +98,14 @@ pub struct Canopy {
     pub(crate) taint: bool,
 
     pub(crate) script_host: script::ScriptHost,
-
     pub(crate) keymap: KeyMap,
-    pub style: StyleMap,
     pub(crate) commands: commands::CommandSet,
+    pub(crate) backend: Option<Box<dyn BackendControl>>,
 
     pub(crate) event_tx: mpsc::Sender<Event>,
     pub(crate) event_rx: Option<mpsc::Receiver<Event>>,
+
+    pub style: StyleMap,
 }
 
 impl Core for Canopy {
@@ -294,6 +304,22 @@ impl Core for Canopy {
     fn is_focused(&self, n: &dyn Node) -> bool {
         n.state().focus_gen == self.focus_gen
     }
+
+    /// Start the backend renderer.
+    fn start(&mut self) -> Result<()> {
+        self.backend.as_mut().unwrap().start()
+    }
+
+    /// Stop the backend renderer, releasing control of the terminal.
+    fn stop(&mut self) -> Result<()> {
+        self.backend.as_mut().unwrap().stop()
+    }
+
+    /// Stop the render backend and exit the process.
+    fn exit(&mut self, code: i32) -> ! {
+        let _ = self.stop();
+        process::exit(code)
+    }
 }
 
 impl Canopy {
@@ -311,7 +337,12 @@ impl Canopy {
             commands: commands::CommandSet::new(),
             script_host: script::ScriptHost::new(),
             style: solarized::solarized_dark(),
+            backend: None,
         }
+    }
+
+    pub fn register_backend<T: BackendControl + 'static>(&mut self, be: T) {
+        self.backend = Some(Box::new(be))
     }
 
     pub fn run_script(
@@ -558,16 +589,10 @@ impl Canopy {
 
     /// Propagate a mouse event through the node under the event and all its
     /// ancestors. Events are handled only once, and then ignored.
-    pub(crate) fn mouse(
-        &mut self,
-        ctrl: &mut dyn BackendControl,
-        root: &mut dyn Node,
-        m: mouse::Mouse,
-    ) -> Result<()> {
+    pub(crate) fn mouse(&mut self, root: &mut dyn Node, m: mouse::Mouse) -> Result<()> {
         locate(root, m.loc, &mut |x| {
             let hdl = x.handle_mouse(
                 self,
-                ctrl,
                 mouse::Mouse {
                     action: m.action,
                     button: m.button,
@@ -587,12 +612,7 @@ impl Canopy {
     }
 
     /// Propagate a key event through the focus and all its ancestors.
-    pub(crate) fn key<T>(
-        &mut self,
-        ctrl: &mut dyn BackendControl,
-        root: &mut dyn Node,
-        tk: T,
-    ) -> Result<()>
+    pub(crate) fn key<T>(&mut self, root: &mut dyn Node, tk: T) -> Result<()>
     where
         T: Into<key::Key>,
     {
@@ -601,7 +621,7 @@ impl Canopy {
         let v = walk_focus_path_e(self.focus_gen, root, &mut |x| -> Result<
             Walk<Option<(script::ScriptId, NodeId)>>,
         > {
-            Ok(match x.handle_key(self, ctrl, k)? {
+            Ok(match x.handle_key(self, k)? {
                 Outcome::Handle => {
                     self.taint(x);
                     Walk::Handle(None)
@@ -637,18 +657,13 @@ impl Canopy {
     }
 
     /// Propagate an event through the tree.
-    pub(crate) fn event(
-        &mut self,
-        ctrl: &mut dyn BackendControl,
-        root: &mut dyn Node,
-        e: Event,
-    ) -> Result<()> {
+    pub(crate) fn event(&mut self, root: &mut dyn Node, e: Event) -> Result<()> {
         match e {
             Event::Key(k) => {
-                self.key(ctrl, root, k)?;
+                self.key(root, k)?;
             }
             Event::Mouse(m) => {
-                self.mouse(ctrl, root, m)?;
+                self.mouse(root, m)?;
             }
             Event::Resize(s) => {
                 self.set_root_size(s, root)?;
@@ -760,12 +775,12 @@ mod tests {
 
     #[test]
     fn tbindings() -> Result<()> {
-        run(|c, tr, mut root| {
+        run(|c, _, mut root| {
             let sid = c.script_host.compile("ba_la::c_leaf()")?;
             c.keymap.bind("", 'a', "", sid)?;
 
             c.set_focus(&mut root.a.a);
-            c.key(&mut tr.control(), &mut root, 'a')?;
+            c.key(&mut root, 'a')?;
 
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@key->ignore", "ba_la.c_leaf()"]);
@@ -777,37 +792,37 @@ mod tests {
 
     #[test]
     fn tkey() -> Result<()> {
-        run(|c, tr, mut root| {
+        run(|c, _, mut root| {
             c.set_focus(&mut root);
             root.next_outcome = Some(Outcome::Handle);
-            c.key(&mut tr.control(), &mut root, 'a')?;
+            c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["r@key->handle"]);
             Ok(())
         })?;
 
-        run(|c, tr, mut root| {
+        run(|c, _, mut root| {
             c.set_focus(&mut root.a.a);
             root.a.a.next_outcome = Some(Outcome::Handle);
-            c.key(&mut tr.control(), &mut root, 'a')?;
+            c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@key->handle"]);
             Ok(())
         })?;
 
-        run(|c, tr, mut root| {
+        run(|c, _, mut root| {
             c.set_focus(&mut root.a.a);
             root.a.next_outcome = Some(Outcome::Handle);
-            c.key(&mut tr.control(), &mut root, 'a')?;
+            c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@key->ignore", "ba@key->handle"]);
             Ok(())
         })?;
 
-        run(|c, tr, mut root| {
+        run(|c, _, mut root| {
             c.set_focus(&mut root.a.a);
             root.next_outcome = Some(Outcome::Handle);
-            c.key(&mut tr.control(), &mut root, 'a')?;
+            c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(
                 s.path,
@@ -816,22 +831,22 @@ mod tests {
             Ok(())
         })?;
 
-        run(|c, tr, mut root| {
+        run(|c, _, mut root| {
             c.set_focus(&mut root.a);
             root.a.next_outcome = Some(Outcome::Handle);
-            c.key(&mut tr.control(), &mut root, 'a')?;
+            c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba@key->handle"]);
             Ok(())
         })?;
 
-        run(|c, tr, mut root| {
+        run(|c, _, mut root| {
             c.set_focus(&mut root.a);
             root.next_outcome = Some(Outcome::Handle);
-            c.key(&mut tr.control(), &mut root, 'a')?;
+            c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba@key->ignore", "r@key->handle"]);
-            c.key(&mut tr.control(), &mut root, 'a')?;
+            c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(
                 s.path,
@@ -845,11 +860,11 @@ mod tests {
             Ok(())
         })?;
 
-        run(|c, tr, mut root| {
+        run(|c, _, mut root| {
             c.set_focus(&mut root.a.b);
             root.a.next_outcome = Some(Outcome::Ignore);
             root.next_outcome = Some(Outcome::Handle);
-            c.key(&mut tr.control(), &mut root, 'a')?;
+            c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(
                 s.path,
@@ -858,38 +873,38 @@ mod tests {
             Ok(())
         })?;
 
-        run(|c, tr, mut root| {
+        run(|c, _, mut root| {
             c.set_focus(&mut root.a.a);
             root.a.a.next_outcome = Some(Outcome::Handle);
-            c.key(&mut tr.control(), &mut root, 'a')?;
+            c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@key->handle",]);
             Ok(())
         })?;
 
-        run(|c, tr, mut root| {
+        run(|c, _, mut root| {
             c.set_focus(&mut root.a.b);
             root.a.next_outcome = Some(Outcome::Handle);
-            c.key(&mut tr.control(), &mut root, 'a')?;
+            c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_lb@key->ignore", "ba@key->handle",]);
             Ok(())
         })?;
 
-        run(|c, tr, mut root| {
+        run(|c, _, mut root| {
             c.set_focus(&mut root.a.b);
             root.a.b.next_outcome = Some(Outcome::Handle);
-            c.key(&mut tr.control(), &mut root, 'a')?;
+            c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_lb@key->handle",]);
             Ok(())
         })?;
 
-        run(|c, tr, mut root| {
+        run(|c, _, mut root| {
             c.set_focus(&mut root.a.b);
             root.a.b.next_outcome = Some(Outcome::Handle);
             root.a.next_outcome = Some(Outcome::Handle);
-            c.key(&mut tr.control(), &mut root, 'a')?;
+            c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_lb@key->handle",]);
             Ok(())
@@ -918,7 +933,7 @@ mod tests {
             root.next_outcome = Some(Outcome::Handle);
             let evt = root.a.a.make_mouse_event()?;
             tr.render(c, &mut root)?;
-            c.mouse(&mut tr.control(), &mut root, evt)?;
+            c.mouse(&mut root, evt)?;
             let s = get_state();
             assert_eq!(
                 s.path,
@@ -931,7 +946,7 @@ mod tests {
             root.a.a.next_outcome = Some(Outcome::Handle);
             let evt = root.a.a.make_mouse_event()?;
             tr.render(c, &mut root)?;
-            c.mouse(&mut tr.control(), &mut root, evt)?;
+            c.mouse(&mut root, evt)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@mouse->handle"]);
             Ok(())
@@ -941,7 +956,7 @@ mod tests {
             root.a.a.next_outcome = Some(Outcome::Handle);
             let evt = root.a.a.make_mouse_event()?;
             tr.render(c, &mut root)?;
-            c.mouse(&mut tr.control(), &mut root, evt)?;
+            c.mouse(&mut root, evt)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@mouse->handle"]);
             Ok(())
@@ -951,7 +966,7 @@ mod tests {
             root.a.a.next_outcome = Some(Outcome::Handle);
             let evt = root.a.a.make_mouse_event()?;
             tr.render(c, &mut root)?;
-            c.mouse(&mut tr.control(), &mut root, evt)?;
+            c.mouse(&mut root, evt)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@mouse->handle",]);
             Ok(())

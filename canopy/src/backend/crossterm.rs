@@ -50,6 +50,7 @@ fn translate_result<T>(e: crossterm::Result<T>) -> Result<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct CrosstermControl {
     fp: std::io::Stderr,
 }
@@ -308,7 +309,7 @@ where
     N: Node,
 {
     let mut be = CrosstermRender::default();
-    let mut ctrl = CrosstermControl::default();
+    let ctrl = CrosstermControl::default();
 
     translate_result(terminal::enable_raw_mode())?;
     let mut w = std::io::stderr();
@@ -353,6 +354,7 @@ where
     let events = EventSource::new(rx);
     event_emitter(cnpy.event_tx.clone());
     let size = translate_result(terminal::size())?;
+    cnpy.register_backend(ctrl);
     cnpy.set_root_size(Expanse::new(size.0, size.1), &mut root)?;
     cnpy.start_poller(cnpy.event_tx.clone());
 
@@ -363,7 +365,7 @@ where
                 cnpy.render(&mut be, &mut root)?;
                 translate_result(be.flush())?;
             }
-            cnpy.event(&mut ctrl, &mut root, events.next()?)?;
+            cnpy.event(&mut root, events.next()?)?;
 
             tainted = cnpy.taint;
             cnpy.taint = false;

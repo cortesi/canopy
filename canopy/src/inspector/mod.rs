@@ -95,12 +95,7 @@ impl<N> Node for Inspector<N>
 where
     N: Node,
 {
-    fn handle_key(
-        &mut self,
-        c: &mut dyn Core,
-        _ctrl: &mut dyn BackendControl,
-        k: key::Key,
-    ) -> Result<Outcome> {
+    fn handle_key(&mut self, c: &mut dyn Core, k: key::Key) -> Result<Outcome> {
         if self.active {
             match k {
                 ck if ck == 'a' => {
