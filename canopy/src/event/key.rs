@@ -139,7 +139,10 @@ impl std::cmp::PartialEq<Key> for char {
 
 impl From<char> for Key {
     fn from(c: char) -> Self {
-        Key(Empty, KeyCode::Char(c))
+        let modifiers = if c.is_uppercase() { Shift } else { Empty };
+        // FIXME: For the moment, we panic if we get a char that has a complex
+        // lowercase conversion. We should do something better here.
+        Key(modifiers, KeyCode::Char(c.to_lowercase().next().unwrap()))
     }
 }
 

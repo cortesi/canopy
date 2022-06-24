@@ -5,9 +5,12 @@
 ## 0.1
 
 - Key binding management system
+  - Resolve the FIXMEs related to lowercase conversion of chars
   - Key from string conversion
   - Mouse actions into binding system
   - Commands improvements
+    - Optional Core argument
+    - Optional BackendControl argument
     - Arguments
     - Return types
       - Let returns that are not Results be ignored for versatility

@@ -244,7 +244,8 @@ fn translate_event(e: cevent::Event) -> Event {
                 cevent::KeyCode::Delete => key::KeyCode::Delete,
                 cevent::KeyCode::Insert => key::KeyCode::Insert,
                 cevent::KeyCode::F(x) => key::KeyCode::F(x),
-                cevent::KeyCode::Char(c) => key::KeyCode::Char(c),
+                // FIXME: Do something more principled than panicking here!
+                cevent::KeyCode::Char(c) => key::KeyCode::Char(c.to_lowercase().next().unwrap()),
                 cevent::KeyCode::Null => key::KeyCode::Null,
                 cevent::KeyCode::Esc => key::KeyCode::Esc,
             },

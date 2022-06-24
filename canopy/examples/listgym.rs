@@ -109,6 +109,30 @@ impl Root {
             },
         }
     }
+
+    #[command]
+    /// Add an item after the current focus
+    fn add_item(&mut self, _c: &dyn Core) {
+        self.content.child.insert_after(Block::new());
+    }
+
+    #[command]
+    /// Add an item at the end of the list
+    fn append_item(&mut self, _c: &dyn Core) {
+        self.content.child.append(Block::new());
+    }
+
+    #[command]
+    /// Add an item at the end of the list
+    fn delete_selected(&mut self, c: &dyn Core) {
+        self.content.child.delete_selected(c);
+    }
+
+    #[command]
+    /// Add an item at the end of the list
+    fn clear(&mut self, _c: &dyn Core) {
+        self.content.child.clear();
+    }
 }
 
 impl Node for Root {
@@ -141,30 +165,14 @@ impl Node for Root {
 
     fn handle_key(
         &mut self,
-        core: &mut dyn Core,
+        _core: &mut dyn Core,
         ctrl: &mut dyn BackendControl,
         k: key::Key,
     ) -> Result<Outcome> {
-        let lst = &mut self.content.child;
         match k {
-            c if c == 'a' => {
-                lst.insert_after(Block::new());
-            }
-            c if c == 'A' => {
-                lst.append(Block::new());
-            }
-            c if c == 'd' => {
-                lst.delete_selected(core);
-            }
-            c if c == 'C' => {
-                lst.clear();
-            }
-            c if c == key::KeyCode::PageUp => lst.page_up(core),
             c if c == 'q' => ctrl.exit(0),
-            _ => return Ok(Outcome::Ignore),
-        };
-        core.taint_tree(self);
-        Ok(Outcome::Handle)
+            _ => Ok(Outcome::Ignore),
+        }
     }
 
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
@@ -201,6 +209,12 @@ pub fn main() -> Result<()> {
         Some(canopy::style::AttrSet::default()),
     );
     cnpy.load_commands::<List<Block>>();
+    cnpy.load_commands::<Root>();
+
+    cnpy.bind_key('a', "root", "root::add_item()")?;
+    cnpy.bind_key('A', "root", "root::append_item()")?;
+    cnpy.bind_key('C', "root", "root::clear()")?;
+    cnpy.bind_key('d', "root", "root::delete_selected()")?;
 
     cnpy.bind_key('g', "root", "list::select_first()")?;
     cnpy.bind_key('G', "root", "list::select_last()")?;
