@@ -8,7 +8,7 @@ use crate::{
     error,
     event::{key, mouse, Event},
     geom::{Coverage, Direction, Expanse, Point, Rect},
-    keymap,
+    inputmap,
     node::{postorder, preorder, Node, Walk},
     path::*,
     poll::Poller,
@@ -99,7 +99,7 @@ pub struct Canopy {
     pub(crate) taint: bool,
 
     pub(crate) script_host: script::ScriptHost,
-    pub(crate) keymap: keymap::InputMap,
+    pub(crate) keymap: inputmap::InputMap,
     pub(crate) commands: commands::CommandSet,
     pub(crate) backend: Option<Box<dyn BackendControl>>,
 
@@ -334,7 +334,7 @@ impl Canopy {
             poller: Poller::new(tx.clone()),
             event_tx: tx,
             event_rx: Some(rx),
-            keymap: keymap::InputMap::new(),
+            keymap: inputmap::InputMap::new(),
             commands: commands::CommandSet::new(),
             script_host: script::ScriptHost::new(),
             style: solarized::solarized_dark(),
@@ -379,7 +379,7 @@ impl Canopy {
     {
         self.keymap.bind(
             mode,
-            keymap::Input::Mouse(mouse.into()),
+            inputmap::Input::Mouse(mouse.into()),
             path_filter,
             self.script_host.compile(script)?,
         )
@@ -406,7 +406,7 @@ impl Canopy {
     {
         self.keymap.bind(
             mode,
-            keymap::Input::Key(key.into()),
+            inputmap::Input::Key(key.into()),
             path_filter,
             self.script_host.compile(script)?,
         )
@@ -660,7 +660,7 @@ impl Canopy {
                     Walk::Handle(None)
                 }
                 Outcome::Ignore => {
-                    if let Some(s) = self.keymap.resolve(&path, keymap::Input::Key(k.into())) {
+                    if let Some(s) = self.keymap.resolve(&path, inputmap::Input::Key(k.into())) {
                         Walk::Handle(Some((s, x.id())))
                     } else {
                         path.pop();
@@ -810,7 +810,8 @@ mod tests {
     fn tbindings() -> Result<()> {
         run(|c, _, mut root| {
             let sid = c.script_host.compile("ba_la::c_leaf()")?;
-            c.keymap.bind("", keymap::Input::Key('a'.into()), "", sid)?;
+            c.keymap
+                .bind("", inputmap::Input::Key('a'.into()), "", sid)?;
 
             c.set_focus(&mut root.a.a);
             c.key(&mut root, 'a')?;

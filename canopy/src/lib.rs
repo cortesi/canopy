@@ -5,7 +5,7 @@ pub use canopy_derive::{command, derive_commands};
 
 mod canopy;
 mod control;
-mod keymap;
+mod inputmap;
 mod node;
 mod poll;
 mod render;
