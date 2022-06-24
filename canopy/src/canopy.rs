@@ -8,13 +8,14 @@ use crate::{
     error,
     event::{key, mouse, Event},
     geom::{Coverage, Direction, Expanse, Point, Rect},
+    keymap,
     node::{postorder, preorder, Node, Walk},
     path::*,
     poll::Poller,
     render::{show_cursor, RenderBackend},
     script,
     style::{solarized, StyleManager, StyleMap},
-    InputMap, NodeId, NodeName, Outcome, Render, Result, ViewPort,
+    NodeId, NodeName, Outcome, Render, Result, ViewPort,
 };
 
 /// Call a closure on the currently focused node and all its ancestors to the
@@ -98,7 +99,7 @@ pub struct Canopy {
     pub(crate) taint: bool,
 
     pub(crate) script_host: script::ScriptHost,
-    pub(crate) keymap: InputMap,
+    pub(crate) keymap: keymap::InputMap,
     pub(crate) commands: commands::CommandSet,
     pub(crate) backend: Option<Box<dyn BackendControl>>,
 
@@ -333,7 +334,7 @@ impl Canopy {
             poller: Poller::new(tx.clone()),
             event_tx: tx,
             event_rx: Some(rx),
-            keymap: InputMap::new(),
+            keymap: keymap::InputMap::new(),
             commands: commands::CommandSet::new(),
             script_host: script::ScriptHost::new(),
             style: solarized::solarized_dark(),
@@ -356,7 +357,35 @@ impl Canopy {
         Ok(())
     }
 
-    /// Bind a key, within a given mode, with a given context to a list of commands.
+    /// Bind a mouse action in the global mode with a given path filter to a script.
+    pub fn bind_mouse<K>(&mut self, mouse: K, path_filter: &str, script: &str) -> Result<()>
+    where
+        mouse::Mouse: From<K>,
+    {
+        self.bind_mode_mouse(mouse, "", path_filter, script)
+    }
+
+    /// Bind a mouse action in a specified mode with a given path filter to a
+    /// script.
+    pub fn bind_mode_mouse<K>(
+        &mut self,
+        mouse: K,
+        mode: &str,
+        path_filter: &str,
+        script: &str,
+    ) -> Result<()>
+    where
+        mouse::Mouse: From<K>,
+    {
+        self.keymap.bind(
+            mode,
+            keymap::Input::Mouse(mouse.into()),
+            path_filter,
+            self.script_host.compile(script)?,
+        )
+    }
+
+    /// Bind a key in the global mode, with a given path filter to a script.
     pub fn bind_key<K>(&mut self, key: K, path_filter: &str, script: &str) -> Result<()>
     where
         key::Key: From<K>,
@@ -364,7 +393,7 @@ impl Canopy {
         self.bind_mode_key(key, "", path_filter, script)
     }
 
-    /// Bind a key, within a given mode, with a given context to a list of commands.
+    /// Bind a key within a given mode, with a given path filter to a script.
     pub fn bind_mode_key<K>(
         &mut self,
         key: K,
@@ -375,8 +404,12 @@ impl Canopy {
     where
         key::Key: From<K>,
     {
-        self.keymap
-            .bind(mode, key, path_filter, self.script_host.compile(script)?)
+        self.keymap.bind(
+            mode,
+            keymap::Input::Key(key.into()),
+            path_filter,
+            self.script_host.compile(script)?,
+        )
     }
 
     /// Load the commands from a command node using the default node name
@@ -627,7 +660,7 @@ impl Canopy {
                     Walk::Handle(None)
                 }
                 Outcome::Ignore => {
-                    if let Some(s) = self.keymap.resolve(&path, k) {
+                    if let Some(s) = self.keymap.resolve(&path, keymap::Input::Key(k.into())) {
                         Walk::Handle(Some((s, x.id())))
                     } else {
                         path.pop();
@@ -777,7 +810,7 @@ mod tests {
     fn tbindings() -> Result<()> {
         run(|c, _, mut root| {
             let sid = c.script_host.compile("ba_la::c_leaf()")?;
-            c.keymap.bind("", 'a', "", sid)?;
+            c.keymap.bind("", keymap::Input::Key('a'.into()), "", sid)?;
 
             c.set_focus(&mut root.a.a);
             c.key(&mut root, 'a')?;

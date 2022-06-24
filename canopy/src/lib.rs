@@ -30,7 +30,6 @@ pub use crate::canopy::*;
 pub use commands::{CommandDefinition, CommandNode};
 pub use control::BackendControl;
 pub use error::{Error, Result};
-pub use keymap::InputMap;
 pub use node::*;
 pub use render::Render;
 pub use root::*;

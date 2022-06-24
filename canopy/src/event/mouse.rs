@@ -105,6 +105,16 @@ impl Add<Button> for Action {
     }
 }
 
+impl From<MouseEvent> for Mouse {
+    fn from(o: MouseEvent) -> Self {
+        Mouse {
+            action: o.action,
+            modifiers: o.modifiers,
+            button: o.button,
+        }
+    }
+}
+
 impl From<Button> for Mouse {
     fn from(e: Button) -> Self {
         Mouse {

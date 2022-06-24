@@ -1,41 +1,50 @@
 use std::collections::HashMap;
 
-use crate::{error, event::key::Key, path::*, script, Result};
+use crate::{error, event::key::Key, event::mouse::Mouse, path::*, script, Result};
 
 const DEFAULT_MODE: &str = "";
 
+/// An action to be taken in response to an event, if the path matches.
 #[derive(Debug)]
 struct BoundAction {
     pathmatch: PathMatcher,
     script: script::ScriptId,
 }
 
-/// A KeyMode contains a set of bound keys.
+#[derive(Debug, Hash, PartialEq, Eq)]
+pub enum Input {
+    Mouse(Mouse),
+    Key(Key),
+}
+
+/// A InputMode contains a set of bound keys and mouse actions.
 #[derive(Debug)]
 pub struct InputMode {
-    keys: HashMap<Key, Vec<BoundAction>>,
+    inputs: HashMap<Input, Vec<BoundAction>>,
 }
 
 impl InputMode {
     fn new() -> Self {
         InputMode {
-            keys: HashMap::new(),
+            inputs: HashMap::new(),
         }
     }
+
     /// Insert a key binding into this mode
-    fn insert(&mut self, path_filter: PathMatcher, key: Key, script: script::ScriptId) {
-        self.keys
-            .entry(key)
+    fn insert(&mut self, path_filter: PathMatcher, input: Input, script: script::ScriptId) {
+        self.inputs
+            .entry(input)
             .or_insert_with(Vec::new)
             .push(BoundAction {
                 pathmatch: path_filter,
                 script,
             });
     }
+
     /// Resolve a key with a given path filter to a script.
-    pub fn resolve(&self, path: &Path, key: Key) -> Option<script::ScriptId> {
+    pub fn resolve(&self, path: &Path, input: Input) -> Option<script::ScriptId> {
         let mut ret = (0, None);
-        for k in self.keys.get(&key)? {
+        for k in self.inputs.get(&input)? {
             if let Some(p) = k.pathmatch.check(path) {
                 if ret.1.is_none() || p > ret.0 {
                     ret = (p, Some(k.script));
@@ -85,25 +94,22 @@ impl InputMap {
         }
     }
 
-    pub fn resolve(&self, path: &Path, key: Key) -> Option<script::ScriptId> {
+    pub fn resolve(&self, path: &Path, input: Input) -> Option<script::ScriptId> {
         // Unwrap is safe, because we make it impossible for our current mode to
         // be non-existent.
         let m = self.modes.get(&self.current_mode).unwrap();
-        m.resolve(path, key)
+        m.resolve(path, input)
     }
 
     /// Bind a key, within a given mode, with a given context to a list of commands.
-    pub fn bind<K>(
+    pub fn bind(
         &mut self,
         mode: &str,
-        key: K,
+        input: Input,
         path_filter: &str,
         script: script::ScriptId,
-    ) -> Result<()>
-    where
-        Key: From<K>,
-    {
-        let key = key.into();
+    ) -> Result<()> {
+        let key = input.into();
         self.modes
             .entry(mode.to_string())
             .or_insert_with(InputMode::new)
@@ -125,16 +131,34 @@ mod tests {
         let a_foo = e.compile("x()")?;
         let a_bar = e.compile("x()")?;
         let b = e.compile("x()")?;
-        m.insert(PathMatcher::new("foo")?, 'a'.into(), a_foo);
-        m.insert(PathMatcher::new("bar")?, 'a'.into(), a_bar);
-        m.insert(PathMatcher::new("")?, 'b'.into(), b);
+        m.insert(PathMatcher::new("foo")?, Input::Key('a'.into()), a_foo);
+        m.insert(PathMatcher::new("bar")?, Input::Key('a'.into()), a_bar);
+        m.insert(PathMatcher::new("")?, Input::Key('b'.into()), b);
 
-        assert_eq!(m.resolve(&"foo".into(), 'a'.into()).unwrap(), a_foo);
-        assert_eq!(m.resolve(&"bar".into(), 'a'.into()).unwrap(), a_bar,);
-        assert_eq!(m.resolve(&"bar/foo".into(), 'a'.into()).unwrap(), a_foo,);
-        assert_eq!(m.resolve(&"foo/bar".into(), 'a'.into()).unwrap(), a_bar);
-        assert!(m.resolve(&"foo/bar".into(), 'x'.into()).is_none());
-        assert!(m.resolve(&"nonexistent".into(), 'a'.into()).is_none());
+        assert_eq!(
+            m.resolve(&"foo".into(), Input::Key('a'.into())).unwrap(),
+            a_foo
+        );
+        assert_eq!(
+            m.resolve(&"bar".into(), Input::Key('a'.into())).unwrap(),
+            a_bar,
+        );
+        assert_eq!(
+            m.resolve(&"bar/foo".into(), Input::Key('a'.into()))
+                .unwrap(),
+            a_foo,
+        );
+        assert_eq!(
+            m.resolve(&"foo/bar".into(), Input::Key('a'.into()))
+                .unwrap(),
+            a_bar
+        );
+        assert!(m
+            .resolve(&"foo/bar".into(), Input::Key('x'.into()))
+            .is_none());
+        assert!(m
+            .resolve(&"nonexistent".into(), Input::Key('a'.into()))
+            .is_none());
 
         Ok(())
     }
@@ -147,12 +171,20 @@ mod tests {
         let a_default = e.compile("x()")?;
         let a_m = e.compile("x()")?;
 
-        m.bind("", 'a', "", a_default)?;
-        m.bind("m", 'a', "", a_m)?;
+        m.bind("", Input::Key('a'.into()), "", a_default)?;
+        m.bind("m", Input::Key('a'.into()), "", a_m)?;
 
-        assert_eq!(m.resolve(&"foo/bar".into(), 'a'.into()).unwrap(), a_default);
+        assert_eq!(
+            m.resolve(&"foo/bar".into(), Input::Key('a'.into()))
+                .unwrap(),
+            a_default
+        );
         m.set_mode("m")?;
-        assert_eq!(m.resolve(&"foo/bar".into(), 'a'.into()).unwrap(), a_m);
+        assert_eq!(
+            m.resolve(&"foo/bar".into(), Input::Key('a'.into()))
+                .unwrap(),
+            a_m
+        );
 
         Ok(())
     }
