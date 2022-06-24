@@ -9,26 +9,6 @@ use canopy::{
 };
 
 #[derive(StatefulNode)]
-struct Root {
-    state: NodeState,
-    child: Block,
-}
-
-#[derive_commands]
-impl Root {
-    fn new() -> Self {
-        Root {
-            state: NodeState::default(),
-            child: Block {
-                state: NodeState::default(),
-                children: vec![Block::new(false), Block::new(false)],
-                horizontal: true,
-            },
-        }
-    }
-}
-
-#[derive(StatefulNode)]
 struct Block {
     state: NodeState,
     children: Vec<Block>,
@@ -44,41 +24,8 @@ impl Block {
             horizontal: orientation,
         }
     }
-}
 
-impl Node for Root {
-    fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {
-        let vp = self.vp();
-        fit(&mut self.child, vp)
-    }
-
-    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::MouseEvent) -> Result<Outcome> {
-        Ok(match k {
-            ck if ck == mouse::Action::ScrollDown => c.focus_next(self)?,
-            ck if ck == mouse::Action::ScrollUp => c.focus_prev(self)?,
-            _ => Outcome::Ignore,
-        })
-    }
-
-    fn handle_key(&mut self, c: &mut dyn Core, k: key::Key) -> Result<Outcome> {
-        Ok(match k {
-            ck if ck == key::KeyCode::Tab => c.focus_next(self)?,
-            ck if ck == 'l' || ck == key::KeyCode::Right => c.focus_right(self)?,
-            ck if ck == 'h' || ck == key::KeyCode::Left => c.focus_left(self)?,
-            ck if ck == 'j' || ck == key::KeyCode::Down => c.focus_down(self)?,
-            ck if ck == 'k' || ck == key::KeyCode::Up => c.focus_up(self)?,
-            ck if ck == 'q' => c.exit(0),
-            _ => Outcome::Ignore,
-        })
-    }
-
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-        f(&mut self.child)?;
-        Ok(())
-    }
-}
-
-impl Block {
+    #[command]
     fn add(&mut self, c: &mut dyn Core) -> Result<Outcome> {
         Ok(if self.children.is_empty() {
             Outcome::Ignore
@@ -90,17 +37,27 @@ impl Block {
             Outcome::Handle
         })
     }
+
     fn size_limited(&self, a: Expanse) -> bool {
         (self.horizontal && a.w <= 4) || (!self.horizontal && a.h <= 4)
     }
+
+    #[command]
     fn split(&mut self, c: &mut dyn Core) -> Result<Outcome> {
         Ok(if self.size_limited(self.vp().view_rect().into()) {
             Outcome::Handle
         } else {
             self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
             c.taint_tree(self);
+            c.focus_next(self)?;
             Outcome::Handle
         })
+    }
+
+    #[command]
+    fn focus(&mut self, c: &mut dyn Core) -> Result<()> {
+        c.set_focus(self);
+        Ok(())
     }
 }
 
@@ -133,36 +90,6 @@ impl Node for Block {
         self.children.is_empty()
     }
 
-    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::MouseEvent) -> Result<Outcome> {
-        Ok(match k {
-            ck if ck == mouse::Action::Down + mouse::Button::Left => {
-                c.taint_tree(self);
-                c.set_focus(self);
-                Outcome::Handle
-            }
-            ck if ck == mouse::Action::Down + mouse::Button::Middle => {
-                self.split(c)?;
-                if c.is_focused(self) {
-                    c.focus_next(self)?;
-                };
-                Outcome::Handle
-            }
-            ck if ck == mouse::Action::Down + mouse::Button::Right => self.add(c)?,
-            _ => Outcome::Ignore,
-        })
-    }
-
-    fn handle_key(&mut self, c: &mut dyn Core, k: key::Key) -> Result<Outcome> {
-        Ok(match k {
-            ck if ck == 's' => {
-                self.split(c)?;
-                c.focus_next(self)?
-            }
-            ck if ck == 'a' => self.add(c)?,
-            _ => Outcome::Ignore,
-        })
-    }
-
     fn children(self: &mut Self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         for i in &mut self.children {
             f(i)?
@@ -171,9 +98,70 @@ impl Node for Block {
     }
 }
 
+#[derive(StatefulNode)]
+struct FocusGym {
+    state: NodeState,
+    child: Block,
+}
+
+#[derive_commands]
+impl FocusGym {
+    fn new() -> Self {
+        FocusGym {
+            state: NodeState::default(),
+            child: Block {
+                state: NodeState::default(),
+                children: vec![Block::new(false), Block::new(false)],
+                horizontal: true,
+            },
+        }
+    }
+}
+
+impl Node for FocusGym {
+    fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {
+        let vp = self.vp();
+        fit(&mut self.child, vp)
+    }
+
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+        f(&mut self.child)?;
+        Ok(())
+    }
+}
+
 pub fn main() -> Result<()> {
-    let cnpy = Canopy::new();
-    let root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new());
+    let mut cnpy = Canopy::new();
+
+    cnpy.load_commands::<Root<FocusGym>>();
+    cnpy.load_commands::<Block>();
+    cnpy.load_commands::<FocusGym>();
+
+    cnpy.bind_key(key::KeyCode::Tab, "root", "root::focus_next()")?;
+    cnpy.bind_mouse(mouse::Action::ScrollDown, "root", "root::focus_next()")?;
+    cnpy.bind_mouse(mouse::Action::ScrollUp, "root", "root::focus_prev()")?;
+
+    cnpy.bind_key(key::KeyCode::Right, "root", "root::focus_right()")?;
+    cnpy.bind_key('l', "root", "root::focus_right()")?;
+
+    cnpy.bind_key(key::KeyCode::Left, "root", "root::focus_left()")?;
+    cnpy.bind_key('h', "root", "root::focus_left()")?;
+
+    cnpy.bind_key(key::KeyCode::Up, "root", "root::focus_up()")?;
+    cnpy.bind_key('k', "root", "root::focus_up()")?;
+
+    cnpy.bind_key(key::KeyCode::Down, "root", "root::focus_down()")?;
+    cnpy.bind_key('j', "root", "root::focus_down()")?;
+
+    cnpy.bind_key('q', "root", "root::quit()")?;
+
+    cnpy.bind_key('s', "block", "block::split()")?;
+    cnpy.bind_key('a', "block", "block::add()")?;
+    cnpy.bind_mouse(mouse::Button::Left, "block", "block::focus()")?;
+    cnpy.bind_mouse(mouse::Button::Middle, "block", "block::split()")?;
+    cnpy.bind_mouse(mouse::Button::Right, "block", "block::add()")?;
+
+    let root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new(FocusGym::new()));
     runloop(cnpy, root)?;
     Ok(())
 }

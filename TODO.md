@@ -69,6 +69,7 @@
   - Benchmarks
   - Fuzzing
 - Things that don't smell too good
+  - focus_next wraps, but focus_prev doesn't
   - Numeric types and constant conversions in the geom module
   - The Outcome type
 

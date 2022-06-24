@@ -26,10 +26,53 @@ where
             state: NodeState::default(),
         }
     }
+
     #[command]
     /// Exit from the program, restoring terminal state
     fn quit(&mut self, c: &mut dyn Core) {
         c.exit(0)
+    }
+
+    #[command]
+    /// Focus the next node in a pre-order traversal of the app.
+    fn focus_next(&mut self, c: &mut dyn Core) -> Result<()> {
+        c.focus_next(self)?;
+        Ok(())
+    }
+
+    #[command]
+    /// Focus the next node in a pre-order traversal of the app.
+    fn focus_prev(&mut self, c: &mut dyn Core) -> Result<()> {
+        c.focus_prev(self)?;
+        Ok(())
+    }
+
+    #[command]
+    /// Shift focus right.
+    fn focus_right(&mut self, c: &mut dyn Core) -> Result<()> {
+        c.focus_right(self)?;
+        Ok(())
+    }
+
+    #[command]
+    /// Shift focus left.
+    fn focus_left(&mut self, c: &mut dyn Core) -> Result<()> {
+        c.focus_left(self)?;
+        Ok(())
+    }
+
+    #[command]
+    /// Shift focus up.
+    fn focus_up(&mut self, c: &mut dyn Core) -> Result<()> {
+        c.focus_up(self)?;
+        Ok(())
+    }
+
+    #[command]
+    /// Shift focus down.
+    fn focus_down(&mut self, c: &mut dyn Core) -> Result<()> {
+        c.focus_down(self)?;
+        Ok(())
     }
 }
 
