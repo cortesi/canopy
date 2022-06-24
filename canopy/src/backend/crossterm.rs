@@ -270,14 +270,14 @@ fn translate_event(e: cevent::Event) -> Event {
                 cevent::MouseEventKind::ScrollDown => mouse::MouseAction::ScrollDown,
                 cevent::MouseEventKind::ScrollUp => mouse::MouseAction::ScrollUp,
             };
-            Event::Mouse(mouse::Mouse {
+            Event::Mouse(mouse::MouseEvent {
                 button,
                 action: Some(action),
                 loc: Point {
                     x: m.column,
                     y: m.row,
                 },
-                modifiers: Some(translate_key_modifiers(m.modifiers)),
+                modifiers: translate_key_modifiers(m.modifiers),
             })
         }
         cevent::Event::Resize(x, y) => Event::Resize(Expanse::new(x, y)),

@@ -31,7 +31,7 @@ impl Node for Root {
         true
     }
 
-    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::Mouse) -> Result<Outcome> {
+    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::MouseEvent) -> Result<Outcome> {
         let txt = &mut self.child.child;
         match k {
             c if c == mouse::MouseAction::ScrollDown => txt.update_viewport(&|vp| vp.down()),

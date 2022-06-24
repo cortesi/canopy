@@ -138,7 +138,7 @@ impl Node for Todo {
         true
     }
 
-    fn handle_mouse(&mut self, _c: &mut dyn Core, k: mouse::Mouse) -> canopy::Result<Outcome> {
+    fn handle_mouse(&mut self, _c: &mut dyn Core, k: mouse::MouseEvent) -> canopy::Result<Outcome> {
         let v = &mut self.content.child;
         match k {
             ck if ck == mouse::MouseAction::ScrollDown => v.update_viewport(&|vp| vp.down()),

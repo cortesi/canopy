@@ -92,7 +92,7 @@ impl Node for TLeaf {
     fn handle_key(&mut self, _: &mut dyn Core, _: key::Key) -> Result<Outcome> {
         self.handle("key")
     }
-    fn handle_mouse(&mut self, _: &mut dyn Core, _: mouse::Mouse) -> Result<Outcome> {
+    fn handle_mouse(&mut self, _: &mut dyn Core, _: mouse::MouseEvent) -> Result<Outcome> {
         self.handle("mouse")
     }
 }
@@ -118,7 +118,7 @@ impl Node for TBranch {
         self.handle("key")
     }
 
-    fn handle_mouse(&mut self, _: &mut dyn Core, _: mouse::Mouse) -> Result<Outcome> {
+    fn handle_mouse(&mut self, _: &mut dyn Core, _: mouse::MouseEvent) -> Result<Outcome> {
         self.handle("mouse")
     }
 
@@ -150,7 +150,7 @@ impl Node for TRoot {
         self.handle("key")
     }
 
-    fn handle_mouse(&mut self, _: &mut dyn Core, _: mouse::Mouse) -> Result<Outcome> {
+    fn handle_mouse(&mut self, _: &mut dyn Core, _: mouse::MouseEvent) -> Result<Outcome> {
         self.handle("mouse")
     }
 
@@ -181,12 +181,12 @@ impl TLeaf {
         Ok(())
     }
 
-    pub fn make_mouse_event(&self) -> Result<mouse::Mouse> {
+    pub fn make_mouse_event(&self) -> Result<mouse::MouseEvent> {
         let a = self.vp().screen_rect();
-        Ok(mouse::Mouse {
+        Ok(mouse::MouseEvent {
             action: Some(mouse::MouseAction::Down),
             button: Some(mouse::Button::Left),
-            modifiers: None,
+            modifiers: key::Empty,
             loc: a.tl,
         })
     }

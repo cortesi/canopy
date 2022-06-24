@@ -91,17 +91,17 @@ impl Node for StatusBar {
 }
 
 #[derive(StatefulNode)]
-struct Root {
+struct ListGym {
     state: NodeState,
     content: frame::Frame<List<Block>>,
     statusbar: StatusBar,
 }
 
 #[derive_commands]
-impl Root {
+impl ListGym {
     fn new() -> Self {
         let nodes: Vec<Block> = (0..10).map(|_| Block::new()).collect();
-        Root {
+        ListGym {
             state: NodeState::default(),
             content: frame::Frame::new(List::new(nodes)),
             statusbar: StatusBar {
@@ -135,7 +135,7 @@ impl Root {
     }
 }
 
-impl Node for Root {
+impl Node for ListGym {
     fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {
         let (a, b) = self.vp().carve_vend(1);
         fit(&mut self.statusbar, b)?;
@@ -147,7 +147,7 @@ impl Node for Root {
         true
     }
 
-    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::Mouse) -> Result<Outcome> {
+    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::MouseEvent) -> Result<Outcome> {
         let txt = &mut self.content.child;
         match k {
             c if c == mouse::MouseAction::ScrollDown => txt.update_viewport(&|vp| vp.down()),
@@ -156,13 +156,6 @@ impl Node for Root {
         };
         c.taint_tree(self);
         Ok(Outcome::Handle)
-    }
-
-    fn handle_key(&mut self, core: &mut dyn Core, k: key::Key) -> Result<Outcome> {
-        match k {
-            c if c == 'q' => core.exit(0),
-            _ => Ok(Outcome::Ignore),
-        }
     }
 
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
@@ -199,12 +192,14 @@ pub fn main() -> Result<()> {
         Some(canopy::style::AttrSet::default()),
     );
     cnpy.load_commands::<List<Block>>();
-    cnpy.load_commands::<Root>();
+    cnpy.load_commands::<ListGym>();
+    cnpy.load_commands::<Root<ListGym>>();
 
-    cnpy.bind_key('a', "root", "root::add_item()")?;
-    cnpy.bind_key('A', "root", "root::append_item()")?;
-    cnpy.bind_key('C', "root", "root::clear()")?;
-    cnpy.bind_key('d', "root", "root::delete_selected()")?;
+    cnpy.bind_key('a', "root", "listgym::add_item()")?;
+    cnpy.bind_key('A', "root", "listgym::append_item()")?;
+    cnpy.bind_key('C', "root", "listgym::clear()")?;
+    cnpy.bind_key('d', "root", "listgym::delete_selected()")?;
+    cnpy.bind_key('q', "root", "root::quit()")?;
 
     cnpy.bind_key('g', "root", "list::select_first()")?;
     cnpy.bind_key('G', "root", "list::select_last()")?;
@@ -225,7 +220,7 @@ pub fn main() -> Result<()> {
     cnpy.bind_key(' ', "root", "list::page_down()")?;
     cnpy.bind_key(key::KeyCode::PageUp, "root", "list::page_up()")?;
 
-    let root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new());
+    let root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new(ListGym::new()));
     runloop(cnpy, root)?;
     Ok(())
 }

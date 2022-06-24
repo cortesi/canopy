@@ -5,9 +5,10 @@
 ## 0.1
 
 - Key binding management system
+  - Mouse actions into binding system
+
   - Resolve the FIXMEs related to lowercase conversion of chars
   - Key from string conversion
-  - Mouse actions into binding system
   - Commands improvements
     - Optional Core argument
     - Optional BackendControl argument
@@ -18,6 +19,7 @@
 - Root object
   - Manage modal windows
   - Command help system
+  - Manage inspector
   - Key rebinding
   - Standard commands
     - Reloading/changing key bindings and color schemes

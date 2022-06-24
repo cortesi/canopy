@@ -5,20 +5,20 @@ use crate::{error, event::key::Key, path::*, script, Result};
 const DEFAULT_MODE: &str = "";
 
 #[derive(Debug)]
-struct BoundKey {
+struct BoundAction {
     pathmatch: PathMatcher,
     script: script::ScriptId,
 }
 
 /// A KeyMode contains a set of bound keys.
 #[derive(Debug)]
-pub struct KeyMode {
-    keys: HashMap<Key, Vec<BoundKey>>,
+pub struct InputMode {
+    keys: HashMap<Key, Vec<BoundAction>>,
 }
 
-impl KeyMode {
+impl InputMode {
     fn new() -> Self {
-        KeyMode {
+        InputMode {
             keys: HashMap::new(),
         }
     }
@@ -27,7 +27,7 @@ impl KeyMode {
         self.keys
             .entry(key)
             .or_insert_with(Vec::new)
-            .push(BoundKey {
+            .push(BoundAction {
                 pathmatch: path_filter,
                 script,
             });
@@ -46,30 +46,31 @@ impl KeyMode {
     }
 }
 
-/// The Keybindings struct manages the global set of key bindings for the app.
+/// The InputMap struct manages the global set of key and mouse bindings for the
+/// app.
 ///
 /// When a key is pressed, it is first translated through the global key map
 /// into a set of possible action specifications. We then walk the tree of nodes
 /// from the focus to the root, trying each action specification in turn, until
 /// an action is handled by a node. If no action is handled, the key is ignored.
 #[derive(Debug)]
-pub struct KeyMap {
-    modes: HashMap<String, KeyMode>,
+pub struct InputMap {
+    modes: HashMap<String, InputMode>,
     current_mode: String,
 }
 
-impl Default for KeyMap {
+impl Default for InputMap {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl KeyMap {
+impl InputMap {
     pub fn new() -> Self {
-        let default = KeyMode::new();
+        let default = InputMode::new();
         let mut modes = HashMap::new();
         modes.insert(DEFAULT_MODE.to_string(), default);
-        KeyMap {
+        InputMap {
             current_mode: DEFAULT_MODE.into(),
             modes,
         }
@@ -105,7 +106,7 @@ impl KeyMap {
         let key = key.into();
         self.modes
             .entry(mode.to_string())
-            .or_insert_with(KeyMode::new)
+            .or_insert_with(InputMode::new)
             .insert(PathMatcher::new(path_filter)?, key, script);
         Ok(())
     }
@@ -120,7 +121,7 @@ mod tests {
     fn keymode() -> Result<()> {
         let mut e = script::ScriptHost::new();
 
-        let mut m = KeyMode::new();
+        let mut m = InputMode::new();
         let a_foo = e.compile("x()")?;
         let a_bar = e.compile("x()")?;
         let b = e.compile("x()")?;
@@ -140,7 +141,7 @@ mod tests {
 
     #[test]
     fn keymap() -> Result<()> {
-        let mut m = KeyMap::new();
+        let mut m = InputMap::new();
         let mut e = script::ScriptHost::new();
 
         let a_default = e.compile("x()")?;

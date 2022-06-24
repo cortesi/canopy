@@ -11,7 +11,7 @@ pub(crate) enum Event {
     /// A keystroke
     Key(key::Key),
     /// A mouse action
-    Mouse(mouse::Mouse),
+    Mouse(mouse::MouseEvent),
     /// Terminal resize
     Resize(Expanse),
     Poll(Vec<u64>),

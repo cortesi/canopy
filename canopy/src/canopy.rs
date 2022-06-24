@@ -14,7 +14,7 @@ use crate::{
     render::{show_cursor, RenderBackend},
     script,
     style::{solarized, StyleManager, StyleMap},
-    KeyMap, NodeId, NodeName, Outcome, Render, Result, ViewPort,
+    InputMap, NodeId, NodeName, Outcome, Render, Result, ViewPort,
 };
 
 /// Call a closure on the currently focused node and all its ancestors to the
@@ -98,7 +98,7 @@ pub struct Canopy {
     pub(crate) taint: bool,
 
     pub(crate) script_host: script::ScriptHost,
-    pub(crate) keymap: KeyMap,
+    pub(crate) keymap: InputMap,
     pub(crate) commands: commands::CommandSet,
     pub(crate) backend: Option<Box<dyn BackendControl>>,
 
@@ -333,7 +333,7 @@ impl Canopy {
             poller: Poller::new(tx.clone()),
             event_tx: tx,
             event_rx: Some(rx),
-            keymap: KeyMap::new(),
+            keymap: InputMap::new(),
             commands: commands::CommandSet::new(),
             script_host: script::ScriptHost::new(),
             style: solarized::solarized_dark(),
@@ -589,11 +589,11 @@ impl Canopy {
 
     /// Propagate a mouse event through the node under the event and all its
     /// ancestors. Events are handled only once, and then ignored.
-    pub(crate) fn mouse(&mut self, root: &mut dyn Node, m: mouse::Mouse) -> Result<()> {
+    pub(crate) fn mouse(&mut self, root: &mut dyn Node, m: mouse::MouseEvent) -> Result<()> {
         locate(root, m.loc, &mut |x| {
             let hdl = x.handle_mouse(
                 self,
-                mouse::Mouse {
+                mouse::MouseEvent {
                     action: m.action,
                     button: m.button,
                     modifiers: m.modifiers,

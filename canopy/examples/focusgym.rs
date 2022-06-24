@@ -52,7 +52,7 @@ impl Node for Root {
         fit(&mut self.child, vp)
     }
 
-    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::Mouse) -> Result<Outcome> {
+    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::MouseEvent) -> Result<Outcome> {
         Ok(match k {
             ck if ck == mouse::MouseAction::ScrollDown => c.focus_next(self)?,
             ck if ck == mouse::MouseAction::ScrollUp => c.focus_prev(self)?,
@@ -133,7 +133,7 @@ impl Node for Block {
         self.children.is_empty()
     }
 
-    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::Mouse) -> Result<Outcome> {
+    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::MouseEvent) -> Result<Outcome> {
         Ok(match k {
             ck if ck == mouse::MouseAction::Down + mouse::Button::Left => {
                 c.taint_tree(self);

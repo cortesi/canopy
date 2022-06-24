@@ -72,7 +72,7 @@ pub trait Node: StatefulNode + CommandNode {
 
     /// Handle a mouse input event. The default implementation ignores mouse
     /// input.
-    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::Mouse) -> Result<Outcome> {
+    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::MouseEvent) -> Result<Outcome> {
         Ok(Outcome::Ignore)
     }
 

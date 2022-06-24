@@ -9,6 +9,7 @@ mod keymap;
 mod node;
 mod poll;
 mod render;
+mod root;
 mod state;
 pub mod tutils;
 
@@ -29,8 +30,9 @@ pub use crate::canopy::*;
 pub use commands::{CommandDefinition, CommandNode};
 pub use control::BackendControl;
 pub use error::{Error, Result};
-pub use keymap::KeyMap;
+pub use keymap::InputMap;
 pub use node::*;
 pub use render::Render;
+pub use root::*;
 pub use state::{NodeId, NodeName, NodeState, StatefulNode};
 pub use viewport::ViewPort;
