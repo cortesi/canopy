@@ -837,15 +837,35 @@ mod tests {
     #[test]
     fn tbindings() -> Result<()> {
         run(|c, _, mut root| {
-            let sid = c.script_host.compile("ba_la::c_leaf()")?;
-            c.keymap
-                .bind("", inputmap::Input::Key('a'.into()), "", sid)?;
+            c.keymap.bind(
+                "",
+                inputmap::Input::Key('a'.into()),
+                "",
+                c.script_host.compile("ba_la::c_leaf()")?,
+            )?;
+            c.keymap.bind(
+                "",
+                inputmap::Input::Key('r'.into()),
+                "",
+                c.script_host.compile("r::c_root()")?,
+            )?;
 
             c.set_focus(&mut root.a.a);
-            c.key(&mut root, 'a')?;
 
+            c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@key->ignore", "ba_la.c_leaf()"]);
+
+            reset_state();
+            c.key(&mut root, 'r')?;
+            let s = get_state();
+            assert_eq!(s.path, vec!["ba_la@key->ignore", "r.c_root()"]);
+
+            reset_state();
+            c.set_focus(&mut root.a);
+            c.key(&mut root, 'a')?;
+            let s = get_state();
+            assert_eq!(s.path, vec!["ba@key->ignore", "ba_la.c_leaf()"]);
 
             Ok(())
         })?;

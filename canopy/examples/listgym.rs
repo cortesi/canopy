@@ -3,7 +3,7 @@ use rand::Rng;
 
 use canopy::{
     backend::crossterm::runloop,
-    event::{key, mouse},
+    event::key,
     geom::{Expanse, Rect},
     inspector::Inspector,
     style::solarized,

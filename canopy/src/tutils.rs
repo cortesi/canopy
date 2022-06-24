@@ -45,6 +45,7 @@ pub fn reset_state() {
     });
 }
 
+/// Get and reset the state
 pub fn get_state() -> State {
     TSTATE.with(|s| s.borrow().clone())
 }
@@ -242,6 +243,14 @@ impl TRoot {
         };
         n.set_name("r".try_into().unwrap());
         n
+    }
+    #[command]
+    /// A command that appears only on leaf nodes.
+    pub fn c_root(&self, _core: &dyn Core) -> Result<()> {
+        TSTATE.with(|s| {
+            s.borrow_mut().add_command(&self.name(), "c_root");
+        });
+        Ok(())
     }
     fn handle(&mut self, evt: &str) -> Result<Outcome> {
         let ret = if let Some(x) = self.next_outcome.clone() {

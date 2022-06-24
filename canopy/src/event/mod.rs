@@ -14,6 +14,7 @@ pub(crate) enum Event {
     Mouse(mouse::MouseEvent),
     /// Terminal resize
     Resize(Expanse),
+    /// A poll event
     Poll(Vec<u64>),
 }
 

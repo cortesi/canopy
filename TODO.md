@@ -5,11 +5,11 @@
 ## 0.1
 
 - Key binding management system
-  - Mouse actions into binding system
   - More testing of actions
 
   - Resolve the FIXMEs related to lowercase conversion of chars
-  - Key from string conversion
+  - Consolidate input events
+  - Input to and from string conversion
   - Commands improvements
     - Optional Core argument
     - Arguments
