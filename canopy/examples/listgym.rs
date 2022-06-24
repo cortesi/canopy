@@ -147,17 +147,6 @@ impl Node for ListGym {
         true
     }
 
-    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::MouseEvent) -> Result<Outcome> {
-        let txt = &mut self.content.child;
-        match k {
-            c if c == mouse::Action::ScrollDown => txt.update_viewport(&|vp| vp.down()),
-            c if c == mouse::Action::ScrollUp => txt.update_viewport(&|vp| vp.up()),
-            _ => return Ok(Outcome::Ignore),
-        };
-        c.taint_tree(self);
-        Ok(Outcome::Handle)
-    }
-
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         f(&mut self.statusbar)?;
         f(&mut self.content)?;
@@ -205,7 +194,19 @@ pub fn main() -> Result<()> {
     cnpy.bind_key('G', "root", "list::select_last()")?;
 
     cnpy.bind_key('j', "root", "list::select_next()")?;
+    cnpy.bind_mouse(
+        event::mouse::Action::ScrollDown,
+        "root",
+        "list::select_next()",
+    )?;
+
     cnpy.bind_key('k', "root", "list::select_prev()")?;
+    cnpy.bind_mouse(
+        event::mouse::Action::ScrollUp,
+        "root",
+        "list::select_prev()",
+    )?;
+
     cnpy.bind_key(key::KeyCode::Down, "root", "list::select_next()")?;
     cnpy.bind_key(key::KeyCode::Up, "root", "list::select_prev()")?;
 

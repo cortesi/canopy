@@ -64,15 +64,15 @@ impl Action {
             Action::Down => true,
             Action::Up => true,
             Action::Drag => true,
-            Action::Moved => true,
-            Action::ScrollDown => true,
-            Action::ScrollUp => true,
+            Action::Moved => false,
+            Action::ScrollDown => false,
+            Action::ScrollUp => false,
         }
     }
 }
 
-/// Synthesize a `Mouse` input specification. The button is assumed to be the
-/// `Button::Left`.
+/// Synthesize a `Mouse` input specification by adding modifiers to an action.
+/// Assume that the button is `Button::None`.
 impl Add<key::Mods> for Action {
     type Output = Mouse;
 

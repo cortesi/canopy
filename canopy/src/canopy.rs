@@ -620,10 +620,27 @@ impl Canopy {
         Ok(())
     }
 
+    /// Return the path for the node at a specific location. Return an empty
+    /// path if the location is outside of the node tree.
+    fn location_path(&self, root: &mut dyn Node, location: Point) -> Path {
+        let id = locate(root, location, &mut |x| -> Result<Walk<NodeId>> {
+            Ok(Walk::Handle(x.id()))
+        });
+
+        if let Some(id) = id.unwrap() {
+            node_path(id, root)
+        } else {
+            Path::empty()
+        }
+    }
+
     /// Propagate a mouse event through the node under the event and all its
     /// ancestors. Events are handled only once, and then ignored.
     pub(crate) fn mouse(&mut self, root: &mut dyn Node, m: mouse::MouseEvent) -> Result<()> {
-        locate(root, m.location, &mut |x| {
+        let mut path = self.location_path(root, m.location);
+        let v = locate(root, m.location, &mut |x| -> Result<
+            Walk<Option<(script::ScriptId, NodeId)>>,
+        > {
             let hdl = x.handle_mouse(
                 self,
                 mouse::MouseEvent {
@@ -636,11 +653,21 @@ impl Canopy {
             Ok(match hdl {
                 Outcome::Handle => {
                     self.taint(x);
-                    Walk::Handle(())
+                    Walk::Handle(None)
                 }
-                Outcome::Ignore => Walk::Continue,
+                Outcome::Ignore => {
+                    if let Some(s) = self.keymap.resolve(&path, inputmap::Input::Mouse(m.into())) {
+                        Walk::Handle(Some((s, x.id())))
+                    } else {
+                        path.pop();
+                        Walk::Continue
+                    }
+                }
             })
         })?;
+        if let Some(Some((sid, nid))) = v {
+            self.run_script(root, nid, sid)?;
+        }
         Ok(())
     }
 
@@ -735,10 +762,10 @@ pub fn locate<R>(
     root: &mut dyn Node,
     p: impl Into<Point>,
     f: &mut dyn FnMut(&mut dyn Node) -> Result<Walk<R>>,
-) -> Result<Walk<R>> {
+) -> Result<Option<R>> {
     let mut seen = false;
     let p = p.into();
-    postorder(root, &mut |inner| -> Result<Walk<R>> {
+    Ok(postorder(root, &mut |inner| -> Result<Walk<R>> {
         Ok(if seen {
             f(inner)?
         } else if !inner.is_hidden() {
@@ -756,7 +783,8 @@ pub fn locate<R>(
         } else {
             Walk::Skip
         })
-    })
+    })?
+    .value())
 }
 
 /// Call a closure on the node with the specified `id`, and all its ancestors to
