@@ -150,8 +150,8 @@ impl Node for ListGym {
     fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::MouseEvent) -> Result<Outcome> {
         let txt = &mut self.content.child;
         match k {
-            c if c == mouse::MouseAction::ScrollDown => txt.update_viewport(&|vp| vp.down()),
-            c if c == mouse::MouseAction::ScrollUp => txt.update_viewport(&|vp| vp.up()),
+            c if c == mouse::Action::ScrollDown => txt.update_viewport(&|vp| vp.down()),
+            c if c == mouse::Action::ScrollUp => txt.update_viewport(&|vp| vp.up()),
             _ => return Ok(Outcome::Ignore),
         };
         c.taint_tree(self);

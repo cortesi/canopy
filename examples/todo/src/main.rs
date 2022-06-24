@@ -141,8 +141,8 @@ impl Node for Todo {
     fn handle_mouse(&mut self, _c: &mut dyn Core, k: mouse::MouseEvent) -> canopy::Result<Outcome> {
         let v = &mut self.content.child;
         match k {
-            ck if ck == mouse::MouseAction::ScrollDown => v.update_viewport(&|vp| vp.down()),
-            ck if ck == mouse::MouseAction::ScrollUp => v.update_viewport(&|vp| vp.up()),
+            ck if ck == mouse::Action::ScrollDown => v.update_viewport(&|vp| vp.down()),
+            ck if ck == mouse::Action::ScrollUp => v.update_viewport(&|vp| vp.up()),
             _ => return Ok(Outcome::Ignore),
         };
         Ok(Outcome::Handle)

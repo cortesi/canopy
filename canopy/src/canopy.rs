@@ -590,14 +590,14 @@ impl Canopy {
     /// Propagate a mouse event through the node under the event and all its
     /// ancestors. Events are handled only once, and then ignored.
     pub(crate) fn mouse(&mut self, root: &mut dyn Node, m: mouse::MouseEvent) -> Result<()> {
-        locate(root, m.loc, &mut |x| {
+        locate(root, m.location, &mut |x| {
             let hdl = x.handle_mouse(
                 self,
                 mouse::MouseEvent {
                     action: m.action,
                     button: m.button,
                     modifiers: m.modifiers,
-                    loc: x.vp().screen_rect().rebase_point(m.loc)?,
+                    location: x.vp().screen_rect().rebase_point(m.location)?,
                 },
             )?;
             Ok(match hdl {

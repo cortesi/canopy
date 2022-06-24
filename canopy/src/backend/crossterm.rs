@@ -252,28 +252,28 @@ fn translate_event(e: cevent::Event) -> Event {
             },
         )),
         cevent::Event::Mouse(m) => {
-            let mut button: Option<mouse::Button> = None;
+            let mut button = mouse::Button::None;
             let action = match m.kind {
                 cevent::MouseEventKind::Down(b) => {
-                    button = Some(translate_button(b));
-                    mouse::MouseAction::Down
+                    button = translate_button(b);
+                    mouse::Action::Down
                 }
                 cevent::MouseEventKind::Up(b) => {
-                    button = Some(translate_button(b));
-                    mouse::MouseAction::Up
+                    button = translate_button(b);
+                    mouse::Action::Up
                 }
                 cevent::MouseEventKind::Drag(b) => {
-                    button = Some(translate_button(b));
-                    mouse::MouseAction::Drag
+                    button = translate_button(b);
+                    mouse::Action::Drag
                 }
-                cevent::MouseEventKind::Moved => mouse::MouseAction::Moved,
-                cevent::MouseEventKind::ScrollDown => mouse::MouseAction::ScrollDown,
-                cevent::MouseEventKind::ScrollUp => mouse::MouseAction::ScrollUp,
+                cevent::MouseEventKind::Moved => mouse::Action::Moved,
+                cevent::MouseEventKind::ScrollDown => mouse::Action::ScrollDown,
+                cevent::MouseEventKind::ScrollUp => mouse::Action::ScrollUp,
             };
             Event::Mouse(mouse::MouseEvent {
                 button,
-                action: Some(action),
-                loc: Point {
+                action: action,
+                location: Point {
                     x: m.column,
                     y: m.row,
                 },

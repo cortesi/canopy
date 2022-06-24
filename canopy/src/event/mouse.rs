@@ -1,44 +1,54 @@
 use crate::{event::key, geom::Point};
 use std::ops::Add;
 
-#[derive(Debug, PartialOrd, PartialEq, Eq, Clone, Copy)]
+/// An abstract specification for a mouse action
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct Mouse {
+    pub action: Action,
+    pub button: Button,
+    pub modifiers: key::Mods,
+}
+
+#[derive(Debug, PartialOrd, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum Button {
     Left,
     Right,
     Middle,
+    None,
 }
 
+/// Synthesize a Mouse specification - the action is assumed to be
+/// `Action::Down`.
 impl Add<key::Mods> for Button {
-    type Output = MouseEvent;
+    type Output = Mouse;
 
     fn add(self, other: key::Mods) -> Self::Output {
-        MouseEvent {
-            action: None,
-            button: Some(self),
+        Mouse {
+            action: Action::Down,
+            button: self,
             modifiers: other,
-            loc: Point { x: 0, y: 0 },
         }
     }
 }
 
 impl Add<Button> for key::Mods {
-    type Output = MouseEvent;
+    type Output = Mouse;
 
     fn add(self, other: Button) -> Self::Output {
         other + self
     }
 }
 
-impl Add<MouseAction> for Button {
-    type Output = MouseEvent;
+impl Add<Action> for Button {
+    type Output = Mouse;
 
-    fn add(self, other: MouseAction) -> Self::Output {
+    fn add(self, other: Action) -> Self::Output {
         other + self
     }
 }
 
-#[derive(Debug, PartialOrd, PartialEq, Eq, Clone, Copy)]
-pub enum MouseAction {
+#[derive(Debug, PartialOrd, PartialEq, Eq, Clone, Copy, Hash)]
+pub enum Action {
     Down,
     Up,
     Drag,
@@ -47,146 +57,148 @@ pub enum MouseAction {
     ScrollUp,
 }
 
-impl Add<key::Mods> for MouseAction {
-    type Output = MouseEvent;
-
-    fn add(self, other: key::Mods) -> Self::Output {
-        MouseEvent {
-            action: Some(self),
-            button: None,
-            modifiers: other,
-            loc: Point { x: 0, y: 0 },
+impl Action {
+    /// Is this a button-driven action?
+    pub fn is_button(&self) -> bool {
+        match self {
+            Action::Down => true,
+            Action::Up => true,
+            Action::Drag => true,
+            Action::Moved => true,
+            Action::ScrollDown => true,
+            Action::ScrollUp => true,
         }
     }
 }
 
-impl Add<MouseAction> for key::Mods {
-    type Output = MouseEvent;
+/// Synthesize a `Mouse` input specification. The button is assumed to be the
+/// `Button::Left`.
+impl Add<key::Mods> for Action {
+    type Output = Mouse;
 
-    fn add(self, other: MouseAction) -> Self::Output {
+    fn add(self, other: key::Mods) -> Self::Output {
+        Mouse {
+            action: self,
+            button: Button::None,
+            modifiers: other,
+        }
+    }
+}
+
+impl Add<Action> for key::Mods {
+    type Output = Mouse;
+
+    fn add(self, other: Action) -> Self::Output {
         other + self
     }
 }
 
-impl Add<Button> for MouseAction {
-    type Output = MouseEvent;
+impl Add<Button> for Action {
+    type Output = Mouse;
 
     fn add(self, other: Button) -> Self::Output {
-        MouseEvent {
-            action: Some(self),
-            button: Some(other),
+        Mouse {
+            action: self,
+            button: other,
             modifiers: key::Empty,
-            loc: Point { x: 0, y: 0 },
         }
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct MouseEvent {
-    pub action: Option<MouseAction>,
-    pub button: Option<Button>,
-    pub modifiers: key::Mods,
-    pub loc: Point,
-}
-
-impl std::cmp::PartialEq<MouseEvent> for MouseEvent {
-    fn eq(&self, other: &MouseEvent) -> bool {
-        if let (Some(b1), Some(b2)) = (self.button, other.button) {
-            if b1 != b2 {
-                return false;
-            }
-        }
-        if let (Some(a1), Some(a2)) = (self.action, other.action) {
-            if a1 != a2 {
-                return false;
-            }
-        }
-        if self.modifiers != other.modifiers {
-            return false;
-        }
-        true
-    }
-}
-
-impl From<Button> for MouseEvent {
+impl From<Button> for Mouse {
     fn from(e: Button) -> Self {
-        MouseEvent {
-            action: None,
+        Mouse {
+            action: Action::Down,
             modifiers: key::Empty,
-            button: Some(e),
-            loc: Point { x: 0, y: 0 },
+            button: e,
         }
     }
 }
 
-impl From<MouseAction> for MouseEvent {
-    fn from(e: MouseAction) -> Self {
-        MouseEvent {
-            action: Some(e),
+impl From<Action> for Mouse {
+    fn from(e: Action) -> Self {
+        Mouse {
+            action: e,
             modifiers: key::Empty,
-            button: None,
-            loc: Point { x: 0, y: 0 },
+            button: if e.is_button() {
+                Button::Left
+            } else {
+                Button::None
+            },
         }
     }
 }
 
-impl std::cmp::PartialEq<Button> for MouseEvent {
+impl std::cmp::PartialEq<Button> for Mouse {
     fn eq(&self, k: &Button) -> bool {
-        let m: MouseEvent = (*k).into();
+        let m: Mouse = (*k).into();
         *self == m
     }
 }
 
-impl std::cmp::PartialEq<MouseAction> for MouseEvent {
-    fn eq(&self, k: &MouseAction) -> bool {
-        let m: MouseEvent = (*k).into();
+impl std::cmp::PartialEq<Action> for Mouse {
+    fn eq(&self, k: &Action) -> bool {
+        let m: Mouse = (*k).into();
         *self == m
     }
 }
 
-impl Add<MouseEvent> for MouseEvent {
-    type Output = MouseEvent;
-
-    fn add(self, other: MouseEvent) -> Self::Output {
-        let mut r = self;
-        if let Some(b) = other.button {
-            r.button = Some(b);
-        }
-        if let Some(a) = other.action {
-            r.action = Some(a);
-        }
-        r.modifiers = other.modifiers;
-        r
-    }
-}
-
-impl Add<Button> for MouseEvent {
-    type Output = MouseEvent;
+impl Add<Button> for Mouse {
+    type Output = Mouse;
 
     fn add(self, other: Button) -> Self::Output {
         let mut r = self;
-        r.button = Some(other);
+        r.button = other;
         r
     }
 }
 
-impl Add<MouseAction> for MouseEvent {
-    type Output = MouseEvent;
+impl Add<Action> for Mouse {
+    type Output = Mouse;
 
-    fn add(self, other: MouseAction) -> Self::Output {
+    fn add(self, other: Action) -> Self::Output {
         let mut r = self;
-        r.action = Some(other);
+        r.action = other;
         r
     }
 }
 
-impl Add<key::Mods> for MouseEvent {
-    type Output = MouseEvent;
+impl Add<key::Mods> for Mouse {
+    type Output = Mouse;
 
     fn add(self, other: key::Mods) -> Self::Output {
         let mut r = self;
         r.modifiers = other;
         r
+    }
+}
+
+/// A mouse input event. This has the same fields as the `Mouse` event
+/// specification, but also includes a location.
+#[derive(Debug, Clone, Copy)]
+pub struct MouseEvent {
+    pub action: Action,
+    pub button: Button,
+    pub modifiers: key::Mods,
+    pub location: Point,
+}
+
+impl std::cmp::PartialEq<Mouse> for MouseEvent {
+    fn eq(&self, o: &Mouse) -> bool {
+        self.action == o.action && self.button == o.button && self.modifiers == o.modifiers
+    }
+}
+
+impl std::cmp::PartialEq<Mouse> for &MouseEvent {
+    fn eq(&self, o: &Mouse) -> bool {
+        self.action == o.action && self.button == o.button && self.modifiers == o.modifiers
+    }
+}
+
+impl std::cmp::PartialEq<Action> for MouseEvent {
+    fn eq(&self, o: &Action) -> bool {
+        let m: Mouse = (*o).into();
+        self == m
     }
 }
 
@@ -198,94 +210,84 @@ mod tests {
     #[test]
     fn tmouse() -> Result<()> {
         assert_eq!(
-            MouseEvent {
-                button: Some(Button::Left),
-                action: Some(MouseAction::Down),
-                loc: Point { x: 0, y: 0 },
+            Mouse {
+                button: Button::Left,
+                action: Action::Down,
                 modifiers: key::Empty,
             },
             Button::Left
         );
         assert_eq!(
-            MouseEvent {
-                button: Some(Button::Left),
-                action: Some(MouseAction::Down),
-                loc: Point { x: 0, y: 0 },
+            Mouse {
+                button: Button::Left,
+                action: Action::Down,
                 modifiers: key::Empty,
             },
-            Button::Left + MouseAction::Down
+            Button::Left + Action::Down
         );
         assert_eq!(
-            MouseEvent {
-                button: Some(Button::Left),
-                action: Some(MouseAction::Down),
-                loc: Point { x: 0, y: 0 },
+            Mouse {
+                button: Button::Left,
+                action: Action::Down,
                 modifiers: key::Empty,
             },
-            MouseAction::Down
+            Action::Down
         );
         assert_ne!(
-            MouseEvent {
-                button: Some(Button::Left),
-                action: Some(MouseAction::Down),
-                loc: Point { x: 0, y: 0 },
+            Mouse {
+                button: Button::Left,
+                action: Action::Down,
                 modifiers: key::Empty,
             },
-            MouseAction::Down + Button::Right
+            Action::Down + Button::Right
         );
         assert_ne!(
-            MouseEvent {
-                button: Some(Button::Left),
-                action: Some(MouseAction::Down),
-                loc: Point { x: 0, y: 0 },
+            Mouse {
+                button: Button::Left,
+                action: Action::Down,
                 modifiers: key::Empty,
             },
             Button::Right
         );
         assert_ne!(
-            MouseEvent {
-                button: Some(Button::Left),
-                action: Some(MouseAction::Down),
-                loc: Point { x: 0, y: 0 },
+            Mouse {
+                button: Button::Left,
+                action: Action::Down,
                 modifiers: key::Empty,
             },
             key::Alt + Button::Right
         );
         assert_eq!(
-            MouseEvent {
-                button: Some(Button::Left),
-                action: Some(MouseAction::Down),
-                loc: Point { x: 0, y: 0 },
+            Mouse {
+                button: Button::Left,
+                action: Action::Down,
                 modifiers: key::Alt,
             },
             key::Alt + Button::Left
         );
         assert_eq!(
-            MouseEvent {
-                button: Some(Button::Left),
-                action: Some(MouseAction::Down),
-                loc: Point { x: 0, y: 0 },
+            Mouse {
+                button: Button::Left,
+                action: Action::Down,
                 modifiers: key::Alt,
             },
-            key::Alt + MouseAction::Down + Button::Left
+            key::Alt + Action::Down + Button::Left
         );
         assert_ne!(
-            MouseEvent {
-                button: Some(Button::Left),
-                action: Some(MouseAction::Down),
-                loc: Point { x: 0, y: 0 },
+            Mouse {
+                button: Button::Left,
+                action: Action::Down,
                 modifiers: key::Alt,
             },
-            key::Alt + MouseAction::Up + Button::Left
+            key::Alt + Action::Up + Button::Left
         );
         assert_eq!(
-            MouseEvent {
-                button: Some(Button::Left),
-                action: Some(MouseAction::Down),
+            Mouse {
+                button: Button::Left,
+                action: Action::Down,
                 modifiers: key::Empty,
-                loc: Point { x: 0, y: 0 }
             },
-            MouseAction::Down
+            Action::Down
         );
         Ok(())
     }

@@ -54,8 +54,8 @@ impl Node for Root {
 
     fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::MouseEvent) -> Result<Outcome> {
         Ok(match k {
-            ck if ck == mouse::MouseAction::ScrollDown => c.focus_next(self)?,
-            ck if ck == mouse::MouseAction::ScrollUp => c.focus_prev(self)?,
+            ck if ck == mouse::Action::ScrollDown => c.focus_next(self)?,
+            ck if ck == mouse::Action::ScrollUp => c.focus_prev(self)?,
             _ => Outcome::Ignore,
         })
     }
@@ -135,19 +135,19 @@ impl Node for Block {
 
     fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::MouseEvent) -> Result<Outcome> {
         Ok(match k {
-            ck if ck == mouse::MouseAction::Down + mouse::Button::Left => {
+            ck if ck == mouse::Action::Down + mouse::Button::Left => {
                 c.taint_tree(self);
                 c.set_focus(self);
                 Outcome::Handle
             }
-            ck if ck == mouse::MouseAction::Down + mouse::Button::Middle => {
+            ck if ck == mouse::Action::Down + mouse::Button::Middle => {
                 self.split(c)?;
                 if c.is_focused(self) {
                     c.focus_next(self)?;
                 };
                 Outcome::Handle
             }
-            ck if ck == mouse::MouseAction::Down + mouse::Button::Right => self.add(c)?,
+            ck if ck == mouse::Action::Down + mouse::Button::Right => self.add(c)?,
             _ => Outcome::Ignore,
         })
     }

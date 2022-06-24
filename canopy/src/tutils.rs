@@ -184,10 +184,10 @@ impl TLeaf {
     pub fn make_mouse_event(&self) -> Result<mouse::MouseEvent> {
         let a = self.vp().screen_rect();
         Ok(mouse::MouseEvent {
-            action: Some(mouse::MouseAction::Down),
-            button: Some(mouse::Button::Left),
+            action: mouse::Action::Down,
+            button: mouse::Button::Left,
             modifiers: key::Empty,
-            loc: a.tl,
+            location: a.tl,
         })
     }
 

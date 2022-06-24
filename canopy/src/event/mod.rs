@@ -6,7 +6,7 @@ use crate::geom::Expanse;
 use std::sync::mpsc;
 
 /// This enum represents all the event types that drive the application.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub(crate) enum Event {
     /// A keystroke
     Key(key::Key),

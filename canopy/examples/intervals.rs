@@ -128,8 +128,8 @@ impl Node for Root {
     fn handle_mouse(&mut self, _c: &mut dyn Core, k: mouse::MouseEvent) -> Result<Outcome> {
         let v = &mut self.content.child;
         match k {
-            c if c == mouse::MouseAction::ScrollDown => v.update_viewport(&|vp| vp.down()),
-            c if c == mouse::MouseAction::ScrollUp => v.update_viewport(&|vp| vp.up()),
+            c if c == mouse::Action::ScrollDown => v.update_viewport(&|vp| vp.down()),
+            c if c == mouse::Action::ScrollUp => v.update_viewport(&|vp| vp.up()),
             _ => return Ok(Outcome::Ignore),
         };
         Ok(Outcome::Handle)
