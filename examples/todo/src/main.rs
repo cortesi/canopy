@@ -110,6 +110,17 @@ impl Todo {
         Ok(())
     }
 
+    /// Open the editor to enter a new todo item.
+    #[command]
+    fn delete_item(&mut self, c: &mut dyn Core) -> canopy::Result<()> {
+        let lst = &mut self.content.child;
+        if let Some(t) = lst.selected() {
+            store::get().delete_todo(t.todo.id).unwrap();
+            lst.delete_selected(c);
+        }
+        Ok(())
+    }
+
     fn load(&mut self) -> canopy::Result<()> {
         let s = store::get().todos().unwrap();
         let todos = s.iter().map(|x| TodoItem::new(x.clone()));
@@ -138,52 +149,27 @@ impl Node for Todo {
         true
     }
 
-    fn handle_mouse(&mut self, _c: &mut dyn Core, k: mouse::MouseEvent) -> canopy::Result<Outcome> {
-        let v = &mut self.content.child;
-        match k {
-            ck if ck == mouse::Action::ScrollDown => v.update_viewport(&|vp| vp.down()),
-            ck if ck == mouse::Action::ScrollUp => v.update_viewport(&|vp| vp.up()),
-            _ => return Ok(Outcome::Ignore),
-        };
-        Ok(Outcome::Handle)
-    }
-
     fn handle_key(&mut self, c: &mut dyn Core, k: key::Key) -> canopy::Result<Outcome> {
         let lst = &mut self.content.child;
-        if let Some(adder) = &mut self.adder {
+        Ok(if let Some(adder) = &mut self.adder {
             match k {
-                c if c == key::KeyCode::Enter => {
+                ck if ck == key::KeyCode::Enter => {
                     let item = store::get().add_todo(&adder.child.text()).unwrap();
                     lst.append(TodoItem::new(item));
                     self.adder = None;
+                    c.taint_tree(self);
+                    Outcome::Handle
                 }
-                c if c == key::KeyCode::Esc => {
+                ck if ck == key::KeyCode::Esc => {
                     self.adder = None;
+                    c.taint_tree(self);
+                    Outcome::Handle
                 }
-                _ => return Ok(Outcome::Ignore),
-            };
+                _ => Outcome::Ignore,
+            }
         } else {
-            match k {
-                ck if ck == 'a' => {
-                    self.enter_item(c)?;
-                }
-                ck if ck == 'g' => lst.select_first(c),
-                ck if ck == 'd' => {
-                    if let Some(t) = lst.selected() {
-                        store::get().delete_todo(t.todo.id).unwrap();
-                        lst.delete_selected(c);
-                    }
-                }
-                ck if ck == 'j' || ck == key::KeyCode::Down => lst.select_next(c),
-                ck if ck == 'k' || ck == key::KeyCode::Up => lst.select_prev(c),
-                ck if ck == ' ' || ck == key::KeyCode::PageDown => lst.page_down(c),
-                ck if ck == key::KeyCode::PageUp => lst.page_up(c),
-                ck if ck == 'q' => c.exit(0),
-                _ => return Ok(Outcome::Ignore),
-            };
-        }
-        c.taint_tree(self);
-        Ok(Outcome::Handle)
+            Outcome::Ignore
+        })
     }
 
     fn children(
@@ -216,8 +202,24 @@ pub fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
     cnpy.load_commands::<List<TodoItem>>();
     cnpy.load_commands::<Todo>();
+    cnpy.bind_key('q', "", "root::quit()")?;
+
+    cnpy.bind_key('d', "", "todo::delete_item()")?;
+
     cnpy.bind_key('a', "", "todo::enter_item()")?;
     cnpy.bind_key('g', "", "list::select_first()")?;
+
+    cnpy.bind_key('j', "", "list::select_next()")?;
+    cnpy.bind_key(key::KeyCode::Down, "", "list::select_next()")?;
+    cnpy.bind_mouse(mouse::Action::ScrollDown, "", "list::select_next()")?;
+
+    cnpy.bind_key('k', "", "list::select_prev()")?;
+    cnpy.bind_key(key::KeyCode::Up, "", "list::select_prev()")?;
+    cnpy.bind_mouse(mouse::Action::ScrollUp, "", "list::select_prev()")?;
+
+    cnpy.bind_key(' ', "", "list::page_down()")?;
+    cnpy.bind_key(key::KeyCode::PageDown, "", "list::page_down()")?;
+    cnpy.bind_key(key::KeyCode::PageUp, "", "list::page_up()")?;
 
     if args.commands {
         cnpy.print_command_table(&mut std::io::stdout())?;
