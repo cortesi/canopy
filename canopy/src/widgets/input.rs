@@ -144,16 +144,28 @@ impl Node for InputLine {
 
     fn handle_key(&mut self, _c: &mut dyn Core, k: key::Key) -> Result<Outcome> {
         match k {
-            key::Key(_, key::KeyCode::Left) => {
+            key::Key {
+                mods: _,
+                key: key::KeyCode::Left,
+            } => {
                 self.textbuf.left();
             }
-            key::Key(_, key::KeyCode::Right) => {
+            key::Key {
+                mods: _,
+                key: key::KeyCode::Right,
+            } => {
                 self.textbuf.right();
             }
-            key::Key(_, key::KeyCode::Backspace) => {
+            key::Key {
+                mods: _,
+                key: key::KeyCode::Backspace,
+            } => {
                 self.textbuf.backspace();
             }
-            key::Key(_, key::KeyCode::Char(c)) => {
+            key::Key {
+                mods: _,
+                key: key::KeyCode::Char(c),
+            } => {
                 self.textbuf.insert(c);
             }
             _ => return Ok(Outcome::Ignore),

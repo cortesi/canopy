@@ -227,9 +227,9 @@ fn translate_button(b: cevent::MouseButton) -> mouse::Button {
 /// Translate a crossterm event into a canopy event
 fn translate_event(e: cevent::Event) -> Event {
     match e {
-        cevent::Event::Key(k) => Event::Key(key::Key(
-            translate_key_modifiers(k.modifiers),
-            match k.code {
+        cevent::Event::Key(k) => Event::Key(key::Key {
+            mods: translate_key_modifiers(k.modifiers),
+            key: match k.code {
                 cevent::KeyCode::Backspace => key::KeyCode::Backspace,
                 cevent::KeyCode::Enter => key::KeyCode::Enter,
                 cevent::KeyCode::Left => key::KeyCode::Left,
@@ -245,12 +245,11 @@ fn translate_event(e: cevent::Event) -> Event {
                 cevent::KeyCode::Delete => key::KeyCode::Delete,
                 cevent::KeyCode::Insert => key::KeyCode::Insert,
                 cevent::KeyCode::F(x) => key::KeyCode::F(x),
-                // FIXME: Do something more principled than panicking here!
-                cevent::KeyCode::Char(c) => key::KeyCode::Char(c.to_lowercase().next().unwrap()),
+                cevent::KeyCode::Char(c) => key::KeyCode::Char(c),
                 cevent::KeyCode::Null => key::KeyCode::Null,
                 cevent::KeyCode::Esc => key::KeyCode::Esc,
             },
-        )),
+        }),
         cevent::Event::Mouse(m) => {
             let mut button = mouse::Button::None;
             let action = match m.kind {

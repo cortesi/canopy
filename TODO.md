@@ -5,8 +5,9 @@
 ## 0.1
 
 - Key binding management system
-  - Port all examples to key bindings
   - Resolve the FIXMEs related to lowercase conversion of chars
+
+  - Port all examples to key bindings
   - Consolidate input events
   - Input to and from string conversion
   - Commands improvements

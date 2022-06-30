@@ -17,6 +17,15 @@ pub enum Input {
     Key(Key),
 }
 
+impl Input {
+    fn normalize(&self) -> Input {
+        match *self {
+            Input::Mouse(m) => Input::Mouse(m.clone()),
+            Input::Key(k) => Input::Key(k.normalize()),
+        }
+    }
+}
+
 /// A InputMode contains a set of bound keys and mouse actions.
 #[derive(Debug)]
 pub struct InputMode {
@@ -43,6 +52,7 @@ impl InputMode {
 
     /// Resolve a key with a given path filter to a script.
     pub fn resolve(&self, path: &Path, input: Input) -> Option<script::ScriptId> {
+        let input = input.normalize();
         let mut ret = (0, None);
         for k in self.inputs.get(&input)? {
             if let Some(p) = k.pathmatch.check(path) {
@@ -121,7 +131,29 @@ impl InputMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{script, Result};
+    use crate::{event::key, script, Result};
+
+    #[test]
+    fn caseconfusion() -> Result<()> {
+        let mut e = script::ScriptHost::new();
+        let mut m = InputMode::new();
+        let a_foo = e.compile("x()")?;
+
+        m.insert(PathMatcher::new("foo")?, Input::Key('A'.into()), a_foo);
+
+        assert_eq!(
+            m.resolve(&"foo".into(), Input::Key(key::Shift + 'A'))
+                .unwrap(),
+            a_foo
+        );
+        assert_eq!(
+            m.resolve(&"foo".into(), Input::Key(key::Shift + 'a'))
+                .unwrap(),
+            a_foo
+        );
+
+        Ok(())
+    }
 
     #[test]
     fn keymode() -> Result<()> {
