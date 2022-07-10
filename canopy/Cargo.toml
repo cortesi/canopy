@@ -6,7 +6,7 @@ edition = "2021"
 
 
 [dependencies]
-crossterm = "0.23.1"
+crossterm = "0.24.0"
 pad = "0.1.6"
 textwrap = "0.15.0"
 color-backtrace = "0.5.1"

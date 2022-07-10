@@ -36,8 +36,6 @@
     - Maybe enable inspector with an env variable?
   - Add node names for relevant errors
   - Add warning logs where needed to aid debugging
-- Remote commander
-  - Standard way to execute scripts within an application remotely
 - Core
   - Improve ergonomics - adding a function that returns a handle which re-enters rendering?
 - Renderer
@@ -78,6 +76,8 @@
 - Termion backend
   - Extract a common set of backend conversion traits
 - use half-blocks to improve smoothness of scrollbars
+- Remote commander
+  - Standard way to execute scripts within an application remotely
 
 
 # User traps and inelegances
