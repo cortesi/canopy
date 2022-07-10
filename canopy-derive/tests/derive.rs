@@ -33,6 +33,8 @@ fn commands() {
 
     impl canopy::Node for Foo {}
 
+    struct Opaque {}
+
     #[derive_commands]
     impl Foo {
         #[command]
@@ -52,6 +54,12 @@ fn commands() {
         #[command]
         fn c(&mut self, _core: &dyn canopy::Core) {
             self.c_triggered = true;
+        }
+
+        #[command(ignore_result)]
+        fn d(&mut self, _core: &dyn canopy::Core) -> Opaque {
+            self.c_triggered = true;
+            Opaque {}
         }
     }
 
@@ -73,6 +81,12 @@ fn commands() {
             canopy::commands::CommandDefinition {
                 node: "foo".try_into().unwrap(),
                 command: "c".to_string(),
+                docs: "".to_string(),
+                return_type: ReturnTypes::Void,
+            },
+            canopy::commands::CommandDefinition {
+                node: "foo".try_into().unwrap(),
+                command: "d".to_string(),
                 docs: "".to_string(),
                 return_type: ReturnTypes::Void,
             }

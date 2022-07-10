@@ -112,6 +112,8 @@ where
         }
     }
 
+    /// Delete the currently selected item
+    #[command(ignore_result)]
     pub fn delete_selected(&mut self, core: &dyn Core) -> Option<N> {
         self.delete_item(core, self.offset)
     }

@@ -5,17 +5,13 @@
 ## 0.1
 
 - Key binding management system
-  - Resolve the FIXMEs related to lowercase conversion of chars
-
-  - Port all examples to key bindings
   - Consolidate input events
   - Input to and from string conversion
+  - Some way for widgets to expose default bindings
   - Commands improvements
-    - Optional Core argument
+    - Optional Core argument?
     - Arguments
     - Return types
-      - Let returns that are not Results be ignored for versatility
-        - Make list delete_selected a command and use it throughout
       - Result<Outcome>?
 - Root object
   - Manage modal windows
@@ -54,9 +50,6 @@
 - Ergonomics:
   - Better error returns
     - consider https://github.com/zkat/miette
-  - Make module structure better
-    - The import situation is a bit confusing
-    - It's not clear where to find everything
 - ctrl-c/ctrl-z
 - Widgets
   - Editor
@@ -75,6 +68,9 @@
   - focus_next wraps, but focus_prev doesn't
   - Numeric types and constant conversions in the geom module
   - The Outcome type
+  - Improve module structure
+    - The import situation is a bit confusing
+    - It's not clear where to find everything
 
 ## 0.2
 

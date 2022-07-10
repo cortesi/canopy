@@ -126,18 +126,6 @@ impl Node for Intervals {
         true
     }
 
-    fn handle_key(&mut self, c: &mut dyn Core, k: key::Key) -> Result<Outcome> {
-        let lst = &mut self.content.child;
-        match k {
-            ck if ck == 'd' => {
-                lst.delete_selected(c);
-            }
-            _ => return Ok(Outcome::Ignore),
-        };
-        c.taint_tree(self);
-        Ok(Outcome::Handle)
-    }
-
     fn children(self: &mut Self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         f(&mut self.statusbar)?;
         f(&mut self.content)?;
@@ -161,6 +149,7 @@ pub fn main() -> Result<()> {
     cnpy.bind_key('a', "intervals", "intervals::add_item()")?;
     cnpy.bind_key('g', "intervals", "list::select_first()")?;
     cnpy.bind_key('j', "intervals", "list::select_next()")?;
+    cnpy.bind_key('d', "intervals", "list::delete_selected()")?;
     cnpy.bind_mouse(
         mouse::Action::ScrollDown,
         "intervals",

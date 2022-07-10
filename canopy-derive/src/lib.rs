@@ -1,6 +1,36 @@
 use litrs::StringLit;
+use proc_macro_error::*;
 use quote::quote;
+use structmeta::StructMeta;
 use syn::{parse_macro_input, DeriveInput};
+
+type Result<T> = std::result::Result<T, Error>;
+
+#[derive(PartialEq, Eq, thiserror::Error, Debug, Clone)]
+enum Error {
+    Parse(String),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl Into<Diagnostic> for Error {
+    fn into(self) -> Diagnostic {
+        Diagnostic::spanned(
+            proc_macro2::Span::call_site(),
+            Level::Error,
+            format!("{}", self),
+        )
+    }
+}
+
+#[derive(Debug, Default, StructMeta)]
+struct CommandArgs {
+    ignore_result: bool,
+}
 
 /// Derive an implementation of the StatefulNode trait for a struct. The struct
 /// should have a `self.state` attribute of type `NodeState`.
@@ -23,6 +53,7 @@ pub fn derive_statefulnode(input: proc_macro::TokenStream) -> proc_macro::TokenS
                     n.clone()
                 } else {
                     canopy::NodeName::convert(#rname)
+
                 }
             }
         }
@@ -50,36 +81,43 @@ struct Command {
     command: String,
     docs: String,
     ret: ReturnTypes,
+    cargs: CommandArgs,
 }
 
 impl Command {
     fn invocation(&self) -> proc_macro2::TokenStream {
         let ident = syn::Ident::new(&self.command, proc_macro2::Span::call_site());
-        match self.ret {
-            ReturnTypes::Void => {
-                quote! { self.#ident(core) }
-            }
-            ReturnTypes::Result => {
-                quote! {self.#ident(core)? }
+        if self.cargs.ignore_result {
+            quote! { let _ = self.#ident(core); }
+        } else {
+            match self.ret {
+                ReturnTypes::Void => {
+                    quote! { self.#ident(core) }
+                }
+                ReturnTypes::Result => {
+                    quote! {self.#ident(core)? }
+                }
             }
         }
     }
 }
 
-fn parse_command_method(method: &syn::ImplItemMethod) -> Option<Command> {
-    let mut is_command = false;
+fn parse_command_method(method: &syn::ImplItemMethod) -> Result<Option<Command>> {
     let mut docs = vec![];
 
-    let ret = match &method.sig.output {
-        syn::ReturnType::Default => ReturnTypes::Void,
-        syn::ReturnType::Type(_, _) => ReturnTypes::Result,
-    };
-
+    let mut args: Option<CommandArgs> = None;
     for a in &method.attrs {
         if a.path.is_ident("command") {
-            is_command = true;
-        }
-        if a.path.is_ident("doc") {
+            args = Some(if a.tokens.is_empty() {
+                CommandArgs::default()
+            } else {
+                a.parse_args().map_err(|e| Error::Parse(e.to_string()))?
+            });
+
+            println!("{:?}", args);
+
+            // println!("XXX: {:?}", a.parse_args());
+        } else if a.path.is_ident("doc") {
             for t in a.tokens.clone() {
                 if let proc_macro2::TokenTree::Literal(l) = t {
                     if let Ok(lit) = StringLit::try_from(l) {
@@ -89,20 +127,30 @@ fn parse_command_method(method: &syn::ImplItemMethod) -> Option<Command> {
             }
         }
     }
-    if is_command {
-        Some(Command {
+    if let Some(a) = args {
+        let ret = if a.ignore_result {
+            ReturnTypes::Void
+        } else {
+            match &method.sig.output {
+                syn::ReturnType::Default => ReturnTypes::Void,
+                syn::ReturnType::Type(_, _) => ReturnTypes::Result,
+            }
+        };
+        Ok(Some(Command {
             command: method.sig.ident.to_string(),
             docs: docs.join("\n"),
+            cargs: a,
             ret,
-        })
+        }))
     } else {
-        None
+        Ok(None)
     }
 }
 
 /// Derive an implementation of the `CommandNode` trait. This macro should be added
 /// to the impl block of a struct. All methods that are annotated with `command`
 /// are added as commands, with their doc comments as the command documentation.
+#[proc_macro_error]
 #[proc_macro_attribute]
 pub fn derive_commands(
     _attr: proc_macro::TokenStream,
@@ -125,7 +173,7 @@ pub fn derive_commands(
     let mut commands = vec![];
     for i in input.items {
         if let syn::ImplItem::Method(m) = i {
-            if let Some(command) = parse_command_method(&m) {
+            if let Some(command) = parse_command_method(&m).unwrap_or_abort() {
                 commands.push(command);
             }
         }
@@ -178,6 +226,13 @@ pub fn derive_commands(
     out.into()
 }
 
+/// Mark a method as a command. This macro should be used to decorate methods in
+/// an `impl` block that uses the `derive_commands` macro. A number of optional
+/// arguments can be passed:
+///
+/// - `ignore_result` tells Canopy that the return value of the method should
+///   not be exposed through the command mechanism. This is useful for dual-use
+///   methods that may return values when called from Rust.
 #[proc_macro_attribute]
 pub fn command(
     _attr: proc_macro::TokenStream,

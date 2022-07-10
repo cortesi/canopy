@@ -124,12 +124,6 @@ impl ListGym {
 
     #[command]
     /// Add an item at the end of the list
-    fn delete_selected(&mut self, c: &dyn Core) {
-        self.content.child.delete_selected(c);
-    }
-
-    #[command]
-    /// Add an item at the end of the list
     fn clear(&mut self, _c: &dyn Core) {
         self.content.child.clear();
     }
@@ -184,14 +178,16 @@ pub fn main() -> Result<()> {
     cnpy.load_commands::<ListGym>();
     cnpy.load_commands::<Root<ListGym>>();
 
-    cnpy.bind_key('a', "root", "listgym::add_item()")?;
-    cnpy.bind_key('A', "root", "listgym::append_item()")?;
-    cnpy.bind_key('C', "root", "listgym::clear()")?;
-    cnpy.bind_key('d', "root", "listgym::delete_selected()")?;
+    cnpy.print_command_table(&mut std::io::stdout())?;
+
+    cnpy.bind_key('a', "root", "list_gym::add_item()")?;
+    cnpy.bind_key('A', "root", "list_gym::append_item()")?;
+    cnpy.bind_key('C', "root", "list_gym::clear()")?;
     cnpy.bind_key('q', "root", "root::quit()")?;
 
     cnpy.bind_key('g', "root", "list::select_first()")?;
     cnpy.bind_key('G', "root", "list::select_last()")?;
+    cnpy.bind_key('d', "root", "list::delete_selected()")?;
 
     cnpy.bind_key('j', "root", "list::select_next()")?;
     cnpy.bind_mouse(
