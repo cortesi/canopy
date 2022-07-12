@@ -5,8 +5,6 @@
 ## 0.1
 
 - Key binding management system
-  - Key binding ergonomics
-    - Better initialization process in code for default key bindings
   - Some way for widgets to expose default bindings
 
   - Input to and from string conversion

@@ -197,27 +197,25 @@ pub fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
     cnpy.load_commands::<List<TodoItem>>();
     cnpy.load_commands::<Todo>();
-    cnpy.bind_key('q', "", "root::quit()")?;
 
-    cnpy.bind_key('d', "", "todo::delete_item()")?;
-
-    cnpy.bind_key('a', "", "todo::enter_item()")?;
-    cnpy.bind_key('g', "", "list::select_first()")?;
-
-    cnpy.bind_key('j', "", "list::select_next()")?;
-    cnpy.bind_key(key::KeyCode::Down, "", "list::select_next()")?;
-    cnpy.bind_mouse(mouse::Action::ScrollDown, "", "list::select_next()")?;
-
-    cnpy.bind_key('k', "", "list::select_prev()")?;
-    cnpy.bind_key(key::KeyCode::Up, "", "list::select_prev()")?;
-    cnpy.bind_mouse(mouse::Action::ScrollUp, "", "list::select_prev()")?;
-
-    cnpy.bind_key(' ', "", "list::page_down()")?;
-    cnpy.bind_key(key::KeyCode::PageDown, "", "list::page_down()")?;
-    cnpy.bind_key(key::KeyCode::PageUp, "", "list::page_up()")?;
-
-    cnpy.bind_key(key::KeyCode::Enter, "input_line", "todo::accept_add()")?;
-    cnpy.bind_key(key::KeyCode::Esc, "input_line", "todo::cancel_add()")?;
+    canopy::MapBuilder::new()
+        .key('q', "root::quit()")
+        .key('d', "todo::delete_item()")
+        .key('a', "todo::enter_item()")
+        .key('g', "list::select_first()")
+        .key('j', "list::select_next()")
+        .key(key::KeyCode::Down, "list::select_next()")
+        .key('k', "list::select_prev()")
+        .key(key::KeyCode::Up, "list::select_prev()")
+        .key(' ', "list::page_down()")
+        .key(key::KeyCode::PageDown, "list::page_down()")
+        .key(key::KeyCode::PageUp, "list::page_up()")
+        .mouse(mouse::Action::ScrollUp, "list::select_prev()")
+        .mouse(mouse::Action::ScrollDown, "list::select_next()")
+        .with_path("input_line")
+        .key(key::KeyCode::Enter, "todo::accept_add()")
+        .key(key::KeyCode::Esc, "todo::cancel_add()")
+        .build(&mut cnpy)?;
 
     if args.commands {
         cnpy.print_command_table(&mut std::io::stdout())?;
