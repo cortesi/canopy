@@ -121,6 +121,24 @@ impl Todo {
         Ok(())
     }
 
+    /// Accept the new item we're currently editing.
+    #[command]
+    fn accept_add(&mut self, _: &mut dyn Core) -> canopy::Result<()> {
+        if let Some(adder) = &mut self.adder {
+            let item = store::get().add_todo(&adder.child.text()).unwrap();
+            self.content.child.append(TodoItem::new(item));
+            self.adder = None;
+        }
+        Ok(())
+    }
+
+    /// Close the add item editor.
+    #[command]
+    fn cancel_add(&mut self, _: &mut dyn Core) -> canopy::Result<()> {
+        self.adder = None;
+        Ok(())
+    }
+
     fn load(&mut self) -> canopy::Result<()> {
         let s = store::get().todos().unwrap();
         let todos = s.iter().map(|x| TodoItem::new(x.clone()));
@@ -147,29 +165,6 @@ impl Node for Todo {
 
     fn accept_focus(&mut self) -> bool {
         true
-    }
-
-    fn handle_key(&mut self, c: &mut dyn Core, k: key::Key) -> canopy::Result<Outcome> {
-        let lst = &mut self.content.child;
-        Ok(if let Some(adder) = &mut self.adder {
-            match k {
-                ck if ck == key::KeyCode::Enter => {
-                    let item = store::get().add_todo(&adder.child.text()).unwrap();
-                    lst.append(TodoItem::new(item));
-                    self.adder = None;
-                    c.taint_tree(self);
-                    Outcome::Handle
-                }
-                ck if ck == key::KeyCode::Esc => {
-                    self.adder = None;
-                    c.taint_tree(self);
-                    Outcome::Handle
-                }
-                _ => Outcome::Ignore,
-            }
-        } else {
-            Outcome::Ignore
-        })
     }
 
     fn children(
@@ -220,6 +215,9 @@ pub fn main() -> Result<()> {
     cnpy.bind_key(' ', "", "list::page_down()")?;
     cnpy.bind_key(key::KeyCode::PageDown, "", "list::page_down()")?;
     cnpy.bind_key(key::KeyCode::PageUp, "", "list::page_up()")?;
+
+    cnpy.bind_key(key::KeyCode::Enter, "input_line", "todo::accept_add()")?;
+    cnpy.bind_key(key::KeyCode::Esc, "input_line", "todo::cancel_add()")?;
 
     if args.commands {
         cnpy.print_command_table(&mut std::io::stdout())?;

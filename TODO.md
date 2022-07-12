@@ -5,14 +5,15 @@
 ## 0.1
 
 - Key binding management system
-  - Consolidate input events
-  - Input to and from string conversion
+  - Key binding ergonomics
+    - Better initialization process in code for default key bindings
   - Some way for widgets to expose default bindings
-  - Commands improvements
-    - Optional Core argument?
-    - Arguments
-    - Return types
-      - Result<Outcome>?
+
+  - Input to and from string conversion
+- Commands improvements
+  - Arguments
+  - Return types
+    - Result<Outcome>?
 - Root object
   - Manage modal windows
   - Command help system
@@ -51,6 +52,7 @@
 - ctrl-c/ctrl-z
 - Widgets
   - Editor
+    - Wrap Helix?
   - Pad
   - Center
   - text line widget
@@ -78,7 +80,6 @@
 - use half-blocks to improve smoothness of scrollbars
 - Remote commander
   - Standard way to execute scripts within an application remotely
-
 
 # User traps and inelegances
 

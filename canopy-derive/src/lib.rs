@@ -113,10 +113,6 @@ fn parse_command_method(method: &syn::ImplItemMethod) -> Result<Option<Command>>
             } else {
                 a.parse_args().map_err(|e| Error::Parse(e.to_string()))?
             });
-
-            println!("{:?}", args);
-
-            // println!("XXX: {:?}", a.parse_args());
         } else if a.path.is_ident("doc") {
             for t in a.tokens.clone() {
                 if let proc_macro2::TokenTree::Literal(l) = t {

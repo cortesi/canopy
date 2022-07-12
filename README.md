@@ -5,7 +5,6 @@
 Canopy is is not yet ready for human consumption! I'll announce a release as
 soon as I feel it's worth anyone else's time.**
 
-
 <center>
     <img width=350 src=".assets/shyness.jpg">
 </center>
