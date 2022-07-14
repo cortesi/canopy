@@ -3,10 +3,10 @@
 
 pub use canopy_derive::{command, derive_commands};
 
+mod binder;
 mod canopy;
 mod control;
 mod inputmap;
-mod mapbuilder;
 mod node;
 mod poll;
 mod render;
@@ -28,10 +28,10 @@ pub mod viewport;
 pub mod widgets;
 
 pub use crate::canopy::*;
+pub use binder::*;
 pub use commands::{CommandDefinition, CommandNode};
 pub use control::BackendControl;
 pub use error::{Error, Result};
-pub use mapbuilder::*;
 pub use node::*;
 pub use render::Render;
 pub use root::*;

@@ -14,16 +14,18 @@ struct MouseBinding {
     script: String,
 }
 
-pub struct MapBuilder {
+/// Binder provides an ergonomic way to specify a set of key bindings using a
+/// builder patttern.
+pub struct Binder {
     keys: Vec<KeyBinding>,
     mice: Vec<MouseBinding>,
     mode: String,
     path_filter: String,
 }
 
-impl MapBuilder {
+impl Binder {
     pub fn new() -> Self {
-        MapBuilder {
+        Binder {
             keys: vec![],
             mice: vec![],
             mode: "".into(),

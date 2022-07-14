@@ -681,20 +681,23 @@ impl Canopy {
         let v = walk_focus_path_e(self.focus_gen, root, &mut |x| -> Result<
             Walk<Option<(script::ScriptId, NodeId)>>,
         > {
-            Ok(match x.handle_key(self, k)? {
-                Outcome::Handle => {
-                    self.taint(x);
-                    Walk::Handle(None)
-                }
-                Outcome::Ignore => {
-                    if let Some(s) = self.keymap.resolve(&path, inputmap::Input::Key(k.into())) {
-                        Walk::Handle(Some((s, x.id())))
-                    } else {
-                        path.pop();
-                        Walk::Continue
+            tracing::info!("path: {:?}", path);
+            Ok(
+                if let Some(s) = self.keymap.resolve(&path, inputmap::Input::Key(k.into())) {
+                    Walk::Handle(Some((s, x.id())))
+                } else {
+                    match x.handle_key(self, k)? {
+                        Outcome::Handle => {
+                            self.taint(x);
+                            Walk::Handle(None)
+                        }
+                        Outcome::Ignore => {
+                            path.pop();
+                            Walk::Continue
+                        }
                     }
-                }
-            })
+                },
+            )
         })?;
         if let Some(Some((sid, nid))) = v {
             self.run_script(root, nid, sid)?;
@@ -849,23 +852,40 @@ mod tests {
                 "",
                 c.script_host.compile("r::c_root()")?,
             )?;
+            c.keymap.bind(
+                "",
+                inputmap::Input::Key('x'.into()),
+                "ba/",
+                c.script_host.compile("r::c_root()")?,
+            )?;
 
             c.set_focus(&mut root.a.a);
-
             c.key(&mut root, 'a')?;
             let s = get_state();
-            assert_eq!(s.path, vec!["ba_la@key->ignore", "ba_la.c_leaf()"]);
+            assert_eq!(s.path, vec!["ba_la.c_leaf()"]);
 
             reset_state();
             c.key(&mut root, 'r')?;
             let s = get_state();
-            assert_eq!(s.path, vec!["ba_la@key->ignore", "r.c_root()"]);
+            assert_eq!(s.path, vec!["r.c_root()"]);
 
             reset_state();
             c.set_focus(&mut root.a);
             c.key(&mut root, 'a')?;
             let s = get_state();
-            assert_eq!(s.path, vec!["ba@key->ignore", "ba_la.c_leaf()"]);
+            assert_eq!(s.path, vec!["ba_la.c_leaf()"]);
+
+            reset_state();
+            c.set_focus(&mut root.a.a);
+            c.key(&mut root, 'x')?;
+            let s = get_state();
+            assert_eq!(s.path, vec!["ba_la@key->ignore", "r.c_root()"]);
+
+            reset_state();
+            c.set_focus(&mut root);
+            c.key(&mut root, 'x')?;
+            let s = get_state();
+            assert_eq!(s.path, vec!["r@key->ignore"]);
 
             Ok(())
         })?;

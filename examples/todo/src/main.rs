@@ -198,7 +198,8 @@ pub fn main() -> Result<()> {
     cnpy.load_commands::<List<TodoItem>>();
     cnpy.load_commands::<Todo>();
 
-    canopy::MapBuilder::new()
+    canopy::Binder::new()
+        .with_path("todo/")
         .key('q', "root::quit()")
         .key('d', "todo::delete_item()")
         .key('a', "todo::enter_item()")
