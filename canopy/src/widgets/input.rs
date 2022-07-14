@@ -100,15 +100,15 @@ impl TextBuf {
 
 /// A single input line, one character high.
 #[derive(StatefulNode)]
-pub struct InputLine {
+pub struct Input {
     state: NodeState,
     pub textbuf: TextBuf,
 }
 
 #[derive_commands]
-impl InputLine {
+impl Input {
     pub fn new(txt: &str) -> Self {
-        InputLine {
+        Input {
             state: NodeState::default(),
             textbuf: TextBuf::new(txt),
         }
@@ -117,34 +117,34 @@ impl InputLine {
         self.textbuf.text()
     }
 
+    /// Move the cursor left.
     #[command]
-    fn left(&mut self, _: &dyn Core) -> Result<()> {
+    fn left(&mut self, _: &dyn Core) {
         self.textbuf.left();
-        Ok(())
     }
 
+    /// Move the cursor right.
     #[command]
-    fn right(&mut self, _: &dyn Core) -> Result<()> {
+    fn right(&mut self, _: &dyn Core) {
         self.textbuf.right();
-        Ok(())
     }
 
+    /// Delete a character at the input location.
     #[command]
-    fn backspace(&mut self, _: &dyn Core) -> Result<()> {
+    fn backspace(&mut self, _: &dyn Core) {
         self.textbuf.backspace();
-        Ok(())
     }
 }
 
-impl DefaultBindings for InputLine {
+impl DefaultBindings for Input {
     fn defaults(b: Binder) -> Binder {
-        b.key(key::KeyCode::Left, "input_line::left()")
-            .key(key::KeyCode::Right, "input_line::right()")
-            .key(key::KeyCode::Backspace, "input_line::backspace()")
+        b.key(key::KeyCode::Left, "input::left()")
+            .key(key::KeyCode::Right, "input::right()")
+            .key(key::KeyCode::Backspace, "input::backspace()")
     }
 }
 
-impl Node for InputLine {
+impl Node for Input {
     fn accept_focus(&mut self) -> bool {
         true
     }

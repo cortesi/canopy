@@ -48,6 +48,7 @@
 - Ergonomics:
   - Better error returns
     - consider https://github.com/zkat/miette
+  - script execution errors need to be improved
 - ctrl-c/ctrl-z
 - Widgets
   - Editor

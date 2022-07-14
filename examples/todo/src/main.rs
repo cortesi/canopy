@@ -7,7 +7,7 @@ use canopy::{
     geom::{Expanse, Rect},
     inspector::Inspector,
     style::solarized,
-    widgets::{frame, list::*, InputLine, Text},
+    widgets::{frame, list::*, Input, Text},
     *,
 };
 
@@ -82,7 +82,7 @@ struct Todo {
     state: NodeState,
     content: frame::Frame<List<TodoItem>>,
     statusbar: StatusBar,
-    adder: Option<frame::Frame<InputLine>>,
+    adder: Option<frame::Frame<Input>>,
 }
 
 #[derive_commands]
@@ -103,7 +103,7 @@ impl Todo {
     /// Open the editor to enter a new todo item.
     #[command]
     fn enter_item(&mut self, c: &mut dyn Core) -> canopy::Result<()> {
-        let mut adder = frame::Frame::new(InputLine::new(""));
+        let mut adder = frame::Frame::new(Input::new(""));
         c.set_focus(&mut adder.child);
         self.adder = Some(adder);
         c.taint(self);
@@ -151,12 +151,11 @@ impl Todo {
 
 impl Node for Todo {
     fn render(&mut self, _c: &dyn Core, _: &mut Render) -> canopy::Result<()> {
-        let vp = self.vp();
-        let (a, b) = vp.carve_vend(1);
+        let (a, b) = self.vp().carve_vend(1);
         fit(&mut self.statusbar, b)?;
         fit(&mut self.content, a)?;
 
-        let a = vp.screen_rect();
+        let a = self.vp().screen_rect();
         if let Some(add) = &mut self.adder {
             place(add, Rect::new(a.tl.x + 2, a.tl.y + a.h / 2, a.w - 4, 3))?;
         }
@@ -197,7 +196,7 @@ pub fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
     cnpy.load_commands::<List<TodoItem>>();
     cnpy.load_commands::<Todo>();
-    cnpy.load_commands::<InputLine>();
+    cnpy.load_commands::<Input>();
 
     canopy::Binder::new()
         .with_path("todo/")
@@ -214,8 +213,8 @@ pub fn main() -> Result<()> {
         .key(key::KeyCode::PageUp, "list::page_up()")
         .mouse(mouse::Action::ScrollUp, "list::select_prev()")
         .mouse(mouse::Action::ScrollDown, "list::select_next()")
-        .with_path("input_line")
-        .defaults::<InputLine>()
+        .with_path("input")
+        .defaults::<Input>()
         .key(key::KeyCode::Enter, "todo::accept_add()")
         .key(key::KeyCode::Esc, "todo::cancel_add()")
         .build(&mut cnpy)?;
