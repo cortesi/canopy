@@ -650,20 +650,22 @@ impl Canopy {
                     location: x.vp().screen_rect().rebase_point(m.location)?,
                 },
             )?;
-            Ok(match hdl {
-                Outcome::Handle => {
-                    self.taint(x);
-                    Walk::Handle(None)
-                }
-                Outcome::Ignore => {
-                    if let Some(s) = self.keymap.resolve(&path, inputmap::Input::Mouse(m.into())) {
-                        Walk::Handle(Some((s, x.id())))
-                    } else {
-                        path.pop();
-                        Walk::Continue
+            Ok(
+                if let Some(s) = self.keymap.resolve(&path, inputmap::Input::Mouse(m.into())) {
+                    Walk::Handle(Some((s, x.id())))
+                } else {
+                    match hdl {
+                        Outcome::Handle => {
+                            self.taint(x);
+                            Walk::Handle(None)
+                        }
+                        Outcome::Ignore => {
+                            path.pop();
+                            Walk::Continue
+                        }
                     }
-                }
-            })
+                },
+            )
         })?;
         if let Some(Some((sid, nid))) = v {
             self.run_script(root, nid, sid)?;
@@ -681,7 +683,6 @@ impl Canopy {
         let v = walk_focus_path_e(self.focus_gen, root, &mut |x| -> Result<
             Walk<Option<(script::ScriptId, NodeId)>>,
         > {
-            tracing::info!("path: {:?}", path);
             Ok(
                 if let Some(s) = self.keymap.resolve(&path, inputmap::Input::Key(k.into())) {
                     Walk::Handle(Some((s, x.id())))
