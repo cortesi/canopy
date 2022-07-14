@@ -116,6 +116,32 @@ impl InputLine {
     pub fn text(&self) -> String {
         self.textbuf.text()
     }
+
+    #[command]
+    fn left(&mut self, _: &dyn Core) -> Result<()> {
+        self.textbuf.left();
+        Ok(())
+    }
+
+    #[command]
+    fn right(&mut self, _: &dyn Core) -> Result<()> {
+        self.textbuf.right();
+        Ok(())
+    }
+
+    #[command]
+    fn backspace(&mut self, _: &dyn Core) -> Result<()> {
+        self.textbuf.backspace();
+        Ok(())
+    }
+}
+
+impl DefaultBindings for InputLine {
+    fn defaults(b: Binder) -> Binder {
+        b.key(key::KeyCode::Left, "input_line::left()")
+            .key(key::KeyCode::Right, "input_line::right()")
+            .key(key::KeyCode::Backspace, "input_line::backspace()")
+    }
 }
 
 impl Node for InputLine {
@@ -146,31 +172,13 @@ impl Node for InputLine {
         match k {
             key::Key {
                 mods: _,
-                key: key::KeyCode::Left,
-            } => {
-                self.textbuf.left();
-            }
-            key::Key {
-                mods: _,
-                key: key::KeyCode::Right,
-            } => {
-                self.textbuf.right();
-            }
-            key::Key {
-                mods: _,
-                key: key::KeyCode::Backspace,
-            } => {
-                self.textbuf.backspace();
-            }
-            key::Key {
-                mods: _,
                 key: key::KeyCode::Char(c),
             } => {
                 self.textbuf.insert(c);
+                Ok(Outcome::Handle)
             }
             _ => return Ok(Outcome::Ignore),
-        };
-        Ok(Outcome::Handle)
+        }
     }
 
     fn fit(&mut self, sz: Expanse) -> Result<Expanse> {

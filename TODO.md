@@ -5,10 +5,11 @@
 ## 0.1
 
 - Key binding management system
-  - Some way for widgets to expose default bindings
-
   - Input to and from string conversion
 - Commands improvements
+  - Optional core argument
+    - This will make "dual-purpose" functions that are intended both to be
+      called from scripts and in code more ergonomic
   - Arguments
   - Return types
     - Result<Outcome>?
@@ -23,10 +24,10 @@
 - Better debugging and monitoring story
   - Inspector GUI
     - Logs
+      - Follow
       - Level selection
       - Coloration
       - Filtering
-      - Follow
       - Search
     - Command execution
     - Shrink/specify app area

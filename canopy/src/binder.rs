@@ -33,6 +33,13 @@ impl Binder {
         }
     }
 
+    pub fn defaults<T>(self) -> Self
+    where
+        T: DefaultBindings,
+    {
+        T::defaults(self)
+    }
+
     pub fn with_mode(mut self, m: &str) -> Self {
         self.mode = m.to_string();
         self
@@ -78,4 +85,8 @@ impl Binder {
         }
         Ok(())
     }
+}
+
+pub trait DefaultBindings {
+    fn defaults(b: Binder) -> Binder;
 }

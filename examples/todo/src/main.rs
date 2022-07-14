@@ -197,6 +197,7 @@ pub fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
     cnpy.load_commands::<List<TodoItem>>();
     cnpy.load_commands::<Todo>();
+    cnpy.load_commands::<InputLine>();
 
     canopy::Binder::new()
         .with_path("todo/")
@@ -214,6 +215,7 @@ pub fn main() -> Result<()> {
         .mouse(mouse::Action::ScrollUp, "list::select_prev()")
         .mouse(mouse::Action::ScrollDown, "list::select_next()")
         .with_path("input_line")
+        .defaults::<InputLine>()
         .key(key::KeyCode::Enter, "todo::accept_add()")
         .key(key::KeyCode::Esc, "todo::cancel_add()")
         .build(&mut cnpy)?;
