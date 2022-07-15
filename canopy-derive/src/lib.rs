@@ -49,12 +49,7 @@ pub fn derive_statefulnode(input: proc_macro::TokenStream) -> proc_macro::TokenS
                 &self.state
             }
             fn name(&self) -> canopy::NodeName {
-                if let Some(n) = &self.state.name {
-                    n.clone()
-                } else {
-                    canopy::NodeName::convert(#rname)
-
-                }
+                canopy::NodeName::convert(#rname)
             }
         }
     };

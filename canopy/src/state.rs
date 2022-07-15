@@ -106,10 +106,6 @@ pub struct NodeState {
     // Has this node been initialized? This is used to determine if we need to
     // call the poll function during the pre-render sweep.
     pub(crate) initialized: bool,
-
-    /// Over-ride the node name, which is usually taken from the struct name
-    /// during the derive.
-    pub name: Option<NodeName>,
 }
 
 /// The node state object - each node needs to keep one of these, and offer it
@@ -127,7 +123,6 @@ impl NodeState {
             hidden: false,
             viewport: ViewPort::default(),
             initialized: false,
-            name: None,
         }
     }
 }
@@ -184,12 +179,6 @@ pub trait StatefulNode {
     /// called for the first time to schedule future polls.
     fn is_initialized(&self) -> bool {
         self.state().initialized
-    }
-
-    /// Set this node's name, over-riding the name derived from the struct name.
-    fn set_name(&mut self, name: NodeName) {
-        let r = self.state_mut();
-        r.name = Some(name);
     }
 }
 

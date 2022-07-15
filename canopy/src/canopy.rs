@@ -15,7 +15,7 @@ use crate::{
     render::{show_cursor, RenderBackend},
     script,
     style::{solarized, StyleManager, StyleMap},
-    NodeId, NodeName, Outcome, Render, Result, ViewPort,
+    NodeId, Outcome, Render, Result, ViewPort,
 };
 
 /// Call a closure on the currently focused node and all its ancestors to the
@@ -418,19 +418,6 @@ impl Canopy {
         let cmds = <T>::default_commands();
         self.script_host.load_commands(&cmds);
         self.commands.commands(&cmds);
-    }
-
-    /// Load the commands from a command node, but rename the node. This
-    /// function is useful for loading commands from nodes that will be renamed.
-    pub fn load_commands_as<T: commands::CommandNode>(&mut self, name: &str) -> Result<()> {
-        let n: NodeName = name.try_into()?;
-        let mut cmds = <T>::default_commands();
-        for mut x in cmds.iter_mut() {
-            x.node = n.clone();
-        }
-        self.script_host.load_commands(&cmds);
-        self.commands.commands(&cmds);
-        Ok(())
     }
 
     /// Output a formatted table of commands to a writer.

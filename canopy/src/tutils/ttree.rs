@@ -210,14 +210,12 @@ pub struct R {
 #[derive_commands]
 impl R {
     pub fn new() -> Self {
-        let mut n = R {
+        R {
             state: NodeState::default(),
             a: Ba::new(),
             b: Bb::new(),
             next_outcome: None,
-        };
-        n.set_name("r".try_into().unwrap());
-        n
+        }
     }
     #[command]
     /// A command that appears only on leaf nodes.
