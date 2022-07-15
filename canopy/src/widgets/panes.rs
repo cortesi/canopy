@@ -121,8 +121,8 @@ mod tests {
     #[test]
     fn tlayout() -> Result<()> {
         let mut c = Canopy::new();
-        let tn = TBranch::new("a");
-        let mut p: Panes<TBranch> = Panes::new(tn);
+        let tn = Ba::new();
+        let mut p: Panes<Ba> = Panes::new(tn);
         let r = Rect {
             tl: Point::zero(),
             w: 100,
@@ -131,7 +131,7 @@ mod tests {
         place(&mut p, r)?;
 
         assert_eq!(p.shape(), vec![1]);
-        let tn = TBranch::new("b");
+        let tn = Ba::new();
         p.insert_col(&mut c, tn)?;
         place(&mut p, r)?;
 
@@ -139,7 +139,7 @@ mod tests {
         c.set_focus(&mut p.children[0][0].a);
         place(&mut p, r)?;
 
-        let tn = TBranch::new("c");
+        let tn = Ba::new();
         assert_eq!(p.focus_coords(&c), Some((0, 0)));
         p.insert_row(&mut c, tn);
         place(&mut p, r)?;

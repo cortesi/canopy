@@ -242,7 +242,7 @@ mod tests {
     fn tpreorder() -> Result<()> {
         fn trigger(name: &str, func: Result<Walk<()>>) -> (Vec<String>, Result<Walk<()>>) {
             let mut v: Vec<String> = vec![];
-            let mut root = TRoot::new();
+            let mut root = R::new();
             let res = preorder(&mut root, &mut |x| -> Result<Walk<()>> {
                 v.push(x.name().to_string());
                 if x.name() == name {
@@ -299,7 +299,7 @@ mod tests {
     fn tpostorder() -> Result<()> {
         fn trigger(name: &str, func: Result<Walk<()>>) -> (Vec<String>, Result<Walk<()>>) {
             let mut v: Vec<String> = vec![];
-            let mut root = TRoot::new();
+            let mut root = R::new();
             let res = postorder(&mut root, &mut |x| -> Result<Walk<()>> {
                 v.push(x.name().to_string());
                 if x.name() == name {

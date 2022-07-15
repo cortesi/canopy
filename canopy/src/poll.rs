@@ -147,8 +147,8 @@ mod tests {
         let now = SystemTime::now();
 
         let mut ph = PendingHeap::default();
-        let n1 = TLeaf::new("foo");
-        let n2 = TLeaf::new("bar");
+        let n1 = BaLa::new();
+        let n2 = BaLb::new();
 
         assert_eq!(ph._current_wait(now), None);
         ph._add(now, n1.id(), Duration::from_secs(10));
