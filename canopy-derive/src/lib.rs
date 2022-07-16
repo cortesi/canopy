@@ -28,6 +28,7 @@ impl Into<Diagnostic> for Error {
     }
 }
 
+/// Arguments to the "command" derive macro.
 #[derive(Debug, Default, StructMeta)]
 struct CommandArgs {
     ignore_result: bool,
@@ -72,36 +73,29 @@ struct Command {
 impl Command {
     fn invocation(&self) -> proc_macro2::TokenStream {
         let ident = syn::Ident::new(&self.command, proc_macro2::Span::call_site());
-        if self.cargs.ignore_result {
-            quote! { let _ = self.#ident(core); Ok(canopy::commands::ReturnValue::Void) }
+        let args = quote! {core};
+
+        let mut inv = if self.ret.result {
+            quote! {let s = self.#ident(#args)?;}
         } else {
-            if self.ret.result {
-                match self.ret.typ {
-                    Types::Void => {
-                        quote! { self.#ident(core)?; Ok(canopy::commands::ReturnValue::Void) }
-                    }
-                    Types::String => {
-                        quote! {let s = self.#ident(core)?; Ok(canopy::commands::ReturnValue::String(s)) }
-                    }
-                }
-            } else {
-                match self.ret.typ {
-                    Types::Void => {
-                        quote! { self.#ident(core); Ok(canopy::commands::ReturnValue::Void) }
-                    }
-                    Types::String => {
-                        quote! {let s = self.#ident(core); Ok(canopy::commands::ReturnValue::String(s)) }
-                    }
-                }
+            quote! {let s = self.#ident(#args);}
+        };
+
+        if self.cargs.ignore_result {
+            inv.extend(quote! {Ok(canopy::commands::ReturnValue::Void)});
+        } else {
+            match self.ret.typ {
+                Types::Void => inv.extend(quote! {Ok(canopy::commands::ReturnValue::Void)}),
+                Types::String => inv.extend(quote! {Ok(canopy::commands::ReturnValue::String(s))}),
             }
-        }
+        };
+        inv
     }
 }
 
 fn parse_command_method(method: &syn::ImplItemMethod) -> Result<Option<Command>> {
     let mut docs = vec![];
-
-    let mut args: Option<CommandArgs> = None;
+    let mut args = None;
     for a in &method.attrs {
         if a.path.is_ident("command") {
             args = Some(if a.tokens.is_empty() {
@@ -119,68 +113,71 @@ fn parse_command_method(method: &syn::ImplItemMethod) -> Result<Option<Command>>
             }
         }
     }
-    if let Some(a) = args {
-        let ret = if a.ignore_result {
-            Some(ReturnType::new(Types::Void, false))
-        } else {
-            match &method.sig.output {
-                syn::ReturnType::Default => Some(ReturnType::new(Types::Void, false)),
-                syn::ReturnType::Type(_, ty) => match &**ty {
-                    syn::Type::Path(p) => {
-                        if p.path.is_ident("String") {
-                            Some(ReturnType::new(Types::String, false))
-                        } else if p.path.segments.last().unwrap().ident == "Result" {
-                            match &p.path.segments.last().unwrap().arguments {
-                                syn::PathArguments::AngleBracketed(a) => {
-                                    if a.args.len() != 1 {
-                                        None
-                                    } else {
-                                        match a.args.first().unwrap() {
-                                            syn::GenericArgument::Type(syn::Type::Path(t)) => {
-                                                if t.path.is_ident("String") {
-                                                    Some(ReturnType::new(Types::String, true))
-                                                } else {
-                                                    None
-                                                }
+    let args = if let Some(a) = args {
+        a
+    } else {
+        // This is not a command method
+        return Ok(None);
+    };
+
+    let ret = if args.ignore_result {
+        Some(ReturnType::new(Types::Void, false))
+    } else {
+        match &method.sig.output {
+            syn::ReturnType::Default => Some(ReturnType::new(Types::Void, false)),
+            syn::ReturnType::Type(_, ty) => match &**ty {
+                syn::Type::Path(p) => {
+                    if p.path.is_ident("String") {
+                        Some(ReturnType::new(Types::String, false))
+                    } else if p.path.segments.last().unwrap().ident == "Result" {
+                        match &p.path.segments.last().unwrap().arguments {
+                            syn::PathArguments::AngleBracketed(a) => {
+                                if a.args.len() != 1 {
+                                    None
+                                } else {
+                                    match a.args.first().unwrap() {
+                                        syn::GenericArgument::Type(syn::Type::Path(t)) => {
+                                            if t.path.is_ident("String") {
+                                                Some(ReturnType::new(Types::String, true))
+                                            } else {
+                                                None
                                             }
-                                            syn::GenericArgument::Type(syn::Type::Tuple(e)) => {
-                                                if e.elems.len() == 0 {
-                                                    Some(ReturnType::new(Types::Void, true))
-                                                } else {
-                                                    None
-                                                }
-                                            }
-                                            _ => None,
                                         }
+                                        syn::GenericArgument::Type(syn::Type::Tuple(e)) => {
+                                            if e.elems.len() == 0 {
+                                                Some(ReturnType::new(Types::Void, true))
+                                            } else {
+                                                None
+                                            }
+                                        }
+                                        _ => None,
                                     }
                                 }
-                                _ => None,
                             }
-                        } else {
-                            None
+                            _ => None,
                         }
+                    } else {
+                        None
                     }
-                    _ => None,
-                },
-            }
-        };
-
-        if let Some(v) = ret {
-            Ok(Some(Command {
-                command: method.sig.ident.to_string(),
-                docs: docs.join("\n"),
-                cargs: a,
-                ret: v,
-            }))
-        } else {
-            let o = &method.sig.output;
-            Err(Error::Unsupported(format!(
-                "unsupported return type on command: {}",
-                quote!(#o)
-            )))
+                }
+                _ => None,
+            },
         }
+    };
+
+    if let Some(v) = ret {
+        Ok(Some(Command {
+            command: method.sig.ident.to_string(),
+            docs: docs.join("\n"),
+            cargs: args,
+            ret: v,
+        }))
     } else {
-        Ok(None)
+        let o = &method.sig.output;
+        Err(Error::Unsupported(format!(
+            "unsupported return type on command: {}",
+            quote!(#o)
+        )))
     }
 }
 

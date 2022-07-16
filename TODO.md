@@ -11,8 +11,11 @@
     - This will make "dual-purpose" functions that are intended both to be
       called from scripts and in code more ergonomic
   - Arguments
-  - Return types
-    - Result<Outcome>?
+  - Return types, add as needed
+    - Int
+    - Core data types?
+      - Node reference
+      - Focus path
 - Root object
   - Manage modal windows
   - Command help system
