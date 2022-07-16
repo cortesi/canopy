@@ -10,6 +10,7 @@ pub enum ReturnTypes {
     String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReturnValue {
     Void,
     String(String),

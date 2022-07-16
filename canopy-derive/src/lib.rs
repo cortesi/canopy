@@ -81,7 +81,7 @@ impl Command {
                         quote! { self.#ident(core)?; Ok(canopy::commands::ReturnValue::Void) }
                     }
                     Types::String => {
-                        quote! {self.#ident(core)?; Ok(canopy::commands::ReturnValue::Void) }
+                        quote! {let s = self.#ident(core)?; Ok(canopy::commands::ReturnValue::String(s)) }
                     }
                 }
             } else {
@@ -90,7 +90,7 @@ impl Command {
                         quote! { self.#ident(core); Ok(canopy::commands::ReturnValue::Void) }
                     }
                     Types::String => {
-                        quote! {self.#ident(core); Ok(canopy::commands::ReturnValue::Void) }
+                        quote! {let s = self.#ident(core); Ok(canopy::commands::ReturnValue::String(s)) }
                     }
                 }
             }

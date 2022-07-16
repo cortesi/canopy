@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap};
 
 use rhai;
 
-use crate::{commands, error, Core, Node, NodeId, NodeName, Result};
+use crate::{commands::*, error, Core, Node, NodeId, NodeName, Result};
 
 pub type ScriptId = u64;
 
@@ -65,14 +65,21 @@ pub(crate) struct ScriptHost {
 
 impl ScriptHost {
     pub fn new() -> Self {
+        let mut engine = rhai::Engine::new();
+        engine.on_debug(move |s, src, pos| {
+            let src = src.unwrap_or("");
+            tracing::debug!("{} [{}:{}]", s, src, pos)
+        });
+        engine.on_print(move |s| tracing::info!("{}", s));
+
         ScriptHost {
-            engine: rhai::Engine::new(),
+            engine,
             scripts: HashMap::new(),
             current_id: 0,
         }
     }
 
-    pub fn load_commands(&mut self, cmds: &[commands::CommandDefinition]) {
+    pub fn load_commands(&mut self, cmds: &[CommandDefinition]) {
         // We can't enable this yet - see:
         //      https://github.com/rhaiscript/rhai/issues/574
         // engine.set_strict_variables(true);
@@ -83,7 +90,7 @@ impl ScriptHost {
                 modules.insert(i.node.clone(), m);
             }
             let m = modules.get_mut(&i.node).unwrap();
-            let ci = commands::CommandInvocation {
+            let ci = CommandInvocation {
                 node: i.node.clone(),
                 command: i.command.clone(),
             };
@@ -96,8 +103,14 @@ impl ScriptHost {
                     SCRIPT_GLOBAL.with(|g| {
                         let mut b = g.borrow_mut();
                         let v = b.as_mut().unwrap();
-                        commands::dispatch(v.core, v.node_id, v.root, &ci).unwrap();
-                        Ok(rhai::Dynamic::UNIT)
+                        if let Some(ret) = dispatch(v.core, v.node_id, v.root, &ci).unwrap() {
+                            Ok(match ret {
+                                ReturnValue::Void => rhai::Dynamic::UNIT,
+                                ReturnValue::String(s) => rhai::Dynamic::from(s),
+                            })
+                        } else {
+                            Ok(rhai::Dynamic::UNIT)
+                        }
                     })
                 },
             );
