@@ -7,8 +7,12 @@ use crate::{postorder, preorder, Core, Error, Node, NodeId, NodeName, Result, St
 pub enum ReturnTypes {
     /// No return value.
     Void,
-    /// A canopy::Result<T> return.
-    Result,
+    String,
+}
+
+pub enum ReturnValue {
+    Void,
+    String(String),
 }
 
 /// A parsed command invocation.
@@ -33,6 +37,8 @@ pub struct CommandDefinition {
     pub docs: String,
     /// The return type of the command.
     pub return_type: ReturnTypes,
+    /// Is the return value wrapped in a cargo::Result?
+    pub return_result: bool,
 }
 
 impl CommandDefinition {
@@ -51,15 +57,12 @@ pub trait CommandNode: StatefulNode {
     /// name converted to snake case. This method is used to pre-load our key
     /// binding map, and the optional name specifier lets us cater for nodes
     /// that may be renamed at runtime.
-    fn default_commands() -> Vec<CommandDefinition>
+    fn commands() -> Vec<CommandDefinition>
     where
         Self: Sized;
 
-    /// Returns a list of commands for this node.
-    fn commands(&self) -> Vec<CommandDefinition>;
-
     /// Dispatch a command to this node.
-    fn dispatch(&mut self, c: &mut dyn Core, cmd: &CommandInvocation) -> Result<()>;
+    fn dispatch(&mut self, c: &mut dyn Core, cmd: &CommandInvocation) -> Result<ReturnValue>;
 }
 
 /// Dispatch a command relative to a node. This searches the node tree for a
@@ -71,34 +74,34 @@ pub fn dispatch<T>(
     current_id: T,
     root: &mut dyn Node,
     cmd: &CommandInvocation,
-) -> Result<()>
+) -> Result<Option<ReturnValue>>
 where
     T: Into<NodeId>,
 {
     let mut seen = false;
     let uid = current_id.into();
-    postorder(root, &mut |x| -> Result<Walk<()>> {
+    let v = postorder(root, &mut |x| -> Result<Walk<ReturnValue>> {
         if seen {
             // We're now on the path to the root
             match x.dispatch(core, cmd) {
                 Err(Error::UnknownCommand(_)) => Ok(Walk::Continue),
                 Err(e) => Err(e),
-                Ok(_) => {
+                Ok(v) => {
                     core.taint_tree(x);
-                    Ok(Walk::Handle(()))
+                    Ok(Walk::Handle(v))
                 }
             }
         } else if x.id() == uid {
             seen = true;
             // Preorder traversal from the focus node into its descendants. Our
             // focus node will be the first node visited.
-            match preorder(x, &mut |x| -> Result<Walk<()>> {
+            match preorder(x, &mut |x| -> Result<Walk<ReturnValue>> {
                 match x.dispatch(core, cmd) {
                     Err(Error::UnknownCommand(_)) => Ok(Walk::Continue),
                     Err(e) => Err(e),
-                    Ok(_) => {
+                    Ok(v) => {
                         core.taint_tree(x);
-                        Ok(Walk::Handle(()))
+                        Ok(Walk::Handle(v))
                     }
                 }
             }) {
@@ -111,7 +114,7 @@ where
             Ok(Walk::Continue)
         }
     })?;
-    Ok(())
+    Ok(v.value())
 }
 
 #[derive(Debug)]
@@ -197,7 +200,7 @@ mod tests {
         }
 
         let mut cs = CommandSet::new();
-        cs.commands(&Foo::default_commands());
+        cs.commands(&Foo::commands());
 
         Ok(())
     }

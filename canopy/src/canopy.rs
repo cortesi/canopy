@@ -415,7 +415,7 @@ impl Canopy {
     /// Load the commands from a command node using the default node name
     /// derived from the name of the struct.
     pub fn load_commands<T: commands::CommandNode>(&mut self) {
-        let cmds = <T>::default_commands();
+        let cmds = <T>::commands();
         self.script_host.load_commands(&cmds);
         self.commands.commands(&cmds);
     }

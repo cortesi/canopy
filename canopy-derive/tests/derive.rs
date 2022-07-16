@@ -1,11 +1,12 @@
 use std::marker::PhantomData;
 
-use canopy;
-use canopy::commands::{CommandInvocation, CommandNode, ReturnTypes};
-use canopy::tutils::*;
-use canopy::StatefulNode;
-use canopy_derive::command;
-use canopy_derive::derive_commands;
+use canopy::{
+    self,
+    commands::{CommandInvocation, CommandNode, ReturnTypes},
+    tutils::*,
+    Result, StatefulNode,
+};
+use canopy_derive::{command, derive_commands};
 
 #[test]
 fn statefulnode() {
@@ -29,6 +30,7 @@ fn commands() {
         a_triggered: bool,
         b_triggered: bool,
         c_triggered: bool,
+        naked_str_triggered: bool,
     }
 
     impl canopy::Node for Foo {}
@@ -40,7 +42,7 @@ fn commands() {
         #[command]
         /// This is a comment.
         /// Multiline too!
-        fn a(&mut self, _core: &dyn canopy::Core) -> canopy::Result<()> {
+        fn a(&mut self, _core: &dyn canopy::Core) -> Result<()> {
             self.a_triggered = true;
             Ok(())
         }
@@ -61,34 +63,64 @@ fn commands() {
             self.c_triggered = true;
             Opaque {}
         }
+
+        #[command]
+        fn naked_str(&mut self, _core: &dyn canopy::Core) -> String {
+            self.naked_str_triggered = true;
+            "".into()
+        }
+
+        #[command]
+        fn result_str(&mut self, _core: &dyn canopy::Core) -> canopy::Result<String> {
+            self.naked_str_triggered = true;
+            Ok("".into())
+        }
     }
 
     assert_eq!(
-        Foo::default_commands(),
+        Foo::commands(),
         [
             canopy::commands::CommandDefinition {
                 node: "foo".try_into().unwrap(),
                 command: "a".to_string(),
                 docs: " This is a comment.\n Multiline too!".to_string(),
-                return_type: ReturnTypes::Result,
+                return_type: ReturnTypes::Void,
+                return_result: true,
             },
             canopy::commands::CommandDefinition {
                 node: "foo".try_into().unwrap(),
                 command: "b".to_string(),
                 docs: "".to_string(),
-                return_type: ReturnTypes::Result,
+                return_type: ReturnTypes::Void,
+                return_result: true,
             },
             canopy::commands::CommandDefinition {
                 node: "foo".try_into().unwrap(),
                 command: "c".to_string(),
                 docs: "".to_string(),
                 return_type: ReturnTypes::Void,
+                return_result: false,
             },
             canopy::commands::CommandDefinition {
                 node: "foo".try_into().unwrap(),
                 command: "d".to_string(),
                 docs: "".to_string(),
                 return_type: ReturnTypes::Void,
+                return_result: false,
+            },
+            canopy::commands::CommandDefinition {
+                node: "foo".try_into().unwrap(),
+                command: "naked_str".to_string(),
+                docs: "".to_string(),
+                return_type: ReturnTypes::String,
+                return_result: false,
+            },
+            canopy::commands::CommandDefinition {
+                node: "foo".try_into().unwrap(),
+                command: "result_str".to_string(),
+                docs: "".to_string(),
+                return_type: ReturnTypes::String,
+                return_result: true,
             }
         ]
     );
@@ -97,6 +129,7 @@ fn commands() {
         a_triggered: false,
         b_triggered: false,
         c_triggered: false,
+        naked_str_triggered: false,
     };
 
     let mut dc = DummyCore {};
@@ -144,12 +177,13 @@ fn commands() {
     }
 
     assert_eq!(
-        Bar::<Foo>::default_commands(),
+        Bar::<Foo>::commands(),
         [canopy::commands::CommandDefinition {
             node: "bar".try_into().unwrap(),
             command: "a".to_string(),
             docs: "".to_string(),
-            return_type: ReturnTypes::Result,
+            return_type: ReturnTypes::Void,
+            return_result: true,
         },]
     );
 }

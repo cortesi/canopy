@@ -26,16 +26,12 @@ impl Block {
     }
 
     #[command]
-    fn add(&mut self, c: &mut dyn Core) -> Result<Outcome> {
-        Ok(if self.children.is_empty() {
-            Outcome::Ignore
-        } else if self.size_limited(self.children[0].vp().view_rect().into()) {
-            Outcome::Handle
-        } else {
+    fn add(&mut self, c: &mut dyn Core) {
+        if !self.children.is_empty() && !self.size_limited(self.children[0].vp().view_rect().into())
+        {
             self.children.push(Block::new(!self.horizontal));
             c.taint_tree(self);
-            Outcome::Handle
-        })
+        }
     }
 
     fn size_limited(&self, a: Expanse) -> bool {
@@ -43,15 +39,13 @@ impl Block {
     }
 
     #[command]
-    fn split(&mut self, c: &mut dyn Core) -> Result<Outcome> {
-        Ok(if self.size_limited(self.vp().view_rect().into()) {
-            Outcome::Handle
-        } else {
+    fn split(&mut self, c: &mut dyn Core) -> Result<()> {
+        if !self.size_limited(self.vp().view_rect().into()) {
             self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
             c.taint_tree(self);
             c.focus_next(self)?;
-            Outcome::Handle
-        })
+        }
+        Ok(())
     }
 
     #[command]

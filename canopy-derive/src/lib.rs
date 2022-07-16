@@ -9,6 +9,7 @@ type Result<T> = std::result::Result<T, Error>;
 #[derive(PartialEq, Eq, thiserror::Error, Debug, Clone)]
 enum Error {
     Parse(String),
+    Unsupported(String),
 }
 
 impl std::fmt::Display for Error {
@@ -32,41 +33,30 @@ struct CommandArgs {
     ignore_result: bool,
 }
 
-/// Derive an implementation of the StatefulNode trait for a struct. The struct
-/// should have a `self.state` attribute of type `NodeState`.
-#[proc_macro_derive(StatefulNode)]
-pub fn derive_statefulnode(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-    let name = input.ident;
-    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-    let rname = name.to_string();
-    let expanded = quote! {
-        impl #impl_generics canopy::StatefulNode for #name #ty_generics #where_clause {
-            fn state_mut(&mut self) -> &mut canopy::NodeState {
-                &mut self.state
-            }
-            fn state(&self) -> &canopy::NodeState {
-                &self.state
-            }
-            fn name(&self) -> canopy::NodeName {
-                canopy::NodeName::convert(#rname)
-            }
-        }
-    };
-    proc_macro::TokenStream::from(expanded)
-}
-
-#[derive(Debug, Clone, Copy)]
-enum ReturnTypes {
+#[derive(Debug, Clone)]
+enum Types {
+    /// No return value - an empty tuple if Result is enabled.
     Void,
-    Result,
+    String,
 }
 
-impl quote::ToTokens for ReturnTypes {
+#[derive(Debug, Clone)]
+struct ReturnType {
+    result: bool,
+    typ: Types,
+}
+
+impl ReturnType {
+    fn new(typ: Types, result: bool) -> Self {
+        Self { typ, result }
+    }
+}
+
+impl quote::ToTokens for ReturnType {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        tokens.extend(match self {
-            ReturnTypes::Void => quote! {  canopy::commands::ReturnTypes::Void },
-            ReturnTypes::Result => quote! { canopy::commands::ReturnTypes::Result },
+        tokens.extend(match self.typ {
+            Types::Void => quote! {  canopy::commands::ReturnTypes::Void },
+            Types::String => quote! { canopy::commands::ReturnTypes::String },
         });
     }
 }
@@ -75,7 +65,7 @@ impl quote::ToTokens for ReturnTypes {
 struct Command {
     command: String,
     docs: String,
-    ret: ReturnTypes,
+    ret: ReturnType,
     cargs: CommandArgs,
 }
 
@@ -83,14 +73,25 @@ impl Command {
     fn invocation(&self) -> proc_macro2::TokenStream {
         let ident = syn::Ident::new(&self.command, proc_macro2::Span::call_site());
         if self.cargs.ignore_result {
-            quote! { let _ = self.#ident(core); }
+            quote! { let _ = self.#ident(core); Ok(canopy::commands::ReturnValue::Void) }
         } else {
-            match self.ret {
-                ReturnTypes::Void => {
-                    quote! { self.#ident(core) }
+            if self.ret.result {
+                match self.ret.typ {
+                    Types::Void => {
+                        quote! { self.#ident(core)?; Ok(canopy::commands::ReturnValue::Void) }
+                    }
+                    Types::String => {
+                        quote! {self.#ident(core)?; Ok(canopy::commands::ReturnValue::Void) }
+                    }
                 }
-                ReturnTypes::Result => {
-                    quote! {self.#ident(core)? }
+            } else {
+                match self.ret.typ {
+                    Types::Void => {
+                        quote! { self.#ident(core); Ok(canopy::commands::ReturnValue::Void) }
+                    }
+                    Types::String => {
+                        quote! {self.#ident(core); Ok(canopy::commands::ReturnValue::Void) }
+                    }
                 }
             }
         }
@@ -120,19 +121,64 @@ fn parse_command_method(method: &syn::ImplItemMethod) -> Result<Option<Command>>
     }
     if let Some(a) = args {
         let ret = if a.ignore_result {
-            ReturnTypes::Void
+            Some(ReturnType::new(Types::Void, false))
         } else {
             match &method.sig.output {
-                syn::ReturnType::Default => ReturnTypes::Void,
-                syn::ReturnType::Type(_, _) => ReturnTypes::Result,
+                syn::ReturnType::Default => Some(ReturnType::new(Types::Void, false)),
+                syn::ReturnType::Type(_, ty) => match &**ty {
+                    syn::Type::Path(p) => {
+                        if p.path.is_ident("String") {
+                            Some(ReturnType::new(Types::String, false))
+                        } else if p.path.segments.last().unwrap().ident == "Result" {
+                            match &p.path.segments.last().unwrap().arguments {
+                                syn::PathArguments::AngleBracketed(a) => {
+                                    if a.args.len() != 1 {
+                                        None
+                                    } else {
+                                        match a.args.first().unwrap() {
+                                            syn::GenericArgument::Type(syn::Type::Path(t)) => {
+                                                if t.path.is_ident("String") {
+                                                    Some(ReturnType::new(Types::String, true))
+                                                } else {
+                                                    None
+                                                }
+                                            }
+                                            syn::GenericArgument::Type(syn::Type::Tuple(e)) => {
+                                                if e.elems.len() == 0 {
+                                                    Some(ReturnType::new(Types::Void, true))
+                                                } else {
+                                                    None
+                                                }
+                                            }
+                                            _ => None,
+                                        }
+                                    }
+                                }
+                                _ => None,
+                            }
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                },
             }
         };
-        Ok(Some(Command {
-            command: method.sig.ident.to_string(),
-            docs: docs.join("\n"),
-            cargs: a,
-            ret,
-        }))
+
+        if let Some(v) = ret {
+            Ok(Some(Command {
+                command: method.sig.ident.to_string(),
+                docs: docs.join("\n"),
+                cargs: a,
+                ret: v,
+            }))
+        } else {
+            let o = &method.sig.output;
+            Err(Error::Unsupported(format!(
+                "unsupported return type on command: {}",
+                quote!(#o)
+            )))
+        }
     } else {
         Ok(None)
     }
@@ -172,41 +218,33 @@ pub fn derive_commands(
 
     let names: Vec<String> = commands.iter().map(|x| x.command.clone()).collect();
     let docs: Vec<String> = commands.iter().map(|x| x.docs.clone()).collect();
-    let rets: Vec<ReturnTypes> = commands.iter().map(|x| x.ret).collect();
+    let rets: Vec<ReturnType> = commands.iter().map(|x| x.ret.clone()).collect();
+    let results: Vec<bool> = commands.iter().map(|x| x.ret.result).collect();
     let invoke: Vec<proc_macro2::TokenStream> = commands.iter().map(|x| x.invocation()).collect();
 
     let expanded = quote! {
         impl #impl_generics canopy::commands::CommandNode for #name #where_clause {
-            fn default_commands() -> Vec<canopy::commands::CommandDefinition> {
+            fn commands() -> Vec<canopy::commands::CommandDefinition> {
                 vec![#(canopy::commands::CommandDefinition {
                         node: canopy::NodeName::convert(#default_node_name),
                         command: #names.to_string(),
                         docs: #docs.to_string(),
                         return_type: #rets,
+                        return_result: #results,
                     }),*]
             }
-            fn commands(&self) -> Vec<canopy::commands::CommandDefinition> {
-                vec![#(canopy::commands::CommandDefinition {
-                        node: self.name(),
-                        command: #names.to_string(),
-                        docs: #docs.to_string(),
-                        return_type: #rets,
-                    }),*]
-            }
-            fn dispatch(&mut self, core: &mut dyn canopy::Core, cmd: &canopy::commands::CommandInvocation) -> canopy::Result<()> {
+            fn dispatch(&mut self, core: &mut dyn canopy::Core, cmd: &canopy::commands::CommandInvocation) -> canopy::Result<canopy::commands::ReturnValue> {
                 if cmd.node != self.name() {
                     return Err(canopy::Error::UnknownCommand(cmd.command.to_string()));
                 }
                 match cmd.command.as_str() {
                     #(
                         #names => {
-                            #invoke;
+                            #invoke
                         }
                     ),*
-                    x if true => {},
-                    _ => return Err(canopy::Error::UnknownCommand(cmd.command.to_string())),
-                };
-                Ok(())
+                    _ => Err(canopy::Error::UnknownCommand(cmd.command.to_string()))
+                }
             }
         }
     };
@@ -230,4 +268,28 @@ pub fn command(
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     input
+}
+
+/// Derive an implementation of the StatefulNode trait for a struct. The struct
+/// should have a `self.state` attribute of type `NodeState`.
+#[proc_macro_derive(StatefulNode)]
+pub fn derive_statefulnode(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    let rname = name.to_string();
+    let expanded = quote! {
+        impl #impl_generics canopy::StatefulNode for #name #ty_generics #where_clause {
+            fn state_mut(&mut self) -> &mut canopy::NodeState {
+                &mut self.state
+            }
+            fn state(&self) -> &canopy::NodeState {
+                &self.state
+            }
+            fn name(&self) -> canopy::NodeName {
+                canopy::NodeName::convert(#rname)
+            }
+        }
+    };
+    proc_macro::TokenStream::from(expanded)
 }

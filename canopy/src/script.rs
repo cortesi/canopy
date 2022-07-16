@@ -97,8 +97,8 @@ impl ScriptHost {
                         let mut b = g.borrow_mut();
                         let v = b.as_mut().unwrap();
                         commands::dispatch(v.core, v.node_id, v.root, &ci).unwrap();
-                    });
-                    Ok(())
+                        Ok(rhai::Dynamic::UNIT)
+                    })
                 },
             );
         }

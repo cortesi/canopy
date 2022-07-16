@@ -106,11 +106,10 @@ impl Intervals {
     }
 
     #[command]
-    fn add_item(&mut self, c: &mut dyn Core) -> Result<Outcome> {
+    fn add_item(&mut self, c: &mut dyn Core) {
         let lst = &mut self.content.child;
         lst.append(IntervalItem::new());
         c.taint(self);
-        Ok(Outcome::Handle)
     }
 }
 
