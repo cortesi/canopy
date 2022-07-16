@@ -4,7 +4,6 @@ use canopy::{
     event::{key, mouse},
     geom::Expanse,
     geom::Frame,
-    inspector::Inspector,
     *,
 };
 
@@ -131,31 +130,33 @@ pub fn main() -> Result<()> {
     cnpy.load_commands::<Block>();
     cnpy.load_commands::<FocusGym>();
 
-    cnpy.bind_key(key::KeyCode::Tab, "root", "root::focus_next()")?;
-    cnpy.bind_mouse(mouse::Action::ScrollDown, "root", "root::focus_next()")?;
-    cnpy.bind_mouse(mouse::Action::ScrollUp, "root", "root::focus_prev()")?;
+    canopy::Binder::new()
+        .with_path("inspector")
+        .key('a', "root::focus_app()")
+        .with_path("root")
+        .key(key::Ctrl + key::KeyCode::Right, "root::toggle_inspector()")
+        .key('q', "root::quit()")
+        .with_path("focus_gym/")
+        .key(key::KeyCode::Tab, "root::focus_next()")
+        .mouse(mouse::Action::ScrollDown, "root::focus_next()")
+        .mouse(mouse::Action::ScrollUp, "root::focus_prev()")
+        .key(key::KeyCode::Right, "root::focus_right()")
+        .key('l', "root::focus_right()")
+        .key(key::KeyCode::Left, "root::focus_left()")
+        .key('h', "root::focus_left()")
+        .key(key::KeyCode::Up, "root::focus_up()")
+        .key('k', "root::focus_up()")
+        .key(key::KeyCode::Down, "root::focus_down()")
+        .key('j', "root::focus_down()")
+        .with_path("block")
+        .key('s', "block::split()")
+        .key('a', "block::add()")
+        .mouse(mouse::Button::Left, "block::focus()")
+        .mouse(mouse::Button::Middle, "block::split()")
+        .mouse(mouse::Button::Right, "block::add()")
+        .build(&mut cnpy)?;
 
-    cnpy.bind_key(key::KeyCode::Right, "root", "root::focus_right()")?;
-    cnpy.bind_key('l', "root", "root::focus_right()")?;
-
-    cnpy.bind_key(key::KeyCode::Left, "root", "root::focus_left()")?;
-    cnpy.bind_key('h', "root", "root::focus_left()")?;
-
-    cnpy.bind_key(key::KeyCode::Up, "root", "root::focus_up()")?;
-    cnpy.bind_key('k', "root", "root::focus_up()")?;
-
-    cnpy.bind_key(key::KeyCode::Down, "root", "root::focus_down()")?;
-    cnpy.bind_key('j', "root", "root::focus_down()")?;
-
-    cnpy.bind_key('q', "root", "root::quit()")?;
-
-    cnpy.bind_key('s', "block", "block::split()")?;
-    cnpy.bind_key('a', "block", "block::add()")?;
-    cnpy.bind_mouse(mouse::Button::Left, "block", "block::focus()")?;
-    cnpy.bind_mouse(mouse::Button::Middle, "block", "block::split()")?;
-    cnpy.bind_mouse(mouse::Button::Right, "block", "block::add()")?;
-
-    let root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new(FocusGym::new()));
+    let root = Root::new(FocusGym::new());
     runloop(cnpy, root)?;
     Ok(())
 }

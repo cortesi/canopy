@@ -5,7 +5,6 @@ use canopy::{
     backend::crossterm::runloop,
     event::{key, mouse},
     geom::{Expanse, Rect},
-    inspector::Inspector,
     style::solarized,
     widgets::{frame, list::*, Input, Text},
     *,
@@ -234,10 +233,7 @@ pub fn main() -> Result<()> {
             None,
         );
 
-        runloop(
-            cnpy,
-            Inspector::new(key::Ctrl + key::KeyCode::Right, Todo::new()?),
-        )?;
+        runloop(cnpy, Todo::new()?)?;
     } else {
         println!("Specify a file path")
     }

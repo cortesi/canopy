@@ -4,12 +4,7 @@
 
 ## 0.1
 
-- Key binding management system
-  - Input to and from string conversion
 - Commands improvements
-  - Optional core argument
-    - This will make "dual-purpose" functions that are intended both to be
-      called from scripts and in code more ergonomic
   - Arguments
   - Return types, add as needed
     - Int
@@ -60,6 +55,8 @@
   - Center
   - text line widget
   - markdown
+- Key binding management system
+  - Input to and from string conversion
 - Testing
   - Improve the test render backend
     - At the moment, its only client is the internal code, so it only implements

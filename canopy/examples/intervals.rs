@@ -5,7 +5,6 @@ use canopy::{
     derive_commands,
     event::{key, mouse},
     geom::Expanse,
-    inspector::Inspector,
     style::solarized,
     widgets::{frame, list::*, Text},
     *,
@@ -165,7 +164,7 @@ pub fn main() -> Result<()> {
 
     cnpy.bind_key('q', "intervals", "root::quit()")?;
 
-    let root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new(Intervals::new()));
+    let root = Root::new(Intervals::new());
     runloop(cnpy, root)?;
     Ok(())
 }

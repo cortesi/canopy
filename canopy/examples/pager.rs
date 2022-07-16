@@ -5,7 +5,6 @@ use canopy::{
     backend::crossterm::runloop,
     derive_commands,
     event::{key, mouse},
-    inspector::Inspector,
     widgets::{frame, Text},
     *,
 };
@@ -71,10 +70,7 @@ pub fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         cnpy.bind_key('q', "root", "root::quit()")?;
 
         let contents = fs::read_to_string(args[1].clone())?;
-        let root = Inspector::new(
-            key::Ctrl + key::KeyCode::Right,
-            Root::new(Pager::new(contents)),
-        );
+        let root = Root::new(Pager::new(contents));
         runloop(cnpy, root)?;
     }
     Ok(())

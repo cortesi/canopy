@@ -5,7 +5,6 @@ use canopy::{
     backend::crossterm::runloop,
     event::key,
     geom::{Expanse, Rect},
-    inspector::Inspector,
     style::solarized,
     widgets::{frame, list::*, Text},
     *,
@@ -217,7 +216,7 @@ pub fn main() -> Result<()> {
     cnpy.bind_key(' ', "root", "list::page_down()")?;
     cnpy.bind_key(key::KeyCode::PageUp, "root", "list::page_up()")?;
 
-    let root = Inspector::new(key::Ctrl + key::KeyCode::Right, Root::new(ListGym::new()));
+    let root = Root::new(ListGym::new());
     runloop(cnpy, root)?;
     Ok(())
 }
