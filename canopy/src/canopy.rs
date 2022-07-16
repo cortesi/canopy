@@ -422,7 +422,7 @@ impl Canopy {
 
     /// Output a formatted table of commands to a writer.
     pub fn print_command_table(&self, w: &mut dyn Write) -> Result<()> {
-        let mut cmds: Vec<&commands::CommandDefinition> = self.commands.commands.values().collect();
+        let mut cmds: Vec<&commands::CommandSpec> = self.commands.commands.values().collect();
 
         cmds.sort_by_key(|a| a.fullname());
 

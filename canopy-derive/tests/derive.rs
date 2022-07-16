@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use canopy::{
     self,
-    commands::{CommandInvocation, CommandNode, ReturnTypes},
+    commands::{CommandInvocation, CommandNode, ReturnSpec, ReturnTypes},
     tutils::*,
     Result, StatefulNode,
 };
@@ -75,52 +75,64 @@ fn commands() {
             self.naked_str_triggered = true;
             Ok("".into())
         }
+
+        #[command]
+        fn nocore(&mut self) -> canopy::Result<String> {
+            Ok("".into())
+        }
     }
 
     assert_eq!(
         Foo::commands(),
         [
-            canopy::commands::CommandDefinition {
+            canopy::commands::CommandSpec {
                 node: "foo".try_into().unwrap(),
                 command: "a".to_string(),
                 docs: " This is a comment.\n Multiline too!".to_string(),
-                return_type: ReturnTypes::Void,
-                return_result: true,
+                ret: ReturnSpec::new(ReturnTypes::Void, true),
+                arg_core: true,
             },
-            canopy::commands::CommandDefinition {
+            canopy::commands::CommandSpec {
                 node: "foo".try_into().unwrap(),
                 command: "b".to_string(),
                 docs: "".to_string(),
-                return_type: ReturnTypes::Void,
-                return_result: true,
+                ret: ReturnSpec::new(ReturnTypes::Void, true),
+                arg_core: true,
             },
-            canopy::commands::CommandDefinition {
+            canopy::commands::CommandSpec {
                 node: "foo".try_into().unwrap(),
                 command: "c".to_string(),
                 docs: "".to_string(),
-                return_type: ReturnTypes::Void,
-                return_result: false,
+                ret: ReturnSpec::new(ReturnTypes::Void, false),
+                arg_core: true,
             },
-            canopy::commands::CommandDefinition {
+            canopy::commands::CommandSpec {
                 node: "foo".try_into().unwrap(),
                 command: "d".to_string(),
                 docs: "".to_string(),
-                return_type: ReturnTypes::Void,
-                return_result: false,
+                ret: ReturnSpec::new(ReturnTypes::Void, false),
+                arg_core: true,
             },
-            canopy::commands::CommandDefinition {
+            canopy::commands::CommandSpec {
                 node: "foo".try_into().unwrap(),
                 command: "naked_str".to_string(),
                 docs: "".to_string(),
-                return_type: ReturnTypes::String,
-                return_result: false,
+                ret: ReturnSpec::new(ReturnTypes::String, false),
+                arg_core: true,
             },
-            canopy::commands::CommandDefinition {
+            canopy::commands::CommandSpec {
                 node: "foo".try_into().unwrap(),
                 command: "result_str".to_string(),
                 docs: "".to_string(),
-                return_type: ReturnTypes::String,
-                return_result: true,
+                ret: ReturnSpec::new(ReturnTypes::String, true),
+                arg_core: true,
+            },
+            canopy::commands::CommandSpec {
+                node: "foo".try_into().unwrap(),
+                command: "nocore".to_string(),
+                docs: "".to_string(),
+                ret: ReturnSpec::new(ReturnTypes::String, true),
+                arg_core: false,
             }
         ]
     );
@@ -178,12 +190,12 @@ fn commands() {
 
     assert_eq!(
         Bar::<Foo>::commands(),
-        [canopy::commands::CommandDefinition {
+        [canopy::commands::CommandSpec {
             node: "bar".try_into().unwrap(),
             command: "a".to_string(),
             docs: "".to_string(),
-            return_type: ReturnTypes::Void,
-            return_result: true,
+            ret: ReturnSpec::new(ReturnTypes::Void, true),
+            arg_core: true,
         },]
     );
 }

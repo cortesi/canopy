@@ -10,6 +10,21 @@ pub enum ReturnTypes {
     String,
 }
 
+/// The return type of a command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReturnSpec {
+    /// What is the ultimate type of the return?
+    pub typ: ReturnTypes,
+    /// Is the return wrapped in a `Result`? That is, is the method fallible?
+    pub result: bool,
+}
+
+impl ReturnSpec {
+    pub fn new(typ: ReturnTypes, result: bool) -> Self {
+        Self { typ, result }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReturnValue {
     Void,
@@ -29,7 +44,7 @@ pub struct CommandInvocation {
 /// performed on a Node. Commands are used for key bindings, mouse actions and
 /// general automation.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CommandDefinition {
+pub struct CommandSpec {
     /// The name of the node.
     pub node: NodeName,
     /// The name of the command.
@@ -37,12 +52,13 @@ pub struct CommandDefinition {
     /// A doc string taken from the method comment.
     pub docs: String,
     /// The return type of the command.
-    pub return_type: ReturnTypes,
-    /// Is the return value wrapped in a cargo::Result?
-    pub return_result: bool,
+    pub ret: ReturnSpec,
+
+    /// Is the first argument to the underlying function a `Core` instance?
+    pub arg_core: bool,
 }
 
-impl CommandDefinition {
+impl CommandSpec {
     /// A full command name, of the form nodename.command
     pub fn fullname(&self) -> String {
         format!("{}.{}", self.node, self.command)
@@ -58,7 +74,7 @@ pub trait CommandNode: StatefulNode {
     /// name converted to snake case. This method is used to pre-load our key
     /// binding map, and the optional name specifier lets us cater for nodes
     /// that may be renamed at runtime.
-    fn commands() -> Vec<CommandDefinition>
+    fn commands() -> Vec<CommandSpec>
     where
         Self: Sized;
 
@@ -120,7 +136,7 @@ where
 
 #[derive(Debug)]
 pub struct CommandSet {
-    pub commands: HashMap<String, CommandDefinition>,
+    pub commands: HashMap<String, CommandSpec>,
 }
 
 impl CommandSet {
@@ -130,7 +146,7 @@ impl CommandSet {
         }
     }
 
-    pub fn commands(&mut self, cmds: &[CommandDefinition]) {
+    pub fn commands(&mut self, cmds: &[CommandSpec]) {
         for i in cmds {
             self.commands.insert(i.fullname(), i.clone());
         }

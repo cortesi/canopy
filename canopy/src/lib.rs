@@ -29,7 +29,7 @@ pub mod widgets;
 
 pub use crate::canopy::*;
 pub use binder::*;
-pub use commands::{CommandDefinition, CommandNode};
+pub use commands::{CommandNode, CommandSpec};
 pub use control::BackendControl;
 pub use error::{Error, Result};
 pub use node::*;

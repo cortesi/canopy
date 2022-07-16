@@ -130,10 +130,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "canopy",
+ "lazy_static",
  "litrs",
  "proc-macro-error",
  "proc-macro2",
  "quote",
+ "regex",
  "structmeta",
  "syn",
  "thiserror",

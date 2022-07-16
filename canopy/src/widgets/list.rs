@@ -95,6 +95,7 @@ where
     }
 
     /// Clear all items.
+    #[command(ignore_result)]
     pub fn clear(&mut self) -> Vec<N> {
         self.items.drain(..).map(move |x| x.itm).collect()
     }

@@ -1,10 +1,17 @@
+use lazy_static::lazy_static;
 use litrs::StringLit;
 use proc_macro_error::*;
 use quote::quote;
+use regex::Regex;
 use structmeta::StructMeta;
 use syn::{parse_macro_input, DeriveInput};
 
 type Result<T> = std::result::Result<T, Error>;
+
+lazy_static! {
+    /// A regex that matches all plausible permutations of a canopy::Core type specification
+    static ref RE_CORE: Regex = Regex::new("& (mut )??dyn (canopy :: )??Core").unwrap();
+}
 
 #[derive(PartialEq, Eq, thiserror::Error, Debug, Clone)]
 enum Error {
@@ -55,25 +62,39 @@ impl ReturnType {
 
 impl quote::ToTokens for ReturnType {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        tokens.extend(match self.typ {
-            Types::Void => quote! {  canopy::commands::ReturnTypes::Void },
-            Types::String => quote! { canopy::commands::ReturnTypes::String },
-        });
+        let typ = match self.typ {
+            Types::Void => {
+                quote! { canopy::commands::ReturnTypes::Void }
+            }
+            Types::String => {
+                quote! { canopy::commands::ReturnTypes::String }
+            }
+        };
+        let res = self.result;
+        tokens.extend(quote! {canopy::commands::ReturnSpec::new(#typ, #res)})
     }
 }
 
 #[derive(Debug)]
 struct Command {
+    node: String,
     command: String,
     docs: String,
     ret: ReturnType,
     cargs: CommandArgs,
+    arg_core: bool,
 }
 
 impl Command {
-    fn invocation(&self) -> proc_macro2::TokenStream {
+    /// Output the invocation clause of a match macro
+    fn invocation_clause(&self) -> proc_macro2::TokenStream {
         let ident = syn::Ident::new(&self.command, proc_macro2::Span::call_site());
-        let args = quote! {core};
+
+        let args = if self.arg_core {
+            quote! {core}
+        } else {
+            quote! {}
+        };
 
         let mut inv = if self.ret.result {
             quote! {let s = self.#ident(#args)?;}
@@ -89,13 +110,34 @@ impl Command {
                 Types::String => inv.extend(quote! {Ok(canopy::commands::ReturnValue::String(s))}),
             }
         };
-        inv
+
+        let command = &self.command;
+        quote! { #command => { #inv } }
     }
 }
 
-fn parse_command_method(method: &syn::ImplItemMethod) -> Result<Option<Command>> {
+impl quote::ToTokens for Command {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let node_name = &self.node;
+        let command = &self.command;
+        let docs = &self.docs;
+        let ret = &self.ret;
+        let arg_core = self.arg_core;
+
+        tokens.extend(quote! {canopy::commands::CommandSpec {
+            node: canopy::NodeName::convert(#node_name),
+            command: #command.to_string(),
+            docs: #docs.to_string(),
+            ret: #ret,
+            arg_core: #arg_core,
+        }})
+    }
+}
+
+fn parse_command_method(node: &str, method: &syn::ImplItemMethod) -> Result<Option<Command>> {
     let mut docs = vec![];
     let mut args = None;
+
     for a in &method.attrs {
         if a.path.is_ident("command") {
             args = Some(if a.tokens.is_empty() {
@@ -119,6 +161,26 @@ fn parse_command_method(method: &syn::ImplItemMethod) -> Result<Option<Command>>
         // This is not a command method
         return Ok(None);
     };
+
+    let mut arg_core = false;
+    for i in &method.sig.inputs {
+        match i {
+            syn::FnArg::Receiver(_) => {}
+            syn::FnArg::Typed(x) => match &*x.ty {
+                syn::Type::Reference(x) => {
+                    if RE_CORE.is_match(&quote!(#x).to_string()) {
+                        arg_core = true
+                    }
+                }
+                _ => {
+                    return Err(Error::Unsupported(format!(
+                        "unsupported argument type on command: {}",
+                        quote!(method)
+                    )))
+                }
+            },
+        }
+    }
 
     let ret = if args.ignore_result {
         Some(ReturnType::new(Types::Void, false))
@@ -167,10 +229,12 @@ fn parse_command_method(method: &syn::ImplItemMethod) -> Result<Option<Command>>
 
     if let Some(v) = ret {
         Ok(Some(Command {
+            node: node.to_string(),
             command: method.sig.ident.to_string(),
             docs: docs.join("\n"),
             cargs: args,
             ret: v,
+            arg_core,
         }))
     } else {
         let o = &method.sig.output;
@@ -198,7 +262,7 @@ pub fn derive_commands(
     };
 
     // The default node name
-    let default_node_name = tp.path.segments[0].ident.to_string();
+    let node_name = tp.path.segments[0].ident.to_string();
 
     let orig = input.clone();
     let name = input.self_ty;
@@ -207,39 +271,26 @@ pub fn derive_commands(
     let mut commands = vec![];
     for i in input.items {
         if let syn::ImplItem::Method(m) = i {
-            if let Some(command) = parse_command_method(&m).unwrap_or_abort() {
+            if let Some(command) = parse_command_method(&node_name, &m).unwrap_or_abort() {
                 commands.push(command);
             }
         }
     }
 
-    let names: Vec<String> = commands.iter().map(|x| x.command.clone()).collect();
-    let docs: Vec<String> = commands.iter().map(|x| x.docs.clone()).collect();
-    let rets: Vec<ReturnType> = commands.iter().map(|x| x.ret.clone()).collect();
-    let results: Vec<bool> = commands.iter().map(|x| x.ret.result).collect();
-    let invoke: Vec<proc_macro2::TokenStream> = commands.iter().map(|x| x.invocation()).collect();
+    let invocations: Vec<proc_macro2::TokenStream> =
+        commands.iter().map(|x| x.invocation_clause()).collect();
 
     let expanded = quote! {
         impl #impl_generics canopy::commands::CommandNode for #name #where_clause {
-            fn commands() -> Vec<canopy::commands::CommandDefinition> {
-                vec![#(canopy::commands::CommandDefinition {
-                        node: canopy::NodeName::convert(#default_node_name),
-                        command: #names.to_string(),
-                        docs: #docs.to_string(),
-                        return_type: #rets,
-                        return_result: #results,
-                    }),*]
+            fn commands() -> Vec<canopy::commands::CommandSpec> {
+                vec![#(#commands),*]
             }
             fn dispatch(&mut self, core: &mut dyn canopy::Core, cmd: &canopy::commands::CommandInvocation) -> canopy::Result<canopy::commands::ReturnValue> {
                 if cmd.node != self.name() {
                     return Err(canopy::Error::UnknownCommand(cmd.command.to_string()));
                 }
                 match cmd.command.as_str() {
-                    #(
-                        #names => {
-                            #invoke
-                        }
-                    ),*
+                    #(#invocations),*
                     _ => Err(canopy::Error::UnknownCommand(cmd.command.to_string()))
                 }
             }

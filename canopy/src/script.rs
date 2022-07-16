@@ -79,7 +79,7 @@ impl ScriptHost {
         }
     }
 
-    pub fn load_commands(&mut self, cmds: &[CommandDefinition]) {
+    pub fn load_commands(&mut self, cmds: &[CommandSpec]) {
         // We can't enable this yet - see:
         //      https://github.com/rhaiscript/rhai/issues/574
         // engine.set_strict_variables(true);

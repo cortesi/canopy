@@ -17,6 +17,8 @@ structmeta = "0.1.5"
 proc-macro-error = "1.0.4"
 thiserror = "1.0.31"
 anyhow = "1.0.58"
+regex = "1.6.0"
+lazy_static = "1.4.0"
 
 [dev-dependencies]
 canopy = { path = "../canopy" }
