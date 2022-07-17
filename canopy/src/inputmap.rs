@@ -20,7 +20,7 @@ pub enum Input {
 impl Input {
     fn normalize(&self) -> Input {
         match *self {
-            Input::Mouse(m) => Input::Mouse(m.clone()),
+            Input::Mouse(m) => Input::Mouse(m),
             Input::Key(k) => Input::Key(k.normalize()),
         }
     }
@@ -119,11 +119,10 @@ impl InputMap {
         path_filter: &str,
         script: script::ScriptId,
     ) -> Result<()> {
-        let key = input.into();
         self.modes
             .entry(mode.to_string())
             .or_insert_with(InputMode::new)
-            .insert(PathMatcher::new(path_filter)?, key, script);
+            .insert(PathMatcher::new(path_filter)?, input, script);
         Ok(())
     }
 }

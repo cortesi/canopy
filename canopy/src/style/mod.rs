@@ -142,7 +142,7 @@ fn parse_path(path: &str) -> Vec<String> {
         .collect()
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct StyleMap {
     styles: HashMap<Vec<String>, PartialStyle>,
 }
@@ -255,12 +255,11 @@ impl Default for StyleManager {
 
 impl StyleManager {
     pub fn new() -> Self {
-        let cs = StyleManager {
+        StyleManager {
             level: 0,
             layers: vec![],
             layer_levels: vec![],
-        };
-        cs
+        }
     }
 
     // Reset all layers and levels.

@@ -11,7 +11,7 @@ use crate::{
 };
 
 // A fixed-size test node
-#[derive(Debug, PartialEq, StatefulNode)]
+#[derive(Debug, PartialEq, Eq, StatefulNode)]
 pub struct TFixed {
     state: NodeState,
     pub w: u16,

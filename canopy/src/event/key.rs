@@ -102,7 +102,7 @@ impl From<char> for KeyCode {
     }
 }
 
-const LEAVE_INTACT: &'static [KeyCode] = &[KeyCode::Enter, KeyCode::Char(' ')];
+const LEAVE_INTACT: &[KeyCode] = &[KeyCode::Enter, KeyCode::Char(' ')];
 
 /// A keystroke along with modifiers.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -158,7 +158,7 @@ impl Key {
                         key: KeyCode::Char(c.to_ascii_uppercase()),
                     }
                 } else if LEAVE_INTACT.contains(&self.key) {
-                    self.clone()
+                    *self
                 } else {
                     Key {
                         mods: Mods {
@@ -170,10 +170,10 @@ impl Key {
                     }
                 }
             } else {
-                self.clone()
+                *self
             }
         } else {
-            self.clone()
+            *self
         }
     }
 }

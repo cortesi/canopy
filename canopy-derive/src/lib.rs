@@ -25,14 +25,15 @@ impl std::fmt::Display for Error {
     }
 }
 
-impl Into<Diagnostic> for Error {
-    fn into(self) -> Diagnostic {
+impl From<Error> for Diagnostic {
+    fn from(e: Error) -> Diagnostic {
         Diagnostic::spanned(
             proc_macro2::Span::call_site(),
             Level::Error,
-            format!("{}", self),
+            format!("{}", e),
         )
     }
+
 }
 
 /// Arguments to the "command" derive macro.
@@ -206,7 +207,7 @@ fn parse_command_method(node: &str, method: &syn::ImplItemMethod) -> Result<Opti
                                             }
                                         }
                                         syn::GenericArgument::Type(syn::Type::Tuple(e)) => {
-                                            if e.elems.len() == 0 {
+                                            if e.elems.is_empty() {
                                                 Some(ReturnType::new(Types::Void, true))
                                             } else {
                                                 None

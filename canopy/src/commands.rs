@@ -139,6 +139,12 @@ pub struct CommandSet {
     pub commands: HashMap<String, CommandSpec>,
 }
 
+impl Default for CommandSet {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CommandSet {
     pub fn new() -> Self {
         CommandSet {

@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// Thread-local state tracked by test nodes.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct State {
     pub path: Vec<String>,
 }
@@ -56,7 +56,7 @@ pub fn state_path() -> Vec<String> {
 
 macro_rules! leaf {
     ($a:ident) => {
-        #[derive(Debug, PartialEq, StatefulNode)]
+        #[derive(Debug, PartialEq, Eq, StatefulNode)]
         pub struct $a {
             state: NodeState,
 
@@ -128,7 +128,7 @@ macro_rules! leaf {
 
 macro_rules! branch {
     ($name:ident, $la:ident, $lb:ident) => {
-        #[derive(Debug, PartialEq, StatefulNode)]
+        #[derive(Debug, PartialEq, Eq, StatefulNode)]
         pub struct $name {
             state: NodeState,
 
@@ -187,7 +187,7 @@ macro_rules! branch {
             }
 
             fn children(
-                self: &mut Self,
+                &mut self,
                 f: &mut dyn FnMut(&mut dyn Node) -> Result<()>,
             ) -> Result<()> {
                 f(&mut self.a)?;
@@ -198,7 +198,7 @@ macro_rules! branch {
     };
 }
 
-#[derive(Debug, PartialEq, StatefulNode)]
+#[derive(Debug, PartialEq, Eq, StatefulNode)]
 pub struct R {
     state: NodeState,
 
@@ -252,7 +252,7 @@ impl Node for R {
         r.text(
             "any",
             self.vp().view_rect().first_line(),
-            &format!("<{}>", self.name().clone()),
+            &format!("<{}>", self.name()),
         )
     }
 
@@ -264,7 +264,7 @@ impl Node for R {
         self.handle("mouse")
     }
 
-    fn children(self: &mut Self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         f(&mut self.a)?;
         f(&mut self.b)?;
         Ok(())

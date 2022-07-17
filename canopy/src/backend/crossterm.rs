@@ -271,7 +271,7 @@ fn translate_event(e: cevent::Event) -> Event {
             };
             Event::Mouse(mouse::MouseEvent {
                 button,
-                action: action,
+                action,
                 location: Point {
                     x: m.column,
                     y: m.row,

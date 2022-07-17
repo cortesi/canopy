@@ -5,6 +5,12 @@ pub struct Path {
     path: Vec<String>,
 }
 
+impl std::fmt::Display for Path {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "/{}", self.path.join("/"))
+    }
+}
+
 impl Path {
     pub fn empty() -> Self {
         Path { path: vec![] }
@@ -20,10 +26,6 @@ impl Path {
         Path {
             path: v.iter().map(|x| x.as_ref().to_string()).collect(),
         }
-    }
-
-    pub fn to_string(&self) -> String {
-        format!("/{}", self.path.join("/"))
     }
 }
 
@@ -54,7 +56,7 @@ impl From<&str> for Path {
     fn from(v: &str) -> Self {
         Path {
             path: v
-                .split("/")
+                .split('/')
                 .filter_map(|x| {
                     if x.is_empty() {
                         None

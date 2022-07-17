@@ -1,5 +1,4 @@
-// Needed due to the semantics of the duplicate crate
-#![allow(clippy::needless_arbitrary_self_type)]
+#![allow(clippy::new_without_default)]
 
 pub use canopy_derive::{command, derive_commands};
 

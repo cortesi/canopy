@@ -177,7 +177,7 @@ impl Node for Input {
                 self.textbuf.insert(c);
                 Ok(Outcome::Handle)
             }
-            _ => return Ok(Outcome::Ignore),
+            _ => Ok(Outcome::Ignore),
         }
     }
 

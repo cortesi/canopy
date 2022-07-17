@@ -673,7 +673,7 @@ impl Canopy {
             Walk<Option<(script::ScriptId, NodeId)>>,
         > {
             Ok(
-                if let Some(s) = self.keymap.resolve(&path, inputmap::Input::Key(k.into())) {
+                if let Some(s) = self.keymap.resolve(&path, inputmap::Input::Key(k)) {
                     Walk::Handle(Some((s, x.id())))
                 } else {
                     match x.handle_key(self, k)? {

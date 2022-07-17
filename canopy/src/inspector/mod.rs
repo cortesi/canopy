@@ -13,6 +13,12 @@ pub struct Inspector {
     view: frame::Frame<view::View>,
 }
 
+impl Default for Inspector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive_commands]
 impl Inspector {
     pub fn new() -> Self {
@@ -22,12 +28,6 @@ impl Inspector {
         };
         i.hide();
         i
-    }
-}
-
-impl Default for Inspector {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

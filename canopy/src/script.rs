@@ -95,7 +95,7 @@ impl ScriptHost {
                 command: i.command.clone(),
             };
             m.set_raw_fn(
-                i.command.to_string(),
+                &i.command,
                 rhai::FnNamespace::Internal,
                 rhai::FnAccess::Public,
                 &[],

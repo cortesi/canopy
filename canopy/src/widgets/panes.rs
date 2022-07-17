@@ -90,7 +90,7 @@ where
 }
 
 impl<N: Node> Node for Panes<N> {
-    fn children(self: &mut Self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         for col in &mut self.children {
             for row in col {
                 f(row)?
