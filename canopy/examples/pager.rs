@@ -46,8 +46,8 @@ pub fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         println!("Usage: pager filename");
     } else {
         let mut cnpy = Canopy::new();
-        cnpy.load_commands::<Root<Pager>>();
-        cnpy.load_commands::<Text>();
+        cnpy.add_commands::<Root<Pager>>();
+        cnpy.add_commands::<Text>();
 
         cnpy.bind_key('g', "pager", "text::scroll_to_top()")?;
 

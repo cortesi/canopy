@@ -1,5 +1,6 @@
 use crate as canopy;
 use crate::{
+    event::key::*,
     inspector::Inspector,
     state::{NodeState, StatefulNode},
     *,
@@ -145,5 +146,28 @@ where
         };
 
         Ok(())
+    }
+}
+
+impl<T> DefaultBindings for Root<T>
+where
+    T: Node,
+{
+    fn defaults(b: Binder) -> Binder {
+        b.defaults::<Inspector>()
+            .with_path("root")
+            .key(Ctrl + KeyCode::Right, "root::toggle_inspector()")
+            .key('q', "root::quit()")
+    }
+}
+
+impl<T> Loader for Root<T>
+where
+    T: Loader + Node,
+{
+    fn load(c: &mut Canopy) {
+        c.add_commands::<Root<T>>();
+        T::load(c);
+        Inspector::load(c);
     }
 }

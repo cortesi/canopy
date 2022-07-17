@@ -14,7 +14,6 @@
 - Root object
   - Manage modal windows
   - Command help system
-  - Manage inspector
   - Key rebinding
   - Standard commands
     - Reloading/changing key bindings and color schemes

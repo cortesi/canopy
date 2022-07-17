@@ -213,10 +213,12 @@ impl Core for Canopy {
     fn focus_first(&mut self, root: &mut dyn Node) -> Result<Outcome> {
         let mut focus_set = false;
         preorder(root, &mut |x| -> Result<Walk<()>> {
-            Ok(if !focus_set && x.accept_focus() {
+            Ok(if x.is_hidden() {
+                Walk::Skip
+            } else if !focus_set && x.accept_focus() {
                 self.set_focus(x);
                 focus_set = true;
-                Walk::Skip
+                Walk::Handle(())
             } else {
                 Walk::Continue
             })
@@ -414,7 +416,7 @@ impl Canopy {
 
     /// Load the commands from a command node using the default node name
     /// derived from the name of the struct.
-    pub fn load_commands<T: commands::CommandNode>(&mut self) {
+    pub fn add_commands<T: commands::CommandNode>(&mut self) {
         let cmds = <T>::commands();
         self.script_host.load_commands(&cmds);
         self.commands.commands(&cmds);
@@ -818,6 +820,13 @@ where
     })
     .unwrap();
     path.into()
+}
+
+/// A trait that allows widgets to perform recursive initialization of
+/// themselves and their children. The most common use for this trait is to load
+/// the command sets from a node tree.
+pub trait Loader {
+    fn load(_: &mut Canopy) {}
 }
 
 #[cfg(test)]

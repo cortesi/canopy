@@ -193,11 +193,11 @@ pub fn main() -> Result<()> {
     let args = Args::parse();
 
     let mut cnpy = Canopy::new();
-    cnpy.load_commands::<List<TodoItem>>();
-    cnpy.load_commands::<Todo>();
-    cnpy.load_commands::<Input>();
+    cnpy.add_commands::<List<TodoItem>>();
+    cnpy.add_commands::<Todo>();
+    cnpy.add_commands::<Input>();
 
-    canopy::Binder::new()
+    canopy::Binder::new(&mut cnpy)
         .with_path("todo/")
         .key('q', "root::quit()")
         .key('d', "todo::delete_item()")
@@ -216,7 +216,7 @@ pub fn main() -> Result<()> {
         .defaults::<Input>()
         .key(key::KeyCode::Enter, "todo::accept_add()")
         .key(key::KeyCode::Esc, "todo::cancel_add()")
-        .build(&mut cnpy)?;
+        .build()?;
 
     if args.commands {
         cnpy.print_command_table(&mut std::io::stdout())?;

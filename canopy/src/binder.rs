@@ -1,4 +1,4 @@
-use crate::{event::key::Key, event::mouse::Mouse, Canopy, Result};
+use crate::{commands, event::key::Key, event::mouse::Mouse, Canopy, Result};
 
 struct KeyBinding {
     key: Key,
@@ -16,20 +16,22 @@ struct MouseBinding {
 
 /// Binder provides an ergonomic way to specify a set of key bindings using a
 /// builder patttern.
-pub struct Binder {
+pub struct Binder<'a> {
     keys: Vec<KeyBinding>,
     mice: Vec<MouseBinding>,
     mode: String,
     path_filter: String,
+    cnpy: &'a mut Canopy,
 }
 
-impl Binder {
-    pub fn new() -> Self {
+impl<'a> Binder<'a> {
+    pub fn new(cnpy: &'a mut Canopy) -> Self {
         Binder {
             keys: vec![],
             mice: vec![],
             mode: "".into(),
             path_filter: "".into(),
+            cnpy,
         }
     }
 
@@ -76,12 +78,23 @@ impl Binder {
         self
     }
 
-    pub fn build(self, c: &mut Canopy) -> Result<()> {
+    /// Load the commands from a command node using the default node name
+    /// derived from the name of the struct.
+    pub fn load_commands<T: commands::CommandNode>(self) -> Self {
+        let cmds = <T>::commands();
+        self.cnpy.script_host.load_commands(&cmds);
+        self.cnpy.commands.commands(&cmds);
+        self
+    }
+
+    pub fn build(self) -> Result<()> {
         for m in self.mice {
-            c.bind_mode_mouse(m.mouse, &m.mode, &m.path, &m.script)?;
+            self.cnpy
+                .bind_mode_mouse(m.mouse, &m.mode, &m.path, &m.script)?;
         }
         for k in self.keys {
-            c.bind_mode_key(k.key, &k.mode, &k.path, &k.script)?;
+            self.cnpy
+                .bind_mode_key(k.key, &k.mode, &k.path, &k.script)?;
         }
         Ok(())
     }

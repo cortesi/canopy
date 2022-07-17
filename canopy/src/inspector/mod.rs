@@ -2,7 +2,9 @@ mod logs;
 mod view;
 
 use crate as canopy;
-use crate::{widgets::frame, *};
+use crate::{event::key::*, widgets::frame, *};
+
+use logs::Logs;
 
 #[derive(StatefulNode)]
 
@@ -14,10 +16,12 @@ pub struct Inspector {
 #[derive_commands]
 impl Inspector {
     pub fn new() -> Self {
-        Inspector {
+        let mut i = Inspector {
             state: NodeState::default(),
             view: frame::Frame::new(view::View::new()),
-        }
+        };
+        i.hide();
+        i
     }
 }
 
@@ -37,5 +41,32 @@ impl Node for Inspector {
 
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         f(&mut self.view)
+    }
+}
+
+impl DefaultBindings for Inspector {
+    fn defaults(b: Binder) -> Binder {
+        b.with_path("root")
+            .with_path("inspector")
+            .key('a', "root::focus_app()")
+            .with_path("logs")
+            .key('C', "list::clear()")
+            .key('d', "list::delete_selected()")
+            .key('j', "list::select_next()")
+            .key('k', "list::select_prev()")
+            .key('g', "list::select_first()")
+            .key('G', "list::select_last()")
+            .key(' ', "list::page_down()")
+            .key(KeyCode::PageDown, "list::page_down()")
+            .key(KeyCode::PageUp, "list::page_up()")
+            .key(KeyCode::Down, "list::select_next()")
+            .key(KeyCode::Down, "list::select_prev()")
+    }
+}
+
+impl Loader for Inspector {
+    fn load(c: &mut Canopy) {
+        c.add_commands::<Inspector>();
+        Logs::load(c);
     }
 }

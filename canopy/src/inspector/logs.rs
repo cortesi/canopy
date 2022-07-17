@@ -100,28 +100,28 @@ pub struct Logs {
 }
 
 impl Node for Logs {
-    fn handle_key(&mut self, core: &mut dyn Core, k: key::Key) -> Result<Outcome> {
-        let lst = &mut self.list;
-        match k {
-            c if c == 'C' => {
-                lst.clear();
-            }
-            c if c == 'd' => {
-                lst.delete_selected(core);
-            }
-            c if c == 'g' => lst.select_first(core),
-            c if c == 'G' => lst.select_last(core),
-            c if c == 'J' => lst.scroll_down(core),
-            c if c == 'K' => lst.scroll_up(core),
-            c if c == 'j' || c == key::KeyCode::Down => lst.select_next(core),
-            c if c == 'k' || c == key::KeyCode::Up => lst.select_prev(core),
-            c if c == ' ' || c == key::KeyCode::PageDown => lst.page_down(core),
-            c if c == key::KeyCode::PageUp => lst.page_up(core),
-            _ => return Ok(Outcome::Ignore),
-        };
-        core.taint_tree(self);
-        Ok(Outcome::Handle)
-    }
+    // fn handle_key(&mut self, core: &mut dyn Core, k: key::Key) -> Result<Outcome> {
+    //     let lst = &mut self.list;
+    //     match k {
+    //         c if c == 'C' => {
+    //             lst.clear();
+    //         }
+    //         c if c == 'd' => {
+    //             lst.delete_selected(core);
+    //         }
+    //         c if c == 'g' => lst.select_first(core),
+    //         c if c == 'G' => lst.select_last(core),
+    //         c if c == 'J' => lst.scroll_down(core),
+    //         c if c == 'K' => lst.scroll_up(core),
+    //         c if c == 'j' || c == key::KeyCode::Down => lst.select_next(core),
+    //         c if c == 'k' || c == key::KeyCode::Up => lst.select_prev(core),
+    //         c if c == ' ' || c == key::KeyCode::PageDown => lst.page_down(core),
+    //         c if c == key::KeyCode::PageUp => lst.page_up(core),
+    //         _ => return Ok(Outcome::Ignore),
+    //     };
+    //     core.taint_tree(self);
+    //     Ok(Outcome::Handle)
+    // }
 
     fn poll(&mut self, c: &mut dyn Core) -> Option<Duration> {
         if !self.started {
@@ -174,5 +174,11 @@ impl Logs {
             started: false,
             buf: Arc::new(Mutex::new(vec![])),
         }
+    }
+}
+
+impl Loader for Logs {
+    fn load(c: &mut Canopy) {
+        c.add_commands::<List<LogItem>>();
     }
 }

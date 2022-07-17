@@ -45,13 +45,13 @@ pub fn run(func: impl FnOnce(&mut Canopy, TestRender, ttree::R) -> Result<()>) -
     let mut root = ttree::R::new();
     let mut c = Canopy::new();
 
-    c.load_commands::<ttree::R>();
-    c.load_commands::<ttree::BaLa>();
-    c.load_commands::<ttree::BaLb>();
-    c.load_commands::<ttree::BbLa>();
-    c.load_commands::<ttree::BbLb>();
-    c.load_commands::<ttree::Ba>();
-    c.load_commands::<ttree::Bb>();
+    c.add_commands::<ttree::R>();
+    c.add_commands::<ttree::BaLa>();
+    c.add_commands::<ttree::BaLb>();
+    c.add_commands::<ttree::BbLa>();
+    c.add_commands::<ttree::BbLb>();
+    c.add_commands::<ttree::Ba>();
+    c.add_commands::<ttree::Bb>();
 
     c.set_root_size(Expanse::new(100, 100), &mut root)?;
     ttree::reset_state();

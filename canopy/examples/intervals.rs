@@ -140,9 +140,9 @@ pub fn main() -> Result<()> {
         None,
     );
 
-    cnpy.load_commands::<Root<Intervals>>();
-    cnpy.load_commands::<Intervals>();
-    cnpy.load_commands::<List<IntervalItem>>();
+    cnpy.add_commands::<Root<Intervals>>();
+    cnpy.add_commands::<Intervals>();
+    cnpy.add_commands::<List<IntervalItem>>();
 
     cnpy.bind_key('a', "intervals", "intervals::add_item()")?;
     cnpy.bind_key('g', "intervals", "list::select_first()")?;

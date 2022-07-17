@@ -173,9 +173,9 @@ pub fn main() -> Result<()> {
         None,
         Some(canopy::style::AttrSet::default()),
     );
-    cnpy.load_commands::<List<Block>>();
-    cnpy.load_commands::<ListGym>();
-    cnpy.load_commands::<Root<ListGym>>();
+    cnpy.add_commands::<List<Block>>();
+    cnpy.add_commands::<ListGym>();
+    cnpy.add_commands::<Root<ListGym>>();
 
     cnpy.print_command_table(&mut std::io::stdout())?;
 

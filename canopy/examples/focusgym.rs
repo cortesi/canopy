@@ -123,19 +123,20 @@ impl Node for FocusGym {
     }
 }
 
+impl Loader for FocusGym {
+    fn load(c: &mut Canopy) {
+        c.add_commands::<FocusGym>();
+        c.add_commands::<Block>();
+    }
+}
+
 pub fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
+    Root::<FocusGym>::load(&mut cnpy);
 
-    cnpy.load_commands::<Root<FocusGym>>();
-    cnpy.load_commands::<Block>();
-    cnpy.load_commands::<FocusGym>();
-
-    canopy::Binder::new()
-        .with_path("inspector")
-        .key('a', "root::focus_app()")
-        .with_path("root")
-        .key(key::Ctrl + key::KeyCode::Right, "root::toggle_inspector()")
-        .key('q', "root::quit()")
+    canopy::Binder::new(&mut cnpy)
+        .defaults::<Root<FocusGym>>()
+        .key('p', "print(\"xxxx\")")
         .with_path("focus_gym/")
         .key(key::KeyCode::Tab, "root::focus_next()")
         .mouse(mouse::Action::ScrollDown, "root::focus_next()")
@@ -154,7 +155,7 @@ pub fn main() -> Result<()> {
         .mouse(mouse::Button::Left, "block::focus()")
         .mouse(mouse::Button::Middle, "block::split()")
         .mouse(mouse::Button::Right, "block::add()")
-        .build(&mut cnpy)?;
+        .build()?;
 
     let root = Root::new(FocusGym::new());
     runloop(cnpy, root)?;
