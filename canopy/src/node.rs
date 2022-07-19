@@ -26,13 +26,22 @@ pub enum Walk<T> {
 }
 
 impl<T> Walk<T> {
+    /// The handle value of the traversal, if any.
     pub fn value(self) -> Option<T> {
         match self {
             Walk::Handle(v) => Some(v),
             _ => None,
         }
     }
-    fn is_continue(&self) -> bool {
+    /// Did the traversal return Handle?
+    pub fn is_handled(&self) -> bool {
+        match self {
+            Walk::Handle(_) => true,
+            _ => false,
+        }
+    }
+    /// Did the traversal return Continue?
+    pub fn is_continue(&self) -> bool {
         match self {
             Walk::Skip | Walk::Handle(_) => false,
             Walk::Continue => true,

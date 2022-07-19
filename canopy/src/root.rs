@@ -33,6 +33,15 @@ where
         }
     }
 
+    /// Start with the inspector open.
+    pub fn with_inspector(mut self, state: bool) -> Self {
+        self.inspector_active = state;
+        if state {
+            self.inspector.unhide();
+        }
+        self
+    }
+
     #[command]
     /// Exit from the program, restoring terminal state. If the inspector is
     /// open, exit the inspector instead.
@@ -158,6 +167,8 @@ where
             .with_path("root")
             .key(Ctrl + KeyCode::Right, "root::toggle_inspector()")
             .key('q', "root::quit()")
+            .with_path("inspector")
+            .key('a', "root::focus_app()")
     }
 }
 

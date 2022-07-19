@@ -101,12 +101,13 @@ where
     }
 
     /// Move selection to the next item in the list, if possible.
-    pub fn delete_item(&mut self, core: &dyn Core, offset: usize) -> Option<N> {
+    pub fn delete_item(&mut self, core: &mut dyn Core, offset: usize) -> Option<N> {
         if !self.is_empty() && offset < self.len() {
             let itm = self.items.remove(offset);
             if offset <= self.offset {
                 self.select_prev(core);
             }
+            core.taint_tree(self);
             Some(itm.itm)
         } else {
             None
@@ -115,7 +116,7 @@ where
 
     /// Delete the currently selected item.
     #[command(ignore_result)]
-    pub fn delete_selected(&mut self, core: &dyn Core) -> Option<N> {
+    pub fn delete_selected(&mut self, core: &mut dyn Core) -> Option<N> {
         self.delete_item(core, self.offset)
     }
 

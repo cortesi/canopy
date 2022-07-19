@@ -47,8 +47,6 @@ impl Node for Inspector {
 impl DefaultBindings for Inspector {
     fn defaults(b: Binder) -> Binder {
         b.with_path("root")
-            .with_path("inspector")
-            .key('a', "root::focus_app()")
             .with_path("logs")
             .key('C', "list::clear()")
             .key('d', "list::delete_selected()")

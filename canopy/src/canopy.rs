@@ -239,22 +239,22 @@ impl Core for Canopy {
     /// Focus the next node in the pre-order traversal of root. If no node with
     /// focus is found, we focus the first node we can find instead.
     fn focus_next(&mut self, root: &mut dyn Node) -> Result<Outcome> {
-        let mut focus_set = false;
         let mut focus_seen = false;
-        preorder(root, &mut |x| -> Result<Walk<()>> {
-            if !focus_set {
-                if focus_seen {
-                    if x.accept_focus() {
-                        self.set_focus(x);
-                        focus_set = true;
-                    }
-                } else if self.is_focused(x) {
-                    focus_seen = true;
+        let ret = preorder(root, &mut |x| -> Result<Walk<()>> {
+            if x.is_hidden() {
+                return Ok(Walk::Skip);
+            }
+            if focus_seen {
+                if x.accept_focus() {
+                    self.set_focus(x);
+                    return Ok(Walk::Handle(()));
                 }
+            } else if self.is_focused(x) {
+                focus_seen = true;
             }
             Ok(Walk::Continue)
         })?;
-        if !focus_set {
+        if !ret.is_handled() {
             self.focus_first(root)
         } else {
             Ok(Outcome::Handle)
@@ -265,18 +265,20 @@ impl Core for Canopy {
     /// with focus is found, we focus the first node we can find instead.
     fn focus_prev(&mut self, root: &mut dyn Node) -> Result<Outcome> {
         let current = self.focus_gen;
-        let mut focus_seen = false;
         let mut first = true;
         preorder(root, &mut |x| -> Result<Walk<()>> {
-            // We skip the first node in the traversal
+            if x.is_hidden() {
+                return Ok(Walk::Skip);
+            }
             if first {
+                // We skip the first node in the traversal
                 first = false
-            } else if !focus_seen {
-                if x.state().focus_gen == current {
-                    focus_seen = true;
-                } else if x.accept_focus() {
-                    self.set_focus(x);
-                }
+            } else if x.state().focus_gen == current {
+                // This is the node that was previously focused, so we can stop.
+                return Ok(Walk::Handle(()));
+            } else if x.accept_focus() {
+                // Speculatively set focus on this node.
+                self.set_focus(x);
             }
             Ok(Walk::Continue)
         })?;

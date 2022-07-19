@@ -6,6 +6,7 @@ use canopy::{
     geom::Frame,
     *,
 };
+use clap::Parser;
 
 #[derive(StatefulNode)]
 struct Block {
@@ -130,6 +131,21 @@ impl Loader for FocusGym {
     }
 }
 
+/// Simple program to greet a person
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    /// Number of times to greet
+    #[clap(short, long)]
+    commands: bool,
+
+    /// Number of times to greet
+    #[clap(short, long)]
+    inspector: bool,
+
+    path: Option<String>,
+}
+
 pub fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
     Root::<FocusGym>::load(&mut cnpy);
@@ -154,10 +170,17 @@ pub fn main() -> Result<()> {
         .key('a', "block::add()")
         .mouse(mouse::Button::Left, "block::focus()")
         .mouse(mouse::Button::Middle, "block::split()")
-        .mouse(mouse::Button::Right, "block::add()")
-        .build()?;
+        .mouse(mouse::Button::Right, "block::add()");
 
-    let root = Root::new(FocusGym::new());
-    runloop(cnpy, root)?;
+    let args = Args::parse();
+    if args.commands {
+        cnpy.print_command_table(&mut std::io::stdout())?;
+        return Ok(());
+    }
+
+    runloop(
+        cnpy,
+        Root::new(FocusGym::new()).with_inspector(args.inspector),
+    )?;
     Ok(())
 }

@@ -215,8 +215,7 @@ pub fn main() -> Result<()> {
         .with_path("input")
         .defaults::<Input>()
         .key(key::KeyCode::Enter, "todo::accept_add()")
-        .key(key::KeyCode::Esc, "todo::cancel_add()")
-        .build()?;
+        .key(key::KeyCode::Esc, "todo::cancel_add()");
 
     if args.commands {
         cnpy.print_command_table(&mut std::io::stdout())?;

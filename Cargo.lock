@@ -109,6 +109,7 @@ version = "0.0.1"
 dependencies = [
  "bitvec",
  "canopy-derive",
+ "clap",
  "color-backtrace",
  "comfy-table",
  "convert_case",

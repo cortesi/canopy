@@ -1,24 +1,8 @@
-use crate::{commands, event::key::Key, event::mouse::Mouse, Canopy, Result};
-
-struct KeyBinding {
-    key: Key,
-    mode: String,
-    path: String,
-    script: String,
-}
-
-struct MouseBinding {
-    mouse: Mouse,
-    mode: String,
-    path: String,
-    script: String,
-}
+use crate::{event::key::Key, event::mouse::Mouse, Canopy, Result};
 
 /// Binder provides an ergonomic way to specify a set of key bindings using a
 /// builder patttern.
 pub struct Binder<'a> {
-    keys: Vec<KeyBinding>,
-    mice: Vec<MouseBinding>,
     mode: String,
     path_filter: String,
     cnpy: &'a mut Canopy,
@@ -27,14 +11,13 @@ pub struct Binder<'a> {
 impl<'a> Binder<'a> {
     pub fn new(cnpy: &'a mut Canopy) -> Self {
         Binder {
-            keys: vec![],
-            mice: vec![],
             mode: "".into(),
             path_filter: "".into(),
             cnpy,
         }
     }
 
+    /// Add the default bindings for a widget.
     pub fn defaults<T>(self) -> Self
     where
         T: DefaultBindings,
@@ -42,61 +25,56 @@ impl<'a> Binder<'a> {
         T::defaults(self)
     }
 
+    /// Set the mode for subsequent bindings.
     pub fn with_mode(mut self, m: &str) -> Self {
         self.mode = m.to_string();
         self
     }
 
+    /// Set the path filter for subsequent bindings.
     pub fn with_path(mut self, m: &str) -> Self {
         self.path_filter = m.into();
         self
     }
 
-    pub fn key<K>(mut self, key: K, script: &str) -> Self
+    /// Bind a key to a script fallibly.
+    pub fn try_key<K>(self, key: K, script: &str) -> Result<Self>
     where
         Key: From<K>,
     {
-        self.keys.push(KeyBinding {
-            key: key.into(),
-            script: script.into(),
-            mode: self.mode.clone(),
-            path: self.path_filter.clone(),
-        });
-        self
+        self.cnpy
+            .bind_mode_key(key, &self.mode, &self.path_filter, script)?;
+        Ok(self)
     }
 
-    pub fn mouse<K>(mut self, m: K, script: &str) -> Self
+    /// Bind a key to a script, panicing if there is any error (usually in
+    /// compilation of the script). This is often acceptable for initial default
+    /// key bindings where scripts don't come from user input.
+    pub fn key<K>(self, key: K, script: &str) -> Self
+    where
+        Key: From<K>,
+    {
+        self.try_key(key, script).unwrap()
+    }
+
+    /// Bind a mouse action to a script fallibly.
+    pub fn try_mouse<K>(self, m: K, script: &str) -> Result<Self>
     where
         Mouse: From<K>,
     {
-        self.mice.push(MouseBinding {
-            mouse: m.into(),
-            script: script.into(),
-            mode: self.mode.clone(),
-            path: self.path_filter.clone(),
-        });
-        self
+        self.cnpy
+            .bind_mode_mouse(m, &self.mode, &self.path_filter, script)?;
+        Ok(self)
     }
 
-    /// Load the commands from a command node using the default node name
-    /// derived from the name of the struct.
-    pub fn load_commands<T: commands::CommandNode>(self) -> Self {
-        let cmds = <T>::commands();
-        self.cnpy.script_host.load_commands(&cmds);
-        self.cnpy.commands.commands(&cmds);
-        self
-    }
-
-    pub fn build(self) -> Result<()> {
-        for m in self.mice {
-            self.cnpy
-                .bind_mode_mouse(m.mouse, &m.mode, &m.path, &m.script)?;
-        }
-        for k in self.keys {
-            self.cnpy
-                .bind_mode_key(k.key, &k.mode, &k.path, &k.script)?;
-        }
-        Ok(())
+    /// Bind a mouse action to a script, panicing if there is any error (usually
+    /// in compilation of the script). This is often acceptable for initial
+    /// default key bindings where scripts don't come from user input.
+    pub fn mouse<K>(self, m: K, script: &str) -> Self
+    where
+        Mouse: From<K>,
+    {
+        self.try_mouse(m, script).unwrap()
     }
 }
 
