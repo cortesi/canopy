@@ -1,10 +1,9 @@
 use super::logs::Logs;
 use crate as canopy;
-use crate::{event::key, widgets::tabs, *};
+use crate::{widgets::tabs, *};
 
 /// View contains the body of the inspector.
 #[derive(StatefulNode)]
-
 pub struct View {
     tabs: tabs::Tabs,
     logs: Logs,
@@ -12,14 +11,6 @@ pub struct View {
 }
 
 impl Node for View {
-    fn handle_key(&mut self, c: &mut dyn Core, k: key::Key) -> Result<Outcome> {
-        match k {
-            kc if kc == key::KeyCode::Tab => self.tabs.next(c),
-            _ => return Ok(Outcome::Ignore),
-        };
-        Ok(Outcome::Handle)
-    }
-
     fn render(&mut self, _c: &dyn Core, _r: &mut Render) -> Result<()> {
         let (a, b) = self.vp().carve_vstart(1);
         fit(&mut self.tabs, a)?;

@@ -2,7 +2,11 @@ mod logs;
 mod view;
 
 use crate as canopy;
-use crate::{event::key::*, widgets::frame, *};
+use crate::{
+    event::key::*,
+    widgets::{frame, tabs},
+    *,
+};
 
 use logs::Logs;
 
@@ -46,7 +50,8 @@ impl Node for Inspector {
 
 impl DefaultBindings for Inspector {
     fn defaults(b: Binder) -> Binder {
-        b.with_path("root")
+        b.with_path("inspector/")
+            .key(KeyCode::Tab, "tabs::next()")
             .with_path("logs")
             .key('C', "list::clear()")
             .key('d', "list::delete_selected()")
@@ -65,6 +70,7 @@ impl DefaultBindings for Inspector {
 impl Loader for Inspector {
     fn load(c: &mut Canopy) {
         c.add_commands::<Inspector>();
+        c.add_commands::<tabs::Tabs>();
         Logs::load(c);
     }
 }

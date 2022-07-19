@@ -205,6 +205,7 @@ pub fn main() -> Result<()> {
     canopy::Binder::new(&mut cnpy)
         .defaults::<Root<ListGym>>()
         .with_path("list_gym")
+        .key('p', "print(\"foo\")")
         .key('a', "list_gym::add_item()")
         .key('A', "list_gym::append_item()")
         .key('C', "list_gym::clear()")

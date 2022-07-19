@@ -22,11 +22,15 @@ impl Tabs {
         }
     }
 
+    /// Select the next tab.
+    #[command]
     pub fn next(&mut self, c: &mut dyn Core) {
         self.active = (self.active + 1) % self.tabs.len();
         c.taint(self);
     }
 
+    /// Select the previous tab.
+    #[command]
     pub fn prev(&mut self, c: &mut dyn Core) {
         self.active = (self.active.wrapping_sub(1)) % self.tabs.len();
         c.taint(self);

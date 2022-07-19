@@ -33,7 +33,6 @@ impl From<Error> for Diagnostic {
             format!("{}", e),
         )
     }
-
 }
 
 /// Arguments to the "command" derive macro.
