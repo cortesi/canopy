@@ -311,6 +311,7 @@ where
 
     fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {
         let vp = self.vp();
+        self.refresh_views(vp.size())?;
         for itm in &mut self.items {
             if let Some(vp) = vp.map(itm.virt)? {
                 itm.itm.set_viewport(vp);
