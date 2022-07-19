@@ -107,7 +107,6 @@ where
             if offset <= self.offset {
                 self.select_prev(core);
             }
-            core.taint_tree(self);
             Some(itm.itm)
         } else {
             None

@@ -142,8 +142,6 @@ struct Args {
     /// Number of times to greet
     #[clap(short, long)]
     inspector: bool,
-
-    path: Option<String>,
 }
 
 pub fn main() -> Result<()> {

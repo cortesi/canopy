@@ -1,3 +1,4 @@
+use clap::Parser;
 use rand::seq::SliceRandom;
 use rand::Rng;
 
@@ -147,6 +148,26 @@ impl Node for ListGym {
     }
 }
 
+impl Loader for ListGym {
+    fn load(c: &mut Canopy) {
+        c.add_commands::<List<Block>>();
+        c.add_commands::<ListGym>();
+    }
+}
+
+/// Simple program to greet a person
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    /// Number of times to greet
+    #[clap(short, long)]
+    commands: bool,
+
+    /// Number of times to greet
+    #[clap(short, long)]
+    inspector: bool,
+}
+
 pub fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
     cnpy.style.add(
@@ -173,50 +194,43 @@ pub fn main() -> Result<()> {
         None,
         Some(canopy::style::AttrSet::default()),
     );
-    cnpy.add_commands::<List<Block>>();
-    cnpy.add_commands::<ListGym>();
-    cnpy.add_commands::<Root<ListGym>>();
+    Root::<ListGym>::load(&mut cnpy);
 
-    cnpy.print_command_table(&mut std::io::stdout())?;
+    let args = Args::parse();
+    if args.commands {
+        cnpy.print_command_table(&mut std::io::stdout())?;
+        return Ok(());
+    }
 
-    cnpy.bind_key('a', "root", "list_gym::add_item()")?;
-    cnpy.bind_key('A', "root", "list_gym::append_item()")?;
-    cnpy.bind_key('C', "root", "list_gym::clear()")?;
-    cnpy.bind_key('q', "root", "root::quit()")?;
+    canopy::Binder::new(&mut cnpy)
+        .defaults::<Root<ListGym>>()
+        .with_path("list_gym")
+        .key('a', "list_gym::add_item()")
+        .key('A', "list_gym::append_item()")
+        .key('C', "list_gym::clear()")
+        .key('q', "root::quit()")
+        .key('g', "list::select_first()")
+        .key('G', "list::select_last()")
+        .key('d', "list::delete_selected()")
+        .key('j', "list::select_next()")
+        .mouse(event::mouse::Action::ScrollDown, "list::select_next()")
+        .key('k', "list::select_prev()")
+        .mouse(event::mouse::Action::ScrollUp, "list::select_prev()")
+        .key(key::KeyCode::Down, "list::select_next()")
+        .key(key::KeyCode::Up, "list::select_prev()")
+        .key('J', "list::scroll_down()")
+        .key('K', "list::scroll_up()")
+        .key('h', "list::scroll_left()")
+        .key('l', "list::scroll_right()")
+        .key(key::KeyCode::Left, "list::scroll_left()")
+        .key(key::KeyCode::Right, "list::scroll_right()")
+        .key(key::KeyCode::PageDown, "list::page_down()")
+        .key(' ', "list::page_down()")
+        .key(key::KeyCode::PageUp, "list::page_up()");
 
-    cnpy.bind_key('g', "root", "list::select_first()")?;
-    cnpy.bind_key('G', "root", "list::select_last()")?;
-    cnpy.bind_key('d', "root", "list::delete_selected()")?;
-
-    cnpy.bind_key('j', "root", "list::select_next()")?;
-    cnpy.bind_mouse(
-        event::mouse::Action::ScrollDown,
-        "root",
-        "list::select_next()",
+    runloop(
+        cnpy,
+        Root::new(ListGym::new()).with_inspector(args.inspector),
     )?;
-
-    cnpy.bind_key('k', "root", "list::select_prev()")?;
-    cnpy.bind_mouse(
-        event::mouse::Action::ScrollUp,
-        "root",
-        "list::select_prev()",
-    )?;
-
-    cnpy.bind_key(key::KeyCode::Down, "root", "list::select_next()")?;
-    cnpy.bind_key(key::KeyCode::Up, "root", "list::select_prev()")?;
-
-    cnpy.bind_key('J', "root", "list::scroll_down()")?;
-    cnpy.bind_key('K', "root", "list::scroll_up()")?;
-    cnpy.bind_key('h', "root", "list::scroll_left()")?;
-    cnpy.bind_key('l', "root", "list::scroll_right()")?;
-    cnpy.bind_key(key::KeyCode::Left, "root", "list::scroll_left()")?;
-    cnpy.bind_key(key::KeyCode::Right, "root", "list::scroll_right()")?;
-
-    cnpy.bind_key(key::KeyCode::PageDown, "root", "list::page_down()")?;
-    cnpy.bind_key(' ', "root", "list::page_down()")?;
-    cnpy.bind_key(key::KeyCode::PageUp, "root", "list::page_up()")?;
-
-    let root = Root::new(ListGym::new());
-    runloop(cnpy, root)?;
     Ok(())
 }
