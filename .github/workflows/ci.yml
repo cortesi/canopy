@@ -1,23 +1,20 @@
-on:
-  push:
-  pull_request:
-
-env:
-  CARGO_TERM_COLOR: always
+on: [push, pull_request]
 
 jobs:
-  build_and_test:
-    name: canopy - ${{ matrix.os }} ${{ matrix.toolchain }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - { toolchain: stable, os: ubuntu-latest }
-          - { toolchain: nightly, os: ubuntu-latest }
-          - { toolchain: stable, os: windows-latest }
-          - { toolchain: nightly, os: windows-latest }
-    steps:
-      - uses: actions/checkout@v2
-      - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
-      - run: cargo build --verbose
-      - run: cargo test --verbose
+    test:
+        name: canopy - ${{ matrix.os }} ${{ matrix.toolchain }}
+        runs-on: ${{ matrix.os }}
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                - { toolchain: stable, os: ubuntu-latest }
+                - { toolchain: nightly, os: ubuntu-latest }
+                - { toolchain: stable, os: windows-latest }
+                - { toolchain: nightly, os: windows-latest }
+        steps:
+            - uses: actions/checkout@v3
+            - uses: dtolnay/rust-toolchain@master
+              with:
+                    toolchain: ${{ matrix.toolchain }}
+            - run: cargo test --all-features

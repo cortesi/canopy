@@ -84,7 +84,9 @@
 
   - Errors don't carry location information, so are often not useful for debugging
   - Not implementing render if a node has children
-  - Not remembering both layout and taint after making a node modification
+  - Not remembering to call fit() on all child nodes on render
+    - It's not clear that it's necessary to call fit every render sweep, so I'm
+      not sure if we can just add a check for this.
 
 # Bugs
 
