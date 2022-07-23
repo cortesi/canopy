@@ -1,3 +1,4 @@
+pub mod editor;
 mod input;
 mod panes;
 mod text;

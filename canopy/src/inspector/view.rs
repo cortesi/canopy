@@ -29,7 +29,7 @@ impl View {
     pub fn new() -> Self {
         View {
             state: NodeState::default(),
-            tabs: tabs::Tabs::new(vec!["Nodes".into(), "Events".into(), "Logs".into()]),
+            tabs: tabs::Tabs::new(vec!["Stats".into(), "Logs".into()]),
             logs: Logs::new(),
         }
     }

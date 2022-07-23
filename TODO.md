@@ -49,7 +49,10 @@
 - ctrl-c/ctrl-z
 - Widgets
   - Editor
-    - Wrap Helix?
+    - Focused on text areas < 100k characters
+    - Undo/redo
+    - Modal operations
+    - Line wrapping
   - Pad
   - Center
   - text line widget
