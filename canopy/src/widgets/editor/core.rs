@@ -1,7 +1,7 @@
 use std::f32::consts::E;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-struct Position {
+pub struct Position {
     line: usize,
     column: usize,
 }
@@ -30,13 +30,14 @@ impl Line {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Insert {
     pos: Position,
-    txt: String,
+    text: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Delete {
     start: Position,
     end: Position,
+    text: String,
 }
 
 /// An operation on the text buffer. Each operation includes the information
@@ -84,22 +85,22 @@ impl Core {
     fn execute_op(&mut self, op: Operation) {
         match &op {
             Operation::Insert(v) => {
-                if v.txt.contains("\n") {
+                if v.text.contains("\n") {
                     // If our contains a newline, it's an expansion of the
                     // current line into multiple lines.
                     let mut m = self.text.remove(v.pos.line).raw;
-                    m.insert_str(v.pos.column as usize, &v.txt);
+                    m.insert_str(v.pos.column as usize, &v.text);
                     let new: Vec<Line> = m.split("\n").map(|x| Line::new(x.clone())).collect();
                     self.cursor = Position {
                         line: self.cursor.line + new.len() - 1,
-                        column: v.txt.len() - v.txt.rfind("\n").unwrap() - 1,
+                        column: v.text.len() - v.text.rfind("\n").unwrap() - 1,
                     };
                     self.text.splice(v.pos.line..v.pos.line, new);
                 } else {
-                    // If there are no newlines, we just insert the text
+                    // If there are no newlines, we just insert the text in-place.
                     self.text[v.pos.line]
                         .raw
-                        .insert_str(v.pos.column as usize, &v.txt);
+                        .insert_str(v.pos.column as usize, &v.text);
                     self.cursor = Position {
                         line: self.cursor.line,
                         column: self.cursor.column + 1,
@@ -116,6 +117,7 @@ impl Core {
         self.history.push(op);
     }
 
+    /// The complete raw text of this editor.
     pub fn raw_text(&self) -> String {
         self.text
             .iter()
@@ -124,10 +126,40 @@ impl Core {
             .join("\n")
     }
 
+    /// Retrieve the text from inclusive start to exclusive end.
+    pub fn text_range(&self, start: Position, end: Position) -> String {
+        let mut buf: String = String::new();
+        if start.line > end.line {
+            panic!("start.line > end.line");
+        }
+        if start.line == end.line {
+            buf.push_str(&self.text[start.line].raw[start.column..end.column]);
+        } else {
+            buf.push_str(&self.text[start.line].raw[start.column..]);
+            buf.push_str("\n");
+            if end.line - start.line > 1 {
+                for l in &self.text[(start.line + 1)..(end.line - 1)] {
+                    buf.push_str(&l.raw);
+                    buf.push_str("\n");
+                }
+            }
+            buf.push_str(&self.text[end.line].raw[..end.column]);
+        }
+        buf
+    }
+
     pub fn insert(&mut self, s: &str) {
         self.execute_op(Operation::Insert(Insert {
             pos: self.cursor,
-            txt: s.into(),
+            text: s.into(),
+        }));
+    }
+
+    pub fn delete(&mut self, start: Position, end: Position) {
+        self.execute_op(Operation::Delete(Delete {
+            start,
+            end,
+            text: self.text_range(start, end),
         }));
     }
 }
@@ -168,7 +200,40 @@ mod tests {
     }
 
     #[test]
-    fn basic_ops() {
+    fn textrange() {
+        let c = Core::new("one two\nthree four\nx");
+        assert_eq!(
+            c.text_range(
+                Position { line: 0, column: 0 },
+                Position { line: 0, column: 3 }
+            ),
+            "one"
+        );
+        assert_eq!(
+            c.text_range(
+                Position { line: 0, column: 4 },
+                Position { line: 0, column: 7 }
+            ),
+            "two"
+        );
+        assert_eq!(
+            c.text_range(
+                Position { line: 0, column: 1 },
+                Position { line: 0, column: 2 }
+            ),
+            "n"
+        );
+        assert_eq!(
+            c.text_range(
+                Position { line: 0, column: 0 },
+                Position { line: 1, column: 0 }
+            ),
+            "one two\n"
+        );
+    }
+
+    #[test]
+    fn insert() {
         test(
             "_",
             |c| {

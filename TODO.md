@@ -42,6 +42,7 @@
     cursor display before a render sweep then re-enable it afterwards, causing
     flickering under some rare circumstances. We could draw the cursor ourselves
     in widgets that need one - is there a reason not to do this?
+  - https://en.wikipedia.org/wiki/Combining_character
 - Ergonomics:
   - Better error returns
     - consider https://github.com/zkat/miette
