@@ -1,9 +1,55 @@
-use std::f32::consts::E;
-
+/// A position in the editor. When used as the end of a range, the column
+/// offset, but not the line offset, may be beyond the bounds of the line.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Position {
     line: usize,
     column: usize,
+}
+
+impl Position {
+    fn new(line: usize, column: usize) -> Self {
+        Position { line, column }
+    }
+
+    /// Return the next logical position after this one. Returns the final
+    /// position if this one is out of bounds.
+    fn next(&self, c: &Core) -> Position {
+        let last = c.last();
+        if self.line > last.line {
+            last
+        } else if self.column < c.lines[self.line].raw.len() - 1 {
+            Position::new(self.line, self.column + 1)
+        } else {
+            Position::new(self.line + 1, 0).cap_inc(c)
+        }
+    }
+
+    /// Caps an inclusive position to be within the bounds of the text.
+    fn cap_inc(&self, c: &Core) -> Position {
+        let ep = c.last();
+        let start_line = if self.line > ep.line {
+            c.last().line
+        } else {
+            self.line
+        };
+        if c.lines[start_line].raw.len() < self.column {
+            Position {
+                line: start_line,
+                column: c.lines[start_line].raw.len() - 1,
+            }
+        } else {
+            Position {
+                line: start_line,
+                column: self.column,
+            }
+        }
+    }
+}
+
+impl From<(usize, usize)> for Position {
+    fn from((line, column): (usize, usize)) -> Self {
+        Self { line, column }
+    }
 }
 
 /// A line is a single line of text, including any terminating line break characters.
@@ -53,7 +99,7 @@ enum Operation {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Core {
     /// The underlying raw text being edited.
-    text: Vec<Line>,
+    lines: Vec<Line>,
     /// The history of operations on this text buffer.
     history: Vec<Operation>,
     /// The current cursor position.
@@ -65,13 +111,13 @@ pub struct Core {
 impl Core {
     pub fn new(text: &str) -> Self {
         let history = Vec::new();
-        let cursor = Position { line: 0, column: 0 };
+        let cursor = (0, 0).into();
         let mut t: Vec<Line> = text.split("\n").map(|x| Line::new(x)).collect();
         if t.is_empty() {
             t.push(Line::new(""))
         }
         Core {
-            text: t,
+            lines: t,
             history,
             cursor,
             width: 0,
@@ -86,32 +132,36 @@ impl Core {
         match &op {
             Operation::Insert(v) => {
                 if v.text.contains("\n") {
-                    // If our contains a newline, it's an expansion of the
+                    // If our text contains a newline, it's an expansion of the
                     // current line into multiple lines.
-                    let mut m = self.text.remove(v.pos.line).raw;
+                    let mut m = self.lines.remove(v.pos.line).raw;
                     m.insert_str(v.pos.column as usize, &v.text);
                     let new: Vec<Line> = m.split("\n").map(|x| Line::new(x.clone())).collect();
                     self.cursor = Position {
                         line: self.cursor.line + new.len() - 1,
                         column: v.text.len() - v.text.rfind("\n").unwrap() - 1,
                     };
-                    self.text.splice(v.pos.line..v.pos.line, new);
+                    self.lines.splice(v.pos.line..v.pos.line, new);
                 } else {
                     // If there are no newlines, we just insert the text in-place.
-                    self.text[v.pos.line]
+                    self.lines[v.pos.line]
                         .raw
                         .insert_str(v.pos.column as usize, &v.text);
-                    self.cursor = Position {
-                        line: self.cursor.line,
-                        column: self.cursor.column + 1,
-                    };
+                    self.cursor = (self.cursor.line, self.cursor.column + 1).into();
                 }
             }
             Operation::Delete(v) => {
-                self.cursor = Position {
-                    line: self.cursor.line,
-                    column: self.cursor.column - 1,
-                };
+                if v.start.line > self.lines.len() || v.end == v.start {
+                    return;
+                } else if v.start.line == v.end.line {
+                    self.lines[v.start.line]
+                        .raw
+                        .replace_range(v.start.column..v.end.column, "");
+                }
+                // self.cursor = Position {
+                //     line: self.cursor.line,
+                //     column: self.cursor.column - 1,
+                // };
             }
         }
         self.history.push(op);
@@ -119,31 +169,43 @@ impl Core {
 
     /// The complete raw text of this editor.
     pub fn raw_text(&self) -> String {
-        self.text
+        self.lines
             .iter()
             .map(|x| x.raw.clone())
             .collect::<Vec<_>>()
             .join("\n")
     }
 
+    /// What's the position of the final character in the text?
+    fn last(&self) -> Position {
+        (
+            self.lines.len() - 1,
+            self.lines[self.lines.len() - 1].raw.len() - 1,
+        )
+            .into()
+    }
+
     /// Retrieve the text from inclusive start to exclusive end.
-    pub fn text_range(&self, start: Position, end: Position) -> String {
+    pub fn text_range<T>(&self, start: T, end: T) -> String
+    where
+        T: Into<Position>,
+    {
+        let start = start.into().cap_inc(self);
+        let end = end.into().cap_inc(self);
+
         let mut buf: String = String::new();
-        if start.line > end.line {
-            panic!("start.line > end.line");
-        }
         if start.line == end.line {
-            buf.push_str(&self.text[start.line].raw[start.column..end.column]);
+            buf.push_str(&self.lines[start.line].raw[start.column..end.column]);
         } else {
-            buf.push_str(&self.text[start.line].raw[start.column..]);
+            buf.push_str(&self.lines[start.line].raw[start.column..]);
             buf.push_str("\n");
             if end.line - start.line > 1 {
-                for l in &self.text[(start.line + 1)..(end.line - 1)] {
+                for l in &self.lines[(start.line + 1)..(end.line - 1)] {
                     buf.push_str(&l.raw);
                     buf.push_str("\n");
                 }
             }
-            buf.push_str(&self.text[end.line].raw[..end.column]);
+            buf.push_str(&self.lines[end.line].raw[..end.column]);
         }
         buf
     }
@@ -155,7 +217,14 @@ impl Core {
         }));
     }
 
-    pub fn delete(&mut self, start: Position, end: Position) {
+    /// Delete a text range. The range may extend beyond the end of the text
+    /// or line with no error
+    pub fn delete<T>(&mut self, start: T, end: T)
+    where
+        T: Into<Position>,
+    {
+        let start = start.into();
+        let end = end.into();
         self.execute_op(Operation::Delete(Delete {
             start,
             end,
@@ -173,17 +242,16 @@ mod tests {
         let mut cursor = None;
         for (cnt, i) in spec.lines().enumerate() {
             if let Some(x) = i.find("_") {
-                cursor = Some(Position {
-                    line: cnt,
-                    column: x,
-                });
+                cursor = Some((cnt, x).into());
                 txt.push(i.replace("_", ""))
             } else {
                 txt.push(i.into());
             }
         }
         let mut n = Core::new(&txt.join("\n"));
-        n.set_cursor(cursor.unwrap());
+        if let Some(x) = cursor {
+            n.set_cursor(x);
+        }
         n
     }
 
@@ -200,36 +268,24 @@ mod tests {
     }
 
     #[test]
-    fn textrange() {
+    fn cap_position() {
+        let c = Core::new("a\nbb");
+        assert_eq!(Position::new(0, 0).cap_inc(&c), (0, 0).into());
+        assert_eq!(Position::new(0, 2).cap_inc(&c), (0, 0).into());
+        assert_eq!(Position::new(3, 0).cap_inc(&c), (1, 0).into());
+        assert_eq!(Position::new(3, 3).cap_inc(&c), (1, 1).into());
+    }
+
+    #[test]
+    fn text_range() {
         let c = Core::new("one two\nthree four\nx");
-        assert_eq!(
-            c.text_range(
-                Position { line: 0, column: 0 },
-                Position { line: 0, column: 3 }
-            ),
-            "one"
-        );
-        assert_eq!(
-            c.text_range(
-                Position { line: 0, column: 4 },
-                Position { line: 0, column: 7 }
-            ),
-            "two"
-        );
-        assert_eq!(
-            c.text_range(
-                Position { line: 0, column: 1 },
-                Position { line: 0, column: 2 }
-            ),
-            "n"
-        );
-        assert_eq!(
-            c.text_range(
-                Position { line: 0, column: 0 },
-                Position { line: 1, column: 0 }
-            ),
-            "one two\n"
-        );
+        assert_eq!(c.text_range((0, 0), (0, 3)), "one");
+        assert_eq!(c.text_range((0, 4), (0, 7)), "two");
+        assert_eq!(c.text_range((0, 1), (0, 2)), "n");
+        assert_eq!(c.text_range((0, 0), (1, 0)), "one two\n");
+        // Beyond bounds
+        assert_eq!(c.text_range((10, 0), (11, 0)), "");
+        assert_eq!(c.text_range((1, 6), (11, 0)), "four\nx");
     }
 
     #[test]
@@ -270,6 +326,33 @@ mod tests {
                 c.insert("\nb");
             },
             "a\nb_",
+        );
+    }
+
+    #[test]
+    fn delete() {
+        // Nop, empty range
+        test(
+            "a",
+            |c| {
+                c.delete((0, 0), (0, 0));
+            },
+            "a",
+        );
+        // Nop, beyond bounds
+        test(
+            "a",
+            |c| {
+                c.delete((1, 0), (1, 0));
+            },
+            "a",
+        );
+        test(
+            "a",
+            |c| {
+                c.delete((0, 0), (0, 1));
+            },
+            "",
         );
     }
 }
