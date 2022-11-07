@@ -17,7 +17,7 @@
   - Key rebinding
   - Standard commands
     - Reloading/changing key bindings and color schemes
-    - Command mode pop
+    - Command mode set/pop
 - Better debugging and monitoring story
   - Inspector GUI
     - Logs
@@ -30,7 +30,6 @@
     - Shrink/specify app area
     - Screenshots of app area
     - Graphs/stats
-    - Maybe enable inspector with an env variable?
   - Add node names for relevant errors
   - Add warning logs where needed to aid debugging
 - Core
@@ -44,6 +43,7 @@
     in widgets that need one - is there a reason not to do this?
   - https://en.wikipedia.org/wiki/Combining_character
 - Ergonomics:
+  - Warn when no matching node::command is found
   - Better error returns
     - consider https://github.com/zkat/miette
   - script execution errors need to be improved
@@ -54,6 +54,8 @@
     - Undo/redo
     - Modal operations
     - Line wrapping
+    - Wrap Helix?
+  - Tree
   - Pad
   - Center
   - text line widget
