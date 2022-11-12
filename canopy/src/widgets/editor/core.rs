@@ -32,17 +32,15 @@ impl Position {
                 line: ep.line,
                 column: c.lines[ep.line].raw.len(),
             }
+        } else if c.lines[self.line].raw.len() < self.column + 1 {
+            Position {
+                line: self.line,
+                column: c.lines[self.line].raw.len(),
+            }
         } else {
-            if c.lines[self.line].raw.len() < self.column + 1 {
-                Position {
-                    line: self.line,
-                    column: c.lines[self.line].raw.len(),
-                }
-            } else {
-                Position {
-                    line: self.line,
-                    column: self.column,
-                }
+            Position {
+                line: self.line,
+                column: self.column,
             }
         }
     }
@@ -50,19 +48,19 @@ impl Position {
     /// Constrain a `Position` to be within the inclusive range of `Core`.
     fn cap_inclusive(&self, c: &Core) -> Position {
         let ep = c.last();
-        let start_line = if self.line > ep.line {
-            c.last().line
-        } else {
-            self.line
-        };
-        if c.lines[start_line].raw.len() < self.column {
+        if self.line > ep.line {
             Position {
-                line: start_line,
-                column: c.lines[start_line].raw.len() - 1,
+                line: ep.line,
+                column: c.lines[ep.line].raw.len() - 1,
+            }
+        } else if c.lines[self.line].raw.len() < self.column {
+            Position {
+                line: self.line,
+                column: c.lines[self.line].raw.len() - 1,
             }
         } else {
             Position {
-                line: start_line,
+                line: self.line,
                 column: self.column,
             }
         }
@@ -213,7 +211,7 @@ impl Core {
     where
         T: Into<Position>,
     {
-        let start = start.into().cap_inclusive(self);
+        let start = start.into().cap_exclusive(self);
         let end = end.into().cap_exclusive(self);
         println!("{:?}", end);
 
@@ -296,7 +294,7 @@ mod tests {
         let c = Core::new("a\nbb");
         assert_eq!(Position::new(0, 0).cap_inclusive(&c), (0, 0).into());
         assert_eq!(Position::new(0, 2).cap_inclusive(&c), (0, 0).into());
-        assert_eq!(Position::new(3, 0).cap_inclusive(&c), (1, 0).into());
+        assert_eq!(Position::new(3, 0).cap_inclusive(&c), (1, 1).into());
         assert_eq!(Position::new(3, 3).cap_inclusive(&c), (1, 1).into());
 
         assert_eq!(Position::new(0, 0).cap_exclusive(&c), (0, 0).into());
@@ -306,12 +304,12 @@ mod tests {
     #[test]
     fn text_range() {
         let c = Core::new("one two\nthree four\nx");
-        // assert_eq!(c.text_range((0, 0), (0, 3)), "one");
-        // assert_eq!(c.text_range((0, 4), (0, 7)), "two");
-        // assert_eq!(c.text_range((0, 1), (0, 2)), "n");
-        // assert_eq!(c.text_range((0, 0), (1, 0)), "one two\n");
+        assert_eq!(c.text_range((0, 0), (0, 3)), "one");
+        assert_eq!(c.text_range((0, 4), (0, 7)), "two");
+        assert_eq!(c.text_range((0, 1), (0, 2)), "n");
+        assert_eq!(c.text_range((0, 0), (1, 0)), "one two\n");
         // // Beyond bounds
-        // assert_eq!(c.text_range((10, 0), (11, 0)), "");
+        assert_eq!(c.text_range((10, 0), (11, 0)), "");
         assert_eq!(c.text_range((1, 6), (11, 0)), "four\nx");
     }
 
@@ -363,6 +361,13 @@ mod tests {
             "a",
             |c| {
                 c.delete((0, 0), (0, 0));
+            },
+            "a",
+        );
+        test(
+            "a",
+            |c| {
+                c.delete((10, 0), (10, 0));
             },
             "a",
         );
