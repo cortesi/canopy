@@ -104,7 +104,6 @@ struct Insert {
 struct Delete {
     start: Position,
     end: Position,
-    text: String,
 }
 
 /// An operation on the text buffer. Each operation includes the information
@@ -245,12 +244,9 @@ impl Core {
     where
         T: Into<Position>,
     {
-        let start = start.into();
-        let end = end.into();
         self.execute_op(Operation::Delete(Delete {
-            start,
-            end,
-            text: self.text_range(start, end),
+            start: start.into(),
+            end: end.into(),
         }));
     }
 }
@@ -385,6 +381,35 @@ mod tests {
                 c.delete((0, 0), (0, 1));
             },
             "",
+        );
+        // Ranges
+        test(
+            "abc",
+            |c| {
+                c.delete((0, 0), (0, 1));
+            },
+            "bc",
+        );
+        test(
+            "abc",
+            |c| {
+                c.delete((0, 1), (0, 2));
+            },
+            "ac",
+        );
+        test(
+            "abc",
+            |c| {
+                c.delete((0, 2), (0, 3));
+            },
+            "ab",
+        );
+        test(
+            "abc\ndef",
+            |c| {
+                c.delete((0, 0), (1, 0));
+            },
+            "def",
         );
     }
 }
