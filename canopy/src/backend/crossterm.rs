@@ -112,11 +112,11 @@ impl CrosstermRender {
         } else {
             self.fp.queue(ccursor::DisableBlinking)?;
         }
-        self.fp.queue(ccursor::SetCursorShape(match c.shape {
-            cursor::CursorShape::Block => ccursor::CursorShape::Block,
-            cursor::CursorShape::Line => ccursor::CursorShape::Line,
-            cursor::CursorShape::Underscore => ccursor::CursorShape::UnderScore,
-        }))?;
+        self.fp.queue(match c.shape {
+            cursor::CursorShape::Block => ccursor::SetCursorStyle::BlinkingBlock,
+            cursor::CursorShape::Line => ccursor::SetCursorStyle::BlinkingBar,
+            cursor::CursorShape::Underscore => ccursor::SetCursorStyle::BlinkingUnderScore,
+        })?;
         self.fp.queue(ccursor::Show)?;
         Ok(())
     }
@@ -248,6 +248,44 @@ fn translate_event(e: cevent::Event) -> Event {
                 cevent::KeyCode::Char(c) => key::KeyCode::Char(c),
                 cevent::KeyCode::Null => key::KeyCode::Null,
                 cevent::KeyCode::Esc => key::KeyCode::Esc,
+                cevent::KeyCode::CapsLock => key::KeyCode::CapsLock,
+                cevent::KeyCode::ScrollLock => key::KeyCode::ScrollLock,
+                cevent::KeyCode::NumLock => key::KeyCode::NumLock,
+                cevent::KeyCode::PrintScreen => key::KeyCode::PrintScreen,
+                cevent::KeyCode::Pause => key::KeyCode::Pause,
+                cevent::KeyCode::Menu => key::KeyCode::Menu,
+                cevent::KeyCode::KeypadBegin => key::KeyCode::KeypadBegin,
+                cevent::KeyCode::Media(k) => key::KeyCode::Media(match k {
+                    cevent::MediaKeyCode::Play => key::MediaKeyCode::Play,
+                    cevent::MediaKeyCode::Pause => key::MediaKeyCode::Play,
+                    cevent::MediaKeyCode::PlayPause => key::MediaKeyCode::PlayPause,
+                    cevent::MediaKeyCode::Reverse => key::MediaKeyCode::Reverse,
+                    cevent::MediaKeyCode::Stop => key::MediaKeyCode::Stop,
+                    cevent::MediaKeyCode::FastForward => key::MediaKeyCode::FastForward,
+                    cevent::MediaKeyCode::Rewind => key::MediaKeyCode::Rewind,
+                    cevent::MediaKeyCode::TrackNext => key::MediaKeyCode::TrackNext,
+                    cevent::MediaKeyCode::TrackPrevious => key::MediaKeyCode::TrackPrevious,
+                    cevent::MediaKeyCode::Record => key::MediaKeyCode::Record,
+                    cevent::MediaKeyCode::LowerVolume => key::MediaKeyCode::LowerVolume,
+                    cevent::MediaKeyCode::RaiseVolume => key::MediaKeyCode::RaiseVolume,
+                    cevent::MediaKeyCode::MuteVolume => key::MediaKeyCode::MuteVolume,
+                }),
+                cevent::KeyCode::Modifier(m) => key::KeyCode::Modifier(match m {
+                    cevent::ModifierKeyCode::LeftShift => key::ModifierKeyCode::LeftShift,
+                    cevent::ModifierKeyCode::LeftControl => key::ModifierKeyCode::LeftControl,
+                    cevent::ModifierKeyCode::LeftAlt => key::ModifierKeyCode::LeftAlt,
+                    cevent::ModifierKeyCode::LeftSuper => key::ModifierKeyCode::LeftSuper,
+                    cevent::ModifierKeyCode::LeftHyper => key::ModifierKeyCode::LeftHyper,
+                    cevent::ModifierKeyCode::LeftMeta => key::ModifierKeyCode::LeftMeta,
+                    cevent::ModifierKeyCode::RightShift => key::ModifierKeyCode::RightShift,
+                    cevent::ModifierKeyCode::RightControl => key::ModifierKeyCode::RightControl,
+                    cevent::ModifierKeyCode::RightAlt => key::ModifierKeyCode::RightAlt,
+                    cevent::ModifierKeyCode::RightSuper => key::ModifierKeyCode::RightSuper,
+                    cevent::ModifierKeyCode::RightHyper => key::ModifierKeyCode::RightHyper,
+                    cevent::ModifierKeyCode::RightMeta => key::ModifierKeyCode::RightMeta,
+                    cevent::ModifierKeyCode::IsoLevel3Shift => key::ModifierKeyCode::IsoLevel3Shift,
+                    cevent::ModifierKeyCode::IsoLevel5Shift => key::ModifierKeyCode::IsoLevel5Shift,
+                }),
             },
         }),
         cevent::Event::Mouse(m) => {
@@ -280,6 +318,9 @@ fn translate_event(e: cevent::Event) -> Event {
             })
         }
         cevent::Event::Resize(x, y) => Event::Resize(Expanse::new(x, y)),
+        cevent::Event::FocusGained => Event::FocusGained,
+        cevent::Event::FocusLost => Event::FocusLost,
+        cevent::Event::Paste(s) => Event::Paste(s),
     }
 }
 
