@@ -68,6 +68,68 @@ pub const Alt: Mods = Mods {
 };
 
 #[derive(Debug, PartialOrd, PartialEq, Hash, Eq, Clone, Copy)]
+pub enum ModifierKeyCode {
+    /// Left Shift key.
+    LeftShift,
+    /// Left Control key.
+    LeftControl,
+    /// Left Alt key.
+    LeftAlt,
+    /// Left Super key.
+    LeftSuper,
+    /// Left Hyper key.
+    LeftHyper,
+    /// Left Meta key.
+    LeftMeta,
+    /// Right Shift key.
+    RightShift,
+    /// Right Control key.
+    RightControl,
+    /// Right Alt key.
+    RightAlt,
+    /// Right Super key.
+    RightSuper,
+    /// Right Hyper key.
+    RightHyper,
+    /// Right Meta key.
+    RightMeta,
+    /// Iso Level3 Shift key.
+    IsoLevel3Shift,
+    /// Iso Level5 Shift key.
+    IsoLevel5Shift,
+}
+
+#[derive(Debug, PartialOrd, PartialEq, Hash, Eq, Clone, Copy)]
+pub enum MediaKeyCode {
+    /// Play media key.
+    Play,
+    /// Pause media key.
+    Pause,
+    /// Play/Pause media key.
+    PlayPause,
+    /// Reverse media key.
+    Reverse,
+    /// Stop media key.
+    Stop,
+    /// Fast-forward media key.
+    FastForward,
+    /// Rewind media key.
+    Rewind,
+    /// Next-track media key.
+    TrackNext,
+    /// Previous-track media key.
+    TrackPrevious,
+    /// Record media key.
+    Record,
+    /// Lower-volume media key.
+    LowerVolume,
+    /// Raise-volume media key.
+    RaiseVolume,
+    /// Mute media key.
+    MuteVolume,
+}
+
+#[derive(Debug, PartialOrd, PartialEq, Hash, Eq, Clone, Copy)]
 pub enum KeyCode {
     Backspace,
     Enter,
@@ -86,6 +148,13 @@ pub enum KeyCode {
     Insert,
     Null,
     Esc,
+    CapsLock,
+    ScrollLock,
+    NumLock,
+    PrintScreen,
+    Pause,
+    Menu,
+    KeypadBegin,
     /// F key.
     ///
     /// `KeyEvent::F(1)` represents F1 key, etc.
@@ -94,6 +163,8 @@ pub enum KeyCode {
     ///
     /// `KeyEvent::Char('c')` represents `c` character, etc.
     Char(char),
+    Media(MediaKeyCode),
+    Modifier(ModifierKeyCode),
 }
 
 impl From<char> for KeyCode {

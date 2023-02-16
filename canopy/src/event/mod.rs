@@ -16,6 +16,12 @@ pub(crate) enum Event {
     Resize(Expanse),
     /// A poll event
     Poll(Vec<u64>),
+    /// Terminal has gained focus
+    FocusGained,
+    /// Terminal has lost focus
+    FocusLost,
+    /// Cut and paste
+    Paste(String),
 }
 
 /// An emitter that is polled by the application to retrieve events.

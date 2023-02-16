@@ -726,6 +726,8 @@ impl Canopy {
             Event::Poll(ids) => {
                 self.poll(ids, root)?;
             }
+            // FIXME: Implement new crossterm events.
+            _ => {}
         };
         Ok(())
     }
