@@ -286,7 +286,7 @@ impl Rect {
         Ok(ret)
     }
 
-    // Sweeps upwards from the top of the rectangle.
+    /// Sweeps upwards from the top of the rectangle. Stops once the closure returns true.
     pub fn search_up(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
         'outer: for y in (0..self.tl.y).rev() {
             for x in self.tl.x..(self.tl.x + self.w) {
@@ -298,7 +298,7 @@ impl Rect {
         Ok(())
     }
 
-    // Sweeps downwards from the bottom of the rectangle.
+    /// Sweeps downwards from the bottom of the rectangle. Stops once the closure returns true.
     pub fn search_down(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
         'outer: for y in self.tl.y + self.h..u16::MAX {
             for x in self.tl.x..(self.tl.x + self.w) {
@@ -310,7 +310,7 @@ impl Rect {
         Ok(())
     }
 
-    // Sweeps leftwards the left of the rectangle.
+    /// Sweeps leftwards the left of the rectangle. Stops once the closure returns true.
     pub fn search_left(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
         'outer: for x in (0..self.tl.x).rev() {
             for y in self.tl.y..self.tl.y + self.h {
@@ -322,7 +322,7 @@ impl Rect {
         Ok(())
     }
 
-    // Sweeps rightwards from the right of the rectangle.
+    /// Sweeps rightwards from the right of the rectangle. Stops once the closure returns true.
     pub fn search_right(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
         'outer: for x in self.tl.x + self.w..u16::MAX {
             for y in self.tl.y..self.tl.y + self.h {
@@ -334,7 +334,7 @@ impl Rect {
         Ok(())
     }
 
-    // Sweeps to and fro from the right of the rectangle to the left.
+    /// Searches in a given direction sweeping to and fro. Stops once the closure returns true.
     pub fn search(&self, dir: Direction, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
         match dir {
             Direction::Up => self.search_up(f),

@@ -105,7 +105,7 @@ impl Core for DummyCore {
         false
     }
     fn set_focus(&mut self, _n: &mut dyn Node) {}
-    fn shift_focus(&mut self, _root: &mut dyn Node, _dir: Direction) -> Result<Outcome> {
+    fn focus_dir(&mut self, _root: &mut dyn Node, _dir: Direction) -> Result<Outcome> {
         Ok(Outcome::Handle)
     }
     fn taint(&mut self, _n: &mut dyn Node) {}

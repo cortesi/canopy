@@ -65,7 +65,7 @@ pub trait Core {
     fn focus_up(&mut self, root: &mut dyn Node) -> Result<Outcome>;
     fn needs_render(&self, n: &dyn Node) -> bool;
     fn set_focus(&mut self, n: &mut dyn Node);
-    fn shift_focus(&mut self, root: &mut dyn Node, dir: Direction) -> Result<Outcome>;
+    fn focus_dir(&mut self, root: &mut dyn Node, dir: Direction) -> Result<Outcome>;
     fn taint(&mut self, n: &mut dyn Node);
     fn taint_tree(&mut self, e: &mut dyn Node);
 
@@ -168,44 +168,51 @@ impl Core for Canopy {
     }
 
     /// Move focus in a specified direction within the subtree at root.
-    fn shift_focus(&mut self, root: &mut dyn Node, dir: Direction) -> Result<Outcome> {
+    fn focus_dir(&mut self, root: &mut dyn Node, dir: Direction) -> Result<Outcome> {
         let mut seen = false;
+        let mut last = None;
         if let Some(start) = self.focus_area(root) {
             start.search(dir, &mut |p| -> Result<bool> {
-                if !root.vp().screen_rect().contains_point(p) {
+                if seen {
                     return Ok(true);
                 }
-                locate(root, p, &mut |x| -> Result<Walk<()>> {
-                    if !seen && x.accept_focus() {
-                        self.set_focus(x);
-                        seen = true;
-                    };
-                    Ok(Walk::Continue)
-                })?;
-                Ok(seen)
+                let n = node_at(root, p)?;
+                if n != last {
+                    last = n;
+                    if let Some(nid) = n {
+                        walk_to_root(root, nid, &mut |x| {
+                            if !seen && x.accept_focus() {
+                                seen = true;
+                                self.set_focus(x);
+                            }
+                            Ok(())
+                        })?;
+                    }
+                }
+                Ok(false)
             })?
         }
         Ok(Outcome::Handle)
     }
 
-    /// Move focus to the right of the currently focused node within the subtree at root.
+    /// Move focus to  right of the currently focused node within the subtree at root.
     fn focus_right(&mut self, root: &mut dyn Node) -> Result<Outcome> {
-        self.shift_focus(root, Direction::Right)
+        self.focus_dir(root, Direction::Right)
     }
 
     /// Move focus to the left of the currently focused node within the subtree at root.
     fn focus_left(&mut self, root: &mut dyn Node) -> Result<Outcome> {
-        self.shift_focus(root, Direction::Left)
+        self.focus_dir(root, Direction::Left)
     }
 
     /// Move focus upward of the currently focused node within the subtree at root.
     fn focus_up(&mut self, root: &mut dyn Node) -> Result<Outcome> {
-        self.shift_focus(root, Direction::Up)
+        self.focus_dir(root, Direction::Up)
     }
 
     /// Move focus downward of the currently focused node within the subtree at root.
     fn focus_down(&mut self, root: &mut dyn Node) -> Result<Outcome> {
-        self.shift_focus(root, Direction::Down)
+        self.focus_dir(root, Direction::Down)
     }
 
     /// Focus the first node that accepts focus in the pre-order traversal of
@@ -611,11 +618,11 @@ impl Canopy {
         Ok(())
     }
 
-    /// Return the path for the node at a specific location. Return an empty
+    /// Return the path for the uppermost node at a specific location. Return an empty
     /// path if the location is outside of the node tree.
     fn location_path(&self, root: &mut dyn Node, location: Point) -> Path {
-        let id = locate(root, location, &mut |x| -> Result<Walk<NodeId>> {
-            Ok(Walk::Handle(x.id()))
+        let id = locate(root, location, &mut |x| -> Result<Locate<NodeId>> {
+            Ok(Locate::Match(x.id()))
         });
 
         if let Some(id) = id.unwrap() {
@@ -629,38 +636,45 @@ impl Canopy {
     /// ancestors. Events are handled only once, and then ignored.
     pub(crate) fn mouse(&mut self, root: &mut dyn Node, m: mouse::MouseEvent) -> Result<()> {
         let mut path = self.location_path(root, m.location);
-        let v = locate(root, m.location, &mut |x| -> Result<
-            Walk<Option<(script::ScriptId, NodeId)>>,
-        > {
-            let hdl = x.handle_mouse(
-                self,
-                mouse::MouseEvent {
-                    action: m.action,
-                    button: m.button,
-                    modifiers: m.modifiers,
-                    location: x.vp().screen_rect().rebase_point(m.location)?,
-                },
-            )?;
-            Ok(
-                if let Some(s) = self.keymap.resolve(&path, inputmap::Input::Mouse(m.into())) {
-                    Walk::Handle(Some((s, x.id())))
-                } else {
-                    match hdl {
-                        Outcome::Handle => {
-                            self.taint(x);
-                            Walk::Handle(None)
-                        }
-                        Outcome::Ignore => {
+        let mut script = None;
+        let mut handled = false;
+        if let Some(nid) = node_at(root, m.location)? {
+            walk_to_root(root, nid, &mut |x| {
+                if handled {
+                    return Ok(());
+                }
+
+                let hdl = x.handle_mouse(
+                    self,
+                    mouse::MouseEvent {
+                        action: m.action,
+                        button: m.button,
+                        modifiers: m.modifiers,
+                        location: x.vp().screen_rect().rebase_point(m.location)?,
+                    },
+                )?;
+                Ok(match hdl {
+                    Outcome::Handle => {
+                        handled = true;
+                        self.taint(x);
+                    }
+                    Outcome::Ignore => {
+                        if let Some(s) =
+                            self.keymap.resolve(&path, inputmap::Input::Mouse(m.into()))
+                        {
+                            handled = true;
+                            script = Some((s, x.id()));
+                        } else {
                             path.pop();
-                            Walk::Continue
                         }
                     }
-                },
-            )
-        })?;
-        if let Some(Some((sid, nid))) = v {
+                })
+            })?;
+        }
+        if let Some((sid, nid)) = script {
             self.run_script(root, nid, sid)?;
         }
+
         Ok(())
     }
 
@@ -751,35 +765,56 @@ impl Canopy {
     }
 }
 
-/// Calls a closure on the leaf node under (x, y), then all its parents to the
-/// root.
+pub enum Locate<R> {
+    // Note the match and continue traversal.
+    Match(R),
+    // Match and don't traverse children.
+    Stop(R),
+    // Continue looking.
+    Continue,
+}
+
+/// Calls a closure on the root node under (x, y), then recurses up the tree to all children falling under the same
+/// point. The function returns the last node that the closure returned a value for, either with Locate::Match
+/// (continuing taversal) or Locate::Stop(stopping traversal). Hidden nodes and nodes that do not contain the location
+/// point are skipped.
 pub fn locate<R>(
     root: &mut dyn Node,
     p: impl Into<Point>,
-    f: &mut dyn FnMut(&mut dyn Node) -> Result<Walk<R>>,
+    f: &mut dyn FnMut(&mut dyn Node) -> Result<Locate<R>>,
 ) -> Result<Option<R>> {
-    let mut seen = false;
     let p = p.into();
-    Ok(postorder(root, &mut |inner| -> Result<Walk<R>> {
-        Ok(if seen {
-            f(inner)?
-        } else if !inner.is_hidden() {
+    let mut result = None;
+    preorder(root, &mut |inner| -> Result<Walk<R>> {
+        Ok(if !inner.is_hidden() {
             let a = inner.vp().screen_rect();
             if a.contains_point(p) {
-                seen = true;
                 match f(inner)? {
-                    Walk::Continue => Walk::Skip,
-                    Walk::Skip => Walk::Skip,
-                    Walk::Handle(t) => Walk::Handle(t),
+                    Locate::Continue => Walk::Continue,
+                    Locate::Stop(x) => {
+                        result = Some(x);
+                        Walk::Skip
+                    }
+                    Locate::Match(x) => {
+                        result = Some(x);
+                        Walk::Continue
+                    }
                 }
             } else {
-                Walk::Continue
+                Walk::Skip
             }
         } else {
             Walk::Skip
         })
-    })?
-    .value())
+    })?;
+    Ok(result)
+}
+
+/// Find the ID of the leaf node at a given point.
+pub fn node_at(root: &mut dyn Node, p: impl Into<Point>) -> Result<Option<NodeId>> {
+    locate(root, p, &mut |x| -> Result<Locate<NodeId>> {
+        Ok(Locate::Match(x.id()))
+    })
 }
 
 /// Call a closure on the node with the specified `id`, and all its ancestors to
