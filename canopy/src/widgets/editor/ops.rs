@@ -74,7 +74,22 @@ impl Effector for Delete {
             s.lines[self.start.line]
                 .raw
                 .replace_range(self.start.column..self.end.column, "");
+        } else {
+            let mut m = s.lines.remove(self.start.line).raw;
+            m.replace_range(self.start.column.., "");
+
+            let mut n = s.lines.remove(self.end.line - 1).raw;
+            n.replace_range(..self.end.column, "");
+
+            s.lines.drain(self.start.line..self.end.line - 1);
+
+            m.push_str(&n);
+            s.lines.insert(self.start.line, core::Line::new(&m));
         }
+        s.cursor = core::Position {
+            line: s.cursor.line,
+            column: s.cursor.column.saturating_sub(1),
+        };
         None
     }
 }
@@ -128,6 +143,117 @@ mod tests {
                 text: "a\nb".into(),
             },
             "a\nb_",
+        );
+    }
+
+    #[test]
+    fn delete() {
+        // Nop, empty range
+        test(
+            "a",
+            Delete {
+                start: (0, 0).into(),
+                end: (0, 0).into(),
+            },
+            "a",
+        );
+        test(
+            "a",
+            Delete {
+                start: (10, 0).into(),
+                end: (10, 0).into(),
+            },
+            "a",
+        );
+        // // Nop, beyond bounds
+        test(
+            "a",
+            Delete {
+                start: (1, 0).into(),
+                end: (1, 0).into(),
+            },
+            "a",
+        );
+        test(
+            "a",
+            Delete {
+                start: (0, 0).into(),
+                end: (0, 1).into(),
+            },
+            "",
+        );
+        // Ranges
+        test(
+            "abc",
+            Delete {
+                start: (0, 0).into(),
+                end: (0, 1).into(),
+            },
+            "bc",
+        );
+        test(
+            "abc",
+            Delete {
+                start: (0, 1).into(),
+                end: (0, 2).into(),
+            },
+            "ac",
+        );
+        test(
+            "abc",
+            Delete {
+                start: (0, 2).into(),
+                end: (0, 3).into(),
+            },
+            "ab",
+        );
+        test(
+            "abc\ndef",
+            Delete {
+                start: (0, 0).into(),
+                end: (1, 0).into(),
+            },
+            "def",
+        );
+        test(
+            "abc\ndef\nghi",
+            Delete {
+                start: (0, 0).into(),
+                end: (2, 0).into(),
+            },
+            "ghi",
+        );
+        test(
+            "abc\ndef\nghi",
+            Delete {
+                start: (0, 1).into(),
+                end: (2, 2).into(),
+            },
+            "ai",
+        );
+        test(
+            "abc\ndef\nghi",
+            Delete {
+                start: (0, 2).into(),
+                end: (2, 2).into(),
+            },
+            "abi",
+        );
+        test(
+            "abc\ndef\nghi",
+            Delete {
+                start: (0, 3).into(),
+                end: (2, 2).into(),
+            },
+            "abci",
+        );
+        test(
+            "abc\ndef\nghi",
+            Delete {
+                start: (1, 0).into(),
+                end: (2, 2).into(),
+            },
+            "abc\ni",
         );
     }
 }
