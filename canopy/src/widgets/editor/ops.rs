@@ -1,27 +1,33 @@
 use super::core;
 
-/// An operation on the text buffer. Each operation includes the information
-/// needed to undo and redo the operation, which might be computed on
-/// application from the underlying text.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// Operations are abstract commands to the editor. They are turned into
+/// concrete, undoable Effects by way of the editor state.
 enum Operation {
+    Insert(String),
+    DeleteChars(usize),
+}
+
+/// An effect represents an undo-able change to the editor state. Each effect
+/// includes the information needed to undo and redo the operation.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum Effect {
     Insert(Insert),
     Delete(Delete),
 }
 
-impl Operator for Operation {
-    fn apply(&self, s: &mut core::State) -> Option<Operation> {
+impl Effector for Effect {
+    fn apply(&self, s: &mut core::State) -> Option<Effect> {
         match self {
-            Operation::Insert(o) => o.apply(s),
-            Operation::Delete(o) => o.apply(s),
+            Effect::Insert(o) => o.apply(s),
+            Effect::Delete(o) => o.apply(s),
         }
     }
 }
 
-trait Operator {
+trait Effector {
     /// Modifies the provided state in-place, and returns an optional undo
     /// operation.
-    fn apply(&self, s: &mut core::State) -> Option<Operation>;
+    fn apply(&self, s: &mut core::State) -> Option<Effect>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -30,8 +36,8 @@ struct Insert {
     text: String,
 }
 
-impl Operator for Insert {
-    fn apply(&self, s: &mut core::State) -> Option<Operation> {
+impl Effector for Insert {
+    fn apply(&self, s: &mut core::State) -> Option<Effect> {
         if self.text.contains("\n") {
             // If our text contains a newline, it's an expansion of the
             // current line into multiple lines.
@@ -60,8 +66,8 @@ struct Delete {
     end: core::Position,
 }
 
-impl Operator for Delete {
-    fn apply(&self, s: &mut core::State) -> Option<Operation> {
+impl Effector for Delete {
+    fn apply(&self, s: &mut core::State) -> Option<Effect> {
         if self.start.line > s.lines.len() || self.end == self.start {
             return None;
         } else if self.start.line == self.end.line {
@@ -97,7 +103,7 @@ mod tests {
 
     /// Compact test function - an underscore in the input text indicates cursor
     /// position, and is removed from the text when constructing state.
-    fn test(text: &str, op: impl Operator, expected: &str) {
+    fn test(text: &str, op: impl Effector, expected: &str) {
         let mut c = from_spec(text);
         let e = from_spec(expected);
         op.apply(&mut c);
