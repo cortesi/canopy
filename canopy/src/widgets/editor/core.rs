@@ -1,6 +1,8 @@
+use super::effect;
+
 /// A position in the editor. The column offset, but not the line offset, may be
 /// beyond the bounds of the line.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Position {
     pub line: usize,
     pub column: usize,
@@ -69,7 +71,7 @@ impl Position {
 
 impl From<(usize, usize)> for Position {
     fn from((line, column): (usize, usize)) -> Self {
-        Self { line, column }
+        Position::new(line, column)
     }
 }
 
@@ -78,41 +80,12 @@ impl From<(usize, usize)> for Position {
 pub struct Line {
     /// The raw text of the line.
     pub raw: String,
-    /// The wrapped text of the line.
-    pub wrapped: String,
-    /// The number of lines in the wrapped text.
-    pub height: usize,
 }
 
 impl Line {
     pub fn new(s: &str) -> Line {
-        Line {
-            raw: s.into(),
-            wrapped: s.into(),
-            height: 1,
-        }
+        Line { raw: s.into() }
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct Insert {
-    pos: Position,
-    text: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct Delete {
-    start: Position,
-    end: Position,
-}
-
-/// An operation on the text buffer. Each operation includes the information
-/// needed to undo and redo the operation, which might be computed on
-/// application from the underlying text.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum Operation {
-    Insert(Insert),
-    Delete(Delete),
 }
 
 /// The current state of the editor
@@ -134,6 +107,25 @@ impl State {
         State { lines: t, cursor }
     }
 
+    #[cfg(test)]
+    pub(crate) fn from_spec(spec: &str) -> Self {
+        let mut txt = vec![];
+        let mut cursor = None;
+        for (cnt, i) in spec.lines().enumerate() {
+            if let Some(x) = i.find("_") {
+                cursor = Some((cnt, x).into());
+                txt.push(i.replace("_", ""))
+            } else {
+                txt.push(i.into());
+            }
+        }
+        let mut n = State::new(&txt.join("\n"));
+        if let Some(x) = cursor {
+            n.cursor = x;
+        }
+        n
+    }
+
     /// The complete raw text of this editor.
     pub fn raw_text(&self) -> String {
         self.lines
@@ -141,6 +133,92 @@ impl State {
             .map(|x| x.raw.clone())
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    /// Insert the given text at the given position, and update the cursor.
+    pub fn insert<T>(mut self, pos: T, s: &str) -> Self
+    where
+        T: Into<Position>,
+    {
+        let pos = pos.into();
+        if s.contains("\n") {
+            // If our text contains a newline, it's an expansion of the
+            // current line into multiple lines.
+            let mut m = self.lines.remove(pos.line).raw;
+            m.insert_str(pos.column as usize, s);
+            let new: Vec<Line> = m.split("\n").map(|x| Line::new(x.clone())).collect();
+            self.cursor = Position {
+                line: self.cursor.line + new.len() - 1,
+                column: s.len() - s.rfind("\n").unwrap() - 1,
+            };
+            self.lines.splice(pos.line..pos.line, new);
+        } else {
+            // If there are no newlines, we just insert the text in-place.
+            self.lines[pos.line].raw.insert_str(pos.column as usize, s);
+            self.cursor = (self.cursor.line, self.cursor.column + 1).into();
+        }
+        self
+    }
+
+    /// Insert the given text at the given position, and update the cursor if necessary.
+    pub fn delete<T>(mut self, start: T, end: T) -> Self
+    where
+        T: Into<Position>,
+    {
+        let start = start.into();
+        let end = end.into();
+        if start.line > self.lines.len() || end == start {
+            return self;
+        } else if start.line == end.line {
+            self.lines[start.line]
+                .raw
+                .replace_range(start.column..end.column, "");
+            if self.cursor > start {
+                if self.cursor <= end {
+                    self.cursor = start;
+                } else if self.cursor.line == start.line {
+                    self.cursor = Position {
+                        line: self.cursor.line,
+                        column: self.cursor.column.saturating_sub(end.column - start.column),
+                    };
+                }
+            }
+        } else {
+            let mut m = self.lines.remove(start.line).raw;
+            m.replace_range(start.column.., "");
+
+            let mut n = self.lines.remove(end.line - 1).raw;
+            n.replace_range(..end.column, "");
+
+            self.lines.drain(start.line..end.line - 1);
+
+            m.push_str(&n);
+            self.lines.insert(start.line, Line::new(&m));
+
+            if self.cursor > start {
+                if self.cursor <= end {
+                    self.cursor = start;
+                } else if self.cursor.line == start.line {
+                    self.cursor = Position {
+                        line: self.cursor.line.saturating_sub(end.line - start.line),
+                        column: self.cursor.column.saturating_sub(end.column),
+                    };
+                } else {
+                    self.cursor = Position {
+                        line: self.cursor.line.saturating_sub(end.line - start.line),
+                        column: self.cursor.column.saturating_sub(end.column),
+                    };
+                    // We've ended moving the cursor onto our partially snipped starting line, so adjust the offset.
+                    if self.cursor.line == start.line {
+                        self.cursor = Position {
+                            line: self.cursor.line,
+                            column: self.cursor.column + start.column,
+                        };
+                    }
+                }
+            }
+        }
+        self
     }
 }
 
@@ -150,7 +228,7 @@ pub struct Core {
     /// The underlying raw text being edited.
     lines: Vec<Line>,
     /// The history of operations on this text buffer.
-    history: Vec<Operation>,
+    history: Vec<effect::Effect>,
     /// The current cursor position.
     cursor: Position,
     /// Width of the viewport.
@@ -175,56 +253,6 @@ impl Core {
 
     fn set_cursor(&mut self, pos: Position) {
         self.cursor = pos;
-    }
-
-    fn execute_op(&mut self, op: Operation) {
-        match &op {
-            Operation::Insert(v) => {
-                if v.text.contains("\n") {
-                    // If our text contains a newline, it's an expansion of the
-                    // current line into multiple lines.
-                    let mut m = self.lines.remove(v.pos.line).raw;
-                    m.insert_str(v.pos.column as usize, &v.text);
-                    let new: Vec<Line> = m.split("\n").map(|x| Line::new(x.clone())).collect();
-                    self.cursor = Position {
-                        line: self.cursor.line + new.len() - 1,
-                        column: v.text.len() - v.text.rfind("\n").unwrap() - 1,
-                    };
-                    self.lines.splice(v.pos.line..v.pos.line, new);
-                } else {
-                    // If there are no newlines, we just insert the text in-place.
-                    self.lines[v.pos.line]
-                        .raw
-                        .insert_str(v.pos.column as usize, &v.text);
-                    self.cursor = (self.cursor.line, self.cursor.column + 1).into();
-                }
-            }
-            Operation::Delete(v) => {
-                if v.start.line > self.lines.len() || v.end == v.start {
-                    return;
-                } else if v.start.line == v.end.line {
-                    self.lines[v.start.line]
-                        .raw
-                        .replace_range(v.start.column..v.end.column, "");
-                } else {
-                    let mut m = self.lines.remove(v.start.line).raw;
-                    m.replace_range(v.start.column.., "");
-
-                    let mut n = self.lines.remove(v.end.line - 1).raw;
-                    n.replace_range(..v.end.column, "");
-
-                    self.lines.drain(v.start.line..v.end.line - 1);
-
-                    m.push_str(&n);
-                    self.lines.insert(v.start.line, Line::new(&m));
-                }
-                self.cursor = Position {
-                    line: self.cursor.line,
-                    column: self.cursor.column - 1,
-                };
-            }
-        }
-        self.history.push(op);
     }
 
     /// The complete raw text of this editor.
@@ -270,59 +298,87 @@ impl Core {
         }
         buf
     }
-
-    pub fn insert(&mut self, s: &str) {
-        self.execute_op(Operation::Insert(Insert {
-            pos: self.cursor,
-            text: s.into(),
-        }));
-    }
-
-    /// Delete a text range. The range may extend beyond the end of the text
-    /// or line with no error
-    pub fn delete<T>(&mut self, start: T, end: T)
-    where
-        T: Into<Position>,
-    {
-        self.execute_op(Operation::Delete(Delete {
-            start: start.into(),
-            end: end.into(),
-        }));
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn from_spec(spec: &str) -> Core {
-        let mut txt = vec![];
-        let mut cursor = None;
-        for (cnt, i) in spec.lines().enumerate() {
-            if let Some(x) = i.find("_") {
-                cursor = Some((cnt, x).into());
-                txt.push(i.replace("_", ""))
-            } else {
-                txt.push(i.into());
-            }
-        }
-        let mut n = Core::new(&txt.join("\n"));
-        if let Some(x) = cursor {
-            n.set_cursor(x);
-        }
-        n
+    /// Wee helper for state equality tests
+    macro_rules! seq {
+        ($a:expr, $b:expr) => {
+            assert_eq!($a, State::from_spec($b));
+        };
     }
 
-    /// Compact test function - the underscore indicates cursor position.
-    fn test<F>(text: &str, ops: F, expected: &str)
-    where
-        F: Fn(&mut Core),
-    {
-        let mut c = from_spec(text);
-        let e = from_spec(expected);
-        ops(&mut c);
-        assert_eq!(c.raw_text(), e.raw_text());
-        assert_eq!(c.cursor, e.cursor);
+    #[test]
+    fn insert() {
+        seq!(State::from_spec("_").insert((0, 0), "a"), "a_");
+        seq!(State::from_spec("_").insert((0, 0), "a\nb"), "a\nb_");
+    }
+
+    #[test]
+    fn delete() {
+        // Nop, empty
+        seq!(State::from_spec("a_").delete((0, 0), (0, 0)), "a_");
+
+        // Nop, beyond bounds
+        seq!(State::from_spec("a_").delete((10, 0), (10, 0)), "a_");
+        seq!(State::from_spec("a_").delete((1, 0), (1, 0)), "a_");
+
+        // Single line deletes
+        seq!(State::from_spec("a_").delete((0, 0), (0, 1)), "_");
+        seq!(State::from_spec("abc_").delete((0, 0), (0, 1)), "bc_");
+        seq!(State::from_spec("abc_").delete((0, 1), (0, 2)), "ac_");
+        seq!(State::from_spec("abc_").delete((0, 2), (0, 3)), "ab_");
+        seq!(State::from_spec("_abc").delete((0, 2), (0, 3)), "_ab");
+        seq!(State::from_spec("ab_c").delete((0, 1), (0, 3)), "a_");
+        seq!(
+            State::from_spec("ab_c\nfoo").delete((0, 1), (0, 3)),
+            "a_\nfoo"
+        );
+        seq!(
+            State::from_spec("foo\nab_c\nfoo").delete((1, 1), (1, 3)),
+            "foo\na_\nfoo"
+        );
+        seq!(
+            State::from_spec("foo\nab_c\nfoo").delete((1, 0), (1, 3)),
+            "foo\n_\nfoo"
+        );
+
+        // Multi line deletes
+        seq!(
+            State::from_spec("one_\ntwo\nthree").delete((1, 0), (2, 1)),
+            "one_\nhree"
+        );
+        seq!(
+            State::from_spec("one\ntw_o\nthree").delete((1, 0), (2, 1)),
+            "one\n_hree"
+        );
+        seq!(
+            State::from_spec("one\ntwo\nthre_e").delete((1, 0), (2, 1)),
+            "one\nhre_e"
+        );
+        seq!(
+            State::from_spec("one\ntwo\nthre_e").delete((0, 1), (2, 4)),
+            "o_e"
+        );
+        seq!(
+            State::from_spec("one\ntwo\nthre_e").delete((0, 3), (2, 2)),
+            "onere_e"
+        );
+        seq!(
+            State::from_spec("one\ntwo\nthre_e").delete((0, 3), (2, 3)),
+            "onee_e"
+        );
+        seq!(
+            State::from_spec("one\ntwo\nthre_e").delete((0, 3), (2, 4)),
+            "one_e"
+        );
+        seq!(
+            State::from_spec("one\ntwo\nthre_e").delete((0, 3), (2, 5)),
+            "one_"
+        );
     }
 
     #[test]
@@ -338,6 +394,13 @@ mod tests {
     }
 
     #[test]
+    fn position_ord() {
+        assert!(Position::new(5, 5) == Position::new(5, 5));
+        assert!(Position::new(4, 5) < Position::new(5, 5));
+        assert!(Position::new(5, 4) < Position::new(5, 5));
+    }
+
+    #[test]
     fn text_range() {
         let c = Core::new("one two\nthree four\nx");
         assert_eq!(c.text_range((0, 0), (0, 3)), "one");
@@ -347,144 +410,5 @@ mod tests {
         // // Beyond bounds
         assert_eq!(c.text_range((10, 0), (11, 0)), "");
         assert_eq!(c.text_range((1, 6), (11, 0)), "four\nx");
-    }
-
-    #[test]
-    fn insert() {
-        test(
-            "_",
-            |c| {
-                c.insert("a");
-                c.insert("b");
-                c.insert("c");
-            },
-            "abc_",
-        );
-        test(
-            "a_",
-            |c| {
-                c.insert("\n");
-            },
-            "a\n_",
-        );
-        test(
-            "_",
-            |c| {
-                c.insert("\n");
-            },
-            "\n_",
-        );
-        test(
-            "a_",
-            |c| {
-                c.insert("\nb\n");
-            },
-            "a\nb\n_",
-        );
-        test(
-            "a_",
-            |c| {
-                c.insert("\nb");
-            },
-            "a\nb_",
-        );
-    }
-
-    #[test]
-    fn delete() {
-        // // Nop, empty range
-        // test(
-        //     "a",
-        //     |c| {
-        //         c.delete((0, 0), (0, 0));
-        //     },
-        //     "a",
-        // );
-        // test(
-        //     "a",
-        //     |c| {
-        //         c.delete((10, 0), (10, 0));
-        //     },
-        //     "a",
-        // );
-        // // Nop, beyond bounds
-        // test(
-        //     "a",
-        //     |c| {
-        //         c.delete((1, 0), (1, 0));
-        //     },
-        //     "a",
-        // );
-        // test(
-        //     "a",
-        //     |c| {
-        //         c.delete((0, 0), (0, 1));
-        //     },
-        //     "",
-        // );
-        // // Ranges
-        // test(
-        //     "abc",
-        //     |c| {
-        //         c.delete((0, 0), (0, 1));
-        //     },
-        //     "bc",
-        // );
-        // test(
-        //     "abc",
-        //     |c| {
-        //         c.delete((0, 1), (0, 2));
-        //     },
-        //     "ac",
-        // );
-        // test(
-        //     "abc",
-        //     |c| {
-        //         c.delete((0, 2), (0, 3));
-        //     },
-        //     "ab",
-        // );
-        // test(
-        //     "abc\ndef",
-        //     |c| {
-        //         c.delete((0, 0), (1, 0));
-        //     },
-        //     "def",
-        // );
-        // test(
-        //     "abc\ndef\nghi",
-        //     |c| {
-        //         c.delete((0, 0), (2, 0));
-        //     },
-        //     "ghi",
-        // );
-        // test(
-        //     "abc\ndef\nghi",
-        //     |c| {
-        //         c.delete((0, 1), (2, 2));
-        //     },
-        //     "ai",
-        // );
-        // test(
-        //     "abc\ndef\nghi",
-        //     |c| {
-        //         c.delete((0, 2), (2, 2));
-        //     },
-        //     "abi",
-        // );
-        // test(
-        //     "abc\ndef\nghi",
-        //     |c| {
-        //         c.delete((0, 3), (2, 2));
-        //     },
-        //     "abci",
-        // );
-        // test(
-        //     "abc\ndef\nghi",
-        //     |c| {
-        //         c.delete((1, 0), (2, 2));
-        //     },
-        //     "abc\ni",
-        // );
     }
 }
