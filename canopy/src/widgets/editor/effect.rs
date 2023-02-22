@@ -1,11 +1,11 @@
 use super::state;
 
-trait Effector {
+pub(super) trait Effector {
     /// Modifies the provided state and returns a new state to apply this effect.
-    fn apply(&self, c: state::State) -> state::State;
+    fn apply(&self, c: &mut state::State);
 
     /// Modifies the provided state and returns a new state to revert this effect.
-    fn revert(&self, c: state::State) -> state::State;
+    fn revert(&self, c: &mut state::State);
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -15,14 +15,14 @@ pub enum Effect {
 }
 
 impl Effector for Effect {
-    fn apply(&self, s: state::State) -> state::State {
+    fn apply(&self, s: &mut state::State) {
         match self {
             Effect::Insert(i) => i.apply(s),
             Effect::Delete(d) => d.apply(s),
         }
     }
 
-    fn revert(&self, c: state::State) -> state::State {
+    fn revert(&self, c: &mut state::State) {
         match self {
             Effect::Insert(i) => i.revert(c),
             Effect::Delete(d) => d.revert(c),
@@ -48,11 +48,11 @@ impl Insert {
 }
 
 impl Effector for Insert {
-    fn apply(&self, s: state::State) -> state::State {
+    fn apply(&self, s: &mut state::State) {
         s.insert_lines(self.pos, &self.text)
     }
 
-    fn revert(&self, s: state::State) -> state::State {
+    fn revert(&self, s: &mut state::State) {
         s.delete(
             self.pos,
             state::Position {
@@ -81,14 +81,11 @@ impl Delete {
 }
 
 impl Effector for Delete {
-    fn apply(&self, s: state::State) -> state::State {
+    fn apply(&self, s: &mut state::State) {
         s.delete(self.start, self.end)
     }
 
-    fn revert(&self, s: state::State) -> state::State {
-        s
-        // s.delete(self.pos, self.pos + self.text.len())
-    }
+    fn revert(&self, s: &mut state::State) {}
 }
 
 #[cfg(test)]
