@@ -87,8 +87,3 @@ impl Effector for Delete {
 
     fn revert(&self, s: &mut state::State) {}
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-}

@@ -201,12 +201,13 @@ impl State {
             let mut m = self.lines.remove(start.line).raw;
             m.replace_range(start.column.., "");
 
-            let mut n = self.lines.remove(end.line - 1).raw;
-            n.replace_range(..end.column, "");
+            if !self.lines.is_empty() {
+                let mut n = self.lines.remove(end.line - 1).raw;
+                n.replace_range(..end.column, "");
+                self.lines.drain(start.line..end.line - 1);
+                m.push_str(&n);
+            }
 
-            self.lines.drain(start.line..end.line - 1);
-
-            m.push_str(&n);
             self.lines.insert(start.line, Line::new(&m));
 
             if self.cursor > start {
