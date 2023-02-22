@@ -159,10 +159,9 @@ impl State {
             };
         } else {
             // If there are no newlines, we just insert the text in-place.
-            self.lines[pos.line]
-                .raw
-                .insert_str(pos.column as usize, &s[0].to_string());
-            self.cursor = (self.cursor.line, self.cursor.column + 1).into();
+            let s = &s[0].to_string();
+            self.lines[pos.line].raw.insert_str(pos.column as usize, s);
+            self.cursor = (self.cursor.line, self.cursor.column + s.len()).into();
         }
     }
 

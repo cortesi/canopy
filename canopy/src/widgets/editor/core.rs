@@ -39,15 +39,29 @@ impl Core {
         }
     }
 
+    pub fn redo(&mut self) -> bool {
+        if let Some(op) = self.redo.pop() {
+            op.apply(&mut self.state);
+            self.history.push(op);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn action(&mut self, e: effect::Effect) {
+        e.apply(&mut self.state);
+        self.history.push(e);
+        self.redo.clear();
+    }
+
     /// Insert text at the current cursor position.
     pub fn insert_text(&mut self, text: &str) {
-        let ins = effect::Effect::Insert(effect::Insert::new(
+        self.action(effect::Effect::Insert(effect::Insert::new(
             &self.state,
             self.state.cursor,
             text.to_string(),
-        ));
-        ins.apply(&mut self.state);
-        self.history.push(ins);
+        )));
     }
 }
 
@@ -55,27 +69,37 @@ impl Core {
 mod tests {
     use super::*;
 
-    /// Wee helper for state equality tests
-    fn tundo<F>(a: &str, f: F, b: &str)
+    /// Wee helper for effect tests. Applies a set of transformations to a starting state through a closure, then checks
+    /// that the changes achieved the expected end. We then undo all changes and test that we end up with the starting
+    /// state, and redo all changes to make sure we end up at the end again.
+    fn tundo<F>(start: &str, f: F, end: &str)
     where
         F: FnOnce(&mut Core) -> (),
     {
-        let mut a = Core::from_spec(a);
-        let post = a.clone();
-        let b = Core::from_spec(b);
-        f(&mut a);
-        assert_eq!(a.state.raw_text(), b.state.raw_text());
+        let start = Core::from_spec(start);
+        let end = Core::from_spec(end);
+
+        let mut s = start.clone();
+
+        f(&mut s);
+        assert_eq!(s.state.raw_text(), end.state.raw_text());
         loop {
-            if !a.undo() {
+            if !s.undo() {
                 break;
             }
         }
-        assert_eq!(a.state, post.state);
+        assert_eq!(s.state, start.state);
+        loop {
+            if !s.redo() {
+                break;
+            }
+        }
+        assert_eq!(s.state, end.state);
     }
 
     #[test]
     fn insert() {
-        tundo("", |c| c.insert_text("hello"), "hello");
+        tundo("", |c| c.insert_text("hello"), "hello_");
         tundo(
             "",
             |c| {
@@ -83,7 +107,7 @@ mod tests {
                 c.insert_text("b");
                 c.insert_text("c");
             },
-            "abc",
+            "abc_",
         );
     }
 }

@@ -59,7 +59,8 @@ impl Effector for Insert {
                 line: self.pos.line + self.text.len(),
                 column: self.pos.column,
             },
-        )
+        );
+        s.cursor = self.prev_cursor;
     }
 }
 
