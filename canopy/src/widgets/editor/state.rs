@@ -200,9 +200,9 @@ impl State {
             let mut m = self.lines.remove(start.line).raw;
             m.replace_range(start.column.., "");
 
-            if !self.lines.is_empty() {
+            if self.lines.len() > end.line - 1 {
                 let mut n = self.lines.remove(end.line - 1).raw;
-                n.replace_range(..end.column, "");
+                n.replace_range(..end.column.min(n.len()), "");
                 self.lines.drain(start.line..end.line - 1);
                 m.push_str(&n);
             }

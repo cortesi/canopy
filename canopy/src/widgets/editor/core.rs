@@ -106,8 +106,11 @@ mod tests {
                 c.insert_text("a");
                 c.insert_text("b");
                 c.insert_text("c");
+                c.insert_text("\n");
+                c.insert_text("d");
+                c.insert_text("\nfoo\nbar");
             },
-            "abc_",
+            "abc\nd\nfoo\nbar_",
         );
     }
 }
