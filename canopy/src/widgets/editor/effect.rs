@@ -69,6 +69,7 @@ pub struct Delete {
     start: state::Position,
     end: state::Position,
     prev_cursor: state::Position,
+    deleted_text: Vec<String>,
 }
 
 impl Delete {
@@ -77,6 +78,7 @@ impl Delete {
             start,
             end,
             prev_cursor: s.cursor,
+            deleted_text: s.text_lines(start, end),
         }
     }
 }
@@ -86,5 +88,8 @@ impl Effector for Delete {
         s.delete(self.start, self.end)
     }
 
-    fn revert(&self, s: &mut state::State) {}
+    fn revert(&self, s: &mut state::State) {
+        s.insert_lines(self.start, &self.deleted_text);
+        s.cursor = self.prev_cursor;
+    }
 }

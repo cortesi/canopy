@@ -133,8 +133,7 @@ impl State {
             .join("\n")
     }
 
-    /// Insert a set of lines at the cursor, then update the cursor. The first line is spliced into the line the cursor
-    /// is on, all other lines are added as whole new lines.
+    /// Insert a set of lines at the cursor, then update the cursor to point just beyond the last inserted character.
     pub fn insert_lines<T, S, I>(&mut self, pos: T, s: S)
     where
         S: AsRef<[I]>,
@@ -144,18 +143,23 @@ impl State {
         let pos = pos.into();
         let s = s.as_ref();
         if s.len() > 1 {
-            // If our text contains a newline, it's an expansion of the
-            // current line into multiple lines.
-            self.lines[pos.line]
-                .raw
-                .insert_str(pos.column as usize, &s[0].to_string());
+            // Start by snipping the line at the insert point into start and end chunks.
+            let start = &self.lines[pos.line].raw[..pos.column];
+            let end = &self.lines[pos.line].raw[pos.column..].to_string();
+
+            self.lines[pos.line] = Line::new(&format!("{}{}", start, s[0].to_string()));
+
+            let mut trailer = s[1..].iter().map(|x| x.to_string()).collect::<Vec<_>>();
+            let last = trailer.pop().unwrap();
+            trailer.push(format!("{}{}", last, end));
+
             self.lines.splice(
                 pos.line + 1..pos.line + 1,
-                s[1..].iter().map(|x| Line::new(&x.to_string())),
+                trailer.iter().map(|x| Line::new(x)),
             );
             self.cursor = Position {
-                line: self.cursor.line + s.len() - 1,
-                column: s.last().unwrap().to_string().len(),
+                line: pos.line + s.len() - 1,
+                column: last.len(),
             };
         } else {
             // If there are no newlines, we just insert the text in-place.
@@ -244,28 +248,33 @@ impl State {
     }
 
     /// Retrieve the text from inclusive start to exclusive end.
-    pub fn text_range<T>(&self, start: T, end: T) -> String
+    pub fn text_lines<T>(&self, start: T, end: T) -> Vec<String>
     where
         T: Into<Position>,
     {
         let start = start.into().cap_exclusive(self);
         let end = end.into().cap_exclusive(self);
 
-        let mut buf: String = String::new();
+        let mut buf = vec![];
         if start.line == end.line {
-            buf.push_str(&self.lines[start.line].raw[start.column..end.column]);
+            buf.push(self.lines[start.line].raw[start.column..end.column].to_string());
         } else {
-            buf.push_str(&self.lines[start.line].raw[start.column..]);
-            buf.push_str("\n");
+            buf.push(self.lines[start.line].raw[start.column..].to_string());
             if end.line - start.line > 1 {
                 for l in &self.lines[(start.line + 1)..(end.line - 1)] {
-                    buf.push_str(&l.raw);
-                    buf.push_str("\n");
+                    buf.push(l.raw.to_string());
                 }
             }
-            buf.push_str(&self.lines[end.line].raw[..end.column]);
+            buf.push(self.lines[end.line].raw[..end.column].to_string());
         }
         buf
+    }
+    /// Retrieve the text from inclusive start to exclusive end.
+    pub fn text_range<T>(&self, start: T, end: T) -> String
+    where
+        T: Into<Position>,
+    {
+        self.text_lines(start, end).join("\n")
     }
 }
 
@@ -288,6 +297,7 @@ mod tests {
     fn insert() {
         seq("_", |x| x.insert((0, 0), "a"), "a_");
         seq("_", |x| x.insert((0, 0), "a\nb"), "a\nb_");
+        seq("abc\ndef_", |x| x.insert((0, 2), "x\ny"), "abx\ny_c\ndef");
     }
 
     #[test]

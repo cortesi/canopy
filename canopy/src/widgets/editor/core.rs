@@ -63,6 +63,18 @@ impl Core {
             text.to_string(),
         )));
     }
+
+    /// Insert text at the current cursor position.
+    pub fn delete<T>(&mut self, start: T, end: T)
+    where
+        T: Into<state::Position>,
+    {
+        self.action(effect::Effect::Delete(effect::Delete::new(
+            &self.state,
+            start.into(),
+            end.into(),
+        )));
+    }
 }
 
 #[cfg(test)]
@@ -112,5 +124,11 @@ mod tests {
             },
             "abc\nd\nfoo\nbar_",
         );
+    }
+
+    #[test]
+    fn delete() {
+        // tundo("hello_", |c| c.delete((0, 0), (0, 1)), "ello_");
+        tundo("hello\nworld_", |c| c.delete((0, 0), (1, 1)), "orld_");
     }
 }
