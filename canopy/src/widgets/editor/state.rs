@@ -1,3 +1,25 @@
+use textwrap;
+
+/// Split the input text into lines of the given width, and return the start and end offsets for each line.
+fn wrap_offsets(s: &str, width: usize) -> Vec<(usize, usize)> {
+    let mut offsets = Vec::new();
+    let words = textwrap::core::break_words(
+        textwrap::WordSeparator::UnicodeBreakProperties.find_words(s),
+        width,
+    );
+    if words.is_empty() {
+        return vec![];
+    }
+    let lines = textwrap::wrap_algorithms::wrap_first_fit(&words, &[width as f64]);
+    for l in lines {
+        let start = unsafe { l[0].word.as_ptr().offset_from(s.as_ptr()) };
+        let last = l[l.len() - 1];
+        let end = unsafe { last.word.as_ptr().offset_from(s.as_ptr()) as usize + last.word.len() };
+        offsets.push((start as usize, end));
+    }
+    offsets
+}
+
 /// A position in the editor. The column offset, but not the line offset, may be
 /// beyond the bounds of the line.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -78,11 +100,22 @@ impl From<(usize, usize)> for Position {
 pub struct Line {
     /// The raw text of the line.
     pub raw: String,
+    pub wraps: Vec<(usize, usize)>,
 }
 
 impl Line {
     pub fn new(s: &str) -> Line {
-        Line { raw: s.into() }
+        Line {
+            raw: s.into(),
+            wraps: vec![],
+        }
+    }
+
+    fn wrap(&mut self, width: usize) -> usize {
+        let w = textwrap::wrap(&self.raw, width);
+        let ret = w.len();
+        self.wraps = wrap_offsets(&self.raw, width);
+        ret
     }
 }
 
@@ -269,12 +302,22 @@ impl State {
         }
         buf
     }
+
     /// Retrieve the text from inclusive start to exclusive end.
     pub fn text_range<T>(&self, start: T, end: T) -> String
     where
         T: Into<Position>,
     {
         self.text_lines(start, end).join("\n")
+    }
+
+    /// Set the width of the editor for wrapping, and return the height of the resulting wrapped text.
+    pub fn set_width(&mut self, width: usize) -> usize {
+        self.lines
+            .iter_mut()
+            .map(|x| x.wrap(width))
+            .max()
+            .unwrap_or(0)
     }
 }
 
@@ -380,5 +423,33 @@ mod tests {
         // // Beyond bounds
         assert_eq!(s.text_range((10, 0), (11, 0)), "");
         assert_eq!(s.text_range((1, 6), (11, 0)), "four\nx");
+    }
+
+    #[test]
+    fn text_width() {
+        let mut s = State::new("one two\nthree four\nx");
+        assert_eq!(s.set_width(3), 4);
+    }
+
+    fn twrap(s: &str, width: usize, expected: Vec<String>) {
+        let offsets = wrap_offsets(s, width);
+        assert_eq!(offsets.len(), expected.len());
+        for i in 0..offsets.len() {
+            let (start, end) = offsets[i];
+            let line = &s[start..end];
+            assert_eq!(line, expected[i]);
+        }
+    }
+
+    #[test]
+    fn test_wrap_offsets() {
+        twrap("", 3, vec![]);
+        twrap("one two three four", 100, vec!["one two three four".into()]);
+        twrap("one two", 3, vec!["one".into(), "two".into()]);
+        twrap(
+            "one two three four",
+            10,
+            vec!["one two".into(), "three four".into()],
+        );
     }
 }
