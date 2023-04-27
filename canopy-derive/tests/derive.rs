@@ -8,6 +8,9 @@ use canopy::{
 };
 use canopy_derive::{command, derive_commands};
 
+#[cfg(test)]
+use pretty_assertions::assert_eq;
+
 #[test]
 fn statefulnode() {
     #[derive(canopy::StatefulNode)]
@@ -88,7 +91,7 @@ fn commands() {
             canopy::commands::CommandSpec {
                 node: "foo".try_into().unwrap(),
                 command: "a".to_string(),
-                docs: " This is a comment.\n Multiline too!".to_string(),
+                docs: "This is a comment.\nMultiline too!".to_string(),
                 ret: ReturnSpec::new(ReturnTypes::Void, true),
                 arg_core: true,
             },

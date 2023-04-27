@@ -4,7 +4,7 @@ use proc_macro_error::*;
 use quote::quote;
 use regex::Regex;
 use structmeta::StructMeta;
-use syn::{parse_macro_input, DeriveInput};
+use syn::{parse_macro_input, DeriveInput, Meta};
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -134,24 +134,44 @@ impl quote::ToTokens for Command {
     }
 }
 
-fn parse_command_method(node: &str, method: &syn::ImplItemMethod) -> Result<Option<Command>> {
-    let mut docs = vec![];
+fn parse_command_method(node: &str, method: &syn::ImplItemFn) -> Result<Option<Command>> {
+    let mut docs: Vec<String> = vec![];
     let mut args = None;
 
     for a in &method.attrs {
-        if a.path.is_ident("command") {
-            args = Some(if a.tokens.is_empty() {
-                CommandArgs::default()
-            } else {
-                a.parse_args().map_err(|e| Error::Parse(e.to_string()))?
-            });
-        } else if a.path.is_ident("doc") {
-            for t in a.tokens.clone() {
-                if let proc_macro2::TokenTree::Literal(l) = t {
-                    if let Ok(lit) = StringLit::try_from(l) {
-                        docs.push(lit.value().to_string())
-                    }
+        if a.path().is_ident("command") {
+            let mut ca = CommandArgs::default();
+            match a.meta {
+                Meta::Path(_) => {}
+                Meta::List(ref l) => {
+                    a.parse_nested_meta(|m| {
+                        if m.path.is_ident("ignore_result") {
+                            ca.ignore_result = true;
+                        } else {
+                            Err(syn::Error::new_spanned(m.path, "unknown command argument"))?
+                        }
+                        Ok(())
+                    })
+                    .map_err(|e| Error::Parse(e.to_string()))?;
                 }
+                Meta::NameValue(_) => {
+                    Err(Error::Parse("invalid command argument".into()))?;
+                }
+            }
+            args = Some(ca);
+        } else if a.path().is_ident("doc") {
+            match &a.meta {
+                Meta::NameValue(syn::MetaNameValue {
+                    value:
+                        syn::Expr::Lit(syn::ExprLit {
+                            lit: syn::Lit::Str(lit),
+                            ..
+                        }),
+                    ..
+                }) => {
+                    docs.push(lit.value().trim().to_string());
+                }
+                _ => Err(Error::Parse("invalid doc attribute".into()))?,
             }
         }
     }
@@ -270,7 +290,7 @@ pub fn derive_commands(
 
     let mut commands = vec![];
     for i in input.items {
-        if let syn::ImplItem::Method(m) = i {
+        if let syn::ImplItem::Fn(m) = i {
             if let Some(command) = parse_command_method(&node_name, &m).unwrap_or_abort() {
                 commands.push(command);
             }
