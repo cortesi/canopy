@@ -1,5 +1,4 @@
 use lazy_static::lazy_static;
-use litrs::StringLit;
 use proc_macro_error::*;
 use quote::quote;
 use regex::Regex;
@@ -143,7 +142,7 @@ fn parse_command_method(node: &str, method: &syn::ImplItemFn) -> Result<Option<C
             let mut ca = CommandArgs::default();
             match a.meta {
                 Meta::Path(_) => {}
-                Meta::List(ref l) => {
+                Meta::List(_) => {
                     a.parse_nested_meta(|m| {
                         if m.path.is_ident("ignore_result") {
                             ca.ignore_result = true;
