@@ -63,6 +63,38 @@ pub(crate) struct ScriptHost {
     current_id: u64,
 }
 
+type FnCallArgs<'a> = [&'a mut rhai::Dynamic];
+
+type ScriptResult<T> = std::result::Result<T, Box<rhai::EvalAltResult>>;
+
+/// This is a re-implementation of the Module::set_raw_fn from rhai. It turns out that set_raw_fn wants to assume that
+/// the function is a odule, which imposes some internal constraints on the number of arguments.
+fn set_pure_fn<T: rhai::Variant + Clone>(
+    this: &mut rhai::Module,
+    name: impl AsRef<str>,
+    namespace: rhai::FnNamespace,
+    access: rhai::FnAccess,
+    arg_types: impl AsRef<[rhai::plugin::TypeId]>,
+    func: impl Fn(rhai::NativeCallContext, &mut FnCallArgs) -> ScriptResult<T> + 'static,
+) -> u64 {
+    let f = move |ctx: Option<rhai::NativeCallContext>, args: &mut FnCallArgs| {
+        func(ctx.unwrap(), args).map(rhai::Dynamic::from)
+    };
+
+    this.set_fn(
+        name,
+        namespace,
+        access,
+        None,
+        arg_types,
+        rhai::plugin::CallableFunction::Pure {
+            func: rhai::Shared::new(f),
+            has_context: true,
+            is_pure: true,
+        },
+    )
+}
+
 impl ScriptHost {
     pub fn new() -> Self {
         let mut engine = rhai::Engine::new();
@@ -94,7 +126,8 @@ impl ScriptHost {
                 node: i.node.clone(),
                 command: i.command.clone(),
             };
-            m.set_raw_fn(
+            set_pure_fn(
+                m,
                 &i.command,
                 rhai::FnNamespace::Internal,
                 rhai::FnAccess::Public,
