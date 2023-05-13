@@ -1,24 +1,6 @@
-use textwrap;
+use super::chunk::Chunk;
 
-/// Split the input text into lines of the given width, and return the start and end offsets for each line.
-fn wrap_offsets(s: &str, width: usize) -> Vec<(usize, usize)> {
-    let mut offsets = Vec::new();
-    let words = textwrap::core::break_words(
-        textwrap::WordSeparator::UnicodeBreakProperties.find_words(s),
-        width,
-    );
-    if words.is_empty() {
-        return vec![];
-    }
-    let lines = textwrap::wrap_algorithms::wrap_first_fit(&words, &[width as f64]);
-    for l in lines {
-        let start = unsafe { l[0].word.as_ptr().offset_from(s.as_ptr()) };
-        let last = l[l.len() - 1];
-        let end = unsafe { last.word.as_ptr().offset_from(s.as_ptr()) as usize + last.word.len() };
-        offsets.push((start as usize, end));
-    }
-    offsets
-}
+const DEFAULT_WRAP: usize = 80;
 
 /// A position in the editor. The column offset, but not the line offset, may be
 /// beyond the bounds of the line.
@@ -39,7 +21,7 @@ impl Position {
         let last = s.last();
         if self.line > last.line {
             last
-        } else if self.column < s.lines[self.line].raw.len() - 1 {
+        } else if self.column < s.chunks[self.line].len() - 1 {
             Position::new(self.line, self.column + 1)
         } else {
             Position::new(self.line + 1, 0).cap_inclusive(s)
@@ -52,12 +34,12 @@ impl Position {
         if self.line > ep.line {
             Position {
                 line: ep.line,
-                column: s.lines[ep.line].raw.len(),
+                column: s.chunks[ep.line].len(),
             }
-        } else if s.lines[self.line].raw.len() < self.column + 1 {
+        } else if s.chunks[self.line].len() < self.column + 1 {
             Position {
                 line: self.line,
-                column: s.lines[self.line].raw.len(),
+                column: s.chunks[self.line].len(),
             }
         } else {
             Position {
@@ -73,12 +55,12 @@ impl Position {
         if self.line > ep.line {
             Position {
                 line: ep.line,
-                column: s.lines[ep.line].raw.len() - 1,
+                column: s.chunks[ep.line].len() - 1,
             }
-        } else if s.lines[self.line].raw.len() < self.column {
+        } else if s.chunks[self.line].len() < self.column {
             Position {
                 line: self.line,
-                column: s.lines[self.line].raw.len() - 1,
+                column: s.chunks[self.line].len() - 1,
             }
         } else {
             Position {
@@ -95,47 +77,31 @@ impl From<(usize, usize)> for Position {
     }
 }
 
-/// A line is a single line of text, including any terminating line break characters.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Line {
-    /// The raw text of the line.
-    pub raw: String,
-    pub wraps: Vec<(usize, usize)>,
-}
-
-impl Line {
-    pub fn new(s: &str) -> Line {
-        Line {
-            raw: s.into(),
-            wraps: vec![],
-        }
-    }
-
-    fn wrap(&mut self, width: usize) -> usize {
-        let w = textwrap::wrap(&self.raw, width);
-        let ret = w.len();
-        self.wraps = wrap_offsets(&self.raw, width);
-        ret
-    }
-}
-
 /// The current state of the editor
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(super) struct State {
     /// The underlying raw text being edited.
-    pub lines: Vec<Line>,
+    pub chunks: Vec<Chunk>,
     /// The current cursor position.
     pub cursor: Position,
+    pub width: usize,
 }
 
 impl State {
     pub fn new(text: &str) -> Self {
         let cursor = (0, 0).into();
-        let mut t: Vec<Line> = text.split("\n").map(|x| Line::new(x)).collect();
+        let mut t: Vec<Chunk> = text
+            .split("\n")
+            .map(|x| Chunk::new(x, DEFAULT_WRAP))
+            .collect();
         if t.is_empty() {
-            t.push(Line::new(""))
+            t.push(Chunk::new("", DEFAULT_WRAP))
         }
-        State { lines: t, cursor }
+        State {
+            chunks: t,
+            cursor,
+            width: DEFAULT_WRAP,
+        }
     }
 
     #[cfg(test)]
@@ -159,9 +125,9 @@ impl State {
 
     /// The complete raw text of this editor.
     pub fn raw_text(&self) -> String {
-        self.lines
+        self.chunks
             .iter()
-            .map(|x| x.raw.clone())
+            .map(|x| x.as_str())
             .collect::<Vec<_>>()
             .join("\n")
     }
@@ -177,27 +143,28 @@ impl State {
         let s = s.as_ref();
         if s.len() > 1 {
             // Start by snipping the line at the insert point into start and end chunks.
-            let start = &self.lines[pos.line].raw[..pos.column];
-            let end = &self.lines[pos.line].raw[pos.column..].to_string();
+            let start = &self.chunks[pos.line].as_str()[..pos.column];
+            let end = &self.chunks[pos.line].as_str()[pos.column..].to_string();
 
-            self.lines[pos.line] = Line::new(&format!("{}{}", start, s[0].to_string()));
+            self.chunks[pos.line] =
+                Chunk::new(&format!("{}{}", start, s[0].to_string()), self.width);
 
             let mut trailer = s[1..].iter().map(|x| x.to_string()).collect::<Vec<_>>();
             let last = trailer.pop().unwrap();
             trailer.push(format!("{}{}", last, end));
 
-            self.lines.splice(
+            self.chunks.splice(
                 pos.line + 1..pos.line + 1,
-                trailer.iter().map(|x| Line::new(x)),
+                trailer.iter().map(|x| Chunk::new(x, self.width)),
             );
             self.cursor = Position {
                 line: pos.line + s.len() - 1,
                 column: last.len(),
             };
         } else {
-            // If there are no newlines, we just insert the text in-place.
+            // If there are no line, we just insert the text in-place.
             let s = &s[0].to_string();
-            self.lines[pos.line].raw.insert_str(pos.column as usize, s);
+            self.chunks[pos.line].insert(pos.column as usize, s);
             self.cursor = (self.cursor.line, self.cursor.column + s.len()).into();
         }
     }
@@ -217,12 +184,10 @@ impl State {
     {
         let start = start.into();
         let end = end.into();
-        if start.line > self.lines.len() || end == start {
+        if start.line > self.chunks.len() || end == start {
             return;
         } else if start.line == end.line {
-            self.lines[start.line]
-                .raw
-                .replace_range(start.column..end.column, "");
+            self.chunks[start.line].replace_range(start.column..end.column, "");
             if self.cursor > start {
                 if self.cursor <= end {
                     self.cursor = start;
@@ -234,17 +199,17 @@ impl State {
                 }
             }
         } else {
-            let mut m = self.lines.remove(start.line).raw;
+            let mut m = self.chunks.remove(start.line);
             m.replace_range(start.column.., "");
 
-            if self.lines.len() > end.line - 1 {
-                let mut n = self.lines.remove(end.line - 1).raw;
+            if self.chunks.len() > end.line - 1 {
+                let mut n = self.chunks.remove(end.line - 1);
                 n.replace_range(..end.column.min(n.len()), "");
-                self.lines.drain(start.line..end.line - 1);
-                m.push_str(&n);
+                self.chunks.drain(start.line..end.line - 1);
+                m.push_str(n.as_str());
             }
 
-            self.lines.insert(start.line, Line::new(&m));
+            self.chunks.insert(start.line, m);
 
             if self.cursor > start {
                 if self.cursor <= end {
@@ -274,8 +239,8 @@ impl State {
     /// What's the position of the final character in the text?
     pub(super) fn last(&self) -> Position {
         (
-            self.lines.len() - 1,
-            self.lines[self.lines.len() - 1].raw.len() - 1,
+            self.chunks.len() - 1,
+            self.chunks[self.chunks.len() - 1].len() - 1,
         )
             .into()
     }
@@ -290,15 +255,15 @@ impl State {
 
         let mut buf = vec![];
         if start.line == end.line {
-            buf.push(self.lines[start.line].raw[start.column..end.column].to_string());
+            buf.push(self.chunks[start.line].as_str()[start.column..end.column].to_string());
         } else {
-            buf.push(self.lines[start.line].raw[start.column..].to_string());
+            buf.push(self.chunks[start.line].as_str()[start.column..].to_string());
             if end.line - start.line > 1 {
-                for l in &self.lines[(start.line + 1)..(end.line - 1)] {
-                    buf.push(l.raw.to_string());
+                for l in &self.chunks[(start.line + 1)..(end.line - 1)] {
+                    buf.push(l.as_str().into());
                 }
             }
-            buf.push(self.lines[end.line].raw[..end.column].to_string());
+            buf.push(self.chunks[end.line].as_str()[..end.column].to_string());
         }
         buf
     }
@@ -313,7 +278,7 @@ impl State {
 
     /// Set the width of the editor for wrapping, and return the height of the resulting wrapped text.
     pub fn set_width(&mut self, width: usize) -> usize {
-        self.lines
+        self.chunks
             .iter_mut()
             .map(|x| x.wrap(width))
             .max()
@@ -429,27 +394,5 @@ mod tests {
     fn text_width() {
         let mut s = State::new("one two\nthree four\nx");
         assert_eq!(s.set_width(3), 4);
-    }
-
-    fn twrap(s: &str, width: usize, expected: Vec<String>) {
-        let offsets = wrap_offsets(s, width);
-        assert_eq!(offsets.len(), expected.len());
-        for i in 0..offsets.len() {
-            let (start, end) = offsets[i];
-            let line = &s[start..end];
-            assert_eq!(line, expected[i]);
-        }
-    }
-
-    #[test]
-    fn test_wrap_offsets() {
-        twrap("", 3, vec![]);
-        twrap("one two three four", 100, vec!["one two three four".into()]);
-        twrap("one two", 3, vec!["one".into(), "two".into()]);
-        twrap(
-            "one two three four",
-            10,
-            vec!["one two".into(), "three four".into()],
-        );
     }
 }

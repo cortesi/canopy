@@ -2,7 +2,7 @@ use super::effect::Effector;
 use super::{effect, state};
 
 /// Core implementation for a simple editor.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Core {
     pub(super) state: state::State,
     /// The history of operations on this text buffer.
