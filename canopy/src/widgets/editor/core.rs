@@ -75,6 +75,10 @@ impl Core {
             end.into(),
         )));
     }
+
+    pub fn set_width(&mut self, width: usize) {
+        self.state.set_width(width);
+    }
 }
 
 #[cfg(test)]
@@ -94,7 +98,7 @@ mod tests {
         let mut s = start.clone();
 
         f(&mut s);
-        assert_eq!(s.state.raw_text(), end.state.raw_text());
+        assert_eq!(s.state.text(), end.state.text());
         loop {
             if !s.undo() {
                 break;
@@ -128,7 +132,7 @@ mod tests {
 
     #[test]
     fn delete() {
-        // tundo("hello_", |c| c.delete((0, 0), (0, 1)), "ello_");
+        tundo("hello_", |c| c.delete((0, 0), (0, 1)), "ello_");
         tundo("hello\nworld_", |c| c.delete((0, 0), (1, 1)), "orld_");
     }
 }

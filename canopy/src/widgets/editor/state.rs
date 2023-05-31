@@ -123,15 +123,6 @@ impl State {
         n
     }
 
-    /// The complete raw text of this editor.
-    pub fn raw_text(&self) -> String {
-        self.chunks
-            .iter()
-            .map(|x| x.as_str())
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
-
     /// Insert a set of lines at the cursor, then update the cursor to point just beyond the last inserted character.
     pub fn insert_lines<T, S, I>(&mut self, pos: T, s: S)
     where
@@ -245,8 +236,9 @@ impl State {
             .into()
     }
 
-    /// Retrieve the text from inclusive start to exclusive end.
-    pub fn text_lines<T>(&self, start: T, end: T) -> Vec<String>
+    /// Retrieve lines of text from inclusive start to exclusive end. The first and last line returned may be partial if
+    /// the offsets are not on line boundaries.
+    pub fn line_range<T>(&self, start: T, end: T) -> Vec<String>
     where
         T: Into<Position>,
     {
@@ -268,21 +260,53 @@ impl State {
         buf
     }
 
-    /// Retrieve the text from inclusive start to exclusive end.
+    /// The complete text of this editor, with chunks separated by newlines.
+    pub fn text(&self) -> String {
+        self.chunks
+            .iter()
+            .map(|x| x.as_str())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Retrieve the text from inclusive start to exclusive end. The first and last line returned may be partial if the
+    /// offsets are not on line boundaries.
     pub fn text_range<T>(&self, start: T, end: T) -> String
     where
         T: Into<Position>,
     {
-        self.text_lines(start, end).join("\n")
+        self.line_range(start, end).join("\n")
     }
 
-    /// Set the width of the editor for wrapping, and return the height of the resulting wrapped text.
+    /// Find the position of a given wrapped line offset. The return value is a tuple (chunk offset, wrapped line
+    /// offset), where the wrapped line offset is the offset within the returned chunk. If the specified offset is out
+    /// of range, the last line is returned.
+    pub fn wrapped_offset(&self, wrapped_line: usize) -> (usize, usize) {
+        let mut offset = 0;
+        for (i, c) in self.chunks.iter().enumerate() {
+            if offset + c.wraps.len() > wrapped_line {
+                return (i, wrapped_line - offset);
+            }
+            offset += c.wraps.len();
+        }
+        (
+            self.chunks.len() - 1,
+            self.chunks[self.chunks.len() - 1].wraps.len() - 1,
+        )
+    }
+
+    /// Return the text of the editor, wrapped to the current width. Offsets are in terms of the wrapped text.
+    pub fn wrapped_window(&self, start: usize, end: usize) -> Vec<&str> {
+        let mut buf = vec![];
+        let mut offset = 0;
+        buf
+    }
+
+    /// Set the width of the editor for wrapping, and return the total number of wrapped lines that resulted.
     pub fn set_width(&mut self, width: usize) -> usize {
-        self.chunks
-            .iter_mut()
-            .map(|x| x.wrap(width))
-            .max()
-            .unwrap_or(0)
+        // FIXME: This needs to be a as close to a nop as possible if the width hasn't changed.
+        self.width = width;
+        self.chunks.iter_mut().map(|x| x.wrap(width)).sum()
     }
 }
 
@@ -393,6 +417,16 @@ mod tests {
     #[test]
     fn text_width() {
         let mut s = State::new("one two\nthree four\nx");
-        assert_eq!(s.set_width(3), 4);
+        assert_eq!(s.set_width(3), 7);
+    }
+
+    #[test]
+    fn wrapped_offset() {
+        let mut s = State::new("one two\nthree four\nx");
+        assert_eq!(s.set_width(3), 7);
+        assert_eq!(s.wrapped_offset(0), (0, 0));
+        assert_eq!(s.wrapped_offset(1), (0, 1));
+        assert_eq!(s.wrapped_offset(2), (1, 0));
+        assert_eq!(s.wrapped_offset(100), (2, 0));
     }
 }

@@ -24,8 +24,11 @@ fn wrap_offsets(s: &str, width: usize) -> Vec<(usize, usize)> {
 pub struct Chunk {
     /// The raw text of the line.
     text: String,
+    /// The start and end offsets of each wrapped line in the chunk.
     pub wraps: Vec<(usize, usize)>,
-    pub wrap: usize,
+    /// The width to which this chunk was wrapped
+    // FIXME: This should not be stored in every line
+    pub wrap_width: usize,
 }
 
 impl PartialEq for Chunk {
@@ -39,7 +42,7 @@ impl Chunk {
         let mut l = Chunk {
             text: s.into(),
             wraps: vec![],
-            wrap,
+            wrap_width: wrap,
         };
         l.wrap(wrap);
         l
@@ -47,12 +50,12 @@ impl Chunk {
 
     pub fn replace_range<R: std::ops::RangeBounds<usize>>(&mut self, range: R, s: &str) {
         self.text.replace_range(range, s);
-        self.wrap(self.wrap);
+        self.wrap(self.wrap_width);
     }
 
     pub fn push_str(&mut self, s: &str) {
         self.text.push_str(s);
-        self.wrap(self.wrap);
+        self.wrap(self.wrap_width);
     }
 
     pub fn as_str(&self) -> &str {
@@ -66,15 +69,14 @@ impl Chunk {
     /// Insert a string at the given offset
     pub fn insert(&mut self, offset: usize, s: &str) {
         self.text.insert_str(offset, s);
-        self.wrap(self.wrap);
+        self.wrap(self.wrap_width);
     }
 
+    /// Wrap the chunk into lines of the given width, and return the number of wrapped lines that resulted.
     pub fn wrap(&mut self, width: usize) -> usize {
-        let w = textwrap::wrap(&self.text, width);
-        let ret = w.len();
         self.wraps = wrap_offsets(&self.text, width);
-        self.wrap = width;
-        ret
+        self.wrap_width = width;
+        self.wraps.len()
     }
 }
 

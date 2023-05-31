@@ -78,7 +78,7 @@ impl Delete {
             start,
             end,
             prev_cursor: s.cursor,
-            deleted_text: s.text_lines(start, end),
+            deleted_text: s.line_range(start, end),
         }
     }
 }
