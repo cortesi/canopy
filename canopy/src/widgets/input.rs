@@ -161,11 +161,7 @@ impl Node for Input {
     }
 
     fn render(&mut self, _: &dyn Core, r: &mut Render) -> Result<()> {
-        r.text(
-            "text",
-            self.vp().view_rect().first_line(),
-            &self.textbuf.text(),
-        )
+        r.text("text", self.vp().view_rect().line(0), &self.textbuf.text())
     }
 
     fn handle_key(&mut self, _c: &mut dyn Core, k: key::Key) -> Result<Outcome> {

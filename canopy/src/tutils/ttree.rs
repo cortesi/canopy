@@ -70,7 +70,7 @@ macro_rules! leaf {
             fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
                 r.text(
                     "any",
-                    self.vp().view_rect().first_line(),
+                    self.vp().view_rect().line(0),
                     &format!("<{}>", self.name().clone()),
                 )
             }
@@ -173,7 +173,7 @@ macro_rules! branch {
 
                 r.text(
                     "any",
-                    self.vp().view_rect().first_line(),
+                    self.vp().view_rect().line(0),
                     &format!("<{}>", self.name().clone()),
                 )
             }
@@ -186,10 +186,7 @@ macro_rules! branch {
                 self.handle("mouse")
             }
 
-            fn children(
-                &mut self,
-                f: &mut dyn FnMut(&mut dyn Node) -> Result<()>,
-            ) -> Result<()> {
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
                 f(&mut self.a)?;
                 f(&mut self.b)?;
                 Ok(())
@@ -251,7 +248,7 @@ impl Node for R {
 
         r.text(
             "any",
-            self.vp().view_rect().first_line(),
+            self.vp().view_rect().line(0),
             &format!("<{}>", self.name()),
         )
     }

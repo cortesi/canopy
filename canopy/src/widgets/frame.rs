@@ -130,7 +130,7 @@ where
                 pad::Alignment::Left,
                 true,
             );
-            rndr.text(style, f.top.first_line(), title)?;
+            rndr.text(style, f.top.line(0), title)?;
         } else {
             rndr.fill(style, f.top, self.glyphs.horizontal)?;
         }

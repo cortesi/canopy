@@ -316,6 +316,10 @@ impl State {
         buf
     }
 
+    pub fn wrapped_height(&self) -> usize {
+        self.chunks.iter().map(|x| x.wraps.len()).sum()
+    }
+
     /// Set the width of the editor for wrapping, and return the total number of wrapped lines that resulted.
     pub fn set_width(&mut self, width: usize) -> usize {
         // FIXME: This needs to be a as close to a nop as possible if the width hasn't changed.

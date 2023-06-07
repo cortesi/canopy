@@ -361,9 +361,13 @@ impl Rect {
         }
     }
 
-    pub fn first_line(&self) -> Line {
+    // Return a line with a given offset in the rectangle. Panics if the rectangle size is exceeded.
+    pub fn line(&self, off: u16) -> Line {
+        if off > self.h {
+            panic!("offset exceeds rectangle height")
+        }
         Line {
-            tl: self.tl,
+            tl: (self.tl.x, self.tl.y + off).into(),
             w: self.w,
         }
     }

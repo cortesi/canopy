@@ -71,7 +71,7 @@ impl StatusBar {}
 impl Node for StatusBar {
     fn render(&mut self, _c: &dyn Core, r: &mut Render) -> canopy::Result<()> {
         r.style.push_layer("statusbar");
-        r.text("statusbar/text", self.vp().view_rect().first_line(), "todo")?;
+        r.text("statusbar/text", self.vp().view_rect().line(0), "todo")?;
         Ok(())
     }
 }

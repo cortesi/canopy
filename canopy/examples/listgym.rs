@@ -85,7 +85,7 @@ impl StatusBar {}
 impl Node for StatusBar {
     fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
         r.style.push_layer("statusbar");
-        r.text("text", self.vp().view_rect().first_line(), "listgym")?;
+        r.text("text", self.vp().view_rect().line(0), "listgym")?;
         Ok(())
     }
 }

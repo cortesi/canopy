@@ -52,8 +52,8 @@ impl Node for Tabs {
                 "tab/inactive"
             };
             let (text, end) = rect.carve_hend(1);
-            r.text(styl, text.first_line(), &self.tabs[i])?;
-            r.text("", end.first_line(), " ")?;
+            r.text(styl, text.line(0), &self.tabs[i])?;
+            r.text("", end.line(0), " ")?;
         }
         Ok(())
     }
