@@ -78,6 +78,12 @@ impl Chunk {
         self.wrap_width = width;
         self.wraps.len()
     }
+
+    /// Return a wrapped line, by offset within this chunk. The offset must be within range, or this function will panic.
+    pub fn wrapped_line(&self, off: usize) -> &str {
+        let (start, end) = self.wraps[off];
+        &self.text[start..end]
+    }
 }
 
 #[cfg(test)]

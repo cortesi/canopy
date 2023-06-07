@@ -295,10 +295,24 @@ impl State {
         )
     }
 
-    /// Return the text of the editor, wrapped to the current width. Offsets are in terms of the wrapped text.
-    pub fn wrapped_window(&self, start: usize, end: usize) -> Vec<&str> {
+    /// Return the wrapped lines in a given window. The start offset is in terms of the wrapped text. The returned Vec
+    /// may be shorter than length if the end of the text is reached.
+    pub fn wrapped_window(&self, start: usize, length: usize) -> Vec<&str> {
         let mut buf = vec![];
-        let mut offset = 0;
+        let (chunk_offset, mut wrapped_offset) = self.wrapped_offset(start);
+        let end = self.wrapped_offset(start + length);
+        for coff in chunk_offset..self.chunks.len() {
+            for woff in wrapped_offset..self.chunks[coff].wraps.len() {
+                if (coff, woff) == end {
+                    return buf;
+                }
+                buf.push(self.chunks[coff].wrapped_line(woff));
+                if buf.len() >= length {
+                    return buf;
+                }
+            }
+            wrapped_offset = 0;
+        }
         buf
     }
 
@@ -314,7 +328,18 @@ impl State {
 mod tests {
     use super::*;
 
-    /// Wee helper for state equality tests
+    /// Check if a specification given as a string containing newlines is equal to a Vec<&str>.
+    fn str_eq(b: Vec<&str>, a: &str) {
+        if a.is_empty() {
+            assert!(b.is_empty());
+            return;
+        }
+        let av = a.split('\n').collect::<Vec<_>>();
+        assert_eq!(av, b)
+    }
+
+    /// Take a state specification a, turn it into a State object, apply the transformation f, then check if the result
+    /// is equal to the state specification b.
     fn seq<F>(a: &str, f: F, b: &str)
     where
         F: FnOnce(&mut State) -> (),
@@ -428,5 +453,22 @@ mod tests {
         assert_eq!(s.wrapped_offset(1), (0, 1));
         assert_eq!(s.wrapped_offset(2), (1, 0));
         assert_eq!(s.wrapped_offset(100), (2, 0));
+    }
+
+    #[test]
+    fn wrapped_window() {
+        let mut s = State::new("one two\nthree four\nx");
+        assert_eq!(s.set_width(3), 7);
+        str_eq(s.wrapped_window(0, 0), "");
+        str_eq(s.wrapped_window(0, 1), "one");
+        str_eq(s.wrapped_window(0, 2), "one\ntwo");
+        str_eq(s.wrapped_window(0, 3), "one\ntwo\nthr");
+
+        str_eq(s.wrapped_window(1, 1), "two");
+        str_eq(s.wrapped_window(1, 2), "two\nthr");
+
+        str_eq(s.wrapped_window(2, 1), "thr");
+        str_eq(s.wrapped_window(2, 2), "thr\nee");
+        str_eq(s.wrapped_window(2, 3), "thr\nee\nfou");
     }
 }
