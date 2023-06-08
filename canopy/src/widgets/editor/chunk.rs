@@ -6,7 +6,7 @@ fn wrap_offsets(s: &str, width: usize) -> Vec<(usize, usize)> {
         width,
     );
     if words.is_empty() {
-        return vec![];
+        return vec![(0, 0)];
     }
     let lines = textwrap::wrap_algorithms::wrap_first_fit(&words, &[width as f64]);
     for l in lines {
@@ -102,7 +102,7 @@ mod tests {
 
     #[test]
     fn test_wrap_offsets() {
-        twrap("", 3, vec![]);
+        twrap("", 3, vec!["".into()]);
         twrap("one two three four", 100, vec!["one two three four".into()]);
         twrap("one two", 3, vec!["one".into(), "two".into()]);
         twrap(

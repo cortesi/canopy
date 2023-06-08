@@ -332,6 +332,18 @@ impl State {
 mod tests {
     use super::*;
 
+    fn show_chunks(s: &State) {
+        for c in &s.chunks {
+            println!("{:?}", c.as_str())
+        }
+    }
+
+    fn show_wraps(s: &State) {
+        for s in s.wrapped_window(0, s.wrapped_height()) {
+            println!("{:?}", s);
+        }
+    }
+
     /// Check if a specification given as a string containing newlines is equal to a Vec<&str>.
     fn str_eq(b: Vec<&str>, a: &str) {
         if a.is_empty() {
@@ -474,5 +486,13 @@ mod tests {
         str_eq(s.wrapped_window(2, 1), "thr");
         str_eq(s.wrapped_window(2, 2), "thr\nee");
         str_eq(s.wrapped_window(2, 3), "thr\nee\nfou");
+    }
+
+    #[test]
+    fn whitespace() {
+        let mut s = State::new("one two\n\nthree four\n\n\nx");
+        assert_eq!(s.set_width(3), 10);
+        str_eq(s.wrapped_window(0, 3), "one\ntwo\n");
+        str_eq(s.wrapped_window(0, 4), "one\ntwo\n\nthr");
     }
 }

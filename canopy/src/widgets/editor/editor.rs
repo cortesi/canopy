@@ -1,3 +1,5 @@
+use std::iter;
+
 use crate as canopy;
 use crate::{
     event::key,
@@ -12,6 +14,7 @@ use super::core;
 pub struct EditorView {
     state: NodeState,
     core: core::Core,
+    window_offset: usize,
 }
 
 #[derive_commands]
@@ -20,6 +23,7 @@ impl EditorView {
         EditorView {
             state: NodeState::default(),
             core: core::Core::new(txt),
+            window_offset: 0,
         }
     }
 }
@@ -30,11 +34,16 @@ impl Node for EditorView {
     }
 
     fn render(&mut self, _: &dyn Core, r: &mut Render) -> Result<()> {
-        // r.text(
-        //     "text",
-        //     self.vp().view_rect().first_line(),
-        //     &self.textbuf.text(),
-        // )
+        let vo = self.vp().view_rect();
+        for (i, s) in self
+            .core
+            .state
+            .wrapped_window(self.window_offset, vo.h as usize)
+            .iter()
+            .enumerate()
+        {
+            r.text("text", vo.line(i as u16), s)?;
+        }
         Ok(())
     }
 
