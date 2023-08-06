@@ -1,4 +1,4 @@
-use super::state;
+use super::{primitives, state};
 
 pub(super) trait Effector {
     /// Modifies the provided state and returns a new state to apply this effect.
@@ -32,13 +32,13 @@ impl Effector for Effect {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Insert {
-    pos: state::Position,
+    pos: primitives::Position,
     text: Vec<String>,
-    prev_cursor: state::Position,
+    prev_cursor: primitives::Position,
 }
 
 impl Insert {
-    pub(super) fn new(s: &state::State, pos: state::Position, text: String) -> Self {
+    pub(super) fn new(s: &state::State, pos: primitives::Position, text: String) -> Self {
         Self {
             pos,
             text: text.split("\n").map(|s| s.to_string()).collect(),
@@ -55,8 +55,8 @@ impl Effector for Insert {
     fn revert(&self, s: &mut state::State) {
         s.delete(
             self.pos,
-            state::Position {
-                line: self.pos.line + self.text.len(),
+            primitives::Position {
+                chunk: self.pos.chunk + self.text.len(),
                 column: self.pos.column,
             },
         );
@@ -66,14 +66,18 @@ impl Effector for Insert {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Delete {
-    start: state::Position,
-    end: state::Position,
-    prev_cursor: state::Position,
+    start: primitives::Position,
+    end: primitives::Position,
+    prev_cursor: primitives::Position,
     deleted_text: Vec<String>,
 }
 
 impl Delete {
-    pub(super) fn new(s: &state::State, start: state::Position, end: state::Position) -> Self {
+    pub(super) fn new(
+        s: &state::State,
+        start: primitives::Position,
+        end: primitives::Position,
+    ) -> Self {
         Self {
             start,
             end,

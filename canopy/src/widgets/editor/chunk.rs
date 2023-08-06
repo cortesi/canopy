@@ -18,8 +18,8 @@ fn wrap_offsets(s: &str, width: usize) -> Vec<(usize, usize)> {
     offsets
 }
 
-/// A chunk is a single piece of text containing no newlines, including any terminating line break characters. A Chunk
-/// may be wrapped into multiple lines for display.
+/// A chunk is a single piece of text containing no newlines. An example might be a paragraph of text, typed without
+/// pressing enter. A Chunk may be wrapped into multiple lines for display.
 #[derive(Debug, Clone, Eq, Hash)]
 pub struct Chunk {
     /// The raw text of the line.

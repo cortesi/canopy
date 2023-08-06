@@ -1,6 +1,6 @@
 use crate as canopy;
 use crate::{
-    geom::{Expanse, Line},
+    geom::Expanse,
     state::{NodeState, StatefulNode},
     *,
 };

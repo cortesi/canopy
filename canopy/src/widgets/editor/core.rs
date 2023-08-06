@@ -1,5 +1,5 @@
 use super::effect::Effector;
-use super::{effect, state};
+use super::{effect, primitives::Position, state};
 
 /// Core implementation for a simple editor.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,7 +67,7 @@ impl Core {
     /// Insert text at the current cursor position.
     pub fn delete<T>(&mut self, start: T, end: T)
     where
-        T: Into<state::Position>,
+        T: Into<Position>,
     {
         self.action(effect::Effect::Delete(effect::Delete::new(
             &self.state,
