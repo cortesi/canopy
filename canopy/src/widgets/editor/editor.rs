@@ -9,11 +9,13 @@ use crate::{
 };
 
 use super::core;
+use super::*;
 
 #[derive(StatefulNode)]
 pub struct EditorView {
     state: NodeState,
     core: core::Core,
+    /// Line offset of the window into the text buffer.
     window_offset: usize,
 }
 
@@ -29,6 +31,10 @@ impl EditorView {
 }
 
 impl Node for EditorView {
+    fn cursor(&self) -> Option<cursor::Cursor> {
+        None
+    }
+
     fn accept_focus(&mut self) -> bool {
         true
     }
@@ -38,11 +44,17 @@ impl Node for EditorView {
         for (i, s) in self
             .core
             .state
-            .wrapped_window(self.window_offset, vo.h as usize)
+            .wrapped_text(Window::from_offset(
+                &self.core.state,
+                self.window_offset,
+                vo.h as usize,
+            ))
             .iter()
             .enumerate()
         {
-            r.text("text", vo.line(i as u16), s)?;
+            if let Some(t) = s {
+                r.text("text", vo.line(i as u16), t)?;
+            }
         }
         Ok(())
     }

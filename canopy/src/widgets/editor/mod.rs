@@ -6,4 +6,4 @@ mod primitives;
 mod state;
 
 pub use editor::Editor;
-pub use primitives::Position;
+pub use primitives::{Position, Window};

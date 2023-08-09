@@ -251,34 +251,11 @@ impl State {
     pub fn wrapped_text(&self, w: Window) -> Vec<Option<&str>> {
         let mut buf = vec![];
         for l in w.lines(self) {
-            println!("{:?}", l);
             if let Some(l) = l {
                 buf.push(Some(self.chunks[l.chunk].wrapped_line(l.offset)));
             } else {
                 buf.push(None);
             }
-        }
-        buf
-    }
-
-    /// Return the wrapped lines in a given window. The start offset is in terms of the wrapped text. The returned Vec
-    /// may be shorter than length if the end of the text is reached.
-    pub fn wrapped_window(&self, start: usize, length: usize) -> Vec<&str> {
-        let mut buf = vec![];
-        let line = self.wrapped_line_offset(start);
-        let end = self.wrapped_line_offset(start + length);
-        let mut wrapped_offset = line.offset;
-        for coff in line.chunk..self.chunks.len() {
-            for woff in wrapped_offset..self.chunks[coff].wraps.len() {
-                if Line::from((coff, woff)) == end {
-                    return buf;
-                }
-                buf.push(self.chunks[coff].wrapped_line(woff));
-                if buf.len() >= length {
-                    return buf;
-                }
-            }
-            wrapped_offset = 0;
         }
         buf
     }
@@ -297,30 +274,24 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use bitvec::vec;
-
     use super::*;
 
-    fn show_chunks(s: &State) {
-        for c in &s.chunks {
-            println!("{:?}", c.as_str())
+    /// Check if a specification given as a string containing newlines is equal to a Vec<Option<&str>>. None is ignored.
+    fn win_str_eq(b: Vec<Option<&str>>, a: &str) {
+        let mut m = vec![];
+        for i in b.iter() {
+            if let Some(s) = i {
+                m.push(*s)
+            } else {
+                break;
+            }
         }
-    }
-
-    fn show_wraps(s: &State) {
-        for s in s.wrapped_window(0, s.wrapped_height()) {
-            println!("{:?}", s);
-        }
-    }
-
-    /// Check if a specification given as a string containing newlines is equal to a Vec<&str>.
-    fn str_eq(b: Vec<&str>, a: &str) {
         if a.is_empty() {
-            assert!(b.is_empty());
+            assert!(m.is_empty());
             return;
         }
         let av = a.split('\n').collect::<Vec<_>>();
-        assert_eq!(av, b)
+        assert_eq!(m.join("\n"), a)
     }
 
     /// Take a state specification a, turn it into a State object, apply the transformation f, then check if the result
@@ -484,27 +455,13 @@ mod tests {
     }
 
     #[test]
-    fn wrapped_window() {
-        let mut s = State::new("one two\nthree four\nx");
-        assert_eq!(s.set_width(3), 7);
-        str_eq(s.wrapped_window(0, 0), "");
-        str_eq(s.wrapped_window(0, 1), "one");
-        str_eq(s.wrapped_window(0, 2), "one\ntwo");
-        str_eq(s.wrapped_window(0, 3), "one\ntwo\nthr");
-
-        str_eq(s.wrapped_window(1, 1), "two");
-        str_eq(s.wrapped_window(1, 2), "two\nthr");
-
-        str_eq(s.wrapped_window(2, 1), "thr");
-        str_eq(s.wrapped_window(2, 2), "thr\nee");
-        str_eq(s.wrapped_window(2, 3), "thr\nee\nfou");
-    }
-
-    #[test]
     fn whitespace() {
         let mut s = State::new("one two\n\nthree four\n\n\nx");
         assert_eq!(s.set_width(3), 10);
-        str_eq(s.wrapped_window(0, 3), "one\ntwo\n");
-        str_eq(s.wrapped_window(0, 4), "one\ntwo\n\nthr");
+        win_str_eq(s.wrapped_text(Window::from_offset(&s, 0, 3)), "one\ntwo\n");
+        win_str_eq(
+            s.wrapped_text(Window::from_offset(&s, 0, 4)),
+            "one\ntwo\n\nthr",
+        );
     }
 }
