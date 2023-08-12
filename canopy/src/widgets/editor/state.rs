@@ -1,7 +1,4 @@
-use super::{
-    chunk::Chunk,
-    primitives::{Line, Position, Window},
-};
+use super::primitives::*;
 
 use crate::geom::Point;
 
@@ -65,8 +62,8 @@ impl State {
         let s = s.as_ref();
         if s.len() > 1 {
             // Start by snipping the line at the insert point into start and end chunks.
-            let start = &self.chunks[pos.chunk].as_str()[..pos.column];
-            let end = &self.chunks[pos.chunk].as_str()[pos.column..].to_string();
+            let start = &self.chunks[pos.chunk].as_str()[..pos.offset];
+            let end = &self.chunks[pos.chunk].as_str()[pos.offset..].to_string();
 
             self.chunks[pos.chunk] =
                 Chunk::new(&format!("{}{}", start, s[0].to_string()), self.width);
@@ -81,13 +78,13 @@ impl State {
             );
             self.cursor = Position {
                 chunk: pos.chunk + s.len() - 1,
-                column: last.len(),
+                offset: last.len(),
             };
         } else {
             // If there are no line, we just insert the text in-place.
             let s = &s[0].to_string();
-            self.chunks[pos.chunk].insert(pos.column as usize, s);
-            self.cursor = (self.cursor.chunk, self.cursor.column + s.len()).into();
+            self.chunks[pos.chunk].insert(pos.offset as usize, s);
+            self.cursor = (self.cursor.chunk, self.cursor.offset + s.len()).into();
         }
     }
 
@@ -109,24 +106,24 @@ impl State {
         if start.chunk > self.chunks.len() || end == start {
             return;
         } else if start.chunk == end.chunk {
-            self.chunks[start.chunk].replace_range(start.column..end.column, "");
+            self.chunks[start.chunk].replace_range(start.offset..end.offset, "");
             if self.cursor > start {
                 if self.cursor <= end {
                     self.cursor = start;
                 } else if self.cursor.chunk == start.chunk {
                     self.cursor = Position {
                         chunk: self.cursor.chunk,
-                        column: self.cursor.column.saturating_sub(end.column - start.column),
+                        offset: self.cursor.offset.saturating_sub(end.offset - start.offset),
                     };
                 }
             }
         } else {
             let mut m = self.chunks.remove(start.chunk);
-            m.replace_range(start.column.., "");
+            m.replace_range(start.offset.., "");
 
             if self.chunks.len() > end.chunk - 1 {
                 let mut n = self.chunks.remove(end.chunk - 1);
-                n.replace_range(..end.column.min(n.len()), "");
+                n.replace_range(..end.offset.min(n.len()), "");
                 self.chunks.drain(start.chunk..end.chunk - 1);
                 m.push_str(n.as_str());
             }
@@ -139,18 +136,18 @@ impl State {
                 } else if self.cursor.chunk == start.chunk {
                     self.cursor = Position {
                         chunk: self.cursor.chunk.saturating_sub(end.chunk - start.chunk),
-                        column: self.cursor.column.saturating_sub(end.column),
+                        offset: self.cursor.offset.saturating_sub(end.offset),
                     };
                 } else {
                     self.cursor = Position {
                         chunk: self.cursor.chunk.saturating_sub(end.chunk - start.chunk),
-                        column: self.cursor.column.saturating_sub(end.column),
+                        offset: self.cursor.offset.saturating_sub(end.offset),
                     };
                     // We've ended moving the cursor onto our partially snipped starting line, so adjust the offset.
                     if self.cursor.chunk == start.chunk {
                         self.cursor = Position {
                             chunk: self.cursor.chunk,
-                            column: self.cursor.column + start.column,
+                            offset: self.cursor.offset + start.offset,
                         };
                     }
                 }
@@ -178,15 +175,15 @@ impl State {
 
         let mut buf = vec![];
         if start.chunk == end.chunk {
-            buf.push(self.chunks[start.chunk].as_str()[start.column..end.column].to_string());
+            buf.push(self.chunks[start.chunk].as_str()[start.offset..end.offset].to_string());
         } else {
-            buf.push(self.chunks[start.chunk].as_str()[start.column..].to_string());
+            buf.push(self.chunks[start.chunk].as_str()[start.offset..].to_string());
             if end.chunk - start.chunk > 1 {
                 for l in &self.chunks[(start.chunk + 1)..(end.chunk - 1)] {
                     buf.push(l.as_str().into());
                 }
             }
-            buf.push(self.chunks[end.chunk].as_str()[..end.column].to_string());
+            buf.push(self.chunks[end.chunk].as_str()[..end.offset].to_string());
         }
         buf
     }
@@ -209,16 +206,16 @@ impl State {
         self.line_range(start, end).join("\n")
     }
 
-    /// Find the position of a given wrapped line offset. The return value is a tuple (chunk offset, wrapped line
-    /// offset), where the wrapped line offset is the offset within the returned chunk. If the specified offset is out
-    /// of range, the last line is returned.
-    pub fn wrapped_line_offset(&self, wrapped_line: usize) -> Line {
-        let mut offset = 0;
+    /// Get a Line from a given wrapped line offset. The return value is a tuple (chunk offset, wrapped line offset),
+    /// where the wrapped line offset is the offset within the returned chunk. If the specified offset is out of range,
+    /// the last line is returned.
+    pub fn line_from_offset(&self, offset: usize) -> Line {
+        let mut wrapped_offset = 0;
         for (i, c) in self.chunks.iter().enumerate() {
-            if offset + c.wraps.len() > wrapped_line {
-                return (i, wrapped_line - offset).into();
+            if wrapped_offset + c.wraps.len() > offset {
+                return (i, offset - wrapped_offset).into();
             }
-            offset += c.wraps.len();
+            wrapped_offset += c.wraps.len();
         }
         (
             self.chunks.len() - 1,
@@ -227,23 +224,20 @@ impl State {
             .into()
     }
 
-    /// Calulate the (x, y) co-ordinates of a position within a wrapped window. If the position is not in the
+    /// Calulate the (x, y) co-ordinates of a Position within a wrapped window. If the position is not in the
     /// window, None is returned.
     pub fn coords_in_window(&self, win: Window, pos: Position) -> Option<Point> {
+        for (y, l) in win.lines(self).iter().enumerate() {
+            if let Some(l) = l {
+                if l.chunk == pos.chunk
+                    && l.offset <= pos.offset
+                    && l.offset + self.width > pos.offset
+                {
+                    return Some(((l.offset - pos.offset) as u16, y as u16).into());
+                }
+            }
+        }
         None
-        // let s = self.wrapped_line_offset(start);
-        // let e = self.wrapped_line_offset(start + length);
-        // if s <= self.cursor && self.cursor < e {
-        //     Some(
-        //         (
-        //             self.cursor.column as u16,
-        //             (self.cursor.chunk - s.chunk) as u16,
-        //         )
-        //             .into(),
-        //     )
-        // } else {
-        //     None
-        // }
     }
 
     /// Return the wrapped lines in a given window. The start offset is in terms of the wrapped text. The returned Vec
@@ -378,6 +372,20 @@ mod tests {
     }
 
     #[test]
+    fn coords_in_window() {
+        let mut s = State::new("one two\nthree four\nx");
+        assert_eq!(s.set_width(3), 7);
+        assert_eq!(
+            s.coords_in_window(Window::from_offset(&s, 0, 3), Position::new(0, 0)),
+            Some(Point { x: 0, y: 0 })
+        );
+        assert_eq!(
+            s.coords_in_window(Window::from_offset(&s, 0, 3), Position::new(100, 0)),
+            None
+        );
+    }
+
+    #[test]
     fn text_width() {
         let mut s = State::new("one two\nthree four\nx");
         assert_eq!(s.set_width(3), 7);
@@ -387,10 +395,10 @@ mod tests {
     fn wrapped_line_offset() {
         let mut s = State::new("one two\nthree four\nx");
         assert_eq!(s.set_width(3), 7);
-        assert_eq!(s.wrapped_line_offset(0), (0, 0).into());
-        assert_eq!(s.wrapped_line_offset(1), (0, 1).into());
-        assert_eq!(s.wrapped_line_offset(2), (1, 0).into());
-        assert_eq!(s.wrapped_line_offset(100), (2, 0).into());
+        assert_eq!(s.line_from_offset(0), (0, 0).into());
+        assert_eq!(s.line_from_offset(1), (0, 1).into());
+        assert_eq!(s.line_from_offset(2), (1, 0).into());
+        assert_eq!(s.line_from_offset(100), (2, 0).into());
     }
 
     #[test]

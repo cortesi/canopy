@@ -1,18 +1,17 @@
 use super::state::State;
 
-/// A position in the editor. The column offset, but not the chunk offset, may be beyond the bounds of the line.
+/// A position in the editor. The offset, but not the chunk offset, may be beyond the bounds of the line.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Position {
+    /// The offset of the chunk in the editor state.
     pub chunk: usize,
-    pub column: usize,
+    /// The column offset within the chunk.
+    pub offset: usize,
 }
 
 impl Position {
-    pub fn new(line: usize, column: usize) -> Self {
-        Position {
-            chunk: line,
-            column,
-        }
+    pub fn new(chunk: usize, offset: usize) -> Self {
+        Position { chunk, offset }
     }
 
     /// Return the next logical position after this one. Returns the final
@@ -21,8 +20,8 @@ impl Position {
         let last = s.last();
         if self.chunk > last.chunk {
             last
-        } else if self.column < s.chunks[self.chunk].len() - 1 {
-            Position::new(self.chunk, self.column + 1)
+        } else if self.offset < s.chunks[self.chunk].len() - 1 {
+            Position::new(self.chunk, self.offset + 1)
         } else {
             Position::new(self.chunk + 1, 0).cap_inclusive(s)
         }
@@ -34,17 +33,17 @@ impl Position {
         if self.chunk > ep.chunk {
             Position {
                 chunk: ep.chunk,
-                column: s.chunks[ep.chunk].len(),
+                offset: s.chunks[ep.chunk].len(),
             }
-        } else if s.chunks[self.chunk].len() < self.column + 1 {
+        } else if s.chunks[self.chunk].len() < self.offset + 1 {
             Position {
                 chunk: self.chunk,
-                column: s.chunks[self.chunk].len(),
+                offset: s.chunks[self.chunk].len(),
             }
         } else {
             Position {
                 chunk: self.chunk,
-                column: self.column,
+                offset: self.offset,
             }
         }
     }
@@ -55,25 +54,25 @@ impl Position {
         if self.chunk > ep.chunk {
             Position {
                 chunk: ep.chunk,
-                column: s.chunks[ep.chunk].len() - 1,
+                offset: s.chunks[ep.chunk].len() - 1,
             }
-        } else if s.chunks[self.chunk].len() < self.column {
+        } else if s.chunks[self.chunk].len() < self.offset {
             Position {
                 chunk: self.chunk,
-                column: s.chunks[self.chunk].len() - 1,
+                offset: s.chunks[self.chunk].len() - 1,
             }
         } else {
             Position {
                 chunk: self.chunk,
-                column: self.column,
+                offset: self.offset,
             }
         }
     }
 }
 
 impl From<(usize, usize)> for Position {
-    fn from((line, column): (usize, usize)) -> Self {
-        Position::new(line, column)
+    fn from((chunk, offset): (usize, usize)) -> Self {
+        Position::new(chunk, offset)
     }
 }
 
@@ -120,7 +119,7 @@ pub struct Window {
 impl Window {
     /// Create a Window from an offset and a screen height.
     pub(super) fn from_offset(s: &State, offset: usize, height: usize) -> Self {
-        let line = s.wrapped_line_offset(offset);
+        let line = s.line_from_offset(offset);
         Window { line, height }
     }
 
@@ -136,6 +135,94 @@ impl Window {
             }
         }
         lines
+    }
+}
+
+/// Split the input text into lines of the given width, and return the start and end offsets for each line.
+fn wrap_offsets(s: &str, width: usize) -> Vec<(usize, usize)> {
+    let mut offsets = Vec::new();
+    let words = textwrap::core::break_words(
+        textwrap::WordSeparator::UnicodeBreakProperties.find_words(s),
+        width,
+    );
+    if words.is_empty() {
+        return vec![(0, 0)];
+    }
+    let lines = textwrap::wrap_algorithms::wrap_first_fit(&words, &[width as f64]);
+    for l in lines {
+        let start = unsafe { l[0].word.as_ptr().offset_from(s.as_ptr()) };
+        let last = l[l.len() - 1];
+        let end = unsafe { last.word.as_ptr().offset_from(s.as_ptr()) as usize + last.word.len() };
+        offsets.push((start as usize, end));
+    }
+    offsets
+}
+
+/// A chunk is a single piece of text containing no newlines. An example might be a paragraph of text, typed without
+/// pressing enter. A Chunk may be wrapped into multiple lines for display.
+#[derive(Debug, Clone, Eq, Hash)]
+pub struct Chunk {
+    /// The raw text of the line.
+    text: String,
+    /// The start and end offsets of each wrapped line in the chunk.
+    pub wraps: Vec<(usize, usize)>,
+    /// The width to which this chunk was wrapped
+    // FIXME: This should not be stored in every line
+    pub wrap_width: usize,
+}
+
+impl PartialEq for Chunk {
+    fn eq(&self, other: &Self) -> bool {
+        self.text == other.text
+    }
+}
+
+impl Chunk {
+    pub fn new(s: &str, wrap: usize) -> Chunk {
+        let mut l = Chunk {
+            text: s.into(),
+            wraps: vec![],
+            wrap_width: wrap,
+        };
+        l.wrap(wrap);
+        l
+    }
+
+    pub fn replace_range<R: std::ops::RangeBounds<usize>>(&mut self, range: R, s: &str) {
+        self.text.replace_range(range, s);
+        self.wrap(self.wrap_width);
+    }
+
+    pub fn push_str(&mut self, s: &str) {
+        self.text.push_str(s);
+        self.wrap(self.wrap_width);
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.text
+    }
+
+    pub fn len(&self) -> usize {
+        self.text.len()
+    }
+
+    /// Insert a string at the given offset
+    pub fn insert(&mut self, offset: usize, s: &str) {
+        self.text.insert_str(offset, s);
+        self.wrap(self.wrap_width);
+    }
+
+    /// Wrap the chunk into lines of the given width, and return the number of wrapped lines that resulted.
+    pub fn wrap(&mut self, width: usize) -> usize {
+        self.wraps = wrap_offsets(&self.text, width);
+        self.wrap_width = width;
+        self.wraps.len()
+    }
+
+    /// Return a wrapped line, by offset within this chunk. The offset must be within range, or this function will panic.
+    pub fn wrapped_line(&self, off: usize) -> &str {
+        let (start, end) = self.wraps[off];
+        &self.text[start..end]
     }
 }
 
@@ -160,5 +247,27 @@ mod tests {
         assert!(Position::new(5, 5) == Position::new(5, 5));
         assert!(Position::new(4, 5) < Position::new(5, 5));
         assert!(Position::new(5, 4) < Position::new(5, 5));
+    }
+
+    fn twrap(s: &str, width: usize, expected: Vec<String>) {
+        let offsets = wrap_offsets(s, width);
+        assert_eq!(offsets.len(), expected.len());
+        for i in 0..offsets.len() {
+            let (start, end) = offsets[i];
+            let line = &s[start..end];
+            assert_eq!(line, expected[i]);
+        }
+    }
+
+    #[test]
+    fn test_wrap_offsets() {
+        twrap("", 3, vec!["".into()]);
+        twrap("one two three four", 100, vec!["one two three four".into()]);
+        twrap("one two", 3, vec!["one".into(), "two".into()]);
+        twrap(
+            "one two three four",
+            10,
+            vec!["one two".into(), "three four".into()],
+        );
     }
 }

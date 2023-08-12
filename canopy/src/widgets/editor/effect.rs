@@ -57,7 +57,7 @@ impl Effector for Insert {
             self.pos,
             primitives::Position {
                 chunk: self.pos.chunk + self.text.len(),
-                column: self.pos.column,
+                offset: self.pos.offset,
             },
         );
         s.cursor = self.prev_cursor;

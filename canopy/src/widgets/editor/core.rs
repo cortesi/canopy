@@ -1,5 +1,10 @@
 use super::effect::Effector;
-use super::{effect, primitives::Position, state};
+use super::{
+    effect,
+    primitives::{Position, Window},
+    state,
+};
+use crate::geom::Point;
 
 /// Core implementation for a simple editor.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,6 +83,10 @@ impl Core {
 
     pub fn set_width(&mut self, width: usize) {
         self.state.set_width(width);
+    }
+
+    pub fn cursor_position(&self, win: Window) -> Option<Point> {
+        self.state.coords_in_window(win, self.state.cursor)
     }
 }
 

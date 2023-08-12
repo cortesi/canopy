@@ -1,9 +1,6 @@
-use std::iter;
-
 use crate as canopy;
 use crate::{
-    event::key,
-    geom::{Expanse, LineSegment, Point},
+    geom::Expanse,
     state::{NodeState, StatefulNode},
     *,
 };
@@ -32,7 +29,20 @@ impl EditorView {
 
 impl Node for EditorView {
     fn cursor(&self) -> Option<cursor::Cursor> {
-        None
+        let p = self.core.cursor_position(Window::from_offset(
+            &self.core.state,
+            self.window_offset,
+            self.vp().screen_rect().h as usize,
+        ));
+        if let Some(p) = p {
+            Some(cursor::Cursor {
+                location: p,
+                shape: cursor::CursorShape::Block,
+                blink: true,
+            })
+        } else {
+            None
+        }
     }
 
     fn accept_focus(&mut self) -> bool {
@@ -65,7 +75,7 @@ impl Node for EditorView {
     }
 }
 
-/// A single input line, one character high.
+/// A simple editor
 #[derive(StatefulNode)]
 pub struct Editor {
     state: NodeState,
@@ -87,9 +97,15 @@ impl Node for Editor {
         true
     }
 
+    fn fit(&mut self, sz: Expanse) -> Result<Expanse> {
+        self.view.fit(sz)
+    }
+
     fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {
         let vp = self.vp();
-        fit(&mut self.view, vp)
+        fit(&mut self.view, vp)?;
+        self.set_viewport(self.view.vp());
+        Ok(())
     }
 
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {

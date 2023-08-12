@@ -1,4 +1,3 @@
-mod chunk;
 pub mod core;
 mod editor;
 mod effect;

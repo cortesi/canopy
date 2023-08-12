@@ -164,6 +164,7 @@ where
 
         Ok(())
     }
+
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         f(&mut self.child)
     }
