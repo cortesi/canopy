@@ -54,6 +54,7 @@ pub fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         canopy::Binder::new(&mut cnpy)
             .defaults::<Root<Ed>>()
             .with_path("ed/")
+            .defaults::<Editor>()
             .key(key::KeyCode::Tab, "root::focus_next()")
             .key('p', "print(\"xxxx\")");
 

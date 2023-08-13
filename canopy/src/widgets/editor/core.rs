@@ -33,7 +33,7 @@ impl Core {
         }
     }
 
-    /// Undo an operation. Return true if an operation was performed, false if the history is empty.
+    /// Undo an operation. Return true if an operation was undone, false if the history is empty.
     pub fn undo(&mut self) -> bool {
         if let Some(op) = self.history.pop() {
             op.revert(&mut self.state);
@@ -44,6 +44,7 @@ impl Core {
         }
     }
 
+    /// Redo an operation. Returne true if an operation was redone, false if redo history is empty.
     pub fn redo(&mut self) -> bool {
         if let Some(op) = self.redo.pop() {
             op.apply(&mut self.state);

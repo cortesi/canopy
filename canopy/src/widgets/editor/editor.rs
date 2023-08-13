@@ -1,9 +1,11 @@
 use crate as canopy;
 use crate::{
+    event::key,
     geom::Expanse,
     state::{NodeState, StatefulNode},
     *,
 };
+use tracing;
 
 use super::core;
 use super::*;
@@ -89,6 +91,25 @@ impl Editor {
             state: NodeState::default(),
             view: EditorView::new(txt),
         }
+    }
+
+    /// Move the cursor left.
+    #[command]
+    fn cursor_left(&mut self, _: &dyn Core) {
+        tracing::info!("cursor_left")
+    }
+
+    /// Move the cursor right.
+    #[command]
+    fn cursor_right(&mut self, _: &dyn Core) {
+        tracing::info!("cursor_right")
+    }
+}
+
+impl DefaultBindings for Editor {
+    fn defaults(b: Binder) -> Binder {
+        b.key(key::KeyCode::Left, "editor::cursor_left()")
+            .key(key::KeyCode::Right, "editor::cursor_right()")
     }
 }
 

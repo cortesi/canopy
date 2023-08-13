@@ -1,6 +1,6 @@
 use super::state::State;
 
-/// A position in the editor. The offset, but not the chunk offset, may be beyond the bounds of the line.
+/// A position in the editor. The offset may be one character beyond the bounds of the line.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Position {
     /// The offset of the chunk in the editor state.
@@ -14,16 +14,20 @@ impl Position {
         Position { chunk, offset }
     }
 
-    /// Return the next logical position after this one. Returns the final
-    /// position if this one is out of bounds.
-    fn next(&self, s: &State) -> Position {
+    /// Return the next logical position after this one, without crossing chunk bounds. Does nothing if we abutt to the
+    /// end of the line. If the current position is out of bounds, return a position at the end of the closest matching
+    /// chunk.
+    pub(super) fn right(&self, s: &State) -> Position {
         let last = s.last();
         if self.chunk > last.chunk {
-            last
-        } else if self.offset < s.chunks[self.chunk].len() - 1 {
-            Position::new(self.chunk, self.offset + 1)
+            Position::new(s.chunks.len() - 1, s.chunks[s.chunks.len() - 1].len())
+        } else if self.offset > s.chunks[self.chunk].len() {
+            Position::new(self.chunk, s.chunks[self.chunk].len())
         } else {
-            Position::new(self.chunk + 1, 0).cap_inclusive(s)
+            Position::new(
+                self.chunk,
+                (self.offset + 1).min(s.chunks[self.chunk].len()),
+            )
         }
     }
 
@@ -158,10 +162,10 @@ fn wrap_offsets(s: &str, width: usize) -> Vec<(usize, usize)> {
     offsets
 }
 
-/// A chunk is a single piece of text containing no newlines. An example might be a paragraph of text, typed without
-/// pressing enter. A Chunk may be wrapped into multiple lines for display.
+/// A chunk is a single piece of text with no newlines. An example might be a contiguous paragraph of text. A Chunk may
+/// be wrapped into multiple Lines for display.
 #[derive(Debug, Clone, Eq, Hash)]
-pub struct Chunk {
+pub(super) struct Chunk {
     /// The raw text of the line.
     text: String,
     /// The start and end offsets of each wrapped line in the chunk.
@@ -240,6 +244,19 @@ mod tests {
 
         assert_eq!(Position::new(0, 0).cap_exclusive(&s), (0, 0).into());
         assert_eq!(Position::new(3, 3).cap_exclusive(&s), (1, 2).into());
+    }
+
+    #[test]
+    fn position_right() {
+        let s = State::new("a\nbb");
+        assert_eq!(Position::new(0, 0).right(&s), Position::new(0, 1));
+        assert_eq!(Position::new(0, 1).right(&s), Position::new(0, 1));
+        assert_eq!(Position::new(1, 1).right(&s), Position::new(1, 2));
+        assert_eq!(Position::new(1, 2).right(&s), Position::new(1, 2));
+
+        // // Beyond bounds
+        assert_eq!(Position::new(1, 3).right(&s), Position::new(1, 2));
+        assert_eq!(Position::new(5, 0).right(&s), Position::new(1, 2));
     }
 
     #[test]

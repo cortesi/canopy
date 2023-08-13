@@ -81,7 +81,7 @@ impl State {
                 offset: last.len(),
             };
         } else {
-            // If there are no line, we just insert the text in-place.
+            // If there are no newlines, we just insert the text in-place.
             let s = &s[0].to_string();
             self.chunks[pos.chunk].insert(pos.offset as usize, s);
             self.cursor = (self.cursor.chunk, self.cursor.offset + s.len()).into();
@@ -264,6 +264,20 @@ impl State {
         self.width = width;
         self.chunks.iter_mut().map(|x| x.wrap(width)).sum()
     }
+
+    /// Move the cursor right within the current chunk, moving to the next wrapped line if needed. Won't move to the
+    /// next chunk.
+    pub fn cursor_right(&mut self, n: usize) {}
+
+    /// Move the cursor leftight within the current chunk, moving to the previous wrapped line if needed. Won't move to
+    /// the previous chunk.
+    pub fn cursor_left(&mut self, n: usize) {}
+
+    /// Move the cursor down, shifting to the next chunk if needed.
+    pub fn cursor_down(&mut self, n: usize) {}
+
+    /// Move the cursor up, shifting to the previous chunk if needed.
+    pub fn cursor_up(&mut self, n: usize) {}
 }
 
 #[cfg(test)]
@@ -284,7 +298,6 @@ mod tests {
             assert!(m.is_empty());
             return;
         }
-        let av = a.split('\n').collect::<Vec<_>>();
         assert_eq!(m.join("\n"), a)
     }
 
