@@ -4,6 +4,11 @@
 
 ## 0.1
 
+- Editor
+  - Split Position and InsertionPoint into separate types
+  - Unify Position and InsertionPoint to use specialized cap functions
+  - Make cursor an enum over Position and InsertionPoint
+
 - Commands improvements
   - Arguments
   - Return types, add as needed

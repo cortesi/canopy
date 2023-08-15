@@ -1,5 +1,113 @@
 use super::state::State;
 
+/// A position that can be clamped within the bounds of a `State`.
+trait Pos: Sized {
+    /// Create a new item and clamp it
+    fn new(s: &State, chunk: usize, offset: usize) -> Self;
+    /// Clamp within state bounds, and return a new item
+    fn cap(&self, s: &State) -> Self;
+    fn chunk_offset(&self) -> (usize, usize);
+
+    /// Return the next logical position after this one, without crossing chunk bounds. Does nothing if we abut to the
+    /// end of the line. If the current position is out of bounds, return a position at the end of the closest matching
+    /// chunk.
+    fn right(&self, s: &State) -> Self {
+        let (chunk, offset) = self.chunk_offset();
+        Self::new(s, chunk, offset + 1)
+    }
+}
+
+/// An insert position. The offset 0 is before the first character in the chunk, and offset `len` is after the last.
+///
+/// So, given the string abc, where _ is the insertion point, we can have the following possible positions:
+///
+///    abc_
+///    ab_c
+///    a_bc
+///    _abc
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+struct InsertPos {
+    /// The offset of the chunk in the editor state.
+    chunk: usize,
+    /// The column offset within the chunk.
+    offset: usize,
+}
+
+impl Pos for InsertPos {
+    fn new(s: &State, chunk: usize, offset: usize) -> Self {
+        InsertPos { chunk, offset }.cap(s)
+    }
+
+    fn chunk_offset(&self) -> (usize, usize) {
+        (self.chunk, self.offset)
+    }
+
+    fn cap(&self, s: &State) -> Self {
+        let ep = s.last();
+        if self.chunk > ep.chunk {
+            InsertPos {
+                chunk: ep.chunk,
+                offset: s.chunks[ep.chunk].len(),
+            }
+        } else if s.chunks[self.chunk].len() < self.offset + 1 {
+            InsertPos {
+                chunk: self.chunk,
+                offset: s.chunks[self.chunk].len(),
+            }
+        } else {
+            *self
+        }
+    }
+}
+
+impl From<(usize, usize)> for CharPos {
+    fn from((chunk, offset): (usize, usize)) -> Self {
+        CharPos { chunk, offset }
+    }
+}
+
+/// A characgter position. Offset 0 is the first character in the chunk, and offset `len - 1` is the last.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+struct CharPos {
+    /// The offset of the chunk in the editor state.
+    chunk: usize,
+    /// The column offset within the chunk.
+    offset: usize,
+}
+
+impl Pos for CharPos {
+    fn new(s: &State, chunk: usize, offset: usize) -> Self {
+        CharPos { chunk, offset }.cap(s)
+    }
+
+    fn chunk_offset(&self) -> (usize, usize) {
+        (self.chunk, self.offset)
+    }
+
+    fn cap(&self, s: &State) -> Self {
+        let ep = s.last();
+        if self.chunk > ep.chunk {
+            CharPos {
+                chunk: ep.chunk,
+                offset: s.chunks[ep.chunk].len() - 1,
+            }
+        } else if s.chunks[self.chunk].len() <= self.offset {
+            CharPos {
+                chunk: self.chunk,
+                offset: s.chunks[self.chunk].len() - 1,
+            }
+        } else {
+            *self
+        }
+    }
+}
+
+impl From<(usize, usize)> for InsertPos {
+    fn from((chunk, offset): (usize, usize)) -> Self {
+        InsertPos { chunk, offset }
+    }
+}
+
 /// A position in the editor. The offset may be one character beyond the bounds of the line.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Position {
@@ -18,17 +126,11 @@ impl Position {
     /// end of the line. If the current position is out of bounds, return a position at the end of the closest matching
     /// chunk.
     pub(super) fn right(&self, s: &State) -> Position {
-        let last = s.last();
-        if self.chunk > last.chunk {
-            Position::new(s.chunks.len() - 1, s.chunks[s.chunks.len() - 1].len())
-        } else if self.offset > s.chunks[self.chunk].len() {
-            Position::new(self.chunk, s.chunks[self.chunk].len())
-        } else {
-            Position::new(
-                self.chunk,
-                (self.offset + 1).min(s.chunks[self.chunk].len()),
-            )
-        }
+        let p = Position {
+            chunk: self.chunk,
+            offset: self.offset + 1,
+        };
+        p.cap_exclusive(s)
     }
 
     /// Constrain a `Position` to be within the exclusive range of `Core`.
@@ -257,6 +359,38 @@ mod tests {
         // // Beyond bounds
         assert_eq!(Position::new(1, 3).right(&s), Position::new(1, 2));
         assert_eq!(Position::new(5, 0).right(&s), Position::new(1, 2));
+    }
+
+    #[test]
+    fn insertpos_right() {
+        fn ip(x: (usize, usize)) -> InsertPos {
+            x.into()
+        }
+        let s = State::new("a\nbb");
+        assert_eq!(ip((0, 0)).right(&s), (0, 1).into());
+        assert_eq!(ip((0, 1)).right(&s), (0, 1).into());
+        assert_eq!(ip((1, 1)).right(&s), (1, 2).into());
+        assert_eq!(ip((1, 2)).right(&s), (1, 2).into());
+
+        // // Beyond bounds
+        assert_eq!(ip((1, 3)).right(&s), (1, 2).into());
+        assert_eq!(ip((5, 0)).right(&s), (1, 2).into());
+    }
+
+    #[test]
+    fn charpos_right() {
+        fn cp(x: (usize, usize)) -> CharPos {
+            x.into()
+        }
+        let s = State::new("a\nbb");
+        assert_eq!(cp((0, 0)).right(&s), (0, 0).into());
+        assert_eq!(cp((0, 1)).right(&s), (0, 0).into());
+        assert_eq!(cp((1, 0)).right(&s), (1, 1).into());
+        assert_eq!(cp((1, 1)).right(&s), (1, 1).into());
+
+        // // Beyond bounds
+        assert_eq!(cp((1, 3)).right(&s), (1, 1).into());
+        assert_eq!(cp((5, 0)).right(&s), (1, 1).into());
     }
 
     #[test]
