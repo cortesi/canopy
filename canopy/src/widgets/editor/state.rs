@@ -6,11 +6,11 @@ const DEFAULT_WRAP: usize = 80;
 
 /// The current state of the editor
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(super) struct State {
+pub struct State {
     /// The underlying raw text being edited.
     pub chunks: Vec<Chunk>,
     /// The current cursor position.
-    pub cursor: Position,
+    pub cursor: InsertPos,
     /// The current wrap width
     pub width: usize,
 }
@@ -56,7 +56,7 @@ impl State {
     where
         S: AsRef<[I]>,
         I: ToString,
-        T: Into<Position>,
+        T: Into<InsertPos>,
     {
         let pos = pos.into();
         let s = s.as_ref();
@@ -76,7 +76,7 @@ impl State {
                 pos.chunk + 1..pos.chunk + 1,
                 trailer.iter().map(|x| Chunk::new(x, self.width)),
             );
-            self.cursor = Position {
+            self.cursor = InsertPos {
                 chunk: pos.chunk + s.len() - 1,
                 offset: last.len(),
             };
@@ -91,7 +91,7 @@ impl State {
     /// Insert the given text at the given position, and update the cursor.
     pub fn insert<T>(&mut self, pos: T, s: &str)
     where
-        T: Into<Position>,
+        T: Into<InsertPos>,
     {
         self.insert_lines(pos, s.split("\n").collect::<Vec<&str>>())
     }
@@ -99,7 +99,7 @@ impl State {
     /// Insert the given text at the given position, and update the cursor if necessary.
     pub fn delete<T>(&mut self, start: T, end: T)
     where
-        T: Into<Position>,
+        T: Into<InsertPos>,
     {
         let start = start.into();
         let end = end.into();
@@ -111,7 +111,7 @@ impl State {
                 if self.cursor <= end {
                     self.cursor = start;
                 } else if self.cursor.chunk == start.chunk {
-                    self.cursor = Position {
+                    self.cursor = InsertPos {
                         chunk: self.cursor.chunk,
                         offset: self.cursor.offset.saturating_sub(end.offset - start.offset),
                     };
@@ -134,18 +134,18 @@ impl State {
                 if self.cursor <= end {
                     self.cursor = start;
                 } else if self.cursor.chunk == start.chunk {
-                    self.cursor = Position {
+                    self.cursor = InsertPos {
                         chunk: self.cursor.chunk.saturating_sub(end.chunk - start.chunk),
                         offset: self.cursor.offset.saturating_sub(end.offset),
                     };
                 } else {
-                    self.cursor = Position {
+                    self.cursor = InsertPos {
                         chunk: self.cursor.chunk.saturating_sub(end.chunk - start.chunk),
                         offset: self.cursor.offset.saturating_sub(end.offset),
                     };
                     // We've ended moving the cursor onto our partially snipped starting line, so adjust the offset.
                     if self.cursor.chunk == start.chunk {
-                        self.cursor = Position {
+                        self.cursor = InsertPos {
                             chunk: self.cursor.chunk,
                             offset: self.cursor.offset + start.offset,
                         };
@@ -155,8 +155,8 @@ impl State {
         }
     }
 
-    /// What's the position of the final character in the text?
-    pub(super) fn last(&self) -> Position {
+    /// What's the last insert position in the text?
+    pub(super) fn last(&self) -> InsertPos {
         (
             self.chunks.len() - 1,
             self.chunks[self.chunks.len() - 1].len() - 1,
@@ -168,10 +168,10 @@ impl State {
     /// the offsets are not on line boundaries.
     pub fn line_range<T>(&self, start: T, end: T) -> Vec<String>
     where
-        T: Into<Position>,
+        T: Into<InsertPos>,
     {
-        let start = start.into().cap_exclusive(self);
-        let end = end.into().cap_exclusive(self);
+        let start = start.into().cap(self);
+        let end = end.into().cap(self);
 
         let mut buf = vec![];
         if start.chunk == end.chunk {
@@ -201,7 +201,7 @@ impl State {
     /// offsets are not on line boundaries.
     pub fn text_range<T>(&self, start: T, end: T) -> String
     where
-        T: Into<Position>,
+        T: Into<InsertPos>,
     {
         self.line_range(start, end).join("\n")
     }
@@ -226,7 +226,7 @@ impl State {
 
     /// Calulate the (x, y) co-ordinates of a Position within a wrapped window. If the position is not in the
     /// window, None is returned.
-    pub fn coords_in_window(&self, win: Window, pos: Position) -> Option<Point> {
+    pub fn coords_in_window(&self, win: Window, pos: InsertPos) -> Option<Point> {
         for (y, l) in win.lines(self).iter().enumerate() {
             if let Some(l) = l {
                 if l.chunk == pos.chunk
@@ -389,11 +389,11 @@ mod tests {
         let mut s = State::new("one two\nthree four\nx");
         assert_eq!(s.set_width(3), 7);
         assert_eq!(
-            s.coords_in_window(Window::from_offset(&s, 0, 3), Position::new(0, 0)),
+            s.coords_in_window(Window::from_offset(&s, 0, 3), InsertPos::new(&s, 0, 0)),
             Some(Point { x: 0, y: 0 })
         );
         assert_eq!(
-            s.coords_in_window(Window::from_offset(&s, 0, 3), Position::new(100, 0)),
+            s.coords_in_window(Window::from_offset(&s, 0, 3), InsertPos::new(&s, 100, 0)),
             None
         );
     }

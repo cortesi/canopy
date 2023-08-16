@@ -5,4 +5,4 @@ mod primitives;
 mod state;
 
 pub use editor::Editor;
-pub use primitives::{Position, Window};
+pub use primitives::{CharPos, InsertPos, Pos, Window};

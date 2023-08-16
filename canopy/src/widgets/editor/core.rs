@@ -1,7 +1,7 @@
 use super::effect::Effector;
 use super::{
     effect,
-    primitives::{Position, Window},
+    primitives::{InsertPos, Window},
     state,
 };
 use crate::geom::Point;
@@ -70,10 +70,10 @@ impl Core {
         )));
     }
 
-    /// Insert text at the current cursor position.
+    /// Delete text in a given range.
     pub fn delete<T>(&mut self, start: T, end: T)
     where
-        T: Into<Position>,
+        T: Into<InsertPos>,
     {
         self.action(effect::Effect::Delete(effect::Delete::new(
             &self.state,

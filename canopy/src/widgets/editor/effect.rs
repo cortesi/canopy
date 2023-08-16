@@ -32,13 +32,13 @@ impl Effector for Effect {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Insert {
-    pos: primitives::Position,
+    pos: primitives::InsertPos,
     text: Vec<String>,
-    prev_cursor: primitives::Position,
+    prev_cursor: primitives::InsertPos,
 }
 
 impl Insert {
-    pub(super) fn new(s: &state::State, pos: primitives::Position, text: String) -> Self {
+    pub(super) fn new(s: &state::State, pos: primitives::InsertPos, text: String) -> Self {
         Self {
             pos,
             text: text.split("\n").map(|s| s.to_string()).collect(),
@@ -55,7 +55,7 @@ impl Effector for Insert {
     fn revert(&self, s: &mut state::State) {
         s.delete(
             self.pos,
-            primitives::Position {
+            primitives::InsertPos {
                 chunk: self.pos.chunk + self.text.len(),
                 offset: self.pos.offset,
             },
@@ -66,17 +66,17 @@ impl Effector for Insert {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Delete {
-    start: primitives::Position,
-    end: primitives::Position,
-    prev_cursor: primitives::Position,
+    start: primitives::InsertPos,
+    end: primitives::InsertPos,
+    prev_cursor: primitives::InsertPos,
     deleted_text: Vec<String>,
 }
 
 impl Delete {
     pub(super) fn new(
         s: &state::State,
-        start: primitives::Position,
-        end: primitives::Position,
+        start: primitives::InsertPos,
+        end: primitives::InsertPos,
     ) -> Self {
         Self {
             start,
