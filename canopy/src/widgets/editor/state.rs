@@ -10,14 +10,15 @@ pub struct State {
     /// The underlying raw text being edited.
     pub chunks: Vec<Chunk>,
     /// The current cursor position.
-    pub cursor: InsertPos,
+    pub cursor: Cursor,
     /// The current wrap width
     pub width: usize,
 }
 
 impl State {
+    /// Create a new State from the specified text. The cursor begins at the start of the text, in visual mode.
     pub fn new(text: &str) -> Self {
-        let cursor = (0, 0).into();
+        let cursor = Cursor::Char((0, 0).into());
         let mut t: Vec<Chunk> = text
             .split("\n")
             .map(|x| Chunk::new(x, DEFAULT_WRAP))
@@ -33,13 +34,19 @@ impl State {
     }
 
     #[cfg(test)]
+    /// Create a new State from a text specification. An Insert cursor position is indicated by an underscore "_"
+    /// character. A Character cursor position is indicated by a "<" character, which "points at" the character at the
+    /// offset. The cursor position indicator is removed from the final string.
     pub(crate) fn from_spec(spec: &str) -> Self {
         let mut txt = vec![];
         let mut cursor = None;
         for (cnt, i) in spec.lines().enumerate() {
             if let Some(x) = i.find("_") {
-                cursor = Some((cnt, x).into());
+                cursor = Some(Cursor::Insert((cnt, x).into()));
                 txt.push(i.replace("_", ""))
+            } else if let Some(x) = i.find("<") {
+                cursor = Some(Cursor::Char((cnt, x.saturating_sub(1)).into()));
+                txt.push(i.replace("<", ""))
             } else {
                 txt.push(i.into());
             }
@@ -76,15 +83,39 @@ impl State {
                 pos.chunk + 1..pos.chunk + 1,
                 trailer.iter().map(|x| Chunk::new(x, self.width)),
             );
-            self.cursor = InsertPos {
-                chunk: pos.chunk + s.len() - 1,
-                offset: last.len(),
-            };
+            match self.cursor {
+                Cursor::Char(_) => {
+                    self.cursor = Cursor::Char(CharPos {
+                        chunk: pos.chunk + s.len() - 1,
+                        offset: last.len(),
+                    });
+                }
+                Cursor::Insert(_) => {
+                    self.cursor = Cursor::Insert(InsertPos {
+                        chunk: pos.chunk + s.len() - 1,
+                        offset: last.len(),
+                    });
+                }
+            }
         } else {
             // If there are no newlines, we just insert the text in-place.
             let s = &s[0].to_string();
             self.chunks[pos.chunk].insert(pos.offset as usize, s);
-            self.cursor = (self.cursor.chunk, self.cursor.offset + s.len()).into();
+            self.cursor = self.cursor.shift(self, s.len() as isize);
+            match self.cursor {
+                Cursor::Char(_) => {
+                    self.cursor = Cursor::Char(CharPos {
+                        chunk: pos.chunk,
+                        offset: (pos.offset + s.len()).saturating_sub(1),
+                    });
+                }
+                Cursor::Insert(_) => {
+                    self.cursor = Cursor::Insert(InsertPos {
+                        chunk: pos.chunk,
+                        offset: pos.offset + s.len(),
+                    });
+                }
+            }
         }
     }
 
@@ -101,55 +132,66 @@ impl State {
     where
         T: Into<InsertPos>,
     {
-        let start = start.into();
-        let end = end.into();
+        let start: InsertPos = start.into();
+        let end: InsertPos = end.into();
+
         if start.chunk > self.chunks.len() || end == start {
+            // Out of bounds, so this is a no-op
             return;
         } else if start.chunk == end.chunk {
+            // We're doing a delete that doesn't cross chunk boundaries.
             self.chunks[start.chunk].replace_range(start.offset..end.offset, "");
-            if self.cursor > start {
-                if self.cursor <= end {
-                    self.cursor = start;
-                } else if self.cursor.chunk == start.chunk {
-                    self.cursor = InsertPos {
-                        chunk: self.cursor.chunk,
-                        offset: self.cursor.offset.saturating_sub(end.offset - start.offset),
-                    };
+            let ip = self.cursor.insert();
+            // We only need to adjust the cursor if it was beyond the deletion point
+            if ip > start {
+                if ip <= end {
+                    // If it was within the deleted text, the new cursor position is at the start of the deleted chunk.
+                    self.cursor = Cursor::Insert(start);
+                } else if ip.chunk == start.chunk {
+                    // If it was beyond the deleted text, we shift the cursor back by the number of chars deleted.
+                    self.cursor = Cursor::Insert(InsertPos {
+                        chunk: ip.chunk,
+                        offset: ip.offset.saturating_sub(end.offset - start.offset),
+                    });
                 }
             }
         } else {
+            // We're doing a delete that crosses chunk boundaries.
+            // We begin by chopping off the trailer of the first chunk.
             let mut m = self.chunks.remove(start.chunk);
             m.replace_range(start.offset.., "");
 
+            // If our deletion range doesn't exceed the number of chunks we have (meaning we are deleting to the end of
+            // the text), we need to splice in the trailer of the last chunk.
             if self.chunks.len() > end.chunk - 1 {
+                // Remove the last chunk, exract its trailer, and push it onto the end of the first chunk.
                 let mut n = self.chunks.remove(end.chunk - 1);
                 n.replace_range(..end.offset.min(n.len()), "");
-                self.chunks.drain(start.chunk..end.chunk - 1);
                 m.push_str(n.as_str());
+                // Now remove all intermediate chunks - these are chunks that are deleted completely.
+                self.chunks.drain(start.chunk..end.chunk - 1);
             }
-
             self.chunks.insert(start.chunk, m);
 
-            if self.cursor > start {
-                if self.cursor <= end {
-                    self.cursor = start;
-                } else if self.cursor.chunk == start.chunk {
-                    self.cursor = InsertPos {
-                        chunk: self.cursor.chunk.saturating_sub(end.chunk - start.chunk),
-                        offset: self.cursor.offset.saturating_sub(end.offset),
-                    };
+            // Now we need to adjust the cursor.
+            let cursor = self.cursor.insert();
+            // If the cursor was before the deleted section, just leave it.
+            if cursor > start {
+                if cursor <= end {
+                    // The cursor was within the deleted chunk, so the new position is just at deletion point.
+                    self.cursor = Cursor::Insert(start);
+                } else if cursor.chunk == end.chunk {
+                    // The cursor was within the trailer of the last chunk. Maintain the character position.
+                    self.cursor = Cursor::Insert(InsertPos {
+                        chunk: start.chunk,
+                        offset: start.offset + cursor.offset.saturating_sub(end.offset),
+                    });
                 } else {
-                    self.cursor = InsertPos {
-                        chunk: self.cursor.chunk.saturating_sub(end.chunk - start.chunk),
-                        offset: self.cursor.offset.saturating_sub(end.offset),
-                    };
-                    // We've ended moving the cursor onto our partially snipped starting line, so adjust the offset.
-                    if self.cursor.chunk == start.chunk {
-                        self.cursor = InsertPos {
-                            chunk: self.cursor.chunk,
-                            offset: self.cursor.offset + start.offset,
-                        };
-                    }
+                    // The cursor was beyond the deleted chunk. We only need to adjust the chunk offset.
+                    self.cursor = Cursor::Insert(InsertPos {
+                        chunk: cursor.chunk.saturating_sub(cursor.chunk - start.chunk),
+                        offset: cursor.offset.saturating_sub(cursor.offset),
+                    });
                 }
             }
         }

@@ -34,7 +34,7 @@ impl Effector for Effect {
 pub struct Insert {
     pos: primitives::InsertPos,
     text: Vec<String>,
-    prev_cursor: primitives::InsertPos,
+    prev_cursor: primitives::Cursor,
 }
 
 impl Insert {
@@ -68,7 +68,7 @@ impl Effector for Insert {
 pub struct Delete {
     start: primitives::InsertPos,
     end: primitives::InsertPos,
-    prev_cursor: primitives::InsertPos,
+    prev_cursor: primitives::Cursor,
     deleted_text: Vec<String>,
 }
 

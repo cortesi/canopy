@@ -17,9 +17,26 @@ pub trait Pos: Sized {
 }
 
 /// A Cursor, which can either be in insert or character mode.
-enum Cursor {
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Cursor {
     Insert(InsertPos),
     Char(CharPos),
+}
+
+impl Cursor {
+    pub fn shift(&self, s: &State, n: isize) -> Self {
+        match self {
+            Cursor::Insert(p) => Cursor::Insert(p.shift(s, n)),
+            Cursor::Char(p) => Cursor::Char(p.shift(s, n)),
+        }
+    }
+
+    pub fn insert(&self) -> InsertPos {
+        match self {
+            Cursor::Insert(p) => *p,
+            Cursor::Char(p) => (*p).into(),
+        }
+    }
 }
 
 /// An insert position. The offset 0 is before the first character in the chunk, and offset `len` is after the last.
@@ -71,6 +88,13 @@ impl From<(usize, usize)> for InsertPos {
     }
 }
 
+impl From<CharPos> for InsertPos {
+    fn from(cp: CharPos) -> Self {
+        let (chunk, offset) = cp.chunk_offset();
+        InsertPos { chunk, offset }
+    }
+}
+
 /// A characgter position. Offset 0 is the first character in the chunk, and offset `len - 1` is the last.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct CharPos {
@@ -110,6 +134,16 @@ impl Pos for CharPos {
 impl From<(usize, usize)> for CharPos {
     fn from((chunk, offset): (usize, usize)) -> Self {
         CharPos { chunk, offset }
+    }
+}
+
+impl From<InsertPos> for CharPos {
+    fn from(cp: InsertPos) -> Self {
+        let (chunk, offset) = cp.chunk_offset();
+        CharPos {
+            chunk,
+            offset: offset.saturating_sub(1),
+        }
     }
 }
 

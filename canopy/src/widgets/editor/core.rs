@@ -65,7 +65,7 @@ impl Core {
     pub fn insert_text(&mut self, text: &str) {
         self.action(effect::Effect::Insert(effect::Insert::new(
             &self.state,
-            self.state.cursor,
+            self.state.cursor.insert(),
             text.to_string(),
         )));
     }
@@ -87,7 +87,7 @@ impl Core {
     }
 
     pub fn cursor_position(&self, win: Window) -> Option<Point> {
-        self.state.coords_in_window(win, self.state.cursor)
+        self.state.coords_in_window(win, self.state.cursor.insert())
     }
 }
 
@@ -125,9 +125,10 @@ mod tests {
 
     #[test]
     fn insert() {
-        tundo("", |c| c.insert_text("hello"), "hello_");
+        tundo("_", |c| c.insert_text("hello"), "hello_");
+        tundo("<", |c| c.insert_text("hello"), "hello<");
         tundo(
-            "",
+            "_",
             |c| {
                 c.insert_text("a");
                 c.insert_text("b");

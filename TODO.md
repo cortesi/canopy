@@ -5,8 +5,7 @@
 ## 0.1
 
 - Editor
-  - Generalize the position shift
-  - Make cursor an enum over Position and InsertionPoint
+  - Test insert for both Char and Insert cursors
 
 - Commands improvements
   - Arguments
