@@ -55,6 +55,8 @@ pub enum Action {
     Moved,
     ScrollDown,
     ScrollUp,
+    ScrollLeft,
+    ScrollRight,
 }
 
 impl Action {
@@ -65,8 +67,10 @@ impl Action {
             Action::Up => true,
             Action::Drag => true,
             Action::Moved => false,
-            Action::ScrollDown => false,
             Action::ScrollUp => false,
+            Action::ScrollDown => false,
+            Action::ScrollLeft => false,
+            Action::ScrollRight => false,
         }
     }
 }

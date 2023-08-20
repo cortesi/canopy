@@ -1,8 +1,10 @@
-use std::io::Write;
-use std::panic;
-use std::process::exit;
-use std::sync::mpsc;
-use std::thread;
+use std::{
+    io::{self, Write},
+    panic,
+    process::exit,
+    sync::mpsc,
+    thread,
+};
 
 use color_backtrace::{default_output_stream, BacktracePrinter};
 use scopeguard::defer;
@@ -43,7 +45,7 @@ fn translate_color(c: Color) -> style::Color {
     }
 }
 
-fn translate_result<T>(e: crossterm::Result<T>) -> Result<T> {
+fn translate_result<T>(e: io::Result<T>) -> Result<T> {
     match e {
         Ok(t) => Ok(t),
         Err(e) => Err(error::Error::Render(e.to_string())),
@@ -56,7 +58,7 @@ pub struct CrosstermControl {
 }
 
 impl CrosstermControl {
-    fn enter(&mut self) -> crossterm::Result<()> {
+    fn enter(&mut self) -> io::Result<()> {
         terminal::enable_raw_mode()?;
         self.fp.execute(terminal::EnterAlternateScreen)?;
         self.fp.execute(cevent::EnableMouseCapture)?;
@@ -64,7 +66,7 @@ impl CrosstermControl {
         terminal::disable_raw_mode()?;
         Ok(())
     }
-    fn exit(&mut self) -> crossterm::Result<()> {
+    fn exit(&mut self) -> io::Result<()> {
         self.fp.execute(terminal::LeaveAlternateScreen)?;
         self.fp.execute(cevent::DisableMouseCapture)?;
         self.fp.execute(ccursor::Show)?;
@@ -95,17 +97,17 @@ pub struct CrosstermRender {
 }
 
 impl CrosstermRender {
-    fn flush(&mut self) -> crossterm::Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         self.fp.flush()?;
         Ok(())
     }
 
-    fn hide_cursor(&mut self) -> crossterm::Result<()> {
+    fn hide_cursor(&mut self) -> io::Result<()> {
         self.fp.queue(ccursor::Hide {})?;
         Ok(())
     }
 
-    fn show_cursor(&mut self, c: cursor::Cursor) -> crossterm::Result<()> {
+    fn show_cursor(&mut self, c: cursor::Cursor) -> io::Result<()> {
         self.fp.queue(ccursor::MoveTo(c.location.x, c.location.y))?;
         if c.blink {
             self.fp.queue(ccursor::EnableBlinking)?;
@@ -121,7 +123,7 @@ impl CrosstermRender {
         Ok(())
     }
 
-    fn style(&mut self, s: Style) -> crossterm::Result<()> {
+    fn style(&mut self, s: Style) -> io::Result<()> {
         // Order is important here - if we reset after setting foreground and
         // background colors they are lost.
         if s.attrs.is_empty() {
@@ -158,7 +160,7 @@ impl CrosstermRender {
         Ok(())
     }
 
-    fn text(&mut self, loc: Point, txt: &str) -> crossterm::Result<()> {
+    fn text(&mut self, loc: Point, txt: &str) -> io::Result<()> {
         self.fp.queue(ccursor::MoveTo(loc.x, loc.y))?;
         self.fp.queue(style::Print(txt))?;
         Ok(())
@@ -306,6 +308,8 @@ fn translate_event(e: cevent::Event) -> Event {
                 cevent::MouseEventKind::Moved => mouse::Action::Moved,
                 cevent::MouseEventKind::ScrollDown => mouse::Action::ScrollDown,
                 cevent::MouseEventKind::ScrollUp => mouse::Action::ScrollUp,
+                cevent::MouseEventKind::ScrollLeft => mouse::Action::ScrollLeft,
+                cevent::MouseEventKind::ScrollRight => mouse::Action::ScrollRight,
             };
             Event::Mouse(mouse::MouseEvent {
                 button,
