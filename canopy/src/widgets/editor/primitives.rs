@@ -4,8 +4,8 @@ use super::state::State;
 pub trait Pos: Sized {
     /// Create a new item and clamp it
     fn new(s: &State, chunk: usize, offset: usize) -> Self;
-    /// Clamp within state bounds, and return a new item
-    fn cap(&self, s: &State) -> Self;
+    /// Constrain within state bounds, and return a new item
+    fn constrain(&self, s: &State) -> Self;
     fn chunk_offset(&self) -> (usize, usize);
 
     /// Shift the cursor by an offset within a chunk. If the new position is out of bounds, return the closest matching
@@ -33,6 +33,7 @@ pub enum Cursor {
 }
 
 impl Cursor {
+    /// Shift left or right within a chunk
     pub fn shift(&self, s: &State, n: isize) -> Self {
         match self {
             Cursor::Insert(p) => Cursor::Insert(p.shift(s, n)),
@@ -40,6 +41,7 @@ impl Cursor {
         }
     }
 
+    /// Shift up and down in the list of chunks.
     pub fn shift_chunk(&self, s: &State, n: isize) -> Self {
         match self {
             Cursor::Insert(p) => Cursor::Insert(p.shift_chunk(s, n)),
@@ -55,7 +57,22 @@ impl Cursor {
             Cursor::Insert(p) => *p,
             Cursor::Char(p) => (*p).into(),
         }
-        .cap(s)
+        .constrain(s)
+    }
+
+    /// Return a cursor of matching type at the given chunk and offset.
+    pub fn at(&self, s: &State, chunk: usize, offset: usize) -> Self {
+        match self {
+            Cursor::Insert(_) => Cursor::Insert(InsertPos::new(s, chunk, offset)),
+            Cursor::Char(_) => Cursor::Char(CharPos::new(s, chunk, offset)),
+        }
+    }
+
+    pub fn constrain(&self, s: &State) -> Self {
+        match self {
+            Cursor::Insert(p) => Cursor::Insert(p.constrain(s)),
+            Cursor::Char(p) => Cursor::Char(p.constrain(s)),
+        }
     }
 }
 
@@ -76,15 +93,16 @@ pub struct InsertPos {
 }
 
 impl Pos for InsertPos {
+    /// Create a new InsertPos and constrain it within the state.
     fn new(s: &State, chunk: usize, offset: usize) -> Self {
-        InsertPos { chunk, offset }.cap(s)
+        InsertPos { chunk, offset }.constrain(s)
     }
 
     fn chunk_offset(&self) -> (usize, usize) {
         (self.chunk, self.offset)
     }
 
-    fn cap(&self, s: &State) -> Self {
+    fn constrain(&self, s: &State) -> Self {
         let ep = s.last();
         if self.chunk > ep.chunk {
             InsertPos {
@@ -125,15 +143,16 @@ pub struct CharPos {
 }
 
 impl Pos for CharPos {
+    /// Create a new CharPos and constrain it within the state.
     fn new(s: &State, chunk: usize, offset: usize) -> Self {
-        CharPos { chunk, offset }.cap(s)
+        CharPos { chunk, offset }.constrain(s)
     }
 
     fn chunk_offset(&self) -> (usize, usize) {
         (self.chunk, self.offset)
     }
 
-    fn cap(&self, s: &State) -> Self {
+    fn constrain(&self, s: &State) -> Self {
         let ep = s.last();
         if self.chunk > ep.chunk {
             CharPos {
@@ -143,7 +162,7 @@ impl Pos for CharPos {
         } else if s.chunks[self.chunk].len() <= self.offset {
             CharPos {
                 chunk: self.chunk,
-                offset: s.chunks[self.chunk].len() - 1,
+                offset: s.chunks[self.chunk].len().saturating_sub(1),
             }
         } else {
             *self
@@ -334,10 +353,10 @@ mod tests {
     #[test]
     fn insertpos_cap() {
         let s = State::new("a\nbb");
-        assert_eq!(ip(0, 0).cap(&s), (0, 0).into());
-        assert_eq!(ip(0, 2).cap(&s), (0, 1).into());
-        assert_eq!(ip(3, 0).cap(&s), (1, 2).into());
-        assert_eq!(ip(3, 3).cap(&s), (1, 2).into());
+        assert_eq!(ip(0, 0).constrain(&s), (0, 0).into());
+        assert_eq!(ip(0, 2).constrain(&s), (0, 1).into());
+        assert_eq!(ip(3, 0).constrain(&s), (1, 2).into());
+        assert_eq!(ip(3, 3).constrain(&s), (1, 2).into());
     }
 
     #[test]

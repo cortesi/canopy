@@ -123,29 +123,33 @@ impl State {
     {
         let start: InsertPos = start.into();
         let end: InsertPos = end.into();
+        let cursor = self.cursor.insert(self);
 
         if start.chunk > self.chunks.len() || end == start {
             // Out of bounds, so this is a no-op
             return;
         } else if start.chunk == end.chunk {
             // We're doing a delete that doesn't cross chunk boundaries.
+            //
             self.chunks[start.chunk].replace_range(start.offset..end.offset, "");
             let ip = self.cursor.insert(self);
             // We only need to adjust the cursor if it was beyond the deletion point
-            if ip > start {
-                if ip <= end {
-                    // If it was within the deleted text, the new cursor position is at the start of the deleted chunk.
-                    self.cursor = Cursor::Insert(start);
-                } else if ip.chunk == start.chunk {
-                    // If it was beyond the deleted text, we shift the cursor back by the number of chars deleted.
-                    self.cursor = Cursor::Insert(InsertPos {
-                        chunk: ip.chunk,
-                        offset: ip.offset.saturating_sub(end.offset - start.offset),
-                    });
-                }
+            if ip > start && ip < end {
+                // If it was within the deleted text, the new cursor position is at the start of the deleted chunk.
+                self.cursor = self.cursor.at(self, start.chunk, start.offset);
+            } else if ip > start && ip.chunk == start.chunk {
+                // If it was beyond the deleted text, we shift the cursor back by the number of chars deleted.
+                self.cursor = self.cursor.at(
+                    self,
+                    ip.chunk,
+                    ip.offset.saturating_sub(end.offset - start.offset - 1),
+                );
+            } else {
+                self.cursor = self.cursor.constrain(self);
             }
         } else {
             // We're doing a delete that crosses chunk boundaries.
+            //
             // We begin by chopping off the trailer of the first chunk.
             let mut m = self.chunks.remove(start.chunk);
             m.replace_range(start.offset.., "");
@@ -163,25 +167,23 @@ impl State {
             self.chunks.insert(start.chunk, m);
 
             // Now we need to adjust the cursor.
-            let cursor = self.cursor.insert(self);
-            // If the cursor was before the deleted section, just leave it.
-            if cursor > start {
-                if cursor <= end {
-                    // The cursor was within the deleted chunk, so the new position is just at deletion point.
-                    self.cursor = Cursor::Insert(start);
-                } else if cursor.chunk == end.chunk {
-                    // The cursor was within the trailer of the last chunk. Maintain the character position.
-                    self.cursor = Cursor::Insert(InsertPos {
-                        chunk: start.chunk,
-                        offset: start.offset + cursor.offset.saturating_sub(end.offset),
-                    });
-                } else {
-                    // The cursor was beyond the deleted chunk. We only need to adjust the chunk offset.
-                    self.cursor = Cursor::Insert(InsertPos {
-                        chunk: cursor.chunk.saturating_sub(cursor.chunk - start.chunk),
-                        offset: cursor.offset.saturating_sub(cursor.offset),
-                    });
-                }
+            if cursor > start && cursor <= end {
+                // The cursor was within the deleted chunk, so the new position is just at deletion point.
+                self.cursor = self.cursor.at(self, start.chunk, start.offset);
+            } else if cursor > start && cursor.chunk == end.chunk {
+                // The cursor was within the trailer of the last chunk. Maintain the character position.
+                self.cursor = self.cursor.at(
+                    self,
+                    start.chunk,
+                    start.offset + cursor.offset.saturating_sub(end.offset),
+                );
+            } else {
+                // The cursor was beyond the deleted chunk. We only need to adjust the chunk offset.
+                self.cursor = self.cursor.at(
+                    self,
+                    cursor.chunk.saturating_sub(end.chunk - start.chunk),
+                    cursor.offset,
+                );
             }
         }
     }
@@ -203,8 +205,8 @@ impl State {
     where
         T: Into<InsertPos>,
     {
-        let start = start.into().cap(self);
-        let end = end.into().cap(self);
+        let start = start.into().constrain(self);
+        let end = end.into().constrain(self);
 
         let mut buf = vec![];
         if start.chunk == end.chunk {
@@ -422,6 +424,11 @@ mod tests {
         seq("one\ntwo\nthre_e", |x| x.delete((0, 3), (2, 3)), "onee_e");
         seq("one\ntwo\nthre_e", |x| x.delete((0, 3), (2, 4)), "one_e");
         seq("one\ntwo\nthre_e", |x| x.delete((0, 3), (2, 5)), "one_");
+        seq(
+            "one\ntwo\nthre_e",
+            |x| x.delete((0, 0), (1, 1)),
+            "wo\nthre_e",
+        );
     }
 
     #[test]
