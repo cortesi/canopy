@@ -9,17 +9,25 @@ pub trait Pos: Sized {
     fn chunk_offset(&self) -> (usize, usize);
 
     /// Shift the cursor by an offset within a chunk. If the new position is out of bounds, return the closest matching
-    /// within the chunk.
+    /// position within the chunk.
     fn shift(&self, s: &State, n: isize) -> Self {
         let (chunk, offset) = self.chunk_offset();
         Self::new(s, chunk, offset.saturating_add_signed(n))
+    }
+
+    /// Shift the chunk offset. If the new position is out of bounds, return the closest matching position.
+    fn shift_chunk(&self, s: &State, n: isize) -> Self {
+        let (chunk, offset) = self.chunk_offset();
+        Self::new(s, chunk.saturating_add_signed(n), offset)
     }
 }
 
 /// A Cursor, which can either be in insert or character mode.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Cursor {
+    /// An insert cursor
     Insert(InsertPos),
+    /// An visual cursor
     Char(CharPos),
 }
 
@@ -28,6 +36,13 @@ impl Cursor {
         match self {
             Cursor::Insert(p) => Cursor::Insert(p.shift(s, n)),
             Cursor::Char(p) => Cursor::Char(p.shift(s, n)),
+        }
+    }
+
+    pub fn shift_chunk(&self, s: &State, n: isize) -> Self {
+        match self {
+            Cursor::Insert(p) => Cursor::Insert(p.shift_chunk(s, n)),
+            Cursor::Char(p) => Cursor::Char(p.shift_chunk(s, n)),
         }
     }
 

@@ -67,53 +67,42 @@ impl State {
     {
         let pos = pos.into();
         let s = s.as_ref();
-        if s.len() > 1 {
-            // Start by snipping the line at the insert point into start and end chunks.
+        if s.len() == 1 {
+            // Simple case - there are no newlines, we just insert the text in-place.
+            let s = &s[0].to_string();
+            self.chunks[pos.chunk].insert(pos.offset as usize, s);
+
+            let cursor = self.cursor.insert();
+            if cursor >= pos {
+                // Adjust the cursor if it was after the insert point.
+                self.cursor = self.cursor.shift(self, s.len() as isize);
+            }
+        } else {
+            // We have a multi-line insert. Start by snipping the line at the insert point into start and end chunks.
             let start = &self.chunks[pos.chunk].as_str()[..pos.offset];
             let end = &self.chunks[pos.chunk].as_str()[pos.offset..].to_string();
 
+            // Now modify the start chunk to include the trailer
             self.chunks[pos.chunk] =
                 Chunk::new(&format!("{}{}", start, s[0].to_string()), self.width);
 
+            // And generate and insert our trailing lines
             let mut trailer = s[1..].iter().map(|x| x.to_string()).collect::<Vec<_>>();
             let last = trailer.pop().unwrap();
             trailer.push(format!("{}{}", last, end));
-
             self.chunks.splice(
                 pos.chunk + 1..pos.chunk + 1,
                 trailer.iter().map(|x| Chunk::new(x, self.width)),
             );
-            match self.cursor {
-                Cursor::Char(_) => {
-                    self.cursor = Cursor::Char(CharPos {
-                        chunk: pos.chunk + s.len() - 1,
-                        offset: last.len(),
-                    });
-                }
-                Cursor::Insert(_) => {
-                    self.cursor = Cursor::Insert(InsertPos {
-                        chunk: pos.chunk + s.len() - 1,
-                        offset: last.len(),
-                    });
-                }
-            }
-        } else {
-            // If there are no newlines, we just insert the text in-place.
-            let s = &s[0].to_string();
-            self.chunks[pos.chunk].insert(pos.offset as usize, s);
-            self.cursor = self.cursor.shift(self, s.len() as isize);
-            match self.cursor {
-                Cursor::Char(_) => {
-                    self.cursor = Cursor::Char(CharPos {
-                        chunk: pos.chunk,
-                        offset: (pos.offset + s.len()).saturating_sub(1),
-                    });
-                }
-                Cursor::Insert(_) => {
-                    self.cursor = Cursor::Insert(InsertPos {
-                        chunk: pos.chunk,
-                        offset: pos.offset + s.len(),
-                    });
+
+            let cursor = self.cursor.insert();
+            if cursor >= pos {
+                // The cursor was at or beyond the insert position, so we have to adjust it.
+                self.cursor = self
+                    .cursor
+                    .shift_chunk(&self, s.len().saturating_sub(1) as isize);
+                if self.cursor.insert().chunk == pos.chunk + trailer.len() {
+                    self.cursor = self.cursor.shift(self, last.len() as isize);
                 }
             }
         }
@@ -199,11 +188,13 @@ impl State {
 
     /// What's the last insert position in the text?
     pub(super) fn last(&self) -> InsertPos {
-        (
-            self.chunks.len() - 1,
-            self.chunks[self.chunks.len() - 1].len() - 1,
-        )
-            .into()
+        let chunk = self.chunks.len().saturating_sub(1);
+        if self.chunks.len() == 0 {
+            (0, 0)
+        } else {
+            (chunk, self.chunks[chunk].len().saturating_sub(1))
+        }
+        .into()
     }
 
     /// Retrieve lines of text from inclusive start to exclusive end. The first and last line returned may be partial if
@@ -358,8 +349,14 @@ mod tests {
     #[test]
     fn insert() {
         seq("_", |x| x.insert((0, 0), "a"), "a_");
+        seq("xx_", |x| x.insert((0, 0), "a"), "axx_");
+        seq("_xx", |x| x.insert((0, 2), "a"), "_xxa");
+
         seq("_", |x| x.insert((0, 0), "a\nb"), "a\nb_");
-        seq("abc\ndef_", |x| x.insert((0, 2), "x\ny"), "abx\ny_c\ndef");
+        seq("_x", |x| x.insert((0, 1), "a\nb"), "_xa\nb");
+        seq("abc\ndef_", |x| x.insert((0, 2), "x\ny"), "abx\nyc\ndef_");
+        seq("abc_\ndef", |x| x.insert((0, 2), "x\ny"), "abx\nyc_\ndef");
+        seq("abc\n_def", |x| x.insert((0, 2), "x\ny"), "abx\nyc\n_def");
     }
 
     #[test]
