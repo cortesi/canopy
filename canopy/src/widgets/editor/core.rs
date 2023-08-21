@@ -65,7 +65,7 @@ impl Core {
     pub fn insert_text(&mut self, text: &str) {
         self.action(effect::Effect::Insert(effect::Insert::new(
             &self.state,
-            self.state.cursor.insert(),
+            self.state.cursor.insert(&self.state),
             text.to_string(),
         )));
     }
@@ -87,7 +87,8 @@ impl Core {
     }
 
     pub fn cursor_position(&self, win: Window) -> Option<Point> {
-        self.state.coords_in_window(win, self.state.cursor.insert())
+        self.state
+            .coords_in_window(win, self.state.cursor.insert(&self.state))
     }
 }
 

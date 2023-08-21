@@ -72,7 +72,7 @@ impl State {
             let s = &s[0].to_string();
             self.chunks[pos.chunk].insert(pos.offset as usize, s);
 
-            let cursor = self.cursor.insert();
+            let cursor = self.cursor.insert(self);
             if cursor >= pos {
                 // Adjust the cursor if it was after the insert point.
                 self.cursor = self.cursor.shift(self, s.len() as isize);
@@ -95,13 +95,13 @@ impl State {
                 trailer.iter().map(|x| Chunk::new(x, self.width)),
             );
 
-            let cursor = self.cursor.insert();
+            let cursor = self.cursor.insert(self);
             if cursor >= pos {
                 // The cursor was at or beyond the insert position, so we have to adjust it.
                 self.cursor = self
                     .cursor
                     .shift_chunk(&self, s.len().saturating_sub(1) as isize);
-                if self.cursor.insert().chunk == pos.chunk + trailer.len() {
+                if self.cursor.insert(self).chunk == pos.chunk + trailer.len() {
                     self.cursor = self.cursor.shift(self, last.len() as isize);
                 }
             }
@@ -130,7 +130,7 @@ impl State {
         } else if start.chunk == end.chunk {
             // We're doing a delete that doesn't cross chunk boundaries.
             self.chunks[start.chunk].replace_range(start.offset..end.offset, "");
-            let ip = self.cursor.insert();
+            let ip = self.cursor.insert(self);
             // We only need to adjust the cursor if it was beyond the deletion point
             if ip > start {
                 if ip <= end {
@@ -163,7 +163,7 @@ impl State {
             self.chunks.insert(start.chunk, m);
 
             // Now we need to adjust the cursor.
-            let cursor = self.cursor.insert();
+            let cursor = self.cursor.insert(self);
             // If the cursor was before the deleted section, just leave it.
             if cursor > start {
                 if cursor <= end {
@@ -293,7 +293,7 @@ impl State {
 
     /// Set the width of the editor for wrapping, and return the total number of wrapped lines that resulted.
     pub fn set_width(&mut self, width: usize) -> usize {
-        // FIXME: This needs to be a as close to a nop as possible if the width hasn't changed.
+        // FIXME: This needs to be as close to a nop as possible if the width hasn't changed.
         self.width = width;
         self.chunks.iter_mut().map(|x| x.wrap(width)).sum()
     }
@@ -347,7 +347,7 @@ mod tests {
     }
 
     #[test]
-    fn insert() {
+    fn insert_ins() {
         seq("_", |x| x.insert((0, 0), "a"), "a_");
         seq("xx_", |x| x.insert((0, 0), "a"), "axx_");
         seq("_xx", |x| x.insert((0, 2), "a"), "_xxa");
@@ -357,6 +357,20 @@ mod tests {
         seq("abc\ndef_", |x| x.insert((0, 2), "x\ny"), "abx\nyc\ndef_");
         seq("abc_\ndef", |x| x.insert((0, 2), "x\ny"), "abx\nyc_\ndef");
         seq("abc\n_def", |x| x.insert((0, 2), "x\ny"), "abx\nyc\n_def");
+    }
+
+    #[test]
+    fn insert_char() {
+        seq("<", |x| x.insert((0, 0), "a"), "a<");
+        seq("xx<", |x| x.insert((0, 0), "a"), "axx<");
+        seq("x<x", |x| x.insert((0, 2), "a"), "x<xa");
+        seq("<xx", |x| x.insert((0, 0), "a"), "ax<x");
+
+        seq("<", |x| x.insert((0, 0), "a\nb"), "a\nb<");
+        seq("<x", |x| x.insert((0, 1), "a\nb"), "<xa\nb");
+        seq("abc\ndef<", |x| x.insert((0, 2), "x\ny"), "abx\nyc\ndef<");
+        seq("abc<\ndef", |x| x.insert((0, 2), "x\ny"), "abx\nyc<\ndef");
+        seq("abc\n<def", |x| x.insert((0, 2), "x\ny"), "abx\nyc\n<def");
     }
 
     #[test]

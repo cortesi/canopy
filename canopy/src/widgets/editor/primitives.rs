@@ -22,7 +22,8 @@ pub trait Pos: Sized {
     }
 }
 
-/// A Cursor, which can either be in insert or character mode.
+/// A Cursor, which can either be in insert or character mode. In insert mode, we can point one offset beyond the last
+/// character in the chunk.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Cursor {
     /// An insert cursor
@@ -46,11 +47,15 @@ impl Cursor {
         }
     }
 
-    pub fn insert(&self) -> InsertPos {
+    /// Return an insert position for the cursor. If the cursor is already in insert mode, this just returns the cursor.
+    /// If the cursor is a char cursor, we return the insert point after the current character, capped to the length of
+    /// the line.
+    pub fn insert(&self, s: &State) -> InsertPos {
         match self {
             Cursor::Insert(p) => *p,
             Cursor::Char(p) => (*p).into(),
         }
+        .cap(s)
     }
 }
 
@@ -86,7 +91,7 @@ impl Pos for InsertPos {
                 chunk: ep.chunk,
                 offset: s.chunks[ep.chunk].len(),
             }
-        } else if s.chunks[self.chunk].len() < self.offset + 1 {
+        } else if self.offset + 1 > s.chunks[self.chunk].len() {
             InsertPos {
                 chunk: self.chunk,
                 offset: s.chunks[self.chunk].len(),
