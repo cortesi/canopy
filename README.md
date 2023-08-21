@@ -1,4 +1,3 @@
-
 [![.github/workflows/ci.yml](https://github.com/cortesi/canopy/actions/workflows/ci.yml/badge.svg)](https://github.com/cortesi/canopy/actions/workflows/ci.yml)
 
 **Hey curious person - if you've stumbled onto this project, please know that

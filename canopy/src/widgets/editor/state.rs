@@ -58,6 +58,36 @@ impl State {
         n
     }
 
+    #[cfg(test)]
+    /// Turns a state into a text specification.
+    pub(crate) fn to_spec(&self) -> String {
+        let mut buf = vec![];
+        let char = match self.cursor {
+            Cursor::Char(_) => '<',
+            Cursor::Insert(_) => '_',
+        };
+        let (chunk, offset) = match self.cursor {
+            Cursor::Char(x) => x.chunk_offset(),
+            Cursor::Insert(x) => x.chunk_offset(),
+        };
+        for (i, c) in self.chunks.iter().enumerate() {
+            let mut s = c.as_str().to_string();
+            if i == chunk {
+                if char == '<' {
+                    if s == "" {
+                        s = "<".into();
+                    } else {
+                        s.insert(offset + 1, char);
+                    }
+                } else {
+                    s.insert(offset, char);
+                }
+            }
+            buf.push(s);
+        }
+        buf.join("\n")
+    }
+
     /// Insert a set of lines at the cursor, then update the cursor to point just beyond the last inserted character.
     pub fn insert_lines<T, S, I>(&mut self, pos: T, s: S)
     where
@@ -299,20 +329,6 @@ impl State {
         self.width = width;
         self.chunks.iter_mut().map(|x| x.wrap(width)).sum()
     }
-
-    /// Move the cursor right within the current chunk, moving to the next wrapped line if needed. Won't move to the
-    /// next chunk.
-    pub fn cursor_right(&mut self, n: usize) {}
-
-    /// Move the cursor leftight within the current chunk, moving to the previous wrapped line if needed. Won't move to
-    /// the previous chunk.
-    pub fn cursor_left(&mut self, n: usize) {}
-
-    /// Move the cursor down, shifting to the next chunk if needed.
-    pub fn cursor_down(&mut self, n: usize) {}
-
-    /// Move the cursor up, shifting to the previous chunk if needed.
-    pub fn cursor_up(&mut self, n: usize) {}
 }
 
 #[cfg(test)]
@@ -346,6 +362,24 @@ mod tests {
         let b = State::from_spec(b);
         f(&mut a);
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn to_spec() {
+        fn roundtrip(s: &str) {
+            assert_eq!(State::from_spec(s).to_spec(), s);
+        }
+        roundtrip("_");
+        roundtrip("foo_");
+        roundtrip("foo\n_");
+        roundtrip("foo\nbar_");
+
+        roundtrip("<");
+        roundtrip("x<");
+        roundtrip("xx<");
+        roundtrip("x<x");
+        roundtrip("x\n<");
+        roundtrip("x\nx<");
     }
 
     #[test]
@@ -448,14 +482,13 @@ mod tests {
     fn coords_in_window() {
         let mut s = State::new("one two\nthree four\nx");
         assert_eq!(s.set_width(3), 7);
+        let w = Window::from_offset(&s, 0, 3);
+
         assert_eq!(
-            s.coords_in_window(Window::from_offset(&s, 0, 3), InsertPos::new(&s, 0, 0)),
+            s.coords_in_window(w, InsertPos::new(&s, 0, 0)),
             Some(Point { x: 0, y: 0 })
         );
-        assert_eq!(
-            s.coords_in_window(Window::from_offset(&s, 0, 3), InsertPos::new(&s, 100, 0)),
-            None
-        );
+        assert_eq!(s.coords_in_window(w, InsertPos::new(&s, 100, 0)), None);
     }
 
     #[test]

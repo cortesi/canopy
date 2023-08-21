@@ -90,6 +90,18 @@ impl Core {
         self.state
             .coords_in_window(win, self.state.cursor.insert(&self.state))
     }
+
+    /// Move the cursor right within the current chunk, moving to the next wrapped line if needed. Won't move to the
+    /// next chunk.
+    pub fn cursor_shift(&mut self, n: isize) {
+        self.state.cursor = self.state.cursor.shift(&self.state, n);
+    }
+
+    /// Move the cursor right within the current chunk, moving to the next wrapped line if needed. Won't move to the
+    /// next chunk.
+    pub fn cursor_shift_chunk(&mut self, n: isize) {
+        self.state.cursor = self.state.cursor.shift_chunk(&self.state, n);
+    }
 }
 
 #[cfg(test)]

@@ -96,13 +96,25 @@ impl Editor {
     /// Move the cursor left.
     #[command]
     fn cursor_left(&mut self, _: &dyn Core) {
-        tracing::info!("cursor_left")
+        self.view.core.cursor_shift(-1);
     }
 
     /// Move the cursor right.
     #[command]
     fn cursor_right(&mut self, _: &dyn Core) {
-        tracing::info!("cursor_right")
+        self.view.core.cursor_shift(1);
+    }
+
+    /// Move the cursor right.
+    #[command]
+    fn next_chunk(&mut self, _: &dyn Core) {
+        self.view.core.cursor_shift_chunk(1);
+    }
+
+    /// Move the cursor right.
+    #[command]
+    fn prev_chunk(&mut self, _: &dyn Core) {
+        self.view.core.cursor_shift_chunk(-1);
     }
 }
 
@@ -110,6 +122,8 @@ impl DefaultBindings for Editor {
     fn defaults(b: Binder) -> Binder {
         b.key(key::KeyCode::Left, "editor::cursor_left()")
             .key(key::KeyCode::Right, "editor::cursor_right()")
+            .key(key::KeyCode::Down, "editor::next_chunk()")
+            .key(key::KeyCode::Up, "editor::prev_chunk()")
     }
 }
 
