@@ -5,17 +5,13 @@ use crate::{
     state::{NodeState, StatefulNode},
     *,
 };
-use tracing;
 
 use super::core;
-use super::*;
 
 #[derive(StatefulNode)]
 pub struct EditorView {
     state: NodeState,
     core: core::Core,
-    /// Line offset of the window into the text buffer.
-    window_offset: usize,
 }
 
 #[derive_commands]
@@ -24,18 +20,13 @@ impl EditorView {
         EditorView {
             state: NodeState::default(),
             core: core::Core::new(txt),
-            window_offset: 0,
         }
     }
 }
 
 impl Node for EditorView {
     fn cursor(&self) -> Option<cursor::Cursor> {
-        let p = self.core.cursor_position(Window::from_offset(
-            &self.core.state,
-            self.window_offset,
-            self.vp().screen_rect().h as usize,
-        ));
+        let p = self.core.cursor_position();
         if let Some(p) = p {
             Some(cursor::Cursor {
                 location: p,
@@ -53,17 +44,7 @@ impl Node for EditorView {
 
     fn render(&mut self, _: &dyn Core, r: &mut Render) -> Result<()> {
         let vo = self.vp().view_rect();
-        for (i, s) in self
-            .core
-            .state
-            .wrapped_text(Window::from_offset(
-                &self.core.state,
-                self.window_offset,
-                vo.h as usize,
-            ))
-            .iter()
-            .enumerate()
-        {
+        for (i, s) in self.core.window_text().iter().enumerate() {
             if let Some(t) = s {
                 r.text("text", vo.line(i as u16), t)?;
             }
@@ -72,8 +53,8 @@ impl Node for EditorView {
     }
 
     fn fit(&mut self, sz: Expanse) -> Result<Expanse> {
-        self.core.set_width(sz.w as usize);
-        Ok(Expanse::new(sz.w, self.core.state.wrapped_height() as u16))
+        self.core.resize_window(sz.w as usize, sz.h as usize);
+        Ok(Expanse::new(sz.w, self.core.wrapped_height() as u16))
     }
 }
 

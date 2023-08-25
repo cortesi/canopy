@@ -5,7 +5,9 @@
 ## 0.1
 
 - Editor
-  - Test insert for both Char and Insert cursors
+  - Test and fix cursor window position
+
+  - Adjust window based on cursor movement
 
 - Commands improvements
   - Arguments

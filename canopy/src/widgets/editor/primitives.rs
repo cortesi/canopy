@@ -7,12 +7,22 @@ pub trait Pos: Sized {
     /// Constrain within state bounds, and return a new item
     fn constrain(&self, s: &State) -> Self;
     fn chunk_offset(&self) -> (usize, usize);
+    /// Is this cursor between wrapped lines?
+    fn is_between(&self, s: &State) -> bool;
 
     /// Shift the cursor by an offset within a chunk. If the new position is out of bounds, return the closest matching
-    /// position within the chunk.
+    /// position within the chunk. If the new offset lands on a character that is between lines, we continue in the same
+    /// direction until we find a character that is in bounds.
     fn shift(&self, s: &State, n: isize) -> Self {
         let (chunk, offset) = self.chunk_offset();
-        Self::new(s, chunk, offset.saturating_add_signed(n))
+        let mut ret = Self::new(s, chunk, offset.saturating_add_signed(n));
+        let btw = if n < 0 { -1 } else { 1 };
+        // If we're between wraps we look for the next wrapped location.
+        while ret.is_between(s) {
+            let (c, o) = ret.chunk_offset();
+            ret = Self::new(s, c, o.saturating_add_signed(btw));
+        }
+        ret
     }
 
     /// Shift the chunk offset. If the new position is out of bounds, return the closest matching position.
@@ -98,6 +108,11 @@ impl Pos for InsertPos {
         InsertPos { chunk, offset }.constrain(s)
     }
 
+    fn is_between(&self, s: &State) -> bool {
+        let c = &s.chunks[self.chunk];
+        c.offset_is_between(self.offset)
+    }
+
     fn chunk_offset(&self) -> (usize, usize) {
         (self.chunk, self.offset)
     }
@@ -152,6 +167,11 @@ impl Pos for CharPos {
         (self.chunk, self.offset)
     }
 
+    fn is_between(&self, s: &State) -> bool {
+        let c = &s.chunks[self.chunk];
+        c.offset_is_between(self.offset)
+    }
+
     fn constrain(&self, s: &State) -> Self {
         let ep = s.last();
         if self.chunk > ep.chunk {
@@ -186,11 +206,12 @@ impl From<InsertPos> for CharPos {
     }
 }
 
-/// A wrapped line in the editor, represented as a chunk index and a line offset within that chunk.
+/// A wrapped line in the editor, represented as a chunk index and a line offset within that chunk. The length of the
+/// line is always the set width of the editor.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Line {
     pub chunk: usize,
-    pub offset: usize,
+    pub line: usize,
 }
 
 impl Line {
@@ -198,7 +219,7 @@ impl Line {
     pub(super) fn add(&self, s: &State, n: usize) -> Option<Line> {
         // FIXME: Make this more efficient
         let mut chunk = self.chunk;
-        let mut offset = self.offset;
+        let mut offset = self.line;
         for _ in 0..n {
             if offset + 1 < s.chunks[chunk].wraps.len() {
                 offset += 1;
@@ -209,13 +230,19 @@ impl Line {
                 return None;
             }
         }
-        Some(Line { chunk, offset })
+        Some(Line {
+            chunk,
+            line: offset,
+        })
     }
 }
 
 impl From<(usize, usize)> for Line {
     fn from((chunk, offset): (usize, usize)) -> Self {
-        Line { chunk, offset }
+        Line {
+            chunk,
+            line: offset,
+        }
     }
 }
 
@@ -231,6 +258,22 @@ impl Window {
     pub(super) fn from_offset(s: &State, offset: usize, height: usize) -> Self {
         let line = s.line_from_offset(offset);
         Window { line, height }
+    }
+
+    /// A window starting at a specific offset line, with th esame dimensions as this one.
+    pub(super) fn at_line(&self, s: &State, offset: usize) -> Self {
+        let line = s.line_from_offset(offset);
+        Window {
+            line,
+            height: self.height,
+        }
+    }
+
+    pub(super) fn with_height(&self, height: usize) -> Self {
+        Window {
+            line: self.line,
+            height,
+        }
     }
 
     /// Return the lines within the window. Lines can be Null if they are beyond
@@ -274,7 +317,8 @@ fn wrap_offsets(s: &str, width: usize) -> Vec<(usize, usize)> {
 pub struct Chunk {
     /// The raw text of the line.
     text: String,
-    /// The start and end offsets of each wrapped line in the chunk.
+    /// The start and end offsets of each wrapped line in the chunk. Not all characters are necessarily included in the
+    /// wrapped lines - for instance, whitespace at the end of a line might be elided.
     pub wraps: Vec<(usize, usize)>,
     /// The width to which this chunk was wrapped
     // FIXME: This should not be stored in every line
@@ -288,14 +332,31 @@ impl PartialEq for Chunk {
 }
 
 impl Chunk {
-    pub fn new(s: &str, wrap: usize) -> Chunk {
+    pub fn new(s: &str, wrap_width: usize) -> Chunk {
         let mut l = Chunk {
             text: s.into(),
             wraps: vec![],
-            wrap_width: wrap,
+            wrap_width,
         };
-        l.wrap(wrap);
+        l.wrap(wrap_width);
         l
+    }
+
+    /// A character is "between" if it is a) within the normal range of the chunk, and b) not part of a wrapped line.
+    /// This happens due to the wrapping algorithm eliding whitespace at the end of the line.
+    pub fn offset_is_between(&self, off: usize) -> bool {
+        if off >= self.text.len() {
+            return false;
+        }
+        for i in &self.wraps {
+            if i.0 <= off && off < i.1 {
+                return false;
+            } else if i.0 > off {
+                // If we're past the offset, we can stop checking.
+                break;
+            }
+        }
+        return true;
     }
 
     pub fn replace_range<R: std::ops::RangeBounds<usize>>(&mut self, range: R, s: &str) {
@@ -350,56 +411,74 @@ mod tests {
         (chunk, off).into()
     }
 
+    /// A variant of the assert_eq macro that coerces its second argument to match the type of the first argument with
+    /// .into().
+    macro_rules! assert_eqi {
+        ($a:expr, $b:expr) => {
+            assert_eq!($a, $b.into())
+        };
+    }
+
+    #[test]
+    fn offset_is_between() {
+        let c = Chunk::new("foo bar voing", 3);
+        assert!(!c.offset_is_between(0));
+        assert!(c.offset_is_between(3));
+        assert!(!c.offset_is_between(4));
+        assert!(c.offset_is_between(7));
+        assert!(!c.offset_is_between(20));
+    }
+
     #[test]
     fn insertpos_cap() {
         let s = State::new("a\nbb");
-        assert_eq!(ip(0, 0).constrain(&s), (0, 0).into());
-        assert_eq!(ip(0, 2).constrain(&s), (0, 1).into());
-        assert_eq!(ip(3, 0).constrain(&s), (1, 2).into());
-        assert_eq!(ip(3, 3).constrain(&s), (1, 2).into());
+        assert_eqi!(ip(0, 0).constrain(&s), (0, 0));
+        assert_eqi!(ip(0, 2).constrain(&s), (0, 1));
+        assert_eqi!(ip(3, 0).constrain(&s), (1, 2));
+        assert_eqi!(ip(3, 3).constrain(&s), (1, 2));
     }
 
     #[test]
     fn insertpos_shift() {
         let s = State::new("a\nbb");
-        assert_eq!(ip(0, 0).shift(&s, 1), (0, 1).into());
-        assert_eq!(ip(0, 0).shift(&s, 100), (0, 1).into());
-        assert_eq!(ip(0, 0).shift(&s, 100).shift(&s, isize::MAX), (0, 1).into());
-        assert_eq!(ip(0, 1).shift(&s, 1), (0, 1).into());
-        assert_eq!(ip(1, 1).shift(&s, 1), (1, 2).into());
-        assert_eq!(ip(1, 2).shift(&s, 1), (1, 2).into());
+        assert_eqi!(ip(0, 0).shift(&s, 1), (0, 1));
+        assert_eqi!(ip(0, 0).shift(&s, 100), (0, 1));
+        assert_eqi!(ip(0, 0).shift(&s, 100).shift(&s, isize::MAX), (0, 1));
+        assert_eqi!(ip(0, 1).shift(&s, 1), (0, 1));
+        assert_eqi!(ip(1, 1).shift(&s, 1), (1, 2));
+        assert_eqi!(ip(1, 2).shift(&s, 1), (1, 2));
 
         // Beyond bounds
-        assert_eq!(ip(1, 3).shift(&s, 1), (1, 2).into());
-        assert_eq!(ip(5, 0).shift(&s, 1), (1, 2).into());
+        assert_eqi!(ip(1, 3).shift(&s, 1), (1, 2));
+        assert_eqi!(ip(5, 0).shift(&s, 1), (1, 2));
 
         // Negative
-        assert_eq!(ip(0, 0).shift(&s, -1), (0, 0).into());
-        assert_eq!(ip(0, 1).shift(&s, -1), (0, 0).into());
-        assert_eq!(ip(1, 2).shift(&s, -1), (1, 1).into());
-        assert_eq!(ip(1, 2).shift(&s, isize::MIN), (1, 0).into());
+        assert_eqi!(ip(0, 0).shift(&s, -1), (0, 0));
+        assert_eqi!(ip(0, 1).shift(&s, -1), (0, 0));
+        assert_eqi!(ip(1, 2).shift(&s, -1), (1, 1));
+        assert_eqi!(ip(1, 2).shift(&s, isize::MIN), (1, 0));
     }
 
     #[test]
     fn charpos_shift() {
         let s = State::new("a\nbb");
-        assert_eq!(cp(0, 0).shift(&s, 1), (0, 0).into());
-        assert_eq!(cp(0, 0).shift(&s, 100), (0, 0).into());
-        assert_eq!(cp(0, 0).shift(&s, 100).shift(&s, isize::MAX), (0, 0).into());
-        assert_eq!(cp(1, 0).shift(&s, 100).shift(&s, isize::MAX), (1, 1).into());
-        assert_eq!(cp(0, 1).shift(&s, 1), (0, 0).into());
-        assert_eq!(cp(1, 0).shift(&s, 1), (1, 1).into());
-        assert_eq!(cp(1, 1).shift(&s, 1), (1, 1).into());
+        assert_eqi!(cp(0, 0).shift(&s, 1), (0, 0));
+        assert_eqi!(cp(0, 0).shift(&s, 100), (0, 0));
+        assert_eqi!(cp(0, 0).shift(&s, 100).shift(&s, isize::MAX), (0, 0));
+        assert_eqi!(cp(1, 0).shift(&s, 100).shift(&s, isize::MAX), (1, 1));
+        assert_eqi!(cp(0, 1).shift(&s, 1), (0, 0));
+        assert_eqi!(cp(1, 0).shift(&s, 1), (1, 1));
+        assert_eqi!(cp(1, 1).shift(&s, 1), (1, 1));
 
         // Beyond bounds
-        assert_eq!(cp(1, 3).shift(&s, 1), (1, 1).into());
-        assert_eq!(cp(5, 0).shift(&s, 1), (1, 1).into());
+        assert_eqi!(cp(1, 3).shift(&s, 1), (1, 1));
+        assert_eqi!(cp(5, 0).shift(&s, 1), (1, 1));
 
         // Negative
-        assert_eq!(cp(0, 0).shift(&s, -1), (0, 0).into());
-        assert_eq!(cp(0, 1).shift(&s, -1), (0, 0).into());
-        assert_eq!(cp(1, 2).shift(&s, -1), (1, 1).into());
-        assert_eq!(cp(1, 2).shift(&s, isize::MIN), (1, 0).into());
+        assert_eqi!(cp(0, 0).shift(&s, -1), (0, 0));
+        assert_eqi!(cp(0, 1).shift(&s, -1), (0, 0));
+        assert_eqi!(cp(1, 2).shift(&s, -1), (1, 1));
+        assert_eqi!(cp(1, 2).shift(&s, isize::MIN), (1, 0));
     }
 
     fn twrap(s: &str, width: usize, expected: Vec<String>) {

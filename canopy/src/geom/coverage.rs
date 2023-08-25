@@ -42,7 +42,7 @@ impl Coverage {
             let x = (i % self.area.w as usize) as u16;
             let y = (i / self.area.w as usize) as u16;
 
-            if let Some(mut c) = current.as_mut() {
+            if let Some(c) = current.as_mut() {
                 if y != c.tl.y || x != c.tl.x + c.w {
                     ret.push(*c);
                     current = Some(Line {

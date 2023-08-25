@@ -1,15 +1,12 @@
 use super::effect::Effector;
-use super::{
-    effect,
-    primitives::{InsertPos, Window},
-    state,
-};
+use super::{effect, primitives::InsertPos, state};
 use crate::geom::Point;
 
-/// Core implementation for a simple editor.
+/// The editor Core exposes the operations that can be performed on a text buffer. It's a facade over the state, with
+/// added operations to support a redo/undo stack.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Core {
-    pub(super) state: state::State,
+    state: state::State,
     /// The history of operations on this text buffer.
     history: Vec<effect::Effect>,
     redo: Vec<effect::Effect>,
@@ -82,25 +79,31 @@ impl Core {
         )));
     }
 
-    pub fn set_width(&mut self, width: usize) {
-        self.state.set_width(width);
+    pub fn window_text(&self) -> Vec<Option<&str>> {
+        self.state.window_text()
     }
 
-    pub fn cursor_position(&self, win: Window) -> Option<Point> {
-        self.state
-            .coords_in_window(win, self.state.cursor.insert(&self.state))
+    pub fn wrapped_height(&self) -> usize {
+        self.state.wrapped_height()
     }
 
-    /// Move the cursor right within the current chunk, moving to the next wrapped line if needed. Won't move to the
-    /// next chunk.
+    pub fn resize_window(&mut self, width: usize, height: usize) {
+        self.state.resize_window(width, height);
+    }
+
+    pub fn cursor_position(&self) -> Option<Point> {
+        self.state.cursor_position()
+    }
+
+    /// Move the cursor within the current chunk, moving to the next or previous wrapped line if needed. Won't move to
+    /// the next chunk.
     pub fn cursor_shift(&mut self, n: isize) {
-        self.state.cursor = self.state.cursor.shift(&self.state, n);
+        self.state.cursor_shift(n);
     }
 
-    /// Move the cursor right within the current chunk, moving to the next wrapped line if needed. Won't move to the
-    /// next chunk.
+    /// Move the up or down in the chunk list.
     pub fn cursor_shift_chunk(&mut self, n: isize) {
-        self.state.cursor = self.state.cursor.shift_chunk(&self.state, n);
+        self.state.cursor_shift_chunk(n);
     }
 }
 

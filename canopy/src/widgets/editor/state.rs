@@ -13,6 +13,7 @@ pub struct State {
     pub cursor: Cursor,
     /// The current wrap width
     pub width: usize,
+    pub window: Window,
 }
 
 impl State {
@@ -30,10 +31,13 @@ impl State {
             chunks: t,
             cursor,
             width: DEFAULT_WRAP,
+            window: Window {
+                line: Line { chunk: 0, line: 0 },
+                height: 0,
+            },
         }
     }
 
-    #[cfg(test)]
     /// Create a new State from a text specification. An Insert cursor position is indicated by an underscore "_"
     /// character. A Character cursor position is indicated by a "<" character, which "points at" the character at the
     /// offset. The cursor position indicator is removed from the final string.
@@ -58,7 +62,6 @@ impl State {
         n
     }
 
-    #[cfg(test)]
     /// Turns a state into a text specification.
     pub(crate) fn to_spec(&self) -> String {
         let mut buf = vec![];
@@ -294,24 +297,22 @@ impl State {
     pub fn coords_in_window(&self, win: Window, pos: InsertPos) -> Option<Point> {
         for (y, l) in win.lines(self).iter().enumerate() {
             if let Some(l) = l {
-                if l.chunk == pos.chunk
-                    && l.offset <= pos.offset
-                    && l.offset + self.width > pos.offset
-                {
-                    return Some(((l.offset - pos.offset) as u16, y as u16).into());
+                let (lstart, lend) = self.chunks[l.chunk].wraps[l.line];
+                if l.chunk == pos.chunk && lstart <= pos.offset && lend > pos.offset {
+                    return Some(((pos.offset - lstart) as u16, y as u16).into());
                 }
             }
         }
         None
     }
 
-    /// Return the wrapped lines in a given window. The start offset is in terms of the wrapped text. The returned Vec
+    /// Return the wrapped lines in the window. The start offset is in terms of the wrapped text. The returned Vec
     /// may be shorter than length if the end of the text is reached.
-    pub fn wrapped_text(&self, w: Window) -> Vec<Option<&str>> {
+    pub fn window_text(&self) -> Vec<Option<&str>> {
         let mut buf = vec![];
-        for l in w.lines(self) {
+        for l in self.window.lines(self) {
             if let Some(l) = l {
-                buf.push(Some(self.chunks[l.chunk].wrapped_line(l.offset)));
+                buf.push(Some(self.chunks[l.chunk].wrapped_line(l.line)));
             } else {
                 buf.push(None);
             }
@@ -324,33 +325,33 @@ impl State {
     }
 
     /// Set the width of the editor for wrapping, and return the total number of wrapped lines that resulted.
-    pub fn set_width(&mut self, width: usize) -> usize {
+    pub fn resize_window(&mut self, width: usize, height: usize) -> usize {
         // FIXME: This needs to be as close to a nop as possible if the width hasn't changed.
         self.width = width;
+        self.window = self.window.with_height(height);
         self.chunks.iter_mut().map(|x| x.wrap(width)).sum()
+    }
+
+    /// The cursor position, relative to the current window.
+    pub fn cursor_position(&self) -> Option<Point> {
+        self.coords_in_window(self.window, self.cursor.insert(&self))
+    }
+
+    /// Move the cursor within the current chunk, moving to the next or previous wrapped line if needed. Won't move to
+    /// the next chunk.
+    pub fn cursor_shift(&mut self, n: isize) {
+        self.cursor = self.cursor.shift(&self, n);
+    }
+
+    /// Move the up or down in the chunk list.
+    pub fn cursor_shift_chunk(&mut self, n: isize) {
+        self.cursor = self.cursor.shift_chunk(&self, n);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Check if a specification given as a string containing newlines is equal to a Vec<Option<&str>>. None is ignored.
-    fn win_str_eq(b: Vec<Option<&str>>, a: &str) {
-        let mut m = vec![];
-        for i in b.iter() {
-            if let Some(s) = i {
-                m.push(*s)
-            } else {
-                break;
-            }
-        }
-        if a.is_empty() {
-            assert!(m.is_empty());
-            return;
-        }
-        assert_eq!(m.join("\n"), a)
-    }
 
     /// Take a state specification a, turn it into a State object, apply the transformation f, then check if the result
     /// is equal to the state specification b.
@@ -362,6 +363,41 @@ mod tests {
         let b = State::from_spec(b);
         f(&mut a);
         assert_eq!(a, b);
+    }
+
+    /// Verifies a text specification against the visible editor window. The window is resized to the specified width
+    /// and height before verification. If a cursor is present in the text specification, it is also validated. If no
+    /// cursor is specified, the current editor cursor is ignored.
+    fn assert_window(s: &mut State, w: usize, h: usize, offset: usize, t: &str) {
+        s.resize_window(w, h);
+        s.window = s.window.at_line(s, offset);
+        let split = if t.is_empty() {
+            vec![]
+        } else {
+            t.split("\n").collect::<Vec<_>>()
+        };
+        let cp = s.cursor_position();
+        for (i, w) in s.window_text().iter().enumerate() {
+            if i < split.len() {
+                let w = w.unwrap();
+                let s = if let Some(x) = split[i].find("_") {
+                    let cp = cp.unwrap();
+                    assert_eq!(cp.x, x as u16);
+                    assert_eq!(cp.y, i as u16);
+                    split[i].replace("_", "")
+                } else if let Some(x) = split[i].find("<") {
+                    let cp = cp.unwrap();
+                    assert_eq!(cp.x, (x - 1) as u16);
+                    assert_eq!(cp.y, i as u16);
+                    split[i].replace("<", "")
+                } else {
+                    split[i].into()
+                };
+                assert_eq!(w, s);
+            } else {
+                assert!(w.is_none());
+            }
+        }
     }
 
     #[test]
@@ -466,6 +502,30 @@ mod tests {
     }
 
     #[test]
+    fn cursor_nav() {
+        let mut s = State::from_spec("o<ne two\nthree four\nx");
+        s.resize_window(3, 2);
+        assert_window(&mut s, 3, 2, 0, "o<ne\ntwo");
+        s.cursor_shift(1);
+        assert_window(&mut s, 3, 2, 0, "on<e\ntwo");
+        s.cursor_shift(1);
+        assert_window(&mut s, 3, 2, 0, "one<\ntwo");
+        s.cursor_shift(1);
+
+        assert_window(&mut s, 3, 2, 0, "one\nt<wo");
+        s.cursor_shift(-1);
+        assert_window(&mut s, 3, 2, 0, "one<\ntwo");
+        s.cursor_shift(1);
+        s.cursor_shift(1);
+        assert_window(&mut s, 3, 2, 0, "one\ntw<o");
+        s.cursor_shift(1);
+        assert_window(&mut s, 3, 2, 0, "one\ntwo<");
+        s.cursor_shift(1);
+        // At the end of the chunk shift is a nop
+        assert_window(&mut s, 3, 2, 0, "one\ntwo<");
+    }
+
+    #[test]
     fn text_range() {
         let s = State::new("one two\nthree four\nx");
         assert_eq!(s.chunks.len(), 3);
@@ -481,7 +541,7 @@ mod tests {
     #[test]
     fn coords_in_window() {
         let mut s = State::new("one two\nthree four\nx");
-        assert_eq!(s.set_width(3), 7);
+        assert_eq!(s.resize_window(3, 10), 7);
         let w = Window::from_offset(&s, 0, 3);
 
         assert_eq!(
@@ -494,13 +554,13 @@ mod tests {
     #[test]
     fn text_width() {
         let mut s = State::new("one two\nthree four\nx");
-        assert_eq!(s.set_width(3), 7);
+        assert_eq!(s.resize_window(3, 10), 7);
     }
 
     #[test]
     fn wrapped_line_offset() {
         let mut s = State::new("one two\nthree four\nx");
-        assert_eq!(s.set_width(3), 7);
+        assert_eq!(s.resize_window(3, 10), 7);
         assert_eq!(s.line_from_offset(0), (0, 0).into());
         assert_eq!(s.line_from_offset(1), (0, 1).into());
         assert_eq!(s.line_from_offset(2), (1, 0).into());
@@ -511,71 +571,30 @@ mod tests {
     fn wrapped_text() {
         let mut s = State::new("one two\nthree four\nx");
         assert_eq!(s.chunks.len(), 3);
-        assert_eq!(s.set_width(3), 7);
-        assert_eq!(s.wrapped_text(Window::from_offset(&s, 0, 0)), vec![]);
-        assert_eq!(
-            s.wrapped_text(Window::from_offset(&s, 0, 1)),
-            vec![Some("one")]
-        );
-        assert_eq!(
-            s.wrapped_text(Window::from_offset(&s, 0, 2)),
-            vec![Some("one"), Some("two")]
-        );
-        assert_eq!(
-            s.wrapped_text(Window::from_offset(&s, 0, 3)),
-            vec![Some("one"), Some("two"), Some("thr")]
-        );
+        assert_eq!(s.resize_window(3, 10), 7);
+        assert_window(&mut s, 3, 0, 0, "");
+        assert_window(&mut s, 3, 1, 0, "one");
+        assert_window(&mut s, 3, 2, 0, "one\ntwo");
+        assert_window(&mut s, 3, 3, 0, "one\ntwo\nthr");
+        assert_window(&mut s, 3, 2, 1, "two\nthr");
+        assert_window(&mut s, 3, 1, 1, "two");
 
-        assert_eq!(
-            s.wrapped_text(Window::from_offset(&s, 1, 1)),
-            vec![Some("two")]
-        );
-        assert_eq!(
-            s.wrapped_text(Window::from_offset(&s, 1, 2)),
-            vec![Some("two"), Some("thr")]
-        );
+        assert_window(&mut s, 3, 1, 2, "thr");
+        assert_window(&mut s, 3, 3, 2, "thr\nee\nfou");
 
-        assert_eq!(
-            s.wrapped_text(Window::from_offset(&s, 2, 1)),
-            vec![Some("thr")]
-        );
-        assert_eq!(
-            s.wrapped_text(Window::from_offset(&s, 2, 2)),
-            vec![Some("thr"), Some("ee")]
-        );
-        assert_eq!(
-            s.wrapped_text(Window::from_offset(&s, 2, 3)),
-            vec![Some("thr"), Some("ee"), Some("fou")]
-        );
-        assert_eq!(
-            s.wrapped_text(Window::from_offset(&s, 2, 4)),
-            vec![Some("thr"), Some("ee"), Some("fou"), Some("r")]
-        );
-        assert_eq!(
-            s.wrapped_text(Window::from_offset(&s, 2, 5)),
-            vec![Some("thr"), Some("ee"), Some("fou"), Some("r"), Some("x")]
-        );
-        assert_eq!(
-            s.wrapped_text(Window::from_offset(&s, 2, 6)),
-            vec![
-                Some("thr"),
-                Some("ee"),
-                Some("fou"),
-                Some("r"),
-                Some("x"),
-                None
-            ]
-        );
+        assert_window(&mut s, 3, 3, 4, "fou\nr\nx");
+        assert_window(&mut s, 3, 3, 5, "r\nx");
+        assert_window(&mut s, 3, 3, 6, "x");
+        // At the very end of the text, we don't allow the window to slide completely out of the text.
+        assert_window(&mut s, 3, 3, 7, "x");
     }
 
     #[test]
     fn whitespace() {
         let mut s = State::new("one two\n\nthree four\n\n\nx");
-        assert_eq!(s.set_width(3), 10);
-        win_str_eq(s.wrapped_text(Window::from_offset(&s, 0, 3)), "one\ntwo\n");
-        win_str_eq(
-            s.wrapped_text(Window::from_offset(&s, 0, 4)),
-            "one\ntwo\n\nthr",
-        );
+        assert_eq!(s.resize_window(3, 10), 10);
+
+        assert_window(&mut s, 3, 3, 0, "one\ntwo\n");
+        assert_window(&mut s, 3, 4, 0, "one\ntwo\n\nthr");
     }
 }
