@@ -5,8 +5,7 @@
 ## 0.1
 
 - Editor
-  - Test and fix cursor window position
-
+  - Wrapping versions of shift
   - Adjust window based on cursor movement
 
 - Commands improvements

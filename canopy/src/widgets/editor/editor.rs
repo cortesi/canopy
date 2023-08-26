@@ -44,6 +44,8 @@ impl Node for EditorView {
 
     fn render(&mut self, _: &dyn Core, r: &mut Render) -> Result<()> {
         let vo = self.vp().view_rect();
+        let sr = self.vp().screen_rect();
+        self.core.resize_window(sr.w as usize, sr.h as usize);
         for (i, s) in self.core.window_text().iter().enumerate() {
             if let Some(t) = s {
                 r.text("text", vo.line(i as u16), t)?;
@@ -53,7 +55,6 @@ impl Node for EditorView {
     }
 
     fn fit(&mut self, sz: Expanse) -> Result<Expanse> {
-        self.core.resize_window(sz.w as usize, sz.h as usize);
         Ok(Expanse::new(sz.w, self.core.wrapped_height() as u16))
     }
 }

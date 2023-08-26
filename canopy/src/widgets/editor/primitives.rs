@@ -255,12 +255,14 @@ pub struct Window {
 
 impl Window {
     /// Create a Window from an offset and a screen height.
+    #[cfg(test)]
     pub(super) fn from_offset(s: &State, offset: usize, height: usize) -> Self {
         let line = s.line_from_offset(offset);
         Window { line, height }
     }
 
-    /// A window starting at a specific offset line, with th esame dimensions as this one.
+    /// A window starting at a specific offset line, with the same dimensions as this one.
+    #[cfg(test)]
     pub(super) fn at_line(&self, s: &State, offset: usize) -> Self {
         let line = s.line_from_offset(offset);
         Window {
@@ -269,6 +271,7 @@ impl Window {
         }
     }
 
+    /// A window with a specified height, and the same dimensions as this one.
     pub(super) fn with_height(&self, height: usize) -> Self {
         Window {
             line: self.line,

@@ -41,6 +41,7 @@ impl State {
     /// Create a new State from a text specification. An Insert cursor position is indicated by an underscore "_"
     /// character. A Character cursor position is indicated by a "<" character, which "points at" the character at the
     /// offset. The cursor position indicator is removed from the final string.
+    #[cfg(test)]
     pub(crate) fn from_spec(spec: &str) -> Self {
         let mut txt = vec![];
         let mut cursor = None;
@@ -63,6 +64,7 @@ impl State {
     }
 
     /// Turns a state into a text specification.
+    #[cfg(test)]
     pub(crate) fn to_spec(&self) -> String {
         let mut buf = vec![];
         let char = match self.cursor {
@@ -292,13 +294,22 @@ impl State {
             .into()
     }
 
-    /// Calulate the (x, y) co-ordinates of a Position within a wrapped window. If the position is not in the
-    /// window, None is returned.
-    pub fn coords_in_window(&self, win: Window, pos: InsertPos) -> Option<Point> {
-        for (y, l) in win.lines(self).iter().enumerate() {
+    /// Calculate the (x, y) co-ordinates of a cursor within a wrapped window. If the position is not in the window,
+    /// None is returned. Empty chunks are handled specially, with the
+    pub fn cursor_position(&self) -> Option<Point> {
+        let pos = self.cursor.insert(self);
+        let c = &self.chunks[pos.chunk];
+        for (y, l) in self.window.lines(self).iter().enumerate() {
             if let Some(l) = l {
                 let (lstart, lend) = self.chunks[l.chunk].wraps[l.line];
-                if l.chunk == pos.chunk && lstart <= pos.offset && lend > pos.offset {
+                if c.len() == 0 && l.chunk == pos.chunk {
+                    // We're at the first character of an empty chunk.
+                    return Some((0, y as u16).into());
+                } else if pos.offset >= c.len() && l.chunk > pos.chunk {
+                    // We're beyond the end of the chunk, which means we must be an insertion cursor. Place the cursor
+                    // position at the first character of the next line.
+                    return Some((0, y as u16).into());
+                } else if l.chunk == pos.chunk && lstart <= pos.offset && lend > pos.offset {
                     return Some(((pos.offset - lstart) as u16, y as u16).into());
                 }
             }
@@ -326,15 +337,13 @@ impl State {
 
     /// Set the width of the editor for wrapping, and return the total number of wrapped lines that resulted.
     pub fn resize_window(&mut self, width: usize, height: usize) -> usize {
-        // FIXME: This needs to be as close to a nop as possible if the width hasn't changed.
+        // This needs to be as cheap as possible if the width hasn't changed.
+        if self.width == width && self.window.height == height {
+            return self.wrapped_height();
+        }
         self.width = width;
         self.window = self.window.with_height(height);
         self.chunks.iter_mut().map(|x| x.wrap(width)).sum()
-    }
-
-    /// The cursor position, relative to the current window.
-    pub fn cursor_position(&self) -> Option<Point> {
-        self.coords_in_window(self.window, self.cursor.insert(&self))
     }
 
     /// Move the cursor within the current chunk, moving to the next or previous wrapped line if needed. Won't move to
@@ -539,16 +548,27 @@ mod tests {
     }
 
     #[test]
-    fn coords_in_window() {
-        let mut s = State::new("one two\nthree four\nx");
-        assert_eq!(s.resize_window(3, 10), 7);
-        let w = Window::from_offset(&s, 0, 3);
-
-        assert_eq!(
-            s.coords_in_window(w, InsertPos::new(&s, 0, 0)),
-            Some(Point { x: 0, y: 0 })
-        );
-        assert_eq!(s.coords_in_window(w, InsertPos::new(&s, 100, 0)), None);
+    fn cursor_position() {
+        let mut s = State::from_spec("_one two\n\nthree four");
+        s.resize_window(3, 10);
+        assert_eq!(s.cursor_position(), Some(Point { x: 0, y: 0 }));
+        s.cursor_shift(1);
+        assert_eq!(s.cursor_position(), Some(Point { x: 1, y: 0 }));
+        s.cursor_shift(1);
+        assert_eq!(s.cursor_position(), Some(Point { x: 2, y: 0 }));
+        s.cursor_shift(1);
+        assert_eq!(s.cursor_position(), Some(Point { x: 0, y: 1 }));
+        s.cursor_shift(1);
+        assert_eq!(s.cursor_position(), Some(Point { x: 1, y: 1 }));
+        s.cursor_shift(1);
+        assert_eq!(s.cursor_position(), Some(Point { x: 2, y: 1 }));
+        s.cursor_shift(1);
+        assert_eq!(s.cursor_position(), Some(Point { x: 0, y: 2 }));
+        s.cursor_shift_chunk(1);
+        // We're now in the next chunk... but still in the same scren position.
+        assert_eq!(s.cursor_position(), Some(Point { x: 0, y: 2 }));
+        s.cursor_shift_chunk(1);
+        assert_eq!(s.cursor_position(), Some(Point { x: 0, y: 3 }));
     }
 
     #[test]
