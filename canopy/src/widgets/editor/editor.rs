@@ -98,14 +98,30 @@ impl Editor {
     fn prev_chunk(&mut self, _: &dyn Core) {
         self.view.core.cursor_shift_chunk(-1);
     }
+
+    /// Move the cursor one line down.
+    #[command]
+    fn next_line(&mut self, _: &dyn Core) {
+        self.view.core.cursor_shift_lines(1);
+    }
+
+    /// Move the cursor one line up.
+    #[command]
+    fn prev_line(&mut self, _: &dyn Core) {
+        self.view.core.cursor_shift_lines(-1);
+    }
 }
 
 impl DefaultBindings for Editor {
     fn defaults(b: Binder) -> Binder {
         b.key(key::KeyCode::Left, "editor::cursor_left()")
             .key(key::KeyCode::Right, "editor::cursor_right()")
-            .key(key::KeyCode::Down, "editor::next_chunk()")
-            .key(key::KeyCode::Up, "editor::prev_chunk()")
+            .key(key::KeyCode::Down, "editor::next_line()")
+            .key(key::KeyCode::Up, "editor::prev_line()")
+            .key('h', "editor::cursor_left()")
+            .key('l', "editor::cursor_right()")
+            .key('j', "editor::next_chunk()")
+            .key('k', "editor::prev_chunk()")
     }
 }
 

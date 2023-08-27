@@ -210,7 +210,7 @@ mod tests {
         impl Foo {
             #[command]
             /// This is a comment.
-            //s Multiline too!
+            /// Multiline too!
             fn a(&mut self, _core: &mut dyn Core) -> canopy::Result<()> {
                 self.a_triggered = true;
                 Ok(())

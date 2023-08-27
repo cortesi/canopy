@@ -32,7 +32,10 @@ impl State {
             cursor,
             width: DEFAULT_WRAP,
             window: Window {
-                line: Line { chunk: 0, line: 0 },
+                line: Line {
+                    chunk: 0,
+                    wrap_idx: 0,
+                },
                 height: 0,
             },
         }
@@ -276,24 +279,6 @@ impl State {
         self.line_range(start, end).join("\n")
     }
 
-    /// Get a Line from a given wrapped line offset. The return value is a tuple (chunk offset, wrapped line offset),
-    /// where the wrapped line offset is the offset within the returned chunk. If the specified offset is out of range,
-    /// the last line is returned.
-    pub fn line_from_offset(&self, offset: usize) -> Line {
-        let mut wrapped_offset = 0;
-        for (i, c) in self.chunks.iter().enumerate() {
-            if wrapped_offset + c.wraps.len() > offset {
-                return (i, offset - wrapped_offset).into();
-            }
-            wrapped_offset += c.wraps.len();
-        }
-        (
-            self.chunks.len() - 1,
-            self.chunks[self.chunks.len() - 1].wraps.len() - 1,
-        )
-            .into()
-    }
-
     /// Calculate the (x, y) co-ordinates of a cursor within a wrapped window. If the position is not in the window,
     /// None is returned. Empty chunks are handled specially, with the
     pub fn cursor_position(&self) -> Option<Point> {
@@ -301,7 +286,7 @@ impl State {
         let c = &self.chunks[pos.chunk];
         for (y, l) in self.window.lines(self).iter().enumerate() {
             if let Some(l) = l {
-                let (lstart, lend) = self.chunks[l.chunk].wraps[l.line];
+                let (lstart, lend) = self.chunks[l.chunk].wraps[l.wrap_idx];
                 if c.len() == 0 && l.chunk == pos.chunk {
                     // We're at the first character of an empty chunk.
                     return Some((0, y as u16).into());
@@ -323,7 +308,7 @@ impl State {
         let mut buf = vec![];
         for l in self.window.lines(self) {
             if let Some(l) = l {
-                buf.push(Some(self.chunks[l.chunk].wrapped_line(l.line)));
+                buf.push(Some(self.chunks[l.chunk].wrapped_line(l.wrap_idx)));
             } else {
                 buf.push(None);
             }
@@ -346,10 +331,15 @@ impl State {
         self.chunks.iter_mut().map(|x| x.wrap(width)).sum()
     }
 
-    /// Move the cursor within the current chunk, moving to the next or previous wrapped line if needed. Won't move to
-    /// the next chunk.
+    /// Move the cursor left or right within the current chunk, moving to the next or previous wrapped line if needed.
+    /// Won't move to the next chunk.
     pub fn cursor_shift(&mut self, n: isize) {
         self.cursor = self.cursor.shift(&self, n);
+    }
+
+    /// Move the cursor up or down in wrapped lines, moving to the next or previous chunk if needed.
+    pub fn cursor_shift_line(&mut self, n: isize) {
+        self.cursor = self.cursor.shift_line(&self, n);
     }
 
     /// Move the up or down in the chunk list.
@@ -575,16 +565,6 @@ mod tests {
     fn text_width() {
         let mut s = State::new("one two\nthree four\nx");
         assert_eq!(s.resize_window(3, 10), 7);
-    }
-
-    #[test]
-    fn wrapped_line_offset() {
-        let mut s = State::new("one two\nthree four\nx");
-        assert_eq!(s.resize_window(3, 10), 7);
-        assert_eq!(s.line_from_offset(0), (0, 0).into());
-        assert_eq!(s.line_from_offset(1), (0, 1).into());
-        assert_eq!(s.line_from_offset(2), (1, 0).into());
-        assert_eq!(s.line_from_offset(100), (2, 0).into());
     }
 
     #[test]

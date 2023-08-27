@@ -6,6 +6,7 @@ pub trait Pos: Sized {
     fn new(s: &State, chunk: usize, offset: usize) -> Self;
     /// Constrain within state bounds, and return a new item
     fn constrain(&self, s: &State) -> Self;
+    /// Retrieve the chunk and offset of the cursor.
     fn chunk_offset(&self) -> (usize, usize);
     /// Is this cursor between wrapped lines?
     fn is_between(&self, s: &State) -> bool;
@@ -29,6 +30,22 @@ pub trait Pos: Sized {
     fn shift_chunk(&self, s: &State, n: isize) -> Self {
         let (chunk, offset) = self.chunk_offset();
         Self::new(s, chunk.saturating_add_signed(n), offset)
+    }
+
+    fn shift_line(&self, s: &State, n: isize) -> Self {
+        let (chunk, offset) = self.chunk_offset();
+        if let Some(l) = Line::from_position(s, (chunk, offset)) {
+            if let Some(ret) = l.shift(s, n) {
+                let line_offset = offset - l.first_pos(s).offset;
+                return if line_offset > ret.len(s) {
+                    // If our line offset takes us beyond the end of the line, we return the last position.
+                    Self::new(s, ret.chunk, ret.first_pos(s).offset + ret.len(s))
+                } else {
+                    Self::new(s, ret.chunk, ret.first_pos(s).offset + line_offset)
+                };
+            }
+        }
+        Self::new(s, chunk, offset)
     }
 }
 
@@ -56,6 +73,14 @@ impl Cursor {
         match self {
             Cursor::Insert(p) => Cursor::Insert(p.shift_chunk(s, n)),
             Cursor::Char(p) => Cursor::Char(p.shift_chunk(s, n)),
+        }
+    }
+
+    /// Shift up and down along wrapped lines.
+    pub fn shift_line(&self, s: &State, n: isize) -> Self {
+        match self {
+            Cursor::Insert(p) => Cursor::Insert(p.shift_line(s, n)),
+            Cursor::Char(p) => Cursor::Char(p.shift_line(s, n)),
         }
     }
 
@@ -94,6 +119,8 @@ impl Cursor {
 ///    ab_c
 ///    a_bc
 ///    _abc
+///
+/// On empty lines, an insertion point at offset 0 is valid.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct InsertPos {
     /// The offset of the chunk in the editor state.
@@ -211,29 +238,79 @@ impl From<InsertPos> for CharPos {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Line {
     pub chunk: usize,
-    pub line: usize,
+    pub wrap_idx: usize,
 }
 
 impl Line {
-    /// Add a number of lines to this one, returning the resulting line. If the line is beyond bounds, return None.
-    pub(super) fn add(&self, s: &State, n: usize) -> Option<Line> {
-        // FIXME: Make this more efficient
-        let mut chunk = self.chunk;
-        let mut offset = self.line;
-        for _ in 0..n {
-            if offset + 1 < s.chunks[chunk].wraps.len() {
-                offset += 1;
-            } else if chunk + 1 < s.chunks.len() {
-                chunk += 1;
-                offset = 0;
-            } else {
-                return None;
+    pub(super) fn from_position<T: Into<InsertPos>>(s: &State, pos: T) -> Option<Line> {
+        let pos = pos.into();
+        for (i, (wstart, wend)) in s.chunks[pos.chunk].wraps.iter().enumerate() {
+            if *wstart <= pos.offset && (pos.offset < *wend || *wstart == *wend) {
+                return Some(Line {
+                    chunk: pos.chunk,
+                    wrap_idx: i,
+                });
             }
         }
-        Some(Line {
-            chunk,
-            line: offset,
-        })
+        None
+    }
+
+    pub fn len(&self, s: &State) -> usize {
+        let (start, end) = s.chunks[self.chunk].wraps[self.wrap_idx];
+        end - start
+    }
+
+    /// Return the first insert position in this line.
+    pub fn first_pos(&self, s: &State) -> InsertPos {
+        let (start, _) = s.chunks[self.chunk].wraps[self.wrap_idx];
+        (self.chunk, start).into()
+    }
+
+    /// Get a Line from a given wrapped line number. If the specified offset is out of range, the last line is returned.
+    pub fn from_lineno(s: &State, line_number: usize) -> Line {
+        let mut wrapped_offset = 0;
+        for (i, c) in s.chunks.iter().enumerate() {
+            if wrapped_offset + c.wraps.len() > line_number {
+                return (i, line_number - wrapped_offset).into();
+            }
+            wrapped_offset += c.wraps.len();
+        }
+        (
+            s.chunks.len() - 1,
+            s.chunks[s.chunks.len() - 1].wraps.len() - 1,
+        )
+            .into()
+    }
+
+    /// Shift by a number of lines, returning the resulting line. If the line is beyond bounds, return None.
+    pub(super) fn shift(&self, s: &State, n: isize) -> Option<Line> {
+        // FIXME: Make this more efficient
+        let mut chunk = self.chunk;
+        let mut wrap_idx = self.wrap_idx;
+        if n < 0 {
+            for _ in 0..n.abs() {
+                if wrap_idx > 0 {
+                    wrap_idx -= 1;
+                } else if chunk > 0 {
+                    chunk -= 1;
+                    wrap_idx = 0;
+                } else {
+                    return None;
+                }
+            }
+        } else {
+            for _ in 0..n {
+                if wrap_idx + 1 < s.chunks[chunk].wraps.len() {
+                    wrap_idx += 1;
+                } else if chunk + 1 < s.chunks.len() {
+                    chunk += 1;
+                    wrap_idx = 0;
+                } else {
+                    return None;
+                }
+            }
+        }
+        Some(Line { chunk, wrap_idx })
     }
 }
 
@@ -241,7 +318,7 @@ impl From<(usize, usize)> for Line {
     fn from((chunk, offset): (usize, usize)) -> Self {
         Line {
             chunk,
-            line: offset,
+            wrap_idx: offset,
         }
     }
 }
@@ -254,17 +331,17 @@ pub struct Window {
 }
 
 impl Window {
-    /// Create a Window from an offset and a screen height.
+    /// Create a Window from a line number and a screen height.
     #[cfg(test)]
-    pub(super) fn from_offset(s: &State, offset: usize, height: usize) -> Self {
-        let line = s.line_from_offset(offset);
+    pub(super) fn from_offset(s: &State, lineno: usize, height: usize) -> Self {
+        let line = Line::from_lineno(s, lineno);
         Window { line, height }
     }
 
     /// A window starting at a specific offset line, with the same dimensions as this one.
     #[cfg(test)]
-    pub(super) fn at_line(&self, s: &State, offset: usize) -> Self {
-        let line = s.line_from_offset(offset);
+    pub(super) fn at_line(&self, s: &State, lineno: usize) -> Self {
+        let line = Line::from_lineno(s, lineno);
         Window {
             line,
             height: self.height,
@@ -287,7 +364,7 @@ impl Window {
         for _ in 0..self.height {
             lines.push(line);
             if let Some(l) = line {
-                line = l.add(s, 1);
+                line = l.shift(s, 1);
             }
         }
         lines
@@ -345,21 +422,27 @@ impl Chunk {
         l
     }
 
+    /// Find the wrapped line for the matching offset. Return None if the offset is out of bounds or if the character is
+    /// between wrapped lines.
+    pub fn find_wrap(&self, off: usize) -> Option<(usize, usize)> {
+        for i in &self.wraps {
+            if i.0 <= off && off < i.1 {
+                return Some(*i);
+            } else if i.0 > off {
+                // If we're past the offset, we can stop checking.
+                break;
+            }
+        }
+        None
+    }
+
     /// A character is "between" if it is a) within the normal range of the chunk, and b) not part of a wrapped line.
     /// This happens due to the wrapping algorithm eliding whitespace at the end of the line.
     pub fn offset_is_between(&self, off: usize) -> bool {
         if off >= self.text.len() {
             return false;
         }
-        for i in &self.wraps {
-            if i.0 <= off && off < i.1 {
-                return false;
-            } else if i.0 > off {
-                // If we're past the offset, we can stop checking.
-                break;
-            }
-        }
-        return true;
+        self.find_wrap(off).is_none()
     }
 
     pub fn replace_range<R: std::ops::RangeBounds<usize>>(&mut self, range: R, s: &str) {
@@ -482,6 +565,61 @@ mod tests {
         assert_eqi!(cp(0, 1).shift(&s, -1), (0, 0));
         assert_eqi!(cp(1, 2).shift(&s, -1), (1, 1));
         assert_eqi!(cp(1, 2).shift(&s, isize::MIN), (1, 0));
+    }
+
+    #[test]
+    fn shift_line() {
+        let mut s = State::new("a\nbb\n\nccc");
+        s.resize_window(3, 10);
+        // +ive
+        assert_eqi!(ip(0, 0).shift_line(&s, 1), (1, 0));
+        assert_eqi!(ip(1, 0).shift_line(&s, 1), (2, 0));
+        assert_eqi!(ip(2, 0).shift_line(&s, 1), (3, 0));
+        assert_eqi!(ip(3, 0).shift_line(&s, 1), (3, 0));
+        // Now at an offset in every line
+        assert_eqi!(ip(1, 1).shift_line(&s, 1), (2, 0));
+        assert_eqi!(ip(1, 1).shift_line(&s, 2), (3, 1));
+
+        // -ive
+        assert_eqi!(ip(0, 0).shift_line(&s, -1), (0, 0));
+        assert_eqi!(ip(1, 0).shift_line(&s, -1), (0, 0));
+        assert_eqi!(cp(1, 1).shift_line(&s, -1), (0, 0));
+        assert_eqi!(ip(1, 1).shift_line(&s, -1), (0, 1));
+
+        let mut s = State::new("one two\nthree four\n\nccc");
+        s.resize_window(3, 10);
+        // +ive
+        assert_eqi!(ip(0, 0).shift_line(&s, 1), (0, 4));
+        assert_eqi!(ip(0, 4).shift_line(&s, 1), (1, 0));
+
+        assert_eqi!(ip(0, 1).shift_line(&s, 1), (0, 5));
+        assert_eqi!(ip(0, 5).shift_line(&s, 1), (1, 1));
+        assert_eqi!(ip(1, 1).shift_line(&s, 1), (1, 4));
+        // -ive
+        assert_eqi!(ip(0, 4).shift_line(&s, -1), (0, 0));
+    }
+
+    #[test]
+    fn line_from_position() {
+        let mut s = State::new("one two\nthree four\n\nccc");
+        s.resize_window(3, 10);
+
+        assert_eq!(Line::from_position(&s, (0, 0)), Some((0, 0).into()));
+        assert_eq!(Line::from_position(&s, (0, 3)), None);
+        assert_eq!(Line::from_position(&s, (0, 4)), Some((0, 1).into()));
+        assert_eq!(Line::from_position(&s, (1, 0)), Some((1, 0).into()));
+        // Offset 0 on an empty line
+        assert_eq!(Line::from_position(&s, (2, 0)), Some((2, 0).into()));
+    }
+
+    #[test]
+    fn line_from_lineno() {
+        let mut s = State::new("one two\nthree four\nx");
+        assert_eq!(s.resize_window(3, 10), 7);
+        assert_eq!(Line::from_lineno(&s, 0), (0, 0).into());
+        assert_eq!(Line::from_lineno(&s, 1), (0, 1).into());
+        assert_eq!(Line::from_lineno(&s, 2), (1, 0).into());
+        assert_eq!(Line::from_lineno(&s, 100), (2, 0).into());
     }
 
     fn twrap(s: &str, width: usize, expected: Vec<String>) {

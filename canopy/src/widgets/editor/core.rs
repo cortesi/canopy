@@ -105,6 +105,11 @@ impl Core {
     pub fn cursor_shift_chunk(&mut self, n: isize) {
         self.state.cursor_shift_chunk(n);
     }
+
+    /// Move the up or down along wrapped lines.
+    pub fn cursor_shift_lines(&mut self, n: isize) {
+        self.state.cursor_shift_line(n);
+    }
 }
 
 #[cfg(test)]
