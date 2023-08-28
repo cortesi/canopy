@@ -5,7 +5,6 @@
 ## 0.1
 
 - Editor
-  - Adjust window based on cursor movement
   - Arguments to commands
   - Consolidate modal key bindings and consider how to support editor
 

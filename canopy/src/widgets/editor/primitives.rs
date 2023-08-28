@@ -384,10 +384,12 @@ impl Window {
     /// Adjust the window to include the cursor.
     pub fn adjust(&self, s: &State) -> Self {
         let start = self.line.to_lineno(s);
-        let pos = Line::from_position(s, s.cursor.insert(s))
-            // Cursor is always constrained to be within the document.
-            .unwrap()
-            .to_lineno(s);
+        let pos = if let Some(l) = Line::from_position(s, s.cursor.insert(s)) {
+            l.to_lineno(s)
+        } else {
+            // If the cursor position is somehow beyond the document, we're on the last line.
+            s.line_height().saturating_sub(1)
+        };
 
         if pos >= start + self.height {
             // Cursor is below
