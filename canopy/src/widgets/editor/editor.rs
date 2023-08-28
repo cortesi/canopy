@@ -127,7 +127,7 @@ impl DefaultBindings for Editor {
 
 impl Node for Editor {
     fn accept_focus(&mut self) -> bool {
-        true
+        false
     }
 
     fn fit(&mut self, sz: Expanse) -> Result<Expanse> {

@@ -316,7 +316,7 @@ impl State {
         buf
     }
 
-    pub fn wrapped_height(&self) -> usize {
+    pub fn line_height(&self) -> usize {
         self.chunks.iter().map(|x| x.wraps.len()).sum()
     }
 
@@ -324,7 +324,7 @@ impl State {
     pub fn resize_window(&mut self, width: usize, height: usize) -> usize {
         // This needs to be as cheap as possible if the width hasn't changed.
         if self.width == width && self.window.height == height {
-            return self.wrapped_height();
+            return self.line_height();
         }
         self.width = width;
         self.window = self.window.with_height(height);
@@ -332,19 +332,23 @@ impl State {
     }
 
     /// Move the cursor left or right within the current chunk, moving to the next or previous wrapped line if needed.
-    /// Won't move to the next chunk.
+    /// Won't move to the next chunk. Adjust the window to include the cursor if needed.
     pub fn cursor_shift(&mut self, n: isize) {
         self.cursor = self.cursor.shift(&self, n);
+        self.window = self.window.adjust(self);
     }
 
-    /// Move the cursor up or down in wrapped lines, moving to the next or previous chunk if needed.
+    /// Move the cursor up or down in wrapped lines, moving to the next or previous chunk if needed. Adjust the window
+    /// to include the cursor if needed.
     pub fn cursor_shift_line(&mut self, n: isize) {
         self.cursor = self.cursor.shift_line(&self, n);
+        self.window = self.window.adjust(self);
     }
 
-    /// Move the up or down in the chunk list.
+    /// Move the up or down in the chunk list. Adjust the window to include the cursor if needed.
     pub fn cursor_shift_chunk(&mut self, n: isize) {
         self.cursor = self.cursor.shift_chunk(&self, n);
+        self.window = self.window.adjust(self);
     }
 }
 

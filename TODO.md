@@ -5,9 +5,13 @@
 ## 0.1
 
 - Editor
-  - Wrapping versions of shift
   - Adjust window based on cursor movement
+  - Arguments to commands
+  - Consolidate modal key bindings and consider how to support editor
 
+- Focus
+  - Add ability to "pop" focus and inspect previous focus states within a subtree. This will unlock a lot of
+    functionality for the inspector.
 - Commands improvements
   - Arguments
   - Return types, add as needed
@@ -76,12 +80,14 @@
   - Improve module structure
     - The import situation is a bit confusing
     - It's not clear where to find everything
+    - Punting on passing state around may be a mistake
 
 ## 0.2
 
 - serialization/deserialization for color scheme
 - Termion backend
   - Extract a common set of backend conversion traits
+- Native rendered backend without a terminal emulator
 - use half-blocks to improve smoothness of scrollbars
 - Remote commander
   - Standard way to execute scripts within an application remotely

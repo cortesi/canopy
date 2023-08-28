@@ -204,7 +204,7 @@ impl Pos for CharPos {
         if self.chunk > ep.chunk {
             CharPos {
                 chunk: ep.chunk,
-                offset: s.chunks[ep.chunk].len() - 1,
+                offset: s.chunks[ep.chunk].len().saturating_sub(1),
             }
         } else if s.chunks[self.chunk].len() <= self.offset {
             CharPos {
@@ -264,6 +264,18 @@ impl Line {
     pub fn first_pos(&self, s: &State) -> InsertPos {
         let (start, _) = s.chunks[self.chunk].wraps[self.wrap_idx];
         (self.chunk, start).into()
+    }
+
+    /// Calculate the line number in the document for this line.
+    pub fn to_lineno(&self, s: &State) -> usize {
+        let mut lineno = 0;
+        for (i, c) in s.chunks.iter().enumerate() {
+            if i == self.chunk {
+                return lineno + self.wrap_idx;
+            }
+            lineno += c.wraps.len();
+        }
+        lineno
     }
 
     /// Get a Line from a given wrapped line number. If the specified offset is out of range, the last line is returned.
@@ -332,8 +344,7 @@ pub struct Window {
 
 impl Window {
     /// Create a Window from a line number and a screen height.
-    #[cfg(test)]
-    pub(super) fn from_offset(s: &State, lineno: usize, height: usize) -> Self {
+    pub(super) fn from_lineno(s: &State, lineno: usize, height: usize) -> Self {
         let line = Line::from_lineno(s, lineno);
         Window { line, height }
     }
@@ -368,6 +379,25 @@ impl Window {
             }
         }
         lines
+    }
+
+    /// Adjust the window to include the cursor.
+    pub fn adjust(&self, s: &State) -> Self {
+        let start = self.line.to_lineno(s);
+        let pos = Line::from_position(s, s.cursor.insert(s))
+            // Cursor is always constrained to be within the document.
+            .unwrap()
+            .to_lineno(s);
+
+        if pos >= start + self.height {
+            // Cursor is below
+            Window::from_lineno(s, pos.saturating_sub(self.height - 1), self.height)
+        } else if pos < start {
+            // Cursor is above
+            Window::from_lineno(s, pos, self.height)
+        } else {
+            *self
+        }
     }
 }
 
@@ -613,12 +643,18 @@ mod tests {
     }
 
     #[test]
-    fn line_from_lineno() {
+    fn line_lineno() {
+        fn t(s: &State, lineno: usize, expected: (usize, usize)) {
+            let l = Line::from_lineno(&s, lineno);
+            assert_eq!(l, expected.into());
+            assert_eq!(l.to_lineno(s), lineno);
+        }
+
         let mut s = State::new("one two\nthree four\nx");
         assert_eq!(s.resize_window(3, 10), 7);
-        assert_eq!(Line::from_lineno(&s, 0), (0, 0).into());
-        assert_eq!(Line::from_lineno(&s, 1), (0, 1).into());
-        assert_eq!(Line::from_lineno(&s, 2), (1, 0).into());
+        t(&s, 0, (0, 0));
+        t(&s, 1, (0, 1));
+        t(&s, 2, (1, 0));
         assert_eq!(Line::from_lineno(&s, 100), (2, 0).into());
     }
 
@@ -642,5 +678,28 @@ mod tests {
             10,
             vec!["one two".into(), "three four".into()],
         );
+    }
+
+    #[test]
+    fn window_adjust() {
+        let mut s = State::new("one two\nthree four\n\nccc");
+        s.resize_window(3, 2);
+        println!("{}", s.line_height());
+
+        fn t(s: &mut State, window: usize, cursor: usize, expected: usize) {
+            s.cursor = Cursor::Insert(Line::from_lineno(s, cursor).first_pos(s));
+            s.window = Window::from_lineno(s, window, 2);
+            s.window = s.window.adjust(s);
+            assert_eq!(s.window.line.to_lineno(s), expected);
+        }
+
+        t(&mut s, 0, 0, 0);
+        t(&mut s, 0, 1, 0);
+        t(&mut s, 0, 2, 1);
+        t(&mut s, 1, 3, 2);
+        t(&mut s, 1, 8, 6);
+
+        t(&mut s, 6, 0, 0);
+        t(&mut s, 6, 5, 5);
     }
 }

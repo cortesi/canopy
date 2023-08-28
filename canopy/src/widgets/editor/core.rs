@@ -84,7 +84,7 @@ impl Core {
     }
 
     pub fn wrapped_height(&self) -> usize {
-        self.state.wrapped_height()
+        self.state.line_height()
     }
 
     pub fn resize_window(&mut self, width: usize, height: usize) {
