@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"canopy":[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.72.0/core/error/trait.Error.html\" title=\"trait core::error::Error\">Error</a> for <a class=\"struct\" href=\"canopy/error/struct.ParseError.html\" title=\"struct canopy::error::ParseError\">ParseError</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.72.0/core/error/trait.Error.html\" title=\"trait core::error::Error\">Error</a> for <a class=\"enum\" href=\"canopy/error/enum.Error.html\" title=\"enum canopy::error::Error\">Error</a>"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
