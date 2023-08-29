@@ -1,8 +1,7 @@
 [![.github/workflows/ci.yml](https://github.com/cortesi/canopy/actions/workflows/ci.yml/badge.svg)](https://github.com/cortesi/canopy/actions/workflows/ci.yml)
 
-**Hey curious person - if you've stumbled onto this project, please know that
-Canopy is is not yet ready for human consumption! I'll announce a release as
-soon as I feel it's worth anyone else's time.**
+**Hey curious person - if you've stumbled onto this project, please know that Canopy is is not yet ready for human
+consumption! I'll announce a release as soon as I feel it's worth anyone else's time.**
 
 <center>
     <img width=350 src=".assets/shyness.jpg">
