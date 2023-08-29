@@ -9,3 +9,4 @@
 - [Key bindings](./keybindings.md)
 - [Scripting](./scripting.md)
 - [Widgets](./widgets.md)
+- [Themes and Styling](./styling.md)
