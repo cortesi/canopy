@@ -4,7 +4,6 @@ authors = ["Aldo Cortesi <aldo@corte.si>"]
 version = "0.0.1"
 edition = "2021"
 
-
 [dependencies]
 crossterm = "0.27.0"
 pad = "0.1.6"

@@ -75,53 +75,35 @@ impl Editor {
         }
     }
 
-    /// Move the cursor left.
+    /// Move the cursor left or right.
     #[command]
-    fn cursor_left(&mut self, _: &dyn Core) {
-        self.view.core.cursor_shift(-1);
+    fn cursor_shift(&mut self, _: &dyn Core, n: isize) {
+        self.view.core.cursor_shift(n);
     }
 
-    /// Move the cursor right.
+    /// Move the cursor up or down in the chunk list.
     #[command]
-    fn cursor_right(&mut self, _: &dyn Core) {
-        self.view.core.cursor_shift(1);
+    fn cursor_shift_chunk(&mut self, _: &dyn Core, n: isize) {
+        self.view.core.cursor_shift_chunk(n);
     }
 
-    /// Move the cursor right.
+    /// Move the cursor up or down by visual line.
     #[command]
-    fn next_chunk(&mut self, _: &dyn Core) {
-        self.view.core.cursor_shift_chunk(1);
-    }
-
-    /// Move the cursor right.
-    #[command]
-    fn prev_chunk(&mut self, _: &dyn Core) {
-        self.view.core.cursor_shift_chunk(-1);
-    }
-
-    /// Move the cursor one line down.
-    #[command]
-    fn next_line(&mut self, _: &dyn Core) {
-        self.view.core.cursor_shift_lines(1);
-    }
-
-    /// Move the cursor one line up.
-    #[command]
-    fn prev_line(&mut self, _: &dyn Core) {
-        self.view.core.cursor_shift_lines(-1);
+    fn cursor_shift_lines(&mut self, _: &dyn Core, n: isize) {
+        self.view.core.cursor_shift_lines(n);
     }
 }
 
 impl DefaultBindings for Editor {
     fn defaults(b: Binder) -> Binder {
-        b.key(key::KeyCode::Left, "editor::cursor_left()")
-            .key(key::KeyCode::Right, "editor::cursor_right()")
-            .key(key::KeyCode::Down, "editor::next_line()")
-            .key(key::KeyCode::Up, "editor::prev_line()")
-            .key('h', "editor::cursor_left()")
-            .key('l', "editor::cursor_right()")
-            .key('j', "editor::next_chunk()")
-            .key('k', "editor::prev_chunk()")
+        b.key(key::KeyCode::Left, "editor::cursor_shift(1)")
+            .key(key::KeyCode::Right, "editor::cursor_shift(-1)")
+            .key(key::KeyCode::Down, "editor::cursor_shift_lines(1)")
+            .key(key::KeyCode::Up, "editor::cursor_shift_lines(-1)")
+            .key('h', "editor::cursor_shift(-1)")
+            .key('l', "editor::cursor_shift(1)")
+            .key('j', "editor::cursor_shift_chunk(1)")
+            .key('k', "editor::cursor_shift_chunk(-1)")
     }
 }
 

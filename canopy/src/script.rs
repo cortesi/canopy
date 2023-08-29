@@ -1,6 +1,5 @@
 use std::{cell::RefCell, collections::HashMap};
 
-use bitvec::vec;
 use rhai;
 
 use crate::{commands::*, error, Core, Node, NodeId, NodeName, Result};
@@ -132,7 +131,7 @@ impl ScriptHost {
                 match a {
                     ArgTypes::Core => {}
                     ArgTypes::ISize => {
-                        rhai_arg_types.push(rhai::plugin::TypeId::of::<isize>());
+                        rhai_arg_types.push(rhai::plugin::TypeId::of::<i64>());
                     }
                 }
             }

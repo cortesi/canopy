@@ -34,7 +34,8 @@ fn commands() {
         b_triggered: bool,
         c_triggered: bool,
         naked_str_triggered: bool,
-        f_core_isize: Option<isize>,
+        core_isize: Option<isize>,
+        naked_isize: Option<isize>,
     }
 
     impl canopy::Node for Foo {}
@@ -70,8 +71,13 @@ fn commands() {
 
         #[command(ignore_result)]
         fn f_core_isize(&mut self, _core: &dyn canopy::Core, i: isize) -> Opaque {
-            self.f_core_isize = Some(i);
+            self.core_isize = Some(i);
             Opaque {}
+        }
+
+        #[command]
+        fn naked_isize(&mut self, i: isize) {
+            self.naked_isize = Some(i);
         }
 
         #[command]
@@ -132,6 +138,13 @@ fn commands() {
             },
             canopy::commands::CommandSpec {
                 node: "foo".try_into().unwrap(),
+                command: "naked_isize".to_string(),
+                docs: "".to_string(),
+                ret: ReturnSpec::new(ReturnTypes::Void, false),
+                args: vec![ArgTypes::ISize],
+            },
+            canopy::commands::CommandSpec {
+                node: "foo".try_into().unwrap(),
                 command: "naked_str".to_string(),
                 docs: "".to_string(),
                 ret: ReturnSpec::new(ReturnTypes::String, false),
@@ -159,7 +172,8 @@ fn commands() {
         b_triggered: false,
         c_triggered: false,
         naked_str_triggered: false,
-        f_core_isize: None,
+        core_isize: None,
+        naked_isize: None,
     };
 
     let mut dc = DummyCore {};
@@ -191,11 +205,22 @@ fn commands() {
         &CommandInvocation {
             node: "foo".try_into().unwrap(),
             command: "f_core_isize".try_into().unwrap(),
+            args: vec![Args::Core, Args::ISize(3)],
+        },
+    )
+    .unwrap();
+    assert_eq!(f.core_isize, Some(3));
+
+    f.dispatch(
+        &mut dc,
+        &CommandInvocation {
+            node: "foo".try_into().unwrap(),
+            command: "naked_isize".try_into().unwrap(),
             args: vec![Args::ISize(3)],
         },
     )
     .unwrap();
-    assert!(f.a_triggered);
+    assert_eq!(f.naked_isize, Some(3));
 
     #[derive(canopy::StatefulNode)]
     struct Bar<N>

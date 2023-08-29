@@ -97,7 +97,7 @@ struct Command {
     command: String,
     docs: String,
     ret: Return,
-    cargs: MacroArgs,
+    macro_args: MacroArgs,
     args: Vec<ArgTypes>,
 }
 
@@ -107,12 +107,7 @@ impl Command {
         let ident = syn::Ident::new(&self.command, proc_macro2::Span::call_site());
 
         let mut args = vec![];
-        let mut si = self.args.clone();
-        if si.len() > 0 && self.args[0] == ArgTypes::Core {
-            args.push(quote! {core});
-            si.remove(0);
-        }
-        for (i, a) in si.iter().enumerate() {
+        for (i, a) in self.args.iter().enumerate() {
             match a {
                 ArgTypes::Core => {
                     args.push(quote! {core});
@@ -129,7 +124,7 @@ impl Command {
             quote! {let s = self.#ident (#(#args),*) ;}
         };
 
-        if self.cargs.ignore_result {
+        if self.macro_args.ignore_result {
             inv.extend(quote! {Ok(canopy::commands::ReturnValue::Void)});
         } else {
             match self.ret.typ {
@@ -295,7 +290,7 @@ fn parse_command_method(node: &str, method: &syn::ImplItemFn) -> Result<Option<C
             node: node.to_string(),
             command: method.sig.ident.to_string(),
             docs: docs.join("\n"),
-            cargs: macroargs,
+            macro_args: macroargs,
             ret: v,
             args,
         }))
