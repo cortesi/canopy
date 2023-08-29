@@ -8,10 +8,8 @@ jobs:
             fail-fast: false
             matrix:
                 include:
-                - { toolchain: stable, os: ubuntu-latest }
-                - { toolchain: nightly, os: ubuntu-latest }
-                - { toolchain: stable, os: windows-latest }
-                - { toolchain: nightly, os: windows-latest }
+                - { toolchain: beta, os: ubuntu-latest }
+                - { toolchain: beta, os: windows-latest }
         steps:
             - uses: actions/checkout@v3
             - uses: dtolnay/rust-toolchain@master
