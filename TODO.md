@@ -5,19 +5,13 @@
 ## 0.1
 
 - Editor
-  - Arguments to commands
   - Consolidate modal key bindings and consider how to support editor
 
 - Focus
   - Add ability to "pop" focus and inspect previous focus states within a subtree. This will unlock a lot of
     functionality for the inspector.
 - Commands improvements
-  - Arguments
-  - Return types, add as needed
-    - Int
-    - Core data types?
-      - Node reference
-      - Focus path
+  - Return and arg types, add as needed
 - Root object
   - Manage modal windows
   - Command help system
@@ -55,9 +49,6 @@
   - script execution errors need to be improved
 - ctrl-c/ctrl-z
 - Widgets
-  - Editor
-    - Focused on text areas < 100k characters
-    - Line wrapping
   - Tree
   - Pad
   - Center
