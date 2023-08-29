@@ -1,3 +1,5 @@
+use std::vec;
+
 use lazy_static::lazy_static;
 use proc_macro_error::*;
 use quote::quote;
@@ -104,22 +106,27 @@ impl Command {
     fn invocation_clause(&self) -> proc_macro2::TokenStream {
         let ident = syn::Ident::new(&self.command, proc_macro2::Span::call_site());
 
-        let mut args = quote! {};
-        for (i, a) in self.args.iter().enumerate() {
+        let mut args = vec![];
+        let mut si = self.args.clone();
+        if si.len() > 0 && self.args[0] == ArgTypes::Core {
+            args.push(quote! {core});
+            si.remove(0);
+        }
+        for (i, a) in si.iter().enumerate() {
             match a {
                 ArgTypes::Core => {
-                    args.extend(quote! {core});
+                    args.push(quote! {core});
                 }
                 ArgTypes::ISize => {
-                    args.extend(quote! {cmd.args[#i].as_isize()?});
+                    args.push(quote! {cmd.args[#i].as_isize()?});
                 }
             }
         }
 
         let mut inv = if self.ret.result {
-            quote! {let s = self.#ident(#args)?;}
+            quote! {let s = self.#ident (#(#args),*) ?;}
         } else {
-            quote! {let s = self.#ident(#args);}
+            quote! {let s = self.#ident (#(#args),*) ;}
         };
 
         if self.cargs.ignore_result {
@@ -214,10 +221,24 @@ fn parse_command_method(node: &str, method: &syn::ImplItemFn) -> Result<Option<C
                         args.push(ArgTypes::Core);
                     }
                 }
-                _ => {
+                syn::Type::Path(x) => {
+                    match x.path.segments.last().unwrap().ident.to_string().as_str() {
+                        "isize" => {
+                            args.push(ArgTypes::ISize);
+                        }
+                        t => {
+                            return Err(Error::Unsupported(format!(
+                                "unsupported argument type {:?} on command: {}",
+                                t, method.sig.ident
+                            )))
+                        }
+                    }
+                }
+                typ => {
                     return Err(Error::Unsupported(format!(
-                        "unsupported argument type on command: {}",
-                        quote!(method)
+                        "unsupported argument type {:?} on command: {}",
+                        quote! {#typ},
+                        method.sig.ident
                     )))
                 }
             },

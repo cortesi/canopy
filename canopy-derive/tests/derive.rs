@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use canopy::{
     self,
-    commands::{ArgTypes, CommandInvocation, CommandNode, ReturnSpec, ReturnTypes},
+    commands::{ArgTypes, Args, CommandInvocation, CommandNode, ReturnSpec, ReturnTypes},
     tutils::*,
     Result, StatefulNode,
 };
@@ -34,6 +34,7 @@ fn commands() {
         b_triggered: bool,
         c_triggered: bool,
         naked_str_triggered: bool,
+        f_core_isize: Option<isize>,
     }
 
     impl canopy::Node for Foo {}
@@ -64,6 +65,12 @@ fn commands() {
         #[command(ignore_result)]
         fn d(&mut self, _core: &dyn canopy::Core) -> Opaque {
             self.c_triggered = true;
+            Opaque {}
+        }
+
+        #[command(ignore_result)]
+        fn f_core_isize(&mut self, _core: &dyn canopy::Core, i: isize) -> Opaque {
+            self.f_core_isize = Some(i);
             Opaque {}
         }
 
@@ -118,6 +125,13 @@ fn commands() {
             },
             canopy::commands::CommandSpec {
                 node: "foo".try_into().unwrap(),
+                command: "f_core_isize".to_string(),
+                docs: "".to_string(),
+                ret: ReturnSpec::new(ReturnTypes::Void, false),
+                args: vec![ArgTypes::Core, ArgTypes::ISize],
+            },
+            canopy::commands::CommandSpec {
+                node: "foo".try_into().unwrap(),
                 command: "naked_str".to_string(),
                 docs: "".to_string(),
                 ret: ReturnSpec::new(ReturnTypes::String, false),
@@ -145,6 +159,7 @@ fn commands() {
         b_triggered: false,
         c_triggered: false,
         naked_str_triggered: false,
+        f_core_isize: None,
     };
 
     let mut dc = DummyCore {};
@@ -170,6 +185,17 @@ fn commands() {
     )
     .unwrap();
     assert!(f.c_triggered);
+
+    f.dispatch(
+        &mut dc,
+        &CommandInvocation {
+            node: "foo".try_into().unwrap(),
+            command: "f_core_isize".try_into().unwrap(),
+            args: vec![Args::ISize(3)],
+        },
+    )
+    .unwrap();
+    assert!(f.a_triggered);
 
     #[derive(canopy::StatefulNode)]
     struct Bar<N>

@@ -1,5 +1,6 @@
 use std::{cell::RefCell, collections::HashMap};
 
+use bitvec::vec;
 use rhai;
 
 use crate::{commands::*, error, Core, Node, NodeId, NodeName, Result};
@@ -68,7 +69,7 @@ type FnCallArgs<'a> = [&'a mut rhai::Dynamic];
 type ScriptResult<T> = std::result::Result<T, Box<rhai::EvalAltResult>>;
 
 /// This is a re-implementation of the Module::set_raw_fn from rhai. It turns out that set_raw_fn wants to assume that
-/// the function is a odule, which imposes some internal constraints on the number of arguments.
+/// the function is a module, which imposes some internal constraints on the number of arguments.
 fn set_pure_fn<T: rhai::Variant + Clone>(
     this: &mut rhai::Module,
     name: impl AsRef<str>,
@@ -80,7 +81,6 @@ fn set_pure_fn<T: rhai::Variant + Clone>(
     let f = move |ctx: Option<rhai::NativeCallContext>, args: &mut FnCallArgs| {
         func(ctx.unwrap(), args).map(rhai::Dynamic::from)
     };
-
     this.set_fn(
         name,
         namespace,
@@ -125,24 +125,53 @@ impl ScriptHost {
 
             let node = i.node.clone();
             let command = i.command.clone();
+
+            let arg_types = i.args.clone();
+            let mut rhai_arg_types = vec![];
+            for a in &arg_types {
+                match a {
+                    ArgTypes::Core => {}
+                    ArgTypes::ISize => {
+                        rhai_arg_types.push(rhai::plugin::TypeId::of::<isize>());
+                    }
+                }
+            }
+
             set_pure_fn(
                 m,
                 &i.command,
                 rhai::FnNamespace::Internal,
                 rhai::FnAccess::Public,
-                &[],
+                &rhai_arg_types,
                 move |_context, args| {
                     SCRIPT_GLOBAL.with(|g| {
                         let mut b = g.borrow_mut();
                         let v = b.as_mut().unwrap();
-                        let args = vec![];
 
-                        // I believe arg en is guaranteed by rhai!
+                        let mut ciargs = vec![];
+                        let mut arg_types = arg_types.clone();
+                        if arg_types.len() > 0 && arg_types[0] == ArgTypes::Core {
+                            ciargs.push(Args::Core);
+                            arg_types.remove(0);
+                        }
+                        // I believe this is guaranteed by rhai
+                        assert!(args.len() == arg_types.len());
+                        for (i, a) in arg_types.iter().enumerate() {
+                            match a {
+                                ArgTypes::Core => {
+                                    panic!("unexpected")
+                                }
+                                ArgTypes::ISize => {
+                                    // The type here should be guaranteed by rhai
+                                    ciargs.push(Args::ISize(args[i].as_int().unwrap() as isize));
+                                }
+                            }
+                        }
 
                         let ci = CommandInvocation {
                             node: node.clone(),
                             command: command.clone(),
-                            args,
+                            args: ciargs,
                         };
                         if let Some(ret) = dispatch(v.core, v.node_id, v.root, &ci).unwrap() {
                             Ok(match ret {

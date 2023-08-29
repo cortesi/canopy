@@ -14,6 +14,15 @@ pub enum Args {
     ISize(isize),
 }
 
+impl Args {
+    pub fn as_isize(&self) -> Result<isize> {
+        match self {
+            Args::ISize(i) => Ok(*i),
+            _ => Err(Error::Internal("Expected isize".into())),
+        }
+    }
+}
+
 /// The return type of a command.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReturnTypes {
@@ -174,8 +183,6 @@ impl CommandSet {
 
 #[cfg(test)]
 mod tests {
-    use bitvec::vec;
-
     use super::*;
     use crate as canopy;
     use crate::tutils::*;
