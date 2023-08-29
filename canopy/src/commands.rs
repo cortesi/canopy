@@ -2,6 +2,18 @@ use std::collections::HashMap;
 
 use crate::{postorder, preorder, Core, Error, Node, NodeId, NodeName, Result, StatefulNode, Walk};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ArgTypes {
+    Core,
+    ISize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Args {
+    Core,
+    ISize(isize),
+}
+
 /// The return type of a command.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReturnTypes {
@@ -38,6 +50,8 @@ pub struct CommandInvocation {
     pub node: NodeName,
     /// The name of the command.
     pub command: String,
+    /// Arguments to the command.
+    pub args: Vec<Args>,
 }
 
 /// CommandDefinition encapsulates the definition of a command that can be
@@ -54,8 +68,7 @@ pub struct CommandSpec {
     /// The return type of the command.
     pub ret: ReturnSpec,
 
-    /// Is the first argument to the underlying function a `Core` instance?
-    pub arg_core: bool,
+    pub args: Vec<ArgTypes>,
 }
 
 impl CommandSpec {
@@ -161,6 +174,8 @@ impl CommandSet {
 
 #[cfg(test)]
 mod tests {
+    use bitvec::vec;
+
     use super::*;
     use crate as canopy;
     use crate::tutils::*;
@@ -176,6 +191,7 @@ mod tests {
                 &CommandInvocation {
                     node: "bb_la".try_into()?,
                     command: "c_leaf".into(),
+                    args: vec![],
                 },
             )?;
             assert_eq!(state_path(), vec!["bb_la.c_leaf()"]);
@@ -188,6 +204,7 @@ mod tests {
                 &CommandInvocation {
                     node: "bb_la".try_into()?,
                     command: "c_leaf".into(),
+                    args: vec![],
                 },
             )?;
             assert!(state_path().is_empty());

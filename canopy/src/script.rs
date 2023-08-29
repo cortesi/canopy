@@ -122,20 +122,28 @@ impl ScriptHost {
                 modules.insert(i.node.clone(), m);
             }
             let m = modules.get_mut(&i.node).unwrap();
-            let ci = CommandInvocation {
-                node: i.node.clone(),
-                command: i.command.clone(),
-            };
+
+            let node = i.node.clone();
+            let command = i.command.clone();
             set_pure_fn(
                 m,
                 &i.command,
                 rhai::FnNamespace::Internal,
                 rhai::FnAccess::Public,
                 &[],
-                move |_context, _args| {
+                move |_context, args| {
                     SCRIPT_GLOBAL.with(|g| {
                         let mut b = g.borrow_mut();
                         let v = b.as_mut().unwrap();
+                        let args = vec![];
+
+                        // I believe arg en is guaranteed by rhai!
+
+                        let ci = CommandInvocation {
+                            node: node.clone(),
+                            command: command.clone(),
+                            args,
+                        };
                         if let Some(ret) = dispatch(v.core, v.node_id, v.root, &ci).unwrap() {
                             Ok(match ret {
                                 ReturnValue::Void => rhai::Dynamic::UNIT,

@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use canopy::{
     self,
-    commands::{CommandInvocation, CommandNode, ReturnSpec, ReturnTypes},
+    commands::{ArgTypes, CommandInvocation, CommandNode, ReturnSpec, ReturnTypes},
     tutils::*,
     Result, StatefulNode,
 };
@@ -93,49 +93,49 @@ fn commands() {
                 command: "a".to_string(),
                 docs: "This is a comment.\nMultiline too!".to_string(),
                 ret: ReturnSpec::new(ReturnTypes::Void, true),
-                arg_core: true,
+                args: vec![ArgTypes::Core],
             },
             canopy::commands::CommandSpec {
                 node: "foo".try_into().unwrap(),
                 command: "b".to_string(),
                 docs: "".to_string(),
                 ret: ReturnSpec::new(ReturnTypes::Void, true),
-                arg_core: true,
+                args: vec![ArgTypes::Core],
             },
             canopy::commands::CommandSpec {
                 node: "foo".try_into().unwrap(),
                 command: "c".to_string(),
                 docs: "".to_string(),
                 ret: ReturnSpec::new(ReturnTypes::Void, false),
-                arg_core: true,
+                args: vec![ArgTypes::Core],
             },
             canopy::commands::CommandSpec {
                 node: "foo".try_into().unwrap(),
                 command: "d".to_string(),
                 docs: "".to_string(),
                 ret: ReturnSpec::new(ReturnTypes::Void, false),
-                arg_core: true,
+                args: vec![ArgTypes::Core],
             },
             canopy::commands::CommandSpec {
                 node: "foo".try_into().unwrap(),
                 command: "naked_str".to_string(),
                 docs: "".to_string(),
                 ret: ReturnSpec::new(ReturnTypes::String, false),
-                arg_core: true,
+                args: vec![ArgTypes::Core],
             },
             canopy::commands::CommandSpec {
                 node: "foo".try_into().unwrap(),
                 command: "result_str".to_string(),
                 docs: "".to_string(),
                 ret: ReturnSpec::new(ReturnTypes::String, true),
-                arg_core: true,
+                args: vec![ArgTypes::Core],
             },
             canopy::commands::CommandSpec {
                 node: "foo".try_into().unwrap(),
                 command: "nocore".to_string(),
                 docs: "".to_string(),
                 ret: ReturnSpec::new(ReturnTypes::String, true),
-                arg_core: false,
+                args: vec![],
             }
         ]
     );
@@ -154,6 +154,7 @@ fn commands() {
         &CommandInvocation {
             node: "foo".try_into().unwrap(),
             command: "a".try_into().unwrap(),
+            args: vec![],
         },
     )
     .unwrap();
@@ -164,6 +165,7 @@ fn commands() {
         &CommandInvocation {
             node: "foo".try_into().unwrap(),
             command: "c".try_into().unwrap(),
+            args: vec![],
         },
     )
     .unwrap();
@@ -198,7 +200,7 @@ fn commands() {
             command: "a".to_string(),
             docs: "".to_string(),
             ret: ReturnSpec::new(ReturnTypes::Void, true),
-            arg_core: true,
+            args: vec![ArgTypes::Core],
         },]
     );
 }

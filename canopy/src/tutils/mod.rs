@@ -40,6 +40,7 @@ impl TFixed {
 
 impl ListItem for TFixed {}
 
+/// Run a function on our standard dummy app.
 pub fn run(func: impl FnOnce(&mut Canopy, TestRender, ttree::R) -> Result<()>) -> Result<()> {
     let (_, tr) = TestRender::create();
     let mut root = ttree::R::new();
