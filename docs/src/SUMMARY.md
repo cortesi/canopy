@@ -2,11 +2,12 @@
 
 - [Overview](./overview.md)
 - [Nodes](./nodes.md)
+    - [State](./state.md)
     - [Commands](./commands.md)
     - [Layout](./layout.md)
-    - [Focus](./focus.md)
     - [Polling](./polling.md)
     - [Cursor](./cursor.md)
+- [Focus](./focus.md)
 - [Event Handling](./events.md)
     - [Key events](./keyboard.md)
     - [Mouse events](./mouse.md)

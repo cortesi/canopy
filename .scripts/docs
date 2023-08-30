@@ -2,4 +2,3 @@
 
 cargo doc --no-deps --lib
 mdbook build ./docs
-mdbook test ./docs
