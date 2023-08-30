@@ -1297,14 +1297,34 @@
 <a href="#1297" id="1297">1297</a>
 <a href="#1298" id="1298">1298</a>
 <a href="#1299" id="1299">1299</a>
+<a href="#1300" id="1300">1300</a>
+<a href="#1301" id="1301">1301</a>
+<a href="#1302" id="1302">1302</a>
+<a href="#1303" id="1303">1303</a>
+<a href="#1304" id="1304">1304</a>
+<a href="#1305" id="1305">1305</a>
+<a href="#1306" id="1306">1306</a>
+<a href="#1307" id="1307">1307</a>
+<a href="#1308" id="1308">1308</a>
+<a href="#1309" id="1309">1309</a>
+<a href="#1310" id="1310">1310</a>
+<a href="#1311" id="1311">1311</a>
+<a href="#1312" id="1312">1312</a>
+<a href="#1313" id="1313">1313</a>
+<a href="#1314" id="1314">1314</a>
+<a href="#1315" id="1315">1315</a>
+<a href="#1316" id="1316">1316</a>
+<a href="#1317" id="1317">1317</a>
+<a href="#1318" id="1318">1318</a>
+<a href="#1319" id="1319">1319</a>
+<a href="#1320" id="1320">1320</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{io::Write, process, sync::mpsc};
 
 <span class="kw">use </span>comfy_table::{ContentArrangement, Table};
 
 <span class="kw">use crate</span>::{
-    commands,
-    control::BackendControl,
-    error,
+    backend::BackendControl,
+    commands, error,
     event::{key, mouse, Event},
     geom::{Coverage, Direction, Expanse, Point, Rect},
     inputmap,
@@ -1348,25 +1368,62 @@
     </span>.value())
 }
 
-<span class="kw">pub trait </span>Core {
-    <span class="kw">fn </span>is_on_focus_path(<span class="kw-2">&amp;</span><span class="self">self</span>, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; bool;
-    <span class="kw">fn </span>is_focused(<span class="kw-2">&amp;</span><span class="self">self</span>, n: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Node) -&gt; bool;
-    <span class="kw">fn </span>is_focus_ancestor(<span class="kw-2">&amp;</span><span class="self">self</span>, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; bool;
-    <span class="kw">fn </span>focus_area(<span class="kw-2">&amp;</span><span class="self">self</span>, root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Option</span>&lt;Rect&gt;;
-    <span class="kw">fn </span>focus_depth(<span class="kw-2">&amp;</span><span class="self">self</span>, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; usize;
-    <span class="kw">fn </span>focus_down(<span class="kw-2">&amp;mut </span><span class="self">self</span>, root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt;;
-    <span class="kw">fn </span>focus_first(<span class="kw-2">&amp;mut </span><span class="self">self</span>, root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt;;
-    <span class="kw">fn </span>focus_left(<span class="kw-2">&amp;mut </span><span class="self">self</span>, root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt;;
-    <span class="kw">fn </span>focus_next(<span class="kw-2">&amp;mut </span><span class="self">self</span>, root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt;;
-    <span class="kw">fn </span>focus_path(<span class="kw-2">&amp;</span><span class="self">self</span>, root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; Path;
-    <span class="kw">fn </span>focus_prev(<span class="kw-2">&amp;mut </span><span class="self">self</span>, root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt;;
-    <span class="kw">fn </span>focus_right(<span class="kw-2">&amp;mut </span><span class="self">self</span>, root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt;;
-    <span class="kw">fn </span>focus_up(<span class="kw-2">&amp;mut </span><span class="self">self</span>, root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt;;
-    <span class="kw">fn </span>needs_render(<span class="kw-2">&amp;</span><span class="self">self</span>, n: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Node) -&gt; bool;
-    <span class="kw">fn </span>set_focus(<span class="kw-2">&amp;mut </span><span class="self">self</span>, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node);
-    <span class="kw">fn </span>focus_dir(<span class="kw-2">&amp;mut </span><span class="self">self</span>, root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, dir: Direction) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt;;
-    <span class="kw">fn </span>taint(<span class="kw-2">&amp;mut </span><span class="self">self</span>, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node);
-    <span class="kw">fn </span>taint_tree(<span class="kw-2">&amp;mut </span><span class="self">self</span>, e: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node);
+<span class="doccomment">/// The API exposed to nodes by Canopy.
+</span><span class="kw">pub trait </span>Core {
+    <span class="doccomment">/// Is the specified node on the focus path? A node is on the focus path if it
+    /// has focus, or if it&#39;s the ancestor of a node with focus.
+    </span><span class="kw">fn </span>is_on_focus_path(<span class="kw-2">&amp;</span><span class="self">self</span>, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; bool;
+
+    <span class="doccomment">/// Does the node have focus?
+    </span><span class="kw">fn </span>is_focused(<span class="kw-2">&amp;</span><span class="self">self</span>, n: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Node) -&gt; bool;
+
+    <span class="doccomment">/// Get the Rect of the screen area that currently has focus.
+    </span><span class="kw">fn </span>focus_area(<span class="kw-2">&amp;</span><span class="self">self</span>, root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Option</span>&lt;Rect&gt;;
+
+    <span class="doccomment">/// What is the depth of the specified node in the focus path?
+    </span><span class="kw">fn </span>focus_depth(<span class="kw-2">&amp;</span><span class="self">self</span>, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; usize;
+
+    <span class="doccomment">/// Move focus downward of the currently focused node within the subtree at root.
+    </span><span class="kw">fn </span>focus_down(<span class="kw-2">&amp;mut </span><span class="self">self</span>, root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt;;
+
+    <span class="doccomment">/// Focus the first node that accepts focus in the pre-order traversal of the subtree at root.
+    </span><span class="kw">fn </span>focus_first(<span class="kw-2">&amp;mut </span><span class="self">self</span>, root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt;;
+
+    <span class="doccomment">/// Move focus to the left of the currently focused node within the subtree at root.
+    </span><span class="kw">fn </span>focus_left(<span class="kw-2">&amp;mut </span><span class="self">self</span>, root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt;;
+
+    <span class="doccomment">/// Focus the next node in the pre-order traversal of root. If no node with focus is found, we focus the first node
+    /// we can find instead.
+    </span><span class="kw">fn </span>focus_next(<span class="kw-2">&amp;mut </span><span class="self">self</span>, root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt;;
+
+    <span class="doccomment">/// Return the focus path for the subtree under `root`.
+    </span><span class="kw">fn </span>focus_path(<span class="kw-2">&amp;</span><span class="self">self</span>, root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; Path;
+
+    <span class="doccomment">/// Focus the previous node in the pre-order traversal of `root`. If no node with focus is found, we focus the first
+    /// node we can find instead.
+    </span><span class="kw">fn </span>focus_prev(<span class="kw-2">&amp;mut </span><span class="self">self</span>, root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt;;
+
+    <span class="doccomment">/// Move focus to  right of the currently focused node within the subtree at root.
+    </span><span class="kw">fn </span>focus_right(<span class="kw-2">&amp;mut </span><span class="self">self</span>, root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt;;
+
+    <span class="doccomment">/// Move focus upward of the currently focused node within the subtree at root.
+    </span><span class="kw">fn </span>focus_up(<span class="kw-2">&amp;mut </span><span class="self">self</span>, root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt;;
+
+    <span class="doccomment">/// Does the node need to render in the next sweep? This checks if the node is currently hidden, and if not, signals
+    /// that we should render if the node is tainted, its focus status has changed, or if it is forcing a render.
+    </span><span class="kw">fn </span>needs_render(<span class="kw-2">&amp;</span><span class="self">self</span>, n: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Node) -&gt; bool;
+
+    <span class="doccomment">/// Focus a node.
+    </span><span class="kw">fn </span>set_focus(<span class="kw-2">&amp;mut </span><span class="self">self</span>, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node);
+
+    <span class="doccomment">/// Move focus in a specified direction within the subtree at root.
+    </span><span class="kw">fn </span>focus_dir(<span class="kw-2">&amp;mut </span><span class="self">self</span>, root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, dir: Direction) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt;;
+
+    <span class="doccomment">/// Taint a node to signal that it should be re-rendered.
+    </span><span class="kw">fn </span>taint(<span class="kw-2">&amp;mut </span><span class="self">self</span>, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node);
+
+    <span class="doccomment">/// Taint the entire subtree under a node.
+    </span><span class="kw">fn </span>taint_tree(<span class="kw-2">&amp;mut </span><span class="self">self</span>, e: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node);
 
     <span class="doccomment">/// Start the backend renderer.
     </span><span class="kw">fn </span>start(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt;;
@@ -1530,16 +1587,6 @@
             })
         })<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(Outcome::Handle)
-    }
-
-    <span class="doccomment">/// A node is on the focus path if it does not have focus itself, but some
-    /// node below it does.
-    </span><span class="kw">fn </span>is_focus_ancestor(<span class="kw-2">&amp;</span><span class="self">self</span>, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; bool {
-        <span class="kw">if </span><span class="self">self</span>.is_focused(n) {
-            <span class="bool-val">false
-        </span>} <span class="kw">else </span>{
-            <span class="self">self</span>.is_on_focus_path(n)
-        }
     }
 
     <span class="doccomment">/// Focus the next node in the pre-order traversal of root. If no node with
@@ -2504,20 +2551,15 @@
 
             c.focus_next(<span class="kw-2">&amp;mut </span>root)<span class="question-mark">?</span>;
             <span class="macro">assert!</span>(c.is_focused(<span class="kw-2">&amp;</span>root.a));
-            <span class="macro">assert!</span>(c.is_focus_ancestor(<span class="kw-2">&amp;mut </span>root));
-            <span class="macro">assert!</span>(!c.is_focus_ancestor(<span class="kw-2">&amp;mut </span>root.a));
 
             c.focus_next(<span class="kw-2">&amp;mut </span>root)<span class="question-mark">?</span>;
             <span class="macro">assert!</span>(c.is_focused(<span class="kw-2">&amp;</span>root.a.a));
-            <span class="macro">assert!</span>(c.is_focus_ancestor(<span class="kw-2">&amp;mut </span>root.a));
             c.focus_next(<span class="kw-2">&amp;mut </span>root)<span class="question-mark">?</span>;
             <span class="macro">assert!</span>(c.is_focused(<span class="kw-2">&amp;</span>root.a.b));
-            <span class="macro">assert!</span>(c.is_focus_ancestor(<span class="kw-2">&amp;mut </span>root.a));
             c.focus_next(<span class="kw-2">&amp;mut </span>root)<span class="question-mark">?</span>;
             <span class="macro">assert!</span>(c.is_focused(<span class="kw-2">&amp;</span>root.b));
 
             c.set_focus(<span class="kw-2">&amp;mut </span>root.b.b);
-            <span class="macro">assert!</span>(c.is_focus_ancestor(<span class="kw-2">&amp;mut </span>root.b));
             c.focus_next(<span class="kw-2">&amp;mut </span>root)<span class="question-mark">?</span>;
             <span class="macro">assert!</span>(c.is_focused(<span class="kw-2">&amp;</span>root));
             <span class="prelude-val">Ok</span>(())

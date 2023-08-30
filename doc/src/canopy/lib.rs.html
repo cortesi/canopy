@@ -34,44 +34,40 @@
 <a href="#34" id="34">34</a>
 <a href="#35" id="35">35</a>
 <a href="#36" id="36">36</a>
-<a href="#37" id="37">37</a>
-<a href="#38" id="38">38</a>
 </pre></div><pre class="rust"><code><span class="attr">#![allow(clippy::new_without_default)]
 
 </span><span class="kw">pub use </span>canopy_derive::{command, derive_commands};
 
-<span class="kw">mod </span>binder;
 <span class="kw">mod </span>canopy;
-<span class="kw">mod </span>control;
+<span class="kw">mod </span>error;
 <span class="kw">mod </span>inputmap;
 <span class="kw">mod </span>node;
 <span class="kw">mod </span>poll;
 <span class="kw">mod </span>render;
 <span class="kw">mod </span>root;
 <span class="kw">mod </span>state;
-<span class="kw">pub mod </span>tutils;
+<span class="kw">mod </span>viewport;
 
 <span class="kw">pub mod </span>backend;
+<span class="kw">mod </span>binder;
 <span class="kw">pub mod </span>commands;
 <span class="kw">pub mod </span>cursor;
-<span class="kw">pub mod </span>error;
 <span class="kw">pub mod </span>event;
 <span class="kw">pub mod </span>geom;
 <span class="kw">pub mod </span>inspector;
 <span class="kw">pub mod </span>path;
 <span class="kw">pub mod </span>script;
 <span class="kw">pub mod </span>style;
-<span class="kw">pub mod </span>viewport;
+<span class="kw">pub mod </span>tutils;
 <span class="kw">pub mod </span>widgets;
 
 <span class="kw">pub use </span><span class="kw">crate</span>::canopy::<span class="kw-2">*</span>;
 <span class="kw">pub use </span>binder::<span class="kw-2">*</span>;
-<span class="kw">pub use </span>commands::{CommandNode, CommandSpec};
-<span class="kw">pub use </span>control::BackendControl;
-<span class="kw">pub use </span>error::{Error, <span class="prelude-ty">Result</span>};
+<span class="kw">pub use </span>error::<span class="kw-2">*</span>;
 <span class="kw">pub use </span>node::<span class="kw-2">*</span>;
-<span class="kw">pub use </span>render::Render;
 <span class="kw">pub use </span>root::<span class="kw-2">*</span>;
+
+<span class="kw">pub use </span>render::Render;
 <span class="kw">pub use </span>state::{NodeId, NodeName, NodeState, StatefulNode};
 <span class="kw">pub use </span>viewport::ViewPort;
 </code></pre></div></section></main></body></html>

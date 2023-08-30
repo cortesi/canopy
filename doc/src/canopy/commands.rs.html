@@ -252,9 +252,17 @@
 <a href="#252" id="252">252</a>
 <a href="#253" id="253">253</a>
 <a href="#254" id="254">254</a>
+<a href="#255" id="255">255</a>
+<a href="#256" id="256">256</a>
+<a href="#257" id="257">257</a>
+<a href="#258" id="258">258</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::collections::HashMap;
 
-<span class="kw">use crate</span>::{postorder, preorder, Core, Error, Node, NodeId, NodeName, <span class="prelude-ty">Result</span>, StatefulNode, Walk};
+<span class="kw">use crate</span>::{
+    postorder, preorder,
+    state::{NodeName, StatefulNode},
+    Core, Error, Node, NodeId, <span class="prelude-ty">Result</span>, Walk,
+};
 
 <span class="attr">#[derive(Debug, Clone, PartialEq, Eq)]
 </span><span class="kw">pub enum </span>ArgTypes {
@@ -440,7 +448,7 @@
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
     <span class="kw">use crate as </span>canopy;
     <span class="kw">use </span><span class="kw">crate</span>::tutils::<span class="kw-2">*</span>;
-    <span class="kw">use crate</span>::{command, derive_commands, CommandNode, <span class="prelude-ty">Result</span>, StatefulNode};
+    <span class="kw">use crate</span>::{command, derive_commands, state::StatefulNode, <span class="prelude-ty">Result</span>};
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>tdispatch() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {

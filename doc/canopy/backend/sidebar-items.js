@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["crossterm","test"]};
+window.SIDEBAR_ITEMS = {"mod":["crossterm","test"],"trait":["BackendControl"]};
