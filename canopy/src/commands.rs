@@ -91,15 +91,10 @@ impl CommandSpec {
     }
 }
 
-/// The CommandNode trait is implemented by all Nodes to expose the set of
-/// supported commands. With rare exceptions, this is done with the `commands`
-/// macro.
+/// The CommandNode trait is implemented by all Nodes to expose the set of supported commands. With rare exceptions,
+/// this is done with the `commands` macro.
 pub trait CommandNode: StatefulNode {
-    /// Returns a list of commands for this node. If a name is specified, it
-    /// is used as the node name for the commands, otherwise we use the struct
-    /// name converted to snake case. This method is used to pre-load our key
-    /// binding map, and the optional name specifier lets us cater for nodes
-    /// that may be renamed at runtime.
+    /// Return a list of commands for this node.
     fn commands() -> Vec<CommandSpec>
     where
         Self: Sized;

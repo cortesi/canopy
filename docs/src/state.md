@@ -1,4 +1,4 @@
-# State
+# trait StatefulNode
 
 Canopy tracks housekeeping data for each node - this includes whether the node has focus, the size and location of the
 node, whether the node has been tainted, and so on. This data is tracked in an opaque structure called `NodeState`, and
@@ -28,5 +28,6 @@ struct MyNode {
 }
 ```
 
-The derive macro takes the name of the struct as the node name - in this case it would be `MyNode`.
+The derive macro takes the name of the struct converted to snake case as the node name - in this case it would be
+`my_node`.
 

@@ -52,7 +52,6 @@ impl<T> Walk<T> {
 }
 
 #[allow(unused_variables)]
-// ANCHOR: node
 /// Nodes are the basic building-blocks of a Canopy UI. They are composed in a tree, with each node responsible for
 /// managing its own children.
 pub trait Node: StatefulNode + CommandNode {
@@ -122,8 +121,6 @@ pub trait Node: StatefulNode + CommandNode {
         Ok(())
     }
 }
-
-// ANCHOR_END: node
 
 /// Adjust a node so that it fits a viewport. This fits the node to the
 /// viewport's virtual size, then adjusts the node's view to place as much of it
