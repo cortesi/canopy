@@ -453,16 +453,6 @@
 <a href="#453" id="453">453</a>
 <a href="#454" id="454">454</a>
 <a href="#455" id="455">455</a>
-<a href="#456" id="456">456</a>
-<a href="#457" id="457">457</a>
-<a href="#458" id="458">458</a>
-<a href="#459" id="459">459</a>
-<a href="#460" id="460">460</a>
-<a href="#461" id="461">461</a>
-<a href="#462" id="462">462</a>
-<a href="#463" id="463">463</a>
-<a href="#464" id="464">464</a>
-<a href="#465" id="465">465</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::time::Duration;
 
 <span class="kw">use crate</span>::{
@@ -516,83 +506,71 @@
     }
 }
 
-<span class="doccomment">/// Nodes are the basic building-blocks of a Canopy UI. They are composed in a
-/// tree, with each node responsible for managing its own children.
-</span><span class="attr">#[allow(unused_variables)]
+<span class="attr">#[allow(unused_variables)]
+</span><span class="comment">// ANCHOR: node
+</span><span class="doccomment">/// Nodes are the basic building-blocks of a Canopy UI. They are composed in a tree, with each node responsible for
+/// managing its own children.
 </span><span class="kw">pub trait </span>Node: StatefulNode + CommandNode {
-    <span class="doccomment">/// Force the node to render in the next sweep. Over-riding this method
-    /// should only be needed rarely, for instance when a container node (e.g. a
-    /// frame) needs to redraw if a child node changes.
+    <span class="doccomment">/// Force the node to render in the next sweep. Over-riding this method should only be needed rarely, for instance
+    /// when a container node (e.g. a frame) needs to redraw if a child node changes.
     </span><span class="kw">fn </span>force_render(<span class="kw-2">&amp;</span><span class="self">self</span>, c: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Core) -&gt; bool {
         <span class="bool-val">false
     </span>}
 
-    <span class="doccomment">/// Called for each node on the focus path, after each render sweep. The
-    /// first node that returns a ``cursor::Cursor`` specification controls the
-    /// cursor. If no node returns a cursor, cursor display is disabled.
+    <span class="doccomment">/// Called for each node on the focus path, after each render sweep. The first node that returns a
+    /// ``cursor::Cursor`` specification controls the cursor. If no node returns a cursor, cursor display is disabled.
     </span><span class="kw">fn </span>cursor(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;cursor::Cursor&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="doccomment">/// Attempt to focus this node. If the node accepts focus, it should return
-    /// true, and if not return false. The default implementation returns false.
+    <span class="doccomment">/// Attempt to focus this node. If the node accepts focus, it should return true, and if not return false. The
+    /// default implementation returns false.
     </span><span class="kw">fn </span>accept_focus(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; bool {
         <span class="bool-val">false
     </span>}
 
-    <span class="doccomment">/// Handle a key input event. This event is only called for nodes that are
-    /// on the focus path. The default implementation ignores input.
+    <span class="doccomment">/// Handle a key input event. This event is only called for nodes that are on the focus path. The default
+    /// implementation ignores input.
     </span><span class="kw">fn </span>handle_key(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core, k: key::Key) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt; {
         <span class="prelude-val">Ok</span>(Outcome::Ignore)
     }
 
-    <span class="doccomment">/// Handle a mouse input event. The default implementation ignores mouse
-    /// input.
+    <span class="doccomment">/// Handle a mouse input event. The default implementation ignores mouse input.
     </span><span class="kw">fn </span>handle_mouse(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core, k: mouse::MouseEvent) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt; {
         <span class="prelude-val">Ok</span>(Outcome::Ignore)
     }
 
-    <span class="doccomment">/// Call a closure on this node&#39;s children. If any child handler returns an
-    /// error, processing terminates without visiting the remaining children.
-    /// The order in which nodes are processed should match intuitive
-    /// next/previous relationships. The default implementation assumes this
-    /// node has no children, and just returns.
+    <span class="doccomment">/// Call a closure on this node&#39;s children. If any child handler returns an error, processing terminates without
+    /// visiting the remaining children. The order in which nodes are processed should match intuitive next/previous
+    /// relationships. The default implementation assumes this node has no children, and just returns.
     </span><span class="kw">fn </span>children(<span class="kw-2">&amp;mut </span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>FnMut(<span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="doccomment">/// Compute the outer size of the node if it had to be displayed in the
-    /// target area. In practice, nodes will usually either constrain themselves
-    /// based on the width or the height of the target area, or neither, but not
-    /// both. The resulting size may be smaller or larger than the target. If
-    /// non-trivial computation is done to compute the size (e.g. reflowing
-    /// text), it should be cached for use by future calls. This method may be
-    /// called multiple times for a given node during a render sweep, so
-    /// re-fitting to the same size should be cheap and return consistent
-    /// results. This function should not change the node&#39;s viewport parameters
-    /// itself.
+    <span class="doccomment">/// Compute the outer size of the node if it had to be displayed in the target area. In practice, nodes will usually
+    /// either constrain themselves based on the width or the height of the target area, or neither, but not both. The
+    /// resulting size may be smaller or larger than the target. If non-trivial computation is done to compute the size
+    /// (e.g. reflowing text), it should be cached for use by future calls. This method may be called multiple times for
+    /// a given node during a render sweep, so re-fitting to the same size should be cheap and return consistent
+    /// results. This function should not change the node&#39;s viewport parameters itself.
     ///
     /// The default implementation just returns the target value.
     </span><span class="kw">fn </span>fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, target: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;Expanse&gt; {
         <span class="prelude-val">Ok</span>(target)
     }
 
-    <span class="doccomment">/// The scheduled poll endpoint. This function is called for every node the
-    /// first time it is seen during the pre-render sweep. Each time the
-    /// function returns a duration, a subsequent call is scheduled. If the
-    /// function returns None, the `poll` function is never called again. The
-    /// default implementation returns `None`.
+    <span class="doccomment">/// The scheduled poll endpoint. This function is called for every node the first time it is seen during the
+    /// pre-render sweep. Each time the function returns a duration, a subsequent call is scheduled. If the function
+    /// returns None, the `poll` function is never called again. The default implementation returns `None`.
     </span><span class="kw">fn </span>poll(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core) -&gt; <span class="prelude-ty">Option</span>&lt;Duration&gt; {
         <span class="prelude-val">None
     </span>}
 
     <span class="doccomment">/// Render this widget. The render method should:
     ///
-    /// - Lay out any child nodes by manipulating their viewports. This will
-    ///   often involve calling the `fit` method on the child nodes to get their
-    ///   dimensions.
-    /// - Render itself to screen. This node&#39;s viewport will already have been
-    ///   set by a parent.
+    /// - Lay out any child nodes by manipulating their viewports. This will often involve calling the `fit` method on
+    ///   the child nodes to get their dimensions.
+    /// - Render itself to screen. This node&#39;s viewport will already have been set by a parent.
     ///
     /// The default implementation does nothing.
     </span><span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Core, r: <span class="kw-2">&amp;mut </span>Render) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
@@ -600,7 +578,9 @@
     }
 }
 
-<span class="doccomment">/// Adjust a node so that it fits a viewport. This fits the node to the
+<span class="comment">// ANCHOR_END: node
+
+</span><span class="doccomment">/// Adjust a node so that it fits a viewport. This fits the node to the
 /// viewport&#39;s virtual size, then adjusts the node&#39;s view to place as much of it
 /// within the viewport&#39;s screen rectangle as possible.
 </span><span class="kw">pub fn </span>fit(n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, parent_vp: ViewPort) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {

@@ -229,7 +229,7 @@
     <span class="attr">#[command]
     </span><span class="doccomment">/// Exit from the program, restoring terminal state. If the inspector is
     /// open, exit the inspector instead.
-    </span><span class="kw">fn </span>quit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+    </span><span class="kw">pub fn </span>quit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="kw">if </span><span class="self">self</span>.inspector_active {
             <span class="self">self</span>.hide_inspector(c)<span class="question-mark">?</span>;
         } <span class="kw">else </span>{
@@ -240,42 +240,42 @@
 
     <span class="attr">#[command]
     </span><span class="doccomment">/// Focus the next node in a pre-order traversal of the app.
-    </span><span class="kw">fn </span>focus_next(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+    </span><span class="kw">pub fn </span>focus_next(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         c.focus_next(<span class="self">self</span>)<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 
     <span class="attr">#[command]
     </span><span class="doccomment">/// Focus the next node in a pre-order traversal of the app.
-    </span><span class="kw">fn </span>focus_prev(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+    </span><span class="kw">pub fn </span>focus_prev(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         c.focus_prev(<span class="self">self</span>)<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 
     <span class="attr">#[command]
     </span><span class="doccomment">/// Shift focus right.
-    </span><span class="kw">fn </span>focus_right(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+    </span><span class="kw">pub fn </span>focus_right(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         c.focus_right(<span class="self">self</span>)<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 
     <span class="attr">#[command]
     </span><span class="doccomment">/// Shift focus left.
-    </span><span class="kw">fn </span>focus_left(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+    </span><span class="kw">pub fn </span>focus_left(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         c.focus_left(<span class="self">self</span>)<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 
     <span class="attr">#[command]
     </span><span class="doccomment">/// Shift focus up.
-    </span><span class="kw">fn </span>focus_up(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+    </span><span class="kw">pub fn </span>focus_up(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         c.focus_up(<span class="self">self</span>)<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 
     <span class="attr">#[command]
     </span><span class="doccomment">/// Shift focus down.
-    </span><span class="kw">fn </span>focus_down(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+    </span><span class="kw">pub fn </span>focus_down(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         c.focus_down(<span class="self">self</span>)<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
