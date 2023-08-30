@@ -450,9 +450,6 @@
 <a href="#450" id="450">450</a>
 <a href="#451" id="451">451</a>
 <a href="#452" id="452">452</a>
-<a href="#453" id="453">453</a>
-<a href="#454" id="454">454</a>
-<a href="#455" id="455">455</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::time::Duration;
 
 <span class="kw">use crate</span>::{
@@ -507,7 +504,6 @@
 }
 
 <span class="attr">#[allow(unused_variables)]
-</span><span class="comment">// ANCHOR: node
 </span><span class="doccomment">/// Nodes are the basic building-blocks of a Canopy UI. They are composed in a tree, with each node responsible for
 /// managing its own children.
 </span><span class="kw">pub trait </span>Node: StatefulNode + CommandNode {
@@ -578,9 +574,7 @@
     }
 }
 
-<span class="comment">// ANCHOR_END: node
-
-</span><span class="doccomment">/// Adjust a node so that it fits a viewport. This fits the node to the
+<span class="doccomment">/// Adjust a node so that it fits a viewport. This fits the node to the
 /// viewport&#39;s virtual size, then adjusts the node&#39;s view to place as much of it
 /// within the viewport&#39;s screen rectangle as possible.
 </span><span class="kw">pub fn </span>fit(n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, parent_vp: ViewPort) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {

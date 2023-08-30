@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Commands - Canopy Manual</title>
+        <title>trait CommandNode - Canopy Manual</title>
 
 
         <!-- Custom HTML head -->
@@ -83,7 +83,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded "><a href="overview.html"><strong aria-hidden="true">1.</strong> Overview</a></li><li class="chapter-item expanded "><a href="nodes.html"><strong aria-hidden="true">2.</strong> Nodes</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="state.html"><strong aria-hidden="true">2.1.</strong> State</a></li><li class="chapter-item expanded "><a href="commands.html" class="active"><strong aria-hidden="true">2.2.</strong> Commands</a></li><li class="chapter-item expanded "><a href="layout.html"><strong aria-hidden="true">2.3.</strong> Layout</a></li><li class="chapter-item expanded "><a href="polling.html"><strong aria-hidden="true">2.4.</strong> Polling</a></li><li class="chapter-item expanded "><a href="cursor.html"><strong aria-hidden="true">2.5.</strong> Cursor</a></li></ol></li><li class="chapter-item expanded "><a href="focus.html"><strong aria-hidden="true">3.</strong> Focus</a></li><li class="chapter-item expanded "><a href="events.html"><strong aria-hidden="true">4.</strong> Event Handling</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="keyboard.html"><strong aria-hidden="true">4.1.</strong> Key events</a></li><li class="chapter-item expanded "><a href="mouse.html"><strong aria-hidden="true">4.2.</strong> Mouse events</a></li><li class="chapter-item expanded "><a href="lifecycle.html"><strong aria-hidden="true">4.3.</strong> Lifecycle events</a></li><li class="chapter-item expanded "><a href="bindings.html"><strong aria-hidden="true">4.4.</strong> Binding system</a></li></ol></li><li class="chapter-item expanded "><a href="scripting.html"><strong aria-hidden="true">5.</strong> Scripting</a></li><li class="chapter-item expanded "><a href="styling.html"><strong aria-hidden="true">6.</strong> Themes and Styling</a></li><li class="chapter-item expanded "><a href="widgets.html"><strong aria-hidden="true">7.</strong> Widget Library</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded "><a href="overview.html"><strong aria-hidden="true">1.</strong> Overview</a></li><li class="chapter-item expanded "><a href="nodes.html"><strong aria-hidden="true">2.</strong> Nodes</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="state.html"><strong aria-hidden="true">2.1.</strong> trait StatefulNode</a></li><li class="chapter-item expanded "><a href="commands.html" class="active"><strong aria-hidden="true">2.2.</strong> trait CommandNode</a></li><li class="chapter-item expanded "><a href="nodetrait.html"><strong aria-hidden="true">2.3.</strong> trait Node</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="layout.html"><strong aria-hidden="true">2.3.1.</strong> Layout and Rendering</a></li><li class="chapter-item expanded "><a href="polling.html"><strong aria-hidden="true">2.3.2.</strong> Polling</a></li><li class="chapter-item expanded "><a href="cursor.html"><strong aria-hidden="true">2.3.3.</strong> Cursor</a></li><li class="chapter-item expanded "><a href="keyboard.html"><strong aria-hidden="true">2.3.4.</strong> Key events</a></li><li class="chapter-item expanded "><a href="mouse.html"><strong aria-hidden="true">2.3.5.</strong> Mouse events</a></li></ol></li></ol></li><li class="chapter-item expanded "><a href="focus.html"><strong aria-hidden="true">3.</strong> Focus</a></li><li class="chapter-item expanded "><a href="bindings.html"><strong aria-hidden="true">4.</strong> Binding system</a></li><li class="chapter-item expanded "><a href="scripting.html"><strong aria-hidden="true">5.</strong> Scripting</a></li><li class="chapter-item expanded "><a href="styling.html"><strong aria-hidden="true">6.</strong> Themes and Styling</a></li><li class="chapter-item expanded "><a href="widgets.html"><strong aria-hidden="true">7.</strong> Widget Library</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -169,7 +169,86 @@
 
                 <div id="content" class="content">
                     <main>
-                        
+                        <h1 id="trait-commandnode"><a class="header" href="#trait-commandnode">trait CommandNode</a></h1>
+<p>Commands are at the driver for much of Canopy's flexibility, and are the core mechanism for interacting with nodes. To
+support commands, nodes implement the deceptively simple <a href="doc/canopy/commands/trait.CommandNode.html">CommandNode</a>
+trait. There are only two methods that need to be implemented to satisfy it:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn commands() -&gt; Vec&lt;CommandSpec&gt;
+    where Self: Sized;
+
+fn dispatch(
+    &amp;mut self,
+    c: &amp;mut dyn Core,
+    cmd: &amp;CommandInvocation
+) -&gt; Result&lt;ReturnValue&gt;;
+<span class="boring">}</span></code></pre></pre>
+<p>The <code>commands</code> function returns a list of command specifications - that is commands that are supported by this node.
+Each <code>CommandSpec</code> has a name, a description, and a type command signature. The converse of this is the <code>dispatch</code>
+function, which takes a <code>CommandInvocation</code> specifcation, and runs the command on the node. Although these functions are
+simple, implementing them by hand would be tedious, so Canopy has derive helpers to do this for you. We use the
+<code>#[derive_commands]</code> attribute on the node impl block, then annotate each individual command with the <code>#[command]</code>
+attribute. For example:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[derive(StatefulNode)]
+struct MyNode {
+    state: NodeState,
+    value: u64,
+}
+
+#[derive_commands]
+impl MyNode {
+    /// Increment our value.
+    #[command]
+    fn inc(&amp;mut self) -&gt; Result&lt;()&gt; {
+        self.value.saturating_add(1);
+        Ok(())
+    }
+
+    /// Decrement our value.
+    #[command]
+    fn dec(&amp;mut self) -&gt; Result&lt;()&gt; {
+        self.value.saturating_sub(1);
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h1 id="arguments"><a class="header" href="#arguments">Arguments</a></h1>
+<p>Command functions can take an arbitrary number of arguments. The following types are supported:</p>
+<ul>
+<li><code>&amp;mut dyn Core</code>. This type is handled specially - if the first argument is of type <code>&amp;mut dyn Core</code>, the <code>Core</code> object
+is automatically passed in to each invocation. That is, it does not have to be (and cannot be) specified in a script
+when a command is invoked.</li>
+<li><code>isize</code></li>
+</ul>
+<p>The list of supported types are extended as needed. If you need a type that isn't supported, please open an issue.</p>
+<h1 id="return-values"><a class="header" href="#return-values">Return values</a></h1>
+<p>The following return value variants are supported:</p>
+<ul>
+<li>No return value.</li>
+<li><code>String</code></li>
+</ul>
+<p>We also support <code>Result</code> variants of the above:</p>
+<ul>
+<li><code>Result&lt;()&gt;</code></li>
+<li><code>Result&lt;T&gt;</code> where <code>T</code> is any supported type.</li>
+</ul>
+<p>Sometimes we want to write functions that can be used from Rust or from a script, with slightly different semantics. It's useful to be able to ignore the return value for script commands in some cases, where those values are not representable in the script language. For example, consider the following function:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// Delete the currently selected item.
+#[command(ignore_result)]
+pub fn delete_selected(&amp;mut self, core: &amp;mut dyn Core) -&gt; Option&lt;N&gt; {
+    self.delete_item(core, self.offset)
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Here, we have a node that manages a list. The Rust variant of the item delete function returns the item if it exists - N
+here is a generic type variable on the node. In scripts we would still like <code>delte_selected</code> to be available, but we
+would like to discard the un-representalbe return value. This is what the <code>ignore_result</code> argument to the <code>command</code>
+attribute does.</p>
+
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
@@ -178,7 +257,7 @@
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next" href="layout.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next" href="nodetrait.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -192,7 +271,7 @@
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next" href="layout.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next" href="nodetrait.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

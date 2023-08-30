@@ -251,11 +251,6 @@
 <a href="#251" id="251">251</a>
 <a href="#252" id="252">252</a>
 <a href="#253" id="253">253</a>
-<a href="#254" id="254">254</a>
-<a href="#255" id="255">255</a>
-<a href="#256" id="256">256</a>
-<a href="#257" id="257">257</a>
-<a href="#258" id="258">258</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::collections::HashMap;
 
 <span class="kw">use crate</span>::{
@@ -349,15 +344,10 @@
     }
 }
 
-<span class="doccomment">/// The CommandNode trait is implemented by all Nodes to expose the set of
-/// supported commands. With rare exceptions, this is done with the `commands`
-/// macro.
+<span class="doccomment">/// The CommandNode trait is implemented by all Nodes to expose the set of supported commands. With rare exceptions,
+/// this is done with the `commands` macro.
 </span><span class="kw">pub trait </span>CommandNode: StatefulNode {
-    <span class="doccomment">/// Returns a list of commands for this node. If a name is specified, it
-    /// is used as the node name for the commands, otherwise we use the struct
-    /// name converted to snake case. This method is used to pre-load our key
-    /// binding map, and the optional name specifier lets us cater for nodes
-    /// that may be renamed at runtime.
+    <span class="doccomment">/// Return a list of commands for this node.
     </span><span class="kw">fn </span>commands() -&gt; Vec&lt;CommandSpec&gt;
     <span class="kw">where
         </span><span class="self">Self</span>: Sized;
