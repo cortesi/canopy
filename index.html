@@ -83,7 +83,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded "><a href="overview.html" class="active"><strong aria-hidden="true">1.</strong> Overview</a></li><li class="chapter-item expanded "><a href="nodes.html"><strong aria-hidden="true">2.</strong> Nodes</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="commands.html"><strong aria-hidden="true">2.1.</strong> Commands</a></li><li class="chapter-item expanded "><a href="layout.html"><strong aria-hidden="true">2.2.</strong> Layout</a></li><li class="chapter-item expanded "><a href="focus.html"><strong aria-hidden="true">2.3.</strong> Focus</a></li><li class="chapter-item expanded "><a href="polling.html"><strong aria-hidden="true">2.4.</strong> Polling</a></li></ol></li><li class="chapter-item expanded "><a href="keybindings.html"><strong aria-hidden="true">3.</strong> Key bindings</a></li><li class="chapter-item expanded "><a href="scripting.html"><strong aria-hidden="true">4.</strong> Scripting</a></li><li class="chapter-item expanded "><a href="widgets.html"><strong aria-hidden="true">5.</strong> Widgets</a></li><li class="chapter-item expanded "><a href="styling.html"><strong aria-hidden="true">6.</strong> Themes and Styling</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded "><a href="overview.html" class="active"><strong aria-hidden="true">1.</strong> Overview</a></li><li class="chapter-item expanded "><a href="nodes.html"><strong aria-hidden="true">2.</strong> Nodes</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="state.html"><strong aria-hidden="true">2.1.</strong> State</a></li><li class="chapter-item expanded "><a href="commands.html"><strong aria-hidden="true">2.2.</strong> Commands</a></li><li class="chapter-item expanded "><a href="layout.html"><strong aria-hidden="true">2.3.</strong> Layout</a></li><li class="chapter-item expanded "><a href="polling.html"><strong aria-hidden="true">2.4.</strong> Polling</a></li><li class="chapter-item expanded "><a href="cursor.html"><strong aria-hidden="true">2.5.</strong> Cursor</a></li></ol></li><li class="chapter-item expanded "><a href="focus.html"><strong aria-hidden="true">3.</strong> Focus</a></li><li class="chapter-item expanded "><a href="events.html"><strong aria-hidden="true">4.</strong> Event Handling</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="keyboard.html"><strong aria-hidden="true">4.1.</strong> Key events</a></li><li class="chapter-item expanded "><a href="mouse.html"><strong aria-hidden="true">4.2.</strong> Mouse events</a></li><li class="chapter-item expanded "><a href="lifecycle.html"><strong aria-hidden="true">4.3.</strong> Lifecycle events</a></li><li class="chapter-item expanded "><a href="bindings.html"><strong aria-hidden="true">4.4.</strong> Binding system</a></li></ol></li><li class="chapter-item expanded "><a href="scripting.html"><strong aria-hidden="true">5.</strong> Scripting</a></li><li class="chapter-item expanded "><a href="styling.html"><strong aria-hidden="true">6.</strong> Themes and Styling</a></li><li class="chapter-item expanded "><a href="widgets.html"><strong aria-hidden="true">7.</strong> Widget Library</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -189,38 +189,16 @@ and <strong>R</strong> are on the focus path. We'll talk more about focus manage
 <p>Canopy strictly enforces the node hierarchy. No node is able to draw outside of its allocated area - the co-ordinate
 system used to draw to screen is relative to the node's own area.</p>
 <h3 id="rendering"><a class="header" href="#rendering">Rendering</a></h3>
-<img width=500px style="padding: 20px;" src="assets/rendering.svg">
-<p>Rust is fast, and terminals are slow. The key to performance is to send as few
-operations to the terminal as possible. Canopy uses a mark-and-sweep mechanism
-to redraw only what's needed. Nodes that need rendering are tainted using the
-<strong>taint</strong> or <strong>taint_tree</strong> functions. Nodes are automatically tainted if they
-handle an event or if their focus status changes.</p>
-<p>Rendering is a pre-order traversal of the tree with the <strong>render</strong> method called
-on each tainted node.</p>
-<h3 id="key-events"><a class="header" href="#key-events">Key Events</a></h3>
-<img width=300 style="padding: 20px;" src="assets/keyevent.png">
-<p>Key events are passed down from the current focus to the root, with the
-<strong>Node::handle_key</strong> method called on each node. Keys are only handled once - we
-stop passing the event along once the first node indicates that it's been
-handled. Handling a key event automatically taints the node, unless the
-<strong>EventResult::no_render</strong> flag in the response object is true.</p>
-<h3 id="mouse-events"><a class="header" href="#mouse-events">Mouse Events</a></h3>
-<img width=300 style="padding: 20px;" src="assets/mouseevent.png">
-<p>Mouse events are independent of the focus - we locate the leaf node that is
-under the mouse cursor, then pass event through the path from the leaf to the
-root for handling. For each node on the path, the <strong>Node::handle_mouse</strong> method
-is called, and we stop after the first node handles the event. Handling a mouse
-event taints the node, unless the <strong>EventResult::no_render</strong> flag on the
-response object is true.</p>
-<h3 id="actions"><a class="header" href="#actions">Actions</a></h3>
-<h3 id="cursor-management"><a class="header" href="#cursor-management">Cursor management</a></h3>
-<p>For historical reasons, terminals don't distinguish between the location of the
-visible cursor and the draw location for rendering. Drawing with the cursor
-turned on will result in a visible cursor moving over the screen. Canopy manages
-this by turning cursors off during rendering, and then enabling the cursor
-during a separate cursor sweep afterwards. The cursor sweep gives all nodes on
-the focus path the opportunity to define a cursor location and style using the
-<code>cursor</code> method on the Node trait.</p>
+<center>
+    <img width=500px style="padding: 20px;" src="assets/rendering.svg">
+</center>
+<p>Rendering is done with a pre-order traversal of the tree. Since Rust is fast and terminals are slow, the key to
+performance is to send as few operations to the terminal as possible. Canopy uses a mark-and-sweep mechanism to redraw
+only what's needed. Nodes that need rendering are tainted using the
+<a href="doc/canopy/trait.Core.html#tymethod.taint">Core.taint</a> or
+<a href="doc/canopy/trait.Core.html#tymethod.taint_tree">Core.taint_tree</a> functions. Nodes are automatically tainted if they
+handle an event or if their focus status changes. During the render sweep, we call the
+<a href="doc/canopy/trait.Node.html#method.render">Node.render</a> method on each tainted node.</p>
 
                     </main>
 

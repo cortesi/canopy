@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Focus - Canopy Manual</title>
+        <title>State - Canopy Manual</title>
 
 
         <!-- Custom HTML head -->
@@ -83,7 +83,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded "><a href="overview.html"><strong aria-hidden="true">1.</strong> Overview</a></li><li class="chapter-item expanded "><a href="nodes.html"><strong aria-hidden="true">2.</strong> Nodes</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="state.html"><strong aria-hidden="true">2.1.</strong> State</a></li><li class="chapter-item expanded "><a href="commands.html"><strong aria-hidden="true">2.2.</strong> Commands</a></li><li class="chapter-item expanded "><a href="layout.html"><strong aria-hidden="true">2.3.</strong> Layout</a></li><li class="chapter-item expanded "><a href="polling.html"><strong aria-hidden="true">2.4.</strong> Polling</a></li><li class="chapter-item expanded "><a href="cursor.html"><strong aria-hidden="true">2.5.</strong> Cursor</a></li></ol></li><li class="chapter-item expanded "><a href="focus.html" class="active"><strong aria-hidden="true">3.</strong> Focus</a></li><li class="chapter-item expanded "><a href="events.html"><strong aria-hidden="true">4.</strong> Event Handling</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="keyboard.html"><strong aria-hidden="true">4.1.</strong> Key events</a></li><li class="chapter-item expanded "><a href="mouse.html"><strong aria-hidden="true">4.2.</strong> Mouse events</a></li><li class="chapter-item expanded "><a href="lifecycle.html"><strong aria-hidden="true">4.3.</strong> Lifecycle events</a></li><li class="chapter-item expanded "><a href="bindings.html"><strong aria-hidden="true">4.4.</strong> Binding system</a></li></ol></li><li class="chapter-item expanded "><a href="scripting.html"><strong aria-hidden="true">5.</strong> Scripting</a></li><li class="chapter-item expanded "><a href="styling.html"><strong aria-hidden="true">6.</strong> Themes and Styling</a></li><li class="chapter-item expanded "><a href="widgets.html"><strong aria-hidden="true">7.</strong> Widget Library</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded "><a href="overview.html"><strong aria-hidden="true">1.</strong> Overview</a></li><li class="chapter-item expanded "><a href="nodes.html"><strong aria-hidden="true">2.</strong> Nodes</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="state.html" class="active"><strong aria-hidden="true">2.1.</strong> State</a></li><li class="chapter-item expanded "><a href="commands.html"><strong aria-hidden="true">2.2.</strong> Commands</a></li><li class="chapter-item expanded "><a href="layout.html"><strong aria-hidden="true">2.3.</strong> Layout</a></li><li class="chapter-item expanded "><a href="polling.html"><strong aria-hidden="true">2.4.</strong> Polling</a></li><li class="chapter-item expanded "><a href="cursor.html"><strong aria-hidden="true">2.5.</strong> Cursor</a></li></ol></li><li class="chapter-item expanded "><a href="focus.html"><strong aria-hidden="true">3.</strong> Focus</a></li><li class="chapter-item expanded "><a href="events.html"><strong aria-hidden="true">4.</strong> Event Handling</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="keyboard.html"><strong aria-hidden="true">4.1.</strong> Key events</a></li><li class="chapter-item expanded "><a href="mouse.html"><strong aria-hidden="true">4.2.</strong> Mouse events</a></li><li class="chapter-item expanded "><a href="lifecycle.html"><strong aria-hidden="true">4.3.</strong> Lifecycle events</a></li><li class="chapter-item expanded "><a href="bindings.html"><strong aria-hidden="true">4.4.</strong> Binding system</a></li></ol></li><li class="chapter-item expanded "><a href="scripting.html"><strong aria-hidden="true">5.</strong> Scripting</a></li><li class="chapter-item expanded "><a href="styling.html"><strong aria-hidden="true">6.</strong> Themes and Styling</a></li><li class="chapter-item expanded "><a href="widgets.html"><strong aria-hidden="true">7.</strong> Widget Library</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -169,54 +169,44 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="focus"><a class="header" href="#focus">Focus</a></h1>
-<img width=300 style="padding: 20px;" src="assets/focus.png">
-<p>Eactly one node has <strong>focus</strong> at any one time. If a node has focus, its
-ancestors up to the root of the tree are on the <strong>focus path</strong>. A corollary of
-this is that the root node is always on the focus path. Nodes advertise whether
-they can accept focus by implementing the <strong>can_focus</strong> method of the <strong>Node</strong>
-trait - any node can accept focus, even if it's not a leaf.</p>
-<p>Canopy provides various functions for controlling the focus in a subtree. These are
-usually used from event handlers, letting a node control the focus location in
-the subtree below it.</p>
-<div>
-    <div style="float: left; display: inline-block; padding: 10px;" >
-        <img width=250 src="assets/focus-next.png"/>
-        <center style="font-weight: bold">focus::next</center>
-    </div>
-    <div style="display: inline-block; padding: 10px;">
-        <img width=250 src="assets/focus-prev.png"/>
-        <center style="font-weight: bold">focus::prev</center>
-    </div>
-</div>
-<p>The <strong>focus::next</strong> and <strong>focus::prev</strong> functions set focus to the next and
-previous nodes that accept focus in the pre-order traversal of the tree. In the
-images above, the grey nodes accept focus, and the red arrow shows where focus
-will move with respect to the pre-order traversal.</p>
-<div>
-    <div style="float: left; display: inline-block; padding: 10px;" >
-        <img width=250 src="assets/focus-up.png"/>
-        <center style="font-weight: bold">focus::up</center>
-    </div>
-    <div style="display: inline-block; padding: 10px;" >
-        <img width=250 src="assets/focus-right.png"/>
-        <center style="font-weight: bold">focus::right</center>
-    </div>
-</div>
-<p>Canopy also has the spatial focus functions <strong>focus::{up,down,left,right}</strong>.
-These functions take the screen area of the currently focused node, then search
-for nodes that accept focus in the specified direction to choose the new focus.</p>
-<p>When a node's focus status changes, it is automatically tainted for rendering in the next sweep.</p>
+                        <h1 id="state"><a class="header" href="#state">State</a></h1>
+<p>Canopy tracks housekeeping data for each node - this includes whether the node has focus, the size and location of the
+node, whether the node has been tainted, and so on. This data is tracked in an opaque structure called <code>NodeState</code>, and
+each node is responsible for keeping its own state and returning it back to Canopy on request. The mechanism for doing
+this is the <a href="doc/canopy/trait.StatefulNode.html">StatefulNode</a> trait. There are three functions that need to be implemented to support this trait:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// The name of this node, used for debugging and command dispatch.
+fn name(&amp;self) -&gt; NodeName;
+
+/// Get a reference to the node's state object.
+fn state(&amp;self) -&gt; &amp;NodeState;
+
+/// Get a mutable reference to the node's state object.
+fn state_mut(&amp;mut self) -&gt; &amp;mut NodeState;
+<span class="boring">}</span></code></pre></pre>
+<p>These are simple enough to implement by hand, but it's such common boilerplate that Canopy provides a macro to do this
+for you. All you need to do is make sure that the struct for your node has an attribute called <code>state</code> of type
+<code>NodeState</code>.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[derive(StatefulNode)]
+struct MyNode {
+    state: NodeState,
+    // ...
+}
+<span class="boring">}</span></code></pre></pre>
+<p>The derive macro takes the name of the struct as the node name - in this case it would be <code>MyNode</code>.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="cursor.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="nodes.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next" href="events.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next" href="commands.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -226,11 +216,11 @@ for nodes that accept focus in the specified direction to choose the new focus.<
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="cursor.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="nodes.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next" href="events.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next" href="commands.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

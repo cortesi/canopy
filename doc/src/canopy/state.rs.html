@@ -329,11 +329,11 @@
 
 <span class="doccomment">/// The interface implemented by all nodes that track state.
 </span><span class="kw">pub trait </span>StatefulNode {
-    <span class="doccomment">/// Get a reference to the node&#39;s state object.
-    </span><span class="kw">fn </span>state(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>NodeState;
-
     <span class="doccomment">/// The name of this node, used for debugging and command dispatch.
     </span><span class="kw">fn </span>name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; NodeName;
+
+    <span class="doccomment">/// Get a reference to the node&#39;s state object.
+    </span><span class="kw">fn </span>state(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>NodeState;
 
     <span class="doccomment">/// Get a mutable reference to the node&#39;s state object.
     </span><span class="kw">fn </span>state_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>NodeState;
