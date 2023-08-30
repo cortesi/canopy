@@ -9,16 +9,26 @@ the sky.
 managing only its children, who manage their own children in turn, until the leaf nodes tile the screen without overlap.
 All interface operations are defined cleanly as traversals of this node tree.
 
+### Structure
 
-## Concepts
+<center>
+    <img width=500px style="padding: 20px;" src="assets/layout.svg">
+</center>
 
+Here we have a visualization of a node tree, and the corresponding terminal output. In this image, **R** is the
+[Root](doc/canopy/struct.Root.html) - a special node provided by Canopy. It exposes a set of standard commands (for
+example to change focus or quit the application) and also manages utilities like the Inspector the context sensitive
+help system. **C** is an an internal node - it doesn't display anything itself, but manages the size and location of
+**A** and **B** within the area it's responsible for. In this example, the **A** has focus, which means that nodes **C**
+and **R** are on the focus path. We'll talk more about focus management and how focus affects event handling later.
 
-### Nodes
+Canopy strictly enforces the node hierarchy. No node is able to draw outside of its allocated area - the co-ordinate
+system used to draw to screen is relative to the node's own area.
 
 
 ### Rendering
 
-<img width=300 style="padding: 20px;" src="assets/rendering.png">
+<img width=500px style="padding: 20px;" src="assets/rendering.svg">
 
 Rust is fast, and terminals are slow. The key to performance is to send as few
 operations to the terminal as possible. Canopy uses a mark-and-sweep mechanism
@@ -30,52 +40,6 @@ Rendering is a pre-order traversal of the tree with the **render** method called
 on each tainted node.
 
 
-### Focus
-
-<img width=300 style="padding: 20px;" src="assets/focus.png">
-
-Eactly one node has **focus** at any one time. If a node has focus, its
-ancestors up to the root of the tree are on the **focus path**. A corollary of
-this is that the root node is always on the focus path. Nodes advertise whether
-they can accept focus by implementing the **can_focus** method of the **Node**
-trait - any node can accept focus, even if it's not a leaf.
-
-Canopy provides various functions for controlling the focus in a subtree. These are
-usually used from event handlers, letting a node control the focus location in
-the subtree below it.
-
-<div>
-    <div style="float: left; display: inline-block; padding: 10px;" >
-        <img width=250 src="assets/focus-next.png"/>
-        <center style="font-weight: bold">focus::next</center>
-    </div>
-    <div style="display: inline-block; padding: 10px;">
-        <img width=250 src="assets/focus-prev.png"/>
-        <center style="font-weight: bold">focus::prev</center>
-    </div>
-</div>
-
-The **focus::next** and **focus::prev** functions set focus to the next and
-previous nodes that accept focus in the pre-order traversal of the tree. In the
-images above, the grey nodes accept focus, and the red arrow shows where focus
-will move with respect to the pre-order traversal.
-
-<div>
-    <div style="float: left; display: inline-block; padding: 10px;" >
-        <img width=250 src="assets/focus-up.png"/>
-        <center style="font-weight: bold">focus::up</center>
-    </div>
-    <div style="display: inline-block; padding: 10px;" >
-        <img width=250 src="assets/focus-right.png"/>
-        <center style="font-weight: bold">focus::right</center>
-    </div>
-</div>
-
-Canopy also has the spatial focus functions **focus::{up,down,left,right}**.
-These functions take the screen area of the currently focused node, then search
-for nodes that accept focus in the specified direction to choose the new focus.
-
-When a node's focus status changes, it is automatically tainted for rendering in the next sweep.
 
 ### Key Events
 
@@ -102,20 +66,6 @@ response object is true.
 
 
 ### Actions
-
-## Tick
-
-<img width=300 style="padding: 20px;" src="assets/tick.png">
-
-The interval between tick events is specified when the event loop is started.
-Tick events are propagated as a pre-order traversal from the root of the tree,
-with the **Node::handle_tick** method called on each node. Because tick events
-can fire many times a second - efficiency is quite important. A tick handler can
-set the **skip** flag on its return value to signal that its children don't need
-to recieve the tick event. In the diagram above, the grey node has done this, so
-the traversal continues to a sibling.
-
-Nodes that handle a tick event are automatically tainted.
 
 
 

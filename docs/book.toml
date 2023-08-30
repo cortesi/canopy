@@ -4,3 +4,6 @@ language = "en"
 multilingual = false
 src = "src"
 title = "Canopy Manual"
+
+[output.html]
+git-repository-url = "https://github.com/cortesi/canopy"

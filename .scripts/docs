@@ -1,10 +1,5 @@
 #!/bin/sh
 
+cargo doc --no-deps --lib
 mdbook build ./docs
 mdbook test ./docs
-cargo doc --no-deps --lib
-
-rm -rf ./publish
-mkdir ./publish
-cp -r ./docs/book ./publish
-cp -r ./target/doc ./publish

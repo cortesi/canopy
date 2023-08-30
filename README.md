@@ -22,5 +22,5 @@ All interface operations are defined cleanly as traversals of this node tree.
 
 # Documentation
 
-- [Manual](https://cortesi.github.io/canopy/book)
-- [API Docs](https://cortesi.github.io/canopy/doc/canopy)
+- [Guide](https://cortesi.github.io/canopy/book)
+- [API](https://cortesi.github.io/canopy/book/doc/canopy/index.html)
