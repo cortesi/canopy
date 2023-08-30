@@ -1,10 +1,12 @@
 use std::time::Duration;
 
 use crate::{
+    commands::CommandNode,
     cursor,
     event::{key, mouse},
     geom::{Expanse, Frame, Rect},
-    CommandNode, Core, Render, Result, StatefulNode, ViewPort,
+    state::StatefulNode,
+    Core, Render, Result, ViewPort,
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]

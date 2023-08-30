@@ -3,9 +3,8 @@ use std::{io::Write, process, sync::mpsc};
 use comfy_table::{ContentArrangement, Table};
 
 use crate::{
-    commands,
-    control::BackendControl,
-    error,
+    backend::BackendControl,
+    commands, error,
     event::{key, mouse, Event},
     geom::{Coverage, Direction, Expanse, Point, Rect},
     inputmap,
@@ -49,24 +48,61 @@ fn walk_focus_path_e<R>(
     .value())
 }
 
+/// The API exposed to nodes by Canopy.
 pub trait Core {
+    /// Is the specified node on the focus path? A node is on the focus path if it
+    /// has focus, or if it's the ancestor of a node with focus.
     fn is_on_focus_path(&self, n: &mut dyn Node) -> bool;
+
+    /// Does the node have focus?
     fn is_focused(&self, n: &dyn Node) -> bool;
-    fn is_focus_ancestor(&self, n: &mut dyn Node) -> bool;
+
+    /// Get the Rect of the screen area that currently has focus.
     fn focus_area(&self, root: &mut dyn Node) -> Option<Rect>;
+
+    /// What is the depth of the specified node in the focus path?
     fn focus_depth(&self, n: &mut dyn Node) -> usize;
+
+    /// Move focus downward of the currently focused node within the subtree at root.
     fn focus_down(&mut self, root: &mut dyn Node) -> Result<Outcome>;
+
+    /// Focus the first node that accepts focus in the pre-order traversal of the subtree at root.
     fn focus_first(&mut self, root: &mut dyn Node) -> Result<Outcome>;
+
+    /// Move focus to the left of the currently focused node within the subtree at root.
     fn focus_left(&mut self, root: &mut dyn Node) -> Result<Outcome>;
+
+    /// Focus the next node in the pre-order traversal of root. If no node with focus is found, we focus the first node
+    /// we can find instead.
     fn focus_next(&mut self, root: &mut dyn Node) -> Result<Outcome>;
+
+    /// Return the focus path for the subtree under `root`.
     fn focus_path(&self, root: &mut dyn Node) -> Path;
+
+    /// Focus the previous node in the pre-order traversal of `root`. If no node with focus is found, we focus the first
+    /// node we can find instead.
     fn focus_prev(&mut self, root: &mut dyn Node) -> Result<Outcome>;
+
+    /// Move focus to  right of the currently focused node within the subtree at root.
     fn focus_right(&mut self, root: &mut dyn Node) -> Result<Outcome>;
+
+    /// Move focus upward of the currently focused node within the subtree at root.
     fn focus_up(&mut self, root: &mut dyn Node) -> Result<Outcome>;
+
+    /// Does the node need to render in the next sweep? This checks if the node is currently hidden, and if not, signals
+    /// that we should render if the node is tainted, its focus status has changed, or if it is forcing a render.
     fn needs_render(&self, n: &dyn Node) -> bool;
+
+    /// Focus a node.
     fn set_focus(&mut self, n: &mut dyn Node);
+
+    /// Move focus in a specified direction within the subtree at root.
     fn focus_dir(&mut self, root: &mut dyn Node, dir: Direction) -> Result<Outcome>;
+
+    /// Taint a node to signal that it should be re-rendered.
     fn taint(&mut self, n: &mut dyn Node);
+
+    /// Taint the entire subtree under a node.
     fn taint_tree(&mut self, e: &mut dyn Node);
 
     /// Start the backend renderer.
@@ -231,16 +267,6 @@ impl Core for Canopy {
             })
         })?;
         Ok(Outcome::Handle)
-    }
-
-    /// A node is on the focus path if it does not have focus itself, but some
-    /// node below it does.
-    fn is_focus_ancestor(&self, n: &mut dyn Node) -> bool {
-        if self.is_focused(n) {
-            false
-        } else {
-            self.is_on_focus_path(n)
-        }
     }
 
     /// Focus the next node in the pre-order traversal of root. If no node with
@@ -1205,20 +1231,15 @@ mod tests {
 
             c.focus_next(&mut root)?;
             assert!(c.is_focused(&root.a));
-            assert!(c.is_focus_ancestor(&mut root));
-            assert!(!c.is_focus_ancestor(&mut root.a));
 
             c.focus_next(&mut root)?;
             assert!(c.is_focused(&root.a.a));
-            assert!(c.is_focus_ancestor(&mut root.a));
             c.focus_next(&mut root)?;
             assert!(c.is_focused(&root.a.b));
-            assert!(c.is_focus_ancestor(&mut root.a));
             c.focus_next(&mut root)?;
             assert!(c.is_focused(&root.b));
 
             c.set_focus(&mut root.b.b);
-            assert!(c.is_focus_ancestor(&mut root.b));
             c.focus_next(&mut root)?;
             assert!(c.is_focused(&root));
             Ok(())

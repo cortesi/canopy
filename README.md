@@ -20,6 +20,7 @@ managing only its children, who manage their own children in turn, until the lea
 All interface operations are defined cleanly as traversals of this node tree.
 
 
-# Docs
+# Documentation
 
-- [Manual](https://cortesi.github.io/canopy)
+- [Manual](https://cortesi.github.io/canopy/book)
+- [API Docs](https://cortesi.github.io/canopy/doc/canopy)

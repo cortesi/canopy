@@ -10,7 +10,7 @@ use color_backtrace::{default_output_stream, BacktracePrinter};
 use scopeguard::defer;
 
 use crate::{
-    control::BackendControl,
+    backend::BackendControl,
     cursor, error,
     event::{key, mouse, Event, EventSource},
     geom::{Expanse, Point},

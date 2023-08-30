@@ -68,9 +68,6 @@ impl Core for DummyCore {
     fn is_focused(&self, _n: &dyn Node) -> bool {
         false
     }
-    fn is_focus_ancestor(&self, _n: &mut dyn Node) -> bool {
-        false
-    }
     fn focus_area(&self, _root: &mut dyn Node) -> Option<Rect> {
         None
     }

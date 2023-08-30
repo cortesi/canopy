@@ -1,6 +1,10 @@
 use std::collections::HashMap;
 
-use crate::{postorder, preorder, Core, Error, Node, NodeId, NodeName, Result, StatefulNode, Walk};
+use crate::{
+    postorder, preorder,
+    state::{NodeName, StatefulNode},
+    Core, Error, Node, NodeId, Result, Walk,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ArgTypes {
@@ -186,7 +190,7 @@ mod tests {
     use super::*;
     use crate as canopy;
     use crate::tutils::*;
-    use crate::{command, derive_commands, CommandNode, Result, StatefulNode};
+    use crate::{command, derive_commands, state::StatefulNode, Result};
 
     #[test]
     fn tdispatch() -> Result<()> {
