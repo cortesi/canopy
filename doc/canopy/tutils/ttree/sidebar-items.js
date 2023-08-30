@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["get_state","reset_state","state_path"],"struct":["Ba","BaLa","BaLb","Bb","BbLa","BbLb","R","State"]};

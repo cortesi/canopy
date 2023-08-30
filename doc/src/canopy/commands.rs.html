@@ -250,13 +250,11 @@
 <a href="#250" id="250">250</a>
 <a href="#251" id="251">251</a>
 <a href="#252" id="252">252</a>
-<a href="#253" id="253">253</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::collections::HashMap;
 
 <span class="kw">use crate</span>::{
-    postorder, preorder,
     state::{NodeName, StatefulNode},
-    Core, Error, Node, NodeId, <span class="prelude-ty">Result</span>, Walk,
+    tree, Core, Error, Node, NodeId, <span class="prelude-ty">Result</span>,
 };
 
 <span class="attr">#[derive(Debug, Clone, PartialEq, Eq)]
@@ -371,38 +369,38 @@
 {
     <span class="kw">let </span><span class="kw-2">mut </span>seen = <span class="bool-val">false</span>;
     <span class="kw">let </span>uid = current_id.into();
-    <span class="kw">let </span>v = postorder(root, <span class="kw-2">&amp;mut </span>|x| -&gt; <span class="prelude-ty">Result</span>&lt;Walk&lt;ReturnValue&gt;&gt; {
+    <span class="kw">let </span>v = tree::postorder(root, <span class="kw-2">&amp;mut </span>|x| -&gt; <span class="prelude-ty">Result</span>&lt;tree::Walk&lt;ReturnValue&gt;&gt; {
         <span class="kw">if </span>seen {
             <span class="comment">// We&#39;re now on the path to the root
             </span><span class="kw">match </span>x.dispatch(core, cmd) {
-                <span class="prelude-val">Err</span>(Error::UnknownCommand(<span class="kw">_</span>)) =&gt; <span class="prelude-val">Ok</span>(Walk::Continue),
+                <span class="prelude-val">Err</span>(Error::UnknownCommand(<span class="kw">_</span>)) =&gt; <span class="prelude-val">Ok</span>(tree::Walk::Continue),
                 <span class="prelude-val">Err</span>(e) =&gt; <span class="prelude-val">Err</span>(e),
                 <span class="prelude-val">Ok</span>(v) =&gt; {
                     core.taint_tree(x);
-                    <span class="prelude-val">Ok</span>(Walk::Handle(v))
+                    <span class="prelude-val">Ok</span>(tree::Walk::Handle(v))
                 }
             }
         } <span class="kw">else if </span>x.id() == uid {
             seen = <span class="bool-val">true</span>;
             <span class="comment">// Preorder traversal from the focus node into its descendants. Our
             // focus node will be the first node visited.
-            </span><span class="kw">match </span>preorder(x, <span class="kw-2">&amp;mut </span>|x| -&gt; <span class="prelude-ty">Result</span>&lt;Walk&lt;ReturnValue&gt;&gt; {
+            </span><span class="kw">match </span>tree::preorder(x, <span class="kw-2">&amp;mut </span>|x| -&gt; <span class="prelude-ty">Result</span>&lt;tree::Walk&lt;ReturnValue&gt;&gt; {
                 <span class="kw">match </span>x.dispatch(core, cmd) {
-                    <span class="prelude-val">Err</span>(Error::UnknownCommand(<span class="kw">_</span>)) =&gt; <span class="prelude-val">Ok</span>(Walk::Continue),
+                    <span class="prelude-val">Err</span>(Error::UnknownCommand(<span class="kw">_</span>)) =&gt; <span class="prelude-val">Ok</span>(tree::Walk::Continue),
                     <span class="prelude-val">Err</span>(e) =&gt; <span class="prelude-val">Err</span>(e),
                     <span class="prelude-val">Ok</span>(v) =&gt; {
                         core.taint_tree(x);
-                        <span class="prelude-val">Ok</span>(Walk::Handle(v))
+                        <span class="prelude-val">Ok</span>(tree::Walk::Handle(v))
                     }
                 }
             }) {
-                <span class="prelude-val">Err</span>(Error::UnknownCommand(<span class="kw">_</span>)) =&gt; <span class="prelude-val">Ok</span>(Walk::Continue),
+                <span class="prelude-val">Err</span>(Error::UnknownCommand(<span class="kw">_</span>)) =&gt; <span class="prelude-val">Ok</span>(tree::Walk::Continue),
                 <span class="prelude-val">Err</span>(e) =&gt; <span class="prelude-val">Err</span>(e),
-                <span class="prelude-val">Ok</span>(Walk::Handle(t)) =&gt; <span class="prelude-val">Ok</span>(Walk::Handle(t)),
+                <span class="prelude-val">Ok</span>(tree::Walk::Handle(t)) =&gt; <span class="prelude-val">Ok</span>(tree::Walk::Handle(t)),
                 <span class="prelude-val">Ok</span>(v) =&gt; <span class="prelude-val">Ok</span>(v),
             }
         } <span class="kw">else </span>{
-            <span class="prelude-val">Ok</span>(Walk::Continue)
+            <span class="prelude-val">Ok</span>(tree::Walk::Continue)
         }
     })<span class="question-mark">?</span>;
     <span class="prelude-val">Ok</span>(v.value())

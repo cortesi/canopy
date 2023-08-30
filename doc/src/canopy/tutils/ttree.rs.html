@@ -274,6 +274,14 @@
 <a href="#274" id="274">274</a>
 <a href="#275" id="275">275</a>
 <a href="#276" id="276">276</a>
+<a href="#277" id="277">277</a>
+<a href="#278" id="278">278</a>
+<a href="#279" id="279">279</a>
+<a href="#280" id="280">280</a>
+<a href="#281" id="281">281</a>
+<a href="#282" id="282">282</a>
+<a href="#283" id="283">283</a>
+<a href="#284" id="284">284</a>
 </pre></div><pre class="rust"><code><span class="doccomment">/*! This module defines a standard tree of instrumented nodes for testing.
  *
  *
@@ -299,10 +307,10 @@
     <span class="kw">pub fn </span>reset(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
         <span class="self">self</span>.path = <span class="macro">vec!</span>[];
     }
-    <span class="kw">pub fn </span>add_event(<span class="kw-2">&amp;mut </span><span class="self">self</span>, n: <span class="kw-2">&amp;</span>NodeName, evt: <span class="kw-2">&amp;</span>str, result: Outcome) {
+    <span class="kw">pub fn </span>add_event(<span class="kw-2">&amp;mut </span><span class="self">self</span>, n: <span class="kw-2">&amp;</span>NodeName, evt: <span class="kw-2">&amp;</span>str, result: EventOutcome) {
         <span class="kw">let </span>outcome = <span class="kw">match </span>result {
-            Outcome::Handle { .. } =&gt; <span class="string">&quot;handle&quot;</span>,
-            Outcome::Ignore { .. } =&gt; <span class="string">&quot;ignore&quot;</span>,
+            EventOutcome::Handle { .. } =&gt; <span class="string">&quot;handle&quot;</span>,
+            EventOutcome::Ignore { .. } =&gt; <span class="string">&quot;ignore&quot;</span>,
         };
         <span class="self">self</span>.path.push(<span class="macro">format!</span>(<span class="string">&quot;{}@{}-&gt;{}&quot;</span>, n, evt, outcome))
     }
@@ -336,7 +344,7 @@
         </span><span class="kw">pub struct </span><span class="macro-nonterminal">$a </span>{
             state: NodeState,
 
-            <span class="kw">pub </span>next_outcome: <span class="prelude-ty">Option</span>&lt;Outcome&gt;,
+            <span class="kw">pub </span>next_outcome: <span class="prelude-ty">Option</span>&lt;EventOutcome&gt;,
         }
 
         <span class="kw">impl </span>Node <span class="kw">for </span><span class="macro-nonterminal">$a </span>{
@@ -350,10 +358,14 @@
                     <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">&quot;&lt;{}&gt;&quot;</span>, <span class="self">self</span>.name().clone()),
                 )
             }
-            <span class="kw">fn </span>handle_key(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core, <span class="kw">_</span>: key::Key) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt; {
+            <span class="kw">fn </span>handle_key(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core, <span class="kw">_</span>: key::Key) -&gt; <span class="prelude-ty">Result</span>&lt;EventOutcome&gt; {
                 <span class="self">self</span>.handle(<span class="string">&quot;key&quot;</span>)
             }
-            <span class="kw">fn </span>handle_mouse(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core, <span class="kw">_</span>: mouse::MouseEvent) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt; {
+            <span class="kw">fn </span>handle_mouse(
+                <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+                <span class="kw">_</span>: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core,
+                <span class="kw">_</span>: mouse::MouseEvent,
+            ) -&gt; <span class="prelude-ty">Result</span>&lt;EventOutcome&gt; {
                 <span class="self">self</span>.handle(<span class="string">&quot;mouse&quot;</span>)
             }
         }
@@ -386,12 +398,12 @@
                 })
             }
 
-            <span class="kw">fn </span>handle(<span class="kw-2">&amp;mut </span><span class="self">self</span>, evt: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt; {
+            <span class="kw">fn </span>handle(<span class="kw-2">&amp;mut </span><span class="self">self</span>, evt: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;EventOutcome&gt; {
                 <span class="kw">let </span>ret = <span class="kw">if let </span><span class="prelude-val">Some</span>(x) = <span class="self">self</span>.next_outcome.clone() {
                     <span class="self">self</span>.next_outcome = <span class="prelude-val">None</span>;
                     x
                 } <span class="kw">else </span>{
-                    Outcome::Ignore
+                    EventOutcome::Ignore
                 };
                 TSTATE.with(|s| {
                     s.borrow_mut().add_event(<span class="kw-2">&amp;</span><span class="self">self</span>.name(), evt, ret.clone());
@@ -408,7 +420,7 @@
         </span><span class="kw">pub struct </span><span class="macro-nonterminal">$name </span>{
             state: NodeState,
 
-            <span class="kw">pub </span>next_outcome: <span class="prelude-ty">Option</span>&lt;Outcome&gt;,
+            <span class="kw">pub </span>next_outcome: <span class="prelude-ty">Option</span>&lt;EventOutcome&gt;,
             <span class="kw">pub </span>a: <span class="macro-nonterminal">$la</span>,
             <span class="kw">pub </span>b: <span class="macro-nonterminal">$lb</span>,
         }
@@ -423,12 +435,12 @@
                     next_outcome: <span class="prelude-val">None</span>,
                 }
             }
-            <span class="kw">fn </span>handle(<span class="kw-2">&amp;mut </span><span class="self">self</span>, evt: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt; {
+            <span class="kw">fn </span>handle(<span class="kw-2">&amp;mut </span><span class="self">self</span>, evt: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;EventOutcome&gt; {
                 <span class="kw">let </span>ret = <span class="kw">if let </span><span class="prelude-val">Some</span>(x) = <span class="self">self</span>.next_outcome.clone() {
                     <span class="self">self</span>.next_outcome = <span class="prelude-val">None</span>;
                     x
                 } <span class="kw">else </span>{
-                    Outcome::Ignore
+                    EventOutcome::Ignore
                 };
                 TSTATE.with(|s| {
                     s.borrow_mut().add_event(<span class="kw-2">&amp;</span><span class="self">self</span>.name(), evt, ret.clone());
@@ -454,11 +466,15 @@
                 )
             }
 
-            <span class="kw">fn </span>handle_key(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core, <span class="kw">_</span>: key::Key) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt; {
+            <span class="kw">fn </span>handle_key(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core, <span class="kw">_</span>: key::Key) -&gt; <span class="prelude-ty">Result</span>&lt;EventOutcome&gt; {
                 <span class="self">self</span>.handle(<span class="string">&quot;key&quot;</span>)
             }
 
-            <span class="kw">fn </span>handle_mouse(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core, <span class="kw">_</span>: mouse::MouseEvent) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt; {
+            <span class="kw">fn </span>handle_mouse(
+                <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+                <span class="kw">_</span>: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core,
+                <span class="kw">_</span>: mouse::MouseEvent,
+            ) -&gt; <span class="prelude-ty">Result</span>&lt;EventOutcome&gt; {
                 <span class="self">self</span>.handle(<span class="string">&quot;mouse&quot;</span>)
             }
 
@@ -475,7 +491,7 @@
 </span><span class="kw">pub struct </span>R {
     state: NodeState,
 
-    <span class="kw">pub </span>next_outcome: <span class="prelude-ty">Option</span>&lt;Outcome&gt;,
+    <span class="kw">pub </span>next_outcome: <span class="prelude-ty">Option</span>&lt;EventOutcome&gt;,
     <span class="kw">pub </span>a: Ba,
     <span class="kw">pub </span>b: Bb,
 }
@@ -498,12 +514,12 @@
         });
         <span class="prelude-val">Ok</span>(())
     }
-    <span class="kw">fn </span>handle(<span class="kw-2">&amp;mut </span><span class="self">self</span>, evt: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt; {
+    <span class="kw">fn </span>handle(<span class="kw-2">&amp;mut </span><span class="self">self</span>, evt: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;EventOutcome&gt; {
         <span class="kw">let </span>ret = <span class="kw">if let </span><span class="prelude-val">Some</span>(x) = <span class="self">self</span>.next_outcome.clone() {
             <span class="self">self</span>.next_outcome = <span class="prelude-val">None</span>;
             x
         } <span class="kw">else </span>{
-            Outcome::Ignore
+            EventOutcome::Ignore
         };
         TSTATE.with(|s| {
             s.borrow_mut().add_event(<span class="kw-2">&amp;</span><span class="self">self</span>.name(), evt, ret.clone());
@@ -529,11 +545,11 @@
         )
     }
 
-    <span class="kw">fn </span>handle_key(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core, <span class="kw">_</span>: key::Key) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt; {
+    <span class="kw">fn </span>handle_key(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core, <span class="kw">_</span>: key::Key) -&gt; <span class="prelude-ty">Result</span>&lt;EventOutcome&gt; {
         <span class="self">self</span>.handle(<span class="string">&quot;key&quot;</span>)
     }
 
-    <span class="kw">fn </span>handle_mouse(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core, <span class="kw">_</span>: mouse::MouseEvent) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt; {
+    <span class="kw">fn </span>handle_mouse(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core, <span class="kw">_</span>: mouse::MouseEvent) -&gt; <span class="prelude-ty">Result</span>&lt;EventOutcome&gt; {
         <span class="self">self</span>.handle(<span class="string">&quot;mouse&quot;</span>)
     }
 

@@ -200,37 +200,37 @@
     <span class="kw">fn </span>focus_depth(<span class="kw-2">&amp;</span><span class="self">self</span>, _n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; usize {
         <span class="number">0
     </span>}
-    <span class="kw">fn </span>focus_down(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt; {
-        <span class="prelude-val">Ok</span>(Outcome::Handle)
+    <span class="kw">fn </span>focus_down(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;EventOutcome&gt; {
+        <span class="prelude-val">Ok</span>(EventOutcome::Handle)
     }
-    <span class="kw">fn </span>focus_first(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt; {
-        <span class="prelude-val">Ok</span>(Outcome::Handle)
+    <span class="kw">fn </span>focus_first(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;EventOutcome&gt; {
+        <span class="prelude-val">Ok</span>(EventOutcome::Handle)
     }
 
-    <span class="kw">fn </span>focus_left(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt; {
-        <span class="prelude-val">Ok</span>(Outcome::Handle)
+    <span class="kw">fn </span>focus_left(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;EventOutcome&gt; {
+        <span class="prelude-val">Ok</span>(EventOutcome::Handle)
     }
-    <span class="kw">fn </span>focus_next(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt; {
-        <span class="prelude-val">Ok</span>(Outcome::Handle)
+    <span class="kw">fn </span>focus_next(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;EventOutcome&gt; {
+        <span class="prelude-val">Ok</span>(EventOutcome::Handle)
     }
     <span class="kw">fn </span>focus_path(<span class="kw-2">&amp;</span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; Path {
         Path::empty()
     }
-    <span class="kw">fn </span>focus_prev(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt; {
-        <span class="prelude-val">Ok</span>(Outcome::Handle)
+    <span class="kw">fn </span>focus_prev(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;EventOutcome&gt; {
+        <span class="prelude-val">Ok</span>(EventOutcome::Handle)
     }
-    <span class="kw">fn </span>focus_right(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt; {
-        <span class="prelude-val">Ok</span>(Outcome::Handle)
+    <span class="kw">fn </span>focus_right(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;EventOutcome&gt; {
+        <span class="prelude-val">Ok</span>(EventOutcome::Handle)
     }
-    <span class="kw">fn </span>focus_up(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt; {
-        <span class="prelude-val">Ok</span>(Outcome::Handle)
+    <span class="kw">fn </span>focus_up(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;EventOutcome&gt; {
+        <span class="prelude-val">Ok</span>(EventOutcome::Handle)
     }
     <span class="kw">fn </span>needs_render(<span class="kw-2">&amp;</span><span class="self">self</span>, _n: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Node) -&gt; bool {
         <span class="bool-val">false
     </span>}
     <span class="kw">fn </span>set_focus(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}
-    <span class="kw">fn </span>focus_dir(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, _dir: Direction) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt; {
-        <span class="prelude-val">Ok</span>(Outcome::Handle)
+    <span class="kw">fn </span>focus_dir(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, _dir: Direction) -&gt; <span class="prelude-ty">Result</span>&lt;EventOutcome&gt; {
+        <span class="prelude-val">Ok</span>(EventOutcome::Handle)
     }
     <span class="kw">fn </span>taint(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}
     <span class="kw">fn </span>taint_tree(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _e: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}

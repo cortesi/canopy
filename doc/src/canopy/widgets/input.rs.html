@@ -415,16 +415,16 @@
         r.text(<span class="string">&quot;text&quot;</span>, <span class="self">self</span>.vp().view_rect().line(<span class="number">0</span>), <span class="kw-2">&amp;</span><span class="self">self</span>.textbuf.text())
     }
 
-    <span class="kw">fn </span>handle_key(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core, k: key::Key) -&gt; <span class="prelude-ty">Result</span>&lt;Outcome&gt; {
+    <span class="kw">fn </span>handle_key(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core, k: key::Key) -&gt; <span class="prelude-ty">Result</span>&lt;EventOutcome&gt; {
         <span class="kw">match </span>k {
             key::Key {
                 mods: <span class="kw">_</span>,
                 key: key::KeyCode::Char(c),
             } =&gt; {
                 <span class="self">self</span>.textbuf.insert(c);
-                <span class="prelude-val">Ok</span>(Outcome::Handle)
+                <span class="prelude-val">Ok</span>(EventOutcome::Handle)
             }
-            <span class="kw">_ </span>=&gt; <span class="prelude-val">Ok</span>(Outcome::Ignore),
+            <span class="kw">_ </span>=&gt; <span class="prelude-val">Ok</span>(EventOutcome::Ignore),
         }
     }
 
