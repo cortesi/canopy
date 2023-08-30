@@ -151,8 +151,10 @@
 <a href="#151" id="151">151</a>
 <a href="#152" id="152">152</a>
 <a href="#153" id="153">153</a>
+<a href="#154" id="154">154</a>
 </pre></div><pre class="rust"><code><span class="kw">use crate as </span>canopy;
 <span class="kw">use crate</span>::{
+    layout,
     state::{NodeState, StatefulNode},
     <span class="kw-2">*</span>,
 };
@@ -256,7 +258,7 @@
         <span class="kw">let </span>l = <span class="self">self</span>.vp().screen_rect().split_panes(<span class="kw-2">&amp;</span><span class="self">self</span>.shape())<span class="question-mark">?</span>;
         <span class="kw">for </span>(ci, col) <span class="kw">in </span><span class="self">self</span>.children.iter_mut().enumerate() {
             <span class="kw">for </span>(ri, row) <span class="kw">in </span>col.iter_mut().enumerate() {
-                place(row, l[ci][ri])<span class="question-mark">?</span>;
+                layout::place(row, l[ci][ri])<span class="question-mark">?</span>;
             }
         }
         <span class="prelude-val">Ok</span>(())
@@ -281,21 +283,21 @@
             w: <span class="number">100</span>,
             h: <span class="number">100</span>,
         };
-        place(<span class="kw-2">&amp;mut </span>p, r)<span class="question-mark">?</span>;
+        layout::place(<span class="kw-2">&amp;mut </span>p, r)<span class="question-mark">?</span>;
 
         <span class="macro">assert_eq!</span>(p.shape(), <span class="macro">vec!</span>[<span class="number">1</span>]);
         <span class="kw">let </span>tn = Ba::new();
         p.insert_col(<span class="kw-2">&amp;mut </span>c, tn)<span class="question-mark">?</span>;
-        place(<span class="kw-2">&amp;mut </span>p, r)<span class="question-mark">?</span>;
+        layout::place(<span class="kw-2">&amp;mut </span>p, r)<span class="question-mark">?</span>;
 
         <span class="macro">assert_eq!</span>(p.shape(), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">1</span>]);
         c.set_focus(<span class="kw-2">&amp;mut </span>p.children[<span class="number">0</span>][<span class="number">0</span>].a);
-        place(<span class="kw-2">&amp;mut </span>p, r)<span class="question-mark">?</span>;
+        layout::place(<span class="kw-2">&amp;mut </span>p, r)<span class="question-mark">?</span>;
 
         <span class="kw">let </span>tn = Ba::new();
         <span class="macro">assert_eq!</span>(p.focus_coords(<span class="kw-2">&amp;</span>c), <span class="prelude-val">Some</span>((<span class="number">0</span>, <span class="number">0</span>)));
         p.insert_row(<span class="kw-2">&amp;mut </span>c, tn);
-        place(<span class="kw-2">&amp;mut </span>p, r)<span class="question-mark">?</span>;
+        layout::place(<span class="kw-2">&amp;mut </span>p, r)<span class="question-mark">?</span>;
 
         <span class="macro">assert_eq!</span>(p.shape(), <span class="macro">vec!</span>[<span class="number">2</span>, <span class="number">1</span>]);
 

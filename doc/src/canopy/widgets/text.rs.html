@@ -200,7 +200,7 @@
 }
 
 <span class="kw">impl </span>Node <span class="kw">for </span>Text {
-    <span class="kw">fn </span>fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, s: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;Expanse&gt; {
+    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, s: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;Expanse&gt; {
         <span class="kw">let </span>w = <span class="kw">if let </span><span class="prelude-val">Some</span>(w) = <span class="self">self</span>.fixed_width {
             w
         } <span class="kw">else </span>{
@@ -243,7 +243,7 @@
     </span><span class="kw">fn </span>text_sizing() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="kw">let </span>txt = <span class="string">&quot;aaa bbb ccc\nddd eee fff\nggg hhh iii&quot;</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>t: Text = Text::new(txt);
-        t.fit(Expanse::new(<span class="number">7</span>, <span class="number">10</span>))<span class="question-mark">?</span>;
+        t.layout(Expanse::new(<span class="number">7</span>, <span class="number">10</span>))<span class="question-mark">?</span>;
         <span class="kw">let </span>expected: Vec&lt;String&gt; = <span class="macro">vec!</span>[
             <span class="string">&quot;aaa bbb&quot;</span>.into(),
             <span class="string">&quot;ccc    &quot;</span>.into(),

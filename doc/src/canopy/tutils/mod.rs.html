@@ -145,7 +145,7 @@
 }
 
 <span class="kw">impl </span>Node <span class="kw">for </span>TFixed {
-    <span class="kw">fn </span>fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _target: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;Expanse&gt; {
+    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _target: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;Expanse&gt; {
         <span class="prelude-val">Ok</span>(Expanse {
             w: <span class="self">self</span>.w,
             h: <span class="self">self</span>.h,

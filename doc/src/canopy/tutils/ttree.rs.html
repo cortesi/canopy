@@ -291,7 +291,7 @@
 <span class="kw">use crate</span>::{<span class="self">self </span><span class="kw">as </span>canopy};
 <span class="kw">use crate</span>::{
     event::{key, mouse},
-    <span class="kw-2">*</span>,
+    layout, <span class="kw-2">*</span>,
 };
 
 <span class="doccomment">/// Thread-local state tracked by test nodes.
@@ -456,8 +456,8 @@
 
             <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Core, r: <span class="kw-2">&amp;mut </span>Render) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
                 <span class="kw">let </span>parts = <span class="self">self</span>.vp().split_vertical(<span class="number">2</span>)<span class="question-mark">?</span>;
-                fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>.a, parts[<span class="number">0</span>])<span class="question-mark">?</span>;
-                fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>.b, parts[<span class="number">1</span>])<span class="question-mark">?</span>;
+                layout::fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>.a, parts[<span class="number">0</span>])<span class="question-mark">?</span>;
+                layout::fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>.b, parts[<span class="number">1</span>])<span class="question-mark">?</span>;
 
                 r.text(
                     <span class="string">&quot;any&quot;</span>,
@@ -535,8 +535,8 @@
 
     <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Core, r: <span class="kw-2">&amp;mut </span>Render) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="kw">let </span>parts = <span class="self">self</span>.vp().split_horizontal(<span class="number">2</span>)<span class="question-mark">?</span>;
-        fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>.a, parts[<span class="number">0</span>])<span class="question-mark">?</span>;
-        fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>.b, parts[<span class="number">1</span>])<span class="question-mark">?</span>;
+        layout::fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>.a, parts[<span class="number">0</span>])<span class="question-mark">?</span>;
+        layout::fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>.b, parts[<span class="number">1</span>])<span class="question-mark">?</span>;
 
         r.text(
             <span class="string">&quot;any&quot;</span>,

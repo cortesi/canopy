@@ -428,7 +428,7 @@
         }
     }
 
-    <span class="kw">fn </span>fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;Expanse&gt; {
+    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;Expanse&gt; {
         <span class="self">self</span>.textbuf.set_display_width(sz.w <span class="kw">as </span>usize);
         <span class="kw">let </span>tbl = <span class="self">self</span>.textbuf.value.len() <span class="kw">as </span>u16;
         <span class="kw">if </span><span class="self">self</span>.textbuf.window.len &gt;= tbl {

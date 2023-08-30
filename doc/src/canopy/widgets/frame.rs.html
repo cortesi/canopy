@@ -173,7 +173,7 @@
 
 <span class="kw">use crate as </span>canopy;
 <span class="kw">use crate</span>::{
-    derive_commands, frame,
+    derive_commands, layout,
     state::{NodeState, StatefulNode},
     Core, Node, Render, <span class="prelude-ty">Result</span>,
 };
@@ -280,7 +280,7 @@
 
     <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Core, rndr: <span class="kw-2">&amp;mut </span>Render) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="kw">let </span>vp = <span class="self">self</span>.vp();
-        <span class="kw">let </span>f = frame(<span class="kw-2">&amp;mut </span><span class="self">self</span>.child, vp, <span class="number">1</span>)<span class="question-mark">?</span>;
+        <span class="kw">let </span>f = layout::frame(<span class="kw-2">&amp;mut </span><span class="self">self</span>.child, vp, <span class="number">1</span>)<span class="question-mark">?</span>;
 
         <span class="kw">let </span>style = <span class="kw">if </span>c.is_on_focus_path(<span class="self">self</span>) {
             <span class="string">&quot;frame/focused&quot;

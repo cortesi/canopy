@@ -36,7 +36,7 @@
 <a href="#36" id="36">36</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">super</span>::logs::Logs;
 <span class="kw">use crate as </span>canopy;
-<span class="kw">use crate</span>::{widgets::tabs, <span class="kw-2">*</span>};
+<span class="kw">use crate</span>::{layout, widgets::tabs, <span class="kw-2">*</span>};
 
 <span class="doccomment">/// View contains the body of the inspector.
 </span><span class="attr">#[derive(StatefulNode)]
@@ -49,8 +49,8 @@
 <span class="kw">impl </span>Node <span class="kw">for </span>View {
     <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Core, _r: <span class="kw-2">&amp;mut </span>Render) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="kw">let </span>(a, b) = <span class="self">self</span>.vp().carve_vstart(<span class="number">1</span>);
-        fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>.tabs, a)<span class="question-mark">?</span>;
-        fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>.logs, b)<span class="question-mark">?</span>;
+        layout::fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>.tabs, a)<span class="question-mark">?</span>;
+        layout::fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>.logs, b)<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 
