@@ -1,4 +1,5 @@
 #![allow(clippy::new_without_default)]
+//! A library for building terminal UIs.
 
 pub use canopy_derive::{command, derive_commands};
 
@@ -22,6 +23,7 @@ pub mod inspector;
 pub mod path;
 pub mod script;
 pub mod style;
+pub mod tree;
 pub mod tutils;
 pub mod widgets;
 
