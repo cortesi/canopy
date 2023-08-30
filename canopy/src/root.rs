@@ -13,10 +13,10 @@ pub struct Root<T>
 where
     T: Node,
 {
-    pub app: T,
-    pub state: NodeState,
-    pub inspector: Inspector,
-    pub inspector_active: bool,
+    app: T,
+    state: NodeState,
+    inspector: Inspector,
+    inspector_active: bool,
 }
 
 #[derive_commands]

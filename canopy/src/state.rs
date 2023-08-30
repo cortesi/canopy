@@ -129,11 +129,11 @@ impl NodeState {
 
 /// The interface implemented by all nodes that track state.
 pub trait StatefulNode {
-    /// Get a reference to the node's state object.
-    fn state(&self) -> &NodeState;
-
     /// The name of this node, used for debugging and command dispatch.
     fn name(&self) -> NodeName;
+
+    /// Get a reference to the node's state object.
+    fn state(&self) -> &NodeState;
 
     /// Get a mutable reference to the node's state object.
     fn state_mut(&mut self) -> &mut NodeState;

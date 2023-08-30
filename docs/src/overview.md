@@ -28,53 +28,16 @@ system used to draw to screen is relative to the node's own area.
 
 ### Rendering
 
-<img width=500px style="padding: 20px;" src="assets/rendering.svg">
+<center>
+    <img width=500px style="padding: 20px;" src="assets/rendering.svg">
+</center>
 
-Rust is fast, and terminals are slow. The key to performance is to send as few
-operations to the terminal as possible. Canopy uses a mark-and-sweep mechanism
-to redraw only what's needed. Nodes that need rendering are tainted using the
-**taint** or **taint_tree** functions. Nodes are automatically tainted if they
-handle an event or if their focus status changes.
-
-Rendering is a pre-order traversal of the tree with the **render** method called
-on each tainted node.
-
-
-
-### Key Events
-
-<img width=300 style="padding: 20px;" src="assets/keyevent.png">
-
-Key events are passed down from the current focus to the root, with the
-**Node::handle_key** method called on each node. Keys are only handled once - we
-stop passing the event along once the first node indicates that it's been
-handled. Handling a key event automatically taints the node, unless the
-**EventResult::no_render** flag in the response object is true.
+Rendering is done with a pre-order traversal of the tree. Since Rust is fast and terminals are slow, the key to
+performance is to send as few operations to the terminal as possible. Canopy uses a mark-and-sweep mechanism to redraw
+only what's needed. Nodes that need rendering are tainted using the
+[Core.taint](doc/canopy/trait.Core.html#tymethod.taint) or
+[Core.taint_tree](doc/canopy/trait.Core.html#tymethod.taint_tree) functions. Nodes are automatically tainted if they
+handle an event or if their focus status changes. During the render sweep, we call the
+[Node.render](doc/canopy/trait.Node.html#method.render) method on each tainted node.
 
 
-### Mouse Events
-
-<img width=300 style="padding: 20px;" src="assets/mouseevent.png">
-
-Mouse events are independent of the focus - we locate the leaf node that is
-under the mouse cursor, then pass event through the path from the leaf to the
-root for handling. For each node on the path, the **Node::handle_mouse** method
-is called, and we stop after the first node handles the event. Handling a mouse
-event taints the node, unless the **EventResult::no_render** flag on the
-response object is true.
-
-
-
-### Actions
-
-
-
-### Cursor management
-
-For historical reasons, terminals don't distinguish between the location of the
-visible cursor and the draw location for rendering. Drawing with the cursor
-turned on will result in a visible cursor moving over the screen. Canopy manages
-this by turning cursors off during rendering, and then enabling the cursor
-during a separate cursor sweep afterwards. The cursor sweep gives all nodes on
-the focus path the opportunity to define a cursor location and style using the
-`cursor` method on the Node trait.
