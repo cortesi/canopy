@@ -24,7 +24,6 @@ pub mod path;
 pub mod script;
 pub mod style;
 pub mod tree;
-pub mod tutils;
 pub mod widgets;
 
 pub use crate::canopy::*;
@@ -36,3 +35,7 @@ pub use root::*;
 pub use render::Render;
 pub use state::{NodeId, NodeName, NodeState, StatefulNode};
 pub use viewport::ViewPort;
+
+// Hide the test utils from docs. We need to expose it for integration tests, but it's not for external use.
+#[doc(hidden)]
+pub mod tutils;

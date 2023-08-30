@@ -14,6 +14,7 @@ pub fn valid_nodename(name: &str) -> bool {
     name.chars().all(valid_nodename_char)
 }
 
+/// A unique ID for a node.
 pub type NodeId = u64;
 
 /// A node name, which consists of lowercase ASCII alphanumeric characters, plus

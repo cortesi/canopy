@@ -8,7 +8,7 @@ use crate::{
     event::{key, mouse, Event},
     geom::{Coverage, Direction, Expanse, Point, Rect},
     inputmap,
-    node::{postorder, preorder, Node, Walk},
+    node::Node,
     path::*,
     poll::Poller,
     render::{show_cursor, RenderBackend},

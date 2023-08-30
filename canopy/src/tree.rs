@@ -1,11 +1,42 @@
 //! Utilities for working with a Canopy node tree.
 
-use crate::{
-    geom::Point,
-    node::{postorder, preorder, Node, Walk},
-    path::*,
-    NodeId, Result,
-};
+use crate::{geom::Point, node::Node, path::*, NodeId, Result};
+
+/// Walk is the return value from traversal closures.
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub enum Walk<T> {
+    /// Skip this node and continue walking. The meaning of Skip depends on the
+    /// traversal function being used.
+    Skip,
+    /// Handle an event with a possible return value and stop walking.
+    Handle(T),
+    /// Continue walking, but don't mark the event as handled.
+    Continue,
+}
+
+impl<T> Walk<T> {
+    /// The handle value of the traversal, if any.
+    pub fn value(self) -> Option<T> {
+        match self {
+            Walk::Handle(v) => Some(v),
+            _ => None,
+        }
+    }
+    /// Did the traversal return Handle?
+    pub fn is_handled(&self) -> bool {
+        match self {
+            Walk::Handle(_) => true,
+            _ => false,
+        }
+    }
+    /// Did the traversal return Continue?
+    pub fn is_continue(&self) -> bool {
+        match self {
+            Walk::Skip | Walk::Handle(_) => false,
+            Walk::Continue => true,
+        }
+    }
+}
 
 /// Call a closure on the currently focused node and all its ancestors to the
 /// root. If the closure returns Walk::Handle, traversal stops. Handle::Skip is
@@ -132,11 +163,78 @@ where
     path.into()
 }
 
+/// A postorder traversal of the nodes under e.
+///
+/// - Walk::Skip causes stops further traversal of children, and all the nodes
+/// in a path back to the root are visited.
+/// - Walk::Handle stops the traversal and the contained value is returned.
+/// - Any error return stops the traversal and the error is returned.
+pub fn postorder<T>(
+    e: &mut dyn Node,
+    f: &mut dyn FnMut(&mut dyn Node) -> Result<Walk<T>>,
+) -> Result<Walk<T>> {
+    let mut stop = None;
+    e.children(&mut |x| {
+        if stop.is_none() {
+            let v = postorder(x, f)?;
+            if !v.is_continue() {
+                stop = Some(v)
+            }
+        }
+        Ok(())
+    })?;
+    match stop {
+        None => f(e),
+        Some(v) => match v {
+            Walk::Skip => {
+                let v = f(e)?;
+                if v.is_continue() {
+                    Ok(Walk::Skip)
+                } else {
+                    Ok(v)
+                }
+            }
+            Walk::Handle(t) => Ok(Walk::Handle(t)),
+            _ => panic!("impossible"),
+        },
+    }
+}
+
+// A preorder traversal of the nodes under e.
+///
+/// - Walk::Skip prunes all children of the current node from the traversal.
+/// - Walk::Handle stops the traversal and the contained value is returned.
+/// - Any error return stops the traversal and the error is returned.
+pub fn preorder<T>(
+    e: &mut dyn Node,
+    f: &mut dyn FnMut(&mut dyn Node) -> Result<Walk<T>>,
+) -> Result<Walk<T>> {
+    let mut res = f(e)?;
+    if res.is_continue() {
+        e.children(&mut |x| {
+            if res.is_continue() {
+                match preorder(x, f)? {
+                    Walk::Skip => panic!("impossible"),
+                    Walk::Continue => {}
+                    Walk::Handle(t) => res = Walk::Handle(t),
+                };
+            }
+            Ok(())
+        })?;
+    }
+    // Skip is not propagated upwards, so we translate it to continue.
+    Ok(match res {
+        Walk::Skip => Walk::Continue,
+        _ => res,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::tutils::*;
     use crate::StatefulNode;
+    use crate::*;
 
     #[test]
     fn tnode_path() -> Result<()> {
@@ -148,6 +246,142 @@ mod tests {
             );
             Ok(())
         })?;
+        Ok(())
+    }
+
+    /// Tiny helper to turn arrays into owned String vecs to ease comparison.
+    fn vc(a: &[&str]) -> Vec<String> {
+        a.iter().map(|x| x.to_string()).collect()
+    }
+
+    #[test]
+    fn tpreorder() -> Result<()> {
+        fn trigger(name: &str, func: Result<Walk<()>>) -> (Vec<String>, Result<Walk<()>>) {
+            let mut v: Vec<String> = vec![];
+            let mut root = R::new();
+            let res = preorder(&mut root, &mut |x| -> Result<Walk<()>> {
+                v.push(x.name().to_string());
+                if x.name() == name {
+                    func.clone()
+                } else {
+                    Ok(Walk::Continue)
+                }
+            });
+            (v, res)
+        }
+
+        assert_eq!(
+            trigger("never", Ok(Walk::Skip)),
+            (
+                vc(&["r", "ba", "ba_la", "ba_lb", "bb", "bb_la", "bb_lb"]),
+                Ok(Walk::Continue)
+            )
+        );
+
+        // Skip
+        assert_eq!(
+            trigger("ba", Ok(Walk::Skip)),
+            (vc(&["r", "ba", "bb", "bb_la", "bb_lb"]), Ok(Walk::Continue))
+        );
+        assert_eq!(
+            trigger("r", Ok(Walk::Skip)),
+            (vc(&["r"]), Ok(Walk::Continue))
+        );
+
+        // Handle
+        assert_eq!(
+            trigger("ba", Ok(Walk::Handle(()))),
+            (vc(&["r", "ba"]), Ok(Walk::Handle(())))
+        );
+        assert_eq!(
+            trigger("ba_la", Ok(Walk::Handle(()))),
+            (vc(&["r", "ba", "ba_la"]), Ok(Walk::Handle(())))
+        );
+
+        // Error
+        assert_eq!(
+            trigger("ba_la".into(), Err(Error::NoResult)),
+            (vc(&["r", "ba", "ba_la"]), Err(Error::NoResult))
+        );
+        assert_eq!(
+            trigger("r".into(), Err(Error::NoResult)),
+            (vc(&["r"]), Err(Error::NoResult))
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn tpostorder() -> Result<()> {
+        fn trigger(name: &str, func: Result<Walk<()>>) -> (Vec<String>, Result<Walk<()>>) {
+            let mut v: Vec<String> = vec![];
+            let mut root = R::new();
+            let res = postorder(&mut root, &mut |x| -> Result<Walk<()>> {
+                v.push(x.name().to_string());
+                if x.name() == name {
+                    func.clone()
+                } else {
+                    Ok(Walk::Continue)
+                }
+            });
+            (v, res)
+        }
+
+        // Skip
+        assert_eq!(
+            trigger("ba_la", Ok(Walk::Skip)),
+            (vc(&["ba_la", "ba", "r"]), Ok(Walk::Skip))
+        );
+
+        assert_eq!(
+            trigger("ba_lb", Ok(Walk::Skip)),
+            (vc(&["ba_la", "ba_lb", "ba", "r"]), Ok(Walk::Skip))
+        );
+        assert_eq!(
+            trigger("r", Ok(Walk::Skip)),
+            (
+                vc(&["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb", "r"]),
+                Ok(Walk::Skip)
+            )
+        );
+        assert_eq!(
+            trigger("bb", Ok(Walk::Skip)),
+            (
+                vc(&["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb", "r"]),
+                Ok(Walk::Skip)
+            )
+        );
+        assert_eq!(
+            trigger("ba", Ok(Walk::Skip)),
+            (vc(&["ba_la", "ba_lb", "ba", "r"]), Ok(Walk::Skip))
+        );
+
+        // Handle
+        assert_eq!(
+            trigger("ba_la".into(), Ok(Walk::Handle(()))),
+            (vc(&["ba_la"]), Ok(Walk::Handle(())))
+        );
+        assert_eq!(
+            trigger("bb".into(), Ok(Walk::Handle(()))),
+            (
+                vc(&["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb"]),
+                Ok(Walk::Handle(()))
+            )
+        );
+
+        // Error
+        assert_eq!(
+            trigger("ba_la".into(), Err(Error::NoResult)),
+            (vc(&["ba_la"]), Err(Error::NoResult))
+        );
+        assert_eq!(
+            trigger("bb".into(), Err(Error::NoResult)),
+            (
+                vc(&["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb"]),
+                Err(Error::NoResult)
+            )
+        );
+
         Ok(())
     }
 }

@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    postorder, preorder,
     state::{NodeName, StatefulNode},
-    Core, Error, Node, NodeId, Result, Walk,
+    tree, Core, Error, Node, NodeId, Result,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,38 +117,38 @@ where
 {
     let mut seen = false;
     let uid = current_id.into();
-    let v = postorder(root, &mut |x| -> Result<Walk<ReturnValue>> {
+    let v = tree::postorder(root, &mut |x| -> Result<tree::Walk<ReturnValue>> {
         if seen {
             // We're now on the path to the root
             match x.dispatch(core, cmd) {
-                Err(Error::UnknownCommand(_)) => Ok(Walk::Continue),
+                Err(Error::UnknownCommand(_)) => Ok(tree::Walk::Continue),
                 Err(e) => Err(e),
                 Ok(v) => {
                     core.taint_tree(x);
-                    Ok(Walk::Handle(v))
+                    Ok(tree::Walk::Handle(v))
                 }
             }
         } else if x.id() == uid {
             seen = true;
             // Preorder traversal from the focus node into its descendants. Our
             // focus node will be the first node visited.
-            match preorder(x, &mut |x| -> Result<Walk<ReturnValue>> {
+            match tree::preorder(x, &mut |x| -> Result<tree::Walk<ReturnValue>> {
                 match x.dispatch(core, cmd) {
-                    Err(Error::UnknownCommand(_)) => Ok(Walk::Continue),
+                    Err(Error::UnknownCommand(_)) => Ok(tree::Walk::Continue),
                     Err(e) => Err(e),
                     Ok(v) => {
                         core.taint_tree(x);
-                        Ok(Walk::Handle(v))
+                        Ok(tree::Walk::Handle(v))
                     }
                 }
             }) {
-                Err(Error::UnknownCommand(_)) => Ok(Walk::Continue),
+                Err(Error::UnknownCommand(_)) => Ok(tree::Walk::Continue),
                 Err(e) => Err(e),
-                Ok(Walk::Handle(t)) => Ok(Walk::Handle(t)),
+                Ok(tree::Walk::Handle(t)) => Ok(tree::Walk::Handle(t)),
                 Ok(v) => Ok(v),
             }
         } else {
-            Ok(Walk::Continue)
+            Ok(tree::Walk::Continue)
         }
     })?;
     Ok(v.value())
