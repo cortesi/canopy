@@ -6,6 +6,7 @@ use canopy::{
     backend::crossterm::runloop,
     event::key,
     geom::{Expanse, Rect},
+    layout,
     style::solarized,
     widgets::{frame, list::*, Text},
     *,
@@ -43,8 +44,8 @@ impl ListItem for Block {
 }
 
 impl Node for Block {
-    fn fit(&mut self, target: Expanse) -> Result<Expanse> {
-        self.child.fit(Expanse {
+    fn layout(&mut self, target: Expanse) -> Result<Expanse> {
+        self.child.layout(Expanse {
             w: target.w - 2,
             h: target.h,
         })
@@ -53,7 +54,7 @@ impl Node for Block {
     fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
         let vp = self.vp();
         let (_, screen) = vp.screen_rect().carve_hstart(2);
-        let outer = self.child.fit(screen.into())?;
+        let outer = self.child.layout(screen.into())?;
         let view = Rect {
             tl: vp.view_rect().tl,
             w: vp.view_rect().w.saturating_sub(2),
@@ -132,8 +133,8 @@ impl ListGym {
 impl Node for ListGym {
     fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {
         let (a, b) = self.vp().carve_vend(1);
-        fit(&mut self.statusbar, b)?;
-        fit(&mut self.content, a)?;
+        layout::fit(&mut self.statusbar, b)?;
+        layout::fit(&mut self.content, a)?;
         Ok(())
     }
 

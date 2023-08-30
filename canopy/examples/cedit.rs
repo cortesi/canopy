@@ -4,7 +4,8 @@ use std::fs;
 use canopy::{
     backend::crossterm::runloop,
     derive_commands,
-    event::{key, mouse},
+    event::key,
+    layout,
     widgets::{frame, Editor},
     *,
 };
@@ -28,7 +29,7 @@ impl Ed {
 impl Node for Ed {
     fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {
         let vp = self.vp();
-        fit(&mut self.child, vp)
+        layout::fit(&mut self.child, vp)
     }
 
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {

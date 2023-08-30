@@ -4,6 +4,7 @@ mod view;
 use crate as canopy;
 use crate::{
     event::key::*,
+    layout,
     widgets::{frame, tabs},
     *,
 };
@@ -39,7 +40,7 @@ impl Node for Inspector {
     fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
         r.style.push_layer("inspector");
         let vp = self.vp();
-        fit(&mut self.view, vp)?;
+        layout::fit(&mut self.view, vp)?;
         Ok(())
     }
 

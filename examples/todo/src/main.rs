@@ -5,6 +5,7 @@ use canopy::{
     backend::crossterm::runloop,
     event::{key, mouse},
     geom::{Expanse, Rect},
+    layout,
     style::solarized,
     widgets::{frame, list::*, Input, Text},
     *,
@@ -39,8 +40,8 @@ impl ListItem for TodoItem {
 
 #[derive_commands]
 impl Node for TodoItem {
-    fn fit(&mut self, target: Expanse) -> canopy::Result<Expanse> {
-        self.child.fit(target)
+    fn layout(&mut self, target: Expanse) -> canopy::Result<Expanse> {
+        self.child.layout(target)
     }
 
     fn children(
@@ -52,7 +53,7 @@ impl Node for TodoItem {
 
     fn render(&mut self, _c: &dyn Core, r: &mut Render) -> canopy::Result<()> {
         let vp = self.vp();
-        fit(&mut self.child, vp)?;
+        layout::fit(&mut self.child, vp)?;
         if self.selected {
             r.style.push_layer("blue");
         }
@@ -151,12 +152,12 @@ impl Todo {
 impl Node for Todo {
     fn render(&mut self, _c: &dyn Core, _: &mut Render) -> canopy::Result<()> {
         let (a, b) = self.vp().carve_vend(1);
-        fit(&mut self.statusbar, b)?;
-        fit(&mut self.content, a)?;
+        layout::fit(&mut self.statusbar, b)?;
+        layout::fit(&mut self.content, a)?;
 
         let a = self.vp().screen_rect();
         if let Some(add) = &mut self.adder {
-            place(add, Rect::new(a.tl.x + 2, a.tl.y + a.h / 2, a.w - 4, 3))?;
+            layout::place(add, Rect::new(a.tl.x + 2, a.tl.y + a.h / 2, a.w - 4, 3))?;
         }
         Ok(())
     }

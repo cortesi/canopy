@@ -2,9 +2,8 @@ use canopy::{
     backend::crossterm::runloop,
     derive_commands,
     event::{key, mouse},
-    geom::Expanse,
-    geom::Frame,
-    *,
+    geom::{Expanse, Frame},
+    layout, *,
 };
 use clap::Parser;
 
@@ -65,7 +64,7 @@ impl Node for Block {
                 vp.split_vertical(self.children.len() as u16)?
             };
             for i in 0..self.children.len() {
-                fit(&mut self.children[i], vps[i])?;
+                layout::fit(&mut self.children[i], vps[i])?;
             }
         } else {
             let bc = if c.is_focused(self) && self.children.is_empty() {
@@ -115,7 +114,7 @@ impl FocusGym {
 impl Node for FocusGym {
     fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {
         let vp = self.vp();
-        fit(&mut self.child, vp)
+        layout::fit(&mut self.child, vp)
     }
 
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {

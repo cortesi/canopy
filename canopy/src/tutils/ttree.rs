@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use crate::{self as canopy};
 use crate::{
     event::{key, mouse},
-    *,
+    layout, *,
 };
 
 /// Thread-local state tracked by test nodes.
@@ -172,8 +172,8 @@ macro_rules! branch {
 
             fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
                 let parts = self.vp().split_vertical(2)?;
-                fit(&mut self.a, parts[0])?;
-                fit(&mut self.b, parts[1])?;
+                layout::fit(&mut self.a, parts[0])?;
+                layout::fit(&mut self.b, parts[1])?;
 
                 r.text(
                     "any",
@@ -251,8 +251,8 @@ impl Node for R {
 
     fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
         let parts = self.vp().split_horizontal(2)?;
-        fit(&mut self.a, parts[0])?;
-        fit(&mut self.b, parts[1])?;
+        layout::fit(&mut self.a, parts[0])?;
+        layout::fit(&mut self.b, parts[1])?;
 
         r.text(
             "any",

@@ -2,6 +2,7 @@ use crate as canopy;
 use crate::{
     event::key::*,
     inspector::Inspector,
+    layout,
     state::{NodeState, StatefulNode},
     *,
 };
@@ -148,10 +149,10 @@ where
         let vp = self.vp();
         if self.inspector_active {
             let parts = vp.split_horizontal(2)?;
-            fit(&mut self.inspector, parts[0])?;
-            fit(&mut self.app, parts[1])?;
+            layout::fit(&mut self.inspector, parts[0])?;
+            layout::fit(&mut self.app, parts[1])?;
         } else {
-            fit(&mut self.app, vp)?;
+            layout::fit(&mut self.app, vp)?;
         };
 
         Ok(())

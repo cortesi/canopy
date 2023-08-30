@@ -1,5 +1,6 @@
 use crate as canopy;
 use crate::{
+    layout,
     state::{NodeState, StatefulNode},
     *,
 };
@@ -103,7 +104,7 @@ impl<N: Node> Node for Panes<N> {
         let l = self.vp().screen_rect().split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
-                place(row, l[ci][ri])?;
+                layout::place(row, l[ci][ri])?;
             }
         }
         Ok(())
@@ -128,21 +129,21 @@ mod tests {
             w: 100,
             h: 100,
         };
-        place(&mut p, r)?;
+        layout::place(&mut p, r)?;
 
         assert_eq!(p.shape(), vec![1]);
         let tn = Ba::new();
         p.insert_col(&mut c, tn)?;
-        place(&mut p, r)?;
+        layout::place(&mut p, r)?;
 
         assert_eq!(p.shape(), vec![1, 1]);
         c.set_focus(&mut p.children[0][0].a);
-        place(&mut p, r)?;
+        layout::place(&mut p, r)?;
 
         let tn = Ba::new();
         assert_eq!(p.focus_coords(&c), Some((0, 0)));
         p.insert_row(&mut c, tn);
-        place(&mut p, r)?;
+        layout::place(&mut p, r)?;
 
         assert_eq!(p.shape(), vec![2, 1]);
 

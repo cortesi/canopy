@@ -7,6 +7,7 @@ use tracing_subscriber::fmt;
 use crate as canopy;
 use crate::{
     geom::{Expanse, Rect},
+    layout,
     widgets::{list::*, Text},
     *,
 };
@@ -37,8 +38,8 @@ impl ListItem for LogItem {
 }
 
 impl Node for LogItem {
-    fn fit(&mut self, target: Expanse) -> Result<Expanse> {
-        self.child.fit(Expanse {
+    fn layout(&mut self, target: Expanse) -> Result<Expanse> {
+        self.child.layout(Expanse {
             w: target.w - 2,
             h: target.h,
         })
@@ -47,7 +48,7 @@ impl Node for LogItem {
     fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
         let vp = self.vp();
         let (_, screen) = vp.screen_rect().carve_hstart(2);
-        let outer = self.child.fit(screen.into())?;
+        let outer = self.child.layout(screen.into())?;
         let view = Rect {
             tl: vp.view_rect().tl,
             w: vp.view_rect().w.saturating_sub(2),
@@ -132,7 +133,7 @@ impl Node for Logs {
 
     fn render(&mut self, _: &dyn Core, _: &mut Render) -> Result<()> {
         let vp = self.vp();
-        fit(&mut self.list, vp)?;
+        layout::fit(&mut self.list, vp)?;
         Ok(())
     }
 

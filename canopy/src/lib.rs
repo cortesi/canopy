@@ -20,6 +20,7 @@ pub mod cursor;
 pub mod event;
 pub mod geom;
 pub mod inspector;
+pub mod layout;
 pub mod path;
 pub mod script;
 pub mod style;
