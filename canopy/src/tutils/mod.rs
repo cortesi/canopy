@@ -74,37 +74,37 @@ impl Core for DummyCore {
     fn focus_depth(&self, _n: &mut dyn Node) -> usize {
         0
     }
-    fn focus_down(&mut self, _root: &mut dyn Node) -> Result<Outcome> {
-        Ok(Outcome::Handle)
+    fn focus_down(&mut self, _root: &mut dyn Node) -> Result<EventOutcome> {
+        Ok(EventOutcome::Handle)
     }
-    fn focus_first(&mut self, _root: &mut dyn Node) -> Result<Outcome> {
-        Ok(Outcome::Handle)
+    fn focus_first(&mut self, _root: &mut dyn Node) -> Result<EventOutcome> {
+        Ok(EventOutcome::Handle)
     }
 
-    fn focus_left(&mut self, _root: &mut dyn Node) -> Result<Outcome> {
-        Ok(Outcome::Handle)
+    fn focus_left(&mut self, _root: &mut dyn Node) -> Result<EventOutcome> {
+        Ok(EventOutcome::Handle)
     }
-    fn focus_next(&mut self, _root: &mut dyn Node) -> Result<Outcome> {
-        Ok(Outcome::Handle)
+    fn focus_next(&mut self, _root: &mut dyn Node) -> Result<EventOutcome> {
+        Ok(EventOutcome::Handle)
     }
     fn focus_path(&self, _root: &mut dyn Node) -> Path {
         Path::empty()
     }
-    fn focus_prev(&mut self, _root: &mut dyn Node) -> Result<Outcome> {
-        Ok(Outcome::Handle)
+    fn focus_prev(&mut self, _root: &mut dyn Node) -> Result<EventOutcome> {
+        Ok(EventOutcome::Handle)
     }
-    fn focus_right(&mut self, _root: &mut dyn Node) -> Result<Outcome> {
-        Ok(Outcome::Handle)
+    fn focus_right(&mut self, _root: &mut dyn Node) -> Result<EventOutcome> {
+        Ok(EventOutcome::Handle)
     }
-    fn focus_up(&mut self, _root: &mut dyn Node) -> Result<Outcome> {
-        Ok(Outcome::Handle)
+    fn focus_up(&mut self, _root: &mut dyn Node) -> Result<EventOutcome> {
+        Ok(EventOutcome::Handle)
     }
     fn needs_render(&self, _n: &dyn Node) -> bool {
         false
     }
     fn set_focus(&mut self, _n: &mut dyn Node) {}
-    fn focus_dir(&mut self, _root: &mut dyn Node, _dir: Direction) -> Result<Outcome> {
-        Ok(Outcome::Handle)
+    fn focus_dir(&mut self, _root: &mut dyn Node, _dir: Direction) -> Result<EventOutcome> {
+        Ok(EventOutcome::Handle)
     }
     fn taint(&mut self, _n: &mut dyn Node) {}
     fn taint_tree(&mut self, _e: &mut dyn Node) {}

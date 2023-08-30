@@ -29,7 +29,7 @@ pub mod widgets;
 
 pub use crate::canopy::*;
 pub use binder::*;
-pub use error::*;
+pub use error::{Error, Result};
 pub use node::*;
 pub use root::*;
 

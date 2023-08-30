@@ -9,8 +9,9 @@ use crate::{
     Core, Render, Result, ViewPort,
 };
 
+/// What was the outcome of an event handler being called?
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Outcome {
+pub enum EventOutcome {
     Handle,
     Ignore,
 }
@@ -75,13 +76,13 @@ pub trait Node: StatefulNode + CommandNode {
 
     /// Handle a key input event. This event is only called for nodes that are on the focus path. The default
     /// implementation ignores input.
-    fn handle_key(&mut self, c: &mut dyn Core, k: key::Key) -> Result<Outcome> {
-        Ok(Outcome::Ignore)
+    fn handle_key(&mut self, c: &mut dyn Core, k: key::Key) -> Result<EventOutcome> {
+        Ok(EventOutcome::Ignore)
     }
 
     /// Handle a mouse input event. The default implementation ignores mouse input.
-    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::MouseEvent) -> Result<Outcome> {
-        Ok(Outcome::Ignore)
+    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::MouseEvent) -> Result<EventOutcome> {
+        Ok(EventOutcome::Ignore)
     }
 
     /// Call a closure on this node's children. If any child handler returns an error, processing terminates without

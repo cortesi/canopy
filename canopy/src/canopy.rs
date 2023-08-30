@@ -15,7 +15,7 @@ use crate::{
     script,
     style::{solarized, StyleManager, StyleMap},
     tree::*,
-    NodeId, Outcome, Render, Result, ViewPort,
+    EventOutcome, NodeId, Render, Result, ViewPort,
 };
 
 /// The API exposed to nodes by Canopy.
@@ -34,30 +34,30 @@ pub trait Core {
     fn focus_depth(&self, n: &mut dyn Node) -> usize;
 
     /// Move focus downward of the currently focused node within the subtree at root.
-    fn focus_down(&mut self, root: &mut dyn Node) -> Result<Outcome>;
+    fn focus_down(&mut self, root: &mut dyn Node) -> Result<EventOutcome>;
 
     /// Focus the first node that accepts focus in the pre-order traversal of the subtree at root.
-    fn focus_first(&mut self, root: &mut dyn Node) -> Result<Outcome>;
+    fn focus_first(&mut self, root: &mut dyn Node) -> Result<EventOutcome>;
 
     /// Move focus to the left of the currently focused node within the subtree at root.
-    fn focus_left(&mut self, root: &mut dyn Node) -> Result<Outcome>;
+    fn focus_left(&mut self, root: &mut dyn Node) -> Result<EventOutcome>;
 
     /// Focus the next node in the pre-order traversal of root. If no node with focus is found, we focus the first node
     /// we can find instead.
-    fn focus_next(&mut self, root: &mut dyn Node) -> Result<Outcome>;
+    fn focus_next(&mut self, root: &mut dyn Node) -> Result<EventOutcome>;
 
     /// Return the focus path for the subtree under `root`.
     fn focus_path(&self, root: &mut dyn Node) -> Path;
 
     /// Focus the previous node in the pre-order traversal of `root`. If no node with focus is found, we focus the first
     /// node we can find instead.
-    fn focus_prev(&mut self, root: &mut dyn Node) -> Result<Outcome>;
+    fn focus_prev(&mut self, root: &mut dyn Node) -> Result<EventOutcome>;
 
     /// Move focus to  right of the currently focused node within the subtree at root.
-    fn focus_right(&mut self, root: &mut dyn Node) -> Result<Outcome>;
+    fn focus_right(&mut self, root: &mut dyn Node) -> Result<EventOutcome>;
 
     /// Move focus upward of the currently focused node within the subtree at root.
-    fn focus_up(&mut self, root: &mut dyn Node) -> Result<Outcome>;
+    fn focus_up(&mut self, root: &mut dyn Node) -> Result<EventOutcome>;
 
     /// Does the node need to render in the next sweep? This checks if the node is currently hidden, and if not, signals
     /// that we should render if the node is tainted, its focus status has changed, or if it is forcing a render.
@@ -67,7 +67,7 @@ pub trait Core {
     fn set_focus(&mut self, n: &mut dyn Node);
 
     /// Move focus in a specified direction within the subtree at root.
-    fn focus_dir(&mut self, root: &mut dyn Node, dir: Direction) -> Result<Outcome>;
+    fn focus_dir(&mut self, root: &mut dyn Node, dir: Direction) -> Result<EventOutcome>;
 
     /// Taint a node to signal that it should be re-rendered.
     fn taint(&mut self, n: &mut dyn Node);
@@ -174,7 +174,7 @@ impl Core for Canopy {
     }
 
     /// Move focus in a specified direction within the subtree at root.
-    fn focus_dir(&mut self, root: &mut dyn Node, dir: Direction) -> Result<Outcome> {
+    fn focus_dir(&mut self, root: &mut dyn Node, dir: Direction) -> Result<EventOutcome> {
         let mut seen = false;
         let mut last = None;
         if let Some(start) = self.focus_area(root) {
@@ -198,32 +198,32 @@ impl Core for Canopy {
                 Ok(false)
             })?
         }
-        Ok(Outcome::Handle)
+        Ok(EventOutcome::Handle)
     }
 
     /// Move focus to  right of the currently focused node within the subtree at root.
-    fn focus_right(&mut self, root: &mut dyn Node) -> Result<Outcome> {
+    fn focus_right(&mut self, root: &mut dyn Node) -> Result<EventOutcome> {
         self.focus_dir(root, Direction::Right)
     }
 
     /// Move focus to the left of the currently focused node within the subtree at root.
-    fn focus_left(&mut self, root: &mut dyn Node) -> Result<Outcome> {
+    fn focus_left(&mut self, root: &mut dyn Node) -> Result<EventOutcome> {
         self.focus_dir(root, Direction::Left)
     }
 
     /// Move focus upward of the currently focused node within the subtree at root.
-    fn focus_up(&mut self, root: &mut dyn Node) -> Result<Outcome> {
+    fn focus_up(&mut self, root: &mut dyn Node) -> Result<EventOutcome> {
         self.focus_dir(root, Direction::Up)
     }
 
     /// Move focus downward of the currently focused node within the subtree at root.
-    fn focus_down(&mut self, root: &mut dyn Node) -> Result<Outcome> {
+    fn focus_down(&mut self, root: &mut dyn Node) -> Result<EventOutcome> {
         self.focus_dir(root, Direction::Down)
     }
 
     /// Focus the first node that accepts focus in the pre-order traversal of
     /// the subtree at root.
-    fn focus_first(&mut self, root: &mut dyn Node) -> Result<Outcome> {
+    fn focus_first(&mut self, root: &mut dyn Node) -> Result<EventOutcome> {
         let mut focus_set = false;
         preorder(root, &mut |x| -> Result<Walk<()>> {
             Ok(if x.is_hidden() {
@@ -236,12 +236,12 @@ impl Core for Canopy {
                 Walk::Continue
             })
         })?;
-        Ok(Outcome::Handle)
+        Ok(EventOutcome::Handle)
     }
 
     /// Focus the next node in the pre-order traversal of root. If no node with
     /// focus is found, we focus the first node we can find instead.
-    fn focus_next(&mut self, root: &mut dyn Node) -> Result<Outcome> {
+    fn focus_next(&mut self, root: &mut dyn Node) -> Result<EventOutcome> {
         let mut focus_seen = false;
         let ret = preorder(root, &mut |x| -> Result<Walk<()>> {
             if x.is_hidden() {
@@ -260,13 +260,13 @@ impl Core for Canopy {
         if !ret.is_handled() {
             self.focus_first(root)
         } else {
-            Ok(Outcome::Handle)
+            Ok(EventOutcome::Handle)
         }
     }
 
     /// Focus the previous node in the pre-order traversal of `root`. If no node
     /// with focus is found, we focus the first node we can find instead.
-    fn focus_prev(&mut self, root: &mut dyn Node) -> Result<Outcome> {
+    fn focus_prev(&mut self, root: &mut dyn Node) -> Result<EventOutcome> {
         let current = self.focus_gen;
         let mut first = true;
         preorder(root, &mut |x| -> Result<Walk<()>> {
@@ -285,7 +285,7 @@ impl Core for Canopy {
             }
             Ok(Walk::Continue)
         })?;
-        Ok(Outcome::Handle)
+        Ok(EventOutcome::Handle)
     }
 
     /// Returns the focal depth of the specified node. If the node is not part
@@ -650,11 +650,11 @@ impl Canopy {
                     },
                 )?;
                 Ok(match hdl {
-                    Outcome::Handle => {
+                    EventOutcome::Handle => {
                         handled = true;
                         self.taint(x);
                     }
-                    Outcome::Ignore => {
+                    EventOutcome::Ignore => {
                         if let Some(s) =
                             self.keymap.resolve(&path, inputmap::Input::Mouse(m.into()))
                         {
@@ -689,11 +689,11 @@ impl Canopy {
                     Walk::Handle(Some((s, x.id())))
                 } else {
                     match x.handle_key(self, k)? {
-                        Outcome::Handle => {
+                        EventOutcome::Handle => {
                             self.taint(x);
                             Walk::Handle(None)
                         }
-                        Outcome::Ignore => {
+                        EventOutcome::Ignore => {
                             path.pop();
                             Walk::Continue
                         }
@@ -834,7 +834,7 @@ mod tests {
     fn tkey() -> Result<()> {
         run(|c, _, mut root| {
             c.set_focus(&mut root);
-            root.next_outcome = Some(Outcome::Handle);
+            root.next_outcome = Some(EventOutcome::Handle);
             c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["r@key->handle"]);
@@ -843,7 +843,7 @@ mod tests {
 
         run(|c, _, mut root| {
             c.set_focus(&mut root.a.a);
-            root.a.a.next_outcome = Some(Outcome::Handle);
+            root.a.a.next_outcome = Some(EventOutcome::Handle);
             c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@key->handle"]);
@@ -852,7 +852,7 @@ mod tests {
 
         run(|c, _, mut root| {
             c.set_focus(&mut root.a.a);
-            root.a.next_outcome = Some(Outcome::Handle);
+            root.a.next_outcome = Some(EventOutcome::Handle);
             c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@key->ignore", "ba@key->handle"]);
@@ -861,7 +861,7 @@ mod tests {
 
         run(|c, _, mut root| {
             c.set_focus(&mut root.a.a);
-            root.next_outcome = Some(Outcome::Handle);
+            root.next_outcome = Some(EventOutcome::Handle);
             c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(
@@ -873,7 +873,7 @@ mod tests {
 
         run(|c, _, mut root| {
             c.set_focus(&mut root.a);
-            root.a.next_outcome = Some(Outcome::Handle);
+            root.a.next_outcome = Some(EventOutcome::Handle);
             c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba@key->handle"]);
@@ -882,7 +882,7 @@ mod tests {
 
         run(|c, _, mut root| {
             c.set_focus(&mut root.a);
-            root.next_outcome = Some(Outcome::Handle);
+            root.next_outcome = Some(EventOutcome::Handle);
             c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba@key->ignore", "r@key->handle"]);
@@ -902,8 +902,8 @@ mod tests {
 
         run(|c, _, mut root| {
             c.set_focus(&mut root.a.b);
-            root.a.next_outcome = Some(Outcome::Ignore);
-            root.next_outcome = Some(Outcome::Handle);
+            root.a.next_outcome = Some(EventOutcome::Ignore);
+            root.next_outcome = Some(EventOutcome::Handle);
             c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(
@@ -915,7 +915,7 @@ mod tests {
 
         run(|c, _, mut root| {
             c.set_focus(&mut root.a.a);
-            root.a.a.next_outcome = Some(Outcome::Handle);
+            root.a.a.next_outcome = Some(EventOutcome::Handle);
             c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@key->handle",]);
@@ -924,7 +924,7 @@ mod tests {
 
         run(|c, _, mut root| {
             c.set_focus(&mut root.a.b);
-            root.a.next_outcome = Some(Outcome::Handle);
+            root.a.next_outcome = Some(EventOutcome::Handle);
             c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_lb@key->ignore", "ba@key->handle",]);
@@ -933,7 +933,7 @@ mod tests {
 
         run(|c, _, mut root| {
             c.set_focus(&mut root.a.b);
-            root.a.b.next_outcome = Some(Outcome::Handle);
+            root.a.b.next_outcome = Some(EventOutcome::Handle);
             c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_lb@key->handle",]);
@@ -942,8 +942,8 @@ mod tests {
 
         run(|c, _, mut root| {
             c.set_focus(&mut root.a.b);
-            root.a.b.next_outcome = Some(Outcome::Handle);
-            root.a.next_outcome = Some(Outcome::Handle);
+            root.a.b.next_outcome = Some(EventOutcome::Handle);
+            root.a.next_outcome = Some(EventOutcome::Handle);
             c.key(&mut root, 'a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_lb@key->handle",]);
@@ -957,7 +957,7 @@ mod tests {
     fn tmouse() -> Result<()> {
         run(|c, mut tr, mut root| {
             c.set_focus(&mut root);
-            root.next_outcome = Some(Outcome::Handle);
+            root.next_outcome = Some(EventOutcome::Handle);
             let evt = root.a.a.make_mouse_event()?;
             tr.render(c, &mut root)?;
             c.mouse(&mut root, evt)?;
@@ -970,7 +970,7 @@ mod tests {
         })?;
 
         run(|c, mut tr, mut root| {
-            root.a.a.next_outcome = Some(Outcome::Handle);
+            root.a.a.next_outcome = Some(EventOutcome::Handle);
             let evt = root.a.a.make_mouse_event()?;
             tr.render(c, &mut root)?;
             c.mouse(&mut root, evt)?;
@@ -980,7 +980,7 @@ mod tests {
         })?;
 
         run(|c, mut tr, mut root| {
-            root.a.a.next_outcome = Some(Outcome::Handle);
+            root.a.a.next_outcome = Some(EventOutcome::Handle);
             let evt = root.a.a.make_mouse_event()?;
             tr.render(c, &mut root)?;
             c.mouse(&mut root, evt)?;
@@ -990,7 +990,7 @@ mod tests {
         })?;
 
         run(|c, mut tr, mut root| {
-            root.a.a.next_outcome = Some(Outcome::Handle);
+            root.a.a.next_outcome = Some(EventOutcome::Handle);
             let evt = root.a.a.make_mouse_event()?;
             tr.render(c, &mut root)?;
             c.mouse(&mut root, evt)?;

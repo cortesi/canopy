@@ -164,16 +164,16 @@ impl Node for Input {
         r.text("text", self.vp().view_rect().line(0), &self.textbuf.text())
     }
 
-    fn handle_key(&mut self, _c: &mut dyn Core, k: key::Key) -> Result<Outcome> {
+    fn handle_key(&mut self, _c: &mut dyn Core, k: key::Key) -> Result<EventOutcome> {
         match k {
             key::Key {
                 mods: _,
                 key: key::KeyCode::Char(c),
             } => {
                 self.textbuf.insert(c);
-                Ok(Outcome::Handle)
+                Ok(EventOutcome::Handle)
             }
-            _ => Ok(Outcome::Ignore),
+            _ => Ok(EventOutcome::Ignore),
         }
     }
 
