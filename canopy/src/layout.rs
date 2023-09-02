@@ -1,3 +1,5 @@
+//! Helper functions for `Node::layout` implementations.
+
 use crate::{
     geom::{Frame, Rect},
     Node, Result, ViewPort,
@@ -7,7 +9,7 @@ use crate::{
 /// viewport's virtual size, then adjusts the node's view to place as much of it
 /// within the viewport's screen rectangle as possible.
 pub fn fit(n: &mut dyn Node, parent_vp: ViewPort) -> Result<()> {
-    let fit = n.layout(parent_vp.size())?;
+    let fit = n.fit(parent_vp.size())?;
     n.set_viewport(n.vp().update(fit, parent_vp.screen_rect()));
     Ok(())
 }
@@ -18,7 +20,7 @@ pub fn fit(n: &mut dyn Node, parent_vp: ViewPort) -> Result<()> {
 /// possible. This function returns a `Frame` object that can be used to draw a
 /// border around the node.
 pub fn frame(n: &mut dyn Node, parent_vp: ViewPort, border: u16) -> Result<Frame> {
-    let fit = n.layout(parent_vp.screen_rect().inner(border).into())?;
+    let fit = n.fit(parent_vp.screen_rect().inner(border).into())?;
     let screen = parent_vp.screen_rect().inner(border);
     n.update_viewport(&|vp| vp.update(fit, screen));
     // Return a frame for drawing the screen boundary, but in the view
@@ -32,7 +34,7 @@ pub fn frame(n: &mut dyn Node, parent_vp: ViewPort, border: u16) -> Result<Frame
 /// Place a node in a given screen rectangle. This fits the node to the
 /// region, and updates its viewport.
 pub fn place(n: &mut dyn Node, screen: Rect) -> Result<()> {
-    let fit = n.layout(screen.expanse())?;
+    let fit = n.fit(screen.expanse())?;
     n.update_viewport(&|vp| vp.update(fit, screen));
     Ok(())
 }

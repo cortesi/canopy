@@ -48,8 +48,8 @@ impl Node for IntervalItem {
         Some(Duration::from_secs(1))
     }
 
-    fn layout(&mut self, target: Expanse) -> Result<Expanse> {
-        self.child.layout(target)
+    fn fit(&mut self, target: Expanse) -> Result<Expanse> {
+        self.child.fit(target)
     }
 
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {

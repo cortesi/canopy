@@ -10,7 +10,7 @@ use crate::Result;
 ///  - `screen`, is the point on the physical screen to paint the `view` at.
 #[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ViewPort {
-    screen: Point,
+    projection: Point,
     view: Rect,
     size: Expanse,
 }
@@ -34,7 +34,7 @@ impl ViewPort {
             Ok(ViewPort {
                 size,
                 view,
-                screen: screen.into(),
+                projection: screen.into(),
             })
         }
     }
@@ -91,7 +91,7 @@ impl ViewPort {
     /// Absolute rectangle for the screen region the node is being projected
     /// onto.
     pub fn screen_rect(&self) -> Rect {
-        self.view.at(self.screen)
+        self.view.at(self.projection)
     }
 
     /// The sub-rectangle of the total virtual node that is being displayed on
@@ -110,7 +110,7 @@ impl ViewPort {
     /// useful for nodes that fill whatever space they're given.
     pub fn set_fill(&self, screen: Rect) -> Self {
         let mut vp = *self;
-        vp.screen = screen.tl;
+        vp.projection = screen.tl;
         vp.view = screen;
         vp.size = screen.into();
         vp
@@ -121,7 +121,7 @@ impl ViewPort {
     pub fn update(&self, size: Expanse, screen: Rect) -> Self {
         let mut vp = *self;
         vp.size = size;
-        vp.screen = screen.tl;
+        vp.projection = screen.tl;
 
         // Now we maintain our view invariants. We know the size of the view is
         // the minimum in each dimension of the two enclosing rects.
@@ -184,8 +184,8 @@ impl ViewPort {
             let rp = self.view.rebase_point(p).unwrap();
             // We know view is not larger than screen, so we can unwrap.
             Some(Point {
-                x: self.screen.x + rp.x,
-                y: self.screen.y + rp.y,
+                x: self.projection.x + rp.x,
+                y: self.projection.y + rp.y,
             })
         } else {
             None
@@ -203,7 +203,7 @@ impl ViewPort {
         if let Some(o) = self.view.intersect(&r) {
             let r = self.view.rebase_rect(&o).unwrap();
             Some(Rect {
-                tl: self.screen.scroll(r.tl.x as i16, r.tl.y as i16),
+                tl: self.projection.scroll(r.tl.x as i16, r.tl.y as i16),
                 w: r.w,
                 h: r.h,
             })
@@ -220,7 +220,9 @@ impl ViewPort {
             Some((
                 o.tl.x - l.tl.x,
                 Line {
-                    tl: self.screen.scroll(rebase.tl.x as i16, rebase.tl.y as i16),
+                    tl: self
+                        .projection
+                        .scroll(rebase.tl.x as i16, rebase.tl.y as i16),
                     w: rebase.w,
                 },
             ))
@@ -239,9 +241,9 @@ impl ViewPort {
                 size: child.expanse(),
                 // The view is the intersection relative to the child's outer
                 view: Rect::new(i.tl.x - child.tl.x, i.tl.y - child.tl.y, i.w, i.h),
-                screen: Point {
-                    x: self.screen.x + view_relative.tl.x,
-                    y: self.screen.y + view_relative.tl.y,
+                projection: Point {
+                    x: self.projection.x + view_relative.tl.x,
+                    y: self.projection.y + view_relative.tl.y,
                 },
             }))
         } else {
@@ -260,9 +262,9 @@ impl ViewPort {
         ViewPort {
             size: v.expanse(),
             view: isect,
-            screen: Point {
-                x: (isect.tl.x - self.view.tl.x) + self.screen.x,
-                y: (isect.tl.y - self.view.tl.y) + self.screen.y,
+            projection: Point {
+                x: (isect.tl.x - self.view.tl.x) + self.projection.x,
+                y: (isect.tl.y - self.view.tl.y) + self.projection.y,
             },
         }
     }

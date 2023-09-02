@@ -55,7 +55,7 @@ impl Node for EditorView {
         Ok(())
     }
 
-    fn layout(&mut self, sz: Expanse) -> Result<Expanse> {
+    fn fit(&mut self, sz: Expanse) -> Result<Expanse> {
         Ok(Expanse::new(sz.w, self.core.wrapped_height() as u16))
     }
 }
@@ -113,8 +113,8 @@ impl Node for Editor {
         false
     }
 
-    fn layout(&mut self, sz: Expanse) -> Result<Expanse> {
-        self.view.layout(sz)
+    fn fit(&mut self, sz: Expanse) -> Result<Expanse> {
+        self.view.fit(sz)
     }
 
     fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {

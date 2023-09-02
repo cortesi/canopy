@@ -19,7 +19,7 @@ pub struct TFixed {
 }
 
 impl Node for TFixed {
-    fn layout(&mut self, _target: Expanse) -> Result<Expanse> {
+    fn fit(&mut self, _target: Expanse) -> Result<Expanse> {
         Ok(Expanse {
             w: self.w,
             h: self.h,

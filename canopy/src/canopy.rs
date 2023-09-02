@@ -744,7 +744,7 @@ impl Canopy {
 
     /// Set the size on the root node, and taint the tree.
     pub(crate) fn set_root_size(&mut self, size: Expanse, n: &mut dyn Node) -> Result<()> {
-        let fit = n.layout(size)?;
+        let fit = n.fit(size)?;
         let vp = ViewPort::new(fit, fit, Point::default())?;
         n.set_viewport(vp);
         self.taint_tree(n);

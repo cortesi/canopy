@@ -71,7 +71,7 @@ impl Text {
 }
 
 impl Node for Text {
-    fn layout(&mut self, s: Expanse) -> Result<Expanse> {
+    fn fit(&mut self, s: Expanse) -> Result<Expanse> {
         let w = if let Some(w) = self.fixed_width {
             w
         } else {
@@ -114,7 +114,7 @@ mod tests {
     fn text_sizing() -> Result<()> {
         let txt = "aaa bbb ccc\nddd eee fff\nggg hhh iii";
         let mut t: Text = Text::new(txt);
-        t.layout(Expanse::new(7, 10))?;
+        t.fit(Expanse::new(7, 10))?;
         let expected: Vec<String> = vec![
             "aaa bbb".into(),
             "ccc    ".into(),

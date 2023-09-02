@@ -38,8 +38,8 @@ impl ListItem for LogItem {
 }
 
 impl Node for LogItem {
-    fn layout(&mut self, target: Expanse) -> Result<Expanse> {
-        self.child.layout(Expanse {
+    fn fit(&mut self, target: Expanse) -> Result<Expanse> {
+        self.child.fit(Expanse {
             w: target.w - 2,
             h: target.h,
         })
@@ -48,7 +48,7 @@ impl Node for LogItem {
     fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
         let vp = self.vp();
         let (_, screen) = vp.screen_rect().carve_hstart(2);
-        let outer = self.child.layout(screen.into())?;
+        let outer = self.child.fit(screen.into())?;
         let view = Rect {
             tl: vp.view_rect().tl,
             w: vp.view_rect().w.saturating_sub(2),

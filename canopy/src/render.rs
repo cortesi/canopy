@@ -22,8 +22,7 @@ pub trait RenderBackend {
     fn reset(&mut self) -> Result<()>;
 }
 
-/// A Render handler for a single node. A new instance is passed to each
-/// invocation of `Node::render()`.
+/// The interface used to render to the screen. It is only accessible in `Node::render`.
 pub struct Render<'a> {
     backend: &'a mut dyn RenderBackend,
     pub style: &'a mut StyleManager,

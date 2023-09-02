@@ -64,7 +64,7 @@ pub trait Node: StatefulNode + CommandNode {
     /// results. This function should not change the node's viewport parameters itself.
     ///
     /// The default implementation just returns the target value.
-    fn layout(&mut self, target: Expanse) -> Result<Expanse> {
+    fn fit(&mut self, target: Expanse) -> Result<Expanse> {
         Ok(target)
     }
 
