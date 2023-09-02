@@ -36,37 +36,37 @@ impl Text {
 
     #[command]
     pub fn scroll_to_top(&mut self, _c: &mut dyn Core) {
-        self.update_viewport(&|vp| vp.scroll_to(0, 0))
+        self.update_viewport(&|vp| vp.view_scroll_to(0, 0))
     }
 
     #[command]
     pub fn scroll_down(&mut self, _c: &mut dyn Core) {
-        self.update_viewport(&|vp| vp.down())
+        self.update_viewport(&|vp| vp.view_down())
     }
 
     #[command]
     pub fn scroll_up(&mut self, _c: &mut dyn Core) {
-        self.update_viewport(&|vp| vp.up())
+        self.update_viewport(&|vp| vp.view_up())
     }
 
     #[command]
     pub fn scroll_left(&mut self, _c: &mut dyn Core) {
-        self.update_viewport(&|vp| vp.left())
+        self.update_viewport(&|vp| vp.view_left())
     }
 
     #[command]
     pub fn scroll_right(&mut self, _c: &mut dyn Core) {
-        self.update_viewport(&|vp| vp.right())
+        self.update_viewport(&|vp| vp.view_right())
     }
 
     #[command]
     pub fn page_down(&mut self, _c: &mut dyn Core) {
-        self.update_viewport(&|vp| vp.page_down())
+        self.update_viewport(&|vp| vp.view_page_down())
     }
 
     #[command]
     pub fn page_up(&mut self, _c: &mut dyn Core) {
-        self.update_viewport(&|vp| vp.page_up())
+        self.update_viewport(&|vp| vp.view_page_up())
     }
 }
 

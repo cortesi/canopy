@@ -160,6 +160,11 @@ pub trait StatefulNode {
         self.state().viewport
     }
 
+    /// Get a mutable reference to the node's `ViewPort`.
+    fn vp_mut(&mut self) -> &mut ViewPort {
+        &mut self.state_mut().viewport
+    }
+
     /// Execute a closure that gets a mutable reference to the node's `ViewPort`
     /// for modification.
     fn update_viewport(&mut self, fun: &dyn Fn(ViewPort) -> ViewPort) {

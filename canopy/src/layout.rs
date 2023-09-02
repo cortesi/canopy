@@ -64,7 +64,7 @@ mod tests {
         let expected = ViewPort::new(Expanse::new(5, 5), Rect::new(0, 0, 5, 5), (10, 10))?;
         fit(&mut n, vp)?;
         assert_eq!(n.state().viewport, expected,);
-        n.update_viewport(&|vp| vp.right().down());
+        n.update_viewport(&|vp| vp.view_right().view_down());
         assert_eq!(n.state().viewport, expected,);
 
         // If the child is larger than parent, then wrap places the viewport at
@@ -77,7 +77,7 @@ mod tests {
             ViewPort::new(Expanse::new(20, 20), Rect::new(0, 0, 10, 10), (10, 10))?
         );
         // The child can shift its view freely
-        n.update_viewport(&|x| x.right().down());
+        n.update_viewport(&|x| x.view_right().view_down());
         assert_eq!(
             n.state().viewport,
             ViewPort::new(Expanse::new(20, 20), Rect::new(1, 1, 10, 10), (10, 10))?

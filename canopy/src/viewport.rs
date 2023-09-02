@@ -3,15 +3,14 @@ use crate::geom::{Expanse, Line, Point, Rect};
 use crate::Result;
 
 /// A ViewPort manages the size of a node and its projection onto the screen.
-///
-/// It co-ordinates three values:
-///  - `size` is the total virtual size of the node.
-///  - `view` is some sub-rectangle of `size` that is being displayed.
-///  - `screen`, is the point on the physical screen to paint the `view` at.
 #[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ViewPort {
+    /// The location on screen that the view is projected to, specified as the co-ordinates of the top-left corner of
+    /// the rectangle in the co-ordinate system of the parent node.
     projection: Point,
+    /// A view within the size rectangle.
     view: Rect,
+    /// The total size of the node.
     size: Expanse,
 }
 
@@ -41,7 +40,7 @@ impl ViewPort {
 
     /// Scroll the view to the specified position. The view is clamped within
     /// the outer rectangle.
-    pub fn scroll_to(&self, x: u16, y: u16) -> Self {
+    pub fn view_scroll_to(&self, x: u16, y: u16) -> Self {
         let mut vp = *self;
         let r = Rect::new(x, y, self.view.w, self.view.h);
         // We unwrap here, because this can only be an error if view is larger
@@ -52,40 +51,40 @@ impl ViewPort {
 
     /// Scroll the view by the given offsets. The view rectangle is clamped
     /// within the outer rectangle.
-    pub fn scroll_by(&self, x: i16, y: i16) -> Self {
+    pub fn view_scroll_by(&self, x: i16, y: i16) -> Self {
         let mut vp = *self;
         vp.view = self.view.shift_within(x, y, self.size.rect());
         vp
     }
 
     /// Scroll the view up by the height of the view rectangle.
-    pub fn page_up(&self) -> Self {
-        self.scroll_by(0, -(self.view.h as i16))
+    pub fn view_page_up(&self) -> Self {
+        self.view_scroll_by(0, -(self.view.h as i16))
     }
 
     /// Scroll the view down by the height of the view rectangle.
-    pub fn page_down(&self) -> Self {
-        self.scroll_by(0, self.view.h as i16)
+    pub fn view_page_down(&self) -> Self {
+        self.view_scroll_by(0, self.view.h as i16)
     }
 
     /// Scroll the view up by one line.
-    pub fn up(&self) -> Self {
-        self.scroll_by(0, -1)
+    pub fn view_up(&self) -> Self {
+        self.view_scroll_by(0, -1)
     }
 
     /// Scroll the view down by one line.
-    pub fn down(&self) -> Self {
-        self.scroll_by(0, 1)
+    pub fn view_down(&self) -> Self {
+        self.view_scroll_by(0, 1)
     }
 
     /// Scroll the view left by one line.
-    pub fn left(&self) -> Self {
-        self.scroll_by(-1, 0)
+    pub fn view_left(&self) -> Self {
+        self.view_scroll_by(-1, 0)
     }
 
     /// Scroll the view right by one line.
-    pub fn right(&self) -> Self {
-        self.scroll_by(1, 0)
+    pub fn view_right(&self) -> Self {
+        self.view_scroll_by(1, 0)
     }
 
     /// Absolute rectangle for the screen region the node is being projected
@@ -114,6 +113,22 @@ impl ViewPort {
         vp.view = screen;
         vp.size = screen.into();
         vp
+    }
+
+    /// Set the node size and the target view size at the same time. We try to retain the old view position, but shift
+    /// and resize it if necessary.
+    pub fn fit_size(&mut self, size: Expanse, view_size: Expanse) {
+        let w = size.w.min(view_size.w);
+        let h = size.h.min(view_size.h);
+        // Now we just clamp the rect into the view.
+        self.view = Rect {
+            tl: self.view.tl,
+            w,
+            h,
+        }
+        .clamp_within(self.size.rect())
+        // Safe to unwrap because of w, h computation above.
+        .unwrap();
     }
 
     /// Set both the outer and screen rects at once. View position is
@@ -481,22 +496,22 @@ mod tests {
     fn view_movement() -> Result<()> {
         let v = ViewPort::new(Expanse::new(100, 100), Rect::new(0, 0, 10, 10), (0, 0))?;
 
-        let v = v.scroll_by(10, 10);
+        let v = v.view_scroll_by(10, 10);
         assert_eq!(v.view, Rect::new(10, 10, 10, 10),);
 
-        let v = v.scroll_by(-20, -20);
+        let v = v.view_scroll_by(-20, -20);
         assert_eq!(v.view, Rect::new(0, 0, 10, 10));
 
-        let v = v.page_down();
+        let v = v.view_page_down();
         assert_eq!(v.view, Rect::new(0, 10, 10, 10));
 
-        let v = v.page_up();
+        let v = v.view_page_up();
         assert_eq!(v.view, Rect::new(0, 0, 10, 10));
 
-        let v = v.scroll_to(50, 50);
+        let v = v.view_scroll_to(50, 50);
         assert_eq!(v.view, Rect::new(50, 50, 10, 10));
 
-        let v = v.scroll_to(150, 150);
+        let v = v.view_scroll_to(150, 150);
         assert_eq!(v.view, Rect::new(90, 90, 10, 10));
 
         Ok(())
