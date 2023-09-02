@@ -1927,7 +1927,7 @@
 
     <span class="doccomment">/// Set the size on the root node, and taint the tree.
     </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>set_root_size(<span class="kw-2">&amp;mut </span><span class="self">self</span>, size: Expanse, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-        <span class="kw">let </span>fit = n.layout(size)<span class="question-mark">?</span>;
+        <span class="kw">let </span>fit = n.fit(size)<span class="question-mark">?</span>;
         <span class="kw">let </span>vp = ViewPort::new(fit, fit, Point::default())<span class="question-mark">?</span>;
         n.set_viewport(vp);
         <span class="self">self</span>.taint_tree(n);

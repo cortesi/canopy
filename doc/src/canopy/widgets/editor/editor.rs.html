@@ -185,7 +185,7 @@
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;Expanse&gt; {
+    <span class="kw">fn </span>fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;Expanse&gt; {
         <span class="prelude-val">Ok</span>(Expanse::new(sz.w, <span class="self">self</span>.core.wrapped_height() <span class="kw">as </span>u16))
     }
 }
@@ -243,8 +243,8 @@
         <span class="bool-val">false
     </span>}
 
-    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;Expanse&gt; {
-        <span class="self">self</span>.view.layout(sz)
+    <span class="kw">fn </span>fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;Expanse&gt; {
+        <span class="self">self</span>.view.fit(sz)
     }
 
     <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Core, <span class="kw">_</span>: <span class="kw-2">&amp;mut </span>Render) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {

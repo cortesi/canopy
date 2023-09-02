@@ -129,7 +129,11 @@
 <a href="#129" id="129">129</a>
 <a href="#130" id="130">130</a>
 <a href="#131" id="131">131</a>
-</pre></div><pre class="rust"><code><span class="kw">use crate</span>::{
+<a href="#132" id="132">132</a>
+<a href="#133" id="133">133</a>
+</pre></div><pre class="rust"><code><span class="doccomment">//! Helper functions for `Node::layout` implementations.
+
+</span><span class="kw">use crate</span>::{
     geom::{Frame, Rect},
     Node, <span class="prelude-ty">Result</span>, ViewPort,
 };
@@ -138,7 +142,7 @@
 /// viewport&#39;s virtual size, then adjusts the node&#39;s view to place as much of it
 /// within the viewport&#39;s screen rectangle as possible.
 </span><span class="kw">pub fn </span>fit(n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, parent_vp: ViewPort) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-    <span class="kw">let </span>fit = n.layout(parent_vp.size())<span class="question-mark">?</span>;
+    <span class="kw">let </span>fit = n.fit(parent_vp.size())<span class="question-mark">?</span>;
     n.set_viewport(n.vp().update(fit, parent_vp.screen_rect()));
     <span class="prelude-val">Ok</span>(())
 }
@@ -149,7 +153,7 @@
 /// possible. This function returns a `Frame` object that can be used to draw a
 /// border around the node.
 </span><span class="kw">pub fn </span>frame(n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, parent_vp: ViewPort, border: u16) -&gt; <span class="prelude-ty">Result</span>&lt;Frame&gt; {
-    <span class="kw">let </span>fit = n.layout(parent_vp.screen_rect().inner(border).into())<span class="question-mark">?</span>;
+    <span class="kw">let </span>fit = n.fit(parent_vp.screen_rect().inner(border).into())<span class="question-mark">?</span>;
     <span class="kw">let </span>screen = parent_vp.screen_rect().inner(border);
     n.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.update(fit, screen));
     <span class="comment">// Return a frame for drawing the screen boundary, but in the view
@@ -163,7 +167,7 @@
 <span class="doccomment">/// Place a node in a given screen rectangle. This fits the node to the
 /// region, and updates its viewport.
 </span><span class="kw">pub fn </span>place(n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, screen: Rect) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-    <span class="kw">let </span>fit = n.layout(screen.expanse())<span class="question-mark">?</span>;
+    <span class="kw">let </span>fit = n.fit(screen.expanse())<span class="question-mark">?</span>;
     n.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.update(fit, screen));
     <span class="prelude-val">Ok</span>(())
 }

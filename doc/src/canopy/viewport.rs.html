@@ -500,6 +500,8 @@
 <a href="#500" id="500">500</a>
 <a href="#501" id="501">501</a>
 <a href="#502" id="502">502</a>
+<a href="#503" id="503">503</a>
+<a href="#504" id="504">504</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::error;
 <span class="kw">use </span><span class="kw">crate</span>::geom::{Expanse, Line, Point, Rect};
 <span class="kw">use </span><span class="kw">crate</span>::Result;
@@ -512,7 +514,7 @@
 ///  - `screen`, is the point on the physical screen to paint the `view` at.
 </span><span class="attr">#[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 </span><span class="kw">pub struct </span>ViewPort {
-    screen: Point,
+    projection: Point,
     view: Rect,
     size: Expanse,
 }
@@ -536,7 +538,7 @@
             <span class="prelude-val">Ok</span>(ViewPort {
                 size,
                 view,
-                screen: screen.into(),
+                projection: screen.into(),
             })
         }
     }
@@ -593,7 +595,7 @@
     <span class="doccomment">/// Absolute rectangle for the screen region the node is being projected
     /// onto.
     </span><span class="kw">pub fn </span>screen_rect(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Rect {
-        <span class="self">self</span>.view.at(<span class="self">self</span>.screen)
+        <span class="self">self</span>.view.at(<span class="self">self</span>.projection)
     }
 
     <span class="doccomment">/// The sub-rectangle of the total virtual node that is being displayed on
@@ -612,7 +614,7 @@
     /// useful for nodes that fill whatever space they&#39;re given.
     </span><span class="kw">pub fn </span>set_fill(<span class="kw-2">&amp;</span><span class="self">self</span>, screen: Rect) -&gt; <span class="self">Self </span>{
         <span class="kw">let </span><span class="kw-2">mut </span>vp = <span class="kw-2">*</span><span class="self">self</span>;
-        vp.screen = screen.tl;
+        vp.projection = screen.tl;
         vp.view = screen;
         vp.size = screen.into();
         vp
@@ -623,7 +625,7 @@
     </span><span class="kw">pub fn </span>update(<span class="kw-2">&amp;</span><span class="self">self</span>, size: Expanse, screen: Rect) -&gt; <span class="self">Self </span>{
         <span class="kw">let </span><span class="kw-2">mut </span>vp = <span class="kw-2">*</span><span class="self">self</span>;
         vp.size = size;
-        vp.screen = screen.tl;
+        vp.projection = screen.tl;
 
         <span class="comment">// Now we maintain our view invariants. We know the size of the view is
         // the minimum in each dimension of the two enclosing rects.
@@ -686,8 +688,8 @@
             <span class="kw">let </span>rp = <span class="self">self</span>.view.rebase_point(p).unwrap();
             <span class="comment">// We know view is not larger than screen, so we can unwrap.
             </span><span class="prelude-val">Some</span>(Point {
-                x: <span class="self">self</span>.screen.x + rp.x,
-                y: <span class="self">self</span>.screen.y + rp.y,
+                x: <span class="self">self</span>.projection.x + rp.x,
+                y: <span class="self">self</span>.projection.y + rp.y,
             })
         } <span class="kw">else </span>{
             <span class="prelude-val">None
@@ -705,7 +707,7 @@
         <span class="kw">if let </span><span class="prelude-val">Some</span>(o) = <span class="self">self</span>.view.intersect(<span class="kw-2">&amp;</span>r) {
             <span class="kw">let </span>r = <span class="self">self</span>.view.rebase_rect(<span class="kw-2">&amp;</span>o).unwrap();
             <span class="prelude-val">Some</span>(Rect {
-                tl: <span class="self">self</span>.screen.scroll(r.tl.x <span class="kw">as </span>i16, r.tl.y <span class="kw">as </span>i16),
+                tl: <span class="self">self</span>.projection.scroll(r.tl.x <span class="kw">as </span>i16, r.tl.y <span class="kw">as </span>i16),
                 w: r.w,
                 h: r.h,
             })
@@ -722,7 +724,9 @@
             <span class="prelude-val">Some</span>((
                 o.tl.x - l.tl.x,
                 Line {
-                    tl: <span class="self">self</span>.screen.scroll(rebase.tl.x <span class="kw">as </span>i16, rebase.tl.y <span class="kw">as </span>i16),
+                    tl: <span class="self">self
+                        </span>.projection
+                        .scroll(rebase.tl.x <span class="kw">as </span>i16, rebase.tl.y <span class="kw">as </span>i16),
                     w: rebase.w,
                 },
             ))
@@ -741,9 +745,9 @@
                 size: child.expanse(),
                 <span class="comment">// The view is the intersection relative to the child&#39;s outer
                 </span>view: Rect::new(i.tl.x - child.tl.x, i.tl.y - child.tl.y, i.w, i.h),
-                screen: Point {
-                    x: <span class="self">self</span>.screen.x + view_relative.tl.x,
-                    y: <span class="self">self</span>.screen.y + view_relative.tl.y,
+                projection: Point {
+                    x: <span class="self">self</span>.projection.x + view_relative.tl.x,
+                    y: <span class="self">self</span>.projection.y + view_relative.tl.y,
                 },
             }))
         } <span class="kw">else </span>{
@@ -762,9 +766,9 @@
         ViewPort {
             size: v.expanse(),
             view: isect,
-            screen: Point {
-                x: (isect.tl.x - <span class="self">self</span>.view.tl.x) + <span class="self">self</span>.screen.x,
-                y: (isect.tl.y - <span class="self">self</span>.view.tl.y) + <span class="self">self</span>.screen.y,
+            projection: Point {
+                x: (isect.tl.x - <span class="self">self</span>.view.tl.x) + <span class="self">self</span>.projection.x,
+                y: (isect.tl.y - <span class="self">self</span>.view.tl.y) + <span class="self">self</span>.projection.y,
             },
         }
     }

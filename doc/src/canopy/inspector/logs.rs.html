@@ -200,8 +200,8 @@
 }
 
 <span class="kw">impl </span>Node <span class="kw">for </span>LogItem {
-    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, target: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;Expanse&gt; {
-        <span class="self">self</span>.child.layout(Expanse {
+    <span class="kw">fn </span>fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, target: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;Expanse&gt; {
+        <span class="self">self</span>.child.fit(Expanse {
             w: target.w - <span class="number">2</span>,
             h: target.h,
         })
@@ -210,7 +210,7 @@
     <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Core, r: <span class="kw-2">&amp;mut </span>Render) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="kw">let </span>vp = <span class="self">self</span>.vp();
         <span class="kw">let </span>(<span class="kw">_</span>, screen) = vp.screen_rect().carve_hstart(<span class="number">2</span>);
-        <span class="kw">let </span>outer = <span class="self">self</span>.child.layout(screen.into())<span class="question-mark">?</span>;
+        <span class="kw">let </span>outer = <span class="self">self</span>.child.fit(screen.into())<span class="question-mark">?</span>;
         <span class="kw">let </span>view = Rect {
             tl: vp.view_rect().tl,
             w: vp.view_rect().w.saturating_sub(<span class="number">2</span>),

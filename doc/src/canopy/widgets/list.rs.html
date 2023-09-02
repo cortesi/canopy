@@ -754,7 +754,7 @@
     </span><span class="kw">fn </span>refresh_views(<span class="kw-2">&amp;mut </span><span class="self">self</span>, r: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="kw">let </span><span class="kw-2">mut </span>voffset: u16 = <span class="number">0</span>;
         <span class="kw">for </span>itm <span class="kw">in </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.items {
-            <span class="kw">let </span>item_view = itm.itm.layout(r)<span class="question-mark">?</span>.rect();
+            <span class="kw">let </span>item_view = itm.itm.fit(r)<span class="question-mark">?</span>.rect();
             itm.virt = item_view.shift(<span class="number">0</span>, voffset <span class="kw">as </span>i16);
             voffset += item_view.h;
         }
@@ -777,7 +777,7 @@
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, r: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;Expanse&gt; {
+    <span class="kw">fn </span>fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, r: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;Expanse&gt; {
         <span class="kw">let </span><span class="kw-2">mut </span>w = <span class="number">0</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>h = <span class="number">0</span>;
         <span class="self">self</span>.refresh_views(r)<span class="question-mark">?</span>;
