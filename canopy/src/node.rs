@@ -56,16 +56,17 @@ pub trait Node: StatefulNode + CommandNode {
         Ok(())
     }
 
-    /// Compute the outer size of the node if it had to be displayed in the target area. In practice, nodes will usually
-    /// either constrain themselves based on the width or the height of the target area, or neither, but not both. The
-    /// resulting size may be smaller or larger than the target. If non-trivial computation is done to compute the size
-    /// (e.g. reflowing text), it should be cached for use by future calls. This method may be called multiple times for
-    /// a given node during a render sweep, so re-fitting to the same size should be cheap and return consistent
-    /// results. This function should not change the node's viewport parameters itself.
+    /// Re-compute the size and view of the node if it had to be displayed in the target area. In practice, nodes will
+    /// usually either constrain themselves based on the width or the height of the target area, or neither, but not
+    /// both. The resulting size may be smaller or larger than the target. If non-trivial computation is done to compute
+    /// the size (e.g. reflowing text), it should be cached for use by future calls. This method may be called multiple
+    /// times for a given node during a render sweep, so re-fitting to the same size should be cheap and return
+    /// consistent results.
     ///
-    /// The default implementation just returns the target value.
-    fn fit(&mut self, target: Expanse) -> Result<Expanse> {
-        Ok(target)
+    /// The default implementation just sets both the size and view of the node to the target.
+    fn fit(&mut self, target: Expanse) -> Result<()> {
+        self.vp_mut().fit_size(target, target);
+        Ok(())
     }
 
     /// The scheduled poll endpoint. This function is called for every node the first time it is seen during the

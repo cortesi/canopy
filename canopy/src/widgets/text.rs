@@ -71,7 +71,7 @@ impl Text {
 }
 
 impl Node for Text {
-    fn fit(&mut self, s: Expanse) -> Result<Expanse> {
+    fn fit(&mut self, s: Expanse) -> Result<()> {
         let w = if let Some(w) = self.fixed_width {
             w
         } else {
@@ -89,8 +89,11 @@ impl Node for Text {
             };
             self.lines = Some(split);
         }
-        Ok(self.current_size)
+        let cs = self.current_size.clone();
+        self.vp_mut().fit_size(cs, s);
+        Ok(())
     }
+
     fn render(&mut self, _c: &dyn Core, rndr: &mut Render) -> Result<()> {
         let vo = self.vp().view_rect();
         if let Some(lines) = self.lines.as_ref() {

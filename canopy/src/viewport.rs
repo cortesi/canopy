@@ -7,11 +7,11 @@ use crate::Result;
 pub struct ViewPort {
     /// The location on screen that the view is projected to, specified as the co-ordinates of the top-left corner of
     /// the rectangle in the co-ordinate system of the parent node.
-    projection: Point,
+    pub projection: Point,
     /// A view within the size rectangle.
-    view: Rect,
+    pub view: Rect,
     /// The total size of the node.
-    size: Expanse,
+    pub size: Expanse,
 }
 
 impl ViewPort {
@@ -116,10 +116,11 @@ impl ViewPort {
     }
 
     /// Set the node size and the target view size at the same time. We try to retain the old view position, but shift
-    /// and resize it if necessary.
+    /// and resize it to be within the view if necessary.
     pub fn fit_size(&mut self, size: Expanse, view_size: Expanse) {
         let w = size.w.min(view_size.w);
         let h = size.h.min(view_size.h);
+        self.size = size;
         // Now we just clamp the rect into the view.
         self.view = Rect {
             tl: self.view.tl,

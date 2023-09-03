@@ -44,24 +44,27 @@ impl ListItem for Block {
 }
 
 impl Node for Block {
-    fn fit(&mut self, target: Expanse) -> Result<Expanse> {
+    fn fit(&mut self, target: Expanse) -> Result<()> {
         self.child.fit(Expanse {
             w: target.w.saturating_sub(2),
             h: target.h,
-        })
+        })?;
+        let size = self.child.vp().size;
+        self.vp_mut().fit_size(size, size);
+        Ok(())
     }
 
     fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
         let vp = self.vp();
         let (_, screen) = vp.screen_rect().carve_hstart(2);
-        let outer = self.child.fit(screen.into())?;
+        self.child.fit(screen.into())?;
         let view = Rect {
             tl: vp.view_rect().tl,
             w: vp.view_rect().w.saturating_sub(2),
             h: vp.view_rect().h,
         };
         self.child
-            .set_viewport(ViewPort::new(outer, view, screen.tl)?);
+            .set_viewport(ViewPort::new(self.child.vp().size, view, screen.tl)?);
         if self.selected {
             let active = vp.view_rect().carve_hstart(1).0;
             r.fill("blue", active, '\u{2588}')?;

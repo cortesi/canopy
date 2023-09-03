@@ -275,7 +275,8 @@ where
     fn refresh_views(&mut self, r: Expanse) -> Result<()> {
         let mut voffset: u16 = 0;
         for itm in &mut self.items {
-            let item_view = itm.itm.fit(r)?.rect();
+            itm.itm.fit(r)?;
+            let item_view = itm.itm.vp().size.rect();
             itm.virt = item_view.shift(0, voffset as i16);
             voffset += item_view.h;
         }
@@ -298,7 +299,7 @@ where
         Ok(())
     }
 
-    fn fit(&mut self, r: Expanse) -> Result<Expanse> {
+    fn fit(&mut self, r: Expanse) -> Result<()> {
         let mut w = 0;
         let mut h = 0;
         self.refresh_views(r)?;
@@ -306,7 +307,8 @@ where
             w = w.max(i.virt.w);
             h += i.virt.h
         }
-        Ok(Expanse { w, h })
+        self.vp_mut().fit_size(Expanse { w, h }, r);
+        Ok(())
     }
 
     fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {

@@ -177,14 +177,16 @@ impl Node for Input {
         }
     }
 
-    fn fit(&mut self, sz: Expanse) -> Result<Expanse> {
+    fn fit(&mut self, sz: Expanse) -> Result<()> {
         self.textbuf.set_display_width(sz.w as usize);
         let tbl = self.textbuf.value.len() as u16;
-        if self.textbuf.window.len >= tbl {
-            Ok(sz)
+        let expanse = if self.textbuf.window.len >= tbl {
+            sz
         } else {
-            Ok(Expanse::new(tbl as u16, 1))
-        }
+            Expanse::new(tbl as u16, 1)
+        };
+        self.vp_mut().fit_size(expanse, sz);
+        Ok(())
     }
 }
 
