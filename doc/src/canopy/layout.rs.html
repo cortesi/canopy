@@ -131,6 +131,7 @@
 <a href="#131" id="131">131</a>
 <a href="#132" id="132">132</a>
 <a href="#133" id="133">133</a>
+<a href="#134" id="134">134</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Helper functions for `Node::layout` implementations.
 
 </span><span class="kw">use crate</span>::{
@@ -138,12 +139,11 @@
     Node, <span class="prelude-ty">Result</span>, ViewPort,
 };
 
-<span class="doccomment">/// Adjust a node so that it fits a viewport. This fits the node to the
-/// viewport&#39;s virtual size, then adjusts the node&#39;s view to place as much of it
-/// within the viewport&#39;s screen rectangle as possible.
+<span class="doccomment">/// Adjust a node so that it fits a viewport. This fits the node to the viewport&#39;s screen rectangle, then adjusts the
+/// node&#39;s view to place as much of it within the viewport&#39;s screen rectangle as possible.
 </span><span class="kw">pub fn </span>fit(n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, parent_vp: ViewPort) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-    <span class="kw">let </span>fit = n.fit(parent_vp.size())<span class="question-mark">?</span>;
-    n.set_viewport(n.vp().update(fit, parent_vp.screen_rect()));
+    n.fit(parent_vp.screen_rect().into())<span class="question-mark">?</span>;
+    n.vp_mut().projection = parent_vp.projection;
     <span class="prelude-val">Ok</span>(())
 }
 
@@ -153,9 +153,10 @@
 /// possible. This function returns a `Frame` object that can be used to draw a
 /// border around the node.
 </span><span class="kw">pub fn </span>frame(n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, parent_vp: ViewPort, border: u16) -&gt; <span class="prelude-ty">Result</span>&lt;Frame&gt; {
-    <span class="kw">let </span>fit = n.fit(parent_vp.screen_rect().inner(border).into())<span class="question-mark">?</span>;
-    <span class="kw">let </span>screen = parent_vp.screen_rect().inner(border);
-    n.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.update(fit, screen));
+    <span class="kw">let </span>inner = parent_vp.screen_rect().inner(border);
+    n.fit(inner.into())<span class="question-mark">?</span>;
+    n.vp_mut().projection = inner.tl;
+
     <span class="comment">// Return a frame for drawing the screen boundary, but in the view
     // rect&#39;s co-ordinate system.
     </span><span class="prelude-val">Ok</span>(Frame::new(
@@ -167,8 +168,8 @@
 <span class="doccomment">/// Place a node in a given screen rectangle. This fits the node to the
 /// region, and updates its viewport.
 </span><span class="kw">pub fn </span>place(n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, screen: Rect) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-    <span class="kw">let </span>fit = n.fit(screen.expanse())<span class="question-mark">?</span>;
-    n.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.update(fit, screen));
+    n.fit(screen.expanse())<span class="question-mark">?</span>;
+    n.vp_mut().projection = screen.tl;
     <span class="prelude-val">Ok</span>(())
 }
 
@@ -190,18 +191,16 @@
         fit(<span class="kw-2">&amp;mut </span>n, vp)<span class="question-mark">?</span>;
         <span class="macro">assert_eq!</span>(n.state().viewport, vp);
 
-        <span class="comment">// If the child is smaller than parent, then wrap places the viewport at
-        // (0, 0)
+        <span class="comment">// If the child is smaller than parent, then wrap places the viewport at (0, 0)
         </span><span class="kw">let </span><span class="kw-2">mut </span>n = TFixed::new(<span class="number">5</span>, <span class="number">5</span>);
         <span class="kw">let </span>vp = ViewPort::new(Expanse::new(<span class="number">10</span>, <span class="number">10</span>), Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">10</span>, <span class="number">10</span>), (<span class="number">10</span>, <span class="number">10</span>))<span class="question-mark">?</span>;
         <span class="kw">let </span>expected = ViewPort::new(Expanse::new(<span class="number">5</span>, <span class="number">5</span>), Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">5</span>, <span class="number">5</span>), (<span class="number">10</span>, <span class="number">10</span>))<span class="question-mark">?</span>;
         fit(<span class="kw-2">&amp;mut </span>n, vp)<span class="question-mark">?</span>;
         <span class="macro">assert_eq!</span>(n.state().viewport, expected,);
-        n.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.right().down());
+        n.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_right().view_down());
         <span class="macro">assert_eq!</span>(n.state().viewport, expected,);
 
-        <span class="comment">// If the child is larger than parent, then wrap places the viewport at
-        // (0, 0).
+        <span class="comment">// If the child is larger than parent, then wrap places the viewport at (0, 0).
         </span><span class="kw">let </span><span class="kw-2">mut </span>n = TFixed::new(<span class="number">20</span>, <span class="number">20</span>);
         <span class="kw">let </span>vp = ViewPort::new(Expanse::new(<span class="number">10</span>, <span class="number">10</span>), Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">10</span>, <span class="number">10</span>), (<span class="number">10</span>, <span class="number">10</span>))<span class="question-mark">?</span>;
         fit(<span class="kw-2">&amp;mut </span>n, vp)<span class="question-mark">?</span>;
@@ -209,18 +208,21 @@
             n.state().viewport,
             ViewPort::new(Expanse::new(<span class="number">20</span>, <span class="number">20</span>), Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">10</span>, <span class="number">10</span>), (<span class="number">10</span>, <span class="number">10</span>))<span class="question-mark">?
         </span>);
+
         <span class="comment">// The child can shift its view freely
-        </span>n.update_viewport(<span class="kw-2">&amp;</span>|x| x.right().down());
+        </span>n.update_viewport(<span class="kw-2">&amp;</span>|x| x.view_right().view_down());
         <span class="macro">assert_eq!</span>(
             n.state().viewport,
             ViewPort::new(Expanse::new(<span class="number">20</span>, <span class="number">20</span>), Rect::new(<span class="number">1</span>, <span class="number">1</span>, <span class="number">10</span>, <span class="number">10</span>), (<span class="number">10</span>, <span class="number">10</span>))<span class="question-mark">?
         </span>);
+
         <span class="comment">// And subsequent wraps maintain the child view position, if possible
         </span>fit(<span class="kw-2">&amp;mut </span>n, vp)<span class="question-mark">?</span>;
         <span class="macro">assert_eq!</span>(
             n.state().viewport,
             ViewPort::new(Expanse::new(<span class="number">20</span>, <span class="number">20</span>), Rect::new(<span class="number">1</span>, <span class="number">1</span>, <span class="number">10</span>, <span class="number">10</span>), (<span class="number">10</span>, <span class="number">10</span>))<span class="question-mark">?
         </span>);
+
         <span class="comment">// When the parent viewport shrinks, we maintain position and resize
         </span><span class="kw">let </span>shrink = ViewPort::new(Expanse::new(<span class="number">3</span>, <span class="number">3</span>), Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">2</span>, <span class="number">2</span>), (<span class="number">10</span>, <span class="number">10</span>))<span class="question-mark">?</span>;
         fit(<span class="kw-2">&amp;mut </span>n, shrink)<span class="question-mark">?</span>;

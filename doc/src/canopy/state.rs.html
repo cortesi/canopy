@@ -199,6 +199,11 @@
 <a href="#199" id="199">199</a>
 <a href="#200" id="200">200</a>
 <a href="#201" id="201">201</a>
+<a href="#202" id="202">202</a>
+<a href="#203" id="203">203</a>
+<a href="#204" id="204">204</a>
+<a href="#205" id="205">205</a>
+<a href="#206" id="206">206</a>
 </pre></div><pre class="rust"><code><span class="kw">use crate</span>::{error, viewport::ViewPort, <span class="prelude-ty">Result</span>};
 <span class="kw">use </span>convert_case::{Case, Casing};
 <span class="kw">use </span>std::sync::atomic::AtomicU64;
@@ -359,6 +364,11 @@
     <span class="doccomment">/// Get the node&#39;s `ViewPort`.
     </span><span class="kw">fn </span>vp(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; ViewPort {
         <span class="self">self</span>.state().viewport
+    }
+
+    <span class="doccomment">/// Get a mutable reference to the node&#39;s `ViewPort`.
+    </span><span class="kw">fn </span>vp_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>ViewPort {
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>.state_mut().viewport
     }
 
     <span class="doccomment">/// Execute a closure that gets a mutable reference to the node&#39;s `ViewPort`

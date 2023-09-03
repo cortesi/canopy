@@ -502,21 +502,36 @@
 <a href="#502" id="502">502</a>
 <a href="#503" id="503">503</a>
 <a href="#504" id="504">504</a>
+<a href="#505" id="505">505</a>
+<a href="#506" id="506">506</a>
+<a href="#507" id="507">507</a>
+<a href="#508" id="508">508</a>
+<a href="#509" id="509">509</a>
+<a href="#510" id="510">510</a>
+<a href="#511" id="511">511</a>
+<a href="#512" id="512">512</a>
+<a href="#513" id="513">513</a>
+<a href="#514" id="514">514</a>
+<a href="#515" id="515">515</a>
+<a href="#516" id="516">516</a>
+<a href="#517" id="517">517</a>
+<a href="#518" id="518">518</a>
+<a href="#519" id="519">519</a>
+<a href="#520" id="520">520</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::error;
 <span class="kw">use </span><span class="kw">crate</span>::geom::{Expanse, Line, Point, Rect};
 <span class="kw">use </span><span class="kw">crate</span>::Result;
 
 <span class="doccomment">/// A ViewPort manages the size of a node and its projection onto the screen.
-///
-/// It co-ordinates three values:
-///  - `size` is the total virtual size of the node.
-///  - `view` is some sub-rectangle of `size` that is being displayed.
-///  - `screen`, is the point on the physical screen to paint the `view` at.
 </span><span class="attr">#[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 </span><span class="kw">pub struct </span>ViewPort {
-    projection: Point,
-    view: Rect,
-    size: Expanse,
+    <span class="doccomment">/// The location on screen that the view is projected to, specified as the co-ordinates of the top-left corner of
+    /// the rectangle in the co-ordinate system of the parent node.
+    </span><span class="kw">pub </span>projection: Point,
+    <span class="doccomment">/// A view within the size rectangle.
+    </span><span class="kw">pub </span>view: Rect,
+    <span class="doccomment">/// The total size of the node.
+    </span><span class="kw">pub </span>size: Expanse,
 }
 
 <span class="kw">impl </span>ViewPort {
@@ -545,7 +560,7 @@
 
     <span class="doccomment">/// Scroll the view to the specified position. The view is clamped within
     /// the outer rectangle.
-    </span><span class="kw">pub fn </span>scroll_to(<span class="kw-2">&amp;</span><span class="self">self</span>, x: u16, y: u16) -&gt; <span class="self">Self </span>{
+    </span><span class="kw">pub fn </span>view_scroll_to(<span class="kw-2">&amp;</span><span class="self">self</span>, x: u16, y: u16) -&gt; <span class="self">Self </span>{
         <span class="kw">let </span><span class="kw-2">mut </span>vp = <span class="kw-2">*</span><span class="self">self</span>;
         <span class="kw">let </span>r = Rect::new(x, y, <span class="self">self</span>.view.w, <span class="self">self</span>.view.h);
         <span class="comment">// We unwrap here, because this can only be an error if view is larger
@@ -556,40 +571,40 @@
 
     <span class="doccomment">/// Scroll the view by the given offsets. The view rectangle is clamped
     /// within the outer rectangle.
-    </span><span class="kw">pub fn </span>scroll_by(<span class="kw-2">&amp;</span><span class="self">self</span>, x: i16, y: i16) -&gt; <span class="self">Self </span>{
+    </span><span class="kw">pub fn </span>view_scroll_by(<span class="kw-2">&amp;</span><span class="self">self</span>, x: i16, y: i16) -&gt; <span class="self">Self </span>{
         <span class="kw">let </span><span class="kw-2">mut </span>vp = <span class="kw-2">*</span><span class="self">self</span>;
         vp.view = <span class="self">self</span>.view.shift_within(x, y, <span class="self">self</span>.size.rect());
         vp
     }
 
     <span class="doccomment">/// Scroll the view up by the height of the view rectangle.
-    </span><span class="kw">pub fn </span>page_up(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self </span>{
-        <span class="self">self</span>.scroll_by(<span class="number">0</span>, -(<span class="self">self</span>.view.h <span class="kw">as </span>i16))
+    </span><span class="kw">pub fn </span>view_page_up(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self </span>{
+        <span class="self">self</span>.view_scroll_by(<span class="number">0</span>, -(<span class="self">self</span>.view.h <span class="kw">as </span>i16))
     }
 
     <span class="doccomment">/// Scroll the view down by the height of the view rectangle.
-    </span><span class="kw">pub fn </span>page_down(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self </span>{
-        <span class="self">self</span>.scroll_by(<span class="number">0</span>, <span class="self">self</span>.view.h <span class="kw">as </span>i16)
+    </span><span class="kw">pub fn </span>view_page_down(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self </span>{
+        <span class="self">self</span>.view_scroll_by(<span class="number">0</span>, <span class="self">self</span>.view.h <span class="kw">as </span>i16)
     }
 
     <span class="doccomment">/// Scroll the view up by one line.
-    </span><span class="kw">pub fn </span>up(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self </span>{
-        <span class="self">self</span>.scroll_by(<span class="number">0</span>, -<span class="number">1</span>)
+    </span><span class="kw">pub fn </span>view_up(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self </span>{
+        <span class="self">self</span>.view_scroll_by(<span class="number">0</span>, -<span class="number">1</span>)
     }
 
     <span class="doccomment">/// Scroll the view down by one line.
-    </span><span class="kw">pub fn </span>down(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self </span>{
-        <span class="self">self</span>.scroll_by(<span class="number">0</span>, <span class="number">1</span>)
+    </span><span class="kw">pub fn </span>view_down(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self </span>{
+        <span class="self">self</span>.view_scroll_by(<span class="number">0</span>, <span class="number">1</span>)
     }
 
     <span class="doccomment">/// Scroll the view left by one line.
-    </span><span class="kw">pub fn </span>left(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self </span>{
-        <span class="self">self</span>.scroll_by(-<span class="number">1</span>, <span class="number">0</span>)
+    </span><span class="kw">pub fn </span>view_left(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self </span>{
+        <span class="self">self</span>.view_scroll_by(-<span class="number">1</span>, <span class="number">0</span>)
     }
 
     <span class="doccomment">/// Scroll the view right by one line.
-    </span><span class="kw">pub fn </span>right(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self </span>{
-        <span class="self">self</span>.scroll_by(<span class="number">1</span>, <span class="number">0</span>)
+    </span><span class="kw">pub fn </span>view_right(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self </span>{
+        <span class="self">self</span>.view_scroll_by(<span class="number">1</span>, <span class="number">0</span>)
     }
 
     <span class="doccomment">/// Absolute rectangle for the screen region the node is being projected
@@ -618,6 +633,23 @@
         vp.view = screen;
         vp.size = screen.into();
         vp
+    }
+
+    <span class="doccomment">/// Set the node size and the target view size at the same time. We try to retain the old view position, but shift
+    /// and resize it to be within the view if necessary.
+    </span><span class="kw">pub fn </span>fit_size(<span class="kw-2">&amp;mut </span><span class="self">self</span>, size: Expanse, view_size: Expanse) {
+        <span class="kw">let </span>w = size.w.min(view_size.w);
+        <span class="kw">let </span>h = size.h.min(view_size.h);
+        <span class="self">self</span>.size = size;
+        <span class="comment">// Now we just clamp the rect into the view.
+        </span><span class="self">self</span>.view = Rect {
+            tl: <span class="self">self</span>.view.tl,
+            w,
+            h,
+        }
+        .clamp_within(<span class="self">self</span>.size.rect())
+        <span class="comment">// Safe to unwrap because of w, h computation above.
+        </span>.unwrap();
     }
 
     <span class="doccomment">/// Set both the outer and screen rects at once. View position is
@@ -985,22 +1017,22 @@
     </span><span class="kw">fn </span>view_movement() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="kw">let </span>v = ViewPort::new(Expanse::new(<span class="number">100</span>, <span class="number">100</span>), Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">10</span>, <span class="number">10</span>), (<span class="number">0</span>, <span class="number">0</span>))<span class="question-mark">?</span>;
 
-        <span class="kw">let </span>v = v.scroll_by(<span class="number">10</span>, <span class="number">10</span>);
+        <span class="kw">let </span>v = v.view_scroll_by(<span class="number">10</span>, <span class="number">10</span>);
         <span class="macro">assert_eq!</span>(v.view, Rect::new(<span class="number">10</span>, <span class="number">10</span>, <span class="number">10</span>, <span class="number">10</span>),);
 
-        <span class="kw">let </span>v = v.scroll_by(-<span class="number">20</span>, -<span class="number">20</span>);
+        <span class="kw">let </span>v = v.view_scroll_by(-<span class="number">20</span>, -<span class="number">20</span>);
         <span class="macro">assert_eq!</span>(v.view, Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">10</span>, <span class="number">10</span>));
 
-        <span class="kw">let </span>v = v.page_down();
+        <span class="kw">let </span>v = v.view_page_down();
         <span class="macro">assert_eq!</span>(v.view, Rect::new(<span class="number">0</span>, <span class="number">10</span>, <span class="number">10</span>, <span class="number">10</span>));
 
-        <span class="kw">let </span>v = v.page_up();
+        <span class="kw">let </span>v = v.view_page_up();
         <span class="macro">assert_eq!</span>(v.view, Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">10</span>, <span class="number">10</span>));
 
-        <span class="kw">let </span>v = v.scroll_to(<span class="number">50</span>, <span class="number">50</span>);
+        <span class="kw">let </span>v = v.view_scroll_to(<span class="number">50</span>, <span class="number">50</span>);
         <span class="macro">assert_eq!</span>(v.view, Rect::new(<span class="number">50</span>, <span class="number">50</span>, <span class="number">10</span>, <span class="number">10</span>));
 
-        <span class="kw">let </span>v = v.scroll_to(<span class="number">150</span>, <span class="number">150</span>);
+        <span class="kw">let </span>v = v.view_scroll_to(<span class="number">150</span>, <span class="number">150</span>);
         <span class="macro">assert_eq!</span>(v.view, Rect::new(<span class="number">90</span>, <span class="number">90</span>, <span class="number">10</span>, <span class="number">10</span>));
 
         <span class="prelude-val">Ok</span>(())

@@ -86,6 +86,7 @@
 <a href="#86" id="86">86</a>
 <a href="#87" id="87">87</a>
 <a href="#88" id="88">88</a>
+<a href="#89" id="89">89</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::time::Duration;
 
 <span class="kw">use crate</span>::{
@@ -144,16 +145,17 @@
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="doccomment">/// Compute the outer size of the node if it had to be displayed in the target area. In practice, nodes will usually
-    /// either constrain themselves based on the width or the height of the target area, or neither, but not both. The
-    /// resulting size may be smaller or larger than the target. If non-trivial computation is done to compute the size
-    /// (e.g. reflowing text), it should be cached for use by future calls. This method may be called multiple times for
-    /// a given node during a render sweep, so re-fitting to the same size should be cheap and return consistent
-    /// results. This function should not change the node&#39;s viewport parameters itself.
+    <span class="doccomment">/// Re-compute the size and view of the node if it had to be displayed in the target area. In practice, nodes will
+    /// usually either constrain themselves based on the width or the height of the target area, or neither, but not
+    /// both. The resulting size may be smaller or larger than the target. If non-trivial computation is done to compute
+    /// the size (e.g. reflowing text), it should be cached for use by future calls. This method may be called multiple
+    /// times for a given node during a render sweep, so re-fitting to the same size should be cheap and return
+    /// consistent results.
     ///
-    /// The default implementation just returns the target value.
-    </span><span class="kw">fn </span>fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, target: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;Expanse&gt; {
-        <span class="prelude-val">Ok</span>(target)
+    /// The default implementation just sets both the size and view of the node to the target.
+    </span><span class="kw">fn </span>fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, target: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+        <span class="self">self</span>.vp_mut().fit_size(target, target);
+        <span class="prelude-val">Ok</span>(())
     }
 
     <span class="doccomment">/// The scheduled poll endpoint. This function is called for every node the first time it is seen during the

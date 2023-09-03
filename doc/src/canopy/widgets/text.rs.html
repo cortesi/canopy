@@ -127,6 +127,9 @@
 <a href="#127" id="127">127</a>
 <a href="#128" id="128">128</a>
 <a href="#129" id="129">129</a>
+<a href="#130" id="130">130</a>
+<a href="#131" id="131">131</a>
+<a href="#132" id="132">132</a>
 </pre></div><pre class="rust"><code><span class="kw">use crate as </span>canopy;
 <span class="kw">use crate</span>::{
     geom::Expanse,
@@ -165,42 +168,42 @@
 
     <span class="attr">#[command]
     </span><span class="kw">pub fn </span>scroll_to_top(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core) {
-        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.scroll_to(<span class="number">0</span>, <span class="number">0</span>))
+        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_scroll_to(<span class="number">0</span>, <span class="number">0</span>))
     }
 
     <span class="attr">#[command]
     </span><span class="kw">pub fn </span>scroll_down(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core) {
-        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.down())
+        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_down())
     }
 
     <span class="attr">#[command]
     </span><span class="kw">pub fn </span>scroll_up(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core) {
-        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.up())
+        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_up())
     }
 
     <span class="attr">#[command]
     </span><span class="kw">pub fn </span>scroll_left(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core) {
-        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.left())
+        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_left())
     }
 
     <span class="attr">#[command]
     </span><span class="kw">pub fn </span>scroll_right(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core) {
-        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.right())
+        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_right())
     }
 
     <span class="attr">#[command]
     </span><span class="kw">pub fn </span>page_down(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core) {
-        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.page_down())
+        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_page_down())
     }
 
     <span class="attr">#[command]
     </span><span class="kw">pub fn </span>page_up(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Core) {
-        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.page_up())
+        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_page_up())
     }
 }
 
 <span class="kw">impl </span>Node <span class="kw">for </span>Text {
-    <span class="kw">fn </span>fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, s: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;Expanse&gt; {
+    <span class="kw">fn </span>fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, s: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="kw">let </span>w = <span class="kw">if let </span><span class="prelude-val">Some</span>(w) = <span class="self">self</span>.fixed_width {
             w
         } <span class="kw">else </span>{
@@ -218,8 +221,11 @@
             };
             <span class="self">self</span>.lines = <span class="prelude-val">Some</span>(split);
         }
-        <span class="prelude-val">Ok</span>(<span class="self">self</span>.current_size)
+        <span class="kw">let </span>cs = <span class="self">self</span>.current_size.clone();
+        <span class="self">self</span>.vp_mut().fit_size(cs, s);
+        <span class="prelude-val">Ok</span>(())
     }
+
     <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Core, rndr: <span class="kw-2">&amp;mut </span>Render) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="kw">let </span>vo = <span class="self">self</span>.vp().view_rect();
         <span class="kw">if let </span><span class="prelude-val">Some</span>(lines) = <span class="self">self</span>.lines.as_ref() {

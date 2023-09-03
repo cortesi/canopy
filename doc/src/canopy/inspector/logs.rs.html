@@ -160,6 +160,9 @@
 <a href="#160" id="160">160</a>
 <a href="#161" id="161">161</a>
 <a href="#162" id="162">162</a>
+<a href="#163" id="163">163</a>
+<a href="#164" id="164">164</a>
+<a href="#165" id="165">165</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     io::Write,
     sync::{Arc, Mutex},
@@ -200,24 +203,27 @@
 }
 
 <span class="kw">impl </span>Node <span class="kw">for </span>LogItem {
-    <span class="kw">fn </span>fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, target: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;Expanse&gt; {
+    <span class="kw">fn </span>fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, target: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="self">self</span>.child.fit(Expanse {
             w: target.w - <span class="number">2</span>,
             h: target.h,
-        })
+        })<span class="question-mark">?</span>;
+        <span class="kw">let </span>sz = <span class="self">self</span>.child.vp().size();
+        <span class="self">self</span>.vp_mut().fit_size(sz, target);
+        <span class="prelude-val">Ok</span>(())
     }
 
     <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Core, r: <span class="kw-2">&amp;mut </span>Render) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="kw">let </span>vp = <span class="self">self</span>.vp();
         <span class="kw">let </span>(<span class="kw">_</span>, screen) = vp.screen_rect().carve_hstart(<span class="number">2</span>);
-        <span class="kw">let </span>outer = <span class="self">self</span>.child.fit(screen.into())<span class="question-mark">?</span>;
+        <span class="self">self</span>.child.fit(screen.into())<span class="question-mark">?</span>;
         <span class="kw">let </span>view = Rect {
             tl: vp.view_rect().tl,
             w: vp.view_rect().w.saturating_sub(<span class="number">2</span>),
             h: vp.view_rect().h,
         };
         <span class="self">self</span>.child
-            .set_viewport(ViewPort::new(outer, view, screen.tl)<span class="question-mark">?</span>);
+            .set_viewport(ViewPort::new(<span class="self">self</span>.child.vp().size, view, screen.tl)<span class="question-mark">?</span>);
 
         <span class="kw">let </span>v = vp.view_rect();
         <span class="kw">let </span>status = Rect::new(v.tl.x, v.tl.y, <span class="number">1</span>, v.h);

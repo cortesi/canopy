@@ -477,6 +477,8 @@
 <a href="#477" id="477">477</a>
 <a href="#478" id="478">478</a>
 <a href="#479" id="479">479</a>
+<a href="#480" id="480">480</a>
+<a href="#481" id="481">481</a>
 </pre></div><pre class="rust"><code><span class="kw">use crate as </span>canopy;
 <span class="kw">use crate</span>::{
     error::Result,
@@ -645,49 +647,49 @@
 
     <span class="doccomment">/// Scroll the viewport to a specified location.
     </span><span class="kw">pub fn </span>scroll_to(<span class="kw-2">&amp;mut </span><span class="self">self</span>, x: u16, y: u16) {
-        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.scroll_to(x, y));
+        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_scroll_to(x, y));
         <span class="self">self</span>.fix_selection();
     }
 
     <span class="doccomment">/// Scroll the viewport down by one line.
     </span><span class="attr">#[command]
     </span><span class="kw">pub fn </span>scroll_down(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _core: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Core) {
-        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.down());
+        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_down());
         <span class="self">self</span>.fix_selection();
     }
 
     <span class="doccomment">/// Scroll the viewport up by one line.
     </span><span class="attr">#[command]
     </span><span class="kw">pub fn </span>scroll_up(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _core: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Core) {
-        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.up());
+        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_up());
         <span class="self">self</span>.fix_selection();
     }
 
     <span class="doccomment">/// Scroll the viewport left by one column.
     </span><span class="attr">#[command]
     </span><span class="kw">pub fn </span>scroll_left(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _core: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Core) {
-        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.left());
+        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_left());
         <span class="self">self</span>.fix_selection();
     }
 
     <span class="doccomment">/// Scroll the viewport right by one column.
     </span><span class="attr">#[command]
     </span><span class="kw">pub fn </span>scroll_right(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _core: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Core) {
-        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.right());
+        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_right());
         <span class="self">self</span>.fix_selection();
     }
 
     <span class="doccomment">/// Scroll the viewport down by one page.
     </span><span class="attr">#[command]
     </span><span class="kw">pub fn </span>page_down(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _core: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Core) {
-        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.page_down());
+        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_page_down());
         <span class="self">self</span>.fix_selection();
     }
 
     <span class="doccomment">/// Scroll the viewport up by one page.
     </span><span class="attr">#[command]
     </span><span class="kw">pub fn </span>page_up(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _core: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Core) {
-        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.page_up());
+        <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_page_up());
         <span class="self">self</span>.fix_selection();
     }
 
@@ -715,13 +717,13 @@
         <span class="kw">let </span>(start, end) = <span class="self">self</span>.view_range();
         <span class="comment">// We know there isn&#39;t an entire overlap
         </span><span class="kw">if </span><span class="self">self</span>.offset &lt;= start {
-            <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.scroll_to(view.tl.x, virt.tl.y));
+            <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_scroll_to(view.tl.x, virt.tl.y));
         } <span class="kw">else if </span><span class="self">self</span>.offset &gt;= end {
             <span class="kw">if </span>virt.h &gt;= view.h {
-                <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.scroll_to(view.tl.x, virt.tl.y));
+                <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_scroll_to(view.tl.x, virt.tl.y));
             } <span class="kw">else </span>{
                 <span class="kw">let </span>y = virt.tl.y - (view.h - virt.h);
-                <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.scroll_to(view.tl.x, y));
+                <span class="self">self</span>.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_scroll_to(view.tl.x, y));
             }
         }
     }
@@ -754,7 +756,8 @@
     </span><span class="kw">fn </span>refresh_views(<span class="kw-2">&amp;mut </span><span class="self">self</span>, r: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="kw">let </span><span class="kw-2">mut </span>voffset: u16 = <span class="number">0</span>;
         <span class="kw">for </span>itm <span class="kw">in </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.items {
-            <span class="kw">let </span>item_view = itm.itm.fit(r)<span class="question-mark">?</span>.rect();
+            itm.itm.fit(r)<span class="question-mark">?</span>;
+            <span class="kw">let </span>item_view = itm.itm.vp().size.rect();
             itm.virt = item_view.shift(<span class="number">0</span>, voffset <span class="kw">as </span>i16);
             voffset += item_view.h;
         }
@@ -777,7 +780,7 @@
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="kw">fn </span>fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, r: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;Expanse&gt; {
+    <span class="kw">fn </span>fit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, r: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="kw">let </span><span class="kw-2">mut </span>w = <span class="number">0</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>h = <span class="number">0</span>;
         <span class="self">self</span>.refresh_views(r)<span class="question-mark">?</span>;
@@ -785,7 +788,8 @@
             w = w.max(i.virt.w);
             h += i.virt.h
         }
-        <span class="prelude-val">Ok</span>(Expanse { w, h })
+        <span class="self">self</span>.vp_mut().fit_size(Expanse { w, h }, r);
+        <span class="prelude-val">Ok</span>(())
     }
 
     <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Core, <span class="kw">_</span>: <span class="kw-2">&amp;mut </span>Render) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
@@ -875,7 +879,7 @@
             ]
         );
 
-        lst.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.scroll_by(<span class="number">0</span>, <span class="number">5</span>));
+        lst.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_scroll_by(<span class="number">0</span>, <span class="number">5</span>));
         place(<span class="kw-2">&amp;mut </span>lst, Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">10</span>, <span class="number">10</span>))<span class="question-mark">?</span>;
         c.taint_tree(<span class="kw-2">&amp;mut </span>lst);
         tr.render(<span class="kw-2">&amp;mut </span>c, <span class="kw-2">&amp;mut </span>lst)<span class="question-mark">?</span>;
@@ -888,7 +892,7 @@
             ]
         );
 
-        lst.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.scroll_by(<span class="number">0</span>, <span class="number">5</span>));
+        lst.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_scroll_by(<span class="number">0</span>, <span class="number">5</span>));
         place(<span class="kw-2">&amp;mut </span>lst, Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">10</span>, <span class="number">10</span>))<span class="question-mark">?</span>;
         c.taint_tree(<span class="kw-2">&amp;mut </span>lst);
         tr.render(<span class="kw-2">&amp;mut </span>c, <span class="kw-2">&amp;mut </span>lst)<span class="question-mark">?</span>;
@@ -901,7 +905,7 @@
             ]
         );
 
-        lst.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.scroll_by(<span class="number">0</span>, <span class="number">10</span>));
+        lst.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_scroll_by(<span class="number">0</span>, <span class="number">10</span>));
         place(<span class="kw-2">&amp;mut </span>lst, Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">10</span>, <span class="number">10</span>))<span class="question-mark">?</span>;
         c.taint_tree(<span class="kw-2">&amp;mut </span>lst);
         tr.render(<span class="kw-2">&amp;mut </span>c, <span class="kw-2">&amp;mut </span>lst)<span class="question-mark">?</span>;
@@ -914,7 +918,7 @@
             ]
         );
 
-        lst.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.scroll_by(<span class="number">0</span>, <span class="number">10</span>));
+        lst.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_scroll_by(<span class="number">0</span>, <span class="number">10</span>));
         place(<span class="kw-2">&amp;mut </span>lst, Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">10</span>, <span class="number">10</span>))<span class="question-mark">?</span>;
         c.taint_tree(<span class="kw-2">&amp;mut </span>lst);
         tr.render(<span class="kw-2">&amp;mut </span>c, <span class="kw-2">&amp;mut </span>lst)<span class="question-mark">?</span>;
@@ -927,7 +931,7 @@
             ]
         );
 
-        lst.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.scroll_to(<span class="number">5</span>, <span class="number">0</span>));
+        lst.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_scroll_to(<span class="number">5</span>, <span class="number">0</span>));
         place(<span class="kw-2">&amp;mut </span>lst, Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">10</span>, <span class="number">10</span>))<span class="question-mark">?</span>;
         c.taint_tree(<span class="kw-2">&amp;mut </span>lst);
         tr.render(<span class="kw-2">&amp;mut </span>c, <span class="kw-2">&amp;mut </span>lst)<span class="question-mark">?</span>;
@@ -940,7 +944,7 @@
             ]
         );
 
-        lst.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.scroll_by(<span class="number">0</span>, <span class="number">5</span>));
+        lst.update_viewport(<span class="kw-2">&amp;</span>|vp| vp.view_scroll_by(<span class="number">0</span>, <span class="number">5</span>));
         place(<span class="kw-2">&amp;mut </span>lst, Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">10</span>, <span class="number">10</span>))<span class="question-mark">?</span>;
         c.taint_tree(<span class="kw-2">&amp;mut </span>lst);
         tr.render(<span class="kw-2">&amp;mut </span>c, <span class="kw-2">&amp;mut </span>lst)<span class="question-mark">?</span>;
