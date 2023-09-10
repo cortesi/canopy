@@ -29,6 +29,7 @@ pub struct Render<'a> {
     pub stylemap: &'a StyleMap,
     viewport: ViewPort,
     pub coverage: &'a mut geom::Coverage,
+    pub base: geom::Point,
 }
 
 /// Show the cursor with a specified style
@@ -56,6 +57,7 @@ impl<'a> Render<'a> {
         style: &'a mut StyleManager,
         viewport: ViewPort,
         coverage: &'a mut geom::Coverage,
+        base: geom::Point,
     ) -> Self {
         Render {
             backend,
@@ -63,6 +65,7 @@ impl<'a> Render<'a> {
             stylemap,
             viewport,
             coverage,
+            base,
         }
     }
 
@@ -72,7 +75,8 @@ impl<'a> Render<'a> {
         self.coverage.add(self.viewport.unproject(dst)?);
         let line = c.to_string().repeat(dst.w as usize);
         for n in 0..dst.h {
-            self.backend.text((dst.tl.x, dst.tl.y + n).into(), &line)?;
+            self.backend
+                .text(self.base + (dst.tl.x, dst.tl.y + n).into(), &line)?;
         }
         Ok(())
     }
@@ -112,7 +116,7 @@ impl<'a> Render<'a> {
                 .take(l.w as usize)
                 .collect::<String>();
 
-            self.backend.text(dst.tl, out)?;
+            self.backend.text(self.base + dst.tl, out)?;
             if out.len() < dst.w as usize {
                 self.fill_screen(
                     geom::Rect::new(

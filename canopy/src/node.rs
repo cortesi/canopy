@@ -16,6 +16,8 @@ pub enum EventOutcome {
     Ignore,
 }
 
+trait Layout: Node {}
+
 #[allow(unused_variables)]
 /// Nodes are the basic building-blocks of a Canopy UI. They are composed in a tree, with each node responsible for
 /// managing its own children.

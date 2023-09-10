@@ -18,6 +18,11 @@ fn statefulnode() {
         state: canopy::NodeState,
     }
 
+    impl canopy::Node for FooBar {}
+
+    #[derive_commands]
+    impl FooBar {}
+
     let f = FooBar {
         state: canopy::NodeState::default(),
     };
@@ -231,6 +236,8 @@ fn commands() {
         a_triggered: bool,
         p: PhantomData<N>,
     }
+
+    impl<N> canopy::Node for Bar<N> where N: canopy::Node {}
 
     #[derive_commands]
     impl<N> Bar<N>

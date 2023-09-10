@@ -33,6 +33,7 @@ pub use error::{Error, Result};
 pub use node::*;
 pub use root::*;
 
+pub use layout::Layout;
 pub use render::Render;
 pub use state::{NodeId, NodeName, NodeState, StatefulNode};
 pub use viewport::ViewPort;

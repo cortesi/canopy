@@ -4,7 +4,7 @@ use comfy_table::{ContentArrangement, Table};
 
 use crate::{
     backend::BackendControl,
-    commands, error,
+    commands, cursor, error,
     event::{key, mouse, Event},
     geom::{Coverage, Direction, Expanse, Point, Rect},
     inputmap,
@@ -531,6 +531,7 @@ impl Canopy {
         r: &mut R,
         styl: &mut StyleManager,
         n: &mut dyn Node,
+        base: Point,
     ) -> Result<()> {
         if !n.is_hidden() {
             styl.push();
@@ -541,7 +542,7 @@ impl Canopy {
                 }
 
                 let mut c = Coverage::new(n.vp().screen_rect().expanse());
-                let mut rndr = Render::new(r, &self.style, styl, n.vp(), &mut c);
+                let mut rndr = Render::new(r, &self.style, styl, n.vp(), &mut c, base);
 
                 n.render(self, &mut rndr)?;
 
@@ -551,7 +552,7 @@ impl Canopy {
                     if !n.is_hidden() {
                         let s = n.vp().screen_rect();
                         if !s.is_zero() {
-                            rndr.coverage.add(escreen.rebase_rect(&s)?);
+                            rndr.coverage.add(escreen);
                         }
                     }
                     Ok(())
@@ -569,7 +570,8 @@ impl Canopy {
             if n.state().render_gen == 0 {
                 n.state_mut().render_gen = self.render_gen;
             }
-            n.children(&mut |x| self.render_traversal(r, styl, x))?;
+            let proj = n.vp().projection;
+            n.children(&mut |x| self.render_traversal(r, styl, x, base + proj))?;
             styl.pop();
         }
         Ok(())
@@ -582,14 +584,25 @@ impl Canopy {
         styl: &mut StyleManager,
         root: &mut dyn Node,
     ) -> Result<()> {
+        let mut cn: Option<(NodeId, ViewPort, cursor::Cursor)> = None;
         self.walk_focus_path(root, &mut |n| -> Result<Walk<()>> {
             Ok(if let Some(c) = n.cursor() {
-                show_cursor(r, &self.style, styl, n.vp(), "cursor", c)?;
+                cn = Some((n.id(), n.vp(), c));
+
                 Walk::Handle(())
             } else {
                 Walk::Continue
             })
         })?;
+        if let Some((nid, vp, c)) = cn {
+            let mut base = Point { x: 0, y: 0 };
+            walk_to_root(root, nid, &mut |x| {
+                base = base + x.vp().projection;
+                Ok(())
+            })?;
+            show_cursor(r, &self.style, styl, vp, "cursor", c + base)?;
+        }
+
         Ok(())
     }
 
@@ -606,7 +619,7 @@ impl Canopy {
         styl.reset();
 
         self.pre_render(be, root)?;
-        self.render_traversal(be, &mut styl, root)?;
+        self.render_traversal(be, &mut styl, root, (0, 0).into())?;
         self.render_gen += 1;
         self.last_render_focus_gen = self.focus_gen;
         self.post_render(be, &mut styl, root)?;

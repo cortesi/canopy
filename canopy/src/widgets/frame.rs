@@ -2,7 +2,9 @@ use pad::PadStr;
 
 use crate as canopy;
 use crate::{
-    derive_commands, layout,
+    derive_commands, fit_frame, geom,
+    geom::Expanse,
+    layout,
     state::{NodeState, StatefulNode},
     Core, Node, Render, Result,
 };
@@ -70,6 +72,7 @@ where
     pub state: NodeState,
     pub glyphs: FrameGlyphs,
     pub title: Option<String>,
+    pub frame: geom::Frame,
 }
 
 #[derive_commands]
@@ -83,6 +86,7 @@ where
             state: NodeState::default(),
             glyphs: SINGLE,
             title: None,
+            frame: geom::Frame::zero(),
         }
     }
 
@@ -107,10 +111,13 @@ where
         c.needs_render(&self.child)
     }
 
-    fn render(&mut self, c: &dyn Core, rndr: &mut Render) -> Result<()> {
-        let vp = self.vp();
-        let f = layout::frame(&mut self.child, vp, 1)?;
+    fn fit(&mut self, sz: crate::geom::Expanse) -> Result<()> {
+        self.frame = fit_frame!(self, self.child, sz, 1);
+        Ok(())
+    }
 
+    fn render(&mut self, c: &dyn Core, rndr: &mut Render) -> Result<()> {
+        let f = self.frame;
         let style = if c.is_on_focus_path(self) {
             "frame/focused"
         } else {

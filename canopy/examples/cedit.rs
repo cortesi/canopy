@@ -5,7 +5,7 @@ use canopy::{
     backend::crossterm::runloop,
     derive_commands,
     event::key,
-    layout,
+    geom::Expanse,
     widgets::{frame, Editor},
     *,
 };
@@ -27,9 +27,9 @@ impl Ed {
 }
 
 impl Node for Ed {
-    fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {
-        let vp = self.vp();
-        layout::fit(&mut self.child, vp)
+    fn fit(&mut self, sz: Expanse) -> Result<()> {
+        fit_wrap!(self, self.child, sz);
+        Ok(())
     }
 
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {

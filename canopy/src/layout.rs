@@ -1,9 +1,62 @@
 //! Helper functions for `Node::layout` implementations.
 
 use crate::{
-    geom::{Frame, Rect},
+    geom::{Frame, Point, Rect},
     Node, Result, ViewPort,
 };
+
+/// Wrap a single child node - fit the child into the size and project it to the point (0, 0) in the parent view. We
+/// then mirror the child's size and view into the parent.
+#[macro_export]
+macro_rules! fit_wrap {
+    ($self: ident, $child:expr, $sz:expr) => {
+        $child.fit($sz)?;
+        $child.vp_mut().projection = $self.vp().projection;
+
+        let cvp = $child.vp();
+        // Mirror the child's size and view
+        $self.vp_mut().size = cvp.size;
+        $self.vp_mut().view = cvp.view;
+    };
+}
+
+/// Frame a single child node. First, we calculate the inner size after subtracting the frame. We then fit the child
+/// into this inner size, and project it appropriately in the parent view.
+#[macro_export]
+macro_rules! fit_frame {
+    ($self: ident, $child:expr, $sz:expr, $border:expr) => {{
+        $child.fit(Expanse {
+            w: $sz.w - ($border * 2),
+            h: $sz.h - ($border * 2),
+        })?;
+        let p = $self.vp().projection;
+        $child.vp_mut().projection = crate::geom::Point {
+            x: p.x + $border,
+            y: p.y + $border,
+        };
+
+        $self.vp_mut().size = $sz;
+        $self.vp_mut().view = $sz.rect();
+        crate::geom::Frame::new($sz.rect(), $border)
+    }};
+}
+
+pub trait Layout: Node {
+    /// Project a child node to a given point. The resulting view of the child node must be entirely within the bounds
+    /// of this node.
+    fn project(&self, n: &mut dyn Node, point: Point) -> Result<()> {
+        n.vp_mut().projection = point;
+        Ok(())
+    }
+
+    /// Adjust a node so that it fits exactly within our viewport. This fits the node to the our screen rectangle,
+    /// projects the node to our origin.
+    fn fit_child(&self, n: &mut dyn Node) -> Result<()> {
+        n.fit(self.vp().screen_rect().into())?;
+        self.project(n, (0, 0).into())?;
+        Ok(())
+    }
+}
 
 /// Adjust a node so that it fits a viewport. This fits the node to the viewport's screen rectangle, then adjusts the
 /// node's view to place as much of it within the viewport's screen rectangle as possible.

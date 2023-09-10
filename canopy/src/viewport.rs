@@ -117,6 +117,14 @@ impl ViewPort {
 
     /// Set the node size and the target view size at the same time. We try to retain the old view position, but shift
     /// and resize it to be within the view if necessary.
+    pub fn wrap(&mut self, vp: ViewPort) {
+        self.size = vp.size;
+        self.view = vp.view;
+        print!("wrap: {:?} {:?}", self.view, vp.view);
+    }
+
+    /// Set the node size and the target view size at the same time. We try to retain the old view position, but shift
+    /// and resize it to be within the view if necessary.
     pub fn fit_size(&mut self, size: Expanse, view_size: Expanse) {
         let w = size.w.min(view_size.w);
         let h = size.h.min(view_size.h);
@@ -130,29 +138,6 @@ impl ViewPort {
         .clamp_within(self.size.rect())
         // Safe to unwrap because of w, h computation above.
         .unwrap();
-    }
-
-    /// Set both the outer and screen rects at once. View position is
-    /// maintained, but it's resized to be as large as possible.
-    pub fn update(&self, size: Expanse, screen: Rect) -> Self {
-        let mut vp = *self;
-        vp.size = size;
-        vp.projection = screen.tl;
-
-        // Now we maintain our view invariants. We know the size of the view is
-        // the minimum in each dimension of the two enclosing rects.
-        let w = size.w.min(screen.w);
-        let h = size.h.min(screen.h);
-        // Now we just clamp the rect into the view. We know the rect will fit,
-        // so we unwrap.
-        vp.view = Rect {
-            tl: self.view.tl,
-            w,
-            h,
-        }
-        .clamp_within(vp.size.rect())
-        .unwrap();
-        vp
     }
 
     /// Calculates the (pre, active, post) rectangles needed to draw a vertical
@@ -475,19 +460,19 @@ mod tests {
     }
 
     #[test]
-    fn view_update() -> Result<()> {
-        let v = ViewPort::new(Expanse::new(100, 100), Rect::new(50, 50, 10, 10), (50, 50))?;
+    fn fit_size() -> Result<()> {
+        let mut v = ViewPort::new(Expanse::new(100, 100), Rect::new(50, 50, 10, 10), (50, 50))?;
 
-        let v = v.update(Expanse::new(50, 50), Rect::new(0, 0, 20, 20));
+        v.fit_size(Expanse::new(50, 50), Expanse::new(20, 20));
         assert_eq!(v.view, Rect::new(30, 30, 20, 20));
 
-        let v = v.update(Expanse::new(100, 100), Rect::new(0, 0, 20, 20));
+        v.fit_size(Expanse::new(100, 100), Expanse::new(20, 20));
         assert_eq!(v.view, Rect::new(30, 30, 20, 20));
 
-        let v = v.update(Expanse::new(10, 10), Rect::new(0, 0, 10, 10));
+        v.fit_size(Expanse::new(10, 10), Expanse::new(10, 10));
         assert_eq!(v.view, Rect::new(0, 0, 10, 10));
 
-        let v = v.update(Expanse::new(20, 20), Rect::new(0, 0, 20, 20));
+        v.fit_size(Expanse::new(20, 20), Expanse::new(20, 20));
         assert_eq!(v.view, Rect::new(0, 0, 20, 20));
 
         Ok(())

@@ -1,3 +1,5 @@
+use std::ops::Add;
+
 use super::Rect;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
@@ -50,9 +52,34 @@ impl Point {
     }
 }
 
+impl Add for Point {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self {
+            x: self.x + other.x,
+            y: self.y + other.y,
+        }
+    }
+}
+
 impl From<(u16, u16)> for Point {
     #[inline]
     fn from(v: (u16, u16)) -> Point {
         Point { x: v.0, y: v.1 }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Result;
+
+    #[test]
+    fn add() -> Result<()> {
+        assert_eq!(Point::zero() + (1, 1).into(), (1, 1).into());
+        assert_eq!(Point::zero() + (1, 0).into(), (1, 0).into());
+        assert_eq!(Point::zero() + (0, 1).into(), (0, 1).into());
+        Ok(())
     }
 }

@@ -2,7 +2,6 @@ use crate as canopy;
 use crate::{
     event::key,
     geom::Expanse,
-    layout,
     state::{NodeState, StatefulNode},
     *,
 };
@@ -116,16 +115,7 @@ impl Node for Editor {
     }
 
     fn fit(&mut self, sz: Expanse) -> Result<()> {
-        self.view.fit(sz)?;
-        let outer = self.view.vp().size;
-        self.vp_mut().fit_size(outer, sz);
-        Ok(())
-    }
-
-    fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {
-        let vp = self.vp();
-        layout::fit(&mut self.view, vp)?;
-        self.set_viewport(self.view.vp());
+        fit_wrap!(self, self.view, sz);
         Ok(())
     }
 

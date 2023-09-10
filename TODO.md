@@ -1,6 +1,9 @@
 
 # TODO
 
+- Rewrite the renderer so that the projection point in ViewPort is always relative to the view of the parent node.
+- Continue to consolidate fit! macros
+
 
 ## 0.1
 

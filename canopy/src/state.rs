@@ -1,4 +1,4 @@
-use crate::{error, viewport::ViewPort, Result};
+use crate::{error, geom::Point, viewport::ViewPort, Result};
 use convert_case::{Case, Casing};
 use std::sync::atomic::AtomicU64;
 

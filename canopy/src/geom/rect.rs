@@ -187,7 +187,7 @@ impl Rect {
     }
 
     /// Given a rectangle contained within this rectangle, shift the inner
-    /// rectangle to be relative to our origin. If the rect is not entirley
+    /// rectangle to be relative to our origin. If the rect is not entirely
     /// contained, an error is returned.
     pub fn rebase_rect(&self, other: &Rect) -> Result<Rect> {
         if !self.contains_rect(other) {
