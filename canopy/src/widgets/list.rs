@@ -227,7 +227,7 @@ where
     /// Fix the view after a selection change operation.
     fn fix_view(&mut self) {
         let virt = self.items[self.offset].virt;
-        let view = self.vp().view_rect();
+        let view = self.vp().view;
         if let Some(v) = virt.vextent().intersection(&view.vextent()) {
             if v.len == virt.h {
                 return;
@@ -251,7 +251,7 @@ where
     /// their offsets and sizes. Items that are offscreen to the side are also
     /// returned, so the returned vector is guaranteed to be a contiguous range.
     fn in_view(&self) -> Vec<usize> {
-        let view = self.vp().view_rect();
+        let view = self.vp().view;
         let mut ret = vec![];
         for (idx, itm) in self.items.iter().enumerate() {
             if view.vextent().intersection(&itm.virt.vextent()).is_some() {
@@ -276,7 +276,7 @@ where
         let mut voffset: u16 = 0;
         for itm in &mut self.items {
             itm.itm.fit(r)?;
-            let item_view = itm.itm.vp().size.rect();
+            let item_view = itm.itm.vp().canvas.rect();
             itm.virt = item_view.shift(0, voffset as i16);
             voffset += item_view.h;
         }
@@ -313,7 +313,6 @@ where
 
     fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {
         let vp = self.vp();
-        self.refresh_views(vp.size())?;
         for itm in &mut self.items {
             if let Some(vp) = vp.map(itm.virt)? {
                 itm.itm.set_viewport(vp);
@@ -342,7 +341,7 @@ mod tests {
             v.push(if x.is_hidden() {
                 Rect::default()
             } else {
-                x.vp().view_rect()
+                x.vp().view
             });
             Ok(())
         })

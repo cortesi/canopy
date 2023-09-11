@@ -3,7 +3,7 @@ use canopy::{
     derive_commands,
     event::{key, mouse},
     geom::{Expanse, Frame},
-    layout, *,
+    *,
 };
 use clap::Parser;
 
@@ -26,8 +26,7 @@ impl Block {
 
     #[command]
     fn add(&mut self, c: &mut dyn Core) {
-        if !self.children.is_empty() && !self.size_limited(self.children[0].vp().view_rect().into())
-        {
+        if !self.children.is_empty() && !self.size_limited(self.children[0].vp().view.into()) {
             self.children.push(Block::new(!self.horizontal));
             c.taint_tree(self);
         }
@@ -39,7 +38,7 @@ impl Block {
 
     #[command]
     fn split(&mut self, c: &mut dyn Core) -> Result<()> {
-        if !self.size_limited(self.vp().view_rect().into()) {
+        if !self.size_limited(self.vp().view.into()) {
             self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
             c.taint_tree(self);
             c.focus_next(self)?;
@@ -59,12 +58,12 @@ impl Node for Block {
         let vp = self.vp();
         if !self.children.is_empty() {
             let vps = if self.horizontal {
-                vp.split_horizontal(self.children.len() as u16)?
+                vp.view.split_horizontal(self.children.len() as u16)?
             } else {
-                vp.split_vertical(self.children.len() as u16)?
+                vp.view.split_vertical(self.children.len() as u16)?
             };
             for i in 0..self.children.len() {
-                layout::fit(&mut self.children[i], vps[i])?;
+                fit_place!(self, &mut self.children[i], vps[i]);
             }
         } else {
             let bc = if c.is_focused(self) && self.children.is_empty() {
@@ -72,8 +71,8 @@ impl Node for Block {
             } else {
                 "blue"
             };
-            r.fill(bc, vp.view_rect().inner(1), '\u{2588}')?;
-            r.solid_frame("black", Frame::new(vp.view_rect(), 1), ' ')?;
+            r.fill(bc, vp.view.inner(1), '\u{2588}')?;
+            r.solid_frame("black", Frame::new(vp.view, 1), ' ')?;
         }
 
         Ok(())
@@ -112,9 +111,10 @@ impl FocusGym {
 }
 
 impl Node for FocusGym {
-    fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {
-        let vp = self.vp();
-        layout::fit(&mut self.child, vp)
+    fn fit(&mut self, sz: Expanse) -> Result<()> {
+        fit_wrap!(self, self.child, sz);
+        self.vp_mut().set_fill(sz.rect());
+        Ok(())
     }
 
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {

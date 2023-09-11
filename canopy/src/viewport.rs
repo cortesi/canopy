@@ -5,25 +5,26 @@ use crate::Result;
 /// A ViewPort manages the size of a node and its projection onto the screen.
 #[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ViewPort {
-    /// The location on screen that the view is projected to, specified as the co-ordinates of the top-left corner of
-    /// the rectangle in the co-ordinate system of the parent node.
-    pub projection: Point,
-    /// A view within the size rectangle.
+    /// The location of the node in the parent's co-ordinate space. Must only be changed by the parent node.
+    pub position: Point,
+    /// The portion of this node that is displayed. A view within the size rectangle. Must only be changed by the node
+    /// itself.
     pub view: Rect,
-    /// The total size of the node.
-    pub size: Expanse,
+    /// The canvas on which children are positioned, and to which rendering occurs. Must only be changed by the node
+    /// itself.
+    pub canvas: Expanse,
 }
 
 impl ViewPort {
     /// Create a new View with the given outer and inner rectangles. The view
     /// rectangle must be fully contained within the outer rectangle.
     pub fn new(
-        size: impl Into<Expanse>,
+        canvas: impl Into<Expanse>,
         view: impl Into<Rect>,
-        screen: impl Into<Point>,
+        position: impl Into<Point>,
     ) -> Result<ViewPort> {
         let view = view.into();
-        let size = size.into();
+        let size = canvas.into();
         if !size.rect().contains_rect(&view) {
             Err(error::Error::Geometry(format!(
                 "view {:?} not contained in size {:?}",
@@ -31,9 +32,9 @@ impl ViewPort {
             )))
         } else {
             Ok(ViewPort {
-                size,
+                canvas: size,
                 view,
-                projection: screen.into(),
+                position: position.into(),
             })
         }
     }
@@ -45,7 +46,7 @@ impl ViewPort {
         let r = Rect::new(x, y, self.view.w, self.view.h);
         // We unwrap here, because this can only be an error if view is larger
         // than outer, which we ensure is not the case.
-        vp.view = r.clamp_within(self.size.rect()).unwrap();
+        vp.view = r.clamp_within(self.canvas.rect()).unwrap();
         vp
     }
 
@@ -53,7 +54,7 @@ impl ViewPort {
     /// within the outer rectangle.
     pub fn view_scroll_by(&self, x: i16, y: i16) -> Self {
         let mut vp = *self;
-        vp.view = self.view.shift_within(x, y, self.size.rect());
+        vp.view = self.view.shift_within(x, y, self.canvas.rect());
         vp
     }
 
@@ -90,37 +91,16 @@ impl ViewPort {
     /// Absolute rectangle for the screen region the node is being projected
     /// onto.
     pub fn screen_rect(&self) -> Rect {
-        self.view.at(self.projection)
-    }
-
-    /// The sub-rectangle of the total virtual node that is being displayed on
-    /// screen. This is equal in size to `screen_rect`, but with origin
-    /// co-ordinates relative to the node's virtual size..
-    pub fn view_rect(&self) -> Rect {
-        self.view
-    }
-
-    /// The total virtual size of the node.
-    pub fn size(&self) -> Expanse {
-        self.size
+        self.view.at(self.position)
     }
 
     /// Set the screen, view and outer rects all to the same size. This is
     /// useful for nodes that fill whatever space they're given.
     pub fn set_fill(&self, screen: Rect) -> Self {
         let mut vp = *self;
-        vp.projection = screen.tl;
         vp.view = screen;
-        vp.size = screen.into();
+        vp.canvas = screen.into();
         vp
-    }
-
-    /// Set the node size and the target view size at the same time. We try to retain the old view position, but shift
-    /// and resize it to be within the view if necessary.
-    pub fn wrap(&mut self, vp: ViewPort) {
-        self.size = vp.size;
-        self.view = vp.view;
-        print!("wrap: {:?} {:?}", self.view, vp.view);
     }
 
     /// Set the node size and the target view size at the same time. We try to retain the old view position, but shift
@@ -128,14 +108,14 @@ impl ViewPort {
     pub fn fit_size(&mut self, size: Expanse, view_size: Expanse) {
         let w = size.w.min(view_size.w);
         let h = size.h.min(view_size.h);
-        self.size = size;
+        self.canvas = size;
         // Now we just clamp the rect into the view.
         self.view = Rect {
             tl: self.view.tl,
             w,
             h,
         }
-        .clamp_within(self.size.rect())
+        .clamp_within(self.canvas.rect())
         // Safe to unwrap because of w, h computation above.
         .unwrap();
     }
@@ -144,12 +124,12 @@ impl ViewPort {
     /// scroll bar for this viewport in the specified margin rect (usually a
     /// right or left vertical margin). Returns None if no scroll bar is needed.
     pub fn vactive(&self, margin: Rect) -> Result<Option<(Rect, Rect, Rect)>> {
-        if self.view.h == self.size.h {
+        if self.view.h == self.canvas.h {
             Ok(None)
         } else {
             let (pre, active, post) = margin
                 .vextent()
-                .split_active(self.view_rect().vextent(), self.size().rect().vextent())?;
+                .split_active(self.view.vextent(), self.canvas.rect().vextent())?;
             Ok(Some((
                 margin.vslice(&pre)?,
                 margin.vslice(&active)?,
@@ -163,12 +143,12 @@ impl ViewPort {
     /// (usually a bottom horizontal margin). Returns None if no scroll bar is
     /// needed.
     pub fn hactive(&self, margin: Rect) -> Result<Option<(Rect, Rect, Rect)>> {
-        if self.view.w == self.size.w {
+        if self.view.w == self.canvas.w {
             Ok(None)
         } else {
             let (pre, active, post) = margin
                 .hextent()
-                .split_active(self.view_rect().hextent(), self.size().rect().hextent())?;
+                .split_active(self.view.hextent(), self.canvas.rect().hextent())?;
             Ok(Some((
                 margin.hslice(&pre)?,
                 margin.hslice(&active)?,
@@ -185,8 +165,8 @@ impl ViewPort {
             let rp = self.view.rebase_point(p).unwrap();
             // We know view is not larger than screen, so we can unwrap.
             Some(Point {
-                x: self.projection.x + rp.x,
-                y: self.projection.y + rp.y,
+                x: self.position.x + rp.x,
+                y: self.position.y + rp.y,
             })
         } else {
             None
@@ -204,7 +184,7 @@ impl ViewPort {
         if let Some(o) = self.view.intersect(&r) {
             let r = self.view.rebase_rect(&o).unwrap();
             Some(Rect {
-                tl: self.projection.scroll(r.tl.x as i16, r.tl.y as i16),
+                tl: self.position.scroll(r.tl.x as i16, r.tl.y as i16),
                 w: r.w,
                 h: r.h,
             })
@@ -221,9 +201,7 @@ impl ViewPort {
             Some((
                 o.tl.x - l.tl.x,
                 Line {
-                    tl: self
-                        .projection
-                        .scroll(rebase.tl.x as i16, rebase.tl.y as i16),
+                    tl: self.position.scroll(rebase.tl.x as i16, rebase.tl.y as i16),
                     w: rebase.w,
                 },
             ))
@@ -239,12 +217,12 @@ impl ViewPort {
         if let Some(i) = self.view.intersect(&child) {
             let view_relative = self.view.rebase_rect(&i).unwrap();
             Ok(Some(ViewPort {
-                size: child.expanse(),
+                canvas: child.expanse(),
                 // The view is the intersection relative to the child's outer
                 view: Rect::new(i.tl.x - child.tl.x, i.tl.y - child.tl.y, i.w, i.h),
-                projection: Point {
-                    x: self.projection.x + view_relative.tl.x,
-                    y: self.projection.y + view_relative.tl.y,
+                position: Point {
+                    x: self.position.x + view_relative.tl.x,
+                    y: self.position.y + view_relative.tl.y,
                 },
             }))
         } else {
@@ -261,11 +239,11 @@ impl ViewPort {
             Rect::default()
         };
         ViewPort {
-            size: v.expanse(),
+            canvas: v.expanse(),
             view: isect,
-            projection: Point {
-                x: (isect.tl.x - self.view.tl.x) + self.projection.x,
-                y: (isect.tl.y - self.view.tl.y) + self.projection.y,
+            position: Point {
+                x: (isect.tl.x - self.view.tl.x) + self.position.x,
+                y: (isect.tl.y - self.view.tl.y) + self.position.y,
             },
         }
     }
@@ -283,7 +261,7 @@ impl ViewPort {
     /// extent of this viewport. Returns a (left, right) tuple. Left is either
     /// empty or has the exact width specified.
     pub fn carve_hstart(&self, n: u16) -> (ViewPort, ViewPort) {
-        let (a, b) = self.size().rect().carve_hstart(n);
+        let (a, b) = self.canvas.rect().carve_hstart(n);
         (self.view_to_vp(a), self.view_to_vp(b))
     }
 
@@ -291,7 +269,7 @@ impl ViewPort {
     /// extent of this viewport. Returns a (left, right) tuple. Right is either
     /// empty or has the exact width specified.
     pub fn carve_hend(&self, n: u16) -> (ViewPort, ViewPort) {
-        let (a, b) = self.size().rect().carve_hend(n);
+        let (a, b) = self.canvas.rect().carve_hend(n);
         (self.view_to_vp(a), self.view_to_vp(b))
     }
 
@@ -299,7 +277,7 @@ impl ViewPort {
     /// extent of this viewport. Returns a (top, bottom) tuple. Top is either
     /// empty or has the exact width specified.
     pub fn carve_vstart(&self, n: u16) -> (ViewPort, ViewPort) {
-        let (a, b) = self.size().rect().carve_vstart(n);
+        let (a, b) = self.canvas.rect().carve_vstart(n);
         (self.view_to_vp(a), self.view_to_vp(b))
     }
 
@@ -307,20 +285,20 @@ impl ViewPort {
     /// extent of this viewport. Returns a (top, bottom) tuple. Bottom is
     /// either empty or has the exact width specified.
     pub fn carve_vend(&self, n: u16) -> (ViewPort, ViewPort) {
-        let (a, b) = self.size().rect().carve_vend(n);
+        let (a, b) = self.canvas.rect().carve_vend(n);
         (self.view_to_vp(a), self.view_to_vp(b))
     }
 
     /// Splits the rectangle horizontally into n sections, as close to equally
     /// sized as possible.
     pub fn split_horizontal(&self, n: u16) -> Result<Vec<ViewPort>> {
-        Ok(self.views_to_vp(self.size().rect().split_horizontal(n)?))
+        Ok(self.views_to_vp(self.canvas.rect().split_horizontal(n)?))
     }
 
     /// Splits the viewport vertically into n sections, as close to equally
     /// sized as possible.
     pub fn split_vertical(&self, n: u16) -> Result<Vec<ViewPort>> {
-        Ok(self.views_to_vp(self.size().rect().split_vertical(n)?))
+        Ok(self.views_to_vp(self.canvas.rect().split_vertical(n)?))
     }
 }
 

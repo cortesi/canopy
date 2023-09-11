@@ -560,7 +560,7 @@ impl Canopy {
 
                 // We now have coverage, relative to this node's screen rectange. We
                 // rebase each rect back down to our virtual co-ordinates.
-                let sr = n.vp().view_rect();
+                let sr = n.vp().view;
                 for l in rndr.coverage.uncovered() {
                     rndr.fill("", l.rect().shift(sr.tl.x as i16, sr.tl.y as i16), ' ')?;
                 }
@@ -570,7 +570,7 @@ impl Canopy {
             if n.state().render_gen == 0 {
                 n.state_mut().render_gen = self.render_gen;
             }
-            let proj = n.vp().projection;
+            let proj = n.vp().position;
             n.children(&mut |x| self.render_traversal(r, styl, x, base + proj))?;
             styl.pop();
         }
@@ -597,7 +597,7 @@ impl Canopy {
         if let Some((nid, vp, c)) = cn {
             let mut base = Point { x: 0, y: 0 };
             walk_to_root(root, nid, &mut |x| {
-                base = base + x.vp().projection;
+                base = base + x.vp().position;
                 Ok(())
             })?;
             show_cursor(r, &self.style, styl, vp, "cursor", c + base)?;
@@ -757,8 +757,9 @@ impl Canopy {
 
     /// Set the size on the root node, and taint the tree.
     pub(crate) fn set_root_size(&mut self, size: Expanse, n: &mut dyn Node) -> Result<()> {
+        // This calls fit recursively on the entire tree, so after this all nodes are positioned.
         n.fit(size)?;
-        let vp = ViewPort::new(n.vp().size, n.vp().size, Point::default())?;
+        let vp = ViewPort::new(n.vp().canvas, n.vp().canvas, Point::default())?;
         n.set_viewport(vp);
         self.taint_tree(n);
         Ok(())

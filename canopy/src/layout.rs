@@ -11,11 +11,11 @@ use crate::{
 macro_rules! fit_wrap {
     ($self: ident, $child:expr, $sz:expr) => {
         $child.fit($sz)?;
-        $child.vp_mut().projection = $self.vp().projection;
+        $child.vp_mut().position = (0, 0).into();
 
         let cvp = $child.vp();
         // Mirror the child's size and view
-        $self.vp_mut().size = cvp.size;
+        $self.vp_mut().canvas = cvp.canvas;
         $self.vp_mut().view = cvp.view;
     };
 }
@@ -29,23 +29,30 @@ macro_rules! fit_frame {
             w: $sz.w - ($border * 2),
             h: $sz.h - ($border * 2),
         })?;
-        let p = $self.vp().projection;
-        $child.vp_mut().projection = crate::geom::Point {
-            x: p.x + $border,
-            y: p.y + $border,
+        $child.vp_mut().position = crate::geom::Point {
+            x: $border,
+            y: $border,
         };
-
-        $self.vp_mut().size = $sz;
+        $self.vp_mut().canvas = $sz;
         $self.vp_mut().view = $sz.rect();
         crate::geom::Frame::new($sz.rect(), $border)
     }};
+}
+
+/// Place a child in a given sub-rectangle of our view.
+#[macro_export]
+macro_rules! fit_place {
+    ($self: ident, $child:expr, $loc:expr) => {
+        $child.fit($loc.expanse())?;
+        $child.vp_mut().position = $loc.tl;
+    };
 }
 
 pub trait Layout: Node {
     /// Project a child node to a given point. The resulting view of the child node must be entirely within the bounds
     /// of this node.
     fn project(&self, n: &mut dyn Node, point: Point) -> Result<()> {
-        n.vp_mut().projection = point;
+        n.vp_mut().position = point;
         Ok(())
     }
 
@@ -62,7 +69,7 @@ pub trait Layout: Node {
 /// node's view to place as much of it within the viewport's screen rectangle as possible.
 pub fn fit(n: &mut dyn Node, parent_vp: ViewPort) -> Result<()> {
     n.fit(parent_vp.screen_rect().into())?;
-    n.vp_mut().projection = parent_vp.projection;
+    n.vp_mut().position = parent_vp.position;
     Ok(())
 }
 
@@ -74,12 +81,12 @@ pub fn fit(n: &mut dyn Node, parent_vp: ViewPort) -> Result<()> {
 pub fn frame(n: &mut dyn Node, parent_vp: ViewPort, border: u16) -> Result<Frame> {
     let inner = parent_vp.screen_rect().inner(border);
     n.fit(inner.into())?;
-    n.vp_mut().projection = inner.tl;
+    n.vp_mut().position = inner.tl;
 
     // Return a frame for drawing the screen boundary, but in the view
     // rect's co-ordinate system.
     Ok(Frame::new(
-        parent_vp.screen_rect().at(parent_vp.view_rect().tl),
+        parent_vp.screen_rect().at(parent_vp.view.tl),
         border,
     ))
 }
@@ -88,7 +95,7 @@ pub fn frame(n: &mut dyn Node, parent_vp: ViewPort, border: u16) -> Result<Frame
 /// region, and updates its viewport.
 pub fn place(n: &mut dyn Node, screen: Rect) -> Result<()> {
     n.fit(screen.expanse())?;
-    n.vp_mut().projection = screen.tl;
+    n.vp_mut().position = screen.tl;
     Ok(())
 }
 

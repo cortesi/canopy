@@ -43,7 +43,7 @@ impl Node for EditorView {
     }
 
     fn render(&mut self, _: &dyn Core, r: &mut Render) -> Result<()> {
-        let vo = self.vp().view_rect();
+        let vo = self.vp().view;
         let sr = self.vp().screen_rect();
         self.core.resize_window(sr.w as usize, sr.h as usize);
         for (i, s) in self.core.window_text().iter().enumerate() {

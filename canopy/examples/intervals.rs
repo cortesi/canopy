@@ -50,7 +50,7 @@ impl Node for IntervalItem {
 
     fn fit(&mut self, target: Expanse) -> Result<()> {
         self.child.fit(target)?;
-        let sz = self.child.vp().size();
+        let sz = self.child.vp().canvas;
         self.vp_mut().fit_size(sz, sz);
         Ok(())
     }
@@ -80,7 +80,7 @@ impl StatusBar {}
 impl Node for StatusBar {
     fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
         r.style.push_layer("statusbar");
-        r.text("statusbar/text", self.vp().view_rect().line(0), "intervals")?;
+        r.text("statusbar/text", self.vp().view.line(0), "intervals")?;
         Ok(())
     }
 }

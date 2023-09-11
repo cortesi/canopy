@@ -43,7 +43,7 @@ impl Node for LogItem {
             w: target.w - 2,
             h: target.h,
         })?;
-        let sz = self.child.vp().size();
+        let sz = self.child.vp().canvas;
         self.vp_mut().fit_size(sz, target);
         Ok(())
     }
@@ -53,14 +53,14 @@ impl Node for LogItem {
         let (_, screen) = vp.screen_rect().carve_hstart(2);
         self.child.fit(screen.into())?;
         let view = Rect {
-            tl: vp.view_rect().tl,
-            w: vp.view_rect().w.saturating_sub(2),
-            h: vp.view_rect().h,
+            tl: vp.view.tl,
+            w: vp.view.w.saturating_sub(2),
+            h: vp.view.h,
         };
         self.child
-            .set_viewport(ViewPort::new(self.child.vp().size, view, screen.tl)?);
+            .set_viewport(ViewPort::new(self.child.vp().canvas, view, screen.tl)?);
 
-        let v = vp.view_rect();
+        let v = vp.view;
         let status = Rect::new(v.tl.x, v.tl.y, 1, v.h);
         if self.selected {
             r.fill("blue", status, '\u{2588}')?;

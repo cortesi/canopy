@@ -4,7 +4,6 @@ use crate as canopy;
 use crate::{
     derive_commands, fit_frame, geom,
     geom::Expanse,
-    layout,
     state::{NodeState, StatefulNode},
     Core, Node, Render, Result,
 };
@@ -162,9 +161,9 @@ where
         // space is to the right and below.
         for r in self
             .vp()
-            .view_rect()
+            .view
             .inner(1)
-            .sub(&self.child.vp().size().rect().shift(1, 1))
+            .sub(&self.child.vp().canvas.rect().shift(1, 1))
         {
             rndr.fill(style, r, ' ')?;
         }

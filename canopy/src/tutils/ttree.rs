@@ -70,7 +70,7 @@ macro_rules! leaf {
             fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
                 r.text(
                     "any",
-                    self.vp().view_rect().line(0),
+                    self.vp().view.line(0),
                     &format!("<{}>", self.name().clone()),
                 )
             }
@@ -177,7 +177,7 @@ macro_rules! branch {
 
                 r.text(
                     "any",
-                    self.vp().view_rect().line(0),
+                    self.vp().view.line(0),
                     &format!("<{}>", self.name().clone()),
                 )
             }
@@ -254,11 +254,7 @@ impl Node for R {
         layout::fit(&mut self.a, parts[0])?;
         layout::fit(&mut self.b, parts[1])?;
 
-        r.text(
-            "any",
-            self.vp().view_rect().line(0),
-            &format!("<{}>", self.name()),
-        )
+        r.text("any", self.vp().view.line(0), &format!("<{}>", self.name()))
     }
 
     fn handle_key(&mut self, _: &mut dyn Core, _: key::Key) -> Result<EventOutcome> {

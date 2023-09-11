@@ -41,7 +41,7 @@ impl Node for Tabs {
     fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
         for (i, rect) in self
             .vp()
-            .view_rect()
+            .view
             .split_horizontal(self.tabs.len() as u16)?
             .iter()
             .enumerate()

@@ -399,9 +399,9 @@ pub fn derive_statefulnode(input: proc_macro::TokenStream) -> proc_macro::TokenS
     };
     let implblock = quote! {
         impl #impl_generics #name #ty_generics #where_clause {
-            fn update_view(&mut self, size: canopy::geom::Expanse, view: canopy::geom::Rect) {
+            fn update_view(&mut self, canvas: canopy::geom::Expanse, view: canopy::geom::Rect) {
                 let vp = self.vp_mut();
-                vp.size = size;
+                vp.canvas = canvas;
                 vp.view = view;
             }
         }

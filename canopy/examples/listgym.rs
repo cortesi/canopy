@@ -6,7 +6,6 @@ use canopy::{
     backend::crossterm::runloop,
     event::key,
     geom::{Expanse, Rect},
-    layout,
     style::solarized,
     widgets::{frame, list::*, Text},
     *,
@@ -45,28 +44,23 @@ impl ListItem for Block {
 
 impl Node for Block {
     fn fit(&mut self, target: Expanse) -> Result<()> {
-        self.child.fit(Expanse {
-            w: target.w.saturating_sub(2),
-            h: target.h,
-        })?;
-        let size = self.child.vp().size;
-        self.vp_mut().fit_size(size, size);
+        let loc = Rect::new(2, 0, target.w.saturating_sub(2), target.h);
+        fit_place!(self, self.child, loc);
+
+        let vp = self.child.vp();
+        let sz = Expanse {
+            w: vp.canvas.w + 2,
+            h: self.child.vp().canvas.h,
+        };
+        self.vp_mut().fit_size(sz, sz);
+
         Ok(())
     }
 
     fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
         let vp = self.vp();
-        let (_, screen) = vp.screen_rect().carve_hstart(2);
-        self.child.fit(screen.into())?;
-        let view = Rect {
-            tl: vp.view_rect().tl,
-            w: vp.view_rect().w.saturating_sub(2),
-            h: vp.view_rect().h,
-        };
-        self.child
-            .set_viewport(ViewPort::new(self.child.vp().size, view, screen.tl)?);
         if self.selected {
-            let active = vp.view_rect().carve_hstart(1).0;
+            let active = vp.view.carve_hstart(1).0;
             r.fill("blue", active, '\u{2588}')?;
         }
         r.style.push_layer(&self.color);
@@ -89,7 +83,7 @@ impl StatusBar {}
 impl Node for StatusBar {
     fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
         r.style.push_layer("statusbar");
-        r.text("text", self.vp().view_rect().line(0), "listgym")?;
+        r.text("text", self.vp().view.line(0), "listgym")?;
         Ok(())
     }
 }
@@ -135,9 +129,9 @@ impl ListGym {
 
 impl Node for ListGym {
     fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {
-        let (a, b) = self.vp().carve_vend(1);
-        layout::fit(&mut self.statusbar, b)?;
-        layout::fit(&mut self.content, a)?;
+        let (a, b) = self.vp().screen_rect().carve_vend(1);
+        fit_place!(self, self.content, a);
+        fit_place!(self, self.statusbar, b);
         Ok(())
     }
 
