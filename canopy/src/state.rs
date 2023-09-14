@@ -1,6 +1,7 @@
-use crate::{error, geom::Point, viewport::ViewPort, Result};
-use convert_case::{Case, Casing};
 use std::sync::atomic::AtomicU64;
+
+use crate::{error, viewport::ViewPort, Result};
+use convert_case::{Case, Casing};
 
 pub use canopy_derive::StatefulNode;
 
@@ -15,7 +16,23 @@ pub fn valid_nodename(name: &str) -> bool {
 }
 
 /// A unique ID for a node.
-pub type NodeId = u64;
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct NodeId {
+    id: u64,
+    name: NodeName,
+}
+
+impl std::fmt::Display for NodeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "#{}", self.id)
+    }
+}
+
+impl PartialEq<u64> for NodeId {
+    fn eq(&self, other: &u64) -> bool {
+        self.id == *other
+    }
+}
 
 /// A node name, which consists of lowercase ASCII alphanumeric characters, plus
 /// underscores.
@@ -178,7 +195,10 @@ pub trait StatefulNode {
 
     /// A unique ID for this node.
     fn id(&self) -> NodeId {
-        self.state().id
+        NodeId {
+            id: self.state().id,
+            name: self.name(),
+        }
     }
 
     /// Has this node been initialized? That is, has its poll function been

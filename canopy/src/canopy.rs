@@ -184,8 +184,8 @@ impl Core for Canopy {
                 }
                 let n = node_at(root, p)?;
                 if n != last {
-                    last = n;
-                    if let Some(nid) = n {
+                    last = n.clone();
+                    if let Some(nid) = &n {
                         walk_to_root(root, nid, &mut |x| {
                             if !seen && x.accept_focus() {
                                 seen = true;
@@ -596,7 +596,7 @@ impl Canopy {
         })?;
         if let Some((nid, vp, c)) = cn {
             let mut base = Point { x: 0, y: 0 };
-            walk_to_root(root, nid, &mut |x| {
+            walk_to_root(root, &nid, &mut |x| {
                 base = base + x.vp().position;
                 Ok(())
             })?;
@@ -635,7 +635,7 @@ impl Canopy {
         });
 
         if let Some(id) = id.unwrap() {
-            node_path(id, root)
+            node_path(&id, root)
         } else {
             Path::empty()
         }
@@ -648,7 +648,7 @@ impl Canopy {
         let mut script = None;
         let mut handled = false;
         if let Some(nid) = node_at(root, m.location)? {
-            walk_to_root(root, nid, &mut |x| {
+            walk_to_root(root, &nid, &mut |x| {
                 if handled {
                     return Ok(());
                 }
@@ -722,7 +722,7 @@ impl Canopy {
 
     /// Handle a poll event by traversing the complete node tree, and triggering
     /// poll on each ID in the poll set.
-    fn poll(&mut self, ids: Vec<u64>, root: &mut dyn Node) -> Result<()> {
+    fn poll(&mut self, ids: Vec<NodeId>, root: &mut dyn Node) -> Result<()> {
         preorder(root, &mut |x| -> Result<Walk<()>> {
             if ids.contains(&x.id()) {
                 if let Some(d) = x.poll(self) {

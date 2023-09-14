@@ -1,7 +1,7 @@
 pub mod key;
 pub mod mouse;
 
-use crate::geom::Expanse;
+use crate::{geom::Expanse, NodeId};
 
 use std::sync::mpsc;
 
@@ -15,7 +15,7 @@ pub(crate) enum Event {
     /// Terminal resize
     Resize(Expanse),
     /// A poll event
-    Poll(Vec<u64>),
+    Poll(Vec<NodeId>),
     /// Terminal has gained focus
     FocusGained,
     /// Terminal has lost focus

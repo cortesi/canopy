@@ -7,12 +7,13 @@ use std::{
 };
 
 use crate::event::Event;
+use crate::NodeId;
 
 /// A node that has a pending callback.
 #[derive(Debug)]
 struct PendingNode {
     time: SystemTime,
-    node_id: u64,
+    node_id: NodeId,
 }
 
 impl PartialEq for PendingNode {
@@ -44,7 +45,7 @@ struct PendingHeap {
 }
 
 impl PendingHeap {
-    fn _add(&mut self, now: SystemTime, node_id: u64, duration: Duration) {
+    fn _add(&mut self, now: SystemTime, node_id: NodeId, duration: Duration) {
         self.nodes.push(PendingNode {
             time: now + duration,
             node_id,
@@ -52,7 +53,7 @@ impl PendingHeap {
     }
 
     /// Add a node with a callback duration to the heap.
-    fn add(&mut self, node_id: u64, duration: Duration) {
+    fn add(&mut self, node_id: NodeId, duration: Duration) {
         self._add(SystemTime::now(), node_id, duration);
     }
 
@@ -69,7 +70,7 @@ impl PendingHeap {
         self._current_wait(SystemTime::now())
     }
 
-    fn _collect(&mut self, now: SystemTime) -> Vec<u64> {
+    fn _collect(&mut self, now: SystemTime) -> Vec<NodeId> {
         let mut v = vec![];
         while let Some(n) = self.nodes.pop() {
             if n.time <= now {
@@ -84,7 +85,7 @@ impl PendingHeap {
     }
 
     /// Remove and return all the pending operations .
-    pub fn collect(&mut self) -> Vec<u64> {
+    pub fn collect(&mut self) -> Vec<NodeId> {
         self._collect(SystemTime::now())
     }
 }
@@ -110,7 +111,7 @@ impl Poller {
     /// Schedule a node to be polled. This function requires us to pass in the
     /// tx channel, which means that a lock over the global state must already
     /// be in place.
-    pub fn schedule(&mut self, node_id: u64, duration: Duration) {
+    pub fn schedule(&mut self, node_id: NodeId, duration: Duration) {
         let mut l = self.pending.lock().unwrap();
         l.add(node_id, duration);
         if let Some(h) = self.handle.as_mut() {

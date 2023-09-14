@@ -172,7 +172,8 @@ impl ScriptHost {
                             command: command.clone(),
                             args: ciargs,
                         };
-                        if let Some(ret) = dispatch(v.core, v.node_id, v.root, &ci).unwrap() {
+                        if let Some(ret) = dispatch(v.core, v.node_id.clone(), v.root, &ci).unwrap()
+                        {
                             Ok(match ret {
                                 ReturnValue::Void => rhai::Dynamic::UNIT,
                                 ReturnValue::String(s) => rhai::Dynamic::from(s),

@@ -123,13 +123,13 @@ pub fn node_at(root: &mut dyn Node, p: impl Into<Point>) -> Result<Option<NodeId
 
 /// Call a closure on the node with the specified `id`, and all its ancestors to
 /// the specified `root`.
-pub fn walk_to_root<T>(
+pub fn walk_to_root<'a, T>(
     root: &mut dyn Node,
     id: T,
     f: &mut dyn FnMut(&mut dyn Node) -> Result<()>,
 ) -> Result<()>
 where
-    T: Into<NodeId>,
+    T: Into<&'a NodeId>,
 {
     let mut seen = false;
     let uid = id.into();
@@ -137,7 +137,7 @@ where
         Ok(if seen {
             f(x)?;
             Walk::Continue
-        } else if x.id() == uid {
+        } else if x.id() == *uid {
             seen = true;
             f(x)?;
             Walk::Skip
@@ -150,9 +150,9 @@ where
 
 /// Return the node path for a specified node id, relative to the specified
 ///`root`.
-pub fn node_path<T>(id: T, root: &mut dyn Node) -> Path
+pub fn node_path<'a, T>(id: T, root: &mut dyn Node) -> Path
 where
-    T: Into<NodeId>,
+    T: Into<&'a NodeId>,
 {
     let mut path = Vec::new();
     walk_to_root(root, id, &mut |n| -> Result<()> {
@@ -239,9 +239,9 @@ mod tests {
     #[test]
     fn tnode_path() -> Result<()> {
         run(|_c, _, mut root| {
-            assert_eq!(node_path(root.id(), &mut root), Path::new(&["r"]));
+            assert_eq!(node_path(&root.id(), &mut root), Path::new(&["r"]));
             assert_eq!(
-                node_path(root.a.a.id(), &mut root),
+                node_path(&root.a.a.id(), &mut root),
                 Path::new(&["r", "ba", "ba_la"])
             );
             Ok(())
