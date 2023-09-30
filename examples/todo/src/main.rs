@@ -40,8 +40,8 @@ impl ListItem for TodoItem {
 
 #[derive_commands]
 impl Node for TodoItem {
-    fn fit(&mut self, target: Expanse) -> canopy::Result<()> {
-        self.child.fit(target)?;
+    fn layout(&mut self, target: Expanse) -> canopy::Result<()> {
+        self.child.layout(target)?;
         let sz = self.child.vp().size();
         self.vp_mut().fit_size(sz, sz);
         Ok(())

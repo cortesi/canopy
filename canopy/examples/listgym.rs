@@ -43,7 +43,7 @@ impl ListItem for Block {
 }
 
 impl Node for Block {
-    fn fit(&mut self, target: Expanse) -> Result<()> {
+    fn layout(&mut self, target: Expanse) -> Result<()> {
         let loc = Rect::new(2, 0, target.w.saturating_sub(2), target.h);
         fit_place!(self, self.child, loc);
 

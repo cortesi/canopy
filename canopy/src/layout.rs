@@ -10,7 +10,7 @@ use crate::{
 #[macro_export]
 macro_rules! fit_wrap {
     ($self: ident, $child:expr, $sz:expr) => {
-        $child.fit($sz)?;
+        $child.layout($sz)?;
         $child.vp_mut().position = (0, 0).into();
 
         let cvp = $child.vp();
@@ -25,7 +25,7 @@ macro_rules! fit_wrap {
 #[macro_export]
 macro_rules! fit_frame {
     ($self: ident, $child:expr, $sz:expr, $border:expr) => {{
-        $child.fit(Expanse {
+        $child.layout(Expanse {
             w: $sz.w - ($border * 2),
             h: $sz.h - ($border * 2),
         })?;
@@ -43,7 +43,7 @@ macro_rules! fit_frame {
 #[macro_export]
 macro_rules! fit_place {
     ($self: ident, $child:expr, $loc:expr) => {
-        $child.fit($loc.expanse())?;
+        $child.layout($loc.expanse())?;
         $child.vp_mut().position = $loc.tl;
     };
 }
@@ -51,7 +51,7 @@ macro_rules! fit_place {
 /// Adjust a node so that it fits a viewport. This fits the node to the viewport's screen rectangle, then adjusts the
 /// node's view to place as much of it within the viewport's screen rectangle as possible.
 pub fn fit(n: &mut dyn Node, parent_vp: ViewPort) -> Result<()> {
-    n.fit(parent_vp.screen_rect().into())?;
+    n.layout(parent_vp.screen_rect().into())?;
     n.vp_mut().position = parent_vp.position;
     Ok(())
 }
@@ -63,7 +63,7 @@ pub fn fit(n: &mut dyn Node, parent_vp: ViewPort) -> Result<()> {
 /// border around the node.
 pub fn frame(n: &mut dyn Node, parent_vp: ViewPort, border: u16) -> Result<Frame> {
     let inner = parent_vp.screen_rect().inner(border);
-    n.fit(inner.into())?;
+    n.layout(inner.into())?;
     n.vp_mut().position = inner.tl;
 
     // Return a frame for drawing the screen boundary, but in the view
@@ -77,7 +77,7 @@ pub fn frame(n: &mut dyn Node, parent_vp: ViewPort, border: u16) -> Result<Frame
 /// Place a node in a given screen rectangle. This fits the node to the
 /// region, and updates its viewport.
 pub fn place(n: &mut dyn Node, screen: Rect) -> Result<()> {
-    n.fit(screen.expanse())?;
+    n.layout(screen.expanse())?;
     n.vp_mut().position = screen.tl;
     Ok(())
 }

@@ -55,7 +55,7 @@ pub trait Node: StatefulNode + CommandNode {
     /// consistent results.
     ///
     /// The default implementation just sets both the size and view of the node to the target.
-    fn fit(&mut self, target: Expanse) -> Result<()> {
+    fn layout(&mut self, target: Expanse) -> Result<()> {
         self.vp_mut().fit_size(target, target);
         Ok(())
     }

@@ -110,7 +110,7 @@ where
         c.needs_render(&self.child)
     }
 
-    fn fit(&mut self, sz: crate::geom::Expanse) -> Result<()> {
+    fn layout(&mut self, sz: crate::geom::Expanse) -> Result<()> {
         self.frame = fit_frame!(self, self.child, sz, 1);
         Ok(())
     }

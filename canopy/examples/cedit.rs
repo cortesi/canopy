@@ -27,7 +27,7 @@ impl Ed {
 }
 
 impl Node for Ed {
-    fn fit(&mut self, sz: Expanse) -> Result<()> {
+    fn layout(&mut self, sz: Expanse) -> Result<()> {
         fit_wrap!(self, self.child, sz);
         Ok(())
     }

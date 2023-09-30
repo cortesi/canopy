@@ -48,8 +48,8 @@ impl Node for IntervalItem {
         Some(Duration::from_secs(1))
     }
 
-    fn fit(&mut self, target: Expanse) -> Result<()> {
-        self.child.fit(target)?;
+    fn layout(&mut self, target: Expanse) -> Result<()> {
+        self.child.layout(target)?;
         let sz = self.child.vp().canvas;
         self.vp_mut().fit_size(sz, sz);
         Ok(())

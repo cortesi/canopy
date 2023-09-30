@@ -111,7 +111,7 @@ impl FocusGym {
 }
 
 impl Node for FocusGym {
-    fn fit(&mut self, sz: Expanse) -> Result<()> {
+    fn layout(&mut self, sz: Expanse) -> Result<()> {
         fit_wrap!(self, self.child, sz);
         self.vp_mut().set_fill(sz.rect());
         Ok(())
