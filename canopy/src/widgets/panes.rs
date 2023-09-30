@@ -100,7 +100,7 @@ impl<N: Node> Node for Panes<N> {
         Ok(())
     }
 
-    fn render(&mut self, _: &dyn Core, _rndr: &mut Render) -> Result<()> {
+    fn render(&mut self, _: &dyn Context, _rndr: &mut Render) -> Result<()> {
         let l = self.vp().screen_rect().split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {

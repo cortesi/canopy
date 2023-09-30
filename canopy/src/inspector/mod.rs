@@ -37,7 +37,7 @@ impl Inspector {
 }
 
 impl Node for Inspector {
-    fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
         r.style.push_layer("inspector");
         let vp = self.vp();
         layout::fit(&mut self.view, vp)?;

@@ -67,19 +67,19 @@ macro_rules! leaf {
             fn accept_focus(&mut self) -> bool {
                 true
             }
-            fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
+            fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
                 r.text(
                     "any",
                     self.vp().view.line(0),
                     &format!("<{}>", self.name().clone()),
                 )
             }
-            fn handle_key(&mut self, _: &mut dyn Core, _: key::Key) -> Result<EventOutcome> {
+            fn handle_key(&mut self, _: &mut dyn Context, _: key::Key) -> Result<EventOutcome> {
                 self.handle("key")
             }
             fn handle_mouse(
                 &mut self,
-                _: &mut dyn Core,
+                _: &mut dyn Context,
                 _: mouse::MouseEvent,
             ) -> Result<EventOutcome> {
                 self.handle("mouse")
@@ -97,7 +97,7 @@ macro_rules! leaf {
 
             #[command]
             /// A command that appears only on leaf nodes.
-            pub fn c_leaf(&self, _core: &dyn Core) -> Result<()> {
+            pub fn c_leaf(&self, _core: &dyn Context) -> Result<()> {
                 TSTATE.with(|s| {
                     s.borrow_mut().add_command(&self.name(), "c_leaf");
                 });
@@ -170,7 +170,7 @@ macro_rules! branch {
                 true
             }
 
-            fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
+            fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
                 let parts = self.vp().split_vertical(2)?;
                 layout::fit(&mut self.a, parts[0])?;
                 layout::fit(&mut self.b, parts[1])?;
@@ -182,13 +182,13 @@ macro_rules! branch {
                 )
             }
 
-            fn handle_key(&mut self, _: &mut dyn Core, _: key::Key) -> Result<EventOutcome> {
+            fn handle_key(&mut self, _: &mut dyn Context, _: key::Key) -> Result<EventOutcome> {
                 self.handle("key")
             }
 
             fn handle_mouse(
                 &mut self,
-                _: &mut dyn Core,
+                _: &mut dyn Context,
                 _: mouse::MouseEvent,
             ) -> Result<EventOutcome> {
                 self.handle("mouse")
@@ -224,7 +224,7 @@ impl R {
     }
     #[command]
     /// A command that appears only on leaf nodes.
-    pub fn c_root(&self, _core: &dyn Core) -> Result<()> {
+    pub fn c_root(&self, _core: &dyn Context) -> Result<()> {
         TSTATE.with(|s| {
             s.borrow_mut().add_command(&self.name(), "c_root");
         });
@@ -249,7 +249,7 @@ impl Node for R {
         true
     }
 
-    fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
         let parts = self.vp().split_horizontal(2)?;
         layout::fit(&mut self.a, parts[0])?;
         layout::fit(&mut self.b, parts[1])?;
@@ -257,11 +257,11 @@ impl Node for R {
         r.text("any", self.vp().view.line(0), &format!("<{}>", self.name()))
     }
 
-    fn handle_key(&mut self, _: &mut dyn Core, _: key::Key) -> Result<EventOutcome> {
+    fn handle_key(&mut self, _: &mut dyn Context, _: key::Key) -> Result<EventOutcome> {
         self.handle("key")
     }
 
-    fn handle_mouse(&mut self, _: &mut dyn Core, _: mouse::MouseEvent) -> Result<EventOutcome> {
+    fn handle_mouse(&mut self, _: &mut dyn Context, _: mouse::MouseEvent) -> Result<EventOutcome> {
         self.handle("mouse")
     }
 

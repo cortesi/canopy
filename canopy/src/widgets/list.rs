@@ -101,7 +101,7 @@ where
     }
 
     /// Move selection to the next item in the list, if possible.
-    pub fn delete_item(&mut self, core: &mut dyn Core, offset: usize) -> Option<N> {
+    pub fn delete_item(&mut self, core: &mut dyn Context, offset: usize) -> Option<N> {
         if !self.is_empty() && offset < self.len() {
             let itm = self.items.remove(offset);
             if offset <= self.offset {
@@ -115,31 +115,31 @@ where
 
     /// Delete the currently selected item.
     #[command(ignore_result)]
-    pub fn delete_selected(&mut self, core: &mut dyn Core) -> Option<N> {
+    pub fn delete_selected(&mut self, core: &mut dyn Context) -> Option<N> {
         self.delete_item(core, self.offset)
     }
 
     /// Move selection to the next item in the list, if possible.
     #[command]
-    pub fn select_first(&mut self, _core: &dyn Core) {
+    pub fn select_first(&mut self, _core: &dyn Context) {
         self.select(0)
     }
 
     /// Move selection to the next item in the list, if possible.
     #[command]
-    pub fn select_last(&mut self, _core: &dyn Core) {
+    pub fn select_last(&mut self, _core: &dyn Context) {
         self.select(self.len())
     }
 
     /// Move selection to the next item in the list, if possible.
     #[command]
-    pub fn select_next(&mut self, _core: &dyn Core) {
+    pub fn select_next(&mut self, _core: &dyn Context) {
         self.select(self.offset.saturating_add(1))
     }
 
     /// Move selection to the next previous the list, if possible.
     #[command]
-    pub fn select_prev(&mut self, _core: &dyn Core) {
+    pub fn select_prev(&mut self, _core: &dyn Context) {
         self.select(self.offset.saturating_sub(1))
     }
 
@@ -172,42 +172,42 @@ where
 
     /// Scroll the viewport down by one line.
     #[command]
-    pub fn scroll_down(&mut self, _core: &dyn Core) {
+    pub fn scroll_down(&mut self, _core: &dyn Context) {
         self.vp_mut().scroll_down();
         self.fix_selection();
     }
 
     /// Scroll the viewport up by one line.
     #[command]
-    pub fn scroll_up(&mut self, _core: &dyn Core) {
+    pub fn scroll_up(&mut self, _core: &dyn Context) {
         self.vp_mut().scroll_up();
         self.fix_selection();
     }
 
     /// Scroll the viewport left by one column.
     #[command]
-    pub fn scroll_left(&mut self, _core: &dyn Core) {
+    pub fn scroll_left(&mut self, _core: &dyn Context) {
         self.vp_mut().scroll_left();
         self.fix_selection();
     }
 
     /// Scroll the viewport right by one column.
     #[command]
-    pub fn scroll_right(&mut self, _core: &dyn Core) {
+    pub fn scroll_right(&mut self, _core: &dyn Context) {
         self.vp_mut().scroll_right();
         self.fix_selection();
     }
 
     /// Scroll the viewport down by one page.
     #[command]
-    pub fn page_down(&mut self, _core: &dyn Core) {
+    pub fn page_down(&mut self, _core: &dyn Context) {
         self.vp_mut().page_down();
         self.fix_selection();
     }
 
     /// Scroll the viewport up by one page.
     #[command]
-    pub fn page_up(&mut self, _core: &dyn Core) {
+    pub fn page_up(&mut self, _core: &dyn Context) {
         self.vp_mut().page_up();
         self.fix_selection();
     }
@@ -311,7 +311,7 @@ where
         Ok(())
     }
 
-    fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Context, _: &mut Render) -> Result<()> {
         let vp = self.vp();
         for itm in &mut self.items {
             if let Some(vp) = vp.map(itm.virt)? {
@@ -331,8 +331,8 @@ mod tests {
     use crate::{
         backend::test::TestRender,
         layout::place,
-        tutils::{DummyCore, TFixed},
-        Core,
+        tutils::{DummyContext, TFixed},
+        Context,
     };
 
     pub fn views(lst: &mut List<TFixed>) -> Vec<Rect> {
@@ -351,7 +351,7 @@ mod tests {
 
     #[test]
     fn select() -> Result<()> {
-        let dc = DummyCore {};
+        let dc = DummyContext {};
 
         // Empty initilization shouldn't fail
         let _: List<TFixed> = List::new(Vec::new());

@@ -48,7 +48,7 @@ impl Node for LogItem {
         Ok(())
     }
 
-    fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
         let vp = self.vp();
         let (_, screen) = vp.screen_rect().carve_hstart(2);
         self.child.fit(screen.into())?;
@@ -103,7 +103,7 @@ pub struct Logs {
 }
 
 impl Node for Logs {
-    fn poll(&mut self, c: &mut dyn Core) -> Option<Duration> {
+    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
         if !self.started {
             // Configure a custom event formatter
             let format = fmt::format()
@@ -134,7 +134,7 @@ impl Node for Logs {
         Some(Duration::from_millis(100))
     }
 
-    fn render(&mut self, _: &dyn Core, _: &mut Render) -> Result<()> {
+    fn render(&mut self, _: &dyn Context, _: &mut Render) -> Result<()> {
         let vp = self.vp();
         layout::fit(&mut self.list, vp)?;
         Ok(())

@@ -58,9 +58,9 @@ pub fn run(func: impl FnOnce(&mut Canopy, TestRender, ttree::R) -> Result<()>) -
     func(&mut c, tr, root)
 }
 
-pub struct DummyCore {}
+pub struct DummyContext {}
 
-impl Core for DummyCore {
+impl Context for DummyContext {
     fn is_on_focus_path(&self, _n: &mut dyn Node) -> bool {
         false
     }

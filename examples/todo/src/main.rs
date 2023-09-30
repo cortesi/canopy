@@ -54,7 +54,7 @@ impl Node for TodoItem {
         f(&mut self.child)
     }
 
-    fn render(&mut self, _c: &dyn Core, r: &mut Render) -> canopy::Result<()> {
+    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> canopy::Result<()> {
         let vp = self.vp();
         layout::fit(&mut self.child, vp)?;
         if self.selected {
@@ -73,7 +73,7 @@ struct StatusBar {
 impl StatusBar {}
 
 impl Node for StatusBar {
-    fn render(&mut self, _c: &dyn Core, r: &mut Render) -> canopy::Result<()> {
+    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> canopy::Result<()> {
         r.style.push_layer("statusbar");
         r.text("statusbar/text", self.vp().view_rect().line(0), "todo")?;
         Ok(())
@@ -105,7 +105,7 @@ impl Todo {
 
     /// Open the editor to enter a new todo item.
     #[command]
-    fn enter_item(&mut self, c: &mut dyn Core) -> canopy::Result<()> {
+    fn enter_item(&mut self, c: &mut dyn Context) -> canopy::Result<()> {
         let mut adder = frame::Frame::new(Input::new(""));
         c.set_focus(&mut adder.child);
         self.adder = Some(adder);
@@ -115,7 +115,7 @@ impl Todo {
 
     /// Open the editor to enter a new todo item.
     #[command]
-    fn delete_item(&mut self, c: &mut dyn Core) -> canopy::Result<()> {
+    fn delete_item(&mut self, c: &mut dyn Context) -> canopy::Result<()> {
         let lst = &mut self.content.child;
         if let Some(t) = lst.selected() {
             store::get().delete_todo(t.todo.id).unwrap();
@@ -126,7 +126,7 @@ impl Todo {
 
     /// Accept the new item we're currently editing.
     #[command]
-    fn accept_add(&mut self, _: &mut dyn Core) -> canopy::Result<()> {
+    fn accept_add(&mut self, _: &mut dyn Context) -> canopy::Result<()> {
         if let Some(adder) = &mut self.adder {
             let item = store::get().add_todo(&adder.child.text()).unwrap();
             self.content.child.append(TodoItem::new(item));
@@ -137,7 +137,7 @@ impl Todo {
 
     /// Close the add item editor.
     #[command]
-    fn cancel_add(&mut self, _: &mut dyn Core) -> canopy::Result<()> {
+    fn cancel_add(&mut self, _: &mut dyn Context) -> canopy::Result<()> {
         self.adder = None;
         Ok(())
     }
@@ -153,7 +153,7 @@ impl Todo {
 }
 
 impl Node for Todo {
-    fn render(&mut self, _c: &dyn Core, _: &mut Render) -> canopy::Result<()> {
+    fn render(&mut self, _c: &dyn Context, _: &mut Render) -> canopy::Result<()> {
         let (a, b) = self.vp().carve_vend(1);
         layout::fit(&mut self.statusbar, b)?;
         layout::fit(&mut self.content, a)?;

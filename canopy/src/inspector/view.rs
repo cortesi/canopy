@@ -11,7 +11,7 @@ pub struct View {
 }
 
 impl Node for View {
-    fn render(&mut self, _c: &dyn Core, _r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Context, _r: &mut Render) -> Result<()> {
         let (a, b) = self.vp().carve_vstart(1);
         layout::fit(&mut self.tabs, a)?;
         layout::fit(&mut self.logs, b)?;

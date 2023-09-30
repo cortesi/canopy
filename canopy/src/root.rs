@@ -46,7 +46,7 @@ where
     #[command]
     /// Exit from the program, restoring terminal state. If the inspector is
     /// open, exit the inspector instead.
-    pub fn quit(&mut self, c: &mut dyn Core) -> Result<()> {
+    pub fn quit(&mut self, c: &mut dyn Context) -> Result<()> {
         if self.inspector_active {
             self.hide_inspector(c)?;
         } else {
@@ -57,49 +57,49 @@ where
 
     #[command]
     /// Focus the next node in a pre-order traversal of the app.
-    pub fn focus_next(&mut self, c: &mut dyn Core) -> Result<()> {
+    pub fn focus_next(&mut self, c: &mut dyn Context) -> Result<()> {
         c.focus_next(self);
         Ok(())
     }
 
     #[command]
     /// Focus the next node in a pre-order traversal of the app.
-    pub fn focus_prev(&mut self, c: &mut dyn Core) -> Result<()> {
+    pub fn focus_prev(&mut self, c: &mut dyn Context) -> Result<()> {
         c.focus_prev(self);
         Ok(())
     }
 
     #[command]
     /// Shift focus right.
-    pub fn focus_right(&mut self, c: &mut dyn Core) -> Result<()> {
+    pub fn focus_right(&mut self, c: &mut dyn Context) -> Result<()> {
         c.focus_right(self);
         Ok(())
     }
 
     #[command]
     /// Shift focus left.
-    pub fn focus_left(&mut self, c: &mut dyn Core) -> Result<()> {
+    pub fn focus_left(&mut self, c: &mut dyn Context) -> Result<()> {
         c.focus_left(self);
         Ok(())
     }
 
     #[command]
     /// Shift focus up.
-    pub fn focus_up(&mut self, c: &mut dyn Core) -> Result<()> {
+    pub fn focus_up(&mut self, c: &mut dyn Context) -> Result<()> {
         c.focus_up(self);
         Ok(())
     }
 
     #[command]
     /// Shift focus down.
-    pub fn focus_down(&mut self, c: &mut dyn Core) -> Result<()> {
+    pub fn focus_down(&mut self, c: &mut dyn Context) -> Result<()> {
         c.focus_down(self);
         Ok(())
     }
 
     #[command]
     /// Hide the inspector.
-    pub fn hide_inspector(&mut self, c: &mut dyn Core) -> Result<()> {
+    pub fn hide_inspector(&mut self, c: &mut dyn Context) -> Result<()> {
         self.inspector_active = false;
         self.inspector.hide();
         c.taint_tree(self);
@@ -109,7 +109,7 @@ where
 
     #[command]
     /// Show the inspector.
-    pub fn activate_inspector(&mut self, c: &mut dyn Core) -> Result<()> {
+    pub fn activate_inspector(&mut self, c: &mut dyn Context) -> Result<()> {
         self.inspector_active = true;
         self.inspector.unhide();
         c.taint_tree(self);
@@ -119,7 +119,7 @@ where
 
     #[command]
     /// Show the inspector.
-    pub fn toggle_inspector(&mut self, c: &mut dyn Core) -> Result<()> {
+    pub fn toggle_inspector(&mut self, c: &mut dyn Context) -> Result<()> {
         if self.inspector_active {
             self.hide_inspector(c)
         } else {
@@ -129,7 +129,7 @@ where
 
     #[command]
     /// If we're currently focused in the inspector, shift focus into the app pane instead.
-    pub fn focus_app(&mut self, c: &mut dyn Core) -> Result<()> {
+    pub fn focus_app(&mut self, c: &mut dyn Context) -> Result<()> {
         if c.is_on_focus_path(&mut self.inspector) {
             c.focus_first(&mut self.app);
         }
@@ -145,7 +145,7 @@ where
         f(&mut self.inspector)?;
         f(&mut self.app)
     }
-    fn render(&mut self, _c: &dyn Core, _r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Context, _r: &mut Render) -> Result<()> {
         let vp = self.vp();
         if self.inspector_active {
             let parts = vp.split_horizontal(2)?;

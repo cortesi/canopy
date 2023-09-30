@@ -25,7 +25,7 @@ impl Block {
     }
 
     #[command]
-    fn add(&mut self, c: &mut dyn Core) {
+    fn add(&mut self, c: &mut dyn Context) {
         if !self.children.is_empty() && !self.size_limited(self.children[0].vp().view.into()) {
             self.children.push(Block::new(!self.horizontal));
             c.taint_tree(self);
@@ -37,7 +37,7 @@ impl Block {
     }
 
     #[command]
-    fn split(&mut self, c: &mut dyn Core) -> Result<()> {
+    fn split(&mut self, c: &mut dyn Context) -> Result<()> {
         if !self.size_limited(self.vp().view.into()) {
             self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
             c.taint_tree(self);
@@ -47,14 +47,14 @@ impl Block {
     }
 
     #[command]
-    fn focus(&mut self, c: &mut dyn Core) -> Result<()> {
+    fn focus(&mut self, c: &mut dyn Context) -> Result<()> {
         c.set_focus(self);
         Ok(())
     }
 }
 
 impl Node for Block {
-    fn render(&mut self, c: &dyn Core, r: &mut Render) -> Result<()> {
+    fn render(&mut self, c: &dyn Context, r: &mut Render) -> Result<()> {
         let vp = self.vp();
         if !self.children.is_empty() {
             let vps = if self.horizontal {

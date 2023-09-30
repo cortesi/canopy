@@ -24,21 +24,21 @@ impl Tabs {
 
     /// Select the next tab.
     #[command]
-    pub fn next(&mut self, c: &mut dyn Core) {
+    pub fn next(&mut self, c: &mut dyn Context) {
         self.active = (self.active + 1) % self.tabs.len();
         c.taint(self);
     }
 
     /// Select the previous tab.
     #[command]
-    pub fn prev(&mut self, c: &mut dyn Core) {
+    pub fn prev(&mut self, c: &mut dyn Context) {
         self.active = (self.active.wrapping_sub(1)) % self.tabs.len();
         c.taint(self);
     }
 }
 
 impl Node for Tabs {
-    fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
         for (i, rect) in self
             .vp()
             .view

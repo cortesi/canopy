@@ -5,7 +5,7 @@ use crate::{
     derive_commands, fit_frame, geom,
     geom::Expanse,
     state::{NodeState, StatefulNode},
-    Core, Node, Render, Result,
+    Context, Node, Render, Result,
 };
 
 /// Defines the set of glyphs used to draw the frame
@@ -106,7 +106,7 @@ impl<N> Node for Frame<N>
 where
     N: Node,
 {
-    fn force_render(&self, c: &dyn Core) -> bool {
+    fn force_render(&self, c: &dyn Context) -> bool {
         c.needs_render(&self.child)
     }
 
@@ -115,7 +115,7 @@ where
         Ok(())
     }
 
-    fn render(&mut self, c: &dyn Core, rndr: &mut Render) -> Result<()> {
+    fn render(&mut self, c: &dyn Context, rndr: &mut Render) -> Result<()> {
         let f = self.frame;
         let style = if c.is_on_focus_path(self) {
             "frame/focused"

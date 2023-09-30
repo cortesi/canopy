@@ -19,7 +19,11 @@ use crate::{
 };
 
 /// The API exposed to nodes by Canopy.
-pub trait Core {
+pub trait Context {
+    /// Does the node need to render in the next sweep? This checks if the node is currently hidden, and if not, signals
+    /// that we should render if the node is tainted, its focus status has changed, or if it is forcing a render.
+    fn needs_render(&self, n: &dyn Node) -> bool;
+
     /// Is the specified node on the focus path? A node is on the focus path if it
     /// has focus, or if it's the ancestor of a node with focus.
     fn is_on_focus_path(&self, n: &mut dyn Node) -> bool;
@@ -58,10 +62,6 @@ pub trait Core {
 
     /// Move focus upward of the currently focused node within the subtree at root.
     fn focus_up(&mut self, root: &mut dyn Node);
-
-    /// Does the node need to render in the next sweep? This checks if the node is currently hidden, and if not, signals
-    /// that we should render if the node is tainted, its focus status has changed, or if it is forcing a render.
-    fn needs_render(&self, n: &dyn Node) -> bool;
 
     /// Focus a node.
     fn set_focus(&mut self, n: &mut dyn Node);
@@ -115,7 +115,7 @@ pub struct Canopy {
     pub style: StyleMap,
 }
 
-impl Core for Canopy {
+impl Context for Canopy {
     /// Does the node need to render in the next sweep? This checks if the node
     /// is currently hidden, and if not, signals that we should render if:
     ///

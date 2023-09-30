@@ -42,7 +42,7 @@ impl Node for EditorView {
         true
     }
 
-    fn render(&mut self, _: &dyn Core, r: &mut Render) -> Result<()> {
+    fn render(&mut self, _: &dyn Context, r: &mut Render) -> Result<()> {
         let vo = self.vp().view;
         let sr = self.vp().screen_rect();
         self.core.resize_window(sr.w as usize, sr.h as usize);
@@ -79,19 +79,19 @@ impl Editor {
 
     /// Move the cursor left or right.
     #[command]
-    fn cursor_shift(&mut self, _: &dyn Core, n: isize) {
+    fn cursor_shift(&mut self, _: &dyn Context, n: isize) {
         self.view.core.cursor_shift(n);
     }
 
     /// Move the cursor up or down in the chunk list.
     #[command]
-    fn cursor_shift_chunk(&mut self, _: &dyn Core, n: isize) {
+    fn cursor_shift_chunk(&mut self, _: &dyn Context, n: isize) {
         self.view.core.cursor_shift_chunk(n);
     }
 
     /// Move the cursor up or down by visual line.
     #[command]
-    fn cursor_shift_lines(&mut self, _: &dyn Core, n: isize) {
+    fn cursor_shift_lines(&mut self, _: &dyn Context, n: isize) {
         self.view.core.cursor_shift_lines(n);
     }
 }

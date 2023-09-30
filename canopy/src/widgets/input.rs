@@ -119,19 +119,19 @@ impl Input {
 
     /// Move the cursor left.
     #[command]
-    fn left(&mut self, _: &dyn Core) {
+    fn left(&mut self, _: &dyn Context) {
         self.textbuf.left();
     }
 
     /// Move the cursor right.
     #[command]
-    fn right(&mut self, _: &dyn Core) {
+    fn right(&mut self, _: &dyn Context) {
         self.textbuf.right();
     }
 
     /// Delete a character at the input location.
     #[command]
-    fn backspace(&mut self, _: &dyn Core) {
+    fn backspace(&mut self, _: &dyn Context) {
         self.textbuf.backspace();
     }
 }
@@ -160,11 +160,11 @@ impl Node for Input {
         })
     }
 
-    fn render(&mut self, _: &dyn Core, r: &mut Render) -> Result<()> {
+    fn render(&mut self, _: &dyn Context, r: &mut Render) -> Result<()> {
         r.text("text", self.vp().view.line(0), &self.textbuf.text())
     }
 
-    fn handle_key(&mut self, _c: &mut dyn Core, k: key::Key) -> Result<EventOutcome> {
+    fn handle_key(&mut self, _c: &mut dyn Context, k: key::Key) -> Result<EventOutcome> {
         match k {
             key::Key {
                 mods: _,

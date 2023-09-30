@@ -2,18 +2,18 @@ use std::collections::HashMap;
 
 use crate::{
     state::{NodeName, StatefulNode},
-    tree, Core, Error, Node, NodeId, Result,
+    tree, Context, Error, Node, NodeId, Result,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ArgTypes {
-    Core,
+    Context,
     ISize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Args {
-    Core,
+    Context,
     ISize(isize),
 }
 
@@ -99,7 +99,7 @@ pub trait CommandNode: StatefulNode {
         Self: Sized;
 
     /// Dispatch a command to this node.
-    fn dispatch(&mut self, c: &mut dyn Core, cmd: &CommandInvocation) -> Result<ReturnValue>;
+    fn dispatch(&mut self, c: &mut dyn Context, cmd: &CommandInvocation) -> Result<ReturnValue>;
 }
 
 /// Dispatch a command relative to a node. This searches the node tree for a
@@ -107,7 +107,7 @@ pub trait CommandNode: StatefulNode {
 ///     - A pre-order traversal of the current node subtree
 ///     - The path from the current node to the root
 pub fn dispatch<T>(
-    core: &mut dyn Core,
+    core: &mut dyn Context,
     current_id: T,
     root: &mut dyn Node,
     cmd: &CommandInvocation,
@@ -233,12 +233,12 @@ mod tests {
             #[command]
             /// This is a comment.
             /// Multiline too!
-            fn a(&mut self, _core: &mut dyn Core) -> canopy::Result<()> {
+            fn a(&mut self, _core: &mut dyn Context) -> canopy::Result<()> {
                 self.a_triggered = true;
                 Ok(())
             }
             #[command]
-            fn b(&mut self, _core: &mut dyn Core) -> canopy::Result<()> {
+            fn b(&mut self, _core: &mut dyn Context) -> canopy::Result<()> {
                 self.b_triggered = true;
                 Ok(())
             }

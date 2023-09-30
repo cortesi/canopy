@@ -52,30 +52,30 @@ fn commands() {
         #[command]
         /// This is a comment.
         /// Multiline too!
-        fn a(&mut self, _core: &dyn canopy::Core) -> Result<()> {
+        fn a(&mut self, _core: &dyn canopy::Context) -> Result<()> {
             self.a_triggered = true;
             Ok(())
         }
 
         #[command]
-        fn b(&mut self, _core: &dyn canopy::Core) -> canopy::Result<()> {
+        fn b(&mut self, _core: &dyn canopy::Context) -> canopy::Result<()> {
             self.b_triggered = true;
             Ok(())
         }
 
         #[command]
-        fn c(&mut self, _core: &dyn canopy::Core) {
+        fn c(&mut self, _core: &dyn canopy::Context) {
             self.c_triggered = true;
         }
 
         #[command(ignore_result)]
-        fn d(&mut self, _core: &dyn canopy::Core) -> Opaque {
+        fn d(&mut self, _core: &dyn canopy::Context) -> Opaque {
             self.c_triggered = true;
             Opaque {}
         }
 
         #[command(ignore_result)]
-        fn f_core_isize(&mut self, _core: &dyn canopy::Core, i: isize) -> Opaque {
+        fn f_core_isize(&mut self, _core: &dyn canopy::Context, i: isize) -> Opaque {
             self.core_isize = Some(i);
             Opaque {}
         }
@@ -86,13 +86,13 @@ fn commands() {
         }
 
         #[command]
-        fn naked_str(&mut self, _core: &dyn canopy::Core) -> String {
+        fn naked_str(&mut self, _core: &dyn canopy::Context) -> String {
             self.naked_str_triggered = true;
             "".into()
         }
 
         #[command]
-        fn result_str(&mut self, _core: &dyn canopy::Core) -> canopy::Result<String> {
+        fn result_str(&mut self, _core: &dyn canopy::Context) -> canopy::Result<String> {
             self.naked_str_triggered = true;
             Ok("".into())
         }
@@ -111,35 +111,35 @@ fn commands() {
                 command: "a".to_string(),
                 docs: "This is a comment.\nMultiline too!".to_string(),
                 ret: ReturnSpec::new(ReturnTypes::Void, true),
-                args: vec![ArgTypes::Core],
+                args: vec![ArgTypes::Context],
             },
             canopy::commands::CommandSpec {
                 node: "foo".try_into().unwrap(),
                 command: "b".to_string(),
                 docs: "".to_string(),
                 ret: ReturnSpec::new(ReturnTypes::Void, true),
-                args: vec![ArgTypes::Core],
+                args: vec![ArgTypes::Context],
             },
             canopy::commands::CommandSpec {
                 node: "foo".try_into().unwrap(),
                 command: "c".to_string(),
                 docs: "".to_string(),
                 ret: ReturnSpec::new(ReturnTypes::Void, false),
-                args: vec![ArgTypes::Core],
+                args: vec![ArgTypes::Context],
             },
             canopy::commands::CommandSpec {
                 node: "foo".try_into().unwrap(),
                 command: "d".to_string(),
                 docs: "".to_string(),
                 ret: ReturnSpec::new(ReturnTypes::Void, false),
-                args: vec![ArgTypes::Core],
+                args: vec![ArgTypes::Context],
             },
             canopy::commands::CommandSpec {
                 node: "foo".try_into().unwrap(),
                 command: "f_core_isize".to_string(),
                 docs: "".to_string(),
                 ret: ReturnSpec::new(ReturnTypes::Void, false),
-                args: vec![ArgTypes::Core, ArgTypes::ISize],
+                args: vec![ArgTypes::Context, ArgTypes::ISize],
             },
             canopy::commands::CommandSpec {
                 node: "foo".try_into().unwrap(),
@@ -153,14 +153,14 @@ fn commands() {
                 command: "naked_str".to_string(),
                 docs: "".to_string(),
                 ret: ReturnSpec::new(ReturnTypes::String, false),
-                args: vec![ArgTypes::Core],
+                args: vec![ArgTypes::Context],
             },
             canopy::commands::CommandSpec {
                 node: "foo".try_into().unwrap(),
                 command: "result_str".to_string(),
                 docs: "".to_string(),
                 ret: ReturnSpec::new(ReturnTypes::String, true),
-                args: vec![ArgTypes::Core],
+                args: vec![ArgTypes::Context],
             },
             canopy::commands::CommandSpec {
                 node: "foo".try_into().unwrap(),
@@ -181,7 +181,7 @@ fn commands() {
         naked_isize: None,
     };
 
-    let mut dc = DummyCore {};
+    let mut dc = DummyContext {};
 
     f.dispatch(
         &mut dc,
@@ -210,7 +210,7 @@ fn commands() {
         &CommandInvocation {
             node: "foo".try_into().unwrap(),
             command: "f_core_isize".try_into().unwrap(),
-            args: vec![Args::Core, Args::ISize(3)],
+            args: vec![Args::Context, Args::ISize(3)],
         },
     )
     .unwrap();
@@ -245,7 +245,7 @@ fn commands() {
         N: canopy::Node,
     {
         #[command]
-        fn a(&mut self, _core: &dyn canopy::Core) -> canopy::Result<()> {
+        fn a(&mut self, _core: &dyn canopy::Context) -> canopy::Result<()> {
             self.a_triggered = true;
             Ok(())
         }
@@ -258,7 +258,7 @@ fn commands() {
             command: "a".to_string(),
             docs: "".to_string(),
             ret: ReturnSpec::new(ReturnTypes::Void, true),
-            args: vec![ArgTypes::Core],
+            args: vec![ArgTypes::Context],
         },]
     );
 }

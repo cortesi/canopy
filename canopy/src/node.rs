@@ -6,7 +6,7 @@ use crate::{
     event::{key, mouse},
     geom::Expanse,
     state::StatefulNode,
-    Core, Render, Result,
+    Context, Render, Result,
 };
 
 /// Was an event handled or ignored?
@@ -24,7 +24,7 @@ trait Layout: Node {}
 pub trait Node: StatefulNode + CommandNode {
     /// Force the node to render in the next sweep. Over-riding this method should only be needed rarely, for instance
     /// when a container node (e.g. a frame) needs to redraw if a child node changes.
-    fn force_render(&self, c: &dyn Core) -> bool {
+    fn force_render(&self, c: &dyn Context) -> bool {
         false
     }
 
@@ -62,19 +62,19 @@ pub trait Node: StatefulNode + CommandNode {
 
     /// Handle a key input event. This event is only called for nodes that are on the focus path. The default
     /// implementation ignores input.
-    fn handle_key(&mut self, c: &mut dyn Core, k: key::Key) -> Result<EventOutcome> {
+    fn handle_key(&mut self, c: &mut dyn Context, k: key::Key) -> Result<EventOutcome> {
         Ok(EventOutcome::Ignore)
     }
 
     /// Handle a mouse input event. The default implementation ignores mouse input.
-    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::MouseEvent) -> Result<EventOutcome> {
+    fn handle_mouse(&mut self, c: &mut dyn Context, k: mouse::MouseEvent) -> Result<EventOutcome> {
         Ok(EventOutcome::Ignore)
     }
 
     /// The scheduled poll endpoint. This function is called for every node the first time it is seen during the
     /// pre-render sweep. Each time the function returns a duration, a subsequent call is scheduled. If the function
     /// returns None, the `poll` function is never called again. The default implementation returns `None`.
-    fn poll(&mut self, c: &mut dyn Core) -> Option<Duration> {
+    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
         None
     }
 
@@ -85,7 +85,7 @@ pub trait Node: StatefulNode + CommandNode {
     /// - Render itself to screen. This node's viewport will already have been set by a parent.
     ///
     /// The default implementation does nothing.
-    fn render(&mut self, c: &dyn Core, r: &mut Render) -> Result<()> {
+    fn render(&mut self, c: &dyn Context, r: &mut Render) -> Result<()> {
         Ok(())
     }
 }

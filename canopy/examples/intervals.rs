@@ -42,7 +42,7 @@ impl ListItem for IntervalItem {
 }
 
 impl Node for IntervalItem {
-    fn poll(&mut self, c: &mut dyn Core) -> Option<Duration> {
+    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
         self.inc();
         c.taint(self);
         Some(Duration::from_secs(1))
@@ -59,7 +59,7 @@ impl Node for IntervalItem {
         f(&mut self.child)
     }
 
-    fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
         let vp = self.vp();
         layout::fit(&mut self.child, vp)?;
         if self.selected {
@@ -78,7 +78,7 @@ struct StatusBar {
 impl StatusBar {}
 
 impl Node for StatusBar {
-    fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
         r.style.push_layer("statusbar");
         r.text("statusbar/text", self.vp().view.line(0), "intervals")?;
         Ok(())
@@ -105,7 +105,7 @@ impl Intervals {
     }
 
     #[command]
-    fn add_item(&mut self, c: &mut dyn Core) {
+    fn add_item(&mut self, c: &mut dyn Context) {
         let lst = &mut self.content.child;
         lst.append(IntervalItem::new());
         c.taint(self);
@@ -113,7 +113,7 @@ impl Intervals {
 }
 
 impl Node for Intervals {
-    fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Context, _: &mut Render) -> Result<()> {
         let (a, b) = self.vp().carve_vend(1);
         layout::fit(&mut self.statusbar, b)?;
         layout::fit(&mut self.content, a)?;

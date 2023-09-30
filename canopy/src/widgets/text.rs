@@ -35,37 +35,37 @@ impl Text {
     }
 
     #[command]
-    pub fn scroll_to_top(&mut self, _c: &mut dyn Core) {
+    pub fn scroll_to_top(&mut self, _c: &mut dyn Context) {
         self.vp_mut().scroll_to(0, 0);
     }
 
     #[command]
-    pub fn scroll_down(&mut self, _c: &mut dyn Core) {
+    pub fn scroll_down(&mut self, _c: &mut dyn Context) {
         self.vp_mut().scroll_down();
     }
 
     #[command]
-    pub fn scroll_up(&mut self, _c: &mut dyn Core) {
+    pub fn scroll_up(&mut self, _c: &mut dyn Context) {
         self.vp_mut().scroll_up();
     }
 
     #[command]
-    pub fn scroll_left(&mut self, _c: &mut dyn Core) {
+    pub fn scroll_left(&mut self, _c: &mut dyn Context) {
         self.vp_mut().scroll_left();
     }
 
     #[command]
-    pub fn scroll_right(&mut self, _c: &mut dyn Core) {
+    pub fn scroll_right(&mut self, _c: &mut dyn Context) {
         self.vp_mut().scroll_right();
     }
 
     #[command]
-    pub fn page_down(&mut self, _c: &mut dyn Core) {
+    pub fn page_down(&mut self, _c: &mut dyn Context) {
         self.vp_mut().page_down();
     }
 
     #[command]
-    pub fn page_up(&mut self, _c: &mut dyn Core) {
+    pub fn page_up(&mut self, _c: &mut dyn Context) {
         self.vp_mut().page_up();
     }
 }
@@ -94,7 +94,7 @@ impl Node for Text {
         Ok(())
     }
 
-    fn render(&mut self, _c: &dyn Core, rndr: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Context, rndr: &mut Render) -> Result<()> {
         let vo = self.vp().view;
         if let Some(lines) = self.lines.as_ref() {
             for i in 0..vo.h {

@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap};
 
 use rhai;
 
-use crate::{commands::*, error, Core, Node, NodeId, NodeName, Result};
+use crate::{commands::*, error, Context, Node, NodeId, NodeName, Result};
 
 pub type ScriptId = u64;
 
@@ -19,7 +19,7 @@ impl Script {
 }
 
 struct ScriptGlobal<'a> {
-    core: &'a mut dyn Core,
+    core: &'a mut dyn Context,
     root: &'a mut dyn Node,
     node_id: NodeId,
 }
@@ -31,7 +31,7 @@ thread_local! {
 pub(crate) struct ScriptGuard {}
 
 impl ScriptGuard {
-    pub fn new(core: &mut dyn Core, root: &mut dyn Node, node_id: NodeId) -> Self {
+    pub fn new(core: &mut dyn Context, root: &mut dyn Node, node_id: NodeId) -> Self {
         let sg = ScriptGlobal {
             core,
             root,
@@ -129,7 +129,7 @@ impl ScriptHost {
             let mut rhai_arg_types = vec![];
             for a in &arg_types {
                 match a {
-                    ArgTypes::Core => {}
+                    ArgTypes::Context => {}
                     ArgTypes::ISize => {
                         rhai_arg_types.push(rhai::plugin::TypeId::of::<i64>());
                     }
@@ -149,15 +149,15 @@ impl ScriptHost {
 
                         let mut ciargs = vec![];
                         let mut arg_types = arg_types.clone();
-                        if arg_types.len() > 0 && arg_types[0] == ArgTypes::Core {
-                            ciargs.push(Args::Core);
+                        if arg_types.len() > 0 && arg_types[0] == ArgTypes::Context {
+                            ciargs.push(Args::Context);
                             arg_types.remove(0);
                         }
                         // I believe this is guaranteed by rhai
                         assert!(args.len() == arg_types.len());
                         for (i, a) in arg_types.iter().enumerate() {
                             match a {
-                                ArgTypes::Core => {
+                                ArgTypes::Context => {
                                     panic!("unexpected")
                                 }
                                 ArgTypes::ISize => {

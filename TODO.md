@@ -1,6 +1,7 @@
 
 # TODO
 
+- Start specializing into a RenderContext and EventContext
 - Rewrite the renderer so that the projection point in ViewPort is always relative to the view of the parent node.
   - ViewPort.screen_rect, project_point, etc. are now completely incorrect, and should be rewritten, probably by moving
     them to Render

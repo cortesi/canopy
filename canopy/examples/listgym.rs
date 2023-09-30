@@ -57,7 +57,7 @@ impl Node for Block {
         Ok(())
     }
 
-    fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
         let vp = self.vp();
         if self.selected {
             let active = vp.view.carve_hstart(1).0;
@@ -81,7 +81,7 @@ struct StatusBar {
 impl StatusBar {}
 
 impl Node for StatusBar {
-    fn render(&mut self, _c: &dyn Core, r: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
         r.style.push_layer("statusbar");
         r.text("text", self.vp().view.line(0), "listgym")?;
         Ok(())
@@ -110,25 +110,25 @@ impl ListGym {
 
     #[command]
     /// Add an item after the current focus
-    fn add_item(&mut self, _c: &dyn Core) {
+    fn add_item(&mut self, _c: &dyn Context) {
         self.content.child.insert_after(Block::new());
     }
 
     #[command]
     /// Add an item at the end of the list
-    fn append_item(&mut self, _c: &dyn Core) {
+    fn append_item(&mut self, _c: &dyn Context) {
         self.content.child.append(Block::new());
     }
 
     #[command]
     /// Add an item at the end of the list
-    fn clear(&mut self, _c: &dyn Core) {
+    fn clear(&mut self, _c: &dyn Context) {
         self.content.child.clear();
     }
 }
 
 impl Node for ListGym {
-    fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Context, _: &mut Render) -> Result<()> {
         let (a, b) = self.vp().screen_rect().carve_vend(1);
         fit_place!(self, self.content, a);
         fit_place!(self, self.statusbar, b);

@@ -31,7 +31,7 @@ impl Node for Pager {
         true
     }
 
-    fn render(&mut self, _c: &dyn Core, _: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Context, _: &mut Render) -> Result<()> {
         let vp = self.vp();
         layout::fit(&mut self.child, vp)
     }

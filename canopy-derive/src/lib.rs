@@ -10,8 +10,8 @@ use syn::{parse_macro_input, DeriveInput, Meta};
 type Result<T> = std::result::Result<T, Error>;
 
 lazy_static! {
-    /// A regex that matches all plausible permutations of a canopy::Core type specification
-    static ref RE_CORE: Regex = Regex::new("& (mut )??dyn (canopy :: )??Core").unwrap();
+    /// A regex that matches all plausible permutations of a canopy::Context type specification
+    static ref RE_CORE: Regex = Regex::new("& (mut )??dyn (canopy :: )??Context").unwrap();
 }
 
 #[derive(PartialEq, Eq, thiserror::Error, Debug, Clone)]
@@ -44,14 +44,14 @@ struct MacroArgs {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ArgTypes {
-    Core,
+    Context,
     ISize,
 }
 
 impl quote::ToTokens for ArgTypes {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         match self {
-            ArgTypes::Core => tokens.extend(quote! {canopy::commands::ArgTypes::Core}),
+            ArgTypes::Context => tokens.extend(quote! {canopy::commands::ArgTypes::Context}),
             ArgTypes::ISize => tokens.extend(quote! {canopy::commands::ArgTypes::ISize}),
         }
     }
@@ -109,7 +109,7 @@ impl Command {
         let mut args = vec![];
         for (i, a) in self.args.iter().enumerate() {
             match a {
-                ArgTypes::Core => {
+                ArgTypes::Context => {
                     args.push(quote! {core});
                 }
                 ArgTypes::ISize => {
@@ -213,7 +213,7 @@ fn parse_command_method(node: &str, method: &syn::ImplItemFn) -> Result<Option<C
             syn::FnArg::Typed(x) => match &*x.ty {
                 syn::Type::Reference(x) => {
                     if RE_CORE.is_match(&quote!(#x).to_string()) {
-                        args.push(ArgTypes::Core);
+                        args.push(ArgTypes::Context);
                     }
                 }
                 syn::Type::Path(x) => {
@@ -343,7 +343,7 @@ pub fn derive_commands(
             fn commands() -> Vec<canopy::commands::CommandSpec> {
                 vec![#(#commands),*]
             }
-            fn dispatch(&mut self, core: &mut dyn canopy::Core, cmd: &canopy::commands::CommandInvocation) -> canopy::Result<canopy::commands::ReturnValue> {
+            fn dispatch(&mut self, core: &mut dyn canopy::Context, cmd: &canopy::commands::CommandInvocation) -> canopy::Result<canopy::commands::ReturnValue> {
                 if cmd.node != self.name() {
                     return Err(canopy::Error::UnknownCommand(cmd.command.to_string()));
                 }
