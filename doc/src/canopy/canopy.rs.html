@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `canopy/src/canopy.rs`."><title>canopy.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-9bb858ba049f1f21.css" id="mainThemeStyle"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="canopy" data-themes="" data-resource-suffix="" data-rustdoc-version="1.72.0 (5680fa18f 2023-08-23)" data-channel="1.72.0" data-search-js="search-f6292fe389d70017.js" data-settings-js="settings-de11bff964e9d4e5.js" data-settings-css="settings-8c76f75bfb6bd192.css" data-theme-light-css="light-0f8c037637f9eb3e.css" data-theme-dark-css="dark-1097f8e92a01e3cf.css" data-theme-ayu-css="ayu-614652228113ac93.css" ><script src="../../static.files/storage-59fd9b8ccb335783.js"></script><script defer src="../../static.files/source-script-106908c7a7964ba4.js"></script><script defer src="../../source-files.js"></script><script defer src="../../static.files/main-0795b7d26be81095.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../../static.files/light-0f8c037637f9eb3e.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../../static.files/dark-1097f8e92a01e3cf.css"><link rel="stylesheet" href="../../static.files/noscript-13285aec31fa243e.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../canopy/index.html"><img class="rust-logo" src="../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `canopy/src/canopy.rs`."><title>canopy.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-9bb858ba049f1f21.css" id="mainThemeStyle"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="canopy" data-themes="" data-resource-suffix="" data-rustdoc-version="1.72.1 (d5c2e9c34 2023-09-13)" data-channel="1.72.1" data-search-js="search-f6292fe389d70017.js" data-settings-js="settings-de11bff964e9d4e5.js" data-settings-css="settings-8c76f75bfb6bd192.css" data-theme-light-css="light-0f8c037637f9eb3e.css" data-theme-dark-css="dark-1097f8e92a01e3cf.css" data-theme-ayu-css="ayu-614652228113ac93.css" ><script src="../../static.files/storage-59fd9b8ccb335783.js"></script><script defer src="../../static.files/source-script-106908c7a7964ba4.js"></script><script defer src="../../source-files.js"></script><script defer src="../../static.files/main-0795b7d26be81095.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../../static.files/light-0f8c037637f9eb3e.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../../static.files/dark-1097f8e92a01e3cf.css"><link rel="stylesheet" href="../../static.files/noscript-13285aec31fa243e.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../canopy/index.html"><img class="rust-logo" src="../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
 <a href="#4" id="4">4</a>
@@ -1181,13 +1181,27 @@
 <a href="#1181" id="1181">1181</a>
 <a href="#1182" id="1182">1182</a>
 <a href="#1183" id="1183">1183</a>
+<a href="#1184" id="1184">1184</a>
+<a href="#1185" id="1185">1185</a>
+<a href="#1186" id="1186">1186</a>
+<a href="#1187" id="1187">1187</a>
+<a href="#1188" id="1188">1188</a>
+<a href="#1189" id="1189">1189</a>
+<a href="#1190" id="1190">1190</a>
+<a href="#1191" id="1191">1191</a>
+<a href="#1192" id="1192">1192</a>
+<a href="#1193" id="1193">1193</a>
+<a href="#1194" id="1194">1194</a>
+<a href="#1195" id="1195">1195</a>
+<a href="#1196" id="1196">1196</a>
+<a href="#1197" id="1197">1197</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{io::Write, process, sync::mpsc};
 
 <span class="kw">use </span>comfy_table::{ContentArrangement, Table};
 
 <span class="kw">use crate</span>::{
     backend::BackendControl,
-    commands, error,
+    commands, cursor, error,
     event::{key, mouse, Event},
     geom::{Coverage, Direction, Expanse, Point, Rect},
     inputmap,
@@ -1367,8 +1381,8 @@
                 }
                 <span class="kw">let </span>n = node_at(root, p)<span class="question-mark">?</span>;
                 <span class="kw">if </span>n != last {
-                    last = n;
-                    <span class="kw">if let </span><span class="prelude-val">Some</span>(nid) = n {
+                    last = n.clone();
+                    <span class="kw">if let </span><span class="prelude-val">Some</span>(nid) = <span class="kw-2">&amp;</span>n {
                         walk_to_root(root, nid, <span class="kw-2">&amp;mut </span>|x| {
                             <span class="kw">if </span>!seen &amp;&amp; x.accept_focus() {
                                 seen = <span class="bool-val">true</span>;
@@ -1714,6 +1728,7 @@
         r: <span class="kw-2">&amp;mut </span>R,
         styl: <span class="kw-2">&amp;mut </span>StyleManager,
         n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node,
+        base: Point,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="kw">if </span>!n.is_hidden() {
             styl.push();
@@ -1724,7 +1739,7 @@
                 }
 
                 <span class="kw">let </span><span class="kw-2">mut </span>c = Coverage::new(n.vp().screen_rect().expanse());
-                <span class="kw">let </span><span class="kw-2">mut </span>rndr = Render::new(r, <span class="kw-2">&amp;</span><span class="self">self</span>.style, styl, n.vp(), <span class="kw-2">&amp;mut </span>c);
+                <span class="kw">let </span><span class="kw-2">mut </span>rndr = Render::new(r, <span class="kw-2">&amp;</span><span class="self">self</span>.style, styl, n.vp(), <span class="kw-2">&amp;mut </span>c, base);
 
                 n.render(<span class="self">self</span>, <span class="kw-2">&amp;mut </span>rndr)<span class="question-mark">?</span>;
 
@@ -1734,7 +1749,7 @@
                     <span class="kw">if </span>!n.is_hidden() {
                         <span class="kw">let </span>s = n.vp().screen_rect();
                         <span class="kw">if </span>!s.is_zero() {
-                            rndr.coverage.add(escreen.rebase_rect(<span class="kw-2">&amp;</span>s)<span class="question-mark">?</span>);
+                            rndr.coverage.add(escreen);
                         }
                     }
                     <span class="prelude-val">Ok</span>(())
@@ -1742,7 +1757,7 @@
 
                 <span class="comment">// We now have coverage, relative to this node&#39;s screen rectange. We
                 // rebase each rect back down to our virtual co-ordinates.
-                </span><span class="kw">let </span>sr = n.vp().view_rect();
+                </span><span class="kw">let </span>sr = n.vp().view;
                 <span class="kw">for </span>l <span class="kw">in </span>rndr.coverage.uncovered() {
                     rndr.fill(<span class="string">&quot;&quot;</span>, l.rect().shift(sr.tl.x <span class="kw">as </span>i16, sr.tl.y <span class="kw">as </span>i16), <span class="string">&#39; &#39;</span>)<span class="question-mark">?</span>;
                 }
@@ -1752,7 +1767,8 @@
             </span><span class="kw">if </span>n.state().render_gen == <span class="number">0 </span>{
                 n.state_mut().render_gen = <span class="self">self</span>.render_gen;
             }
-            n.children(<span class="kw-2">&amp;mut </span>|x| <span class="self">self</span>.render_traversal(r, styl, x))<span class="question-mark">?</span>;
+            <span class="kw">let </span>proj = n.vp().position;
+            n.children(<span class="kw-2">&amp;mut </span>|x| <span class="self">self</span>.render_traversal(r, styl, x, base + proj))<span class="question-mark">?</span>;
             styl.pop();
         }
         <span class="prelude-val">Ok</span>(())
@@ -1765,14 +1781,25 @@
         styl: <span class="kw-2">&amp;mut </span>StyleManager,
         root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+        <span class="kw">let </span><span class="kw-2">mut </span>cn: <span class="prelude-ty">Option</span>&lt;(NodeId, ViewPort, cursor::Cursor)&gt; = <span class="prelude-val">None</span>;
         <span class="self">self</span>.walk_focus_path(root, <span class="kw-2">&amp;mut </span>|n| -&gt; <span class="prelude-ty">Result</span>&lt;Walk&lt;()&gt;&gt; {
             <span class="prelude-val">Ok</span>(<span class="kw">if let </span><span class="prelude-val">Some</span>(c) = n.cursor() {
-                show_cursor(r, <span class="kw-2">&amp;</span><span class="self">self</span>.style, styl, n.vp(), <span class="string">&quot;cursor&quot;</span>, c)<span class="question-mark">?</span>;
+                cn = <span class="prelude-val">Some</span>((n.id(), n.vp(), c));
+
                 Walk::Handle(())
             } <span class="kw">else </span>{
                 Walk::Continue
             })
         })<span class="question-mark">?</span>;
+        <span class="kw">if let </span><span class="prelude-val">Some</span>((nid, vp, c)) = cn {
+            <span class="kw">let </span><span class="kw-2">mut </span>base = Point { x: <span class="number">0</span>, y: <span class="number">0 </span>};
+            walk_to_root(root, <span class="kw-2">&amp;</span>nid, <span class="kw-2">&amp;mut </span>|x| {
+                base = base + x.vp().position;
+                <span class="prelude-val">Ok</span>(())
+            })<span class="question-mark">?</span>;
+            show_cursor(r, <span class="kw-2">&amp;</span><span class="self">self</span>.style, styl, vp, <span class="string">&quot;cursor&quot;</span>, c + base)<span class="question-mark">?</span>;
+        }
+
         <span class="prelude-val">Ok</span>(())
     }
 
@@ -1789,7 +1816,7 @@
         styl.reset();
 
         <span class="self">self</span>.pre_render(be, root)<span class="question-mark">?</span>;
-        <span class="self">self</span>.render_traversal(be, <span class="kw-2">&amp;mut </span>styl, root)<span class="question-mark">?</span>;
+        <span class="self">self</span>.render_traversal(be, <span class="kw-2">&amp;mut </span>styl, root, (<span class="number">0</span>, <span class="number">0</span>).into())<span class="question-mark">?</span>;
         <span class="self">self</span>.render_gen += <span class="number">1</span>;
         <span class="self">self</span>.last_render_focus_gen = <span class="self">self</span>.focus_gen;
         <span class="self">self</span>.post_render(be, <span class="kw-2">&amp;mut </span>styl, root)<span class="question-mark">?</span>;
@@ -1805,7 +1832,7 @@
         });
 
         <span class="kw">if let </span><span class="prelude-val">Some</span>(id) = id.unwrap() {
-            node_path(id, root)
+            node_path(<span class="kw-2">&amp;</span>id, root)
         } <span class="kw">else </span>{
             Path::empty()
         }
@@ -1818,7 +1845,7 @@
         <span class="kw">let </span><span class="kw-2">mut </span>script = <span class="prelude-val">None</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>handled = <span class="bool-val">false</span>;
         <span class="kw">if let </span><span class="prelude-val">Some</span>(nid) = node_at(root, m.location)<span class="question-mark">? </span>{
-            walk_to_root(root, nid, <span class="kw-2">&amp;mut </span>|x| {
+            walk_to_root(root, <span class="kw-2">&amp;</span>nid, <span class="kw-2">&amp;mut </span>|x| {
                 <span class="kw">if </span>handled {
                     <span class="kw">return </span><span class="prelude-val">Ok</span>(());
                 }
@@ -1892,7 +1919,7 @@
 
     <span class="doccomment">/// Handle a poll event by traversing the complete node tree, and triggering
     /// poll on each ID in the poll set.
-    </span><span class="kw">fn </span>poll(<span class="kw-2">&amp;mut </span><span class="self">self</span>, ids: Vec&lt;u64&gt;, root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+    </span><span class="kw">fn </span>poll(<span class="kw-2">&amp;mut </span><span class="self">self</span>, ids: Vec&lt;NodeId&gt;, root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         preorder(root, <span class="kw-2">&amp;mut </span>|x| -&gt; <span class="prelude-ty">Result</span>&lt;Walk&lt;()&gt;&gt; {
             <span class="kw">if </span>ids.contains(<span class="kw-2">&amp;</span>x.id()) {
                 <span class="kw">if let </span><span class="prelude-val">Some</span>(d) = x.poll(<span class="self">self</span>) {
@@ -1927,8 +1954,9 @@
 
     <span class="doccomment">/// Set the size on the root node, and taint the tree.
     </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>set_root_size(<span class="kw-2">&amp;mut </span><span class="self">self</span>, size: Expanse, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-        n.fit(size)<span class="question-mark">?</span>;
-        <span class="kw">let </span>vp = ViewPort::new(n.vp().size, n.vp().size, Point::default())<span class="question-mark">?</span>;
+        <span class="comment">// This calls fit recursively on the entire tree, so after this all nodes are positioned.
+        </span>n.fit(size)<span class="question-mark">?</span>;
+        <span class="kw">let </span>vp = ViewPort::new(n.vp().canvas, n.vp().canvas, Point::default())<span class="question-mark">?</span>;
         n.set_viewport(vp);
         <span class="self">self</span>.taint_tree(n);
         <span class="prelude-val">Ok</span>(())

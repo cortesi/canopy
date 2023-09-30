@@ -1,5 +1,5 @@
 <!DOCTYPE HTML>
-<html lang="en" class="sidebar-visible no-js light">
+<html lang="en" class="light" dir="ltr">
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
@@ -10,7 +10,7 @@
         
         <meta name="description" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="theme-color" content="#ffffff" />
+        <meta name="theme-color" content="#ffffff">
 
         <link rel="icon" href="favicon.svg">
         <link rel="shortcut icon" href="favicon.png">
@@ -31,7 +31,7 @@
         <!-- Custom theme stylesheets -->
 
     </head>
-    <body>
+    <body class="sidebar-visible no-js">
     <div id="body-container">
         <!-- Provide site root to javascript -->
         <script>
@@ -61,24 +61,29 @@
             try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
             if (theme === null || theme === undefined) { theme = default_theme; }
             var html = document.querySelector('html');
-            html.classList.remove('no-js')
             html.classList.remove('light')
             html.classList.add(theme);
-            html.classList.add('js');
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
         </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
 
         <!-- Hide / unhide sidebar before it is displayed -->
         <script>
-            var html = document.querySelector('html');
+            var body = document.querySelector('body');
             var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
             if (document.body.clientWidth >= 1080) {
                 try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
                 sidebar = sidebar || 'visible';
             } else {
                 sidebar = 'hidden';
             }
-            html.classList.remove('sidebar-visible');
-            html.classList.add("sidebar-" + sidebar);
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
         </script>
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
@@ -116,9 +121,9 @@
                                 <div id="menu-bar-hover-placeholder"></div>
                 <div id="menu-bar" class="menu-bar sticky">
                     <div class="left-buttons">
-                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
                             <i class="fa fa-bars"></i>
-                        </button>
+                        </label>
                         <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
                             <i class="fa fa-paint-brush"></i>
                         </button>
@@ -182,8 +187,11 @@ one, kept in the assocaited node state.</p>
 node, and a <strong>projection</strong> of the view onto the screen. To make this concrete, let's imagine a text widget. We calculate
 the <strong>size</strong> of the widget by wrapping the text to a given width - the height of the node is then the number of
 resulting lines. The resulting size might not all fit on screen. The <strong>view</strong> is a window onto the widget that does fit
-on screen, constrained to fall within the node's total <strong>size</strong>. Finally, location on the physical screen to which the
-view is painted is the <strong>projection</strong>, represented by the top left point of the projection rectangle.</p>
+on screen, constrained to fall within the node's total <strong>size</strong>.</p>
+<p>The final value we need to understand is the <strong>projection</strong> - this is the location on the screen where the <strong>view</strong> is
+drawn. The tricky thing to understand is that the projection value is an offset within the <strong>view</strong> of the parent node.</p>
+<p>Finally, location on the physical screen to which the view is painted is the <strong>projection</strong>, represented by the top left
+point of the projection rectangle.</p>
 <p>The <strong>size</strong> and <strong>view</strong> are controlled by the node itself, while the <strong>projection</strong> is controlled by the parent node.</p>
 <h2 id="fit"><a class="header" href="#fit">Fit</a></h2>
 <h2 id="rendering"><a class="header" href="#rendering">Rendering</a></h2>
@@ -196,7 +204,7 @@ view is painted is the <strong>projection</strong>, represented by the top left 
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next" href="polling.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="polling.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -210,7 +218,7 @@ view is painted is the <strong>projection</strong>, represented by the top left 
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next" href="polling.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="polling.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

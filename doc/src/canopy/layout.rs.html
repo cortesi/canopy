@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `canopy/src/layout.rs`."><title>layout.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-9bb858ba049f1f21.css" id="mainThemeStyle"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="canopy" data-themes="" data-resource-suffix="" data-rustdoc-version="1.72.0 (5680fa18f 2023-08-23)" data-channel="1.72.0" data-search-js="search-f6292fe389d70017.js" data-settings-js="settings-de11bff964e9d4e5.js" data-settings-css="settings-8c76f75bfb6bd192.css" data-theme-light-css="light-0f8c037637f9eb3e.css" data-theme-dark-css="dark-1097f8e92a01e3cf.css" data-theme-ayu-css="ayu-614652228113ac93.css" ><script src="../../static.files/storage-59fd9b8ccb335783.js"></script><script defer src="../../static.files/source-script-106908c7a7964ba4.js"></script><script defer src="../../source-files.js"></script><script defer src="../../static.files/main-0795b7d26be81095.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../../static.files/light-0f8c037637f9eb3e.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../../static.files/dark-1097f8e92a01e3cf.css"><link rel="stylesheet" href="../../static.files/noscript-13285aec31fa243e.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../canopy/index.html"><img class="rust-logo" src="../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `canopy/src/layout.rs`."><title>layout.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-9bb858ba049f1f21.css" id="mainThemeStyle"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="canopy" data-themes="" data-resource-suffix="" data-rustdoc-version="1.72.1 (d5c2e9c34 2023-09-13)" data-channel="1.72.1" data-search-js="search-f6292fe389d70017.js" data-settings-js="settings-de11bff964e9d4e5.js" data-settings-css="settings-8c76f75bfb6bd192.css" data-theme-light-css="light-0f8c037637f9eb3e.css" data-theme-dark-css="dark-1097f8e92a01e3cf.css" data-theme-ayu-css="ayu-614652228113ac93.css" ><script src="../../static.files/storage-59fd9b8ccb335783.js"></script><script defer src="../../static.files/source-script-106908c7a7964ba4.js"></script><script defer src="../../source-files.js"></script><script defer src="../../static.files/main-0795b7d26be81095.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../../static.files/light-0f8c037637f9eb3e.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../../static.files/dark-1097f8e92a01e3cf.css"><link rel="stylesheet" href="../../static.files/noscript-13285aec31fa243e.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../canopy/index.html"><img class="rust-logo" src="../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
 <a href="#4" id="4">4</a>
@@ -132,18 +132,138 @@
 <a href="#132" id="132">132</a>
 <a href="#133" id="133">133</a>
 <a href="#134" id="134">134</a>
+<a href="#135" id="135">135</a>
+<a href="#136" id="136">136</a>
+<a href="#137" id="137">137</a>
+<a href="#138" id="138">138</a>
+<a href="#139" id="139">139</a>
+<a href="#140" id="140">140</a>
+<a href="#141" id="141">141</a>
+<a href="#142" id="142">142</a>
+<a href="#143" id="143">143</a>
+<a href="#144" id="144">144</a>
+<a href="#145" id="145">145</a>
+<a href="#146" id="146">146</a>
+<a href="#147" id="147">147</a>
+<a href="#148" id="148">148</a>
+<a href="#149" id="149">149</a>
+<a href="#150" id="150">150</a>
+<a href="#151" id="151">151</a>
+<a href="#152" id="152">152</a>
+<a href="#153" id="153">153</a>
+<a href="#154" id="154">154</a>
+<a href="#155" id="155">155</a>
+<a href="#156" id="156">156</a>
+<a href="#157" id="157">157</a>
+<a href="#158" id="158">158</a>
+<a href="#159" id="159">159</a>
+<a href="#160" id="160">160</a>
+<a href="#161" id="161">161</a>
+<a href="#162" id="162">162</a>
+<a href="#163" id="163">163</a>
+<a href="#164" id="164">164</a>
+<a href="#165" id="165">165</a>
+<a href="#166" id="166">166</a>
+<a href="#167" id="167">167</a>
+<a href="#168" id="168">168</a>
+<a href="#169" id="169">169</a>
+<a href="#170" id="170">170</a>
+<a href="#171" id="171">171</a>
+<a href="#172" id="172">172</a>
+<a href="#173" id="173">173</a>
+<a href="#174" id="174">174</a>
+<a href="#175" id="175">175</a>
+<a href="#176" id="176">176</a>
+<a href="#177" id="177">177</a>
+<a href="#178" id="178">178</a>
+<a href="#179" id="179">179</a>
+<a href="#180" id="180">180</a>
+<a href="#181" id="181">181</a>
+<a href="#182" id="182">182</a>
+<a href="#183" id="183">183</a>
+<a href="#184" id="184">184</a>
+<a href="#185" id="185">185</a>
+<a href="#186" id="186">186</a>
+<a href="#187" id="187">187</a>
+<a href="#188" id="188">188</a>
+<a href="#189" id="189">189</a>
+<a href="#190" id="190">190</a>
+<a href="#191" id="191">191</a>
+<a href="#192" id="192">192</a>
+<a href="#193" id="193">193</a>
+<a href="#194" id="194">194</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Helper functions for `Node::layout` implementations.
 
 </span><span class="kw">use crate</span>::{
-    geom::{Frame, Rect},
+    geom::{Frame, Point, Rect},
     Node, <span class="prelude-ty">Result</span>, ViewPort,
 };
+
+<span class="doccomment">/// Wrap a single child node - fit the child into the size and project it to the point (0, 0) in the parent view. We
+/// then mirror the child&#39;s size and view into the parent.
+</span><span class="attr">#[macro_export]
+</span><span class="macro">macro_rules! </span>fit_wrap {
+    (<span class="macro-nonterminal">$self</span>: ident, <span class="macro-nonterminal">$child</span>:expr, <span class="macro-nonterminal">$sz</span>:expr) =&gt; {
+        <span class="macro-nonterminal">$child</span>.fit(<span class="macro-nonterminal">$sz</span>)<span class="question-mark">?</span>;
+        <span class="macro-nonterminal">$child</span>.vp_mut().position = (<span class="number">0</span>, <span class="number">0</span>).into();
+
+        <span class="kw">let </span>cvp = <span class="macro-nonterminal">$child</span>.vp();
+        <span class="comment">// Mirror the child&#39;s size and view
+        </span><span class="macro-nonterminal">$self</span>.vp_mut().canvas = cvp.canvas;
+        <span class="macro-nonterminal">$self</span>.vp_mut().view = cvp.view;
+    };
+}
+
+<span class="doccomment">/// Frame a single child node. First, we calculate the inner size after subtracting the frame. We then fit the child
+/// into this inner size, and project it appropriately in the parent view.
+</span><span class="attr">#[macro_export]
+</span><span class="macro">macro_rules! </span>fit_frame {
+    (<span class="macro-nonterminal">$self</span>: ident, <span class="macro-nonterminal">$child</span>:expr, <span class="macro-nonterminal">$sz</span>:expr, <span class="macro-nonterminal">$border</span>:expr) =&gt; {{
+        <span class="macro-nonterminal">$child</span>.fit(Expanse {
+            w: <span class="macro-nonterminal">$sz</span>.w - (<span class="macro-nonterminal">$border </span>* <span class="number">2</span>),
+            h: <span class="macro-nonterminal">$sz</span>.h - (<span class="macro-nonterminal">$border </span>* <span class="number">2</span>),
+        })<span class="question-mark">?</span>;
+        <span class="macro-nonterminal">$child</span>.vp_mut().position = <span class="kw">crate</span>::geom::Point {
+            x: <span class="macro-nonterminal">$border</span>,
+            y: <span class="macro-nonterminal">$border</span>,
+        };
+        <span class="macro-nonterminal">$self</span>.vp_mut().canvas = <span class="macro-nonterminal">$sz</span>;
+        <span class="macro-nonterminal">$self</span>.vp_mut().view = <span class="macro-nonterminal">$sz</span>.rect();
+        <span class="kw">crate</span>::geom::Frame::new(<span class="macro-nonterminal">$sz</span>.rect(), <span class="macro-nonterminal">$border</span>)
+    }};
+}
+
+<span class="doccomment">/// Place a child in a given sub-rectangle of our view.
+</span><span class="attr">#[macro_export]
+</span><span class="macro">macro_rules! </span>fit_place {
+    (<span class="macro-nonterminal">$self</span>: ident, <span class="macro-nonterminal">$child</span>:expr, <span class="macro-nonterminal">$loc</span>:expr) =&gt; {
+        <span class="macro-nonterminal">$child</span>.fit(<span class="macro-nonterminal">$loc</span>.expanse())<span class="question-mark">?</span>;
+        <span class="macro-nonterminal">$child</span>.vp_mut().position = <span class="macro-nonterminal">$loc</span>.tl;
+    };
+}
+
+<span class="kw">pub trait </span>Layout: Node {
+    <span class="doccomment">/// Project a child node to a given point. The resulting view of the child node must be entirely within the bounds
+    /// of this node.
+    </span><span class="kw">fn </span>project(<span class="kw-2">&amp;</span><span class="self">self</span>, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, point: Point) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+        n.vp_mut().position = point;
+        <span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="doccomment">/// Adjust a node so that it fits exactly within our viewport. This fits the node to the our screen rectangle,
+    /// projects the node to our origin.
+    </span><span class="kw">fn </span>fit_child(<span class="kw-2">&amp;</span><span class="self">self</span>, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+        n.fit(<span class="self">self</span>.vp().screen_rect().into())<span class="question-mark">?</span>;
+        <span class="self">self</span>.project(n, (<span class="number">0</span>, <span class="number">0</span>).into())<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(())
+    }
+}
 
 <span class="doccomment">/// Adjust a node so that it fits a viewport. This fits the node to the viewport&#39;s screen rectangle, then adjusts the
 /// node&#39;s view to place as much of it within the viewport&#39;s screen rectangle as possible.
 </span><span class="kw">pub fn </span>fit(n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, parent_vp: ViewPort) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
     n.fit(parent_vp.screen_rect().into())<span class="question-mark">?</span>;
-    n.vp_mut().projection = parent_vp.projection;
+    n.vp_mut().position = parent_vp.position;
     <span class="prelude-val">Ok</span>(())
 }
 
@@ -155,12 +275,12 @@
 </span><span class="kw">pub fn </span>frame(n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, parent_vp: ViewPort, border: u16) -&gt; <span class="prelude-ty">Result</span>&lt;Frame&gt; {
     <span class="kw">let </span>inner = parent_vp.screen_rect().inner(border);
     n.fit(inner.into())<span class="question-mark">?</span>;
-    n.vp_mut().projection = inner.tl;
+    n.vp_mut().position = inner.tl;
 
     <span class="comment">// Return a frame for drawing the screen boundary, but in the view
     // rect&#39;s co-ordinate system.
     </span><span class="prelude-val">Ok</span>(Frame::new(
-        parent_vp.screen_rect().at(parent_vp.view_rect().tl),
+        parent_vp.screen_rect().at(parent_vp.view.tl),
         border,
     ))
 }
@@ -169,7 +289,7 @@
 /// region, and updates its viewport.
 </span><span class="kw">pub fn </span>place(n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, screen: Rect) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
     n.fit(screen.expanse())<span class="question-mark">?</span>;
-    n.vp_mut().projection = screen.tl;
+    n.vp_mut().position = screen.tl;
     <span class="prelude-val">Ok</span>(())
 }
 
