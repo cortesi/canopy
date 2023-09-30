@@ -451,6 +451,17 @@ impl From<Line> for Rect {
     }
 }
 
+impl From<(u16, u16, u16, u16)> for Rect {
+    fn from(v: (u16, u16, u16, u16)) -> Rect {
+        let (x, y, w, h) = v;
+        Rect {
+            tl: (x, y).into(),
+            w: w,
+            h: h,
+        }
+    }
+}
+
 /// Split a length into n sections, as evenly as possible.
 fn split(len: u16, n: u16) -> Result<Vec<u16>> {
     if n == 0 {

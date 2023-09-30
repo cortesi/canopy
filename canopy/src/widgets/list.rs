@@ -166,49 +166,49 @@ where
 
     /// Scroll the viewport to a specified location.
     pub fn scroll_to(&mut self, x: u16, y: u16) {
-        self.update_viewport(&|vp| vp.view_scroll_to(x, y));
+        self.vp_mut().view_scroll_to(x, y);
         self.fix_selection();
     }
 
     /// Scroll the viewport down by one line.
     #[command]
     pub fn scroll_down(&mut self, _core: &dyn Core) {
-        self.update_viewport(&|vp| vp.view_down());
+        self.vp_mut().view_down();
         self.fix_selection();
     }
 
     /// Scroll the viewport up by one line.
     #[command]
     pub fn scroll_up(&mut self, _core: &dyn Core) {
-        self.update_viewport(&|vp| vp.view_up());
+        self.vp_mut().view_up();
         self.fix_selection();
     }
 
     /// Scroll the viewport left by one column.
     #[command]
     pub fn scroll_left(&mut self, _core: &dyn Core) {
-        self.update_viewport(&|vp| vp.view_left());
+        self.vp_mut().view_left();
         self.fix_selection();
     }
 
     /// Scroll the viewport right by one column.
     #[command]
     pub fn scroll_right(&mut self, _core: &dyn Core) {
-        self.update_viewport(&|vp| vp.view_right());
+        self.vp_mut().view_right();
         self.fix_selection();
     }
 
     /// Scroll the viewport down by one page.
     #[command]
     pub fn page_down(&mut self, _core: &dyn Core) {
-        self.update_viewport(&|vp| vp.view_page_down());
+        self.vp_mut().view_page_down();
         self.fix_selection();
     }
 
     /// Scroll the viewport up by one page.
     #[command]
     pub fn page_up(&mut self, _core: &dyn Core) {
-        self.update_viewport(&|vp| vp.view_page_up());
+        self.vp_mut().view_page_up();
         self.fix_selection();
     }
 
@@ -236,13 +236,13 @@ where
         let (start, end) = self.view_range();
         // We know there isn't an entire overlap
         if self.offset <= start {
-            self.update_viewport(&|vp| vp.view_scroll_to(view.tl.x, virt.tl.y));
+            self.vp_mut().view_scroll_to(view.tl.x, virt.tl.y);
         } else if self.offset >= end {
             if virt.h >= view.h {
-                self.update_viewport(&|vp| vp.view_scroll_to(view.tl.x, virt.tl.y));
+                self.vp_mut().view_scroll_to(view.tl.x, virt.tl.y);
             } else {
                 let y = virt.tl.y - (view.h - virt.h);
-                self.update_viewport(&|vp| vp.view_scroll_to(view.tl.x, y));
+                self.vp_mut().view_scroll_to(view.tl.x, y);
             }
         }
     }
@@ -397,7 +397,7 @@ mod tests {
             ]
         );
 
-        lst.update_viewport(&|vp| vp.view_scroll_by(0, 5));
+        lst.vp_mut().view_scroll_by(0, 5);
         place(&mut lst, Rect::new(0, 0, 10, 10))?;
         c.taint_tree(&mut lst);
         tr.render(&mut c, &mut lst)?;
@@ -410,7 +410,7 @@ mod tests {
             ]
         );
 
-        lst.update_viewport(&|vp| vp.view_scroll_by(0, 5));
+        lst.vp_mut().view_scroll_by(0, 5);
         place(&mut lst, Rect::new(0, 0, 10, 10))?;
         c.taint_tree(&mut lst);
         tr.render(&mut c, &mut lst)?;
@@ -423,7 +423,7 @@ mod tests {
             ]
         );
 
-        lst.update_viewport(&|vp| vp.view_scroll_by(0, 10));
+        lst.vp_mut().view_scroll_by(0, 10);
         place(&mut lst, Rect::new(0, 0, 10, 10))?;
         c.taint_tree(&mut lst);
         tr.render(&mut c, &mut lst)?;
@@ -436,7 +436,7 @@ mod tests {
             ]
         );
 
-        lst.update_viewport(&|vp| vp.view_scroll_by(0, 10));
+        lst.vp_mut().view_scroll_by(0, 10);
         place(&mut lst, Rect::new(0, 0, 10, 10))?;
         c.taint_tree(&mut lst);
         tr.render(&mut c, &mut lst)?;
@@ -449,7 +449,7 @@ mod tests {
             ]
         );
 
-        lst.update_viewport(&|vp| vp.view_scroll_to(5, 0));
+        lst.vp_mut().view_scroll_to(5, 0);
         place(&mut lst, Rect::new(0, 0, 10, 10))?;
         c.taint_tree(&mut lst);
         tr.render(&mut c, &mut lst)?;
@@ -462,7 +462,7 @@ mod tests {
             ]
         );
 
-        lst.update_viewport(&|vp| vp.view_scroll_by(0, 5));
+        lst.vp_mut().view_scroll_by(0, 5);
         place(&mut lst, Rect::new(0, 0, 10, 10))?;
         c.taint_tree(&mut lst);
         tr.render(&mut c, &mut lst)?;

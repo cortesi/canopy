@@ -1,7 +1,6 @@
-use std::sync::atomic::AtomicU64;
-
 use crate::{error, viewport::ViewPort, Result};
 use convert_case::{Case, Casing};
+use std::sync::atomic::AtomicU64;
 
 pub use canopy_derive::StatefulNode;
 
@@ -180,12 +179,6 @@ pub trait StatefulNode {
     /// Get a mutable reference to the node's `ViewPort`.
     fn vp_mut(&mut self) -> &mut ViewPort {
         &mut self.state_mut().viewport
-    }
-
-    /// Execute a closure that gets a mutable reference to the node's `ViewPort`
-    /// for modification.
-    fn update_viewport(&mut self, fun: &dyn Fn(ViewPort) -> ViewPort) {
-        self.set_viewport(fun(self.state().viewport))
     }
 
     /// Replace the current `ViewPort`.
