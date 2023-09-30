@@ -78,69 +78,17 @@ where
     pub fn insert(&mut self, index: usize, itm: N) {
         self.items
             .insert(index.clamp(0, self.len()), Item::new(itm));
-        self.fix_selection();
     }
 
     /// Insert an item after the current selection.
     pub fn insert_after(&mut self, itm: N) {
         self.items
             .insert((self.offset + 1).clamp(0, self.len()), Item::new(itm));
-        self.fix_selection();
     }
 
     /// Append an item to the end of the list.
     pub fn append(&mut self, itm: N) {
         self.items.insert(self.len(), Item::new(itm));
-        self.fix_selection();
-    }
-
-    /// Clear all items.
-    #[command(ignore_result)]
-    pub fn clear(&mut self) -> Vec<N> {
-        self.items.drain(..).map(move |x| x.itm).collect()
-    }
-
-    /// Move selection to the next item in the list, if possible.
-    pub fn delete_item(&mut self, core: &mut dyn Context, offset: usize) -> Option<N> {
-        if !self.is_empty() && offset < self.len() {
-            let itm = self.items.remove(offset);
-            if offset <= self.offset {
-                self.select_prev(core);
-            }
-            Some(itm.itm)
-        } else {
-            None
-        }
-    }
-
-    /// Delete the currently selected item.
-    #[command(ignore_result)]
-    pub fn delete_selected(&mut self, core: &mut dyn Context) -> Option<N> {
-        self.delete_item(core, self.offset)
-    }
-
-    /// Move selection to the next item in the list, if possible.
-    #[command]
-    pub fn select_first(&mut self, _core: &dyn Context) {
-        self.select(0)
-    }
-
-    /// Move selection to the next item in the list, if possible.
-    #[command]
-    pub fn select_last(&mut self, _core: &dyn Context) {
-        self.select(self.len())
-    }
-
-    /// Move selection to the next item in the list, if possible.
-    #[command]
-    pub fn select_next(&mut self, _core: &dyn Context) {
-        self.select(self.offset.saturating_add(1))
-    }
-
-    /// Move selection to the next previous the list, if possible.
-    #[command]
-    pub fn select_prev(&mut self, _core: &dyn Context) {
-        self.select(self.offset.saturating_sub(1))
     }
 
     /// The current selected item, if any
@@ -160,72 +108,24 @@ where
             self.items[self.offset].set_selected(false);
             self.offset = offset.clamp(0, self.items.len() - 1);
             self.items[self.offset].set_selected(true);
-            self.fix_view();
         }
     }
 
-    /// Scroll the viewport to a specified location.
-    pub fn scroll_to(&mut self, x: u16, y: u16) {
-        self.vp_mut().scroll_to(x, y);
-        self.fix_selection();
-    }
-
-    /// Scroll the viewport down by one line.
-    #[command]
-    pub fn scroll_down(&mut self, _core: &dyn Context) {
-        self.vp_mut().scroll_down();
-        self.fix_selection();
-    }
-
-    /// Scroll the viewport up by one line.
-    #[command]
-    pub fn scroll_up(&mut self, _core: &dyn Context) {
-        self.vp_mut().scroll_up();
-        self.fix_selection();
-    }
-
-    /// Scroll the viewport left by one column.
-    #[command]
-    pub fn scroll_left(&mut self, _core: &dyn Context) {
-        self.vp_mut().scroll_left();
-        self.fix_selection();
-    }
-
-    /// Scroll the viewport right by one column.
-    #[command]
-    pub fn scroll_right(&mut self, _core: &dyn Context) {
-        self.vp_mut().scroll_right();
-        self.fix_selection();
-    }
-
-    /// Scroll the viewport down by one page.
-    #[command]
-    pub fn page_down(&mut self, _core: &dyn Context) {
-        self.vp_mut().page_down();
-        self.fix_selection();
-    }
-
-    /// Scroll the viewport up by one page.
-    #[command]
-    pub fn page_up(&mut self, _core: &dyn Context) {
-        self.vp_mut().page_up();
-        self.fix_selection();
-    }
-
-    /// Fix the selected item after a scroll operation.
-    fn fix_selection(&mut self) {
-        let (start, end) = self.view_range();
-        if self.offset < start {
-            self.select(start);
-        } else if self.offset > end {
-            self.select(end);
+    /// Move selection to the next item in the list, if possible.
+    pub fn delete_item(&mut self, core: &mut dyn Context, offset: usize) -> Option<N> {
+        if !self.is_empty() && offset < self.len() {
+            let itm = self.items.remove(offset);
+            if offset <= self.offset {
+                self.select_prev(core);
+            }
+            Some(itm.itm)
         } else {
-            self.select(self.offset);
+            None
         }
     }
 
-    /// Fix the view after a selection change operation.
-    fn fix_view(&mut self) {
+    /// Make sure the selected item is within the view after a change.
+    fn ensure_selected_in_view(&mut self, c: &dyn Context) {
         let virt = self.items[self.offset].virt;
         let view = self.vp().view;
         if let Some(v) = virt.vextent().intersection(&view.vextent()) {
@@ -236,13 +136,13 @@ where
         let (start, end) = self.view_range();
         // We know there isn't an entire overlap
         if self.offset <= start {
-            self.vp_mut().scroll_to(view.tl.x, virt.tl.y);
+            c.scroll_to(self, view.tl.x, virt.tl.y);
         } else if self.offset >= end {
             if virt.h >= view.h {
-                self.vp_mut().scroll_to(view.tl.x, virt.tl.y);
+                c.scroll_to(self, view.tl.x, virt.tl.y);
             } else {
                 let y = virt.tl.y - (view.h - virt.h);
-                self.vp_mut().scroll_to(view.tl.x, y);
+                c.scroll_to(self, view.tl.x, y);
             }
         }
     }
@@ -281,6 +181,82 @@ where
             voffset += item_view.h;
         }
         Ok(())
+    }
+
+    /// Clear all items.
+    #[command(ignore_result)]
+    pub fn clear(&mut self) -> Vec<N> {
+        self.items.drain(..).map(move |x| x.itm).collect()
+    }
+
+    /// Delete the currently selected item.
+    #[command(ignore_result)]
+    pub fn delete_selected(&mut self, core: &mut dyn Context) -> Option<N> {
+        self.delete_item(core, self.offset)
+    }
+
+    /// Move selection to the next item in the list, if possible.
+    #[command]
+    pub fn select_first(&mut self, c: &dyn Context) {
+        self.select(0);
+        self.ensure_selected_in_view(c);
+    }
+
+    /// Move selection to the next item in the list, if possible.
+    #[command]
+    pub fn select_last(&mut self, c: &dyn Context) {
+        self.select(self.len());
+        self.ensure_selected_in_view(c);
+    }
+
+    /// Move selection to the next item in the list, if possible.
+    #[command]
+    pub fn select_next(&mut self, c: &dyn Context) {
+        self.select(self.offset.saturating_add(1));
+        self.ensure_selected_in_view(c);
+    }
+
+    /// Move selection to the next previous the list, if possible.
+    #[command]
+    pub fn select_prev(&mut self, c: &dyn Context) {
+        self.select(self.offset.saturating_sub(1));
+        self.ensure_selected_in_view(c);
+    }
+
+    /// Scroll the viewport down by one line.
+    #[command]
+    pub fn scroll_down(&mut self, c: &dyn Context) {
+        c.scroll_down(self);
+    }
+
+    /// Scroll the viewport up by one line.
+    #[command]
+    pub fn scroll_up(&mut self, c: &dyn Context) {
+        c.scroll_up(self);
+    }
+
+    /// Scroll the viewport left by one column.
+    #[command]
+    pub fn scroll_left(&mut self, c: &dyn Context) {
+        c.scroll_left(self);
+    }
+
+    /// Scroll the viewport right by one column.
+    #[command]
+    pub fn scroll_right(&mut self, c: &dyn Context) {
+        c.scroll_right(self);
+    }
+
+    /// Scroll the viewport down by one page.
+    #[command]
+    pub fn page_down(&mut self, c: &dyn Context) {
+        c.page_down(self);
+    }
+
+    /// Scroll the viewport up by one page.
+    #[command]
+    pub fn page_up(&mut self, c: &dyn Context) {
+        c.page_up(self);
     }
 }
 
@@ -397,7 +373,7 @@ mod tests {
             ]
         );
 
-        lst.vp_mut().scroll_by(0, 5);
+        c.scroll_by(&mut lst, 0, 5);
         place(&mut lst, Rect::new(0, 0, 10, 10))?;
         c.taint_tree(&mut lst);
         tr.render(&mut c, &mut lst)?;
@@ -410,7 +386,7 @@ mod tests {
             ]
         );
 
-        lst.vp_mut().scroll_by(0, 5);
+        c.scroll_by(&mut lst, 0, 5);
         place(&mut lst, Rect::new(0, 0, 10, 10))?;
         c.taint_tree(&mut lst);
         tr.render(&mut c, &mut lst)?;
@@ -423,7 +399,7 @@ mod tests {
             ]
         );
 
-        lst.vp_mut().scroll_by(0, 10);
+        c.scroll_by(&mut lst, 0, 10);
         place(&mut lst, Rect::new(0, 0, 10, 10))?;
         c.taint_tree(&mut lst);
         tr.render(&mut c, &mut lst)?;
@@ -436,7 +412,7 @@ mod tests {
             ]
         );
 
-        lst.vp_mut().scroll_by(0, 10);
+        c.scroll_by(&mut lst, 0, 10);
         place(&mut lst, Rect::new(0, 0, 10, 10))?;
         c.taint_tree(&mut lst);
         tr.render(&mut c, &mut lst)?;
@@ -449,7 +425,7 @@ mod tests {
             ]
         );
 
-        lst.vp_mut().scroll_to(5, 0);
+        c.scroll_to(&mut lst, 5, 0);
         place(&mut lst, Rect::new(0, 0, 10, 10))?;
         c.taint_tree(&mut lst);
         tr.render(&mut c, &mut lst)?;
@@ -462,7 +438,7 @@ mod tests {
             ]
         );
 
-        lst.vp_mut().scroll_by(0, 5);
+        c.scroll_by(&mut lst, 0, 5);
         place(&mut lst, Rect::new(0, 0, 10, 10))?;
         c.taint_tree(&mut lst);
         tr.render(&mut c, &mut lst)?;

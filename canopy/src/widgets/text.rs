@@ -35,38 +35,38 @@ impl Text {
     }
 
     #[command]
-    pub fn scroll_to_top(&mut self, _c: &mut dyn Context) {
-        self.vp_mut().scroll_to(0, 0);
+    pub fn scroll_to_top(&mut self, c: &mut dyn Context) {
+        c.scroll_to(self, 0, 0);
     }
 
     #[command]
-    pub fn scroll_down(&mut self, _c: &mut dyn Context) {
-        self.vp_mut().scroll_down();
+    pub fn scroll_down(&mut self, c: &mut dyn Context) {
+        c.scroll_down(self);
     }
 
     #[command]
-    pub fn scroll_up(&mut self, _c: &mut dyn Context) {
-        self.vp_mut().scroll_up();
+    pub fn scroll_up(&mut self, c: &mut dyn Context) {
+        c.scroll_up(self);
     }
 
     #[command]
-    pub fn scroll_left(&mut self, _c: &mut dyn Context) {
-        self.vp_mut().scroll_left();
+    pub fn scroll_left(&mut self, c: &mut dyn Context) {
+        c.scroll_left(self);
     }
 
     #[command]
-    pub fn scroll_right(&mut self, _c: &mut dyn Context) {
-        self.vp_mut().scroll_right();
+    pub fn scroll_right(&mut self, c: &mut dyn Context) {
+        c.scroll_right(self);
     }
 
     #[command]
-    pub fn page_down(&mut self, _c: &mut dyn Context) {
-        self.vp_mut().page_down();
+    pub fn page_down(&mut self, c: &mut dyn Context) {
+        c.page_down(self);
     }
 
     #[command]
-    pub fn page_up(&mut self, _c: &mut dyn Context) {
-        self.vp_mut().page_up();
+    pub fn page_up(&mut self, c: &mut dyn Context) {
+        c.page_up(self);
     }
 }
 

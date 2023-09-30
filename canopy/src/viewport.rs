@@ -41,7 +41,7 @@ impl ViewPort {
 
     /// Scroll the view to the specified position. The view is clamped within
     /// the outer rectangle.
-    pub fn scroll_to(&mut self, x: u16, y: u16) {
+    pub(crate) fn scroll_to(&mut self, x: u16, y: u16) {
         let r = Rect::new(x, y, self.view.w, self.view.h);
         // We unwrap here, because this can only be an error if view is larger
         // than outer, which we ensure is not the case.
@@ -50,37 +50,37 @@ impl ViewPort {
 
     /// Scroll the view by the given offsets. The view rectangle is clamped
     /// within the outer rectangle.
-    pub fn scroll_by(&mut self, x: i16, y: i16) {
+    pub(crate) fn scroll_by(&mut self, x: i16, y: i16) {
         self.view = self.view.shift_within(x, y, self.canvas.rect());
     }
 
     /// Scroll the view up by the height of the view rectangle.
-    pub fn page_up(&mut self) {
+    pub(crate) fn page_up(&mut self) {
         self.scroll_by(0, -(self.view.h as i16))
     }
 
     /// Scroll the view down by the height of the view rectangle.
-    pub fn page_down(&mut self) {
+    pub(crate) fn page_down(&mut self) {
         self.scroll_by(0, self.view.h as i16)
     }
 
     /// Scroll the view up by one line.
-    pub fn scroll_up(&mut self) {
+    pub(crate) fn scroll_up(&mut self) {
         self.scroll_by(0, -1)
     }
 
     /// Scroll the view down by one line.
-    pub fn scroll_down(&mut self) {
+    pub(crate) fn scroll_down(&mut self) {
         self.scroll_by(0, 1)
     }
 
     /// Scroll the view left by one line.
-    pub fn scroll_left(&mut self) {
+    pub(crate) fn scroll_left(&mut self) {
         self.scroll_by(-1, 0)
     }
 
     /// Scroll the view right by one line.
-    pub fn scroll_right(&mut self) {
+    pub(crate) fn scroll_right(&mut self) {
         self.scroll_by(1, 0)
     }
 

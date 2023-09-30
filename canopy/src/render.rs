@@ -26,10 +26,10 @@ pub trait RenderBackend {
 pub struct Render<'a> {
     backend: &'a mut dyn RenderBackend,
     pub style: &'a mut StyleManager,
-    pub stylemap: &'a StyleMap,
+    stylemap: &'a StyleMap,
     viewport: ViewPort,
-    pub coverage: &'a mut geom::Coverage,
-    pub base: geom::Point,
+    pub(crate) coverage: &'a mut geom::Coverage,
+    base: geom::Point,
 }
 
 /// Show the cursor with a specified style

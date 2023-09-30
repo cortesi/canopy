@@ -1,7 +1,7 @@
 //! Helper functions for `Node::layout` implementations.
 
 use crate::{
-    geom::{Frame, Point, Rect},
+    geom::{Frame, Rect},
     Node, Result, ViewPort,
 };
 
@@ -46,23 +46,6 @@ macro_rules! fit_place {
         $child.fit($loc.expanse())?;
         $child.vp_mut().position = $loc.tl;
     };
-}
-
-pub trait Layout: Node {
-    /// Project a child node to a given point. The resulting view of the child node must be entirely within the bounds
-    /// of this node.
-    fn project(&self, n: &mut dyn Node, point: Point) -> Result<()> {
-        n.vp_mut().position = point;
-        Ok(())
-    }
-
-    /// Adjust a node so that it fits exactly within our viewport. This fits the node to the our screen rectangle,
-    /// projects the node to our origin.
-    fn fit_child(&self, n: &mut dyn Node) -> Result<()> {
-        n.fit(self.vp().screen_rect().into())?;
-        self.project(n, (0, 0).into())?;
-        Ok(())
-    }
 }
 
 /// Adjust a node so that it fits a viewport. This fits the node to the viewport's screen rectangle, then adjusts the
