@@ -115,10 +115,12 @@ pub fn locate<R>(
 }
 
 /// Find the ID of the leaf node at a given point.
-pub fn node_at(root: &mut dyn Node, p: impl Into<Point>) -> Result<Option<NodeId>> {
+pub fn node_at(root: &mut dyn Node, p: impl Into<Point>) -> Option<NodeId> {
     locate(root, p, &mut |x| -> Result<Locate<NodeId>> {
         Ok(Locate::Match(x.id()))
     })
+    // Unwrap is safe, because the closure cannot fail.
+    .unwrap()
 }
 
 /// Call a closure on the node with the specified `id`, and all its ancestors to

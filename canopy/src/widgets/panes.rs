@@ -39,7 +39,7 @@ where
     /// Delete the focus node. If a column ends up empty, it is removed.
     pub fn delete_focus(&mut self, c: &mut Canopy) -> Result<()> {
         if let Some((x, y)) = self.focus_coords(c) {
-            c.focus_next(self)?;
+            c.focus_next(self);
             self.children[x].remove(y);
             if self.children[x].is_empty() {
                 self.children.remove(x);
@@ -70,7 +70,7 @@ where
         N: Node,
     {
         let coords = self.focus_coords(c);
-        c.focus_next(&mut n)?;
+        c.focus_next(&mut n);
         if let Some((x, _)) = coords {
             self.children.insert(x + 1, vec![n])
         } else {

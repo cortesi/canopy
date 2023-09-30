@@ -41,7 +41,7 @@ impl ViewPort {
 
     /// Scroll the view to the specified position. The view is clamped within
     /// the outer rectangle.
-    pub fn view_scroll_to(&mut self, x: u16, y: u16) {
+    pub fn scroll_to(&mut self, x: u16, y: u16) {
         let r = Rect::new(x, y, self.view.w, self.view.h);
         // We unwrap here, because this can only be an error if view is larger
         // than outer, which we ensure is not the case.
@@ -50,38 +50,38 @@ impl ViewPort {
 
     /// Scroll the view by the given offsets. The view rectangle is clamped
     /// within the outer rectangle.
-    pub fn view_scroll_by(&mut self, x: i16, y: i16) {
+    pub fn scroll_by(&mut self, x: i16, y: i16) {
         self.view = self.view.shift_within(x, y, self.canvas.rect());
     }
 
     /// Scroll the view up by the height of the view rectangle.
-    pub fn view_page_up(&mut self) {
-        self.view_scroll_by(0, -(self.view.h as i16))
+    pub fn page_up(&mut self) {
+        self.scroll_by(0, -(self.view.h as i16))
     }
 
     /// Scroll the view down by the height of the view rectangle.
-    pub fn view_page_down(&mut self) {
-        self.view_scroll_by(0, self.view.h as i16)
+    pub fn page_down(&mut self) {
+        self.scroll_by(0, self.view.h as i16)
     }
 
     /// Scroll the view up by one line.
-    pub fn view_up(&mut self) {
-        self.view_scroll_by(0, -1)
+    pub fn scroll_up(&mut self) {
+        self.scroll_by(0, -1)
     }
 
     /// Scroll the view down by one line.
-    pub fn view_down(&mut self) {
-        self.view_scroll_by(0, 1)
+    pub fn scroll_down(&mut self) {
+        self.scroll_by(0, 1)
     }
 
     /// Scroll the view left by one line.
-    pub fn view_left(&mut self) {
-        self.view_scroll_by(-1, 0)
+    pub fn scroll_left(&mut self) {
+        self.scroll_by(-1, 0)
     }
 
     /// Scroll the view right by one line.
-    pub fn view_right(&mut self) {
-        self.view_scroll_by(1, 0)
+    pub fn scroll_right(&mut self) {
+        self.scroll_by(1, 0)
     }
 
     /// Absolute rectangle for the screen region the node is being projected
@@ -466,12 +466,12 @@ mod tests {
 
         let v = ViewPort::new(Expanse::new(100, 100), Rect::new(0, 0, 10, 10), (0, 0))?;
 
-        tv(&v, &|v| v.view_scroll_by(10, 10), (10, 10, 10, 10));
-        tv(&v, &|v| v.view_scroll_by(-20, -20), (0, 0, 10, 10));
-        tv(&v, &|v| v.view_page_down(), (0, 10, 10, 10));
-        tv(&v, &|v| v.view_page_up(), (0, 0, 10, 10));
-        tv(&v, &|v| v.view_scroll_to(50, 50), (50, 50, 10, 10));
-        tv(&v, &|v| v.view_scroll_to(150, 150), (90, 90, 10, 10));
+        tv(&v, &|v| v.scroll_by(10, 10), (10, 10, 10, 10));
+        tv(&v, &|v| v.scroll_by(-20, -20), (0, 0, 10, 10));
+        tv(&v, &|v| v.page_down(), (0, 10, 10, 10));
+        tv(&v, &|v| v.page_up(), (0, 0, 10, 10));
+        tv(&v, &|v| v.scroll_to(50, 50), (50, 50, 10, 10));
+        tv(&v, &|v| v.scroll_to(150, 150), (90, 90, 10, 10));
 
         Ok(())
     }

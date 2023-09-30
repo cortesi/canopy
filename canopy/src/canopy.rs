@@ -34,30 +34,30 @@ pub trait Core {
     fn focus_depth(&self, n: &mut dyn Node) -> usize;
 
     /// Move focus downward of the currently focused node within the subtree at root.
-    fn focus_down(&mut self, root: &mut dyn Node) -> Result<EventOutcome>;
+    fn focus_down(&mut self, root: &mut dyn Node);
 
     /// Focus the first node that accepts focus in the pre-order traversal of the subtree at root.
-    fn focus_first(&mut self, root: &mut dyn Node) -> Result<EventOutcome>;
+    fn focus_first(&mut self, root: &mut dyn Node);
 
     /// Move focus to the left of the currently focused node within the subtree at root.
-    fn focus_left(&mut self, root: &mut dyn Node) -> Result<EventOutcome>;
+    fn focus_left(&mut self, root: &mut dyn Node);
 
     /// Focus the next node in the pre-order traversal of root. If no node with focus is found, we focus the first node
     /// we can find instead.
-    fn focus_next(&mut self, root: &mut dyn Node) -> Result<EventOutcome>;
+    fn focus_next(&mut self, root: &mut dyn Node);
 
     /// Return the focus path for the subtree under `root`.
     fn focus_path(&self, root: &mut dyn Node) -> Path;
 
     /// Focus the previous node in the pre-order traversal of `root`. If no node with focus is found, we focus the first
     /// node we can find instead.
-    fn focus_prev(&mut self, root: &mut dyn Node) -> Result<EventOutcome>;
+    fn focus_prev(&mut self, root: &mut dyn Node);
 
     /// Move focus to  right of the currently focused node within the subtree at root.
-    fn focus_right(&mut self, root: &mut dyn Node) -> Result<EventOutcome>;
+    fn focus_right(&mut self, root: &mut dyn Node);
 
     /// Move focus upward of the currently focused node within the subtree at root.
-    fn focus_up(&mut self, root: &mut dyn Node) -> Result<EventOutcome>;
+    fn focus_up(&mut self, root: &mut dyn Node);
 
     /// Does the node need to render in the next sweep? This checks if the node is currently hidden, and if not, signals
     /// that we should render if the node is tainted, its focus status has changed, or if it is forcing a render.
@@ -67,7 +67,7 @@ pub trait Core {
     fn set_focus(&mut self, n: &mut dyn Node);
 
     /// Move focus in a specified direction within the subtree at root.
-    fn focus_dir(&mut self, root: &mut dyn Node, dir: Direction) -> Result<EventOutcome>;
+    fn focus_dir(&mut self, root: &mut dyn Node, dir: Direction);
 
     /// Taint a node to signal that it should be re-rendered.
     fn taint(&mut self, n: &mut dyn Node);
@@ -174,56 +174,59 @@ impl Core for Canopy {
     }
 
     /// Move focus in a specified direction within the subtree at root.
-    fn focus_dir(&mut self, root: &mut dyn Node, dir: Direction) -> Result<EventOutcome> {
+    fn focus_dir(&mut self, root: &mut dyn Node, dir: Direction) {
         let mut seen = false;
         let mut last = None;
         if let Some(start) = self.focus_area(root) {
-            start.search(dir, &mut |p| -> Result<bool> {
-                if seen {
-                    return Ok(true);
-                }
-                let n = node_at(root, p)?;
-                if n != last {
-                    last = n.clone();
-                    if let Some(nid) = &n {
-                        walk_to_root(root, nid, &mut |x| {
-                            if !seen && x.accept_focus() {
-                                seen = true;
-                                self.set_focus(x);
-                            }
-                            Ok(())
-                        })?;
+            start
+                .search(dir, &mut |p| -> Result<bool> {
+                    if seen {
+                        return Ok(true);
                     }
-                }
-                Ok(false)
-            })?
+                    let n = node_at(root, p);
+                    if n != last {
+                        last = n.clone();
+                        if let Some(nid) = &n {
+                            walk_to_root(root, nid, &mut |x| {
+                                if !seen && x.accept_focus() {
+                                    seen = true;
+                                    self.set_focus(x);
+                                }
+                                Ok(())
+                            })
+                            // Unwrap is safe, because the closure cannot fail
+                            .unwrap();
+                        }
+                    }
+                    Ok(false)
+                })
+                .unwrap()
         }
-        Ok(EventOutcome::Handle)
     }
 
     /// Move focus to  right of the currently focused node within the subtree at root.
-    fn focus_right(&mut self, root: &mut dyn Node) -> Result<EventOutcome> {
+    fn focus_right(&mut self, root: &mut dyn Node) {
         self.focus_dir(root, Direction::Right)
     }
 
     /// Move focus to the left of the currently focused node within the subtree at root.
-    fn focus_left(&mut self, root: &mut dyn Node) -> Result<EventOutcome> {
+    fn focus_left(&mut self, root: &mut dyn Node) {
         self.focus_dir(root, Direction::Left)
     }
 
     /// Move focus upward of the currently focused node within the subtree at root.
-    fn focus_up(&mut self, root: &mut dyn Node) -> Result<EventOutcome> {
+    fn focus_up(&mut self, root: &mut dyn Node) {
         self.focus_dir(root, Direction::Up)
     }
 
     /// Move focus downward of the currently focused node within the subtree at root.
-    fn focus_down(&mut self, root: &mut dyn Node) -> Result<EventOutcome> {
+    fn focus_down(&mut self, root: &mut dyn Node) {
         self.focus_dir(root, Direction::Down)
     }
 
     /// Focus the first node that accepts focus in the pre-order traversal of
     /// the subtree at root.
-    fn focus_first(&mut self, root: &mut dyn Node) -> Result<EventOutcome> {
+    fn focus_first(&mut self, root: &mut dyn Node) {
         let mut focus_set = false;
         preorder(root, &mut |x| -> Result<Walk<()>> {
             Ok(if x.is_hidden() {
@@ -235,13 +238,14 @@ impl Core for Canopy {
             } else {
                 Walk::Continue
             })
-        })?;
-        Ok(EventOutcome::Handle)
+        })
+        // Unwrap is safe, because the closure cannot fail.
+        .unwrap();
     }
 
     /// Focus the next node in the pre-order traversal of root. If no node with
     /// focus is found, we focus the first node we can find instead.
-    fn focus_next(&mut self, root: &mut dyn Node) -> Result<EventOutcome> {
+    fn focus_next(&mut self, root: &mut dyn Node) {
         let mut focus_seen = false;
         let ret = preorder(root, &mut |x| -> Result<Walk<()>> {
             if x.is_hidden() {
@@ -256,17 +260,17 @@ impl Core for Canopy {
                 focus_seen = true;
             }
             Ok(Walk::Continue)
-        })?;
+        })
+        // Unwrap is safe, because the closure cannot fail.
+        .unwrap();
         if !ret.is_handled() {
             self.focus_first(root)
-        } else {
-            Ok(EventOutcome::Handle)
         }
     }
 
     /// Focus the previous node in the pre-order traversal of `root`. If no node
     /// with focus is found, we focus the first node we can find instead.
-    fn focus_prev(&mut self, root: &mut dyn Node) -> Result<EventOutcome> {
+    fn focus_prev(&mut self, root: &mut dyn Node) {
         let current = self.focus_gen;
         let mut first = true;
         preorder(root, &mut |x| -> Result<Walk<()>> {
@@ -284,8 +288,9 @@ impl Core for Canopy {
                 self.set_focus(x);
             }
             Ok(Walk::Continue)
-        })?;
-        Ok(EventOutcome::Handle)
+        })
+        // Unwrap is safe, because the closure cannot fail.
+        .unwrap();
     }
 
     /// Returns the focal depth of the specified node. If the node is not part
@@ -509,7 +514,7 @@ impl Canopy {
             Ok(Walk::Continue)
         })?;
         if !seen {
-            self.focus_first(root)?;
+            self.focus_first(root);
         }
 
         if self.focus_changed() {
@@ -647,7 +652,7 @@ impl Canopy {
         let mut path = self.location_path(root, m.location);
         let mut script = None;
         let mut handled = false;
-        if let Some(nid) = node_at(root, m.location)? {
+        if let Some(nid) = node_at(root, m.location) {
             walk_to_root(root, &nid, &mut |x| {
                 if handled {
                     return Ok(());
@@ -1067,11 +1072,11 @@ mod tests {
             tr.render(c, &mut root)?;
             assert_eq!(tr.buf_text(), vec!["<r>", "<ba_la>"]);
 
-            c.focus_next(&mut root)?;
+            c.focus_next(&mut root);
             tr.render(c, &mut root)?;
             assert_eq!(tr.buf_text(), vec!["<ba_la>", "<ba_lb>"]);
 
-            c.focus_prev(&mut root)?;
+            c.focus_prev(&mut root);
             tr.render(c, &mut root)?;
             assert_eq!(tr.buf_text(), vec!["<ba_la>", "<ba_lb>"]);
 
@@ -1088,11 +1093,11 @@ mod tests {
     fn focus_path() -> Result<()> {
         run(|c, _, mut root| {
             assert_eq!(c.focus_path(&mut root), Path::empty());
-            c.focus_next(&mut root)?;
+            c.focus_next(&mut root);
             assert_eq!(c.focus_path(&mut root), Path::new(&["r"]));
-            c.focus_next(&mut root)?;
+            c.focus_next(&mut root);
             assert_eq!(c.focus_path(&mut root), Path::new(&["r", "ba"]));
-            c.focus_next(&mut root)?;
+            c.focus_next(&mut root);
             assert_eq!(c.focus_path(&mut root), Path::new(&["r", "ba", "ba_la"]));
             Ok(())
         })?;
@@ -1103,21 +1108,21 @@ mod tests {
     fn focus_next() -> Result<()> {
         run(|c, _, mut root| {
             assert!(!c.is_focused(&root));
-            c.focus_next(&mut root)?;
+            c.focus_next(&mut root);
             assert!(c.is_focused(&root));
 
-            c.focus_next(&mut root)?;
+            c.focus_next(&mut root);
             assert!(c.is_focused(&root.a));
 
-            c.focus_next(&mut root)?;
+            c.focus_next(&mut root);
             assert!(c.is_focused(&root.a.a));
-            c.focus_next(&mut root)?;
+            c.focus_next(&mut root);
             assert!(c.is_focused(&root.a.b));
-            c.focus_next(&mut root)?;
+            c.focus_next(&mut root);
             assert!(c.is_focused(&root.b));
 
             c.set_focus(&mut root.b.b);
-            c.focus_next(&mut root)?;
+            c.focus_next(&mut root);
             assert!(c.is_focused(&root));
             Ok(())
         })?;
@@ -1128,17 +1133,17 @@ mod tests {
     fn focus_prev() -> Result<()> {
         run(|c, _, mut root| {
             assert!(!c.is_focused(&root));
-            c.focus_prev(&mut root)?;
+            c.focus_prev(&mut root);
             assert!(c.is_focused(&root.b.b));
 
-            c.focus_prev(&mut root)?;
+            c.focus_prev(&mut root);
             assert!(c.is_focused(&root.b.a));
 
-            c.focus_prev(&mut root)?;
+            c.focus_prev(&mut root);
             assert!(c.is_focused(&root.b));
 
             c.set_focus(&mut root);
-            c.focus_prev(&mut root)?;
+            c.focus_prev(&mut root);
             assert!(c.is_focused(&root.b.b));
 
             Ok(())
@@ -1151,15 +1156,15 @@ mod tests {
         run(|c, mut tr, mut root| {
             tr.render(c, &mut root)?;
             c.set_focus(&mut root.a.a);
-            c.focus_right(&mut root)?;
+            c.focus_right(&mut root);
             assert!(c.is_focused(&root.b.a));
-            c.focus_right(&mut root)?;
+            c.focus_right(&mut root);
             assert!(c.is_focused(&root.b.a));
 
             c.set_focus(&mut root.a.b);
-            c.focus_right(&mut root)?;
+            c.focus_right(&mut root);
             assert!(c.is_focused(&root.b.b));
-            c.focus_right(&mut root)?;
+            c.focus_right(&mut root);
             assert!(c.is_focused(&root.b.b));
             Ok(())
         })?;

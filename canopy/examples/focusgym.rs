@@ -41,7 +41,7 @@ impl Block {
         if !self.size_limited(self.vp().view.into()) {
             self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
             c.taint_tree(self);
-            c.focus_next(self)?;
+            c.focus_next(self);
         }
         Ok(())
     }

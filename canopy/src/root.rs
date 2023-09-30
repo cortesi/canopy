@@ -58,42 +58,42 @@ where
     #[command]
     /// Focus the next node in a pre-order traversal of the app.
     pub fn focus_next(&mut self, c: &mut dyn Core) -> Result<()> {
-        c.focus_next(self)?;
+        c.focus_next(self);
         Ok(())
     }
 
     #[command]
     /// Focus the next node in a pre-order traversal of the app.
     pub fn focus_prev(&mut self, c: &mut dyn Core) -> Result<()> {
-        c.focus_prev(self)?;
+        c.focus_prev(self);
         Ok(())
     }
 
     #[command]
     /// Shift focus right.
     pub fn focus_right(&mut self, c: &mut dyn Core) -> Result<()> {
-        c.focus_right(self)?;
+        c.focus_right(self);
         Ok(())
     }
 
     #[command]
     /// Shift focus left.
     pub fn focus_left(&mut self, c: &mut dyn Core) -> Result<()> {
-        c.focus_left(self)?;
+        c.focus_left(self);
         Ok(())
     }
 
     #[command]
     /// Shift focus up.
     pub fn focus_up(&mut self, c: &mut dyn Core) -> Result<()> {
-        c.focus_up(self)?;
+        c.focus_up(self);
         Ok(())
     }
 
     #[command]
     /// Shift focus down.
     pub fn focus_down(&mut self, c: &mut dyn Core) -> Result<()> {
-        c.focus_down(self)?;
+        c.focus_down(self);
         Ok(())
     }
 
@@ -103,7 +103,7 @@ where
         self.inspector_active = false;
         self.inspector.hide();
         c.taint_tree(self);
-        c.focus_first(&mut self.app)?;
+        c.focus_first(&mut self.app);
         Ok(())
     }
 
@@ -113,7 +113,7 @@ where
         self.inspector_active = true;
         self.inspector.unhide();
         c.taint_tree(self);
-        c.focus_first(&mut self.inspector)?;
+        c.focus_first(&mut self.inspector);
         Ok(())
     }
 
@@ -131,7 +131,7 @@ where
     /// If we're currently focused in the inspector, shift focus into the app pane instead.
     pub fn focus_app(&mut self, c: &mut dyn Core) -> Result<()> {
         if c.is_on_focus_path(&mut self.inspector) {
-            c.focus_first(&mut self.app)?;
+            c.focus_first(&mut self.app);
         }
         Ok(())
     }

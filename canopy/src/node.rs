@@ -40,17 +40,6 @@ pub trait Node: StatefulNode + CommandNode {
         false
     }
 
-    /// Handle a key input event. This event is only called for nodes that are on the focus path. The default
-    /// implementation ignores input.
-    fn handle_key(&mut self, c: &mut dyn Core, k: key::Key) -> Result<EventOutcome> {
-        Ok(EventOutcome::Ignore)
-    }
-
-    /// Handle a mouse input event. The default implementation ignores mouse input.
-    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::MouseEvent) -> Result<EventOutcome> {
-        Ok(EventOutcome::Ignore)
-    }
-
     /// Call a closure on this node's children. If any child handler returns an error, processing terminates without
     /// visiting the remaining children. The order in which nodes are processed should match intuitive next/previous
     /// relationships. The default implementation assumes this node has no children, and just returns.
@@ -69,6 +58,17 @@ pub trait Node: StatefulNode + CommandNode {
     fn fit(&mut self, target: Expanse) -> Result<()> {
         self.vp_mut().fit_size(target, target);
         Ok(())
+    }
+
+    /// Handle a key input event. This event is only called for nodes that are on the focus path. The default
+    /// implementation ignores input.
+    fn handle_key(&mut self, c: &mut dyn Core, k: key::Key) -> Result<EventOutcome> {
+        Ok(EventOutcome::Ignore)
+    }
+
+    /// Handle a mouse input event. The default implementation ignores mouse input.
+    fn handle_mouse(&mut self, c: &mut dyn Core, k: mouse::MouseEvent) -> Result<EventOutcome> {
+        Ok(EventOutcome::Ignore)
     }
 
     /// The scheduled poll endpoint. This function is called for every node the first time it is seen during the
