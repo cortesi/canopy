@@ -172,10 +172,10 @@ macro_rules! branch {
             }
 
             fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-                let parts = self.vp().split_vertical(2)?;
-                l.fit(&mut self.a, parts[0])?;
-                l.fit(&mut self.b, parts[1])?;
                 l.fill(self, sz)?;
+                let parts = self.vp().view.split_vertical(2)?;
+                l.place(&mut self.a, parts[0])?;
+                l.place(&mut self.b, parts[1])?;
                 Ok(())
             }
 
@@ -255,9 +255,10 @@ impl Node for R {
     }
 
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        let parts = self.vp().split_horizontal(2)?;
-        l.fit(&mut self.a, parts[0])?;
-        l.fit(&mut self.b, parts[1])?;
+        l.fill(self, sz)?;
+        let parts = self.vp().view.split_horizontal(2)?;
+        l.place(&mut self.a, parts[0])?;
+        l.place(&mut self.b, parts[1])?;
         Ok(())
     }
 

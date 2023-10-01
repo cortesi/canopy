@@ -152,9 +152,9 @@ impl Todo {
 impl Node for Todo {
     fn layout(&mut self, l: &Layout, sz: Expanse) -> canopy::Result<()> {
         l.fill(self, sz)?;
-        let (a, b) = self.vp().carve_vend(1);
-        l.fit(&mut self.statusbar, b)?;
-        l.fit(&mut self.content, a)?;
+        let (a, b) = self.vp().view.carve_vend(1);
+        l.place(&mut self.statusbar, b)?;
+        l.place(&mut self.content, a)?;
 
         let a = self.vp().screen_rect();
         if let Some(add) = &mut self.adder {

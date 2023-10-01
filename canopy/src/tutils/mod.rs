@@ -70,9 +70,6 @@ impl Context for DummyContext {
     fn focus_area(&self, _root: &mut dyn Node) -> Option<Rect> {
         None
     }
-    fn focus_depth(&self, _n: &mut dyn Node) -> usize {
-        0
-    }
     fn focus_down(&mut self, _root: &mut dyn Node) {}
     fn focus_first(&mut self, _root: &mut dyn Node) {}
     fn focus_left(&mut self, _root: &mut dyn Node) {}

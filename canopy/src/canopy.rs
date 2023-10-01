@@ -34,9 +34,6 @@ pub trait Context {
     /// Get the Rect of the screen area that currently has focus.
     fn focus_area(&self, root: &mut dyn Node) -> Option<Rect>;
 
-    /// What is the depth of the specified node in the focus path?
-    fn focus_depth(&self, n: &mut dyn Node) -> usize;
-
     /// Move focus downward of the currently focused node within the subtree at root.
     fn focus_down(&mut self, root: &mut dyn Node);
 
@@ -335,20 +332,6 @@ impl Context for Canopy {
         })
         // Unwrap is safe, because the closure cannot fail.
         .unwrap();
-    }
-
-    /// Returns the focal depth of the specified node. If the node is not part
-    /// of the focus chain, the depth is 0. If the node is a leaf focus, the
-    /// depth is 1.
-    fn focus_depth(&self, n: &mut dyn Node) -> usize {
-        let mut total = 0;
-        self.walk_focus_path(n, &mut |_| -> Result<Walk<()>> {
-            total += 1;
-            Ok(Walk::Continue)
-        })
-        // We're safe to unwrap, because our closure can't return an error.
-        .unwrap();
-        total
     }
 
     /// Focus a node.

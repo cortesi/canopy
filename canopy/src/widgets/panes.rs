@@ -124,21 +124,21 @@ mod tests {
         let l = Layout {};
         let e = Expanse { w: 100, h: 100 };
 
-        p.layout(&l, e);
+        p.layout(&l, e)?;
 
         assert_eq!(p.shape(), vec![1]);
         let tn = Ba::new();
         p.insert_col(&mut c, tn)?;
-        p.layout(&l, e);
+        p.layout(&l, e)?;
 
         assert_eq!(p.shape(), vec![1, 1]);
         c.set_focus(&mut p.children[0][0].a);
-        p.layout(&l, e);
+        p.layout(&l, e)?;
 
         let tn = Ba::new();
         assert_eq!(p.focus_coords(&c), Some((0, 0)));
         p.insert_row(&mut c, tn);
-        p.layout(&l, e);
+        p.layout(&l, e)?;
 
         assert_eq!(p.shape(), vec![2, 1]);
 

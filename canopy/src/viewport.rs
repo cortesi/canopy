@@ -7,7 +7,7 @@ use crate::Result;
 pub struct ViewPort {
     /// The location of the node in the parent's co-ordinate space. Must only be changed by the parent node.
     pub position: Point,
-    /// The portion of this node that is displayed. A view within the size rectangle. Must only be changed by the node
+    /// The portion of this node that is displayed - a sub-rectangle of the canvas. Must only be changed by the node
     /// itself.
     pub view: Rect,
     /// The canvas on which children are positioned, and to which rendering occurs. Must only be changed by the node
@@ -80,7 +80,7 @@ impl ViewPort {
     }
 
     /// Scroll the view right by one line.
-    pub(crate) fn scroll_right(&mut self) {
+    pub fn scroll_right(&mut self) {
         self.scroll_by(1, 0)
     }
 
@@ -224,77 +224,6 @@ impl ViewPort {
         } else {
             Ok(None)
         }
-    }
-
-    /// Turns a view rectangle into a sub-viewport. The outer size of the
-    /// viewport remains the same.
-    fn view_to_vp(&self, v: Rect) -> ViewPort {
-        let isect = if let Some(r) = v.intersect(&self.view) {
-            r
-        } else {
-            Rect::default()
-        };
-        ViewPort {
-            canvas: v.expanse(),
-            view: isect,
-            position: Point {
-                x: (isect.tl.x - self.view.tl.x) + self.position.x,
-                y: (isect.tl.y - self.view.tl.y) + self.position.y,
-            },
-        }
-    }
-
-    /// Turns a vector of view rectangles into sub-viewports.
-    fn views_to_vp(&self, views: Vec<Rect>) -> Vec<ViewPort> {
-        let mut ret = Vec::with_capacity(views.len());
-        for i in views {
-            ret.push(self.view_to_vp(i));
-        }
-        ret
-    }
-
-    /// Carve a rectangle with a fixed width out of the start of the horizontal
-    /// extent of this viewport. Returns a (left, right) tuple. Left is either
-    /// empty or has the exact width specified.
-    pub fn carve_hstart(&self, n: u16) -> (ViewPort, ViewPort) {
-        let (a, b) = self.canvas.rect().carve_hstart(n);
-        (self.view_to_vp(a), self.view_to_vp(b))
-    }
-
-    /// Carve a rectangle with a fixed width out of the end of the horizontal
-    /// extent of this viewport. Returns a (left, right) tuple. Right is either
-    /// empty or has the exact width specified.
-    pub fn carve_hend(&self, n: u16) -> (ViewPort, ViewPort) {
-        let (a, b) = self.canvas.rect().carve_hend(n);
-        (self.view_to_vp(a), self.view_to_vp(b))
-    }
-
-    /// Carve a rectangle with a fixed width out of the start of the vertical
-    /// extent of this viewport. Returns a (top, bottom) tuple. Top is either
-    /// empty or has the exact width specified.
-    pub fn carve_vstart(&self, n: u16) -> (ViewPort, ViewPort) {
-        let (a, b) = self.canvas.rect().carve_vstart(n);
-        (self.view_to_vp(a), self.view_to_vp(b))
-    }
-
-    /// Carve a rectangle with a fixed width out of the end of the vertical
-    /// extent of this viewport. Returns a (top, bottom) tuple. Bottom is
-    /// either empty or has the exact width specified.
-    pub fn carve_vend(&self, n: u16) -> (ViewPort, ViewPort) {
-        let (a, b) = self.canvas.rect().carve_vend(n);
-        (self.view_to_vp(a), self.view_to_vp(b))
-    }
-
-    /// Splits the rectangle horizontally into n sections, as close to equally
-    /// sized as possible.
-    pub fn split_horizontal(&self, n: u16) -> Result<Vec<ViewPort>> {
-        Ok(self.views_to_vp(self.canvas.rect().split_horizontal(n)?))
-    }
-
-    /// Splits the viewport vertically into n sections, as close to equally
-    /// sized as possible.
-    pub fn split_vertical(&self, n: u16) -> Result<Vec<ViewPort>> {
-        Ok(self.views_to_vp(self.canvas.rect().split_vertical(n)?))
     }
 }
 
