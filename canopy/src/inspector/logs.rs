@@ -46,21 +46,12 @@ impl Node for LogItem {
             },
         )?;
         let sz = self.child.vp().canvas;
-        self.vp_mut().fit_size(sz, target);
+        l.size(self, sz, target)?;
         Ok(())
     }
 
     fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
         let vp = self.vp();
-        let (_, screen) = vp.screen_rect().carve_hstart(2);
-        let view = Rect {
-            tl: vp.view.tl,
-            w: vp.view.w.saturating_sub(2),
-            h: vp.view.h,
-        };
-        self.child
-            .set_viewport(ViewPort::new(self.child.vp().canvas, view, screen.tl)?);
-
         let v = vp.view;
         let status = Rect::new(v.tl.x, v.tl.y, 1, v.h);
         if self.selected {

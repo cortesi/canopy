@@ -679,6 +679,7 @@ impl Canopy {
             self.last_render_focus_gen = self.focus_gen;
             self.post_render(be, &mut styl, root)?;
         }
+
         Ok(())
     }
 

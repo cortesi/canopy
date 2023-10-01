@@ -90,7 +90,7 @@ impl Node for Text {
             self.lines = Some(split);
         }
         let cs = self.current_size.clone();
-        self.vp_mut().fit_size(cs, s);
+        l.size(self, cs, s)?;
         Ok(())
     }
 

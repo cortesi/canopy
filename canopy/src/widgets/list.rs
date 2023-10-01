@@ -279,15 +279,14 @@ where
             w = w.max(i.virt.w);
             h += i.virt.h
         }
-        self.vp_mut().fit_size(Expanse { w, h }, r);
+        l.size(self, Expanse { w, h }, r)?;
         Ok(())
     }
 
     fn render(&mut self, _c: &dyn Context, _: &mut Render) -> Result<()> {
         let vp = self.vp();
         for itm in &mut self.items {
-            if let Some(vp) = vp.map(itm.virt)? {
-                itm.itm.set_viewport(vp);
+            if let Some(_) = vp.map(itm.virt)? {
                 itm.itm.unhide();
             } else {
                 itm.itm.hide();

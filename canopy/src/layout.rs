@@ -48,6 +48,11 @@ impl Layout {
         Ok(())
     }
 
+    pub fn size(&self, n: &mut dyn Node, sz: Expanse, view_size: Expanse) -> Result<()> {
+        n.vp_mut().fit_size(sz, view_size);
+        Ok(())
+    }
+
     /// Adjust a child node so that it fits a viewport. This lays the node out to the viewport's screen rectangle, then
     /// adjusts the node's view to place as much of it within the viewport's screen rectangle as possible.
     pub fn fit(&self, n: &mut dyn Node, parent_vp: ViewPort) -> Result<()> {

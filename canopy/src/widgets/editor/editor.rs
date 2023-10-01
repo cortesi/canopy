@@ -56,7 +56,7 @@ impl Node for EditorView {
 
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         let outer = Expanse::new(sz.w, self.core.wrapped_height() as u16);
-        self.vp_mut().fit_size(outer, sz);
+        l.size(self, outer, sz)?;
         Ok(())
     }
 }

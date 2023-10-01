@@ -5,7 +5,6 @@ use canopy::{
     backend::crossterm::runloop,
     event::{key, mouse},
     geom::{Expanse, Rect},
-    layout,
     style::solarized,
     widgets::{frame, list::*, Input, Text},
     *,
@@ -40,10 +39,10 @@ impl ListItem for TodoItem {
 
 #[derive_commands]
 impl Node for TodoItem {
-    fn layout(&mut self, target: Expanse) -> canopy::Result<()> {
-        self.child.layout(target)?;
-        let sz = self.child.vp().size();
-        self.vp_mut().fit_size(sz, sz);
+    fn layout(&mut self, l: &Layout, sz: Expanse) -> canopy::Result<()> {
+        self.child.layout(l, sz)?;
+        let vp = self.child.vp();
+        l.wrap(&mut self.child, vp)?;
         Ok(())
     }
 
@@ -55,8 +54,6 @@ impl Node for TodoItem {
     }
 
     fn render(&mut self, _c: &dyn Context, r: &mut Render) -> canopy::Result<()> {
-        let vp = self.vp();
-        layout::fit(&mut self.child, vp)?;
         if self.selected {
             r.style.push_layer("blue");
         }
@@ -75,7 +72,7 @@ impl StatusBar {}
 impl Node for StatusBar {
     fn render(&mut self, _c: &dyn Context, r: &mut Render) -> canopy::Result<()> {
         r.style.push_layer("statusbar");
-        r.text("statusbar/text", self.vp().view_rect().line(0), "todo")?;
+        r.text("statusbar/text", self.vp().view.line(0), "todo")?;
         Ok(())
     }
 }
@@ -153,14 +150,15 @@ impl Todo {
 }
 
 impl Node for Todo {
-    fn render(&mut self, _c: &dyn Context, _: &mut Render) -> canopy::Result<()> {
+    fn layout(&mut self, l: &Layout, sz: Expanse) -> canopy::Result<()> {
+        l.fill(self, sz)?;
         let (a, b) = self.vp().carve_vend(1);
-        layout::fit(&mut self.statusbar, b)?;
-        layout::fit(&mut self.content, a)?;
+        l.fit(&mut self.statusbar, b)?;
+        l.fit(&mut self.content, a)?;
 
         let a = self.vp().screen_rect();
         if let Some(add) = &mut self.adder {
-            layout::place(add, Rect::new(a.tl.x + 2, a.tl.y + a.h / 2, a.w - 4, 3))?;
+            l.place(add, Rect::new(a.tl.x + 2, a.tl.y + a.h / 2, a.w - 4, 3))?;
         }
         Ok(())
     }

@@ -185,7 +185,7 @@ impl Node for Input {
         } else {
             Expanse::new(tbl as u16, 1)
         };
-        self.vp_mut().fit_size(expanse, sz);
+        l.size(self, expanse, sz)?;
         Ok(())
     }
 }

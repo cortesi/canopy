@@ -51,10 +51,7 @@ pub trait Node: StatefulNode + CommandNode {
     /// the size (e.g. reflowing text), it should be cached for use by future calls. This method may be called multiple
     /// times for a given node during a render sweep, so re-fitting to the same size should be cheap and return
     /// consistent results.
-    ///
-    /// The default implementation just sets both the size and view of the node to the target.
     fn layout(&mut self, l: &Layout, target: Expanse) -> Result<()> {
-        self.vp_mut().fit_size(target, target);
         Ok(())
     }
 
