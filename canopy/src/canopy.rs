@@ -145,6 +145,8 @@ pub struct Canopy {
     poller: Poller,
     /// Has the tree been tainted? Resets to false before every event sweep.
     pub(crate) taint: bool,
+    /// Root window size
+    pub(crate) root_size: Option<Expanse>,
 
     pub(crate) script_host: script::ScriptHost,
     pub(crate) keymap: inputmap::InputMap,
@@ -392,6 +394,7 @@ impl Canopy {
             commands: commands::CommandSet::new(),
             script_host: script::ScriptHost::new(),
             style: solarized::solarized_dark(),
+            root_size: None,
             backend: None,
         }
     }
@@ -661,16 +664,21 @@ impl Canopy {
         be: &mut R,
         root: &mut dyn Node,
     ) -> Result<()> {
-        let mut styl = StyleManager::default();
-        be.reset()?;
-        styl.reset();
+        if let Some(root_size) = self.root_size {
+            // This calls fit recursively on the entire tree, so after this all nodes are positioned.
+            let l = Layout {};
+            root.layout(&l, root_size)?;
 
-        self.pre_render(be, root)?;
-        self.render_traversal(be, &mut styl, root, (0, 0).into())?;
-        self.render_gen += 1;
-        self.last_render_focus_gen = self.focus_gen;
-        self.post_render(be, &mut styl, root)?;
+            let mut styl = StyleManager::default();
+            be.reset()?;
+            styl.reset();
 
+            self.pre_render(be, root)?;
+            self.render_traversal(be, &mut styl, root, (0, 0).into())?;
+            self.render_gen += 1;
+            self.last_render_focus_gen = self.focus_gen;
+            self.post_render(be, &mut styl, root)?;
+        }
         Ok(())
     }
 
@@ -803,12 +811,9 @@ impl Canopy {
     }
 
     /// Set the size on the root node, and taint the tree.
-    pub(crate) fn set_root_size(&mut self, size: Expanse, n: &mut dyn Node) -> Result<()> {
-        // This calls fit recursively on the entire tree, so after this all nodes are positioned.
-        n.layout(&Layout {}, size)?;
-        let vp = ViewPort::new(n.vp().canvas, n.vp().canvas, Point::default())?;
-        n.set_viewport(vp);
-        self.taint_tree(n);
+    pub(crate) fn set_root_size(&mut self, size: Expanse, root: &mut dyn Node) -> Result<()> {
+        self.root_size = Some(size);
+        self.taint_tree(root);
         Ok(())
     }
 
