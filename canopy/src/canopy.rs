@@ -72,43 +72,43 @@ pub trait Context {
     /// Scroll the view to the specified position. The view is clamped within
     /// the outer rectangle.
     fn scroll_to(&self, n: &mut dyn Node, x: u16, y: u16) {
-        n.vp_mut().scroll_to(x, y)
+        n.__vp_mut().scroll_to(x, y)
     }
 
     /// Scroll the view by the given offsets. The view rectangle is clamped
     /// within the outer rectangle.
     fn scroll_by(&self, n: &mut dyn Node, x: i16, y: i16) {
-        n.vp_mut().scroll_by(x, y)
+        n.__vp_mut().scroll_by(x, y)
     }
 
     /// Scroll the view up by the height of the view rectangle.
     fn page_up(&self, n: &mut dyn Node) {
-        n.vp_mut().page_up()
+        n.__vp_mut().page_up()
     }
 
     /// Scroll the view down by the height of the view rectangle.
     fn page_down(&self, n: &mut dyn Node) {
-        n.vp_mut().page_down()
+        n.__vp_mut().page_down()
     }
 
     /// Scroll the view up by one line.
     fn scroll_up(&self, n: &mut dyn Node) {
-        n.vp_mut().scroll_up()
+        n.__vp_mut().scroll_up()
     }
 
     /// Scroll the view down by one line.
     fn scroll_down(&self, n: &mut dyn Node) {
-        n.vp_mut().scroll_down()
+        n.__vp_mut().scroll_down()
     }
 
     /// Scroll the view left by one line.
     fn scroll_left(&self, n: &mut dyn Node) {
-        n.vp_mut().scroll_left()
+        n.__vp_mut().scroll_left()
     }
 
     /// Scroll the view right by one line.
     fn scroll_right(&self, n: &mut dyn Node) {
-        n.vp_mut().scroll_right()
+        n.__vp_mut().scroll_right()
     }
 
     /// Taint a node to signal that it should be re-rendered.

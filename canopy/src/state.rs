@@ -178,7 +178,7 @@ pub trait StatefulNode {
 
     /// Get a mutable reference to the node's `ViewPort`. This method should never be used by client code.
     #[doc(hidden)]
-    fn vp_mut(&mut self) -> &mut ViewPort {
+    fn __vp_mut(&mut self) -> &mut ViewPort {
         &mut self.state_mut().viewport
     }
 

@@ -11,8 +11,8 @@ impl Layout {
     /// Wrap a single child node, mirroring the child's size and view.
     pub fn wrap(&self, parent: &mut dyn Node, vp: ViewPort) -> Result<()> {
         // Mirror the child's size and view
-        parent.vp_mut().canvas = vp.canvas;
-        parent.vp_mut().view = vp.view;
+        parent.__vp_mut().canvas = vp.canvas;
+        parent.__vp_mut().view = vp.view;
         Ok(())
     }
 
@@ -26,7 +26,7 @@ impl Layout {
                 h: sz.h - (border * 2),
             },
         )?;
-        child.vp_mut().position = crate::geom::Point {
+        child.__vp_mut().position = crate::geom::Point {
             x: border,
             y: border,
         };
@@ -35,7 +35,7 @@ impl Layout {
 
     /// Place a node in a given sub-rectangle of a parent's view.
     pub fn fill(&self, n: &mut dyn Node, sz: Expanse) -> Result<()> {
-        let vp = n.vp_mut();
+        let vp = n.__vp_mut();
         vp.canvas = sz;
         vp.view = sz.rect();
         Ok(())
@@ -44,12 +44,12 @@ impl Layout {
     /// Place a child in a given sub-rectangle of a parent's view.
     pub fn place(&self, child: &mut dyn Node, loc: Rect) -> Result<()> {
         child.layout(self, loc.expanse())?;
-        child.vp_mut().position = loc.tl;
+        child.__vp_mut().position = loc.tl;
         Ok(())
     }
 
     pub fn size(&self, n: &mut dyn Node, sz: Expanse, view_size: Expanse) -> Result<()> {
-        n.vp_mut().fit_size(sz, view_size);
+        n.__vp_mut().fit_size(sz, view_size);
         Ok(())
     }
 
@@ -57,7 +57,7 @@ impl Layout {
     /// adjusts the node's view to place as much of it within the viewport's screen rectangle as possible.
     pub fn fit(&self, n: &mut dyn Node, parent_vp: ViewPort) -> Result<()> {
         n.layout(self, parent_vp.screen_rect().into())?;
-        n.vp_mut().position = parent_vp.position;
+        n.__vp_mut().position = parent_vp.position;
         Ok(())
     }
 }
