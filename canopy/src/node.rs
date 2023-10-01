@@ -6,7 +6,7 @@ use crate::{
     event::{key, mouse},
     geom::Expanse,
     state::StatefulNode,
-    Context, Render, Result,
+    Context, Layout, Render, Result,
 };
 
 /// Was an event handled or ignored?
@@ -15,8 +15,6 @@ pub enum EventOutcome {
     Handle,
     Ignore,
 }
-
-trait Layout: Node {}
 
 #[allow(unused_variables)]
 /// Nodes are the basic building-blocks of a Canopy UI. They are composed in a tree, with each node responsible for
@@ -55,7 +53,7 @@ pub trait Node: StatefulNode + CommandNode {
     /// consistent results.
     ///
     /// The default implementation just sets both the size and view of the node to the target.
-    fn layout(&mut self, target: Expanse) -> Result<()> {
+    fn layout(&mut self, l: &Layout, target: Expanse) -> Result<()> {
         self.vp_mut().fit_size(target, target);
         Ok(())
     }

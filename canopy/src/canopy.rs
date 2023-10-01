@@ -15,7 +15,7 @@ use crate::{
     script,
     style::{solarized, StyleManager, StyleMap},
     tree::*,
-    EventOutcome, NodeId, Render, Result, ViewPort,
+    EventOutcome, Layout, NodeId, Render, Result, ViewPort,
 };
 
 /// The API exposed to nodes by Canopy.
@@ -805,7 +805,7 @@ impl Canopy {
     /// Set the size on the root node, and taint the tree.
     pub(crate) fn set_root_size(&mut self, size: Expanse, n: &mut dyn Node) -> Result<()> {
         // This calls fit recursively on the entire tree, so after this all nodes are positioned.
-        n.layout(size)?;
+        n.layout(&Layout {}, size)?;
         let vp = ViewPort::new(n.vp().canvas, n.vp().canvas, Point::default())?;
         n.set_viewport(vp);
         self.taint_tree(n);

@@ -5,7 +5,6 @@ use canopy::{
     backend::crossterm::runloop,
     derive_commands,
     event::{key, mouse},
-    layout,
     widgets::{frame, Text},
     *,
 };
@@ -31,9 +30,11 @@ impl Node for Pager {
         true
     }
 
-    fn render(&mut self, _c: &dyn Context, _: &mut Render) -> Result<()> {
-        let vp = self.vp();
-        layout::fit(&mut self.child, vp)
+    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+        self.child.layout(l, sz)?;
+        let vp = self.child.vp();
+        l.wrap(self, vp)?;
+        Ok(())
     }
 
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {

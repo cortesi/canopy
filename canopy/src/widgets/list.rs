@@ -171,18 +171,6 @@ where
         }
     }
 
-    /// Calculate and return the outer viewport rectangles of all items.
-    fn refresh_views(&mut self, r: Expanse) -> Result<()> {
-        let mut voffset: u16 = 0;
-        for itm in &mut self.items {
-            itm.itm.layout(r)?;
-            let item_view = itm.itm.vp().canvas.rect();
-            itm.virt = item_view.shift(0, voffset as i16);
-            voffset += item_view.h;
-        }
-        Ok(())
-    }
-
     /// Clear all items.
     #[command(ignore_result)]
     pub fn clear(&mut self) -> Vec<N> {
@@ -275,10 +263,18 @@ where
         Ok(())
     }
 
-    fn layout(&mut self, r: Expanse) -> Result<()> {
+    fn layout(&mut self, l: &Layout, r: Expanse) -> Result<()> {
         let mut w = 0;
         let mut h = 0;
-        self.refresh_views(r)?;
+
+        let mut voffset: u16 = 0;
+        for itm in &mut self.items {
+            itm.itm.layout(l, r)?;
+            let item_view = itm.itm.vp().canvas.rect();
+            itm.virt = item_view.shift(0, voffset as i16);
+            voffset += item_view.h;
+        }
+
         for i in &mut self.items {
             w = w.max(i.virt.w);
             h += i.virt.h
@@ -306,7 +302,6 @@ mod tests {
     use super::*;
     use crate::{
         backend::test::TestRender,
-        layout::place,
         tutils::{DummyContext, TFixed},
         Context,
     };
@@ -362,7 +357,9 @@ mod tests {
             TFixed::new(rw, rh),
         ]);
 
-        place(&mut lst, Rect::new(0, 0, 10, 10))?;
+        let l = Layout {};
+
+        lst.layout(&l, Expanse::new(10, 10))?;
         tr.render(&mut c, &mut lst)?;
         assert_eq!(
             views(&mut lst),
@@ -374,7 +371,7 @@ mod tests {
         );
 
         c.scroll_by(&mut lst, 0, 5);
-        place(&mut lst, Rect::new(0, 0, 10, 10))?;
+        lst.layout(&l, Expanse::new(10, 10))?;
         c.taint_tree(&mut lst);
         tr.render(&mut c, &mut lst)?;
         assert_eq!(
@@ -387,7 +384,7 @@ mod tests {
         );
 
         c.scroll_by(&mut lst, 0, 5);
-        place(&mut lst, Rect::new(0, 0, 10, 10))?;
+        lst.layout(&l, Expanse::new(10, 10))?;
         c.taint_tree(&mut lst);
         tr.render(&mut c, &mut lst)?;
         assert_eq!(
@@ -400,7 +397,7 @@ mod tests {
         );
 
         c.scroll_by(&mut lst, 0, 10);
-        place(&mut lst, Rect::new(0, 0, 10, 10))?;
+        lst.layout(&l, Expanse::new(10, 10))?;
         c.taint_tree(&mut lst);
         tr.render(&mut c, &mut lst)?;
         assert_eq!(
@@ -413,7 +410,7 @@ mod tests {
         );
 
         c.scroll_by(&mut lst, 0, 10);
-        place(&mut lst, Rect::new(0, 0, 10, 10))?;
+        lst.layout(&l, Expanse::new(10, 10))?;
         c.taint_tree(&mut lst);
         tr.render(&mut c, &mut lst)?;
         assert_eq!(
@@ -426,7 +423,7 @@ mod tests {
         );
 
         c.scroll_to(&mut lst, 5, 0);
-        place(&mut lst, Rect::new(0, 0, 10, 10))?;
+        lst.layout(&l, Expanse::new(10, 10))?;
         c.taint_tree(&mut lst);
         tr.render(&mut c, &mut lst)?;
         assert_eq!(
@@ -439,7 +436,7 @@ mod tests {
         );
 
         c.scroll_by(&mut lst, 0, 5);
-        place(&mut lst, Rect::new(0, 0, 10, 10))?;
+        lst.layout(&l, Expanse::new(10, 10))?;
         c.taint_tree(&mut lst);
         tr.render(&mut c, &mut lst)?;
         assert_eq!(

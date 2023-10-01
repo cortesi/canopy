@@ -54,18 +54,24 @@ impl Block {
 }
 
 impl Node for Block {
-    fn render(&mut self, c: &dyn Context, r: &mut Render) -> Result<()> {
-        let vp = self.vp();
+    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         if !self.children.is_empty() {
+            let vp = self.vp();
             let vps = if self.horizontal {
                 vp.view.split_horizontal(self.children.len() as u16)?
             } else {
                 vp.view.split_vertical(self.children.len() as u16)?
             };
             for i in 0..self.children.len() {
-                fit_place!(self, &mut self.children[i], vps[i]);
+                l.place(&mut self.children[i], vps[i])?;
             }
-        } else {
+        }
+        Ok(())
+    }
+
+    fn render(&mut self, c: &dyn Context, r: &mut Render) -> Result<()> {
+        let vp = self.vp();
+        if self.children.is_empty() {
             let bc = if c.is_focused(self) && self.children.is_empty() {
                 "violet"
             } else {
@@ -74,7 +80,6 @@ impl Node for Block {
             r.fill(bc, vp.view.inner(1), '\u{2588}')?;
             r.solid_frame("black", Frame::new(vp.view, 1), ' ')?;
         }
-
         Ok(())
     }
 
@@ -111,9 +116,10 @@ impl FocusGym {
 }
 
 impl Node for FocusGym {
-    fn layout(&mut self, sz: Expanse) -> Result<()> {
-        fit_wrap!(self, self.child, sz);
-        self.vp_mut().set_fill(sz.rect());
+    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+        self.child.layout(l, sz)?;
+        let vp = self.child.vp();
+        l.wrap(self, vp)?;
         Ok(())
     }
 

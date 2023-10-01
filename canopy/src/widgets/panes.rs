@@ -1,6 +1,6 @@
 use crate as canopy;
 use crate::{
-    layout,
+    geom::Expanse,
     state::{NodeState, StatefulNode},
     *,
 };
@@ -100,11 +100,11 @@ impl<N: Node> Node for Panes<N> {
         Ok(())
     }
 
-    fn render(&mut self, _: &dyn Context, _rndr: &mut Render) -> Result<()> {
-        let l = self.vp().screen_rect().split_panes(&self.shape())?;
+    fn layout(&mut self, l: &Layout, _: Expanse) -> Result<()> {
+        let lst = self.vp().screen_rect().split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
-                layout::place(row, l[ci][ri])?;
+                l.place(row, lst[ci][ri])?;
             }
         }
         Ok(())
@@ -114,36 +114,31 @@ impl<N: Node> Node for Panes<N> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        geom::{Point, Rect},
-        tutils::*,
-    };
+    use crate::tutils::*;
 
     #[test]
     fn tlayout() -> Result<()> {
         let mut c = Canopy::new();
         let tn = Ba::new();
         let mut p: Panes<Ba> = Panes::new(tn);
-        let r = Rect {
-            tl: Point::zero(),
-            w: 100,
-            h: 100,
-        };
-        layout::place(&mut p, r)?;
+        let l = Layout {};
+        let e = Expanse { w: 100, h: 100 };
+
+        p.layout(&l, e);
 
         assert_eq!(p.shape(), vec![1]);
         let tn = Ba::new();
         p.insert_col(&mut c, tn)?;
-        layout::place(&mut p, r)?;
+        p.layout(&l, e);
 
         assert_eq!(p.shape(), vec![1, 1]);
         c.set_focus(&mut p.children[0][0].a);
-        layout::place(&mut p, r)?;
+        p.layout(&l, e);
 
         let tn = Ba::new();
         assert_eq!(p.focus_coords(&c), Some((0, 0)));
         p.insert_row(&mut c, tn);
-        layout::place(&mut p, r)?;
+        p.layout(&l, e);
 
         assert_eq!(p.shape(), vec![2, 1]);
 

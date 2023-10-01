@@ -19,9 +19,9 @@ pub struct TFixed {
 }
 
 impl Node for TFixed {
-    fn layout(&mut self, target: Expanse) -> Result<()> {
+    fn layout(&mut self, l: &Layout, _: Expanse) -> Result<()> {
         let x = Expanse::new(self.w, self.h);
-        self.vp_mut().fit_size(x, target);
+        l.fill(self, x)?;
         Ok(())
     }
 }

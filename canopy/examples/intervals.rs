@@ -5,7 +5,6 @@ use canopy::{
     derive_commands,
     event::{key, mouse},
     geom::Expanse,
-    layout,
     style::solarized,
     widgets::{frame, list::*, Text},
     *,
@@ -48,10 +47,10 @@ impl Node for IntervalItem {
         Some(Duration::from_secs(1))
     }
 
-    fn layout(&mut self, target: Expanse) -> Result<()> {
-        self.child.layout(target)?;
-        let sz = self.child.vp().canvas;
-        self.vp_mut().fit_size(sz, sz);
+    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+        self.child.layout(l, sz)?;
+        let vp = self.child.vp();
+        l.fit(self, vp)?;
         Ok(())
     }
 
@@ -60,8 +59,6 @@ impl Node for IntervalItem {
     }
 
     fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
-        let vp = self.vp();
-        layout::fit(&mut self.child, vp)?;
         if self.selected {
             r.style.push_layer("blue");
         }
@@ -113,10 +110,10 @@ impl Intervals {
 }
 
 impl Node for Intervals {
-    fn render(&mut self, _c: &dyn Context, _: &mut Render) -> Result<()> {
+    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         let (a, b) = self.vp().carve_vend(1);
-        layout::fit(&mut self.statusbar, b)?;
-        layout::fit(&mut self.content, a)?;
+        l.fit(&mut self.statusbar, b)?;
+        l.fit(&mut self.content, a)?;
         Ok(())
     }
 

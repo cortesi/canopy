@@ -2,10 +2,9 @@ use pad::PadStr;
 
 use crate as canopy;
 use crate::{
-    derive_commands, fit_frame, geom,
-    geom::Expanse,
+    derive_commands, geom,
     state::{NodeState, StatefulNode},
-    Context, Node, Render, Result,
+    Context, Layout, Node, Render, Result,
 };
 
 /// Defines the set of glyphs used to draw the frame
@@ -110,8 +109,9 @@ where
         c.needs_render(&self.child)
     }
 
-    fn layout(&mut self, sz: crate::geom::Expanse) -> Result<()> {
-        self.frame = fit_frame!(self, self.child, sz, 1);
+    fn layout(&mut self, l: &Layout, sz: crate::geom::Expanse) -> Result<()> {
+        self.frame = l.frame(&mut self.child, sz, 1)?;
+        l.fill(self, sz)?;
         Ok(())
     }
 

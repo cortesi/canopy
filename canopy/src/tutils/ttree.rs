@@ -7,7 +7,8 @@ use std::cell::RefCell;
 use crate::{self as canopy};
 use crate::{
     event::{key, mouse},
-    layout, *,
+    geom::Expanse,
+    *,
 };
 
 /// Thread-local state tracked by test nodes.
@@ -170,11 +171,15 @@ macro_rules! branch {
                 true
             }
 
-            fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
                 let parts = self.vp().split_vertical(2)?;
-                layout::fit(&mut self.a, parts[0])?;
-                layout::fit(&mut self.b, parts[1])?;
+                l.fit(&mut self.a, parts[0])?;
+                l.fit(&mut self.b, parts[1])?;
+                l.fill(self, sz)?;
+                Ok(())
+            }
 
+            fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
                 r.text(
                     "any",
                     self.vp().view.line(0),
@@ -249,11 +254,14 @@ impl Node for R {
         true
     }
 
-    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
+    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         let parts = self.vp().split_horizontal(2)?;
-        layout::fit(&mut self.a, parts[0])?;
-        layout::fit(&mut self.b, parts[1])?;
+        l.fit(&mut self.a, parts[0])?;
+        l.fit(&mut self.b, parts[1])?;
+        Ok(())
+    }
 
+    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
         r.text("any", self.vp().view.line(0), &format!("<{}>", self.name()))
     }
 

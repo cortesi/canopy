@@ -30,8 +30,12 @@ pub mod widgets;
 pub use crate::canopy::*;
 pub use binder::*;
 pub use error::{Error, Result};
+pub use layout::*;
 pub use node::*;
 pub use root::*;
+
+// Part of the core Node API, so export for convenience.
+pub use geom::Expanse;
 
 pub use render::Render;
 pub use state::{NodeId, NodeName, NodeState, StatefulNode};

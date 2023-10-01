@@ -1,6 +1,6 @@
 use super::logs::Logs;
 use crate as canopy;
-use crate::{layout, widgets::tabs, *};
+use crate::{widgets::tabs, *};
 
 /// View contains the body of the inspector.
 #[derive(StatefulNode)]
@@ -11,10 +11,10 @@ pub struct View {
 }
 
 impl Node for View {
-    fn render(&mut self, _c: &dyn Context, _r: &mut Render) -> Result<()> {
+    fn layout(&mut self, l: &Layout, _: Expanse) -> Result<()> {
         let (a, b) = self.vp().carve_vstart(1);
-        layout::fit(&mut self.tabs, a)?;
-        layout::fit(&mut self.logs, b)?;
+        l.fit(&mut self.tabs, a)?;
+        l.fit(&mut self.logs, b)?;
         Ok(())
     }
 
