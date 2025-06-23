@@ -69,30 +69,7 @@ type ScriptResult<T> = std::result::Result<T, Box<rhai::EvalAltResult>>;
 
 /// This is a re-implementation of the Module::set_raw_fn from rhai. It turns out that set_raw_fn wants to assume that
 /// the function is a module, which imposes some internal constraints on the number of arguments.
-fn set_pure_fn<T: rhai::Variant + Clone>(
-    this: &mut rhai::Module,
-    name: impl AsRef<str>,
-    namespace: rhai::FnNamespace,
-    access: rhai::FnAccess,
-    arg_types: impl AsRef<[rhai::plugin::TypeId]>,
-    func: impl Fn(rhai::NativeCallContext, &mut FnCallArgs) -> ScriptResult<T> + 'static,
-) -> u64 {
-    let f = move |ctx: Option<rhai::NativeCallContext>, args: &mut FnCallArgs| {
-        func(ctx.unwrap(), args).map(rhai::Dynamic::from)
-    };
-    this.set_fn(
-        name,
-        namespace,
-        access,
-        None,
-        arg_types,
-        rhai::plugin::CallableFunction::Pure {
-            func: rhai::Shared::new(f),
-            has_context: true,
-            is_pure: true,
-        },
-    )
-}
+// Helper function removed - using FuncRegistration API directly instead
 
 impl ScriptHost {
     pub fn new() -> Self {
@@ -136,52 +113,65 @@ impl ScriptHost {
                 }
             }
 
-            set_pure_fn(
-                m,
-                &i.command,
-                rhai::FnNamespace::Internal,
-                rhai::FnAccess::Public,
-                &rhai_arg_types,
-                move |_context, args| {
-                    SCRIPT_GLOBAL.with(|g| {
-                        let mut b = g.borrow_mut();
-                        let v = b.as_mut().unwrap();
+            // For dynamic argument handling, we need to use the module's raw function API
+            // Since FuncRegistration doesn't support our use case directly
+            let func = move |context: Option<rhai::NativeCallContext>,
+                             args: &mut FnCallArgs|
+                  -> ScriptResult<rhai::Dynamic> {
+                SCRIPT_GLOBAL.with(|g| {
+                    let mut b = g.borrow_mut();
+                    let v = b.as_mut().unwrap();
 
-                        let mut ciargs = vec![];
-                        let mut arg_types = arg_types.clone();
-                        if arg_types.len() > 0 && arg_types[0] == ArgTypes::Context {
-                            ciargs.push(Args::Context);
-                            arg_types.remove(0);
-                        }
-                        // I believe this is guaranteed by rhai
-                        assert!(args.len() == arg_types.len());
-                        for (i, a) in arg_types.iter().enumerate() {
-                            match a {
-                                ArgTypes::Context => {
-                                    panic!("unexpected")
-                                }
-                                ArgTypes::ISize => {
-                                    // The type here should be guaranteed by rhai
-                                    ciargs.push(Args::ISize(args[i].as_int().unwrap() as isize));
-                                }
+                    let mut ciargs = vec![];
+                    let mut arg_types = arg_types.clone();
+                    if arg_types.len() > 0 && arg_types[0] == ArgTypes::Context {
+                        ciargs.push(Args::Context);
+                        arg_types.remove(0);
+                    }
+                    // I believe this is guaranteed by rhai
+                    assert!(args.len() == arg_types.len());
+                    for (i, a) in arg_types.iter().enumerate() {
+                        match a {
+                            ArgTypes::Context => {
+                                panic!("unexpected")
+                            }
+                            ArgTypes::ISize => {
+                                // The type here should be guaranteed by rhai
+                                ciargs.push(Args::ISize(args[i].as_int().unwrap() as isize));
                             }
                         }
+                    }
 
-                        let ci = CommandInvocation {
-                            node: node.clone(),
-                            command: command.clone(),
-                            args: ciargs,
-                        };
-                        if let Some(ret) = dispatch(v.core, v.node_id.clone(), v.root, &ci).unwrap()
-                        {
-                            Ok(match ret {
-                                ReturnValue::Void => rhai::Dynamic::UNIT,
-                                ReturnValue::String(s) => rhai::Dynamic::from(s),
-                            })
-                        } else {
-                            Ok(rhai::Dynamic::UNIT)
-                        }
-                    })
+                    let ci = CommandInvocation {
+                        node: node.clone(),
+                        command: command.clone(),
+                        args: ciargs,
+                    };
+                    if let Some(ret) = dispatch(v.core, v.node_id.clone(), v.root, &ci).unwrap() {
+                        Ok(match ret {
+                            ReturnValue::Void => rhai::Dynamic::UNIT,
+                            ReturnValue::String(s) => rhai::Dynamic::from(s),
+                        })
+                    } else {
+                        Ok(rhai::Dynamic::UNIT)
+                    }
+                })
+            };
+
+            // Use the deprecated set_fn API since we need dynamic type handling
+            // We'll suppress the warning for now
+            #[allow(deprecated)]
+            m.set_fn(
+                i.command.clone(),
+                rhai::FnNamespace::Internal,
+                rhai::FnAccess::Public,
+                None,
+                &rhai_arg_types,
+                rhai::RhaiFunc::Pure {
+                    func: rhai::Shared::new(func),
+                    has_context: true,
+                    is_pure: true,
+                    is_volatile: false,
                 },
             );
         }
