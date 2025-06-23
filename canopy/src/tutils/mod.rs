@@ -173,4 +173,67 @@ mod tests {
         assert!(!tr.buf_empty());
         Ok(())
     }
+
+    fn collect_expected(b: &Block, area: Rect, out: &mut Vec<Rect>) -> Result<()> {
+        if b.children.is_empty() {
+            out.push(area);
+        } else {
+            let rects = if b.horizontal {
+                area.split_horizontal(b.children.len() as u16)?
+            } else {
+                area.split_vertical(b.children.len() as u16)?
+            };
+            for (ch, r) in b.children.iter().zip(rects) {
+                collect_expected(ch, r, out)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn collect_actual(b: &Block, out: &mut Vec<Rect>) {
+        if b.children.is_empty() {
+            out.push(b.vp().screen_rect());
+        } else {
+            for ch in &b.children {
+                collect_actual(ch, out);
+            }
+        }
+    }
+
+    impl Block {
+        fn split(&mut self, _c: &mut dyn Context) -> Result<()> {
+            self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn block_progressive_split() -> Result<()> {
+        let mut canopy = Canopy::new();
+        let mut root = Block {
+            state: NodeState::default(),
+            children: vec![Block::new(false), Block::new(false)],
+            horizontal: true,
+        };
+
+        canopy.set_root_size(Expanse::new(20, 10), &mut root)?;
+        let l = Layout {};
+        let mut ctx = DummyContext {};
+
+        // Split the right-most pane repeatedly, emulating the focusgym example.
+        root.children[1].split(&mut ctx)?;
+        root.children[1].children[1].split(&mut ctx)?;
+        root.children[1].children[1].children[1].split(&mut ctx)?;
+
+        root.layout(&l, Expanse::new(20, 10))?;
+
+        let mut expect = Vec::new();
+        collect_expected(&root, root.vp().view, &mut expect)?;
+
+        let mut actual = Vec::new();
+        collect_actual(&root, &mut actual);
+
+        assert_eq!(actual, expect);
+        Ok(())
+    }
 }
