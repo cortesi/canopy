@@ -305,6 +305,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use crate::{
         backend::test::TestRender,
+        backend::test::CanvasRender,
         tutils::{DummyContext, TFixed},
         Context,
         widgets::Text,
@@ -844,6 +845,97 @@ mod tests {
                 assert!(row.iter().all(|&c| c));
             }
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn items_do_not_overlap_initially() -> Result<()> {
+        const SAMPLE: &str = "aaa bbb ccc\nddd";
+
+        #[derive(StatefulNode)]
+        struct Block {
+            state: NodeState,
+            text: Text,
+        }
+
+        #[derive_commands]
+        impl Block {
+            fn new(w: u16) -> Self {
+                Block { state: NodeState::default(), text: Text::new(SAMPLE).with_fixed_width(w) }
+            }
+        }
+
+        impl ListItem for Block {}
+
+        impl Node for Block {
+            fn layout(&mut self, l: &Layout, s: Expanse) -> Result<()> {
+                l.fill(self, s)?;
+                let vp = self.vp();
+                l.place(&mut self.text, vp, Rect::new(0, 0, s.w, s.h))?;
+                let vp = self.text.vp();
+                let sz = Expanse { w: vp.canvas.w, h: vp.canvas.h };
+                l.size(self, sz, sz)?;
+                Ok(())
+            }
+
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.text)
+            }
+        }
+
+        #[derive(StatefulNode)]
+        struct Root {
+            state: NodeState,
+            frame: frame::Frame<List<Block>>,
+        }
+
+        #[derive_commands]
+        impl Root {
+            fn new() -> Self {
+                Root {
+                    state: NodeState::default(),
+                    frame: frame::Frame::new(List::new(vec![
+                        Block::new(4),
+                        Block::new(7),
+                        Block::new(5),
+                    ])),
+                }
+            }
+        }
+
+        impl Node for Root {
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.frame)
+            }
+
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                l.place(&mut self.frame, vp, vp.view)?;
+                Ok(())
+            }
+        }
+
+        let mut canopy = Canopy::new();
+        let size = Expanse::new(20, 8);
+        let mut root = Root::new();
+
+        canopy.set_root_size(size, &mut root)?;
+        let (_, mut cr) = CanvasRender::create(size);
+        canopy.render(&mut cr, &mut root)?;
+
+        let list_rect = root.frame.child.vp().screen_rect();
+        let mut last_y = list_rect.tl.y;
+        root.frame.child.children(&mut |n| {
+            if !n.is_hidden() {
+                let r = n.vp().screen_rect();
+                assert!(list_rect.contains_rect(&r));
+                assert!(r.tl.y >= last_y);
+                last_y = r.tl.y + r.h;
+            }
+            Ok(())
+        })?;
 
         Ok(())
     }

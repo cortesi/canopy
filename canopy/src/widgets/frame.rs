@@ -163,7 +163,7 @@ where
             .vp()
             .view
             .inner(1)
-            .sub(&self.child.vp().screen_rect())
+            .sub(&self.vp().unproject(self.child.vp().screen_rect())?)
         {
             rndr.fill(style, r, ' ')?;
         }
