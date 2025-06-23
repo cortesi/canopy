@@ -1,3 +1,5 @@
+#[cfg(test)]
+use crate::geom::Expanse;
 use crate::{
     cursor,
     geom::Point,
@@ -5,8 +7,6 @@ use crate::{
     style::{Style, StyleManager},
     Canopy, Node, Result,
 };
-#[cfg(test)]
-use crate::geom::Expanse;
 use std::sync::{Arc, Mutex};
 
 /// A handle to a vector that contains the result of the render.
@@ -95,6 +95,8 @@ impl RenderBackend for TestRender {
 pub struct CanvasBuf {
     size: Expanse,
     pub cells: Vec<Vec<char>>,
+    /// Track which cells have been written to during a render.
+    pub painted: Vec<Vec<bool>>,
 }
 
 #[cfg(test)]
@@ -103,6 +105,7 @@ impl CanvasBuf {
         CanvasBuf {
             size,
             cells: vec![vec![' '; size.w as usize]; size.h as usize],
+            painted: vec![vec![false; size.w as usize]; size.h as usize],
         }
     }
 
@@ -110,6 +113,11 @@ impl CanvasBuf {
         for row in &mut self.cells {
             for c in row.iter_mut() {
                 *c = ' ';
+            }
+        }
+        for row in &mut self.painted {
+            for c in row.iter_mut() {
+                *c = false;
             }
         }
     }
@@ -159,6 +167,7 @@ impl RenderBackend for CanvasRender {
             let y = loc.y as usize;
             if x < buf.size.w as usize && y < buf.size.h as usize {
                 buf.cells[y][x] = ch;
+                buf.painted[y][x] = true;
             }
         }
         Ok(())

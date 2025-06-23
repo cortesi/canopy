@@ -44,6 +44,9 @@ impl ListItem for Block {
 
 impl Node for Block {
     fn layout(&mut self, l: &Layout, target: Expanse) -> Result<()> {
+        // Set our viewport before laying out children so geometry calculations
+        // are based on the correct size.
+        l.fill(self, target)?;
         let loc = Rect::new(2, 0, target.w.saturating_sub(2), target.h);
         let vp = self.vp();
         l.place(&mut self.child, vp, loc)?;
@@ -129,6 +132,11 @@ impl ListGym {
 
 impl Node for ListGym {
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+        // First fill our viewport so that child placement calculations use the
+        // correct geometry. Without this the initial layout runs with a zero
+        // sized viewport, causing the list to appear empty until a subsequent
+        // event triggers another layout.
+        l.fill(self, sz)?;
         let vp = self.vp();
         let (a, b) = vp.screen_rect().carve_vend(1);
         l.place(&mut self.content, vp, a)?;
