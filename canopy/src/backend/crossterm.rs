@@ -404,6 +404,7 @@ where
 
     cnpy.render(&mut be, &mut root)?;
     translate_result(be.flush())?;
+    cnpy.taint = false;
 
     loop {
         cnpy.event(&mut root, events.next()?)?;
