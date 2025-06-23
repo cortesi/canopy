@@ -392,9 +392,8 @@ impl Canopy {
         node_id: NodeId,
         sid: script::ScriptId,
     ) -> Result<()> {
-        let _g = script::ScriptGuard::new(self, root, node_id);
-        self.script_host.execute(sid)?;
-        Ok(())
+        let host_ptr: *mut script::ScriptHost = &mut self.script_host;
+        script::with_global(self, root, node_id, || unsafe { (*host_ptr).execute(sid) })
     }
 
     /// Bind a mouse action in the global mode with a given path filter to a script.

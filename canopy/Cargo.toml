@@ -20,6 +20,7 @@ comfy-table = "7.0.0"
 convert_case = "0.6.0"
 regex = "1.5.5"
 rhai = { version = "1.14.0", features = ["internals"] }
+scoped-tls = "1.0"
 
 [dev-dependencies]
 clap = { version = "4.2.1", features = ["derive"] }

@@ -1,4 +1,6 @@
-use std::{cell::RefCell, collections::HashMap};
+use std::{collections::HashMap};
+
+use scoped_tls::scoped_thread_local;
 
 use rhai;
 
@@ -18,42 +20,27 @@ impl Script {
     }
 }
 
-struct ScriptGlobal<'a> {
-    core: &'a mut dyn Context,
-    root: &'a mut dyn Node,
+#[derive(Clone)]
+pub(crate) struct ScriptGlobal {
+    core: *mut dyn Context,
+    root: *mut dyn Node,
     node_id: NodeId,
 }
 
-thread_local! {
-    static SCRIPT_GLOBAL: RefCell<Option<ScriptGlobal<'static>>> = const { RefCell::new(None) };
-}
+scoped_thread_local!(static SCRIPT_GLOBAL: ScriptGlobal);
 
-pub(crate) struct ScriptGuard {}
-
-impl ScriptGuard {
-    pub fn new(core: &mut dyn Context, root: &mut dyn Node, node_id: NodeId) -> Self {
-        let sg = ScriptGlobal {
-            core,
-            root,
-            node_id,
-        };
-        SCRIPT_GLOBAL.with(|g| {
-            *g.borrow_mut() = Some(unsafe { extend_lifetime(sg) });
-        });
-        ScriptGuard {}
-    }
-}
-
-impl Drop for ScriptGuard {
-    fn drop(&mut self) {
-        SCRIPT_GLOBAL.with(|g| {
-            *g.borrow_mut() = None;
-        });
-    }
-}
-
-unsafe fn extend_lifetime<'b>(r: ScriptGlobal<'b>) -> ScriptGlobal<'static> {
-    std::mem::transmute::<ScriptGlobal<'b>, ScriptGlobal<'static>>(r)
+pub(crate) fn with_global<T>(
+    core: &mut dyn Context,
+    root: &mut dyn Node,
+    node_id: NodeId,
+    f: impl FnOnce() -> T,
+) -> T {
+    let sg = ScriptGlobal {
+        core: unsafe { std::mem::transmute::<&mut dyn Context, *mut dyn Context>(core) },
+        root: unsafe { std::mem::transmute::<&mut dyn Node, *mut dyn Node>(root) },
+        node_id,
+    };
+    SCRIPT_GLOBAL.set(&sg, f)
 }
 
 #[derive(Debug)]
@@ -117,9 +104,10 @@ impl ScriptHost {
             let func = move |_context: Option<rhai::NativeCallContext>,
                              args: &mut FnCallArgs|
                   -> ScriptResult<rhai::Dynamic> {
-                SCRIPT_GLOBAL.with(|g| {
-                    let mut b = g.borrow_mut();
-                    let v = b.as_mut().unwrap();
+                SCRIPT_GLOBAL.with(|v| {
+                    // Safety: references are valid for the duration of the script execution
+                    let core: &mut dyn Context = unsafe { &mut *(v.core as *mut dyn Context) };
+                    let root: &mut dyn Node = unsafe { &mut *(v.root as *mut dyn Node) };
 
                     let mut ciargs = vec![];
                     let mut arg_types = arg_types.clone();
@@ -146,7 +134,7 @@ impl ScriptHost {
                         command: command.clone(),
                         args: ciargs,
                     };
-                    if let Some(ret) = dispatch(v.core, v.node_id.clone(), v.root, &ci).unwrap() {
+                    if let Some(ret) = dispatch(core, v.node_id.clone(), root, &ci).unwrap() {
                         Ok(match ret {
                             ReturnValue::Void => rhai::Dynamic::UNIT,
                             ReturnValue::String(s) => rhai::Dynamic::from(s),
