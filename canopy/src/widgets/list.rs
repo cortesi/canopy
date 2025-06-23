@@ -302,27 +302,18 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Arc, Mutex};
     use crate::{
-        backend::test::CanvasRender,
-        Context,
-        widgets::Text,
-        widgets::frame,
-        cursor,
-        geom::Point,
-        render::RenderBackend,
-        style::Style,
+        backend::test::CanvasRender, cursor, geom::Point, render::RenderBackend, style::Style,
+        widgets::frame, widgets::Text, Context,
     };
+    use std::sync::{Arc, Mutex};
 
     impl ListItem for Text {}
-
-
 
     #[test]
     fn frame_repaints_on_scroll() -> Result<()> {
         use crate::backend::test::CanvasRender;
         use crate::widgets::{frame, text::Text};
-
 
         #[derive(StatefulNode)]
         struct Root {
@@ -396,7 +387,6 @@ mod tests {
         Ok(())
     }
 
-
     struct PaintTracker {
         painted: Arc<Mutex<Vec<Vec<bool>>>>,
         size: Expanse,
@@ -404,7 +394,10 @@ mod tests {
 
     impl PaintTracker {
         fn create(size: Expanse) -> (Arc<Mutex<Vec<Vec<bool>>>>, Self) {
-            let buf = Arc::new(Mutex::new(vec![vec![false; size.w as usize]; size.h as usize]));
+            let buf = Arc::new(Mutex::new(vec![
+                vec![false; size.w as usize];
+                size.h as usize
+            ]));
             (buf.clone(), PaintTracker { painted: buf, size })
         }
     }
@@ -420,10 +413,18 @@ mod tests {
             Ok(())
         }
 
-        fn flush(&mut self) -> Result<()> { Ok(()) }
-        fn show_cursor(&mut self, _c: cursor::Cursor) -> Result<()> { Ok(()) }
-        fn hide_cursor(&mut self) -> Result<()> { Ok(()) }
-        fn style(&mut self, _s: Style) -> Result<()> { Ok(()) }
+        fn flush(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn show_cursor(&mut self, _c: cursor::Cursor) -> Result<()> {
+            Ok(())
+        }
+        fn hide_cursor(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn style(&mut self, _s: Style) -> Result<()> {
+            Ok(())
+        }
 
         fn text(&mut self, loc: Point, txt: &str) -> Result<()> {
             let mut buf = self.painted.lock().unwrap();
@@ -437,7 +438,9 @@ mod tests {
             Ok(())
         }
 
-        fn exit(&mut self, _code: i32) -> ! { unreachable!() }
+        fn exit(&mut self, _code: i32) -> ! {
+            unreachable!()
+        }
     }
 
     #[test]
@@ -453,7 +456,10 @@ mod tests {
         #[derive_commands]
         impl Block {
             fn new(w: u16) -> Self {
-                Block { state: NodeState::default(), text: Text::new(SAMPLE).with_fixed_width(w) }
+                Block {
+                    state: NodeState::default(),
+                    text: Text::new(SAMPLE).with_fixed_width(w),
+                }
             }
         }
 
@@ -465,7 +471,10 @@ mod tests {
                 let vp = self.vp();
                 l.place(&mut self.text, vp, Rect::new(0, 0, s.w, s.h))?;
                 let vp = self.text.vp();
-                let sz = Expanse { w: vp.canvas.w, h: vp.canvas.h };
+                let sz = Expanse {
+                    w: vp.canvas.w,
+                    h: vp.canvas.h,
+                };
                 l.size(self, sz, sz)?;
                 Ok(())
             }
@@ -541,7 +550,10 @@ mod tests {
         #[derive_commands]
         impl Block {
             fn new(w: u16) -> Self {
-                Block { state: NodeState::default(), text: Text::new(SAMPLE).with_fixed_width(w) }
+                Block {
+                    state: NodeState::default(),
+                    text: Text::new(SAMPLE).with_fixed_width(w),
+                }
             }
         }
 
@@ -553,7 +565,10 @@ mod tests {
                 let vp = self.vp();
                 l.place(&mut self.text, vp, Rect::new(0, 0, s.w, s.h))?;
                 let vp = self.text.vp();
-                let sz = Expanse { w: vp.canvas.w, h: vp.canvas.h };
+                let sz = Expanse {
+                    w: vp.canvas.w,
+                    h: vp.canvas.h,
+                };
                 l.size(self, sz, sz)?;
                 Ok(())
             }
@@ -646,7 +661,10 @@ mod tests {
         #[derive_commands]
         impl Block {
             fn new(w: u16) -> Self {
-                Block { state: NodeState::default(), text: Text::new(SAMPLE).with_fixed_width(w) }
+                Block {
+                    state: NodeState::default(),
+                    text: Text::new(SAMPLE).with_fixed_width(w),
+                }
             }
         }
 
@@ -658,7 +676,10 @@ mod tests {
                 let vp = self.vp();
                 l.place(&mut self.text, vp, Rect::new(0, 0, s.w, s.h))?;
                 let vp = self.text.vp();
-                let sz = Expanse { w: vp.canvas.w, h: vp.canvas.h };
+                let sz = Expanse {
+                    w: vp.canvas.w,
+                    h: vp.canvas.h,
+                };
                 l.size(self, sz, sz)?;
                 Ok(())
             }
@@ -724,4 +745,116 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn list_inside_frame_renders() -> Result<()> {
+        #[derive(StatefulNode)]
+        struct Block {
+            state: NodeState,
+            text: Text,
+        }
+
+        #[derive_commands]
+        impl Block {
+            fn new(t: &str) -> Self {
+                Block {
+                    state: NodeState::default(),
+                    text: Text::new(t).with_fixed_width(t.len() as u16),
+                }
+            }
+        }
+
+        impl ListItem for Block {}
+
+        impl Node for Block {
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                // Mirrors the listgym example block layout
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                l.place(
+                    &mut self.text,
+                    vp,
+                    Rect::new(2, 0, sz.w.saturating_sub(2), sz.h),
+                )?;
+                let vp = self.text.vp();
+                let sz = Expanse {
+                    w: vp.canvas.w + 2,
+                    h: vp.canvas.h,
+                };
+                l.size(self, sz, sz)?;
+                Ok(())
+            }
+
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.text)
+            }
+        }
+
+        #[derive(StatefulNode)]
+        struct Status {
+            state: NodeState,
+        }
+
+        #[derive_commands]
+        impl Status {}
+
+        impl Node for Status {
+            fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
+                r.text("", self.vp().view.line(0), "status")
+            }
+        }
+
+        #[derive(StatefulNode)]
+        struct Root {
+            state: NodeState,
+            list: frame::Frame<List<Block>>,
+            status: Status,
+        }
+
+        #[derive_commands]
+        impl Root {
+            fn new() -> Self {
+                Root {
+                    state: NodeState::default(),
+                    list: frame::Frame::new(List::new(vec![
+                        Block::new("AAAA"),
+                        Block::new("BBBB"),
+                    ])),
+                    status: Status {
+                        state: NodeState::default(),
+                    },
+                }
+            }
+        }
+
+        impl Node for Root {
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.status)?;
+                f(&mut self.list)
+            }
+
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                let (top, bottom) = vp.screen_rect().carve_vend(1);
+                l.place(&mut self.list, vp, top)?;
+                l.place(&mut self.status, vp, bottom)?;
+                Ok(())
+            }
+        }
+
+        let size = Expanse::new(15, 4);
+        let (buf, mut cr) = CanvasRender::create(size);
+        let mut canopy = Canopy::new();
+        let mut root = Root::new();
+
+        canopy.set_root_size(size, &mut root)?;
+        canopy.render(&mut cr, &mut root)?;
+
+        let canvas = buf.lock().unwrap();
+        assert_eq!(canvas.cells[1][3], 'A');
+        assert!(canvas.painted[1][3]);
+        assert_eq!(canvas.cells[0][0], '┌');
+
+        Ok(())
+    }
 }

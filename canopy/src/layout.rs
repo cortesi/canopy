@@ -19,6 +19,10 @@ impl Layout {
     /// Frame a single child node. First, we calculate the inner size after subtracting the frame. We then fit the child
     /// into this inner size, and project it appropriately in the parent view.
     pub fn frame(&self, child: &mut dyn Node, sz: Expanse, border: u16) -> Result<Frame> {
+        child.__vp_mut().position = crate::geom::Point {
+            x: border,
+            y: border,
+        };
         child.layout(
             self,
             Expanse {
@@ -26,10 +30,6 @@ impl Layout {
                 h: sz.h.saturating_sub(border * 2),
             },
         )?;
-        child.__vp_mut().position = crate::geom::Point {
-            x: border,
-            y: border,
-        };
         Ok(crate::geom::Frame::new(sz.rect(), border))
     }
 
@@ -43,9 +43,7 @@ impl Layout {
 
     /// Place a child in a given sub-rectangle of a parent's view.
     pub fn place(&self, child: &mut dyn Node, parent_vp: ViewPort, loc: Rect) -> Result<()> {
-        child.__vp_mut().position = parent_vp
-            .position
-            .scroll(loc.tl.x as i16, loc.tl.y as i16);
+        child.__vp_mut().position = parent_vp.position.scroll(loc.tl.x as i16, loc.tl.y as i16);
         child.layout(self, loc.expanse())?;
         child.__vp_mut().constrain(parent_vp);
         Ok(())
@@ -134,8 +132,7 @@ mod tests {
         self as canopy,
         geom::{Expanse, Frame, Point, Rect},
         tutils::TFixed,
-        *,
-        Canopy, Context, Node, NodeState, Render, StatefulNode,
+        Canopy, Context, Node, NodeState, Render, StatefulNode, *,
     };
 
     #[test]
