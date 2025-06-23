@@ -120,6 +120,12 @@ mod tests {
         fn new(horizontal: bool) -> Self {
             Block { state: NodeState::default(), children: vec![], horizontal }
         }
+
+        /// Split this block into two children, toggling orientation like the
+        /// `focusgym` example.
+        fn split(&mut self) {
+            self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
+        }
     }
 
     impl Node for Block {
@@ -171,6 +177,88 @@ mod tests {
         canopy.set_root_size(Expanse::new(20, 10), &mut root)?;
         canopy.render(&mut tr, &mut root)?;
         assert!(!tr.buf_empty());
+        Ok(())
+    }
+
+    fn gather_leaves<'a>(b: &'a Block, out: &mut Vec<&'a Block>) {
+        if b.children.is_empty() {
+            out.push(b);
+        } else {
+            for c in &b.children {
+                gather_leaves(c, out);
+            }
+        }
+    }
+
+    fn expected_rects(b: &Block, area: Rect) -> Result<Vec<Rect>> {
+        if b.children.is_empty() {
+            return Ok(vec![area]);
+        }
+        let vps = if b.horizontal {
+            area.split_horizontal(b.children.len() as u16)?
+        } else {
+            area.split_vertical(b.children.len() as u16)?
+        };
+        let mut ret = Vec::new();
+        for (child, rect) in b.children.iter().zip(vps.into_iter()) {
+            ret.extend(expected_rects(child, rect)?);
+        }
+        Ok(ret)
+    }
+
+    #[test]
+    fn focusgym_layout() -> Result<()> {
+        let mut canopy = Canopy::new();
+        let mut root = Block {
+            state: NodeState::default(),
+            children: vec![Block::new(false), Block::new(false)],
+            horizontal: true,
+        };
+        let l = Layout {};
+
+        canopy.set_root_size(Expanse::new(20, 10), &mut root)?;
+
+        // Split the right-hand block, then split its bottom block
+        root.children[1].split();
+        root.children[1].children[1].split();
+
+        root.layout(&l, Expanse::new(20, 10))?;
+
+        let mut leaves = Vec::new();
+        gather_leaves(&root, &mut leaves);
+        let expect = expected_rects(&root, root.vp().screen_rect())?;
+
+        let got: Vec<Rect> = leaves.iter().map(|b| b.vp().screen_rect()).collect();
+        assert_eq!(got, expect);
+
+        Ok(())
+    }
+
+    #[test]
+    fn focusgym_split_top_right() -> Result<()> {
+        let mut canopy = Canopy::new();
+        let mut root = Block {
+            state: NodeState::default(),
+            children: vec![Block::new(false), Block::new(false)],
+            horizontal: true,
+        };
+        let l = Layout {};
+
+        canopy.set_root_size(Expanse::new(20, 10), &mut root)?;
+
+        // Split the right-hand block, then split its top block
+        root.children[1].split();
+        root.children[1].children[0].split();
+
+        root.layout(&l, Expanse::new(20, 10))?;
+
+        let mut leaves = Vec::new();
+        gather_leaves(&root, &mut leaves);
+        let expect = expected_rects(&root, root.vp().screen_rect())?;
+
+        let got: Vec<Rect> = leaves.iter().map(|b| b.vp().screen_rect()).collect();
+        assert_eq!(got, expect);
+
         Ok(())
     }
 }
