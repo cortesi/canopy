@@ -115,13 +115,14 @@
 <a href=#115 id=115 data-nosnippet>115</a>    </span>}
 <a href=#116 id=116 data-nosnippet>116</a>
 <a href=#117 id=117 data-nosnippet>117</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l: <span class="kw-2">&amp;</span>Layout, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#118 id=118 data-nosnippet>118</a>        l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.view, sz.rect())<span class="question-mark">?</span>;
-<a href=#119 id=119 data-nosnippet>119</a>        <span class="kw">let </span>vp = <span class="self">self</span>.view.vp();
-<a href=#120 id=120 data-nosnippet>120</a>        l.wrap(<span class="self">self</span>, vp)<span class="question-mark">?</span>;
-<a href=#121 id=121 data-nosnippet>121</a>        <span class="prelude-val">Ok</span>(())
-<a href=#122 id=122 data-nosnippet>122</a>    }
-<a href=#123 id=123 data-nosnippet>123</a>
-<a href=#124 id=124 data-nosnippet>124</a>    <span class="kw">fn </span>children(<span class="kw-2">&amp;mut </span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>FnMut(<span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#125 id=125 data-nosnippet>125</a>        f(<span class="kw-2">&amp;mut </span><span class="self">self</span>.view)
-<a href=#126 id=126 data-nosnippet>126</a>    }
-<a href=#127 id=127 data-nosnippet>127</a>}</code></pre></div></section></main></body></html>
+<a href=#118 id=118 data-nosnippet>118</a>        <span class="kw">let </span>vp = <span class="self">self</span>.vp();
+<a href=#119 id=119 data-nosnippet>119</a>        l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.view, vp, sz.rect())<span class="question-mark">?</span>;
+<a href=#120 id=120 data-nosnippet>120</a>        <span class="kw">let </span>vp = <span class="self">self</span>.view.vp();
+<a href=#121 id=121 data-nosnippet>121</a>        l.wrap(<span class="self">self</span>, vp)<span class="question-mark">?</span>;
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="prelude-val">Ok</span>(())
+<a href=#123 id=123 data-nosnippet>123</a>    }
+<a href=#124 id=124 data-nosnippet>124</a>
+<a href=#125 id=125 data-nosnippet>125</a>    <span class="kw">fn </span>children(<span class="kw-2">&amp;mut </span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>FnMut(<span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#126 id=126 data-nosnippet>126</a>        f(<span class="kw-2">&amp;mut </span><span class="self">self</span>.view)
+<a href=#127 id=127 data-nosnippet>127</a>    }
+<a href=#128 id=128 data-nosnippet>128</a>}</code></pre></div></section></main></body></html>

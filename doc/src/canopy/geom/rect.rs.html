@@ -181,8 +181,8 @@
 <a href=#181 id=181 data-nosnippet>181</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(Error::Geometry(<span class="string">"rebase of non-contained point"</span>.into()));
 <a href=#182 id=182 data-nosnippet>182</a>        }
 <a href=#183 id=183 data-nosnippet>183</a>        <span class="prelude-val">Ok</span>(Point {
-<a href=#184 id=184 data-nosnippet>184</a>            x: pt.x - <span class="self">self</span>.tl.x,
-<a href=#185 id=185 data-nosnippet>185</a>            y: pt.y - <span class="self">self</span>.tl.y,
+<a href=#184 id=184 data-nosnippet>184</a>            x: pt.x.saturating_sub(<span class="self">self</span>.tl.x),
+<a href=#185 id=185 data-nosnippet>185</a>            y: pt.y.saturating_sub(<span class="self">self</span>.tl.y),
 <a href=#186 id=186 data-nosnippet>186</a>        })
 <a href=#187 id=187 data-nosnippet>187</a>    }
 <a href=#188 id=188 data-nosnippet>188</a>

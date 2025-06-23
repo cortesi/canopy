@@ -12,25 +12,26 @@
 <a href=#12 id=12 data-nosnippet>12</a>
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">impl </span>Node <span class="kw">for </span>View {
 <a href=#14 id=14 data-nosnippet>14</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l: <span class="kw-2">&amp;</span>Layout, <span class="kw">_</span>: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#15 id=15 data-nosnippet>15</a>        <span class="kw">let </span>(a, b) = <span class="self">self</span>.vp().view.carve_vstart(<span class="number">1</span>);
-<a href=#16 id=16 data-nosnippet>16</a>        l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.tabs, a)<span class="question-mark">?</span>;
-<a href=#17 id=17 data-nosnippet>17</a>        l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.logs, b)<span class="question-mark">?</span>;
-<a href=#18 id=18 data-nosnippet>18</a>        <span class="prelude-val">Ok</span>(())
-<a href=#19 id=19 data-nosnippet>19</a>    }
-<a href=#20 id=20 data-nosnippet>20</a>
-<a href=#21 id=21 data-nosnippet>21</a>    <span class="kw">fn </span>children(<span class="kw-2">&amp;mut </span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>FnMut(<span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#22 id=22 data-nosnippet>22</a>        f(<span class="kw-2">&amp;mut </span><span class="self">self</span>.tabs)<span class="question-mark">?</span>;
-<a href=#23 id=23 data-nosnippet>23</a>        f(<span class="kw-2">&amp;mut </span><span class="self">self</span>.logs)
-<a href=#24 id=24 data-nosnippet>24</a>    }
-<a href=#25 id=25 data-nosnippet>25</a>}
-<a href=#26 id=26 data-nosnippet>26</a>
-<a href=#27 id=27 data-nosnippet>27</a><span class="attr">#[derive_commands]
-<a href=#28 id=28 data-nosnippet>28</a></span><span class="kw">impl </span>View {
-<a href=#29 id=29 data-nosnippet>29</a>    <span class="kw">pub fn </span>new() -&gt; <span class="self">Self </span>{
-<a href=#30 id=30 data-nosnippet>30</a>        View {
-<a href=#31 id=31 data-nosnippet>31</a>            state: NodeState::default(),
-<a href=#32 id=32 data-nosnippet>32</a>            tabs: tabs::Tabs::new(<span class="macro">vec!</span>[<span class="string">"Stats"</span>.into(), <span class="string">"Logs"</span>.into()]),
-<a href=#33 id=33 data-nosnippet>33</a>            logs: Logs::new(),
-<a href=#34 id=34 data-nosnippet>34</a>        }
-<a href=#35 id=35 data-nosnippet>35</a>    }
-<a href=#36 id=36 data-nosnippet>36</a>}</code></pre></div></section></main></body></html>
+<a href=#15 id=15 data-nosnippet>15</a>        <span class="kw">let </span>vp = <span class="self">self</span>.vp();
+<a href=#16 id=16 data-nosnippet>16</a>        <span class="kw">let </span>(a, b) = vp.view.carve_vstart(<span class="number">1</span>);
+<a href=#17 id=17 data-nosnippet>17</a>        l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.tabs, vp, a)<span class="question-mark">?</span>;
+<a href=#18 id=18 data-nosnippet>18</a>        l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.logs, vp, b)<span class="question-mark">?</span>;
+<a href=#19 id=19 data-nosnippet>19</a>        <span class="prelude-val">Ok</span>(())
+<a href=#20 id=20 data-nosnippet>20</a>    }
+<a href=#21 id=21 data-nosnippet>21</a>
+<a href=#22 id=22 data-nosnippet>22</a>    <span class="kw">fn </span>children(<span class="kw-2">&amp;mut </span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>FnMut(<span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#23 id=23 data-nosnippet>23</a>        f(<span class="kw-2">&amp;mut </span><span class="self">self</span>.tabs)<span class="question-mark">?</span>;
+<a href=#24 id=24 data-nosnippet>24</a>        f(<span class="kw-2">&amp;mut </span><span class="self">self</span>.logs)
+<a href=#25 id=25 data-nosnippet>25</a>    }
+<a href=#26 id=26 data-nosnippet>26</a>}
+<a href=#27 id=27 data-nosnippet>27</a>
+<a href=#28 id=28 data-nosnippet>28</a><span class="attr">#[derive_commands]
+<a href=#29 id=29 data-nosnippet>29</a></span><span class="kw">impl </span>View {
+<a href=#30 id=30 data-nosnippet>30</a>    <span class="kw">pub fn </span>new() -&gt; <span class="self">Self </span>{
+<a href=#31 id=31 data-nosnippet>31</a>        View {
+<a href=#32 id=32 data-nosnippet>32</a>            state: NodeState::default(),
+<a href=#33 id=33 data-nosnippet>33</a>            tabs: tabs::Tabs::new(<span class="macro">vec!</span>[<span class="string">"Stats"</span>.into(), <span class="string">"Logs"</span>.into()]),
+<a href=#34 id=34 data-nosnippet>34</a>            logs: Logs::new(),
+<a href=#35 id=35 data-nosnippet>35</a>        }
+<a href=#36 id=36 data-nosnippet>36</a>    }
+<a href=#37 id=37 data-nosnippet>37</a>}</code></pre></div></section></main></body></html>

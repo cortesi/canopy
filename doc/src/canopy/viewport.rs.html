@@ -256,7 +256,7 @@
 <a href=#256 id=256 data-nosnippet>256</a>            <span class="kw">let </span>region = view_in_parent.rebase_rect(<span class="kw-2">&amp;</span>overlap).ok()<span class="question-mark">?</span>;
 <a href=#257 id=257 data-nosnippet>257</a>            <span class="comment">// Now, to calculate the screen offset, we take the relative position in the parent's projection, then add
 <a href=#258 id=258 data-nosnippet>258</a>            // that to the screen offset.
-<a href=#259 id=259 data-nosnippet>259</a>            </span><span class="kw">let </span>p = parent_projection.region.rebase_point(region.tl).ok()<span class="question-mark">?</span>;
+<a href=#259 id=259 data-nosnippet>259</a>            </span><span class="kw">let </span>p = parent_projection.region.rebase_point(overlap.tl).ok()<span class="question-mark">?</span>;
 <a href=#260 id=260 data-nosnippet>260</a>            <span class="prelude-val">Some</span>(Projection::new(
 <a href=#261 id=261 data-nosnippet>261</a>                region,
 <a href=#262 id=262 data-nosnippet>262</a>                (
@@ -315,7 +315,7 @@
 <a href=#315 id=315 data-nosnippet>315</a>        </span><span class="kw">let </span>v = ViewPort::new((<span class="number">30</span>, <span class="number">30</span>), (<span class="number">10</span>, <span class="number">10</span>, <span class="number">10</span>, <span class="number">10</span>), (<span class="number">5</span>, <span class="number">5</span>))<span class="question-mark">?</span>;
 <a href=#316 id=316 data-nosnippet>316</a>        <span class="macro">assert_eq!</span>(
 <a href=#317 id=317 data-nosnippet>317</a>            v.projection(Projection::new((<span class="number">10</span>, <span class="number">10</span>, <span class="number">10</span>, <span class="number">10</span>), (<span class="number">0</span>, <span class="number">0</span>))),
-<a href=#318 id=318 data-nosnippet>318</a>            <span class="prelude-val">Some</span>(Projection::new((<span class="number">0</span>, <span class="number">0</span>, <span class="number">30</span>, <span class="number">30</span>), (<span class="number">10</span>, <span class="number">10</span>))),
+<a href=#318 id=318 data-nosnippet>318</a>            <span class="prelude-val">Some</span>(Projection::new((<span class="number">5</span>, <span class="number">5</span>, <span class="number">5</span>, <span class="number">5</span>), (<span class="number">0</span>, <span class="number">0</span>))),
 <a href=#319 id=319 data-nosnippet>319</a>        );
 <a href=#320 id=320 data-nosnippet>320</a>
 <a href=#321 id=321 data-nosnippet>321</a>        <span class="prelude-val">Ok</span>(())

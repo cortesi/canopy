@@ -101,49 +101,50 @@
 <a href=#101 id=101 data-nosnippet>101</a>    }
 <a href=#102 id=102 data-nosnippet>102</a>
 <a href=#103 id=103 data-nosnippet>103</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l: <span class="kw-2">&amp;</span>Layout, <span class="kw">_</span>: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#104 id=104 data-nosnippet>104</a>        <span class="kw">let </span>lst = <span class="self">self</span>.vp().screen_rect().split_panes(<span class="kw-2">&amp;</span><span class="self">self</span>.shape())<span class="question-mark">?</span>;
-<a href=#105 id=105 data-nosnippet>105</a>        <span class="kw">for </span>(ci, col) <span class="kw">in </span><span class="self">self</span>.children.iter_mut().enumerate() {
-<a href=#106 id=106 data-nosnippet>106</a>            <span class="kw">for </span>(ri, row) <span class="kw">in </span>col.iter_mut().enumerate() {
-<a href=#107 id=107 data-nosnippet>107</a>                l.place(row, lst[ci][ri])<span class="question-mark">?</span>;
-<a href=#108 id=108 data-nosnippet>108</a>            }
-<a href=#109 id=109 data-nosnippet>109</a>        }
-<a href=#110 id=110 data-nosnippet>110</a>        <span class="prelude-val">Ok</span>(())
-<a href=#111 id=111 data-nosnippet>111</a>    }
-<a href=#112 id=112 data-nosnippet>112</a>}
-<a href=#113 id=113 data-nosnippet>113</a>
-<a href=#114 id=114 data-nosnippet>114</a><span class="attr">#[cfg(test)]
-<a href=#115 id=115 data-nosnippet>115</a></span><span class="kw">mod </span>tests {
-<a href=#116 id=116 data-nosnippet>116</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#117 id=117 data-nosnippet>117</a>    <span class="kw">use </span><span class="kw">crate</span>::tutils::<span class="kw-2">*</span>;
-<a href=#118 id=118 data-nosnippet>118</a>
-<a href=#119 id=119 data-nosnippet>119</a>    <span class="attr">#[test]
-<a href=#120 id=120 data-nosnippet>120</a>    </span><span class="kw">fn </span>tlayout() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#121 id=121 data-nosnippet>121</a>        <span class="kw">let </span><span class="kw-2">mut </span>c = Canopy::new();
-<a href=#122 id=122 data-nosnippet>122</a>        <span class="kw">let </span>tn = Ba::new();
-<a href=#123 id=123 data-nosnippet>123</a>        <span class="kw">let </span><span class="kw-2">mut </span>p: Panes&lt;Ba&gt; = Panes::new(tn);
-<a href=#124 id=124 data-nosnippet>124</a>        <span class="kw">let </span>l = Layout {};
-<a href=#125 id=125 data-nosnippet>125</a>        <span class="kw">let </span>e = Expanse { w: <span class="number">100</span>, h: <span class="number">100 </span>};
-<a href=#126 id=126 data-nosnippet>126</a>
-<a href=#127 id=127 data-nosnippet>127</a>        p.layout(<span class="kw-2">&amp;</span>l, e)<span class="question-mark">?</span>;
-<a href=#128 id=128 data-nosnippet>128</a>
-<a href=#129 id=129 data-nosnippet>129</a>        <span class="macro">assert_eq!</span>(p.shape(), <span class="macro">vec!</span>[<span class="number">1</span>]);
-<a href=#130 id=130 data-nosnippet>130</a>        <span class="kw">let </span>tn = Ba::new();
-<a href=#131 id=131 data-nosnippet>131</a>        p.insert_col(<span class="kw-2">&amp;mut </span>c, tn)<span class="question-mark">?</span>;
-<a href=#132 id=132 data-nosnippet>132</a>        p.layout(<span class="kw-2">&amp;</span>l, e)<span class="question-mark">?</span>;
-<a href=#133 id=133 data-nosnippet>133</a>
-<a href=#134 id=134 data-nosnippet>134</a>        <span class="macro">assert_eq!</span>(p.shape(), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">1</span>]);
-<a href=#135 id=135 data-nosnippet>135</a>        c.set_focus(<span class="kw-2">&amp;mut </span>p.children[<span class="number">0</span>][<span class="number">0</span>].a);
-<a href=#136 id=136 data-nosnippet>136</a>        p.layout(<span class="kw-2">&amp;</span>l, e)<span class="question-mark">?</span>;
-<a href=#137 id=137 data-nosnippet>137</a>
-<a href=#138 id=138 data-nosnippet>138</a>        <span class="kw">let </span>tn = Ba::new();
-<a href=#139 id=139 data-nosnippet>139</a>        <span class="macro">assert_eq!</span>(p.focus_coords(<span class="kw-2">&amp;</span>c), <span class="prelude-val">Some</span>((<span class="number">0</span>, <span class="number">0</span>)));
-<a href=#140 id=140 data-nosnippet>140</a>        p.insert_row(<span class="kw-2">&amp;mut </span>c, tn);
-<a href=#141 id=141 data-nosnippet>141</a>        p.layout(<span class="kw-2">&amp;</span>l, e)<span class="question-mark">?</span>;
-<a href=#142 id=142 data-nosnippet>142</a>
-<a href=#143 id=143 data-nosnippet>143</a>        <span class="macro">assert_eq!</span>(p.shape(), <span class="macro">vec!</span>[<span class="number">2</span>, <span class="number">1</span>]);
-<a href=#144 id=144 data-nosnippet>144</a>
-<a href=#145 id=145 data-nosnippet>145</a>        c.set_focus(<span class="kw-2">&amp;mut </span>p.children[<span class="number">1</span>][<span class="number">0</span>].a);
-<a href=#146 id=146 data-nosnippet>146</a>        <span class="macro">assert_eq!</span>(p.focus_coords(<span class="kw-2">&amp;</span>c), <span class="prelude-val">Some</span>((<span class="number">1</span>, <span class="number">0</span>)));
-<a href=#147 id=147 data-nosnippet>147</a>        <span class="prelude-val">Ok</span>(())
-<a href=#148 id=148 data-nosnippet>148</a>    }
-<a href=#149 id=149 data-nosnippet>149</a>}</code></pre></div></section></main></body></html>
+<a href=#104 id=104 data-nosnippet>104</a>        <span class="kw">let </span>vp = <span class="self">self</span>.vp();
+<a href=#105 id=105 data-nosnippet>105</a>        <span class="kw">let </span>lst = vp.screen_rect().split_panes(<span class="kw-2">&amp;</span><span class="self">self</span>.shape())<span class="question-mark">?</span>;
+<a href=#106 id=106 data-nosnippet>106</a>        <span class="kw">for </span>(ci, col) <span class="kw">in </span><span class="self">self</span>.children.iter_mut().enumerate() {
+<a href=#107 id=107 data-nosnippet>107</a>            <span class="kw">for </span>(ri, row) <span class="kw">in </span>col.iter_mut().enumerate() {
+<a href=#108 id=108 data-nosnippet>108</a>                l.place(row, vp, lst[ci][ri])<span class="question-mark">?</span>;
+<a href=#109 id=109 data-nosnippet>109</a>            }
+<a href=#110 id=110 data-nosnippet>110</a>        }
+<a href=#111 id=111 data-nosnippet>111</a>        <span class="prelude-val">Ok</span>(())
+<a href=#112 id=112 data-nosnippet>112</a>    }
+<a href=#113 id=113 data-nosnippet>113</a>}
+<a href=#114 id=114 data-nosnippet>114</a>
+<a href=#115 id=115 data-nosnippet>115</a><span class="attr">#[cfg(test)]
+<a href=#116 id=116 data-nosnippet>116</a></span><span class="kw">mod </span>tests {
+<a href=#117 id=117 data-nosnippet>117</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#118 id=118 data-nosnippet>118</a>    <span class="kw">use </span><span class="kw">crate</span>::tutils::<span class="kw-2">*</span>;
+<a href=#119 id=119 data-nosnippet>119</a>
+<a href=#120 id=120 data-nosnippet>120</a>    <span class="attr">#[test]
+<a href=#121 id=121 data-nosnippet>121</a>    </span><span class="kw">fn </span>tlayout() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="kw">let </span><span class="kw-2">mut </span>c = Canopy::new();
+<a href=#123 id=123 data-nosnippet>123</a>        <span class="kw">let </span>tn = Ba::new();
+<a href=#124 id=124 data-nosnippet>124</a>        <span class="kw">let </span><span class="kw-2">mut </span>p: Panes&lt;Ba&gt; = Panes::new(tn);
+<a href=#125 id=125 data-nosnippet>125</a>        <span class="kw">let </span>l = Layout {};
+<a href=#126 id=126 data-nosnippet>126</a>        <span class="kw">let </span>e = Expanse { w: <span class="number">100</span>, h: <span class="number">100 </span>};
+<a href=#127 id=127 data-nosnippet>127</a>
+<a href=#128 id=128 data-nosnippet>128</a>        p.layout(<span class="kw-2">&amp;</span>l, e)<span class="question-mark">?</span>;
+<a href=#129 id=129 data-nosnippet>129</a>
+<a href=#130 id=130 data-nosnippet>130</a>        <span class="macro">assert_eq!</span>(p.shape(), <span class="macro">vec!</span>[<span class="number">1</span>]);
+<a href=#131 id=131 data-nosnippet>131</a>        <span class="kw">let </span>tn = Ba::new();
+<a href=#132 id=132 data-nosnippet>132</a>        p.insert_col(<span class="kw-2">&amp;mut </span>c, tn)<span class="question-mark">?</span>;
+<a href=#133 id=133 data-nosnippet>133</a>        p.layout(<span class="kw-2">&amp;</span>l, e)<span class="question-mark">?</span>;
+<a href=#134 id=134 data-nosnippet>134</a>
+<a href=#135 id=135 data-nosnippet>135</a>        <span class="macro">assert_eq!</span>(p.shape(), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">1</span>]);
+<a href=#136 id=136 data-nosnippet>136</a>        c.set_focus(<span class="kw-2">&amp;mut </span>p.children[<span class="number">0</span>][<span class="number">0</span>].a);
+<a href=#137 id=137 data-nosnippet>137</a>        p.layout(<span class="kw-2">&amp;</span>l, e)<span class="question-mark">?</span>;
+<a href=#138 id=138 data-nosnippet>138</a>
+<a href=#139 id=139 data-nosnippet>139</a>        <span class="kw">let </span>tn = Ba::new();
+<a href=#140 id=140 data-nosnippet>140</a>        <span class="macro">assert_eq!</span>(p.focus_coords(<span class="kw-2">&amp;</span>c), <span class="prelude-val">Some</span>((<span class="number">0</span>, <span class="number">0</span>)));
+<a href=#141 id=141 data-nosnippet>141</a>        p.insert_row(<span class="kw-2">&amp;mut </span>c, tn);
+<a href=#142 id=142 data-nosnippet>142</a>        p.layout(<span class="kw-2">&amp;</span>l, e)<span class="question-mark">?</span>;
+<a href=#143 id=143 data-nosnippet>143</a>
+<a href=#144 id=144 data-nosnippet>144</a>        <span class="macro">assert_eq!</span>(p.shape(), <span class="macro">vec!</span>[<span class="number">2</span>, <span class="number">1</span>]);
+<a href=#145 id=145 data-nosnippet>145</a>
+<a href=#146 id=146 data-nosnippet>146</a>        c.set_focus(<span class="kw-2">&amp;mut </span>p.children[<span class="number">1</span>][<span class="number">0</span>].a);
+<a href=#147 id=147 data-nosnippet>147</a>        <span class="macro">assert_eq!</span>(p.focus_coords(<span class="kw-2">&amp;</span>c), <span class="prelude-val">Some</span>((<span class="number">1</span>, <span class="number">0</span>)));
+<a href=#148 id=148 data-nosnippet>148</a>        <span class="prelude-val">Ok</span>(())
+<a href=#149 id=149 data-nosnippet>149</a>    }
+<a href=#150 id=150 data-nosnippet>150</a>}</code></pre></div></section></main></body></html>
