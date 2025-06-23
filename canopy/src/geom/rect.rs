@@ -419,7 +419,7 @@ impl Rect {
                         x: isec.tl.x,
                         y: isec.tl.y + isec.h,
                     },
-                    h: (self.tl.x + self.h).saturating_sub(isec.tl.y + isec.h),
+                    h: (self.tl.y + self.h).saturating_sub(isec.tl.y + isec.h),
                     w: isec.w,
                 },
             ];
