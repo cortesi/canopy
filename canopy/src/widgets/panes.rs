@@ -117,6 +117,7 @@ impl<N: Node> Node for Panes<N> {
 mod tests {
     use super::*;
     use crate::tutils::*;
+    use crate::geom::Rect;
 
     #[test]
     fn tlayout() -> Result<()> {
@@ -153,6 +154,50 @@ mod tests {
     struct Root {
         state: NodeState,
         panes: Panes<TFixed>,
+    }
+
+    #[derive(StatefulNode)]
+    struct RootFill {
+        state: NodeState,
+        panes: Panes<Fill>,
+    }
+
+    #[derive(StatefulNode)]
+    struct Fill {
+        state: NodeState,
+    }
+
+    #[derive_commands]
+    impl Fill {}
+
+    impl Node for Fill {
+        fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+            l.fill(self, sz)
+        }
+    }
+
+    #[derive_commands]
+    impl RootFill {
+        fn new() -> Self {
+            RootFill {
+                state: NodeState::default(),
+                panes: Panes::new(Fill { state: NodeState::default() }),
+            }
+        }
+    }
+
+    impl Node for RootFill {
+        fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+            f(&mut self.panes)
+        }
+
+        fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+            l.fill(self, sz)?;
+            let vp = self.vp();
+            let parts = vp.view.split_horizontal(2)?;
+            l.place(&mut self.panes, vp, parts[1])?;
+            Ok(())
+        }
     }
 
     #[derive_commands]
@@ -192,6 +237,34 @@ mod tests {
         assert_eq!(root.panes.children.len(), 2);
         assert_eq!(root.panes.children[0][0].vp().position.x, 10);
         assert_eq!(root.panes.children[1][0].vp().position.x, 15);
+        Ok(())
+    }
+
+    #[test]
+    fn tlayout_tiling() -> Result<()> {
+        let mut c = Canopy::new();
+        let mut root = RootFill::new();
+        let l = Layout {};
+
+        c.set_root_size(Expanse::new(20, 10), &mut root)?;
+        root.panes.insert_col(&mut c, Fill { state: NodeState::default() })?;
+        c.set_focus(&mut root.panes.children[0][0]);
+        root.panes.insert_row(&mut c, Fill { state: NodeState::default() });
+        c.set_focus(&mut root.panes.children[1][0]);
+        root.panes.insert_row(&mut c, Fill { state: NodeState::default() });
+        root.layout(&l, Expanse::new(20, 10))?;
+
+        let expect = [
+            Rect::new(10, 0, 5, 5),
+            Rect::new(10, 5, 5, 5),
+            Rect::new(15, 0, 5, 5),
+            Rect::new(15, 5, 5, 5),
+        ];
+
+        assert_eq!(root.panes.children[0][0].vp().screen_rect(), expect[0]);
+        assert_eq!(root.panes.children[0][1].vp().screen_rect(), expect[1]);
+        assert_eq!(root.panes.children[1][0].vp().screen_rect(), expect[2]);
+        assert_eq!(root.panes.children[1][1].vp().screen_rect(), expect[3]);
         Ok(())
     }
 }
