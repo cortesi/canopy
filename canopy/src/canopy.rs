@@ -602,8 +602,7 @@ impl Canopy {
             if n.state().render_gen == 0 {
                 n.state_mut().render_gen = self.render_gen;
             }
-            let proj = n.vp().position;
-            n.children(&mut |x| self.render_traversal(r, styl, x, base + proj))?;
+            n.children(&mut |x| self.render_traversal(r, styl, x, base))?;
             styl.pop();
         }
         Ok(())
@@ -626,13 +625,8 @@ impl Canopy {
                 Walk::Continue
             })
         })?;
-        if let Some((nid, vp, c)) = cn {
-            let mut base = Point { x: 0, y: 0 };
-            walk_to_root(root, &nid, &mut |x| {
-                base = base + x.vp().position;
-                Ok(())
-            })?;
-            show_cursor(r, &self.style, styl, vp, "cursor", c + base)?;
+        if let Some((_nid, vp, c)) = cn {
+            show_cursor(r, &self.style, styl, vp, "cursor", c + vp.position)?;
         }
 
         Ok(())

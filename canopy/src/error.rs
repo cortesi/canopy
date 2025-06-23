@@ -4,6 +4,8 @@ use std::{
 };
 
 use crate::backend::test::TestBuf;
+#[cfg(test)]
+use crate::backend::test::CanvasBuf;
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -55,6 +57,13 @@ impl From<mpsc::RecvError> for Error {
 
 impl From<PoisonError<MutexGuard<'_, TestBuf>>> for Error {
     fn from(e: PoisonError<MutexGuard<'_, TestBuf>>) -> Self {
+        Error::RunLoop(e.to_string())
+    }
+}
+
+#[cfg(test)]
+impl From<PoisonError<MutexGuard<'_, CanvasBuf>>> for Error {
+    fn from(e: PoisonError<MutexGuard<'_, CanvasBuf>>) -> Self {
         Error::RunLoop(e.to_string())
     }
 }

@@ -5,6 +5,8 @@ use crate::{
     style::{Style, StyleManager},
     Canopy, Node, Result,
 };
+#[cfg(test)]
+use crate::geom::Expanse;
 use std::sync::{Arc, Mutex};
 
 /// A handle to a vector that contains the result of the render.
@@ -78,6 +80,86 @@ impl RenderBackend for TestRender {
         let txt = txt.trim();
         if !txt.is_empty() {
             self.text.lock()?.text.push(txt.trim().into());
+        }
+        Ok(())
+    }
+
+    fn exit(&mut self, _code: i32) -> ! {
+        unreachable!()
+    }
+}
+
+/// A simple in-memory canvas for verifying render placement in tests.
+#[cfg(test)]
+#[derive(Default)]
+pub struct CanvasBuf {
+    size: Expanse,
+    pub cells: Vec<Vec<char>>,
+}
+
+#[cfg(test)]
+impl CanvasBuf {
+    fn new(size: Expanse) -> Self {
+        CanvasBuf {
+            size,
+            cells: vec![vec![' '; size.w as usize]; size.h as usize],
+        }
+    }
+
+    fn clear(&mut self) {
+        for row in &mut self.cells {
+            for c in row.iter_mut() {
+                *c = ' ';
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+pub struct CanvasRender {
+    pub canvas: Arc<Mutex<CanvasBuf>>,
+}
+
+#[cfg(test)]
+impl CanvasRender {
+    pub fn create(size: Expanse) -> (Arc<Mutex<CanvasBuf>>, Self) {
+        let buf = Arc::new(Mutex::new(CanvasBuf::new(size)));
+        let buf2 = buf.clone();
+        (buf, CanvasRender { canvas: buf2 })
+    }
+}
+
+#[cfg(test)]
+impl RenderBackend for CanvasRender {
+    fn reset(&mut self) -> Result<()> {
+        self.canvas.lock()?.clear();
+        Ok(())
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn show_cursor(&mut self, _c: cursor::Cursor) -> Result<()> {
+        Ok(())
+    }
+
+    fn hide_cursor(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn style(&mut self, _s: Style) -> Result<()> {
+        Ok(())
+    }
+
+    fn text(&mut self, loc: Point, txt: &str) -> Result<()> {
+        let mut buf = self.canvas.lock()?;
+        for (i, ch) in txt.chars().enumerate() {
+            let x = loc.x as usize + i;
+            let y = loc.y as usize;
+            if x < buf.size.w as usize && y < buf.size.h as usize {
+                buf.cells[y][x] = ch;
+            }
         }
         Ok(())
     }
