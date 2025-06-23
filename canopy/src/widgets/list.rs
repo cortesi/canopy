@@ -724,4 +724,56 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn items_render_on_first_frame() -> Result<()> {
+        use crate::backend::test::CanvasRender;
+        use crate::widgets::{frame, text::Text};
+
+        #[derive(StatefulNode)]
+        struct Root {
+            state: NodeState,
+            list: frame::Frame<List<Text>>,
+        }
+
+        #[derive_commands]
+        impl Root {
+            fn new() -> Self {
+                Root {
+                    state: NodeState::default(),
+                    list: frame::Frame::new(List::new(vec![
+                        Text::new("AAAA").with_fixed_width(4),
+                        Text::new("BBBB").with_fixed_width(4),
+                    ])),
+                }
+            }
+        }
+
+        impl Node for Root {
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.list)
+            }
+
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                l.place(&mut self.list, vp, vp.view)?;
+                Ok(())
+            }
+        }
+
+        let size = Expanse::new(10, 4);
+        let (buf, mut cr) = CanvasRender::create(size);
+        let mut canopy = Canopy::new();
+        let mut root = Root::new();
+
+        canopy.set_root_size(size, &mut root)?;
+        canopy.render(&mut cr, &mut root)?;
+
+        let canvas = buf.lock().unwrap();
+        assert_eq!(canvas.cells[1][1], 'A');
+        assert_eq!(canvas.cells[2][1], 'B');
+
+        Ok(())
+    }
+
 }

@@ -396,7 +396,6 @@ where
     };
 
     let events = EventSource::new(rx);
-    event_emitter(cnpy.event_tx.clone());
     let size = translate_result(terminal::size())?;
     cnpy.register_backend(ctrl);
     cnpy.set_root_size(Expanse::new(size.0, size.1), &mut root)?;
@@ -405,7 +404,7 @@ where
     cnpy.render(&mut be, &mut root)?;
     translate_result(be.flush())?;
     cnpy.taint = false;
-
+    event_emitter(cnpy.event_tx.clone());
     loop {
         cnpy.event(&mut root, events.next()?)?;
 
