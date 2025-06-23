@@ -177,7 +177,7 @@
 <a href=#177 id=177 data-nosnippet>177</a>        }
 <a href=#178 id=178 data-nosnippet>178</a>    }
 <a href=#179 id=179 data-nosnippet>179</a>
-<a href=#180 id=180 data-nosnippet>180</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#180 id=180 data-nosnippet>180</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l: <span class="kw-2">&amp;</span>Layout, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
 <a href=#181 id=181 data-nosnippet>181</a>        <span class="self">self</span>.textbuf.set_display_width(sz.w <span class="kw">as </span>usize);
 <a href=#182 id=182 data-nosnippet>182</a>        <span class="kw">let </span>tbl = <span class="self">self</span>.textbuf.value.len() <span class="kw">as </span>u16;
 <a href=#183 id=183 data-nosnippet>183</a>        <span class="kw">let </span>expanse = <span class="kw">if </span><span class="self">self</span>.textbuf.window.len &gt;= tbl {
@@ -185,7 +185,7 @@
 <a href=#185 id=185 data-nosnippet>185</a>        } <span class="kw">else </span>{
 <a href=#186 id=186 data-nosnippet>186</a>            Expanse::new(tbl <span class="kw">as </span>u16, <span class="number">1</span>)
 <a href=#187 id=187 data-nosnippet>187</a>        };
-<a href=#188 id=188 data-nosnippet>188</a>        <span class="self">self</span>.vp_mut().fit_size(expanse, sz);
+<a href=#188 id=188 data-nosnippet>188</a>        l.size(<span class="self">self</span>, expanse, sz)<span class="question-mark">?</span>;
 <a href=#189 id=189 data-nosnippet>189</a>        <span class="prelude-val">Ok</span>(())
 <a href=#190 id=190 data-nosnippet>190</a>    }
 <a href=#191 id=191 data-nosnippet>191</a>}

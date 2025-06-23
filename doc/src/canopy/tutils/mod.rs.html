@@ -19,9 +19,9 @@
 <a href=#19 id=19 data-nosnippet>19</a>}
 <a href=#20 id=20 data-nosnippet>20</a>
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">impl </span>Node <span class="kw">for </span>TFixed {
-<a href=#22 id=22 data-nosnippet>22</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, target: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#22 id=22 data-nosnippet>22</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l: <span class="kw-2">&amp;</span>Layout, <span class="kw">_</span>: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
 <a href=#23 id=23 data-nosnippet>23</a>        <span class="kw">let </span>x = Expanse::new(<span class="self">self</span>.w, <span class="self">self</span>.h);
-<a href=#24 id=24 data-nosnippet>24</a>        <span class="self">self</span>.vp_mut().fit_size(x, target);
+<a href=#24 id=24 data-nosnippet>24</a>        l.fill(<span class="self">self</span>, x)<span class="question-mark">?</span>;
 <a href=#25 id=25 data-nosnippet>25</a>        <span class="prelude-val">Ok</span>(())
 <a href=#26 id=26 data-nosnippet>26</a>    }
 <a href=#27 id=27 data-nosnippet>27</a>}
@@ -70,39 +70,36 @@
 <a href=#70 id=70 data-nosnippet>70</a>    <span class="kw">fn </span>focus_area(<span class="kw-2">&amp;</span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Option</span>&lt;Rect&gt; {
 <a href=#71 id=71 data-nosnippet>71</a>        <span class="prelude-val">None
 <a href=#72 id=72 data-nosnippet>72</a>    </span>}
-<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">fn </span>focus_depth(<span class="kw-2">&amp;</span><span class="self">self</span>, _n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; usize {
-<a href=#74 id=74 data-nosnippet>74</a>        <span class="number">0
-<a href=#75 id=75 data-nosnippet>75</a>    </span>}
-<a href=#76 id=76 data-nosnippet>76</a>    <span class="kw">fn </span>focus_down(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}
-<a href=#77 id=77 data-nosnippet>77</a>    <span class="kw">fn </span>focus_first(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}
-<a href=#78 id=78 data-nosnippet>78</a>    <span class="kw">fn </span>focus_left(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}
-<a href=#79 id=79 data-nosnippet>79</a>    <span class="kw">fn </span>focus_next(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}
-<a href=#80 id=80 data-nosnippet>80</a>    <span class="kw">fn </span>focus_path(<span class="kw-2">&amp;</span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; Path {
-<a href=#81 id=81 data-nosnippet>81</a>        Path::empty()
-<a href=#82 id=82 data-nosnippet>82</a>    }
-<a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">fn </span>focus_prev(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}
-<a href=#84 id=84 data-nosnippet>84</a>    <span class="kw">fn </span>focus_right(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}
-<a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">fn </span>focus_up(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}
-<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">fn </span>needs_render(<span class="kw-2">&amp;</span><span class="self">self</span>, _n: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Node) -&gt; bool {
-<a href=#87 id=87 data-nosnippet>87</a>        <span class="bool-val">false
-<a href=#88 id=88 data-nosnippet>88</a>    </span>}
-<a href=#89 id=89 data-nosnippet>89</a>    <span class="kw">fn </span>set_focus(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}
-<a href=#90 id=90 data-nosnippet>90</a>    <span class="kw">fn </span>focus_dir(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, _dir: Direction) {}
-<a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">fn </span>taint(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}
-<a href=#92 id=92 data-nosnippet>92</a>    <span class="kw">fn </span>taint_tree(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _e: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}
-<a href=#93 id=93 data-nosnippet>93</a>
-<a href=#94 id=94 data-nosnippet>94</a>    <span class="doccomment">/// Start the backend renderer.
-<a href=#95 id=95 data-nosnippet>95</a>    </span><span class="kw">fn </span>start(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#96 id=96 data-nosnippet>96</a>        <span class="prelude-val">Ok</span>(())
-<a href=#97 id=97 data-nosnippet>97</a>    }
-<a href=#98 id=98 data-nosnippet>98</a>
-<a href=#99 id=99 data-nosnippet>99</a>    <span class="doccomment">/// Stop the backend renderer, releasing control of the terminal.
-<a href=#100 id=100 data-nosnippet>100</a>    </span><span class="kw">fn </span>stop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#101 id=101 data-nosnippet>101</a>        <span class="prelude-val">Ok</span>(())
-<a href=#102 id=102 data-nosnippet>102</a>    }
-<a href=#103 id=103 data-nosnippet>103</a>
-<a href=#104 id=104 data-nosnippet>104</a>    <span class="doccomment">/// Stop the render backend and exit the process.
-<a href=#105 id=105 data-nosnippet>105</a>    </span><span class="kw">fn </span>exit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _code: i32) -&gt; ! {
-<a href=#106 id=106 data-nosnippet>106</a>        <span class="macro">panic!</span>(<span class="string">"exit in dummy core"</span>)
-<a href=#107 id=107 data-nosnippet>107</a>    }
-<a href=#108 id=108 data-nosnippet>108</a>}</code></pre></div></section></main></body></html>
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">fn </span>focus_down(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}
+<a href=#74 id=74 data-nosnippet>74</a>    <span class="kw">fn </span>focus_first(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}
+<a href=#75 id=75 data-nosnippet>75</a>    <span class="kw">fn </span>focus_left(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}
+<a href=#76 id=76 data-nosnippet>76</a>    <span class="kw">fn </span>focus_next(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}
+<a href=#77 id=77 data-nosnippet>77</a>    <span class="kw">fn </span>focus_path(<span class="kw-2">&amp;</span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; Path {
+<a href=#78 id=78 data-nosnippet>78</a>        Path::empty()
+<a href=#79 id=79 data-nosnippet>79</a>    }
+<a href=#80 id=80 data-nosnippet>80</a>    <span class="kw">fn </span>focus_prev(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}
+<a href=#81 id=81 data-nosnippet>81</a>    <span class="kw">fn </span>focus_right(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}
+<a href=#82 id=82 data-nosnippet>82</a>    <span class="kw">fn </span>focus_up(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}
+<a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">fn </span>needs_render(<span class="kw-2">&amp;</span><span class="self">self</span>, _n: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Node) -&gt; bool {
+<a href=#84 id=84 data-nosnippet>84</a>        <span class="bool-val">false
+<a href=#85 id=85 data-nosnippet>85</a>    </span>}
+<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">fn </span>set_focus(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}
+<a href=#87 id=87 data-nosnippet>87</a>    <span class="kw">fn </span>focus_dir(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, _dir: Direction) {}
+<a href=#88 id=88 data-nosnippet>88</a>    <span class="kw">fn </span>taint(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}
+<a href=#89 id=89 data-nosnippet>89</a>    <span class="kw">fn </span>taint_tree(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _e: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {}
+<a href=#90 id=90 data-nosnippet>90</a>
+<a href=#91 id=91 data-nosnippet>91</a>    <span class="doccomment">/// Start the backend renderer.
+<a href=#92 id=92 data-nosnippet>92</a>    </span><span class="kw">fn </span>start(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#93 id=93 data-nosnippet>93</a>        <span class="prelude-val">Ok</span>(())
+<a href=#94 id=94 data-nosnippet>94</a>    }
+<a href=#95 id=95 data-nosnippet>95</a>
+<a href=#96 id=96 data-nosnippet>96</a>    <span class="doccomment">/// Stop the backend renderer, releasing control of the terminal.
+<a href=#97 id=97 data-nosnippet>97</a>    </span><span class="kw">fn </span>stop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#98 id=98 data-nosnippet>98</a>        <span class="prelude-val">Ok</span>(())
+<a href=#99 id=99 data-nosnippet>99</a>    }
+<a href=#100 id=100 data-nosnippet>100</a>
+<a href=#101 id=101 data-nosnippet>101</a>    <span class="doccomment">/// Stop the render backend and exit the process.
+<a href=#102 id=102 data-nosnippet>102</a>    </span><span class="kw">fn </span>exit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _code: i32) -&gt; ! {
+<a href=#103 id=103 data-nosnippet>103</a>        <span class="macro">panic!</span>(<span class="string">"exit in dummy core"</span>)
+<a href=#104 id=104 data-nosnippet>104</a>    }
+<a href=#105 id=105 data-nosnippet>105</a>}</code></pre></div></section></main></body></html>

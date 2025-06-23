@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["fit","frame","place"]};
+window.SIDEBAR_ITEMS = {"struct":["Layout"]};
