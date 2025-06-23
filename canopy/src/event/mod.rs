@@ -21,6 +21,7 @@ pub(crate) enum Event {
     /// Terminal has lost focus
     FocusLost,
     /// Cut and paste
+    #[allow(dead_code)]
     Paste(String),
 }
 

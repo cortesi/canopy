@@ -115,7 +115,7 @@ impl ScriptHost {
 
             // For dynamic argument handling, we need to use the module's raw function API
             // Since FuncRegistration doesn't support our use case directly
-            let func = move |context: Option<rhai::NativeCallContext>,
+            let func = move |_context: Option<rhai::NativeCallContext>,
                              args: &mut FnCallArgs|
                   -> ScriptResult<rhai::Dynamic> {
                 SCRIPT_GLOBAL.with(|g| {

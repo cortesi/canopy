@@ -54,7 +54,7 @@ impl Block {
 }
 
 impl Node for Block {
-    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+    fn layout(&mut self, l: &Layout, _sz: Expanse) -> Result<()> {
         if !self.children.is_empty() {
             let vp = self.vp();
             let vps = if self.horizontal {

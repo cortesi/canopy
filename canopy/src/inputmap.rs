@@ -95,6 +95,7 @@ impl InputMap {
         }
     }
 
+    #[allow(dead_code)]
     pub fn set_mode(&mut self, mode: &str) -> Result<()> {
         if !mode.is_empty() && !self.modes.contains_key(mode) {
             Err(error::Error::Invalid(format!("Unknown mode: {}", mode)))

@@ -3,6 +3,7 @@ use crate::geom::{Expanse, Line, Point, Rect};
 use crate::Result;
 
 /// A projection from the virtual space of a node to the screen.
+#[cfg(test)]
 #[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 struct Projection {
     /// A region in the node's canvas. This is always a sub-rectangle of the node's view.
@@ -11,6 +12,7 @@ struct Projection {
     screen: Point,
 }
 
+#[cfg(test)]
 impl Projection {
     fn new<R, S>(region: R, screen: S) -> Projection
     where
@@ -250,6 +252,7 @@ impl ViewPort {
     }
 
     /// Calculate this node's projection, given a parent projection. If there is no screen overlap, return None.
+    #[cfg(test)]
     fn projection(&self, parent_projection: Projection) -> Option<Projection> {
         let view_in_parent = self.view.at(self.position);
         if let Some(overlap) = parent_projection.region.intersect(&view_in_parent) {
