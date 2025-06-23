@@ -135,7 +135,10 @@ impl Node for ListGym {
         // event triggers another layout.
         l.fill(self, sz)?;
         let vp = self.vp();
-        let (a, b) = vp.screen_rect().carve_vend(1);
+        // Use our viewport view, not the absolute screen rect, when carving up
+        // space for children. This avoids an initial frame overlap when the
+        // view has not yet been projected to the screen.
+        let (a, b) = vp.view.carve_vend(1);
         l.place(&mut self.content, vp, a)?;
         l.place(&mut self.statusbar, vp, b)?;
         Ok(())
