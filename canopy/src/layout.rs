@@ -22,8 +22,8 @@ impl Layout {
         child.layout(
             self,
             Expanse {
-                w: sz.w - (border * 2),
-                h: sz.h - (border * 2),
+                w: sz.w.saturating_sub(border * 2),
+                h: sz.h.saturating_sub(border * 2),
             },
         )?;
         child.__vp_mut().position = crate::geom::Point {
@@ -126,6 +126,19 @@ mod tests {
 
     //     Ok(())
     // }
+
+    use super::*;
+    use crate::{geom::{Expanse, Frame, Point}, tutils::TFixed, StatefulNode};
+
+    #[test]
+    fn frame_does_not_overflow_small_parent() -> Result<()> {
+        let l = Layout {};
+        let mut child = TFixed::new(2, 2);
+        let f = l.frame(&mut child, Expanse::new(1, 1), 1)?;
+        assert_eq!(f, Frame::zero());
+        assert_eq!(child.vp().position, Point { x: 1, y: 1 });
+        Ok(())
+    }
 
     // #[test]
     // fn node_frame() -> Result<()> {
