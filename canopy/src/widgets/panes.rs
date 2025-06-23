@@ -100,9 +100,10 @@ impl<N: Node> Node for Panes<N> {
         Ok(())
     }
 
-    fn layout(&mut self, l: &Layout, _: Expanse) -> Result<()> {
+    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+        l.fill(self, sz)?;
         let vp = self.vp();
-        let lst = vp.screen_rect().split_panes(&self.shape())?;
+        let lst = vp.view.split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
                 l.place(row, vp, lst[ci][ri])?;
@@ -145,6 +146,52 @@ mod tests {
 
         c.set_focus(&mut p.children[1][0].a);
         assert_eq!(p.focus_coords(&c), Some((1, 0)));
+        Ok(())
+    }
+
+    #[derive(StatefulNode)]
+    struct Root {
+        state: NodeState,
+        panes: Panes<TFixed>,
+    }
+
+    #[derive_commands]
+    impl Root {
+        fn new() -> Self {
+            Root {
+                state: NodeState::default(),
+                panes: Panes::new(TFixed::new(1, 1)),
+            }
+        }
+    }
+
+    impl Node for Root {
+        fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+            f(&mut self.panes)
+        }
+
+        fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+            l.fill(self, sz)?;
+            let vp = self.vp();
+            let parts = vp.view.split_horizontal(2)?;
+            l.place(&mut self.panes, vp, parts[1])?;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn tlayout_offset() -> Result<()> {
+        let mut c = Canopy::new();
+        let mut root = Root::new();
+        let l = Layout {};
+
+        c.set_root_size(Expanse::new(20, 10), &mut root)?;
+        root.panes.insert_col(&mut c, TFixed::new(1, 1))?;
+        root.layout(&l, Expanse::new(20, 10))?;
+
+        assert_eq!(root.panes.children.len(), 2);
+        assert_eq!(root.panes.children[0][0].vp().position.x, 10);
+        assert_eq!(root.panes.children[1][0].vp().position.x, 15);
         Ok(())
     }
 }
