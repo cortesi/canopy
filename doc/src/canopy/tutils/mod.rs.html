@@ -102,4 +102,75 @@
 <a href=#102 id=102 data-nosnippet>102</a>    </span><span class="kw">fn </span>exit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _code: i32) -&gt; ! {
 <a href=#103 id=103 data-nosnippet>103</a>        <span class="macro">panic!</span>(<span class="string">"exit in dummy core"</span>)
 <a href=#104 id=104 data-nosnippet>104</a>    }
-<a href=#105 id=105 data-nosnippet>105</a>}</code></pre></div></section></main></body></html>
+<a href=#105 id=105 data-nosnippet>105</a>}
+<a href=#106 id=106 data-nosnippet>106</a>
+<a href=#107 id=107 data-nosnippet>107</a><span class="attr">#[cfg(test)]
+<a href=#108 id=108 data-nosnippet>108</a></span><span class="kw">mod </span>tests {
+<a href=#109 id=109 data-nosnippet>109</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#110 id=110 data-nosnippet>110</a>
+<a href=#111 id=111 data-nosnippet>111</a>    <span class="attr">#[derive(StatefulNode)]
+<a href=#112 id=112 data-nosnippet>112</a>    </span><span class="kw">struct </span>Block {
+<a href=#113 id=113 data-nosnippet>113</a>        state: NodeState,
+<a href=#114 id=114 data-nosnippet>114</a>        children: Vec&lt;Block&gt;,
+<a href=#115 id=115 data-nosnippet>115</a>        horizontal: bool,
+<a href=#116 id=116 data-nosnippet>116</a>    }
+<a href=#117 id=117 data-nosnippet>117</a>
+<a href=#118 id=118 data-nosnippet>118</a>    <span class="attr">#[derive_commands]
+<a href=#119 id=119 data-nosnippet>119</a>    </span><span class="kw">impl </span>Block {
+<a href=#120 id=120 data-nosnippet>120</a>        <span class="kw">fn </span>new(horizontal: bool) -&gt; <span class="self">Self </span>{
+<a href=#121 id=121 data-nosnippet>121</a>            Block { state: NodeState::default(), children: <span class="macro">vec!</span>[], horizontal }
+<a href=#122 id=122 data-nosnippet>122</a>        }
+<a href=#123 id=123 data-nosnippet>123</a>    }
+<a href=#124 id=124 data-nosnippet>124</a>
+<a href=#125 id=125 data-nosnippet>125</a>    <span class="kw">impl </span>Node <span class="kw">for </span>Block {
+<a href=#126 id=126 data-nosnippet>126</a>        <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l: <span class="kw-2">&amp;</span>Layout, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#127 id=127 data-nosnippet>127</a>            l.fill(<span class="self">self</span>, sz)<span class="question-mark">?</span>;
+<a href=#128 id=128 data-nosnippet>128</a>            <span class="kw">if </span>!<span class="self">self</span>.children.is_empty() {
+<a href=#129 id=129 data-nosnippet>129</a>                <span class="kw">let </span>vp = <span class="self">self</span>.vp();
+<a href=#130 id=130 data-nosnippet>130</a>                <span class="kw">let </span>vps = <span class="kw">if </span><span class="self">self</span>.horizontal {
+<a href=#131 id=131 data-nosnippet>131</a>                    vp.view.split_horizontal(<span class="self">self</span>.children.len() <span class="kw">as </span>u16)<span class="question-mark">?
+<a href=#132 id=132 data-nosnippet>132</a>                </span>} <span class="kw">else </span>{
+<a href=#133 id=133 data-nosnippet>133</a>                    vp.view.split_vertical(<span class="self">self</span>.children.len() <span class="kw">as </span>u16)<span class="question-mark">?
+<a href=#134 id=134 data-nosnippet>134</a>                </span>};
+<a href=#135 id=135 data-nosnippet>135</a>                <span class="kw">for </span>(i, ch) <span class="kw">in </span><span class="self">self</span>.children.iter_mut().enumerate() {
+<a href=#136 id=136 data-nosnippet>136</a>                    l.place(ch, vp, vps[i])<span class="question-mark">?</span>;
+<a href=#137 id=137 data-nosnippet>137</a>                }
+<a href=#138 id=138 data-nosnippet>138</a>            }
+<a href=#139 id=139 data-nosnippet>139</a>            <span class="prelude-val">Ok</span>(())
+<a href=#140 id=140 data-nosnippet>140</a>        }
+<a href=#141 id=141 data-nosnippet>141</a>
+<a href=#142 id=142 data-nosnippet>142</a>        <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Context, r: <span class="kw-2">&amp;mut </span>Render) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#143 id=143 data-nosnippet>143</a>            <span class="kw">if </span><span class="self">self</span>.children.is_empty() {
+<a href=#144 id=144 data-nosnippet>144</a>                r.fill(<span class="string">"blue"</span>, <span class="self">self</span>.vp().view, <span class="string">'x'</span>)<span class="question-mark">?</span>;
+<a href=#145 id=145 data-nosnippet>145</a>            }
+<a href=#146 id=146 data-nosnippet>146</a>            <span class="prelude-val">Ok</span>(())
+<a href=#147 id=147 data-nosnippet>147</a>        }
+<a href=#148 id=148 data-nosnippet>148</a>
+<a href=#149 id=149 data-nosnippet>149</a>        <span class="kw">fn </span>accept_focus(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; bool {
+<a href=#150 id=150 data-nosnippet>150</a>            <span class="bool-val">true
+<a href=#151 id=151 data-nosnippet>151</a>        </span>}
+<a href=#152 id=152 data-nosnippet>152</a>
+<a href=#153 id=153 data-nosnippet>153</a>        <span class="kw">fn </span>children(<span class="kw-2">&amp;mut </span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>FnMut(<span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#154 id=154 data-nosnippet>154</a>            <span class="kw">for </span>c <span class="kw">in </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.children {
+<a href=#155 id=155 data-nosnippet>155</a>                f(c)<span class="question-mark">?</span>;
+<a href=#156 id=156 data-nosnippet>156</a>            }
+<a href=#157 id=157 data-nosnippet>157</a>            <span class="prelude-val">Ok</span>(())
+<a href=#158 id=158 data-nosnippet>158</a>        }
+<a href=#159 id=159 data-nosnippet>159</a>    }
+<a href=#160 id=160 data-nosnippet>160</a>
+<a href=#161 id=161 data-nosnippet>161</a>    <span class="attr">#[test]
+<a href=#162 id=162 data-nosnippet>162</a>    </span><span class="kw">fn </span>block_renders() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#163 id=163 data-nosnippet>163</a>        <span class="kw">let </span>(<span class="kw">_</span>, <span class="kw-2">mut </span>tr) = TestRender::create();
+<a href=#164 id=164 data-nosnippet>164</a>        <span class="kw">let </span><span class="kw-2">mut </span>canopy = Canopy::new();
+<a href=#165 id=165 data-nosnippet>165</a>        <span class="kw">let </span><span class="kw-2">mut </span>root = Block {
+<a href=#166 id=166 data-nosnippet>166</a>            state: NodeState::default(),
+<a href=#167 id=167 data-nosnippet>167</a>            children: <span class="macro">vec!</span>[Block::new(<span class="bool-val">false</span>), Block::new(<span class="bool-val">false</span>)],
+<a href=#168 id=168 data-nosnippet>168</a>            horizontal: <span class="bool-val">true</span>,
+<a href=#169 id=169 data-nosnippet>169</a>        };
+<a href=#170 id=170 data-nosnippet>170</a>
+<a href=#171 id=171 data-nosnippet>171</a>        canopy.set_root_size(Expanse::new(<span class="number">20</span>, <span class="number">10</span>), <span class="kw-2">&amp;mut </span>root)<span class="question-mark">?</span>;
+<a href=#172 id=172 data-nosnippet>172</a>        canopy.render(<span class="kw-2">&amp;mut </span>tr, <span class="kw-2">&amp;mut </span>root)<span class="question-mark">?</span>;
+<a href=#173 id=173 data-nosnippet>173</a>        <span class="macro">assert!</span>(!tr.buf_empty());
+<a href=#174 id=174 data-nosnippet>174</a>        <span class="prelude-val">Ok</span>(())
+<a href=#175 id=175 data-nosnippet>175</a>    }
+<a href=#176 id=176 data-nosnippet>176</a>}</code></pre></div></section></main></body></html>
