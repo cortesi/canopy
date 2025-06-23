@@ -47,6 +47,7 @@ impl Layout {
             .position
             .scroll(loc.tl.x as i16, loc.tl.y as i16);
         child.layout(self, loc.expanse())?;
+        child.__vp_mut().constrain(parent_vp);
         Ok(())
     }
 
@@ -60,6 +61,7 @@ impl Layout {
     pub fn fit(&self, n: &mut dyn Node, parent_vp: ViewPort) -> Result<()> {
         n.layout(self, parent_vp.screen_rect().into())?;
         n.__vp_mut().position = parent_vp.position;
+        n.__vp_mut().constrain(parent_vp);
         Ok(())
     }
 }
@@ -128,7 +130,13 @@ mod tests {
     // }
 
     use super::*;
-    use crate::{geom::{Expanse, Frame, Point}, tutils::TFixed, StatefulNode};
+    use crate::{
+        self as canopy,
+        geom::{Expanse, Frame, Point, Rect},
+        tutils::TFixed,
+        *,
+        Canopy, Context, Node, NodeState, Render, StatefulNode,
+    };
 
     #[test]
     fn frame_does_not_overflow_small_parent() -> Result<()> {
@@ -137,6 +145,94 @@ mod tests {
         let f = l.frame(&mut child, Expanse::new(1, 1), 1)?;
         assert_eq!(f, Frame::zero());
         assert_eq!(child.vp().position, Point { x: 1, y: 1 });
+        Ok(())
+    }
+
+    #[derive(StatefulNode)]
+    struct Big {
+        state: NodeState,
+    }
+
+    impl Big {
+        fn new() -> Self {
+            Big {
+                state: NodeState::default(),
+            }
+        }
+    }
+
+    #[derive_commands]
+    impl Big {}
+
+    impl Node for Big {
+        fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+            l.fill(self, Expanse::new(sz.w * 2, sz.h * 2))
+        }
+
+        fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
+            r.fill("", self.vp().canvas.rect(), 'x')
+        }
+    }
+
+    #[derive(StatefulNode)]
+    struct Root {
+        state: NodeState,
+        child: Big,
+    }
+
+    impl Root {
+        fn new() -> Self {
+            Root {
+                state: NodeState::default(),
+                child: Big::new(),
+            }
+        }
+    }
+
+    #[derive_commands]
+    impl Root {}
+
+    impl Node for Root {
+        fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+            f(&mut self.child)
+        }
+
+        fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+            l.fill(self, sz)?;
+            let vp = self.vp();
+            let loc = Rect::new(sz.w.saturating_sub(1), sz.h.saturating_sub(1), sz.w, sz.h);
+            l.place(&mut self.child, vp, loc)?;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn child_clamped_to_parent() -> Result<()> {
+        use crate::backend::test::CanvasRender;
+
+        let size = Expanse::new(4, 4);
+        let (buf, mut cr) = CanvasRender::create(size);
+        let mut canopy = Canopy::new();
+        let mut root = Root::new();
+
+        canopy.set_root_size(size, &mut root)?;
+        canopy.render(&mut cr, &mut root)?;
+
+        let parent = root.vp().screen_rect();
+        let child = root.child.vp().screen_rect();
+        assert!(parent.contains_rect(&child));
+
+        let canvas = buf.lock().unwrap();
+        for y in 0..size.h {
+            for x in 0..size.w {
+                let ch = canvas.cells[y as usize][x as usize];
+                if child.contains_point((x, y)) {
+                    assert_eq!(ch, 'x');
+                } else {
+                    assert_eq!(ch, ' ');
+                }
+            }
+        }
         Ok(())
     }
 

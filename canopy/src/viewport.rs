@@ -139,6 +139,28 @@ impl ViewPort {
         .unwrap();
     }
 
+    /// Constrain this viewport so that its screen rectangle falls within the
+    /// specified parent viewport. If there is no overlap with the parent, the
+    /// view is reduced to zero.
+    pub fn constrain(&mut self, parent: ViewPort) {
+        let parent_screen = parent.screen_rect();
+        let screen = self.view.at(self.position);
+        if let Some(i) = parent_screen.intersect(&screen) {
+            let dx = i.tl.x - screen.tl.x;
+            let dy = i.tl.y - screen.tl.y;
+            self.position = i.tl;
+            self.view = Rect::new(
+                self.view.tl.x + dx,
+                self.view.tl.y + dy,
+                i.w,
+                i.h,
+            );
+        } else {
+            self.position = parent_screen.tl;
+            self.view = Rect::default();
+        }
+    }
+
     /// Calculates the (pre, active, post) rectangles needed to draw a vertical
     /// scroll bar for this viewport in the specified margin rect (usually a
     /// right or left vertical margin). Returns None if no scroll bar is needed.
