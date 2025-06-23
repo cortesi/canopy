@@ -392,8 +392,11 @@ impl Canopy {
         node_id: NodeId,
         sid: script::ScriptId,
     ) -> Result<()> {
-        let _g = script::ScriptGuard::new(self, root, node_id);
-        self.script_host.execute(sid)?;
+        let this: *mut dyn Context = self;
+        let script_host = &mut self.script_host;
+        // SAFETY: `this` is valid for the duration of this call because we have
+        // a mutable reference to `self`.
+        unsafe { script_host.execute(&mut *this, root, node_id, sid) }?;
         Ok(())
     }
 
