@@ -129,11 +129,15 @@ impl ListGym {
 
 impl Node for ListGym {
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+        // Initialize our viewport before laying out children so they use the
+        // correct geometry. Without this, the initial layout runs with a zero
+        // sized viewport and the list appears empty.
+        l.fill(self, sz)?;
         let vp = self.vp();
-        let (a, b) = vp.screen_rect().carve_vend(1);
+        // Carve from the local view so child placement isn't offset twice
+        let (a, b) = vp.view.carve_vend(1);
         l.place(&mut self.content, vp, a)?;
         l.place(&mut self.statusbar, vp, b)?;
-        l.fill(self, sz)?;
         Ok(())
     }
 
