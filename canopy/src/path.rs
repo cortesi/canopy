@@ -102,7 +102,7 @@ impl PathMatcher {
             .collect::<Vec<_>>()
             .join("");
         if path.starts_with('/') {
-            pattern = format!("^/{}", pattern)
+            pattern = format!("^/{pattern}")
         }
         pattern = pattern.trim_end_matches('/').to_string();
         if path.ends_with('/') {

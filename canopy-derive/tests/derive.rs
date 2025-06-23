@@ -187,7 +187,7 @@ fn commands() {
         &mut dc,
         &CommandInvocation {
             node: "foo".try_into().unwrap(),
-            command: "a".try_into().unwrap(),
+            command: "a".into(),
             args: vec![],
         },
     )
@@ -198,7 +198,7 @@ fn commands() {
         &mut dc,
         &CommandInvocation {
             node: "foo".try_into().unwrap(),
-            command: "c".try_into().unwrap(),
+            command: "c".into(),
             args: vec![],
         },
     )
@@ -209,7 +209,7 @@ fn commands() {
         &mut dc,
         &CommandInvocation {
             node: "foo".try_into().unwrap(),
-            command: "f_core_isize".try_into().unwrap(),
+            command: "f_core_isize".into(),
             args: vec![Args::Context, Args::ISize(3)],
         },
     )
@@ -220,7 +220,7 @@ fn commands() {
         &mut dc,
         &CommandInvocation {
             node: "foo".try_into().unwrap(),
-            command: "naked_isize".try_into().unwrap(),
+            command: "naked_isize".into(),
             args: vec![Args::ISize(3)],
         },
     )

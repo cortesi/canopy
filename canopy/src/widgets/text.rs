@@ -89,7 +89,7 @@ impl Node for Text {
             };
             self.lines = Some(split);
         }
-        let cs = self.current_size.clone();
+        let cs = self.current_size;
         l.size(self, cs, s)?;
         Ok(())
     }

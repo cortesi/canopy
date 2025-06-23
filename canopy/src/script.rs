@@ -25,7 +25,7 @@ struct ScriptGlobal<'a> {
 }
 
 thread_local! {
-    static SCRIPT_GLOBAL: RefCell<Option<ScriptGlobal<'static>>> = RefCell::new(None);
+    static SCRIPT_GLOBAL: RefCell<Option<ScriptGlobal<'static>>> = const { RefCell::new(None) };
 }
 
 pub(crate) struct ScriptGuard {}
@@ -70,7 +70,6 @@ type ScriptResult<T> = std::result::Result<T, Box<rhai::EvalAltResult>>;
 /// This is a re-implementation of the Module::set_raw_fn from rhai. It turns out that set_raw_fn wants to assume that
 /// the function is a module, which imposes some internal constraints on the number of arguments.
 // Helper function removed - using FuncRegistration API directly instead
-
 impl ScriptHost {
     pub fn new() -> Self {
         let mut engine = rhai::Engine::new();
@@ -124,7 +123,7 @@ impl ScriptHost {
 
                     let mut ciargs = vec![];
                     let mut arg_types = arg_types.clone();
-                    if arg_types.len() > 0 && arg_types[0] == ArgTypes::Context {
+                    if !arg_types.is_empty() && arg_types[0] == ArgTypes::Context {
                         ciargs.push(Args::Context);
                         arg_types.remove(0);
                     }

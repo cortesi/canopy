@@ -43,7 +43,7 @@ impl InputMode {
     fn insert(&mut self, path_filter: PathMatcher, input: Input, script: script::ScriptId) {
         self.inputs
             .entry(input)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(BoundAction {
                 pathmatch: path_filter,
                 script,
@@ -98,7 +98,7 @@ impl InputMap {
     #[allow(dead_code)]
     pub fn set_mode(&mut self, mode: &str) -> Result<()> {
         if !mode.is_empty() && !self.modes.contains_key(mode) {
-            Err(error::Error::Invalid(format!("Unknown mode: {}", mode)))
+            Err(error::Error::Invalid(format!("Unknown mode: {mode}")))
         } else {
             self.current_mode = mode.to_string();
             Ok(())

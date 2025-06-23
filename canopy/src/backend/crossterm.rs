@@ -402,17 +402,15 @@ where
     cnpy.set_root_size(Expanse::new(size.0, size.1), &mut root)?;
     cnpy.start_poller(cnpy.event_tx.clone());
 
+    let mut tainted = true;
     loop {
-        let mut tainted = true;
-        loop {
-            if tainted {
-                cnpy.render(&mut be, &mut root)?;
-                translate_result(be.flush())?;
-            }
-            cnpy.event(&mut root, events.next()?)?;
-
-            tainted = cnpy.taint;
-            cnpy.taint = false;
+        if tainted {
+            cnpy.render(&mut be, &mut root)?;
+            translate_result(be.flush())?;
         }
+        cnpy.event(&mut root, events.next()?)?;
+
+        tainted = cnpy.taint;
+        cnpy.taint = false;
     }
 }

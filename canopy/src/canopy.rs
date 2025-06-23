@@ -700,7 +700,7 @@ impl Canopy {
                         location: x.vp().screen_rect().rebase_point(m.location)?,
                     },
                 )?;
-                Ok(match hdl {
+                match hdl {
                     EventOutcome::Handle => {
                         handled = true;
                         self.taint(x);
@@ -715,7 +715,8 @@ impl Canopy {
                             path.pop();
                         }
                     }
-                })
+                };
+                Ok(())
             })?;
         }
         if let Some((sid, nid)) = script {

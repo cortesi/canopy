@@ -267,7 +267,7 @@ impl Line {
     }
 
     /// Calculate the line number in the document for this line.
-    pub fn to_lineno(&self, s: &State) -> usize {
+    pub fn lineno(&self, s: &State) -> usize {
         let mut lineno = 0;
         for (i, c) in s.chunks.iter().enumerate() {
             if i == self.chunk {
@@ -383,9 +383,9 @@ impl Window {
 
     /// Adjust the window to include the cursor.
     pub fn adjust(&self, s: &State) -> Self {
-        let start = self.line.to_lineno(s);
+        let start = self.line.lineno(s);
         let pos = if let Some(l) = Line::from_position(s, s.cursor.insert(s)) {
-            l.to_lineno(s)
+            l.lineno(s)
         } else {
             // If the cursor position is somehow beyond the document, we're on the last line.
             s.line_height().saturating_sub(1)
@@ -425,7 +425,7 @@ fn wrap_offsets(s: &str, width: usize) -> Vec<(usize, usize)> {
 
 /// A chunk is a single piece of text with no newlines. An example might be a contiguous paragraph of text. A Chunk may
 /// be wrapped into multiple Lines for display.
-#[derive(Debug, Clone, Eq, Hash)]
+#[derive(Debug, Clone, Eq)]
 pub struct Chunk {
     /// The raw text of the line.
     text: String,
@@ -440,6 +440,12 @@ pub struct Chunk {
 impl PartialEq for Chunk {
     fn eq(&self, other: &Self) -> bool {
         self.text == other.text
+    }
+}
+
+impl std::hash::Hash for Chunk {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.text.hash(state);
     }
 }
 
@@ -647,9 +653,9 @@ mod tests {
     #[test]
     fn line_lineno() {
         fn t(s: &State, lineno: usize, expected: (usize, usize)) {
-            let l = Line::from_lineno(&s, lineno);
+            let l = Line::from_lineno(s, lineno);
             assert_eq!(l, expected.into());
-            assert_eq!(l.to_lineno(s), lineno);
+            assert_eq!(l.lineno(s), lineno);
         }
 
         let mut s = State::new("one two\nthree four\nx");
@@ -692,7 +698,7 @@ mod tests {
             s.cursor = Cursor::Insert(Line::from_lineno(s, cursor).first_pos(s));
             s.window = Window::from_lineno(s, window, 2);
             s.window = s.window.adjust(s);
-            assert_eq!(s.window.line.to_lineno(s), expected);
+            assert_eq!(s.window.line.lineno(s), expected);
         }
 
         t(&mut s, 0, 0, 0);

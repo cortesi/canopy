@@ -26,13 +26,13 @@ impl State {
     }
     pub fn add_event(&mut self, n: &NodeName, evt: &str, result: EventOutcome) {
         let outcome = match result {
-            EventOutcome::Handle { .. } => "handle",
-            EventOutcome::Ignore { .. } => "ignore",
+            EventOutcome::Handle => "handle",
+            EventOutcome::Ignore => "ignore",
         };
-        self.path.push(format!("{}@{}->{}", n, evt, outcome))
+        self.path.push(format!("{n}@{evt}->{outcome}"))
     }
     pub fn add_command(&mut self, n: &NodeName, cmd: &str) {
-        self.path.push(format!("{}.{}()", n, cmd))
+        self.path.push(format!("{n}.{cmd}()"))
     }
 }
 

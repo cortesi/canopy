@@ -128,8 +128,7 @@ impl LineSegment {
             Err(Error::Geometry("window cannot be zero length".into()))
         } else if !view.contains(&window) {
             Err(Error::Geometry(format!(
-                "view {:?} does not contain window {:?}",
-                view, window,
+                "view {view:?} does not contain window {window:?}",
             )))
         } else {
             // Compute the fraction each section occupies of the view.

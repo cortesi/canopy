@@ -82,7 +82,7 @@ impl State {
             let mut s = c.as_str().to_string();
             if i == chunk {
                 if char == '<' {
-                    if s == "" {
+                    if s.is_empty() {
                         s = "<".into();
                     } else {
                         s.insert(offset + 1, char);
@@ -108,7 +108,7 @@ impl State {
         if s.len() == 1 {
             // Simple case - there are no newlines, we just insert the text in-place.
             let s = &s[0].to_string();
-            self.chunks[pos.chunk].insert(pos.offset as usize, s);
+            self.chunks[pos.chunk].insert(pos.offset, s);
 
             let cursor = self.cursor.insert(self);
             if cursor >= pos {
@@ -127,7 +127,7 @@ impl State {
             // And generate and insert our trailing lines
             let mut trailer = s[1..].iter().map(|x| x.to_string()).collect::<Vec<_>>();
             let last = trailer.pop().unwrap();
-            trailer.push(format!("{}{}", last, end));
+            trailer.push(format!("{last}{end}"));
             self.chunks.splice(
                 pos.chunk + 1..pos.chunk + 1,
                 trailer.iter().map(|x| Chunk::new(x, self.width)),
@@ -138,7 +138,7 @@ impl State {
                 // The cursor was at or beyond the insert position, so we have to adjust it.
                 self.cursor = self
                     .cursor
-                    .shift_chunk(&self, s.len().saturating_sub(1) as isize);
+                    .shift_chunk(self, s.len().saturating_sub(1) as isize);
                 if self.cursor.insert(self).chunk == pos.chunk + trailer.len() {
                     self.cursor = self.cursor.shift(self, last.len() as isize);
                 }
@@ -165,7 +165,6 @@ impl State {
 
         if start.chunk > self.chunks.len() || end == start {
             // Out of bounds, so this is a no-op
-            return;
         } else if start.chunk == end.chunk {
             // We're doing a delete that doesn't cross chunk boundaries.
             //
@@ -229,7 +228,7 @@ impl State {
     /// What's the last insert position in the text?
     pub(super) fn last(&self) -> InsertPos {
         let chunk = self.chunks.len().saturating_sub(1);
-        if self.chunks.len() == 0 {
+        if self.chunks.is_empty() {
             (0, 0)
         } else {
             (chunk, self.chunks[chunk].len().saturating_sub(1))
@@ -334,20 +333,20 @@ impl State {
     /// Move the cursor left or right within the current chunk, moving to the next or previous wrapped line if needed.
     /// Won't move to the next chunk. Adjust the window to include the cursor if needed.
     pub fn cursor_shift(&mut self, n: isize) {
-        self.cursor = self.cursor.shift(&self, n);
+        self.cursor = self.cursor.shift(self, n);
         self.window = self.window.adjust(self);
     }
 
     /// Move the cursor up or down in wrapped lines, moving to the next or previous chunk if needed. Adjust the window
     /// to include the cursor if needed.
     pub fn cursor_shift_line(&mut self, n: isize) {
-        self.cursor = self.cursor.shift_line(&self, n);
+        self.cursor = self.cursor.shift_line(self, n);
         self.window = self.window.adjust(self);
     }
 
     /// Move the up or down in the chunk list. Adjust the window to include the cursor if needed.
     pub fn cursor_shift_chunk(&mut self, n: isize) {
-        self.cursor = self.cursor.shift_chunk(&self, n);
+        self.cursor = self.cursor.shift_chunk(self, n);
         self.window = self.window.adjust(self);
     }
 }
@@ -360,7 +359,7 @@ mod tests {
     /// is equal to the state specification b.
     fn seq<F>(a: &str, f: F, b: &str)
     where
-        F: FnOnce(&mut State) -> (),
+        F: FnOnce(&mut State),
     {
         let mut a = State::from_spec(a);
         let b = State::from_spec(b);

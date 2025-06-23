@@ -62,8 +62,8 @@ impl Node for Block {
             } else {
                 vp.view.split_vertical(self.children.len() as u16)?
             };
-            for i in 0..self.children.len() {
-                l.place(&mut self.children[i], vp, vps[i])?;
+            for (i, child) in self.children.iter_mut().enumerate() {
+                l.place(child, vp, vps[i])?;
             }
         }
         Ok(())
@@ -87,7 +87,7 @@ impl Node for Block {
         self.children.is_empty()
     }
 
-    fn children(self: &mut Self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         for i in &mut self.children {
             f(i)?
         }

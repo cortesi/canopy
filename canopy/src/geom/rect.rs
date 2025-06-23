@@ -192,8 +192,7 @@ impl Rect {
     pub fn rebase_rect(&self, other: &Rect) -> Result<Rect> {
         if !self.contains_rect(other) {
             return Err(Error::Geometry(format!(
-                "rebase of non-contained rect - outer={:?} inner={:?}",
-                self, other,
+                "rebase of non-contained rect - outer={self:?} inner={other:?}",
             )));
         }
         Ok(Rect {
@@ -456,8 +455,8 @@ impl From<(u16, u16, u16, u16)> for Rect {
         let (x, y, w, h) = v;
         Rect {
             tl: (x, y).into(),
-            w: w,
-            h: h,
+            w,
+            h,
         }
     }
 }

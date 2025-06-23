@@ -51,8 +51,7 @@ impl ViewPort {
         let size = canvas.into();
         if !size.rect().contains_rect(&view) {
             Err(error::Error::Geometry(format!(
-                "view {:?} not contained in size {:?}",
-                view, size,
+                "view {view:?} not contained in size {size:?}",
             )))
         } else {
             Ok(ViewPort {
@@ -444,11 +443,11 @@ mod tests {
 
     #[test]
     fn view_movement() -> Result<()> {
-        fn tv<T>(vp: &ViewPort, f: &dyn Fn(&mut ViewPort) -> (), r: T)
+        fn tv<T>(vp: &ViewPort, f: &dyn Fn(&mut ViewPort), r: T)
         where
             T: Into<Rect>,
         {
-            let mut v = vp.clone();
+            let mut v = *vp;
             f(&mut v);
             let r = r.into();
             assert_eq!(v.view, r);

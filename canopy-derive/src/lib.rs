@@ -22,7 +22,7 @@ enum Error {
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -31,7 +31,7 @@ impl From<Error> for Diagnostic {
         Diagnostic::spanned(
             proc_macro2::Span::call_site(),
             Level::Error,
-            format!("{}", e),
+            format!("{e}"),
         )
     }
 }

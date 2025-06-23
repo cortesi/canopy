@@ -127,8 +127,8 @@ pub struct NodeState {
 
 /// The node state object - each node needs to keep one of these, and offer it
 /// up by implementing the StatefulNode trait.
-impl NodeState {
-    pub fn default() -> Self {
+impl Default for NodeState {
+    fn default() -> Self {
         let id = CURRENT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         NodeState {
             id,

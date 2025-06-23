@@ -24,10 +24,7 @@ impl<T> Walk<T> {
     }
     /// Did the traversal return Handle?
     pub fn is_handled(&self) -> bool {
-        match self {
-            Walk::Handle(_) => true,
-            _ => false,
-        }
+        matches!(self, Walk::Handle(_))
     }
     /// Did the traversal return Continue?
     pub fn is_continue(&self) -> bool {
@@ -168,7 +165,7 @@ where
 /// A postorder traversal of the nodes under e.
 ///
 /// - Walk::Skip causes stops further traversal of children, and all the nodes
-/// in a path back to the root are visited.
+///   in a path back to the root are visited.
 /// - Walk::Handle stops the traversal and the contained value is returned.
 /// - Any error return stops the traversal and the error is returned.
 pub fn postorder<T>(
@@ -302,11 +299,11 @@ mod tests {
 
         // Error
         assert_eq!(
-            trigger("ba_la".into(), Err(Error::NoResult)),
+            trigger("ba_la", Err(Error::NoResult)),
             (vc(&["r", "ba", "ba_la"]), Err(Error::NoResult))
         );
         assert_eq!(
-            trigger("r".into(), Err(Error::NoResult)),
+            trigger("r", Err(Error::NoResult)),
             (vc(&["r"]), Err(Error::NoResult))
         );
 
@@ -360,11 +357,11 @@ mod tests {
 
         // Handle
         assert_eq!(
-            trigger("ba_la".into(), Ok(Walk::Handle(()))),
+            trigger("ba_la", Ok(Walk::Handle(()))),
             (vc(&["ba_la"]), Ok(Walk::Handle(())))
         );
         assert_eq!(
-            trigger("bb".into(), Ok(Walk::Handle(()))),
+            trigger("bb", Ok(Walk::Handle(()))),
             (
                 vc(&["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb"]),
                 Ok(Walk::Handle(()))
@@ -373,11 +370,11 @@ mod tests {
 
         // Error
         assert_eq!(
-            trigger("ba_la".into(), Err(Error::NoResult)),
+            trigger("ba_la", Err(Error::NoResult)),
             (vc(&["ba_la"]), Err(Error::NoResult))
         );
         assert_eq!(
-            trigger("bb".into(), Err(Error::NoResult)),
+            trigger("bb", Err(Error::NoResult)),
             (
                 vc(&["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb"]),
                 Err(Error::NoResult)

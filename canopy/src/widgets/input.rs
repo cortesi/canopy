@@ -51,12 +51,12 @@ impl TextBuf {
             if self.cursor_pos == self.value.len() as u16 {
                 off += 1
             }
-            self.window.off = off as u16;
+            self.window.off = off;
         }
 
         if self.cursor_display() >= self.window.len {
             let delta = self.cursor_display() - self.window.len + 1;
-            self.window.off += delta as u16;
+            self.window.off += delta;
         }
     }
 
@@ -152,7 +152,7 @@ impl Node for Input {
     fn cursor(&self) -> Option<cursor::Cursor> {
         Some(cursor::Cursor {
             location: Point {
-                x: self.textbuf.cursor_display() as u16,
+                x: self.textbuf.cursor_display(),
                 y: 0,
             },
             shape: cursor::CursorShape::Block,
@@ -183,7 +183,7 @@ impl Node for Input {
         let expanse = if self.textbuf.window.len >= tbl {
             sz
         } else {
-            Expanse::new(tbl as u16, 1)
+            Expanse::new(tbl, 1)
         };
         l.size(self, expanse, sz)?;
         Ok(())

@@ -121,7 +121,7 @@ mod tests {
     /// state, and redo all changes to make sure we end up at the end again.
     fn tundo<F>(start: &str, f: F, end: &str)
     where
-        F: FnOnce(&mut Core) -> (),
+        F: FnOnce(&mut Core),
     {
         let start = Core::from_spec(start);
         let end = Core::from_spec(end);

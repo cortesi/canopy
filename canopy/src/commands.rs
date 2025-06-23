@@ -21,7 +21,7 @@ impl Args {
     pub fn as_isize(&self) -> Result<isize> {
         match self {
             Args::ISize(i) => Ok(*i),
-            _ => Err(Error::Internal(format!("Expected isize, got {:?}", self))),
+            _ => Err(Error::Internal(format!("Expected isize, got {self:?}"))),
         }
     }
 }
