@@ -428,4 +428,25 @@
 <a href=#428 id=428 data-nosnippet>428</a>
 <a href=#429 id=429 data-nosnippet>429</a>        <span class="prelude-val">Ok</span>(())
 <a href=#430 id=430 data-nosnippet>430</a>    }
-<a href=#431 id=431 data-nosnippet>431</a>}</code></pre></div></section></main></body></html>
+<a href=#431 id=431 data-nosnippet>431</a>
+<a href=#432 id=432 data-nosnippet>432</a>    <span class="attr">#[test]
+<a href=#433 id=433 data-nosnippet>433</a>    </span><span class="kw">fn </span>render_on_focus_change() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#434 id=434 data-nosnippet>434</a>        <span class="kw">let </span>(<span class="kw">_</span>, <span class="kw-2">mut </span>tr) = TestRender::create();
+<a href=#435 id=435 data-nosnippet>435</a>        <span class="kw">let </span><span class="kw-2">mut </span>canopy = Canopy::new();
+<a href=#436 id=436 data-nosnippet>436</a>        <span class="kw">let </span><span class="kw-2">mut </span>root = Block {
+<a href=#437 id=437 data-nosnippet>437</a>            state: NodeState::default(),
+<a href=#438 id=438 data-nosnippet>438</a>            children: <span class="macro">vec!</span>[Block::new(<span class="bool-val">false</span>), Block::new(<span class="bool-val">false</span>)],
+<a href=#439 id=439 data-nosnippet>439</a>            horizontal: <span class="bool-val">true</span>,
+<a href=#440 id=440 data-nosnippet>440</a>        };
+<a href=#441 id=441 data-nosnippet>441</a>
+<a href=#442 id=442 data-nosnippet>442</a>        canopy.set_root_size(Expanse::new(<span class="number">20</span>, <span class="number">10</span>), <span class="kw-2">&amp;mut </span>root)<span class="question-mark">?</span>;
+<a href=#443 id=443 data-nosnippet>443</a>        canopy.render(<span class="kw-2">&amp;mut </span>tr, <span class="kw-2">&amp;mut </span>root)<span class="question-mark">?</span>;
+<a href=#444 id=444 data-nosnippet>444</a>        tr.text.lock()<span class="question-mark">?</span>.text.clear();
+<a href=#445 id=445 data-nosnippet>445</a>
+<a href=#446 id=446 data-nosnippet>446</a>        canopy.focus_next(<span class="kw-2">&amp;mut </span>root);
+<a href=#447 id=447 data-nosnippet>447</a>        canopy.render(<span class="kw-2">&amp;mut </span>tr, <span class="kw-2">&amp;mut </span>root)<span class="question-mark">?</span>;
+<a href=#448 id=448 data-nosnippet>448</a>        <span class="macro">assert!</span>(!tr.buf_empty());
+<a href=#449 id=449 data-nosnippet>449</a>
+<a href=#450 id=450 data-nosnippet>450</a>        <span class="prelude-val">Ok</span>(())
+<a href=#451 id=451 data-nosnippet>451</a>    }
+<a href=#452 id=452 data-nosnippet>452</a>}</code></pre></div></section></main></body></html>
