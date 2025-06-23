@@ -168,3 +168,64 @@ impl RenderBackend for CanvasRender {
         unreachable!()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate as canopy;
+    use crate::{
+        widgets::{frame, list::*, Text},
+        Layout, NodeState, Node, StatefulNode, derive_commands,
+    };
+
+    #[derive(StatefulNode)]
+    struct Root {
+        state: NodeState,
+        list: frame::Frame<List<Text>>,
+    }
+
+    #[derive_commands]
+    impl Root {
+        fn new() -> Self {
+            Root {
+                state: NodeState::default(),
+                list: frame::Frame::new(List::new(vec![
+                    Text::new("AAAA").with_fixed_width(4),
+                    Text::new("BBBB").with_fixed_width(4),
+                ])),
+            }
+        }
+    }
+
+    impl Node for Root {
+        fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+            f(&mut self.list)
+        }
+
+        fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+            l.fill(self, sz)?;
+            let vp = self.vp();
+            l.place(&mut self.list, vp, vp.view)?;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn initial_render_shows_list_items() -> Result<()> {
+        let size = Expanse::new(10, 5);
+        let (buf, mut backend) = CanvasRender::create(size);
+        let mut canopy = Canopy::new();
+        let mut root = Root::new();
+
+        canopy.set_root_size(size, &mut root)?;
+        let tainted = true;
+        if tainted || canopy.focus_changed() {
+            canopy.render(&mut backend, &mut root)?;
+        }
+
+        let cells = buf.lock().unwrap().cells.clone();
+        assert_eq!(cells[1][1], 'A');
+        assert_eq!(cells[2][1], 'B');
+        Ok(())
+    }
+}
