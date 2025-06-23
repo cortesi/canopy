@@ -45,3 +45,9 @@ impl From<Rect> for Expanse {
         Expanse { w: r.w, h: r.h }
     }
 }
+
+impl From<(u16, u16)> for Expanse {
+    fn from(v: (u16, u16)) -> Expanse {
+        Expanse { w: v.0, h: v.1 }
+    }
+}

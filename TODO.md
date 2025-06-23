@@ -2,6 +2,8 @@
 # TODO
 
 - Start specializing into a Render, Layout and Event contexts
+  - Shift projection methods into Render
+    - Add new projection tracker to Render that tracks the screen rectangle for each nodes
   - Make immutable methods from Context available on Render
 - Rewrite the renderer so that the projection point in ViewPort is always relative to the view of the parent node.
   - ViewPort.screen_rect, project_point, etc. are now completely incorrect, and should be rewritten, probably by moving
