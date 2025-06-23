@@ -26,13 +26,13 @@
 <a href=#26 id=26 data-nosnippet>26</a>    }
 <a href=#27 id=27 data-nosnippet>27</a>    <span class="kw">pub fn </span>add_event(<span class="kw-2">&amp;mut </span><span class="self">self</span>, n: <span class="kw-2">&amp;</span>NodeName, evt: <span class="kw-2">&amp;</span>str, result: EventOutcome) {
 <a href=#28 id=28 data-nosnippet>28</a>        <span class="kw">let </span>outcome = <span class="kw">match </span>result {
-<a href=#29 id=29 data-nosnippet>29</a>            EventOutcome::Handle { .. } =&gt; <span class="string">"handle"</span>,
-<a href=#30 id=30 data-nosnippet>30</a>            EventOutcome::Ignore { .. } =&gt; <span class="string">"ignore"</span>,
+<a href=#29 id=29 data-nosnippet>29</a>            EventOutcome::Handle =&gt; <span class="string">"handle"</span>,
+<a href=#30 id=30 data-nosnippet>30</a>            EventOutcome::Ignore =&gt; <span class="string">"ignore"</span>,
 <a href=#31 id=31 data-nosnippet>31</a>        };
-<a href=#32 id=32 data-nosnippet>32</a>        <span class="self">self</span>.path.push(<span class="macro">format!</span>(<span class="string">"{}@{}-&gt;{}"</span>, n, evt, outcome))
+<a href=#32 id=32 data-nosnippet>32</a>        <span class="self">self</span>.path.push(<span class="macro">format!</span>(<span class="string">"{n}@{evt}-&gt;{outcome}"</span>))
 <a href=#33 id=33 data-nosnippet>33</a>    }
 <a href=#34 id=34 data-nosnippet>34</a>    <span class="kw">pub fn </span>add_command(<span class="kw-2">&amp;mut </span><span class="self">self</span>, n: <span class="kw-2">&amp;</span>NodeName, cmd: <span class="kw-2">&amp;</span>str) {
-<a href=#35 id=35 data-nosnippet>35</a>        <span class="self">self</span>.path.push(<span class="macro">format!</span>(<span class="string">"{}.{}()"</span>, n, cmd))
+<a href=#35 id=35 data-nosnippet>35</a>        <span class="self">self</span>.path.push(<span class="macro">format!</span>(<span class="string">"{n}.{cmd}()"</span>))
 <a href=#36 id=36 data-nosnippet>36</a>    }
 <a href=#37 id=37 data-nosnippet>37</a>}
 <a href=#38 id=38 data-nosnippet>38</a>

@@ -127,8 +127,8 @@
 <a href=#127 id=127 data-nosnippet>127</a>
 <a href=#128 id=128 data-nosnippet>128</a><span class="doccomment">/// The node state object - each node needs to keep one of these, and offer it
 <a href=#129 id=129 data-nosnippet>129</a>/// up by implementing the StatefulNode trait.
-<a href=#130 id=130 data-nosnippet>130</a></span><span class="kw">impl </span>NodeState {
-<a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">pub fn </span>default() -&gt; <span class="self">Self </span>{
+<a href=#130 id=130 data-nosnippet>130</a></span><span class="kw">impl </span>Default <span class="kw">for </span>NodeState {
+<a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
 <a href=#132 id=132 data-nosnippet>132</a>        <span class="kw">let </span>id = CURRENT_ID.fetch_add(<span class="number">1</span>, std::sync::atomic::Ordering::Relaxed);
 <a href=#133 id=133 data-nosnippet>133</a>        NodeState {
 <a href=#134 id=134 data-nosnippet>134</a>            id,

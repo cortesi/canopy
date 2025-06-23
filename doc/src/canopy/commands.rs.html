@@ -21,7 +21,7 @@
 <a href=#21 id=21 data-nosnippet>21</a>    <span class="kw">pub fn </span>as_isize(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;isize&gt; {
 <a href=#22 id=22 data-nosnippet>22</a>        <span class="kw">match </span><span class="self">self </span>{
 <a href=#23 id=23 data-nosnippet>23</a>            Args::ISize(i) =&gt; <span class="prelude-val">Ok</span>(<span class="kw-2">*</span>i),
-<a href=#24 id=24 data-nosnippet>24</a>            <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(Error::Internal(<span class="macro">format!</span>(<span class="string">"Expected isize, got {:?}"</span>, <span class="self">self</span>))),
+<a href=#24 id=24 data-nosnippet>24</a>            <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(Error::Internal(<span class="macro">format!</span>(<span class="string">"Expected isize, got {self:?}"</span>))),
 <a href=#25 id=25 data-nosnippet>25</a>        }
 <a href=#26 id=26 data-nosnippet>26</a>    }
 <a href=#27 id=27 data-nosnippet>27</a>}

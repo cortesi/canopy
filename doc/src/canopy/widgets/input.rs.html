@@ -51,12 +51,12 @@
 <a href=#51 id=51 data-nosnippet>51</a>            </span><span class="kw">if </span><span class="self">self</span>.cursor_pos == <span class="self">self</span>.value.len() <span class="kw">as </span>u16 {
 <a href=#52 id=52 data-nosnippet>52</a>                off += <span class="number">1
 <a href=#53 id=53 data-nosnippet>53</a>            </span>}
-<a href=#54 id=54 data-nosnippet>54</a>            <span class="self">self</span>.window.off = off <span class="kw">as </span>u16;
+<a href=#54 id=54 data-nosnippet>54</a>            <span class="self">self</span>.window.off = off;
 <a href=#55 id=55 data-nosnippet>55</a>        }
 <a href=#56 id=56 data-nosnippet>56</a>
 <a href=#57 id=57 data-nosnippet>57</a>        <span class="kw">if </span><span class="self">self</span>.cursor_display() &gt;= <span class="self">self</span>.window.len {
 <a href=#58 id=58 data-nosnippet>58</a>            <span class="kw">let </span>delta = <span class="self">self</span>.cursor_display() - <span class="self">self</span>.window.len + <span class="number">1</span>;
-<a href=#59 id=59 data-nosnippet>59</a>            <span class="self">self</span>.window.off += delta <span class="kw">as </span>u16;
+<a href=#59 id=59 data-nosnippet>59</a>            <span class="self">self</span>.window.off += delta;
 <a href=#60 id=60 data-nosnippet>60</a>        }
 <a href=#61 id=61 data-nosnippet>61</a>    }
 <a href=#62 id=62 data-nosnippet>62</a>
@@ -152,7 +152,7 @@
 <a href=#152 id=152 data-nosnippet>152</a>    <span class="kw">fn </span>cursor(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;cursor::Cursor&gt; {
 <a href=#153 id=153 data-nosnippet>153</a>        <span class="prelude-val">Some</span>(cursor::Cursor {
 <a href=#154 id=154 data-nosnippet>154</a>            location: Point {
-<a href=#155 id=155 data-nosnippet>155</a>                x: <span class="self">self</span>.textbuf.cursor_display() <span class="kw">as </span>u16,
+<a href=#155 id=155 data-nosnippet>155</a>                x: <span class="self">self</span>.textbuf.cursor_display(),
 <a href=#156 id=156 data-nosnippet>156</a>                y: <span class="number">0</span>,
 <a href=#157 id=157 data-nosnippet>157</a>            },
 <a href=#158 id=158 data-nosnippet>158</a>            shape: cursor::CursorShape::Block,
@@ -183,7 +183,7 @@
 <a href=#183 id=183 data-nosnippet>183</a>        <span class="kw">let </span>expanse = <span class="kw">if </span><span class="self">self</span>.textbuf.window.len &gt;= tbl {
 <a href=#184 id=184 data-nosnippet>184</a>            sz
 <a href=#185 id=185 data-nosnippet>185</a>        } <span class="kw">else </span>{
-<a href=#186 id=186 data-nosnippet>186</a>            Expanse::new(tbl <span class="kw">as </span>u16, <span class="number">1</span>)
+<a href=#186 id=186 data-nosnippet>186</a>            Expanse::new(tbl, <span class="number">1</span>)
 <a href=#187 id=187 data-nosnippet>187</a>        };
 <a href=#188 id=188 data-nosnippet>188</a>        l.size(<span class="self">self</span>, expanse, sz)<span class="question-mark">?</span>;
 <a href=#189 id=189 data-nosnippet>189</a>        <span class="prelude-val">Ok</span>(())

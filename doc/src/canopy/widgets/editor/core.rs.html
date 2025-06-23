@@ -121,7 +121,7 @@
 <a href=#121 id=121 data-nosnippet>121</a>    /// state, and redo all changes to make sure we end up at the end again.
 <a href=#122 id=122 data-nosnippet>122</a>    </span><span class="kw">fn </span>tundo&lt;F&gt;(start: <span class="kw-2">&amp;</span>str, f: F, end: <span class="kw-2">&amp;</span>str)
 <a href=#123 id=123 data-nosnippet>123</a>    <span class="kw">where
-<a href=#124 id=124 data-nosnippet>124</a>        </span>F: FnOnce(<span class="kw-2">&amp;mut </span>Core) -&gt; (),
+<a href=#124 id=124 data-nosnippet>124</a>        </span>F: FnOnce(<span class="kw-2">&amp;mut </span>Core),
 <a href=#125 id=125 data-nosnippet>125</a>    {
 <a href=#126 id=126 data-nosnippet>126</a>        <span class="kw">let </span>start = Core::from_spec(start);
 <a href=#127 id=127 data-nosnippet>127</a>        <span class="kw">let </span>end = Core::from_spec(end);
