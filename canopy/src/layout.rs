@@ -43,10 +43,10 @@ impl Layout {
 
     /// Place a child in a given sub-rectangle of a parent's view.
     pub fn place(&self, child: &mut dyn Node, parent_vp: ViewPort, loc: Rect) -> Result<()> {
-        child.layout(self, loc.expanse())?;
         child.__vp_mut().position = parent_vp
             .position
             .scroll(loc.tl.x as i16, loc.tl.y as i16);
+        child.layout(self, loc.expanse())?;
         Ok(())
     }
 

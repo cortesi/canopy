@@ -100,9 +100,10 @@ impl<N: Node> Node for Panes<N> {
         Ok(())
     }
 
-    fn layout(&mut self, l: &Layout, _: Expanse) -> Result<()> {
+    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+        l.fill(self, sz)?;
         let vp = self.vp();
-        let lst = vp.screen_rect().split_panes(&self.shape())?;
+        let lst = vp.view.split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
                 l.place(row, vp, lst[ci][ri])?;
@@ -116,6 +117,7 @@ impl<N: Node> Node for Panes<N> {
 mod tests {
     use super::*;
     use crate::tutils::*;
+    use crate::geom::Rect;
 
     #[test]
     fn tlayout() -> Result<()> {
@@ -145,6 +147,221 @@ mod tests {
 
         c.set_focus(&mut p.children[1][0].a);
         assert_eq!(p.focus_coords(&c), Some((1, 0)));
+        Ok(())
+    }
+
+    #[derive(StatefulNode)]
+    struct Root {
+        state: NodeState,
+        panes: Panes<TFixed>,
+    }
+
+    #[derive(StatefulNode)]
+    struct RootFill {
+        state: NodeState,
+        panes: Panes<Fill>,
+    }
+
+    #[derive(StatefulNode)]
+    struct Fill {
+        state: NodeState,
+    }
+
+    #[derive_commands]
+    impl Fill {}
+
+    impl Node for Fill {
+        fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+            l.fill(self, sz)
+        }
+    }
+
+    #[derive_commands]
+    impl RootFill {
+        fn new() -> Self {
+            RootFill {
+                state: NodeState::default(),
+                panes: Panes::new(Fill { state: NodeState::default() }),
+            }
+        }
+    }
+
+    impl Node for RootFill {
+        fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+            f(&mut self.panes)
+        }
+
+        fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+            l.fill(self, sz)?;
+            let vp = self.vp();
+            let parts = vp.view.split_horizontal(2)?;
+            l.place(&mut self.panes, vp, parts[1])?;
+            Ok(())
+        }
+    }
+
+    #[derive_commands]
+    impl Root {
+        fn new() -> Self {
+            Root {
+                state: NodeState::default(),
+                panes: Panes::new(TFixed::new(1, 1)),
+            }
+        }
+    }
+
+    impl Node for Root {
+        fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+            f(&mut self.panes)
+        }
+
+        fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+            l.fill(self, sz)?;
+            let vp = self.vp();
+            let parts = vp.view.split_horizontal(2)?;
+            l.place(&mut self.panes, vp, parts[1])?;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn tlayout_offset() -> Result<()> {
+        let mut c = Canopy::new();
+        let mut root = Root::new();
+        let l = Layout {};
+
+        c.set_root_size(Expanse::new(20, 10), &mut root)?;
+        root.panes.insert_col(&mut c, TFixed::new(1, 1))?;
+        root.layout(&l, Expanse::new(20, 10))?;
+
+        assert_eq!(root.panes.children.len(), 2);
+        assert_eq!(root.panes.children[0][0].vp().position.x, 10);
+        assert_eq!(root.panes.children[1][0].vp().position.x, 15);
+        Ok(())
+    }
+
+    #[test]
+    fn tlayout_tiling() -> Result<()> {
+        let mut c = Canopy::new();
+        let mut root = RootFill::new();
+        let l = Layout {};
+
+        c.set_root_size(Expanse::new(20, 10), &mut root)?;
+        root.panes.insert_col(&mut c, Fill { state: NodeState::default() })?;
+        c.set_focus(&mut root.panes.children[0][0]);
+        root.panes.insert_row(&mut c, Fill { state: NodeState::default() });
+        c.set_focus(&mut root.panes.children[1][0]);
+        root.panes.insert_row(&mut c, Fill { state: NodeState::default() });
+        root.layout(&l, Expanse::new(20, 10))?;
+
+        let expect = [
+            Rect::new(10, 0, 5, 5),
+            Rect::new(10, 5, 5, 5),
+            Rect::new(15, 0, 5, 5),
+            Rect::new(15, 5, 5, 5),
+        ];
+
+        assert_eq!(root.panes.children[0][0].vp().screen_rect(), expect[0]);
+        assert_eq!(root.panes.children[0][1].vp().screen_rect(), expect[1]);
+        assert_eq!(root.panes.children[1][0].vp().screen_rect(), expect[2]);
+        assert_eq!(root.panes.children[1][1].vp().screen_rect(), expect[3]);
+        Ok(())
+    }
+
+    #[test]
+    fn tlayout_multisplit() -> Result<()> {
+        let mut c = Canopy::new();
+        let mut root = RootFill::new();
+        let l = Layout {};
+
+        c.set_root_size(Expanse::new(20, 10), &mut root)?;
+
+        // Create two columns
+        root.panes.insert_col(&mut c, Fill { state: NodeState::default() })?;
+
+        // Split the left column
+        c.set_focus(&mut root.panes.children[0][0]);
+        root.panes.insert_row(&mut c, Fill { state: NodeState::default() });
+
+        // Split the right column so we have a 2x2 grid
+        c.set_focus(&mut root.panes.children[1][0]);
+        root.panes.insert_row(&mut c, Fill { state: NodeState::default() });
+
+        // Now split the bottom-right pane again. This exercises splitting
+        // a pane that is not in the top-left corner.
+        c.set_focus(&mut root.panes.children[1][1]);
+        root.panes.insert_row(&mut c, Fill { state: NodeState::default() });
+
+        root.layout(&l, Expanse::new(20, 10))?;
+
+        let expect = root
+            .panes
+            .vp()
+            .view
+            .split_panes(&root.panes.shape())?;
+
+        let off = root.panes.vp().position;
+        let expect: Vec<Vec<Rect>> = expect
+            .into_iter()
+            .map(|col| {
+                col.into_iter()
+                    .map(|r| r.shift(off.x as i16, off.y as i16))
+                    .collect()
+            })
+            .collect();
+
+        assert_eq!(root.panes.shape(), vec![2, 3]);
+        assert_eq!(root.panes.children[0][0].vp().screen_rect(), expect[0][0]);
+        assert_eq!(root.panes.children[0][1].vp().screen_rect(), expect[0][1]);
+        assert_eq!(root.panes.children[1][0].vp().screen_rect(), expect[1][0]);
+        assert_eq!(root.panes.children[1][1].vp().screen_rect(), expect[1][1]);
+        assert_eq!(root.panes.children[1][2].vp().screen_rect(), expect[1][2]);
+        Ok(())
+    }
+
+    #[test]
+    fn tlayout_tiling_3x3() -> Result<()> {
+        let mut c = Canopy::new();
+        let mut root = RootFill::new();
+        let l = Layout {};
+
+        c.set_root_size(Expanse::new(20, 10), &mut root)?;
+
+        root.panes.insert_col(&mut c, Fill { state: NodeState::default() })?;
+        root.panes.insert_col(&mut c, Fill { state: NodeState::default() })?;
+
+        for x in 0..3 {
+            c.set_focus(&mut root.panes.children[x][0]);
+            root.panes.insert_row(&mut c, Fill { state: NodeState::default() });
+            c.set_focus(&mut root.panes.children[x][1]);
+            root.panes.insert_row(&mut c, Fill { state: NodeState::default() });
+        }
+
+        root.layout(&l, Expanse::new(20, 10))?;
+
+        let expect = root
+            .panes
+            .vp()
+            .view
+            .split_panes(&root.panes.shape())?;
+
+        let off = root.panes.vp().position;
+        let expect: Vec<Vec<Rect>> = expect
+            .into_iter()
+            .map(|col| {
+                col.into_iter()
+                    .map(|r| r.shift(off.x as i16, off.y as i16))
+                    .collect()
+            })
+            .collect();
+
+        assert_eq!(root.panes.shape(), vec![3, 3, 3]);
+        for (ci, col) in root.panes.children.iter().enumerate() {
+            for (ri, pane) in col.iter().enumerate() {
+                assert_eq!(pane.vp().screen_rect(), expect[ci][ri]);
+            }
+        }
+
         Ok(())
     }
 }
