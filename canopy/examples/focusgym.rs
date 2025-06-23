@@ -63,7 +63,7 @@ impl Node for Block {
                 vp.view.split_vertical(self.children.len() as u16)?
             };
             for i in 0..self.children.len() {
-                l.place(&mut self.children[i], vps[i])?;
+                l.place(&mut self.children[i], vp, vps[i])?;
             }
         }
         Ok(())

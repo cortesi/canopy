@@ -101,10 +101,11 @@ impl<N: Node> Node for Panes<N> {
     }
 
     fn layout(&mut self, l: &Layout, _: Expanse) -> Result<()> {
-        let lst = self.vp().screen_rect().split_panes(&self.shape())?;
+        let vp = self.vp();
+        let lst = vp.screen_rect().split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
-                l.place(row, lst[ci][ri])?;
+                l.place(row, vp, lst[ci][ri])?;
             }
         }
         Ok(())

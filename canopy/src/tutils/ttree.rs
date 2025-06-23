@@ -68,6 +68,9 @@ macro_rules! leaf {
             fn accept_focus(&mut self) -> bool {
                 true
             }
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)
+            }
             fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
                 r.text(
                     "any",
@@ -173,9 +176,10 @@ macro_rules! branch {
 
             fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
                 l.fill(self, sz)?;
-                let parts = self.vp().view.split_vertical(2)?;
-                l.place(&mut self.a, parts[0])?;
-                l.place(&mut self.b, parts[1])?;
+                let vp = self.vp();
+                let parts = vp.view.split_vertical(2)?;
+                l.place(&mut self.a, vp, parts[0])?;
+                l.place(&mut self.b, vp, parts[1])?;
                 Ok(())
             }
 
@@ -256,9 +260,10 @@ impl Node for R {
 
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         l.fill(self, sz)?;
-        let parts = self.vp().view.split_horizontal(2)?;
-        l.place(&mut self.a, parts[0])?;
-        l.place(&mut self.b, parts[1])?;
+        let vp = self.vp();
+        let parts = vp.view.split_horizontal(2)?;
+        l.place(&mut self.a, vp, parts[0])?;
+        l.place(&mut self.b, vp, parts[1])?;
         Ok(())
     }
 

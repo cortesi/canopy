@@ -280,18 +280,20 @@ where
             h += i.virt.h
         }
         l.size(self, Expanse { w, h }, r)?;
+        let vp = self.vp();
+        for itm in &mut self.items {
+            if let Some(child_vp) = vp.map(itm.virt)? {
+                *itm.itm.__vp_mut() = child_vp;
+                itm.itm.unhide();
+            } else {
+                itm.itm.hide();
+                itm.itm.__vp_mut().view = Rect::default();
+            }
+        }
         Ok(())
     }
 
     fn render(&mut self, _c: &dyn Context, _: &mut Render) -> Result<()> {
-        let vp = self.vp();
-        for itm in &mut self.items {
-            if let Some(_) = vp.map(itm.virt)? {
-                itm.itm.unhide();
-            } else {
-                itm.itm.hide();
-            }
-        }
         Ok(())
     }
 }

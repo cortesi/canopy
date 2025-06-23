@@ -112,9 +112,10 @@ impl Intervals {
 impl Node for Intervals {
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         l.fill(self, sz)?;
-        let (a, b) = self.vp().view.carve_vend(1);
-        l.place(&mut self.statusbar, b)?;
-        l.place(&mut self.content, a)?;
+        let vp = self.vp();
+        let (a, b) = vp.view.carve_vend(1);
+        l.place(&mut self.statusbar, vp, b)?;
+        l.place(&mut self.content, vp, a)?;
         Ok(())
     }
 

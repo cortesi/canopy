@@ -256,7 +256,7 @@ impl ViewPort {
             let region = view_in_parent.rebase_rect(&overlap).ok()?;
             // Now, to calculate the screen offset, we take the relative position in the parent's projection, then add
             // that to the screen offset.
-            let p = parent_projection.region.rebase_point(region.tl).ok()?;
+            let p = parent_projection.region.rebase_point(overlap.tl).ok()?;
             Some(Projection::new(
                 region,
                 (
@@ -315,7 +315,7 @@ mod tests {
         let v = ViewPort::new((30, 30), (10, 10, 10, 10), (5, 5))?;
         assert_eq!(
             v.projection(Projection::new((10, 10, 10, 10), (0, 0))),
-            Some(Projection::new((0, 0, 30, 30), (10, 10))),
+            Some(Projection::new((5, 5, 5, 5), (0, 0))),
         );
 
         Ok(())

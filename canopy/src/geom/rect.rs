@@ -181,8 +181,8 @@ impl Rect {
             return Err(Error::Geometry("rebase of non-contained point".into()));
         }
         Ok(Point {
-            x: pt.x - self.tl.x,
-            y: pt.y - self.tl.y,
+            x: pt.x.saturating_sub(self.tl.x),
+            y: pt.y.saturating_sub(self.tl.y),
         })
     }
 

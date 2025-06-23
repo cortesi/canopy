@@ -580,12 +580,11 @@ impl Canopy {
                 n.render(self, &mut rndr)?;
 
                 // Now add regions managed by children to coverage
-                let escreen = n.vp().screen_rect();
                 n.children(&mut |n| {
                     if !n.is_hidden() {
                         let s = n.vp().screen_rect();
                         if !s.is_zero() {
-                            rndr.coverage.add(escreen);
+                            rndr.coverage.add(s);
                         }
                     }
                     Ok(())
@@ -798,6 +797,9 @@ impl Canopy {
     pub(crate) fn set_root_size(&mut self, size: Expanse, root: &mut dyn Node) -> Result<()> {
         self.root_size = Some(size);
         self.taint_tree(root);
+        // Apply layout immediately so viewport reflects the new size
+        let l = Layout {};
+        root.layout(&l, size)?;
         Ok(())
     }
 

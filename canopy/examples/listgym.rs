@@ -45,7 +45,8 @@ impl ListItem for Block {
 impl Node for Block {
     fn layout(&mut self, l: &Layout, target: Expanse) -> Result<()> {
         let loc = Rect::new(2, 0, target.w.saturating_sub(2), target.h);
-        l.place(&mut self.child, loc)?;
+        let vp = self.vp();
+        l.place(&mut self.child, vp, loc)?;
 
         let vp = self.child.vp();
         let sz = Expanse {
@@ -128,9 +129,10 @@ impl ListGym {
 
 impl Node for ListGym {
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        let (a, b) = self.vp().screen_rect().carve_vend(1);
-        l.place(&mut self.content, a)?;
-        l.place(&mut self.statusbar, b)?;
+        let vp = self.vp();
+        let (a, b) = vp.screen_rect().carve_vend(1);
+        l.place(&mut self.content, vp, a)?;
+        l.place(&mut self.statusbar, vp, b)?;
         l.fill(self, sz)?;
         Ok(())
     }
