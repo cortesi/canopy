@@ -428,4 +428,25 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn render_on_focus_change() -> Result<()> {
+        let (_, mut tr) = TestRender::create();
+        let mut canopy = Canopy::new();
+        let mut root = Block {
+            state: NodeState::default(),
+            children: vec![Block::new(false), Block::new(false)],
+            horizontal: true,
+        };
+
+        canopy.set_root_size(Expanse::new(20, 10), &mut root)?;
+        canopy.render(&mut tr, &mut root)?;
+        tr.text.lock()?.text.clear();
+
+        canopy.focus_next(&mut root);
+        canopy.render(&mut tr, &mut root)?;
+        assert!(!tr.buf_empty());
+
+        Ok(())
+    }
 }

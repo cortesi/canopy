@@ -402,15 +402,16 @@ where
     cnpy.set_root_size(Expanse::new(size.0, size.1), &mut root)?;
     cnpy.start_poller(cnpy.event_tx.clone());
 
-    let mut tainted = true;
+    cnpy.render(&mut be, &mut root)?;
+    translate_result(be.flush())?;
+
     loop {
-        if tainted {
-            cnpy.render(&mut be, &mut root)?;
-            translate_result(be.flush())?;
-        }
         cnpy.event(&mut root, events.next()?)?;
 
-        tainted = cnpy.taint;
-        cnpy.taint = false;
+        if cnpy.taint || cnpy.focus_changed() {
+            cnpy.render(&mut be, &mut root)?;
+            translate_result(be.flush())?;
+            cnpy.taint = false;
+        }
     }
 }
