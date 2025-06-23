@@ -1,4 +1,5 @@
-use std::{cell::RefCell, collections::HashMap};
+use std::collections::HashMap;
+use scoped_tls::scoped_thread_local;
 
 use rhai;
 
@@ -24,37 +25,8 @@ struct ScriptGlobal<'a> {
     node_id: NodeId,
 }
 
-thread_local! {
-    static SCRIPT_GLOBAL: RefCell<Option<ScriptGlobal<'static>>> = const { RefCell::new(None) };
-}
+scoped_thread_local!(static SCRIPT_GLOBAL: *const ());
 
-pub(crate) struct ScriptGuard {}
-
-impl ScriptGuard {
-    pub fn new(core: &mut dyn Context, root: &mut dyn Node, node_id: NodeId) -> Self {
-        let sg = ScriptGlobal {
-            core,
-            root,
-            node_id,
-        };
-        SCRIPT_GLOBAL.with(|g| {
-            *g.borrow_mut() = Some(unsafe { extend_lifetime(sg) });
-        });
-        ScriptGuard {}
-    }
-}
-
-impl Drop for ScriptGuard {
-    fn drop(&mut self) {
-        SCRIPT_GLOBAL.with(|g| {
-            *g.borrow_mut() = None;
-        });
-    }
-}
-
-unsafe fn extend_lifetime<'b>(r: ScriptGlobal<'b>) -> ScriptGlobal<'static> {
-    std::mem::transmute::<ScriptGlobal<'b>, ScriptGlobal<'static>>(r)
-}
 
 #[derive(Debug)]
 pub(crate) struct ScriptHost {
@@ -117,9 +89,12 @@ impl ScriptHost {
             let func = move |_context: Option<rhai::NativeCallContext>,
                              args: &mut FnCallArgs|
                   -> ScriptResult<rhai::Dynamic> {
-                SCRIPT_GLOBAL.with(|g| {
-                    let mut b = g.borrow_mut();
-                    let v = b.as_mut().unwrap();
+                SCRIPT_GLOBAL.with(|ptr| {
+                    // SAFETY: `ptr` was created from a pointer to `ScriptGlobal`
+                    // which lives for the duration of this closure.
+                    let sg = unsafe { &mut *(*ptr as *mut ScriptGlobal) };
+                    let core = &mut *sg.core;
+                    let root = &mut *sg.root;
 
                     let mut ciargs = vec![];
                     let mut arg_types = arg_types.clone();
@@ -146,7 +121,7 @@ impl ScriptHost {
                         command: command.clone(),
                         args: ciargs,
                     };
-                    if let Some(ret) = dispatch(v.core, v.node_id.clone(), v.root, &ci).unwrap() {
+                    if let Some(ret) = dispatch(core, sg.node_id.clone(), root, &ci).unwrap() {
                         Ok(match ret {
                             ReturnValue::Void => rhai::Dynamic::UNIT,
                             ReturnValue::String(s) => rhai::Dynamic::from(s),
@@ -195,11 +170,25 @@ impl ScriptHost {
         Ok(self.current_id)
     }
 
-    pub fn execute(&self, sid: ScriptId) -> Result<()> {
+    pub fn execute(
+        &mut self,
+        core: &mut dyn Context,
+        root: &mut dyn Node,
+        node_id: NodeId,
+        sid: ScriptId,
+    ) -> Result<()> {
         let s = self.scripts.get(&sid).unwrap();
-        self.engine
-            .run_ast(&s.ast)
-            .map_err(|e| error::Error::Script(e.to_string()))?;
+        let sg = ScriptGlobal {
+            core,
+            root,
+            node_id,
+        };
+        let ptr = &sg as *const _ as *const ();
+        SCRIPT_GLOBAL.set(&ptr, || {
+            self.engine
+                .run_ast(&s.ast)
+                .map_err(|e| error::Error::Script(e.to_string()))
+        })?;
         Ok(())
     }
 }

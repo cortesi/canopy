@@ -156,6 +156,7 @@ dependencies = [
  "rand",
  "regex",
  "rhai",
+ "scoped-tls",
  "scopeguard",
  "textwrap",
  "thiserror",
@@ -810,6 +811,12 @@ dependencies = [
  "linux-raw-sys",
  "windows-sys 0.59.0",
 ]
+
+[[package]]
+name = "scoped-tls"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1cf6437eb19a8f4a6cc0f7dca544973b0b78843adbfeb3683d1a94a0024a294"
 
 [[package]]
 name = "scopeguard"
