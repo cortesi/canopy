@@ -161,9 +161,9 @@ where
         // space is to the right and below.
         for r in self
             .vp()
-            .view
+            .screen_rect()
             .inner(1)
-            .sub(&self.child.vp().canvas.rect().shift(1, 1))
+            .sub(&self.child.vp().screen_rect())
         {
             rndr.fill(style, r, ' ')?;
         }
