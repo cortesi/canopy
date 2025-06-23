@@ -103,3 +103,74 @@ impl Context for DummyContext {
         panic!("exit in dummy core")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(StatefulNode)]
+    struct Block {
+        state: NodeState,
+        children: Vec<Block>,
+        horizontal: bool,
+    }
+
+    #[derive_commands]
+    impl Block {
+        fn new(horizontal: bool) -> Self {
+            Block { state: NodeState::default(), children: vec![], horizontal }
+        }
+    }
+
+    impl Node for Block {
+        fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+            l.fill(self, sz)?;
+            if !self.children.is_empty() {
+                let vp = self.vp();
+                let vps = if self.horizontal {
+                    vp.view.split_horizontal(self.children.len() as u16)?
+                } else {
+                    vp.view.split_vertical(self.children.len() as u16)?
+                };
+                for (i, ch) in self.children.iter_mut().enumerate() {
+                    l.place(ch, vp, vps[i])?;
+                }
+            }
+            Ok(())
+        }
+
+        fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
+            if self.children.is_empty() {
+                r.fill("blue", self.vp().view, 'x')?;
+            }
+            Ok(())
+        }
+
+        fn accept_focus(&mut self) -> bool {
+            true
+        }
+
+        fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+            for c in &mut self.children {
+                f(c)?;
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn block_renders() -> Result<()> {
+        let (_, mut tr) = TestRender::create();
+        let mut canopy = Canopy::new();
+        let mut root = Block {
+            state: NodeState::default(),
+            children: vec![Block::new(false), Block::new(false)],
+            horizontal: true,
+        };
+
+        canopy.set_root_size(Expanse::new(20, 10), &mut root)?;
+        canopy.render(&mut tr, &mut root)?;
+        assert!(!tr.buf_empty());
+        Ok(())
+    }
+}
