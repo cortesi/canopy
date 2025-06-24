@@ -74,7 +74,7 @@
 <a href=#74 id=74 data-nosnippet>74</a>            <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Context, r: <span class="kw-2">&amp;mut </span>Render) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
 <a href=#75 id=75 data-nosnippet>75</a>                r.text(
 <a href=#76 id=76 data-nosnippet>76</a>                    <span class="string">"any"</span>,
-<a href=#77 id=77 data-nosnippet>77</a>                    <span class="self">self</span>.vp().view.line(<span class="number">0</span>),
+<a href=#77 id=77 data-nosnippet>77</a>                    <span class="self">self</span>.vp().view().line(<span class="number">0</span>),
 <a href=#78 id=78 data-nosnippet>78</a>                    <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"&lt;{}&gt;"</span>, <span class="self">self</span>.name().clone()),
 <a href=#79 id=79 data-nosnippet>79</a>                )
 <a href=#80 id=80 data-nosnippet>80</a>            }
@@ -177,7 +177,7 @@
 <a href=#177 id=177 data-nosnippet>177</a>            <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l: <span class="kw-2">&amp;</span>Layout, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
 <a href=#178 id=178 data-nosnippet>178</a>                l.fill(<span class="self">self</span>, sz)<span class="question-mark">?</span>;
 <a href=#179 id=179 data-nosnippet>179</a>                <span class="kw">let </span>vp = <span class="self">self</span>.vp();
-<a href=#180 id=180 data-nosnippet>180</a>                <span class="kw">let </span>parts = vp.view.split_vertical(<span class="number">2</span>)<span class="question-mark">?</span>;
+<a href=#180 id=180 data-nosnippet>180</a>                <span class="kw">let </span>parts = vp.view().split_vertical(<span class="number">2</span>)<span class="question-mark">?</span>;
 <a href=#181 id=181 data-nosnippet>181</a>                l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.a, vp, parts[<span class="number">0</span>])<span class="question-mark">?</span>;
 <a href=#182 id=182 data-nosnippet>182</a>                l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.b, vp, parts[<span class="number">1</span>])<span class="question-mark">?</span>;
 <a href=#183 id=183 data-nosnippet>183</a>                <span class="prelude-val">Ok</span>(())
@@ -186,7 +186,7 @@
 <a href=#186 id=186 data-nosnippet>186</a>            <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Context, r: <span class="kw-2">&amp;mut </span>Render) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
 <a href=#187 id=187 data-nosnippet>187</a>                r.text(
 <a href=#188 id=188 data-nosnippet>188</a>                    <span class="string">"any"</span>,
-<a href=#189 id=189 data-nosnippet>189</a>                    <span class="self">self</span>.vp().view.line(<span class="number">0</span>),
+<a href=#189 id=189 data-nosnippet>189</a>                    <span class="self">self</span>.vp().view().line(<span class="number">0</span>),
 <a href=#190 id=190 data-nosnippet>190</a>                    <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"&lt;{}&gt;"</span>, <span class="self">self</span>.name().clone()),
 <a href=#191 id=191 data-nosnippet>191</a>                )
 <a href=#192 id=192 data-nosnippet>192</a>            }
@@ -261,14 +261,14 @@
 <a href=#261 id=261 data-nosnippet>261</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l: <span class="kw-2">&amp;</span>Layout, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
 <a href=#262 id=262 data-nosnippet>262</a>        l.fill(<span class="self">self</span>, sz)<span class="question-mark">?</span>;
 <a href=#263 id=263 data-nosnippet>263</a>        <span class="kw">let </span>vp = <span class="self">self</span>.vp();
-<a href=#264 id=264 data-nosnippet>264</a>        <span class="kw">let </span>parts = vp.view.split_horizontal(<span class="number">2</span>)<span class="question-mark">?</span>;
+<a href=#264 id=264 data-nosnippet>264</a>        <span class="kw">let </span>parts = vp.view().split_horizontal(<span class="number">2</span>)<span class="question-mark">?</span>;
 <a href=#265 id=265 data-nosnippet>265</a>        l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.a, vp, parts[<span class="number">0</span>])<span class="question-mark">?</span>;
 <a href=#266 id=266 data-nosnippet>266</a>        l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.b, vp, parts[<span class="number">1</span>])<span class="question-mark">?</span>;
 <a href=#267 id=267 data-nosnippet>267</a>        <span class="prelude-val">Ok</span>(())
 <a href=#268 id=268 data-nosnippet>268</a>    }
 <a href=#269 id=269 data-nosnippet>269</a>
 <a href=#270 id=270 data-nosnippet>270</a>    <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Context, r: <span class="kw-2">&amp;mut </span>Render) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#271 id=271 data-nosnippet>271</a>        r.text(<span class="string">"any"</span>, <span class="self">self</span>.vp().view.line(<span class="number">0</span>), <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"&lt;{}&gt;"</span>, <span class="self">self</span>.name()))
+<a href=#271 id=271 data-nosnippet>271</a>        r.text(<span class="string">"any"</span>, <span class="self">self</span>.vp().view().line(<span class="number">0</span>), <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"&lt;{}&gt;"</span>, <span class="self">self</span>.name()))
 <a href=#272 id=272 data-nosnippet>272</a>    }
 <a href=#273 id=273 data-nosnippet>273</a>
 <a href=#274 id=274 data-nosnippet>274</a>    <span class="kw">fn </span>handle_key(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Context, <span class="kw">_</span>: key::Key) -&gt; <span class="prelude-ty">Result</span>&lt;EventOutcome&gt; {

@@ -595,7 +595,7 @@
 <a href=#595 id=595 data-nosnippet>595</a>
 <a href=#596 id=596 data-nosnippet>596</a>                <span class="comment">// We now have coverage, relative to this node's screen rectange. We
 <a href=#597 id=597 data-nosnippet>597</a>                // rebase each rect back down to our virtual co-ordinates.
-<a href=#598 id=598 data-nosnippet>598</a>                </span><span class="kw">let </span>sr = n.vp().view;
+<a href=#598 id=598 data-nosnippet>598</a>                </span><span class="kw">let </span>sr = n.vp().view();
 <a href=#599 id=599 data-nosnippet>599</a>                <span class="kw">for </span>l <span class="kw">in </span>rndr.coverage.uncovered() {
 <a href=#600 id=600 data-nosnippet>600</a>                    rndr.fill(<span class="string">""</span>, l.rect().shift(sr.tl.x <span class="kw">as </span>i16, sr.tl.y <span class="kw">as </span>i16), <span class="string">' '</span>)<span class="question-mark">?</span>;
 <a href=#601 id=601 data-nosnippet>601</a>                }
@@ -629,7 +629,7 @@
 <a href=#629 id=629 data-nosnippet>629</a>            })
 <a href=#630 id=630 data-nosnippet>630</a>        })<span class="question-mark">?</span>;
 <a href=#631 id=631 data-nosnippet>631</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>((_nid, vp, c)) = cn {
-<a href=#632 id=632 data-nosnippet>632</a>            show_cursor(r, <span class="kw-2">&amp;</span><span class="self">self</span>.style, styl, vp, <span class="string">"cursor"</span>, c + vp.position)<span class="question-mark">?</span>;
+<a href=#632 id=632 data-nosnippet>632</a>            show_cursor(r, <span class="kw-2">&amp;</span><span class="self">self</span>.style, styl, vp, <span class="string">"cursor"</span>, c + vp.position())<span class="question-mark">?</span>;
 <a href=#633 id=633 data-nosnippet>633</a>        }
 <a href=#634 id=634 data-nosnippet>634</a>
 <a href=#635 id=635 data-nosnippet>635</a>        <span class="prelude-val">Ok</span>(())

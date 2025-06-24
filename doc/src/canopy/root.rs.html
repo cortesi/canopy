@@ -149,7 +149,7 @@
 <a href=#149 id=149 data-nosnippet>149</a>        l.fill(<span class="self">self</span>, sz)<span class="question-mark">?</span>;
 <a href=#150 id=150 data-nosnippet>150</a>        <span class="kw">let </span>vp = <span class="self">self</span>.vp();
 <a href=#151 id=151 data-nosnippet>151</a>        <span class="kw">if </span><span class="self">self</span>.inspector_active {
-<a href=#152 id=152 data-nosnippet>152</a>            <span class="kw">let </span>parts = vp.view.split_horizontal(<span class="number">2</span>)<span class="question-mark">?</span>;
+<a href=#152 id=152 data-nosnippet>152</a>            <span class="kw">let </span>parts = vp.view().split_horizontal(<span class="number">2</span>)<span class="question-mark">?</span>;
 <a href=#153 id=153 data-nosnippet>153</a>            l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.inspector, vp, parts[<span class="number">0</span>])<span class="question-mark">?</span>;
 <a href=#154 id=154 data-nosnippet>154</a>            l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.app, vp, parts[<span class="number">1</span>])<span class="question-mark">?</span>;
 <a href=#155 id=155 data-nosnippet>155</a>        } <span class="kw">else </span>{

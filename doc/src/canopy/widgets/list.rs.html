@@ -127,7 +127,7 @@
 <a href=#127 id=127 data-nosnippet>127</a>    <span class="doccomment">/// Make sure the selected item is within the view after a change.
 <a href=#128 id=128 data-nosnippet>128</a>    </span><span class="kw">fn </span>ensure_selected_in_view(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Context) {
 <a href=#129 id=129 data-nosnippet>129</a>        <span class="kw">let </span>virt = <span class="self">self</span>.items[<span class="self">self</span>.offset].virt;
-<a href=#130 id=130 data-nosnippet>130</a>        <span class="kw">let </span>view = <span class="self">self</span>.vp().view;
+<a href=#130 id=130 data-nosnippet>130</a>        <span class="kw">let </span>view = <span class="self">self</span>.vp().view();
 <a href=#131 id=131 data-nosnippet>131</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = virt.vextent().intersection(<span class="kw-2">&amp;</span>view.vextent()) {
 <a href=#132 id=132 data-nosnippet>132</a>            <span class="kw">if </span>v.len == virt.h {
 <a href=#133 id=133 data-nosnippet>133</a>                <span class="kw">return</span>;
@@ -151,7 +151,7 @@
 <a href=#151 id=151 data-nosnippet>151</a>    /// their offsets and sizes. Items that are offscreen to the side are also
 <a href=#152 id=152 data-nosnippet>152</a>    /// returned, so the returned vector is guaranteed to be a contiguous range.
 <a href=#153 id=153 data-nosnippet>153</a>    </span><span class="kw">fn </span>in_view(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;usize&gt; {
-<a href=#154 id=154 data-nosnippet>154</a>        <span class="kw">let </span>view = <span class="self">self</span>.vp().view;
+<a href=#154 id=154 data-nosnippet>154</a>        <span class="kw">let </span>view = <span class="self">self</span>.vp().view();
 <a href=#155 id=155 data-nosnippet>155</a>        <span class="kw">let </span><span class="kw-2">mut </span>ret = <span class="macro">vec!</span>[];
 <a href=#156 id=156 data-nosnippet>156</a>        <span class="kw">for </span>(idx, itm) <span class="kw">in </span><span class="self">self</span>.items.iter().enumerate() {
 <a href=#157 id=157 data-nosnippet>157</a>            <span class="kw">if </span>view.vextent().intersection(<span class="kw-2">&amp;</span>itm.virt.vextent()).is_some() {
@@ -270,7 +270,7 @@
 <a href=#270 id=270 data-nosnippet>270</a>        <span class="kw">let </span><span class="kw-2">mut </span>voffset: u16 = <span class="number">0</span>;
 <a href=#271 id=271 data-nosnippet>271</a>        <span class="kw">for </span>itm <span class="kw">in </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.items {
 <a href=#272 id=272 data-nosnippet>272</a>            itm.itm.layout(l, r)<span class="question-mark">?</span>;
-<a href=#273 id=273 data-nosnippet>273</a>            <span class="kw">let </span>item_view = itm.itm.vp().canvas.rect();
+<a href=#273 id=273 data-nosnippet>273</a>            <span class="kw">let </span>item_view = itm.itm.vp().canvas().rect();
 <a href=#274 id=274 data-nosnippet>274</a>            itm.virt = item_view.shift(<span class="number">0</span>, voffset <span class="kw">as </span>i16);
 <a href=#275 id=275 data-nosnippet>275</a>            voffset += item_view.h;
 <a href=#276 id=276 data-nosnippet>276</a>        }
@@ -284,9 +284,9 @@
 <a href=#284 id=284 data-nosnippet>284</a>        <span class="kw">for </span>itm <span class="kw">in </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.items {
 <a href=#285 id=285 data-nosnippet>285</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(child_vp) = vp.map(itm.virt)<span class="question-mark">? </span>{
 <a href=#286 id=286 data-nosnippet>286</a>                <span class="kw">let </span>st = itm.itm.state_mut();
-<a href=#287 id=287 data-nosnippet>287</a>                st.set_canvas(child_vp.canvas);
-<a href=#288 id=288 data-nosnippet>288</a>                st.set_view(child_vp.view);
-<a href=#289 id=289 data-nosnippet>289</a>                st.set_position(child_vp.position);
+<a href=#287 id=287 data-nosnippet>287</a>                st.set_canvas(child_vp.canvas());
+<a href=#288 id=288 data-nosnippet>288</a>                st.set_view(child_vp.view());
+<a href=#289 id=289 data-nosnippet>289</a>                st.set_position(child_vp.position());
 <a href=#290 id=290 data-nosnippet>290</a>                itm.itm.unhide();
 <a href=#291 id=291 data-nosnippet>291</a>            } <span class="kw">else </span>{
 <a href=#292 id=292 data-nosnippet>292</a>                itm.itm.hide();
@@ -297,7 +297,7 @@
 <a href=#297 id=297 data-nosnippet>297</a>    }
 <a href=#298 id=298 data-nosnippet>298</a>
 <a href=#299 id=299 data-nosnippet>299</a>    <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Context, rndr: <span class="kw-2">&amp;mut </span>Render) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#300 id=300 data-nosnippet>300</a>        rndr.fill(<span class="string">""</span>, <span class="self">self</span>.vp().canvas.rect(), <span class="string">' '</span>)<span class="question-mark">?</span>;
+<a href=#300 id=300 data-nosnippet>300</a>        rndr.fill(<span class="string">""</span>, <span class="self">self</span>.vp().canvas().rect(), <span class="string">' '</span>)<span class="question-mark">?</span>;
 <a href=#301 id=301 data-nosnippet>301</a>        <span class="prelude-val">Ok</span>(())
 <a href=#302 id=302 data-nosnippet>302</a>    }
 <a href=#303 id=303 data-nosnippet>303</a>}
@@ -347,7 +347,7 @@
 <a href=#347 id=347 data-nosnippet>347</a>            <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l: <span class="kw-2">&amp;</span>Layout, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
 <a href=#348 id=348 data-nosnippet>348</a>                l.fill(<span class="self">self</span>, sz)<span class="question-mark">?</span>;
 <a href=#349 id=349 data-nosnippet>349</a>                <span class="kw">let </span>vp = <span class="self">self</span>.vp();
-<a href=#350 id=350 data-nosnippet>350</a>                l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.list, vp, vp.view)<span class="question-mark">?</span>;
+<a href=#350 id=350 data-nosnippet>350</a>                l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.list, vp, vp.view())<span class="question-mark">?</span>;
 <a href=#351 id=351 data-nosnippet>351</a>                <span class="prelude-val">Ok</span>(())
 <a href=#352 id=352 data-nosnippet>352</a>            }
 <a href=#353 id=353 data-nosnippet>353</a>        }
@@ -475,8 +475,8 @@
 <a href=#475 id=475 data-nosnippet>475</a>                l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.text, vp, Rect::new(<span class="number">0</span>, <span class="number">0</span>, s.w, s.h))<span class="question-mark">?</span>;
 <a href=#476 id=476 data-nosnippet>476</a>                <span class="kw">let </span>vp = <span class="self">self</span>.text.vp();
 <a href=#477 id=477 data-nosnippet>477</a>                <span class="kw">let </span>sz = Expanse {
-<a href=#478 id=478 data-nosnippet>478</a>                    w: vp.canvas.w,
-<a href=#479 id=479 data-nosnippet>479</a>                    h: vp.canvas.h,
+<a href=#478 id=478 data-nosnippet>478</a>                    w: vp.canvas().w,
+<a href=#479 id=479 data-nosnippet>479</a>                    h: vp.canvas().h,
 <a href=#480 id=480 data-nosnippet>480</a>                };
 <a href=#481 id=481 data-nosnippet>481</a>                l.size(<span class="self">self</span>, sz, sz)<span class="question-mark">?</span>;
 <a href=#482 id=482 data-nosnippet>482</a>                <span class="prelude-val">Ok</span>(())
@@ -514,7 +514,7 @@
 <a href=#514 id=514 data-nosnippet>514</a>            <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l: <span class="kw-2">&amp;</span>Layout, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
 <a href=#515 id=515 data-nosnippet>515</a>                l.fill(<span class="self">self</span>, sz)<span class="question-mark">?</span>;
 <a href=#516 id=516 data-nosnippet>516</a>                <span class="kw">let </span>vp = <span class="self">self</span>.vp();
-<a href=#517 id=517 data-nosnippet>517</a>                l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.frame, vp, vp.view)<span class="question-mark">?</span>;
+<a href=#517 id=517 data-nosnippet>517</a>                l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.frame, vp, vp.view())<span class="question-mark">?</span>;
 <a href=#518 id=518 data-nosnippet>518</a>                <span class="prelude-val">Ok</span>(())
 <a href=#519 id=519 data-nosnippet>519</a>            }
 <a href=#520 id=520 data-nosnippet>520</a>        }
@@ -525,11 +525,11 @@
 <a href=#525 id=525 data-nosnippet>525</a>
 <a href=#526 id=526 data-nosnippet>526</a>        canopy.set_root_size(size, <span class="kw-2">&amp;mut </span>root)<span class="question-mark">?</span>;
 <a href=#527 id=527 data-nosnippet>527</a>
-<a href=#528 id=528 data-nosnippet>528</a>        <span class="kw">let </span>list_rect = root.frame.child.vp().view;
+<a href=#528 id=528 data-nosnippet>528</a>        <span class="kw">let </span>list_rect = root.frame.child.vp().view();
 <a href=#529 id=529 data-nosnippet>529</a>        <span class="kw">let </span><span class="kw-2">mut </span>rects = Vec::new();
 <a href=#530 id=530 data-nosnippet>530</a>        root.frame.child.children(<span class="kw-2">&amp;mut </span>|n| {
 <a href=#531 id=531 data-nosnippet>531</a>            <span class="kw">if </span>!n.is_hidden() {
-<a href=#532 id=532 data-nosnippet>532</a>                rects.push(n.vp().view);
+<a href=#532 id=532 data-nosnippet>532</a>                rects.push(n.vp().view());
 <a href=#533 id=533 data-nosnippet>533</a>            }
 <a href=#534 id=534 data-nosnippet>534</a>            <span class="prelude-val">Ok</span>(())
 <a href=#535 id=535 data-nosnippet>535</a>        })<span class="question-mark">?</span>;
@@ -569,8 +569,8 @@
 <a href=#569 id=569 data-nosnippet>569</a>                l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.text, vp, Rect::new(<span class="number">0</span>, <span class="number">0</span>, s.w, s.h))<span class="question-mark">?</span>;
 <a href=#570 id=570 data-nosnippet>570</a>                <span class="kw">let </span>vp = <span class="self">self</span>.text.vp();
 <a href=#571 id=571 data-nosnippet>571</a>                <span class="kw">let </span>sz = Expanse {
-<a href=#572 id=572 data-nosnippet>572</a>                    w: vp.canvas.w,
-<a href=#573 id=573 data-nosnippet>573</a>                    h: vp.canvas.h,
+<a href=#572 id=572 data-nosnippet>572</a>                    w: vp.canvas().w,
+<a href=#573 id=573 data-nosnippet>573</a>                    h: vp.canvas().h,
 <a href=#574 id=574 data-nosnippet>574</a>                };
 <a href=#575 id=575 data-nosnippet>575</a>                l.size(<span class="self">self</span>, sz, sz)<span class="question-mark">?</span>;
 <a href=#576 id=576 data-nosnippet>576</a>                <span class="prelude-val">Ok</span>(())
@@ -609,7 +609,7 @@
 <a href=#609 id=609 data-nosnippet>609</a>            <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l: <span class="kw-2">&amp;</span>Layout, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
 <a href=#610 id=610 data-nosnippet>610</a>                l.fill(<span class="self">self</span>, sz)<span class="question-mark">?</span>;
 <a href=#611 id=611 data-nosnippet>611</a>                <span class="kw">let </span>vp = <span class="self">self</span>.vp();
-<a href=#612 id=612 data-nosnippet>612</a>                l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.frame, vp, vp.view)<span class="question-mark">?</span>;
+<a href=#612 id=612 data-nosnippet>612</a>                l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.frame, vp, vp.view())<span class="question-mark">?</span>;
 <a href=#613 id=613 data-nosnippet>613</a>                <span class="prelude-val">Ok</span>(())
 <a href=#614 id=614 data-nosnippet>614</a>            }
 <a href=#615 id=615 data-nosnippet>615</a>        }
@@ -680,8 +680,8 @@
 <a href=#680 id=680 data-nosnippet>680</a>                l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.text, vp, Rect::new(<span class="number">0</span>, <span class="number">0</span>, s.w, s.h))<span class="question-mark">?</span>;
 <a href=#681 id=681 data-nosnippet>681</a>                <span class="kw">let </span>vp = <span class="self">self</span>.text.vp();
 <a href=#682 id=682 data-nosnippet>682</a>                <span class="kw">let </span>sz = Expanse {
-<a href=#683 id=683 data-nosnippet>683</a>                    w: vp.canvas.w,
-<a href=#684 id=684 data-nosnippet>684</a>                    h: vp.canvas.h,
+<a href=#683 id=683 data-nosnippet>683</a>                    w: vp.canvas().w,
+<a href=#684 id=684 data-nosnippet>684</a>                    h: vp.canvas().h,
 <a href=#685 id=685 data-nosnippet>685</a>                };
 <a href=#686 id=686 data-nosnippet>686</a>                l.size(<span class="self">self</span>, sz, sz)<span class="question-mark">?</span>;
 <a href=#687 id=687 data-nosnippet>687</a>                <span class="prelude-val">Ok</span>(())
@@ -720,7 +720,7 @@
 <a href=#720 id=720 data-nosnippet>720</a>            <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l: <span class="kw-2">&amp;</span>Layout, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
 <a href=#721 id=721 data-nosnippet>721</a>                l.fill(<span class="self">self</span>, sz)<span class="question-mark">?</span>;
 <a href=#722 id=722 data-nosnippet>722</a>                <span class="kw">let </span>vp = <span class="self">self</span>.vp();
-<a href=#723 id=723 data-nosnippet>723</a>                l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.frame, vp, vp.view)<span class="question-mark">?</span>;
+<a href=#723 id=723 data-nosnippet>723</a>                l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.frame, vp, vp.view())<span class="question-mark">?</span>;
 <a href=#724 id=724 data-nosnippet>724</a>                <span class="prelude-val">Ok</span>(())
 <a href=#725 id=725 data-nosnippet>725</a>            }
 <a href=#726 id=726 data-nosnippet>726</a>        }
@@ -780,8 +780,8 @@
 <a href=#780 id=780 data-nosnippet>780</a>                )<span class="question-mark">?</span>;
 <a href=#781 id=781 data-nosnippet>781</a>                <span class="kw">let </span>vp = <span class="self">self</span>.text.vp();
 <a href=#782 id=782 data-nosnippet>782</a>                <span class="kw">let </span>sz = Expanse {
-<a href=#783 id=783 data-nosnippet>783</a>                    w: vp.canvas.w + <span class="number">2</span>,
-<a href=#784 id=784 data-nosnippet>784</a>                    h: vp.canvas.h,
+<a href=#783 id=783 data-nosnippet>783</a>                    w: vp.canvas().w + <span class="number">2</span>,
+<a href=#784 id=784 data-nosnippet>784</a>                    h: vp.canvas().h,
 <a href=#785 id=785 data-nosnippet>785</a>                };
 <a href=#786 id=786 data-nosnippet>786</a>                l.size(<span class="self">self</span>, sz, sz)<span class="question-mark">?</span>;
 <a href=#787 id=787 data-nosnippet>787</a>                <span class="prelude-val">Ok</span>(())
@@ -802,7 +802,7 @@
 <a href=#802 id=802 data-nosnippet>802</a>
 <a href=#803 id=803 data-nosnippet>803</a>        <span class="kw">impl </span>Node <span class="kw">for </span>Status {
 <a href=#804 id=804 data-nosnippet>804</a>            <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Context, r: <span class="kw-2">&amp;mut </span>Render) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#805 id=805 data-nosnippet>805</a>                r.text(<span class="string">""</span>, <span class="self">self</span>.vp().view.line(<span class="number">0</span>), <span class="string">"status"</span>)
+<a href=#805 id=805 data-nosnippet>805</a>                r.text(<span class="string">""</span>, <span class="self">self</span>.vp().view().line(<span class="number">0</span>), <span class="string">"status"</span>)
 <a href=#806 id=806 data-nosnippet>806</a>            }
 <a href=#807 id=807 data-nosnippet>807</a>        }
 <a href=#808 id=808 data-nosnippet>808</a>

@@ -41,7 +41,7 @@
 <a href=#41 id=41 data-nosnippet>41</a>    <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Context, r: <span class="kw-2">&amp;mut </span>Render) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
 <a href=#42 id=42 data-nosnippet>42</a>        <span class="kw">for </span>(i, rect) <span class="kw">in </span><span class="self">self
 <a href=#43 id=43 data-nosnippet>43</a>            </span>.vp()
-<a href=#44 id=44 data-nosnippet>44</a>            .view
+<a href=#44 id=44 data-nosnippet>44</a>            .view()
 <a href=#45 id=45 data-nosnippet>45</a>            .split_horizontal(<span class="self">self</span>.tabs.len() <span class="kw">as </span>u16)<span class="question-mark">?
 <a href=#46 id=46 data-nosnippet>46</a>            </span>.iter()
 <a href=#47 id=47 data-nosnippet>47</a>            .enumerate()
