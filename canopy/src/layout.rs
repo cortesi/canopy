@@ -46,12 +46,12 @@ impl Layout {
             .state_mut()
             .set_position(parent_vp.position.scroll(loc.tl.x as i16, loc.tl.y as i16));
         child.layout(self, loc.expanse())?;
-        child.__vp_mut().constrain(parent_vp);
+        child.state_mut().constrain(parent_vp);
         Ok(())
     }
 
     pub fn size(&self, n: &mut dyn Node, sz: Expanse, view_size: Expanse) -> Result<()> {
-        n.__vp_mut().fit_size(sz, view_size);
+        n.state_mut().fit_size(sz, view_size);
         Ok(())
     }
 
@@ -60,7 +60,7 @@ impl Layout {
     pub fn fit(&self, n: &mut dyn Node, parent_vp: ViewPort) -> Result<()> {
         n.layout(self, parent_vp.screen_rect().into())?;
         n.state_mut().set_position(parent_vp.position);
-        n.__vp_mut().constrain(parent_vp);
+        n.state_mut().constrain(parent_vp);
         Ok(())
     }
 }
@@ -84,8 +84,8 @@ mod tests {
         let expected = ViewPort::new(Expanse::new(5, 5), Rect::new(0, 0, 5, 5), (10, 10))?;
         l.fit(&mut n, vp)?;
         assert_eq!(n.state().viewport, expected,);
-        n.__vp_mut().scroll_right();
-        n.__vp_mut().scroll_down();
+        n.state_mut().scroll_right();
+        n.state_mut().scroll_down();
         assert_eq!(n.state().viewport, expected,);
 
         // If the child is larger than parent, then wrap places the viewport at (0, 0).
@@ -98,8 +98,8 @@ mod tests {
         );
 
         // The child can shift its view freely
-        n.__vp_mut().scroll_right();
-        n.__vp_mut().scroll_down();
+        n.state_mut().scroll_right();
+        n.state_mut().scroll_down();
         assert_eq!(
             n.state().viewport,
             ViewPort::new(Expanse::new(20, 20), Rect::new(1, 1, 10, 10), (10, 10))?

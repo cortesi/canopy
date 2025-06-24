@@ -140,6 +140,57 @@ impl NodeState {
     pub fn set_view(&mut self, view: crate::geom::Rect) {
         self.viewport.view = view;
     }
+
+    /// Constrain this viewport so that its screen rectangle falls within the
+    /// specified parent viewport.
+    pub fn constrain(&mut self, parent: ViewPort) {
+        self.viewport.constrain(parent);
+    }
+
+    /// Set the node size and the target view size at the same time.
+    pub fn fit_size(&mut self, size: crate::geom::Expanse, view_size: crate::geom::Expanse) {
+        self.viewport.fit_size(size, view_size);
+    }
+
+    /// Scroll the view to the specified position.
+    pub fn scroll_to(&mut self, x: u16, y: u16) {
+        self.viewport.scroll_to(x, y);
+    }
+
+    /// Scroll the view by the given offsets.
+    pub fn scroll_by(&mut self, x: i16, y: i16) {
+        self.viewport.scroll_by(x, y);
+    }
+
+    /// Scroll the view up by the height of the view rectangle.
+    pub fn page_up(&mut self) {
+        self.viewport.page_up();
+    }
+
+    /// Scroll the view down by the height of the view rectangle.
+    pub fn page_down(&mut self) {
+        self.viewport.page_down();
+    }
+
+    /// Scroll the view up by one line.
+    pub fn scroll_up(&mut self) {
+        self.viewport.scroll_up();
+    }
+
+    /// Scroll the view down by one line.
+    pub fn scroll_down(&mut self) {
+        self.viewport.scroll_down();
+    }
+
+    /// Scroll the view left by one line.
+    pub fn scroll_left(&mut self) {
+        self.viewport.scroll_left();
+    }
+
+    /// Scroll the view right by one line.
+    pub fn scroll_right(&mut self) {
+        self.viewport.scroll_right();
+    }
 }
 
 /// The node state object - each node needs to keep one of these, and offer it
