@@ -3,9 +3,9 @@ use std::{
     sync::{mpsc, MutexGuard, PoisonError},
 };
 
-use crate::backend::test::TestBuf;
 #[cfg(test)]
 use crate::backend::test::CanvasBuf;
+use crate::backend::test::TestBuf;
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;

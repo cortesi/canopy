@@ -28,10 +28,10 @@ impl Node for EditorView {
     fn cursor(&self) -> Option<cursor::Cursor> {
         let p = self.core.cursor_position();
         p.map(|p| cursor::Cursor {
-                location: p,
-                shape: cursor::CursorShape::Block,
-                blink: true,
-            })
+            location: p,
+            shape: cursor::CursorShape::Block,
+            blink: true,
+        })
     }
 
     fn accept_focus(&mut self) -> bool {

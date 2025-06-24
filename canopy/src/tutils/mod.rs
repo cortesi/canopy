@@ -118,7 +118,11 @@ mod tests {
     #[derive_commands]
     impl Block {
         fn new(horizontal: bool) -> Self {
-            Block { state: NodeState::default(), children: vec![], horizontal }
+            Block {
+                state: NodeState::default(),
+                children: vec![],
+                horizontal,
+            }
         }
 
         /// Split this block into two children, toggling orientation like the

@@ -41,13 +41,10 @@ impl InputMode {
 
     /// Insert a key binding into this mode
     fn insert(&mut self, path_filter: PathMatcher, input: Input, script: script::ScriptId) {
-        self.inputs
-            .entry(input)
-            .or_default()
-            .push(BoundAction {
-                pathmatch: path_filter,
-                script,
-            });
+        self.inputs.entry(input).or_default().push(BoundAction {
+            pathmatch: path_filter,
+            script,
+        });
     }
 
     /// Resolve a key with a given path filter to a script.

@@ -116,8 +116,8 @@ impl<N: Node> Node for Panes<N> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tutils::*;
     use crate::geom::Rect;
+    use crate::tutils::*;
 
     #[test]
     fn tlayout() -> Result<()> {
@@ -181,7 +181,9 @@ mod tests {
         fn new() -> Self {
             RootFill {
                 state: NodeState::default(),
-                panes: Panes::new(Fill { state: NodeState::default() }),
+                panes: Panes::new(Fill {
+                    state: NodeState::default(),
+                }),
             }
         }
     }
@@ -247,11 +249,26 @@ mod tests {
         let l = Layout {};
 
         c.set_root_size(Expanse::new(20, 10), &mut root)?;
-        root.panes.insert_col(&mut c, Fill { state: NodeState::default() })?;
+        root.panes.insert_col(
+            &mut c,
+            Fill {
+                state: NodeState::default(),
+            },
+        )?;
         c.set_focus(&mut root.panes.children[0][0]);
-        root.panes.insert_row(&mut c, Fill { state: NodeState::default() });
+        root.panes.insert_row(
+            &mut c,
+            Fill {
+                state: NodeState::default(),
+            },
+        );
         c.set_focus(&mut root.panes.children[1][0]);
-        root.panes.insert_row(&mut c, Fill { state: NodeState::default() });
+        root.panes.insert_row(
+            &mut c,
+            Fill {
+                state: NodeState::default(),
+            },
+        );
         root.layout(&l, Expanse::new(20, 10))?;
 
         let expect = [
@@ -277,28 +294,44 @@ mod tests {
         c.set_root_size(Expanse::new(20, 10), &mut root)?;
 
         // Create two columns
-        root.panes.insert_col(&mut c, Fill { state: NodeState::default() })?;
+        root.panes.insert_col(
+            &mut c,
+            Fill {
+                state: NodeState::default(),
+            },
+        )?;
 
         // Split the left column
         c.set_focus(&mut root.panes.children[0][0]);
-        root.panes.insert_row(&mut c, Fill { state: NodeState::default() });
+        root.panes.insert_row(
+            &mut c,
+            Fill {
+                state: NodeState::default(),
+            },
+        );
 
         // Split the right column so we have a 2x2 grid
         c.set_focus(&mut root.panes.children[1][0]);
-        root.panes.insert_row(&mut c, Fill { state: NodeState::default() });
+        root.panes.insert_row(
+            &mut c,
+            Fill {
+                state: NodeState::default(),
+            },
+        );
 
         // Now split the bottom-right pane again. This exercises splitting
         // a pane that is not in the top-left corner.
         c.set_focus(&mut root.panes.children[1][1]);
-        root.panes.insert_row(&mut c, Fill { state: NodeState::default() });
+        root.panes.insert_row(
+            &mut c,
+            Fill {
+                state: NodeState::default(),
+            },
+        );
 
         root.layout(&l, Expanse::new(20, 10))?;
 
-        let expect = root
-            .panes
-            .vp()
-            .view
-            .split_panes(&root.panes.shape())?;
+        let expect = root.panes.vp().view.split_panes(&root.panes.shape())?;
 
         let off = root.panes.vp().position;
         let expect: Vec<Vec<Rect>> = expect
@@ -327,23 +360,39 @@ mod tests {
 
         c.set_root_size(Expanse::new(20, 10), &mut root)?;
 
-        root.panes.insert_col(&mut c, Fill { state: NodeState::default() })?;
-        root.panes.insert_col(&mut c, Fill { state: NodeState::default() })?;
+        root.panes.insert_col(
+            &mut c,
+            Fill {
+                state: NodeState::default(),
+            },
+        )?;
+        root.panes.insert_col(
+            &mut c,
+            Fill {
+                state: NodeState::default(),
+            },
+        )?;
 
         for x in 0..3 {
             c.set_focus(&mut root.panes.children[x][0]);
-            root.panes.insert_row(&mut c, Fill { state: NodeState::default() });
+            root.panes.insert_row(
+                &mut c,
+                Fill {
+                    state: NodeState::default(),
+                },
+            );
             c.set_focus(&mut root.panes.children[x][1]);
-            root.panes.insert_row(&mut c, Fill { state: NodeState::default() });
+            root.panes.insert_row(
+                &mut c,
+                Fill {
+                    state: NodeState::default(),
+                },
+            );
         }
 
         root.layout(&l, Expanse::new(20, 10))?;
 
-        let expect = root
-            .panes
-            .vp()
-            .view
-            .split_panes(&root.panes.shape())?;
+        let expect = root.panes.vp().view.split_panes(&root.panes.shape())?;
 
         let off = root.panes.vp().position;
         let expect: Vec<Vec<Rect>> = expect

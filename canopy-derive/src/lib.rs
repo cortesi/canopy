@@ -28,11 +28,7 @@ impl std::fmt::Display for Error {
 
 impl From<Error> for Diagnostic {
     fn from(e: Error) -> Diagnostic {
-        Diagnostic::spanned(
-            proc_macro2::Span::call_site(),
-            Level::Error,
-            format!("{e}"),
-        )
+        Diagnostic::spanned(proc_macro2::Span::call_site(), Level::Error, format!("{e}"))
     }
 }
 

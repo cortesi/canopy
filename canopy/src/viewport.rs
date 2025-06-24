@@ -31,11 +31,12 @@ impl Projection {
 pub struct ViewPort {
     /// The location of the node in the parent's canvas. Must only be changed by the parent node.
     pub position: Point,
-    /// The portion of this node that is displayed - a sub-rectangle of the canvas. Must only be changed by the node
-    /// itself.
+    /// The portion of this node that is displayed - a sub-rectangle of the canvas. Must only be
+    /// changed by the node itself.
     pub view: Rect,
-    /// The canvas on which children are positioned, and to which rendering occurs. Must only be changed by the node
-    /// itself.
+    /// The canvas on which children are positioned, and to which rendering occurs. Must only be
+    /// changed by the node itself. You can think of this as a rectangle with co-ordinates (0, 0),
+    /// which describes the full size of this node and its children.
     pub canvas: Expanse,
 }
 
@@ -149,12 +150,7 @@ impl ViewPort {
             let dx = i.tl.x - screen.tl.x;
             let dy = i.tl.y - screen.tl.y;
             self.position = i.tl;
-            self.view = Rect::new(
-                self.view.tl.x + dx,
-                self.view.tl.y + dy,
-                i.w,
-                i.h,
-            );
+            self.view = Rect::new(self.view.tl.x + dx, self.view.tl.y + dy, i.w, i.h);
         } else {
             self.position = parent_screen.tl;
             self.view = Rect::default();

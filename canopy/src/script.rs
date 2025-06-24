@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use scoped_tls::scoped_thread_local;
+use std::collections::HashMap;
 
 use rhai;
 
@@ -26,7 +26,6 @@ struct ScriptGlobal<'a> {
 }
 
 scoped_thread_local!(static SCRIPT_GLOBAL: *const ());
-
 
 #[derive(Debug)]
 pub(crate) struct ScriptHost {
