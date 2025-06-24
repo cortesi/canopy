@@ -83,7 +83,7 @@ mod tests {
     use super::*;
     use crate::{
         self as canopy,
-        geom::{Expanse, Frame, Point, Rect},
+        geom::{Expanse, Rect},
         tutils::TFixed,
         Canopy, Context, Node, NodeState, Render, StatefulNode, *,
     };

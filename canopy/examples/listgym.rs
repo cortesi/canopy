@@ -100,7 +100,7 @@ struct ListGym {
 #[derive_commands]
 impl ListGym {
     fn new() -> Self {
-        let nodes: Vec<Block> = (0..10).map(|i| Block::new(i)).collect();
+        let nodes: Vec<Block> = (0..10).map(Block::new).collect();
         ListGym {
             state: NodeState::default(),
             content: frame::Frame::new(List::new(nodes)),
