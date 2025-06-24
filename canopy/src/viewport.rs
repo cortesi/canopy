@@ -30,10 +30,14 @@ impl Projection {
 #[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ViewPort {
     /// The location of the node in the parent's canvas. Must only be changed by the parent node.
+    // CONSTRAINT: The position must be within the PARENT's canvas rectangle.
     pub position: Point,
+
     /// The portion of this node that is displayed - a sub-rectangle of the canvas. Must only be
     /// changed by the node itself.
+    // CONSTRAINT: The view rectangle must be fully contained within OUR canvas rectangle.
     pub view: Rect,
+
     /// The canvas on which children are positioned, and to which rendering occurs. Must only be
     /// changed by the node itself. You can think of this as a rectangle with co-ordinates (0, 0),
     /// which describes the full size of this node and its children.

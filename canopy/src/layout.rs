@@ -67,6 +67,13 @@ impl Layout {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::{
+        self as canopy,
+        geom::{Expanse, Frame, Point, Rect},
+        tutils::TFixed,
+        Canopy, Context, Node, NodeState, Render, StatefulNode, *,
+    };
 
     #[test]
     fn node_fit() -> Result<()> {
@@ -122,14 +129,6 @@ mod tests {
 
         Ok(())
     }
-
-    use super::*;
-    use crate::{
-        self as canopy,
-        geom::{Expanse, Frame, Point, Rect},
-        tutils::TFixed,
-        Canopy, Context, Node, NodeState, Render, StatefulNode, *,
-    };
 
     #[test]
     fn frame_does_not_overflow_small_parent() -> Result<()> {
