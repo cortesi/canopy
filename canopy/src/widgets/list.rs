@@ -780,14 +780,15 @@ mod tests {
                 // Mirrors the listgym example block layout
                 l.fill(self, sz)?;
                 let vp = self.vp();
+                let indent = if sz.w >= 2 { 2 } else { 0 };
                 l.place(
                     &mut self.text,
                     vp,
-                    Rect::new(2, 0, sz.w.saturating_sub(2), sz.h),
+                    Rect::new(indent, 0, sz.w.saturating_sub(indent), sz.h),
                 )?;
                 let vp = self.text.vp();
                 let sz = Expanse {
-                    w: vp.canvas().w + 2,
+                    w: vp.canvas().w + indent,
                     h: vp.canvas().h,
                 };
                 l.size(self, sz, sz)?;
@@ -865,6 +866,165 @@ mod tests {
         assert!(canvas.painted[1][3]);
         assert_eq!(canvas.cells[0][0], '┌');
 
+        Ok(())
+    }
+
+    #[test]
+    fn horizontal_scroll_works() -> Result<()> {
+        use crate::backend::test::CanvasRender;
+        use crate::widgets::{frame, text::Text};
+
+        #[derive(StatefulNode)]
+        struct Root {
+            state: NodeState,
+            list: frame::Frame<List<Text>>,
+        }
+
+        #[derive_commands]
+        impl Root {
+            fn new() -> Self {
+                Root {
+                    state: NodeState::default(),
+                    list: frame::Frame::new(List::new(vec![
+                        Text::new("ABCDEFG").with_fixed_width(7),
+                        Text::new("HIJKLMN").with_fixed_width(7),
+                    ])),
+                }
+            }
+        }
+
+        impl Node for Root {
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.list)
+            }
+
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                l.place(&mut self.list, vp, vp.view())?;
+                Ok(())
+            }
+        }
+
+        let size = Expanse::new(8, 4);
+        let (buf, mut cr) = CanvasRender::create(size);
+        let mut canopy = Canopy::new();
+        let mut root = Root::new();
+
+        canopy.set_root_size(size, &mut root)?;
+        canopy.render(&mut cr, &mut root)?;
+        let first = buf.lock().unwrap().cells.clone();
+        let bottom = first[(size.h - 1) as usize].clone();
+
+        assert_eq!(first[1][1], 'A');
+        assert_eq!(first[1][2], 'B');
+
+        let corner = first[0][0];
+
+        canopy.scroll_right(&mut root.list.child);
+        canopy.taint_tree(&mut root);
+        canopy.render(&mut cr, &mut root)?;
+        let second = buf.lock().unwrap().cells.clone();
+
+        assert_eq!(second[1][1], 'B');
+        assert_eq!(second[1][2], 'C');
+        assert_eq!(second[0][0], corner);
+        assert_eq!(second[(size.h - 1) as usize], bottom);
+
+        canopy.scroll_left(&mut root.list.child);
+        canopy.taint_tree(&mut root);
+        canopy.render(&mut cr, &mut root)?;
+        let third = buf.lock().unwrap().cells.clone();
+
+        assert_eq!(third[1][1], 'A');
+        assert_eq!(third[1][2], 'B');
+        assert_eq!(third[0][0], corner);
+        assert_eq!(third[(size.h - 1) as usize], bottom);
+
+        Ok(())
+    }
+
+    #[test]
+    fn narrow_list_scroll_no_error() -> Result<()> {
+        use crate::backend::test::CanvasRender;
+
+        #[derive(StatefulNode)]
+        struct Block {
+            state: NodeState,
+            text: Text,
+        }
+
+        #[derive_commands]
+        impl Block {
+            fn new(t: &str) -> Self {
+                Block {
+                    state: NodeState::default(),
+                    text: Text::new(t).with_fixed_width(t.len() as u16),
+                }
+            }
+        }
+
+        impl ListItem for Block {}
+
+        impl Node for Block {
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                let indent = if sz.w >= 2 { 2 } else { 0 };
+                l.place(&mut self.text, vp, Rect::new(indent, 0, sz.w.saturating_sub(indent), sz.h))?;
+                let vp = self.text.vp();
+                let sz = Expanse {
+                    w: vp.canvas().w + indent,
+                    h: vp.canvas().h,
+                };
+                l.size(self, sz, sz)?;
+                Ok(())
+            }
+
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.text)
+            }
+        }
+
+        #[derive(StatefulNode)]
+        struct Root {
+            state: NodeState,
+            list: frame::Frame<List<Block>>,
+        }
+
+        #[derive_commands]
+        impl Root {
+            fn new() -> Self {
+                Root {
+                    state: NodeState::default(),
+                    list: frame::Frame::new(List::new(vec![Block::new("AAAA")])),
+                }
+            }
+        }
+
+        impl Node for Root {
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.list)
+            }
+
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                l.place(&mut self.list, vp, vp.view())?;
+                Ok(())
+            }
+        }
+
+        let size = Expanse::new(3, 3);
+        let (_, mut cr) = CanvasRender::create(size);
+        let mut canopy = Canopy::new();
+        let mut root = Root::new();
+
+        canopy.set_root_size(size, &mut root)?;
+        canopy.render(&mut cr, &mut root)?;
+        canopy.scroll_right(&mut root.list.child);
+        canopy.taint_tree(&mut root);
+        canopy.render(&mut cr, &mut root)?;
         Ok(())
     }
 }
