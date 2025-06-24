@@ -283,14 +283,12 @@ where
         let vp = self.vp();
         for itm in &mut self.items {
             if let Some(child_vp) = vp.map(itm.virt)? {
-                let st = itm.itm.state_mut();
-                st.set_canvas(child_vp.canvas());
-                st.set_view(child_vp.view());
-                st.set_position(
-                    child_vp.position(),
-                    vp.position(),
-                    vp.canvas().rect(),
-                )?;
+                l.fit(&mut itm.itm, child_vp)?;
+                let ivp = itm.itm.vp();
+                itm.itm.children(&mut |c| {
+                    c.state_mut().constrain(ivp);
+                    Ok(())
+                })?;
                 itm.itm.unhide();
             } else {
                 itm.itm.hide();

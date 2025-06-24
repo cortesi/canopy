@@ -46,13 +46,13 @@ impl Layout {
 
     /// Place a child in a given sub-rectangle of a parent's view.
     pub fn place(&self, child: &mut dyn Node, parent_vp: ViewPort, loc: Rect) -> Result<()> {
-        child
-            .state_mut()
-            .set_position(
-                parent_vp.position().scroll(loc.tl.x as i16, loc.tl.y as i16),
-                parent_vp.position(),
-                parent_vp.canvas().rect(),
-            )?;
+        child.state_mut().set_position(
+            parent_vp
+                .position()
+                .scroll(loc.tl.x as i16, loc.tl.y as i16),
+            parent_vp.position(),
+            parent_vp.canvas().rect(),
+        )?;
         child.layout(self, loc.expanse())?;
         child.state_mut().constrain(parent_vp);
         Ok(())
@@ -67,12 +67,11 @@ impl Layout {
     /// adjusts the node's view to place as much of it within the viewport's screen rectangle as possible.
     pub fn fit(&self, n: &mut dyn Node, parent_vp: ViewPort) -> Result<()> {
         n.layout(self, parent_vp.screen_rect().into())?;
-        n.state_mut()
-            .set_position(
-                parent_vp.position(),
-                parent_vp.position(),
-                parent_vp.canvas().rect(),
-            )?;
+        n.state_mut().set_position(
+            parent_vp.position(),
+            parent_vp.position(),
+            parent_vp.canvas().rect(),
+        )?;
         n.state_mut().constrain(parent_vp);
         Ok(())
     }
@@ -83,7 +82,7 @@ mod tests {
     use super::*;
     use crate::{
         self as canopy,
-        geom::{Expanse, Frame, Point, Rect},
+        geom::{Expanse, Rect},
         tutils::TFixed,
         Canopy, Context, Node, NodeState, Render, StatefulNode, *,
     };

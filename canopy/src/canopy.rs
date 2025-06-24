@@ -568,8 +568,16 @@ impl Canopy {
         styl: &mut StyleManager,
         n: &mut dyn Node,
         base: Point,
+        parent: Option<ViewPort>,
     ) -> Result<()> {
         if !n.is_hidden() {
+            if let Some(pvp) = parent {
+                let child = n.vp().screen_rect();
+                let par = pvp.screen_rect();
+                if !child.is_zero() && !par.contains_rect(&child) {
+                    panic!("child {:?} outside parent {:?}: {:?}", n.id(), par, child);
+                }
+            }
             styl.push();
             if self.needs_render(n) {
                 if self.is_focused(n) {
@@ -605,7 +613,8 @@ impl Canopy {
             if n.state().render_gen == 0 {
                 n.state_mut().render_gen = self.render_gen;
             }
-            n.children(&mut |x| self.render_traversal(r, styl, x, base))?;
+            let vp = n.vp();
+            n.children(&mut |x| self.render_traversal(r, styl, x, base, Some(vp)))?;
             styl.pop();
         }
         Ok(())
@@ -653,7 +662,7 @@ impl Canopy {
             styl.reset();
 
             self.pre_render(be, root)?;
-            self.render_traversal(be, &mut styl, root, (0, 0).into())?;
+            self.render_traversal(be, &mut styl, root, (0, 0).into(), None)?;
             self.render_gen += 1;
             self.last_render_focus_gen = self.focus_gen;
             self.post_render(be, &mut styl, root)?;
