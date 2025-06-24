@@ -244,15 +244,6 @@ pub trait StatefulNode {
         self.state().viewport
     }
 
-    /// Get a mutable reference to the node's `ViewPort`.
-    ///
-    /// **Deprecated**: use `NodeState` setter methods instead.
-    #[doc(hidden)]
-    #[deprecated(note = "use NodeState setter methods instead")]
-    fn __vp_mut(&mut self) -> &mut ViewPort {
-        &mut self.state_mut().viewport
-    }
-
     /// A unique ID for this node.
     fn id(&self) -> NodeId {
         NodeId {
