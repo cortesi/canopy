@@ -857,4 +857,185 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn list_does_not_overdraw_frame_bottom() -> Result<()> {
+        const SAMPLE: &str = "line1\nline2";
+
+        #[derive(StatefulNode)]
+        struct Block {
+            state: NodeState,
+            text: Text,
+        }
+
+        #[derive_commands]
+        impl Block {
+            fn new() -> Self {
+                Block {
+                    state: NodeState::default(),
+                    text: Text::new(SAMPLE).with_fixed_width(4),
+                }
+            }
+        }
+
+        impl ListItem for Block {}
+
+        impl Node for Block {
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                l.place(&mut self.text, vp, Rect::new(0, 0, sz.w, sz.h))?;
+                let vp = self.text.vp();
+                let sz = Expanse {
+                    w: vp.canvas.w,
+                    h: vp.canvas.h,
+                };
+                l.size(self, sz, sz)?;
+                Ok(())
+            }
+
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.text)
+            }
+        }
+
+        #[derive(StatefulNode)]
+        struct Root {
+            state: NodeState,
+            frame: frame::Frame<List<Block>>,
+        }
+
+        #[derive_commands]
+        impl Root {
+            fn new() -> Self {
+                Root {
+                    state: NodeState::default(),
+                    frame: frame::Frame::new(List::new(vec![
+                        Block::new(),
+                        Block::new(),
+                        Block::new(),
+                        Block::new(),
+                    ])),
+                }
+            }
+        }
+
+        impl Node for Root {
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.frame)
+            }
+
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                l.place(&mut self.frame, vp, vp.view)?;
+                Ok(())
+            }
+        }
+
+        let size = Expanse::new(10, 6);
+        let (buf, mut cr) = CanvasRender::create(size);
+        let mut canopy = Canopy::new();
+        let mut root = Root::new();
+
+        canopy.set_root_size(size, &mut root)?;
+        canopy.render(&mut cr, &mut root)?;
+        let bottom = buf.lock().unwrap().cells[(size.h - 1) as usize].clone();
+
+        canopy.scroll_down(&mut root.frame.child);
+        canopy.taint_tree(&mut root);
+        canopy.render(&mut cr, &mut root)?;
+        let bottom_after = buf.lock().unwrap().cells[(size.h - 1) as usize].clone();
+
+        assert_eq!(bottom, bottom_after);
+
+        Ok(())
+    }
+
+    #[test]
+    fn list_horizontal_scroll_moves_view() -> Result<()> {
+        #[derive(StatefulNode)]
+        struct Block {
+            state: NodeState,
+            text: Text,
+        }
+
+        #[derive_commands]
+        impl Block {
+            fn new() -> Self {
+                Block {
+                    state: NodeState::default(),
+                    text: Text::new("ABCD").with_fixed_width(30),
+                }
+            }
+        }
+
+        impl ListItem for Block {}
+
+        impl Node for Block {
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                l.place(&mut self.text, vp, Rect::new(0, 0, sz.w, sz.h))?;
+                let vp = self.text.vp();
+                let sz = Expanse {
+                    w: vp.canvas.w,
+                    h: vp.canvas.h,
+                };
+                l.size(self, sz, sz)?;
+                Ok(())
+            }
+
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.text)
+            }
+        }
+
+        #[derive(StatefulNode)]
+        struct Root {
+            state: NodeState,
+            frame: frame::Frame<List<Block>>,
+        }
+
+        #[derive_commands]
+        impl Root {
+            fn new() -> Self {
+                Root {
+                    state: NodeState::default(),
+                    frame: frame::Frame::new(List::new(vec![Block::new()])),
+                }
+            }
+        }
+
+        impl Node for Root {
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.frame)
+            }
+
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                l.place(&mut self.frame, vp, vp.view)?;
+                Ok(())
+            }
+        }
+
+        let size = Expanse::new(10, 4);
+        let (buf, mut cr) = CanvasRender::create(size);
+        let mut canopy = Canopy::new();
+        let mut root = Root::new();
+
+        canopy.set_root_size(size, &mut root)?;
+        canopy.render(&mut cr, &mut root)?;
+        let before_offset = root.frame.child.vp().view.tl.x;
+
+        canopy.scroll_right(&mut root.frame.child);
+        canopy.taint_tree(&mut root);
+        canopy.render(&mut cr, &mut root)?;
+        let after_offset = root.frame.child.vp().view.tl.x;
+
+        assert!(after_offset > before_offset);
+
+        Ok(())
+    }
 }
