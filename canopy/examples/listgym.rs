@@ -1,5 +1,4 @@
 use clap::Parser;
-use rand::seq::SliceRandom;
 use rand::Rng;
 
 use canopy::{
@@ -13,7 +12,7 @@ use canopy::{
 
 const TEXT: &str = "What a struggle must have gone on during long centuries between the several kinds of trees, each annually scattering its seeds by the thousand; what war between insect and insect — between insects, snails, and other animals with birds and beasts of prey — all striving to increase, all feeding on each other, or on the trees, their seeds and seedlings, or on the other plants which first clothed the ground and thus checked the growth of the trees.";
 
-const COLORS: &[&str] = &["red", "blue", "green"];
+const COLORS: &[&str] = &["red", "blue"];
 
 #[derive(StatefulNode)]
 struct Block {
@@ -25,12 +24,12 @@ struct Block {
 
 #[derive_commands]
 impl Block {
-    fn new() -> Self {
+    fn new(index: usize) -> Self {
         let mut rng = rand::thread_rng();
         Block {
             state: NodeState::default(),
             child: Text::new(TEXT).with_fixed_width(rng.gen_range(10..150)),
-            color: String::from(*(COLORS.choose(&mut rng).unwrap())),
+            color: String::from(COLORS[index % 2]),
             selected: false,
         }
     }
@@ -101,7 +100,7 @@ struct ListGym {
 #[derive_commands]
 impl ListGym {
     fn new() -> Self {
-        let nodes: Vec<Block> = (0..10).map(|_| Block::new()).collect();
+        let nodes: Vec<Block> = (0..10).map(|i| Block::new(i)).collect();
         ListGym {
             state: NodeState::default(),
             content: frame::Frame::new(List::new(nodes)),
@@ -114,13 +113,15 @@ impl ListGym {
     #[command]
     /// Add an item after the current focus
     fn add_item(&mut self, _c: &dyn Context) {
-        self.content.child.insert_after(Block::new());
+        let index = self.content.child.offset + 1;
+        self.content.child.insert_after(Block::new(index));
     }
 
     #[command]
     /// Add an item at the end of the list
     fn append_item(&mut self, _c: &dyn Context) {
-        self.content.child.append(Block::new());
+        let index = self.content.child.len();
+        self.content.child.append(Block::new(index));
     }
 
     #[command]
