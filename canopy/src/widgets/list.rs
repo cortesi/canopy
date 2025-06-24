@@ -864,4 +864,91 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn list_does_not_overspill_frame() -> Result<()> {
+        #[derive(StatefulNode)]
+        struct Block {
+            state: NodeState,
+            text: Text,
+        }
+
+        #[derive_commands]
+        impl Block {
+            fn new() -> Self {
+                Block {
+                    state: NodeState::default(),
+                    text: Text::new("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
+                        .with_fixed_width(40),
+                }
+            }
+        }
+
+        impl ListItem for Block {}
+
+        impl Node for Block {
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                l.place(&mut self.text, vp, Rect::new(2, 0, sz.w.saturating_sub(2), sz.h))?;
+                let vp = self.text.vp();
+                let sz = Expanse { w: vp.canvas().w + 2, h: vp.canvas().h };
+                l.size(self, sz, sz)?;
+                Ok(())
+            }
+
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.text)
+            }
+        }
+
+        #[derive(StatefulNode)]
+        struct Root {
+            state: NodeState,
+            frame: frame::Frame<List<Block>>,
+        }
+
+        #[derive_commands]
+        impl Root {
+            fn new() -> Self {
+                Root {
+                    state: NodeState::default(),
+                    frame: frame::Frame::new(List::new(vec![Block::new()])),
+                }
+            }
+        }
+
+        impl Node for Root {
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.frame)
+            }
+
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                l.place(&mut self.frame, vp, vp.view())?;
+                Ok(())
+            }
+        }
+
+        let size = Expanse::new(15, 3);
+        let (buf, mut cr) = CanvasRender::create(size);
+        let mut canopy = Canopy::new();
+        let mut root = Root::new();
+
+        canopy.set_root_size(size, &mut root)?;
+        canopy.render(&mut cr, &mut root)?;
+
+        let canvas = buf.lock().unwrap();
+        let list_rect = root.frame.child.vp().screen_rect();
+        for y in 0..size.h {
+            for x in 0..size.w {
+                if !list_rect.contains_point((x, y)) {
+                    assert_ne!(canvas.cells[y as usize][x as usize], 'X');
+                }
+            }
+        }
+
+        Ok(())
+    }
 }

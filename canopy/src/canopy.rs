@@ -583,11 +583,12 @@ impl Canopy {
                 n.render(self, &mut rndr)?;
 
                 // Now add regions managed by children to coverage
-                n.children(&mut |n| {
-                    if !n.is_hidden() {
-                        let s = n.vp().screen_rect();
-                        if !s.is_zero() {
-                            rndr.coverage.add(s);
+                let vp = n.vp();
+                n.children(&mut |child| {
+                    if !child.is_hidden() {
+                        let s = child.vp().screen_rect();
+                        if let Some(i) = s.intersect(&vp.screen_rect()) {
+                            rndr.coverage.add(vp.unproject(i)?);
                         }
                     }
                     Ok(())
