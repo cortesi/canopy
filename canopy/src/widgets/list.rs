@@ -285,12 +285,12 @@ where
             if let Some(child_vp) = vp.map(itm.virt)? {
                 let st = itm.itm.state_mut();
                 st.set_canvas(child_vp.canvas());
-                st.set_view(child_vp.view());
-                st.set_position(child_vp.position());
+                st.set_view(child_vp.view())?;
+                st.set_position(child_vp.position(), vp.canvas())?;
                 itm.itm.unhide();
             } else {
                 itm.itm.hide();
-                itm.itm.state_mut().set_view(Rect::default());
+                itm.itm.state_mut().set_view(Rect::default())?;
             }
         }
         Ok(())

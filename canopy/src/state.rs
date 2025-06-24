@@ -127,8 +127,8 @@ pub struct NodeState {
 
 impl NodeState {
     /// Set the node's position within the parent canvas.
-    pub fn set_position(&mut self, p: crate::geom::Point) {
-        self.viewport.set_position(p);
+    pub fn set_position(&mut self, p: crate::geom::Point, parent: crate::geom::Expanse) -> crate::Result<()> {
+        self.viewport.set_position(p, parent)
     }
 
     /// Set the size of the node's canvas.
@@ -137,8 +137,8 @@ impl NodeState {
     }
 
     /// Set the portion of the node that is displayed.
-    pub fn set_view(&mut self, view: crate::geom::Rect) {
-        self.viewport.set_view(view);
+    pub fn set_view(&mut self, view: crate::geom::Rect) -> crate::Result<()> {
+        self.viewport.set_view(view)
     }
 
     /// Constrain this viewport so that its screen rectangle falls within the

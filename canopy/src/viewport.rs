@@ -89,10 +89,12 @@ impl ViewPort {
         self.canvas
     }
 
-    /// Set the viewport position. The caller is responsible for ensuring the
-    /// position is valid within the parent canvas.
-    pub fn set_position(&mut self, p: Point) {
+    /// Set the viewport position. The caller must supply the size of the parent
+    /// canvas so that we can validate that the node remains within bounds.
+    pub fn set_position(&mut self, p: Point, parent_canvas: Expanse) -> Result<()> {
         self.position = p;
+        let _ = parent_canvas; // Currently unused; provided for future checks.
+        Ok(())
     }
 
     /// Update the canvas size for this viewport, clamping the current view to
@@ -105,13 +107,18 @@ impl ViewPort {
         };
     }
 
-    /// Set the visible view rectangle, clamped so that it always falls within
+    /// Set the visible view rectangle. The view must be fully contained within
     /// the current canvas.
-    pub fn set_view(&mut self, view: Rect) {
-        self.view = match view.clamp_within(self.canvas.rect()) {
-            Ok(v) => v,
-            Err(_) => self.canvas.rect(),
-        };
+    pub fn set_view(&mut self, view: Rect) -> Result<()> {
+        if self.canvas.rect().contains_rect(&view) {
+            self.view = view;
+            Ok(())
+        } else {
+            Err(error::Error::Geometry(format!(
+                "view {view:?} not contained in canvas {:?}",
+                self.canvas
+            )))
+        }
     }
 
     /// Scroll the view to the specified position. The view is clamped within
