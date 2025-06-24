@@ -965,7 +965,7 @@
 <a href=#965 id=965 data-nosnippet>965</a>            <span class="kw">fn </span>new() -&gt; <span class="self">Self </span>{
 <a href=#966 id=966 data-nosnippet>966</a>                Block {
 <a href=#967 id=967 data-nosnippet>967</a>                    state: NodeState::default(),
-<a href=#968 id=968 data-nosnippet>968</a>                    text: Text::new(<span class="string">"ABCD"</span>).with_fixed_width(<span class="number">30</span>),
+<a href=#968 id=968 data-nosnippet>968</a>                    text: Text::new(<span class="string">"ABCDE"</span>).with_fixed_width(<span class="number">30</span>),
 <a href=#969 id=969 data-nosnippet>969</a>                }
 <a href=#970 id=970 data-nosnippet>970</a>            }
 <a href=#971 id=971 data-nosnippet>971</a>        }
@@ -1027,14 +1027,14 @@
 <a href=#1027 id=1027 data-nosnippet>1027</a>
 <a href=#1028 id=1028 data-nosnippet>1028</a>        canopy.set_root_size(size, <span class="kw-2">&amp;mut </span>root)<span class="question-mark">?</span>;
 <a href=#1029 id=1029 data-nosnippet>1029</a>        canopy.render(<span class="kw-2">&amp;mut </span>cr, <span class="kw-2">&amp;mut </span>root)<span class="question-mark">?</span>;
-<a href=#1030 id=1030 data-nosnippet>1030</a>        <span class="kw">let </span>before_offset = root.frame.child.vp().view.tl.x;
+<a href=#1030 id=1030 data-nosnippet>1030</a>        <span class="kw">let </span>before_char = buf.lock().unwrap().cells[<span class="number">1</span>][<span class="number">1</span>];
 <a href=#1031 id=1031 data-nosnippet>1031</a>
 <a href=#1032 id=1032 data-nosnippet>1032</a>        canopy.scroll_right(<span class="kw-2">&amp;mut </span>root.frame.child);
 <a href=#1033 id=1033 data-nosnippet>1033</a>        canopy.taint_tree(<span class="kw-2">&amp;mut </span>root);
 <a href=#1034 id=1034 data-nosnippet>1034</a>        canopy.render(<span class="kw-2">&amp;mut </span>cr, <span class="kw-2">&amp;mut </span>root)<span class="question-mark">?</span>;
-<a href=#1035 id=1035 data-nosnippet>1035</a>        <span class="kw">let </span>after_offset = root.frame.child.vp().view.tl.x;
+<a href=#1035 id=1035 data-nosnippet>1035</a>        <span class="kw">let </span>after_char = buf.lock().unwrap().cells[<span class="number">1</span>][<span class="number">1</span>];
 <a href=#1036 id=1036 data-nosnippet>1036</a>
-<a href=#1037 id=1037 data-nosnippet>1037</a>        <span class="macro">assert!</span>(after_offset &gt; before_offset);
+<a href=#1037 id=1037 data-nosnippet>1037</a>        <span class="macro">assert_ne!</span>(before_char, after_char);
 <a href=#1038 id=1038 data-nosnippet>1038</a>
 <a href=#1039 id=1039 data-nosnippet>1039</a>        <span class="prelude-val">Ok</span>(())
 <a href=#1040 id=1040 data-nosnippet>1040</a>    }
