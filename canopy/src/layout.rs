@@ -11,18 +11,18 @@ impl Layout {
     /// Wrap a single child node, mirroring the child's size and view.
     pub fn wrap(&self, parent: &mut dyn Node, vp: ViewPort) -> Result<()> {
         // Mirror the child's size and view
-        parent.__vp_mut().canvas = vp.canvas;
-        parent.__vp_mut().view = vp.view;
+        parent.state_mut().set_canvas(vp.canvas);
+        parent.state_mut().set_view(vp.view);
         Ok(())
     }
 
     /// Frame a single child node. First, we calculate the inner size after subtracting the frame. We then fit the child
     /// into this inner size, and project it appropriately in the parent view.
     pub fn frame(&self, child: &mut dyn Node, sz: Expanse, border: u16) -> Result<Frame> {
-        child.__vp_mut().position = crate::geom::Point {
+        child.state_mut().set_position(crate::geom::Point {
             x: border,
             y: border,
-        };
+        });
         child.layout(
             self,
             Expanse {
@@ -35,15 +35,16 @@ impl Layout {
 
     /// Place a node in a given sub-rectangle of a parent's view.
     pub fn fill(&self, n: &mut dyn Node, sz: Expanse) -> Result<()> {
-        let vp = n.__vp_mut();
-        vp.canvas = sz;
-        vp.view = sz.rect();
+        n.state_mut().set_canvas(sz);
+        n.state_mut().set_view(sz.rect());
         Ok(())
     }
 
     /// Place a child in a given sub-rectangle of a parent's view.
     pub fn place(&self, child: &mut dyn Node, parent_vp: ViewPort, loc: Rect) -> Result<()> {
-        child.__vp_mut().position = parent_vp.position.scroll(loc.tl.x as i16, loc.tl.y as i16);
+        child
+            .state_mut()
+            .set_position(parent_vp.position.scroll(loc.tl.x as i16, loc.tl.y as i16));
         child.layout(self, loc.expanse())?;
         child.__vp_mut().constrain(parent_vp);
         Ok(())
@@ -58,7 +59,7 @@ impl Layout {
     /// adjusts the node's view to place as much of it within the viewport's screen rectangle as possible.
     pub fn fit(&self, n: &mut dyn Node, parent_vp: ViewPort) -> Result<()> {
         n.layout(self, parent_vp.screen_rect().into())?;
-        n.__vp_mut().position = parent_vp.position;
+        n.state_mut().set_position(parent_vp.position);
         n.__vp_mut().constrain(parent_vp);
         Ok(())
     }

@@ -125,6 +125,23 @@ pub struct NodeState {
     pub(crate) initialized: bool,
 }
 
+impl NodeState {
+    /// Set the node's position within the parent canvas.
+    pub fn set_position(&mut self, p: crate::geom::Point) {
+        self.viewport.position = p;
+    }
+
+    /// Set the size of the node's canvas.
+    pub fn set_canvas(&mut self, sz: crate::geom::Expanse) {
+        self.viewport.canvas = sz;
+    }
+
+    /// Set the portion of the node that is displayed.
+    pub fn set_view(&mut self, view: crate::geom::Rect) {
+        self.viewport.view = view;
+    }
+}
+
 /// The node state object - each node needs to keep one of these, and offer it
 /// up by implementing the StatefulNode trait.
 impl Default for NodeState {
@@ -176,8 +193,11 @@ pub trait StatefulNode {
         self.state().viewport
     }
 
-    /// Get a mutable reference to the node's `ViewPort`. This method should never be used by client code.
+    /// Get a mutable reference to the node's `ViewPort`.
+    ///
+    /// **Deprecated**: use `NodeState` setter methods instead.
     #[doc(hidden)]
+    #[deprecated(note = "use NodeState setter methods instead")]
     fn __vp_mut(&mut self) -> &mut ViewPort {
         &mut self.state_mut().viewport
     }
