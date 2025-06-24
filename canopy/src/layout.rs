@@ -19,10 +19,8 @@ impl Layout {
     /// Frame a single child node. First, we calculate the inner size after subtracting the frame. We then fit the child
     /// into this inner size, and project it appropriately in the parent view.
     pub fn frame(&self, child: &mut dyn Node, sz: Expanse, border: u16) -> Result<Frame> {
-        child.__vp_mut().position = crate::geom::Point {
-            x: border,
-            y: border,
-        };
+        let vp = child.vp();
+        child.__vp_mut().position = crate::geom::Point { x: border, y: border };
         child.layout(
             self,
             Expanse {
@@ -30,6 +28,13 @@ impl Layout {
                 h: sz.h.saturating_sub(border * 2),
             },
         )?;
+        // After layout, restore the child's previous scroll offset. We recurse
+        // into the child tree so nested nodes retain their positions too.
+        fn set_offset(n: &mut dyn Node, x: u16, y: u16) -> Result<()> {
+            n.__vp_mut().scroll_to(x, y);
+            n.children(&mut |c| set_offset(c, x, y))
+        }
+        set_offset(child, vp.view.tl.x, vp.view.tl.y)?;
         Ok(crate::geom::Frame::new(sz.rect(), border))
     }
 
