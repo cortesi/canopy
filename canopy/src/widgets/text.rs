@@ -95,7 +95,7 @@ impl Node for Text {
     }
 
     fn render(&mut self, _c: &dyn Context, rndr: &mut Render) -> Result<()> {
-        let vo = self.vp().view;
+        let vo = self.vp().view();
         if let Some(lines) = self.lines.as_ref() {
             for i in 0..vo.h {
                 let out = &lines[(vo.tl.y + i) as usize]

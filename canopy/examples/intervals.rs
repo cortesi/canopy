@@ -77,7 +77,7 @@ impl StatusBar {}
 impl Node for StatusBar {
     fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
         r.style.push_layer("statusbar");
-        r.text("statusbar/text", self.vp().view.line(0), "intervals")?;
+        r.text("statusbar/text", self.vp().view().line(0), "intervals")?;
         Ok(())
     }
 }
@@ -113,7 +113,7 @@ impl Node for Intervals {
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         l.fill(self, sz)?;
         let vp = self.vp();
-        let (a, b) = vp.view.carve_vend(1);
+        let (a, b) = vp.view().carve_vend(1);
         l.place(&mut self.statusbar, vp, b)?;
         l.place(&mut self.content, vp, a)?;
         Ok(())

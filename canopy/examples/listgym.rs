@@ -53,8 +53,8 @@ impl Node for Block {
 
         let vp = self.child.vp();
         let sz = Expanse {
-            w: vp.canvas.w + 2,
-            h: self.child.vp().canvas.h,
+            w: vp.canvas().w + 2,
+            h: self.child.vp().canvas().h,
         };
         l.size(self, sz, sz)?;
         Ok(())
@@ -63,7 +63,7 @@ impl Node for Block {
     fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
         let vp = self.vp();
         if self.selected {
-            let active = vp.view.carve_hstart(1).0;
+            let active = vp.view().carve_hstart(1).0;
             r.fill("blue", active, '\u{2588}')?;
         }
         r.style.push_layer(&self.color);
@@ -86,7 +86,7 @@ impl StatusBar {}
 impl Node for StatusBar {
     fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
         r.style.push_layer("statusbar");
-        r.text("text", self.vp().view.line(0), "listgym")?;
+        r.text("text", self.vp().view().line(0), "listgym")?;
         Ok(())
     }
 }

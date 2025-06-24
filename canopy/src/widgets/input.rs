@@ -161,7 +161,7 @@ impl Node for Input {
     }
 
     fn render(&mut self, _: &dyn Context, r: &mut Render) -> Result<()> {
-        r.text("text", self.vp().view.line(0), &self.textbuf.text())
+        r.text("text", self.vp().view().line(0), &self.textbuf.text())
     }
 
     fn handle_key(&mut self, _c: &mut dyn Context, k: key::Key) -> Result<EventOutcome> {

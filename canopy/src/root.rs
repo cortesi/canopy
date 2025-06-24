@@ -149,7 +149,7 @@ where
         l.fill(self, sz)?;
         let vp = self.vp();
         if self.inspector_active {
-            let parts = vp.view.split_horizontal(2)?;
+            let parts = vp.view().split_horizontal(2)?;
             l.place(&mut self.inspector, vp, parts[0])?;
             l.place(&mut self.app, vp, parts[1])?;
         } else {

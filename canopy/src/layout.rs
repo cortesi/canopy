@@ -11,8 +11,8 @@ impl Layout {
     /// Wrap a single child node, mirroring the child's size and view.
     pub fn wrap(&self, parent: &mut dyn Node, vp: ViewPort) -> Result<()> {
         // Mirror the child's size and view
-        parent.state_mut().set_canvas(vp.canvas);
-        parent.state_mut().set_view(vp.view);
+        parent.state_mut().set_canvas(vp.canvas());
+        parent.state_mut().set_view(vp.view());
         Ok(())
     }
 
@@ -44,7 +44,7 @@ impl Layout {
     pub fn place(&self, child: &mut dyn Node, parent_vp: ViewPort, loc: Rect) -> Result<()> {
         child
             .state_mut()
-            .set_position(parent_vp.position.scroll(loc.tl.x as i16, loc.tl.y as i16));
+            .set_position(parent_vp.position().scroll(loc.tl.x as i16, loc.tl.y as i16));
         child.layout(self, loc.expanse())?;
         child.state_mut().constrain(parent_vp);
         Ok(())
@@ -59,7 +59,7 @@ impl Layout {
     /// adjusts the node's view to place as much of it within the viewport's screen rectangle as possible.
     pub fn fit(&self, n: &mut dyn Node, parent_vp: ViewPort) -> Result<()> {
         n.layout(self, parent_vp.screen_rect().into())?;
-        n.state_mut().set_position(parent_vp.position);
+        n.state_mut().set_position(parent_vp.position());
         n.state_mut().constrain(parent_vp);
         Ok(())
     }
@@ -136,7 +136,7 @@ mod tests {
         let mut child = TFixed::new(2, 2);
         let f = l.frame(&mut child, Expanse::new(1, 1), 1)?;
         assert_eq!(f, Frame::zero());
-        assert_eq!(child.vp().position, Point { x: 1, y: 1 });
+        assert_eq!(child.vp().position(), Point { x: 1, y: 1 });
         Ok(())
     }
 
@@ -162,7 +162,7 @@ mod tests {
         }
 
         fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
-            r.fill("", self.vp().canvas.rect(), 'x')
+            r.fill("", self.vp().canvas().rect(), 'x')
         }
     }
 

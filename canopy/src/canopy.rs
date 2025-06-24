@@ -595,7 +595,7 @@ impl Canopy {
 
                 // We now have coverage, relative to this node's screen rectange. We
                 // rebase each rect back down to our virtual co-ordinates.
-                let sr = n.vp().view;
+                let sr = n.vp().view();
                 for l in rndr.coverage.uncovered() {
                     rndr.fill("", l.rect().shift(sr.tl.x as i16, sr.tl.y as i16), ' ')?;
                 }
@@ -629,7 +629,7 @@ impl Canopy {
             })
         })?;
         if let Some((_nid, vp, c)) = cn {
-            show_cursor(r, &self.style, styl, vp, "cursor", c + vp.position)?;
+            show_cursor(r, &self.style, styl, vp, "cursor", c + vp.position())?;
         }
 
         Ok(())

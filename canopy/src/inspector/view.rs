@@ -13,7 +13,7 @@ pub struct View {
 impl Node for View {
     fn layout(&mut self, l: &Layout, _: Expanse) -> Result<()> {
         let vp = self.vp();
-        let (a, b) = vp.view.carve_vstart(1);
+        let (a, b) = vp.view().carve_vstart(1);
         l.place(&mut self.tabs, vp, a)?;
         l.place(&mut self.logs, vp, b)?;
         Ok(())

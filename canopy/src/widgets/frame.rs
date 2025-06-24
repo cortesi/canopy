@@ -161,7 +161,7 @@ where
         // space is to the right and below.
         for r in self
             .vp()
-            .view
+            .view()
             .inner(1)
             .sub(&self.vp().unproject(self.child.vp().screen_rect())?)
         {

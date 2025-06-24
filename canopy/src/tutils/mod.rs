@@ -147,9 +147,9 @@ mod tests {
             if !self.children.is_empty() {
                 let vp = self.vp();
                 let vps = if self.horizontal {
-                    vp.view.split_horizontal(self.children.len() as u16)?
+                    vp.view().split_horizontal(self.children.len() as u16)?
                 } else {
-                    vp.view.split_vertical(self.children.len() as u16)?
+                    vp.view().split_vertical(self.children.len() as u16)?
                 };
                 for (i, ch) in self.children.iter_mut().enumerate() {
                     l.place(ch, vp, vps[i])?;
@@ -160,7 +160,7 @@ mod tests {
 
         fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
             if self.children.is_empty() {
-                r.fill("blue", self.vp().view, 'x')?;
+                r.fill("blue", self.vp().view(), 'x')?;
             }
             Ok(())
         }
@@ -388,7 +388,7 @@ mod tests {
             fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
                 l.fill(self, sz)?;
                 let vp = self.vp();
-                let parts = vp.view.split_horizontal(2)?;
+                let parts = vp.view().split_horizontal(2)?;
                 l.place(&mut self.child, vp, parts[1])?;
                 Ok(())
             }

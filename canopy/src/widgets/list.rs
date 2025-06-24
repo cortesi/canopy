@@ -127,7 +127,7 @@ where
     /// Make sure the selected item is within the view after a change.
     fn ensure_selected_in_view(&mut self, c: &dyn Context) {
         let virt = self.items[self.offset].virt;
-        let view = self.vp().view;
+        let view = self.vp().view();
         if let Some(v) = virt.vextent().intersection(&view.vextent()) {
             if v.len == virt.h {
                 return;
@@ -151,7 +151,7 @@ where
     /// their offsets and sizes. Items that are offscreen to the side are also
     /// returned, so the returned vector is guaranteed to be a contiguous range.
     fn in_view(&self) -> Vec<usize> {
-        let view = self.vp().view;
+        let view = self.vp().view();
         let mut ret = vec![];
         for (idx, itm) in self.items.iter().enumerate() {
             if view.vextent().intersection(&itm.virt.vextent()).is_some() {
@@ -270,7 +270,7 @@ where
         let mut voffset: u16 = 0;
         for itm in &mut self.items {
             itm.itm.layout(l, r)?;
-            let item_view = itm.itm.vp().canvas.rect();
+            let item_view = itm.itm.vp().canvas().rect();
             itm.virt = item_view.shift(0, voffset as i16);
             voffset += item_view.h;
         }
@@ -284,9 +284,9 @@ where
         for itm in &mut self.items {
             if let Some(child_vp) = vp.map(itm.virt)? {
                 let st = itm.itm.state_mut();
-                st.set_canvas(child_vp.canvas);
-                st.set_view(child_vp.view);
-                st.set_position(child_vp.position);
+                st.set_canvas(child_vp.canvas());
+                st.set_view(child_vp.view());
+                st.set_position(child_vp.position());
                 itm.itm.unhide();
             } else {
                 itm.itm.hide();
@@ -297,7 +297,7 @@ where
     }
 
     fn render(&mut self, _c: &dyn Context, rndr: &mut Render) -> Result<()> {
-        rndr.fill("", self.vp().canvas.rect(), ' ')?;
+        rndr.fill("", self.vp().canvas().rect(), ' ')?;
         Ok(())
     }
 }
@@ -347,7 +347,7 @@ mod tests {
             fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
                 l.fill(self, sz)?;
                 let vp = self.vp();
-                l.place(&mut self.list, vp, vp.view)?;
+                l.place(&mut self.list, vp, vp.view())?;
                 Ok(())
             }
         }
@@ -475,8 +475,8 @@ mod tests {
                 l.place(&mut self.text, vp, Rect::new(0, 0, s.w, s.h))?;
                 let vp = self.text.vp();
                 let sz = Expanse {
-                    w: vp.canvas.w,
-                    h: vp.canvas.h,
+                    w: vp.canvas().w,
+                    h: vp.canvas().h,
                 };
                 l.size(self, sz, sz)?;
                 Ok(())
@@ -514,7 +514,7 @@ mod tests {
             fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
                 l.fill(self, sz)?;
                 let vp = self.vp();
-                l.place(&mut self.frame, vp, vp.view)?;
+                l.place(&mut self.frame, vp, vp.view())?;
                 Ok(())
             }
         }
@@ -525,11 +525,11 @@ mod tests {
 
         canopy.set_root_size(size, &mut root)?;
 
-        let list_rect = root.frame.child.vp().view;
+        let list_rect = root.frame.child.vp().view();
         let mut rects = Vec::new();
         root.frame.child.children(&mut |n| {
             if !n.is_hidden() {
-                rects.push(n.vp().view);
+                rects.push(n.vp().view());
             }
             Ok(())
         })?;
@@ -569,8 +569,8 @@ mod tests {
                 l.place(&mut self.text, vp, Rect::new(0, 0, s.w, s.h))?;
                 let vp = self.text.vp();
                 let sz = Expanse {
-                    w: vp.canvas.w,
-                    h: vp.canvas.h,
+                    w: vp.canvas().w,
+                    h: vp.canvas().h,
                 };
                 l.size(self, sz, sz)?;
                 Ok(())
@@ -609,7 +609,7 @@ mod tests {
             fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
                 l.fill(self, sz)?;
                 let vp = self.vp();
-                l.place(&mut self.frame, vp, vp.view)?;
+                l.place(&mut self.frame, vp, vp.view())?;
                 Ok(())
             }
         }
@@ -680,8 +680,8 @@ mod tests {
                 l.place(&mut self.text, vp, Rect::new(0, 0, s.w, s.h))?;
                 let vp = self.text.vp();
                 let sz = Expanse {
-                    w: vp.canvas.w,
-                    h: vp.canvas.h,
+                    w: vp.canvas().w,
+                    h: vp.canvas().h,
                 };
                 l.size(self, sz, sz)?;
                 Ok(())
@@ -720,7 +720,7 @@ mod tests {
             fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
                 l.fill(self, sz)?;
                 let vp = self.vp();
-                l.place(&mut self.frame, vp, vp.view)?;
+                l.place(&mut self.frame, vp, vp.view())?;
                 Ok(())
             }
         }
@@ -780,8 +780,8 @@ mod tests {
                 )?;
                 let vp = self.text.vp();
                 let sz = Expanse {
-                    w: vp.canvas.w + 2,
-                    h: vp.canvas.h,
+                    w: vp.canvas().w + 2,
+                    h: vp.canvas().h,
                 };
                 l.size(self, sz, sz)?;
                 Ok(())
@@ -802,7 +802,7 @@ mod tests {
 
         impl Node for Status {
             fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
-                r.text("", self.vp().view.line(0), "status")
+                r.text("", self.vp().view().line(0), "status")
             }
         }
 

@@ -45,14 +45,14 @@ impl Node for LogItem {
                 h: target.h,
             },
         )?;
-        let sz = self.child.vp().canvas;
+        let sz = self.child.vp().canvas();
         l.size(self, sz, target)?;
         Ok(())
     }
 
     fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
         let vp = self.vp();
-        let v = vp.view;
+        let v = vp.view();
         let status = Rect::new(v.tl.x, v.tl.y, 1, v.h);
         if self.selected {
             r.fill("blue", status, '\u{2588}')?;

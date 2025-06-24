@@ -26,7 +26,7 @@ impl Block {
 
     #[command]
     fn add(&mut self, c: &mut dyn Context) {
-        if !self.children.is_empty() && !self.size_limited(self.children[0].vp().view.into()) {
+        if !self.children.is_empty() && !self.size_limited(self.children[0].vp().view().into()) {
             self.children.push(Block::new(!self.horizontal));
             c.taint_tree(self);
         }
@@ -38,7 +38,7 @@ impl Block {
 
     #[command]
     fn split(&mut self, c: &mut dyn Context) -> Result<()> {
-        if !self.size_limited(self.vp().view.into()) {
+        if !self.size_limited(self.vp().view().into()) {
             self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
             c.taint_tree(self);
             c.focus_next(self);
@@ -59,9 +59,9 @@ impl Node for Block {
         if !self.children.is_empty() {
             let vp = self.vp();
             let vps = if self.horizontal {
-                vp.view.split_horizontal(self.children.len() as u16)?
+                vp.view().split_horizontal(self.children.len() as u16)?
             } else {
-                vp.view.split_vertical(self.children.len() as u16)?
+                vp.view().split_vertical(self.children.len() as u16)?
             };
             for (i, child) in self.children.iter_mut().enumerate() {
                 l.place(child, vp, vps[i])?;
@@ -78,8 +78,8 @@ impl Node for Block {
             } else {
                 "blue"
             };
-            r.fill(bc, vp.view.inner(1), '\u{2588}')?;
-            r.solid_frame("black", Frame::new(vp.view, 1), ' ')?;
+            r.fill(bc, vp.view().inner(1), '\u{2588}')?;
+            r.solid_frame("black", Frame::new(vp.view(), 1), ' ')?;
         }
         Ok(())
     }

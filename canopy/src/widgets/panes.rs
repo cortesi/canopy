@@ -103,7 +103,7 @@ impl<N: Node> Node for Panes<N> {
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         l.fill(self, sz)?;
         let vp = self.vp();
-        let lst = vp.view.split_panes(&self.shape())?;
+        let lst = vp.view().split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
                 l.place(row, vp, lst[ci][ri])?;
@@ -196,7 +196,7 @@ mod tests {
         fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
             l.fill(self, sz)?;
             let vp = self.vp();
-            let parts = vp.view.split_horizontal(2)?;
+            let parts = vp.view().split_horizontal(2)?;
             l.place(&mut self.panes, vp, parts[1])?;
             Ok(())
         }
@@ -220,7 +220,7 @@ mod tests {
         fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
             l.fill(self, sz)?;
             let vp = self.vp();
-            let parts = vp.view.split_horizontal(2)?;
+            let parts = vp.view().split_horizontal(2)?;
             l.place(&mut self.panes, vp, parts[1])?;
             Ok(())
         }
@@ -237,8 +237,8 @@ mod tests {
         root.layout(&l, Expanse::new(20, 10))?;
 
         assert_eq!(root.panes.children.len(), 2);
-        assert_eq!(root.panes.children[0][0].vp().position.x, 10);
-        assert_eq!(root.panes.children[1][0].vp().position.x, 15);
+        assert_eq!(root.panes.children[0][0].vp().position().x, 10);
+        assert_eq!(root.panes.children[1][0].vp().position().x, 15);
         Ok(())
     }
 
@@ -331,9 +331,9 @@ mod tests {
 
         root.layout(&l, Expanse::new(20, 10))?;
 
-        let expect = root.panes.vp().view.split_panes(&root.panes.shape())?;
+        let expect = root.panes.vp().view().split_panes(&root.panes.shape())?;
 
-        let off = root.panes.vp().position;
+        let off = root.panes.vp().position();
         let expect: Vec<Vec<Rect>> = expect
             .into_iter()
             .map(|col| {
@@ -392,9 +392,9 @@ mod tests {
 
         root.layout(&l, Expanse::new(20, 10))?;
 
-        let expect = root.panes.vp().view.split_panes(&root.panes.shape())?;
+        let expect = root.panes.vp().view().split_panes(&root.panes.shape())?;
 
-        let off = root.panes.vp().position;
+        let off = root.panes.vp().position();
         let expect: Vec<Vec<Rect>> = expect
             .into_iter()
             .map(|col| {

@@ -74,7 +74,7 @@ macro_rules! leaf {
             fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
                 r.text(
                     "any",
-                    self.vp().view.line(0),
+                    self.vp().view().line(0),
                     &format!("<{}>", self.name().clone()),
                 )
             }
@@ -177,7 +177,7 @@ macro_rules! branch {
             fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
                 l.fill(self, sz)?;
                 let vp = self.vp();
-                let parts = vp.view.split_vertical(2)?;
+                let parts = vp.view().split_vertical(2)?;
                 l.place(&mut self.a, vp, parts[0])?;
                 l.place(&mut self.b, vp, parts[1])?;
                 Ok(())
@@ -186,7 +186,7 @@ macro_rules! branch {
             fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
                 r.text(
                     "any",
-                    self.vp().view.line(0),
+                    self.vp().view().line(0),
                     &format!("<{}>", self.name().clone()),
                 )
             }
@@ -261,14 +261,14 @@ impl Node for R {
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         l.fill(self, sz)?;
         let vp = self.vp();
-        let parts = vp.view.split_horizontal(2)?;
+        let parts = vp.view().split_horizontal(2)?;
         l.place(&mut self.a, vp, parts[0])?;
         l.place(&mut self.b, vp, parts[1])?;
         Ok(())
     }
 
     fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
-        r.text("any", self.vp().view.line(0), &format!("<{}>", self.name()))
+        r.text("any", self.vp().view().line(0), &format!("<{}>", self.name()))
     }
 
     fn handle_key(&mut self, _: &mut dyn Context, _: key::Key) -> Result<EventOutcome> {

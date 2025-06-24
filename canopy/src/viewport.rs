@@ -36,19 +36,19 @@ pub struct ViewPort {
     // within the parent's canvas rectangle.
     //
     // CONSTRAINT: The position must be within the PARENT's canvas rectangle.
-    pub position: Point,
+    position: Point,
 
     /// The portion of this node that is displayed - a sub-rectangle of the canvas. Must only be
     /// changed by the node itself. This is the portion of the node that is drawn to the screen. To
     /// ease widget implementation, when attempting to draw to the screen any draw operations outside the
     /// screen rectangle are ignored.
     // CONSTRAINT: The view rectangle must be fully contained within OUR canvas rectangle.
-    pub view: Rect,
+    view: Rect,
 
     /// The canvas on which children are positioned, and to which rendering occurs. Must only be
     /// changed by the node itself. You can think of this as a rectangle with co-ordinates (0, 0),
     /// which describes the full size of this node and its children.
-    pub canvas: Expanse,
+    canvas: Expanse,
 }
 
 impl ViewPort {
@@ -72,6 +72,46 @@ impl ViewPort {
                 position: position.into(),
             })
         }
+    }
+
+    /// Current position of the viewport within the parent canvas.
+    pub fn position(&self) -> Point {
+        self.position
+    }
+
+    /// Rectangle of the child view within the canvas.
+    pub fn view(&self) -> Rect {
+        self.view
+    }
+
+    /// The canvas size for this viewport.
+    pub fn canvas(&self) -> Expanse {
+        self.canvas
+    }
+
+    /// Set the viewport position. The caller is responsible for ensuring the
+    /// position is valid within the parent canvas.
+    pub fn set_position(&mut self, p: Point) {
+        self.position = p;
+    }
+
+    /// Update the canvas size for this viewport, clamping the current view to
+    /// remain within the new canvas.
+    pub fn set_canvas(&mut self, sz: Expanse) {
+        self.canvas = sz;
+        self.view = match self.view.clamp_within(self.canvas.rect()) {
+            Ok(v) => v,
+            Err(_) => self.canvas.rect(),
+        };
+    }
+
+    /// Set the visible view rectangle, clamped so that it always falls within
+    /// the current canvas.
+    pub fn set_view(&mut self, view: Rect) {
+        self.view = match view.clamp_within(self.canvas.rect()) {
+            Ok(v) => v,
+            Err(_) => self.canvas.rect(),
+        };
     }
 
     /// Scroll the view to the specified position. The view is clamped within
