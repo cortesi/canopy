@@ -19,10 +19,14 @@ impl Layout {
     /// Frame a single child node. First, we calculate the inner size after subtracting the frame. We then fit the child
     /// into this inner size, and project it appropriately in the parent view.
     pub fn frame(&self, child: &mut dyn Node, sz: Expanse, border: u16) -> Result<Frame> {
-        child.state_mut().set_position(crate::geom::Point {
-            x: border,
-            y: border,
-        });
+        child.state_mut().set_position(
+            crate::geom::Point {
+                x: border,
+                y: border,
+            },
+            crate::geom::Point::zero(),
+            sz.rect(),
+        )?;
         child.layout(
             self,
             Expanse {
@@ -44,7 +48,11 @@ impl Layout {
     pub fn place(&self, child: &mut dyn Node, parent_vp: ViewPort, loc: Rect) -> Result<()> {
         child
             .state_mut()
-            .set_position(parent_vp.position().scroll(loc.tl.x as i16, loc.tl.y as i16));
+            .set_position(
+                parent_vp.position().scroll(loc.tl.x as i16, loc.tl.y as i16),
+                parent_vp.position(),
+                parent_vp.canvas().rect(),
+            )?;
         child.layout(self, loc.expanse())?;
         child.state_mut().constrain(parent_vp);
         Ok(())
@@ -59,7 +67,12 @@ impl Layout {
     /// adjusts the node's view to place as much of it within the viewport's screen rectangle as possible.
     pub fn fit(&self, n: &mut dyn Node, parent_vp: ViewPort) -> Result<()> {
         n.layout(self, parent_vp.screen_rect().into())?;
-        n.state_mut().set_position(parent_vp.position());
+        n.state_mut()
+            .set_position(
+                parent_vp.position(),
+                parent_vp.position(),
+                parent_vp.canvas().rect(),
+            )?;
         n.state_mut().constrain(parent_vp);
         Ok(())
     }
@@ -134,9 +147,7 @@ mod tests {
     fn frame_does_not_overflow_small_parent() -> Result<()> {
         let l = Layout {};
         let mut child = TFixed::new(2, 2);
-        let f = l.frame(&mut child, Expanse::new(1, 1), 1)?;
-        assert_eq!(f, Frame::zero());
-        assert_eq!(child.vp().position(), Point { x: 1, y: 1 });
+        assert!(l.frame(&mut child, Expanse::new(1, 1), 1).is_err());
         Ok(())
     }
 
@@ -249,11 +260,7 @@ mod tests {
 
         // If if the parent is smaller than the frame would require, we get a zero view
         let mut n = TFixed::new(10, 10);
-        l.frame(&mut n, Expanse::new(0, 0), 1)?;
-        assert_eq!(
-            n.state().viewport,
-            ViewPort::new(Expanse::new(10, 10), Rect::new(0, 0, 10, 10), (1, 1))?
-        );
+        assert!(l.frame(&mut n, Expanse::new(0, 0), 1).is_err());
 
         Ok(())
     }

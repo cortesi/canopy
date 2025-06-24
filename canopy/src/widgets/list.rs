@@ -286,7 +286,11 @@ where
                 let st = itm.itm.state_mut();
                 st.set_canvas(child_vp.canvas());
                 st.set_view(child_vp.view());
-                st.set_position(child_vp.position());
+                st.set_position(
+                    child_vp.position(),
+                    vp.position(),
+                    vp.canvas().rect(),
+                )?;
                 itm.itm.unhide();
             } else {
                 itm.itm.hide();
