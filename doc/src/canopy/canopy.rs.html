@@ -69,43 +69,43 @@
 <a href=#69 id=69 data-nosnippet>69</a>    <span class="doccomment">/// Scroll the view to the specified position. The view is clamped within
 <a href=#70 id=70 data-nosnippet>70</a>    /// the outer rectangle.
 <a href=#71 id=71 data-nosnippet>71</a>    </span><span class="kw">fn </span>scroll_to(<span class="kw-2">&amp;</span><span class="self">self</span>, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, x: u16, y: u16) {
-<a href=#72 id=72 data-nosnippet>72</a>        n.__vp_mut().scroll_to(x, y)
+<a href=#72 id=72 data-nosnippet>72</a>        n.state_mut().scroll_to(x, y)
 <a href=#73 id=73 data-nosnippet>73</a>    }
 <a href=#74 id=74 data-nosnippet>74</a>
 <a href=#75 id=75 data-nosnippet>75</a>    <span class="doccomment">/// Scroll the view by the given offsets. The view rectangle is clamped
 <a href=#76 id=76 data-nosnippet>76</a>    /// within the outer rectangle.
 <a href=#77 id=77 data-nosnippet>77</a>    </span><span class="kw">fn </span>scroll_by(<span class="kw-2">&amp;</span><span class="self">self</span>, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, x: i16, y: i16) {
-<a href=#78 id=78 data-nosnippet>78</a>        n.__vp_mut().scroll_by(x, y)
+<a href=#78 id=78 data-nosnippet>78</a>        n.state_mut().scroll_by(x, y)
 <a href=#79 id=79 data-nosnippet>79</a>    }
 <a href=#80 id=80 data-nosnippet>80</a>
 <a href=#81 id=81 data-nosnippet>81</a>    <span class="doccomment">/// Scroll the view up by the height of the view rectangle.
 <a href=#82 id=82 data-nosnippet>82</a>    </span><span class="kw">fn </span>page_up(<span class="kw-2">&amp;</span><span class="self">self</span>, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {
-<a href=#83 id=83 data-nosnippet>83</a>        n.__vp_mut().page_up()
+<a href=#83 id=83 data-nosnippet>83</a>        n.state_mut().page_up()
 <a href=#84 id=84 data-nosnippet>84</a>    }
 <a href=#85 id=85 data-nosnippet>85</a>
 <a href=#86 id=86 data-nosnippet>86</a>    <span class="doccomment">/// Scroll the view down by the height of the view rectangle.
 <a href=#87 id=87 data-nosnippet>87</a>    </span><span class="kw">fn </span>page_down(<span class="kw-2">&amp;</span><span class="self">self</span>, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {
-<a href=#88 id=88 data-nosnippet>88</a>        n.__vp_mut().page_down()
+<a href=#88 id=88 data-nosnippet>88</a>        n.state_mut().page_down()
 <a href=#89 id=89 data-nosnippet>89</a>    }
 <a href=#90 id=90 data-nosnippet>90</a>
 <a href=#91 id=91 data-nosnippet>91</a>    <span class="doccomment">/// Scroll the view up by one line.
 <a href=#92 id=92 data-nosnippet>92</a>    </span><span class="kw">fn </span>scroll_up(<span class="kw-2">&amp;</span><span class="self">self</span>, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {
-<a href=#93 id=93 data-nosnippet>93</a>        n.__vp_mut().scroll_up()
+<a href=#93 id=93 data-nosnippet>93</a>        n.state_mut().scroll_up()
 <a href=#94 id=94 data-nosnippet>94</a>    }
 <a href=#95 id=95 data-nosnippet>95</a>
 <a href=#96 id=96 data-nosnippet>96</a>    <span class="doccomment">/// Scroll the view down by one line.
 <a href=#97 id=97 data-nosnippet>97</a>    </span><span class="kw">fn </span>scroll_down(<span class="kw-2">&amp;</span><span class="self">self</span>, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {
-<a href=#98 id=98 data-nosnippet>98</a>        n.__vp_mut().scroll_down()
+<a href=#98 id=98 data-nosnippet>98</a>        n.state_mut().scroll_down()
 <a href=#99 id=99 data-nosnippet>99</a>    }
 <a href=#100 id=100 data-nosnippet>100</a>
 <a href=#101 id=101 data-nosnippet>101</a>    <span class="doccomment">/// Scroll the view left by one line.
 <a href=#102 id=102 data-nosnippet>102</a>    </span><span class="kw">fn </span>scroll_left(<span class="kw-2">&amp;</span><span class="self">self</span>, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {
-<a href=#103 id=103 data-nosnippet>103</a>        n.__vp_mut().scroll_left()
+<a href=#103 id=103 data-nosnippet>103</a>        n.state_mut().scroll_left()
 <a href=#104 id=104 data-nosnippet>104</a>    }
 <a href=#105 id=105 data-nosnippet>105</a>
 <a href=#106 id=106 data-nosnippet>106</a>    <span class="doccomment">/// Scroll the view right by one line.
 <a href=#107 id=107 data-nosnippet>107</a>    </span><span class="kw">fn </span>scroll_right(<span class="kw-2">&amp;</span><span class="self">self</span>, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {
-<a href=#108 id=108 data-nosnippet>108</a>        n.__vp_mut().scroll_right()
+<a href=#108 id=108 data-nosnippet>108</a>        n.state_mut().scroll_right()
 <a href=#109 id=109 data-nosnippet>109</a>    }
 <a href=#110 id=110 data-nosnippet>110</a>
 <a href=#111 id=111 data-nosnippet>111</a>    <span class="doccomment">/// Taint a node to signal that it should be re-rendered.
