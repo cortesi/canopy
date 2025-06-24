@@ -113,7 +113,7 @@ impl<'a> Render<'a> {
             let out = &txt
                 .chars()
                 .skip(offset as usize)
-                .take(l.w as usize)
+                .take(dst.w as usize)
                 .collect::<String>();
 
             self.backend.text(self.base + dst.tl, out)?;
