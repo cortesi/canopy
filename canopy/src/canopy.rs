@@ -583,11 +583,19 @@ impl Canopy {
                 n.render(self, &mut rndr)?;
 
                 // Now add regions managed by children to coverage
-                n.children(&mut |n| {
-                    if !n.is_hidden() {
-                        let s = n.vp().screen_rect();
-                        if !s.is_zero() {
-                            rndr.coverage.add(s);
+                let parent = n.vp().screen_rect();
+                n.children(&mut |child| {
+                    if !child.is_hidden() {
+                        let child_rect = child.vp().screen_rect();
+                        assert!(
+                            parent.contains_rect(&child_rect),
+                            "child {} viewport {:?} outside parent {:?}",
+                            child.name(),
+                            child_rect,
+                            parent
+                        );
+                        if !child_rect.is_zero() {
+                            rndr.coverage.add(child_rect);
                         }
                     }
                     Ok(())
@@ -605,7 +613,20 @@ impl Canopy {
             if n.state().render_gen == 0 {
                 n.state_mut().render_gen = self.render_gen;
             }
-            n.children(&mut |x| self.render_traversal(r, styl, x, base))?;
+            let parent = n.vp().screen_rect();
+            n.children(&mut |child| {
+                if !child.is_hidden() {
+                    let child_rect = child.vp().screen_rect();
+                    assert!(
+                        parent.contains_rect(&child_rect),
+                        "child {} viewport {:?} outside parent {:?}",
+                        child.name(),
+                        child_rect,
+                        parent
+                    );
+                }
+                self.render_traversal(r, styl, child, base)
+            })?;
             styl.pop();
         }
         Ok(())
