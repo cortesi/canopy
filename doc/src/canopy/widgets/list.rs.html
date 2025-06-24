@@ -285,12 +285,12 @@
 <a href=#285 id=285 data-nosnippet>285</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(child_vp) = vp.map(itm.virt)<span class="question-mark">? </span>{
 <a href=#286 id=286 data-nosnippet>286</a>                <span class="kw">let </span>st = itm.itm.state_mut();
 <a href=#287 id=287 data-nosnippet>287</a>                st.set_canvas(child_vp.canvas());
-<a href=#288 id=288 data-nosnippet>288</a>                st.set_view(child_vp.view());
-<a href=#289 id=289 data-nosnippet>289</a>                st.set_position(child_vp.position());
+<a href=#288 id=288 data-nosnippet>288</a>                st.set_view(child_vp.view())<span class="question-mark">?</span>;
+<a href=#289 id=289 data-nosnippet>289</a>                st.set_position(child_vp.position(), vp.canvas())<span class="question-mark">?</span>;
 <a href=#290 id=290 data-nosnippet>290</a>                itm.itm.unhide();
 <a href=#291 id=291 data-nosnippet>291</a>            } <span class="kw">else </span>{
 <a href=#292 id=292 data-nosnippet>292</a>                itm.itm.hide();
-<a href=#293 id=293 data-nosnippet>293</a>                itm.itm.state_mut().set_view(Rect::default());
+<a href=#293 id=293 data-nosnippet>293</a>                itm.itm.state_mut().set_view(Rect::default())<span class="question-mark">?</span>;
 <a href=#294 id=294 data-nosnippet>294</a>            }
 <a href=#295 id=295 data-nosnippet>295</a>        }
 <a href=#296 id=296 data-nosnippet>296</a>        <span class="prelude-val">Ok</span>(())
