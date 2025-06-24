@@ -286,14 +286,15 @@ where
                 {
                     let st = itm.itm.state_mut();
                     st.set_position(child_vp.position(), vp.position(), vp.canvas().rect())?;
-                }
-                itm.itm.layout(l, child_vp.screen_rect().expanse())?;
-                {
-                    let st = itm.itm.state_mut();
                     st.set_canvas(child_vp.canvas());
                     st.set_view(child_vp.view());
                     st.constrain(vp);
                 }
+                let cvp = child_vp;
+                itm.itm.children(&mut |ch| {
+                    ch.state_mut().constrain(cvp);
+                    Ok(())
+                })?;
                 itm.itm.unhide();
             } else {
                 itm.itm.hide();
@@ -864,6 +865,98 @@ mod tests {
         assert_eq!(canvas.cells[1][3], 'A');
         assert!(canvas.painted[1][3]);
         assert_eq!(canvas.cells[0][0], '┌');
+
+        Ok(())
+    }
+
+    #[test]
+    fn horizontal_scroll_moves_view() -> Result<()> {
+        #[derive(StatefulNode)]
+        struct Block {
+            state: NodeState,
+            text: Text,
+        }
+
+        #[derive_commands]
+        impl Block {
+            fn new(w: u16) -> Self {
+                Block {
+                    state: NodeState::default(),
+                    text: Text::new("AAAA").with_fixed_width(w),
+                }
+            }
+        }
+
+        impl ListItem for Block {}
+
+        impl Node for Block {
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                // Mirrors the listgym example block layout
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                l.place(&mut self.text, vp, Rect::new(2, 0, sz.w.saturating_sub(2), sz.h))?;
+                let vp = self.text.vp();
+                let sz = Expanse { w: vp.canvas().w + 2, h: vp.canvas().h };
+                l.size(self, sz, sz)?;
+                Ok(())
+            }
+
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.text)
+            }
+        }
+
+        #[derive(StatefulNode)]
+        struct Root {
+            state: NodeState,
+            frame: frame::Frame<List<Block>>,
+        }
+
+        #[derive_commands]
+        impl Root {
+            fn new() -> Self {
+                Root {
+                    state: NodeState::default(),
+                    frame: frame::Frame::new(List::new(vec![Block::new(20), Block::new(20)])),
+                }
+            }
+        }
+
+        impl Node for Root {
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.frame)
+            }
+
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                l.place(&mut self.frame, vp, vp.view())?;
+                Ok(())
+            }
+        }
+
+        let size = Expanse::new(10, 5);
+        let (_buf, mut cr) = CanvasRender::create(size);
+        let mut canopy = Canopy::new();
+        let mut root = Root::new();
+
+        canopy.set_root_size(size, &mut root)?;
+        canopy.render(&mut cr, &mut root)?;
+        let initial_view = root.frame.child.items[0].itm.vp().view();
+        assert_eq!(initial_view.tl.x, 0);
+
+        canopy.scroll_right(&mut root.frame.child);
+        canopy.taint_tree(&mut root);
+        canopy.render(&mut cr, &mut root)?;
+        let scrolled_view = root.frame.child.items[0].itm.vp().view();
+        assert_eq!(scrolled_view.tl.x, 1);
+        assert_eq!(scrolled_view.w, initial_view.w);
+
+        canopy.scroll_left(&mut root.frame.child);
+        canopy.taint_tree(&mut root);
+        canopy.render(&mut cr, &mut root)?;
+        let final_view = root.frame.child.items[0].itm.vp().view();
+        assert_eq!(final_view.tl.x, 0);
 
         Ok(())
     }
