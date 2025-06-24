@@ -127,8 +127,13 @@ pub struct NodeState {
 
 impl NodeState {
     /// Set the node's position within the parent canvas.
-    pub fn set_position(&mut self, p: crate::geom::Point) {
-        self.viewport.set_position(p);
+    pub fn set_position(
+        &mut self,
+        p: crate::geom::Point,
+        parent_pos: crate::geom::Point,
+        parent_canvas: crate::geom::Rect,
+    ) -> crate::Result<()> {
+        self.viewport.set_position(p, parent_pos, parent_canvas)
     }
 
     /// Set the size of the node's canvas.
