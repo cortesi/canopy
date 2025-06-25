@@ -175,8 +175,7 @@
 under the mouse cursor, then pass event through the path from the leaf to the
 root for handling. For each node on the path, the <strong>Node::handle_mouse</strong> method
 is called, and we stop after the first node handles the event. Handling a mouse
-event taints the node, unless the <strong>EventResult::no_render</strong> flag on the
-response object is true.</p>
+event taints the node unless the handler returns <code>EventOutcome::Consume</code>.</p>
 
                     </main>
 

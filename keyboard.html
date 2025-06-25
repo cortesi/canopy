@@ -175,7 +175,7 @@
 <strong>Node::handle_key</strong> method called on each node. Keys are only handled once - we
 stop passing the event along once the first node indicates that it's been
 handled. Handling a key event automatically taints the node, unless the
-<strong>EventResult::no_render</strong> flag in the response object is true.</p>
+event handler returns <code>EventOutcome::Consume</code>.</p>
 
                     </main>
 
