@@ -286,14 +286,25 @@ where
                 {
                     let st = itm.itm.state_mut();
                     st.set_position(child_vp.position(), vp.position(), vp.canvas().rect())?;
+                    // The item should lay out using its full canvas size so that
+                    // horizontal scrolling only affects the viewport. We set the
+                    // canvas here and expose the entire view for layout.
+                    st.set_canvas(child_vp.canvas());
+                    st.set_view(child_vp.canvas().rect());
                 }
-                itm.itm.layout(l, child_vp.screen_rect().expanse())?;
+                itm.itm.layout(l, child_vp.canvas())?;
                 {
                     let st = itm.itm.state_mut();
-                    st.set_canvas(child_vp.canvas());
+                    // After layout, apply the actual visible view and constrain
+                    // the result within the parent.
                     st.set_view(child_vp.view());
                     st.constrain(vp);
                 }
+                let final_vp = itm.itm.vp();
+                itm.itm.children(&mut |ch| {
+                    ch.state_mut().constrain(final_vp);
+                    Ok(())
+                })?;
                 itm.itm.unhide();
             } else {
                 itm.itm.hide();
@@ -864,6 +875,64 @@ mod tests {
         assert_eq!(canvas.cells[1][3], 'A');
         assert!(canvas.painted[1][3]);
         assert_eq!(canvas.cells[0][0], '┌');
+
+        Ok(())
+    }
+
+    #[test]
+    fn horizontal_scroll_reveals_content() -> Result<()> {
+        #[derive(StatefulNode)]
+        struct Root {
+            state: NodeState,
+            list: List<Text>,
+        }
+
+        #[derive_commands]
+        impl Root {
+            fn new() -> Self {
+                Root {
+                    state: NodeState::default(),
+                    list: List::new(vec![Text::new("0123456789").with_fixed_width(10)]),
+                }
+            }
+        }
+
+        impl Node for Root {
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.list)
+            }
+
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                l.place(&mut self.list, vp, vp.view())?;
+                Ok(())
+            }
+        }
+
+        let size = Expanse::new(5, 1);
+        let (buf, mut cr) = CanvasRender::create(size);
+        let mut canopy = Canopy::new();
+        let mut root = Root::new();
+
+        canopy.set_root_size(size, &mut root)?;
+        canopy.render(&mut cr, &mut root)?;
+
+        {
+            let canvas = buf.lock().unwrap();
+            let first: String = canvas.cells[0].iter().collect();
+            assert_eq!(first, "01234");
+        }
+
+        canopy.scroll_right(&mut root.list);
+        canopy.taint_tree(&mut root);
+        canopy.render(&mut cr, &mut root)?;
+
+        {
+            let canvas = buf.lock().unwrap();
+            let second: String = canvas.cells[0].iter().collect();
+            assert_eq!(second, "12345");
+        }
 
         Ok(())
     }

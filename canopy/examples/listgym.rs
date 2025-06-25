@@ -43,16 +43,19 @@ impl ListItem for Block {
 
 impl Node for Block {
     fn layout(&mut self, l: &Layout, target: Expanse) -> Result<()> {
-        // Set our viewport before laying out children so geometry calculations
-        // are based on the correct size.
-        l.fill(self, target)?;
-        let loc = Rect::new(2, 0, target.w.saturating_sub(2), target.h);
+        // Preserve the current horizontal scroll offset by only adjusting our
+        // canvas, leaving the view position unchanged.
+        let view = self.vp().view();
+        self.state_mut().set_canvas(target);
+        self.state_mut().set_view(Rect::new(view.tl.x, view.tl.y, target.w, target.h));
+        // Leave a single column for the active selection indicator.
+        let loc = Rect::new(1, 0, target.w.saturating_sub(1), target.h);
         let vp = self.vp();
         l.place(&mut self.child, vp, loc)?;
 
         let vp = self.child.vp();
         let sz = Expanse {
-            w: vp.canvas().w + 2,
+            w: vp.canvas().w + 1,
             h: self.child.vp().canvas().h,
         };
         l.size(self, sz, sz)?;
