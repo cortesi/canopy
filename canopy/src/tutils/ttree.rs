@@ -78,15 +78,15 @@ macro_rules! leaf {
                     &format!("<{}>", self.name().clone()),
                 )
             }
-            fn handle_key(&mut self, _: &mut dyn Context, _: key::Key) -> Result<EventOutcome> {
-                self.handle("key")
+            fn handle_key(&mut self, _: &mut dyn Context, _: key::Key) -> Result<EventResult> {
+                Ok(self.handle("key")?)
             }
             fn handle_mouse(
                 &mut self,
                 _: &mut dyn Context,
                 _: mouse::MouseEvent,
-            ) -> Result<EventOutcome> {
-                self.handle("mouse")
+            ) -> Result<EventResult> {
+                Ok(self.handle("mouse")?)
             }
         }
 
@@ -118,7 +118,7 @@ macro_rules! leaf {
                 })
             }
 
-            fn handle(&mut self, evt: &str) -> Result<EventOutcome> {
+            fn handle(&mut self, evt: &str) -> Result<EventResult> {
                 let ret = if let Some(x) = self.next_outcome.clone() {
                     self.next_outcome = None;
                     x
@@ -128,7 +128,7 @@ macro_rules! leaf {
                 TSTATE.with(|s| {
                     s.borrow_mut().add_event(&self.name(), evt, ret.clone());
                 });
-                Ok(ret)
+                Ok(ret.into())
             }
         }
     };
@@ -155,7 +155,7 @@ macro_rules! branch {
                     next_outcome: None,
                 }
             }
-            fn handle(&mut self, evt: &str) -> Result<EventOutcome> {
+            fn handle(&mut self, evt: &str) -> Result<EventResult> {
                 let ret = if let Some(x) = self.next_outcome.clone() {
                     self.next_outcome = None;
                     x
@@ -165,7 +165,7 @@ macro_rules! branch {
                 TSTATE.with(|s| {
                     s.borrow_mut().add_event(&self.name(), evt, ret.clone());
                 });
-                Ok(ret)
+                Ok(ret.into())
             }
         }
 
@@ -191,16 +191,16 @@ macro_rules! branch {
                 )
             }
 
-            fn handle_key(&mut self, _: &mut dyn Context, _: key::Key) -> Result<EventOutcome> {
-                self.handle("key")
+            fn handle_key(&mut self, _: &mut dyn Context, _: key::Key) -> Result<EventResult> {
+                Ok(self.handle("key")?)
             }
 
             fn handle_mouse(
                 &mut self,
                 _: &mut dyn Context,
                 _: mouse::MouseEvent,
-            ) -> Result<EventOutcome> {
-                self.handle("mouse")
+            ) -> Result<EventResult> {
+                Ok(self.handle("mouse")?)
             }
 
             fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
@@ -239,7 +239,7 @@ impl R {
         });
         Ok(())
     }
-    fn handle(&mut self, evt: &str) -> Result<EventOutcome> {
+    fn handle(&mut self, evt: &str) -> Result<EventResult> {
         let ret = if let Some(x) = self.next_outcome.clone() {
             self.next_outcome = None;
             x
@@ -249,7 +249,7 @@ impl R {
         TSTATE.with(|s| {
             s.borrow_mut().add_event(&self.name(), evt, ret.clone());
         });
-        Ok(ret)
+        Ok(ret.into())
     }
 }
 
@@ -271,12 +271,12 @@ impl Node for R {
         r.text("any", self.vp().view().line(0), &format!("<{}>", self.name()))
     }
 
-    fn handle_key(&mut self, _: &mut dyn Context, _: key::Key) -> Result<EventOutcome> {
-        self.handle("key")
+    fn handle_key(&mut self, _: &mut dyn Context, _: key::Key) -> Result<EventResult> {
+        Ok(self.handle("key")?)
     }
 
-    fn handle_mouse(&mut self, _: &mut dyn Context, _: mouse::MouseEvent) -> Result<EventOutcome> {
-        self.handle("mouse")
+    fn handle_mouse(&mut self, _: &mut dyn Context, _: mouse::MouseEvent) -> Result<EventResult> {
+        Ok(self.handle("mouse")?)
     }
 
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
