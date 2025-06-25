@@ -723,6 +723,9 @@ impl Canopy {
                         handled = true;
                         self.taint(x);
                     }
+                    EventOutcome::Consume => {
+                        handled = true;
+                    }
                     EventOutcome::Ignore => {
                         if let Some(s) =
                             self.keymap.resolve(&path, inputmap::Input::Mouse(m.into()))
@@ -763,6 +766,7 @@ impl Canopy {
                             self.taint(x);
                             Walk::Handle(None)
                         }
+                        EventOutcome::Consume => Walk::Handle(None),
                         EventOutcome::Ignore => {
                             path.pop();
                             Walk::Continue
@@ -823,8 +827,9 @@ impl Canopy {
     }
 
     /// Call a closure on the currently focused node and all its ancestors to the
-    /// root. If the closure returns Walk::Handle, traversal stops. Handle::Skip is
-    /// ignored.
+    /// root. If the closure returns `Walk::Handle`, traversal stops. A
+    /// `EventOutcome::Consume` result from the closure is treated the same as
+    /// `Walk::Handle(None)`.
     pub(crate) fn walk_focus_path<R>(
         &self,
         root: &mut dyn Node,
@@ -1249,6 +1254,70 @@ mod tests {
             Ok(())
         })?;
 
+        Ok(())
+    }
+
+    #[test]
+    fn tkey_no_render() -> Result<()> {
+        use crate as canopy;
+        use crate::backend::test::TestRender;
+        use crate::commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue};
+        use crate::{EventOutcome, NodeState, Error};
+
+        #[derive(StatefulNode)]
+        struct N {
+            state: NodeState,
+        }
+
+        impl CommandNode for N {
+            fn commands() -> Vec<CommandSpec> {
+                vec![]
+            }
+
+            fn dispatch(
+                &mut self,
+                _c: &mut dyn Context,
+                _cmd: &CommandInvocation,
+            ) -> Result<ReturnValue> {
+                Err(Error::UnknownCommand("".into()))
+            }
+        }
+
+        impl Node for N {
+            fn accept_focus(&mut self) -> bool { true }
+
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)
+            }
+
+            fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
+                r.text("any", self.vp().view().line(0), "<n>")
+            }
+
+            fn handle_key(&mut self, _c: &mut dyn Context, _k: key::Key) -> Result<EventOutcome> {
+                Ok(EventOutcome::Consume)
+            }
+        }
+
+        let (_, mut tr) = TestRender::create();
+        let mut canopy = Canopy::new();
+        let mut root = N { state: NodeState::default() };
+        canopy.add_commands::<N>();
+
+        canopy.set_root_size(Expanse::new(10, 1), &mut root)?;
+        canopy.set_focus(&mut root);
+        canopy.render(&mut tr, &mut root)?;
+        assert!(!tr.buf_empty());
+        tr.text.lock().unwrap().text.clear();
+        canopy.taint = false;
+
+        canopy.key(&mut root, 'a')?;
+        assert!(!canopy.taint);
+        if canopy.taint || canopy.focus_changed() {
+            canopy.render(&mut tr, &mut root)?;
+            canopy.taint = false;
+        }
+        assert!(tr.buf_empty());
         Ok(())
     }
 }

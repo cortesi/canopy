@@ -9,12 +9,20 @@ use crate::{
     Context, Layout, Render, Result,
 };
 
-/// Was an event handled or ignored?
+/// Outcome returned by event handlers.
+///
+/// * `Handle` - The event was handled and the node should be tainted so a render
+///   sweep will occur.
+/// * `Consume` - The event was handled but did not change any visual state. The
+///   event should not be propagated further and the node is **not** tainted.
+/// * `Ignore` - The event was ignored and should be propagated to ancestors.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum EventOutcome {
     Handle,
+    Consume,
     Ignore,
 }
+
 
 #[allow(unused_variables)]
 /// Nodes are the basic building-blocks of a Canopy UI. They are composed in a tree, with each node responsible for
