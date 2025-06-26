@@ -76,19 +76,24 @@ where
 
     /// Insert an item at the given index.
     pub fn insert(&mut self, index: usize, itm: N) {
-        self.items
-            .insert(index.clamp(0, self.len()), Item::new(itm));
+        let mut item = Item::new(itm);
+        item.itm.hide();
+        self.items.insert(index.clamp(0, self.len()), item);
     }
 
     /// Insert an item after the current selection.
     pub fn insert_after(&mut self, itm: N) {
+        let mut item = Item::new(itm);
+        item.itm.hide();
         self.items
-            .insert((self.offset + 1).clamp(0, self.len()), Item::new(itm));
+            .insert((self.offset + 1).clamp(0, self.len()), item);
     }
 
     /// Append an item to the end of the list.
     pub fn append(&mut self, itm: N) {
-        self.items.insert(self.len(), Item::new(itm));
+        let mut item = Item::new(itm);
+        item.itm.hide();
+        self.items.insert(self.len(), item);
     }
 
     /// The current selected item, if any
@@ -320,9 +325,15 @@ where
                 }
                 let final_vp = itm.itm.vp();
                 itm.itm.children(&mut |ch| {
+                    // `ch.vp().position()` returns absolute co-ordinates. We
+                    // want a rectangle relative to the item's canvas, so we
+                    // calculate the offset from the item's position. Use
+                    // `saturating_sub` to avoid panics if the child hasn't been
+                    // repositioned yet and lies above or to the left of the
+                    // item.
                     let ch_rect = Rect::new(
-                        ch.vp().position().x - final_vp.position().x,
-                        ch.vp().position().y - final_vp.position().y,
+                        ch.vp().position().x.saturating_sub(final_vp.position().x),
+                        ch.vp().position().y.saturating_sub(final_vp.position().y),
                         ch.vp().canvas().w,
                         ch.vp().canvas().h,
                     );
@@ -1057,6 +1068,91 @@ mod tests {
         {
             let canvas = buf.lock().unwrap();
             assert_eq!(canvas.cells[1][3], '1');
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn append_item_keeps_children_in_bounds() -> Result<()> {
+        #[derive(StatefulNode)]
+        struct Item {
+            state: NodeState,
+            text: Text,
+        }
+
+        #[derive_commands]
+        impl Item {
+            fn new(t: &str) -> Self {
+                Item {
+                    state: NodeState::default(),
+                    text: Text::new(t).with_fixed_width(t.len() as u16),
+                }
+            }
+        }
+
+        impl ListItem for Item {}
+
+        impl Node for Item {
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                self.text.layout(l, sz)?;
+                let vp = self.text.vp();
+                l.wrap(self, vp)?;
+                Ok(())
+            }
+
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.text)
+            }
+        }
+
+        #[derive(StatefulNode)]
+        struct Root {
+            state: NodeState,
+            list: List<Item>,
+        }
+
+        #[derive_commands]
+        impl Root {
+            fn new() -> Self {
+                Root {
+                    state: NodeState::default(),
+                    list: List::new(vec![Item::new("A")]),
+                }
+            }
+        }
+
+        impl Node for Root {
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.list)
+            }
+
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                l.place(&mut self.list, vp, vp.view())?;
+                Ok(())
+            }
+        }
+
+        let size = Expanse::new(5, 2);
+        let (_, mut cr) = CanvasRender::create(size);
+        let mut canopy = Canopy::new();
+        let mut root = Root::new();
+
+        canopy.set_root_size(size, &mut root)?;
+        canopy.render(&mut cr, &mut root)?;
+
+        root.list.append(Item::new("B"));
+        canopy.render(&mut cr, &mut root)?;
+
+        for itm in &mut root.list.items {
+            let parent = itm.itm.vp().screen_rect();
+            itm.itm.children(&mut |ch| {
+                let child = ch.vp().screen_rect();
+                assert!(parent.contains_rect(&child));
+                Ok(())
+            })?;
         }
 
         Ok(())
