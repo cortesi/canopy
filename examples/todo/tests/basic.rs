@@ -96,10 +96,30 @@ fn add_item_via_pty() {
     let mut app = spawn_workspace_bin("todo", &[db_path.to_str().unwrap()]).unwrap();
     app.expect("todo", Duration::from_millis(100)).ok();
 
-    app.send("a").unwrap();
-    app.send("hi").unwrap();
-    app.send("\r").unwrap();
-    app.send("q").unwrap();
+    fn add(app: &mut canopy::tutils::PtyApp, text: &str) {
+        app.send("a").unwrap();
+        app.send(text).unwrap();
+        app.send("\r").unwrap();
+        app.expect(text, Duration::from_millis(200)).unwrap();
+    }
 
+    fn del(app: &mut canopy::tutils::PtyApp, expected_next: Option<&str>) {
+        app.send("g").unwrap();
+        app.send("d").unwrap();
+        if let Some(txt) = expected_next {
+            app.expect(txt, Duration::from_millis(200)).unwrap();
+        }
+    }
+
+    add(&mut app, "item_one");
+    add(&mut app, "item_two");
+    add(&mut app, "item_three");
+
+    del(&mut app, Some("item_two"));
+    del(&mut app, Some("item_three"));
+    del(&mut app, None);
+
+    // App should still respond after deleting the last item
+    app.send("q").unwrap();
     app.wait_eof(Duration::from_secs(2)).unwrap();
 }

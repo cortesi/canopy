@@ -131,6 +131,9 @@ where
 
     /// Make sure the selected item is within the view after a change.
     fn ensure_selected_in_view(&mut self, c: &mut dyn Context) -> bool {
+        if self.is_empty() {
+            return false;
+        }
         let virt = self.items[self.offset].virt;
         let view = self.vp().view();
         if let Some(v) = virt.vextent().intersection(&view.vextent()) {
