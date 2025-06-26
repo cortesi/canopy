@@ -146,7 +146,11 @@ where
             }
         }
 
+        let scrolled = self.ensure_selected_in_view(core);
         core.taint_tree(self);
+        if scrolled {
+            core.taint(self);
+        }
         Some(itm.itm)
     }
 
