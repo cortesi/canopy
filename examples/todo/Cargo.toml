@@ -9,3 +9,5 @@ canopy = { path = "../../canopy" }
 clap = { version = "4.5.40", features = ["derive"] }
 rusqlite = "0.36.0"
 tracing = "0.1.41"
+
+
