@@ -59,7 +59,7 @@ where
             state: NodeState::default(),
         };
         if !l.is_empty() {
-            l.select(0);
+            l.items[0].set_selected(true);
         }
         l
     }
