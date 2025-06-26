@@ -36,37 +36,51 @@ impl Text {
 
     #[command]
     pub fn scroll_to_top(&mut self, c: &mut dyn Context) {
-        c.scroll_to(self, 0, 0);
+        if c.scroll_to(self, 0, 0) {
+            c.taint(self);
+        }
     }
 
     #[command]
     pub fn scroll_down(&mut self, c: &mut dyn Context) {
-        c.scroll_down(self);
+        if c.scroll_down(self) {
+            c.taint(self);
+        }
     }
 
     #[command]
     pub fn scroll_up(&mut self, c: &mut dyn Context) {
-        c.scroll_up(self);
+        if c.scroll_up(self) {
+            c.taint(self);
+        }
     }
 
     #[command]
     pub fn scroll_left(&mut self, c: &mut dyn Context) {
-        c.scroll_left(self);
+        if c.scroll_left(self) {
+            c.taint(self);
+        }
     }
 
     #[command]
     pub fn scroll_right(&mut self, c: &mut dyn Context) {
-        c.scroll_right(self);
+        if c.scroll_right(self) {
+            c.taint(self);
+        }
     }
 
     #[command]
     pub fn page_down(&mut self, c: &mut dyn Context) {
-        c.page_down(self);
+        if c.page_down(self) {
+            c.taint(self);
+        }
     }
 
     #[command]
     pub fn page_up(&mut self, c: &mut dyn Context) {
-        c.page_up(self);
+        if c.page_up(self) {
+            c.taint(self);
+        }
     }
 }
 
