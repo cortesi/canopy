@@ -123,6 +123,8 @@ pub struct NodeState {
     // Has this node been initialized? This is used to determine if we need to
     // call the poll function during the pre-render sweep.
     pub(crate) initialized: bool,
+    // Set while inside `Node::layout` to detect recursive layout calls.
+    pub(crate) in_layout: bool,
 }
 
 impl NodeState {
@@ -213,6 +215,7 @@ impl Default for NodeState {
             hidden: false,
             viewport: ViewPort::default(),
             initialized: false,
+            in_layout: false,
         }
     }
 }
