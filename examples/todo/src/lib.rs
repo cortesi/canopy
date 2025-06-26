@@ -117,18 +117,24 @@ impl Todo {
     }
 
     #[command]
-    pub fn accept_add(&mut self, _: &mut dyn Context) -> canopy::Result<()> {
-        if let Some(adder) = &mut self.adder {
-            let item = store::get().add_todo(&adder.child.text()).unwrap();
-            self.content.child.append(TodoItem::new(item));
-            self.adder = None;
+    pub fn accept_add(&mut self, c: &mut dyn Context) -> canopy::Result<()> {
+        if let Some(adder) = self.adder.take() {
+            let value = adder.child.textbuf.value;
+            if !value.is_empty() {
+                let item = store::get().add_todo(&value).unwrap();
+                self.content.child.append(TodoItem::new(item));
+            }
         }
+        c.taint_tree(self);
+        c.focus_first(self);
         Ok(())
     }
 
     #[command]
-    pub fn cancel_add(&mut self, _: &mut dyn Context) -> canopy::Result<()> {
+    pub fn cancel_add(&mut self, c: &mut dyn Context) -> canopy::Result<()> {
         self.adder = None;
+        c.taint_tree(self);
+        c.focus_first(self);
         Ok(())
     }
 
