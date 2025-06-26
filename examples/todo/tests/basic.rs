@@ -1,7 +1,32 @@
 use anyhow::Result;
 use canopy::tutils::{run_root, run_root_with_size, spawn_workspace_bin};
-use std::time::Duration;
 use todo::{bind_keys, open_store, style, Todo};
+
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+fn db_path(tag: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!(
+        "todo_test_{}_{}.db",
+        tag,
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis(),
+    ))
+}
+
+fn spawn_app(tag: &str) -> canopy::tutils::PtyApp {
+    let path = db_path(tag);
+    open_store(path.to_str().unwrap()).unwrap();
+    let mut app = spawn_workspace_bin("todo", &[path.to_str().unwrap()]).unwrap();
+    app.expect("todo", Duration::from_millis(100)).ok();
+    app
+}
+
+fn quit(mut app: canopy::tutils::PtyApp) {
+    app.send("q").unwrap();
+    app.wait_eof(Duration::from_secs(2)).unwrap();
+}
 
 fn expect_highlight(app: &mut canopy::tutils::PtyApp, text: &str) {
     app.expect(text, Duration::from_millis(200)).unwrap();
@@ -32,13 +57,7 @@ fn del_no_nav(app: &mut canopy::tutils::PtyApp, expected_next: Option<&str>) {
 
 #[test]
 fn add_item_via_script() -> Result<()> {
-    let path = std::env::temp_dir().join(format!(
-        "todo_test_{}.db",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis()
-    ));
+    let path = db_path("script");
     open_store(path.to_str().unwrap())?;
     run_root(Todo::new()?, |h, tr, root| {
         style(h.canopy());
@@ -63,13 +82,7 @@ fn add_item_via_script() -> Result<()> {
 #[test]
 fn render_seeded_item() {
     use canopy::geom::Expanse;
-    let path = std::env::temp_dir().join(format!(
-        "todo_test_seed_{}.db",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis()
-    ));
+    let path = db_path("seed");
     open_store(path.to_str().unwrap()).unwrap();
     todo::store::get().add_todo("seeded").unwrap();
     run_root_with_size(Todo::new().unwrap(), Expanse::new(20, 5), |h, tr, root| {
@@ -85,13 +98,7 @@ fn render_seeded_item() {
 #[test]
 #[should_panic]
 fn add_item_with_char_newline() {
-    let path = std::env::temp_dir().join(format!(
-        "todo_test_charnl_{}.db",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis(),
-    ));
+    let path = db_path("charnl");
     open_store(path.to_str().unwrap()).unwrap();
     run_root(Todo::new().unwrap(), |h, tr, root| {
         style(h.canopy());
@@ -111,17 +118,7 @@ fn add_item_with_char_newline() {
 
 #[test]
 fn add_item_via_pty() {
-    let db_path = std::env::temp_dir().join(format!(
-        "todo_test_pty_{}.db",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis()
-    ));
-    open_store(db_path.to_str().unwrap()).unwrap();
-
-    let mut app = spawn_workspace_bin("todo", &[db_path.to_str().unwrap()]).unwrap();
-    app.expect("todo", Duration::from_millis(100)).ok();
+    let mut app = spawn_app("pty");
 
     add(&mut app, "item_one");
     add(&mut app, "item_two");
@@ -132,23 +129,12 @@ fn add_item_via_pty() {
     del_first(&mut app, None);
 
     // App should still respond after deleting the last item
-    app.send("q").unwrap();
-    app.wait_eof(Duration::from_secs(2)).unwrap();
+    quit(app);
 }
 
 #[test]
 fn delete_reverse_via_pty() {
-    let db_path = std::env::temp_dir().join(format!(
-        "todo_test_rev_{}.db",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis(),
-    ));
-    open_store(db_path.to_str().unwrap()).unwrap();
-
-    let mut app = spawn_workspace_bin("todo", &[db_path.to_str().unwrap()]).unwrap();
-    app.expect("todo", Duration::from_millis(100)).ok();
+    let mut app = spawn_app("rev");
 
     add(&mut app, "one");
     add(&mut app, "two");
@@ -160,44 +146,34 @@ fn delete_reverse_via_pty() {
     del_first(&mut app, Some("one"));
     del_first(&mut app, None);
 
-    app.send("q").unwrap();
-    app.wait_eof(Duration::from_secs(2)).unwrap();
+    quit(app);
 }
 
 #[test]
 fn single_item_add_remove() {
-    let db_path = std::env::temp_dir().join(format!(
-        "todo_test_single_{}.db",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis(),
-    ));
-    open_store(db_path.to_str().unwrap()).unwrap();
-
-    let mut app = spawn_workspace_bin("todo", &[db_path.to_str().unwrap()]).unwrap();
-    app.expect("todo", Duration::from_millis(100)).ok();
+    let mut app = spawn_app("single");
 
     add(&mut app, "solo");
     del_first(&mut app, None);
 
-    app.send("q").unwrap();
-    app.wait_eof(Duration::from_secs(2)).unwrap();
+    quit(app);
+}
+
+#[test]
+fn delete_first_leaves_single_visible() {
+    let mut app = spawn_app("del_first_single_left");
+
+    add(&mut app, "one");
+    add(&mut app, "two");
+
+    del_no_nav(&mut app, Some("two"));
+
+    quit(app);
 }
 
 #[test]
 fn delete_after_moving_focus() {
-    let db_path = std::env::temp_dir().join(format!(
-        "todo_test_move_del_{}.db",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis(),
-    ));
-    open_store(db_path.to_str().unwrap()).unwrap();
-
-    let mut app = spawn_workspace_bin("todo", &[db_path.to_str().unwrap()]).unwrap();
-    app.expect("todo", Duration::from_millis(100)).ok();
+    let mut app = spawn_app("move_del");
 
     add(&mut app, "first");
     add(&mut app, "second");
@@ -207,23 +183,29 @@ fn delete_after_moving_focus() {
     app.send("d").unwrap();
     expect_highlight(&mut app, "first");
 
-    app.send("q").unwrap();
-    app.wait_eof(Duration::from_secs(2)).unwrap();
+    quit(app);
+}
+
+#[test]
+fn delete_middle_keeps_rest() {
+    let mut app = spawn_app("del_middle");
+
+    add(&mut app, "first");
+    add(&mut app, "second");
+    add(&mut app, "third");
+
+    app.send("j").unwrap();
+    expect_highlight(&mut app, "second");
+    app.send("d").unwrap();
+    expect_highlight(&mut app, "first");
+    app.expect("third", Duration::from_millis(200)).unwrap();
+
+    quit(app);
 }
 
 #[test]
 fn delete_first_without_nav() {
-    let db_path = std::env::temp_dir().join(format!(
-        "todo_test_del_first_{}.db",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis(),
-    ));
-    open_store(db_path.to_str().unwrap()).unwrap();
-
-    let mut app = spawn_workspace_bin("todo", &[db_path.to_str().unwrap()]).unwrap();
-    app.expect("todo", Duration::from_millis(100)).ok();
+    let mut app = spawn_app("del_first");
 
     add(&mut app, "a1");
     add(&mut app, "a2");
@@ -232,23 +214,12 @@ fn delete_first_without_nav() {
     del_no_nav(&mut app, Some("a2"));
     del_no_nav(&mut app, Some("a3"));
 
-    app.send("q").unwrap();
-    app.wait_eof(Duration::from_secs(2)).unwrap();
+    quit(app);
 }
 
 #[test]
 fn focus_moves_with_navigation() {
-    let db_path = std::env::temp_dir().join(format!(
-        "todo_test_nav_{}.db",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis(),
-    ));
-    open_store(db_path.to_str().unwrap()).unwrap();
-
-    let mut app = spawn_workspace_bin("todo", &[db_path.to_str().unwrap()]).unwrap();
-    app.expect("todo", Duration::from_millis(100)).ok();
+    let mut app = spawn_app("nav");
 
     add(&mut app, "one");
     add(&mut app, "two");
@@ -259,6 +230,5 @@ fn focus_moves_with_navigation() {
     app.send("k").unwrap();
     expect_highlight(&mut app, "one");
 
-    app.send("q").unwrap();
-    app.wait_eof(Duration::from_secs(2)).unwrap();
+    quit(app);
 }

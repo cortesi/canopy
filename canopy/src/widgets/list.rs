@@ -126,6 +126,10 @@ where
             return None;
         }
 
+        // Track the first visible item before we mutate the list so we can
+        // decide if scrolling is necessary afterwards.
+        let view_start = self.view_range().0;
+
         // Clear the previous selection while indices are valid.
         if let Some(itm) = self.items.get_mut(self.offset) {
             itm.set_selected(false);
@@ -143,6 +147,13 @@ where
             }
             if let Some(itm) = self.items.get_mut(self.offset) {
                 itm.set_selected(true);
+            }
+            // If the deleted item was below the view, we may need to adjust the
+            // scroll position so the newly selected item remains visible. If it
+            // was above the top of the view, the remaining items will slide up
+            // naturally when we next layout, so skip the scroll adjustment.
+            if offset > view_start && self.ensure_selected_in_view(core) {
+                core.taint(self);
             }
         }
 
