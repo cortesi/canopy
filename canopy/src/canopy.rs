@@ -67,7 +67,8 @@ pub trait Context {
     fn focus_dir(&mut self, root: &mut dyn Node, dir: Direction);
 
     /// Scroll the view to the specified position. The view is clamped within
-    /// the outer rectangle. Returns `true` if the view changed.
+    /// the outer rectangle. Returns `true` if movement occurred and taints the
+    /// subtree on change.
     fn scroll_to(&mut self, n: &mut dyn Node, x: u16, y: u16) -> bool {
         let before = n.vp().view();
         n.state_mut().scroll_to(x, y);
@@ -79,7 +80,8 @@ pub trait Context {
     }
 
     /// Scroll the view by the given offsets. The view rectangle is clamped
-    /// within the outer rectangle. Returns `true` if the view changed.
+    /// within the outer rectangle. Returns `true` if movement occurred and
+    /// taints the subtree on change.
     fn scroll_by(&mut self, n: &mut dyn Node, x: i16, y: i16) -> bool {
         let before = n.vp().view();
         n.state_mut().scroll_by(x, y);
@@ -90,8 +92,8 @@ pub trait Context {
         changed
     }
 
-    /// Scroll the view up by the height of the view rectangle. Returns `true`
-    /// if the view changed.
+    /// Scroll the view up by one page. Returns `true` if movement occurred and
+    /// taints the subtree on change.
     fn page_up(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
         n.state_mut().page_up();
@@ -102,8 +104,8 @@ pub trait Context {
         changed
     }
 
-    /// Scroll the view down by the height of the view rectangle. Returns `true`
-    /// if the view changed.
+    /// Scroll the view down by one page. Returns `true` if movement occurred
+    /// and taints the subtree on change.
     fn page_down(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
         n.state_mut().page_down();
@@ -114,7 +116,8 @@ pub trait Context {
         changed
     }
 
-    /// Scroll the view up by one line. Returns `true` if the view changed.
+    /// Scroll the view up by one line. Returns `true` if movement occurred and
+    /// taints the subtree on change.
     fn scroll_up(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
         n.state_mut().scroll_up();
@@ -125,7 +128,8 @@ pub trait Context {
         changed
     }
 
-    /// Scroll the view down by one line. Returns `true` if the view changed.
+    /// Scroll the view down by one line. Returns `true` if movement occurred
+    /// and taints the subtree on change.
     fn scroll_down(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
         n.state_mut().scroll_down();
@@ -136,7 +140,8 @@ pub trait Context {
         changed
     }
 
-    /// Scroll the view left by one line. Returns `true` if the view changed.
+    /// Scroll the view left by one line. Returns `true` if movement occurred
+    /// and taints the subtree on change.
     fn scroll_left(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
         n.state_mut().scroll_left();
@@ -147,7 +152,8 @@ pub trait Context {
         changed
     }
 
-    /// Scroll the view right by one line. Returns `true` if the view changed.
+    /// Scroll the view right by one line. Returns `true` if movement occurred
+    /// and taints the subtree on change.
     fn scroll_right(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
         n.state_mut().scroll_right();
