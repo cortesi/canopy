@@ -320,9 +320,15 @@ where
                 }
                 let final_vp = itm.itm.vp();
                 itm.itm.children(&mut |ch| {
+                    // `ch.vp().position()` returns absolute co-ordinates. We
+                    // want a rectangle relative to the item's canvas, so we
+                    // calculate the offset from the item's position. Use
+                    // `saturating_sub` to avoid panics if the child hasn't been
+                    // repositioned yet and lies above or to the left of the
+                    // item.
                     let ch_rect = Rect::new(
-                        ch.vp().position().x - final_vp.position().x,
-                        ch.vp().position().y - final_vp.position().y,
+                        ch.vp().position().x.saturating_sub(final_vp.position().x),
+                        ch.vp().position().y.saturating_sub(final_vp.position().y),
                         ch.vp().canvas().w,
                         ch.vp().canvas().h,
                     );
