@@ -144,6 +144,10 @@ where
             if let Some(itm) = self.items.get_mut(self.offset) {
                 itm.set_selected(true);
             }
+            // Ensure the newly selected item remains visible
+            if self.ensure_selected_in_view(core) {
+                core.taint(self);
+            }
         }
 
         core.taint_tree(self);
