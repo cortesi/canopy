@@ -319,10 +319,13 @@ where
                     st.constrain(vp);
                 }
                 let final_vp = itm.itm.vp();
+                let dx = final_vp.position().x as i16 - child_vp.position().x as i16;
+                let dy = final_vp.position().y as i16 - child_vp.position().y as i16;
                 itm.itm.children(&mut |ch| {
+                    let pos = ch.vp().position().scroll(dx, dy);
                     let ch_rect = Rect::new(
-                        ch.vp().position().x - final_vp.position().x,
-                        ch.vp().position().y - final_vp.position().y,
+                        pos.x.saturating_sub(final_vp.position().x),
+                        pos.y.saturating_sub(final_vp.position().y),
                         ch.vp().canvas().w,
                         ch.vp().canvas().h,
                     );
