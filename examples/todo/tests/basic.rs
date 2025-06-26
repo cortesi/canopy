@@ -1,7 +1,51 @@
 use anyhow::Result;
-use canopy::tutils::{run_root, run_root_with_size, spawn_workspace_bin};
-use std::time::Duration;
+use canopy::tutils::{run_root, run_root_with_size, spawn_workspace_bin, PtyApp};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use todo::{bind_keys, open_store, style, Todo};
+
+const WAIT: Duration = Duration::from_millis(500);
+
+fn temp_db(name: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!(
+        "{}_{}.db",
+        name,
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    ))
+}
+
+fn spawn_todo(path: &std::path::Path) -> PtyApp {
+    let mut app = spawn_workspace_bin("todo", &[path.to_str().unwrap()]).unwrap();
+    app.expect("todo", Duration::from_millis(100)).ok();
+    app
+}
+
+fn add(app: &mut PtyApp, text: &str) {
+    app.send("a").unwrap();
+    app.send(text).unwrap();
+    app.send("\r").unwrap();
+    app.expect(text, WAIT).unwrap();
+    std::thread::sleep(WAIT);
+}
+
+fn assert_present(app: &mut PtyApp, text: &str) {
+    app.expect(text, WAIT).unwrap();
+}
+
+fn select_first(app: &mut PtyApp) {
+    app.send("g").unwrap();
+}
+
+fn select_next(app: &mut PtyApp) {
+    app.send("j").unwrap();
+}
+
+fn delete_current(app: &mut PtyApp, _next: Option<&str>) {
+    app.send("d").unwrap();
+    std::thread::sleep(WAIT);
+}
 
 #[test]
 fn add_item_via_script() -> Result<()> {
@@ -93,13 +137,73 @@ fn add_item_via_pty() {
     ));
     open_store(db_path.to_str().unwrap()).unwrap();
 
-    let mut app = spawn_workspace_bin("todo", &[db_path.to_str().unwrap()]).unwrap();
-    app.expect("todo", Duration::from_millis(100)).ok();
+    let mut app = spawn_todo(&db_path);
 
-    app.send("a").unwrap();
-    app.send("hi").unwrap();
-    app.send("\r").unwrap();
+    fn del(app: &mut PtyApp, expected_next: Option<&str>) {
+        select_first(app);
+        delete_current(app, expected_next);
+    }
+
+    add(&mut app, "item_one");
+    add(&mut app, "item_two");
+    add(&mut app, "item_three");
+
+    del(&mut app, Some("item_two"));
+    del(&mut app, Some("item_three"));
+    del(&mut app, None);
+
+    // App should still respond after deleting the last item
     app.send("q").unwrap();
+    app.wait_eof(Duration::from_secs(2)).unwrap();
+}
 
+#[test]
+fn delete_reverse_via_pty() {
+    let db_path = temp_db("todo_test_rev");
+    open_store(db_path.to_str().unwrap()).unwrap();
+
+    let mut app = spawn_todo(&db_path);
+
+    add(&mut app, "one");
+    add(&mut app, "two");
+    add(&mut app, "three");
+
+    select_first(&mut app);
+    select_next(&mut app);
+    select_next(&mut app);
+    delete_current(&mut app, Some("two"));
+    assert_present(&mut app, "one");
+    assert_present(&mut app, "two");
+
+    delete_current(&mut app, Some("one"));
+    assert_present(&mut app, "one");
+
+    delete_current(&mut app, None);
+
+    app.send("q").unwrap();
+    app.wait_eof(Duration::from_secs(2)).unwrap();
+}
+
+#[test]
+fn single_item_add_remove_via_pty() {
+    let db_path = temp_db("todo_test_single");
+    open_store(db_path.to_str().unwrap()).unwrap();
+
+    let mut app = spawn_todo(&db_path);
+
+    add(&mut app, "only");
+    select_first(&mut app);
+    delete_current(&mut app, None);
+
+    // ensure still responsive when list empty
+    app.send("j").unwrap();
+    app.send("k").unwrap();
+    app.send("d").unwrap();
+
+    add(&mut app, "again");
+    select_first(&mut app);
+    delete_current(&mut app, None);
+
+    app.send("q").unwrap();
     app.wait_eof(Duration::from_secs(2)).unwrap();
 }

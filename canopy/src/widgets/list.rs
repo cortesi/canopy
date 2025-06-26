@@ -120,8 +120,18 @@ where
     pub fn delete_item(&mut self, core: &mut dyn Context, offset: usize) -> Option<N> {
         if !self.is_empty() && offset < self.len() {
             let itm = self.items.remove(offset);
-            if offset <= self.offset {
-                self.select_prev(core);
+            if self.is_empty() {
+                self.offset = 0;
+            } else {
+                if self.offset > offset {
+                    self.offset -= 1;
+                } else if self.offset >= self.items.len() {
+                    self.offset = self.items.len() - 1;
+                }
+                for (i, it) in self.items.iter_mut().enumerate() {
+                    it.set_selected(i == self.offset);
+                }
+                self.ensure_selected_in_view(core);
             }
             Some(itm.itm)
         } else {
@@ -131,6 +141,9 @@ where
 
     /// Make sure the selected item is within the view after a change.
     fn ensure_selected_in_view(&mut self, c: &mut dyn Context) -> bool {
+        if self.is_empty() {
+            return false;
+        }
         let virt = self.items[self.offset].virt;
         let view = self.vp().view();
         if let Some(v) = virt.vextent().intersection(&view.vextent()) {
