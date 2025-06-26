@@ -76,19 +76,37 @@ where
 
     /// Insert an item at the given index.
     pub fn insert(&mut self, index: usize, itm: N) {
-        self.items
-            .insert(index.clamp(0, self.len()), Item::new(itm));
+        let was_empty = self.is_empty();
+        let idx = index.clamp(0, self.len());
+        self.items.insert(idx, Item::new(itm));
+        if was_empty {
+            self.offset = 0;
+            self.items[0].set_selected(true);
+        } else if idx <= self.offset {
+            // Keep selection on the same logical item when inserting before it
+            self.offset += 1;
+        }
     }
 
     /// Insert an item after the current selection.
     pub fn insert_after(&mut self, itm: N) {
-        self.items
-            .insert((self.offset + 1).clamp(0, self.len()), Item::new(itm));
+        let was_empty = self.is_empty();
+        let idx = (self.offset + 1).clamp(0, self.len());
+        self.items.insert(idx, Item::new(itm));
+        if was_empty {
+            self.offset = 0;
+            self.items[0].set_selected(true);
+        }
     }
 
     /// Append an item to the end of the list.
     pub fn append(&mut self, itm: N) {
+        let was_empty = self.is_empty();
         self.items.insert(self.len(), Item::new(itm));
+        if was_empty {
+            self.offset = 0;
+            self.items[0].set_selected(true);
+        }
     }
 
     /// The current selected item, if any
@@ -118,19 +136,35 @@ where
 
     /// Move selection to the next item in the list, if possible.
     pub fn delete_item(&mut self, core: &mut dyn Context, offset: usize) -> Option<N> {
-        if !self.is_empty() && offset < self.len() {
-            let itm = self.items.remove(offset);
-            if offset <= self.offset {
-                self.select_prev(core);
-            }
-            Some(itm.itm)
-        } else {
-            None
+        if offset >= self.len() {
+            return None;
         }
+
+        let selected_removed = offset == self.offset;
+        let itm = self.items.remove(offset);
+
+        if self.is_empty() {
+            self.offset = 0;
+        } else {
+            if offset < self.offset {
+                self.offset -= 1;
+            } else if selected_removed && self.offset >= self.len() {
+                self.offset = self.len() - 1;
+            }
+            for (idx, item) in self.items.iter_mut().enumerate() {
+                item.set_selected(idx == self.offset);
+            }
+        }
+
+        core.taint(self);
+        Some(itm.itm)
     }
 
     /// Make sure the selected item is within the view after a change.
     fn ensure_selected_in_view(&mut self, c: &mut dyn Context) -> bool {
+        if self.is_empty() {
+            return false;
+        }
         let virt = self.items[self.offset].virt;
         let view = self.vp().view();
         if let Some(v) = virt.vextent().intersection(&view.vextent()) {
