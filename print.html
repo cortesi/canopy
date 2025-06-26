@@ -350,14 +350,14 @@ the focus path the opportunity to define a cursor location and style using the
 <strong>Node::handle_key</strong> method called on each node. Keys are only handled once - we
 stop passing the event along once the first node indicates that it's been
 handled. Handling a key event automatically taints the node, unless the
-event handler returns <code>EventOutcome::Consume</code>.</p>
+<strong>EventOutcome::Consume</strong> value is returned.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="mouse"><a class="header" href="#mouse">Mouse</a></h1>
 <img width=300 style="padding: 20px;" src="assets/mouseevent.png">
 <p>Mouse events are independent of the focus - we locate the leaf node that is
 under the mouse cursor, then pass event through the path from the leaf to the
 root for handling. For each node on the path, the <strong>Node::handle_mouse</strong> method
 is called, and we stop after the first node handles the event. Handling a mouse
-event taints the node unless the handler returns <code>EventOutcome::Consume</code>.</p>
+event taints the node, unless <strong>EventOutcome::Consume</strong> is returned.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="focus"><a class="header" href="#focus">Focus</a></h1>
 <img width=300 style="padding: 20px;" src="assets/focus.png">
 <p>Eactly one node has <strong>focus</strong> at any one time. If a node has focus, its
