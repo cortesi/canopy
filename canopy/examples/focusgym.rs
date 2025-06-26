@@ -24,16 +24,16 @@ impl Block {
         }
     }
 
+    fn size_limited(&self, a: Expanse) -> bool {
+        (self.horizontal && a.w <= 4) || (!self.horizontal && a.h <= 4)
+    }
+
     #[command]
     fn add(&mut self, c: &mut dyn Context) {
         if !self.children.is_empty() && !self.size_limited(self.children[0].vp().view().into()) {
             self.children.push(Block::new(!self.horizontal));
             c.taint_tree(self);
         }
-    }
-
-    fn size_limited(&self, a: Expanse) -> bool {
-        (self.horizontal && a.w <= 4) || (!self.horizontal && a.h <= 4)
     }
 
     #[command]
