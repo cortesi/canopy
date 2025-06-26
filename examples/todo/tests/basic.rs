@@ -1,5 +1,6 @@
 use anyhow::Result;
 use canopy::tutils::run_root;
+use canopy::tutils::run_root_with_size;
 use std::time::Duration;
 use todo::{bind_keys, open_store, style, Todo};
 
@@ -31,4 +32,25 @@ fn add_item_via_script() -> Result<()> {
         Ok(())
     })?;
     Ok(())
+}
+
+#[test]
+fn render_seeded_item() {
+    use canopy::geom::Expanse;
+    let path = std::env::temp_dir().join(format!(
+        "todo_test_seed_{}.db",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    ));
+    open_store(path.to_str().unwrap()).unwrap();
+    todo::store::get().add_todo("seeded").unwrap();
+    run_root_with_size(Todo::new().unwrap(), Expanse::new(20, 5), |h, tr, root| {
+        style(h.canopy());
+        bind_keys(h.canopy());
+        h.render_timeout(tr, root, Duration::from_secs(1)).unwrap();
+        assert!(tr.contains_text("seeded"));
+        Ok(())
+    }).unwrap();
 }

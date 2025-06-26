@@ -79,8 +79,9 @@ impl<'a> Harness<'a> {
 /// The root node must implement [`Loader`] so that command sets can be loaded
 /// for the test environment. The node is laid out with a default size before
 /// the supplied closure is executed.
-pub fn run_root<N>(
+pub fn run_root_with_size<N>(
     mut root: N,
+    size: Expanse,
     func: impl FnOnce(&mut Harness<'_>, &mut TestRender, &mut N) -> Result<()>,
 ) -> Result<()>
 where
@@ -90,8 +91,18 @@ where
     let mut c = Canopy::new();
 
     <N as Loader>::load(&mut c);
-    c.set_root_size(Expanse::new(100, 100), &mut root)?;
+    c.set_root_size(size, &mut root)?;
 
     let mut h = Harness { core: &mut c };
     func(&mut h, &mut tr, &mut root)
+}
+
+pub fn run_root<N>(
+    root: N,
+    func: impl FnOnce(&mut Harness<'_>, &mut TestRender, &mut N) -> Result<()>,
+) -> Result<()>
+where
+    N: Node + Loader,
+{
+    run_root_with_size(root, Expanse::new(100, 100), func)
 }
