@@ -464,7 +464,7 @@ impl From<(u16, u16, u16, u16)> for Rect {
 /// Split a length into n sections, as evenly as possible.
 fn split(len: u16, n: u16) -> Result<Vec<u16>> {
     if n == 0 {
-        return Err(Error::Geometry("divide by zero".into()));
+        return Ok(Vec::new());
     }
     let w = len / n;
     let rem = len % n;
