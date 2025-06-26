@@ -320,9 +320,15 @@ where
                 }
                 let final_vp = itm.itm.vp();
                 itm.itm.children(&mut |ch| {
+                    // `ch.vp().position()` returns absolute co-ordinates. We
+                    // want a rectangle relative to the item's canvas, so we
+                    // calculate the offset from the item's position. Use
+                    // `saturating_sub` to avoid panics if the child hasn't been
+                    // repositioned yet and lies above or to the left of the
+                    // item.
                     let ch_rect = Rect::new(
-                        ch.vp().position().x - final_vp.position().x,
-                        ch.vp().position().y - final_vp.position().y,
+                        ch.vp().position().x.saturating_sub(final_vp.position().x),
+                        ch.vp().position().y.saturating_sub(final_vp.position().y),
                         ch.vp().canvas().w,
                         ch.vp().canvas().h,
                     );
@@ -335,6 +341,14 @@ where
                         ch.state_mut().set_canvas(ch_vp.canvas());
                         ch.state_mut().set_view(ch_vp.view());
                     } else {
+                        // Even if the child is fully clipped, ensure it stays
+                        // at a valid position relative to the item so that
+                        // invariants hold.
+                        ch.state_mut().set_position(
+                            final_vp.position(),
+                            final_vp.position(),
+                            final_vp.canvas().rect(),
+                        )?;
                         ch.state_mut().set_view(Rect::default());
                     }
                     Ok(())
@@ -1058,6 +1072,297 @@ mod tests {
             let canvas = buf.lock().unwrap();
             assert_eq!(canvas.cells[1][3], '1');
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn append_item_clipped_bounds() -> Result<()> {
+        #[derive(StatefulNode)]
+        struct Block {
+            state: NodeState,
+            text: Text,
+        }
+
+        #[derive_commands]
+        impl Block {
+            fn new(t: &str) -> Self {
+                Block {
+                    state: NodeState::default(),
+                    text: Text::new(t).with_fixed_width(t.len() as u16),
+                }
+            }
+        }
+
+        impl ListItem for Block {}
+
+        impl Node for Block {
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                l.place(&mut self.text, vp, Rect::new(0, 0, sz.w, sz.h))?;
+                let vp = self.text.vp();
+                l.size(self, vp.canvas(), vp.canvas())?;
+                Ok(())
+            }
+
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.text)
+            }
+        }
+
+        #[derive(StatefulNode)]
+        struct Root {
+            state: NodeState,
+            list: frame::Frame<List<Block>>,
+        }
+
+        #[derive_commands]
+        impl Root {
+            fn new() -> Self {
+                Root {
+                    state: NodeState::default(),
+                    list: frame::Frame::new(List::new(vec![Block::new("A"), Block::new("B")])),
+                }
+            }
+        }
+
+        impl Node for Root {
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.list)
+            }
+
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                l.place(&mut self.list, vp, vp.view())?;
+                Ok(())
+            }
+        }
+
+        let size = Expanse::new(4, 3);
+        let (_, mut cr) = CanvasRender::create(size);
+        let mut canopy = Canopy::new();
+        let mut root = Root::new();
+
+        canopy.set_root_size(size, &mut root)?;
+        canopy.render(&mut cr, &mut root)?;
+
+        // Append a new item that will be outside the visible view.
+        root.list.child.append(Block::new("C"));
+        canopy.render(&mut cr, &mut root)?;
+
+        let list_rect = root.list.child.vp().screen_rect();
+        root.list.child.children(&mut |n| {
+            if !n.is_hidden() {
+                assert!(list_rect.contains_rect(&n.vp().screen_rect()));
+            }
+            Ok(())
+        })?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn append_interval_item_no_overflow() -> Result<()> {
+        #[derive(StatefulNode)]
+        struct IntervalItem {
+            state: NodeState,
+            child: Text,
+            selected: bool,
+        }
+
+        #[derive_commands]
+        impl IntervalItem {
+            fn new() -> Self {
+                IntervalItem {
+                    state: NodeState::default(),
+                    child: Text::new("0"),
+                    selected: false,
+                }
+            }
+        }
+
+        impl ListItem for IntervalItem {
+            fn set_selected(&mut self, state: bool) {
+                self.selected = state;
+            }
+        }
+
+        impl Node for IntervalItem {
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                self.child.layout(l, sz)?;
+                let vp = self.child.vp();
+                l.wrap(self, vp)?;
+                Ok(())
+            }
+
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.child)
+            }
+        }
+
+        #[derive(StatefulNode)]
+        struct Root {
+            state: NodeState,
+            list: frame::Frame<List<IntervalItem>>,
+        }
+
+        #[derive_commands]
+        impl Root {
+            fn new() -> Self {
+                Root {
+                    state: NodeState::default(),
+                    list: frame::Frame::new(List::new(vec![])),
+                }
+            }
+        }
+
+        impl Node for Root {
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.list)
+            }
+
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                l.place(&mut self.list, vp, vp.view())?;
+                Ok(())
+            }
+        }
+
+        let size = Expanse::new(10, 3);
+        let (_, mut cr) = CanvasRender::create(size);
+        let mut canopy = Canopy::new();
+        let mut root = Root::new();
+
+        canopy.set_root_size(size, &mut root)?;
+        canopy.render(&mut cr, &mut root)?;
+
+        // Append a new item and render again. This previously triggered an
+        // invariant violation.
+        root.list.child.append(IntervalItem::new());
+        canopy.render(&mut cr, &mut root)?;
+
+        let list_rect = root.list.child.vp().screen_rect();
+        root.list.child.children(&mut |n| {
+            if !n.is_hidden() {
+                assert!(list_rect.contains_rect(&n.vp().screen_rect()));
+            }
+            Ok(())
+        })?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn append_interval_item_bounds_multiple() -> Result<()> {
+        #[derive(StatefulNode)]
+        struct IntervalItem {
+            state: NodeState,
+            child: Text,
+            selected: bool,
+        }
+
+        #[derive_commands]
+        impl IntervalItem {
+            fn new() -> Self {
+                IntervalItem {
+                    state: NodeState::default(),
+                    child: Text::new("0"),
+                    selected: false,
+                }
+            }
+        }
+
+        impl ListItem for IntervalItem {
+            fn set_selected(&mut self, state: bool) {
+                self.selected = state;
+            }
+        }
+
+        impl Node for IntervalItem {
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                self.child.layout(l, sz)?;
+                let vp = self.child.vp();
+                l.wrap(self, vp)?;
+                Ok(())
+            }
+
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.child)
+            }
+        }
+
+        #[derive(StatefulNode)]
+        struct StatusBar {
+            state: NodeState,
+        }
+
+        #[derive_commands]
+        impl StatusBar {}
+
+        impl Node for StatusBar {
+            fn render(&mut self, _c: &dyn Context, _r: &mut Render) -> Result<()> {
+                Ok(())
+            }
+        }
+
+        #[derive(StatefulNode)]
+        struct Root {
+            state: NodeState,
+            content: frame::Frame<List<IntervalItem>>,
+            status: StatusBar,
+        }
+
+        #[derive_commands]
+        impl Root {
+            fn new(items: Vec<IntervalItem>) -> Self {
+                Root {
+                    state: NodeState::default(),
+                    content: frame::Frame::new(List::new(items)),
+                    status: StatusBar {
+                        state: NodeState::default(),
+                    },
+                }
+            }
+        }
+
+        impl Node for Root {
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.status)?;
+                f(&mut self.content)
+            }
+
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                let (a, b) = vp.view().carve_vend(1);
+                l.place(&mut self.status, vp, b)?;
+                l.place(&mut self.content, vp, a)?;
+                Ok(())
+            }
+        }
+
+        let size = Expanse::new(10, 4);
+        let (_, mut cr) = CanvasRender::create(size);
+        let mut canopy = Canopy::new();
+        let mut root = Root::new(vec![IntervalItem::new(), IntervalItem::new()]);
+
+        canopy.set_root_size(size, &mut root)?;
+        canopy.render(&mut cr, &mut root)?;
+
+        // Append a new item while there are existing items.
+        root.content.child.append(IntervalItem::new());
+        canopy.render(&mut cr, &mut root)?;
+
+        let list_rect = root.content.child.vp().screen_rect();
+        root.content.child.children(&mut |n| {
+            if !n.is_hidden() {
+                assert!(list_rect.contains_rect(&n.vp().screen_rect()));
+            }
+            Ok(())
+        })?;
 
         Ok(())
     }
