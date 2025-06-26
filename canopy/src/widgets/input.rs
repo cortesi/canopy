@@ -68,32 +68,44 @@ impl TextBuf {
         };
     }
 
-    pub fn goto(&mut self, loc: u16) {
+    pub fn goto(&mut self, loc: u16) -> bool {
+        let changed = self.cursor_pos != loc;
         self.cursor_pos = loc;
         self.fix_window();
+        changed
     }
-    pub fn insert(&mut self, c: char) {
+    pub fn insert(&mut self, c: char) -> bool {
         self.value.insert(self.cursor_pos as usize, c);
         self.cursor_pos += 1;
         self.fix_window();
+        true
     }
-    pub fn backspace(&mut self) {
+    pub fn backspace(&mut self) -> bool {
         if !self.value.is_empty() && self.cursor_pos > 0 {
             self.value.remove(self.cursor_pos as usize - 1);
             self.cursor_pos -= 1;
             self.fix_window();
+            true
+        } else {
+            false
         }
     }
-    pub fn left(&mut self) {
+    pub fn left(&mut self) -> bool {
         if self.cursor_pos > 0 {
             self.cursor_pos -= 1;
             self.fix_window();
+            true
+        } else {
+            false
         }
     }
-    pub fn right(&mut self) {
+    pub fn right(&mut self) -> bool {
         if self.cursor_pos < self.value.len() as u16 {
             self.cursor_pos += 1;
             self.fix_window();
+            true
+        } else {
+            false
         }
     }
 }
@@ -119,20 +131,26 @@ impl Input {
 
     /// Move the cursor left.
     #[command]
-    fn left(&mut self, _: &dyn Context) {
-        self.textbuf.left();
+    fn left(&mut self, c: &mut dyn Context) {
+        if self.textbuf.left() {
+            c.taint(self);
+        }
     }
 
     /// Move the cursor right.
     #[command]
-    fn right(&mut self, _: &dyn Context) {
-        self.textbuf.right();
+    fn right(&mut self, c: &mut dyn Context) {
+        if self.textbuf.right() {
+            c.taint(self);
+        }
     }
 
     /// Delete a character at the input location.
     #[command]
-    fn backspace(&mut self, _: &dyn Context) {
-        self.textbuf.backspace();
+    fn backspace(&mut self, c: &mut dyn Context) {
+        if self.textbuf.backspace() {
+            c.taint(self);
+        }
     }
 }
 

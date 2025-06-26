@@ -102,13 +102,18 @@ where
 
     /// Select an item at a specified offset, clamping the offset to make sure
     /// it lies within the list.
-    pub fn select(&mut self, offset: usize) {
-        if !self.is_empty() {
-            self.offset = self.offset.clamp(0, self.len() - 1);
-            self.items[self.offset].set_selected(false);
-            self.offset = offset.clamp(0, self.items.len() - 1);
-            self.items[self.offset].set_selected(true);
+    pub fn select(&mut self, offset: usize) -> bool {
+        if self.is_empty() {
+            return false;
         }
+        let new_off = offset.clamp(0, self.items.len() - 1);
+        if new_off == self.offset {
+            return false;
+        }
+        self.items[self.offset].set_selected(false);
+        self.offset = new_off;
+        self.items[self.offset].set_selected(true);
+        true
     }
 
     /// Move selection to the next item in the list, if possible.
@@ -125,26 +130,27 @@ where
     }
 
     /// Make sure the selected item is within the view after a change.
-    fn ensure_selected_in_view(&mut self, c: &dyn Context) {
+    fn ensure_selected_in_view(&mut self, c: &mut dyn Context) -> bool {
         let virt = self.items[self.offset].virt;
         let view = self.vp().view();
         if let Some(v) = virt.vextent().intersection(&view.vextent()) {
             if v.len == virt.h {
-                return;
+                return false;
             }
         }
         let (start, end) = self.view_range();
         // We know there isn't an entire overlap
         if self.offset <= start {
-            c.scroll_to(self, view.tl.x, virt.tl.y);
+            return c.scroll_to(self, view.tl.x, virt.tl.y);
         } else if self.offset >= end {
             if virt.h >= view.h {
-                c.scroll_to(self, view.tl.x, virt.tl.y);
+                return c.scroll_to(self, view.tl.x, virt.tl.y);
             } else {
                 let y = virt.tl.y - (view.h - virt.h);
-                c.scroll_to(self, view.tl.x, y);
+                return c.scroll_to(self, view.tl.x, y);
             }
         }
+        false
     }
 
     /// Calculate which items are in the list's vertical window, and return
@@ -185,66 +191,90 @@ where
 
     /// Move selection to the next item in the list, if possible.
     #[command]
-    pub fn select_first(&mut self, c: &dyn Context) {
-        self.select(0);
-        self.ensure_selected_in_view(c);
+    pub fn select_first(&mut self, c: &mut dyn Context) {
+        let changed = self.select(0);
+        let scrolled = self.ensure_selected_in_view(c);
+        if changed || scrolled {
+            c.taint(self);
+        }
     }
 
     /// Move selection to the next item in the list, if possible.
     #[command]
-    pub fn select_last(&mut self, c: &dyn Context) {
-        self.select(self.len());
-        self.ensure_selected_in_view(c);
+    pub fn select_last(&mut self, c: &mut dyn Context) {
+        let changed = self.select(self.len());
+        let scrolled = self.ensure_selected_in_view(c);
+        if changed || scrolled {
+            c.taint(self);
+        }
     }
 
     /// Move selection to the next item in the list, if possible.
     #[command]
-    pub fn select_next(&mut self, c: &dyn Context) {
-        self.select(self.offset.saturating_add(1));
-        self.ensure_selected_in_view(c);
+    pub fn select_next(&mut self, c: &mut dyn Context) {
+        let changed = self.select(self.offset.saturating_add(1));
+        let scrolled = self.ensure_selected_in_view(c);
+        if changed || scrolled {
+            c.taint(self);
+        }
     }
 
     /// Move selection to the next previous the list, if possible.
     #[command]
-    pub fn select_prev(&mut self, c: &dyn Context) {
-        self.select(self.offset.saturating_sub(1));
-        self.ensure_selected_in_view(c);
+    pub fn select_prev(&mut self, c: &mut dyn Context) {
+        let changed = self.select(self.offset.saturating_sub(1));
+        let scrolled = self.ensure_selected_in_view(c);
+        if changed || scrolled {
+            c.taint(self);
+        }
     }
 
     /// Scroll the viewport down by one line.
     #[command]
-    pub fn scroll_down(&mut self, c: &dyn Context) {
-        c.scroll_down(self);
+    pub fn scroll_down(&mut self, c: &mut dyn Context) {
+        if c.scroll_down(self) {
+            c.taint(self);
+        }
     }
 
     /// Scroll the viewport up by one line.
     #[command]
-    pub fn scroll_up(&mut self, c: &dyn Context) {
-        c.scroll_up(self);
+    pub fn scroll_up(&mut self, c: &mut dyn Context) {
+        if c.scroll_up(self) {
+            c.taint(self);
+        }
     }
 
     /// Scroll the viewport left by one column.
     #[command]
-    pub fn scroll_left(&mut self, c: &dyn Context) {
-        c.scroll_left(self);
+    pub fn scroll_left(&mut self, c: &mut dyn Context) {
+        if c.scroll_left(self) {
+            c.taint(self);
+        }
     }
 
     /// Scroll the viewport right by one column.
     #[command]
-    pub fn scroll_right(&mut self, c: &dyn Context) {
-        c.scroll_right(self);
+    pub fn scroll_right(&mut self, c: &mut dyn Context) {
+        if c.scroll_right(self) {
+            c.taint(self);
+        }
     }
 
     /// Scroll the viewport down by one page.
     #[command]
-    pub fn page_down(&mut self, c: &dyn Context) {
-        c.page_down(self);
+    pub fn page_down(&mut self, c: &mut dyn Context) {
+        if c.page_down(self) {
+            c.taint(self);
+        }
     }
 
     /// Scroll the viewport up by one page.
     #[command]
-    pub fn page_up(&mut self, c: &dyn Context) {
-        c.page_up(self);
+    pub fn page_up(&mut self, c: &mut dyn Context) {
+        if c.page_up(self) {
+            c.taint(self);
+        }
     }
 }
 

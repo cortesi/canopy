@@ -67,45 +67,63 @@ pub trait Context {
     fn focus_dir(&mut self, root: &mut dyn Node, dir: Direction);
 
     /// Scroll the view to the specified position. The view is clamped within
-    /// the outer rectangle.
-    fn scroll_to(&self, n: &mut dyn Node, x: u16, y: u16) {
-        n.state_mut().scroll_to(x, y)
+    /// the outer rectangle. Returns `true` if the view changed.
+    fn scroll_to(&self, n: &mut dyn Node, x: u16, y: u16) -> bool {
+        let before = n.vp().view();
+        n.state_mut().scroll_to(x, y);
+        before != n.vp().view()
     }
 
     /// Scroll the view by the given offsets. The view rectangle is clamped
-    /// within the outer rectangle.
-    fn scroll_by(&self, n: &mut dyn Node, x: i16, y: i16) {
-        n.state_mut().scroll_by(x, y)
+    /// within the outer rectangle. Returns `true` if the view changed.
+    fn scroll_by(&self, n: &mut dyn Node, x: i16, y: i16) -> bool {
+        let before = n.vp().view();
+        n.state_mut().scroll_by(x, y);
+        before != n.vp().view()
     }
 
-    /// Scroll the view up by the height of the view rectangle.
-    fn page_up(&self, n: &mut dyn Node) {
-        n.state_mut().page_up()
+    /// Scroll the view up by the height of the view rectangle. Returns `true`
+    /// if the view changed.
+    fn page_up(&self, n: &mut dyn Node) -> bool {
+        let before = n.vp().view();
+        n.state_mut().page_up();
+        before != n.vp().view()
     }
 
-    /// Scroll the view down by the height of the view rectangle.
-    fn page_down(&self, n: &mut dyn Node) {
-        n.state_mut().page_down()
+    /// Scroll the view down by the height of the view rectangle. Returns `true`
+    /// if the view changed.
+    fn page_down(&self, n: &mut dyn Node) -> bool {
+        let before = n.vp().view();
+        n.state_mut().page_down();
+        before != n.vp().view()
     }
 
-    /// Scroll the view up by one line.
-    fn scroll_up(&self, n: &mut dyn Node) {
-        n.state_mut().scroll_up()
+    /// Scroll the view up by one line. Returns `true` if the view changed.
+    fn scroll_up(&self, n: &mut dyn Node) -> bool {
+        let before = n.vp().view();
+        n.state_mut().scroll_up();
+        before != n.vp().view()
     }
 
-    /// Scroll the view down by one line.
-    fn scroll_down(&self, n: &mut dyn Node) {
-        n.state_mut().scroll_down()
+    /// Scroll the view down by one line. Returns `true` if the view changed.
+    fn scroll_down(&self, n: &mut dyn Node) -> bool {
+        let before = n.vp().view();
+        n.state_mut().scroll_down();
+        before != n.vp().view()
     }
 
-    /// Scroll the view left by one line.
-    fn scroll_left(&self, n: &mut dyn Node) {
-        n.state_mut().scroll_left()
+    /// Scroll the view left by one line. Returns `true` if the view changed.
+    fn scroll_left(&self, n: &mut dyn Node) -> bool {
+        let before = n.vp().view();
+        n.state_mut().scroll_left();
+        before != n.vp().view()
     }
 
-    /// Scroll the view right by one line.
-    fn scroll_right(&self, n: &mut dyn Node) {
-        n.state_mut().scroll_right()
+    /// Scroll the view right by one line. Returns `true` if the view changed.
+    fn scroll_right(&self, n: &mut dyn Node) -> bool {
+        let before = n.vp().view();
+        n.state_mut().scroll_right();
+        before != n.vp().view()
     }
 
     /// Taint a node to signal that it should be re-rendered.
@@ -122,6 +140,11 @@ pub trait Context {
 
     /// Stop the render backend and exit the process.
     fn exit(&mut self, code: i32) -> !;
+
+    /// Current focus generation counter.
+    fn current_focus_gen(&self) -> u64 {
+        0
+    }
 }
 
 #[derive(Debug)]
@@ -364,6 +387,10 @@ impl Context for Canopy {
     fn exit(&mut self, code: i32) -> ! {
         let _ = self.stop();
         process::exit(code)
+    }
+
+    fn current_focus_gen(&self) -> u64 {
+        self.focus_gen
     }
 }
 
@@ -771,9 +798,7 @@ impl Canopy {
                             self.taint(x);
                             Walk::Handle(None)
                         }
-                        EventOutcome::Consume => {
-                            Walk::Handle(None)
-                        }
+                        EventOutcome::Consume => Walk::Handle(None),
                         _ => {
                             path.pop();
                             Walk::Continue
@@ -1268,7 +1293,7 @@ mod tests {
         use crate as canopy;
         use crate::backend::test::TestRender;
         use crate::commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue};
-        use crate::{EventOutcome, NodeState, Error};
+        use crate::{Error, EventOutcome, NodeState};
 
         #[derive(StatefulNode)]
         struct N {
@@ -1290,7 +1315,9 @@ mod tests {
         }
 
         impl Node for N {
-            fn accept_focus(&mut self) -> bool { true }
+            fn accept_focus(&mut self) -> bool {
+                true
+            }
 
             fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
                 l.fill(self, sz)
@@ -1307,7 +1334,9 @@ mod tests {
 
         let (_, mut tr) = TestRender::create();
         let mut canopy = Canopy::new();
-        let mut root = N { state: NodeState::default() };
+        let mut root = N {
+            state: NodeState::default(),
+        };
         canopy.add_commands::<N>();
 
         canopy.set_root_size(Expanse::new(10, 1), &mut root)?;

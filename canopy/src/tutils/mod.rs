@@ -83,8 +83,34 @@ impl Context for DummyContext {
     fn needs_render(&self, _n: &dyn Node) -> bool {
         false
     }
-    fn set_focus(&mut self, _n: &mut dyn Node) -> bool { false }
+    fn set_focus(&mut self, _n: &mut dyn Node) -> bool {
+        false
+    }
     fn focus_dir(&mut self, _root: &mut dyn Node, _dir: Direction) {}
+    fn scroll_to(&self, _n: &mut dyn Node, _x: u16, _y: u16) -> bool {
+        false
+    }
+    fn scroll_by(&self, _n: &mut dyn Node, _x: i16, _y: i16) -> bool {
+        false
+    }
+    fn page_up(&self, _n: &mut dyn Node) -> bool {
+        false
+    }
+    fn page_down(&self, _n: &mut dyn Node) -> bool {
+        false
+    }
+    fn scroll_up(&self, _n: &mut dyn Node) -> bool {
+        false
+    }
+    fn scroll_down(&self, _n: &mut dyn Node) -> bool {
+        false
+    }
+    fn scroll_left(&self, _n: &mut dyn Node) -> bool {
+        false
+    }
+    fn scroll_right(&self, _n: &mut dyn Node) -> bool {
+        false
+    }
     fn taint(&mut self, _n: &mut dyn Node) {}
     fn taint_tree(&mut self, _e: &mut dyn Node) {}
 
@@ -101,6 +127,10 @@ impl Context for DummyContext {
     /// Stop the render backend and exit the process.
     fn exit(&mut self, _code: i32) -> ! {
         panic!("exit in dummy core")
+    }
+
+    fn current_focus_gen(&self) -> u64 {
+        0
     }
 }
 

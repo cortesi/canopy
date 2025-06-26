@@ -120,11 +120,15 @@ where
     let v = tree::postorder(root, &mut |x| -> Result<tree::Walk<ReturnValue>> {
         if seen {
             // We're now on the path to the root
+            let pre_focus = core.current_focus_gen();
+            let pre_taint = core.needs_render(x);
             match x.dispatch(core, cmd) {
                 Err(Error::UnknownCommand(_)) => Ok(tree::Walk::Continue),
                 Err(e) => Err(e),
                 Ok(v) => {
-                    core.taint_tree(x);
+                    if core.current_focus_gen() != pre_focus || core.needs_render(x) != pre_taint {
+                        core.taint_tree(x);
+                    }
                     Ok(tree::Walk::Handle(v))
                 }
             }
@@ -133,11 +137,17 @@ where
             // Preorder traversal from the focus node into its descendants. Our
             // focus node will be the first node visited.
             match tree::preorder(x, &mut |x| -> Result<tree::Walk<ReturnValue>> {
+                let pre_focus = core.current_focus_gen();
+                let pre_taint = core.needs_render(x);
                 match x.dispatch(core, cmd) {
                     Err(Error::UnknownCommand(_)) => Ok(tree::Walk::Continue),
                     Err(e) => Err(e),
                     Ok(v) => {
-                        core.taint_tree(x);
+                        if core.current_focus_gen() != pre_focus
+                            || core.needs_render(x) != pre_taint
+                        {
+                            core.taint_tree(x);
+                        }
                         Ok(tree::Walk::Handle(v))
                     }
                 }

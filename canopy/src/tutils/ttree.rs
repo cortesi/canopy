@@ -269,7 +269,11 @@ impl Node for R {
     }
 
     fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
-        r.text("any", self.vp().view().line(0), &format!("<{}>", self.name()))
+        r.text(
+            "any",
+            self.vp().view().line(0),
+            &format!("<{}>", self.name()),
+        )
     }
 
     fn handle_key(&mut self, _: &mut dyn Context, _: key::Key) -> Result<EventOutcome> {
