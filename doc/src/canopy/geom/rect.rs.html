@@ -464,7 +464,7 @@
 <a href=#464 id=464 data-nosnippet>464</a><span class="doccomment">/// Split a length into n sections, as evenly as possible.
 <a href=#465 id=465 data-nosnippet>465</a></span><span class="kw">fn </span>split(len: u16, n: u16) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;u16&gt;&gt; {
 <a href=#466 id=466 data-nosnippet>466</a>    <span class="kw">if </span>n == <span class="number">0 </span>{
-<a href=#467 id=467 data-nosnippet>467</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(Vec::new());
+<a href=#467 id=467 data-nosnippet>467</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::Geometry(<span class="string">"divide by zero"</span>.into()));
 <a href=#468 id=468 data-nosnippet>468</a>    }
 <a href=#469 id=469 data-nosnippet>469</a>    <span class="kw">let </span>w = len / n;
 <a href=#470 id=470 data-nosnippet>470</a>    <span class="kw">let </span>rem = len % n;
