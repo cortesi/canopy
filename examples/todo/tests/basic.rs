@@ -54,3 +54,29 @@ fn render_seeded_item() {
         Ok(())
     }).unwrap();
 }
+
+#[test]
+#[should_panic]
+fn add_item_with_char_newline() {
+    let path = std::env::temp_dir().join(format!(
+        "todo_test_charnl_{}.db",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis(),
+    ));
+    open_store(path.to_str().unwrap()).unwrap();
+    run_root(Todo::new().unwrap(), |h, tr, root| {
+        style(h.canopy());
+        bind_keys(h.canopy());
+        h.render_timeout(tr, root, Duration::from_secs(1)).unwrap();
+        h.key_timeout(root, 'a', Duration::from_secs(1)).unwrap();
+        h.render_timeout(tr, root, Duration::from_secs(1)).unwrap();
+        h.key_timeout(root, 'h', Duration::from_secs(1)).unwrap();
+        h.key_timeout(root, 'i', Duration::from_secs(1)).unwrap();
+        h.key_timeout(root, '\n', Duration::from_secs(1)).unwrap();
+        h.render_timeout(tr, root, Duration::from_secs(1)).unwrap();
+        assert_eq!(root.content.child.len(), 1);
+        Ok(())
+    }).unwrap();
+}
