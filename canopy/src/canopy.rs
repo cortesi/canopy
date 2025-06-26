@@ -242,9 +242,16 @@ impl Context for Canopy {
         let mut seen = false;
         let mut last = None;
         if let Some(start) = self.focus_area(root) {
+            let bounds = self
+                .root_size
+                .unwrap_or_else(|| Expanse::new(u16::MAX, u16::MAX));
+
             start
                 .search(dir, &mut |p| -> Result<bool> {
-                    if seen {
+                    if seen
+                        || p.x >= bounds.w
+                        || p.y >= bounds.h
+                    {
                         return Ok(true);
                     }
                     let n = node_at(root, p);
