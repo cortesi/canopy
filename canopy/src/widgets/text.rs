@@ -34,6 +34,14 @@ impl Text {
         self
     }
 
+    /// Replace the displayed text. Any cached layout is cleared so the node
+    /// will be reflowed on the next layout pass.
+    pub fn set_text(&mut self, raw: &str) {
+        self.raw = raw.to_owned();
+        self.lines = None;
+        self.current_size = Expanse::default();
+    }
+
     #[command]
     pub fn scroll_to_top(&mut self, c: &mut dyn Context) {
         c.scroll_to(self, 0, 0);

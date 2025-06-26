@@ -30,7 +30,7 @@ impl IntervalItem {
     }
     fn inc(&mut self) {
         self.value += 1;
-        self.child = Text::new(&format!("{}", self.value))
+        self.child.set_text(&format!("{}", self.value));
     }
 }
 
@@ -50,7 +50,7 @@ impl Node for IntervalItem {
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         self.child.layout(l, sz)?;
         let vp = self.child.vp();
-        l.fit(self, vp)?;
+        l.wrap(self, vp)?;
         Ok(())
     }
 
