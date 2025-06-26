@@ -1404,7 +1404,7 @@ mod tests {
     fn zero_size_child_ok() -> Result<()> {
         use crate as canopy;
         use crate::backend::test::CanvasRender;
-        use crate::{NodeState, derive_commands};
+        use crate::{derive_commands, NodeState};
 
         #[derive(StatefulNode)]
         struct Child {
@@ -1426,7 +1426,9 @@ mod tests {
             fn new() -> Self {
                 Parent {
                     state: NodeState::default(),
-                    child: Child { state: NodeState::default() },
+                    child: Child {
+                        state: NodeState::default(),
+                    },
                 }
             }
         }
