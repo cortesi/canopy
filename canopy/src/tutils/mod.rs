@@ -1,6 +1,8 @@
 pub mod harness;
+pub mod pty;
 pub mod ttree;
 pub use harness::*;
+pub use pty::*;
 pub use ttree::*;
 
 #[cfg(test)]
