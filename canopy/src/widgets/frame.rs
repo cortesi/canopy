@@ -110,8 +110,16 @@ where
     }
 
     fn layout(&mut self, l: &Layout, sz: crate::geom::Expanse) -> Result<()> {
-        self.frame = l.frame(&mut self.child, sz, 1)?;
         l.fill(self, sz)?;
+        let vp = self.vp();
+        let child_rect = crate::geom::Rect::new(
+            1,
+            1,
+            sz.w.saturating_sub(2),
+            sz.h.saturating_sub(2),
+        );
+        l.place(&mut self.child, vp, child_rect)?;
+        self.frame = crate::geom::Frame::new(sz.rect(), 1);
         Ok(())
     }
 
