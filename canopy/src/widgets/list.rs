@@ -135,6 +135,8 @@ where
 
         if self.items.is_empty() {
             self.offset = 0;
+            let view = self.vp().view();
+            core.scroll_to(self, view.tl.x, 0);
         } else {
             if self.offset > offset {
                 self.offset -= 1;
@@ -143,6 +145,12 @@ where
             }
             if let Some(itm) = self.items.get_mut(self.offset) {
                 itm.set_selected(true);
+            }
+            if self.items.len() == 1 {
+                let view = self.vp().view();
+                core.scroll_to(self, view.tl.x, 0);
+            } else if self.ensure_selected_in_view(core) {
+                core.taint(self);
             }
         }
 
