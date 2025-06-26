@@ -159,7 +159,8 @@ impl Node for Todo {
 
         let a = self.vp().screen_rect();
         if let Some(add) = &mut self.adder {
-            l.place(add, vp, Rect::new(a.tl.x + 2, a.tl.y + a.h / 2, a.w - 4, 3))?;
+            let w = a.w.saturating_sub(4);
+            l.place(add, vp, Rect::new(a.tl.x + 2, a.tl.y + a.h / 2, w, 3))?;
         }
         Ok(())
     }
@@ -242,3 +243,4 @@ pub fn main() -> Result<()> {
 
     Ok(())
 }
+
