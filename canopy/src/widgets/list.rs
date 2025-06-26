@@ -88,7 +88,12 @@ where
 
     /// Append an item to the end of the list.
     pub fn append(&mut self, itm: N) {
+        let was_empty = self.is_empty();
         self.items.insert(self.len(), Item::new(itm));
+        if was_empty {
+            self.offset = 0;
+            self.items[0].set_selected(true);
+        }
     }
 
     /// The current selected item, if any
@@ -118,19 +123,35 @@ where
 
     /// Move selection to the next item in the list, if possible.
     pub fn delete_item(&mut self, core: &mut dyn Context, offset: usize) -> Option<N> {
-        if !self.is_empty() && offset < self.len() {
-            let itm = self.items.remove(offset);
-            if offset <= self.offset {
-                self.select_prev(core);
-            }
-            Some(itm.itm)
-        } else {
-            None
+        if self.is_empty() || offset >= self.len() {
+            return None;
         }
+
+        let itm = self.items.remove(offset);
+
+        if self.items.is_empty() {
+            self.offset = 0;
+        } else {
+            if offset < self.offset || offset == self.offset && self.offset > 0 {
+                self.offset -= 1;
+            }
+            // Clear previous selections and mark the new one
+            for item in &mut self.items {
+                item.set_selected(false);
+            }
+            self.items[self.offset].set_selected(true);
+            self.ensure_selected_in_view(core);
+        }
+
+        core.taint(self);
+        Some(itm.itm)
     }
 
     /// Make sure the selected item is within the view after a change.
     fn ensure_selected_in_view(&mut self, c: &mut dyn Context) -> bool {
+        if self.is_empty() {
+            return false;
+        }
         let virt = self.items[self.offset].virt;
         let view = self.vp().view();
         if let Some(v) = virt.vextent().intersection(&view.vextent()) {
