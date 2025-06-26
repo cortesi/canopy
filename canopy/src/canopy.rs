@@ -664,14 +664,14 @@ impl Canopy {
                 n.children(&mut |child| {
                     if !child.is_hidden() {
                         let child_rect = child.vp().screen_rect();
-                        assert!(
-                            parent.contains_rect(&child_rect),
-                            "child {} viewport {:?} outside parent {:?}",
-                            child.name(),
-                            child_rect,
-                            parent
-                        );
                         if !child_rect.is_zero() {
+                            assert!(
+                                parent.contains_rect(&child_rect),
+                                "child {} viewport {:?} outside parent {:?}",
+                                child.name(),
+                                child_rect,
+                                parent
+                            );
                             rndr.coverage.add(child_rect);
                         }
                     }
@@ -694,13 +694,15 @@ impl Canopy {
             n.children(&mut |child| {
                 if !child.is_hidden() {
                     let child_rect = child.vp().screen_rect();
-                    assert!(
-                        parent.contains_rect(&child_rect),
-                        "child {} viewport {:?} outside parent {:?}",
-                        child.name(),
-                        child_rect,
-                        parent
-                    );
+                    if !child_rect.is_zero() {
+                        assert!(
+                            parent.contains_rect(&child_rect),
+                            "child {} viewport {:?} outside parent {:?}",
+                            child.name(),
+                            child_rect,
+                            parent
+                        );
+                    }
                 }
                 self.render_traversal(r, styl, child, base)
             })?;
@@ -1398,6 +1400,62 @@ mod tests {
             canopy.taint = false;
         }
         assert!(tr.buf_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn zero_size_child_ok() -> Result<()> {
+        use crate as canopy;
+        use crate::backend::test::CanvasRender;
+        use crate::{NodeState, derive_commands};
+
+        #[derive(StatefulNode)]
+        struct Child {
+            state: NodeState,
+        }
+
+        #[derive_commands]
+        impl Child {}
+
+        impl Node for Child {}
+
+        #[derive(StatefulNode)]
+        struct Parent {
+            state: NodeState,
+            child: Child,
+        }
+
+        impl Parent {
+            fn new() -> Self {
+                Parent {
+                    state: NodeState::default(),
+                    child: Child { state: NodeState::default() },
+                }
+            }
+        }
+
+        #[derive_commands]
+        impl Parent {}
+
+        impl Node for Parent {
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.child)
+            }
+
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                l.wrap(&mut self.child, ViewPort::default())?;
+                Ok(())
+            }
+        }
+
+        let size = Expanse::new(5, 1);
+        let (_, mut cr) = CanvasRender::create(size);
+        let mut canopy = Canopy::new();
+        let mut root = Parent::new();
+
+        canopy.set_root_size(size, &mut root)?;
+        canopy.render(&mut cr, &mut root)?;
         Ok(())
     }
 }

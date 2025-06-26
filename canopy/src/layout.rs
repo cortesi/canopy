@@ -9,6 +9,11 @@ pub struct Layout {}
 
 impl Layout {
     /// Wrap a single child node, mirroring the child's size and view.
+    ///
+    /// When implementing a simple container that merely exposes its child's
+    /// viewport, prefer this over [`fit`]. Calling `fit` recursively from a
+    /// widget's `layout` method can lead to unbounded recursion and a stack
+    /// overflow.
     pub fn wrap(&self, parent: &mut dyn Node, vp: ViewPort) -> Result<()> {
         // Mirror the child's size and view
         parent.state_mut().set_canvas(vp.canvas());
@@ -63,10 +68,26 @@ impl Layout {
         Ok(())
     }
 
-    /// Adjust a child node so that it fits a viewport. This lays the node out to the viewport's screen rectangle, then
-    /// adjusts the node's view to place as much of it within the viewport's screen rectangle as possible.
+    /// Adjust a child node so that it fits a viewport. This lays the node out to
+    /// the viewport's screen rectangle, then adjusts the node's view to place as
+    /// much of it within the viewport's screen rectangle as possible.
+    ///
+    /// Note that [`fit`] will call the child's [`Node::layout`] method. Calling
+    /// `fit` on a node from within its own `layout` implementation will recurse
+    /// endlessly.
     pub fn fit(&self, n: &mut dyn Node, parent_vp: ViewPort) -> Result<()> {
-        n.layout(self, parent_vp.screen_rect().into())?;
+        {
+            let st = n.state_mut();
+            if st.in_layout {
+                return Err(crate::error::Error::Layout(
+                    "recursive Layout::fit call".into(),
+                ));
+            }
+            st.in_layout = true;
+        }
+        let res = n.layout(self, parent_vp.screen_rect().into());
+        n.state_mut().in_layout = false;
+        res?;
         n.state_mut().set_position(
             parent_vp.position(),
             parent_vp.position(),
