@@ -50,7 +50,7 @@ impl Node for IntervalItem {
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         self.child.layout(l, sz)?;
         let vp = self.child.vp();
-        l.fit(self, vp)?;
+        l.wrap(self, vp)?;
         Ok(())
     }
 

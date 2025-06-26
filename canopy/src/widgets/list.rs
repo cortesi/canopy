@@ -320,9 +320,15 @@ where
                 }
                 let final_vp = itm.itm.vp();
                 itm.itm.children(&mut |ch| {
+                    // `ch.vp().position()` returns absolute co-ordinates. We
+                    // want a rectangle relative to the item's canvas, so we
+                    // calculate the offset from the item's position. Use
+                    // `saturating_sub` to avoid panics if the child hasn't been
+                    // repositioned yet and lies above or to the left of the
+                    // item.
                     let ch_rect = Rect::new(
-                        ch.vp().position().x - final_vp.position().x,
-                        ch.vp().position().y - final_vp.position().y,
+                        ch.vp().position().x.saturating_sub(final_vp.position().x),
+                        ch.vp().position().y.saturating_sub(final_vp.position().y),
                         ch.vp().canvas().w,
                         ch.vp().canvas().h,
                     );
@@ -334,8 +340,15 @@ where
                         )?;
                         ch.state_mut().set_canvas(ch_vp.canvas());
                         ch.state_mut().set_view(ch_vp.view());
+                        ch.unhide();
                     } else {
+                        ch.state_mut().set_position(
+                            final_vp.position(),
+                            final_vp.position(),
+                            final_vp.canvas().rect(),
+                        )?;
                         ch.state_mut().set_view(Rect::default());
+                        ch.hide();
                     }
                     Ok(())
                 })?;
@@ -1058,6 +1071,59 @@ mod tests {
             let canvas = buf.lock().unwrap();
             assert_eq!(canvas.cells[1][3], '1');
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn append_item_keeps_children_within_bounds() -> Result<()> {
+        #[derive(StatefulNode)]
+        struct Root {
+            state: NodeState,
+            list: List<Text>,
+        }
+
+        #[derive_commands]
+        impl Root {
+            fn new() -> Self {
+                Root {
+                    state: NodeState::default(),
+                    list: List::new(vec![Text::new("x")]),
+                }
+            }
+        }
+
+        impl Node for Root {
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.list)
+            }
+
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                l.place(&mut self.list, vp, vp.view())?;
+                Ok(())
+            }
+        }
+
+        let mut canopy = Canopy::new();
+        let size = Expanse::new(10, 2);
+        let (_, mut cr) = CanvasRender::create(size);
+        let mut root = Root::new();
+
+        canopy.set_root_size(size, &mut root)?;
+        canopy.render(&mut cr, &mut root)?;
+
+        root.list.append(Text::new("y"));
+        canopy.render(&mut cr, &mut root)?;
+
+        let list_rect = root.list.vp().screen_rect();
+        root.list.children(&mut |n| {
+            if !n.is_hidden() {
+                assert!(list_rect.contains_rect(&n.vp().screen_rect()));
+            }
+            Ok(())
+        })?;
 
         Ok(())
     }
