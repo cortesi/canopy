@@ -7,5 +7,6 @@ edition = "2021"
 anyhow = "1.0.98"
 canopy = { path = "../../canopy" }
 clap = { version = "4.5.40", features = ["derive"] }
+expectrl = "0.7.1"
 rusqlite = "0.36.0"
 tracing = "0.1.41"
