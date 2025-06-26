@@ -55,6 +55,9 @@
 <a href=#55 id=55 data-nosnippet>55</a>
 <a href=#56 id=56 data-nosnippet>56</a><span class="doccomment">/// Spawn a workspace binary from `target/debug` with the provided arguments.
 <a href=#57 id=57 data-nosnippet>57</a></span><span class="kw">pub fn </span>spawn_workspace_bin(name: <span class="kw-2">&amp;</span>str, args: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str]) -&gt; <span class="prelude-ty">Result</span>&lt;PtyApp&gt; {
-<a href=#58 id=58 data-nosnippet>58</a>    <span class="kw">let </span>bin = <span class="macro">format!</span>(<span class="macro">concat!</span>(<span class="macro">env!</span>(<span class="string">"CARGO_MANIFEST_DIR"</span>), <span class="string">"/../target/debug/{}"</span>), name);
-<a href=#59 id=59 data-nosnippet>59</a>    PtyApp::spawn_cmd(<span class="kw-2">&amp;</span>bin, args)
-<a href=#60 id=60 data-nosnippet>60</a>}</code></pre></div></section></main></body></html>
+<a href=#58 id=58 data-nosnippet>58</a>    <span class="kw">let </span>bin = <span class="macro">format!</span>(
+<a href=#59 id=59 data-nosnippet>59</a>        <span class="macro">concat!</span>(<span class="macro">env!</span>(<span class="string">"CARGO_MANIFEST_DIR"</span>), <span class="string">"/../target/debug/{}"</span>),
+<a href=#60 id=60 data-nosnippet>60</a>        name
+<a href=#61 id=61 data-nosnippet>61</a>    );
+<a href=#62 id=62 data-nosnippet>62</a>    PtyApp::spawn_cmd(<span class="kw-2">&amp;</span>bin, args)
+<a href=#63 id=63 data-nosnippet>63</a>}</code></pre></div></section></main></body></html>
