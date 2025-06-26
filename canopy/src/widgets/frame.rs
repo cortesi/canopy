@@ -112,6 +112,15 @@ where
     fn layout(&mut self, l: &Layout, sz: crate::geom::Expanse) -> Result<()> {
         self.frame = l.frame(&mut self.child, sz, 1)?;
         l.fill(self, sz)?;
+        // After we're placed by the parent our child needs to be relocated
+        // relative to our final position.
+        let vp = self.vp();
+        self.child.state_mut().set_position(
+            vp.position().scroll(1, 1),
+            vp.position(),
+            vp.canvas().rect(),
+        )?;
+        self.child.state_mut().constrain(vp);
         Ok(())
     }
 
