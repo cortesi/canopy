@@ -286,10 +286,7 @@ impl Context for Canopy {
 
             start
                 .search(dir, &mut |p| -> Result<bool> {
-                    if seen
-                        || p.x >= bounds.w
-                        || p.y >= bounds.h
-                    {
+                    if seen || p.x >= bounds.w || p.y >= bounds.h {
                         return Ok(true);
                     }
                     let n = node_at(root, p);
