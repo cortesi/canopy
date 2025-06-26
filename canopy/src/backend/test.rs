@@ -19,6 +19,10 @@ impl TestBuf {
     pub fn is_empty(&self) -> bool {
         self.text.is_empty()
     }
+
+    pub fn contains(&self, s: &str) -> bool {
+        self.text.iter().any(|l| l.contains(s))
+    }
 }
 
 /// A render backend for testing, which logs render outcomes.
@@ -51,6 +55,10 @@ impl TestRender {
 
     pub fn buf_empty(&self) -> bool {
         self.text.lock().unwrap().text.is_empty()
+    }
+
+    pub fn contains_text(&self, txt: &str) -> bool {
+        self.text.lock().unwrap().contains(txt)
     }
 }
 
