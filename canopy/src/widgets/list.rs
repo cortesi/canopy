@@ -144,6 +144,15 @@ where
             if let Some(itm) = self.items.get_mut(self.offset) {
                 itm.set_selected(true);
             }
+            // If the deleted item was above the current view, adjust the scroll
+            // position so remaining items stay visible.
+            let vp_y = self.vp().view().tl.y;
+            if itm.virt.tl.y < vp_y {
+                core.scroll_by(self, 0, -(itm.virt.h as i16));
+            }
+            if self.ensure_selected_in_view(core) {
+                core.taint(self);
+            }
         }
 
         core.taint_tree(self);
