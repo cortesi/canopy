@@ -27,6 +27,7 @@ impl State {
     pub fn add_event(&mut self, n: &NodeName, evt: &str, result: EventOutcome) {
         let outcome = match result {
             EventOutcome::Handle => "handle",
+            EventOutcome::Consume => "consume",
             EventOutcome::Ignore => "ignore",
         };
         self.path.push(format!("{n}@{evt}->{outcome}"))
