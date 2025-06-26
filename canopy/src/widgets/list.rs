@@ -132,6 +132,10 @@ where
         }
 
         let itm = self.items.remove(offset);
+        let removed_height = itm.virt.h;
+        for i in self.items.iter_mut().skip(offset) {
+            i.virt = i.virt.shift(0, -(removed_height as i16));
+        }
 
         if self.items.is_empty() {
             self.offset = 0;
@@ -143,6 +147,10 @@ where
             }
             if let Some(itm) = self.items.get_mut(self.offset) {
                 itm.set_selected(true);
+            }
+            // Ensure the newly selected item remains visible
+            if self.ensure_selected_in_view(core) {
+                core.taint(self);
             }
         }
 
