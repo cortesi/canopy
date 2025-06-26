@@ -146,6 +146,7 @@ where
             }
         }
 
+        self.ensure_selected_in_view(core);
         core.taint_tree(self);
         Some(itm.itm)
     }
