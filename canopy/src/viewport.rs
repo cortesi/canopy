@@ -92,12 +92,7 @@ impl ViewPort {
     /// Set the viewport position. The caller must provide the parent's position
     /// and canvas rectangle so that we can verify the new position stays within
     /// bounds.
-    pub fn set_position(
-        &mut self,
-        p: Point,
-        parent_pos: Point,
-        parent_canvas: Rect,
-    ) -> Result<()> {
+    pub fn set_position(&mut self, p: Point, parent_pos: Point, parent_canvas: Rect) -> Result<()> {
         if p.x < parent_pos.x || p.y < parent_pos.y {
             return Err(error::Error::Geometry(format!(
                 "position {p:?} before parent origin {parent_pos:?}",
