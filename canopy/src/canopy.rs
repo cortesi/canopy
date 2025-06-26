@@ -60,8 +60,8 @@ pub trait Context {
     /// Move focus upward of the currently focused node within the subtree at root.
     fn focus_up(&mut self, root: &mut dyn Node);
 
-    /// Focus a node.
-    fn set_focus(&mut self, n: &mut dyn Node);
+    /// Focus a node. Returns `true` if focus changed.
+    fn set_focus(&mut self, n: &mut dyn Node) -> bool;
 
     /// Move focus in a specified direction within the subtree at root.
     fn focus_dir(&mut self, root: &mut dyn Node, dir: Direction);
@@ -334,10 +334,15 @@ impl Context for Canopy {
         .unwrap();
     }
 
-    /// Focus a node.
-    fn set_focus(&mut self, n: &mut dyn Node) {
-        self.focus_gen += 1;
-        n.state_mut().focus_gen = self.focus_gen;
+    /// Focus a node. Returns `true` if focus changed.
+    fn set_focus(&mut self, n: &mut dyn Node) -> bool {
+        if self.is_focused(n) {
+            false
+        } else {
+            self.focus_gen += 1;
+            n.state_mut().focus_gen = self.focus_gen;
+            true
+        }
     }
 
     /// Does the node have terminal focus?
@@ -723,7 +728,10 @@ impl Canopy {
                         handled = true;
                         self.taint(x);
                     }
-                    EventOutcome::Ignore => {
+                    EventOutcome::Consume => {
+                        handled = true;
+                    }
+                    _ => {
                         if let Some(s) =
                             self.keymap.resolve(&path, inputmap::Input::Mouse(m.into()))
                         {
@@ -763,7 +771,10 @@ impl Canopy {
                             self.taint(x);
                             Walk::Handle(None)
                         }
-                        EventOutcome::Ignore => {
+                        EventOutcome::Consume => {
+                            Walk::Handle(None)
+                        }
+                        _ => {
                             path.pop();
                             Walk::Continue
                         }
@@ -1249,6 +1260,70 @@ mod tests {
             Ok(())
         })?;
 
+        Ok(())
+    }
+
+    #[test]
+    fn tkey_no_render() -> Result<()> {
+        use crate as canopy;
+        use crate::backend::test::TestRender;
+        use crate::commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue};
+        use crate::{EventOutcome, NodeState, Error};
+
+        #[derive(StatefulNode)]
+        struct N {
+            state: NodeState,
+        }
+
+        impl CommandNode for N {
+            fn commands() -> Vec<CommandSpec> {
+                vec![]
+            }
+
+            fn dispatch(
+                &mut self,
+                _c: &mut dyn Context,
+                _cmd: &CommandInvocation,
+            ) -> Result<ReturnValue> {
+                Err(Error::UnknownCommand("".into()))
+            }
+        }
+
+        impl Node for N {
+            fn accept_focus(&mut self) -> bool { true }
+
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)
+            }
+
+            fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
+                r.text("any", self.vp().view().line(0), "<n>")
+            }
+
+            fn handle_key(&mut self, _c: &mut dyn Context, _k: key::Key) -> Result<EventOutcome> {
+                Ok(EventOutcome::Consume)
+            }
+        }
+
+        let (_, mut tr) = TestRender::create();
+        let mut canopy = Canopy::new();
+        let mut root = N { state: NodeState::default() };
+        canopy.add_commands::<N>();
+
+        canopy.set_root_size(Expanse::new(10, 1), &mut root)?;
+        canopy.set_focus(&mut root);
+        canopy.render(&mut tr, &mut root)?;
+        assert!(!tr.buf_empty());
+        tr.text.lock().unwrap().text.clear();
+        canopy.taint = false;
+
+        canopy.key(&mut root, 'a')?;
+        assert!(!canopy.taint);
+        if canopy.taint || canopy.focus_changed() {
+            canopy.render(&mut tr, &mut root)?;
+            canopy.taint = false;
+        }
+        assert!(tr.buf_empty());
         Ok(())
     }
 }

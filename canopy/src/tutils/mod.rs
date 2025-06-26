@@ -83,7 +83,7 @@ impl Context for DummyContext {
     fn needs_render(&self, _n: &dyn Node) -> bool {
         false
     }
-    fn set_focus(&mut self, _n: &mut dyn Node) {}
+    fn set_focus(&mut self, _n: &mut dyn Node) -> bool { false }
     fn focus_dir(&mut self, _root: &mut dyn Node, _dir: Direction) {}
     fn taint(&mut self, _n: &mut dyn Node) {}
     fn taint_tree(&mut self, _e: &mut dyn Node) {}
