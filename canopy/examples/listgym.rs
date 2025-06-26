@@ -25,10 +25,10 @@ struct Block {
 #[derive_commands]
 impl Block {
     fn new(index: usize) -> Self {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         Block {
             state: NodeState::default(),
-            child: Text::new(TEXT).with_fixed_width(rng.gen_range(10..150)),
+            child: Text::new(TEXT).with_fixed_width(rng.random_range(10..150)),
             color: String::from(COLORS[index % 2]),
             selected: false,
         }

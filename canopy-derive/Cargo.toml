@@ -7,17 +7,17 @@ edition = "2021"
 proc-macro = true
 
 [dependencies]
-syn = { version = "2.0.13", features = ["full"] }
-quote = "1.0.15"
-proc-macro2 = "1.0.36"
-litrs = "0.4.0"
-structmeta = "0.2.0"
+syn = { version = "2.0.104", features = ["full"] }
+quote = "1.0.40"
+proc-macro2 = "1.0.95"
+litrs = "0.4.1"
+structmeta = "0.3.0"
 proc-macro-error = "1.0.4"
-thiserror = "1.0.31"
-anyhow = "1.0.58"
-regex = "1.6.0"
-lazy_static = "1.4.0"
+thiserror = "2.0.12"
+anyhow = "1.0.98"
+regex = "1.11.1"
+lazy_static = "1.5.0"
 
 [dev-dependencies]
 canopy = { path = "../canopy" }
-pretty_assertions = "1.3.0"
+pretty_assertions = "1.4.1"
