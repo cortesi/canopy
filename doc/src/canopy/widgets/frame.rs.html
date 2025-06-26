@@ -110,77 +110,76 @@
 <a href=#110 id=110 data-nosnippet>110</a>    }
 <a href=#111 id=111 data-nosnippet>111</a>
 <a href=#112 id=112 data-nosnippet>112</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l: <span class="kw-2">&amp;</span>Layout, sz: <span class="kw">crate</span>::geom::Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#113 id=113 data-nosnippet>113</a>        <span class="self">self</span>.frame = l.frame(<span class="kw-2">&amp;mut </span><span class="self">self</span>.child, sz, <span class="number">1</span>)<span class="question-mark">?</span>;
-<a href=#114 id=114 data-nosnippet>114</a>        l.fill(<span class="self">self</span>, sz)<span class="question-mark">?</span>;
-<a href=#115 id=115 data-nosnippet>115</a>        <span class="comment">// After we're placed by the parent our child needs to be relocated
-<a href=#116 id=116 data-nosnippet>116</a>        // relative to our final position.
-<a href=#117 id=117 data-nosnippet>117</a>        </span><span class="kw">let </span>vp = <span class="self">self</span>.vp();
-<a href=#118 id=118 data-nosnippet>118</a>        <span class="self">self</span>.child.state_mut().set_position(
-<a href=#119 id=119 data-nosnippet>119</a>            vp.position().scroll(<span class="number">1</span>, <span class="number">1</span>),
-<a href=#120 id=120 data-nosnippet>120</a>            vp.position(),
-<a href=#121 id=121 data-nosnippet>121</a>            vp.canvas().rect(),
-<a href=#122 id=122 data-nosnippet>122</a>        )<span class="question-mark">?</span>;
-<a href=#123 id=123 data-nosnippet>123</a>        <span class="self">self</span>.child.state_mut().constrain(vp);
-<a href=#124 id=124 data-nosnippet>124</a>        <span class="prelude-val">Ok</span>(())
-<a href=#125 id=125 data-nosnippet>125</a>    }
-<a href=#126 id=126 data-nosnippet>126</a>
-<a href=#127 id=127 data-nosnippet>127</a>    <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Context, rndr: <span class="kw-2">&amp;mut </span>Render) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#128 id=128 data-nosnippet>128</a>        <span class="kw">let </span>f = <span class="self">self</span>.frame;
-<a href=#129 id=129 data-nosnippet>129</a>        <span class="kw">let </span>style = <span class="kw">if </span>c.is_on_focus_path(<span class="self">self</span>) {
-<a href=#130 id=130 data-nosnippet>130</a>            <span class="string">"frame/focused"
-<a href=#131 id=131 data-nosnippet>131</a>        </span>} <span class="kw">else </span>{
-<a href=#132 id=132 data-nosnippet>132</a>            <span class="string">"frame"
-<a href=#133 id=133 data-nosnippet>133</a>        </span>};
-<a href=#134 id=134 data-nosnippet>134</a>
-<a href=#135 id=135 data-nosnippet>135</a>        rndr.fill(style, f.topleft, <span class="self">self</span>.glyphs.topleft)<span class="question-mark">?</span>;
-<a href=#136 id=136 data-nosnippet>136</a>        rndr.fill(style, f.topright, <span class="self">self</span>.glyphs.topright)<span class="question-mark">?</span>;
-<a href=#137 id=137 data-nosnippet>137</a>        rndr.fill(style, f.bottomleft, <span class="self">self</span>.glyphs.bottomleft)<span class="question-mark">?</span>;
-<a href=#138 id=138 data-nosnippet>138</a>        rndr.fill(style, f.bottomright, <span class="self">self</span>.glyphs.bottomright)<span class="question-mark">?</span>;
-<a href=#139 id=139 data-nosnippet>139</a>        rndr.fill(style, f.left, <span class="self">self</span>.glyphs.vertical)<span class="question-mark">?</span>;
-<a href=#140 id=140 data-nosnippet>140</a>
-<a href=#141 id=141 data-nosnippet>141</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(title) = <span class="kw-2">&amp;</span><span class="self">self</span>.title {
-<a href=#142 id=142 data-nosnippet>142</a>            title.pad(
-<a href=#143 id=143 data-nosnippet>143</a>                f.top.w <span class="kw">as </span>usize,
-<a href=#144 id=144 data-nosnippet>144</a>                <span class="self">self</span>.glyphs.horizontal,
-<a href=#145 id=145 data-nosnippet>145</a>                pad::Alignment::Left,
-<a href=#146 id=146 data-nosnippet>146</a>                <span class="bool-val">true</span>,
-<a href=#147 id=147 data-nosnippet>147</a>            );
-<a href=#148 id=148 data-nosnippet>148</a>            rndr.text(style, f.top.line(<span class="number">0</span>), title)<span class="question-mark">?</span>;
-<a href=#149 id=149 data-nosnippet>149</a>        } <span class="kw">else </span>{
-<a href=#150 id=150 data-nosnippet>150</a>            rndr.fill(style, f.top, <span class="self">self</span>.glyphs.horizontal)<span class="question-mark">?</span>;
-<a href=#151 id=151 data-nosnippet>151</a>        }
-<a href=#152 id=152 data-nosnippet>152</a>
-<a href=#153 id=153 data-nosnippet>153</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>((pre, active, post)) = <span class="self">self</span>.child.state().viewport.vactive(f.right)<span class="question-mark">? </span>{
-<a href=#154 id=154 data-nosnippet>154</a>            rndr.fill(style, pre, <span class="self">self</span>.glyphs.vertical)<span class="question-mark">?</span>;
-<a href=#155 id=155 data-nosnippet>155</a>            rndr.fill(style, post, <span class="self">self</span>.glyphs.vertical)<span class="question-mark">?</span>;
-<a href=#156 id=156 data-nosnippet>156</a>            rndr.fill(style, active, <span class="self">self</span>.glyphs.vertical_active)<span class="question-mark">?</span>;
-<a href=#157 id=157 data-nosnippet>157</a>        } <span class="kw">else </span>{
-<a href=#158 id=158 data-nosnippet>158</a>            rndr.fill(style, f.right, <span class="self">self</span>.glyphs.vertical)<span class="question-mark">?</span>;
-<a href=#159 id=159 data-nosnippet>159</a>        }
-<a href=#160 id=160 data-nosnippet>160</a>
-<a href=#161 id=161 data-nosnippet>161</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>((pre, active, post)) = <span class="self">self</span>.child.state().viewport.hactive(f.bottom)<span class="question-mark">? </span>{
-<a href=#162 id=162 data-nosnippet>162</a>            rndr.fill(style, pre, <span class="self">self</span>.glyphs.horizontal)<span class="question-mark">?</span>;
-<a href=#163 id=163 data-nosnippet>163</a>            rndr.fill(style, post, <span class="self">self</span>.glyphs.horizontal)<span class="question-mark">?</span>;
-<a href=#164 id=164 data-nosnippet>164</a>            rndr.fill(style, active, <span class="self">self</span>.glyphs.horizontal_active)<span class="question-mark">?</span>;
-<a href=#165 id=165 data-nosnippet>165</a>        } <span class="kw">else </span>{
-<a href=#166 id=166 data-nosnippet>166</a>            rndr.fill(style, f.bottom, <span class="self">self</span>.glyphs.horizontal)<span class="question-mark">?</span>;
-<a href=#167 id=167 data-nosnippet>167</a>        }
-<a href=#168 id=168 data-nosnippet>168</a>
-<a href=#169 id=169 data-nosnippet>169</a>        <span class="comment">// Our child is always positioned in our upper-left corner, so negative
-<a href=#170 id=170 data-nosnippet>170</a>        // space is to the right and below.
-<a href=#171 id=171 data-nosnippet>171</a>        </span><span class="kw">for </span>r <span class="kw">in </span><span class="self">self
-<a href=#172 id=172 data-nosnippet>172</a>            </span>.vp()
-<a href=#173 id=173 data-nosnippet>173</a>            .view()
-<a href=#174 id=174 data-nosnippet>174</a>            .inner(<span class="number">1</span>)
-<a href=#175 id=175 data-nosnippet>175</a>            .sub(<span class="kw-2">&amp;</span><span class="self">self</span>.vp().unproject(<span class="self">self</span>.child.vp().screen_rect())<span class="question-mark">?</span>)
-<a href=#176 id=176 data-nosnippet>176</a>        {
-<a href=#177 id=177 data-nosnippet>177</a>            rndr.fill(style, r, <span class="string">' '</span>)<span class="question-mark">?</span>;
-<a href=#178 id=178 data-nosnippet>178</a>        }
-<a href=#179 id=179 data-nosnippet>179</a>
-<a href=#180 id=180 data-nosnippet>180</a>        <span class="prelude-val">Ok</span>(())
-<a href=#181 id=181 data-nosnippet>181</a>    }
-<a href=#182 id=182 data-nosnippet>182</a>
-<a href=#183 id=183 data-nosnippet>183</a>    <span class="kw">fn </span>children(<span class="kw-2">&amp;mut </span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>FnMut(<span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#184 id=184 data-nosnippet>184</a>        f(<span class="kw-2">&amp;mut </span><span class="self">self</span>.child)
-<a href=#185 id=185 data-nosnippet>185</a>    }
-<a href=#186 id=186 data-nosnippet>186</a>}</code></pre></div></section></main></body></html>
+<a href=#113 id=113 data-nosnippet>113</a>        l.fill(<span class="self">self</span>, sz)<span class="question-mark">?</span>;
+<a href=#114 id=114 data-nosnippet>114</a>        <span class="kw">let </span>vp = <span class="self">self</span>.vp();
+<a href=#115 id=115 data-nosnippet>115</a>        <span class="kw">let </span>child_rect = <span class="kw">crate</span>::geom::Rect::new(
+<a href=#116 id=116 data-nosnippet>116</a>            <span class="number">1</span>,
+<a href=#117 id=117 data-nosnippet>117</a>            <span class="number">1</span>,
+<a href=#118 id=118 data-nosnippet>118</a>            sz.w.saturating_sub(<span class="number">2</span>),
+<a href=#119 id=119 data-nosnippet>119</a>            sz.h.saturating_sub(<span class="number">2</span>),
+<a href=#120 id=120 data-nosnippet>120</a>        );
+<a href=#121 id=121 data-nosnippet>121</a>        l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.child, vp, child_rect)<span class="question-mark">?</span>;
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="self">self</span>.frame = <span class="kw">crate</span>::geom::Frame::new(sz.rect(), <span class="number">1</span>);
+<a href=#123 id=123 data-nosnippet>123</a>        <span class="prelude-val">Ok</span>(())
+<a href=#124 id=124 data-nosnippet>124</a>    }
+<a href=#125 id=125 data-nosnippet>125</a>
+<a href=#126 id=126 data-nosnippet>126</a>    <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, c: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Context, rndr: <span class="kw-2">&amp;mut </span>Render) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#127 id=127 data-nosnippet>127</a>        <span class="kw">let </span>f = <span class="self">self</span>.frame;
+<a href=#128 id=128 data-nosnippet>128</a>        <span class="kw">let </span>style = <span class="kw">if </span>c.is_on_focus_path(<span class="self">self</span>) {
+<a href=#129 id=129 data-nosnippet>129</a>            <span class="string">"frame/focused"
+<a href=#130 id=130 data-nosnippet>130</a>        </span>} <span class="kw">else </span>{
+<a href=#131 id=131 data-nosnippet>131</a>            <span class="string">"frame"
+<a href=#132 id=132 data-nosnippet>132</a>        </span>};
+<a href=#133 id=133 data-nosnippet>133</a>
+<a href=#134 id=134 data-nosnippet>134</a>        rndr.fill(style, f.topleft, <span class="self">self</span>.glyphs.topleft)<span class="question-mark">?</span>;
+<a href=#135 id=135 data-nosnippet>135</a>        rndr.fill(style, f.topright, <span class="self">self</span>.glyphs.topright)<span class="question-mark">?</span>;
+<a href=#136 id=136 data-nosnippet>136</a>        rndr.fill(style, f.bottomleft, <span class="self">self</span>.glyphs.bottomleft)<span class="question-mark">?</span>;
+<a href=#137 id=137 data-nosnippet>137</a>        rndr.fill(style, f.bottomright, <span class="self">self</span>.glyphs.bottomright)<span class="question-mark">?</span>;
+<a href=#138 id=138 data-nosnippet>138</a>        rndr.fill(style, f.left, <span class="self">self</span>.glyphs.vertical)<span class="question-mark">?</span>;
+<a href=#139 id=139 data-nosnippet>139</a>
+<a href=#140 id=140 data-nosnippet>140</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(title) = <span class="kw-2">&amp;</span><span class="self">self</span>.title {
+<a href=#141 id=141 data-nosnippet>141</a>            title.pad(
+<a href=#142 id=142 data-nosnippet>142</a>                f.top.w <span class="kw">as </span>usize,
+<a href=#143 id=143 data-nosnippet>143</a>                <span class="self">self</span>.glyphs.horizontal,
+<a href=#144 id=144 data-nosnippet>144</a>                pad::Alignment::Left,
+<a href=#145 id=145 data-nosnippet>145</a>                <span class="bool-val">true</span>,
+<a href=#146 id=146 data-nosnippet>146</a>            );
+<a href=#147 id=147 data-nosnippet>147</a>            rndr.text(style, f.top.line(<span class="number">0</span>), title)<span class="question-mark">?</span>;
+<a href=#148 id=148 data-nosnippet>148</a>        } <span class="kw">else </span>{
+<a href=#149 id=149 data-nosnippet>149</a>            rndr.fill(style, f.top, <span class="self">self</span>.glyphs.horizontal)<span class="question-mark">?</span>;
+<a href=#150 id=150 data-nosnippet>150</a>        }
+<a href=#151 id=151 data-nosnippet>151</a>
+<a href=#152 id=152 data-nosnippet>152</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>((pre, active, post)) = <span class="self">self</span>.child.state().viewport.vactive(f.right)<span class="question-mark">? </span>{
+<a href=#153 id=153 data-nosnippet>153</a>            rndr.fill(style, pre, <span class="self">self</span>.glyphs.vertical)<span class="question-mark">?</span>;
+<a href=#154 id=154 data-nosnippet>154</a>            rndr.fill(style, post, <span class="self">self</span>.glyphs.vertical)<span class="question-mark">?</span>;
+<a href=#155 id=155 data-nosnippet>155</a>            rndr.fill(style, active, <span class="self">self</span>.glyphs.vertical_active)<span class="question-mark">?</span>;
+<a href=#156 id=156 data-nosnippet>156</a>        } <span class="kw">else </span>{
+<a href=#157 id=157 data-nosnippet>157</a>            rndr.fill(style, f.right, <span class="self">self</span>.glyphs.vertical)<span class="question-mark">?</span>;
+<a href=#158 id=158 data-nosnippet>158</a>        }
+<a href=#159 id=159 data-nosnippet>159</a>
+<a href=#160 id=160 data-nosnippet>160</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>((pre, active, post)) = <span class="self">self</span>.child.state().viewport.hactive(f.bottom)<span class="question-mark">? </span>{
+<a href=#161 id=161 data-nosnippet>161</a>            rndr.fill(style, pre, <span class="self">self</span>.glyphs.horizontal)<span class="question-mark">?</span>;
+<a href=#162 id=162 data-nosnippet>162</a>            rndr.fill(style, post, <span class="self">self</span>.glyphs.horizontal)<span class="question-mark">?</span>;
+<a href=#163 id=163 data-nosnippet>163</a>            rndr.fill(style, active, <span class="self">self</span>.glyphs.horizontal_active)<span class="question-mark">?</span>;
+<a href=#164 id=164 data-nosnippet>164</a>        } <span class="kw">else </span>{
+<a href=#165 id=165 data-nosnippet>165</a>            rndr.fill(style, f.bottom, <span class="self">self</span>.glyphs.horizontal)<span class="question-mark">?</span>;
+<a href=#166 id=166 data-nosnippet>166</a>        }
+<a href=#167 id=167 data-nosnippet>167</a>
+<a href=#168 id=168 data-nosnippet>168</a>        <span class="comment">// Our child is always positioned in our upper-left corner, so negative
+<a href=#169 id=169 data-nosnippet>169</a>        // space is to the right and below.
+<a href=#170 id=170 data-nosnippet>170</a>        </span><span class="kw">for </span>r <span class="kw">in </span><span class="self">self
+<a href=#171 id=171 data-nosnippet>171</a>            </span>.vp()
+<a href=#172 id=172 data-nosnippet>172</a>            .view()
+<a href=#173 id=173 data-nosnippet>173</a>            .inner(<span class="number">1</span>)
+<a href=#174 id=174 data-nosnippet>174</a>            .sub(<span class="kw-2">&amp;</span><span class="self">self</span>.vp().unproject(<span class="self">self</span>.child.vp().screen_rect())<span class="question-mark">?</span>)
+<a href=#175 id=175 data-nosnippet>175</a>        {
+<a href=#176 id=176 data-nosnippet>176</a>            rndr.fill(style, r, <span class="string">' '</span>)<span class="question-mark">?</span>;
+<a href=#177 id=177 data-nosnippet>177</a>        }
+<a href=#178 id=178 data-nosnippet>178</a>
+<a href=#179 id=179 data-nosnippet>179</a>        <span class="prelude-val">Ok</span>(())
+<a href=#180 id=180 data-nosnippet>180</a>    }
+<a href=#181 id=181 data-nosnippet>181</a>
+<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">fn </span>children(<span class="kw-2">&amp;mut </span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>FnMut(<span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#183 id=183 data-nosnippet>183</a>        f(<span class="kw-2">&amp;mut </span><span class="self">self</span>.child)
+<a href=#184 id=184 data-nosnippet>184</a>    }
+<a href=#185 id=185 data-nosnippet>185</a>}</code></pre></div></section></main></body></html>
