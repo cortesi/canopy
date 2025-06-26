@@ -1142,6 +1142,7 @@ dependencies = [
  "anyhow",
  "canopy",
  "clap",
+ "expectrl",
  "rusqlite",
  "tracing",
 ]
