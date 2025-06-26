@@ -120,7 +120,11 @@ where
     pub fn delete_item(&mut self, core: &mut dyn Context, offset: usize) -> Option<N> {
         if !self.is_empty() && offset < self.len() {
             let itm = self.items.remove(offset);
-            if offset <= self.offset {
+            if self.is_empty() {
+                self.offset = 0;
+                core.taint(self);
+            } else if offset <= self.offset {
+                self.offset = self.offset.min(self.len() - 1);
                 self.select_prev(core);
             }
             Some(itm.itm)

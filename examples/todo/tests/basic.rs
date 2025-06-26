@@ -82,3 +82,76 @@ fn add_item_with_char_newline() {
     })
     .unwrap();
 }
+use canopy::tutils::spawn_workspace_bin;
+
+#[test]
+#[ignore]
+fn add_item_via_pty() {
+    let db_path = std::env::temp_dir().join(format!(
+        "todo_test_pty_{}.db",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    ));
+    open_store(db_path.to_str().unwrap()).unwrap();
+
+    let mut app = spawn_workspace_bin("todo", &[db_path.to_str().unwrap()]).unwrap();
+
+    let items = ["one", "two", "three"];
+    for item in items.iter() {
+        app.send("a").unwrap();
+        app.send(item).unwrap();
+        app.send_line("").unwrap();
+        app.expect(item, Duration::from_millis(500)).unwrap();
+    }
+
+    for _ in 0..items.len() {
+        app.send("d").unwrap();
+    }
+
+    app.send("q").unwrap();
+    app.wait_eof(Duration::from_secs(2)).unwrap();
+
+    open_store(db_path.to_str().unwrap()).unwrap();
+    assert!(todo::store::get().todos().unwrap().is_empty());
+}
+
+
+#[test]
+fn add_delete_via_harness() -> Result<()> {
+    let path = std::env::temp_dir().join(format!(
+        "todo_test_roundtrip_{}.db",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis(),
+    ));
+    open_store(path.to_str().unwrap()).unwrap();
+    run_root(Todo::new()?, |h, tr, root| {
+        style(h.canopy());
+        bind_keys(h.canopy());
+        h.render_timeout(tr, root, Duration::from_secs(1))?;
+        for text in ["one", "two", "three"] {
+            h.key_timeout(root, 'a', Duration::from_secs(1))?;
+            h.render_timeout(tr, root, Duration::from_secs(1))?;
+            for ch in text.chars() {
+                h.key_timeout(root, ch, Duration::from_secs(1))?;
+            }
+            use canopy::event::key::KeyCode;
+            h.key_timeout(root, KeyCode::Enter, Duration::from_secs(1))?;
+            h.render_timeout(tr, root, Duration::from_secs(1))?;
+            assert!(tr.contains_text(text));
+        }
+        for text in ["three", "two", "one"] {
+            h.key_timeout(root, 'd', Duration::from_secs(1))?;
+            h.render_timeout(tr, root, Duration::from_secs(1))?;
+            assert!(!tr.contains_text(text));
+        }
+        Ok(())
+    })?;
+    open_store(path.to_str().unwrap()).unwrap();
+    assert!(todo::store::get().todos().unwrap().is_empty());
+    Ok(())
+}
+
