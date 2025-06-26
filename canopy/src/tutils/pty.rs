@@ -29,6 +29,24 @@ impl PtyApp {
             .map_err(|e| Error::Internal(e.to_string()))
     }
 
+    /// Ensure that `pat` does not appear within `timeout`.
+    pub fn expect_absent(&mut self, pat: &str, timeout: Duration) -> Result<()> {
+        use expectrl::Error as PtyError;
+        self.sess.set_expect_timeout(Some(timeout));
+        match self.sess.expect(pat) {
+            Ok(_) => Err(Error::Internal(format!("unexpected pattern found: {pat}"))),
+            Err(e) => match e {
+                PtyError::ExpectTimeout => Ok(()),
+                other => Err(Error::Internal(other.to_string())),
+            },
+        }
+    }
+
+    /// Drain any pending output.
+    pub fn flush(&mut self) {
+        let _ = self.expect_absent("__CANOPY_FLUSH__", Duration::from_millis(50));
+    }
+
     /// Send raw text to the running process.
     pub fn send(&mut self, s: &str) -> Result<()> {
         self.sess

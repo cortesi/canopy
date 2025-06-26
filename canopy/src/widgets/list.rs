@@ -118,19 +118,40 @@ where
 
     /// Move selection to the next item in the list, if possible.
     pub fn delete_item(&mut self, core: &mut dyn Context, offset: usize) -> Option<N> {
-        if !self.is_empty() && offset < self.len() {
-            let itm = self.items.remove(offset);
-            if offset <= self.offset {
-                self.select_prev(core);
-            }
-            Some(itm.itm)
-        } else {
-            None
+        if offset >= self.items.len() {
+            return None;
         }
+
+        // Clear the previous selection while indices are valid.
+        if let Some(itm) = self.items.get_mut(self.offset) {
+            itm.set_selected(false);
+        }
+
+        let itm = self.items.remove(offset);
+
+        if self.items.is_empty() {
+            self.offset = 0;
+        } else {
+            if self.offset > offset {
+                self.offset -= 1;
+            } else if self.offset >= self.items.len() {
+                self.offset = self.items.len() - 1;
+            }
+            if let Some(itm) = self.items.get_mut(self.offset) {
+                itm.set_selected(true);
+            }
+        }
+
+        self.ensure_selected_in_view(core);
+        core.taint_tree(self);
+        Some(itm.itm)
     }
 
     /// Make sure the selected item is within the view after a change.
     fn ensure_selected_in_view(&mut self, c: &mut dyn Context) -> bool {
+        if self.is_empty() {
+            return false;
+        }
         let virt = self.items[self.offset].virt;
         let view = self.vp().view();
         if let Some(v) = virt.vextent().intersection(&view.vextent()) {
