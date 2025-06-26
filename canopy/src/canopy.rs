@@ -68,62 +68,94 @@ pub trait Context {
 
     /// Scroll the view to the specified position. The view is clamped within
     /// the outer rectangle. Returns `true` if the view changed.
-    fn scroll_to(&self, n: &mut dyn Node, x: u16, y: u16) -> bool {
+    fn scroll_to(&mut self, n: &mut dyn Node, x: u16, y: u16) -> bool {
         let before = n.vp().view();
         n.state_mut().scroll_to(x, y);
-        before != n.vp().view()
+        let changed = before != n.vp().view();
+        if changed {
+            self.taint_tree(n);
+        }
+        changed
     }
 
     /// Scroll the view by the given offsets. The view rectangle is clamped
     /// within the outer rectangle. Returns `true` if the view changed.
-    fn scroll_by(&self, n: &mut dyn Node, x: i16, y: i16) -> bool {
+    fn scroll_by(&mut self, n: &mut dyn Node, x: i16, y: i16) -> bool {
         let before = n.vp().view();
         n.state_mut().scroll_by(x, y);
-        before != n.vp().view()
+        let changed = before != n.vp().view();
+        if changed {
+            self.taint_tree(n);
+        }
+        changed
     }
 
     /// Scroll the view up by the height of the view rectangle. Returns `true`
     /// if the view changed.
-    fn page_up(&self, n: &mut dyn Node) -> bool {
+    fn page_up(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
         n.state_mut().page_up();
-        before != n.vp().view()
+        let changed = before != n.vp().view();
+        if changed {
+            self.taint_tree(n);
+        }
+        changed
     }
 
     /// Scroll the view down by the height of the view rectangle. Returns `true`
     /// if the view changed.
-    fn page_down(&self, n: &mut dyn Node) -> bool {
+    fn page_down(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
         n.state_mut().page_down();
-        before != n.vp().view()
+        let changed = before != n.vp().view();
+        if changed {
+            self.taint_tree(n);
+        }
+        changed
     }
 
     /// Scroll the view up by one line. Returns `true` if the view changed.
-    fn scroll_up(&self, n: &mut dyn Node) -> bool {
+    fn scroll_up(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
         n.state_mut().scroll_up();
-        before != n.vp().view()
+        let changed = before != n.vp().view();
+        if changed {
+            self.taint_tree(n);
+        }
+        changed
     }
 
     /// Scroll the view down by one line. Returns `true` if the view changed.
-    fn scroll_down(&self, n: &mut dyn Node) -> bool {
+    fn scroll_down(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
         n.state_mut().scroll_down();
-        before != n.vp().view()
+        let changed = before != n.vp().view();
+        if changed {
+            self.taint_tree(n);
+        }
+        changed
     }
 
     /// Scroll the view left by one line. Returns `true` if the view changed.
-    fn scroll_left(&self, n: &mut dyn Node) -> bool {
+    fn scroll_left(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
         n.state_mut().scroll_left();
-        before != n.vp().view()
+        let changed = before != n.vp().view();
+        if changed {
+            self.taint_tree(n);
+        }
+        changed
     }
 
     /// Scroll the view right by one line. Returns `true` if the view changed.
-    fn scroll_right(&self, n: &mut dyn Node) -> bool {
+    fn scroll_right(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
         n.state_mut().scroll_right();
-        before != n.vp().view()
+        let changed = before != n.vp().view();
+        if changed {
+            self.taint_tree(n);
+        }
+        changed
     }
 
     /// Taint a node to signal that it should be re-rendered.

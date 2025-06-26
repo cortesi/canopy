@@ -87,28 +87,28 @@ impl Context for DummyContext {
         false
     }
     fn focus_dir(&mut self, _root: &mut dyn Node, _dir: Direction) {}
-    fn scroll_to(&self, _n: &mut dyn Node, _x: u16, _y: u16) -> bool {
+    fn scroll_to(&mut self, _n: &mut dyn Node, _x: u16, _y: u16) -> bool {
         false
     }
-    fn scroll_by(&self, _n: &mut dyn Node, _x: i16, _y: i16) -> bool {
+    fn scroll_by(&mut self, _n: &mut dyn Node, _x: i16, _y: i16) -> bool {
         false
     }
-    fn page_up(&self, _n: &mut dyn Node) -> bool {
+    fn page_up(&mut self, _n: &mut dyn Node) -> bool {
         false
     }
-    fn page_down(&self, _n: &mut dyn Node) -> bool {
+    fn page_down(&mut self, _n: &mut dyn Node) -> bool {
         false
     }
-    fn scroll_up(&self, _n: &mut dyn Node) -> bool {
+    fn scroll_up(&mut self, _n: &mut dyn Node) -> bool {
         false
     }
-    fn scroll_down(&self, _n: &mut dyn Node) -> bool {
+    fn scroll_down(&mut self, _n: &mut dyn Node) -> bool {
         false
     }
-    fn scroll_left(&self, _n: &mut dyn Node) -> bool {
+    fn scroll_left(&mut self, _n: &mut dyn Node) -> bool {
         false
     }
-    fn scroll_right(&self, _n: &mut dyn Node) -> bool {
+    fn scroll_right(&mut self, _n: &mut dyn Node) -> bool {
         false
     }
     fn taint(&mut self, _n: &mut dyn Node) {}

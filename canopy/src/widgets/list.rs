@@ -232,49 +232,37 @@ where
     /// Scroll the viewport down by one line.
     #[command]
     pub fn scroll_down(&mut self, c: &mut dyn Context) {
-        if c.scroll_down(self) {
-            c.taint(self);
-        }
+        c.scroll_down(self);
     }
 
     /// Scroll the viewport up by one line.
     #[command]
     pub fn scroll_up(&mut self, c: &mut dyn Context) {
-        if c.scroll_up(self) {
-            c.taint(self);
-        }
+        c.scroll_up(self);
     }
 
     /// Scroll the viewport left by one column.
     #[command]
     pub fn scroll_left(&mut self, c: &mut dyn Context) {
-        if c.scroll_left(self) {
-            c.taint(self);
-        }
+        c.scroll_left(self);
     }
 
     /// Scroll the viewport right by one column.
     #[command]
     pub fn scroll_right(&mut self, c: &mut dyn Context) {
-        if c.scroll_right(self) {
-            c.taint(self);
-        }
+        c.scroll_right(self);
     }
 
     /// Scroll the viewport down by one page.
     #[command]
     pub fn page_down(&mut self, c: &mut dyn Context) {
-        if c.page_down(self) {
-            c.taint(self);
-        }
+        c.page_down(self);
     }
 
     /// Scroll the viewport up by one page.
     #[command]
     pub fn page_up(&mut self, c: &mut dyn Context) {
-        if c.page_up(self) {
-            c.taint(self);
-        }
+        c.page_up(self);
     }
 }
 
@@ -432,7 +420,6 @@ mod tests {
         let corner = first[0][0];
 
         canopy.scroll_down(&mut root.list.child);
-        canopy.taint_tree(&mut root);
         canopy.render(&mut cr, &mut root)?;
         let second = buf.lock().unwrap().cells.clone();
 
@@ -442,7 +429,6 @@ mod tests {
         assert_eq!(second[(size.h - 1) as usize], bottom);
 
         canopy.scroll_up(&mut root.list.child);
-        canopy.taint_tree(&mut root);
         canopy.render(&mut cr, &mut root)?;
         let third = buf.lock().unwrap().cells.clone();
 
@@ -693,7 +679,6 @@ mod tests {
         }
 
         canopy.scroll_down(&mut root.frame.child);
-        canopy.taint_tree(&mut root);
         canopy.render(&mut pr, &mut root)?;
         {
             let painted = buf.lock().unwrap();
@@ -703,7 +688,6 @@ mod tests {
         }
 
         canopy.scroll_up(&mut root.frame.child);
-        canopy.taint_tree(&mut root);
         canopy.render(&mut pr, &mut root)?;
         {
             let painted = buf.lock().unwrap();
@@ -971,7 +955,6 @@ mod tests {
         }
 
         canopy.scroll_right(&mut root.list);
-        canopy.taint_tree(&mut root);
         canopy.render(&mut cr, &mut root)?;
 
         {
@@ -1069,7 +1052,6 @@ mod tests {
         }
 
         canopy.scroll_right(&mut root.frame.child);
-        canopy.taint_tree(&mut root);
         canopy.render(&mut cr, &mut root)?;
 
         {
