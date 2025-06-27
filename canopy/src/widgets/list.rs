@@ -131,7 +131,12 @@ where
             itm.set_selected(false);
         }
 
-        let itm = self.items.remove(offset);
+        let removed = self.items.remove(offset);
+        // Shift any items below the removed one up by its height so virt data
+        // stays roughly correct until the next layout.
+        for itm in self.items.iter_mut().skip(offset) {
+            itm.virt.tl.y = itm.virt.tl.y.saturating_sub(removed.virt.h);
+        }
 
         if self.items.is_empty() {
             self.offset = 0;
@@ -141,13 +146,24 @@ where
             } else if self.offset >= self.items.len() {
                 self.offset = self.items.len() - 1;
             }
-            if let Some(itm) = self.items.get_mut(self.offset) {
-                itm.set_selected(true);
+            if let Some(sel) = self.items.get_mut(self.offset) {
+                sel.set_selected(true);
+            }
+
+            // If the deleted item was above the current view, adjust the scroll
+            // position so remaining items stay visible.
+            let vp_y = self.vp().view().tl.y;
+            if removed.virt.tl.y < vp_y {
+                core.scroll_by(self, 0, -(removed.virt.h as i16));
+            }
+
+            if self.ensure_selected_in_view(core) {
+                core.taint(self);
             }
         }
 
         core.taint_tree(self);
-        Some(itm.itm)
+        Some(removed.itm)
     }
 
     /// Make sure the selected item is within the view after a change.
