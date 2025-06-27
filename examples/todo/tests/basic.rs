@@ -24,6 +24,7 @@ fn add(h: &mut Harness<Todo>, text: &str) -> canopy::Result<()> {
     }
     h.key(KeyCode::Enter)?;
     h.render()?;
+    h.expect_highlight(text);
     Ok(())
 }
 
@@ -31,12 +32,18 @@ fn del_first(h: &mut Harness<Todo>, _expected_next: Option<&str>) -> canopy::Res
     h.key('g')?;
     h.key('d')?;
     h.render()?;
+    if let Some(txt) = _expected_next {
+        h.expect_highlight(txt);
+    }
     Ok(())
 }
 
 fn del_no_nav(h: &mut Harness<Todo>, _expected_next: Option<&str>) -> canopy::Result<()> {
     h.key('d')?;
     h.render()?;
+    if let Some(txt) = _expected_next {
+        h.expect_highlight(txt);
+    }
     Ok(())
 }
 

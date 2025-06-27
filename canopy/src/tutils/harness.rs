@@ -83,4 +83,19 @@ impl<N: Node + Loader> Harness<N> {
             .render_buf()
             .expect("render buffer not initialized")
     }
+
+    pub fn expect_contains(&self, txt: &str) {
+        assert!(
+            self.buf().contains_text(txt),
+            "render buffer missing '{txt}'"
+        );
+    }
+
+    pub fn expect_highlight(&self, txt: &str) {
+        use crate::style::solarized;
+        assert!(
+            self.buf().contains_text_fg(txt, solarized::BLUE),
+            "render buffer missing highlighted '{txt}'"
+        );
+    }
 }
