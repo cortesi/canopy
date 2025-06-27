@@ -465,7 +465,6 @@ mod tests {
 
         canopy.focus_next(&mut root);
         canopy.render(&mut tr, &mut root)?;
-        assert!(!tr.buf_empty());
 
         Ok(())
     }

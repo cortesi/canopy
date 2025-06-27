@@ -10,6 +10,7 @@ pub struct Cell {
     pub style: Style,
 }
 
+#[derive(Clone, Debug)]
 pub struct TermBuf {
     size: Expanse,
     cells: Vec<Cell>,
@@ -113,47 +114,54 @@ impl TermBuf {
     /// Diff this terminal buffer against a previous state, emitting changes
     /// to the provided render backend.
     pub fn diff<R: RenderBackend>(&self, prev: &TermBuf, backend: &mut R) -> crate::Result<()> {
+        let mut wrote = false;
         if self.size != prev.size {
-            return self.render(backend);
-        }
-        for y in 0..self.size.h {
-            let mut x = 0;
-            while x < self.size.w {
-                let idx = y as usize * self.size.w as usize + x as usize;
-                let cell = &self.cells[idx];
-                let same = if y < prev.size.h && x < prev.size.w {
-                    let pidx = y as usize * prev.size.w as usize + x as usize;
-                    prev.cells[pidx] == *cell
-                } else {
-                    false
-                };
-                if same {
-                    x += 1;
-                    continue;
-                }
-
-                let style = cell.style.clone();
-                let start_x = x;
-                let mut text = String::new();
+            self.render(backend)?;
+            wrote = true;
+        } else {
+            for y in 0..self.size.h {
+                let mut x = 0;
                 while x < self.size.w {
-                    let idx2 = y as usize * self.size.w as usize + x as usize;
-                    let ccell = &self.cells[idx2];
+                    let idx = y as usize * self.size.w as usize + x as usize;
+                    let cell = &self.cells[idx];
                     let same = if y < prev.size.h && x < prev.size.w {
-                        let pidx2 = y as usize * prev.size.w as usize + x as usize;
-                        prev.cells[pidx2] == *ccell
+                        let pidx = y as usize * prev.size.w as usize + x as usize;
+                        prev.cells[pidx] == *cell
                     } else {
                         false
                     };
-                    if !same && ccell.style == style {
-                        text.push(ccell.ch);
+                    if same {
                         x += 1;
-                    } else {
-                        break;
+                        continue;
                     }
+
+                    let style = cell.style.clone();
+                    let start_x = x;
+                    let mut text = String::new();
+                    while x < self.size.w {
+                        let idx2 = y as usize * self.size.w as usize + x as usize;
+                        let ccell = &self.cells[idx2];
+                        let same = if y < prev.size.h && x < prev.size.w {
+                            let pidx2 = y as usize * prev.size.w as usize + x as usize;
+                            prev.cells[pidx2] == *ccell
+                        } else {
+                            false
+                        };
+                        if !same && ccell.style == style {
+                            text.push(ccell.ch);
+                            x += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    backend.style(style)?;
+                    backend.text(Point { x: start_x, y }, &text)?;
+                    wrote = true;
                 }
-                backend.style(style)?;
-                backend.text(Point { x: start_x, y }, &text)?;
             }
+        }
+        if wrote {
+            backend.flush()?;
         }
         Ok(())
     }
@@ -161,6 +169,7 @@ impl TermBuf {
     /// Render this terminal buffer in full using the provided backend,
     /// batching runs of text with the same style.
     pub fn render<R: RenderBackend>(&self, backend: &mut R) -> crate::Result<()> {
+        let mut wrote = false;
         for y in 0..self.size.h {
             let mut x = 0;
             while x < self.size.w {
@@ -181,7 +190,11 @@ impl TermBuf {
                 }
                 backend.style(style)?;
                 backend.text(Point { x: start_x, y }, &text)?;
+                wrote = true;
             }
+        }
+        if wrote {
+            backend.flush()?;
         }
         Ok(())
     }

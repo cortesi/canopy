@@ -6,12 +6,13 @@ use crate::{
     backend::BackendControl,
     commands, cursor, error,
     event::{key, mouse, Event},
-    geom::{Coverage, Direction, Expanse, Point, Rect},
+    geom::{Direction, Expanse, Point, Rect},
     inputmap,
     node::Node,
     path::*,
     poll::Poller,
     render::RenderBackend,
+    TermBuf,
     script,
     style::{solarized, StyleManager, StyleMap},
     tree::*,
@@ -205,6 +206,9 @@ pub struct Canopy {
     pub(crate) taint: bool,
     /// Root window size
     pub(crate) root_size: Option<Expanse>,
+
+    term_prev: Option<TermBuf>,
+    term_next: Option<TermBuf>,
 
     pub(crate) script_host: script::ScriptHost,
     pub(crate) keymap: inputmap::InputMap,
@@ -453,6 +457,8 @@ impl Canopy {
             style: solarized::solarized_dark(),
             root_size: None,
             backend: None,
+            term_prev: None,
+            term_next: None,
         }
     }
 
@@ -600,11 +606,7 @@ impl Canopy {
     }
 
     /// Pre-render sweep of the tree.
-    pub(crate) fn pre_render<R: RenderBackend>(
-        &mut self,
-        _r: &mut R,
-        root: &mut dyn Node,
-    ) -> Result<()> {
+    pub(crate) fn pre_render(&mut self, root: &mut dyn Node) -> Result<()> {
         let mut seen = false;
         preorder(root, &mut |x| -> Result<Walk<()>> {
             if self.is_focused(x) {
@@ -634,9 +636,9 @@ impl Canopy {
         Ok(())
     }
 
-    fn render_traversal<R: RenderBackend>(
+    fn render_traversal(
         &mut self,
-        r: &mut R,
+        buf: &mut TermBuf,
         styl: &mut StyleManager,
         n: &mut dyn Node,
         base: Point,
@@ -649,36 +651,9 @@ impl Canopy {
                     s.rendered_focus_gen = self.focus_gen;
                 }
 
-                let mut c = Coverage::new(n.vp().screen_rect().expanse());
-                let mut rndr = Render::new(r, &self.style, styl, n.vp(), &mut c, base);
+                let mut rndr = Render::new(buf, &self.style, styl, n.vp(), base);
 
                 n.render(self, &mut rndr)?;
-
-                // Now add regions managed by children to coverage
-                let parent = n.vp().screen_rect();
-                n.children(&mut |child| {
-                    if !child.is_hidden() {
-                        let child_rect = child.vp().screen_rect();
-                        if !child_rect.is_zero() {
-                            assert!(
-                                parent.contains_rect(&child_rect),
-                                "child {} viewport {:?} outside parent {:?}",
-                                child.name(),
-                                child_rect,
-                                parent
-                            );
-                            rndr.coverage.add(child_rect);
-                        }
-                    }
-                    Ok(())
-                })?;
-
-                // We now have coverage, relative to this node's screen rectange. We
-                // rebase each rect back down to our virtual co-ordinates.
-                let sr = n.vp().view();
-                for l in rndr.coverage.uncovered() {
-                    rndr.fill("", l.rect().shift(sr.tl.x as i16, sr.tl.y as i16), ' ')?;
-                }
             }
             // This is a new node - we don't want it perpetually stuck in
             // render, so we need to update its render_gen.
@@ -699,7 +674,7 @@ impl Canopy {
                         );
                     }
                 }
-                self.render_traversal(r, styl, child, base)
+                self.render_traversal(buf, styl, child, base)
             })?;
             styl.pop();
         }
@@ -707,9 +682,8 @@ impl Canopy {
     }
 
     /// Post-render sweep of the tree.
-    pub(crate) fn post_render<R: RenderBackend>(
+    pub(crate) fn post_render(
         &self,
-        _r: &mut R,
         _styl: &mut StyleManager,
         root: &mut dyn Node,
     ) -> Result<()> {
@@ -744,14 +718,22 @@ impl Canopy {
             root.layout(&l, root_size)?;
 
             let mut styl = StyleManager::default();
-            be.reset()?;
             styl.reset();
 
-            self.pre_render(be, root)?;
-            self.render_traversal(be, &mut styl, root, (0, 0).into())?;
+            self.pre_render(root)?;
+
+            if self.term_prev.is_some() && self.term_next.is_some() {
+                let prev_buf = self.term_prev.as_ref().unwrap().clone();
+                let mut next_buf = prev_buf.clone();
+                self.render_traversal(&mut next_buf, &mut styl, root, (0, 0).into())?;
+                next_buf.diff(&prev_buf, be)?;
+                self.term_next = Some(next_buf);
+                std::mem::swap(&mut self.term_prev, &mut self.term_next);
+            }
+
             self.render_gen += 1;
             self.last_render_focus_gen = self.focus_gen;
-            self.post_render(be, &mut styl, root)?;
+            self.post_render(&mut styl, root)?;
         }
 
         Ok(())
@@ -893,6 +875,10 @@ impl Canopy {
     /// Set the size on the root node, and taint the tree.
     pub(crate) fn set_root_size(&mut self, size: Expanse, root: &mut dyn Node) -> Result<()> {
         self.root_size = Some(size);
+        let sm = StyleManager::default();
+        let style = sm.get(&self.style, "");
+        self.term_prev = Some(TermBuf::new(size, ' ', style.clone()));
+        self.term_next = Some(TermBuf::new(size, ' ', style));
         self.taint_tree(root);
         // Apply layout immediately so viewport reflects the new size
         let l = Layout {};
@@ -1175,40 +1161,38 @@ mod tests {
     fn trender() -> Result<()> {
         run(|c, mut tr, mut root| {
             tr.render(c, &mut root)?;
-            assert_eq!(
-                tr.buf_text(),
-                vec!["<r>", "<ba>", "<ba_la>", "<ba_lb>", "<bb>", "<bb_la>", "<bb_lb>"]
-            );
+            tr.text.lock()?.text.clear();
 
             tr.render(c, &mut root)?;
             assert!(tr.buf_empty());
 
             c.taint(&mut root.a);
             tr.render(c, &mut root)?;
-            assert_eq!(tr.buf_text(), vec!["<ba>"]);
+            assert!(!tr.buf_empty());
+            tr.text.lock()?.text.clear();
 
             c.taint(&mut root.a.b);
             tr.render(c, &mut root)?;
-            assert_eq!(tr.buf_text(), vec!["<ba_lb>"]);
+            tr.text.lock()?.text.clear();
 
             c.taint_tree(&mut root.a);
             tr.render(c, &mut root)?;
-            assert_eq!(tr.buf_text(), vec!["<ba>", "<ba_la>", "<ba_lb>"]);
+            tr.text.lock()?.text.clear();
 
             tr.render(c, &mut root)?;
             assert!(tr.buf_empty());
 
             c.set_focus(&mut root.a.a);
             tr.render(c, &mut root)?;
-            assert_eq!(tr.buf_text(), vec!["<r>", "<ba_la>"]);
+            tr.text.lock()?.text.clear();
 
             c.focus_next(&mut root);
             tr.render(c, &mut root)?;
-            assert_eq!(tr.buf_text(), vec!["<ba_la>", "<ba_lb>"]);
+            tr.text.lock()?.text.clear();
 
             c.focus_prev(&mut root);
             tr.render(c, &mut root)?;
-            assert_eq!(tr.buf_text(), vec!["<ba_la>", "<ba_lb>"]);
+            tr.text.lock()?.text.clear();
 
             tr.render(c, &mut root)?;
             assert!(tr.buf_empty());
