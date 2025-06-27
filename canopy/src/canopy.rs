@@ -12,11 +12,10 @@ use crate::{
     path::*,
     poll::Poller,
     render::RenderBackend,
-    TermBuf,
     script,
     style::{solarized, StyleManager, StyleMap},
     tree::*,
-    EventOutcome, Layout, NodeId, Render, Result, ViewPort,
+    EventOutcome, Layout, NodeId, Render, Result, TermBuf, ViewPort,
 };
 
 /// The API exposed to nodes by Canopy.
@@ -31,9 +30,6 @@ pub trait Context {
 
     /// Does the node have focus?
     fn is_focused(&self, n: &dyn Node) -> bool;
-
-    /// Get the Rect of the screen area that currently has focus.
-    fn focus_area(&self, root: &mut dyn Node) -> Option<Rect>;
 
     /// Move focus downward of the currently focused node within the subtree at root.
     fn focus_down(&mut self, root: &mut dyn Node);
@@ -269,15 +265,6 @@ impl Context for Canopy {
         Path::new(&p)
     }
 
-    /// Find the area of the current terminal focus node under the specified `root`.
-    fn focus_area(&self, root: &mut dyn Node) -> Option<Rect> {
-        self.walk_focus_path(root, &mut |x| -> Result<Walk<Rect>> {
-            Ok(Walk::Handle(x.vp().screen_rect()))
-        })
-        // We're safe to unwrap, because our closure can't return an error.
-        .unwrap()
-    }
-
     /// Move focus in a specified direction within the subtree at root.
     fn focus_dir(&mut self, root: &mut dyn Node, dir: Direction) {
         let mut seen = false;
@@ -460,6 +447,15 @@ impl Canopy {
         }
     }
 
+    /// Find the area of the current terminal focus node under the specified `root`.
+    fn focus_area(&self, root: &mut dyn Node) -> Option<Rect> {
+        self.walk_focus_path(root, &mut |x| -> Result<Walk<Rect>> {
+            Ok(Walk::Handle(x.vp().screen_rect()))
+        })
+        // We're safe to unwrap, because our closure can't return an error.
+        .unwrap()
+    }
+
     pub fn register_backend<T: BackendControl + 'static>(&mut self, be: T) {
         self.backend = Some(Box::new(be))
     }
@@ -634,7 +630,6 @@ impl Canopy {
             })?;
         }
 
-        // Cursor rendering is handled virtually, so nothing to disable here
         Ok(())
     }
 
@@ -694,7 +689,6 @@ impl Canopy {
         self.walk_focus_path(root, &mut |n| -> Result<Walk<()>> {
             Ok(if let Some(c) = n.cursor() {
                 cn = Some((n.id(), n.vp(), c));
-
                 Walk::Handle(())
             } else {
                 Walk::Continue

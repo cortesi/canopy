@@ -9,7 +9,7 @@ pub use ttree::*;
 use crate::backend::test::TestRender;
 use crate::{self as canopy};
 use crate::{
-    geom::{Direction, Expanse, Rect},
+    geom::{Direction, Expanse},
     path::Path,
     widgets::list::ListItem,
     *,
@@ -52,9 +52,6 @@ impl Context for DummyContext {
     }
     fn is_focused(&self, _n: &dyn Node) -> bool {
         false
-    }
-    fn focus_area(&self, _root: &mut dyn Node) -> Option<Rect> {
-        None
     }
     fn focus_down(&mut self, _root: &mut dyn Node) {}
     fn focus_first(&mut self, _root: &mut dyn Node) {}
@@ -123,6 +120,7 @@ impl Context for DummyContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::geom::Rect;
 
     #[derive(StatefulNode)]
     struct Block {

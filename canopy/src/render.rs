@@ -2,7 +2,7 @@ use crate::{
     geom,
     style::Style,
     style::{StyleManager, StyleMap},
-    Result, ViewPort, TermBuf,
+    Result, TermBuf, ViewPort,
 };
 
 /// The trait implemented by renderers.
@@ -27,7 +27,6 @@ pub struct Render<'a> {
     base: geom::Point,
 }
 
-
 impl<'a> Render<'a> {
     pub fn new(
         buf: &'a mut TermBuf,
@@ -44,7 +43,6 @@ impl<'a> Render<'a> {
             base,
         }
     }
-
 
     /// Fill a rectangle with a specified character.
     pub fn fill(&mut self, style: &str, r: geom::Rect, c: char) -> Result<()> {
