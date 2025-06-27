@@ -1,5 +1,7 @@
 use super::ttree;
-use crate::{backend::test::TestRender, event::key, geom::Expanse, Canopy, Loader, Node, Result};
+use crate::{
+    backend::test::TestRender, event::key, geom::Expanse, Canopy, Loader, Node, Result, TermBuf,
+};
 use std::time::{Duration, Instant};
 
 /// Run a function on our standard dummy app.
@@ -71,6 +73,11 @@ impl<'a> Harness<'a> {
 
     pub fn canopy(&mut self) -> &mut Canopy {
         self.core
+    }
+
+    /// Access the current render buffer from the underlying [`Canopy`] core.
+    pub fn buffer(&self) -> Option<&TermBuf> {
+        self.core.termbuf()
     }
 }
 

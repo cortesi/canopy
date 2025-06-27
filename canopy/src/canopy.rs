@@ -460,6 +460,11 @@ impl Canopy {
         self.backend = Some(Box::new(be))
     }
 
+    /// Return a reference to the current render buffer, if any.
+    pub(crate) fn termbuf(&self) -> Option<&TermBuf> {
+        self.termbuf.as_ref()
+    }
+
     pub fn run_script(
         &mut self,
         root: &mut dyn Node,

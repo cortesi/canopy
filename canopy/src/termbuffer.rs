@@ -108,6 +108,37 @@ impl TermBuf {
     pub fn get(&self, p: Point) -> Option<&Cell> {
         self.idx(p).map(|i| &self.cells[i])
     }
+
+    /// Return the text for a line in the buffer as a `String`.
+    pub fn line_str(&self, y: u16) -> String {
+        (0..self.size.w)
+            .map(|x| self.get(Point { x, y }).map(|c| c.ch).unwrap_or(' '))
+            .collect()
+    }
+
+    /// Return the contents of the buffer as a vector of lines.
+    pub fn lines(&self) -> Vec<String> {
+        (0..self.size.h).map(|y| self.line_str(y)).collect()
+    }
+
+    /// Does the buffer contain the provided substring?
+    pub fn contains_text(&self, txt: &str) -> bool {
+        self.lines().iter().any(|l| l.contains(txt))
+    }
+
+    /// Find the first occurrence of `txt`, returning the starting point if
+    /// present.
+    pub fn find_text(&self, txt: &str) -> Option<Point> {
+        for (y, line) in self.lines().iter().enumerate() {
+            if let Some(x) = line.find(txt) {
+                return Some(Point {
+                    x: x as u16,
+                    y: y as u16,
+                });
+            }
+        }
+        None
+    }
 }
 
 impl TermBuf {
