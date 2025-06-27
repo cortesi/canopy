@@ -1,7 +1,7 @@
 use crate::{
     geom::{Expanse, Frame, Line, Point, Rect},
     render::RenderBackend,
-    style::Style,
+    style::{Color, Style},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -131,6 +131,39 @@ impl TermBuf {
     /// Does the buffer contain the supplied substring?
     pub fn contains_text(&self, txt: &str) -> bool {
         self.lines().iter().any(|l| l.contains(txt))
+    }
+
+    /// Does the buffer contain the supplied substring in the given foreground
+    /// colour?
+    pub fn contains_text_fg(&self, txt: &str, fg: Color) -> bool {
+        let tl = txt.chars().count() as u16;
+        if tl == 0 || tl > self.size.w {
+            return false;
+        }
+        for y in 0..self.size.h {
+            for x in 0..=self.size.w.saturating_sub(tl) {
+                let mut m = true;
+                let mut c = false;
+                for (i, ch) in txt.chars().enumerate() {
+                    if let Some(cell) = self.get(Point { x: x + i as u16, y }) {
+                        if cell.ch != ch {
+                            m = false;
+                            break;
+                        }
+                        if cell.style.fg == fg {
+                            c = true;
+                        }
+                    } else {
+                        m = false;
+                        break;
+                    }
+                }
+                if m && c {
+                    return true;
+                }
+            }
+        }
+        false
     }
 }
 
