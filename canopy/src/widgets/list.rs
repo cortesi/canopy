@@ -144,6 +144,15 @@ where
             if let Some(itm) = self.items.get_mut(self.offset) {
                 itm.set_selected(true);
             }
+            // If the deleted item was above the current view, adjust the scroll
+            // position so remaining items stay visible.
+            let vp_y = self.vp().view().tl.y;
+            if itm.virt.tl.y < vp_y {
+                core.scroll_by(self, 0, -(itm.virt.h as i16));
+            }
+            if self.ensure_selected_in_view(core) {
+                core.taint(self);
+            }
         }
 
         core.taint_tree(self);
@@ -1275,6 +1284,54 @@ mod tests {
             }
             Ok(())
         })?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn delete_selected_shows_next_item() -> Result<()> {
+        #[derive(StatefulNode)]
+        struct Root {
+            state: NodeState,
+            list: List<Text>,
+        }
+
+        #[derive_commands]
+        impl Root {
+            fn new() -> Self {
+                Root {
+                    state: NodeState::default(),
+                    list: List::new(vec![Text::new("first"), Text::new("second")]),
+                }
+            }
+        }
+
+        impl Node for Root {
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.list)
+            }
+
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                l.place(&mut self.list, vp, vp.view())?;
+                Ok(())
+            }
+        }
+
+        let size = Expanse::new(10, 2);
+        let (buf, mut cr) = CanvasRender::create(size);
+        let mut canopy = Canopy::new();
+        let mut root = Root::new();
+
+        canopy.set_root_size(size, &mut root)?;
+        canopy.render(&mut cr, &mut root)?;
+
+        root.list.delete_selected(&mut canopy);
+        canopy.render(&mut cr, &mut root)?;
+
+        let canvas = buf.lock().unwrap();
+        assert!(canvas.cells.iter().flatten().any(|&c| c == 's'));
 
         Ok(())
     }
