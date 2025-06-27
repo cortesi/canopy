@@ -102,289 +102,287 @@
 <a href=#102 id=102 data-nosnippet>102</a>        <span class="prelude-val">Ok</span>(())
 <a href=#103 id=103 data-nosnippet>103</a>    }
 <a href=#104 id=104 data-nosnippet>104</a>
-<a href=#105 id=105 data-nosnippet>105</a>
-<a href=#106 id=106 data-nosnippet>106</a>    <span class="kw">fn </span>style(<span class="kw-2">&amp;mut </span><span class="self">self</span>, s: Style) -&gt; io::Result&lt;()&gt; {
-<a href=#107 id=107 data-nosnippet>107</a>        <span class="comment">// Order is important here - if we reset after setting foreground and
-<a href=#108 id=108 data-nosnippet>108</a>        // background colors they are lost.
-<a href=#109 id=109 data-nosnippet>109</a>        </span><span class="kw">if </span>s.attrs.is_empty() {
-<a href=#110 id=110 data-nosnippet>110</a>            <span class="self">self</span>.fp
-<a href=#111 id=111 data-nosnippet>111</a>                .queue(style::SetAttribute(style::Attribute::Reset))<span class="question-mark">?</span>;
-<a href=#112 id=112 data-nosnippet>112</a>        } <span class="kw">else </span>{
-<a href=#113 id=113 data-nosnippet>113</a>            <span class="kw">if </span>s.attrs.bold {
-<a href=#114 id=114 data-nosnippet>114</a>                <span class="self">self</span>.fp.queue(style::SetAttribute(style::Attribute::Bold))<span class="question-mark">?</span>;
-<a href=#115 id=115 data-nosnippet>115</a>            }
-<a href=#116 id=116 data-nosnippet>116</a>            <span class="kw">if </span>s.attrs.crossedout {
-<a href=#117 id=117 data-nosnippet>117</a>                <span class="self">self</span>.fp
-<a href=#118 id=118 data-nosnippet>118</a>                    .queue(style::SetAttribute(style::Attribute::CrossedOut))<span class="question-mark">?</span>;
-<a href=#119 id=119 data-nosnippet>119</a>            }
-<a href=#120 id=120 data-nosnippet>120</a>            <span class="kw">if </span>s.attrs.dim {
-<a href=#121 id=121 data-nosnippet>121</a>                <span class="self">self</span>.fp.queue(style::SetAttribute(style::Attribute::Dim))<span class="question-mark">?</span>;
-<a href=#122 id=122 data-nosnippet>122</a>            }
-<a href=#123 id=123 data-nosnippet>123</a>            <span class="kw">if </span>s.attrs.italic {
-<a href=#124 id=124 data-nosnippet>124</a>                <span class="self">self</span>.fp
-<a href=#125 id=125 data-nosnippet>125</a>                    .queue(style::SetAttribute(style::Attribute::Italic))<span class="question-mark">?</span>;
-<a href=#126 id=126 data-nosnippet>126</a>            }
-<a href=#127 id=127 data-nosnippet>127</a>            <span class="kw">if </span>s.attrs.overline {
-<a href=#128 id=128 data-nosnippet>128</a>                <span class="self">self</span>.fp
-<a href=#129 id=129 data-nosnippet>129</a>                    .queue(style::SetAttribute(style::Attribute::OverLined))<span class="question-mark">?</span>;
-<a href=#130 id=130 data-nosnippet>130</a>            }
-<a href=#131 id=131 data-nosnippet>131</a>            <span class="kw">if </span>s.attrs.underline {
-<a href=#132 id=132 data-nosnippet>132</a>                <span class="self">self</span>.fp
-<a href=#133 id=133 data-nosnippet>133</a>                    .queue(style::SetAttribute(style::Attribute::Underlined))<span class="question-mark">?</span>;
-<a href=#134 id=134 data-nosnippet>134</a>            }
-<a href=#135 id=135 data-nosnippet>135</a>        }
-<a href=#136 id=136 data-nosnippet>136</a>        <span class="self">self</span>.fp
-<a href=#137 id=137 data-nosnippet>137</a>            .queue(style::SetForegroundColor(translate_color(s.fg)))<span class="question-mark">?</span>;
-<a href=#138 id=138 data-nosnippet>138</a>        <span class="self">self</span>.fp
-<a href=#139 id=139 data-nosnippet>139</a>            .queue(style::SetBackgroundColor(translate_color(s.bg)))<span class="question-mark">?</span>;
-<a href=#140 id=140 data-nosnippet>140</a>        <span class="prelude-val">Ok</span>(())
-<a href=#141 id=141 data-nosnippet>141</a>    }
-<a href=#142 id=142 data-nosnippet>142</a>
-<a href=#143 id=143 data-nosnippet>143</a>    <span class="kw">fn </span>text(<span class="kw-2">&amp;mut </span><span class="self">self</span>, loc: Point, txt: <span class="kw-2">&amp;</span>str) -&gt; io::Result&lt;()&gt; {
-<a href=#144 id=144 data-nosnippet>144</a>        <span class="self">self</span>.fp.queue(ccursor::MoveTo(loc.x, loc.y))<span class="question-mark">?</span>;
-<a href=#145 id=145 data-nosnippet>145</a>        <span class="self">self</span>.fp.queue(style::Print(txt))<span class="question-mark">?</span>;
-<a href=#146 id=146 data-nosnippet>146</a>        <span class="prelude-val">Ok</span>(())
-<a href=#147 id=147 data-nosnippet>147</a>    }
-<a href=#148 id=148 data-nosnippet>148</a>}
-<a href=#149 id=149 data-nosnippet>149</a>
-<a href=#150 id=150 data-nosnippet>150</a><span class="kw">impl </span>Default <span class="kw">for </span>CrosstermRender {
-<a href=#151 id=151 data-nosnippet>151</a>    <span class="kw">fn </span>default() -&gt; CrosstermRender {
-<a href=#152 id=152 data-nosnippet>152</a>        CrosstermRender {
-<a href=#153 id=153 data-nosnippet>153</a>            fp: std::io::stderr(),
-<a href=#154 id=154 data-nosnippet>154</a>        }
-<a href=#155 id=155 data-nosnippet>155</a>    }
-<a href=#156 id=156 data-nosnippet>156</a>}
-<a href=#157 id=157 data-nosnippet>157</a>
-<a href=#158 id=158 data-nosnippet>158</a><span class="kw">impl </span>RenderBackend <span class="kw">for </span>CrosstermRender {
-<a href=#159 id=159 data-nosnippet>159</a>    <span class="kw">fn </span>flush(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#160 id=160 data-nosnippet>160</a>        translate_result(<span class="self">self</span>.flush())
-<a href=#161 id=161 data-nosnippet>161</a>    }
-<a href=#162 id=162 data-nosnippet>162</a>
-<a href=#163 id=163 data-nosnippet>163</a>
-<a href=#164 id=164 data-nosnippet>164</a>    <span class="kw">fn </span>style(<span class="kw-2">&amp;mut </span><span class="self">self</span>, s: Style) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#165 id=165 data-nosnippet>165</a>        translate_result(<span class="self">self</span>.style(s))
-<a href=#166 id=166 data-nosnippet>166</a>    }
-<a href=#167 id=167 data-nosnippet>167</a>
-<a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">fn </span>text(<span class="kw-2">&amp;mut </span><span class="self">self</span>, loc: Point, txt: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#169 id=169 data-nosnippet>169</a>        translate_result(<span class="self">self</span>.text(loc, txt))
-<a href=#170 id=170 data-nosnippet>170</a>    }
-<a href=#171 id=171 data-nosnippet>171</a>
-<a href=#172 id=172 data-nosnippet>172</a>    <span class="attr">#[allow(unused_must_use)]
-<a href=#173 id=173 data-nosnippet>173</a>    </span><span class="kw">fn </span>exit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, code: i32) -&gt; ! {
-<a href=#174 id=174 data-nosnippet>174</a>        <span class="self">self</span>.fp.execute(terminal::LeaveAlternateScreen);
-<a href=#175 id=175 data-nosnippet>175</a>        <span class="self">self</span>.fp.execute(cevent::DisableMouseCapture);
-<a href=#176 id=176 data-nosnippet>176</a>        <span class="self">self</span>.fp.execute(ccursor::Show);
-<a href=#177 id=177 data-nosnippet>177</a>        terminal::disable_raw_mode();
-<a href=#178 id=178 data-nosnippet>178</a>        exit(code)
-<a href=#179 id=179 data-nosnippet>179</a>    }
-<a href=#180 id=180 data-nosnippet>180</a>
-<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">fn </span>reset(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#182 id=182 data-nosnippet>182</a>        <span class="prelude-val">Ok</span>(())
-<a href=#183 id=183 data-nosnippet>183</a>    }
-<a href=#184 id=184 data-nosnippet>184</a>}
-<a href=#185 id=185 data-nosnippet>185</a>
-<a href=#186 id=186 data-nosnippet>186</a><span class="kw">fn </span>translate_key_modifiers(mods: cevent::KeyModifiers) -&gt; key::Mods {
-<a href=#187 id=187 data-nosnippet>187</a>    key::Mods {
-<a href=#188 id=188 data-nosnippet>188</a>        shift: mods.contains(cevent::KeyModifiers::SHIFT),
-<a href=#189 id=189 data-nosnippet>189</a>        ctrl: mods.contains(cevent::KeyModifiers::CONTROL),
-<a href=#190 id=190 data-nosnippet>190</a>        alt: mods.contains(cevent::KeyModifiers::ALT),
-<a href=#191 id=191 data-nosnippet>191</a>    }
-<a href=#192 id=192 data-nosnippet>192</a>}
-<a href=#193 id=193 data-nosnippet>193</a>
-<a href=#194 id=194 data-nosnippet>194</a><span class="kw">fn </span>translate_button(b: cevent::MouseButton) -&gt; mouse::Button {
-<a href=#195 id=195 data-nosnippet>195</a>    <span class="kw">match </span>b {
-<a href=#196 id=196 data-nosnippet>196</a>        cevent::MouseButton::Left =&gt; mouse::Button::Left,
-<a href=#197 id=197 data-nosnippet>197</a>        cevent::MouseButton::Right =&gt; mouse::Button::Right,
-<a href=#198 id=198 data-nosnippet>198</a>        cevent::MouseButton::Middle =&gt; mouse::Button::Middle,
-<a href=#199 id=199 data-nosnippet>199</a>    }
-<a href=#200 id=200 data-nosnippet>200</a>}
-<a href=#201 id=201 data-nosnippet>201</a>
-<a href=#202 id=202 data-nosnippet>202</a><span class="doccomment">/// Translate a crossterm event into a canopy event
-<a href=#203 id=203 data-nosnippet>203</a></span><span class="kw">fn </span>translate_event(e: cevent::Event) -&gt; Event {
-<a href=#204 id=204 data-nosnippet>204</a>    <span class="kw">match </span>e {
-<a href=#205 id=205 data-nosnippet>205</a>        cevent::Event::Key(k) =&gt; Event::Key(key::Key {
-<a href=#206 id=206 data-nosnippet>206</a>            mods: translate_key_modifiers(k.modifiers),
-<a href=#207 id=207 data-nosnippet>207</a>            key: <span class="kw">match </span>k.code {
-<a href=#208 id=208 data-nosnippet>208</a>                cevent::KeyCode::Backspace =&gt; key::KeyCode::Backspace,
-<a href=#209 id=209 data-nosnippet>209</a>                cevent::KeyCode::Enter =&gt; key::KeyCode::Enter,
-<a href=#210 id=210 data-nosnippet>210</a>                cevent::KeyCode::Left =&gt; key::KeyCode::Left,
-<a href=#211 id=211 data-nosnippet>211</a>                cevent::KeyCode::Right =&gt; key::KeyCode::Right,
-<a href=#212 id=212 data-nosnippet>212</a>                cevent::KeyCode::Up =&gt; key::KeyCode::Up,
-<a href=#213 id=213 data-nosnippet>213</a>                cevent::KeyCode::Down =&gt; key::KeyCode::Down,
-<a href=#214 id=214 data-nosnippet>214</a>                cevent::KeyCode::Home =&gt; key::KeyCode::Home,
-<a href=#215 id=215 data-nosnippet>215</a>                cevent::KeyCode::End =&gt; key::KeyCode::End,
-<a href=#216 id=216 data-nosnippet>216</a>                cevent::KeyCode::PageUp =&gt; key::KeyCode::PageUp,
-<a href=#217 id=217 data-nosnippet>217</a>                cevent::KeyCode::PageDown =&gt; key::KeyCode::PageDown,
-<a href=#218 id=218 data-nosnippet>218</a>                cevent::KeyCode::Tab =&gt; key::KeyCode::Tab,
-<a href=#219 id=219 data-nosnippet>219</a>                cevent::KeyCode::BackTab =&gt; key::KeyCode::BackTab,
-<a href=#220 id=220 data-nosnippet>220</a>                cevent::KeyCode::Delete =&gt; key::KeyCode::Delete,
-<a href=#221 id=221 data-nosnippet>221</a>                cevent::KeyCode::Insert =&gt; key::KeyCode::Insert,
-<a href=#222 id=222 data-nosnippet>222</a>                cevent::KeyCode::F(x) =&gt; key::KeyCode::F(x),
-<a href=#223 id=223 data-nosnippet>223</a>                cevent::KeyCode::Char(c) =&gt; key::KeyCode::Char(c),
-<a href=#224 id=224 data-nosnippet>224</a>                cevent::KeyCode::Null =&gt; key::KeyCode::Null,
-<a href=#225 id=225 data-nosnippet>225</a>                cevent::KeyCode::Esc =&gt; key::KeyCode::Esc,
-<a href=#226 id=226 data-nosnippet>226</a>                cevent::KeyCode::CapsLock =&gt; key::KeyCode::CapsLock,
-<a href=#227 id=227 data-nosnippet>227</a>                cevent::KeyCode::ScrollLock =&gt; key::KeyCode::ScrollLock,
-<a href=#228 id=228 data-nosnippet>228</a>                cevent::KeyCode::NumLock =&gt; key::KeyCode::NumLock,
-<a href=#229 id=229 data-nosnippet>229</a>                cevent::KeyCode::PrintScreen =&gt; key::KeyCode::PrintScreen,
-<a href=#230 id=230 data-nosnippet>230</a>                cevent::KeyCode::Pause =&gt; key::KeyCode::Pause,
-<a href=#231 id=231 data-nosnippet>231</a>                cevent::KeyCode::Menu =&gt; key::KeyCode::Menu,
-<a href=#232 id=232 data-nosnippet>232</a>                cevent::KeyCode::KeypadBegin =&gt; key::KeyCode::KeypadBegin,
-<a href=#233 id=233 data-nosnippet>233</a>                cevent::KeyCode::Media(k) =&gt; key::KeyCode::Media(<span class="kw">match </span>k {
-<a href=#234 id=234 data-nosnippet>234</a>                    cevent::MediaKeyCode::Play =&gt; key::MediaKeyCode::Play,
-<a href=#235 id=235 data-nosnippet>235</a>                    cevent::MediaKeyCode::Pause =&gt; key::MediaKeyCode::Play,
-<a href=#236 id=236 data-nosnippet>236</a>                    cevent::MediaKeyCode::PlayPause =&gt; key::MediaKeyCode::PlayPause,
-<a href=#237 id=237 data-nosnippet>237</a>                    cevent::MediaKeyCode::Reverse =&gt; key::MediaKeyCode::Reverse,
-<a href=#238 id=238 data-nosnippet>238</a>                    cevent::MediaKeyCode::Stop =&gt; key::MediaKeyCode::Stop,
-<a href=#239 id=239 data-nosnippet>239</a>                    cevent::MediaKeyCode::FastForward =&gt; key::MediaKeyCode::FastForward,
-<a href=#240 id=240 data-nosnippet>240</a>                    cevent::MediaKeyCode::Rewind =&gt; key::MediaKeyCode::Rewind,
-<a href=#241 id=241 data-nosnippet>241</a>                    cevent::MediaKeyCode::TrackNext =&gt; key::MediaKeyCode::TrackNext,
-<a href=#242 id=242 data-nosnippet>242</a>                    cevent::MediaKeyCode::TrackPrevious =&gt; key::MediaKeyCode::TrackPrevious,
-<a href=#243 id=243 data-nosnippet>243</a>                    cevent::MediaKeyCode::Record =&gt; key::MediaKeyCode::Record,
-<a href=#244 id=244 data-nosnippet>244</a>                    cevent::MediaKeyCode::LowerVolume =&gt; key::MediaKeyCode::LowerVolume,
-<a href=#245 id=245 data-nosnippet>245</a>                    cevent::MediaKeyCode::RaiseVolume =&gt; key::MediaKeyCode::RaiseVolume,
-<a href=#246 id=246 data-nosnippet>246</a>                    cevent::MediaKeyCode::MuteVolume =&gt; key::MediaKeyCode::MuteVolume,
-<a href=#247 id=247 data-nosnippet>247</a>                }),
-<a href=#248 id=248 data-nosnippet>248</a>                cevent::KeyCode::Modifier(m) =&gt; key::KeyCode::Modifier(<span class="kw">match </span>m {
-<a href=#249 id=249 data-nosnippet>249</a>                    cevent::ModifierKeyCode::LeftShift =&gt; key::ModifierKeyCode::LeftShift,
-<a href=#250 id=250 data-nosnippet>250</a>                    cevent::ModifierKeyCode::LeftControl =&gt; key::ModifierKeyCode::LeftControl,
-<a href=#251 id=251 data-nosnippet>251</a>                    cevent::ModifierKeyCode::LeftAlt =&gt; key::ModifierKeyCode::LeftAlt,
-<a href=#252 id=252 data-nosnippet>252</a>                    cevent::ModifierKeyCode::LeftSuper =&gt; key::ModifierKeyCode::LeftSuper,
-<a href=#253 id=253 data-nosnippet>253</a>                    cevent::ModifierKeyCode::LeftHyper =&gt; key::ModifierKeyCode::LeftHyper,
-<a href=#254 id=254 data-nosnippet>254</a>                    cevent::ModifierKeyCode::LeftMeta =&gt; key::ModifierKeyCode::LeftMeta,
-<a href=#255 id=255 data-nosnippet>255</a>                    cevent::ModifierKeyCode::RightShift =&gt; key::ModifierKeyCode::RightShift,
-<a href=#256 id=256 data-nosnippet>256</a>                    cevent::ModifierKeyCode::RightControl =&gt; key::ModifierKeyCode::RightControl,
-<a href=#257 id=257 data-nosnippet>257</a>                    cevent::ModifierKeyCode::RightAlt =&gt; key::ModifierKeyCode::RightAlt,
-<a href=#258 id=258 data-nosnippet>258</a>                    cevent::ModifierKeyCode::RightSuper =&gt; key::ModifierKeyCode::RightSuper,
-<a href=#259 id=259 data-nosnippet>259</a>                    cevent::ModifierKeyCode::RightHyper =&gt; key::ModifierKeyCode::RightHyper,
-<a href=#260 id=260 data-nosnippet>260</a>                    cevent::ModifierKeyCode::RightMeta =&gt; key::ModifierKeyCode::RightMeta,
-<a href=#261 id=261 data-nosnippet>261</a>                    cevent::ModifierKeyCode::IsoLevel3Shift =&gt; key::ModifierKeyCode::IsoLevel3Shift,
-<a href=#262 id=262 data-nosnippet>262</a>                    cevent::ModifierKeyCode::IsoLevel5Shift =&gt; key::ModifierKeyCode::IsoLevel5Shift,
-<a href=#263 id=263 data-nosnippet>263</a>                }),
-<a href=#264 id=264 data-nosnippet>264</a>            },
-<a href=#265 id=265 data-nosnippet>265</a>        }),
-<a href=#266 id=266 data-nosnippet>266</a>        cevent::Event::Mouse(m) =&gt; {
-<a href=#267 id=267 data-nosnippet>267</a>            <span class="kw">let </span><span class="kw-2">mut </span>button = mouse::Button::None;
-<a href=#268 id=268 data-nosnippet>268</a>            <span class="kw">let </span>action = <span class="kw">match </span>m.kind {
-<a href=#269 id=269 data-nosnippet>269</a>                cevent::MouseEventKind::Down(b) =&gt; {
-<a href=#270 id=270 data-nosnippet>270</a>                    button = translate_button(b);
-<a href=#271 id=271 data-nosnippet>271</a>                    mouse::Action::Down
-<a href=#272 id=272 data-nosnippet>272</a>                }
-<a href=#273 id=273 data-nosnippet>273</a>                cevent::MouseEventKind::Up(b) =&gt; {
-<a href=#274 id=274 data-nosnippet>274</a>                    button = translate_button(b);
-<a href=#275 id=275 data-nosnippet>275</a>                    mouse::Action::Up
-<a href=#276 id=276 data-nosnippet>276</a>                }
-<a href=#277 id=277 data-nosnippet>277</a>                cevent::MouseEventKind::Drag(b) =&gt; {
-<a href=#278 id=278 data-nosnippet>278</a>                    button = translate_button(b);
-<a href=#279 id=279 data-nosnippet>279</a>                    mouse::Action::Drag
-<a href=#280 id=280 data-nosnippet>280</a>                }
-<a href=#281 id=281 data-nosnippet>281</a>                cevent::MouseEventKind::Moved =&gt; mouse::Action::Moved,
-<a href=#282 id=282 data-nosnippet>282</a>                cevent::MouseEventKind::ScrollDown =&gt; mouse::Action::ScrollDown,
-<a href=#283 id=283 data-nosnippet>283</a>                cevent::MouseEventKind::ScrollUp =&gt; mouse::Action::ScrollUp,
-<a href=#284 id=284 data-nosnippet>284</a>                cevent::MouseEventKind::ScrollLeft =&gt; mouse::Action::ScrollLeft,
-<a href=#285 id=285 data-nosnippet>285</a>                cevent::MouseEventKind::ScrollRight =&gt; mouse::Action::ScrollRight,
-<a href=#286 id=286 data-nosnippet>286</a>            };
-<a href=#287 id=287 data-nosnippet>287</a>            Event::Mouse(mouse::MouseEvent {
-<a href=#288 id=288 data-nosnippet>288</a>                button,
-<a href=#289 id=289 data-nosnippet>289</a>                action,
-<a href=#290 id=290 data-nosnippet>290</a>                location: Point {
-<a href=#291 id=291 data-nosnippet>291</a>                    x: m.column,
-<a href=#292 id=292 data-nosnippet>292</a>                    y: m.row,
-<a href=#293 id=293 data-nosnippet>293</a>                },
-<a href=#294 id=294 data-nosnippet>294</a>                modifiers: translate_key_modifiers(m.modifiers),
-<a href=#295 id=295 data-nosnippet>295</a>            })
-<a href=#296 id=296 data-nosnippet>296</a>        }
-<a href=#297 id=297 data-nosnippet>297</a>        cevent::Event::Resize(x, y) =&gt; Event::Resize(Expanse::new(x, y)),
-<a href=#298 id=298 data-nosnippet>298</a>        cevent::Event::FocusGained =&gt; Event::FocusGained,
-<a href=#299 id=299 data-nosnippet>299</a>        cevent::Event::FocusLost =&gt; Event::FocusLost,
-<a href=#300 id=300 data-nosnippet>300</a>        cevent::Event::Paste(s) =&gt; Event::Paste(s),
-<a href=#301 id=301 data-nosnippet>301</a>    }
-<a href=#302 id=302 data-nosnippet>302</a>}
-<a href=#303 id=303 data-nosnippet>303</a>
-<a href=#304 id=304 data-nosnippet>304</a><span class="kw">fn </span>event_emitter(evt_tx: mpsc::Sender&lt;Event&gt;) {
-<a href=#305 id=305 data-nosnippet>305</a>    thread::spawn(<span class="kw">move </span>|| <span class="kw">loop </span>{
-<a href=#306 id=306 data-nosnippet>306</a>        <span class="kw">match </span>cevent::read() {
-<a href=#307 id=307 data-nosnippet>307</a>            <span class="prelude-val">Ok</span>(evt) =&gt; {
-<a href=#308 id=308 data-nosnippet>308</a>                <span class="kw">let </span>ret = evt_tx.send(translate_event(evt));
-<a href=#309 id=309 data-nosnippet>309</a>                <span class="kw">if </span>ret.is_err() {
-<a href=#310 id=310 data-nosnippet>310</a>                    <span class="comment">// FIXME: Do a bit more work here. Restore context,
-<a href=#311 id=311 data-nosnippet>311</a>                    // exit.
-<a href=#312 id=312 data-nosnippet>312</a>                    </span><span class="kw">return</span>;
-<a href=#313 id=313 data-nosnippet>313</a>                }
-<a href=#314 id=314 data-nosnippet>314</a>            }
-<a href=#315 id=315 data-nosnippet>315</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
-<a href=#316 id=316 data-nosnippet>316</a>                <span class="comment">// FIXME: Do a bit more work here. Restore context,
-<a href=#317 id=317 data-nosnippet>317</a>                // exit.
-<a href=#318 id=318 data-nosnippet>318</a>                </span><span class="kw">return</span>;
-<a href=#319 id=319 data-nosnippet>319</a>            }
-<a href=#320 id=320 data-nosnippet>320</a>        }
-<a href=#321 id=321 data-nosnippet>321</a>    });
-<a href=#322 id=322 data-nosnippet>322</a>}
-<a href=#323 id=323 data-nosnippet>323</a>
-<a href=#324 id=324 data-nosnippet>324</a><span class="kw">pub fn </span>runloop&lt;N&gt;(<span class="kw-2">mut </span>cnpy: Canopy, <span class="kw-2">mut </span>root: N) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt;
-<a href=#325 id=325 data-nosnippet>325</a><span class="kw">where
-<a href=#326 id=326 data-nosnippet>326</a>    </span>N: Node,
-<a href=#327 id=327 data-nosnippet>327</a>{
-<a href=#328 id=328 data-nosnippet>328</a>    <span class="kw">let </span><span class="kw-2">mut </span>be = CrosstermRender::default();
-<a href=#329 id=329 data-nosnippet>329</a>    <span class="kw">let </span>ctrl = CrosstermControl::default();
-<a href=#330 id=330 data-nosnippet>330</a>
-<a href=#331 id=331 data-nosnippet>331</a>    translate_result(terminal::enable_raw_mode())<span class="question-mark">?</span>;
-<a href=#332 id=332 data-nosnippet>332</a>    <span class="kw">let </span><span class="kw-2">mut </span>w = std::io::stderr();
-<a href=#333 id=333 data-nosnippet>333</a>
-<a href=#334 id=334 data-nosnippet>334</a>    translate_result(<span class="macro">crossterm::execute!</span>(
-<a href=#335 id=335 data-nosnippet>335</a>        w,
-<a href=#336 id=336 data-nosnippet>336</a>        terminal::EnterAlternateScreen,
-<a href=#337 id=337 data-nosnippet>337</a>        cevent::EnableMouseCapture,
-<a href=#338 id=338 data-nosnippet>338</a>        ccursor::Hide
-<a href=#339 id=339 data-nosnippet>339</a>    ))<span class="question-mark">?</span>;
-<a href=#340 id=340 data-nosnippet>340</a>
-<a href=#341 id=341 data-nosnippet>341</a>    <span class="macro">defer!</span> {
-<a href=#342 id=342 data-nosnippet>342</a>        <span class="kw">let </span><span class="kw-2">mut </span>stderr = std::io::stderr();
-<a href=#343 id=343 data-nosnippet>343</a>        <span class="attr">#[allow(unused_must_use)]
-<a href=#344 id=344 data-nosnippet>344</a>        </span>{
-<a href=#345 id=345 data-nosnippet>345</a>            <span class="macro">crossterm::execute!</span>(stderr, terminal::LeaveAlternateScreen, cevent::DisableMouseCapture, ccursor::Show);
-<a href=#346 id=346 data-nosnippet>346</a>            terminal::disable_raw_mode();
-<a href=#347 id=347 data-nosnippet>347</a>        }
-<a href=#348 id=348 data-nosnippet>348</a>    }
-<a href=#349 id=349 data-nosnippet>349</a>
-<a href=#350 id=350 data-nosnippet>350</a>    panic::set_hook(Box::new(|pi| {
-<a href=#351 id=351 data-nosnippet>351</a>        <span class="kw">let </span><span class="kw-2">mut </span>stderr = std::io::stderr();
-<a href=#352 id=352 data-nosnippet>352</a>        <span class="attr">#[allow(unused_must_use)]
-<a href=#353 id=353 data-nosnippet>353</a>        </span>{
-<a href=#354 id=354 data-nosnippet>354</a>            <span class="macro">crossterm::execute!</span>(
-<a href=#355 id=355 data-nosnippet>355</a>                stderr,
-<a href=#356 id=356 data-nosnippet>356</a>                terminal::LeaveAlternateScreen,
-<a href=#357 id=357 data-nosnippet>357</a>                cevent::DisableMouseCapture,
-<a href=#358 id=358 data-nosnippet>358</a>                ccursor::Show
-<a href=#359 id=359 data-nosnippet>359</a>            );
-<a href=#360 id=360 data-nosnippet>360</a>            terminal::disable_raw_mode();
-<a href=#361 id=361 data-nosnippet>361</a>            BacktracePrinter::new().print_panic_info(pi, <span class="kw-2">&amp;mut </span>default_output_stream());
-<a href=#362 id=362 data-nosnippet>362</a>        }
-<a href=#363 id=363 data-nosnippet>363</a>    }));
-<a href=#364 id=364 data-nosnippet>364</a>
-<a href=#365 id=365 data-nosnippet>365</a>    <span class="kw">let </span>rx = <span class="kw">if let </span><span class="prelude-val">Some</span>(x) = cnpy.event_rx.take() {
-<a href=#366 id=366 data-nosnippet>366</a>        x
-<a href=#367 id=367 data-nosnippet>367</a>    } <span class="kw">else </span>{
-<a href=#368 id=368 data-nosnippet>368</a>        <span class="macro">panic!</span>(<span class="string">"core event loop already initialized"</span>)
-<a href=#369 id=369 data-nosnippet>369</a>    };
-<a href=#370 id=370 data-nosnippet>370</a>
-<a href=#371 id=371 data-nosnippet>371</a>    <span class="kw">let </span>events = EventSource::new(rx);
-<a href=#372 id=372 data-nosnippet>372</a>    event_emitter(cnpy.event_tx.clone());
-<a href=#373 id=373 data-nosnippet>373</a>    <span class="kw">let </span>size = translate_result(terminal::size())<span class="question-mark">?</span>;
-<a href=#374 id=374 data-nosnippet>374</a>    cnpy.register_backend(ctrl);
-<a href=#375 id=375 data-nosnippet>375</a>    cnpy.set_root_size(Expanse::new(size.<span class="number">0</span>, size.<span class="number">1</span>), <span class="kw-2">&amp;mut </span>root)<span class="question-mark">?</span>;
-<a href=#376 id=376 data-nosnippet>376</a>    cnpy.start_poller(cnpy.event_tx.clone());
-<a href=#377 id=377 data-nosnippet>377</a>
-<a href=#378 id=378 data-nosnippet>378</a>    cnpy.render(<span class="kw-2">&amp;mut </span>be, <span class="kw-2">&amp;mut </span>root)<span class="question-mark">?</span>;
-<a href=#379 id=379 data-nosnippet>379</a>    translate_result(be.flush())<span class="question-mark">?</span>;
-<a href=#380 id=380 data-nosnippet>380</a>
-<a href=#381 id=381 data-nosnippet>381</a>    <span class="kw">loop </span>{
-<a href=#382 id=382 data-nosnippet>382</a>        cnpy.event(<span class="kw-2">&amp;mut </span>root, events.next()<span class="question-mark">?</span>)<span class="question-mark">?</span>;
-<a href=#383 id=383 data-nosnippet>383</a>
-<a href=#384 id=384 data-nosnippet>384</a>        <span class="kw">if </span>cnpy.taint || cnpy.focus_changed() {
-<a href=#385 id=385 data-nosnippet>385</a>            cnpy.render(<span class="kw-2">&amp;mut </span>be, <span class="kw-2">&amp;mut </span>root)<span class="question-mark">?</span>;
-<a href=#386 id=386 data-nosnippet>386</a>            translate_result(be.flush())<span class="question-mark">?</span>;
-<a href=#387 id=387 data-nosnippet>387</a>            cnpy.taint = <span class="bool-val">false</span>;
-<a href=#388 id=388 data-nosnippet>388</a>        }
-<a href=#389 id=389 data-nosnippet>389</a>    }
-<a href=#390 id=390 data-nosnippet>390</a>}</code></pre></div></section></main></body></html>
+<a href=#105 id=105 data-nosnippet>105</a>    <span class="kw">fn </span>style(<span class="kw-2">&amp;mut </span><span class="self">self</span>, s: Style) -&gt; io::Result&lt;()&gt; {
+<a href=#106 id=106 data-nosnippet>106</a>        <span class="comment">// Order is important here - if we reset after setting foreground and
+<a href=#107 id=107 data-nosnippet>107</a>        // background colors they are lost.
+<a href=#108 id=108 data-nosnippet>108</a>        </span><span class="kw">if </span>s.attrs.is_empty() {
+<a href=#109 id=109 data-nosnippet>109</a>            <span class="self">self</span>.fp
+<a href=#110 id=110 data-nosnippet>110</a>                .queue(style::SetAttribute(style::Attribute::Reset))<span class="question-mark">?</span>;
+<a href=#111 id=111 data-nosnippet>111</a>        } <span class="kw">else </span>{
+<a href=#112 id=112 data-nosnippet>112</a>            <span class="kw">if </span>s.attrs.bold {
+<a href=#113 id=113 data-nosnippet>113</a>                <span class="self">self</span>.fp.queue(style::SetAttribute(style::Attribute::Bold))<span class="question-mark">?</span>;
+<a href=#114 id=114 data-nosnippet>114</a>            }
+<a href=#115 id=115 data-nosnippet>115</a>            <span class="kw">if </span>s.attrs.crossedout {
+<a href=#116 id=116 data-nosnippet>116</a>                <span class="self">self</span>.fp
+<a href=#117 id=117 data-nosnippet>117</a>                    .queue(style::SetAttribute(style::Attribute::CrossedOut))<span class="question-mark">?</span>;
+<a href=#118 id=118 data-nosnippet>118</a>            }
+<a href=#119 id=119 data-nosnippet>119</a>            <span class="kw">if </span>s.attrs.dim {
+<a href=#120 id=120 data-nosnippet>120</a>                <span class="self">self</span>.fp.queue(style::SetAttribute(style::Attribute::Dim))<span class="question-mark">?</span>;
+<a href=#121 id=121 data-nosnippet>121</a>            }
+<a href=#122 id=122 data-nosnippet>122</a>            <span class="kw">if </span>s.attrs.italic {
+<a href=#123 id=123 data-nosnippet>123</a>                <span class="self">self</span>.fp
+<a href=#124 id=124 data-nosnippet>124</a>                    .queue(style::SetAttribute(style::Attribute::Italic))<span class="question-mark">?</span>;
+<a href=#125 id=125 data-nosnippet>125</a>            }
+<a href=#126 id=126 data-nosnippet>126</a>            <span class="kw">if </span>s.attrs.overline {
+<a href=#127 id=127 data-nosnippet>127</a>                <span class="self">self</span>.fp
+<a href=#128 id=128 data-nosnippet>128</a>                    .queue(style::SetAttribute(style::Attribute::OverLined))<span class="question-mark">?</span>;
+<a href=#129 id=129 data-nosnippet>129</a>            }
+<a href=#130 id=130 data-nosnippet>130</a>            <span class="kw">if </span>s.attrs.underline {
+<a href=#131 id=131 data-nosnippet>131</a>                <span class="self">self</span>.fp
+<a href=#132 id=132 data-nosnippet>132</a>                    .queue(style::SetAttribute(style::Attribute::Underlined))<span class="question-mark">?</span>;
+<a href=#133 id=133 data-nosnippet>133</a>            }
+<a href=#134 id=134 data-nosnippet>134</a>        }
+<a href=#135 id=135 data-nosnippet>135</a>        <span class="self">self</span>.fp
+<a href=#136 id=136 data-nosnippet>136</a>            .queue(style::SetForegroundColor(translate_color(s.fg)))<span class="question-mark">?</span>;
+<a href=#137 id=137 data-nosnippet>137</a>        <span class="self">self</span>.fp
+<a href=#138 id=138 data-nosnippet>138</a>            .queue(style::SetBackgroundColor(translate_color(s.bg)))<span class="question-mark">?</span>;
+<a href=#139 id=139 data-nosnippet>139</a>        <span class="prelude-val">Ok</span>(())
+<a href=#140 id=140 data-nosnippet>140</a>    }
+<a href=#141 id=141 data-nosnippet>141</a>
+<a href=#142 id=142 data-nosnippet>142</a>    <span class="kw">fn </span>text(<span class="kw-2">&amp;mut </span><span class="self">self</span>, loc: Point, txt: <span class="kw-2">&amp;</span>str) -&gt; io::Result&lt;()&gt; {
+<a href=#143 id=143 data-nosnippet>143</a>        <span class="self">self</span>.fp.queue(ccursor::MoveTo(loc.x, loc.y))<span class="question-mark">?</span>;
+<a href=#144 id=144 data-nosnippet>144</a>        <span class="self">self</span>.fp.queue(style::Print(txt))<span class="question-mark">?</span>;
+<a href=#145 id=145 data-nosnippet>145</a>        <span class="prelude-val">Ok</span>(())
+<a href=#146 id=146 data-nosnippet>146</a>    }
+<a href=#147 id=147 data-nosnippet>147</a>}
+<a href=#148 id=148 data-nosnippet>148</a>
+<a href=#149 id=149 data-nosnippet>149</a><span class="kw">impl </span>Default <span class="kw">for </span>CrosstermRender {
+<a href=#150 id=150 data-nosnippet>150</a>    <span class="kw">fn </span>default() -&gt; CrosstermRender {
+<a href=#151 id=151 data-nosnippet>151</a>        CrosstermRender {
+<a href=#152 id=152 data-nosnippet>152</a>            fp: std::io::stderr(),
+<a href=#153 id=153 data-nosnippet>153</a>        }
+<a href=#154 id=154 data-nosnippet>154</a>    }
+<a href=#155 id=155 data-nosnippet>155</a>}
+<a href=#156 id=156 data-nosnippet>156</a>
+<a href=#157 id=157 data-nosnippet>157</a><span class="kw">impl </span>RenderBackend <span class="kw">for </span>CrosstermRender {
+<a href=#158 id=158 data-nosnippet>158</a>    <span class="kw">fn </span>flush(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#159 id=159 data-nosnippet>159</a>        translate_result(<span class="self">self</span>.flush())
+<a href=#160 id=160 data-nosnippet>160</a>    }
+<a href=#161 id=161 data-nosnippet>161</a>
+<a href=#162 id=162 data-nosnippet>162</a>    <span class="kw">fn </span>style(<span class="kw-2">&amp;mut </span><span class="self">self</span>, s: Style) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#163 id=163 data-nosnippet>163</a>        translate_result(<span class="self">self</span>.style(s))
+<a href=#164 id=164 data-nosnippet>164</a>    }
+<a href=#165 id=165 data-nosnippet>165</a>
+<a href=#166 id=166 data-nosnippet>166</a>    <span class="kw">fn </span>text(<span class="kw-2">&amp;mut </span><span class="self">self</span>, loc: Point, txt: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#167 id=167 data-nosnippet>167</a>        translate_result(<span class="self">self</span>.text(loc, txt))
+<a href=#168 id=168 data-nosnippet>168</a>    }
+<a href=#169 id=169 data-nosnippet>169</a>
+<a href=#170 id=170 data-nosnippet>170</a>    <span class="attr">#[allow(unused_must_use)]
+<a href=#171 id=171 data-nosnippet>171</a>    </span><span class="kw">fn </span>exit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, code: i32) -&gt; ! {
+<a href=#172 id=172 data-nosnippet>172</a>        <span class="self">self</span>.fp.execute(terminal::LeaveAlternateScreen);
+<a href=#173 id=173 data-nosnippet>173</a>        <span class="self">self</span>.fp.execute(cevent::DisableMouseCapture);
+<a href=#174 id=174 data-nosnippet>174</a>        <span class="self">self</span>.fp.execute(ccursor::Show);
+<a href=#175 id=175 data-nosnippet>175</a>        terminal::disable_raw_mode();
+<a href=#176 id=176 data-nosnippet>176</a>        exit(code)
+<a href=#177 id=177 data-nosnippet>177</a>    }
+<a href=#178 id=178 data-nosnippet>178</a>
+<a href=#179 id=179 data-nosnippet>179</a>    <span class="kw">fn </span>reset(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#180 id=180 data-nosnippet>180</a>        <span class="prelude-val">Ok</span>(())
+<a href=#181 id=181 data-nosnippet>181</a>    }
+<a href=#182 id=182 data-nosnippet>182</a>}
+<a href=#183 id=183 data-nosnippet>183</a>
+<a href=#184 id=184 data-nosnippet>184</a><span class="kw">fn </span>translate_key_modifiers(mods: cevent::KeyModifiers) -&gt; key::Mods {
+<a href=#185 id=185 data-nosnippet>185</a>    key::Mods {
+<a href=#186 id=186 data-nosnippet>186</a>        shift: mods.contains(cevent::KeyModifiers::SHIFT),
+<a href=#187 id=187 data-nosnippet>187</a>        ctrl: mods.contains(cevent::KeyModifiers::CONTROL),
+<a href=#188 id=188 data-nosnippet>188</a>        alt: mods.contains(cevent::KeyModifiers::ALT),
+<a href=#189 id=189 data-nosnippet>189</a>    }
+<a href=#190 id=190 data-nosnippet>190</a>}
+<a href=#191 id=191 data-nosnippet>191</a>
+<a href=#192 id=192 data-nosnippet>192</a><span class="kw">fn </span>translate_button(b: cevent::MouseButton) -&gt; mouse::Button {
+<a href=#193 id=193 data-nosnippet>193</a>    <span class="kw">match </span>b {
+<a href=#194 id=194 data-nosnippet>194</a>        cevent::MouseButton::Left =&gt; mouse::Button::Left,
+<a href=#195 id=195 data-nosnippet>195</a>        cevent::MouseButton::Right =&gt; mouse::Button::Right,
+<a href=#196 id=196 data-nosnippet>196</a>        cevent::MouseButton::Middle =&gt; mouse::Button::Middle,
+<a href=#197 id=197 data-nosnippet>197</a>    }
+<a href=#198 id=198 data-nosnippet>198</a>}
+<a href=#199 id=199 data-nosnippet>199</a>
+<a href=#200 id=200 data-nosnippet>200</a><span class="doccomment">/// Translate a crossterm event into a canopy event
+<a href=#201 id=201 data-nosnippet>201</a></span><span class="kw">fn </span>translate_event(e: cevent::Event) -&gt; Event {
+<a href=#202 id=202 data-nosnippet>202</a>    <span class="kw">match </span>e {
+<a href=#203 id=203 data-nosnippet>203</a>        cevent::Event::Key(k) =&gt; Event::Key(key::Key {
+<a href=#204 id=204 data-nosnippet>204</a>            mods: translate_key_modifiers(k.modifiers),
+<a href=#205 id=205 data-nosnippet>205</a>            key: <span class="kw">match </span>k.code {
+<a href=#206 id=206 data-nosnippet>206</a>                cevent::KeyCode::Backspace =&gt; key::KeyCode::Backspace,
+<a href=#207 id=207 data-nosnippet>207</a>                cevent::KeyCode::Enter =&gt; key::KeyCode::Enter,
+<a href=#208 id=208 data-nosnippet>208</a>                cevent::KeyCode::Left =&gt; key::KeyCode::Left,
+<a href=#209 id=209 data-nosnippet>209</a>                cevent::KeyCode::Right =&gt; key::KeyCode::Right,
+<a href=#210 id=210 data-nosnippet>210</a>                cevent::KeyCode::Up =&gt; key::KeyCode::Up,
+<a href=#211 id=211 data-nosnippet>211</a>                cevent::KeyCode::Down =&gt; key::KeyCode::Down,
+<a href=#212 id=212 data-nosnippet>212</a>                cevent::KeyCode::Home =&gt; key::KeyCode::Home,
+<a href=#213 id=213 data-nosnippet>213</a>                cevent::KeyCode::End =&gt; key::KeyCode::End,
+<a href=#214 id=214 data-nosnippet>214</a>                cevent::KeyCode::PageUp =&gt; key::KeyCode::PageUp,
+<a href=#215 id=215 data-nosnippet>215</a>                cevent::KeyCode::PageDown =&gt; key::KeyCode::PageDown,
+<a href=#216 id=216 data-nosnippet>216</a>                cevent::KeyCode::Tab =&gt; key::KeyCode::Tab,
+<a href=#217 id=217 data-nosnippet>217</a>                cevent::KeyCode::BackTab =&gt; key::KeyCode::BackTab,
+<a href=#218 id=218 data-nosnippet>218</a>                cevent::KeyCode::Delete =&gt; key::KeyCode::Delete,
+<a href=#219 id=219 data-nosnippet>219</a>                cevent::KeyCode::Insert =&gt; key::KeyCode::Insert,
+<a href=#220 id=220 data-nosnippet>220</a>                cevent::KeyCode::F(x) =&gt; key::KeyCode::F(x),
+<a href=#221 id=221 data-nosnippet>221</a>                cevent::KeyCode::Char(c) =&gt; key::KeyCode::Char(c),
+<a href=#222 id=222 data-nosnippet>222</a>                cevent::KeyCode::Null =&gt; key::KeyCode::Null,
+<a href=#223 id=223 data-nosnippet>223</a>                cevent::KeyCode::Esc =&gt; key::KeyCode::Esc,
+<a href=#224 id=224 data-nosnippet>224</a>                cevent::KeyCode::CapsLock =&gt; key::KeyCode::CapsLock,
+<a href=#225 id=225 data-nosnippet>225</a>                cevent::KeyCode::ScrollLock =&gt; key::KeyCode::ScrollLock,
+<a href=#226 id=226 data-nosnippet>226</a>                cevent::KeyCode::NumLock =&gt; key::KeyCode::NumLock,
+<a href=#227 id=227 data-nosnippet>227</a>                cevent::KeyCode::PrintScreen =&gt; key::KeyCode::PrintScreen,
+<a href=#228 id=228 data-nosnippet>228</a>                cevent::KeyCode::Pause =&gt; key::KeyCode::Pause,
+<a href=#229 id=229 data-nosnippet>229</a>                cevent::KeyCode::Menu =&gt; key::KeyCode::Menu,
+<a href=#230 id=230 data-nosnippet>230</a>                cevent::KeyCode::KeypadBegin =&gt; key::KeyCode::KeypadBegin,
+<a href=#231 id=231 data-nosnippet>231</a>                cevent::KeyCode::Media(k) =&gt; key::KeyCode::Media(<span class="kw">match </span>k {
+<a href=#232 id=232 data-nosnippet>232</a>                    cevent::MediaKeyCode::Play =&gt; key::MediaKeyCode::Play,
+<a href=#233 id=233 data-nosnippet>233</a>                    cevent::MediaKeyCode::Pause =&gt; key::MediaKeyCode::Play,
+<a href=#234 id=234 data-nosnippet>234</a>                    cevent::MediaKeyCode::PlayPause =&gt; key::MediaKeyCode::PlayPause,
+<a href=#235 id=235 data-nosnippet>235</a>                    cevent::MediaKeyCode::Reverse =&gt; key::MediaKeyCode::Reverse,
+<a href=#236 id=236 data-nosnippet>236</a>                    cevent::MediaKeyCode::Stop =&gt; key::MediaKeyCode::Stop,
+<a href=#237 id=237 data-nosnippet>237</a>                    cevent::MediaKeyCode::FastForward =&gt; key::MediaKeyCode::FastForward,
+<a href=#238 id=238 data-nosnippet>238</a>                    cevent::MediaKeyCode::Rewind =&gt; key::MediaKeyCode::Rewind,
+<a href=#239 id=239 data-nosnippet>239</a>                    cevent::MediaKeyCode::TrackNext =&gt; key::MediaKeyCode::TrackNext,
+<a href=#240 id=240 data-nosnippet>240</a>                    cevent::MediaKeyCode::TrackPrevious =&gt; key::MediaKeyCode::TrackPrevious,
+<a href=#241 id=241 data-nosnippet>241</a>                    cevent::MediaKeyCode::Record =&gt; key::MediaKeyCode::Record,
+<a href=#242 id=242 data-nosnippet>242</a>                    cevent::MediaKeyCode::LowerVolume =&gt; key::MediaKeyCode::LowerVolume,
+<a href=#243 id=243 data-nosnippet>243</a>                    cevent::MediaKeyCode::RaiseVolume =&gt; key::MediaKeyCode::RaiseVolume,
+<a href=#244 id=244 data-nosnippet>244</a>                    cevent::MediaKeyCode::MuteVolume =&gt; key::MediaKeyCode::MuteVolume,
+<a href=#245 id=245 data-nosnippet>245</a>                }),
+<a href=#246 id=246 data-nosnippet>246</a>                cevent::KeyCode::Modifier(m) =&gt; key::KeyCode::Modifier(<span class="kw">match </span>m {
+<a href=#247 id=247 data-nosnippet>247</a>                    cevent::ModifierKeyCode::LeftShift =&gt; key::ModifierKeyCode::LeftShift,
+<a href=#248 id=248 data-nosnippet>248</a>                    cevent::ModifierKeyCode::LeftControl =&gt; key::ModifierKeyCode::LeftControl,
+<a href=#249 id=249 data-nosnippet>249</a>                    cevent::ModifierKeyCode::LeftAlt =&gt; key::ModifierKeyCode::LeftAlt,
+<a href=#250 id=250 data-nosnippet>250</a>                    cevent::ModifierKeyCode::LeftSuper =&gt; key::ModifierKeyCode::LeftSuper,
+<a href=#251 id=251 data-nosnippet>251</a>                    cevent::ModifierKeyCode::LeftHyper =&gt; key::ModifierKeyCode::LeftHyper,
+<a href=#252 id=252 data-nosnippet>252</a>                    cevent::ModifierKeyCode::LeftMeta =&gt; key::ModifierKeyCode::LeftMeta,
+<a href=#253 id=253 data-nosnippet>253</a>                    cevent::ModifierKeyCode::RightShift =&gt; key::ModifierKeyCode::RightShift,
+<a href=#254 id=254 data-nosnippet>254</a>                    cevent::ModifierKeyCode::RightControl =&gt; key::ModifierKeyCode::RightControl,
+<a href=#255 id=255 data-nosnippet>255</a>                    cevent::ModifierKeyCode::RightAlt =&gt; key::ModifierKeyCode::RightAlt,
+<a href=#256 id=256 data-nosnippet>256</a>                    cevent::ModifierKeyCode::RightSuper =&gt; key::ModifierKeyCode::RightSuper,
+<a href=#257 id=257 data-nosnippet>257</a>                    cevent::ModifierKeyCode::RightHyper =&gt; key::ModifierKeyCode::RightHyper,
+<a href=#258 id=258 data-nosnippet>258</a>                    cevent::ModifierKeyCode::RightMeta =&gt; key::ModifierKeyCode::RightMeta,
+<a href=#259 id=259 data-nosnippet>259</a>                    cevent::ModifierKeyCode::IsoLevel3Shift =&gt; key::ModifierKeyCode::IsoLevel3Shift,
+<a href=#260 id=260 data-nosnippet>260</a>                    cevent::ModifierKeyCode::IsoLevel5Shift =&gt; key::ModifierKeyCode::IsoLevel5Shift,
+<a href=#261 id=261 data-nosnippet>261</a>                }),
+<a href=#262 id=262 data-nosnippet>262</a>            },
+<a href=#263 id=263 data-nosnippet>263</a>        }),
+<a href=#264 id=264 data-nosnippet>264</a>        cevent::Event::Mouse(m) =&gt; {
+<a href=#265 id=265 data-nosnippet>265</a>            <span class="kw">let </span><span class="kw-2">mut </span>button = mouse::Button::None;
+<a href=#266 id=266 data-nosnippet>266</a>            <span class="kw">let </span>action = <span class="kw">match </span>m.kind {
+<a href=#267 id=267 data-nosnippet>267</a>                cevent::MouseEventKind::Down(b) =&gt; {
+<a href=#268 id=268 data-nosnippet>268</a>                    button = translate_button(b);
+<a href=#269 id=269 data-nosnippet>269</a>                    mouse::Action::Down
+<a href=#270 id=270 data-nosnippet>270</a>                }
+<a href=#271 id=271 data-nosnippet>271</a>                cevent::MouseEventKind::Up(b) =&gt; {
+<a href=#272 id=272 data-nosnippet>272</a>                    button = translate_button(b);
+<a href=#273 id=273 data-nosnippet>273</a>                    mouse::Action::Up
+<a href=#274 id=274 data-nosnippet>274</a>                }
+<a href=#275 id=275 data-nosnippet>275</a>                cevent::MouseEventKind::Drag(b) =&gt; {
+<a href=#276 id=276 data-nosnippet>276</a>                    button = translate_button(b);
+<a href=#277 id=277 data-nosnippet>277</a>                    mouse::Action::Drag
+<a href=#278 id=278 data-nosnippet>278</a>                }
+<a href=#279 id=279 data-nosnippet>279</a>                cevent::MouseEventKind::Moved =&gt; mouse::Action::Moved,
+<a href=#280 id=280 data-nosnippet>280</a>                cevent::MouseEventKind::ScrollDown =&gt; mouse::Action::ScrollDown,
+<a href=#281 id=281 data-nosnippet>281</a>                cevent::MouseEventKind::ScrollUp =&gt; mouse::Action::ScrollUp,
+<a href=#282 id=282 data-nosnippet>282</a>                cevent::MouseEventKind::ScrollLeft =&gt; mouse::Action::ScrollLeft,
+<a href=#283 id=283 data-nosnippet>283</a>                cevent::MouseEventKind::ScrollRight =&gt; mouse::Action::ScrollRight,
+<a href=#284 id=284 data-nosnippet>284</a>            };
+<a href=#285 id=285 data-nosnippet>285</a>            Event::Mouse(mouse::MouseEvent {
+<a href=#286 id=286 data-nosnippet>286</a>                button,
+<a href=#287 id=287 data-nosnippet>287</a>                action,
+<a href=#288 id=288 data-nosnippet>288</a>                location: Point {
+<a href=#289 id=289 data-nosnippet>289</a>                    x: m.column,
+<a href=#290 id=290 data-nosnippet>290</a>                    y: m.row,
+<a href=#291 id=291 data-nosnippet>291</a>                },
+<a href=#292 id=292 data-nosnippet>292</a>                modifiers: translate_key_modifiers(m.modifiers),
+<a href=#293 id=293 data-nosnippet>293</a>            })
+<a href=#294 id=294 data-nosnippet>294</a>        }
+<a href=#295 id=295 data-nosnippet>295</a>        cevent::Event::Resize(x, y) =&gt; Event::Resize(Expanse::new(x, y)),
+<a href=#296 id=296 data-nosnippet>296</a>        cevent::Event::FocusGained =&gt; Event::FocusGained,
+<a href=#297 id=297 data-nosnippet>297</a>        cevent::Event::FocusLost =&gt; Event::FocusLost,
+<a href=#298 id=298 data-nosnippet>298</a>        cevent::Event::Paste(s) =&gt; Event::Paste(s),
+<a href=#299 id=299 data-nosnippet>299</a>    }
+<a href=#300 id=300 data-nosnippet>300</a>}
+<a href=#301 id=301 data-nosnippet>301</a>
+<a href=#302 id=302 data-nosnippet>302</a><span class="kw">fn </span>event_emitter(evt_tx: mpsc::Sender&lt;Event&gt;) {
+<a href=#303 id=303 data-nosnippet>303</a>    thread::spawn(<span class="kw">move </span>|| <span class="kw">loop </span>{
+<a href=#304 id=304 data-nosnippet>304</a>        <span class="kw">match </span>cevent::read() {
+<a href=#305 id=305 data-nosnippet>305</a>            <span class="prelude-val">Ok</span>(evt) =&gt; {
+<a href=#306 id=306 data-nosnippet>306</a>                <span class="kw">let </span>ret = evt_tx.send(translate_event(evt));
+<a href=#307 id=307 data-nosnippet>307</a>                <span class="kw">if </span>ret.is_err() {
+<a href=#308 id=308 data-nosnippet>308</a>                    <span class="comment">// FIXME: Do a bit more work here. Restore context,
+<a href=#309 id=309 data-nosnippet>309</a>                    // exit.
+<a href=#310 id=310 data-nosnippet>310</a>                    </span><span class="kw">return</span>;
+<a href=#311 id=311 data-nosnippet>311</a>                }
+<a href=#312 id=312 data-nosnippet>312</a>            }
+<a href=#313 id=313 data-nosnippet>313</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
+<a href=#314 id=314 data-nosnippet>314</a>                <span class="comment">// FIXME: Do a bit more work here. Restore context,
+<a href=#315 id=315 data-nosnippet>315</a>                // exit.
+<a href=#316 id=316 data-nosnippet>316</a>                </span><span class="kw">return</span>;
+<a href=#317 id=317 data-nosnippet>317</a>            }
+<a href=#318 id=318 data-nosnippet>318</a>        }
+<a href=#319 id=319 data-nosnippet>319</a>    });
+<a href=#320 id=320 data-nosnippet>320</a>}
+<a href=#321 id=321 data-nosnippet>321</a>
+<a href=#322 id=322 data-nosnippet>322</a><span class="kw">pub fn </span>runloop&lt;N&gt;(<span class="kw-2">mut </span>cnpy: Canopy, <span class="kw-2">mut </span>root: N) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt;
+<a href=#323 id=323 data-nosnippet>323</a><span class="kw">where
+<a href=#324 id=324 data-nosnippet>324</a>    </span>N: Node,
+<a href=#325 id=325 data-nosnippet>325</a>{
+<a href=#326 id=326 data-nosnippet>326</a>    <span class="kw">let </span><span class="kw-2">mut </span>be = CrosstermRender::default();
+<a href=#327 id=327 data-nosnippet>327</a>    <span class="kw">let </span>ctrl = CrosstermControl::default();
+<a href=#328 id=328 data-nosnippet>328</a>
+<a href=#329 id=329 data-nosnippet>329</a>    translate_result(terminal::enable_raw_mode())<span class="question-mark">?</span>;
+<a href=#330 id=330 data-nosnippet>330</a>    <span class="kw">let </span><span class="kw-2">mut </span>w = std::io::stderr();
+<a href=#331 id=331 data-nosnippet>331</a>
+<a href=#332 id=332 data-nosnippet>332</a>    translate_result(<span class="macro">crossterm::execute!</span>(
+<a href=#333 id=333 data-nosnippet>333</a>        w,
+<a href=#334 id=334 data-nosnippet>334</a>        terminal::EnterAlternateScreen,
+<a href=#335 id=335 data-nosnippet>335</a>        cevent::EnableMouseCapture,
+<a href=#336 id=336 data-nosnippet>336</a>        ccursor::Hide
+<a href=#337 id=337 data-nosnippet>337</a>    ))<span class="question-mark">?</span>;
+<a href=#338 id=338 data-nosnippet>338</a>
+<a href=#339 id=339 data-nosnippet>339</a>    <span class="macro">defer!</span> {
+<a href=#340 id=340 data-nosnippet>340</a>        <span class="kw">let </span><span class="kw-2">mut </span>stderr = std::io::stderr();
+<a href=#341 id=341 data-nosnippet>341</a>        <span class="attr">#[allow(unused_must_use)]
+<a href=#342 id=342 data-nosnippet>342</a>        </span>{
+<a href=#343 id=343 data-nosnippet>343</a>            <span class="macro">crossterm::execute!</span>(stderr, terminal::LeaveAlternateScreen, cevent::DisableMouseCapture, ccursor::Show);
+<a href=#344 id=344 data-nosnippet>344</a>            terminal::disable_raw_mode();
+<a href=#345 id=345 data-nosnippet>345</a>        }
+<a href=#346 id=346 data-nosnippet>346</a>    }
+<a href=#347 id=347 data-nosnippet>347</a>
+<a href=#348 id=348 data-nosnippet>348</a>    panic::set_hook(Box::new(|pi| {
+<a href=#349 id=349 data-nosnippet>349</a>        <span class="kw">let </span><span class="kw-2">mut </span>stderr = std::io::stderr();
+<a href=#350 id=350 data-nosnippet>350</a>        <span class="attr">#[allow(unused_must_use)]
+<a href=#351 id=351 data-nosnippet>351</a>        </span>{
+<a href=#352 id=352 data-nosnippet>352</a>            <span class="macro">crossterm::execute!</span>(
+<a href=#353 id=353 data-nosnippet>353</a>                stderr,
+<a href=#354 id=354 data-nosnippet>354</a>                terminal::LeaveAlternateScreen,
+<a href=#355 id=355 data-nosnippet>355</a>                cevent::DisableMouseCapture,
+<a href=#356 id=356 data-nosnippet>356</a>                ccursor::Show
+<a href=#357 id=357 data-nosnippet>357</a>            );
+<a href=#358 id=358 data-nosnippet>358</a>            terminal::disable_raw_mode();
+<a href=#359 id=359 data-nosnippet>359</a>            BacktracePrinter::new().print_panic_info(pi, <span class="kw-2">&amp;mut </span>default_output_stream());
+<a href=#360 id=360 data-nosnippet>360</a>        }
+<a href=#361 id=361 data-nosnippet>361</a>    }));
+<a href=#362 id=362 data-nosnippet>362</a>
+<a href=#363 id=363 data-nosnippet>363</a>    <span class="kw">let </span>rx = <span class="kw">if let </span><span class="prelude-val">Some</span>(x) = cnpy.event_rx.take() {
+<a href=#364 id=364 data-nosnippet>364</a>        x
+<a href=#365 id=365 data-nosnippet>365</a>    } <span class="kw">else </span>{
+<a href=#366 id=366 data-nosnippet>366</a>        <span class="macro">panic!</span>(<span class="string">"core event loop already initialized"</span>)
+<a href=#367 id=367 data-nosnippet>367</a>    };
+<a href=#368 id=368 data-nosnippet>368</a>
+<a href=#369 id=369 data-nosnippet>369</a>    <span class="kw">let </span>events = EventSource::new(rx);
+<a href=#370 id=370 data-nosnippet>370</a>    event_emitter(cnpy.event_tx.clone());
+<a href=#371 id=371 data-nosnippet>371</a>    <span class="kw">let </span>size = translate_result(terminal::size())<span class="question-mark">?</span>;
+<a href=#372 id=372 data-nosnippet>372</a>    cnpy.register_backend(ctrl);
+<a href=#373 id=373 data-nosnippet>373</a>    cnpy.set_root_size(Expanse::new(size.<span class="number">0</span>, size.<span class="number">1</span>), <span class="kw-2">&amp;mut </span>root)<span class="question-mark">?</span>;
+<a href=#374 id=374 data-nosnippet>374</a>    cnpy.start_poller(cnpy.event_tx.clone());
+<a href=#375 id=375 data-nosnippet>375</a>
+<a href=#376 id=376 data-nosnippet>376</a>    cnpy.render(<span class="kw-2">&amp;mut </span>be, <span class="kw-2">&amp;mut </span>root)<span class="question-mark">?</span>;
+<a href=#377 id=377 data-nosnippet>377</a>    translate_result(be.flush())<span class="question-mark">?</span>;
+<a href=#378 id=378 data-nosnippet>378</a>
+<a href=#379 id=379 data-nosnippet>379</a>    <span class="kw">loop </span>{
+<a href=#380 id=380 data-nosnippet>380</a>        cnpy.event(<span class="kw-2">&amp;mut </span>root, events.next()<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+<a href=#381 id=381 data-nosnippet>381</a>
+<a href=#382 id=382 data-nosnippet>382</a>        <span class="kw">if </span>cnpy.taint || cnpy.focus_changed() {
+<a href=#383 id=383 data-nosnippet>383</a>            cnpy.render(<span class="kw-2">&amp;mut </span>be, <span class="kw-2">&amp;mut </span>root)<span class="question-mark">?</span>;
+<a href=#384 id=384 data-nosnippet>384</a>            translate_result(be.flush())<span class="question-mark">?</span>;
+<a href=#385 id=385 data-nosnippet>385</a>            cnpy.taint = <span class="bool-val">false</span>;
+<a href=#386 id=386 data-nosnippet>386</a>        }
+<a href=#387 id=387 data-nosnippet>387</a>    }
+<a href=#388 id=388 data-nosnippet>388</a>}</code></pre></div></section></main></body></html>
