@@ -1,7 +1,6 @@
 #[cfg(test)]
 use crate::geom::Expanse;
 use crate::{
-    cursor,
     geom::Point,
     render::RenderBackend,
     style::{Style, StyleManager},
@@ -69,14 +68,6 @@ impl RenderBackend for TestRender {
     }
 
     fn flush(&mut self) -> Result<()> {
-        Ok(())
-    }
-
-    fn show_cursor(&mut self, _c: cursor::Cursor) -> Result<()> {
-        Ok(())
-    }
-
-    fn hide_cursor(&mut self) -> Result<()> {
         Ok(())
     }
 
@@ -153,14 +144,6 @@ impl RenderBackend for CanvasRender {
     }
 
     fn flush(&mut self) -> Result<()> {
-        Ok(())
-    }
-
-    fn show_cursor(&mut self, _c: cursor::Cursor) -> Result<()> {
-        Ok(())
-    }
-
-    fn hide_cursor(&mut self) -> Result<()> {
         Ok(())
     }
 
