@@ -378,7 +378,6 @@ where
 
     loop {
         cnpy.event(&mut root, events.next()?)?;
-
         if cnpy.taint || cnpy.focus_changed() {
             cnpy.render(&mut be, &mut root)?;
             translate_result(be.flush())?;

@@ -163,13 +163,11 @@ where
 
         // Our child is always positioned in our upper-left corner, so negative
         // space is to the right and below.
-        for r in self
-            .vp()
-            .view()
-            .inner(1)
-            .sub(&self.vp().unproject(self.child.vp().screen_rect())?)
-        {
-            rndr.fill(style, r, ' ')?;
+        let inner = self.vp().view().inner(1);
+        if let Ok(child_rect) = self.vp().unproject(self.child.vp().screen_rect()) {
+            for r in inner.sub(&child_rect) {
+                rndr.fill(style, r, ' ')?;
+            }
         }
 
         Ok(())

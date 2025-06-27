@@ -57,7 +57,8 @@ impl<N: Node + Loader> Harness<N> {
     where
         T: Into<key::Key>,
     {
-        self.core.key(&mut self.root, k)
+        self.core.key(&mut self.root, k)?;
+        self.core.render(&mut self.render, &mut self.root)
     }
 
     pub fn render(&mut self) -> Result<()> {
@@ -93,9 +94,30 @@ impl<N: Node + Loader> Harness<N> {
 
     pub fn expect_highlight(&self, txt: &str) {
         use crate::style::{solarized, PartialStyle};
+        let buf = self.buf();
+
+        // Debug helper: if assertion will fail, print what's in the buffer
+        if !buf.contains_text_style(txt, &PartialStyle::fg(solarized::BLUE)) {
+            eprintln!("Debug: Text '{}' not found with blue highlight", txt);
+            // First check if the text exists at all
+            if buf.contains_text(txt) {
+                eprintln!(
+                    "  Text '{}' exists in buffer but without blue highlight!",
+                    txt
+                );
+            } else {
+                eprintln!("  Text '{}' not found in buffer at all!", txt);
+            }
+            eprintln!("Buffer contents:");
+            for (i, line) in buf.lines().iter().enumerate() {
+                if !line.trim().is_empty() {
+                    eprintln!("  Line {}: '{}'", i, line.trim());
+                }
+            }
+        }
+
         assert!(
-            self.buf()
-                .contains_text_style(txt, &PartialStyle::fg(solarized::BLUE)),
+            buf.contains_text_style(txt, &PartialStyle::fg(solarized::BLUE)),
             "render buffer missing highlighted '{txt}'"
         );
     }

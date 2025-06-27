@@ -112,6 +112,7 @@ impl Todo {
         if let Some(t) = lst.selected() {
             store::get().delete_todo(t.todo.id).unwrap();
             lst.delete_selected(c);
+            c.taint_tree(self);
         }
         Ok(())
     }
@@ -123,10 +124,13 @@ impl Todo {
             if !value.is_empty() {
                 let item = store::get().add_todo(&value).unwrap();
                 self.content.child.append(TodoItem::new(item));
+                // Select the newly added item (which is the last one)
+                let new_index = self.content.child.len().saturating_sub(1);
+                self.content.child.select(new_index);
             }
         }
         c.taint_tree(self);
-        c.focus_first(self);
+        c.set_focus(&mut self.content);
         Ok(())
     }
 
@@ -144,6 +148,40 @@ impl Todo {
         for i in todos {
             self.content.child.append(i);
         }
+        // Select the first item if any exist
+        if self.content.child.len() > 0 {
+            self.content.child.select(0);
+        }
+        Ok(())
+    }
+
+    #[command]
+    pub fn select_first(&mut self, c: &mut dyn Context) -> canopy::Result<()> {
+        self.content.child.select_first(c);
+        Ok(())
+    }
+
+    #[command]
+    pub fn select_next(&mut self, c: &mut dyn Context) -> canopy::Result<()> {
+        self.content.child.select_next(c);
+        Ok(())
+    }
+
+    #[command]
+    pub fn select_prev(&mut self, c: &mut dyn Context) -> canopy::Result<()> {
+        self.content.child.select_prev(c);
+        Ok(())
+    }
+
+    #[command]
+    pub fn page_down(&mut self, c: &mut dyn Context) -> canopy::Result<()> {
+        self.content.child.page_down(c);
+        Ok(())
+    }
+
+    #[command]
+    pub fn page_up(&mut self, c: &mut dyn Context) -> canopy::Result<()> {
+        self.content.child.page_up(c);
         Ok(())
     }
 }
@@ -195,6 +233,8 @@ pub fn style(cnpy: &mut Canopy) {
         Some(solarized::BASE1),
         None,
     );
+    // Ensure text under blue layer gets blue foreground
+    cnpy.style.add_fg("blue/text", solarized::BLUE);
 }
 
 pub fn bind_keys(cnpy: &mut Canopy) {
@@ -203,16 +243,16 @@ pub fn bind_keys(cnpy: &mut Canopy) {
         .key('q', "root::quit()")
         .key('d', "todo::delete_item()")
         .key('a', "todo::enter_item()")
-        .key('g', "list::select_first()")
-        .key('j', "list::select_next()")
-        .key(key::KeyCode::Down, "list::select_next()")
-        .key('k', "list::select_prev()")
-        .key(key::KeyCode::Up, "list::select_prev()")
-        .key(' ', "list::page_down()")
-        .key(key::KeyCode::PageDown, "list::page_down()")
-        .key(key::KeyCode::PageUp, "list::page_up()")
-        .mouse(mouse::Action::ScrollUp, "list::select_prev()")
-        .mouse(mouse::Action::ScrollDown, "list::select_next()")
+        .key('g', "todo::select_first()")
+        .key('j', "todo::select_next()")
+        .key(key::KeyCode::Down, "todo::select_next()")
+        .key('k', "todo::select_prev()")
+        .key(key::KeyCode::Up, "todo::select_prev()")
+        .key(' ', "todo::page_down()")
+        .key(key::KeyCode::PageDown, "todo::page_down()")
+        .key(key::KeyCode::PageUp, "todo::page_up()")
+        .mouse(mouse::Action::ScrollUp, "todo::select_prev()")
+        .mouse(mouse::Action::ScrollDown, "todo::select_next()")
         .with_path("input")
         .defaults::<Input>()
         .key(key::KeyCode::Enter, "todo::accept_add()")

@@ -153,10 +153,6 @@ where
             if self.ensure_selected_in_view(core) {
                 core.taint(self);
             }
-            // Force a viewport update in case item visibility changed but
-            // expectrl didn't trigger a redraw when driving the app manually.
-            let view = self.vp().view();
-            core.scroll_to(self, view.tl.x, view.tl.y);
         }
 
         core.taint_tree(self);
@@ -170,8 +166,10 @@ where
         }
         let virt = self.items[self.offset].virt;
         let view = self.vp().view();
+        // Check if the selected item is fully visible
         if let Some(v) = virt.vextent().intersection(&view.vextent()) {
             if v.len == virt.h {
+                // Item is fully visible, no need to scroll
                 return false;
             }
         }
@@ -229,7 +227,11 @@ where
     /// Move selection to the next item in the list, if possible.
     #[command]
     pub fn select_first(&mut self, c: &mut dyn Context) {
+        if self.is_empty() {
+            return;
+        }
         let changed = self.select(0);
+        // Don't scroll - just ensure the selected item is in view
         let scrolled = self.ensure_selected_in_view(c);
         if changed || scrolled {
             c.taint(self);
@@ -336,7 +338,7 @@ where
         }
         l.size(self, Expanse { w, h }, r)?;
         let vp = self.vp();
-        for itm in &mut self.items {
+        for (_idx, itm) in self.items.iter_mut().enumerate() {
             if let Some(child_vp) = vp.map(itm.virt)? {
                 {
                     let st = itm.itm.state_mut();
