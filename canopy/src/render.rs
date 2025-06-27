@@ -1,5 +1,5 @@
 use crate::{
-    cursor, geom,
+    geom,
     style::Style,
     style::{StyleManager, StyleMap},
     Result, ViewPort,
@@ -11,10 +11,6 @@ pub trait RenderBackend {
     fn style(&mut self, style: Style) -> Result<()>;
     /// Output text to screen. This method is used for all text output.
     fn text(&mut self, loc: geom::Point, txt: &str) -> Result<()>;
-    /// Show the terminal cursor.
-    fn show_cursor(&mut self, c: cursor::Cursor) -> Result<()>;
-    /// Hide the terminal cursor.
-    fn hide_cursor(&mut self) -> Result<()>;
     /// Flush output to the terminal.
     fn flush(&mut self) -> Result<()>;
     /// Exit the process, relinquishing screen control.
@@ -32,23 +28,6 @@ pub struct Render<'a> {
     base: geom::Point,
 }
 
-/// Show the cursor with a specified style
-pub(crate) fn show_cursor(
-    backend: &mut dyn RenderBackend,
-    smap: &StyleMap,
-    styleman: &mut StyleManager,
-    viewport: ViewPort,
-    style: &str,
-    c: cursor::Cursor,
-) -> Result<()> {
-    if let Some(loc) = viewport.project_point(c.location) {
-        let mut c = c;
-        c.location = loc;
-        backend.style(styleman.get(smap, style))?;
-        backend.show_cursor(c)?;
-    }
-    Ok(())
-}
 
 impl<'a> Render<'a> {
     pub fn new(

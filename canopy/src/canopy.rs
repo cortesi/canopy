@@ -11,7 +11,7 @@ use crate::{
     node::Node,
     path::*,
     poll::Poller,
-    render::{show_cursor, RenderBackend},
+    render::RenderBackend,
     script,
     style::{solarized, StyleManager, StyleMap},
     tree::*,
@@ -602,7 +602,7 @@ impl Canopy {
     /// Pre-render sweep of the tree.
     pub(crate) fn pre_render<R: RenderBackend>(
         &mut self,
-        r: &mut R,
+        _r: &mut R,
         root: &mut dyn Node,
     ) -> Result<()> {
         let mut seen = false;
@@ -630,9 +630,7 @@ impl Canopy {
             })?;
         }
 
-        // The cursor is disabled before every render sweep, otherwise we would
-        // see it visibly on screen during redraws.
-        r.hide_cursor()?;
+        // Cursor rendering is handled virtually, so nothing to disable here
         Ok(())
     }
 
@@ -711,8 +709,8 @@ impl Canopy {
     /// Post-render sweep of the tree.
     pub(crate) fn post_render<R: RenderBackend>(
         &self,
-        r: &mut R,
-        styl: &mut StyleManager,
+        _r: &mut R,
+        _styl: &mut StyleManager,
         root: &mut dyn Node,
     ) -> Result<()> {
         let mut cn: Option<(NodeId, ViewPort, cursor::Cursor)> = None;
@@ -725,8 +723,8 @@ impl Canopy {
                 Walk::Continue
             })
         })?;
-        if let Some((_nid, vp, c)) = cn {
-            show_cursor(r, &self.style, styl, vp, "cursor", c + vp.position())?;
+        if let Some((_nid, _vp, _c)) = cn {
+            // TODO: render virtual cursor here
         }
 
         Ok(())
