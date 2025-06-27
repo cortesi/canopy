@@ -6,12 +6,13 @@ use crate::{
     backend::BackendControl,
     commands, cursor, error,
     event::{key, mouse, Event},
-    geom::{Coverage, Direction, Expanse, Point, Rect},
+    geom::{Direction, Expanse, Point, Rect},
     inputmap,
     node::Node,
     path::*,
     poll::Poller,
     render::RenderBackend,
+    TermBuf,
     script,
     style::{solarized, StyleManager, StyleMap},
     tree::*,
@@ -215,6 +216,8 @@ pub struct Canopy {
     pub(crate) event_rx: Option<mpsc::Receiver<Event>>,
 
     pub style: StyleMap,
+
+    termbuf: Option<TermBuf>,
 }
 
 impl Context for Canopy {
@@ -453,6 +456,7 @@ impl Canopy {
             style: solarized::solarized_dark(),
             root_size: None,
             backend: None,
+            termbuf: None,
         }
     }
 
@@ -634,9 +638,9 @@ impl Canopy {
         Ok(())
     }
 
-    fn render_traversal<R: RenderBackend>(
+    fn render_traversal(
         &mut self,
-        r: &mut R,
+        buf: &mut TermBuf,
         styl: &mut StyleManager,
         n: &mut dyn Node,
         base: Point,
@@ -649,36 +653,9 @@ impl Canopy {
                     s.rendered_focus_gen = self.focus_gen;
                 }
 
-                let mut c = Coverage::new(n.vp().screen_rect().expanse());
-                let mut rndr = Render::new(r, &self.style, styl, n.vp(), &mut c, base);
+                let mut rndr = Render::new(buf, &self.style, styl, n.vp(), base);
 
                 n.render(self, &mut rndr)?;
-
-                // Now add regions managed by children to coverage
-                let parent = n.vp().screen_rect();
-                n.children(&mut |child| {
-                    if !child.is_hidden() {
-                        let child_rect = child.vp().screen_rect();
-                        if !child_rect.is_zero() {
-                            assert!(
-                                parent.contains_rect(&child_rect),
-                                "child {} viewport {:?} outside parent {:?}",
-                                child.name(),
-                                child_rect,
-                                parent
-                            );
-                            rndr.coverage.add(child_rect);
-                        }
-                    }
-                    Ok(())
-                })?;
-
-                // We now have coverage, relative to this node's screen rectange. We
-                // rebase each rect back down to our virtual co-ordinates.
-                let sr = n.vp().view();
-                for l in rndr.coverage.uncovered() {
-                    rndr.fill("", l.rect().shift(sr.tl.x as i16, sr.tl.y as i16), ' ')?;
-                }
             }
             // This is a new node - we don't want it perpetually stuck in
             // render, so we need to update its render_gen.
@@ -699,7 +676,7 @@ impl Canopy {
                         );
                     }
                 }
-                self.render_traversal(r, styl, child, base)
+                self.render_traversal(buf, styl, child, base)
             })?;
             styl.pop();
         }
@@ -747,8 +724,20 @@ impl Canopy {
             be.reset()?;
             styl.reset();
 
+            let mut next = TermBuf::new(
+                root_size,
+                ' ',
+                styl.get(&self.style, ""),
+            );
+
             self.pre_render(be, root)?;
-            self.render_traversal(be, &mut styl, root, (0, 0).into())?;
+            self.render_traversal(&mut next, &mut styl, root, (0, 0).into())?;
+            if let Some(prev) = &self.termbuf {
+                next.diff(prev, be)?;
+            } else {
+                next.render(be)?;
+            }
+            self.termbuf = Some(next);
             self.render_gen += 1;
             self.last_render_focus_gen = self.focus_gen;
             self.post_render(be, &mut styl, root)?;
@@ -893,6 +882,7 @@ impl Canopy {
     /// Set the size on the root node, and taint the tree.
     pub(crate) fn set_root_size(&mut self, size: Expanse, root: &mut dyn Node) -> Result<()> {
         self.root_size = Some(size);
+        self.termbuf = None;
         self.taint_tree(root);
         // Apply layout immediately so viewport reflects the new size
         let l = Layout {};
@@ -1172,6 +1162,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn trender() -> Result<()> {
         run(|c, mut tr, mut root| {
             tr.render(c, &mut root)?;

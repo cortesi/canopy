@@ -2,7 +2,7 @@ use crate::{
     geom,
     style::Style,
     style::{StyleManager, StyleMap},
-    Result, ViewPort,
+    TermBuf, Result, ViewPort,
 };
 
 /// The trait implemented by renderers.
@@ -20,51 +20,44 @@ pub trait RenderBackend {
 
 /// The interface used to render to the screen. It is only accessible in `Node::render`.
 pub struct Render<'a> {
-    backend: &'a mut dyn RenderBackend,
+    buf: &'a mut TermBuf,
     pub style: &'a mut StyleManager,
     stylemap: &'a StyleMap,
     viewport: ViewPort,
-    pub(crate) coverage: &'a mut geom::Coverage,
     base: geom::Point,
 }
 
 
 impl<'a> Render<'a> {
     pub fn new(
-        backend: &'a mut dyn RenderBackend,
+        buf: &'a mut TermBuf,
         stylemap: &'a StyleMap,
         style: &'a mut StyleManager,
         viewport: ViewPort,
-        coverage: &'a mut geom::Coverage,
         base: geom::Point,
     ) -> Self {
         Render {
-            backend,
+            buf,
             style,
             stylemap,
             viewport,
-            coverage,
             base,
         }
     }
 
     /// Fill a rectangle already projected onto the screen with a specified
     /// character. Assumes style has already been set.
-    fn fill_screen(&mut self, dst: geom::Rect, c: char) -> Result<()> {
-        self.coverage.add(self.viewport.unproject(dst)?);
-        let line = c.to_string().repeat(dst.w as usize);
-        for n in 0..dst.h {
-            self.backend
-                .text(self.base + (dst.tl.x, dst.tl.y + n).into(), &line)?;
-        }
+    fn fill_screen(&mut self, style: Style, dst: geom::Rect, c: char) -> Result<()> {
+        let dst = dst.shift(self.base.x as i16, self.base.y as i16);
+        self.buf.fill(style, dst, c);
         Ok(())
     }
 
     /// Fill a rectangle with a specified character.
     pub fn fill(&mut self, style: &str, r: geom::Rect, c: char) -> Result<()> {
         if let Some(dst) = self.viewport.project_rect(r) {
-            self.backend.style(self.style.get(self.stylemap, style))?;
-            self.fill_screen(dst, c)?;
+            let st = self.style.get(self.stylemap, style);
+            self.fill_screen(st, dst, c)?;
         }
         Ok(())
     }
@@ -86,18 +79,22 @@ impl<'a> Render<'a> {
     /// rectangle, it will be truncated; if it is shorter, it will be padded.
     pub fn text(&mut self, style: &str, l: geom::Line, txt: &str) -> Result<()> {
         if let Some((offset, dst)) = self.viewport.project_line(l) {
-            self.coverage.add(self.viewport.unproject(dst.rect())?);
-            self.backend.style(self.style.get(self.stylemap, style))?;
+            let st = self.style.get(self.stylemap, style);
 
-            let out = &txt
+            let out: String = txt
                 .chars()
                 .skip(offset as usize)
                 .take(l.w as usize)
-                .collect::<String>();
+                .collect();
 
-            self.backend.text(self.base + dst.tl, out)?;
+            let shifted = geom::Line {
+                tl: dst.tl.scroll(self.base.x as i16, self.base.y as i16),
+                w: dst.w,
+            };
+            self.buf.text(st.clone(), shifted, &out);
             if out.len() < dst.w as usize {
                 self.fill_screen(
+                    st,
                     geom::Rect::new(
                         dst.tl.x + out.len() as u16,
                         dst.tl.y,

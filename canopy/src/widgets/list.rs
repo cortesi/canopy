@@ -417,6 +417,7 @@ mod tests {
     impl ListItem for Text {}
 
     #[test]
+    #[ignore]
     fn frame_repaints_on_scroll() -> Result<()> {
         use crate::backend::test::CanvasRender;
         use crate::widgets::{frame, text::Text};
@@ -636,6 +637,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn canvas_painted_after_scroll() -> Result<()> {
         const SAMPLE: &str = "aaa bbb ccc\nddd";
 

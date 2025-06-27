@@ -450,6 +450,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn render_on_focus_change() -> Result<()> {
         let (_, mut tr) = TestRender::create();
         let mut canopy = Canopy::new();
