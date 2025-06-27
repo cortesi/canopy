@@ -11,7 +11,7 @@ use scopeguard::defer;
 
 use crate::{
     backend::BackendControl,
-    cursor, error,
+    error,
     event::{key, mouse, Event, EventSource},
     geom::{Expanse, Point},
     render::RenderBackend,
@@ -102,26 +102,6 @@ impl CrosstermRender {
         Ok(())
     }
 
-    fn hide_cursor(&mut self) -> io::Result<()> {
-        self.fp.queue(ccursor::Hide {})?;
-        Ok(())
-    }
-
-    fn show_cursor(&mut self, c: cursor::Cursor) -> io::Result<()> {
-        self.fp.queue(ccursor::MoveTo(c.location.x, c.location.y))?;
-        if c.blink {
-            self.fp.queue(ccursor::EnableBlinking)?;
-        } else {
-            self.fp.queue(ccursor::DisableBlinking)?;
-        }
-        self.fp.queue(match c.shape {
-            cursor::CursorShape::Block => ccursor::SetCursorStyle::BlinkingBlock,
-            cursor::CursorShape::Line => ccursor::SetCursorStyle::BlinkingBar,
-            cursor::CursorShape::Underscore => ccursor::SetCursorStyle::BlinkingUnderScore,
-        })?;
-        self.fp.queue(ccursor::Show)?;
-        Ok(())
-    }
 
     fn style(&mut self, s: Style) -> io::Result<()> {
         // Order is important here - if we reset after setting foreground and
@@ -180,13 +160,6 @@ impl RenderBackend for CrosstermRender {
         translate_result(self.flush())
     }
 
-    fn hide_cursor(&mut self) -> Result<()> {
-        translate_result(self.hide_cursor())
-    }
-
-    fn show_cursor(&mut self, c: cursor::Cursor) -> Result<()> {
-        translate_result(self.show_cursor(c))
-    }
 
     fn style(&mut self, s: Style) -> Result<()> {
         translate_result(self.style(s))

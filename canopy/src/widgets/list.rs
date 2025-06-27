@@ -409,7 +409,7 @@ where
 mod tests {
     use super::*;
     use crate::{
-        backend::test::CanvasRender, cursor, geom::Point, render::RenderBackend, style::Style,
+        backend::test::CanvasRender, geom::Point, render::RenderBackend, style::Style,
         widgets::frame, widgets::Text, Context,
     };
     use std::sync::{Arc, Mutex};
@@ -518,12 +518,6 @@ mod tests {
         }
 
         fn flush(&mut self) -> Result<()> {
-            Ok(())
-        }
-        fn show_cursor(&mut self, _c: cursor::Cursor) -> Result<()> {
-            Ok(())
-        }
-        fn hide_cursor(&mut self) -> Result<()> {
             Ok(())
         }
         fn style(&mut self, _s: Style) -> Result<()> {
