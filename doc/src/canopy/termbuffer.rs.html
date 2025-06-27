@@ -117,7 +117,7 @@
 <a href=#117 id=117 data-nosnippet>117</a>        <span class="kw">if </span><span class="self">self</span>.size != prev.size {
 <a href=#118 id=118 data-nosnippet>118</a>            <span class="kw">return </span><span class="self">self</span>.render(backend);
 <a href=#119 id=119 data-nosnippet>119</a>        }
-<a href=#120 id=120 data-nosnippet>120</a>        <span class="kw">let </span><span class="kw-2">mut </span>changed = <span class="bool-val">false</span>;
+<a href=#120 id=120 data-nosnippet>120</a>        <span class="kw">let </span><span class="kw-2">mut </span>wrote = <span class="bool-val">false</span>;
 <a href=#121 id=121 data-nosnippet>121</a>        <span class="kw">for </span>y <span class="kw">in </span><span class="number">0</span>..<span class="self">self</span>.size.h {
 <a href=#122 id=122 data-nosnippet>122</a>            <span class="kw">let </span><span class="kw-2">mut </span>x = <span class="number">0</span>;
 <a href=#123 id=123 data-nosnippet>123</a>            <span class="kw">while </span>x &lt; <span class="self">self</span>.size.w {
@@ -155,10 +155,10 @@
 <a href=#155 id=155 data-nosnippet>155</a>                }
 <a href=#156 id=156 data-nosnippet>156</a>                backend.style(style)<span class="question-mark">?</span>;
 <a href=#157 id=157 data-nosnippet>157</a>                backend.text(Point { x: start_x, y }, <span class="kw-2">&amp;</span>text)<span class="question-mark">?</span>;
-<a href=#158 id=158 data-nosnippet>158</a>                changed = <span class="bool-val">true</span>;
+<a href=#158 id=158 data-nosnippet>158</a>                wrote = <span class="bool-val">true</span>;
 <a href=#159 id=159 data-nosnippet>159</a>            }
 <a href=#160 id=160 data-nosnippet>160</a>        }
-<a href=#161 id=161 data-nosnippet>161</a>        <span class="kw">if </span>changed {
+<a href=#161 id=161 data-nosnippet>161</a>        <span class="kw">if </span>wrote {
 <a href=#162 id=162 data-nosnippet>162</a>            backend.flush()<span class="question-mark">?</span>;
 <a href=#163 id=163 data-nosnippet>163</a>        }
 <a href=#164 id=164 data-nosnippet>164</a>        <span class="prelude-val">Ok</span>(())
@@ -167,7 +167,7 @@
 <a href=#167 id=167 data-nosnippet>167</a>    <span class="doccomment">/// Render this terminal buffer in full using the provided backend,
 <a href=#168 id=168 data-nosnippet>168</a>    /// batching runs of text with the same style.
 <a href=#169 id=169 data-nosnippet>169</a>    </span><span class="kw">pub fn </span>render&lt;R: RenderBackend&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, backend: <span class="kw-2">&amp;mut </span>R) -&gt; <span class="kw">crate</span>::Result&lt;()&gt; {
-<a href=#170 id=170 data-nosnippet>170</a>        <span class="kw">let </span><span class="kw-2">mut </span>changed = <span class="bool-val">false</span>;
+<a href=#170 id=170 data-nosnippet>170</a>        <span class="kw">let </span><span class="kw-2">mut </span>wrote = <span class="bool-val">false</span>;
 <a href=#171 id=171 data-nosnippet>171</a>        <span class="kw">for </span>y <span class="kw">in </span><span class="number">0</span>..<span class="self">self</span>.size.h {
 <a href=#172 id=172 data-nosnippet>172</a>            <span class="kw">let </span><span class="kw-2">mut </span>x = <span class="number">0</span>;
 <a href=#173 id=173 data-nosnippet>173</a>            <span class="kw">while </span>x &lt; <span class="self">self</span>.size.w {
@@ -188,10 +188,10 @@
 <a href=#188 id=188 data-nosnippet>188</a>                }
 <a href=#189 id=189 data-nosnippet>189</a>                backend.style(style)<span class="question-mark">?</span>;
 <a href=#190 id=190 data-nosnippet>190</a>                backend.text(Point { x: start_x, y }, <span class="kw-2">&amp;</span>text)<span class="question-mark">?</span>;
-<a href=#191 id=191 data-nosnippet>191</a>                changed = <span class="bool-val">true</span>;
+<a href=#191 id=191 data-nosnippet>191</a>                wrote = <span class="bool-val">true</span>;
 <a href=#192 id=192 data-nosnippet>192</a>            }
 <a href=#193 id=193 data-nosnippet>193</a>        }
-<a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">if </span>changed {
+<a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">if </span>wrote {
 <a href=#195 id=195 data-nosnippet>195</a>            backend.flush()<span class="question-mark">?</span>;
 <a href=#196 id=196 data-nosnippet>196</a>        }
 <a href=#197 id=197 data-nosnippet>197</a>        <span class="prelude-val">Ok</span>(())
