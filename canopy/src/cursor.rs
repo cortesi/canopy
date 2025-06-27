@@ -11,7 +11,7 @@ pub enum CursorShape {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Cursor {
-    /// Location of the cursor, relative to the node's origin.
+    /// Location of the cursor, relative to (0, 0) in the node view rect.
     pub location: geom::Point,
     /// Shape of the cursor.
     pub shape: CursorShape,
