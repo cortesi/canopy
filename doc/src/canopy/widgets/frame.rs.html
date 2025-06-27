@@ -163,19 +163,17 @@
 <a href=#163 id=163 data-nosnippet>163</a>
 <a href=#164 id=164 data-nosnippet>164</a>        <span class="comment">// Our child is always positioned in our upper-left corner, so negative
 <a href=#165 id=165 data-nosnippet>165</a>        // space is to the right and below.
-<a href=#166 id=166 data-nosnippet>166</a>        </span><span class="kw">for </span>r <span class="kw">in </span><span class="self">self
-<a href=#167 id=167 data-nosnippet>167</a>            </span>.vp()
-<a href=#168 id=168 data-nosnippet>168</a>            .view()
-<a href=#169 id=169 data-nosnippet>169</a>            .inner(<span class="number">1</span>)
-<a href=#170 id=170 data-nosnippet>170</a>            .sub(<span class="kw-2">&amp;</span><span class="self">self</span>.vp().unproject(<span class="self">self</span>.child.vp().screen_rect())<span class="question-mark">?</span>)
-<a href=#171 id=171 data-nosnippet>171</a>        {
-<a href=#172 id=172 data-nosnippet>172</a>            rndr.fill(style, r, <span class="string">' '</span>)<span class="question-mark">?</span>;
-<a href=#173 id=173 data-nosnippet>173</a>        }
-<a href=#174 id=174 data-nosnippet>174</a>
-<a href=#175 id=175 data-nosnippet>175</a>        <span class="prelude-val">Ok</span>(())
-<a href=#176 id=176 data-nosnippet>176</a>    }
-<a href=#177 id=177 data-nosnippet>177</a>
-<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">fn </span>children(<span class="kw-2">&amp;mut </span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>FnMut(<span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#179 id=179 data-nosnippet>179</a>        f(<span class="kw-2">&amp;mut </span><span class="self">self</span>.child)
-<a href=#180 id=180 data-nosnippet>180</a>    }
-<a href=#181 id=181 data-nosnippet>181</a>}</code></pre></div></section></main></body></html>
+<a href=#166 id=166 data-nosnippet>166</a>        </span><span class="kw">let </span>inner = <span class="self">self</span>.vp().view().inner(<span class="number">1</span>);
+<a href=#167 id=167 data-nosnippet>167</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(child_rect) = <span class="self">self</span>.vp().unproject(<span class="self">self</span>.child.vp().screen_rect()) {
+<a href=#168 id=168 data-nosnippet>168</a>            <span class="kw">for </span>r <span class="kw">in </span>inner.sub(<span class="kw-2">&amp;</span>child_rect) {
+<a href=#169 id=169 data-nosnippet>169</a>                rndr.fill(style, r, <span class="string">' '</span>)<span class="question-mark">?</span>;
+<a href=#170 id=170 data-nosnippet>170</a>            }
+<a href=#171 id=171 data-nosnippet>171</a>        }
+<a href=#172 id=172 data-nosnippet>172</a>
+<a href=#173 id=173 data-nosnippet>173</a>        <span class="prelude-val">Ok</span>(())
+<a href=#174 id=174 data-nosnippet>174</a>    }
+<a href=#175 id=175 data-nosnippet>175</a>
+<a href=#176 id=176 data-nosnippet>176</a>    <span class="kw">fn </span>children(<span class="kw-2">&amp;mut </span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>FnMut(<span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#177 id=177 data-nosnippet>177</a>        f(<span class="kw-2">&amp;mut </span><span class="self">self</span>.child)
+<a href=#178 id=178 data-nosnippet>178</a>    }
+<a href=#179 id=179 data-nosnippet>179</a>}</code></pre></div></section></main></body></html>

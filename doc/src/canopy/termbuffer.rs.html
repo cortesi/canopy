@@ -1,7 +1,7 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `canopy/src/termbuffer.rs`."><title>termbuffer.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-1a91846b.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="canopy" data-themes="" data-resource-suffix="" data-rustdoc-version="1.88.0 (6b00bc388 2025-06-23)" data-channel="1.88.0" data-search-js="search-f7877310.js" data-settings-js="settings-5514c975.js" ><script src="../../static.files/storage-4e99c027.js"></script><script defer src="../../static.files/src-script-63605ae7.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-7ef8a74a.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">canopy/</div>termbuffer.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use crate</span>::{
 <a href=#2 id=2 data-nosnippet>2</a>    geom::{Expanse, Frame, Line, Point, Rect},
 <a href=#3 id=3 data-nosnippet>3</a>    render::RenderBackend,
-<a href=#4 id=4 data-nosnippet>4</a>    style::{Color, Style},
+<a href=#4 id=4 data-nosnippet>4</a>    style::Style,
 <a href=#5 id=5 data-nosnippet>5</a>};
 <a href=#6 id=6 data-nosnippet>6</a>
 <a href=#7 id=7 data-nosnippet>7</a><span class="attr">#[derive(Clone, Debug, PartialEq)]
@@ -135,282 +135,386 @@
 <a href=#135 id=135 data-nosnippet>135</a>
 <a href=#136 id=136 data-nosnippet>136</a>    <span class="doccomment">/// Does the buffer contain the supplied substring in the given foreground
 <a href=#137 id=137 data-nosnippet>137</a>    /// colour?
-<a href=#138 id=138 data-nosnippet>138</a>    </span><span class="kw">pub fn </span>contains_text_fg(<span class="kw-2">&amp;</span><span class="self">self</span>, txt: <span class="kw-2">&amp;</span>str, fg: Color) -&gt; bool {
-<a href=#139 id=139 data-nosnippet>139</a>        <span class="kw">let </span>tl = txt.chars().count() <span class="kw">as </span>u16;
-<a href=#140 id=140 data-nosnippet>140</a>        <span class="kw">if </span>tl == <span class="number">0 </span>|| tl &gt; <span class="self">self</span>.size.w {
-<a href=#141 id=141 data-nosnippet>141</a>            <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#142 id=142 data-nosnippet>142</a>        }
-<a href=#143 id=143 data-nosnippet>143</a>        <span class="kw">for </span>y <span class="kw">in </span><span class="number">0</span>..<span class="self">self</span>.size.h {
-<a href=#144 id=144 data-nosnippet>144</a>            <span class="kw">for </span>x <span class="kw">in </span><span class="number">0</span>..=<span class="self">self</span>.size.w.saturating_sub(tl) {
-<a href=#145 id=145 data-nosnippet>145</a>                <span class="kw">let </span><span class="kw-2">mut </span>m = <span class="bool-val">true</span>;
-<a href=#146 id=146 data-nosnippet>146</a>                <span class="kw">let </span><span class="kw-2">mut </span>c = <span class="bool-val">false</span>;
-<a href=#147 id=147 data-nosnippet>147</a>                <span class="kw">for </span>(i, ch) <span class="kw">in </span>txt.chars().enumerate() {
-<a href=#148 id=148 data-nosnippet>148</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(cell) = <span class="self">self</span>.get(Point { x: x + i <span class="kw">as </span>u16, y }) {
-<a href=#149 id=149 data-nosnippet>149</a>                        <span class="kw">if </span>cell.ch != ch {
-<a href=#150 id=150 data-nosnippet>150</a>                            m = <span class="bool-val">false</span>;
-<a href=#151 id=151 data-nosnippet>151</a>                            <span class="kw">break</span>;
-<a href=#152 id=152 data-nosnippet>152</a>                        }
-<a href=#153 id=153 data-nosnippet>153</a>                        <span class="kw">if </span>cell.style.fg == fg {
-<a href=#154 id=154 data-nosnippet>154</a>                            c = <span class="bool-val">true</span>;
-<a href=#155 id=155 data-nosnippet>155</a>                        }
-<a href=#156 id=156 data-nosnippet>156</a>                    } <span class="kw">else </span>{
-<a href=#157 id=157 data-nosnippet>157</a>                        m = <span class="bool-val">false</span>;
-<a href=#158 id=158 data-nosnippet>158</a>                        <span class="kw">break</span>;
-<a href=#159 id=159 data-nosnippet>159</a>                    }
-<a href=#160 id=160 data-nosnippet>160</a>                }
-<a href=#161 id=161 data-nosnippet>161</a>                <span class="kw">if </span>m &amp;&amp; c {
-<a href=#162 id=162 data-nosnippet>162</a>                    <span class="kw">return </span><span class="bool-val">true</span>;
-<a href=#163 id=163 data-nosnippet>163</a>                }
-<a href=#164 id=164 data-nosnippet>164</a>            }
-<a href=#165 id=165 data-nosnippet>165</a>        }
-<a href=#166 id=166 data-nosnippet>166</a>        <span class="bool-val">false
-<a href=#167 id=167 data-nosnippet>167</a>    </span>}
-<a href=#168 id=168 data-nosnippet>168</a>}
-<a href=#169 id=169 data-nosnippet>169</a>
-<a href=#170 id=170 data-nosnippet>170</a><span class="kw">impl </span>TermBuf {
-<a href=#171 id=171 data-nosnippet>171</a>    <span class="doccomment">/// Diff this terminal buffer against a previous state, emitting changes
-<a href=#172 id=172 data-nosnippet>172</a>    /// to the provided render backend.
-<a href=#173 id=173 data-nosnippet>173</a>    </span><span class="kw">pub fn </span>diff&lt;R: RenderBackend&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, prev: <span class="kw-2">&amp;</span>TermBuf, backend: <span class="kw-2">&amp;mut </span>R) -&gt; <span class="kw">crate</span>::Result&lt;()&gt; {
-<a href=#174 id=174 data-nosnippet>174</a>        <span class="kw">let </span><span class="kw-2">mut </span>wrote = <span class="bool-val">false</span>;
-<a href=#175 id=175 data-nosnippet>175</a>        <span class="kw">if </span><span class="self">self</span>.size != prev.size {
-<a href=#176 id=176 data-nosnippet>176</a>            <span class="kw">return </span><span class="self">self</span>.render(backend);
-<a href=#177 id=177 data-nosnippet>177</a>        }
-<a href=#178 id=178 data-nosnippet>178</a>        <span class="kw">for </span>y <span class="kw">in </span><span class="number">0</span>..<span class="self">self</span>.size.h {
-<a href=#179 id=179 data-nosnippet>179</a>            <span class="kw">let </span><span class="kw-2">mut </span>x = <span class="number">0</span>;
-<a href=#180 id=180 data-nosnippet>180</a>            <span class="kw">while </span>x &lt; <span class="self">self</span>.size.w {
-<a href=#181 id=181 data-nosnippet>181</a>                <span class="kw">let </span>idx = y <span class="kw">as </span>usize * <span class="self">self</span>.size.w <span class="kw">as </span>usize + x <span class="kw">as </span>usize;
-<a href=#182 id=182 data-nosnippet>182</a>                <span class="kw">let </span>cell = <span class="kw-2">&amp;</span><span class="self">self</span>.cells[idx];
-<a href=#183 id=183 data-nosnippet>183</a>                <span class="kw">let </span>same = <span class="kw">if </span>y &lt; prev.size.h &amp;&amp; x &lt; prev.size.w {
-<a href=#184 id=184 data-nosnippet>184</a>                    <span class="kw">let </span>pidx = y <span class="kw">as </span>usize * prev.size.w <span class="kw">as </span>usize + x <span class="kw">as </span>usize;
-<a href=#185 id=185 data-nosnippet>185</a>                    prev.cells[pidx] == <span class="kw-2">*</span>cell
-<a href=#186 id=186 data-nosnippet>186</a>                } <span class="kw">else </span>{
-<a href=#187 id=187 data-nosnippet>187</a>                    <span class="bool-val">false
-<a href=#188 id=188 data-nosnippet>188</a>                </span>};
-<a href=#189 id=189 data-nosnippet>189</a>                <span class="kw">if </span>same {
-<a href=#190 id=190 data-nosnippet>190</a>                    x += <span class="number">1</span>;
-<a href=#191 id=191 data-nosnippet>191</a>                    <span class="kw">continue</span>;
-<a href=#192 id=192 data-nosnippet>192</a>                }
-<a href=#193 id=193 data-nosnippet>193</a>
-<a href=#194 id=194 data-nosnippet>194</a>                <span class="kw">let </span>style = cell.style.clone();
-<a href=#195 id=195 data-nosnippet>195</a>                <span class="kw">let </span>start_x = x;
-<a href=#196 id=196 data-nosnippet>196</a>                <span class="kw">let </span><span class="kw-2">mut </span>text = String::new();
-<a href=#197 id=197 data-nosnippet>197</a>                <span class="kw">while </span>x &lt; <span class="self">self</span>.size.w {
-<a href=#198 id=198 data-nosnippet>198</a>                    <span class="kw">let </span>idx2 = y <span class="kw">as </span>usize * <span class="self">self</span>.size.w <span class="kw">as </span>usize + x <span class="kw">as </span>usize;
-<a href=#199 id=199 data-nosnippet>199</a>                    <span class="kw">let </span>ccell = <span class="kw-2">&amp;</span><span class="self">self</span>.cells[idx2];
-<a href=#200 id=200 data-nosnippet>200</a>                    <span class="kw">let </span>same = <span class="kw">if </span>y &lt; prev.size.h &amp;&amp; x &lt; prev.size.w {
-<a href=#201 id=201 data-nosnippet>201</a>                        <span class="kw">let </span>pidx2 = y <span class="kw">as </span>usize * prev.size.w <span class="kw">as </span>usize + x <span class="kw">as </span>usize;
-<a href=#202 id=202 data-nosnippet>202</a>                        prev.cells[pidx2] == <span class="kw-2">*</span>ccell
-<a href=#203 id=203 data-nosnippet>203</a>                    } <span class="kw">else </span>{
-<a href=#204 id=204 data-nosnippet>204</a>                        <span class="bool-val">false
-<a href=#205 id=205 data-nosnippet>205</a>                    </span>};
-<a href=#206 id=206 data-nosnippet>206</a>                    <span class="kw">if </span>!same &amp;&amp; ccell.style == style {
-<a href=#207 id=207 data-nosnippet>207</a>                        text.push(ccell.ch);
-<a href=#208 id=208 data-nosnippet>208</a>                        x += <span class="number">1</span>;
-<a href=#209 id=209 data-nosnippet>209</a>                    } <span class="kw">else </span>{
-<a href=#210 id=210 data-nosnippet>210</a>                        <span class="kw">break</span>;
-<a href=#211 id=211 data-nosnippet>211</a>                    }
-<a href=#212 id=212 data-nosnippet>212</a>                }
-<a href=#213 id=213 data-nosnippet>213</a>                backend.style(style)<span class="question-mark">?</span>;
-<a href=#214 id=214 data-nosnippet>214</a>                backend.text(Point { x: start_x, y }, <span class="kw-2">&amp;</span>text)<span class="question-mark">?</span>;
-<a href=#215 id=215 data-nosnippet>215</a>                wrote = <span class="bool-val">true</span>;
-<a href=#216 id=216 data-nosnippet>216</a>            }
-<a href=#217 id=217 data-nosnippet>217</a>        }
-<a href=#218 id=218 data-nosnippet>218</a>        <span class="kw">if </span>wrote {
-<a href=#219 id=219 data-nosnippet>219</a>            backend.flush()<span class="question-mark">?</span>;
-<a href=#220 id=220 data-nosnippet>220</a>        }
-<a href=#221 id=221 data-nosnippet>221</a>        <span class="prelude-val">Ok</span>(())
-<a href=#222 id=222 data-nosnippet>222</a>    }
-<a href=#223 id=223 data-nosnippet>223</a>
-<a href=#224 id=224 data-nosnippet>224</a>    <span class="doccomment">/// Render this terminal buffer in full using the provided backend,
-<a href=#225 id=225 data-nosnippet>225</a>    /// batching runs of text with the same style.
-<a href=#226 id=226 data-nosnippet>226</a>    </span><span class="kw">pub fn </span>render&lt;R: RenderBackend&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, backend: <span class="kw-2">&amp;mut </span>R) -&gt; <span class="kw">crate</span>::Result&lt;()&gt; {
-<a href=#227 id=227 data-nosnippet>227</a>        <span class="kw">let </span><span class="kw-2">mut </span>wrote = <span class="bool-val">false</span>;
-<a href=#228 id=228 data-nosnippet>228</a>        <span class="kw">for </span>y <span class="kw">in </span><span class="number">0</span>..<span class="self">self</span>.size.h {
-<a href=#229 id=229 data-nosnippet>229</a>            <span class="kw">let </span><span class="kw-2">mut </span>x = <span class="number">0</span>;
-<a href=#230 id=230 data-nosnippet>230</a>            <span class="kw">while </span>x &lt; <span class="self">self</span>.size.w {
-<a href=#231 id=231 data-nosnippet>231</a>                <span class="kw">let </span>idx = y <span class="kw">as </span>usize * <span class="self">self</span>.size.w <span class="kw">as </span>usize + x <span class="kw">as </span>usize;
-<a href=#232 id=232 data-nosnippet>232</a>                <span class="kw">let </span>cell = <span class="kw-2">&amp;</span><span class="self">self</span>.cells[idx];
-<a href=#233 id=233 data-nosnippet>233</a>                <span class="kw">let </span>style = cell.style.clone();
-<a href=#234 id=234 data-nosnippet>234</a>                <span class="kw">let </span>start_x = x;
-<a href=#235 id=235 data-nosnippet>235</a>                <span class="kw">let </span><span class="kw-2">mut </span>text = String::new();
-<a href=#236 id=236 data-nosnippet>236</a>                <span class="kw">while </span>x &lt; <span class="self">self</span>.size.w {
-<a href=#237 id=237 data-nosnippet>237</a>                    <span class="kw">let </span>idx2 = y <span class="kw">as </span>usize * <span class="self">self</span>.size.w <span class="kw">as </span>usize + x <span class="kw">as </span>usize;
-<a href=#238 id=238 data-nosnippet>238</a>                    <span class="kw">let </span>ccell = <span class="kw-2">&amp;</span><span class="self">self</span>.cells[idx2];
-<a href=#239 id=239 data-nosnippet>239</a>                    <span class="kw">if </span>ccell.style == style {
-<a href=#240 id=240 data-nosnippet>240</a>                        text.push(ccell.ch);
-<a href=#241 id=241 data-nosnippet>241</a>                        x += <span class="number">1</span>;
-<a href=#242 id=242 data-nosnippet>242</a>                    } <span class="kw">else </span>{
-<a href=#243 id=243 data-nosnippet>243</a>                        <span class="kw">break</span>;
-<a href=#244 id=244 data-nosnippet>244</a>                    }
-<a href=#245 id=245 data-nosnippet>245</a>                }
-<a href=#246 id=246 data-nosnippet>246</a>                backend.style(style)<span class="question-mark">?</span>;
-<a href=#247 id=247 data-nosnippet>247</a>                backend.text(Point { x: start_x, y }, <span class="kw-2">&amp;</span>text)<span class="question-mark">?</span>;
-<a href=#248 id=248 data-nosnippet>248</a>                wrote = <span class="bool-val">true</span>;
-<a href=#249 id=249 data-nosnippet>249</a>            }
-<a href=#250 id=250 data-nosnippet>250</a>        }
-<a href=#251 id=251 data-nosnippet>251</a>        <span class="kw">if </span>wrote {
-<a href=#252 id=252 data-nosnippet>252</a>            backend.flush()<span class="question-mark">?</span>;
-<a href=#253 id=253 data-nosnippet>253</a>        }
-<a href=#254 id=254 data-nosnippet>254</a>        <span class="prelude-val">Ok</span>(())
-<a href=#255 id=255 data-nosnippet>255</a>    }
-<a href=#256 id=256 data-nosnippet>256</a>}
-<a href=#257 id=257 data-nosnippet>257</a>
-<a href=#258 id=258 data-nosnippet>258</a><span class="attr">#[cfg(test)]
-<a href=#259 id=259 data-nosnippet>259</a></span><span class="kw">mod </span>tests {
-<a href=#260 id=260 data-nosnippet>260</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#261 id=261 data-nosnippet>261</a>    <span class="kw">use </span><span class="kw">crate</span>::style::{AttrSet, Color};
-<a href=#262 id=262 data-nosnippet>262</a>
-<a href=#263 id=263 data-nosnippet>263</a>    <span class="kw">fn </span>def_style() -&gt; Style {
-<a href=#264 id=264 data-nosnippet>264</a>        Style {
-<a href=#265 id=265 data-nosnippet>265</a>            fg: Color::White,
-<a href=#266 id=266 data-nosnippet>266</a>            bg: Color::Black,
-<a href=#267 id=267 data-nosnippet>267</a>            attrs: AttrSet::default(),
-<a href=#268 id=268 data-nosnippet>268</a>        }
-<a href=#269 id=269 data-nosnippet>269</a>    }
-<a href=#270 id=270 data-nosnippet>270</a>
-<a href=#271 id=271 data-nosnippet>271</a>    <span class="attr">#[test]
-<a href=#272 id=272 data-nosnippet>272</a>    </span><span class="kw">fn </span>basic_fill() {
-<a href=#273 id=273 data-nosnippet>273</a>        <span class="kw">let </span><span class="kw-2">mut </span>tb = TermBuf::new(Expanse::new(<span class="number">4</span>, <span class="number">2</span>), <span class="string">' '</span>, def_style());
-<a href=#274 id=274 data-nosnippet>274</a>        tb.fill(def_style(), Rect::new(<span class="number">1</span>, <span class="number">0</span>, <span class="number">2</span>, <span class="number">2</span>), <span class="string">'x'</span>);
-<a href=#275 id=275 data-nosnippet>275</a>        <span class="macro">assert_eq!</span>(tb.get(Point { x: <span class="number">1</span>, y: <span class="number">0 </span>}).unwrap().ch, <span class="string">'x'</span>);
-<a href=#276 id=276 data-nosnippet>276</a>        <span class="macro">assert_eq!</span>(tb.get(Point { x: <span class="number">2</span>, y: <span class="number">1 </span>}).unwrap().ch, <span class="string">'x'</span>);
-<a href=#277 id=277 data-nosnippet>277</a>        <span class="macro">assert_eq!</span>(tb.get(Point { x: <span class="number">3</span>, y: <span class="number">0 </span>}).unwrap().ch, <span class="string">' '</span>);
+<a href=#138 id=138 data-nosnippet>138</a>    </span><span class="kw">pub fn </span>contains_text_fg(<span class="kw-2">&amp;</span><span class="self">self</span>, txt: <span class="kw-2">&amp;</span>str, fg: <span class="kw">crate</span>::style::Color) -&gt; bool {
+<a href=#139 id=139 data-nosnippet>139</a>        <span class="self">self</span>.contains_text_style(txt, <span class="kw-2">&amp;</span><span class="kw">crate</span>::style::PartialStyle::fg(fg))
+<a href=#140 id=140 data-nosnippet>140</a>    }
+<a href=#141 id=141 data-nosnippet>141</a>
+<a href=#142 id=142 data-nosnippet>142</a>    <span class="doccomment">/// Does the buffer contain the supplied substring with the given style?
+<a href=#143 id=143 data-nosnippet>143</a>    </span><span class="kw">pub fn </span>contains_text_style(<span class="kw-2">&amp;</span><span class="self">self</span>, txt: <span class="kw-2">&amp;</span>str, style: <span class="kw-2">&amp;</span><span class="kw">crate</span>::style::PartialStyle) -&gt; bool {
+<a href=#144 id=144 data-nosnippet>144</a>        <span class="kw">let </span>tl = txt.chars().count() <span class="kw">as </span>u16;
+<a href=#145 id=145 data-nosnippet>145</a>        <span class="kw">if </span>tl == <span class="number">0 </span>|| tl &gt; <span class="self">self</span>.size.w {
+<a href=#146 id=146 data-nosnippet>146</a>            <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#147 id=147 data-nosnippet>147</a>        }
+<a href=#148 id=148 data-nosnippet>148</a>        <span class="kw">for </span>y <span class="kw">in </span><span class="number">0</span>..<span class="self">self</span>.size.h {
+<a href=#149 id=149 data-nosnippet>149</a>            <span class="kw">for </span>x <span class="kw">in </span><span class="number">0</span>..=<span class="self">self</span>.size.w.saturating_sub(tl) {
+<a href=#150 id=150 data-nosnippet>150</a>                <span class="kw">let </span><span class="kw-2">mut </span>m = <span class="bool-val">true</span>;
+<a href=#151 id=151 data-nosnippet>151</a>                <span class="kw">let </span><span class="kw-2">mut </span>c = <span class="bool-val">false</span>;
+<a href=#152 id=152 data-nosnippet>152</a>                <span class="kw">for </span>(i, ch) <span class="kw">in </span>txt.chars().enumerate() {
+<a href=#153 id=153 data-nosnippet>153</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(cell) = <span class="self">self</span>.get(Point { x: x + i <span class="kw">as </span>u16, y }) {
+<a href=#154 id=154 data-nosnippet>154</a>                        <span class="kw">if </span>cell.ch != ch {
+<a href=#155 id=155 data-nosnippet>155</a>                            m = <span class="bool-val">false</span>;
+<a href=#156 id=156 data-nosnippet>156</a>                            <span class="kw">break</span>;
+<a href=#157 id=157 data-nosnippet>157</a>                        }
+<a href=#158 id=158 data-nosnippet>158</a>                        <span class="comment">// Check if the cell style matches the partial style
+<a href=#159 id=159 data-nosnippet>159</a>                        </span><span class="kw">let </span>style_matches = (style.fg.is_none() || style.fg == <span class="prelude-val">Some</span>(cell.style.fg))
+<a href=#160 id=160 data-nosnippet>160</a>                            &amp;&amp; (style.bg.is_none() || style.bg == <span class="prelude-val">Some</span>(cell.style.bg))
+<a href=#161 id=161 data-nosnippet>161</a>                            &amp;&amp; (style.attrs.is_none() || style.attrs == <span class="prelude-val">Some</span>(cell.style.attrs));
+<a href=#162 id=162 data-nosnippet>162</a>                        <span class="kw">if </span>style_matches {
+<a href=#163 id=163 data-nosnippet>163</a>                            c = <span class="bool-val">true</span>;
+<a href=#164 id=164 data-nosnippet>164</a>                        }
+<a href=#165 id=165 data-nosnippet>165</a>                    } <span class="kw">else </span>{
+<a href=#166 id=166 data-nosnippet>166</a>                        m = <span class="bool-val">false</span>;
+<a href=#167 id=167 data-nosnippet>167</a>                        <span class="kw">break</span>;
+<a href=#168 id=168 data-nosnippet>168</a>                    }
+<a href=#169 id=169 data-nosnippet>169</a>                }
+<a href=#170 id=170 data-nosnippet>170</a>                <span class="kw">if </span>m &amp;&amp; c {
+<a href=#171 id=171 data-nosnippet>171</a>                    <span class="kw">return </span><span class="bool-val">true</span>;
+<a href=#172 id=172 data-nosnippet>172</a>                }
+<a href=#173 id=173 data-nosnippet>173</a>            }
+<a href=#174 id=174 data-nosnippet>174</a>        }
+<a href=#175 id=175 data-nosnippet>175</a>        <span class="bool-val">false
+<a href=#176 id=176 data-nosnippet>176</a>    </span>}
+<a href=#177 id=177 data-nosnippet>177</a>}
+<a href=#178 id=178 data-nosnippet>178</a>
+<a href=#179 id=179 data-nosnippet>179</a><span class="kw">impl </span>TermBuf {
+<a href=#180 id=180 data-nosnippet>180</a>    <span class="doccomment">/// Diff this terminal buffer against a previous state, emitting changes
+<a href=#181 id=181 data-nosnippet>181</a>    /// to the provided render backend.
+<a href=#182 id=182 data-nosnippet>182</a>    </span><span class="kw">pub fn </span>diff&lt;R: RenderBackend&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, prev: <span class="kw-2">&amp;</span>TermBuf, backend: <span class="kw-2">&amp;mut </span>R) -&gt; <span class="kw">crate</span>::Result&lt;()&gt; {
+<a href=#183 id=183 data-nosnippet>183</a>        <span class="kw">let </span><span class="kw-2">mut </span>wrote = <span class="bool-val">false</span>;
+<a href=#184 id=184 data-nosnippet>184</a>        <span class="kw">if </span><span class="self">self</span>.size != prev.size {
+<a href=#185 id=185 data-nosnippet>185</a>            <span class="kw">return </span><span class="self">self</span>.render(backend);
+<a href=#186 id=186 data-nosnippet>186</a>        }
+<a href=#187 id=187 data-nosnippet>187</a>        <span class="kw">for </span>y <span class="kw">in </span><span class="number">0</span>..<span class="self">self</span>.size.h {
+<a href=#188 id=188 data-nosnippet>188</a>            <span class="kw">let </span><span class="kw-2">mut </span>x = <span class="number">0</span>;
+<a href=#189 id=189 data-nosnippet>189</a>            <span class="kw">while </span>x &lt; <span class="self">self</span>.size.w {
+<a href=#190 id=190 data-nosnippet>190</a>                <span class="kw">let </span>idx = y <span class="kw">as </span>usize * <span class="self">self</span>.size.w <span class="kw">as </span>usize + x <span class="kw">as </span>usize;
+<a href=#191 id=191 data-nosnippet>191</a>                <span class="kw">let </span>cell = <span class="kw-2">&amp;</span><span class="self">self</span>.cells[idx];
+<a href=#192 id=192 data-nosnippet>192</a>                <span class="kw">let </span>same = <span class="kw">if </span>y &lt; prev.size.h &amp;&amp; x &lt; prev.size.w {
+<a href=#193 id=193 data-nosnippet>193</a>                    <span class="kw">let </span>pidx = y <span class="kw">as </span>usize * prev.size.w <span class="kw">as </span>usize + x <span class="kw">as </span>usize;
+<a href=#194 id=194 data-nosnippet>194</a>                    prev.cells[pidx] == <span class="kw-2">*</span>cell
+<a href=#195 id=195 data-nosnippet>195</a>                } <span class="kw">else </span>{
+<a href=#196 id=196 data-nosnippet>196</a>                    <span class="bool-val">false
+<a href=#197 id=197 data-nosnippet>197</a>                </span>};
+<a href=#198 id=198 data-nosnippet>198</a>                <span class="kw">if </span>same {
+<a href=#199 id=199 data-nosnippet>199</a>                    x += <span class="number">1</span>;
+<a href=#200 id=200 data-nosnippet>200</a>                    <span class="kw">continue</span>;
+<a href=#201 id=201 data-nosnippet>201</a>                }
+<a href=#202 id=202 data-nosnippet>202</a>
+<a href=#203 id=203 data-nosnippet>203</a>                <span class="kw">let </span>style = cell.style.clone();
+<a href=#204 id=204 data-nosnippet>204</a>                <span class="kw">let </span>start_x = x;
+<a href=#205 id=205 data-nosnippet>205</a>                <span class="kw">let </span><span class="kw-2">mut </span>text = String::new();
+<a href=#206 id=206 data-nosnippet>206</a>                <span class="kw">while </span>x &lt; <span class="self">self</span>.size.w {
+<a href=#207 id=207 data-nosnippet>207</a>                    <span class="kw">let </span>idx2 = y <span class="kw">as </span>usize * <span class="self">self</span>.size.w <span class="kw">as </span>usize + x <span class="kw">as </span>usize;
+<a href=#208 id=208 data-nosnippet>208</a>                    <span class="kw">let </span>ccell = <span class="kw-2">&amp;</span><span class="self">self</span>.cells[idx2];
+<a href=#209 id=209 data-nosnippet>209</a>                    <span class="kw">let </span>same = <span class="kw">if </span>y &lt; prev.size.h &amp;&amp; x &lt; prev.size.w {
+<a href=#210 id=210 data-nosnippet>210</a>                        <span class="kw">let </span>pidx2 = y <span class="kw">as </span>usize * prev.size.w <span class="kw">as </span>usize + x <span class="kw">as </span>usize;
+<a href=#211 id=211 data-nosnippet>211</a>                        prev.cells[pidx2] == <span class="kw-2">*</span>ccell
+<a href=#212 id=212 data-nosnippet>212</a>                    } <span class="kw">else </span>{
+<a href=#213 id=213 data-nosnippet>213</a>                        <span class="bool-val">false
+<a href=#214 id=214 data-nosnippet>214</a>                    </span>};
+<a href=#215 id=215 data-nosnippet>215</a>                    <span class="kw">if </span>!same &amp;&amp; ccell.style == style {
+<a href=#216 id=216 data-nosnippet>216</a>                        text.push(ccell.ch);
+<a href=#217 id=217 data-nosnippet>217</a>                        x += <span class="number">1</span>;
+<a href=#218 id=218 data-nosnippet>218</a>                    } <span class="kw">else </span>{
+<a href=#219 id=219 data-nosnippet>219</a>                        <span class="kw">break</span>;
+<a href=#220 id=220 data-nosnippet>220</a>                    }
+<a href=#221 id=221 data-nosnippet>221</a>                }
+<a href=#222 id=222 data-nosnippet>222</a>                backend.style(style)<span class="question-mark">?</span>;
+<a href=#223 id=223 data-nosnippet>223</a>                backend.text(Point { x: start_x, y }, <span class="kw-2">&amp;</span>text)<span class="question-mark">?</span>;
+<a href=#224 id=224 data-nosnippet>224</a>                wrote = <span class="bool-val">true</span>;
+<a href=#225 id=225 data-nosnippet>225</a>            }
+<a href=#226 id=226 data-nosnippet>226</a>        }
+<a href=#227 id=227 data-nosnippet>227</a>        <span class="kw">if </span>wrote {
+<a href=#228 id=228 data-nosnippet>228</a>            backend.flush()<span class="question-mark">?</span>;
+<a href=#229 id=229 data-nosnippet>229</a>        }
+<a href=#230 id=230 data-nosnippet>230</a>        <span class="prelude-val">Ok</span>(())
+<a href=#231 id=231 data-nosnippet>231</a>    }
+<a href=#232 id=232 data-nosnippet>232</a>
+<a href=#233 id=233 data-nosnippet>233</a>    <span class="doccomment">/// Render this terminal buffer in full using the provided backend,
+<a href=#234 id=234 data-nosnippet>234</a>    /// batching runs of text with the same style.
+<a href=#235 id=235 data-nosnippet>235</a>    </span><span class="kw">pub fn </span>render&lt;R: RenderBackend&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, backend: <span class="kw-2">&amp;mut </span>R) -&gt; <span class="kw">crate</span>::Result&lt;()&gt; {
+<a href=#236 id=236 data-nosnippet>236</a>        <span class="kw">let </span><span class="kw-2">mut </span>wrote = <span class="bool-val">false</span>;
+<a href=#237 id=237 data-nosnippet>237</a>        <span class="kw">for </span>y <span class="kw">in </span><span class="number">0</span>..<span class="self">self</span>.size.h {
+<a href=#238 id=238 data-nosnippet>238</a>            <span class="kw">let </span><span class="kw-2">mut </span>x = <span class="number">0</span>;
+<a href=#239 id=239 data-nosnippet>239</a>            <span class="kw">while </span>x &lt; <span class="self">self</span>.size.w {
+<a href=#240 id=240 data-nosnippet>240</a>                <span class="kw">let </span>idx = y <span class="kw">as </span>usize * <span class="self">self</span>.size.w <span class="kw">as </span>usize + x <span class="kw">as </span>usize;
+<a href=#241 id=241 data-nosnippet>241</a>                <span class="kw">let </span>cell = <span class="kw-2">&amp;</span><span class="self">self</span>.cells[idx];
+<a href=#242 id=242 data-nosnippet>242</a>                <span class="kw">let </span>style = cell.style.clone();
+<a href=#243 id=243 data-nosnippet>243</a>                <span class="kw">let </span>start_x = x;
+<a href=#244 id=244 data-nosnippet>244</a>                <span class="kw">let </span><span class="kw-2">mut </span>text = String::new();
+<a href=#245 id=245 data-nosnippet>245</a>                <span class="kw">while </span>x &lt; <span class="self">self</span>.size.w {
+<a href=#246 id=246 data-nosnippet>246</a>                    <span class="kw">let </span>idx2 = y <span class="kw">as </span>usize * <span class="self">self</span>.size.w <span class="kw">as </span>usize + x <span class="kw">as </span>usize;
+<a href=#247 id=247 data-nosnippet>247</a>                    <span class="kw">let </span>ccell = <span class="kw-2">&amp;</span><span class="self">self</span>.cells[idx2];
+<a href=#248 id=248 data-nosnippet>248</a>                    <span class="kw">if </span>ccell.style == style {
+<a href=#249 id=249 data-nosnippet>249</a>                        text.push(ccell.ch);
+<a href=#250 id=250 data-nosnippet>250</a>                        x += <span class="number">1</span>;
+<a href=#251 id=251 data-nosnippet>251</a>                    } <span class="kw">else </span>{
+<a href=#252 id=252 data-nosnippet>252</a>                        <span class="kw">break</span>;
+<a href=#253 id=253 data-nosnippet>253</a>                    }
+<a href=#254 id=254 data-nosnippet>254</a>                }
+<a href=#255 id=255 data-nosnippet>255</a>                backend.style(style)<span class="question-mark">?</span>;
+<a href=#256 id=256 data-nosnippet>256</a>                backend.text(Point { x: start_x, y }, <span class="kw-2">&amp;</span>text)<span class="question-mark">?</span>;
+<a href=#257 id=257 data-nosnippet>257</a>                wrote = <span class="bool-val">true</span>;
+<a href=#258 id=258 data-nosnippet>258</a>            }
+<a href=#259 id=259 data-nosnippet>259</a>        }
+<a href=#260 id=260 data-nosnippet>260</a>        <span class="kw">if </span>wrote {
+<a href=#261 id=261 data-nosnippet>261</a>            backend.flush()<span class="question-mark">?</span>;
+<a href=#262 id=262 data-nosnippet>262</a>        }
+<a href=#263 id=263 data-nosnippet>263</a>        <span class="prelude-val">Ok</span>(())
+<a href=#264 id=264 data-nosnippet>264</a>    }
+<a href=#265 id=265 data-nosnippet>265</a>}
+<a href=#266 id=266 data-nosnippet>266</a>
+<a href=#267 id=267 data-nosnippet>267</a><span class="attr">#[cfg(test)]
+<a href=#268 id=268 data-nosnippet>268</a></span><span class="kw">mod </span>tests {
+<a href=#269 id=269 data-nosnippet>269</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#270 id=270 data-nosnippet>270</a>    <span class="kw">use </span><span class="kw">crate</span>::style::{AttrSet, Color, PartialStyle};
+<a href=#271 id=271 data-nosnippet>271</a>
+<a href=#272 id=272 data-nosnippet>272</a>    <span class="kw">fn </span>def_style() -&gt; Style {
+<a href=#273 id=273 data-nosnippet>273</a>        Style {
+<a href=#274 id=274 data-nosnippet>274</a>            fg: Color::White,
+<a href=#275 id=275 data-nosnippet>275</a>            bg: Color::Black,
+<a href=#276 id=276 data-nosnippet>276</a>            attrs: AttrSet::default(),
+<a href=#277 id=277 data-nosnippet>277</a>        }
 <a href=#278 id=278 data-nosnippet>278</a>    }
 <a href=#279 id=279 data-nosnippet>279</a>
 <a href=#280 id=280 data-nosnippet>280</a>    <span class="attr">#[test]
-<a href=#281 id=281 data-nosnippet>281</a>    </span><span class="kw">fn </span>text_write() {
-<a href=#282 id=282 data-nosnippet>282</a>        <span class="kw">let </span><span class="kw-2">mut </span>tb = TermBuf::new(Expanse::new(<span class="number">5</span>, <span class="number">1</span>), <span class="string">' '</span>, def_style());
-<a href=#283 id=283 data-nosnippet>283</a>        tb.text(def_style(), Line::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">5</span>), <span class="string">"hi"</span>);
-<a href=#284 id=284 data-nosnippet>284</a>        <span class="macro">assert_eq!</span>(tb.get((<span class="number">0</span>, <span class="number">0</span>).into()).unwrap().ch, <span class="string">'h'</span>);
-<a href=#285 id=285 data-nosnippet>285</a>        <span class="macro">assert_eq!</span>(tb.get((<span class="number">1</span>, <span class="number">0</span>).into()).unwrap().ch, <span class="string">'i'</span>);
-<a href=#286 id=286 data-nosnippet>286</a>        <span class="macro">assert_eq!</span>(tb.get((<span class="number">2</span>, <span class="number">0</span>).into()).unwrap().ch, <span class="string">' '</span>);
+<a href=#281 id=281 data-nosnippet>281</a>    </span><span class="kw">fn </span>basic_fill() {
+<a href=#282 id=282 data-nosnippet>282</a>        <span class="kw">let </span><span class="kw-2">mut </span>tb = TermBuf::new(Expanse::new(<span class="number">4</span>, <span class="number">2</span>), <span class="string">' '</span>, def_style());
+<a href=#283 id=283 data-nosnippet>283</a>        tb.fill(def_style(), Rect::new(<span class="number">1</span>, <span class="number">0</span>, <span class="number">2</span>, <span class="number">2</span>), <span class="string">'x'</span>);
+<a href=#284 id=284 data-nosnippet>284</a>        <span class="macro">assert_eq!</span>(tb.get(Point { x: <span class="number">1</span>, y: <span class="number">0 </span>}).unwrap().ch, <span class="string">'x'</span>);
+<a href=#285 id=285 data-nosnippet>285</a>        <span class="macro">assert_eq!</span>(tb.get(Point { x: <span class="number">2</span>, y: <span class="number">1 </span>}).unwrap().ch, <span class="string">'x'</span>);
+<a href=#286 id=286 data-nosnippet>286</a>        <span class="macro">assert_eq!</span>(tb.get(Point { x: <span class="number">3</span>, y: <span class="number">0 </span>}).unwrap().ch, <span class="string">' '</span>);
 <a href=#287 id=287 data-nosnippet>287</a>    }
 <a href=#288 id=288 data-nosnippet>288</a>
 <a href=#289 id=289 data-nosnippet>289</a>    <span class="attr">#[test]
-<a href=#290 id=290 data-nosnippet>290</a>    </span><span class="kw">fn </span>solid_frame_draw() {
-<a href=#291 id=291 data-nosnippet>291</a>        <span class="kw">let </span><span class="kw-2">mut </span>tb = TermBuf::new(Expanse::new(<span class="number">4</span>, <span class="number">4</span>), <span class="string">' '</span>, def_style());
-<a href=#292 id=292 data-nosnippet>292</a>        <span class="kw">let </span>f = Frame::new(Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">4</span>, <span class="number">4</span>), <span class="number">1</span>);
-<a href=#293 id=293 data-nosnippet>293</a>        tb.solid_frame(def_style(), f, <span class="string">'#'</span>);
-<a href=#294 id=294 data-nosnippet>294</a>        <span class="macro">assert_eq!</span>(tb.get((<span class="number">0</span>, <span class="number">0</span>).into()).unwrap().ch, <span class="string">'#'</span>);
-<a href=#295 id=295 data-nosnippet>295</a>        <span class="macro">assert_eq!</span>(tb.get((<span class="number">1</span>, <span class="number">1</span>).into()).unwrap().ch, <span class="string">' '</span>);
-<a href=#296 id=296 data-nosnippet>296</a>        <span class="macro">assert_eq!</span>(tb.get((<span class="number">3</span>, <span class="number">3</span>).into()).unwrap().ch, <span class="string">'#'</span>);
-<a href=#297 id=297 data-nosnippet>297</a>    }
-<a href=#298 id=298 data-nosnippet>298</a>
-<a href=#299 id=299 data-nosnippet>299</a>    <span class="kw">struct </span>RecBackend {
-<a href=#300 id=300 data-nosnippet>300</a>        ops: Vec&lt;String&gt;,
-<a href=#301 id=301 data-nosnippet>301</a>    }
-<a href=#302 id=302 data-nosnippet>302</a>
-<a href=#303 id=303 data-nosnippet>303</a>    <span class="kw">impl </span>RecBackend {
-<a href=#304 id=304 data-nosnippet>304</a>        <span class="kw">fn </span>new() -&gt; <span class="self">Self </span>{
-<a href=#305 id=305 data-nosnippet>305</a>            RecBackend { ops: Vec::new() }
-<a href=#306 id=306 data-nosnippet>306</a>        }
-<a href=#307 id=307 data-nosnippet>307</a>    }
-<a href=#308 id=308 data-nosnippet>308</a>
-<a href=#309 id=309 data-nosnippet>309</a>    <span class="kw">impl </span>RenderBackend <span class="kw">for </span>RecBackend {
-<a href=#310 id=310 data-nosnippet>310</a>        <span class="kw">fn </span>style(<span class="kw-2">&amp;mut </span><span class="self">self</span>, s: Style) -&gt; <span class="kw">crate</span>::Result&lt;()&gt; {
-<a href=#311 id=311 data-nosnippet>311</a>            <span class="self">self</span>.ops.push(<span class="macro">format!</span>(<span class="string">"style {s:?}"</span>));
-<a href=#312 id=312 data-nosnippet>312</a>            <span class="prelude-val">Ok</span>(())
-<a href=#313 id=313 data-nosnippet>313</a>        }
-<a href=#314 id=314 data-nosnippet>314</a>
-<a href=#315 id=315 data-nosnippet>315</a>        <span class="kw">fn </span>text(<span class="kw-2">&amp;mut </span><span class="self">self</span>, loc: Point, txt: <span class="kw-2">&amp;</span>str) -&gt; <span class="kw">crate</span>::Result&lt;()&gt; {
-<a href=#316 id=316 data-nosnippet>316</a>            <span class="self">self</span>.ops.push(<span class="macro">format!</span>(<span class="string">"text {} {} {}"</span>, loc.x, loc.y, txt));
-<a href=#317 id=317 data-nosnippet>317</a>            <span class="prelude-val">Ok</span>(())
-<a href=#318 id=318 data-nosnippet>318</a>        }
-<a href=#319 id=319 data-nosnippet>319</a>
-<a href=#320 id=320 data-nosnippet>320</a>        <span class="kw">fn </span>flush(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw">crate</span>::Result&lt;()&gt; {
+<a href=#290 id=290 data-nosnippet>290</a>    </span><span class="kw">fn </span>text_write() {
+<a href=#291 id=291 data-nosnippet>291</a>        <span class="kw">let </span><span class="kw-2">mut </span>tb = TermBuf::new(Expanse::new(<span class="number">5</span>, <span class="number">1</span>), <span class="string">' '</span>, def_style());
+<a href=#292 id=292 data-nosnippet>292</a>        tb.text(def_style(), Line::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">5</span>), <span class="string">"hi"</span>);
+<a href=#293 id=293 data-nosnippet>293</a>        <span class="macro">assert_eq!</span>(tb.get((<span class="number">0</span>, <span class="number">0</span>).into()).unwrap().ch, <span class="string">'h'</span>);
+<a href=#294 id=294 data-nosnippet>294</a>        <span class="macro">assert_eq!</span>(tb.get((<span class="number">1</span>, <span class="number">0</span>).into()).unwrap().ch, <span class="string">'i'</span>);
+<a href=#295 id=295 data-nosnippet>295</a>        <span class="macro">assert_eq!</span>(tb.get((<span class="number">2</span>, <span class="number">0</span>).into()).unwrap().ch, <span class="string">' '</span>);
+<a href=#296 id=296 data-nosnippet>296</a>    }
+<a href=#297 id=297 data-nosnippet>297</a>
+<a href=#298 id=298 data-nosnippet>298</a>    <span class="attr">#[test]
+<a href=#299 id=299 data-nosnippet>299</a>    </span><span class="kw">fn </span>solid_frame_draw() {
+<a href=#300 id=300 data-nosnippet>300</a>        <span class="kw">let </span><span class="kw-2">mut </span>tb = TermBuf::new(Expanse::new(<span class="number">4</span>, <span class="number">4</span>), <span class="string">' '</span>, def_style());
+<a href=#301 id=301 data-nosnippet>301</a>        <span class="kw">let </span>f = Frame::new(Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">4</span>, <span class="number">4</span>), <span class="number">1</span>);
+<a href=#302 id=302 data-nosnippet>302</a>        tb.solid_frame(def_style(), f, <span class="string">'#'</span>);
+<a href=#303 id=303 data-nosnippet>303</a>        <span class="macro">assert_eq!</span>(tb.get((<span class="number">0</span>, <span class="number">0</span>).into()).unwrap().ch, <span class="string">'#'</span>);
+<a href=#304 id=304 data-nosnippet>304</a>        <span class="macro">assert_eq!</span>(tb.get((<span class="number">1</span>, <span class="number">1</span>).into()).unwrap().ch, <span class="string">' '</span>);
+<a href=#305 id=305 data-nosnippet>305</a>        <span class="macro">assert_eq!</span>(tb.get((<span class="number">3</span>, <span class="number">3</span>).into()).unwrap().ch, <span class="string">'#'</span>);
+<a href=#306 id=306 data-nosnippet>306</a>    }
+<a href=#307 id=307 data-nosnippet>307</a>
+<a href=#308 id=308 data-nosnippet>308</a>    <span class="kw">struct </span>RecBackend {
+<a href=#309 id=309 data-nosnippet>309</a>        ops: Vec&lt;String&gt;,
+<a href=#310 id=310 data-nosnippet>310</a>    }
+<a href=#311 id=311 data-nosnippet>311</a>
+<a href=#312 id=312 data-nosnippet>312</a>    <span class="kw">impl </span>RecBackend {
+<a href=#313 id=313 data-nosnippet>313</a>        <span class="kw">fn </span>new() -&gt; <span class="self">Self </span>{
+<a href=#314 id=314 data-nosnippet>314</a>            RecBackend { ops: Vec::new() }
+<a href=#315 id=315 data-nosnippet>315</a>        }
+<a href=#316 id=316 data-nosnippet>316</a>    }
+<a href=#317 id=317 data-nosnippet>317</a>
+<a href=#318 id=318 data-nosnippet>318</a>    <span class="kw">impl </span>RenderBackend <span class="kw">for </span>RecBackend {
+<a href=#319 id=319 data-nosnippet>319</a>        <span class="kw">fn </span>style(<span class="kw-2">&amp;mut </span><span class="self">self</span>, s: Style) -&gt; <span class="kw">crate</span>::Result&lt;()&gt; {
+<a href=#320 id=320 data-nosnippet>320</a>            <span class="self">self</span>.ops.push(<span class="macro">format!</span>(<span class="string">"style {s:?}"</span>));
 <a href=#321 id=321 data-nosnippet>321</a>            <span class="prelude-val">Ok</span>(())
 <a href=#322 id=322 data-nosnippet>322</a>        }
 <a href=#323 id=323 data-nosnippet>323</a>
-<a href=#324 id=324 data-nosnippet>324</a>        <span class="kw">fn </span>exit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _code: i32) -&gt; ! {
-<a href=#325 id=325 data-nosnippet>325</a>            <span class="macro">unreachable!</span>()
-<a href=#326 id=326 data-nosnippet>326</a>        }
-<a href=#327 id=327 data-nosnippet>327</a>
-<a href=#328 id=328 data-nosnippet>328</a>        <span class="kw">fn </span>reset(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw">crate</span>::Result&lt;()&gt; {
-<a href=#329 id=329 data-nosnippet>329</a>            <span class="prelude-val">Ok</span>(())
-<a href=#330 id=330 data-nosnippet>330</a>        }
-<a href=#331 id=331 data-nosnippet>331</a>    }
+<a href=#324 id=324 data-nosnippet>324</a>        <span class="kw">fn </span>text(<span class="kw-2">&amp;mut </span><span class="self">self</span>, loc: Point, txt: <span class="kw-2">&amp;</span>str) -&gt; <span class="kw">crate</span>::Result&lt;()&gt; {
+<a href=#325 id=325 data-nosnippet>325</a>            <span class="self">self</span>.ops.push(<span class="macro">format!</span>(<span class="string">"text {} {} {}"</span>, loc.x, loc.y, txt));
+<a href=#326 id=326 data-nosnippet>326</a>            <span class="prelude-val">Ok</span>(())
+<a href=#327 id=327 data-nosnippet>327</a>        }
+<a href=#328 id=328 data-nosnippet>328</a>
+<a href=#329 id=329 data-nosnippet>329</a>        <span class="kw">fn </span>flush(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw">crate</span>::Result&lt;()&gt; {
+<a href=#330 id=330 data-nosnippet>330</a>            <span class="prelude-val">Ok</span>(())
+<a href=#331 id=331 data-nosnippet>331</a>        }
 <a href=#332 id=332 data-nosnippet>332</a>
-<a href=#333 id=333 data-nosnippet>333</a>    <span class="attr">#[test]
-<a href=#334 id=334 data-nosnippet>334</a>    </span><span class="kw">fn </span>diff_no_change() {
-<a href=#335 id=335 data-nosnippet>335</a>        <span class="kw">let </span>style = def_style();
-<a href=#336 id=336 data-nosnippet>336</a>        <span class="kw">let </span>tb1 = TermBuf::new(Expanse::new(<span class="number">3</span>, <span class="number">1</span>), <span class="string">' '</span>, style.clone());
-<a href=#337 id=337 data-nosnippet>337</a>        <span class="kw">let </span>tb2 = TermBuf::new(Expanse::new(<span class="number">3</span>, <span class="number">1</span>), <span class="string">' '</span>, style.clone());
-<a href=#338 id=338 data-nosnippet>338</a>        <span class="kw">let </span><span class="kw-2">mut </span>be = RecBackend::new();
-<a href=#339 id=339 data-nosnippet>339</a>        tb2.diff(<span class="kw-2">&amp;</span>tb1, <span class="kw-2">&amp;mut </span>be).unwrap();
-<a href=#340 id=340 data-nosnippet>340</a>        <span class="macro">assert!</span>(be.ops.is_empty());
-<a href=#341 id=341 data-nosnippet>341</a>    }
-<a href=#342 id=342 data-nosnippet>342</a>
-<a href=#343 id=343 data-nosnippet>343</a>    <span class="attr">#[test]
-<a href=#344 id=344 data-nosnippet>344</a>    </span><span class="kw">fn </span>diff_single_run() {
-<a href=#345 id=345 data-nosnippet>345</a>        <span class="kw">let </span>style = def_style();
-<a href=#346 id=346 data-nosnippet>346</a>        <span class="kw">let </span>prev = TermBuf::new(Expanse::new(<span class="number">3</span>, <span class="number">1</span>), <span class="string">' '</span>, style.clone());
-<a href=#347 id=347 data-nosnippet>347</a>        <span class="kw">let </span><span class="kw-2">mut </span>cur = TermBuf::new(Expanse::new(<span class="number">3</span>, <span class="number">1</span>), <span class="string">' '</span>, style.clone());
-<a href=#348 id=348 data-nosnippet>348</a>        cur.text(style.clone(), Line::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">3</span>), <span class="string">"ab"</span>);
-<a href=#349 id=349 data-nosnippet>349</a>        <span class="kw">let </span><span class="kw-2">mut </span>be = RecBackend::new();
-<a href=#350 id=350 data-nosnippet>350</a>        cur.diff(<span class="kw-2">&amp;</span>prev, <span class="kw-2">&amp;mut </span>be).unwrap();
-<a href=#351 id=351 data-nosnippet>351</a>        <span class="macro">assert_eq!</span>(be.ops.len(), <span class="number">2</span>);
-<a href=#352 id=352 data-nosnippet>352</a>        <span class="macro">assert_eq!</span>(be.ops[<span class="number">0</span>], <span class="macro">format!</span>(<span class="string">"style {style:?}"</span>));
-<a href=#353 id=353 data-nosnippet>353</a>        <span class="macro">assert_eq!</span>(be.ops[<span class="number">1</span>], <span class="string">"text 0 0 ab"</span>);
-<a href=#354 id=354 data-nosnippet>354</a>    }
-<a href=#355 id=355 data-nosnippet>355</a>
-<a href=#356 id=356 data-nosnippet>356</a>    <span class="attr">#[test]
-<a href=#357 id=357 data-nosnippet>357</a>    </span><span class="kw">fn </span>diff_style_changes() {
-<a href=#358 id=358 data-nosnippet>358</a>        <span class="kw">let </span>style1 = def_style();
-<a href=#359 id=359 data-nosnippet>359</a>        <span class="kw">let </span><span class="kw-2">mut </span>style2 = style1.clone();
-<a href=#360 id=360 data-nosnippet>360</a>        style2.fg = Color::Red;
-<a href=#361 id=361 data-nosnippet>361</a>
-<a href=#362 id=362 data-nosnippet>362</a>        <span class="kw">let </span>prev = TermBuf::new(Expanse::new(<span class="number">2</span>, <span class="number">1</span>), <span class="string">' '</span>, style1.clone());
-<a href=#363 id=363 data-nosnippet>363</a>        <span class="kw">let </span><span class="kw-2">mut </span>cur = TermBuf::new(Expanse::new(<span class="number">2</span>, <span class="number">1</span>), <span class="string">' '</span>, style1.clone());
-<a href=#364 id=364 data-nosnippet>364</a>        cur.fill(style2.clone(), Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>, <span class="number">1</span>), <span class="string">'a'</span>);
-<a href=#365 id=365 data-nosnippet>365</a>        cur.fill(style1.clone(), Rect::new(<span class="number">1</span>, <span class="number">0</span>, <span class="number">1</span>, <span class="number">1</span>), <span class="string">'b'</span>);
-<a href=#366 id=366 data-nosnippet>366</a>
-<a href=#367 id=367 data-nosnippet>367</a>        <span class="kw">let </span><span class="kw-2">mut </span>be = RecBackend::new();
-<a href=#368 id=368 data-nosnippet>368</a>        cur.diff(<span class="kw-2">&amp;</span>prev, <span class="kw-2">&amp;mut </span>be).unwrap();
-<a href=#369 id=369 data-nosnippet>369</a>
-<a href=#370 id=370 data-nosnippet>370</a>        <span class="macro">assert_eq!</span>(be.ops.len(), <span class="number">4</span>);
-<a href=#371 id=371 data-nosnippet>371</a>        <span class="macro">assert_eq!</span>(be.ops[<span class="number">0</span>], <span class="macro">format!</span>(<span class="string">"style {style2:?}"</span>));
-<a href=#372 id=372 data-nosnippet>372</a>        <span class="macro">assert_eq!</span>(be.ops[<span class="number">1</span>], <span class="string">"text 0 0 a"</span>);
-<a href=#373 id=373 data-nosnippet>373</a>        <span class="macro">assert_eq!</span>(be.ops[<span class="number">2</span>], <span class="macro">format!</span>(<span class="string">"style {style1:?}"</span>));
-<a href=#374 id=374 data-nosnippet>374</a>        <span class="macro">assert_eq!</span>(be.ops[<span class="number">3</span>], <span class="string">"text 1 0 b"</span>);
-<a href=#375 id=375 data-nosnippet>375</a>    }
-<a href=#376 id=376 data-nosnippet>376</a>
-<a href=#377 id=377 data-nosnippet>377</a>    <span class="attr">#[test]
-<a href=#378 id=378 data-nosnippet>378</a>    </span><span class="kw">fn </span>diff_multi_line() {
-<a href=#379 id=379 data-nosnippet>379</a>        <span class="kw">let </span>style = def_style();
-<a href=#380 id=380 data-nosnippet>380</a>        <span class="kw">let </span>prev = TermBuf::new(Expanse::new(<span class="number">3</span>, <span class="number">2</span>), <span class="string">' '</span>, style.clone());
-<a href=#381 id=381 data-nosnippet>381</a>        <span class="kw">let </span><span class="kw-2">mut </span>cur = TermBuf::new(Expanse::new(<span class="number">3</span>, <span class="number">2</span>), <span class="string">' '</span>, style.clone());
-<a href=#382 id=382 data-nosnippet>382</a>        cur.fill(style.clone(), Rect::new(<span class="number">0</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">1</span>), <span class="string">'x'</span>);
-<a href=#383 id=383 data-nosnippet>383</a>        <span class="kw">let </span><span class="kw-2">mut </span>be = RecBackend::new();
-<a href=#384 id=384 data-nosnippet>384</a>        cur.diff(<span class="kw-2">&amp;</span>prev, <span class="kw-2">&amp;mut </span>be).unwrap();
-<a href=#385 id=385 data-nosnippet>385</a>        <span class="macro">assert_eq!</span>(be.ops.len(), <span class="number">2</span>);
-<a href=#386 id=386 data-nosnippet>386</a>        <span class="macro">assert_eq!</span>(be.ops[<span class="number">0</span>], <span class="macro">format!</span>(<span class="string">"style {style:?}"</span>));
-<a href=#387 id=387 data-nosnippet>387</a>        <span class="macro">assert_eq!</span>(be.ops[<span class="number">1</span>], <span class="string">"text 0 1 xx"</span>);
-<a href=#388 id=388 data-nosnippet>388</a>    }
-<a href=#389 id=389 data-nosnippet>389</a>
-<a href=#390 id=390 data-nosnippet>390</a>    <span class="attr">#[test]
-<a href=#391 id=391 data-nosnippet>391</a>    </span><span class="kw">fn </span>render_whole_buffer() {
-<a href=#392 id=392 data-nosnippet>392</a>        <span class="kw">let </span>style = def_style();
-<a href=#393 id=393 data-nosnippet>393</a>        <span class="kw">let </span><span class="kw-2">mut </span>tb = TermBuf::new(Expanse::new(<span class="number">3</span>, <span class="number">1</span>), <span class="string">' '</span>, style.clone());
-<a href=#394 id=394 data-nosnippet>394</a>        tb.text(style.clone(), Line::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">3</span>), <span class="string">"ab"</span>);
-<a href=#395 id=395 data-nosnippet>395</a>        <span class="kw">let </span><span class="kw-2">mut </span>be = RecBackend::new();
-<a href=#396 id=396 data-nosnippet>396</a>        tb.render(<span class="kw-2">&amp;mut </span>be).unwrap();
-<a href=#397 id=397 data-nosnippet>397</a>        <span class="macro">assert_eq!</span>(
-<a href=#398 id=398 data-nosnippet>398</a>            be.ops,
-<a href=#399 id=399 data-nosnippet>399</a>            <span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"style {style:?}"</span>), <span class="string">"text 0 0 ab "</span>.to_string(),]
-<a href=#400 id=400 data-nosnippet>400</a>        );
-<a href=#401 id=401 data-nosnippet>401</a>    }
-<a href=#402 id=402 data-nosnippet>402</a>
-<a href=#403 id=403 data-nosnippet>403</a>    <span class="attr">#[test]
-<a href=#404 id=404 data-nosnippet>404</a>    </span><span class="kw">fn </span>diff_size_change_rerender() {
-<a href=#405 id=405 data-nosnippet>405</a>        <span class="kw">let </span>style = def_style();
-<a href=#406 id=406 data-nosnippet>406</a>        <span class="kw">let </span>prev = TermBuf::new(Expanse::new(<span class="number">2</span>, <span class="number">1</span>), <span class="string">' '</span>, style.clone());
-<a href=#407 id=407 data-nosnippet>407</a>        <span class="kw">let </span><span class="kw-2">mut </span>cur = TermBuf::new(Expanse::new(<span class="number">3</span>, <span class="number">1</span>), <span class="string">' '</span>, style.clone());
-<a href=#408 id=408 data-nosnippet>408</a>        cur.text(style.clone(), Line::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">3</span>), <span class="string">"abc"</span>);
-<a href=#409 id=409 data-nosnippet>409</a>        <span class="kw">let </span><span class="kw-2">mut </span>be = RecBackend::new();
-<a href=#410 id=410 data-nosnippet>410</a>        cur.diff(<span class="kw-2">&amp;</span>prev, <span class="kw-2">&amp;mut </span>be).unwrap();
-<a href=#411 id=411 data-nosnippet>411</a>        <span class="macro">assert_eq!</span>(
-<a href=#412 id=412 data-nosnippet>412</a>            be.ops,
-<a href=#413 id=413 data-nosnippet>413</a>            <span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"style {style:?}"</span>), <span class="string">"text 0 0 abc"</span>.to_string(),]
-<a href=#414 id=414 data-nosnippet>414</a>        );
-<a href=#415 id=415 data-nosnippet>415</a>    }
-<a href=#416 id=416 data-nosnippet>416</a>}</code></pre></div></section></main></body></html>
+<a href=#333 id=333 data-nosnippet>333</a>        <span class="kw">fn </span>exit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _code: i32) -&gt; ! {
+<a href=#334 id=334 data-nosnippet>334</a>            <span class="macro">unreachable!</span>()
+<a href=#335 id=335 data-nosnippet>335</a>        }
+<a href=#336 id=336 data-nosnippet>336</a>
+<a href=#337 id=337 data-nosnippet>337</a>        <span class="kw">fn </span>reset(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw">crate</span>::Result&lt;()&gt; {
+<a href=#338 id=338 data-nosnippet>338</a>            <span class="prelude-val">Ok</span>(())
+<a href=#339 id=339 data-nosnippet>339</a>        }
+<a href=#340 id=340 data-nosnippet>340</a>    }
+<a href=#341 id=341 data-nosnippet>341</a>
+<a href=#342 id=342 data-nosnippet>342</a>    <span class="attr">#[test]
+<a href=#343 id=343 data-nosnippet>343</a>    </span><span class="kw">fn </span>diff_no_change() {
+<a href=#344 id=344 data-nosnippet>344</a>        <span class="kw">let </span>style = def_style();
+<a href=#345 id=345 data-nosnippet>345</a>        <span class="kw">let </span>tb1 = TermBuf::new(Expanse::new(<span class="number">3</span>, <span class="number">1</span>), <span class="string">' '</span>, style.clone());
+<a href=#346 id=346 data-nosnippet>346</a>        <span class="kw">let </span>tb2 = TermBuf::new(Expanse::new(<span class="number">3</span>, <span class="number">1</span>), <span class="string">' '</span>, style.clone());
+<a href=#347 id=347 data-nosnippet>347</a>        <span class="kw">let </span><span class="kw-2">mut </span>be = RecBackend::new();
+<a href=#348 id=348 data-nosnippet>348</a>        tb2.diff(<span class="kw-2">&amp;</span>tb1, <span class="kw-2">&amp;mut </span>be).unwrap();
+<a href=#349 id=349 data-nosnippet>349</a>        <span class="macro">assert!</span>(be.ops.is_empty());
+<a href=#350 id=350 data-nosnippet>350</a>    }
+<a href=#351 id=351 data-nosnippet>351</a>
+<a href=#352 id=352 data-nosnippet>352</a>    <span class="attr">#[test]
+<a href=#353 id=353 data-nosnippet>353</a>    </span><span class="kw">fn </span>diff_single_run() {
+<a href=#354 id=354 data-nosnippet>354</a>        <span class="kw">let </span>style = def_style();
+<a href=#355 id=355 data-nosnippet>355</a>        <span class="kw">let </span>prev = TermBuf::new(Expanse::new(<span class="number">3</span>, <span class="number">1</span>), <span class="string">' '</span>, style.clone());
+<a href=#356 id=356 data-nosnippet>356</a>        <span class="kw">let </span><span class="kw-2">mut </span>cur = TermBuf::new(Expanse::new(<span class="number">3</span>, <span class="number">1</span>), <span class="string">' '</span>, style.clone());
+<a href=#357 id=357 data-nosnippet>357</a>        cur.text(style.clone(), Line::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">3</span>), <span class="string">"ab"</span>);
+<a href=#358 id=358 data-nosnippet>358</a>        <span class="kw">let </span><span class="kw-2">mut </span>be = RecBackend::new();
+<a href=#359 id=359 data-nosnippet>359</a>        cur.diff(<span class="kw-2">&amp;</span>prev, <span class="kw-2">&amp;mut </span>be).unwrap();
+<a href=#360 id=360 data-nosnippet>360</a>        <span class="macro">assert_eq!</span>(be.ops.len(), <span class="number">2</span>);
+<a href=#361 id=361 data-nosnippet>361</a>        <span class="macro">assert_eq!</span>(be.ops[<span class="number">0</span>], <span class="macro">format!</span>(<span class="string">"style {style:?}"</span>));
+<a href=#362 id=362 data-nosnippet>362</a>        <span class="macro">assert_eq!</span>(be.ops[<span class="number">1</span>], <span class="string">"text 0 0 ab"</span>);
+<a href=#363 id=363 data-nosnippet>363</a>    }
+<a href=#364 id=364 data-nosnippet>364</a>
+<a href=#365 id=365 data-nosnippet>365</a>    <span class="attr">#[test]
+<a href=#366 id=366 data-nosnippet>366</a>    </span><span class="kw">fn </span>diff_style_changes() {
+<a href=#367 id=367 data-nosnippet>367</a>        <span class="kw">let </span>style1 = def_style();
+<a href=#368 id=368 data-nosnippet>368</a>        <span class="kw">let </span><span class="kw-2">mut </span>style2 = style1.clone();
+<a href=#369 id=369 data-nosnippet>369</a>        style2.fg = Color::Red;
+<a href=#370 id=370 data-nosnippet>370</a>
+<a href=#371 id=371 data-nosnippet>371</a>        <span class="kw">let </span>prev = TermBuf::new(Expanse::new(<span class="number">2</span>, <span class="number">1</span>), <span class="string">' '</span>, style1.clone());
+<a href=#372 id=372 data-nosnippet>372</a>        <span class="kw">let </span><span class="kw-2">mut </span>cur = TermBuf::new(Expanse::new(<span class="number">2</span>, <span class="number">1</span>), <span class="string">' '</span>, style1.clone());
+<a href=#373 id=373 data-nosnippet>373</a>        cur.fill(style2.clone(), Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>, <span class="number">1</span>), <span class="string">'a'</span>);
+<a href=#374 id=374 data-nosnippet>374</a>        cur.fill(style1.clone(), Rect::new(<span class="number">1</span>, <span class="number">0</span>, <span class="number">1</span>, <span class="number">1</span>), <span class="string">'b'</span>);
+<a href=#375 id=375 data-nosnippet>375</a>
+<a href=#376 id=376 data-nosnippet>376</a>        <span class="kw">let </span><span class="kw-2">mut </span>be = RecBackend::new();
+<a href=#377 id=377 data-nosnippet>377</a>        cur.diff(<span class="kw-2">&amp;</span>prev, <span class="kw-2">&amp;mut </span>be).unwrap();
+<a href=#378 id=378 data-nosnippet>378</a>
+<a href=#379 id=379 data-nosnippet>379</a>        <span class="macro">assert_eq!</span>(be.ops.len(), <span class="number">4</span>);
+<a href=#380 id=380 data-nosnippet>380</a>        <span class="macro">assert_eq!</span>(be.ops[<span class="number">0</span>], <span class="macro">format!</span>(<span class="string">"style {style2:?}"</span>));
+<a href=#381 id=381 data-nosnippet>381</a>        <span class="macro">assert_eq!</span>(be.ops[<span class="number">1</span>], <span class="string">"text 0 0 a"</span>);
+<a href=#382 id=382 data-nosnippet>382</a>        <span class="macro">assert_eq!</span>(be.ops[<span class="number">2</span>], <span class="macro">format!</span>(<span class="string">"style {style1:?}"</span>));
+<a href=#383 id=383 data-nosnippet>383</a>        <span class="macro">assert_eq!</span>(be.ops[<span class="number">3</span>], <span class="string">"text 1 0 b"</span>);
+<a href=#384 id=384 data-nosnippet>384</a>    }
+<a href=#385 id=385 data-nosnippet>385</a>
+<a href=#386 id=386 data-nosnippet>386</a>    <span class="attr">#[test]
+<a href=#387 id=387 data-nosnippet>387</a>    </span><span class="kw">fn </span>diff_multi_line() {
+<a href=#388 id=388 data-nosnippet>388</a>        <span class="kw">let </span>style = def_style();
+<a href=#389 id=389 data-nosnippet>389</a>        <span class="kw">let </span>prev = TermBuf::new(Expanse::new(<span class="number">3</span>, <span class="number">2</span>), <span class="string">' '</span>, style.clone());
+<a href=#390 id=390 data-nosnippet>390</a>        <span class="kw">let </span><span class="kw-2">mut </span>cur = TermBuf::new(Expanse::new(<span class="number">3</span>, <span class="number">2</span>), <span class="string">' '</span>, style.clone());
+<a href=#391 id=391 data-nosnippet>391</a>        cur.fill(style.clone(), Rect::new(<span class="number">0</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">1</span>), <span class="string">'x'</span>);
+<a href=#392 id=392 data-nosnippet>392</a>        <span class="kw">let </span><span class="kw-2">mut </span>be = RecBackend::new();
+<a href=#393 id=393 data-nosnippet>393</a>        cur.diff(<span class="kw-2">&amp;</span>prev, <span class="kw-2">&amp;mut </span>be).unwrap();
+<a href=#394 id=394 data-nosnippet>394</a>        <span class="macro">assert_eq!</span>(be.ops.len(), <span class="number">2</span>);
+<a href=#395 id=395 data-nosnippet>395</a>        <span class="macro">assert_eq!</span>(be.ops[<span class="number">0</span>], <span class="macro">format!</span>(<span class="string">"style {style:?}"</span>));
+<a href=#396 id=396 data-nosnippet>396</a>        <span class="macro">assert_eq!</span>(be.ops[<span class="number">1</span>], <span class="string">"text 0 1 xx"</span>);
+<a href=#397 id=397 data-nosnippet>397</a>    }
+<a href=#398 id=398 data-nosnippet>398</a>
+<a href=#399 id=399 data-nosnippet>399</a>    <span class="attr">#[test]
+<a href=#400 id=400 data-nosnippet>400</a>    </span><span class="kw">fn </span>render_whole_buffer() {
+<a href=#401 id=401 data-nosnippet>401</a>        <span class="kw">let </span>style = def_style();
+<a href=#402 id=402 data-nosnippet>402</a>        <span class="kw">let </span><span class="kw-2">mut </span>tb = TermBuf::new(Expanse::new(<span class="number">3</span>, <span class="number">1</span>), <span class="string">' '</span>, style.clone());
+<a href=#403 id=403 data-nosnippet>403</a>        tb.text(style.clone(), Line::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">3</span>), <span class="string">"ab"</span>);
+<a href=#404 id=404 data-nosnippet>404</a>        <span class="kw">let </span><span class="kw-2">mut </span>be = RecBackend::new();
+<a href=#405 id=405 data-nosnippet>405</a>        tb.render(<span class="kw-2">&amp;mut </span>be).unwrap();
+<a href=#406 id=406 data-nosnippet>406</a>        <span class="macro">assert_eq!</span>(
+<a href=#407 id=407 data-nosnippet>407</a>            be.ops,
+<a href=#408 id=408 data-nosnippet>408</a>            <span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"style {style:?}"</span>), <span class="string">"text 0 0 ab "</span>.to_string(),]
+<a href=#409 id=409 data-nosnippet>409</a>        );
+<a href=#410 id=410 data-nosnippet>410</a>    }
+<a href=#411 id=411 data-nosnippet>411</a>
+<a href=#412 id=412 data-nosnippet>412</a>    <span class="attr">#[test]
+<a href=#413 id=413 data-nosnippet>413</a>    </span><span class="kw">fn </span>diff_size_change_rerender() {
+<a href=#414 id=414 data-nosnippet>414</a>        <span class="kw">let </span>style = def_style();
+<a href=#415 id=415 data-nosnippet>415</a>        <span class="kw">let </span>prev = TermBuf::new(Expanse::new(<span class="number">2</span>, <span class="number">1</span>), <span class="string">' '</span>, style.clone());
+<a href=#416 id=416 data-nosnippet>416</a>        <span class="kw">let </span><span class="kw-2">mut </span>cur = TermBuf::new(Expanse::new(<span class="number">3</span>, <span class="number">1</span>), <span class="string">' '</span>, style.clone());
+<a href=#417 id=417 data-nosnippet>417</a>        cur.text(style.clone(), Line::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">3</span>), <span class="string">"abc"</span>);
+<a href=#418 id=418 data-nosnippet>418</a>        <span class="kw">let </span><span class="kw-2">mut </span>be = RecBackend::new();
+<a href=#419 id=419 data-nosnippet>419</a>        cur.diff(<span class="kw-2">&amp;</span>prev, <span class="kw-2">&amp;mut </span>be).unwrap();
+<a href=#420 id=420 data-nosnippet>420</a>        <span class="macro">assert_eq!</span>(
+<a href=#421 id=421 data-nosnippet>421</a>            be.ops,
+<a href=#422 id=422 data-nosnippet>422</a>            <span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"style {style:?}"</span>), <span class="string">"text 0 0 abc"</span>.to_string(),]
+<a href=#423 id=423 data-nosnippet>423</a>        );
+<a href=#424 id=424 data-nosnippet>424</a>    }
+<a href=#425 id=425 data-nosnippet>425</a>
+<a href=#426 id=426 data-nosnippet>426</a>    <span class="attr">#[test]
+<a href=#427 id=427 data-nosnippet>427</a>    </span><span class="kw">fn </span>contains_text() {
+<a href=#428 id=428 data-nosnippet>428</a>        <span class="kw">let </span><span class="kw-2">mut </span>tb = TermBuf::new(Expanse::new(<span class="number">10</span>, <span class="number">3</span>), <span class="string">' '</span>, def_style());
+<a href=#429 id=429 data-nosnippet>429</a>        tb.text(def_style(), Line::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">10</span>), <span class="string">"hello"</span>);
+<a href=#430 id=430 data-nosnippet>430</a>        tb.text(def_style(), Line::new(<span class="number">0</span>, <span class="number">1</span>, <span class="number">10</span>), <span class="string">"world"</span>);
+<a href=#431 id=431 data-nosnippet>431</a>
+<a href=#432 id=432 data-nosnippet>432</a>        <span class="macro">assert!</span>(tb.contains_text(<span class="string">"hello"</span>));
+<a href=#433 id=433 data-nosnippet>433</a>        <span class="macro">assert!</span>(tb.contains_text(<span class="string">"world"</span>));
+<a href=#434 id=434 data-nosnippet>434</a>        <span class="macro">assert!</span>(!tb.contains_text(<span class="string">"goodbye"</span>));
+<a href=#435 id=435 data-nosnippet>435</a>    }
+<a href=#436 id=436 data-nosnippet>436</a>
+<a href=#437 id=437 data-nosnippet>437</a>    <span class="attr">#[test]
+<a href=#438 id=438 data-nosnippet>438</a>    </span><span class="kw">fn </span>contains_text_style() {
+<a href=#439 id=439 data-nosnippet>439</a>        <span class="kw">let </span><span class="kw-2">mut </span>tb = TermBuf::new(Expanse::new(<span class="number">10</span>, <span class="number">3</span>), <span class="string">' '</span>, def_style());
+<a href=#440 id=440 data-nosnippet>440</a>
+<a href=#441 id=441 data-nosnippet>441</a>        <span class="comment">// Add text with different styles
+<a href=#442 id=442 data-nosnippet>442</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>red_style = def_style();
+<a href=#443 id=443 data-nosnippet>443</a>        red_style.fg = Color::Red;
+<a href=#444 id=444 data-nosnippet>444</a>
+<a href=#445 id=445 data-nosnippet>445</a>        <span class="kw">let </span><span class="kw-2">mut </span>blue_style = def_style();
+<a href=#446 id=446 data-nosnippet>446</a>        blue_style.fg = Color::Blue;
+<a href=#447 id=447 data-nosnippet>447</a>
+<a href=#448 id=448 data-nosnippet>448</a>        tb.text(red_style, Line::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">5</span>), <span class="string">"hello"</span>);
+<a href=#449 id=449 data-nosnippet>449</a>        tb.text(blue_style, Line::new(<span class="number">5</span>, <span class="number">0</span>, <span class="number">5</span>), <span class="string">"world"</span>);
+<a href=#450 id=450 data-nosnippet>450</a>        tb.text(def_style(), Line::new(<span class="number">0</span>, <span class="number">1</span>, <span class="number">10</span>), <span class="string">"test line"</span>);
+<a href=#451 id=451 data-nosnippet>451</a>
+<a href=#452 id=452 data-nosnippet>452</a>        <span class="comment">// Test with foreground color partial style
+<a href=#453 id=453 data-nosnippet>453</a>        </span><span class="macro">assert!</span>(tb.contains_text_style(<span class="string">"hello"</span>, <span class="kw-2">&amp;</span>PartialStyle::fg(Color::Red)));
+<a href=#454 id=454 data-nosnippet>454</a>        <span class="macro">assert!</span>(!tb.contains_text_style(<span class="string">"world"</span>, <span class="kw-2">&amp;</span>PartialStyle::fg(Color::Red)));
+<a href=#455 id=455 data-nosnippet>455</a>
+<a href=#456 id=456 data-nosnippet>456</a>        <span class="macro">assert!</span>(tb.contains_text_style(<span class="string">"world"</span>, <span class="kw-2">&amp;</span>PartialStyle::fg(Color::Blue)));
+<a href=#457 id=457 data-nosnippet>457</a>        <span class="macro">assert!</span>(!tb.contains_text_style(<span class="string">"hello"</span>, <span class="kw-2">&amp;</span>PartialStyle::fg(Color::Blue)));
+<a href=#458 id=458 data-nosnippet>458</a>
+<a href=#459 id=459 data-nosnippet>459</a>        <span class="comment">// Test with empty partial style (matches any style)
+<a href=#460 id=460 data-nosnippet>460</a>        </span><span class="kw">let </span>partial_any = PartialStyle::default();
+<a href=#461 id=461 data-nosnippet>461</a>        <span class="macro">assert!</span>(tb.contains_text_style(<span class="string">"hello"</span>, <span class="kw-2">&amp;</span>partial_any));
+<a href=#462 id=462 data-nosnippet>462</a>        <span class="macro">assert!</span>(tb.contains_text_style(<span class="string">"world"</span>, <span class="kw-2">&amp;</span>partial_any));
+<a href=#463 id=463 data-nosnippet>463</a>        <span class="macro">assert!</span>(tb.contains_text_style(<span class="string">"test"</span>, <span class="kw-2">&amp;</span>partial_any));
+<a href=#464 id=464 data-nosnippet>464</a>
+<a href=#465 id=465 data-nosnippet>465</a>        <span class="comment">// Test with multiple style attributes
+<a href=#466 id=466 data-nosnippet>466</a>        </span><span class="kw">let </span>partial_white_bg = PartialStyle::fg(Color::White).with_bg(Color::Black);
+<a href=#467 id=467 data-nosnippet>467</a>        <span class="macro">assert!</span>(tb.contains_text_style(<span class="string">"test"</span>, <span class="kw-2">&amp;</span>partial_white_bg));
+<a href=#468 id=468 data-nosnippet>468</a>    }
+<a href=#469 id=469 data-nosnippet>469</a>
+<a href=#470 id=470 data-nosnippet>470</a>    <span class="attr">#[test]
+<a href=#471 id=471 data-nosnippet>471</a>    </span><span class="kw">fn </span>contains_text_fg_compat() {
+<a href=#472 id=472 data-nosnippet>472</a>        <span class="kw">use </span><span class="kw">crate</span>::style::solarized;
+<a href=#473 id=473 data-nosnippet>473</a>        <span class="kw">let </span><span class="kw-2">mut </span>tb = TermBuf::new(Expanse::new(<span class="number">10</span>, <span class="number">1</span>), <span class="string">' '</span>, def_style());
+<a href=#474 id=474 data-nosnippet>474</a>
+<a href=#475 id=475 data-nosnippet>475</a>        <span class="kw">let </span><span class="kw-2">mut </span>blue_style = def_style();
+<a href=#476 id=476 data-nosnippet>476</a>        blue_style.fg = solarized::BLUE;
+<a href=#477 id=477 data-nosnippet>477</a>
+<a href=#478 id=478 data-nosnippet>478</a>        tb.text(blue_style, Line::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">3</span>), <span class="string">"two"</span>);
+<a href=#479 id=479 data-nosnippet>479</a>
+<a href=#480 id=480 data-nosnippet>480</a>        <span class="comment">// Test the old method
+<a href=#481 id=481 data-nosnippet>481</a>        </span><span class="macro">assert!</span>(tb.contains_text_fg(<span class="string">"two"</span>, solarized::BLUE));
+<a href=#482 id=482 data-nosnippet>482</a>
+<a href=#483 id=483 data-nosnippet>483</a>        <span class="comment">// Test that it works the same as contains_text_style
+<a href=#484 id=484 data-nosnippet>484</a>        </span><span class="macro">assert!</span>(tb.contains_text_style(<span class="string">"two"</span>, <span class="kw-2">&amp;</span>PartialStyle::fg(solarized::BLUE)));
+<a href=#485 id=485 data-nosnippet>485</a>    }
+<a href=#486 id=486 data-nosnippet>486</a>
+<a href=#487 id=487 data-nosnippet>487</a>    <span class="attr">#[test]
+<a href=#488 id=488 data-nosnippet>488</a>    </span><span class="kw">fn </span>contains_text_style_builders() {
+<a href=#489 id=489 data-nosnippet>489</a>        <span class="kw">use </span><span class="kw">crate</span>::style::Attr;
+<a href=#490 id=490 data-nosnippet>490</a>        <span class="kw">let </span><span class="kw-2">mut </span>tb = TermBuf::new(Expanse::new(<span class="number">10</span>, <span class="number">2</span>), <span class="string">' '</span>, def_style());
+<a href=#491 id=491 data-nosnippet>491</a>
+<a href=#492 id=492 data-nosnippet>492</a>        <span class="comment">// Create styles with different attributes
+<a href=#493 id=493 data-nosnippet>493</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>bold_red = def_style();
+<a href=#494 id=494 data-nosnippet>494</a>        bold_red.fg = Color::Red;
+<a href=#495 id=495 data-nosnippet>495</a>        bold_red.attrs = AttrSet::new(Attr::Bold);
+<a href=#496 id=496 data-nosnippet>496</a>
+<a href=#497 id=497 data-nosnippet>497</a>        <span class="kw">let </span><span class="kw-2">mut </span>italic_blue = def_style();
+<a href=#498 id=498 data-nosnippet>498</a>        italic_blue.fg = Color::Blue;
+<a href=#499 id=499 data-nosnippet>499</a>        italic_blue.attrs = AttrSet::new(Attr::Italic);
+<a href=#500 id=500 data-nosnippet>500</a>
+<a href=#501 id=501 data-nosnippet>501</a>        tb.text(bold_red, Line::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">4</span>), <span class="string">"bold"</span>);
+<a href=#502 id=502 data-nosnippet>502</a>        tb.text(italic_blue, Line::new(<span class="number">0</span>, <span class="number">1</span>, <span class="number">6</span>), <span class="string">"italic"</span>);
+<a href=#503 id=503 data-nosnippet>503</a>
+<a href=#504 id=504 data-nosnippet>504</a>        <span class="comment">// Test using builder methods
+<a href=#505 id=505 data-nosnippet>505</a>        </span><span class="macro">assert!</span>(tb.contains_text_style(<span class="string">"bold"</span>, <span class="kw-2">&amp;</span>PartialStyle::fg(Color::Red)));
+<a href=#506 id=506 data-nosnippet>506</a>        <span class="macro">assert!</span>(tb.contains_text_style(<span class="string">"italic"</span>, <span class="kw-2">&amp;</span>PartialStyle::fg(Color::Blue)));
+<a href=#507 id=507 data-nosnippet>507</a>
+<a href=#508 id=508 data-nosnippet>508</a>        <span class="comment">// Test with attributes
+<a href=#509 id=509 data-nosnippet>509</a>        </span><span class="macro">assert!</span>(tb.contains_text_style(<span class="string">"bold"</span>, <span class="kw-2">&amp;</span>PartialStyle::attrs(AttrSet::new(Attr::Bold))));
+<a href=#510 id=510 data-nosnippet>510</a>        <span class="macro">assert!</span>(tb.contains_text_style(<span class="string">"italic"</span>, <span class="kw-2">&amp;</span>PartialStyle::attrs(AttrSet::new(Attr::Italic))));
+<a href=#511 id=511 data-nosnippet>511</a>
+<a href=#512 id=512 data-nosnippet>512</a>        <span class="comment">// Test chaining
+<a href=#513 id=513 data-nosnippet>513</a>        </span><span class="kw">let </span>bold_red_style = PartialStyle::fg(Color::Red).with_attrs(AttrSet::new(Attr::Bold));
+<a href=#514 id=514 data-nosnippet>514</a>        <span class="macro">assert!</span>(tb.contains_text_style(<span class="string">"bold"</span>, <span class="kw-2">&amp;</span>bold_red_style));
+<a href=#515 id=515 data-nosnippet>515</a>
+<a href=#516 id=516 data-nosnippet>516</a>        <span class="comment">// Test that it doesn't match wrong combinations
+<a href=#517 id=517 data-nosnippet>517</a>        </span><span class="kw">let </span>italic_red = PartialStyle::fg(Color::Red).with_attrs(AttrSet::new(Attr::Italic));
+<a href=#518 id=518 data-nosnippet>518</a>        <span class="macro">assert!</span>(!tb.contains_text_style(<span class="string">"bold"</span>, <span class="kw-2">&amp;</span>italic_red));
+<a href=#519 id=519 data-nosnippet>519</a>    }
+<a href=#520 id=520 data-nosnippet>520</a>}</code></pre></div></section></main></body></html>
