@@ -1,8 +1,9 @@
-use anyhow::Result;
-use canopy::tutils::Harness;
-use todo::{bind_keys, open_store, style, Todo};
-
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use anyhow::Result;
+use canopy::{event::key::KeyCode, tutils::Harness};
+
+use todo::{bind_keys, open_store, style, Todo};
 
 fn db_path(tag: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!(
@@ -16,7 +17,6 @@ fn db_path(tag: &str) -> std::path::PathBuf {
 }
 
 fn add(h: &mut Harness<Todo>, text: &str) -> canopy::Result<()> {
-    use canopy::event::key::KeyCode;
     h.key('a')?;
     for ch in text.chars() {
         h.key(ch)?;
@@ -100,7 +100,7 @@ fn add_item_via_pty() {
     let mut h = Harness::new(Todo::new().unwrap()).unwrap();
     style(h.canopy());
     bind_keys(h.canopy());
-    h.render().unwrap();
+
     add(&mut h, "item_one").unwrap();
     add(&mut h, "item_two").unwrap();
     add(&mut h, "item_three").unwrap();
@@ -117,7 +117,6 @@ fn delete_reverse_via_pty() {
     let mut h = Harness::new(Todo::new().unwrap()).unwrap();
     style(h.canopy());
     bind_keys(h.canopy());
-    h.render().unwrap();
     add(&mut h, "one").unwrap();
     add(&mut h, "two").unwrap();
     add(&mut h, "three").unwrap();
@@ -135,6 +134,7 @@ fn single_item_add_remove() {
     let mut h = Harness::new(Todo::new().unwrap()).unwrap();
     style(h.canopy());
     bind_keys(h.canopy());
+
     h.render().unwrap();
     add(&mut h, "solo").unwrap();
     del_first(&mut h, None).unwrap();

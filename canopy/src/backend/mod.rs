@@ -1,4 +1,5 @@
 pub mod crossterm;
+pub mod dummy;
 pub mod test;
 
 use crate::Result;

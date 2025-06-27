@@ -1,6 +1,7 @@
 use super::ttree;
 use crate::{
-    backend::test::TestRender, event::key, geom::Expanse, Canopy, Loader, Node, Result, TermBuf,
+    backend::{dummy::DummyBackend, test::TestRender}, 
+    event::key, geom::Expanse, Canopy, Loader, Node, Result, TermBuf,
 };
 
 /// Run a function on our standard dummy app built from [`ttree`]. This helper
@@ -23,19 +24,19 @@ pub fn run(func: impl FnOnce(&mut Canopy, TestRender, ttree::R) -> Result<()>) -
     func(&mut c, tr, root)
 }
 
-/// A simple harness that holds a [`Canopy`], a [`TestRender`] backend and a
+/// A simple harness that holds a [`Canopy`], a [`DummyBackend`] backend and a
 /// root node. Tests drive the UI by sending key events and triggering renders
 /// and can then inspect the render buffer.
 pub struct Harness<N> {
     core: Canopy,
-    render: TestRender,
+    render: DummyBackend,
     root: N,
 }
 
 impl<N: Node + Loader> Harness<N> {
     /// Create a harness using `size` for the root layout.
     pub fn with_size(mut root: N, size: Expanse) -> Result<Self> {
-        let (_, tr) = TestRender::create();
+        let render = DummyBackend::new();
         let mut core = Canopy::new();
 
         <N as Loader>::load(&mut core);
@@ -43,7 +44,7 @@ impl<N: Node + Loader> Harness<N> {
 
         Ok(Harness {
             core,
-            render: tr,
+            render,
             root,
         })
     }
@@ -73,9 +74,6 @@ impl<N: Node + Loader> Harness<N> {
         &mut self.root
     }
 
-    pub fn backend(&mut self) -> &mut TestRender {
-        &mut self.render
-    }
 
     /// Access the current render buffer. Panics if a render has not yet been
     /// performed.
