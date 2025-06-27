@@ -2,9 +2,9 @@ use super::ttree;
 use crate::{
     backend::test::TestRender, event::key, geom::Expanse, Canopy, Loader, Node, Result, TermBuf,
 };
-use std::time::{Duration, Instant};
 
-/// Run a function on our standard dummy app.
+/// Run a function on our standard dummy app built from [`ttree`]. This helper
+/// is used extensively in unit tests across the codebase.
 pub fn run(func: impl FnOnce(&mut Canopy, TestRender, ttree::R) -> Result<()>) -> Result<()> {
     let (_, tr) = TestRender::create();
     let mut root = ttree::R::new();
@@ -23,96 +23,64 @@ pub fn run(func: impl FnOnce(&mut Canopy, TestRender, ttree::R) -> Result<()>) -
     func(&mut c, tr, root)
 }
 
-/// A thin wrapper around [`Canopy`] that exposes a limited public API suitable
-/// for driving tests.
-pub struct Harness<'a> {
-    core: &'a mut Canopy,
+/// A simple harness that holds a [`Canopy`], a [`TestRender`] backend and a
+/// root node. Tests drive the UI by sending key events and triggering renders
+/// and can then inspect the render buffer.
+pub struct Harness<N> {
+    core: Canopy,
+    render: TestRender,
+    root: N,
 }
 
-impl<'a> Harness<'a> {
-    pub fn key<T>(&mut self, root: &mut dyn Node, k: T) -> Result<()>
+impl<N: Node + Loader> Harness<N> {
+    /// Create a harness using `size` for the root layout.
+    pub fn with_size(mut root: N, size: Expanse) -> Result<Self> {
+        let (_, tr) = TestRender::create();
+        let mut core = Canopy::new();
+
+        <N as Loader>::load(&mut core);
+        core.set_root_size(size, &mut root)?;
+
+        Ok(Harness {
+            core,
+            render: tr,
+            root,
+        })
+    }
+
+    /// Create a harness with a default root size of 100x100.
+    pub fn new(root: N) -> Result<Self> {
+        Self::with_size(root, Expanse::new(100, 100))
+    }
+
+    pub fn key<T>(&mut self, k: T) -> Result<()>
     where
         T: Into<key::Key>,
     {
-        self.core.key(root, k)
+        self.core.key(&mut self.root, k)
     }
 
-    /// Version of [`key`] that fails the test if processing takes longer than
-    /// `timeout`.
-    pub fn key_timeout<T>(&mut self, root: &mut dyn Node, k: T, timeout: Duration) -> Result<()>
-    where
-        T: Into<key::Key>,
-    {
-        let start = Instant::now();
-        let ret = self.key(root, k);
-        if start.elapsed() > timeout {
-            panic!("key event timed out");
-        }
-        ret
-    }
-
-    pub fn render(&mut self, r: &mut TestRender, root: &mut dyn Node) -> Result<()> {
-        self.core.render(r, root)
-    }
-
-    /// Version of [`render`] that fails the test if processing takes longer than
-    /// `timeout`.
-    pub fn render_timeout(
-        &mut self,
-        r: &mut TestRender,
-        root: &mut dyn Node,
-        timeout: Duration,
-    ) -> Result<()> {
-        let start = Instant::now();
-        let ret = self.render(r, root);
-        if start.elapsed() > timeout {
-            panic!("render timed out");
-        }
-        ret
+    pub fn render(&mut self) -> Result<()> {
+        self.core.render(&mut self.render, &mut self.root)
     }
 
     pub fn canopy(&mut self) -> &mut Canopy {
-        self.core
+        &mut self.core
     }
 
-    /// Access the current render buffer. Panics if a render has not yet
-    /// been performed.
+    pub fn root(&mut self) -> &mut N {
+        &mut self.root
+    }
+
+    pub fn backend(&mut self) -> &mut TestRender {
+        &mut self.render
+    }
+
+    /// Access the current render buffer. Panics if a render has not yet been
+    /// performed.
     pub fn buf(&self) -> &TermBuf {
         self.core
             .render_buf()
             .expect("render buffer not initialized")
     }
-}
-
-/// Run a function on a provided root node using the test render backend.
-///
-/// The root node must implement [`Loader`] so that command sets can be loaded
-/// for the test environment. The node is laid out with a default size before
-/// the supplied closure is executed.
-pub fn run_root_with_size<N>(
-    mut root: N,
-    size: Expanse,
-    func: impl FnOnce(&mut Harness<'_>, &mut TestRender, &mut N) -> Result<()>,
-) -> Result<()>
-where
-    N: Node + Loader,
-{
-    let (_, mut tr) = TestRender::create();
-    let mut c = Canopy::new();
-
-    <N as Loader>::load(&mut c);
-    c.set_root_size(size, &mut root)?;
-
-    let mut h = Harness { core: &mut c };
-    func(&mut h, &mut tr, &mut root)
-}
-
-pub fn run_root<N>(
-    root: N,
-    func: impl FnOnce(&mut Harness<'_>, &mut TestRender, &mut N) -> Result<()>,
-) -> Result<()>
-where
-    N: Node + Loader,
-{
-    run_root_with_size(root, Expanse::new(100, 100), func)
 }
