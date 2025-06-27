@@ -1,4 +1,5 @@
 use expectrl::{spawn, Eof, Session};
+use std::process::Command;
 use std::time::Duration;
 
 use crate::{Error, Result};
@@ -53,8 +54,22 @@ impl PtyApp {
     }
 }
 
-/// Spawn a workspace binary from `target/debug` with the provided arguments.
+/// Spawn a workspace binary by first building it, then running from target/debug.
 pub fn spawn_workspace_bin(name: &str, args: &[&str]) -> Result<PtyApp> {
+    // First, build the binary
+    let output = Command::new("cargo")
+        .args(["build", "-p", name, "--bin", name])
+        .output()
+        .map_err(|e| Error::Internal(format!("Failed to run cargo build: {e}")))?;
+
+    if !output.status.success() {
+        return Err(Error::Internal(format!(
+            "cargo build failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )));
+    }
+
+    // Now spawn the built binary directly
     let bin = format!(
         concat!(env!("CARGO_MANIFEST_DIR"), "/../target/debug/{}"),
         name

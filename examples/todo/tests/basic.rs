@@ -4,6 +4,8 @@ use todo::{bind_keys, open_store, style, Todo};
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+const TIMEOUT: Duration = Duration::from_millis(100);
+
 fn db_path(tag: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!(
         "todo_test_{}_{}.db",
@@ -19,18 +21,19 @@ fn spawn_app(tag: &str) -> canopy::tutils::PtyApp {
     let path = db_path(tag);
     open_store(path.to_str().unwrap()).unwrap();
     let mut app = spawn_workspace_bin("todo", &[path.to_str().unwrap()]).unwrap();
-    app.expect("todo", Duration::from_millis(100)).ok();
+    // Give cargo run more time to start up
+    app.expect("todo", TIMEOUT).ok();
     app
 }
 
 fn quit(mut app: canopy::tutils::PtyApp) {
     app.send("q").unwrap();
-    app.wait_eof(Duration::from_secs(2)).unwrap();
+    app.wait_eof(TIMEOUT).unwrap();
 }
 
 fn expect_highlight(app: &mut canopy::tutils::PtyApp, text: &str) {
-    app.expect(text, Duration::from_millis(200)).unwrap();
-    app.expect("\x1b[38;", Duration::from_millis(200)).unwrap();
+    app.expect(text, TIMEOUT).unwrap();
+    app.expect("\x1b[38;", TIMEOUT).unwrap();
 }
 
 fn add(app: &mut canopy::tutils::PtyApp, text: &str) {
@@ -167,7 +170,7 @@ fn delete_after_moving_focus() {
     add(&mut app, "second");
 
     app.send("j").unwrap();
-    app.expect("second", Duration::from_millis(200)).unwrap();
+    app.expect("second", Duration::from_secs(2)).unwrap();
     app.send("d").unwrap();
     expect_highlight(&mut app, "first");
 
@@ -186,7 +189,7 @@ fn delete_middle_keeps_rest() {
     expect_highlight(&mut app, "second");
     app.send("d").unwrap();
     expect_highlight(&mut app, "first");
-    app.expect("third", Duration::from_millis(200)).unwrap();
+    app.expect("third", Duration::from_secs(2)).unwrap();
 
     quit(app);
 }

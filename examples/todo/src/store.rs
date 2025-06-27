@@ -4,7 +4,7 @@ use anyhow::Result;
 use rusqlite::Connection;
 
 thread_local! {
-    pub static STORE: RefCell<Option<Store>> = RefCell::new(None);
+    pub static STORE: RefCell<Option<Store>> = const { RefCell::new(None) };
 }
 
 #[derive(Debug, Clone)]
