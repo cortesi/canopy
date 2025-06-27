@@ -338,7 +338,7 @@ where
         }
         l.size(self, Expanse { w, h }, r)?;
         let vp = self.vp();
-        for (_idx, itm) in self.items.iter_mut().enumerate() {
+        for itm in self.items.iter_mut() {
             if let Some(child_vp) = vp.map(itm.virt)? {
                 {
                     let st = itm.itm.state_mut();

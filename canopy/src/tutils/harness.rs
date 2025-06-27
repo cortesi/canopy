@@ -1,7 +1,9 @@
 use super::ttree;
 use crate::{
-    backend::{dummy::DummyBackend, test::TestRender}, 
-    event::key, geom::Expanse, Canopy, Loader, Node, Result, TermBuf,
+    backend::{dummy::DummyBackend, test::TestRender},
+    event::key,
+    geom::Expanse,
+    Canopy, Loader, Node, Result, TermBuf,
 };
 
 /// Run a function on our standard dummy app built from [`ttree`]. This helper
@@ -42,11 +44,7 @@ impl<N: Node + Loader> Harness<N> {
         <N as Loader>::load(&mut core);
         core.set_root_size(size, &mut root)?;
 
-        Ok(Harness {
-            core,
-            render,
-            root,
-        })
+        Ok(Harness { core, render, root })
     }
 
     /// Create a harness with a default root size of 100x100.
@@ -74,7 +72,6 @@ impl<N: Node + Loader> Harness<N> {
         &mut self.root
     }
 
-
     /// Access the current render buffer. Panics if a render has not yet been
     /// performed.
     pub fn buf(&self) -> &TermBuf {
@@ -96,15 +93,12 @@ impl<N: Node + Loader> Harness<N> {
 
         // Debug helper: if assertion will fail, print what's in the buffer
         if !buf.contains_text_style(txt, &PartialStyle::fg(solarized::BLUE)) {
-            eprintln!("Debug: Text '{}' not found with blue highlight", txt);
+            eprintln!("Debug: Text '{txt}' not found with blue highlight");
             // First check if the text exists at all
             if buf.contains_text(txt) {
-                eprintln!(
-                    "  Text '{}' exists in buffer but without blue highlight!",
-                    txt
-                );
+                eprintln!("  Text '{txt}' exists in buffer but without blue highlight!");
             } else {
-                eprintln!("  Text '{}' not found in buffer at all!", txt);
+                eprintln!("  Text '{txt}' not found in buffer at all!");
             }
             eprintln!("Buffer contents:");
             for (i, line) in buf.lines().iter().enumerate() {

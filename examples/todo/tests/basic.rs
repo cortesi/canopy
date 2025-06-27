@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::Result;
 use canopy::{event::key::KeyCode, tutils::Harness};
 
-use todo::{bind_keys, open_store, style, Todo};
+use todo::{open_store, setup_app, Todo};
 
 fn db_path(tag: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!(
@@ -43,14 +43,18 @@ fn del_no_nav(h: &mut Harness<Todo>, next: Option<&str>) -> canopy::Result<()> {
     Ok(())
 }
 
+fn app(path: &str) -> Result<Harness<Todo>> {
+    open_store(db_path(path).to_str().unwrap())?;
+    let mut h = Harness::new(Todo::new()?)?;
+    setup_app(h.canopy());
+    h.render()?;
+    Ok(h)
+}
+
 #[test]
 fn add_item_via_script() -> Result<()> {
-    let path = db_path("script");
-    open_store(path.to_str().unwrap())?;
-    let mut h = Harness::new(Todo::new()?)?;
-    style(h.canopy());
-    bind_keys(h.canopy());
-    h.render()?;
+    let mut h = app("script")?;
+
     h.key('a')?;
     h.key('h')?;
     h.key('i')?;
@@ -64,27 +68,24 @@ fn add_item_via_script() -> Result<()> {
 }
 
 #[test]
-fn render_seeded_item() {
+fn render_seeded_item() -> Result<()> {
     use canopy::geom::Expanse;
     let path = db_path("seed");
-    open_store(path.to_str().unwrap()).unwrap();
-    todo::store::get().add_todo("seeded").unwrap();
-    let mut h = Harness::with_size(Todo::new().unwrap(), Expanse::new(20, 5)).unwrap();
-    style(h.canopy());
-    bind_keys(h.canopy());
-    h.render().unwrap();
+    open_store(path.to_str().unwrap())?;
+    todo::store::get().add_todo("seeded")?;
+    let mut h = Harness::with_size(Todo::new()?, Expanse::new(20, 5))?;
+    setup_app(h.canopy());
+    h.render()?;
+
     h.expect_contains("seeded");
+    Ok(())
 }
 
 #[test]
 #[should_panic]
 fn add_item_with_char_newline() {
-    let path = db_path("charnl");
-    open_store(path.to_str().unwrap()).unwrap();
-    let mut h = Harness::new(Todo::new().unwrap()).unwrap();
-    style(h.canopy());
-    bind_keys(h.canopy());
-    h.render().unwrap();
+    let mut h = app("charn1").unwrap();
+
     h.key('a').unwrap();
     h.key('h').unwrap();
     h.key('i').unwrap();
@@ -94,130 +95,100 @@ fn add_item_with_char_newline() {
 
 #[test]
 #[ignore]
-fn add_item_via_pty() {
-    let path = db_path("pty");
-    open_store(path.to_str().unwrap()).unwrap();
-    let mut h = Harness::new(Todo::new().unwrap()).unwrap();
-    style(h.canopy());
-    bind_keys(h.canopy());
+fn add_item_via_pty() -> Result<()> {
+    let mut h = app("pty")?;
 
-    add(&mut h, "item_one").unwrap();
-    add(&mut h, "item_two").unwrap();
-    add(&mut h, "item_three").unwrap();
-    del_first(&mut h, Some("item_two")).unwrap();
-    del_first(&mut h, Some("item_three")).unwrap();
-    del_first(&mut h, None).unwrap();
+    add(&mut h, "item_one")?;
+    add(&mut h, "item_two")?;
+    add(&mut h, "item_three")?;
+    del_first(&mut h, Some("item_two"))?;
+    del_first(&mut h, Some("item_three"))?;
+    del_first(&mut h, None)?;
+    Ok(())
 }
 
 #[test]
 #[ignore]
-fn delete_reverse_via_pty() {
-    let path = db_path("rev");
-    open_store(path.to_str().unwrap()).unwrap();
-    let mut h = Harness::new(Todo::new().unwrap()).unwrap();
-    style(h.canopy());
-    bind_keys(h.canopy());
-    add(&mut h, "one").unwrap();
-    add(&mut h, "two").unwrap();
-    add(&mut h, "three").unwrap();
-    h.key('j').unwrap();
-    h.key('j').unwrap();
-    del_first(&mut h, Some("two")).unwrap();
-    del_first(&mut h, Some("three")).unwrap();
-    del_first(&mut h, None).unwrap();
+fn delete_reverse_via_pty() -> Result<()> {
+    let mut h = app("rev")?;
+    add(&mut h, "one")?;
+    add(&mut h, "two")?;
+    add(&mut h, "three")?;
+    h.key('j')?;
+    h.key('j')?;
+    del_first(&mut h, Some("two"))?;
+    del_first(&mut h, Some("three"))?;
+    del_first(&mut h, None)?;
+    Ok(())
 }
 
 #[test]
-fn single_item_add_remove() {
-    let path = db_path("single");
-    open_store(path.to_str().unwrap()).unwrap();
-    let mut h = Harness::new(Todo::new().unwrap()).unwrap();
-    style(h.canopy());
-    bind_keys(h.canopy());
+fn single_item_add_remove() -> Result<()> {
+    let mut h = app("single")?;
 
-    h.render().unwrap();
-    add(&mut h, "solo").unwrap();
-    del_first(&mut h, None).unwrap();
+    add(&mut h, "solo")?;
+    del_first(&mut h, None)?;
+    Ok(())
 }
 
 #[test]
-fn delete_after_moving_focus() {
-    let path = db_path("move_del");
-    open_store(path.to_str().unwrap()).unwrap();
-    let mut h = Harness::new(Todo::new().unwrap()).unwrap();
-    style(h.canopy());
-    bind_keys(h.canopy());
-    h.render().unwrap();
-    add(&mut h, "first").unwrap();
-    add(&mut h, "second").unwrap();
-    h.key('j').unwrap();
-    h.key('d').unwrap();
+fn delete_after_moving_focus() -> Result<()> {
+    let mut h = app("move_del")?;
+    add(&mut h, "first")?;
+    add(&mut h, "second")?;
+    h.key('j')?;
+    h.key('d')?;
+    Ok(())
 }
 
 #[test]
-fn delete_middle_keeps_rest() {
-    let path = db_path("del_middle");
-    open_store(path.to_str().unwrap()).unwrap();
-    let mut h = Harness::new(Todo::new().unwrap()).unwrap();
-    style(h.canopy());
-    bind_keys(h.canopy());
-    h.render().unwrap();
-    add(&mut h, "first").unwrap();
-    add(&mut h, "second").unwrap();
-    add(&mut h, "third").unwrap();
-    h.key('j').unwrap();
-    h.key('j').unwrap();
-    h.key('d').unwrap();
+fn delete_middle_keeps_rest() -> Result<()> {
+    let mut h = app("del_middle")?;
+    add(&mut h, "first")?;
+    add(&mut h, "second")?;
+    add(&mut h, "third")?;
+    h.key('j')?;
+    h.key('j')?;
+    h.key('d')?;
     assert_eq!(h.root().content.child.len(), 2);
+    Ok(())
 }
 
 #[test]
-fn delete_first_without_nav() {
-    let path = db_path("del_first");
-    open_store(path.to_str().unwrap()).unwrap();
-    let mut h = Harness::new(Todo::new().unwrap()).unwrap();
-    style(h.canopy());
-    bind_keys(h.canopy());
-    h.render().unwrap();
-    add(&mut h, "a1").unwrap();
-    add(&mut h, "a2").unwrap();
-    add(&mut h, "a3").unwrap();
-    del_no_nav(&mut h, Some("a2")).unwrap();
-    del_no_nav(&mut h, Some("a1")).unwrap();
+fn delete_first_without_nav() -> Result<()> {
+    let mut h = app("del_first")?;
+    add(&mut h, "a1")?;
+    add(&mut h, "a2")?;
+    add(&mut h, "a3")?;
+    del_no_nav(&mut h, Some("a2"))?;
+    del_no_nav(&mut h, Some("a1"))?;
+    Ok(())
 }
 
 #[test]
-fn focus_moves_with_navigation() {
-    let path = db_path("nav");
-    open_store(path.to_str().unwrap()).unwrap();
-    let mut h = Harness::new(Todo::new().unwrap()).unwrap();
-    style(h.canopy());
-    bind_keys(h.canopy());
-    h.render().unwrap();
-    add(&mut h, "one").unwrap();
-    add(&mut h, "two").unwrap();
-    h.key('j').unwrap();
-    h.key('k').unwrap();
+fn focus_moves_with_navigation() -> Result<()> {
+    let mut h = app("nav")?;
+    add(&mut h, "one")?;
+    add(&mut h, "two")?;
+    h.key('j')?;
+    h.key('k')?;
+    Ok(())
 }
 
 #[test]
-fn delete_first_keeps_second_visible() {
-    let path = db_path("del_first_second");
-    open_store(path.to_str().unwrap()).unwrap();
-    let mut h = Harness::new(Todo::new().unwrap()).unwrap();
-    style(h.canopy());
-    bind_keys(h.canopy());
-    h.render().unwrap();
-    add(&mut h, "first").unwrap();
-    add(&mut h, "second").unwrap();
-    h.key('g').unwrap(); // Go to first item
-    h.key('d').unwrap(); // Delete first item
+fn delete_first_keeps_second_visible() -> Result<()> {
+    let mut h = app("del_first_second")?;
+    add(&mut h, "first")?;
+    add(&mut h, "second")?;
+    h.key('g')?; // Go to first item
+    h.key('d')?; // Delete first item
 
     // After deletion, we still have one item
     assert_eq!(h.root().content.child.len(), 1);
 
     // Check that the database still has the right item
-    let todos = todo::store::get().todos().unwrap();
+    let todos = todo::store::get().todos()?;
     assert_eq!(todos.len(), 1);
     assert!(todos[0].item.contains("second"));
+    Ok(())
 }

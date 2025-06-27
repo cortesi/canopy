@@ -149,7 +149,7 @@ impl Todo {
             self.content.child.append(i);
         }
         // Select the first item if any exist
-        if self.content.child.len() > 0 {
+        if !self.content.child.is_empty() {
             self.content.child.select(0);
         }
         Ok(())
@@ -261,4 +261,20 @@ pub fn bind_keys(cnpy: &mut Canopy) {
 
 pub fn open_store(path: &str) -> Result<()> {
     store::open(path)
+}
+
+pub fn setup_app(cnpy: &mut Canopy) {
+    <Todo as Loader>::load(cnpy);
+    style(cnpy);
+    bind_keys(cnpy);
+}
+
+pub fn create_app(db_path: &str) -> Result<(Canopy, Todo)> {
+    open_store(db_path)?;
+
+    let mut cnpy = Canopy::new();
+    setup_app(&mut cnpy);
+
+    let todo = Todo::new()?;
+    Ok((cnpy, todo))
 }
