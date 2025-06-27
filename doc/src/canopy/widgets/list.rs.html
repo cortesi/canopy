@@ -338,7 +338,7 @@
 <a href=#338 id=338 data-nosnippet>338</a>        }
 <a href=#339 id=339 data-nosnippet>339</a>        l.size(<span class="self">self</span>, Expanse { w, h }, r)<span class="question-mark">?</span>;
 <a href=#340 id=340 data-nosnippet>340</a>        <span class="kw">let </span>vp = <span class="self">self</span>.vp();
-<a href=#341 id=341 data-nosnippet>341</a>        <span class="kw">for </span>(_idx, itm) <span class="kw">in </span><span class="self">self</span>.items.iter_mut().enumerate() {
+<a href=#341 id=341 data-nosnippet>341</a>        <span class="kw">for </span>itm <span class="kw">in </span><span class="self">self</span>.items.iter_mut() {
 <a href=#342 id=342 data-nosnippet>342</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(child_vp) = vp.map(itm.virt)<span class="question-mark">? </span>{
 <a href=#343 id=343 data-nosnippet>343</a>                {
 <a href=#344 id=344 data-nosnippet>344</a>                    <span class="kw">let </span>st = itm.itm.state_mut();
