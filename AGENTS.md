@@ -13,7 +13,7 @@
 # Build the project
 cargo build
 
-# Run all tests including workspace tests
+# Run all tests including workspace tests. Never commit with failing tests.
 cargo test --all --workspace
 
 # Run a specific test
@@ -22,11 +22,11 @@ cargo test test_name
 # Check code without building
 cargo check
 
-# Format code
-cargo fmt
-
 # Run linter
 cargo clippy --examples --tests
+
+# Format code. Always format before committing.
+cargo fmt
 
 # Fix linter issues automatically
 cargo clippy --fix --tests --examples --allow-dirty

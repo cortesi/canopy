@@ -79,13 +79,40 @@ pub struct Style {
 /// A possibly partial style specification, which is stored in a StyleManager.
 /// Partial styles are completely resolved during the style resolution process.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
-struct PartialStyle {
+pub struct PartialStyle {
     pub fg: Option<Color>,
     pub bg: Option<Color>,
     pub attrs: Option<AttrSet>,
 }
 
 impl PartialStyle {
+    /// Create a new PartialStyle with only a foreground color.
+    pub fn fg(fg: Color) -> Self {
+        Self {
+            fg: Some(fg),
+            bg: None,
+            attrs: None,
+        }
+    }
+
+    /// Create a new PartialStyle with only a background color.
+    pub fn bg(bg: Color) -> Self {
+        Self {
+            fg: None,
+            bg: Some(bg),
+            attrs: None,
+        }
+    }
+
+    /// Create a new PartialStyle with only attributes.
+    pub fn attrs(attrs: AttrSet) -> Self {
+        Self {
+            fg: None,
+            bg: None,
+            attrs: Some(attrs),
+        }
+    }
+
     pub fn resolve(&self) -> Style {
         Style {
             fg: self.fg.unwrap(),
@@ -113,7 +140,12 @@ impl PartialStyle {
         self
     }
 
-    fn join(&self, other: &PartialStyle) -> PartialStyle {
+    pub fn with_attrs(mut self, attrs: AttrSet) -> PartialStyle {
+        self.attrs = Some(attrs);
+        self
+    }
+
+    pub fn join(&self, other: &PartialStyle) -> PartialStyle {
         PartialStyle {
             fg: if self.fg.is_some() { self.fg } else { other.fg },
             bg: if self.bg.is_some() { self.bg } else { other.bg },
@@ -125,7 +157,7 @@ impl PartialStyle {
         }
     }
 
-    fn is_complete(&self) -> bool {
+    pub fn is_complete(&self) -> bool {
         self.fg.is_some() && self.bg.is_some() && self.attrs.is_some()
     }
 }

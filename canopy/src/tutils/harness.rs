@@ -92,9 +92,10 @@ impl<N: Node + Loader> Harness<N> {
     }
 
     pub fn expect_highlight(&self, txt: &str) {
-        use crate::style::solarized;
+        use crate::style::{solarized, PartialStyle};
         assert!(
-            self.buf().contains_text_fg(txt, solarized::BLUE),
+            self.buf()
+                .contains_text_style(txt, &PartialStyle::fg(solarized::BLUE)),
             "render buffer missing highlighted '{txt}'"
         );
     }

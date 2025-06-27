@@ -1,7 +1,7 @@
 use crate::{
     geom::{Expanse, Frame, Line, Point, Rect},
     render::RenderBackend,
-    style::{Color, Style},
+    style::Style,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -135,7 +135,12 @@ impl TermBuf {
 
     /// Does the buffer contain the supplied substring in the given foreground
     /// colour?
-    pub fn contains_text_fg(&self, txt: &str, fg: Color) -> bool {
+    pub fn contains_text_fg(&self, txt: &str, fg: crate::style::Color) -> bool {
+        self.contains_text_style(txt, &crate::style::PartialStyle::fg(fg))
+    }
+
+    /// Does the buffer contain the supplied substring with the given style?
+    pub fn contains_text_style(&self, txt: &str, style: &crate::style::PartialStyle) -> bool {
         let tl = txt.chars().count() as u16;
         if tl == 0 || tl > self.size.w {
             return false;
@@ -150,7 +155,11 @@ impl TermBuf {
                             m = false;
                             break;
                         }
-                        if cell.style.fg == fg {
+                        // Check if the cell style matches the partial style
+                        let style_matches = (style.fg.is_none() || style.fg == Some(cell.style.fg))
+                            && (style.bg.is_none() || style.bg == Some(cell.style.bg))
+                            && (style.attrs.is_none() || style.attrs == Some(cell.style.attrs));
+                        if style_matches {
                             c = true;
                         }
                     } else {
@@ -258,7 +267,7 @@ impl TermBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::style::{AttrSet, Color};
+    use crate::style::{AttrSet, Color, PartialStyle};
 
     fn def_style() -> Style {
         Style {
@@ -412,5 +421,100 @@ mod tests {
             be.ops,
             vec![format!("style {style:?}"), "text 0 0 abc".to_string(),]
         );
+    }
+
+    #[test]
+    fn contains_text() {
+        let mut tb = TermBuf::new(Expanse::new(10, 3), ' ', def_style());
+        tb.text(def_style(), Line::new(0, 0, 10), "hello");
+        tb.text(def_style(), Line::new(0, 1, 10), "world");
+
+        assert!(tb.contains_text("hello"));
+        assert!(tb.contains_text("world"));
+        assert!(!tb.contains_text("goodbye"));
+    }
+
+    #[test]
+    fn contains_text_style() {
+        let mut tb = TermBuf::new(Expanse::new(10, 3), ' ', def_style());
+
+        // Add text with different styles
+        let mut red_style = def_style();
+        red_style.fg = Color::Red;
+
+        let mut blue_style = def_style();
+        blue_style.fg = Color::Blue;
+
+        tb.text(red_style, Line::new(0, 0, 5), "hello");
+        tb.text(blue_style, Line::new(5, 0, 5), "world");
+        tb.text(def_style(), Line::new(0, 1, 10), "test line");
+
+        // Test with foreground color partial style
+        assert!(tb.contains_text_style("hello", &PartialStyle::fg(Color::Red)));
+        assert!(!tb.contains_text_style("world", &PartialStyle::fg(Color::Red)));
+
+        assert!(tb.contains_text_style("world", &PartialStyle::fg(Color::Blue)));
+        assert!(!tb.contains_text_style("hello", &PartialStyle::fg(Color::Blue)));
+
+        // Test with empty partial style (matches any style)
+        let partial_any = PartialStyle::default();
+        assert!(tb.contains_text_style("hello", &partial_any));
+        assert!(tb.contains_text_style("world", &partial_any));
+        assert!(tb.contains_text_style("test", &partial_any));
+
+        // Test with multiple style attributes
+        let partial_white_bg = PartialStyle::fg(Color::White).with_bg(Color::Black);
+        assert!(tb.contains_text_style("test", &partial_white_bg));
+    }
+
+    #[test]
+    fn contains_text_fg_compat() {
+        use crate::style::solarized;
+        let mut tb = TermBuf::new(Expanse::new(10, 1), ' ', def_style());
+
+        let mut blue_style = def_style();
+        blue_style.fg = solarized::BLUE;
+
+        tb.text(blue_style, Line::new(0, 0, 3), "two");
+
+        // Test the old method
+        assert!(tb.contains_text_fg("two", solarized::BLUE));
+
+        // Test that it works the same as contains_text_style
+        assert!(tb.contains_text_style("two", &PartialStyle::fg(solarized::BLUE)));
+    }
+
+    #[test]
+    fn contains_text_style_builders() {
+        use crate::style::Attr;
+        let mut tb = TermBuf::new(Expanse::new(10, 2), ' ', def_style());
+
+        // Create styles with different attributes
+        let mut bold_red = def_style();
+        bold_red.fg = Color::Red;
+        bold_red.attrs = AttrSet::new(Attr::Bold);
+
+        let mut italic_blue = def_style();
+        italic_blue.fg = Color::Blue;
+        italic_blue.attrs = AttrSet::new(Attr::Italic);
+
+        tb.text(bold_red, Line::new(0, 0, 4), "bold");
+        tb.text(italic_blue, Line::new(0, 1, 6), "italic");
+
+        // Test using builder methods
+        assert!(tb.contains_text_style("bold", &PartialStyle::fg(Color::Red)));
+        assert!(tb.contains_text_style("italic", &PartialStyle::fg(Color::Blue)));
+
+        // Test with attributes
+        assert!(tb.contains_text_style("bold", &PartialStyle::attrs(AttrSet::new(Attr::Bold))));
+        assert!(tb.contains_text_style("italic", &PartialStyle::attrs(AttrSet::new(Attr::Italic))));
+
+        // Test chaining
+        let bold_red_style = PartialStyle::fg(Color::Red).with_attrs(AttrSet::new(Attr::Bold));
+        assert!(tb.contains_text_style("bold", &bold_red_style));
+
+        // Test that it doesn't match wrong combinations
+        let italic_red = PartialStyle::fg(Color::Red).with_attrs(AttrSet::new(Attr::Italic));
+        assert!(!tb.contains_text_style("bold", &italic_red));
     }
 }

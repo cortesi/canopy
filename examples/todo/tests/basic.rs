@@ -225,5 +225,6 @@ fn delete_first_keeps_second_visible() {
     add(&mut h, "first").unwrap();
     add(&mut h, "second").unwrap();
     h.key('d').unwrap();
+    assert!(h.backend().contains_text("second"));
     h.render().unwrap();
 }
