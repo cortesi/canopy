@@ -26,3 +26,8 @@ expectrl = "0.7.1"
 [dev-dependencies]
 clap = { version = "4.5.40", features = ["derive"] }
 rand = "0.9.1"
+criterion = "0.5"
+
+[[bench]]
+name = "rendering"
+harness = false

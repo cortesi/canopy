@@ -76,3 +76,26 @@ pub fn spawn_workspace_bin(name: &str, args: &[&str]) -> Result<PtyApp> {
     );
     PtyApp::spawn_cmd(&bin, args)
 }
+
+/// Spawn a workspace example by first building it, then running from target/debug/examples.
+pub fn spawn_workspace_example(name: &str, args: &[&str]) -> Result<PtyApp> {
+    // First, build the example
+    let output = Command::new("cargo")
+        .args(["build", "--example", name])
+        .output()
+        .map_err(|e| Error::Internal(format!("Failed to run cargo build: {e}")))?;
+
+    if !output.status.success() {
+        return Err(Error::Internal(format!(
+            "cargo build failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )));
+    }
+
+    // Now spawn the built example directly
+    let bin = format!(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../target/debug/examples/{}"),
+        name
+    );
+    PtyApp::spawn_cmd(&bin, args)
+}

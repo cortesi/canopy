@@ -1,9 +1,4 @@
-use canopy::{
-    backend::crossterm::runloop,
-    derive_commands,
-    widgets::Text,
-    *,
-};
+use canopy::{backend::crossterm::runloop, derive_commands, widgets::Text, *};
 
 #[derive(StatefulNode)]
 struct TextDisplay {
@@ -19,11 +14,16 @@ impl TextDisplay {
                         quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo \
                         consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse \
                         cillum dolore eu fugiat nulla pariatur.";
-        
+
         Self {
             state: NodeState::default(),
             text: Text::new(paragraph),
         }
+    }
+
+    #[command]
+    fn redraw(&mut self, ctx: &mut dyn Context) {
+        ctx.taint_tree(self);
     }
 }
 
@@ -48,9 +48,10 @@ pub fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let mut cnpy = Canopy::new();
     cnpy.add_commands::<Root<TextDisplay>>();
     cnpy.add_commands::<TextDisplay>();
-    
+
     cnpy.bind_key('q', "root", "root::quit()")?;
-    
+    cnpy.bind_key('r', "textdisplay", "textdisplay::redraw()")?;
+
     let root = Root::new(TextDisplay::new());
     runloop(cnpy, root)?;
     Ok(())
