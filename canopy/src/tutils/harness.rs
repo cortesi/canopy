@@ -1,5 +1,7 @@
 use super::ttree;
-use crate::{backend::test::TestRender, event::key, geom::Expanse, Canopy, Loader, Node, Result};
+use crate::{
+    backend::test::TestRender, event::key, geom::Expanse, Canopy, Loader, Node, Result, TermBuf,
+};
 use std::time::{Duration, Instant};
 
 /// Run a function on our standard dummy app.
@@ -71,6 +73,14 @@ impl<'a> Harness<'a> {
 
     pub fn canopy(&mut self) -> &mut Canopy {
         self.core
+    }
+
+    /// Access the current render buffer. Panics if a render has not yet
+    /// been performed.
+    pub fn buf(&self) -> &TermBuf {
+        self.core
+            .render_buf()
+            .expect("render buffer not initialized")
     }
 }
 
