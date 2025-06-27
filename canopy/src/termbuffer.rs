@@ -10,6 +10,7 @@ pub struct Cell {
     pub style: Style,
 }
 
+#[derive(Debug)]
 pub struct TermBuf {
     size: Expanse,
     cells: Vec<Cell>,
@@ -116,6 +117,7 @@ impl TermBuf {
         if self.size != prev.size {
             return self.render(backend);
         }
+        let mut wrote = false;
         for y in 0..self.size.h {
             let mut x = 0;
             while x < self.size.w {
@@ -153,7 +155,11 @@ impl TermBuf {
                 }
                 backend.style(style)?;
                 backend.text(Point { x: start_x, y }, &text)?;
+                wrote = true;
             }
+        }
+        if wrote {
+            backend.flush()?;
         }
         Ok(())
     }
@@ -161,6 +167,7 @@ impl TermBuf {
     /// Render this terminal buffer in full using the provided backend,
     /// batching runs of text with the same style.
     pub fn render<R: RenderBackend>(&self, backend: &mut R) -> crate::Result<()> {
+        let mut wrote = false;
         for y in 0..self.size.h {
             let mut x = 0;
             while x < self.size.w {
@@ -181,7 +188,11 @@ impl TermBuf {
                 }
                 backend.style(style)?;
                 backend.text(Point { x: start_x, y }, &text)?;
+                wrote = true;
             }
+        }
+        if wrote {
+            backend.flush()?;
         }
         Ok(())
     }

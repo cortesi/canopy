@@ -6,12 +6,13 @@ use crate::{
     backend::BackendControl,
     commands, cursor, error,
     event::{key, mouse, Event},
-    geom::{Coverage, Direction, Expanse, Point, Rect},
+    geom::{Direction, Expanse, Point, Rect},
     inputmap,
     node::Node,
     path::*,
     poll::Poller,
     render::RenderBackend,
+    TermBuf,
     script,
     style::{solarized, StyleManager, StyleMap},
     tree::*,
@@ -210,6 +211,9 @@ pub struct Canopy {
     pub(crate) keymap: inputmap::InputMap,
     pub(crate) commands: commands::CommandSet,
     pub(crate) backend: Option<Box<dyn BackendControl>>,
+
+    /// The terminal buffer from the last render.
+    termbuf: Option<TermBuf>,
 
     pub(crate) event_tx: mpsc::Sender<Event>,
     pub(crate) event_rx: Option<mpsc::Receiver<Event>>,
@@ -453,6 +457,7 @@ impl Canopy {
             style: solarized::solarized_dark(),
             root_size: None,
             backend: None,
+            termbuf: None,
         }
     }
 
@@ -634,9 +639,9 @@ impl Canopy {
         Ok(())
     }
 
-    fn render_traversal<R: RenderBackend>(
+    fn render_traversal(
         &mut self,
-        r: &mut R,
+        buf: &mut TermBuf,
         styl: &mut StyleManager,
         n: &mut dyn Node,
         base: Point,
@@ -649,36 +654,8 @@ impl Canopy {
                     s.rendered_focus_gen = self.focus_gen;
                 }
 
-                let mut c = Coverage::new(n.vp().screen_rect().expanse());
-                let mut rndr = Render::new(r, &self.style, styl, n.vp(), &mut c, base);
-
+                let mut rndr = Render::new(buf, &self.style, styl, n.vp(), base);
                 n.render(self, &mut rndr)?;
-
-                // Now add regions managed by children to coverage
-                let parent = n.vp().screen_rect();
-                n.children(&mut |child| {
-                    if !child.is_hidden() {
-                        let child_rect = child.vp().screen_rect();
-                        if !child_rect.is_zero() {
-                            assert!(
-                                parent.contains_rect(&child_rect),
-                                "child {} viewport {:?} outside parent {:?}",
-                                child.name(),
-                                child_rect,
-                                parent
-                            );
-                            rndr.coverage.add(child_rect);
-                        }
-                    }
-                    Ok(())
-                })?;
-
-                // We now have coverage, relative to this node's screen rectange. We
-                // rebase each rect back down to our virtual co-ordinates.
-                let sr = n.vp().view();
-                for l in rndr.coverage.uncovered() {
-                    rndr.fill("", l.rect().shift(sr.tl.x as i16, sr.tl.y as i16), ' ')?;
-                }
             }
             // This is a new node - we don't want it perpetually stuck in
             // render, so we need to update its render_gen.
@@ -699,7 +676,7 @@ impl Canopy {
                         );
                     }
                 }
-                self.render_traversal(r, styl, child, base)
+                self.render_traversal(buf, styl, child, base)
             })?;
             styl.pop();
         }
@@ -744,11 +721,25 @@ impl Canopy {
             root.layout(&l, root_size)?;
 
             let mut styl = StyleManager::default();
-            be.reset()?;
+            if self.termbuf.is_none() {
+                be.reset()?;
+            }
             styl.reset();
 
             self.pre_render(be, root)?;
-            self.render_traversal(be, &mut styl, root, (0, 0).into())?;
+
+            let def_style = styl.get(&self.style, "");
+            let mut next = TermBuf::new(root_size, ' ', def_style.clone());
+            self.render_traversal(&mut next, &mut styl, root, (0, 0).into())?;
+
+            if let Some(prev) = &self.termbuf {
+                next.diff(prev, be)?;
+            } else {
+                next.render(be)?;
+            }
+
+            self.termbuf = Some(next);
+
             self.render_gen += 1;
             self.last_render_focus_gen = self.focus_gen;
             self.post_render(be, &mut styl, root)?;
@@ -1175,10 +1166,10 @@ mod tests {
     fn trender() -> Result<()> {
         run(|c, mut tr, mut root| {
             tr.render(c, &mut root)?;
-            assert_eq!(
-                tr.buf_text(),
-                vec!["<r>", "<ba>", "<ba_la>", "<ba_lb>", "<bb>", "<bb_la>", "<bb_lb>"]
-            );
+            let out = tr.buf_text();
+            assert_eq!(out.len(), 2);
+            assert!(out[0].contains("<ba_la>") && out[0].contains("<bb_la>"));
+            assert!(out[1].contains("<ba_lb>") && out[1].contains("<bb_lb>"));
 
             tr.render(c, &mut root)?;
             assert!(tr.buf_empty());
@@ -1193,22 +1184,22 @@ mod tests {
 
             c.taint_tree(&mut root.a);
             tr.render(c, &mut root)?;
-            assert_eq!(tr.buf_text(), vec!["<ba>", "<ba_la>", "<ba_lb>"]);
+            assert_eq!(tr.buf_text(), vec!["<ba_la>"]);
 
             tr.render(c, &mut root)?;
             assert!(tr.buf_empty());
 
             c.set_focus(&mut root.a.a);
             tr.render(c, &mut root)?;
-            assert_eq!(tr.buf_text(), vec!["<r>", "<ba_la>"]);
+            assert_eq!(tr.buf_text(), vec!["<ba_la>"]);
 
             c.focus_next(&mut root);
             tr.render(c, &mut root)?;
-            assert_eq!(tr.buf_text(), vec!["<ba_la>", "<ba_lb>"]);
+            assert_eq!(tr.buf_text(), vec!["<ba_lb>"]);
 
             c.focus_prev(&mut root);
             tr.render(c, &mut root)?;
-            assert_eq!(tr.buf_text(), vec!["<ba_la>", "<ba_lb>"]);
+            assert!(tr.buf_empty());
 
             tr.render(c, &mut root)?;
             assert!(tr.buf_empty());

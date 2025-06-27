@@ -40,6 +40,7 @@ impl TestRender {
     }
 
     pub fn render(&mut self, c: &mut Canopy, e: &mut dyn Node) -> Result<()> {
+        self.text.lock()?.text.clear();
         c.render(self, e)?;
         Ok(())
     }
