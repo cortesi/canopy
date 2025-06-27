@@ -144,6 +144,26 @@ where
             if let Some(itm) = self.items.get_mut(self.offset) {
                 itm.set_selected(true);
             }
+
+            // If the removed item was above the current view, shift the
+            // viewport so the remaining items retain their on-screen position.
+            let view_y = self.vp().view().tl.y;
+            if itm.virt.tl.y < view_y {
+                core.scroll_by(self, 0, -(itm.virt.h as i16));
+            }
+
+            // Clamp the viewport if we've scrolled past the end of the
+            // shortened list.
+            let view = self.vp().view();
+            let canvas_h = self.vp().canvas().h.saturating_sub(itm.virt.h);
+            let max_y = canvas_h.saturating_sub(view.h);
+            if view.tl.y > max_y {
+                core.scroll_to(self, view.tl.x, max_y);
+            }
+
+            if self.ensure_selected_in_view(core) {
+                core.taint(self);
+            }
         }
 
         core.taint_tree(self);
