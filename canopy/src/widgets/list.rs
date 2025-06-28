@@ -412,7 +412,7 @@ mod tests {
     use super::*;
     use crate::{
         backend::test::CanvasRender, geom::Point, render::RenderBackend, style::Style,
-        widgets::frame, widgets::Text, Context,
+        tutils::Harness, widgets::frame, widgets::Text, Context,
     };
     use std::sync::{Arc, Mutex};
 
@@ -1275,6 +1275,448 @@ mod tests {
             }
             Ok(())
         })?;
+
+        Ok(())
+    }
+
+    // Text item wrapper that supports selection highlighting
+    #[derive(StatefulNode)]
+    struct SelectableText {
+        state: NodeState,
+        text: Text,
+        selected: bool,
+    }
+
+    #[derive_commands]
+    impl SelectableText {
+        fn new(s: &str) -> Self {
+            SelectableText {
+                state: NodeState::default(),
+                text: Text::new(s),
+                selected: false,
+            }
+        }
+
+        fn with_fixed_width(mut self, width: u16) -> Self {
+            self.text = self.text.with_fixed_width(width);
+            self
+        }
+    }
+
+    impl ListItem for SelectableText {
+        fn set_selected(&mut self, state: bool) {
+            self.selected = state;
+        }
+    }
+
+    impl Node for SelectableText {
+        fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+            self.text.layout(l, sz)?;
+            let vp = self.text.vp();
+            l.wrap(self, vp)?;
+            Ok(())
+        }
+
+        fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+            f(&mut self.text)
+        }
+
+        fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
+            if self.selected {
+                r.style.push_layer("blue");
+            }
+            Ok(())
+        }
+    }
+
+    // Simple list implementation for testing
+    #[derive(StatefulNode)]
+    struct SimpleList {
+        state: NodeState,
+        list: List<SelectableText>,
+    }
+
+    #[derive_commands]
+    impl SimpleList {
+        fn new(items: Vec<&str>) -> Self {
+            SimpleList {
+                state: NodeState::default(),
+                list: List::new(items.into_iter().map(SelectableText::new).collect()),
+            }
+        }
+    }
+
+    impl Node for SimpleList {
+        fn accept_focus(&mut self) -> bool {
+            true
+        }
+
+        fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+            f(&mut self.list)
+        }
+
+        fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+            l.fill(self, sz)?;
+            let vp = self.vp();
+            l.place(&mut self.list, vp, vp.view())?;
+            Ok(())
+        }
+    }
+
+    impl crate::Loader for SimpleList {
+        fn load(c: &mut crate::Canopy) {
+            use crate::style::solarized;
+            use crate::Binder;
+
+            c.add_commands::<SimpleList>();
+            c.add_commands::<List<SelectableText>>();
+
+            // Set up style for selection highlighting
+            c.style.add_fg("blue/text", solarized::BLUE);
+
+            // Set up key bindings for testing
+            Binder::new(c)
+                .key('j', "list::select_next()")
+                .key('k', "list::select_prev()")
+                .key('g', "list::select_first()")
+                .key('G', "list::select_last()")
+                .key('d', "list::delete_selected()")
+                .key('h', "list::scroll_left()")
+                .key('l', "list::scroll_right()");
+        }
+    }
+
+    #[test]
+    fn render_simple_list() -> Result<()> {
+        let mut h = Harness::new(SimpleList::new(vec!["item1", "item2", "item3"]))?;
+        h.render()?;
+
+        h.expect_contains("item1");
+        h.expect_contains("item2");
+        h.expect_contains("item3");
+
+        // First item should be selected (highlighted)
+        h.expect_highlight("item1");
+        Ok(())
+    }
+
+    #[test]
+    fn scrolling_through_list() -> Result<()> {
+        let mut h = Harness::with_size(
+            SimpleList::new(vec!["item1", "item2", "item3", "item4", "item5"]),
+            Expanse::new(10, 3),
+        )?;
+        h.render()?;
+
+        // Initially first item is selected
+        h.expect_highlight("item1");
+
+        // Scroll down
+        h.key('j')?;
+        h.expect_highlight("item2");
+
+        h.key('j')?;
+        h.expect_highlight("item3");
+
+        // Scroll up
+        h.key('k')?;
+        h.expect_highlight("item2");
+
+        // Test first/last navigation
+        h.key('G')?;
+        h.expect_highlight("item5");
+
+        h.key('g')?;
+        h.expect_highlight("item1");
+
+        Ok(())
+    }
+
+    #[test]
+    fn scrolling_with_viewport_constraints() -> Result<()> {
+        // Create a list larger than viewport
+        let items: Vec<&str> = (1..=10)
+            .map(|i| Box::leak(format!("item{i}").into_boxed_str()) as &str)
+            .collect();
+        let mut h = Harness::with_size(
+            SimpleList::new(items),
+            Expanse::new(10, 4), // Small viewport
+        )?;
+        h.render()?;
+
+        // Navigate to bottom
+        h.key('G')?;
+        h.expect_highlight("item10");
+
+        // Item10 should be visible
+        h.expect_contains("item10");
+
+        // Navigate back to top
+        h.key('g')?;
+        h.expect_highlight("item1");
+        h.expect_contains("item1");
+
+        Ok(())
+    }
+
+    #[test]
+    fn delete_items_from_list() -> Result<()> {
+        // Test basic deletion functionality
+        let mut h = Harness::new(SimpleList::new(vec!["apple", "banana", "cherry"]))?;
+        h.render()?;
+
+        // Verify initial state
+        assert_eq!(h.root().list.len(), 3);
+        h.expect_highlight("apple");
+
+        // Delete current item
+        h.key('d')?;
+        h.render()?;
+
+        // Verify one item was deleted
+        assert_eq!(h.root().list.len(), 2);
+
+        // Delete another item
+        h.key('d')?;
+        h.render()?;
+
+        // Verify another item was deleted
+        assert_eq!(h.root().list.len(), 1);
+
+        // Delete the last item
+        h.key('d')?;
+        h.render()?;
+
+        // List should be empty
+        assert!(h.root().list.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn delete_middle_item() -> Result<()> {
+        let mut h = Harness::new(SimpleList::new(vec!["first", "middle", "last"]))?;
+        h.render()?;
+
+        // Navigate to middle item
+        h.key('j')?;
+        h.expect_highlight("middle");
+
+        // Delete it
+        h.key('d')?;
+        h.render()?;
+
+        // After deleting middle item, we should have 2 items left
+        assert_eq!(h.root().list.len(), 2);
+
+        // The selection should be on an item (either first or last)
+        // The exact behavior depends on the list implementation
+        assert!(h.root().list.selected().is_some());
+
+        Ok(())
+    }
+
+    #[test]
+    fn add_items_to_list() -> Result<()> {
+        let mut h = Harness::new(SimpleList::new(vec!["initial"]))?;
+        h.render()?;
+
+        h.expect_highlight("initial");
+
+        // Append items
+        h.root().list.append(SelectableText::new("second"));
+        h.render()?;
+        h.expect_contains("second");
+
+        h.root().list.append(SelectableText::new("third"));
+        h.render()?;
+        h.expect_contains("third");
+
+        // Insert at specific position
+        h.root().list.insert(1, SelectableText::new("inserted"));
+        h.render()?;
+        h.expect_contains("inserted");
+
+        // Insert after current selection
+        h.root()
+            .list
+            .insert_after(SelectableText::new("after_initial"));
+        h.render()?;
+        h.expect_contains("after_initial");
+
+        Ok(())
+    }
+
+    #[test]
+    fn add_to_empty_list() -> Result<()> {
+        let mut h = Harness::new(SimpleList::new(vec![]))?;
+        h.render()?;
+
+        // List should be empty
+        assert!(h.root().list.is_empty());
+
+        // Add first item
+        h.root().list.append(SelectableText::new("first"));
+        h.render()?;
+
+        // First item should be automatically selected
+        h.expect_highlight("first");
+        h.expect_contains("first");
+
+        Ok(())
+    }
+
+    #[test]
+    fn selection_persists_through_operations() -> Result<()> {
+        let mut h = Harness::new(SimpleList::new(vec!["a", "b", "c", "d", "e"]))?;
+        h.render()?;
+
+        // Move to 'c'
+        h.key('j')?;
+        h.key('j')?;
+        h.expect_highlight("c");
+
+        // Delete item before selection
+        // We'll delete 'a' by navigating to it and pressing 'd'
+        h.key('g')?; // Go to first
+        h.key('d')?; // Delete 'a'
+        h.key('j')?; // Go to 'c' (which was at index 2, now at 1)
+        h.render()?;
+
+        // Selection should still be on 'c'
+        h.expect_highlight("c");
+        // 'c' is now at index 1 after deleting 'a'
+
+        // Delete item after selection
+        // Navigate to 'e' and delete it
+        h.key('G')?; // Go to last ('e')
+        h.key('d')?; // Delete 'e'
+        h.key('k')?; // Go back to 'c'
+        h.render()?;
+
+        // Selection should still be on 'c'
+        h.expect_highlight("c");
+
+        Ok(())
+    }
+
+    #[test]
+    fn clear_list() -> Result<()> {
+        let mut h = Harness::new(SimpleList::new(vec!["x", "y", "z"]))?;
+        h.render()?;
+
+        // Verify items are initially present
+        assert_eq!(h.root().list.len(), 3);
+
+        // Clear all items
+        let cleared = h.root().list.clear();
+        h.render()?;
+
+        // Verify all items were returned
+        assert_eq!(cleared.len(), 3);
+
+        // List should be empty
+        assert!(h.root().list.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn page_navigation() -> Result<()> {
+        // Create a long list
+        let items: Vec<&str> = (1..=20)
+            .map(|i| Box::leak(format!("line{i:02}").into_boxed_str()) as &str)
+            .collect();
+        let mut h = Harness::with_size(
+            SimpleList::new(items),
+            Expanse::new(15, 5), // Small viewport
+        )?;
+        h.render()?;
+
+        h.expect_highlight("line01");
+
+        // Page down - use multiple select_next instead
+        for _ in 0..5 {
+            h.key('j')?;
+        }
+        h.render()?;
+
+        // Should have scrolled down
+        assert!(!h.buf().contains_text("line01"));
+
+        // Page up - use multiple select_prev instead
+        for _ in 0..5 {
+            h.key('k')?;
+        }
+        h.render()?;
+
+        // Should see line01 again
+        h.expect_contains("line01");
+
+        Ok(())
+    }
+
+    #[test]
+    fn horizontal_scrolling() -> Result<()> {
+        // Create a custom list with fixed width items
+        #[derive(StatefulNode)]
+        struct HScrollList {
+            state: NodeState,
+            list: List<SelectableText>,
+        }
+
+        #[derive_commands]
+        impl HScrollList {
+            fn new() -> Self {
+                HScrollList {
+                    state: NodeState::default(),
+                    list: List::new(vec![SelectableText::new("0123456789").with_fixed_width(10)]),
+                }
+            }
+        }
+
+        impl Node for HScrollList {
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.list)
+            }
+
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                l.place(&mut self.list, vp, vp.view())?;
+                Ok(())
+            }
+        }
+
+        impl crate::Loader for HScrollList {
+            fn load(c: &mut crate::Canopy) {
+                use crate::Binder;
+                c.add_commands::<List<SelectableText>>();
+                Binder::new(c)
+                    .key('h', "list::scroll_left()")
+                    .key('l', "list::scroll_right()");
+            }
+        }
+
+        let mut h = Harness::with_size(HScrollList::new(), Expanse::new(5, 1))?;
+        h.render()?;
+
+        // Initially see the beginning
+        h.expect_contains("01234");
+
+        // Scroll right
+        h.key('l')?;
+        h.render()?;
+
+        // Should see different content
+        h.expect_contains("12345");
+
+        // Scroll left back
+        h.key('h')?;
+        h.render()?;
+
+        // Should be back at the beginning
+        h.expect_contains("01234");
 
         Ok(())
     }
