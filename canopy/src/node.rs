@@ -10,15 +10,13 @@ use crate::{
 };
 
 /// The result of an event handler.
-///
-/// * `Handle` - the event was processed and the node should be rendered.
-/// * `Consume` - the event was processed, but nothing changed so rendering is
-///   skipped and propagation stops.
-/// * `Ignore` - the event was not handled and will bubble up the tree.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum EventOutcome {
+    /// The event was processed and the node should be rendered.
     Handle,
+    /// The event was processed, but nothing changed so rendering is skipped and propagation stops.
     Consume,
+    /// The event was not handled and will bubble up the tree.
     Ignore,
 }
 

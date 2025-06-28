@@ -788,7 +788,7 @@ impl Canopy {
                 match hdl {
                     EventOutcome::Handle => {
                         handled = true;
-                        self.taint(x);
+                        self.taint_tree(x);
                     }
                     EventOutcome::Consume => {
                         handled = true;
@@ -830,7 +830,7 @@ impl Canopy {
                 } else {
                     match x.handle_key(self, k)? {
                         EventOutcome::Handle => {
-                            self.taint(x);
+                            self.taint_tree(x);
                             Walk::Handle(None)
                         }
                         EventOutcome::Consume => Walk::Handle(None),
@@ -856,6 +856,7 @@ impl Canopy {
                 if let Some(d) = x.poll(self) {
                     self.poller.schedule(x.id(), d);
                 }
+                self.taint_tree(x);
             };
             Ok(Walk::Continue)
         })?;
