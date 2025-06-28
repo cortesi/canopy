@@ -1657,6 +1657,167 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "Rendering bug: After deleting first item, remaining items don't render correctly"]
+    fn delete_first_item_rendering_bug() -> Result<()> {
+        // This test demonstrates a bug where after deleting the first item,
+        // not all remaining items are rendered properly
+        let mut h = Harness::with_size(
+            SimpleList::new(vec!["apple", "banana", "cherry"]),
+            Expanse::new(20, 10),
+        )?;
+        h.render()?;
+
+        // Verify all items are initially visible
+        h.expect_contains("apple");
+        h.expect_contains("banana");
+        h.expect_contains("cherry");
+
+        // Delete first item
+        h.expect_highlight("apple");
+        h.key('d')?;
+        h.render()?;
+
+        // BUG: After deletion, both remaining items should be visible
+        // but only "cherry" appears in the buffer
+        h.expect_contains("banana"); // This fails - banana is not rendered
+        h.expect_contains("cherry");
+        h.expect_highlight("banana"); // This fails - banana should be highlighted
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "Rendering bug: List items disappear from view after delete operations"]
+    fn delete_with_multiple_items_visible_bug() -> Result<()> {
+        // This test shows that items that should remain visible after deletion
+        // are not being rendered
+        let mut h = Harness::with_size(
+            SimpleList::new(vec!["1", "2", "3", "4", "5"]),
+            Expanse::new(10, 8), // Large enough to show all items
+        )?;
+        h.render()?;
+
+        // All items should be visible initially
+        for i in 1..=5 {
+            h.expect_contains(&i.to_string());
+        }
+
+        // Delete item "3"
+        h.key('j')?; // to "2"
+        h.key('j')?; // to "3"
+        h.expect_highlight("3");
+        h.key('d')?;
+        h.render()?;
+
+        // BUG: Items 1, 2, 4, 5 should all still be visible
+        // but some disappear from the rendered output
+        h.expect_contains("1"); // This likely fails
+        h.expect_contains("2"); // This likely fails
+        h.expect_contains("4");
+        h.expect_contains("5");
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "Rendering bug: Frame content not updated properly after list modifications"]
+    fn delete_in_frame_rendering_bug() -> Result<()> {
+        // When list is inside a frame, the rendering bug is even more apparent
+        #[derive(StatefulNode)]
+        struct FramedList {
+            state: NodeState,
+            frame: frame::Frame<List<SelectableText>>,
+        }
+
+        #[derive_commands]
+        impl FramedList {
+            fn new(items: Vec<&str>) -> Self {
+                FramedList {
+                    state: NodeState::default(),
+                    frame: frame::Frame::new(List::new(
+                        items.into_iter().map(SelectableText::new).collect(),
+                    )),
+                }
+            }
+        }
+
+        impl Node for FramedList {
+            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+                f(&mut self.frame)
+            }
+
+            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+                l.fill(self, sz)?;
+                let vp = self.vp();
+                l.place(&mut self.frame, vp, vp.view())?;
+                Ok(())
+            }
+        }
+
+        impl crate::Loader for FramedList {
+            fn load(c: &mut crate::Canopy) {
+                use crate::Binder;
+                c.add_commands::<List<SelectableText>>();
+                Binder::new(c).key('d', "list::delete_selected()");
+            }
+        }
+
+        let mut h = Harness::with_size(FramedList::new(vec!["A", "B", "C"]), Expanse::new(10, 6))?;
+        h.render()?;
+
+        // Frame should show all content
+        h.expect_contains("A");
+        h.expect_contains("B");
+        h.expect_contains("C");
+
+        // Delete first item
+        h.key('d')?;
+        h.render()?;
+
+        // BUG: Frame content should show B and C, but doesn't render properly
+        h.expect_contains("B"); // This likely fails
+        h.expect_contains("C");
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "Rendering bug: Demonstrates exact rendering output after deletion"]
+    fn delete_rendering_diagnostic() -> Result<()> {
+        // This test shows exactly what gets rendered after deletion
+        let mut h = Harness::with_size(
+            SimpleList::new(vec!["Line1", "Line2", "Line3", "Line4"]),
+            Expanse::new(15, 6),
+        )?;
+        h.render()?;
+
+        eprintln!("=== Before deletion ===");
+        {
+            let buf = h.buf();
+            for (i, line) in buf.lines().iter().enumerate() {
+                eprintln!("Line {}: '{}'", i, line);
+            }
+        }
+
+        // Delete first item
+        h.key('d')?;
+        h.render()?;
+
+        eprintln!("\n=== After deleting first item ===");
+        eprintln!("List length: {}", h.root().list.len());
+        eprintln!("List offset: {}", h.root().list.offset);
+        {
+            let buf = h.buf();
+            for (i, line) in buf.lines().iter().enumerate() {
+                eprintln!("Line {}: '{}'", i, line);
+            }
+        }
+
+        // This assertion will fail, showing the rendering issue
+        panic!("Check diagnostic output above to see the rendering bug");
+    }
+
+    #[test]
     fn horizontal_scrolling() -> Result<()> {
         // Create a custom list with fixed width items
         #[derive(StatefulNode)]
