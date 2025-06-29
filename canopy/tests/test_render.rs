@@ -4,10 +4,7 @@ use canopy::{
 };
 
 fn assert_buffer_matches(buf: &TermBuf, expected: &[&str]) {
-    assert!(
-        buf.buffer_matches(expected),
-        "Buffer contents did not match expected pattern"
-    );
+    buf.assert_matches(expected);
 }
 
 fn setup_render_test(
@@ -120,31 +117,12 @@ impl BufTest {
 
         render.text("default", self.line, self.text).unwrap();
 
-        if !buf.buffer_matches(self.expected) {
-            let actual_lines = buf.lines();
-            let width = self.expected[0].len().max(10);
-
-            println!("\n=== Test case '{}' failed ===", self.name);
-            println!(
-                "Text: '{}' at line({},{}) width={}",
-                self.text, self.line.tl.x, self.line.tl.y, self.line.w
-            );
-            println!("\nExpected:");
-            println!("┌{}┐", "─".repeat(width));
-            for line in self.expected {
-                println!("│{line:width$}│");
-            }
-            println!("└{}┘", "─".repeat(width));
-
-            println!("\nActual:");
-            println!("┌{}┐", "─".repeat(width));
-            for line in &actual_lines {
-                println!("│{line:width$}│");
-            }
-            println!("└{}┘", "─".repeat(width));
-
-            panic!("Buffer contents did not match expected pattern");
-        }
+        // Use the new assert_matches method which includes pretty printing
+        let context = format!(
+            "=== Test case '{}' failed ===\nText: '{}' at line({},{}) width={}",
+            self.name, self.text, self.line.tl.x, self.line.tl.y, self.line.w
+        );
+        buf.assert_matches_with_context(self.expected, Some(&context));
     }
 }
 
