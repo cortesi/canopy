@@ -32,17 +32,17 @@ pub struct ViewPort {
     /// The location of the node in the parent's canvas. Must only be changed by the parent node.
     /// The space occupied by node is defined by its position and its view rectangle.
     ///
-    // CONSTRAINT: The view rectangle at the parent's canvas position must be fully contained
-    // within the parent's canvas rectangle.
-    //
-    // CONSTRAINT: The position must be within the PARENT's canvas rectangle.
+    /// CONSTRAINT: The view rectangle at the parent's canvas position must be fully contained
+    /// within the parent's canvas rectangle.
+    ///
+    /// CONSTRAINT: The position must be within the PARENT's canvas rectangle.
     position: Point,
 
     /// The portion of this node that is displayed - a sub-rectangle of the canvas. Must only be
     /// changed by the node itself. This is the portion of the node that is drawn to the screen. To
     /// ease widget implementation, when attempting to draw to the screen any draw operations outside the
     /// screen rectangle are ignored.
-    // CONSTRAINT: The view rectangle must be fully contained within OUR canvas rectangle.
+    /// CONSTRAINT: The view rectangle must be fully contained within OUR canvas rectangle.
     view: Rect,
 
     /// The canvas on which children are positioned, and to which rendering occurs. Must only be
