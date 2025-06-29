@@ -34,60 +34,6 @@ fn setup_render_test(
     (buf, stylemap, style_manager, viewport)
 }
 
-#[test]
-fn test_fill_full_viewport() {
-    let buf_size = Expanse::new(10, 5);
-    let viewport =
-        ViewPort::new(buf_size, geom::Rect::new(0, 0, 10, 5), geom::Point::zero()).unwrap();
-    let (mut buf, stylemap, mut style_manager, viewport) = setup_render_test(buf_size, viewport);
-
-    let base = geom::Point::zero();
-    let mut render = Render::new(&mut buf, &stylemap, &mut style_manager, viewport, base);
-
-    // Fill a rectangle in the middle of the buffer
-    let rect = geom::Rect::new(2, 1, 4, 2);
-    render.fill("default", rect, '#').unwrap();
-
-    // Check that the rectangle was filled correctly
-    assert_buffer_matches(
-        &buf,
-        &[
-            "          ",
-            "  ####    ",
-            "  ####    ",
-            "          ",
-            "          ",
-        ],
-    );
-}
-
-#[test]
-fn test_fill_with_base_offset() {
-    let buf_size = Expanse::new(10, 5);
-    let viewport =
-        ViewPort::new(buf_size, geom::Rect::new(0, 0, 10, 5), geom::Point::zero()).unwrap();
-    let (mut buf, stylemap, mut style_manager, viewport) = setup_render_test(buf_size, viewport);
-
-    let base = (1, 1).into();
-    let mut render = Render::new(&mut buf, &stylemap, &mut style_manager, viewport, base);
-
-    // Fill a rectangle at (0,0) which should appear at (1,1) due to base offset
-    let rect = geom::Rect::new(0, 0, 3, 2);
-    render.fill("default", rect, 'X').unwrap();
-
-    // Check that the rectangle was filled at the offset position
-    assert_buffer_matches(
-        &buf,
-        &[
-            "          ",
-            " XXX      ",
-            " XXX      ",
-            "          ",
-            "          ",
-        ],
-    );
-}
-
 struct BufTest {
     name: &'static str,
     line: geom::Line,
@@ -200,6 +146,60 @@ impl BufTest {
             panic!("Buffer contents did not match expected pattern");
         }
     }
+}
+
+#[test]
+fn test_fill_full_viewport() {
+    let buf_size = Expanse::new(10, 5);
+    let viewport =
+        ViewPort::new(buf_size, geom::Rect::new(0, 0, 10, 5), geom::Point::zero()).unwrap();
+    let (mut buf, stylemap, mut style_manager, viewport) = setup_render_test(buf_size, viewport);
+
+    let base = geom::Point::zero();
+    let mut render = Render::new(&mut buf, &stylemap, &mut style_manager, viewport, base);
+
+    // Fill a rectangle in the middle of the buffer
+    let rect = geom::Rect::new(2, 1, 4, 2);
+    render.fill("default", rect, '#').unwrap();
+
+    // Check that the rectangle was filled correctly
+    assert_buffer_matches(
+        &buf,
+        &[
+            "          ",
+            "  ####    ",
+            "  ####    ",
+            "          ",
+            "          ",
+        ],
+    );
+}
+
+#[test]
+fn test_fill_with_base_offset() {
+    let buf_size = Expanse::new(10, 5);
+    let viewport =
+        ViewPort::new(buf_size, geom::Rect::new(0, 0, 10, 5), geom::Point::zero()).unwrap();
+    let (mut buf, stylemap, mut style_manager, viewport) = setup_render_test(buf_size, viewport);
+
+    let base = (1, 1).into();
+    let mut render = Render::new(&mut buf, &stylemap, &mut style_manager, viewport, base);
+
+    // Fill a rectangle at (0,0) which should appear at (1,1) due to base offset
+    let rect = geom::Rect::new(0, 0, 3, 2);
+    render.fill("default", rect, 'X').unwrap();
+
+    // Check that the rectangle was filled at the offset position
+    assert_buffer_matches(
+        &buf,
+        &[
+            "          ",
+            " XXX      ",
+            " XXX      ",
+            "          ",
+            "          ",
+        ],
+    );
 }
 
 #[test]

@@ -11,7 +11,7 @@ mod poll;
 mod render;
 mod root;
 mod state;
-mod termbuffer;
+mod termbuf;
 mod viewport;
 
 pub mod backend;
@@ -40,7 +40,7 @@ pub use geom::Expanse;
 
 pub use render::Render;
 pub use state::{NodeId, NodeName, NodeState, StatefulNode};
-pub use termbuffer::TermBuf;
+pub use termbuf::TermBuf;
 pub use viewport::ViewPort;
 
 // Hide the test utils from docs. We need to expose it for integration tests, but it's not for external use.
