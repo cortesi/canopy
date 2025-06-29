@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["Alt","Ctrl","Empty","Shift"],"enum":["KeyCode","MediaKeyCode","ModifierKeyCode"],"struct":["Key","Mods"]};

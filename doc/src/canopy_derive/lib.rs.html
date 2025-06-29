@@ -5,7 +5,7 @@
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>quote::quote;
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>regex::Regex;
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>structmeta::StructMeta;
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>syn::{parse_macro_input, DeriveInput, Meta};
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>syn::{DeriveInput, Meta, parse_macro_input};
 <a href=#9 id=9 data-nosnippet>9</a>
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">type </span><span class="prelude-ty">Result</span>&lt;T&gt; = std::result::Result&lt;T, Error&gt;;
 <a href=#11 id=11 data-nosnippet>11</a>
@@ -221,7 +221,7 @@
 <a href=#221 id=221 data-nosnippet>221</a>                            <span class="kw">return </span><span class="prelude-val">Err</span>(Error::Unsupported(<span class="macro">format!</span>(
 <a href=#222 id=222 data-nosnippet>222</a>                                <span class="string">"unsupported argument type {:?} on command: {}"</span>,
 <a href=#223 id=223 data-nosnippet>223</a>                                t, method.sig.ident
-<a href=#224 id=224 data-nosnippet>224</a>                            )))
+<a href=#224 id=224 data-nosnippet>224</a>                            )));
 <a href=#225 id=225 data-nosnippet>225</a>                        }
 <a href=#226 id=226 data-nosnippet>226</a>                    }
 <a href=#227 id=227 data-nosnippet>227</a>                }
@@ -230,7 +230,7 @@
 <a href=#230 id=230 data-nosnippet>230</a>                        <span class="string">"unsupported argument type {:?} on command: {}"</span>,
 <a href=#231 id=231 data-nosnippet>231</a>                        <span class="macro">quote!</span> {#typ},
 <a href=#232 id=232 data-nosnippet>232</a>                        method.sig.ident
-<a href=#233 id=233 data-nosnippet>233</a>                    )))
+<a href=#233 id=233 data-nosnippet>233</a>                    )));
 <a href=#234 id=234 data-nosnippet>234</a>                }
 <a href=#235 id=235 data-nosnippet>235</a>            },
 <a href=#236 id=236 data-nosnippet>236</a>        }
