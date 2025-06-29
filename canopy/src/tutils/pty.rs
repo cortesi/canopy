@@ -1,4 +1,4 @@
-use expectrl::{spawn, Eof, Session};
+use expectrl::{Eof, Session, spawn};
 use std::process::Command;
 use std::time::Duration;
 

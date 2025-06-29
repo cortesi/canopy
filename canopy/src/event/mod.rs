@@ -1,7 +1,7 @@
 pub mod key;
 pub mod mouse;
 
-use crate::{geom::Expanse, NodeId};
+use crate::{NodeId, geom::Expanse};
 
 use std::sync::mpsc;
 

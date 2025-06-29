@@ -1,9 +1,9 @@
 use super::ttree;
 use crate::{
+    Canopy, Loader, Node, Result, TermBuf,
     backend::{dummy::DummyBackend, test::TestRender},
     event::key,
     geom::Expanse,
-    Canopy, Loader, Node, Result, TermBuf,
 };
 
 /// Run a function on our standard dummy app built from [`ttree`]. This helper
@@ -88,7 +88,7 @@ impl<N: Node + Loader> Harness<N> {
     }
 
     pub fn expect_highlight(&self, txt: &str) {
-        use crate::style::{solarized, PartialStyle};
+        use crate::style::{PartialStyle, solarized};
         let buf = self.buf();
 
         // Debug helper: if assertion will fail, print what's in the buffer

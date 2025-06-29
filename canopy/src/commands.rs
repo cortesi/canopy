@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
 use crate::{
+    Context, Error, Node, NodeId, Result,
     state::{NodeName, StatefulNode},
-    tree, Context, Error, Node, NodeId, Result,
+    tree,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -194,7 +195,7 @@ mod tests {
     use super::*;
     use crate as canopy;
     use crate::tutils::*;
-    use crate::{command, derive_commands, state::StatefulNode, Result};
+    use crate::{Result, command, derive_commands, state::StatefulNode};
 
     #[test]
     fn tdispatch() -> Result<()> {

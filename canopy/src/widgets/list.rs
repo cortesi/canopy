@@ -411,8 +411,8 @@ where
 mod tests {
     use super::*;
     use crate::{
-        backend::test::CanvasRender, geom::Point, render::RenderBackend, style::Style,
-        tutils::Harness, widgets::frame, widgets::Text, Context,
+        Context, backend::test::CanvasRender, geom::Point, render::RenderBackend, style::Style,
+        tutils::Harness, widgets::Text, widgets::frame,
     };
     use std::sync::{Arc, Mutex};
 
@@ -1365,8 +1365,8 @@ mod tests {
 
     impl crate::Loader for SimpleList {
         fn load(c: &mut crate::Canopy) {
-            use crate::style::solarized;
             use crate::Binder;
+            use crate::style::solarized;
 
             c.add_commands::<SimpleList>();
             c.add_commands::<List<SelectableText>>();
@@ -1795,7 +1795,7 @@ mod tests {
         {
             let buf = h.buf();
             for (i, line) in buf.lines().iter().enumerate() {
-                eprintln!("Line {}: '{}'", i, line);
+                eprintln!("Line {i}: '{line}'");
             }
         }
 
@@ -1809,7 +1809,7 @@ mod tests {
         {
             let buf = h.buf();
             for (i, line) in buf.lines().iter().enumerate() {
-                eprintln!("Line {}: '{}'", i, line);
+                eprintln!("Line {i}: '{line}'");
             }
         }
 

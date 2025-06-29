@@ -1,13 +1,13 @@
 use std::{
     cmp::Ordering,
     collections::binary_heap::BinaryHeap,
-    sync::{mpsc, Arc, Mutex},
+    sync::{Arc, Mutex, mpsc},
     thread,
     time::{Duration, SystemTime},
 };
 
-use crate::event::Event;
 use crate::NodeId;
+use crate::event::Event;
 
 /// A node that has a pending callback.
 #[derive(Debug)]
@@ -120,19 +120,21 @@ impl Poller {
         } else {
             let pending = self.pending.clone();
             let tx = self.event_tx.clone();
-            self.handle = Some(thread::spawn(move || loop {
-                // Caution: moving this into the statement below means that we
-                // retain the lock over the thread park, causing deadlock.
-                let d = pending.lock().unwrap().current_wait();
-                if let Some(d) = d {
-                    thread::park_timeout(d);
-                } else {
-                    // We have no current wait time, so we just park the thread.
-                    thread::park();
-                };
-                let ids = pending.lock().unwrap().collect();
-                if !ids.is_empty() && tx.send(Event::Poll(ids)).is_err() {
-                    break;
+            self.handle = Some(thread::spawn(move || {
+                loop {
+                    // Caution: moving this into the statement below means that we
+                    // retain the lock over the thread park, causing deadlock.
+                    let d = pending.lock().unwrap().current_wait();
+                    if let Some(d) = d {
+                        thread::park_timeout(d);
+                    } else {
+                        // We have no current wait time, so we just park the thread.
+                        thread::park();
+                    };
+                    let ids = pending.lock().unwrap().collect();
+                    if !ids.is_empty() && tx.send(Event::Poll(ids)).is_err() {
+                        break;
+                    }
                 }
             }));
         }
@@ -142,7 +144,7 @@ impl Poller {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{tutils::*, Result, StatefulNode};
+    use crate::{Result, StatefulNode, tutils::*};
     #[test]
     fn pendingheap() -> Result<()> {
         let now = SystemTime::now();

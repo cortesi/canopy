@@ -5,7 +5,7 @@ use proc_macro_error::*;
 use quote::quote;
 use regex::Regex;
 use structmeta::StructMeta;
-use syn::{parse_macro_input, DeriveInput, Meta};
+use syn::{DeriveInput, Meta, parse_macro_input};
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -221,7 +221,7 @@ fn parse_command_method(node: &str, method: &syn::ImplItemFn) -> Result<Option<C
                             return Err(Error::Unsupported(format!(
                                 "unsupported argument type {:?} on command: {}",
                                 t, method.sig.ident
-                            )))
+                            )));
                         }
                     }
                 }
@@ -230,7 +230,7 @@ fn parse_command_method(node: &str, method: &syn::ImplItemFn) -> Result<Option<C
                         "unsupported argument type {:?} on command: {}",
                         quote! {#typ},
                         method.sig.ident
-                    )))
+                    )));
                 }
             },
         }

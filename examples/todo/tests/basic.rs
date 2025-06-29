@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::Result;
 use canopy::{event::key::KeyCode, tutils::Harness};
 
-use todo::{open_store, setup_app, Todo};
+use todo::{Todo, open_store, setup_app};
 
 fn db_path(tag: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!(

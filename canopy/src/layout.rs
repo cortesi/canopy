@@ -1,8 +1,8 @@
 //! Helper functions for `Node::layout` implementations.
 
 use crate::{
-    geom::{Expanse, Frame, Rect},
     Node, Result, ViewPort,
+    geom::{Expanse, Frame, Rect},
 };
 
 pub struct Layout {}
@@ -102,10 +102,10 @@ impl Layout {
 mod tests {
     use super::*;
     use crate::{
-        self as canopy,
+        self as canopy, Canopy, Context, Node, NodeState, Render, StatefulNode,
         geom::{Expanse, Rect},
         tutils::TFixed,
-        Canopy, Context, Node, NodeState, Render, StatefulNode, *,
+        *,
     };
 
     #[test]

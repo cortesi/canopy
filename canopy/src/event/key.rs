@@ -291,7 +291,7 @@ impl From<KeyCode> for Key {
 
 #[cfg(test)]
 mod tests {
-    use crate::{event::key::*, Result};
+    use crate::{Result, event::key::*};
 
     #[test]
     fn normalize() -> Result<()> {

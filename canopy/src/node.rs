@@ -1,12 +1,12 @@
 use std::time::Duration;
 
 use crate::{
+    Context, Layout, Render, Result,
     commands::CommandNode,
     cursor,
     event::{key, mouse},
     geom::Expanse,
     state::StatefulNode,
-    Context, Layout, Render, Result,
 };
 
 /// The result of an event handler.

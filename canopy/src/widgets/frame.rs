@@ -2,9 +2,8 @@ use pad::PadStr;
 
 use crate as canopy;
 use crate::{
-    derive_commands, geom,
+    Context, Layout, Node, Render, Result, derive_commands, geom,
     state::{NodeState, StatefulNode},
-    Context, Layout, Node, Render, Result,
 };
 
 /// Defines the set of glyphs used to draw the frame

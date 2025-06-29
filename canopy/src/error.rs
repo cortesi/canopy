@@ -1,6 +1,6 @@
 use std::{
     fmt::Display,
-    sync::{mpsc, MutexGuard, PoisonError},
+    sync::{MutexGuard, PoisonError, mpsc},
 };
 
 #[cfg(test)]

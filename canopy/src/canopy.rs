@@ -3,9 +3,10 @@ use std::{io::Write, process, sync::mpsc};
 use comfy_table::{ContentArrangement, Table};
 
 use crate::{
+    EventOutcome, Layout, NodeId, Render, Result, TermBuf, ViewPort,
     backend::BackendControl,
     commands, cursor, error,
-    event::{key, mouse, Event},
+    event::{Event, key, mouse},
     geom::{Direction, Expanse, Point, Rect},
     inputmap,
     node::Node,
@@ -13,9 +14,8 @@ use crate::{
     poll::Poller,
     render::RenderBackend,
     script,
-    style::{solarized, StyleManager, StyleMap},
+    style::{StyleManager, StyleMap, solarized},
     tree::*,
-    EventOutcome, Layout, NodeId, Render, Result, TermBuf, ViewPort,
 };
 
 /// The API exposed to nodes by Canopy.
@@ -916,7 +916,7 @@ pub trait Loader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{geom::Rect, tutils::*, StatefulNode};
+    use crate::{StatefulNode, geom::Rect, tutils::*};
 
     #[test]
     fn tbindings() -> Result<()> {
@@ -1388,7 +1388,7 @@ mod tests {
     fn zero_size_child_ok() -> Result<()> {
         use crate as canopy;
         use crate::backend::test::CanvasRender;
-        use crate::{derive_commands, NodeState};
+        use crate::{NodeState, derive_commands};
 
         #[derive(StatefulNode)]
         struct Child {

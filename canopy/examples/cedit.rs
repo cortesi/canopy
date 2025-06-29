@@ -6,7 +6,7 @@ use canopy::{
     derive_commands,
     event::key,
     geom::Expanse,
-    widgets::{frame, Editor},
+    widgets::{Editor, frame},
     *,
 };
 

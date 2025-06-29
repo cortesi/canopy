@@ -7,7 +7,7 @@ use tracing_subscriber::fmt;
 use crate as canopy;
 use crate::{
     geom::{Expanse, Rect},
-    widgets::{list::*, Text},
+    widgets::{Text, list::*},
     *,
 };
 use std::time::Duration;

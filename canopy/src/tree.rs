@@ -1,6 +1,6 @@
 //! Utilities for working with a Canopy node tree.
 
-use crate::{geom::Point, node::Node, path::*, NodeId, Result};
+use crate::{NodeId, Result, geom::Point, node::Node, path::*};
 
 /// Walk is the return value from traversal closures.
 #[derive(PartialEq, Eq, Debug, Clone)]
@@ -231,8 +231,8 @@ pub fn preorder<T>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tutils::*;
     use crate::StatefulNode;
+    use crate::tutils::*;
     use crate::*;
 
     #[test]

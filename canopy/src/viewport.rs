@@ -1,6 +1,6 @@
+use crate::Result;
 use crate::error;
 use crate::geom::{Expanse, Line, Point, Rect};
-use crate::Result;
 
 /// A projection from the virtual space of a node to the screen.
 #[cfg(test)]

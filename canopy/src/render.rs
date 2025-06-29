@@ -1,8 +1,7 @@
 use crate::{
-    geom,
+    Result, TermBuf, ViewPort, geom,
     style::Style,
     style::{StyleManager, StyleMap},
-    Result, TermBuf, ViewPort,
 };
 
 /// The trait implemented by renderers.
@@ -95,5 +94,207 @@ impl<'a> Render<'a> {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::style::{AttrSet, Color};
+    use crate::{Expanse, TermBuf, ViewPort};
+
+    fn setup_render_test(
+        buf_size: Expanse,
+        viewport_canvas: Expanse,
+        viewport_view: geom::Rect,
+    ) -> (TermBuf, StyleMap, StyleManager, ViewPort) {
+        let default_style = Style {
+            fg: Color::White,
+            bg: Color::Black,
+            attrs: AttrSet::default(),
+        };
+        let buf = TermBuf::new(buf_size, ' ', default_style.clone());
+
+        let mut stylemap = StyleMap::default();
+        // Add a default style to the map
+        stylemap.add(
+            "default",
+            Some(Color::White),
+            Some(Color::Black),
+            Some(AttrSet::default()),
+        );
+
+        let style_manager = StyleManager::default();
+        let viewport = ViewPort::new(viewport_canvas, viewport_view, geom::Point::zero()).unwrap();
+        (buf, stylemap, style_manager, viewport)
+    }
+
+    #[test]
+    fn test_fill_full_viewport() {
+        let buf_size = Expanse::new(10, 5);
+        let (mut buf, stylemap, mut style_manager, viewport) =
+            setup_render_test(buf_size, buf_size, geom::Rect::new(0, 0, 10, 5));
+
+        let base = geom::Point::zero();
+        let mut render = Render::new(&mut buf, &stylemap, &mut style_manager, viewport, base);
+
+        // Fill a rectangle in the middle of the buffer
+        let rect = geom::Rect::new(2, 1, 4, 2);
+        render.fill("default", rect, '#').unwrap();
+
+        // Check that the rectangle was filled correctly
+        buf.assert_buffer_matches(&[
+            "          ",
+            "  ####    ",
+            "  ####    ",
+            "          ",
+            "          ",
+        ]);
+    }
+
+    #[test]
+    fn test_fill_with_base_offset() {
+        let buf_size = Expanse::new(10, 5);
+        let (mut buf, stylemap, mut style_manager, viewport) =
+            setup_render_test(buf_size, buf_size, geom::Rect::new(0, 0, 10, 5));
+
+        let base = (1, 1).into();
+        let mut render = Render::new(&mut buf, &stylemap, &mut style_manager, viewport, base);
+
+        // Fill a rectangle at (0,0) which should appear at (1,1) due to base offset
+        let rect = geom::Rect::new(0, 0, 3, 2);
+        render.fill("default", rect, 'X').unwrap();
+
+        // Check that the rectangle was filled at the offset position
+        buf.assert_buffer_matches(&[
+            "          ",
+            " XXX      ",
+            " XXX      ",
+            "          ",
+            "          ",
+        ]);
+    }
+
+    #[test]
+    fn test_text_full_line() {
+        let buf_size = Expanse::new(10, 5);
+        let (mut buf, stylemap, mut style_manager, viewport) =
+            setup_render_test(buf_size, buf_size, geom::Rect::new(0, 0, 10, 5));
+
+        let base = geom::Point::zero();
+        let mut render = Render::new(&mut buf, &stylemap, &mut style_manager, viewport, base);
+
+        // Write text to a line
+        let line = geom::Line {
+            tl: geom::Point { x: 0, y: 1 },
+            w: 10,
+        };
+        render.text("default", line, "Hello").unwrap();
+
+        // Check that the text was written correctly
+        buf.assert_buffer_matches(&[
+            "          ",
+            "Hello     ",
+            "          ",
+            "          ",
+            "          ",
+        ]);
+    }
+
+    #[test]
+    fn test_text_truncation() {
+        let buf_size = Expanse::new(10, 5);
+        let (mut buf, stylemap, mut style_manager, viewport) =
+            setup_render_test(buf_size, buf_size, geom::Rect::new(0, 0, 10, 5));
+
+        let base = geom::Point::zero();
+        let mut render = Render::new(&mut buf, &stylemap, &mut style_manager, viewport, base);
+
+        // Write text that's longer than the line
+        let line = geom::Line {
+            tl: geom::Point { x: 0, y: 0 },
+            w: 5,
+        };
+        render.text("default", line, "Hello World").unwrap();
+
+        // Check that only the first 5 characters were written
+        buf.assert_buffer_matches(&[
+            "Hello     ",
+            "          ",
+            "          ",
+            "          ",
+            "          ",
+        ]);
+    }
+
+    #[test]
+    fn test_text_with_padding() {
+        let buf_size = Expanse::new(10, 5);
+        let (mut buf, stylemap, mut style_manager, viewport) =
+            setup_render_test(buf_size, buf_size, geom::Rect::new(0, 0, 10, 5));
+
+        let base = geom::Point::zero();
+        let mut render = Render::new(&mut buf, &stylemap, &mut style_manager, viewport, base);
+
+        // Write short text to a longer line
+        let line = geom::Line {
+            tl: geom::Point { x: 0, y: 2 },
+            w: 8,
+        };
+        render.text("default", line, "Hi").unwrap();
+
+        // Check that the text was written with padding
+        buf.assert_buffer_matches(&[
+            "          ",
+            "          ",
+            "Hi        ",
+            "          ",
+            "          ",
+        ]);
+    }
+
+    #[test]
+    fn test_solid_frame() {
+        let buf_size = Expanse::new(10, 10);
+        let (mut buf, stylemap, mut style_manager, viewport) =
+            setup_render_test(buf_size, buf_size, geom::Rect::new(0, 0, 10, 10));
+
+        let base = geom::Point::zero();
+        let mut render = Render::new(&mut buf, &stylemap, &mut style_manager, viewport, base);
+
+        // Create a frame around a 6x6 area starting at (2,2)
+        let frame = geom::Frame::new(geom::Rect::new(2, 2, 6, 6), 1);
+        render.solid_frame("default", frame, '*').unwrap();
+
+        // Check the frame is drawn correctly
+        buf.assert_buffer_matches(&[
+            "          ",
+            "          ",
+            "  ******  ",
+            "  *    *  ",
+            "  *    *  ",
+            "  *    *  ",
+            "  *    *  ",
+            "  ******  ",
+            "          ",
+            "          ",
+        ]);
+    }
+
+    #[test]
+    fn test_solid_frame_single_width() {
+        let buf_size = Expanse::new(5, 5);
+        let (mut buf, stylemap, mut style_manager, viewport) =
+            setup_render_test(buf_size, buf_size, geom::Rect::new(0, 0, 5, 5));
+
+        let base = geom::Point::zero();
+        let mut render = Render::new(&mut buf, &stylemap, &mut style_manager, viewport, base);
+
+        // Create a minimal frame
+        let frame = geom::Frame::new(geom::Rect::new(1, 1, 3, 3), 1);
+        render.solid_frame("default", frame, '#').unwrap();
+
+        // Check that frame is drawn correctly
+        buf.assert_buffer_matches(&["     ", " ### ", " # # ", " ### ", "     "]);
     }
 }

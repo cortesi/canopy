@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use rhai;
 
-use crate::{commands::*, error, Context, Node, NodeId, NodeName, Result};
+use crate::{Context, Node, NodeId, NodeName, Result, commands::*, error};
 
 pub type ScriptId = u64;
 
@@ -195,8 +195,8 @@ impl ScriptHost {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tutils::*;
     use crate::StatefulNode;
+    use crate::tutils::*;
 
     #[test]
     fn texecute() -> Result<()> {

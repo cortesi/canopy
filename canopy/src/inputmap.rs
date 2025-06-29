@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{error, event::key::Key, event::mouse::Mouse, path::*, script, Result};
+use crate::{Result, error, event::key::Key, event::mouse::Mouse, path::*, script};
 
 const DEFAULT_MODE: &str = "";
 
@@ -128,7 +128,7 @@ impl InputMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{event::key, script, Result};
+    use crate::{Result, event::key, script};
 
     #[test]
     fn caseconfusion() -> Result<()> {
@@ -182,12 +182,14 @@ mod tests {
                 .unwrap(),
             a_bar
         );
-        assert!(m
-            .resolve(&"foo/bar".into(), Input::Key('x'.into()))
-            .is_none());
-        assert!(m
-            .resolve(&"nonexistent".into(), Input::Key('a'.into()))
-            .is_none());
+        assert!(
+            m.resolve(&"foo/bar".into(), Input::Key('x'.into()))
+                .is_none()
+        );
+        assert!(
+            m.resolve(&"nonexistent".into(), Input::Key('a'.into()))
+                .is_none()
+        );
 
         Ok(())
     }

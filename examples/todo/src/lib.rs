@@ -3,7 +3,7 @@ use canopy::{
     event::{key, mouse},
     geom::{Expanse, Rect},
     style::solarized,
-    widgets::{frame, list::*, Input, Text},
+    widgets::{Input, Text, frame, list::*},
     *,
 };
 

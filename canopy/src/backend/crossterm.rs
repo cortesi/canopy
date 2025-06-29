@@ -6,20 +6,20 @@ use std::{
     thread,
 };
 
-use color_backtrace::{default_output_stream, BacktracePrinter};
+use color_backtrace::{BacktracePrinter, default_output_stream};
 use scopeguard::defer;
 
 use crate::{
+    Canopy, Node, Result,
     backend::BackendControl,
     error,
-    event::{key, mouse, Event, EventSource},
+    event::{Event, EventSource, key, mouse},
     geom::{Expanse, Point},
     render::RenderBackend,
     style::{Color, Style},
-    Canopy, Node, Result,
 };
 use crossterm::{
-    self, cursor as ccursor, event as cevent, style, terminal, ExecutableCommand, QueueableCommand,
+    self, ExecutableCommand, QueueableCommand, cursor as ccursor, event as cevent, style, terminal,
 };
 
 fn translate_color(c: Color) -> style::Color {
@@ -300,20 +300,22 @@ fn translate_event(e: cevent::Event) -> Event {
 }
 
 fn event_emitter(evt_tx: mpsc::Sender<Event>) {
-    thread::spawn(move || loop {
-        match cevent::read() {
-            Ok(evt) => {
-                let ret = evt_tx.send(translate_event(evt));
-                if ret.is_err() {
+    thread::spawn(move || {
+        loop {
+            match cevent::read() {
+                Ok(evt) => {
+                    let ret = evt_tx.send(translate_event(evt));
+                    if ret.is_err() {
+                        // FIXME: Do a bit more work here. Restore context,
+                        // exit.
+                        return;
+                    }
+                }
+                Err(_) => {
                     // FIXME: Do a bit more work here. Restore context,
                     // exit.
                     return;
                 }
-            }
-            Err(_) => {
-                // FIXME: Do a bit more work here. Restore context,
-                // exit.
-                return;
             }
         }
     });

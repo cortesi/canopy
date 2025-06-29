@@ -5,7 +5,7 @@ use canopy::{
     backend::crossterm::runloop,
     derive_commands,
     event::{key, mouse},
-    widgets::{frame, Text},
+    widgets::{Text, frame},
     *,
 };
 

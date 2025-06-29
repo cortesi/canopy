@@ -1,10 +1,10 @@
 #[cfg(test)]
 use crate::geom::Expanse;
 use crate::{
+    Canopy, Node, Result,
     geom::Point,
     render::RenderBackend,
     style::{Style, StyleManager},
-    Canopy, Node, Result,
 };
 use std::sync::{Arc, Mutex};
 

@@ -174,6 +174,59 @@ impl TermBuf {
         }
         false
     }
+
+    /// Asserts that the buffer contents match the expected lines of text.
+    ///
+    /// This function compares the characters in the buffer against an expected
+    /// set of lines, ignoring all styling information. It's useful for testing
+    /// rendering output where only the text content matters.
+    ///
+    /// # Arguments
+    ///
+    /// * `expected` - A vector of strings representing the expected lines.
+    ///   Each string should match one line of the buffer.
+    ///
+    /// # Panics
+    ///
+    /// Panics if:
+    /// - The number of lines doesn't match
+    /// - Any line content doesn't match the expected text
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use canopy::{TermBuf, geom::Expanse, style::Style};
+    /// # let buf = TermBuf::new(Expanse::new(5, 3), ' ', Style::default());
+    /// buf.assert_buffer_matches(&[
+    ///     "Hello",
+    ///     "World",
+    ///     "     ",
+    /// ]);
+    /// ```
+    #[cfg(test)]
+    pub fn assert_buffer_matches(&self, expected: &[&str]) {
+        let actual_lines = self.lines();
+
+        assert_eq!(
+            expected.len(),
+            self.size.h as usize,
+            "Expected {} lines, but buffer has {} lines",
+            expected.len(),
+            self.size.h
+        );
+
+        for (y, expected_line) in expected.iter().enumerate() {
+            let actual_line = &actual_lines[y];
+            assert_eq!(
+                actual_line.trim_end(),
+                expected_line.trim_end(),
+                "Line {} mismatch:\nExpected: '{}'\nActual:   '{}'",
+                y,
+                expected_line,
+                actual_line
+            );
+        }
+    }
 }
 
 impl TermBuf {

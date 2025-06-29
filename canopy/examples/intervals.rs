@@ -6,7 +6,7 @@ use canopy::{
     event::{key, mouse},
     geom::Expanse,
     style::solarized,
-    widgets::{frame, list::*, Text},
+    widgets::{Text, frame, list::*},
     *,
 };
 

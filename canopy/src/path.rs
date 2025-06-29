@@ -1,4 +1,4 @@
-use crate::{error, Result};
+use crate::{Result, error};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Path {
