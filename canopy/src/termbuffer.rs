@@ -220,12 +220,28 @@ impl TermBuf {
             assert_eq!(
                 actual_line.trim_end(),
                 expected_line.trim_end(),
-                "Line {} mismatch:\nExpected: '{}'\nActual:   '{}'",
-                y,
-                expected_line,
-                actual_line
+                "Line {y} mismatch:\nExpected: '{expected_line}'\nActual:   '{actual_line}'"
             );
         }
+    }
+
+    /// Returns true if the buffer content matches the expected lines.
+    /// This is the non-panicking version of assert_buffer_matches.
+    pub fn buffer_matches(&self, expected: &[&str]) -> bool {
+        let actual_lines = self.lines();
+
+        if expected.len() != self.size.h as usize {
+            return false;
+        }
+
+        for (y, expected_line) in expected.iter().enumerate() {
+            let actual_line = &actual_lines[y];
+            if actual_line.trim_end() != expected_line.trim_end() {
+                return false;
+            }
+        }
+
+        true
     }
 }
 

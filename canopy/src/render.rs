@@ -175,82 +175,92 @@ mod tests {
         ]);
     }
 
-    #[test]
-    fn test_text_full_line() {
-        let buf_size = Expanse::new(10, 5);
-        let (mut buf, stylemap, mut style_manager, viewport) =
-            setup_render_test(buf_size, buf_size, geom::Rect::new(0, 0, 10, 5));
+    struct TestCase {
+        name: &'static str,
+        line: geom::Line,
+        text: &'static str,
+        expected: &'static [&'static str],
+    }
 
-        let base = geom::Point::zero();
-        let mut render = Render::new(&mut buf, &stylemap, &mut style_manager, viewport, base);
+    impl TestCase {
+        fn new(name: &'static str, expected: &'static [&'static str]) -> Self {
+            Self {
+                name,
+                line: geom::Line {
+                    tl: geom::Point { x: 0, y: 0 },
+                    w: 1,
+                },
+                text: "",
+                expected,
+            }
+        }
 
-        // Write text to a line
-        let line = geom::Line {
-            tl: geom::Point { x: 0, y: 1 },
-            w: 10,
-        };
-        render.text("default", line, "Hello").unwrap();
-
-        // Check that the text was written correctly
-        buf.assert_buffer_matches(&[
-            "          ",
-            "Hello     ",
-            "          ",
-            "          ",
-            "          ",
-        ]);
+        fn with_line(mut self, x: u16, y: u16, width: u16, text: &'static str) -> Self {
+            self.line = geom::Line {
+                tl: geom::Point { x, y },
+                w: width,
+            };
+            self.text = text;
+            self
+        }
     }
 
     #[test]
-    fn test_text_truncation() {
-        let buf_size = Expanse::new(10, 5);
-        let (mut buf, stylemap, mut style_manager, viewport) =
-            setup_render_test(buf_size, buf_size, geom::Rect::new(0, 0, 10, 5));
+    fn test_text_rendering() {
+        let test_cases = vec![
+            TestCase::new(
+                "full line",
+                &[
+                    "          ",
+                    "Hello     ",
+                    "          ",
+                    "          ",
+                    "          ",
+                ],
+            )
+            .with_line(0, 1, 10, "Hello"),
+            TestCase::new(
+                "truncation",
+                &[
+                    "Hello     ",
+                    "          ",
+                    "          ",
+                    "          ",
+                    "          ",
+                ],
+            )
+            .with_line(0, 0, 5, "Hello World"),
+            TestCase::new(
+                "with padding",
+                &[
+                    "          ",
+                    "          ",
+                    "Hi        ",
+                    "          ",
+                    "          ",
+                ],
+            )
+            .with_line(0, 2, 8, "Hi"),
+        ];
 
-        let base = geom::Point::zero();
-        let mut render = Render::new(&mut buf, &stylemap, &mut style_manager, viewport, base);
+        for test_case in test_cases {
+            let buf_size = Expanse::new(10, 5);
+            let (mut buf, stylemap, mut style_manager, viewport) =
+                setup_render_test(buf_size, buf_size, geom::Rect::new(0, 0, 10, 5));
 
-        // Write text that's longer than the line
-        let line = geom::Line {
-            tl: geom::Point { x: 0, y: 0 },
-            w: 5,
-        };
-        render.text("default", line, "Hello World").unwrap();
+            let base = geom::Point::zero();
+            let mut render = Render::new(&mut buf, &stylemap, &mut style_manager, viewport, base);
 
-        // Check that only the first 5 characters were written
-        buf.assert_buffer_matches(&[
-            "Hello     ",
-            "          ",
-            "          ",
-            "          ",
-            "          ",
-        ]);
-    }
+            render
+                .text("default", test_case.line, test_case.text)
+                .unwrap();
 
-    #[test]
-    fn test_text_with_padding() {
-        let buf_size = Expanse::new(10, 5);
-        let (mut buf, stylemap, mut style_manager, viewport) =
-            setup_render_test(buf_size, buf_size, geom::Rect::new(0, 0, 10, 5));
-
-        let base = geom::Point::zero();
-        let mut render = Render::new(&mut buf, &stylemap, &mut style_manager, viewport, base);
-
-        // Write short text to a longer line
-        let line = geom::Line {
-            tl: geom::Point { x: 0, y: 2 },
-            w: 8,
-        };
-        render.text("default", line, "Hi").unwrap();
-
-        // Check that the text was written with padding
-        buf.assert_buffer_matches(&[
-            "          ",
-            "          ",
-            "Hi        ",
-            "          ",
-            "          ",
-        ]);
+            assert!(
+                buf.buffer_matches(test_case.expected),
+                "Test case '{}' failed:\nExpected buffer to match pattern",
+                test_case.name
+            );
+        }
     }
 
     #[test]
