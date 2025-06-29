@@ -1,3 +1,20 @@
+/// This is the UI the interface that all nodes must implement in Canopy.
+///
+/// Some explanation is necessary to justify the split between .layout() and .render(). Why not
+/// just combine these two methods into a single .draw() method? The reason is that nodes need to
+/// be able to account for the size of their children when laying themselves out. Imagine, for
+/// instance, a text container that wraps text and resizes itself to fit. The parent needs to be
+/// aware of the resulting size BEFORE it can decide where to place the child and render itself.
+/// Our solution is to split rendering and layout. During the layout phase, no drawing is done, but
+/// all nodes have their size and position determined. We do this by asking each node what their
+/// size would be IF they had to draw within a given target area. The result can be larger or
+/// smaller than the target, but gives the node the opportunity to do things like reflow text with
+/// a width constraint, and then tell the parent how much space it needs. During the render phase,
+/// size and position are fixed, and nodes only draw themselves to the screen.
+///
+/// Another key aspect of the design is that all rendering and layout happens with respect to the
+/// node's own canvas. Nodes don't have to (and can't) know where they are being drawn on the
+/// physical screen.
 use std::time::Duration;
 
 use crate::{
@@ -49,16 +66,6 @@ pub trait Node: StatefulNode + CommandNode {
         Ok(())
     }
 
-    /// Re-compute the size and view of the node if it had to be displayed in the target area. In practice, nodes will
-    /// usually either constrain themselves based on the width or the height of the target area, or neither, but not
-    /// both. The resulting size may be smaller or larger than the target. If non-trivial computation is done to compute
-    /// the size (e.g. reflowing text), it should be cached for use by future calls. This method may be called multiple
-    /// times for a given node during a render sweep, so re-fitting to the same size should be cheap and return
-    /// consistent results.
-    fn layout(&mut self, l: &Layout, target: Expanse) -> Result<()> {
-        Ok(())
-    }
-
     /// Handle a key input event. This event is only called for nodes that are on the focus path. The default
     /// implementation ignores input.
     fn handle_key(&mut self, c: &mut dyn Context, k: key::Key) -> Result<EventOutcome> {
@@ -77,13 +84,16 @@ pub trait Node: StatefulNode + CommandNode {
         None
     }
 
-    /// Render this widget. The render method should:
-    ///
-    /// - Lay out any child nodes by manipulating their viewports. This will often involve calling the `fit` method on
-    ///   the child nodes to get their dimensions.
-    /// - Render itself to screen. This node's viewport will already have been set by a parent.
-    ///
-    /// The default implementation does nothing.
+    /// Re-compute the size and view of the node to display in the target area. In practice, nodes
+    /// will either constrain themselves based on the width or the height of the target area, or
+    /// neither, but not both. The resulting size may be smaller or larger than the target. If
+    /// non-trivial computation is done (e.g. reflowing text), it should be cached for use by
+    /// future calls.
+    fn layout(&mut self, l: &Layout, target: Expanse) -> Result<()> {
+        Ok(())
+    }
+
+    /// Render this widget, only drawing itself with reference to its own canvas.
     fn render(&mut self, c: &dyn Context, r: &mut Render) -> Result<()> {
         Ok(())
     }

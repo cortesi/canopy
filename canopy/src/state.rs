@@ -101,15 +101,19 @@ pub struct NodeState {
     /// If this is equal to the global render_gen, we render during the current
     /// sweep.
     pub(crate) render_gen: u64,
+
     /// This node's focus generation. We increment the global focus counter when
     /// focus changes, invalidating the current focus generation without having
     /// to update all node states.
     pub(crate) focus_gen: u64,
+
     /// Set to be equal to the focus_gen during a pre-render sweep, if focus has
     /// changed.
     pub(crate) focus_path_gen: u64,
+
     // The last render sweep during which this node held focus.
     pub(crate) rendered_focus_gen: u64,
+
     /// Set to the `render_gen` during the pre-render sweep if focus has
     /// changed, and this node was either on the old focus path, or is on the
     /// new focus path.
@@ -118,11 +122,14 @@ pub struct NodeState {
     /// The view for this node. The inner rectangle always has the same size as
     /// the screen_area.
     pub(crate) viewport: ViewPort,
+
     // Is this node hidden?
     pub(crate) hidden: bool,
+
     // Has this node been initialized? This is used to determine if we need to
     // call the poll function during the pre-render sweep.
     pub(crate) initialized: bool,
+
     // Set while inside `Node::layout` to detect recursive layout calls.
     pub(crate) in_layout: bool,
 }

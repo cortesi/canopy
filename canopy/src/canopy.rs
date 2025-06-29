@@ -652,9 +652,7 @@ impl Canopy {
                     let s = &mut n.state_mut();
                     s.rendered_focus_gen = self.focus_gen;
                 }
-
                 let mut rndr = Render::new(buf, &self.style, styl, n.vp(), base);
-
                 n.render(self, &mut rndr)?;
             }
             // This is a new node - we don't want it perpetually stuck in

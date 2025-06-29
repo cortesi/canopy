@@ -4,6 +4,14 @@ use crate::{
     style::Style,
 };
 
+/// A helper macro to create buffers for the termbuf match assertions.
+#[macro_export]
+macro_rules! buf {
+    ($($line:literal)*) => {
+        &[$($line),*]
+    };
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Cell {
     pub ch: char,

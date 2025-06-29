@@ -5,6 +5,7 @@ use crate::{
     geom::{Expanse, Frame, Rect},
 };
 
+/// The Layout struct provides all operations that a node can perform during its layout phase.
 pub struct Layout {}
 
 impl Layout {

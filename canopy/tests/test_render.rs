@@ -1,5 +1,5 @@
 use canopy::{
-    Expanse, Render, TermBuf, ViewPort, geom,
+    Expanse, Render, TermBuf, ViewPort, buf, geom,
     style::{AttrSet, Color, Style, StyleManager, StyleMap},
 };
 
@@ -37,12 +37,6 @@ struct BufTest {
     text: &'static str,
     expected: &'static [&'static str],
     viewport: Option<ViewPort>,
-}
-
-macro_rules! buf {
-    ($($line:literal)*) => {
-        &[$($line),*]
-    };
 }
 
 impl BufTest {

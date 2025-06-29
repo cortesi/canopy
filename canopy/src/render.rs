@@ -19,10 +19,15 @@ pub trait RenderBackend {
 
 /// The interface used to render to the screen. It is only accessible in `Node::render`.
 pub struct Render<'a> {
+    /// The terminal buffer to render to.
     buf: &'a mut TermBuf,
+    /// The style manager used to apply styles.
     pub style: &'a mut StyleManager,
+    /// The style map used to resolve style names to styles.
     stylemap: &'a StyleMap,
+    /// The viewport that defines the visible area of the terminal.
     viewport: ViewPort,
+    /// The base point for rendering, used to offset the coordinates.
     base: geom::Point,
 }
 
