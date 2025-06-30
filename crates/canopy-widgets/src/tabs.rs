@@ -1,7 +1,7 @@
 use canopy_core as canopy;
 
 use canopy_core::{
-    Context, Layout, Node, NodeState, Render, Result, StatefulNode, command, derive_commands, *,
+    Context, Node, NodeState, Render, Result, StatefulNode, command, derive_commands,
 };
 
 /// A tab control managing a set of nodes with titles.

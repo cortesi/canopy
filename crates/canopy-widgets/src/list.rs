@@ -1,7 +1,7 @@
 use canopy_core as canopy;
 
 use canopy_core::{
-    Context, Layout, Node, NodeState, Render, Result, StatefulNode, ViewPort, derive_commands,
+    Context, Layout, Node, NodeState, Render, Result, StatefulNode, derive_commands,
     geom::{Expanse, Rect},
     *,
 };

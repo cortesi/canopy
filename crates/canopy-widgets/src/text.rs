@@ -2,10 +2,8 @@ use canopy_core as canopy;
 
 use canopy_core::{
     Context, Layout, Node, NodeState, Render, Result, StatefulNode, command, derive_commands,
-    geom::Expanse, *,
+    geom::Expanse,
 };
-
-use textwrap;
 
 #[derive(canopy_core::StatefulNode)]
 pub struct Text {

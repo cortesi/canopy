@@ -1,4 +1,3 @@
-use canopy_core as canopy;
 pub mod core;
 mod editor_impl;
 mod effect;

@@ -1,7 +1,4 @@
-use canopy_core as canopy;
-
 // Re-export the trait for derive macros
-use canopy_core::StatefulNodeTrait;
 pub mod editor;
 mod input;
 mod panes;

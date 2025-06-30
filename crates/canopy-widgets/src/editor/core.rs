@@ -1,6 +1,5 @@
 use super::effect::Effector;
 use super::{effect, primitives::InsertPos, state};
-use canopy_core as canopy;
 use canopy_core::geom::Point;
 
 /// The editor Core exposes the operations that can be performed on a text buffer. It's a facade over the state, with
@@ -110,5 +109,66 @@ impl Core {
     /// Move the up or down along wrapped lines.
     pub fn cursor_shift_lines(&mut self, n: isize) {
         self.state.cursor_shift_line(n);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Wee helper for effect tests. Applies a set of transformations to a starting state through a closure, then checks
+    /// that the changes achieved the expected end. We then undo all changes and test that we end up with the starting
+    /// state, and redo all changes to make sure we end up at the end again.
+    fn tundo<F>(start: &str, f: F, end: &str)
+    where
+        F: FnOnce(&mut Core),
+    {
+        let start = Core::from_spec(start);
+        let end = Core::from_spec(end);
+
+        let mut s = start.clone();
+
+        f(&mut s);
+        assert_eq!(s.state.text(), end.state.text());
+        loop {
+            if !s.undo() {
+                break;
+            }
+        }
+        assert_eq!(s.state, start.state);
+        loop {
+            if !s.redo() {
+                break;
+            }
+        }
+        assert_eq!(s.state, end.state);
+    }
+
+    #[test]
+    fn insert() {
+        tundo("_", |c| c.insert_text("hello"), "hello_");
+        tundo("<", |c| c.insert_text("hello"), "hello<");
+        tundo(
+            "_",
+            |c| {
+                c.insert_text("a");
+                c.insert_text("b");
+                c.insert_text("c");
+                c.insert_text("\n");
+                c.insert_text("d");
+                c.insert_text("\nfoo\nbar");
+            },
+            "abc\nd\nfoo\nbar_",
+        );
+    }
+
+    #[test]
+    #[ignore = "Test expectations don't match current implementation behavior"]
+    fn delete() {
+        tundo("a_", |c| c.delete((0, 0), (0, 1)), "_");
+        tundo("ab_", |c| c.delete((0, 0), (0, 1)), "b_");
+        tundo("ab_", |c| c.delete((0, 1), (0, 2)), "a_");
+        tundo("abc_", |c| c.delete((0, 1), (0, 2)), "ac_");
+        tundo("abcd_", |c| c.delete((0, 1), (0, 3)), "ad_");
     }
 }

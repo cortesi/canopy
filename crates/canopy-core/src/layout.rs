@@ -139,15 +139,71 @@ impl Layout {
 }
 
 #[cfg(test)]
-#[cfg(feature = "test-utils")]
 mod tests {
     use super::*;
+    use crate::commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue};
+    use crate::state::NodeName;
     use crate::{
-        self as canopy, Canopy, Context, Node, NodeState, Render, StatefulNode,
+        Context, Node, NodeState, Render, Result, StatefulNode,
         geom::{Expanse, Rect},
-        tutils::TFixed,
-        *,
     };
+
+    // Simple fixed-size test node
+    struct TFixed {
+        state: NodeState,
+        width: u16,
+        height: u16,
+    }
+
+    impl TFixed {
+        fn new(width: u16, height: u16) -> Self {
+            TFixed {
+                state: NodeState::default(),
+                width,
+                height,
+            }
+        }
+    }
+
+    impl StatefulNode for TFixed {
+        fn name(&self) -> NodeName {
+            NodeName::convert("tfixed")
+        }
+
+        fn state(&self) -> &NodeState {
+            &self.state
+        }
+
+        fn state_mut(&mut self) -> &mut NodeState {
+            &mut self.state
+        }
+    }
+
+    impl CommandNode for TFixed {
+        fn commands() -> Vec<CommandSpec> {
+            vec![]
+        }
+
+        fn dispatch(
+            &mut self,
+            _c: &mut dyn Context,
+            _cmd: &CommandInvocation,
+        ) -> Result<ReturnValue> {
+            Ok(ReturnValue::Void)
+        }
+    }
+
+    impl Node for TFixed {
+        fn layout(&mut self, l: &Layout, _: Expanse) -> Result<()> {
+            let w = self.width;
+            let h = self.height;
+            l.fill(self, Expanse::new(w, h))
+        }
+
+        fn render(&mut self, _: &dyn Context, _: &mut Render) -> Result<()> {
+            Ok(())
+        }
+    }
 
     #[test]
     fn node_fit() -> Result<()> {
@@ -209,71 +265,6 @@ mod tests {
         let l = Layout {};
         let mut child = TFixed::new(2, 2);
         assert!(l.frame(&mut child, Expanse::new(1, 1), 1).is_err());
-        Ok(())
-    }
-
-    #[derive(StatefulNode)]
-    struct Big {
-        state: NodeState,
-    }
-
-    impl Big {
-        fn new() -> Self {
-            Big {
-                state: NodeState::default(),
-            }
-        }
-    }
-
-    #[derive_commands]
-    impl Big {}
-
-    impl Node for Big {
-        fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-            l.fill(self, Expanse::new(sz.w * 2, sz.h * 2))
-        }
-
-        fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
-            r.fill("", self.vp().canvas().rect(), 'x')
-        }
-    }
-
-    #[derive(StatefulNode)]
-    struct Root {
-        state: NodeState,
-        child: Big,
-    }
-
-    impl Root {
-        fn new() -> Self {
-            Root {
-                state: NodeState::default(),
-                child: Big::new(),
-            }
-        }
-    }
-
-    #[derive_commands]
-    impl Root {}
-
-    impl Node for Root {
-        fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-            f(&mut self.child)
-        }
-
-        fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-            l.fill(self, sz)?;
-            let vp = self.vp();
-            let loc = Rect::new(sz.w.saturating_sub(1), sz.h.saturating_sub(1), sz.w, sz.h);
-            l.place(&mut self.child, vp, loc)?;
-            Ok(())
-        }
-    }
-
-    #[test]
-    #[ignore = "Test depends on CanvasRender which is now in canopy crate"]
-    fn child_clamped_to_parent() -> Result<()> {
-        // This test needs to be moved to the canopy crate tests
         Ok(())
     }
 

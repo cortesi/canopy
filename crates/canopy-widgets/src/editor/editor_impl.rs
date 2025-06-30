@@ -2,7 +2,7 @@ use canopy_core as canopy;
 
 use canopy_core::{
     Context, Layout, Node, NodeState, Render, Result, StatefulNode, command, cursor,
-    derive_commands, event::key, geom::Expanse, *,
+    derive_commands, geom::Expanse,
 };
 
 use super::core;

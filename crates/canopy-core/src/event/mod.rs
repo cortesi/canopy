@@ -26,16 +26,19 @@ pub enum Event {
 }
 
 /// An emitter that is polled by the application to retrieve events.
+#[allow(dead_code)]
 pub(crate) struct EventSource {
     rx: mpsc::Receiver<Event>,
 }
 
+#[allow(dead_code)]
 impl EventSource {
     pub fn new(rx: mpsc::Receiver<Event>) -> Self {
         EventSource { rx }
     }
 }
 
+#[allow(dead_code)]
 impl EventSource {
     /// Retrieve the next event, blocking until an event is recieved or the
     /// underlying channel closes..

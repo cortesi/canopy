@@ -1,5 +1,4 @@
 use super::state::State;
-use canopy_core as canopy;
 
 /// A position that can be clamped within the bounds of a `State`.
 pub trait Pos: Sized {

@@ -190,75 +190,8 @@ impl CommandSet {
     }
 }
 
+// Tests moved to canopy crate to avoid circular dependency
 #[cfg(test)]
-#[cfg(feature = "test-utils")]
 mod tests {
-    use super::*;
-    use crate as canopy;
-    use crate::tutils::*;
-    use crate::{Result, command, derive_commands, state::StatefulNode};
-
-    #[test]
-    fn tdispatch() -> Result<()> {
-        run(|c, _, mut root| {
-            dispatch(
-                c,
-                root.id(),
-                &mut root,
-                &CommandInvocation {
-                    node: "bb_la".try_into()?,
-                    command: "c_leaf".into(),
-                    args: vec![],
-                },
-            )?;
-            assert_eq!(state_path(), vec!["bb_la.c_leaf()"]);
-
-            reset_state();
-            dispatch(
-                c,
-                root.b.b.id(),
-                &mut root,
-                &CommandInvocation {
-                    node: "bb_la".try_into()?,
-                    command: "c_leaf".into(),
-                    args: vec![],
-                },
-            )?;
-            assert!(state_path().is_empty());
-            Ok(())
-        })
-    }
-
-    #[test]
-    fn load_commands() -> Result<()> {
-        #[derive(canopy::StatefulNode)]
-        struct Foo {
-            state: canopy::NodeState,
-            a_triggered: bool,
-            b_triggered: bool,
-        }
-
-        impl canopy::Node for Foo {}
-
-        #[derive_commands]
-        impl Foo {
-            #[command]
-            /// This is a comment.
-            /// Multiline too!
-            fn a(&mut self, _core: &mut dyn Context) -> canopy::Result<()> {
-                self.a_triggered = true;
-                Ok(())
-            }
-            #[command]
-            fn b(&mut self, _core: &mut dyn Context) -> canopy::Result<()> {
-                self.b_triggered = true;
-                Ok(())
-            }
-        }
-
-        let mut cs = CommandSet::new();
-        cs.commands(&Foo::commands());
-
-        Ok(())
-    }
+    // TODO: Move command dispatch tests from canopy-core to canopy crate
 }

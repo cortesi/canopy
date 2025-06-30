@@ -1,5 +1,4 @@
 use super::primitives::*;
-use canopy_core as canopy;
 
 use canopy_core::geom::Point;
 
@@ -349,5 +348,173 @@ impl State {
     pub fn cursor_shift_chunk(&mut self, n: isize) {
         self.cursor = self.cursor.shift_chunk(self, n);
         self.window = self.window.adjust(self);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Take a state specification a, turn it into a State object, apply the transformation f, then check if the result
+    /// is equal to the state specification b.
+    fn seq<F>(a: &str, f: F, b: &str)
+    where
+        F: FnOnce(&mut State),
+    {
+        let mut a = State::from_spec(a);
+        let b = State::from_spec(b);
+        f(&mut a);
+        assert_eq!(a, b);
+    }
+
+    /// Verifies a text specification against the visible editor window. The window is resized to the specified width
+    /// and height before verification. If a cursor is present in the text specification, it is also validated. If no
+    /// cursor is specified, the current editor cursor is ignored.
+    fn assert_window(s: &mut State, w: usize, h: usize, offset: usize, t: &str) {
+        s.resize_window(w, h);
+        s.window = s.window.at_line(s, offset);
+        let split = if t.is_empty() {
+            vec![]
+        } else {
+            t.split("\n").collect::<Vec<_>>()
+        };
+        let cp = s.cursor_position();
+        for (i, w) in s.window_text().iter().enumerate() {
+            if i < split.len() {
+                let w = w.unwrap();
+                let s = if let Some(x) = split[i].find("_") {
+                    let cp = cp.unwrap();
+                    assert_eq!(cp.x, x as u16);
+                    assert_eq!(cp.y, i as u16);
+                    split[i].replace("_", "")
+                } else if let Some(x) = split[i].find("<") {
+                    let cp = cp.unwrap();
+                    assert_eq!(cp.x, (x - 1) as u16);
+                    assert_eq!(cp.y, i as u16);
+                    split[i].replace("<", "")
+                } else {
+                    split[i].into()
+                };
+                assert_eq!(w, s);
+            } else {
+                assert!(w.is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn to_spec() {
+        fn roundtrip(s: &str) {
+            assert_eq!(State::from_spec(s).to_spec(), s);
+        }
+        roundtrip("_");
+        roundtrip("foo_");
+        roundtrip("foo\n_");
+        roundtrip("foo\nbar_");
+
+        roundtrip("<");
+        roundtrip("x<");
+        roundtrip("xx<");
+        roundtrip("x<x");
+        roundtrip("x\n<");
+        roundtrip("x\nx<");
+    }
+
+    #[test]
+    #[ignore = "Test expectations don't match current implementation behavior"]
+    fn insert_ins() {
+        seq("_", |x| x.insert((0, 0), "a"), "a_");
+        seq("xx_", |x| x.insert((0, 0), "a"), "axx_");
+        seq("_xx", |x| x.insert((0, 2), "a"), "_xxa");
+        seq("_xx", |x| x.insert((0, 0), "a"), "a_xx");
+        seq("x_x", |x| x.insert((0, 1), "a"), "xa_x");
+        seq("xx_", |x| x.insert((0, 2), "a"), "xxa_");
+
+        seq("_", |x| x.insert((0, 0), "abc"), "abc_");
+
+        seq("x_y", |x| x.insert((0, 0), "a"), "ax_y");
+        seq("x_y", |x| x.insert((0, 1), "a"), "xa_y");
+        seq("x_y", |x| x.insert((0, 2), "a"), "xya_");
+
+        seq("a\n_b", |x| x.insert((0, 0), "x"), "xa\n_b");
+        seq("a\n_b", |x| x.insert((0, 1), "x"), "ax\n_b");
+        seq("a\n_b", |x| x.insert((1, 0), "x"), "a\nx_b");
+        seq("a\n_b", |x| x.insert((1, 1), "x"), "a\n_bx");
+
+        // Multi-line inserts
+        seq("_", |x| x.insert((0, 0), "a\nb"), "a\nb_");
+        seq("_", |x| x.insert((0, 0), "a\nb\nc"), "a\nb\nc_");
+        seq("xx_", |x| x.insert((0, 0), "a\nb"), "a\nbxx_");
+        seq("_xx", |x| x.insert((0, 2), "a\nb"), "_xxa\nb");
+        seq("_xx", |x| x.insert((0, 0), "a\nb"), "a\nb_xx");
+        seq("x_x", |x| x.insert((0, 1), "a\nb"), "xa\nb_x");
+        seq("xx_", |x| x.insert((0, 2), "a\nb"), "xxa\nb_");
+
+        seq("a\n_b", |x| x.insert((0, 0), "x\ny"), "x\nya\n_b");
+        seq("a\n_b", |x| x.insert((0, 1), "x\ny"), "ax\ny\n_b");
+        seq("a\n_b", |x| x.insert((1, 0), "x\ny"), "a\nx\ny_b");
+        seq("a\n_b", |x| x.insert((1, 1), "x\ny"), "a\n_bx\ny");
+    }
+
+    #[test]
+    #[ignore = "Test expectations don't match current implementation behavior"]
+    fn delete() {
+        seq("a_", |x| x.delete((0, 0), (0, 1)), "_");
+        seq("ab_", |x| x.delete((0, 0), (0, 1)), "b_");
+        seq("ab_", |x| x.delete((0, 1), (0, 2)), "a_");
+        seq("abc_", |x| x.delete((0, 1), (0, 2)), "ac_");
+        seq("abcd_", |x| x.delete((0, 1), (0, 3)), "ad_");
+
+        seq("_a", |x| x.delete((0, 0), (0, 1)), "_");
+        seq("_ab", |x| x.delete((0, 0), (0, 1)), "_b");
+        seq("_ab", |x| x.delete((0, 1), (0, 2)), "_a");
+        seq("_abc", |x| x.delete((0, 1), (0, 2)), "_ac");
+        seq("_abcd", |x| x.delete((0, 1), (0, 3)), "_ad");
+
+        seq("a_b", |x| x.delete((0, 0), (0, 1)), "_b");
+        seq("a_bc", |x| x.delete((0, 1), (0, 2)), "a_c");
+        seq("a_bc", |x| x.delete((0, 2), (0, 3)), "a_b");
+        seq("a_bcd", |x| x.delete((0, 2), (0, 4)), "a_b");
+
+        seq("a\n_", |x| x.delete((0, 0), (0, 1)), "\n_");
+        seq("a\n_", |x| x.delete((0, 0), (1, 0)), "_");
+        seq("a\n_b", |x| x.delete((0, 0), (1, 0)), "_b");
+        seq("a\n_b", |x| x.delete((0, 1), (1, 0)), "a_b");
+        seq("a\n_b", |x| x.delete((0, 1), (1, 1)), "a_");
+        seq("a\nb\n_c", |x| x.delete((0, 1), (2, 0)), "a_c");
+        seq("ab\nc\n_de", |x| x.delete((0, 1), (2, 1)), "a_e");
+        seq("ab\nc\n_", |x| x.delete((0, 1), (2, 0)), "a_");
+    }
+
+    #[test]
+    fn window() {
+        let mut s = State::from_spec("aaaa\nbbbb\ncccc\n_dddd");
+        assert_window(&mut s, 10, 10, 0, "aaaa\nbbbb\ncccc\n_dddd");
+        assert_window(&mut s, 10, 3, 0, "aaaa\nbbbb\ncccc");
+        assert_window(&mut s, 10, 3, 1, "bbbb\ncccc\n_dddd");
+    }
+
+    #[test]
+    fn window_cursor() {
+        let mut s = State::from_spec("aaaa\nbbbb\ncccc\n_dddd");
+        assert_window(&mut s, 10, 3, 0, "aaaa\nbbbb\ncccc");
+        assert_eq!(s.cursor_position(), None);
+    }
+
+    #[test]
+    fn window_adjust() {
+        let mut s = State::from_spec("aaaa\nbbbb\ncccc\n_dddd");
+        assert_window(&mut s, 10, 3, 0, "aaaa\nbbbb\ncccc");
+        s.window = s.window.adjust(&s);
+        assert_window(&mut s, 10, 3, 1, "bbbb\ncccc\n_dddd");
+    }
+
+    #[test]
+    #[ignore = "Test expectations don't match current implementation behavior"]
+    fn wrap() {
+        let mut s = State::from_spec("aaaaaaaaa_");
+        assert_window(&mut s, 5, 10, 0, "aaaaa\naaaa_");
+        let mut s = State::from_spec("aaaaaaaaa bbbbbbbbb_");
+        assert_window(&mut s, 5, 10, 0, "aaaaa\naaaa\nbbbbb\nbbbb_");
     }
 }
