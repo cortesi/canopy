@@ -1,13 +1,8 @@
 use canopy_core as canopy;
 
-
 use canopy_core::{
-    event::key,
-    geom::Expanse,
-    NodeState, StatefulNode,
-    Context, Node, Result, Render, Layout,
-    cursor, derive_commands, command,
-    *,
+    Context, Layout, Node, NodeState, Render, Result, StatefulNode, command, cursor,
+    derive_commands, event::key, geom::Expanse, *,
 };
 
 use super::core;

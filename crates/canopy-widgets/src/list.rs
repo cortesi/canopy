@@ -1,10 +1,8 @@
 use canopy_core as canopy;
 
 use canopy_core::{
-    Result, Node, NodeState, StatefulNode,
+    Context, Layout, Node, NodeState, Render, Result, StatefulNode, ViewPort, derive_commands,
     geom::{Expanse, Rect},
-    Context, Layout, Render, ViewPort,
-    derive_commands,
     *,
 };
 
@@ -341,23 +339,25 @@ where
         let vp = self.vp();
         for itm in self.items.iter_mut() {
             if let Some(child_vp) = vp.map(itm.virt)? {
-                {
-                    let st = itm.itm.state_mut();
-                    st.set_position(child_vp.position(), vp.position(), vp.canvas().rect())?;
-                    // The item should lay out using its full canvas size so that
-                    // horizontal scrolling only affects the viewport. We set the
-                    // canvas here and expose the entire view for layout.
-                    st.set_canvas(child_vp.canvas());
-                    st.set_view(child_vp.canvas().rect());
-                }
+                l.set_child_position(
+                    &mut itm.itm,
+                    child_vp.position(),
+                    vp.position(),
+                    vp.canvas().rect(),
+                )?;
+                // The item should lay out using its full canvas size so that
+                // horizontal scrolling only affects the viewport. We set the
+                // canvas here and expose the entire view for layout.
+                l.set_canvas(&mut itm.itm, child_vp.canvas());
+                l.set_view(&mut itm.itm, child_vp.canvas().rect());
+
                 itm.itm.layout(l, child_vp.canvas())?;
-                {
-                    let st = itm.itm.state_mut();
-                    // After layout, apply the actual visible view and constrain
-                    // the result within the parent.
-                    st.set_view(child_vp.view());
-                    st.constrain(vp);
-                }
+
+                // After layout, apply the actual visible view and constrain
+                // the result within the parent.
+                l.set_view(&mut itm.itm, child_vp.view());
+                l.constrain_child(&mut itm.itm, vp);
+
                 let final_vp = itm.itm.vp();
                 itm.itm.children(&mut |ch| {
                     // `ch.vp().position()` returns absolute co-ordinates. We
@@ -373,30 +373,32 @@ where
                         ch.vp().canvas().h,
                     );
                     if let Some(ch_vp) = final_vp.map(ch_rect)? {
-                        ch.state_mut().set_position(
+                        l.set_child_position(
+                            ch,
                             ch_vp.position(),
                             final_vp.position(),
                             final_vp.canvas().rect(),
                         )?;
-                        ch.state_mut().set_canvas(ch_vp.canvas());
-                        ch.state_mut().set_view(ch_vp.view());
+                        l.set_canvas(ch, ch_vp.canvas());
+                        l.set_view(ch, ch_vp.view());
                     } else {
                         // Even if the child is fully clipped, ensure it stays
                         // at a valid position relative to the item so that
                         // invariants hold.
-                        ch.state_mut().set_position(
+                        l.set_child_position(
+                            ch,
                             final_vp.position(),
                             final_vp.position(),
                             final_vp.canvas().rect(),
                         )?;
-                        ch.state_mut().set_view(Rect::default());
+                        l.set_view(ch, Rect::default());
                     }
                     Ok(())
                 })?;
                 l.unhide(&mut itm.itm);
             } else {
                 l.hide(&mut itm.itm);
-                itm.itm.state_mut().set_view(Rect::default());
+                l.set_view(&mut itm.itm, Rect::default());
             }
         }
         Ok(())
@@ -407,4 +409,3 @@ where
         Ok(())
     }
 }
-

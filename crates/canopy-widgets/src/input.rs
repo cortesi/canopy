@@ -1,12 +1,9 @@
 use canopy_core as canopy;
 
-
 use canopy_core::{
+    Context, Layout, Node, NodeState, Render, Result, StatefulNode, command, derive_commands,
     event::key,
     geom::{Expanse, LineSegment, Point},
-    NodeState, StatefulNode,
-    Context, Node, Result, Render, Layout,
-    derive_commands, command,
     *,
 };
 
@@ -212,4 +209,3 @@ impl Node for Input {
         Ok(())
     }
 }
-

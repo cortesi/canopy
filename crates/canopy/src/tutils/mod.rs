@@ -7,8 +7,8 @@ pub use ttree::*;
 
 #[cfg(test)]
 use crate::backend::test::TestRender;
-use canopy_core::{self as canopy};
 use crate::widgets::list::ListItem;
+use canopy_core::{self as canopy};
 use canopy_core::{
     geom::{Direction, Expanse},
     path::Path,

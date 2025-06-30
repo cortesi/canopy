@@ -1,7 +1,4 @@
-use std::{
-    fmt::Display,
-    sync::mpsc,
-};
+use std::{fmt::Display, sync::mpsc};
 
 use thiserror::Error;
 

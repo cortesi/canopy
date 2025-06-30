@@ -1,7 +1,4 @@
-use crate::{
-    Node, Direction, Result,
-    path::Path,
-};
+use crate::{Direction, Node, Result, path::Path};
 
 /// The API exposed to nodes by Canopy.
 pub trait Context {

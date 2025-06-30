@@ -80,6 +80,34 @@ impl Layout {
         Ok(())
     }
 
+    /// Set the position of a child node within the parent's coordinate system.
+    pub fn set_child_position(
+        &self,
+        child: &mut dyn Node,
+        position: crate::geom::Point,
+        parent_position: crate::geom::Point,
+        parent_canvas: Rect,
+    ) -> Result<()> {
+        child
+            .state_mut()
+            .set_position(position, parent_position, parent_canvas)
+    }
+
+    /// Set the canvas size for a node.
+    pub fn set_canvas(&self, node: &mut dyn Node, canvas: Expanse) {
+        node.state_mut().set_canvas(canvas);
+    }
+
+    /// Set the view rectangle for a node.
+    pub fn set_view(&self, node: &mut dyn Node, view: Rect) {
+        node.state_mut().set_view(view);
+    }
+
+    /// Constrain a child node within its parent's viewport.
+    pub fn constrain_child(&self, child: &mut dyn Node, parent_vp: ViewPort) {
+        child.state_mut().constrain(parent_vp);
+    }
+
     /// Adjust a child node so that it fits a viewport. This lays the node out to
     /// the viewport's screen rectangle, then adjusts the node's view to place as
     /// much of it within the viewport's screen rectangle as possible.

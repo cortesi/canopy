@@ -5,8 +5,8 @@ use std::{
 use tracing_subscriber::fmt;
 
 use crate as canopy;
-use crate::{Canopy, Loader};
 use crate::widgets::{Text, list::*};
+use crate::{Canopy, Loader};
 use canopy_core::{
     geom::{Expanse, Rect},
     *,

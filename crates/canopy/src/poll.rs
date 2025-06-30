@@ -144,8 +144,8 @@ impl Poller {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use canopy_core::{Result, StatefulNode};
     use crate::tutils::*;
+    use canopy_core::{Result, StatefulNode};
     #[test]
     fn pendingheap() -> Result<()> {
         let now = SystemTime::now();

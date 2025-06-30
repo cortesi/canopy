@@ -2,10 +2,8 @@ use canopy_core as canopy;
 
 use pad::PadStr;
 
-
 use canopy_core::{
-    Context, Layout, Node, Render, Result, derive_commands, geom,
-    NodeState, StatefulNode,
+    Context, Layout, Node, NodeState, Render, Result, StatefulNode, derive_commands, geom,
 };
 
 /// Defines the set of glyphs used to draw the frame

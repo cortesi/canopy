@@ -1,6 +1,6 @@
-use canopy_core as canopy;
 use super::effect::Effector;
 use super::{effect, primitives::InsertPos, state};
+use canopy_core as canopy;
 use canopy_core::geom::Point;
 
 /// The editor Core exposes the operations that can be performed on a text buffer. It's a facade over the state, with
@@ -112,4 +112,3 @@ impl Core {
         self.state.cursor_shift_line(n);
     }
 }
-

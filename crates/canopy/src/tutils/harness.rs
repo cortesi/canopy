@@ -1,10 +1,9 @@
 use super::ttree;
-use crate::{Canopy, Loader, backend::{dummy::DummyBackend, test::TestRender}};
-use canopy_core::{
-    Node, Result, TermBuf,
-    event::key,
-    geom::Expanse,
+use crate::{
+    Canopy, Loader,
+    backend::{dummy::DummyBackend, test::TestRender},
 };
+use canopy_core::{Node, Result, TermBuf, event::key, geom::Expanse};
 
 /// Run a function on our standard dummy app built from [`ttree`]. This helper
 /// is used extensively in unit tests across the codebase.

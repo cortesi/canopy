@@ -1,13 +1,9 @@
 use crate as canopy;
-use crate::{Canopy, DefaultBindings, Binder, Loader};
-use canopy_core::{
-    event::key::*,
-    NodeState,
-    Context, Node, Result, Layout, Render,
-    derive_commands, command,
-    *,
-};
 use crate::inspector::Inspector;
+use crate::{Binder, Canopy, DefaultBindings, Loader};
+use canopy_core::{
+    Context, Layout, Node, NodeState, Render, Result, command, derive_commands, event::key::*, *,
+};
 
 /// A Root node that lives at the base of a Canopy app. It manages modal
 /// windows, houses the Inspector and exposes a set of built-in functions.

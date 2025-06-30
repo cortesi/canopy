@@ -11,8 +11,7 @@ use scopeguard::defer;
 
 use crate::{Canopy, backend::BackendControl};
 use canopy_core::{
-    Node, Result,
-    error,
+    Node, Result, error,
     event::{Event, key, mouse},
     geom::{Expanse, Point},
     render::RenderBackend,
@@ -27,7 +26,7 @@ impl EventSource {
     fn new(rx: mpsc::Receiver<Event>) -> Self {
         EventSource { rx }
     }
-    
+
     fn next(&self) -> std::result::Result<Event, mpsc::RecvError> {
         self.rx.recv()
     }

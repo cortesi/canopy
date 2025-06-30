@@ -2,17 +2,11 @@ use std::{io::Write, process, sync::mpsc};
 
 use comfy_table::{ContentArrangement, Table};
 
-use crate::{
-    backend::BackendControl,
-    inputmap,
-    poll::Poller,
-    script,
-};
+use crate::{backend::BackendControl, inputmap, poll::Poller, script};
 
 use canopy_core::{
-    EventOutcome, Layout, NodeId, Render, Result, TermBuf, ViewPort,
-    Context, Node,
-    commands, cursor, error,
+    Context, EventOutcome, Layout, Node, NodeId, Render, Result, TermBuf, ViewPort, commands,
+    cursor, error,
     event::{Event, key, mouse},
     geom::{Direction, Expanse, Point, Rect},
     path::*,
@@ -753,8 +747,8 @@ pub trait Loader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use canopy_core::{StatefulNode, geom::Rect};
     use crate::tutils::*;
+    use canopy_core::{StatefulNode, geom::Rect};
 
     #[test]
     fn tbindings() -> Result<()> {

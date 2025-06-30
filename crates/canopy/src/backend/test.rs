@@ -1,6 +1,6 @@
+use crate::Canopy;
 #[cfg(test)]
 use canopy_core::geom::Expanse;
-use crate::Canopy;
 use canopy_core::{
     Node, Result,
     geom::Point,

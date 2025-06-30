@@ -3,11 +3,8 @@ mod view;
 
 use crate as canopy;
 use crate::widgets::{frame, tabs};
-use crate::{Canopy, Loader, DefaultBindings, Binder};
-use canopy_core::{
-    event::key::*,
-    *,
-};
+use crate::{Binder, Canopy, DefaultBindings, Loader};
+use canopy_core::{event::key::*, *};
 
 use logs::Logs;
 

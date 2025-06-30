@@ -1,12 +1,7 @@
 use canopy_core as canopy;
 
-
 use canopy_core::{
-    geom::Expanse,
-    NodeState, StatefulNode,
-    Context, Node, Result, Layout,
-    derive_commands,
-    *,
+    Context, Layout, Node, NodeState, Result, StatefulNode, derive_commands, geom::Expanse, *,
 };
 
 /// Panes manages a set of child nodes arranged in a 2d grid.
@@ -116,4 +111,3 @@ impl<N: Node> Node for Panes<N> {
         Ok(())
     }
 }
-

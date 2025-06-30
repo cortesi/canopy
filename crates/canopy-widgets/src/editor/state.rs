@@ -1,5 +1,5 @@
-use canopy_core as canopy;
 use super::primitives::*;
+use canopy_core as canopy;
 
 use canopy_core::geom::Point;
 
@@ -351,4 +351,3 @@ impl State {
         self.window = self.window.adjust(self);
     }
 }
-

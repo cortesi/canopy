@@ -1,12 +1,8 @@
 use canopy_core as canopy;
 
-
 use canopy_core::{
-    geom::Expanse,
-    NodeState, StatefulNode,
-    Context, Node, Result, Render, Layout,
-    derive_commands, command,
-    *,
+    Context, Layout, Node, NodeState, Render, Result, StatefulNode, command, derive_commands,
+    geom::Expanse, *,
 };
 
 use textwrap;
@@ -112,4 +108,3 @@ impl Node for Text {
         Ok(())
     }
 }
-

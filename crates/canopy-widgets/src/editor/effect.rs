@@ -1,5 +1,5 @@
-use canopy_core as canopy;
 use super::{primitives, state};
+use canopy_core as canopy;
 
 pub(super) trait Effector {
     /// Modifies the provided state and returns a new state to apply this effect.
