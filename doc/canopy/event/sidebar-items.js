@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["key","mouse"]};
+window.SIDEBAR_ITEMS = {"enum":["Event"],"mod":["key","mouse"]};
