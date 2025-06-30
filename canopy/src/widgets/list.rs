@@ -392,9 +392,9 @@ where
                     }
                     Ok(())
                 })?;
-                itm.itm.unhide();
+                l.unhide(&mut itm.itm);
             } else {
-                itm.itm.hide();
+                l.hide(&mut itm.itm);
                 itm.itm.state_mut().set_view(Rect::default());
             }
         }

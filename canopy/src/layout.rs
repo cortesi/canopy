@@ -9,6 +9,17 @@ use crate::{
 pub struct Layout {}
 
 impl Layout {
+    /// Hides the element and all its descendants from rendering. The nodes are still included in
+    /// the tree.
+    pub fn hide(&self, child: &mut dyn Node) {
+        child.state_mut().hidden = true;
+    }
+
+    /// Unhides the element and all its descendants, allowing them to be rendered again.
+    pub fn unhide(&self, child: &mut dyn Node) {
+        child.state_mut().hidden = false;
+    }
+
     /// Wrap a single child node, mirroring the child's size and view.
     ///
     /// When implementing a simple container that merely exposes its child's
