@@ -1,0 +1,16 @@
+[package]
+name = "canopy-core"
+authors = ["Aldo Cortesi <aldo@corte.si>"]
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+crossterm = "0.29.0"
+thiserror = "2.0.12"
+bitvec = "1.0.1"
+tracing = "0.1.41"
+canopy-derive = { path = "../canopy-derive" }
+scopeguard = "1.2.0"
+convert_case = "0.8.0"
+rhai = { version = "1.22.2", features = ["internals"] }
+regex = "1.11.1"

@@ -158,7 +158,9 @@ name = "canopy"
 version = "0.0.1"
 dependencies = [
  "bitvec",
+ "canopy-core",
  "canopy-derive",
+ "canopy-widgets",
  "clap",
  "color-backtrace",
  "comfy-table",
@@ -179,6 +181,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "canopy-core"
+version = "0.0.1"
+dependencies = [
+ "bitvec",
+ "canopy-derive",
+ "convert_case 0.8.0",
+ "crossterm 0.29.0",
+ "regex",
+ "rhai",
+ "scopeguard",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
 name = "canopy-derive"
 version = "0.1.0"
 dependencies = [
@@ -194,6 +211,19 @@ dependencies = [
  "structmeta",
  "syn 2.0.104",
  "thiserror",
+]
+
+[[package]]
+name = "canopy-widgets"
+version = "0.0.1"
+dependencies = [
+ "canopy-core",
+ "canopy-derive",
+ "pad",
+ "regex",
+ "rhai",
+ "textwrap",
+ "tracing",
 ]
 
 [[package]]

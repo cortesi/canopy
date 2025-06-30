@@ -254,7 +254,9 @@ pub fn bind_keys(cnpy: &mut Canopy) {
         .mouse(mouse::Action::ScrollUp, "todo::select_prev()")
         .mouse(mouse::Action::ScrollDown, "todo::select_next()")
         .with_path("input")
-        .defaults::<Input>()
+        .key(key::KeyCode::Left, "input::left()")
+        .key(key::KeyCode::Right, "input::right()")
+        .key(key::KeyCode::Backspace, "input::backspace()")
         .key(key::KeyCode::Enter, "todo::accept_add()")
         .key(key::KeyCode::Esc, "todo::cancel_add()");
 }

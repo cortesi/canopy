@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.98"
-canopy = { path = "../../canopy" }
+canopy = { path = "../../crates/canopy" }
 clap = { version = "4.5.40", features = ["derive"] }
 rusqlite = "0.36.0"
 tracing = "0.1.41"

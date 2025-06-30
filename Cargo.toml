@@ -1,4 +1,4 @@
 [workspace]
 resolver = "2"
-members = ["canopy", "canopy-derive", "examples/*"]
-default-members = ["canopy", "canopy-derive"]
+members = ["crates/*", "examples/*"]
+default-members = ["crates/canopy", "crates/canopy-derive"]
