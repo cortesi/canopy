@@ -29,8 +29,8 @@ impl Projection {
 /// A ViewPort manages the size of a node and its projection onto the screen.
 #[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ViewPort {
-    /// The location of the node in the parent's canvas. Must only be changed by the parent node.
-    /// The space occupied by node is defined by its position and its view rectangle.
+    /// The location of the node's view in the parent's canvas. Must only be changed by the parent
+    /// node. The space occupied by node is defined by its position and its view rectangle.
     ///
     /// CONSTRAINT: The view rectangle at the parent's canvas position must be fully contained
     /// within the parent's canvas rectangle.
@@ -43,6 +43,7 @@ pub struct ViewPort {
     /// ease widget implementation, when attempting to draw to the screen any draw operations outside the
     /// screen rectangle are ignored.
     /// CONSTRAINT: The view rectangle must be fully contained within OUR canvas rectangle.
+    ///
     view: Rect,
 
     /// The canvas on which children are positioned, and to which rendering occurs. Must only be
@@ -74,12 +75,12 @@ impl ViewPort {
         }
     }
 
-    /// Current position of the viewport within the parent canvas.
+    /// Position of this ViewPort's view within the parent canvas.
     pub fn position(&self) -> Point {
         self.position
     }
 
-    /// Rectangle of the child view within the canvas.
+    /// This viewport's view rectangle, relative to our own canvas.
     pub fn view(&self) -> Rect {
         self.view
     }

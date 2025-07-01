@@ -1,7 +1,9 @@
 use canopy::{
     Context, Expanse, Layout, Loader, Node, NodeState, Render, Result, StatefulNode,
     commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
-    geom::{Point, Rect}, state::NodeName, tutils::Harness,
+    geom::{Point, Rect},
+    state::NodeName,
+    tutils::Harness,
 };
 
 // Big node that expands to twice its given size
@@ -36,11 +38,7 @@ impl CommandNode for Big {
         vec![]
     }
 
-    fn dispatch(
-        &mut self,
-        _c: &mut dyn Context,
-        _cmd: &CommandInvocation,
-    ) -> Result<ReturnValue> {
+    fn dispatch(&mut self, _c: &mut dyn Context, _cmd: &CommandInvocation) -> Result<ReturnValue> {
         Ok(ReturnValue::Void)
     }
 }
@@ -89,11 +87,7 @@ impl CommandNode for Root {
         vec![]
     }
 
-    fn dispatch(
-        &mut self,
-        _c: &mut dyn Context,
-        _cmd: &CommandInvocation,
-    ) -> Result<ReturnValue> {
+    fn dispatch(&mut self, _c: &mut dyn Context, _cmd: &CommandInvocation) -> Result<ReturnValue> {
         Ok(ReturnValue::Void)
     }
 }
@@ -129,7 +123,7 @@ fn child_clamped_to_parent() -> Result<()> {
     // Big expands to 2x2 when given 1x1, so it should be clamped to parent
     // We expect the bottom-right corner to have 'x'
     let buf = h.buf();
-    
+
     // Check that only the bottom-right corner has 'x'
     for y in 0..size.h {
         for x in 0..size.w {

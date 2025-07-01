@@ -15,6 +15,7 @@ pub mod render;
 pub mod state;
 mod termbuf;
 mod viewport;
+mod viewstack;
 
 pub mod cursor;
 pub mod event;
