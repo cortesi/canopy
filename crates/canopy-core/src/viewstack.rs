@@ -1,9 +1,15 @@
 #![allow(dead_code)]
+#![allow(clippy::type_complexity)]
 
 use crate::geom::{Point, Rect};
 use crate::viewport::ViewPort;
 use crate::{Error, Result};
 
+/// A stack of viewports that manages nested view transformations.
+///
+/// Invariant: The stack always contains at least one viewport, enforced by:
+/// - `new()` requiring an initial viewport
+/// - `pop()` preventing removal of the last item
 pub struct ViewStack {
     views: Vec<ViewPort>,
 }
@@ -16,6 +22,37 @@ impl ViewStack {
     }
 
     pub fn push(&mut self, view: ViewPort) {
+        // Ensure the new viewport is positioned within the parent's canvas
+        // We know views always has at least one item
+        let parent = self.views.last().unwrap();
+        let parent_canvas = parent.canvas().rect();
+
+        assert!(
+            parent_canvas.contains_point(view.position()),
+            "ViewPort position {:?} is outside parent's canvas {:?}",
+            view.position(),
+            parent_canvas
+        );
+
+        // Also check that the child's view rectangle (at its position in parent's canvas)
+        // is completely contained within the parent's canvas
+        // The actual rectangle occupied by the child in parent's canvas is:
+        // position + view's top-left offset, with view's width and height
+        let child_rect_in_parent = Rect::new(
+            view.position().x + view.view().tl.x,
+            view.position().y + view.view().tl.y,
+            view.view().w,
+            view.view().h,
+        );
+
+        assert!(
+            parent_canvas.contains_rect(&child_rect_in_parent),
+            "ViewPort's view {:?} at position {:?} is not completely contained within parent's canvas {:?}",
+            view.view(),
+            view.position(),
+            parent_canvas
+        );
+
         self.views.push(view);
     }
 
@@ -56,12 +93,7 @@ impl ViewStack {
                 };
 
                 // Create the viewport's screen rectangle
-                let viewport_screen = Rect::new(
-                    view_offset_on_screen.x,
-                    view_offset_on_screen.y,
-                    viewport.view().w,
-                    viewport.view().h,
-                );
+                let viewport_screen = viewport.view().at(view_offset_on_screen);
 
                 // Intersect with current screen area
                 current_screen = current_screen.intersect(&viewport_screen)?;
@@ -99,42 +131,20 @@ impl ViewStack {
             // Transform from screen to this viewport's canvas coordinates
             // by subtracting the viewport's screen position
             let screen_pos = viewport.screen_rect().tl;
-            current_rect = Rect::new(
-                current_rect.tl.x.saturating_sub(screen_pos.x),
-                current_rect.tl.y.saturating_sub(screen_pos.y),
-                current_rect.w,
-                current_rect.h,
-            );
+            current_rect = current_rect.shift(-(screen_pos.x as i16), -(screen_pos.y as i16));
 
             // Now subtract the position of the next viewport within this canvas
-            if i + 1 < self.views.len() {
-                let next_pos = self.views[i + 1].position();
-                current_rect = Rect::new(
-                    current_rect.tl.x.saturating_sub(next_pos.x),
-                    current_rect.tl.y.saturating_sub(next_pos.y),
-                    current_rect.w,
-                    current_rect.h,
-                );
-            }
+            let next_pos = self.views[i + 1].position();
+            current_rect = current_rect.shift(-(next_pos.x as i16), -(next_pos.y as i16));
         }
 
         // Finally, we're in the last viewport's canvas coordinates
         // We need to account for the last viewport's view offset
         let last_view = self.views.last().unwrap().view();
-        current_rect = Rect::new(
-            current_rect.tl.x.saturating_sub(last_view.tl.x),
-            current_rect.tl.y.saturating_sub(last_view.tl.y),
-            current_rect.w,
-            current_rect.h,
-        );
+        current_rect = current_rect.shift(-(last_view.tl.x as i16), -(last_view.tl.y as i16));
 
         // Add back the view offset to get the actual canvas rect
-        Some(Rect::new(
-            last_view.tl.x + current_rect.tl.x,
-            last_view.tl.y + current_rect.tl.y,
-            current_rect.w,
-            current_rect.h,
-        ))
+        Some(current_rect.shift(last_view.tl.x as i16, last_view.tl.y as i16))
     }
 }
 
@@ -253,7 +263,7 @@ mod tests {
             TestCase {
                 name: "Second viewport positioned within first",
                 viewport1: ((10, 10), (0, 0, 10, 10), (0, 0)),
-                viewport2: ((10, 10), (0, 0, 10, 10), (2, 2)),
+                viewport2: ((8, 8), (0, 0, 8, 8), (2, 2)),
                 expected_screen: Some(Rect::new(2, 2, 8, 8)),
                 expected_canvas: Some(Rect::new(0, 0, 8, 8)),
             },
@@ -265,25 +275,25 @@ mod tests {
                 expected_canvas: Some(Rect::new(2, 2, 6, 6)),
             },
             TestCase {
-                name: "Second viewport positioned outside first",
+                name: "Second viewport positioned at edge of first",
                 viewport1: ((10, 10), (0, 0, 10, 10), (0, 0)),
-                viewport2: ((10, 10), (0, 0, 10, 10), (11, 11)),
-                expected_screen: None,
-                expected_canvas: None,
+                viewport2: ((5, 5), (0, 0, 5, 5), (5, 5)),
+                expected_screen: Some(Rect::new(5, 5, 5, 5)),
+                expected_canvas: Some(Rect::new(0, 0, 5, 5)),
             },
             TestCase {
-                name: "Partial overlap",
-                viewport1: ((100, 100), (0, 0, 50, 50), (0, 0)),
-                viewport2: ((100, 100), (0, 0, 50, 50), (25, 25)),
-                expected_screen: Some(Rect::new(25, 25, 25, 25)),
-                expected_canvas: Some(Rect::new(0, 0, 25, 25)),
+                name: "Child with offset view",
+                viewport1: ((10, 10), (0, 0, 10, 10), (0, 0)),
+                viewport2: ((8, 8), (1, 1, 4, 4), (3, 3)),
+                expected_screen: Some(Rect::new(4, 4, 4, 4)),
+                expected_canvas: Some(Rect::new(1, 1, 4, 4)),
             },
             TestCase {
                 name: "Complex view positioning",
-                viewport1: ((100, 100), (0, 0, 80, 80), (10, 10)),
-                viewport2: ((80, 80), (10, 10, 40, 40), (20, 20)),
-                expected_screen: Some(Rect::new(40, 40, 40, 40)),
-                expected_canvas: Some(Rect::new(10, 10, 40, 40)),
+                viewport1: ((10, 10), (0, 0, 10, 10), (0, 0)),
+                viewport2: ((6, 6), (1, 1, 3, 3), (2, 2)),
+                expected_screen: Some(Rect::new(3, 3, 3, 3)),
+                expected_canvas: Some(Rect::new(1, 1, 3, 3)),
             },
         ];
 
@@ -307,6 +317,48 @@ mod tests {
                 tc.name
             );
         }
+    }
+
+    #[test]
+    #[should_panic(expected = "is outside parent's canvas")]
+    fn test_push_constraint_position_outside_parent() {
+        // Parent has canvas (100,100)
+        let view1 = ViewPort::new((100, 100), (0, 0, 50, 50), (0, 0)).unwrap();
+        let mut stack = ViewStack::new(view1);
+
+        // Child at position (101,101) which is outside parent's canvas (0,0,100,100)
+        let view2 = ViewPort::new((50, 50), (0, 0, 30, 30), (101, 101)).unwrap();
+        stack.push(view2); // Should panic
+    }
+
+    #[test]
+    #[should_panic(expected = "is not completely contained within parent's canvas")]
+    fn test_push_constraint_view_not_contained() {
+        // Parent has canvas (100,100)
+        let view1 = ViewPort::new((100, 100), (0, 0, 50, 50), (0, 0)).unwrap();
+        let mut stack = ViewStack::new(view1);
+
+        // Child's view starts at (0,0) in its own canvas and has size 30x30
+        // Position the child at (80,80) in parent's canvas
+        // This means the actual view rectangle would be at (80,80) to (110,110)
+        // which extends beyond the parent's canvas
+        let view2 = ViewPort::new((50, 50), (0, 0, 30, 30), (80, 80)).unwrap();
+        stack.push(view2); // Should panic
+    }
+
+    #[test]
+    fn test_push_constraint_valid() {
+        // Parent has canvas (100,100)
+        let view1 = ViewPort::new((100, 100), (0, 0, 50, 50), (0, 0)).unwrap();
+        let mut stack = ViewStack::new(view1);
+
+        // Child fits within parent's canvas
+        let view2 = ViewPort::new((80, 80), (0, 0, 60, 60), (20, 20)).unwrap();
+        stack.push(view2); // Should not panic (60x60 at (20,20) ends at (80,80))
+
+        // Edge case: child exactly at parent's canvas boundary (view2 has 80x80 canvas)
+        let view3 = ViewPort::new((40, 40), (0, 0, 40, 40), (40, 40)).unwrap();
+        stack.push(view3); // Should not panic (40x40 at (40,40) ends at (80,80))
     }
 
     #[test]
