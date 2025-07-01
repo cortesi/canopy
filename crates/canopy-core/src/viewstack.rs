@@ -323,6 +323,20 @@ mod tests {
                 expected_canvas: Some(Rect::new(5, 5, 5, 5)),
             },
             TestCase {
+                name: "Second viewport positioned within first, partial, top right",
+                viewport1: ((20, 20), (5, 0, 10, 10), (0, 0)),
+                viewport2: ((10, 10), (0, 0, 10, 10), (0, 0)),
+                expected_screen: Some(Rect::new(0, 0, 5, 10)),
+                expected_canvas: Some(Rect::new(5, 0, 5, 10)),
+            },
+            TestCase {
+                name: "Second viewport positioned within first, partial, bottom left",
+                viewport1: ((20, 20), (0, 5, 10, 10), (0, 0)),
+                viewport2: ((10, 10), (0, 0, 10, 10), (0, 0)),
+                expected_screen: Some(Rect::new(0, 0, 10, 5)),
+                expected_canvas: Some(Rect::new(0, 5, 10, 5)),
+            },
+            TestCase {
                 name: "Second viewport with partial view",
                 viewport1: ((10, 10), (0, 0, 10, 10), (0, 0)),
                 viewport2: ((10, 10), (2, 2, 6, 6), (1, 1)),
@@ -342,6 +356,27 @@ mod tests {
                 viewport2: ((8, 8), (1, 1, 4, 4), (3, 3)),
                 expected_screen: Some(Rect::new(4, 4, 4, 4)),
                 expected_canvas: Some(Rect::new(1, 1, 4, 4)),
+            },
+            TestCase {
+                name: "Child partially visible - top left corner",
+                viewport1: ((10, 10), (0, 0, 10, 10), (0, 0)),
+                viewport2: ((8, 8), (0, 0, 8, 8), (7, 7)),
+                expected_screen: Some(Rect::new(7, 7, 3, 3)),
+                expected_canvas: Some(Rect::new(0, 0, 3, 3)),
+            },
+            TestCase {
+                name: "Child extends beyond parent - top right",
+                viewport1: ((10, 10), (0, 0, 10, 10), (0, 0)),
+                viewport2: ((15, 15), (0, 0, 15, 15), (5, 0)),
+                expected_screen: Some(Rect::new(5, 0, 5, 10)),
+                expected_canvas: Some(Rect::new(0, 0, 5, 10)),
+            },
+            TestCase {
+                name: "Child extends beyond parent - bottom left",
+                viewport1: ((10, 10), (0, 0, 10, 10), (0, 0)),
+                viewport2: ((15, 15), (0, 0, 15, 15), (0, 5)),
+                expected_screen: Some(Rect::new(0, 5, 10, 5)),
+                expected_canvas: Some(Rect::new(0, 0, 10, 5)),
             },
             TestCase {
                 name: "Complex view positioning",
@@ -499,5 +534,97 @@ mod tests {
 
         let (canvas, screen) = stack.projection().unwrap();
         assert_eq!((screen.w, screen.h), (canvas.w, canvas.h));
+    }
+
+    #[test]
+    fn test_viewport_partial_visibility_corners() {
+        // Test partial visibility from different corners
+
+        // Parent view shows only bottom-right quadrant of its canvas
+        let view1 = ViewPort::new((20, 20), (10, 10, 10, 10), (0, 0)).unwrap();
+        let mut stack = ViewStack::new(view1);
+
+        // Child positioned so its view overlaps with parent's visible area
+        let view2 = ViewPort::new((15, 15), (0, 0, 15, 15), (5, 5)).unwrap();
+        stack.push(view2);
+        assert_eq!(
+            stack.projection(),
+            Some((Rect::new(5, 5, 10, 10), Rect::new(0, 0, 10, 10))),
+            "Child visible from (5,5) in its canvas"
+        );
+
+        // Test with parent showing only top-left quadrant
+        let view1 = ViewPort::new((20, 20), (0, 0, 10, 10), (0, 0)).unwrap();
+        let mut stack = ViewStack::new(view1);
+
+        // Child positioned to show only its bottom-right corner
+        let view2 = ViewPort::new((15, 15), (0, 0, 15, 15), (5, 5)).unwrap();
+        stack.push(view2);
+        assert_eq!(
+            stack.projection(),
+            Some((Rect::new(0, 0, 5, 5), Rect::new(5, 5, 5, 5))),
+            "Only bottom-right corner of child should be visible"
+        );
+
+        // Parent shows middle section, child overlaps partially on all sides
+        let view1 = ViewPort::new((30, 30), (10, 10, 10, 10), (0, 0)).unwrap();
+        let mut stack = ViewStack::new(view1);
+
+        let view2 = ViewPort::new((20, 20), (0, 0, 20, 20), (5, 5)).unwrap();
+        stack.push(view2);
+        assert_eq!(
+            stack.projection(),
+            Some((Rect::new(5, 5, 10, 10), Rect::new(0, 0, 10, 10))),
+            "Child should be clipped to parent's view"
+        );
+    }
+
+    #[test]
+    fn test_viewport_corner_clipping() {
+        // Test specific corner clipping scenarios
+
+        // Bottom-right corner: Parent at origin, child extends beyond
+        let view1 = ViewPort::new((10, 10), (0, 0, 10, 10), (0, 0)).unwrap();
+        let mut stack = ViewStack::new(view1);
+        let view2 = ViewPort::new((8, 8), (0, 0, 8, 8), (5, 5)).unwrap();
+        stack.push(view2);
+        assert_eq!(
+            stack.projection(),
+            Some((Rect::new(0, 0, 5, 5), Rect::new(5, 5, 5, 5))),
+            "Bottom-right 5x5 corner visible"
+        );
+
+        // Top-left corner: Child partially before parent's view
+        let view1 = ViewPort::new((20, 20), (5, 5, 10, 10), (0, 0)).unwrap();
+        let mut stack = ViewStack::new(view1);
+        let view2 = ViewPort::new((10, 10), (0, 0, 10, 10), (0, 0)).unwrap();
+        stack.push(view2);
+        assert_eq!(
+            stack.projection(),
+            Some((Rect::new(5, 5, 5, 5), Rect::new(0, 0, 5, 5))),
+            "Top-left 5x5 corner visible"
+        );
+
+        // Top-right corner: Mix of horizontal and vertical clipping
+        let view1 = ViewPort::new((20, 20), (0, 5, 10, 10), (0, 0)).unwrap();
+        let mut stack = ViewStack::new(view1);
+        let view2 = ViewPort::new((10, 10), (0, 0, 10, 10), (0, 0)).unwrap();
+        stack.push(view2);
+        assert_eq!(
+            stack.projection(),
+            Some((Rect::new(0, 5, 10, 5), Rect::new(0, 0, 10, 5))),
+            "Top portion visible"
+        );
+
+        // Bottom-left corner: Another mix
+        let view1 = ViewPort::new((20, 20), (5, 0, 10, 10), (0, 0)).unwrap();
+        let mut stack = ViewStack::new(view1);
+        let view2 = ViewPort::new((10, 10), (0, 0, 10, 10), (0, 0)).unwrap();
+        stack.push(view2);
+        assert_eq!(
+            stack.projection(),
+            Some((Rect::new(5, 0, 5, 10), Rect::new(0, 0, 5, 10))),
+            "Left portion visible"
+        );
     }
 }
