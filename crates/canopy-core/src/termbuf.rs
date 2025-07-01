@@ -80,7 +80,7 @@ impl TermBuf {
     }
 
     fn idx(&self, p: Point) -> Option<usize> {
-        if p.x < self.size.w && p.y < self.size.h {
+        if self.rect().contains_point(p) {
             Some(p.y as usize * self.size.w as usize + p.x as usize)
         } else {
             None
