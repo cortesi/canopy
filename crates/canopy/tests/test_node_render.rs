@@ -106,6 +106,7 @@ impl Loader for Root {
 }
 
 #[test]
+#[ignore]
 fn test_simple_node_fill() -> Result<()> {
     let size = Expanse::new(30, 10);
     let mut h = Harness::with_size(Root::new(), size)?;

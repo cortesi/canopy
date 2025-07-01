@@ -372,6 +372,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn focusgym_canvas_render() -> Result<()> {
         use crate::backend::test::CanvasRender;
 

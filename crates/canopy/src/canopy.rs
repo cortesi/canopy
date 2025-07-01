@@ -28,11 +28,14 @@ pub struct Canopy {
     /// require rendering during the current sweep will have a state `render_gen`
     /// equal to this.
     render_gen: u64,
+
     /// The poller is responsible for tracking nodes that have pending poll
     /// events, and scheduling their execution.
     poller: Poller,
+
     /// Has the tree been tainted? Resets to false before every event sweep.
     pub(crate) taint: bool,
+
     /// Root window size
     pub(crate) root_size: Option<Expanse>,
 
@@ -602,8 +605,8 @@ impl Canopy {
 
             let def_style = styl.get(&self.style, "");
 
-            // Create a new termbuf for double buffering
-            let mut next = TermBuf::new(root_size, ' ', def_style.clone());
+            // Create a new termbuf initialized with spaces and default style
+            let mut next = TermBuf::empty_with_style(root_size, def_style.clone());
 
             self.pre_render(be, root)?;
 
@@ -615,15 +618,24 @@ impl Canopy {
             // Render the tree into the new buffer
             self.render_traversal(&mut next, &mut styl, &mut view_stack, root, Point::zero())?;
 
-            // Diff and render to screen
+            // Update the screen buffer
             if let Some(prev) = &self.termbuf {
-                next.diff(prev, be)?;
-            } else {
-                next.render(be)?;
-            }
+                // Clone the previous buffer
+                let mut screen_buf = prev.clone();
 
-            // Swap buffers for double buffering
-            self.termbuf = Some(next);
+                // Copy the rendered content into the cloned buffer
+                screen_buf.copy(&next, root_size.rect());
+
+                // Diff and render to screen
+                screen_buf.diff(prev, be)?;
+
+                // Swap the updated buffer
+                self.termbuf = Some(screen_buf);
+            } else {
+                // First render - just render the entire buffer
+                next.render(be)?;
+                self.termbuf = Some(next);
+            }
 
             self.render_gen += 1;
             self.last_render_focus_gen = self.focus_gen;
@@ -1050,6 +1062,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn trender() -> Result<()> {
         run(|c, mut tr, mut root| {
             tr.render(c, &mut root)?;

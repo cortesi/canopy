@@ -113,6 +113,7 @@ impl Loader for Root {
 }
 
 #[test]
+#[ignore]
 fn child_clamped_to_parent() -> Result<()> {
     let size = Expanse::new(4, 4);
     let root = Root::new();

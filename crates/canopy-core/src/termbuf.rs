@@ -39,6 +39,10 @@ impl TermBuf {
             cells: vec![cell; size.area() as usize],
         }
     }
+    /// Create an empty TermBuf filled with NULL characters
+    pub fn empty_with_style(size: impl Into<Expanse>, style: Style) -> Self {
+        Self::new(size, NULL, style)
+    }
 
     /// Create an empty TermBuf filled with NULL characters
     pub fn empty(size: impl Into<Expanse>) -> Self {
@@ -131,6 +135,18 @@ impl TermBuf {
                 for x in isec.tl.x..isec.tl.x + isec.w {
                     self.put(Point { x, y }, ch, style.clone());
                 }
+            }
+        }
+    }
+
+    /// Fill all empty (NULL) cells with the given character and style
+    pub fn fill_empty(&mut self, ch: char, style: Style) {
+        for i in 0..self.cells.len() {
+            if self.cells[i].ch == NULL {
+                self.cells[i] = Cell {
+                    ch,
+                    style: style.clone(),
+                };
             }
         }
     }
@@ -775,5 +791,40 @@ mod tests {
         // Test that it doesn't match wrong combinations
         let italic_red = PartialStyle::fg(Color::Red).with_attrs(AttrSet::new(Attr::Italic));
         assert!(!tb.contains_text_style("bold", &italic_red));
+    }
+
+    #[test]
+    fn test_fill_empty() {
+        // Create an empty buffer
+        let mut tb = TermBuf::empty(Expanse::new(5, 3));
+
+        // Verify all cells are NULL initially
+        for y in 0..3 {
+            for x in 0..5 {
+                assert_eq!(tb.get(Point { x, y }).unwrap().ch, NULL);
+            }
+        }
+
+        // Add some content to part of the buffer
+        tb.text(def_style(), Line::new(1, 1, 3), "ABC");
+
+        // Fill empty cells with a specific character and style
+        let mut fill_style = def_style();
+        fill_style.fg = Color::Red;
+        tb.fill_empty('.', fill_style.clone());
+
+        // Check that previously empty cells are now filled
+        assert_eq!(tb.get(Point { x: 0, y: 0 }).unwrap().ch, '.');
+        assert_eq!(tb.get(Point { x: 0, y: 0 }).unwrap().style.fg, Color::Red);
+
+        // Check that non-empty cells remain unchanged
+        assert_eq!(tb.get(Point { x: 1, y: 1 }).unwrap().ch, 'A');
+        assert_eq!(tb.get(Point { x: 2, y: 1 }).unwrap().ch, 'B');
+        assert_eq!(tb.get(Point { x: 3, y: 1 }).unwrap().ch, 'C');
+        assert_eq!(tb.get(Point { x: 1, y: 1 }).unwrap().style.fg, Color::White);
+
+        // Check that the empty cells after the text are also filled
+        assert_eq!(tb.get(Point { x: 4, y: 1 }).unwrap().ch, '.');
+        assert_eq!(tb.get(Point { x: 4, y: 2 }).unwrap().ch, '.');
     }
 }
