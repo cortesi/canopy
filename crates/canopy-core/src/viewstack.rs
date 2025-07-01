@@ -37,8 +37,8 @@ impl ViewStack {
             parent_canvas
         );
 
-        // Also check that the child's view rectangle (at its position in parent's canvas)
-        // is completely contained within the parent's canvas
+        // Also check that at least some part of the child's view rectangle
+        // (at its position in parent's canvas) overlaps with the parent's canvas
         // The actual rectangle occupied by the child in parent's canvas is:
         // position + view's top-left offset, with view's width and height
         let child_rect_in_parent = Rect::new(
@@ -49,8 +49,8 @@ impl ViewStack {
         );
 
         assert!(
-            parent_canvas.contains_rect(&child_rect_in_parent),
-            "ViewPort's view {:?} at position {:?} is not completely contained within parent's canvas {:?}",
+            parent_canvas.intersect(&child_rect_in_parent).is_some(),
+            "ViewPort's view {:?} at position {:?} does not overlap with parent's canvas {:?}",
             view.view(),
             view.position(),
             parent_canvas
@@ -235,6 +235,12 @@ mod tests {
                 expected_canvas: Rect::new(0, 0, 100, 100),
             },
             TestCase {
+                name: "Partial view of larger canvas with offset",
+                viewport: ((200, 150), (0, 0, 100, 100), (10, 10)),
+                expected_screen: Rect::new(0, 0, 100, 100),
+                expected_canvas: Rect::new(0, 0, 100, 100),
+            },
+            TestCase {
                 name: "View with offset into canvas",
                 viewport: ((200, 150), (20, 15, 100, 100), (0, 0)),
                 expected_screen: Rect::new(0, 0, 100, 100),
@@ -311,6 +317,13 @@ mod tests {
                 expected_canvas: Some(Rect::new(0, 0, 8, 8)),
             },
             TestCase {
+                name: "Second viewport positioned within first, occlusion",
+                viewport1: ((10, 10), (0, 0, 10, 10), (0, 0)),
+                viewport2: ((10, 10), (0, 0, 10, 10), (5, 5)),
+                expected_screen: Some(Rect::new(5, 5, 5, 5)),
+                expected_canvas: Some(Rect::new(0, 0, 5, 5)),
+            },
+            TestCase {
                 name: "Second viewport with partial view",
                 viewport1: ((10, 10), (0, 0, 10, 10), (0, 0)),
                 viewport2: ((10, 10), (2, 2, 6, 6), (1, 1)),
@@ -366,18 +379,37 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "is not completely contained within parent's canvas")]
-    fn test_push_constraint_view_not_contained() {
+    #[should_panic(expected = "does not overlap with parent's canvas")]
+    fn test_push_constraint_view_no_overlap() {
         // Parent has canvas (100,100)
         let view1 = ViewPort::new((100, 100), (0, 0, 50, 50), (0, 0)).unwrap();
         let mut stack = ViewStack::new(view1);
 
-        // Child's view starts at (0,0) in its own canvas and has size 30x30
+        // Child's view starts at (20,20) in its own canvas and has size 10x10
         // Position the child at (80,80) in parent's canvas
-        // This means the actual view rectangle would be at (80,80) to (110,110)
-        // which extends beyond the parent's canvas
-        let view2 = ViewPort::new((50, 50), (0, 0, 30, 30), (80, 80)).unwrap();
+        // This means the actual view rectangle would be at (100,100) to (110,110)
+        // which is completely outside the parent's canvas
+        let view2 = ViewPort::new((50, 50), (20, 20, 10, 10), (80, 80)).unwrap();
         stack.push(view2); // Should panic
+    }
+
+    #[test]
+    fn test_viewport_clipping() {
+        // Test that viewports are properly clipped when they extend beyond parent bounds
+        let view1 = ViewPort::new((20, 20), (0, 0, 20, 20), (0, 0)).unwrap();
+        let mut stack = ViewStack::new(view1);
+
+        // Child viewport extends beyond parent - should be clipped, not rejected
+        let view2 = ViewPort::new((30, 30), (0, 0, 30, 30), (10, 10)).unwrap();
+        stack.push(view2); // Should not panic - partial overlap is allowed
+
+        // Projection should show clipped result
+        let projection = stack.projection();
+        assert_eq!(
+            projection,
+            Some((Rect::new(0, 0, 10, 10), Rect::new(10, 10, 10, 10))),
+            "Viewport should be clipped to parent bounds"
+        );
     }
 
     #[test]
