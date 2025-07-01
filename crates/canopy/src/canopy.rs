@@ -5,8 +5,8 @@ use comfy_table::{ContentArrangement, Table};
 use crate::{backend::BackendControl, inputmap, poll::Poller, script};
 
 use canopy_core::{
-    Context, EventOutcome, Layout, Node, NodeId, Render, Result, TermBuf, ViewPort, commands,
-    cursor, error,
+    Context, EventOutcome, Layout, Node, NodeId, Render, Result, TermBuf, ViewPort, ViewStack,
+    commands, cursor, error,
     event::{Event, key, mouse},
     geom::{Direction, Expanse, Point, Rect},
     path::*,
@@ -473,42 +473,89 @@ impl Canopy {
 
     fn render_traversal(
         &mut self,
-        buf: &mut TermBuf,
+        dest_buf: &mut TermBuf,
         styl: &mut StyleManager,
+        view_stack: &mut ViewStack,
         n: &mut dyn Node,
-        base: Point,
+        parent_screen_pos: Point,
     ) -> Result<()> {
         if !n.is_hidden() {
             styl.push();
-            if self.needs_render(n) {
-                if self.is_focused(n) {
-                    let s = &mut n.state_mut();
-                    s.rendered_focus_gen = self.focus_gen;
-                }
-                let mut rndr = Render::new(buf, &self.style, styl, n.vp(), base);
-                n.render(self, &mut rndr)?;
+
+            // Track whether we pushed a viewport
+            let mut pushed_viewport = false;
+
+            // Push the node's viewport onto the stack
+            let node_vp = n.vp();
+            // Only push if the viewport has a non-zero view
+            if !node_vp.view().is_zero() {
+                // Convert node position from screen coordinates to parent-relative coordinates
+                let relative_pos = Point {
+                    x: node_vp.position().x.saturating_sub(parent_screen_pos.x),
+                    y: node_vp.position().y.saturating_sub(parent_screen_pos.y),
+                };
+
+                // Create a new viewport with parent-relative position
+                let relative_vp = ViewPort::new(node_vp.canvas(), node_vp.view(), relative_pos)?;
+
+                view_stack.push(relative_vp);
+                pushed_viewport = true;
             }
+
+            // Only render if we pushed a viewport
+            if pushed_viewport {
+                if self.needs_render(n) {
+                    if self.is_focused(n) {
+                        let s = &mut n.state_mut();
+                        s.rendered_focus_gen = self.focus_gen;
+                    }
+
+                    // Create a new Render instance with the node's expanse and rect equal to its view
+                    let vp = n.vp();
+                    let expanse = vp.canvas();
+                    let rect = vp.view();
+
+                    let mut rndr = Render::new(&self.style, styl, expanse, rect);
+                    n.render(self, &mut rndr)?;
+
+                    // Copy the rendered content from the Render buffer into the destination buffer
+                    if let Some((_, screen_rect)) = view_stack.projection() {
+                        // Get the render buffer and copy it to the destination at the screen rect
+                        let render_buf = rndr.get_buffer();
+                        dest_buf.copy_to_rect(render_buf, screen_rect);
+                    }
+                }
+
+                // Process children
+                let parent = n.vp().screen_rect();
+                let node_screen_pos = n.vp().position();
+                n.children(&mut |child| {
+                    if !child.is_hidden() {
+                        let child_rect = child.vp().screen_rect();
+                        if !child_rect.is_zero() {
+                            assert!(
+                                parent.contains_rect(&child_rect),
+                                "child {} viewport {:?} outside parent {:?}",
+                                child.name(),
+                                child_rect,
+                                parent
+                            );
+                        }
+                    }
+                    self.render_traversal(dest_buf, styl, view_stack, child, node_screen_pos)
+                })?;
+            }
+
             // This is a new node - we don't want it perpetually stuck in
             // render, so we need to update its render_gen.
             if n.state().render_gen == 0 {
                 n.state_mut().render_gen = self.render_gen;
             }
-            let parent = n.vp().screen_rect();
-            n.children(&mut |child| {
-                if !child.is_hidden() {
-                    let child_rect = child.vp().screen_rect();
-                    if !child_rect.is_zero() {
-                        assert!(
-                            parent.contains_rect(&child_rect),
-                            "child {} viewport {:?} outside parent {:?}",
-                            child.name(),
-                            child_rect,
-                            parent
-                        );
-                    }
-                }
-                self.render_traversal(buf, styl, child, base)
-            })?;
+
+            // Only pop if we pushed
+            if pushed_viewport {
+                view_stack.pop()?;
+            }
             styl.pop();
         }
         Ok(())
@@ -554,23 +601,28 @@ impl Canopy {
             styl.reset();
 
             let def_style = styl.get(&self.style, "");
-            let mut next = if let Some(prev) = &self.termbuf {
-                if prev.size() == root_size {
-                    prev.clone()
-                } else {
-                    TermBuf::new(root_size, ' ', def_style.clone())
-                }
-            } else {
-                TermBuf::new(root_size, ' ', def_style.clone())
-            };
+
+            // Create a new termbuf for double buffering
+            let mut next = TermBuf::new(root_size, ' ', def_style.clone());
 
             self.pre_render(be, root)?;
-            self.render_traversal(&mut next, &mut styl, root, (0, 0).into())?;
+
+            // Create a ViewStack with a screen viewport
+            // The screen viewport has canvas=view=root_size at position (0,0)
+            let screen_vp = ViewPort::new(root_size, root_size.rect(), (0, 0))?;
+            let mut view_stack = ViewStack::new(screen_vp);
+
+            // Render the tree into the new buffer
+            self.render_traversal(&mut next, &mut styl, &mut view_stack, root, Point::zero())?;
+
+            // Diff and render to screen
             if let Some(prev) = &self.termbuf {
                 next.diff(prev, be)?;
             } else {
                 next.render(be)?;
             }
+
+            // Swap buffers for double buffering
             self.termbuf = Some(next);
 
             self.render_gen += 1;

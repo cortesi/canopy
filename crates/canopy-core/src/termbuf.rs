@@ -71,6 +71,38 @@ impl TermBuf {
         }
     }
 
+    /// Copy non-NULL characters from a source TermBuf into a destination rectangle
+    pub fn copy_to_rect(&mut self, src: &TermBuf, dest_rect: Rect) {
+        // The source buffer represents content to be placed at dest_rect
+        // We need to map from source coordinates to destination coordinates
+
+        // Intersect the destination rectangle with our bounds
+        if let Some(clipped_dest) = self.rect().intersect(&dest_rect) {
+            // Calculate the offset into the source buffer based on clipping
+            let src_offset_x = (clipped_dest.tl.x - dest_rect.tl.x) as i16;
+            let src_offset_y = (clipped_dest.tl.y - dest_rect.tl.y) as i16;
+
+            // Copy the visible portion
+            for dy in 0..clipped_dest.h {
+                for dx in 0..clipped_dest.w {
+                    let src_x = (dx as i16 + src_offset_x) as u16;
+                    let src_y = (dy as i16 + src_offset_y) as u16;
+                    let src_p = Point { x: src_x, y: src_y };
+
+                    if let Some(cell) = src.get(src_p) {
+                        if cell.ch != NULL {
+                            let dest_p = Point {
+                                x: clipped_dest.tl.x + dx,
+                                y: clipped_dest.tl.y + dy,
+                            };
+                            self.put(dest_p, cell.ch, cell.style.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     pub fn size(&self) -> Expanse {
         self.size
     }

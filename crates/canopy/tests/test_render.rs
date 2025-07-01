@@ -1,10 +1,10 @@
 use canopy::{
     Expanse, buf, geom,
-    render::PartRender,
+    render::Render,
     style::{StyleManager, StyleMap},
 };
 
-fn assert_buffer_matches(render: &PartRender, expected: &[&str]) {
+fn assert_buffer_matches(render: &Render, expected: &[&str]) {
     render.get_buffer().assert_matches(expected);
 }
 
@@ -93,7 +93,7 @@ impl BufTest {
             .unwrap_or_else(|| geom::Rect::new(0, 0, buf_size.w, buf_size.h));
 
         let (stylemap, mut style_manager) = setup_render_test(canvas_size, render_rect);
-        let mut render = PartRender::new(&stylemap, &mut style_manager, canvas_size, render_rect);
+        let mut render = Render::new(&stylemap, &mut style_manager, canvas_size, render_rect);
 
         let result = render.text("default", self.line, self.text);
         if let Err(e) = result {
@@ -126,7 +126,7 @@ fn test_fill_full_render_rect() {
     let canvas_size = Expanse::new(10, 5);
     let render_rect = geom::Rect::new(0, 0, 10, 5);
     let (stylemap, mut style_manager) = setup_render_test(canvas_size, render_rect);
-    let mut render = PartRender::new(&stylemap, &mut style_manager, canvas_size, render_rect);
+    let mut render = Render::new(&stylemap, &mut style_manager, canvas_size, render_rect);
 
     // Fill a rectangle in the middle of the buffer
     let rect = geom::Rect::new(2, 1, 4, 2);
@@ -150,7 +150,7 @@ fn test_fill_partial_render_rect() {
     let canvas_size = Expanse::new(20, 10);
     let render_rect = geom::Rect::new(5, 2, 10, 5);
     let (stylemap, mut style_manager) = setup_render_test(canvas_size, render_rect);
-    let mut render = PartRender::new(&stylemap, &mut style_manager, canvas_size, render_rect);
+    let mut render = Render::new(&stylemap, &mut style_manager, canvas_size, render_rect);
 
     // Fill a rectangle that partially overlaps the render rect
     // Rectangle at (3, 1) with size 10x5 should only render the part that overlaps with render_rect
@@ -363,7 +363,7 @@ fn test_solid_frame() {
     let canvas_size = Expanse::new(10, 10);
     let render_rect = geom::Rect::new(0, 0, 10, 10);
     let (stylemap, mut style_manager) = setup_render_test(canvas_size, render_rect);
-    let mut render = PartRender::new(&stylemap, &mut style_manager, canvas_size, render_rect);
+    let mut render = Render::new(&stylemap, &mut style_manager, canvas_size, render_rect);
 
     // Create a frame around a 6x6 area starting at (2,2)
     let frame = geom::Frame::new(geom::Rect::new(2, 2, 6, 6), 1);
@@ -392,7 +392,7 @@ fn test_solid_frame_single_width() {
     let canvas_size = Expanse::new(5, 5);
     let render_rect = geom::Rect::new(0, 0, 5, 5);
     let (stylemap, mut style_manager) = setup_render_test(canvas_size, render_rect);
-    let mut render = PartRender::new(&stylemap, &mut style_manager, canvas_size, render_rect);
+    let mut render = Render::new(&stylemap, &mut style_manager, canvas_size, render_rect);
 
     // Create a minimal frame
     let frame = geom::Frame::new(geom::Rect::new(1, 1, 3, 3), 1);
@@ -407,7 +407,7 @@ fn test_solid_frame_partial_overlap() {
     let canvas_size = Expanse::new(20, 15);
     let render_rect = geom::Rect::new(5, 5, 10, 5);
     let (stylemap, mut style_manager) = setup_render_test(canvas_size, render_rect);
-    let mut render = PartRender::new(&stylemap, &mut style_manager, canvas_size, render_rect);
+    let mut render = Render::new(&stylemap, &mut style_manager, canvas_size, render_rect);
 
     // Create a frame that partially overlaps the render rect
     let frame = geom::Frame::new(geom::Rect::new(3, 3, 10, 8), 1);
@@ -442,7 +442,7 @@ fn test_multiple_render_rects() {
 
     for (render_rect, position) in positions {
         let (stylemap, mut style_manager) = setup_render_test(canvas_size, render_rect);
-        let mut render = PartRender::new(&stylemap, &mut style_manager, canvas_size, render_rect);
+        let mut render = Render::new(&stylemap, &mut style_manager, canvas_size, render_rect);
 
         // Fill the entire render rect with a pattern
         render.fill("default", render_rect, '.').unwrap();
@@ -477,7 +477,7 @@ fn test_render_outside_canvas_bounds() {
     let canvas_size = Expanse::new(20, 20);
     let render_rect = geom::Rect::new(5, 5, 10, 10);
     let (stylemap, mut style_manager) = setup_render_test(canvas_size, render_rect);
-    let mut render = PartRender::new(&stylemap, &mut style_manager, canvas_size, render_rect);
+    let mut render = Render::new(&stylemap, &mut style_manager, canvas_size, render_rect);
 
     // Try to fill a rectangle that extends outside the canvas
     let result = render.fill("default", geom::Rect::new(15, 15, 10, 10), '#');

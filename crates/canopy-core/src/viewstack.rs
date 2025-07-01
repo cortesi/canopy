@@ -65,6 +65,11 @@ impl ViewStack {
         Ok(self.views.pop().unwrap())
     }
 
+    /// Get the top viewport on the stack
+    pub fn top(&self) -> &ViewPort {
+        self.views.last().unwrap()
+    }
+
     /// Returns the physical screen dimensions as a rectangle rooted at (0,0).
     ///
     /// The size is determined by the first viewport's view, which by convention

@@ -37,6 +37,7 @@ pub use state::StatefulNode;
 pub use state::StatefulNode as StatefulNodeTrait;
 pub use termbuf::TermBuf;
 pub use viewport::ViewPort;
+pub use viewstack::ViewStack;
 
 // Export commonly used geometry types at the root
 pub use geom::{Direction, Expanse, Point, Rect};

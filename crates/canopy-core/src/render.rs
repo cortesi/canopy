@@ -1,5 +1,5 @@
 use crate::{
-    Error, Result, TermBuf, ViewPort, geom,
+    Error, Result, TermBuf, geom,
     style::{AttrSet, Color, Style},
     style::{StyleManager, StyleMap},
 };
@@ -17,93 +17,8 @@ pub trait RenderBackend {
     fn reset(&mut self) -> Result<()>;
 }
 
-/// The interface used to render to the screen. It is only accessible in `Node::render`.
-pub struct Render<'a> {
-    /// The terminal buffer to render to.
-    buf: &'a mut TermBuf,
-    /// The style manager used to apply styles.
-    pub style: &'a mut StyleManager,
-    /// The style map used to resolve style names to styles.
-    stylemap: &'a StyleMap,
-    /// The viewport that defines the visible area of the terminal.
-    viewport: ViewPort,
-    /// The base point for rendering, used to offset the coordinates.
-    base: geom::Point,
-}
-
-impl<'a> Render<'a> {
-    pub fn new(
-        buf: &'a mut TermBuf,
-        stylemap: &'a StyleMap,
-        style: &'a mut StyleManager,
-        viewport: ViewPort,
-        base: geom::Point,
-    ) -> Self {
-        Render {
-            buf,
-            style,
-            stylemap,
-            viewport,
-            base,
-        }
-    }
-
-    /// Fill a rectangle with a specified character.
-    pub fn fill(&mut self, style: &str, r: geom::Rect, c: char) -> Result<()> {
-        if let Some(dst) = self.viewport.project_rect(r) {
-            let style = self.style.get(self.stylemap, style);
-            let rect = dst.shift(self.base.x as i16, self.base.y as i16);
-            self.buf.fill(style, rect, c);
-        }
-        Ok(())
-    }
-
-    /// Draw a solid frame
-    pub fn solid_frame(&mut self, style: &str, f: geom::Frame, c: char) -> Result<()> {
-        self.fill(style, f.top, c)?;
-        self.fill(style, f.left, c)?;
-        self.fill(style, f.right, c)?;
-        self.fill(style, f.bottom, c)?;
-        self.fill(style, f.topleft, c)?;
-        self.fill(style, f.topright, c)?;
-        self.fill(style, f.bottomleft, c)?;
-        self.fill(style, f.bottomright, c)?;
-        Ok(())
-    }
-
-    /// Print text in the specified line. If the text is wider than the
-    /// rectangle, it will be truncated; if it is shorter, it will be padded.
-    pub fn text(&mut self, style: &str, l: geom::Line, txt: &str) -> Result<()> {
-        if let Some((offset, dst)) = self.viewport.project_line(l) {
-            let style_res = self.style.get(self.stylemap, style);
-
-            let out = txt
-                .chars()
-                .skip(offset as usize)
-                .take(l.w as usize)
-                .collect::<String>();
-
-            let line = geom::Line {
-                tl: self.base + dst.tl,
-                w: dst.w,
-            };
-            self.buf.text(style_res.clone(), line, &out);
-            if out.len() < dst.w as usize {
-                let rect = geom::Rect::new(
-                    self.base.x + dst.tl.x + out.len() as u16,
-                    self.base.y + dst.tl.y,
-                    dst.w - out.len() as u16,
-                    1,
-                );
-                self.buf.fill(style_res, rect, ' ');
-            }
-        }
-        Ok(())
-    }
-}
-
 /// A renderer that only renders to a specific rectangle within an expanse.
-pub struct PartRender<'a> {
+pub struct Render<'a> {
     /// The terminal buffer to render to.
     buf: TermBuf,
     /// The style manager used to apply styles.
@@ -116,7 +31,7 @@ pub struct PartRender<'a> {
     rect: geom::Rect,
 }
 
-impl<'a> PartRender<'a> {
+impl<'a> Render<'a> {
     pub fn new(
         stylemap: &'a StyleMap,
         style: &'a mut StyleManager,
@@ -132,7 +47,7 @@ impl<'a> PartRender<'a> {
                 attrs: AttrSet::default(),
             },
         );
-        PartRender {
+        Render {
             buf,
             style,
             stylemap,
@@ -254,7 +169,7 @@ mod tests {
         let canvas = geom::Expanse::new(20, 20);
         let render_rect = geom::Rect::new(5, 5, 10, 10);
 
-        let mut part_render = PartRender::new(&stylemap, &mut style_manager, canvas, render_rect);
+        let mut part_render = Render::new(&stylemap, &mut style_manager, canvas, render_rect);
 
         // Fill entirely within the render rectangle
         let result = part_render.fill("default", geom::Rect::new(6, 6, 3, 3), 'X');
@@ -273,7 +188,7 @@ mod tests {
         let canvas = geom::Expanse::new(20, 20);
         let render_rect = geom::Rect::new(5, 5, 10, 10);
 
-        let mut part_render = PartRender::new(&stylemap, &mut style_manager, canvas, render_rect);
+        let mut part_render = Render::new(&stylemap, &mut style_manager, canvas, render_rect);
 
         // Fill that partially overlaps the render rectangle
         let result = part_render.fill("default", geom::Rect::new(3, 3, 5, 5), 'X');
@@ -291,7 +206,7 @@ mod tests {
         let canvas = geom::Expanse::new(20, 20);
         let render_rect = geom::Rect::new(5, 5, 10, 10);
 
-        let mut part_render = PartRender::new(&stylemap, &mut style_manager, canvas, render_rect);
+        let mut part_render = Render::new(&stylemap, &mut style_manager, canvas, render_rect);
 
         // Fill completely outside the render rectangle but within canvas
         let result = part_render.fill("default", geom::Rect::new(0, 0, 3, 3), 'X');
@@ -309,7 +224,7 @@ mod tests {
         let canvas = geom::Expanse::new(20, 20);
         let render_rect = geom::Rect::new(5, 5, 10, 10);
 
-        let mut part_render = PartRender::new(&stylemap, &mut style_manager, canvas, render_rect);
+        let mut part_render = Render::new(&stylemap, &mut style_manager, canvas, render_rect);
 
         // Fill that extends beyond canvas bounds
         let result = part_render.fill("default", geom::Rect::new(15, 15, 10, 10), 'X');
@@ -332,7 +247,7 @@ mod tests {
         let canvas = geom::Expanse::new(20, 20);
         let render_rect = geom::Rect::new(5, 5, 10, 10);
 
-        let mut part_render = PartRender::new(&stylemap, &mut style_manager, canvas, render_rect);
+        let mut part_render = Render::new(&stylemap, &mut style_manager, canvas, render_rect);
 
         // Text entirely within render rectangle
         let result = part_render.text(
@@ -364,7 +279,7 @@ mod tests {
         let canvas = geom::Expanse::new(20, 20);
         let render_rect = geom::Rect::new(5, 5, 10, 10);
 
-        let mut part_render = PartRender::new(&stylemap, &mut style_manager, canvas, render_rect);
+        let mut part_render = Render::new(&stylemap, &mut style_manager, canvas, render_rect);
 
         // Text that starts before render rect
         let result = part_render.text(
@@ -396,7 +311,7 @@ mod tests {
         let canvas = geom::Expanse::new(20, 20);
         let render_rect = geom::Rect::new(5, 5, 10, 10);
 
-        let mut part_render = PartRender::new(&stylemap, &mut style_manager, canvas, render_rect);
+        let mut part_render = Render::new(&stylemap, &mut style_manager, canvas, render_rect);
 
         // Text that extends beyond canvas
         let result = part_render.text(
@@ -429,7 +344,7 @@ mod tests {
         let canvas = geom::Expanse::new(20, 20);
         let render_rect = geom::Rect::new(5, 5, 10, 10);
 
-        let mut part_render = PartRender::new(&stylemap, &mut style_manager, canvas, render_rect);
+        let mut part_render = Render::new(&stylemap, &mut style_manager, canvas, render_rect);
 
         // Frame within bounds
         let frame = geom::Frame::new(geom::Rect::new(6, 6, 8, 8), 1);
@@ -456,8 +371,7 @@ mod tests {
         ];
 
         for render_rect in positions {
-            let mut part_render =
-                PartRender::new(&stylemap, &mut style_manager, canvas, render_rect);
+            let mut part_render = Render::new(&stylemap, &mut style_manager, canvas, render_rect);
 
             // Fill within the specific render rect
             let fill_rect = geom::Rect::new(render_rect.tl.x + 1, render_rect.tl.y + 1, 5, 5);
