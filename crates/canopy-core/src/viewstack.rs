@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 #![allow(clippy::type_complexity)]
 
-use crate::geom::{Point, Rect};
+use crate::geom::Rect;
 use crate::viewport::ViewPort;
 use crate::{Error, Result};
 
@@ -40,13 +40,10 @@ impl ViewStack {
         // Also check that at least some part of the child's view rectangle
         // (at its position in parent's canvas) overlaps with the parent's canvas
         // The actual rectangle occupied by the child in parent's canvas is:
-        // position + view's top-left offset, with view's width and height
-        let child_rect_in_parent = Rect::new(
-            view.position().x + view.view().tl.x,
-            view.position().y + view.view().tl.y,
-            view.view().w,
-            view.view().h,
-        );
+        // the child's view shifted by the child's position
+        let child_rect_in_parent = view
+            .view()
+            .shift(view.position().x as i16, view.position().y as i16);
 
         assert!(
             parent_canvas.intersect(&child_rect_in_parent).is_some(),
@@ -100,60 +97,55 @@ impl ViewStack {
             let viewport = &self.views[i];
             let parent = &self.views[i - 1];
 
-            // Map the viewport's position through the parent to screen
-            if let Some(pos_on_screen) = parent.project_point(viewport.position()) {
-                // Add the viewport's own view offset
-                let view_offset_on_screen = Point {
-                    x: pos_on_screen.x + viewport.view().tl.x,
-                    y: pos_on_screen.y + viewport.view().tl.y,
-                };
+            // Calculate where the child viewport appears in the parent's canvas
+            let child_rect_in_parent = viewport
+                .view()
+                .shift(viewport.position().x as i16, viewport.position().y as i16);
 
-                // Create the viewport's screen rectangle
-                let viewport_screen = viewport.view().at(view_offset_on_screen);
-
+            // Project this rectangle through the parent to screen coordinates
+            if let Some(rect_on_screen) = parent.project_rect(child_rect_in_parent) {
                 // Intersect with current screen area
-                current_screen = current_screen.intersect(&viewport_screen)?;
+                current_screen = current_screen.intersect(&rect_on_screen)?;
             } else {
-                // Position is outside parent's view
+                // No overlap with parent's view
                 return None;
             }
         }
 
         let screen_rect = current_screen;
 
-        // Now calculate the canvas rect
-        // If there's only one viewport, the canvas rect is just the view rect
+        // Now calculate the canvas rect by tracking through the viewport transformations
         let canvas_rect = if self.views.len() == 1 {
             self.views[0].view()
         } else {
-            // We need to work backwards through the viewport stack to find
-            // what portion of the final viewport's canvas corresponds to the screen rect
+            // Track the visible region through each viewport transformation
+            let mut visible_in_parent = self.views[0].view();
 
-            // Start with the screen rect
-            let mut current_rect = screen_rect;
-
-            // For each viewport from first to second-to-last, we need to
-            // transform the rect from screen coordinates to canvas coordinates
-            for i in 0..self.views.len() - 1 {
+            for i in 1..self.views.len() {
                 let viewport = &self.views[i];
+                let _parent = &self.views[i - 1];
 
-                // Transform from screen to this viewport's canvas coordinates
-                // by subtracting the viewport's screen position
-                let screen_pos = viewport.screen_rect().tl;
-                current_rect = current_rect.shift(-(screen_pos.x as i16), -(screen_pos.y as i16));
+                // Calculate where the child appears in parent's canvas
+                let child_rect_in_parent = viewport
+                    .view()
+                    .shift(viewport.position().x as i16, viewport.position().y as i16);
 
-                // Now subtract the position of the next viewport within this canvas
-                let next_pos = self.views[i + 1].position();
-                current_rect = current_rect.shift(-(next_pos.x as i16), -(next_pos.y as i16));
+                // Find the intersection with what's visible in the parent
+                if let Some(visible_part) = visible_in_parent.intersect(&child_rect_in_parent) {
+                    // Transform this visible part to child's canvas coordinates
+                    // by shifting back by the child's position
+                    visible_in_parent = visible_part.shift(
+                        -(viewport.position().x as i16),
+                        -(viewport.position().y as i16),
+                    );
+                } else {
+                    // No intersection - nothing visible
+                    return None;
+                }
             }
 
-            // Finally, we're in the last viewport's canvas coordinates
-            // We need to account for the last viewport's view offset
-            let last_view = self.views.last().unwrap().view();
-            current_rect = current_rect.shift(-(last_view.tl.x as i16), -(last_view.tl.y as i16));
-
-            // Add back the view offset to get the actual canvas rect
-            current_rect.shift(last_view.tl.x as i16, last_view.tl.y as i16)
+            // The final visible_in_parent is our canvas rect
+            visible_in_parent
         };
 
         // Verify the invariant that canvas_rect and screen_rect have the same size
@@ -317,11 +309,18 @@ mod tests {
                 expected_canvas: Some(Rect::new(0, 0, 8, 8)),
             },
             TestCase {
-                name: "Second viewport positioned within first, occlusion",
+                name: "Second viewport positioned within first, partial, top left",
                 viewport1: ((10, 10), (0, 0, 10, 10), (0, 0)),
                 viewport2: ((10, 10), (0, 0, 10, 10), (5, 5)),
                 expected_screen: Some(Rect::new(5, 5, 5, 5)),
                 expected_canvas: Some(Rect::new(0, 0, 5, 5)),
+            },
+            TestCase {
+                name: "Second viewport positioned within first, partial, bottom right",
+                viewport1: ((20, 20), (5, 5, 10, 10), (0, 0)),
+                viewport2: ((10, 10), (0, 0, 10, 10), (0, 0)),
+                expected_screen: Some(Rect::new(0, 0, 5, 5)),
+                expected_canvas: Some(Rect::new(5, 5, 5, 5)),
             },
             TestCase {
                 name: "Second viewport with partial view",
