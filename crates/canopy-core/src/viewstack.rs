@@ -152,7 +152,7 @@ impl ViewStack {
         debug_assert_eq!(
             (canvas_rect.w, canvas_rect.h),
             (screen_rect.w, screen_rect.h),
-            "canvas_rect and screen_rect must have the same dimensions"
+            "canvas_rect and screen_rect must have the same dimensions - canvas: {canvas_rect:?}, screen: {screen_rect:?}"
         );
 
         Some((canvas_rect, screen_rect))
@@ -162,6 +162,78 @@ impl ViewStack {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct TestCase {
+        name: &'static str,
+        viewports: Vec<((u16, u16), (u16, u16, u16, u16), (u16, u16))>,
+        projections: Vec<Option<((u16, u16, u16, u16), (u16, u16, u16, u16))>>,
+    }
+
+    impl TestCase {
+        fn run(&self) {
+            assert!(
+                !self.viewports.is_empty(),
+                "Test case must have at least one viewport"
+            );
+            assert_eq!(
+                self.viewports.len(),
+                self.projections.len(),
+                "Number of viewports must match number of projections for '{}'",
+                self.name
+            );
+
+            let first = &self.viewports[0];
+            let view = ViewPort::new(first.0, first.1, first.2).unwrap();
+            let mut stack = ViewStack::new(view);
+
+            // Check projection after first viewport
+            let projection = stack.projection();
+            let expected = self.projections[0].map(|(canvas, screen)| {
+                (
+                    Rect::new(canvas.0, canvas.1, canvas.2, canvas.3),
+                    Rect::new(screen.0, screen.1, screen.2, screen.3),
+                )
+            });
+            assert_eq!(
+                projection, expected,
+                "projection failed for '{}' after viewport 0",
+                self.name
+            );
+
+            // For single viewport tests, verify root_screen
+            if self.viewports.len() == 1 && self.projections[0].is_some() {
+                let root = stack.root_screen();
+                let (_, expected_screen) = self.projections[0].unwrap();
+                assert_eq!(
+                    (root.w, root.h),
+                    (expected_screen.2, expected_screen.3),
+                    "root_screen size must match screen size for '{}'",
+                    self.name
+                );
+            }
+
+            // Push remaining viewports and check projections
+            for (i, viewport) in self.viewports[1..].iter().enumerate() {
+                let view = ViewPort::new(viewport.0, viewport.1, viewport.2).unwrap();
+                stack.push(view);
+
+                let projection = stack.projection();
+                let expected = self.projections[i + 1].map(|(canvas, screen)| {
+                    (
+                        Rect::new(canvas.0, canvas.1, canvas.2, canvas.3),
+                        Rect::new(screen.0, screen.1, screen.2, screen.3),
+                    )
+                });
+                assert_eq!(
+                    projection,
+                    expected,
+                    "projection failed for '{}' after viewport {}",
+                    self.name,
+                    i + 1
+                );
+            }
+        }
+    }
 
     #[test]
     fn test_basic_operations() {
@@ -205,65 +277,6 @@ mod tests {
     }
 
     #[test]
-    fn test_screen_rect_single_viewport() {
-        struct TestCase {
-            name: &'static str,
-            viewport: ((u16, u16), (u16, u16, u16, u16), (u16, u16)),
-            expected_screen: Rect,
-            expected_canvas: Rect,
-        }
-
-        let test_cases = vec![
-            TestCase {
-                name: "Full screen viewport",
-                viewport: ((100, 100), (0, 0, 100, 100), (0, 0)),
-                expected_screen: Rect::new(0, 0, 100, 100),
-                expected_canvas: Rect::new(0, 0, 100, 100),
-            },
-            TestCase {
-                name: "Partial view of larger canvas",
-                viewport: ((200, 150), (0, 0, 100, 100), (0, 0)),
-                expected_screen: Rect::new(0, 0, 100, 100),
-                expected_canvas: Rect::new(0, 0, 100, 100),
-            },
-            TestCase {
-                name: "Partial view of larger canvas with offset",
-                viewport: ((200, 150), (0, 0, 100, 100), (10, 10)),
-                expected_screen: Rect::new(0, 0, 100, 100),
-                expected_canvas: Rect::new(0, 0, 100, 100),
-            },
-            TestCase {
-                name: "View with offset into canvas",
-                viewport: ((200, 150), (20, 15, 100, 100), (0, 0)),
-                expected_screen: Rect::new(0, 0, 100, 100),
-                expected_canvas: Rect::new(20, 15, 100, 100),
-            },
-        ];
-
-        for tc in test_cases {
-            let view = ViewPort::new(tc.viewport.0, tc.viewport.1, tc.viewport.2).unwrap();
-            let stack = ViewStack::new(view);
-
-            let projection = stack.projection();
-            assert_eq!(
-                projection,
-                Some((tc.expected_canvas, tc.expected_screen)),
-                "projection failed for '{}'",
-                tc.name
-            );
-
-            // Verify that root_screen matches the expected screen size
-            let root = stack.root_screen();
-            assert_eq!(
-                (root.w, root.h),
-                (tc.expected_screen.w, tc.expected_screen.h),
-                "root_screen size must match screen size for '{}'",
-                tc.name
-            );
-        }
-    }
-
-    #[test]
     fn test_first_viewport_position_ignored() {
         // Test that the first viewport's position is ignored since it represents the screen
         let view1_at_origin = ViewPort::new((100, 100), (0, 0, 80, 60), (0, 0)).unwrap();
@@ -284,119 +297,138 @@ mod tests {
     }
 
     #[test]
-    fn test_screen_rect_two_viewports() {
-        struct TestCase {
-            name: &'static str,
-            viewport1: ((u16, u16), (u16, u16, u16, u16), (u16, u16)),
-            viewport2: ((u16, u16), (u16, u16, u16, u16), (u16, u16)),
-            expected_screen: Option<Rect>,
-            expected_canvas: Option<Rect>,
-        }
-
+    fn test_projections() {
         let test_cases = vec![
+            // Single viewport tests
             TestCase {
-                name: "Both viewports full canvas views at origin",
-                viewport1: ((10, 10), (0, 0, 10, 10), (0, 0)),
-                viewport2: ((10, 10), (0, 0, 10, 10), (0, 0)),
-                expected_screen: Some(Rect::new(0, 0, 10, 10)),
-                expected_canvas: Some(Rect::new(0, 0, 10, 10)),
+                name: "Full viewport of canvas",
+                viewports: vec![((100, 100), (0, 0, 100, 100), (0, 0))],
+                projections: vec![Some(((0, 0, 100, 100), (0, 0, 100, 100)))],
             },
             TestCase {
-                name: "Second viewport positioned within first",
-                viewport1: ((10, 10), (0, 0, 10, 10), (0, 0)),
-                viewport2: ((8, 8), (0, 0, 8, 8), (2, 2)),
-                expected_screen: Some(Rect::new(2, 2, 8, 8)),
-                expected_canvas: Some(Rect::new(0, 0, 8, 8)),
+                name: "Viewport with offset view into canvas",
+                viewports: vec![((200, 150), (20, 15, 100, 100), (0, 0))],
+                projections: vec![Some(((20, 15, 100, 100), (0, 0, 100, 100)))],
+            },
+            // Two viewport tests that can be extended to three
+            TestCase {
+                name: "Nested viewports - full canvas views",
+                viewports: vec![
+                    ((100, 100), (0, 0, 100, 100), (0, 0)),
+                    ((80, 80), (0, 0, 80, 80), (10, 10)),
+                    ((60, 60), (0, 0, 60, 60), (10, 10)),
+                ],
+                projections: vec![
+                    Some(((0, 0, 100, 100), (0, 0, 100, 100))),
+                    Some(((0, 0, 80, 80), (10, 10, 80, 80))),
+                    Some(((0, 0, 60, 60), (20, 20, 60, 60))),
+                ],
             },
             TestCase {
-                name: "Second viewport positioned within first, partial, top left",
-                viewport1: ((10, 10), (0, 0, 10, 10), (0, 0)),
-                viewport2: ((10, 10), (0, 0, 10, 10), (5, 5)),
-                expected_screen: Some(Rect::new(5, 5, 5, 5)),
-                expected_canvas: Some(Rect::new(0, 0, 5, 5)),
+                name: "Child partially clipped",
+                viewports: vec![
+                    ((20, 20), (0, 0, 20, 20), (0, 0)),
+                    ((15, 15), (0, 0, 15, 15), (10, 10)),
+                    ((10, 10), (0, 0, 10, 10), (5, 5)),
+                ],
+                projections: vec![
+                    Some(((0, 0, 20, 20), (0, 0, 20, 20))),
+                    Some(((0, 0, 10, 10), (10, 10, 10, 10))),
+                    Some(((0, 0, 5, 5), (15, 15, 5, 5))),
+                ],
+            },
+            // Clipping edge cases
+            TestCase {
+                name: "Second viewport completely outside parent view",
+                viewports: vec![
+                    ((50, 50), (40, 40, 10, 10), (0, 0)),
+                    ((30, 30), (0, 0, 30, 30), (5, 5)),
+                    ((20, 20), (0, 0, 20, 20), (5, 5)),
+                ],
+                projections: vec![Some(((40, 40, 10, 10), (0, 0, 10, 10))), None, None],
             },
             TestCase {
-                name: "Second viewport positioned within first, partial, bottom right",
-                viewport1: ((20, 20), (5, 5, 10, 10), (0, 0)),
-                viewport2: ((10, 10), (0, 0, 10, 10), (0, 0)),
-                expected_screen: Some(Rect::new(0, 0, 5, 5)),
-                expected_canvas: Some(Rect::new(5, 5, 5, 5)),
+                name: "Viewport positioned at parent view edge",
+                viewports: vec![
+                    ((20, 20), (0, 0, 20, 20), (0, 0)),
+                    ((15, 15), (0, 0, 15, 15), (19, 19)),
+                    ((10, 10), (0, 0, 10, 10), (0, 0)),
+                ],
+                projections: vec![
+                    Some(((0, 0, 20, 20), (0, 0, 20, 20))),
+                    Some(((0, 0, 1, 1), (19, 19, 1, 1))),
+                    Some(((0, 0, 1, 1), (19, 19, 1, 1))),
+                ],
             },
             TestCase {
-                name: "Second viewport positioned within first, partial, top right",
-                viewport1: ((20, 20), (5, 0, 10, 10), (0, 0)),
-                viewport2: ((10, 10), (0, 0, 10, 10), (0, 0)),
-                expected_screen: Some(Rect::new(0, 0, 5, 10)),
-                expected_canvas: Some(Rect::new(5, 0, 5, 10)),
+                name: "Progressive clipping with offset views",
+                viewports: vec![
+                    ((50, 50), (0, 0, 50, 50), (0, 0)),
+                    ((40, 40), (0, 0, 30, 30), (10, 10)),
+                    ((25, 25), (0, 0, 20, 20), (5, 5)),
+                ],
+                projections: vec![
+                    Some(((0, 0, 50, 50), (0, 0, 50, 50))),
+                    Some(((0, 0, 30, 30), (10, 10, 30, 30))),
+                    Some(((0, 0, 20, 20), (15, 15, 20, 20))),
+                ],
             },
             TestCase {
-                name: "Second viewport positioned within first, partial, bottom left",
-                viewport1: ((20, 20), (0, 5, 10, 10), (0, 0)),
-                viewport2: ((10, 10), (0, 0, 10, 10), (0, 0)),
-                expected_screen: Some(Rect::new(0, 0, 10, 5)),
-                expected_canvas: Some(Rect::new(0, 5, 10, 5)),
+                name: "Third viewport clips to tiny area",
+                viewports: vec![
+                    ((30, 30), (0, 0, 30, 30), (0, 0)),
+                    ((25, 25), (0, 0, 25, 25), (5, 5)),
+                    ((20, 20), (0, 0, 20, 20), (24, 24)),
+                ],
+                projections: vec![
+                    Some(((0, 0, 30, 30), (0, 0, 30, 30))),
+                    Some(((0, 0, 25, 25), (5, 5, 25, 25))),
+                    Some(((0, 0, 1, 1), (29, 29, 1, 1))),
+                ],
             },
             TestCase {
-                name: "Second viewport with partial view",
-                viewport1: ((10, 10), (0, 0, 10, 10), (0, 0)),
-                viewport2: ((10, 10), (2, 2, 6, 6), (1, 1)),
-                expected_screen: Some(Rect::new(3, 3, 6, 6)),
-                expected_canvas: Some(Rect::new(2, 2, 6, 6)),
+                name: "Complex three-layer clipping",
+                viewports: vec![
+                    ((100, 100), (10, 10, 80, 80), (0, 0)),
+                    ((90, 90), (5, 5, 60, 60), (15, 15)),
+                    ((80, 80), (10, 10, 40, 40), (10, 10)),
+                ],
+                projections: vec![
+                    Some(((10, 10, 80, 80), (0, 0, 80, 80))),
+                    Some(((5, 5, 60, 60), (10, 10, 60, 60))),
+                    Some(((10, 10, 40, 40), (30, 30, 40, 40))),
+                ],
             },
             TestCase {
-                name: "Second viewport positioned at edge of first",
-                viewport1: ((10, 10), (0, 0, 10, 10), (0, 0)),
-                viewport2: ((5, 5), (0, 0, 5, 5), (5, 5)),
-                expected_screen: Some(Rect::new(5, 5, 5, 5)),
-                expected_canvas: Some(Rect::new(0, 0, 5, 5)),
+                name: "Viewport chain with progressive clipping",
+                viewports: vec![
+                    ((40, 40), (0, 0, 40, 40), (0, 0)),
+                    ((35, 35), (5, 5, 25, 25), (5, 5)),
+                    ((30, 30), (5, 5, 15, 15), (5, 5)),
+                ],
+                projections: vec![
+                    Some(((0, 0, 40, 40), (0, 0, 40, 40))),
+                    Some(((5, 5, 25, 25), (10, 10, 25, 25))),
+                    Some(((5, 5, 15, 15), (10, 10, 15, 15))),
+                ],
             },
             TestCase {
-                name: "Child with offset view",
-                viewport1: ((10, 10), (0, 0, 10, 10), (0, 0)),
-                viewport2: ((8, 8), (1, 1, 4, 4), (3, 3)),
-                expected_screen: Some(Rect::new(4, 4, 4, 4)),
-                expected_canvas: Some(Rect::new(1, 1, 4, 4)),
-            },
-            TestCase {
-                name: "Child partially visible - top left corner",
-                viewport1: ((10, 10), (0, 0, 10, 10), (0, 0)),
-                viewport2: ((8, 8), (0, 0, 8, 8), (7, 7)),
-                expected_screen: Some(Rect::new(7, 7, 3, 3)),
-                expected_canvas: Some(Rect::new(0, 0, 3, 3)),
-            },
-            TestCase {
-                name: "Child extends beyond parent - top right",
-                viewport1: ((10, 10), (0, 0, 10, 10), (0, 0)),
-                viewport2: ((15, 15), (0, 0, 15, 15), (5, 0)),
-                expected_screen: Some(Rect::new(5, 0, 5, 10)),
-                expected_canvas: Some(Rect::new(0, 0, 5, 10)),
-            },
-            TestCase {
-                name: "Child extends beyond parent - bottom left",
-                viewport1: ((10, 10), (0, 0, 10, 10), (0, 0)),
-                viewport2: ((15, 15), (0, 0, 15, 15), (0, 5)),
-                expected_screen: Some(Rect::new(0, 5, 10, 5)),
-                expected_canvas: Some(Rect::new(0, 0, 10, 5)),
-            },
-            TestCase {
-                name: "Complex view positioning",
-                viewport1: ((10, 10), (0, 0, 10, 10), (0, 0)),
-                viewport2: ((6, 6), (1, 1, 3, 3), (2, 2)),
-                expected_screen: Some(Rect::new(3, 3, 3, 3)),
-                expected_canvas: Some(Rect::new(1, 1, 3, 3)),
+                name: "Multiple viewports with extreme edge positioning",
+                viewports: vec![
+                    ((50, 50), (0, 0, 50, 50), (0, 0)),
+                    ((40, 40), (0, 0, 40, 40), (49, 0)),
+                    ((30, 30), (0, 0, 30, 30), (0, 39)),
+                ],
+                projections: vec![
+                    Some(((0, 0, 50, 50), (0, 0, 50, 50))),
+                    Some(((0, 0, 1, 40), (49, 0, 1, 40))),
+                    Some(((0, 0, 1, 1), (49, 39, 1, 1))),
+                ],
             },
         ];
 
         for tc in test_cases {
-            let view1 = ViewPort::new(tc.viewport1.0, tc.viewport1.1, tc.viewport1.2).unwrap();
-            let mut stack = ViewStack::new(view1);
-
-            let view2 = ViewPort::new(tc.viewport2.0, tc.viewport2.1, tc.viewport2.2).unwrap();
-            stack.push(view2);
-
-            let projection = stack.projection();
-            let expected = tc.expected_canvas.zip(tc.expected_screen);
-            assert_eq!(projection, expected, "projection failed for '{}'", tc.name);
+            tc.run();
         }
     }
 
@@ -459,26 +491,6 @@ mod tests {
         // Edge case: child exactly at parent's canvas boundary (view2 has 80x80 canvas)
         let view3 = ViewPort::new((40, 40), (0, 0, 40, 40), (40, 40)).unwrap();
         stack.push(view3); // Should not panic (40x40 at (40,40) ends at (80,80))
-    }
-
-    #[test]
-    fn test_screen_rect_three_viewports() {
-        // Complex three viewport test
-        let view1 = ViewPort::new((200, 200), (0, 0, 100, 100), (0, 0)).unwrap();
-        let view2 = ViewPort::new((150, 150), (0, 0, 80, 80), (10, 10)).unwrap();
-        let view3 = ViewPort::new((100, 100), (0, 0, 60, 60), (20, 20)).unwrap();
-
-        let mut stack = ViewStack::new(view1);
-        stack.push(view2);
-        stack.push(view3);
-
-        // View3 is at position (20,20) relative to view2, which is at (10,10)
-        // So view3's screen rect is (10+20, 10+20, 60, 60) = (30,30,60,60)
-        let projection = stack.projection();
-        assert_eq!(
-            projection,
-            Some((Rect::new(0, 0, 60, 60), Rect::new(30, 30, 60, 60)))
-        );
     }
 
     #[test]
