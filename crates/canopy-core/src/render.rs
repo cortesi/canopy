@@ -125,7 +125,7 @@ impl<'a> PartRender<'a> {
     ) -> Self {
         let buf = TermBuf::new(
             (rect.w, rect.h),
-            ' ',
+            '\0',
             Style {
                 fg: Color::White,
                 bg: Color::Black,
@@ -236,9 +236,8 @@ impl<'a> PartRender<'a> {
         Ok(())
     }
 
-    /// Get a reference to the internal buffer for testing
-    #[cfg(test)]
-    pub fn buffer(&self) -> &TermBuf {
+    /// Get a reference to the internal buffer
+    pub fn get_buffer(&self) -> &TermBuf {
         &self.buf
     }
 }
@@ -262,7 +261,7 @@ mod tests {
         assert!(result.is_ok());
 
         // Check that the buffer was filled correctly (adjusted to buffer coordinates)
-        let _buf = part_render.buffer();
+        let _buf = part_render.get_buffer();
         // The fill at (6,6) should appear at (1,1) in the buffer since render_rect starts at (5,5)
         // We'd need access to the buffer's internal cells to verify, but at least we know it succeeded
     }

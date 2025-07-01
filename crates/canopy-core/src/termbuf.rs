@@ -166,8 +166,23 @@ impl TermBuf {
     }
 
     /// Return the contents of the buffer as lines of text.
+    /// NULL cells (containing '\0') are represented as 'X' for display purposes.
     pub fn lines(&self) -> Vec<String> {
-        (0..self.size.h).filter_map(|y| self.line_text(y)).collect()
+        (0..self.size.h)
+            .map(|y| {
+                let mut chars = Vec::new();
+                for x in 0..self.size.w {
+                    if let Some(cell) = self.get(Point { x, y }) {
+                        if cell.ch == NULL {
+                            chars.push('X');
+                        } else {
+                            chars.push(cell.ch);
+                        }
+                    }
+                }
+                chars.into_iter().collect()
+            })
+            .collect()
     }
 
     /// Does the buffer contain the supplied substring?
@@ -269,15 +284,28 @@ impl TermBuf {
 
     /// Returns true if the buffer content matches the expected lines.
     /// This is the non-panicking version of assert_buffer_matches.
+    ///
+    /// In expected lines, the character 'X' is treated as a special marker for NULL cells.
+    /// NULL cells (containing '\0') in the actual buffer will match 'X' in the expected pattern.
     pub fn buffer_matches(&self, expected: &[&str]) -> bool {
-        let actual_lines = self.lines();
-
         if expected.len() != self.size.h as usize {
             return false;
         }
 
         for (y, expected_line) in expected.iter().enumerate() {
-            let actual_line = &actual_lines[y];
+            // Get actual line character by character to handle NULL cells
+            let mut actual_chars = Vec::new();
+            for x in 0..self.size.w {
+                if let Some(cell) = self.get(Point { x, y: y as u16 }) {
+                    if cell.ch == NULL {
+                        actual_chars.push('X');
+                    } else {
+                        actual_chars.push(cell.ch);
+                    }
+                }
+            }
+            let actual_line: String = actual_chars.into_iter().collect();
+
             if actual_line.trim_end() != expected_line.trim_end() {
                 return false;
             }
@@ -287,12 +315,30 @@ impl TermBuf {
     }
 
     /// Assert that the buffer matches the expected lines with pretty printed output on failure.
+    ///
+    /// In expected lines, the character 'X' is treated as a special marker for NULL cells.
+    /// NULL cells (containing '\0') in the actual buffer will match 'X' in the expected pattern.
+    /// This is useful for testing partial renders where some areas remain uninitialized.
+    ///
+    /// # Example
+    /// ```ignore
+    /// buffer.assert_matches(&[
+    ///     "Hello X",  // 'X' matches NULL cells
+    ///     "World  ",
+    /// ]);
+    /// ```
     pub fn assert_matches(&self, expected: &[&str]) {
         self.assert_matches_with_context(expected, None);
     }
 
     /// Assert that the buffer matches the expected lines with pretty printed output on failure,
     /// with optional context information.
+    ///
+    /// In expected lines, the character 'X' is treated as a special marker for NULL cells.
+    /// NULL cells (containing '\0') in the actual buffer will match 'X' in the expected pattern.
+    ///
+    /// The context parameter allows providing additional information that will be displayed
+    /// before the expected/actual comparison if the assertion fails.
     pub fn assert_matches_with_context(&self, expected: &[&str], context: Option<&str>) {
         if !self.buffer_matches(expected) {
             let actual_lines = self.lines();
