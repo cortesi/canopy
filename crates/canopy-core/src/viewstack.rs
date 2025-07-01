@@ -7,9 +7,12 @@ use crate::{Error, Result};
 
 /// A stack of viewports that manages nested view transformations.
 ///
-/// Invariant: The stack always contains at least one viewport, enforced by:
-/// - `new()` requiring an initial viewport
-/// - `pop()` preventing removal of the last item
+/// Invariants:
+/// - The stack always contains at least one viewport, enforced by:
+///   - `new()` requiring an initial viewport
+///   - `pop()` preventing removal of the last item
+/// - The first viewport's view represents the physical screen dimensions
+///   (i.e., its view size defines the screen size for the entire stack)
 pub struct ViewStack {
     views: Vec<ViewPort>,
 }
@@ -65,18 +68,31 @@ impl ViewStack {
         Ok(self.views.pop().unwrap())
     }
 
-    /// Returns a rectangle rooted at (0,0) with the same size as the view of the first
-    /// item on the stack. This represents the base screen dimensions.
+    /// Returns the physical screen dimensions as a rectangle rooted at (0,0).
+    ///
+    /// The size is determined by the first viewport's view, which by convention
+    /// represents the actual screen size. The position of the first viewport itself
+    /// is ignored - only its view dimensions matter.
     pub fn root_screen(&self) -> Rect {
         self.views[0].view().at((0, 0))
     }
 
-    /// Returns the rectangle on the screen we are drawing to, after all stacked views
-    /// have been taken into account. This progressively narrows down the drawable area
-    /// based on each viewport's position within its parent's canvas and its view.
-    pub fn screen_rect(&self) -> Option<Rect> {
-        // Start with the first viewport's screen rect
-        let mut current_screen = self.views[0].screen_rect();
+    /// Calculates the projection from the final viewport's canvas to the screen.
+    ///
+    /// Returns a tuple of (canvas_rect, screen_rect) where:
+    /// - canvas_rect: The region in the final viewport's canvas that we're drawing
+    /// - screen_rect: The corresponding region on the screen where it will be displayed
+    ///
+    /// These rectangles always have the same dimensions but different positions:
+    /// canvas_rect is in the final viewport's coordinate system, while screen_rect
+    /// is in absolute screen coordinates.
+    ///
+    /// Returns None if the viewport stack results in no visible area (e.g., when
+    /// viewports are positioned outside their parent's visible area).
+    pub fn projection(&self) -> Option<(Rect, Rect)> {
+        // Start with the first viewport's view as the screen
+        // The first viewport's position is ignored since it represents the physical screen
+        let mut current_screen = self.views[0].view().at((0, 0));
 
         // For each subsequent viewport, we need to calculate where its view
         // appears on screen, taking into account its position within the parent
@@ -103,49 +119,42 @@ impl ViewStack {
             }
         }
 
-        Some(current_screen)
-    }
+        let screen_rect = current_screen;
 
-    /// Returns the rectangle in the canvas of the final view on the stack that we are
-    /// drawing. This rectangle will always be the same size as screen_rect(), as it
-    /// represents the same content in the final viewport's canvas coordinate system.
-    pub fn canvas_rect(&self) -> Option<Rect> {
-        // Get the screen rect - this is our final drawable area
-        let screen_rect = self.screen_rect()?;
-
+        // Now calculate the canvas rect
         // If there's only one viewport, the canvas rect is just the view rect
-        if self.views.len() == 1 {
-            return Some(self.views[0].view());
-        }
+        let canvas_rect = if self.views.len() == 1 {
+            self.views[0].view()
+        } else {
+            // We need to work backwards through the viewport stack to find
+            // what portion of the final viewport's canvas corresponds to the screen rect
 
-        // We need to work backwards through the viewport stack to find
-        // what portion of the final viewport's canvas corresponds to the screen rect
+            // Start with the screen rect
+            let mut current_rect = screen_rect;
 
-        // Start with the screen rect
-        let mut current_rect = screen_rect;
+            // For each viewport from first to second-to-last, we need to
+            // transform the rect from screen coordinates to canvas coordinates
+            for i in 0..self.views.len() - 1 {
+                let viewport = &self.views[i];
 
-        // For each viewport from first to second-to-last, we need to
-        // transform the rect from screen coordinates to canvas coordinates
-        for i in 0..self.views.len() - 1 {
-            let viewport = &self.views[i];
+                // Transform from screen to this viewport's canvas coordinates
+                // by subtracting the viewport's screen position
+                let screen_pos = viewport.screen_rect().tl;
+                current_rect = current_rect.shift(-(screen_pos.x as i16), -(screen_pos.y as i16));
 
-            // Transform from screen to this viewport's canvas coordinates
-            // by subtracting the viewport's screen position
-            let screen_pos = viewport.screen_rect().tl;
-            current_rect = current_rect.shift(-(screen_pos.x as i16), -(screen_pos.y as i16));
+                // Now subtract the position of the next viewport within this canvas
+                let next_pos = self.views[i + 1].position();
+                current_rect = current_rect.shift(-(next_pos.x as i16), -(next_pos.y as i16));
+            }
 
-            // Now subtract the position of the next viewport within this canvas
-            let next_pos = self.views[i + 1].position();
-            current_rect = current_rect.shift(-(next_pos.x as i16), -(next_pos.y as i16));
-        }
+            // Finally, we're in the last viewport's canvas coordinates
+            // We need to account for the last viewport's view offset
+            let last_view = self.views.last().unwrap().view();
+            current_rect = current_rect.shift(-(last_view.tl.x as i16), -(last_view.tl.y as i16));
 
-        // Finally, we're in the last viewport's canvas coordinates
-        // We need to account for the last viewport's view offset
-        let last_view = self.views.last().unwrap().view();
-        current_rect = current_rect.shift(-(last_view.tl.x as i16), -(last_view.tl.y as i16));
-
-        // Add back the view offset to get the actual canvas rect
-        let canvas_rect = current_rect.shift(last_view.tl.x as i16, last_view.tl.y as i16);
+            // Add back the view offset to get the actual canvas rect
+            current_rect.shift(last_view.tl.x as i16, last_view.tl.y as i16)
+        };
 
         // Verify the invariant that canvas_rect and screen_rect have the same size
         debug_assert_eq!(
@@ -154,7 +163,7 @@ impl ViewStack {
             "canvas_rect and screen_rect must have the same dimensions"
         );
 
-        Some(canvas_rect)
+        Some((canvas_rect, screen_rect))
     }
 }
 
@@ -214,22 +223,22 @@ mod tests {
 
         let test_cases = vec![
             TestCase {
-                name: "Simple viewport at origin",
-                viewport: ((100, 100), (0, 0, 50, 30), (0, 0)),
-                expected_screen: Rect::new(0, 0, 50, 30),
-                expected_canvas: Rect::new(0, 0, 50, 30),
+                name: "Full screen viewport",
+                viewport: ((100, 100), (0, 0, 100, 100), (0, 0)),
+                expected_screen: Rect::new(0, 0, 100, 100),
+                expected_canvas: Rect::new(0, 0, 100, 100),
             },
             TestCase {
-                name: "Viewport with position offset",
-                viewport: ((100, 100), (0, 0, 50, 30), (10, 10)),
-                expected_screen: Rect::new(10, 10, 50, 30),
-                expected_canvas: Rect::new(0, 0, 50, 30),
+                name: "Partial view of larger canvas",
+                viewport: ((200, 150), (0, 0, 100, 100), (0, 0)),
+                expected_screen: Rect::new(0, 0, 100, 100),
+                expected_canvas: Rect::new(0, 0, 100, 100),
             },
             TestCase {
-                name: "Viewport with view offset",
-                viewport: ((100, 100), (20, 15, 50, 30), (10, 10)),
-                expected_screen: Rect::new(10, 10, 50, 30),
-                expected_canvas: Rect::new(20, 15, 50, 30),
+                name: "View with offset into canvas",
+                viewport: ((200, 150), (20, 15, 100, 100), (0, 0)),
+                expected_screen: Rect::new(0, 0, 100, 100),
+                expected_canvas: Rect::new(20, 15, 100, 100),
             },
         ];
 
@@ -237,19 +246,43 @@ mod tests {
             let view = ViewPort::new(tc.viewport.0, tc.viewport.1, tc.viewport.2).unwrap();
             let stack = ViewStack::new(view);
 
+            let projection = stack.projection();
             assert_eq!(
-                stack.screen_rect(),
-                Some(tc.expected_screen),
-                "screen_rect failed for '{}'",
+                projection,
+                Some((tc.expected_canvas, tc.expected_screen)),
+                "projection failed for '{}'",
                 tc.name
             );
+
+            // Verify that root_screen matches the expected screen size
+            let root = stack.root_screen();
             assert_eq!(
-                stack.canvas_rect(),
-                Some(tc.expected_canvas),
-                "canvas_rect failed for '{}'",
+                (root.w, root.h),
+                (tc.expected_screen.w, tc.expected_screen.h),
+                "root_screen size must match screen size for '{}'",
                 tc.name
             );
         }
+    }
+
+    #[test]
+    fn test_first_viewport_position_ignored() {
+        // Test that the first viewport's position is ignored since it represents the screen
+        let view1_at_origin = ViewPort::new((100, 100), (0, 0, 80, 60), (0, 0)).unwrap();
+        let view1_with_position = ViewPort::new((100, 100), (0, 0, 80, 60), (50, 50)).unwrap();
+
+        let stack1 = ViewStack::new(view1_at_origin);
+        let stack2 = ViewStack::new(view1_with_position);
+
+        // Both should have the same projection despite different positions
+        assert_eq!(stack1.projection(), stack2.projection());
+        assert_eq!(stack1.root_screen(), stack2.root_screen());
+
+        // Both should project to screen at (0,0) with size 80x60
+        assert_eq!(
+            stack1.projection(),
+            Some((Rect::new(0, 0, 80, 60), Rect::new(0, 0, 80, 60)))
+        );
     }
 
     #[test]
@@ -314,18 +347,9 @@ mod tests {
             let view2 = ViewPort::new(tc.viewport2.0, tc.viewport2.1, tc.viewport2.2).unwrap();
             stack.push(view2);
 
-            assert_eq!(
-                stack.screen_rect(),
-                tc.expected_screen,
-                "screen_rect failed for '{}'",
-                tc.name
-            );
-            assert_eq!(
-                stack.canvas_rect(),
-                tc.expected_canvas,
-                "canvas_rect failed for '{}'",
-                tc.name
-            );
+            let projection = stack.projection();
+            let expected = tc.expected_canvas.zip(tc.expected_screen);
+            assert_eq!(projection, expected, "projection failed for '{}'", tc.name);
         }
     }
 
@@ -384,8 +408,11 @@ mod tests {
 
         // View3 is at position (20,20) relative to view2, which is at (10,10)
         // So view3's screen rect is (10+20, 10+20, 60, 60) = (30,30,60,60)
-        assert_eq!(stack.screen_rect(), Some(Rect::new(30, 30, 60, 60)));
-        assert_eq!(stack.canvas_rect(), Some(Rect::new(0, 0, 60, 60)));
+        let projection = stack.projection();
+        assert_eq!(
+            projection,
+            Some((Rect::new(0, 0, 60, 60), Rect::new(30, 30, 60, 60)))
+        );
     }
 
     #[test]
@@ -395,8 +422,7 @@ mod tests {
         // Single viewport
         let view1 = ViewPort::new((100, 100), (10, 10, 50, 50), (5, 5)).unwrap();
         let stack = ViewStack::new(view1);
-        let screen = stack.screen_rect().unwrap();
-        let canvas = stack.canvas_rect().unwrap();
+        let (canvas, screen) = stack.projection().unwrap();
         assert_eq!((screen.w, screen.h), (canvas.w, canvas.h));
 
         // Two viewports with various configurations
@@ -422,7 +448,7 @@ mod tests {
             let mut stack = ViewStack::new(view1);
             stack.push(view2);
 
-            if let (Some(screen), Some(canvas)) = (stack.screen_rect(), stack.canvas_rect()) {
+            if let Some((canvas, screen)) = stack.projection() {
                 assert_eq!(
                     (screen.w, screen.h),
                     (canvas.w, canvas.h),
@@ -440,8 +466,7 @@ mod tests {
         stack.push(view2);
         stack.push(view3);
 
-        let screen = stack.screen_rect().unwrap();
-        let canvas = stack.canvas_rect().unwrap();
+        let (canvas, screen) = stack.projection().unwrap();
         assert_eq!((screen.w, screen.h), (canvas.w, canvas.h));
     }
 }
