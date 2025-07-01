@@ -107,7 +107,8 @@ impl ViewStack {
     }
 
     /// Returns the rectangle in the canvas of the final view on the stack that we are
-    /// drawing. This rectangle will always be the same size as screen_rect().
+    /// drawing. This rectangle will always be the same size as screen_rect(), as it
+    /// represents the same content in the final viewport's canvas coordinate system.
     pub fn canvas_rect(&self) -> Option<Rect> {
         // Get the screen rect - this is our final drawable area
         let screen_rect = self.screen_rect()?;
@@ -144,7 +145,16 @@ impl ViewStack {
         current_rect = current_rect.shift(-(last_view.tl.x as i16), -(last_view.tl.y as i16));
 
         // Add back the view offset to get the actual canvas rect
-        Some(current_rect.shift(last_view.tl.x as i16, last_view.tl.y as i16))
+        let canvas_rect = current_rect.shift(last_view.tl.x as i16, last_view.tl.y as i16);
+
+        // Verify the invariant that canvas_rect and screen_rect have the same size
+        debug_assert_eq!(
+            (canvas_rect.w, canvas_rect.h),
+            (screen_rect.w, screen_rect.h),
+            "canvas_rect and screen_rect must have the same dimensions"
+        );
+
+        Some(canvas_rect)
     }
 }
 
@@ -376,5 +386,62 @@ mod tests {
         // So view3's screen rect is (10+20, 10+20, 60, 60) = (30,30,60,60)
         assert_eq!(stack.screen_rect(), Some(Rect::new(30, 30, 60, 60)));
         assert_eq!(stack.canvas_rect(), Some(Rect::new(0, 0, 60, 60)));
+    }
+
+    #[test]
+    fn test_screen_canvas_rect_size_invariant() {
+        // Test that screen_rect and canvas_rect always have the same dimensions
+
+        // Single viewport
+        let view1 = ViewPort::new((100, 100), (10, 10, 50, 50), (5, 5)).unwrap();
+        let stack = ViewStack::new(view1);
+        let screen = stack.screen_rect().unwrap();
+        let canvas = stack.canvas_rect().unwrap();
+        assert_eq!((screen.w, screen.h), (canvas.w, canvas.h));
+
+        // Two viewports with various configurations
+        let test_cases = vec![
+            // Simple nested viewport
+            (
+                ViewPort::new((50, 50), (0, 0, 50, 50), (0, 0)).unwrap(),
+                ViewPort::new((40, 40), (5, 5, 30, 30), (10, 10)).unwrap(),
+            ),
+            // Viewport with offset views
+            (
+                ViewPort::new((100, 100), (20, 20, 60, 60), (0, 0)).unwrap(),
+                ViewPort::new((50, 50), (10, 10, 20, 20), (25, 25)).unwrap(),
+            ),
+            // Edge-aligned viewports
+            (
+                ViewPort::new((20, 20), (0, 0, 20, 20), (0, 0)).unwrap(),
+                ViewPort::new((10, 10), (0, 0, 10, 10), (10, 10)).unwrap(),
+            ),
+        ];
+
+        for (view1, view2) in test_cases {
+            let mut stack = ViewStack::new(view1);
+            stack.push(view2);
+
+            if let (Some(screen), Some(canvas)) = (stack.screen_rect(), stack.canvas_rect()) {
+                assert_eq!(
+                    (screen.w, screen.h),
+                    (canvas.w, canvas.h),
+                    "screen_rect {screen:?} and canvas_rect {canvas:?} must have same dimensions"
+                );
+            }
+        }
+
+        // Three viewports
+        let view1 = ViewPort::new((100, 100), (0, 0, 100, 100), (0, 0)).unwrap();
+        let view2 = ViewPort::new((80, 80), (10, 10, 60, 60), (20, 20)).unwrap();
+        let view3 = ViewPort::new((40, 40), (5, 5, 30, 30), (15, 15)).unwrap();
+
+        let mut stack = ViewStack::new(view1);
+        stack.push(view2);
+        stack.push(view3);
+
+        let screen = stack.screen_rect().unwrap();
+        let canvas = stack.canvas_rect().unwrap();
+        assert_eq!((screen.w, screen.h), (canvas.w, canvas.h));
     }
 }
