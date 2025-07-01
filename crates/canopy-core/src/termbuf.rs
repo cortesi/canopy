@@ -4,6 +4,9 @@ use crate::{
     style::Style,
 };
 
+/// NULL character constant
+const NULL: char = '\0';
+
 /// A helper macro to create buffers for the termbuf match assertions.
 #[macro_export]
 macro_rules! buf {
@@ -34,6 +37,37 @@ impl TermBuf {
         TermBuf {
             size,
             cells: vec![cell; size.area() as usize],
+        }
+    }
+
+    /// Create an empty TermBuf filled with NULL characters
+    pub fn empty(size: impl Into<Expanse>) -> Self {
+        let default_style = Style {
+            fg: crate::style::Color::White,
+            bg: crate::style::Color::Black,
+            attrs: crate::style::AttrSet::default(),
+        };
+        Self::new(size, NULL, default_style)
+    }
+
+    /// Copy non-NULL characters from a rectangle of another TermBuf into this one
+    pub fn copy(&mut self, src: &TermBuf, rect: Rect) {
+        if src.size != self.size {
+            return;
+        }
+
+        // Intersect the rectangle with our bounds
+        if let Some(isec) = self.rect().intersect(&rect) {
+            for y in isec.tl.y..isec.tl.y + isec.h {
+                for x in isec.tl.x..isec.tl.x + isec.w {
+                    let p = Point { x, y };
+                    if let Some(cell) = src.get(p) {
+                        if cell.ch != NULL {
+                            self.put(p, cell.ch, cell.style.clone());
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -593,6 +627,42 @@ mod tests {
 
         // Test that it works the same as contains_text_style
         assert!(tb.contains_text_style("two", &PartialStyle::fg(solarized::BLUE)));
+    }
+
+    #[test]
+    fn test_empty_and_copy() {
+        // Test empty constructor
+        let empty = TermBuf::empty(Expanse::new(5, 3));
+        assert_eq!(empty.size(), Expanse::new(5, 3));
+        assert_eq!(empty.get(Point { x: 0, y: 0 }).unwrap().ch, NULL);
+
+        // Test copy functionality
+        let mut src = TermBuf::new(Expanse::new(5, 3), ' ', def_style());
+        src.text(def_style(), Line::new(1, 1, 3), "ABC");
+
+        let mut dst = TermBuf::empty(Expanse::new(5, 3));
+        dst.copy(&src, Rect::new(1, 1, 3, 1));
+
+        // Check that the text was copied
+        assert_eq!(dst.get(Point { x: 1, y: 1 }).unwrap().ch, 'A');
+        assert_eq!(dst.get(Point { x: 2, y: 1 }).unwrap().ch, 'B');
+        assert_eq!(dst.get(Point { x: 3, y: 1 }).unwrap().ch, 'C');
+
+        // Check that NULL characters were not copied
+        assert_eq!(dst.get(Point { x: 0, y: 0 }).unwrap().ch, NULL);
+        assert_eq!(dst.get(Point { x: 4, y: 1 }).unwrap().ch, NULL);
+
+        // Test copy with partial rectangle
+        let mut dst2 = TermBuf::empty(Expanse::new(5, 3));
+        dst2.copy(&src, Rect::new(2, 1, 2, 1));
+        assert_eq!(dst2.get(Point { x: 1, y: 1 }).unwrap().ch, NULL); // Not copied
+        assert_eq!(dst2.get(Point { x: 2, y: 1 }).unwrap().ch, 'B');
+        assert_eq!(dst2.get(Point { x: 3, y: 1 }).unwrap().ch, 'C');
+
+        // Test copy with different sizes (should do nothing)
+        let mut wrong_size = TermBuf::empty(Expanse::new(4, 3));
+        wrong_size.copy(&src, Rect::new(0, 0, 5, 3));
+        assert_eq!(wrong_size.get(Point { x: 0, y: 0 }).unwrap().ch, NULL);
     }
 
     #[test]
