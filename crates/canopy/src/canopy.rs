@@ -538,7 +538,7 @@ impl Canopy {
                         if !child_rect.is_zero() {
                             assert!(
                                 parent.contains_rect(&child_rect),
-                                "child {} viewport {:?} outside parent {:?}",
+                                "child \'{}\' has viewport {:?} outside parent {:?}",
                                 child.name(),
                                 child_rect,
                                 parent

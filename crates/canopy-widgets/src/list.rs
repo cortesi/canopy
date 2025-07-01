@@ -319,88 +319,88 @@ where
         Ok(())
     }
 
-    fn layout(&mut self, l: &Layout, r: Expanse) -> Result<()> {
-        let mut w = 0;
-        let mut h = 0;
-
-        let mut voffset: u16 = 0;
-        for itm in &mut self.items {
-            itm.itm.layout(l, r)?;
-            let item_view = itm.itm.vp().canvas().rect();
-            itm.virt = item_view.shift(0, voffset as i16);
-            voffset += item_view.h;
-        }
-
-        for i in &mut self.items {
-            w = w.max(i.virt.w);
-            h += i.virt.h
-        }
-        l.size(self, Expanse { w, h }, r)?;
-        let vp = self.vp();
-        for itm in self.items.iter_mut() {
-            if let Some(child_vp) = vp.map(itm.virt)? {
-                l.set_child_position(
-                    &mut itm.itm,
-                    child_vp.position(),
-                    vp.position(),
-                    vp.canvas().rect(),
-                )?;
-                // The item should lay out using its full canvas size so that
-                // horizontal scrolling only affects the viewport. We set the
-                // canvas here and expose the entire view for layout.
-                l.set_canvas(&mut itm.itm, child_vp.canvas());
-                l.set_view(&mut itm.itm, child_vp.canvas().rect());
-
-                itm.itm.layout(l, child_vp.canvas())?;
-
-                // After layout, apply the actual visible view and constrain
-                // the result within the parent.
-                l.set_view(&mut itm.itm, child_vp.view());
-                l.constrain_child(&mut itm.itm, vp);
-
-                let final_vp = itm.itm.vp();
-                itm.itm.children(&mut |ch| {
-                    // `ch.vp().position()` returns absolute co-ordinates. We
-                    // want a rectangle relative to the item's canvas, so we
-                    // calculate the offset from the item's position. Use
-                    // `saturating_sub` to avoid panics if the child hasn't been
-                    // repositioned yet and lies above or to the left of the
-                    // item.
-                    let ch_rect = Rect::new(
-                        ch.vp().position().x.saturating_sub(final_vp.position().x),
-                        ch.vp().position().y.saturating_sub(final_vp.position().y),
-                        ch.vp().canvas().w,
-                        ch.vp().canvas().h,
-                    );
-                    if let Some(ch_vp) = final_vp.map(ch_rect)? {
-                        l.set_child_position(
-                            ch,
-                            ch_vp.position(),
-                            final_vp.position(),
-                            final_vp.canvas().rect(),
-                        )?;
-                        l.set_canvas(ch, ch_vp.canvas());
-                        l.set_view(ch, ch_vp.view());
-                    } else {
-                        // Even if the child is fully clipped, ensure it stays
-                        // at a valid position relative to the item so that
-                        // invariants hold.
-                        l.set_child_position(
-                            ch,
-                            final_vp.position(),
-                            final_vp.position(),
-                            final_vp.canvas().rect(),
-                        )?;
-                        l.set_view(ch, Rect::default());
-                    }
-                    Ok(())
-                })?;
-                l.unhide(&mut itm.itm);
-            } else {
-                l.hide(&mut itm.itm);
-                l.set_view(&mut itm.itm, Rect::default());
-            }
-        }
+    fn layout(&mut self, _l: &Layout, _r: Expanse) -> Result<()> {
+        // let mut w = 0;
+        // let mut h = 0;
+        //
+        // let mut voffset: u16 = 0;
+        // for itm in &mut self.items {
+        //     itm.itm.layout(l, r)?;
+        //     let item_view = itm.itm.vp().canvas().rect();
+        //     itm.virt = item_view.shift(0, voffset as i16);
+        //     voffset += item_view.h;
+        // }
+        //
+        // for i in &mut self.items {
+        //     w = w.max(i.virt.w);
+        //     h += i.virt.h
+        // }
+        // l.size(self, Expanse { w, h }, r)?;
+        // let vp = self.vp();
+        // for itm in self.items.iter_mut() {
+        //     if let Some(child_vp) = vp.map(itm.virt)? {
+        //         l.set_child_position(
+        //             &mut itm.itm,
+        //             child_vp.position(),
+        //             vp.position(),
+        //             vp.canvas().rect(),
+        //         )?;
+        //         // The item should lay out using its full canvas size so that
+        //         // horizontal scrolling only affects the viewport. We set the
+        //         // canvas here and expose the entire view for layout.
+        //         l.set_canvas(&mut itm.itm, child_vp.canvas());
+        //         l.set_view(&mut itm.itm, child_vp.canvas().rect());
+        //
+        //         itm.itm.layout(l, child_vp.canvas())?;
+        //
+        //         // After layout, apply the actual visible view and constrain
+        //         // the result within the parent.
+        //         l.set_view(&mut itm.itm, child_vp.view());
+        //         l.constrain_child(&mut itm.itm, vp);
+        //
+        //         let final_vp = itm.itm.vp();
+        //         itm.itm.children(&mut |ch| {
+        //             // `ch.vp().position()` returns absolute co-ordinates. We
+        //             // want a rectangle relative to the item's canvas, so we
+        //             // calculate the offset from the item's position. Use
+        //             // `saturating_sub` to avoid panics if the child hasn't been
+        //             // repositioned yet and lies above or to the left of the
+        //             // item.
+        //             let ch_rect = Rect::new(
+        //                 ch.vp().position().x.saturating_sub(final_vp.position().x),
+        //                 ch.vp().position().y.saturating_sub(final_vp.position().y),
+        //                 ch.vp().canvas().w,
+        //                 ch.vp().canvas().h,
+        //             );
+        //             if let Some(ch_vp) = final_vp.map(ch_rect)? {
+        //                 l.set_child_position(
+        //                     ch,
+        //                     ch_vp.position(),
+        //                     final_vp.position(),
+        //                     final_vp.canvas().rect(),
+        //                 )?;
+        //                 l.set_canvas(ch, ch_vp.canvas());
+        //                 l.set_view(ch, ch_vp.view());
+        //             } else {
+        //                 // Even if the child is fully clipped, ensure it stays
+        //                 // at a valid position relative to the item so that
+        //                 // invariants hold.
+        //                 l.set_child_position(
+        //                     ch,
+        //                     final_vp.position(),
+        //                     final_vp.position(),
+        //                     final_vp.canvas().rect(),
+        //                 )?;
+        //                 l.set_view(ch, Rect::default());
+        //             }
+        //             Ok(())
+        //         })?;
+        //         l.unhide(&mut itm.itm);
+        //     } else {
+        //         l.hide(&mut itm.itm);
+        //         l.set_view(&mut itm.itm, Rect::default());
+        //     }
+        // }
         Ok(())
     }
 

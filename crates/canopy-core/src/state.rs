@@ -134,13 +134,8 @@ pub struct NodeState {
 
 impl NodeState {
     /// Set the node's position within the parent canvas.
-    pub fn set_position(
-        &mut self,
-        p: crate::geom::Point,
-        parent_pos: crate::geom::Point,
-        parent_canvas: crate::geom::Rect,
-    ) -> crate::Result<()> {
-        self.viewport.set_position(p, parent_pos, parent_canvas)
+    pub fn set_position(&mut self, p: crate::geom::Point) {
+        self.viewport.set_position(p)
     }
 
     /// Set the size of the node's canvas.
@@ -269,6 +264,30 @@ pub trait StatefulNode {
     /// called for the first time to schedule future polls.
     fn is_initialized(&self) -> bool {
         self.state().initialized
+    }
+
+    /// Set our canvas size.
+    fn set_canvas(&mut self, sz: crate::geom::Expanse) {
+        self.state_mut().set_canvas(sz);
+    }
+
+    /// Set our view position and size.
+    fn set_view(&mut self, view: crate::geom::Rect) {
+        self.state_mut().set_view(view);
+    }
+
+    /// Set both the canvas size and the view to fill the target size.
+    fn fill(&mut self, sz: crate::geom::Expanse) -> Result<()> {
+        self.state_mut().set_canvas(sz);
+        self.state_mut().set_view(sz.rect());
+        Ok(())
+    }
+
+    /// Wrap around a child by laying it out in our viewport, then seting our canvas size to match.
+    fn wrap(&mut self, child: ViewPort) -> Result<()> {
+        self.set_canvas(child.canvas());
+        self.set_view(child.view());
+        Ok(())
     }
 }
 

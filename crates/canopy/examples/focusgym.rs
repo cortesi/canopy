@@ -55,16 +55,15 @@ impl Block {
 
 impl Node for Block {
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        l.fill(self, sz)?;
+        self.fill(sz)?;
         if !self.children.is_empty() {
-            let vp = self.vp();
             let vps = if self.horizontal {
-                vp.view().split_horizontal(self.children.len() as u16)?
+                sz.rect().split_horizontal(self.children.len() as u16)?
             } else {
-                vp.view().split_vertical(self.children.len() as u16)?
+                sz.rect().split_vertical(self.children.len() as u16)?
             };
             for (i, child) in self.children.iter_mut().enumerate() {
-                l.place(child, vp, vps[i])?;
+                l.place_(child, vps[i])?;
             }
         }
         Ok(())
@@ -119,8 +118,7 @@ impl FocusGym {
 impl Node for FocusGym {
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         self.child.layout(l, sz)?;
-        let vp = self.child.vp();
-        l.wrap(self, vp)?;
+        self.wrap(self.child.vp())?;
         Ok(())
     }
 
