@@ -30,7 +30,7 @@ impl Node for Ed {
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         self.child.layout(l, sz)?;
         let vp = self.child.vp();
-        l.wrap(self, vp)?;
+        self.wrap(vp)?;
         Ok(())
     }
 

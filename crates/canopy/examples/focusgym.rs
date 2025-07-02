@@ -29,10 +29,9 @@ impl Block {
     }
 
     #[command]
-    fn add(&mut self, c: &mut dyn Context) {
+    fn add(&mut self) {
         if !self.children.is_empty() && !self.size_limited(self.children[0].vp().view().into()) {
             self.children.push(Block::new(!self.horizontal));
-            c.taint_tree(self);
         }
     }
 
@@ -40,7 +39,6 @@ impl Block {
     fn split(&mut self, c: &mut dyn Context) -> Result<()> {
         if !self.size_limited(self.vp().view().into()) {
             self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
-            c.taint_tree(self);
             c.focus_next(self);
         }
         Ok(())

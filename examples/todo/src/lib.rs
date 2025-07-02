@@ -39,7 +39,7 @@ impl Node for TodoItem {
     fn layout(&mut self, l: &Layout, sz: Expanse) -> canopy::Result<()> {
         self.child.layout(l, sz)?;
         let vp = self.child.vp();
-        l.wrap(self, vp)?;
+        self.wrap(vp)?;
         Ok(())
     }
 

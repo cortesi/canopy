@@ -46,7 +46,7 @@ impl Node for TextDisplay {
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         self.text.layout(l, sz)?;
         let vp = self.text.vp();
-        l.wrap(self, vp)?;
+        self.wrap(vp)?;
         Ok(())
     }
 

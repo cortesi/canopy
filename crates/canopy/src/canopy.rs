@@ -537,10 +537,10 @@ impl Canopy {
                         let child_rect = child.vp().screen_rect();
                         if !child_rect.is_zero() {
                             assert!(
-                                parent.contains_rect(&child_rect),
-                                "child \'{}\' has viewport {:?} outside parent {:?}",
+                                parent.contains_point(child_rect.tl),
+                                "child \'{}\' has position {:?} outside parent canvas {:?}",
                                 child.name(),
-                                child_rect,
+                                child_rect.tl,
                                 parent
                             );
                         }
@@ -1324,7 +1324,7 @@ mod tests {
 
             fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
                 l.fill(self, sz)?;
-                l.wrap(&mut self.child, ViewPort::default())?;
+                self.wrap(self.child.vp())?;
                 Ok(())
             }
         }

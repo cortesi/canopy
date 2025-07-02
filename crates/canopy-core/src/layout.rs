@@ -5,7 +5,8 @@ use crate::{
     geom::{Expanse, Frame, Rect},
 };
 
-/// The Layout struct provides all operations that a node can perform during its layout phase.
+/// The Layout struct provides operations that a node can perform on children during its layout
+/// phase.
 pub struct Layout {}
 
 impl Layout {
@@ -18,21 +19,6 @@ impl Layout {
     /// Unhides the element and all its descendants, allowing them to be rendered again.
     pub fn unhide(&self, child: &mut dyn Node) {
         child.state_mut().hidden = false;
-    }
-
-    /// Wrap a single child node, mirroring the child's size and view.
-    ///
-    /// When implementing a simple container that merely exposes its child's
-    /// viewport, prefer this over [`fit`]. Calling `fit` recursively from a
-    /// widget's `layout` method can lead to unbounded recursion and a stack
-    /// overflow.
-    ///
-    /// Will be deprecated
-    pub fn wrap(&self, parent: &mut dyn Node, vp: ViewPort) -> Result<()> {
-        // Mirror the child's size and view
-        parent.state_mut().set_canvas(vp.canvas());
-        parent.state_mut().set_view(vp.view());
-        Ok(())
     }
 
     /// Frame a single child node. First, we calculate the inner size after subtracting the frame. We then fit the child
@@ -59,7 +45,7 @@ impl Layout {
         Ok(())
     }
 
-    /// Lay the child out and place it in a given sub-rectangle of a parent's view.
+    /// Lay the child out and place it in a given sub-rectangle of a parent's canvas.
     pub fn place_(&self, child: &mut dyn Node, loc: Rect) -> Result<()> {
         child.layout(self, loc.into())?;
         child.state_mut().set_position(loc.tl);

@@ -114,7 +114,7 @@ impl Node for Editor {
         let vp = self.vp();
         l.place(&mut self.view, vp, sz.rect())?;
         let vp = self.view.vp();
-        l.wrap(self, vp)?;
+        self.wrap(vp)?;
         Ok(())
     }
 

@@ -26,24 +26,31 @@ impl Projection {
     }
 }
 
-/// A ViewPort manages the size of a node and its projection onto the screen.
+/// A ViewPort manages the size of a node and its projection onto the screen. In many ways, this is
+/// the core of Canopy, and the viewport structure and its constraints determines many aspects of
+/// Canopy's layout and rendering behavior.
+///
+/// A Canopy app is a tree of nested ViewPorts, with each maintaining a set of constraints with
+/// reference to its parent and children.
 #[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ViewPort {
-    /// The location of the node's view in the parent's canvas. Must only be changed by the parent
-    /// node. The space occupied by node is defined by its position and its view rectangle.
-    ///
-    /// CONSTRAINT: The view rectangle at the parent's canvas position must be fully contained
-    /// within the parent's canvas rectangle.
+    /// The location of the node's view rectangle in the parent's canvas. Must only be changed by
+    /// the parent node. The space occupied by node is defined by its position and its view
+    /// rectangle.
     ///
     /// CONSTRAINT: The position must be within the PARENT's canvas rectangle.
+    ///
+    /// It is NOT a constraint that the mapped view rectangle must be fully within the parent's
+    /// canvas. It may be that the view is larger than the parent's canvas, in which case it will
+    /// be clipped.
     position: Point,
 
     /// The portion of this node that is displayed - a sub-rectangle of the canvas. Must only be
     /// changed by the node itself. This is the portion of the node that is drawn to the screen. To
     /// ease widget implementation, when attempting to draw to the screen any draw operations outside the
     /// screen rectangle are ignored.
-    /// CONSTRAINT: The view rectangle must be fully contained within OUR canvas rectangle.
     ///
+    /// CONSTRAINT: The view rectangle must be fully contained within OUR canvas rectangle.
     view: Rect,
 
     /// The canvas on which children are positioned, and to which rendering occurs. Must only be
