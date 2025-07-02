@@ -1,6 +1,4 @@
-use canopy_core::{
-    Context, Direction, Node, NodeId, Rect, Result, ViewPort, ViewStack, tree::walk_to_root,
-};
+use canopy_core::{Context, Direction, Node, NodeId, Rect, Result};
 
 /// Information about a focusable node
 #[derive(Debug, Clone)]
@@ -10,55 +8,55 @@ pub(crate) struct FocusableNode {
 }
 
 /// Collect all focusable nodes with their screen rectangles
-pub fn collect_focusable_nodes(root: &mut dyn Node) -> Result<Vec<FocusableNode>> {
+pub fn collect_focusable_nodes(
+    ctx: &dyn Context,
+    root: &mut dyn Node,
+) -> Result<(Vec<FocusableNode>, Option<(NodeId, Rect)>)> {
     let mut nodes = Vec::new();
+    let mut focused = None;
 
-    // Create initial ViewStack
-    let root_vp = root.vp();
-    let screen_vp = ViewPort::new(root_vp.canvas(), root_vp.canvas().rect(), (0, 0))?;
-    let mut view_stack = ViewStack::new(screen_vp);
+    fn recurse(
+        ctx: &dyn Context,
+        node: &mut dyn Node,
+        offset: (i16, i16),
+        acc: &mut Vec<FocusableNode>,
+        focused: &mut Option<(NodeId, Rect)>,
+    ) -> Result<()> {
+        if node.is_hidden() {
+            return Ok(());
+        }
 
-    collect_focusable_recursive(root, &mut view_stack, &mut nodes)?;
-    Ok(nodes)
-}
+        let vp = node.vp();
+        if vp.view().is_zero() {
+            return Ok(());
+        }
 
-fn collect_focusable_recursive(
-    node: &mut dyn Node,
-    view_stack: &mut ViewStack,
-    nodes: &mut Vec<FocusableNode>,
-) -> Result<()> {
-    if node.is_hidden() {
-        return Ok(());
-    }
+        let pos = (
+            offset.0 + vp.position().x as i16,
+            offset.1 + vp.position().y as i16,
+        );
+        let screen = vp.view().shift(pos.0, pos.1);
 
-    let node_vp = node.vp();
-    if node_vp.view().is_zero() {
-        return Ok(());
-    }
-
-    // Push viewport
-    view_stack.push(node_vp);
-
-    // Get screen rect from projection
-    if let Some((_, screen_rect)) = view_stack.projection() {
         if node.accept_focus() {
-            nodes.push(FocusableNode {
+            if focused.is_none() && ctx.is_focused(node) {
+                *focused = Some((node.id(), screen));
+            }
+            acc.push(FocusableNode {
                 id: node.id(),
-                rect: screen_rect,
+                rect: screen,
             });
         }
 
-        // Process children
         node.children(&mut |child| {
-            collect_focusable_recursive(child, view_stack, nodes)?;
+            recurse(ctx, child, pos, acc, focused)?;
             Ok(())
         })?;
+
+        Ok(())
     }
 
-    // Pop viewport
-    view_stack.pop()?;
-
-    Ok(())
+    recurse(ctx, root, (0, 0), &mut nodes, &mut focused)?;
+    Ok((nodes, focused))
 }
 
 /// Find the best focus target in the specified direction
@@ -253,27 +251,4 @@ fn distance_score(source: &Rect, target: &Rect, direction: Direction) -> u32 {
             }
         }
     }
-}
-
-/// Find the currently focused node and its screen rectangle
-pub fn find_focused_node(
-    ctx: &dyn Context,
-    root: &mut dyn Node,
-    focusable_nodes: &[FocusableNode],
-) -> Option<(NodeId, Rect)> {
-    for node in focusable_nodes {
-        let mut is_focused = false;
-        walk_to_root(root, &node.id, &mut |n| {
-            if ctx.is_focused(n) {
-                is_focused = true;
-            }
-            Ok(())
-        })
-        .ok()?;
-
-        if is_focused {
-            return Some((node.id.clone(), node.rect));
-        }
-    }
-    None
 }

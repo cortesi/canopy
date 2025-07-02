@@ -103,29 +103,23 @@ impl Context for Canopy {
 
     /// Move focus in a specified direction within the subtree at root.
     fn focus_dir(&mut self, root: &mut dyn Node, dir: Direction) {
-        use crate::focus_navigation::{
-            collect_focusable_nodes, find_focus_target, find_focused_node,
-        };
+        use crate::focus_navigation::{collect_focusable_nodes, find_focus_target};
 
         // Collect all focusable nodes
-        if let Ok(focusable_nodes) = collect_focusable_nodes(root) {
-            // Find the currently focused node
-            if let Some((current_id, current_rect)) =
-                find_focused_node(self, root, &focusable_nodes)
+        if let Ok((focusable_nodes, Some((current_id, current_rect)))) =
+            collect_focusable_nodes(self, root)
+        {
+            if let Some(target_id) =
+                find_focus_target(current_rect, dir, &focusable_nodes, &current_id)
             {
-                // Find the best target in the specified direction
-                if let Some(target_id) =
-                    find_focus_target(current_rect, dir, &focusable_nodes, &current_id)
-                {
-                    // Set focus on the target
-                    walk_to_root(root, &target_id, &mut |node| {
-                        if node.id() == target_id && node.accept_focus() {
-                            self.set_focus(node);
-                        }
-                        Ok(())
-                    })
-                    .unwrap();
-                }
+                // Set focus on the target
+                walk_to_root(root, &target_id, &mut |node| {
+                    if node.id() == target_id && node.accept_focus() {
+                        self.set_focus(node);
+                    }
+                    Ok(())
+                })
+                .unwrap();
             }
         }
     }
