@@ -71,9 +71,7 @@ pub fn find_focus_target(
     // Debug: print current rect
     #[cfg(test)]
     {
-        eprintln!(
-            "find_focus_target: current_rect = {current_rect:?}, direction = {direction:?}"
-        );
+        eprintln!("find_focus_target: current_rect = {current_rect:?}, direction = {direction:?}");
         eprintln!("Total candidates: {}", candidates.len());
     }
 

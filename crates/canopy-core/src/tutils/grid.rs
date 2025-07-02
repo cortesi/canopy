@@ -283,6 +283,17 @@ impl Grid {
         Expanse::new(size, size)
     }
 
+    /// Get the dimensions of the grid (number of cells in x and y)
+    /// Returns (width, height) in cells
+    pub fn dimensions(&self) -> (usize, usize) {
+        let cells_per_side = if self.recursion == 0 {
+            1
+        } else {
+            self.divisions.pow(self.recursion as u32)
+        };
+        (cells_per_side, cells_per_side)
+    }
+
     /// Helper to find the deepest leaf node at a given position
     pub fn find_leaf_at(&mut self, x: u16, y: u16) -> Option<String> {
         // Keep track of all nodes we encounter
