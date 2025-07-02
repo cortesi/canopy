@@ -191,6 +191,7 @@ dependencies = [
  "regex",
  "rhai",
  "scopeguard",
+ "termcolor",
  "thiserror",
  "tracing",
 ]

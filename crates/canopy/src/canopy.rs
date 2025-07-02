@@ -530,20 +530,16 @@ impl Canopy {
                 }
 
                 // Process children
-                let parent = n.vp().screen_rect();
                 let node_screen_pos = n.vp().position();
+                let canvas = n.vp().canvas().rect();
                 n.children(&mut |child| {
-                    if !child.is_hidden() {
-                        let child_rect = child.vp().screen_rect();
-                        if !child_rect.is_zero() {
-                            assert!(
-                                parent.contains_point(child_rect.tl),
-                                "child \'{}\' has position {:?} outside parent canvas {:?}",
-                                child.name(),
-                                child_rect.tl,
-                                parent
-                            );
-                        }
+                    if !child.is_hidden() && !canvas.contains_point(child.vp().position()) {
+                        return Err(error::Error::Render(format!(
+                            "Child node '{}' has position {:?} outside parent canvas {:?}",
+                            child.id(),
+                            child.vp().position(),
+                            canvas
+                        )));
                     }
                     self.render_traversal(dest_buf, styl, view_stack, child, node_screen_pos)
                 })?;

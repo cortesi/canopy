@@ -18,6 +18,7 @@ mod viewport;
 mod viewstack;
 
 pub mod cursor;
+pub mod dump;
 pub mod event;
 pub mod geom;
 pub mod path;

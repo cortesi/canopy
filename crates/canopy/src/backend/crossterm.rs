@@ -11,7 +11,9 @@ use scopeguard::defer;
 
 use crate::{Canopy, backend::BackendControl};
 use canopy_core::{
-    Node, Result, error,
+    Node, Result,
+    dump::dump,
+    error,
     event::{Event, key, mouse},
     geom::{Expanse, Point},
     render::RenderBackend,
@@ -335,6 +337,33 @@ fn event_emitter(evt_tx: mpsc::Sender<Event>) {
     });
 }
 
+/// Helper function to handle render errors by exiting alternate screen mode
+/// and displaying the error with a node tree dump
+fn handle_render_error<N: Node>(error: error::Error, root: &mut N) -> error::Error {
+    // Exit alternate screen mode to display error
+    let mut stderr = std::io::stderr();
+    #[allow(unused_must_use)]
+    {
+        crossterm::execute!(
+            stderr,
+            terminal::LeaveAlternateScreen,
+            cevent::DisableMouseCapture,
+            ccursor::Show
+        );
+        terminal::disable_raw_mode();
+    }
+
+    // Print error and node dump
+    eprintln!("Render error: {error}");
+    eprintln!("\nNode tree dump:");
+    match dump(root) {
+        Ok(dump_str) => eprintln!("{dump_str}"),
+        Err(dump_err) => eprintln!("Failed to dump node tree: {dump_err}"),
+    }
+
+    error
+}
+
 pub fn runloop<N>(mut cnpy: Canopy, mut root: N) -> Result<()>
 where
     N: Node,
@@ -389,13 +418,17 @@ where
     cnpy.set_root_size(Expanse::new(size.0, size.1), &mut root)?;
     cnpy.start_poller(cnpy.event_tx.clone());
 
-    cnpy.render(&mut be, &mut root)?;
+    if let Err(e) = cnpy.render(&mut be, &mut root) {
+        return Err(handle_render_error(e, &mut root));
+    }
     translate_result(be.flush())?;
 
     loop {
         cnpy.event(&mut root, events.next()?)?;
         if cnpy.taint || cnpy.focus_changed() {
-            cnpy.render(&mut be, &mut root)?;
+            if let Err(e) = cnpy.render(&mut be, &mut root) {
+                return Err(handle_render_error(e, &mut root));
+            }
             translate_result(be.flush())?;
             cnpy.taint = false;
         }

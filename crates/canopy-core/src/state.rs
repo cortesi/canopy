@@ -21,7 +21,7 @@ pub struct NodeId {
 
 impl std::fmt::Display for NodeId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "#{}", self.id)
+        write!(f, "{}#{}", self.name, self.id)
     }
 }
 
@@ -94,7 +94,7 @@ impl TryFrom<&str> for NodeName {
 #[derive(Debug, PartialEq, Eq)]
 pub struct NodeState {
     // Unique node ID
-    id: u64,
+    pub id: u64,
 
     /// If this is equal to the global render_gen, we render during the current
     /// sweep.

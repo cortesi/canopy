@@ -14,3 +14,4 @@ scopeguard = "1.2.0"
 convert_case = "0.8.0"
 rhai = { version = "1.22.2", features = ["internals"] }
 regex = "1.11.1"
+termcolor = "1.4.1"
