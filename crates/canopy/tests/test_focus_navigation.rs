@@ -385,7 +385,6 @@ fn test_snake_navigation_9x9_grid() -> Result<()> {
 }
 
 #[test]
-#[should_panic(expected = "Failed to move")]
 fn test_snake_navigation_8x8_grid() {
     // This test is expected to fail due to container boundary issues
     let mut grid = Grid::new(3, 2);
@@ -393,7 +392,6 @@ fn test_snake_navigation_8x8_grid() {
 }
 
 #[test]
-#[should_panic(expected = "Failed to move")]
 fn test_snake_navigation_27x27_grid() {
     // This test is expected to fail due to container boundary issues
     let mut grid = Grid::new(3, 3);
