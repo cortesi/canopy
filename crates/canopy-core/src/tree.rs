@@ -93,7 +93,7 @@ pub fn locate<R>(
     let screen_vp = ViewPort::new(root_vp.canvas(), root_vp.canvas().rect(), (0, 0))?;
     let mut view_stack = ViewStack::new(screen_vp);
 
-    locate_recursive(root, p, f, &mut view_stack, Point::zero(), &mut result)?;
+    locate_recursive(root, p, f, &mut view_stack, &mut result)?;
     Ok(result)
 }
 
@@ -103,7 +103,6 @@ fn locate_recursive<R>(
     p: Point,
     f: &mut dyn FnMut(&mut dyn Node) -> Result<Locate<R>>,
     view_stack: &mut ViewStack,
-    parent_screen_pos: Point,
     result: &mut Option<R>,
 ) -> Result<Walk<R>> {
     if node.is_hidden() {
@@ -117,16 +116,8 @@ fn locate_recursive<R>(
     let node_vp = node.vp();
     // Only push if the viewport has a non-zero view
     if !node_vp.view().is_zero() {
-        // Convert node position from screen coordinates to parent-relative coordinates
-        let relative_pos = Point {
-            x: node_vp.position().x.saturating_sub(parent_screen_pos.x),
-            y: node_vp.position().y.saturating_sub(parent_screen_pos.y),
-        };
-
-        // Create a new viewport with parent-relative position
-        let relative_vp = ViewPort::new(node_vp.canvas(), node_vp.view(), relative_pos)?;
-
-        view_stack.push(relative_vp);
+        // The node's position is already parent-relative, so use it directly
+        view_stack.push(node_vp);
         pushed_viewport = true;
     }
 
@@ -153,9 +144,8 @@ fn locate_recursive<R>(
 
                 // Process children if we're continuing
                 if matches!(walk_result, Walk::Continue) {
-                    let node_screen_pos = node.vp().position();
                     node.children(&mut |child| {
-                        match locate_recursive(child, p, f, view_stack, node_screen_pos, result)? {
+                        match locate_recursive(child, p, f, view_stack, result)? {
                             Walk::Skip => {}
                             Walk::Continue => {}
                             Walk::Handle(x) => {

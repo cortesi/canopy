@@ -5,7 +5,7 @@ use std::sync::atomic::AtomicU64;
 static CURRENT_ID: AtomicU64 = AtomicU64::new(0);
 
 pub fn valid_nodename_char(c: char) -> bool {
-    (c.is_ascii_alphanumeric() && c.is_lowercase()) || c == '_'
+    (c.is_ascii_lowercase() || c.is_ascii_digit()) || c == '_'
 }
 
 pub fn valid_nodename(name: &str) -> bool {

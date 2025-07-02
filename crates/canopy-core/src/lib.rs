@@ -24,6 +24,7 @@ pub mod geom;
 pub mod path;
 pub mod style;
 pub mod tree;
+pub mod tutils;
 
 // Public exports
 pub use commands::*;

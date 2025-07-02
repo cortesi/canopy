@@ -52,10 +52,6 @@ pub fn get_state() -> State {
     TSTATE.with(|s| s.borrow().clone())
 }
 
-pub fn state_path() -> Vec<String> {
-    TSTATE.with(|s| s.borrow().path.clone())
-}
-
 macro_rules! leaf {
     ($a:ident) => {
         #[derive(Debug, PartialEq, Eq, StatefulNode)]

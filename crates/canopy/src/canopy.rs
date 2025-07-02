@@ -8,7 +8,7 @@ use canopy_core::{
     Context, EventOutcome, Layout, Node, NodeId, Render, Result, TermBuf, ViewPort, ViewStack,
     commands, cursor, error,
     event::{Event, key, mouse},
-    geom::{Direction, Expanse, Point, Rect},
+    geom::{Direction, Expanse, Point},
     path::*,
     render::RenderBackend,
     style::{StyleManager, StyleMap, solarized},
@@ -103,36 +103,30 @@ impl Context for Canopy {
 
     /// Move focus in a specified direction within the subtree at root.
     fn focus_dir(&mut self, root: &mut dyn Node, dir: Direction) {
-        let mut seen = false;
-        let mut last = None;
-        if let Some(start) = self.focus_area(root) {
-            let bounds = self
-                .root_size
-                .unwrap_or_else(|| Expanse::new(u16::MAX, u16::MAX));
+        use crate::focus_navigation::{
+            collect_focusable_nodes, find_focus_target, find_focused_node,
+        };
 
-            start
-                .search(dir, &mut |p| -> Result<bool> {
-                    if seen || p.x >= bounds.w || p.y >= bounds.h {
-                        return Ok(true);
-                    }
-                    let n = node_at(root, p);
-                    if n != last {
-                        last = n.clone();
-                        if let Some(nid) = &n {
-                            walk_to_root(root, nid, &mut |x| {
-                                if !seen && x.accept_focus() {
-                                    seen = true;
-                                    self.set_focus(x);
-                                }
-                                Ok(())
-                            })
-                            // Unwrap is safe, because the closure cannot fail
-                            .unwrap();
+        // Collect all focusable nodes
+        if let Ok(focusable_nodes) = collect_focusable_nodes(root) {
+            // Find the currently focused node
+            if let Some((current_id, current_rect)) =
+                find_focused_node(self, root, &focusable_nodes)
+            {
+                // Find the best target in the specified direction
+                if let Some(target_id) =
+                    find_focus_target(current_rect, dir, &focusable_nodes, &current_id)
+                {
+                    // Set focus on the target
+                    walk_to_root(root, &target_id, &mut |node| {
+                        if node.id() == target_id && node.accept_focus() {
+                            self.set_focus(node);
                         }
-                    }
-                    Ok(false)
-                })
-                .unwrap()
+                        Ok(())
+                    })
+                    .unwrap();
+                }
+            }
         }
     }
 
@@ -281,15 +275,6 @@ impl Canopy {
             backend: None,
             termbuf: None,
         }
-    }
-
-    /// Find the area of the current terminal focus node under the specified `root`.
-    fn focus_area(&self, root: &mut dyn Node) -> Option<Rect> {
-        self.walk_focus_path(root, &mut |x| -> Result<Walk<Rect>> {
-            Ok(Walk::Handle(x.vp().screen_rect()))
-        })
-        // We're safe to unwrap, because our closure can't return an error.
-        .unwrap()
     }
 
     pub fn register_backend<T: BackendControl + 'static>(&mut self, be: T) {
