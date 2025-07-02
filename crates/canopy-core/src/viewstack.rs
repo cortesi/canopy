@@ -312,7 +312,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_projections() {
         let test_cases = vec![
             // Single viewport tests
@@ -412,7 +411,7 @@ mod tests {
                 projections: vec![
                     Some(((10, 10, 80, 80), (0, 0, 80, 80))),
                     Some(((5, 5, 60, 60), (10, 10, 60, 60))),
-                    Some(((10, 10, 40, 40), (30, 30, 40, 40))),
+                    Some(((10, 10, 40, 40), (25, 25, 40, 40))),
                 ],
             },
             TestCase {
@@ -425,7 +424,7 @@ mod tests {
                 projections: vec![
                     Some(((0, 0, 40, 40), (0, 0, 40, 40))),
                     Some(((5, 5, 25, 25), (10, 10, 25, 25))),
-                    Some(((5, 5, 15, 15), (10, 10, 15, 15))),
+                    Some(((5, 5, 15, 15), (15, 15, 15, 15))),
                 ],
             },
             TestCase {

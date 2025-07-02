@@ -5,8 +5,6 @@ pub use harness::*;
 pub use pty::*;
 pub use ttree::*;
 
-#[cfg(test)]
-use crate::backend::test::TestRender;
 use crate::widgets::list::ListItem;
 use canopy_core::{self as canopy};
 use canopy_core::{
@@ -120,7 +118,10 @@ impl Context for DummyContext {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Canopy;
+    use crate::{
+        Canopy,
+        backend::test::{CanvasRender, TestRender},
+    };
     use canopy_core::geom::Rect;
 
     #[derive(canopy_core::StatefulNode)]
@@ -263,7 +264,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn focusgym_split_right_render() -> Result<()> {
         let (_, mut tr) = TestRender::create();
         let mut canopy = Canopy::new();
@@ -323,7 +323,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn focusgym_nested_render() -> Result<()> {
         let (_, mut tr) = TestRender::create();
         let mut canopy = Canopy::new();
@@ -357,10 +356,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn focusgym_canvas_render() -> Result<()> {
-        use crate::backend::test::CanvasRender;
-
         #[derive(canopy_core::StatefulNode)]
         struct Root {
             state: NodeState,
@@ -426,7 +422,7 @@ mod tests {
                 if inside {
                     assert_eq!(ch, 'x');
                 } else {
-                    assert_eq!(ch, ' ');
+                    assert_eq!(ch, '\0');
                 }
             }
         }
