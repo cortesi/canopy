@@ -385,6 +385,44 @@ fn test_snake_navigation_9x9_grid() -> Result<()> {
 }
 
 #[test]
+fn test_focus_bounds_2x2_grid() -> Result<()> {
+    let mut grid = Grid::new(1, 2);
+    let layout = Layout {};
+    let size = grid.expected_size();
+    grid.layout(&layout, size)?;
+
+    let mut canopy = Canopy::new();
+    canopy.focus_first(&mut grid);
+
+    // At top-left corner
+    assert_eq!(
+        get_focused_cell(&canopy, &mut grid),
+        Some("cell_0_0".to_string())
+    );
+    canopy.focus_left(&mut grid);
+    canopy.focus_up(&mut grid);
+    assert_eq!(
+        get_focused_cell(&canopy, &mut grid),
+        Some("cell_0_0".to_string()),
+        "Focus should not move beyond top-left"
+    );
+
+    canopy.focus_down(&mut grid); // to cell_0_1
+    canopy.focus_right(&mut grid); // to cell_1_1
+
+    // At bottom-right corner
+    canopy.focus_right(&mut grid);
+    canopy.focus_down(&mut grid);
+    assert_eq!(
+        get_focused_cell(&canopy, &mut grid),
+        Some("cell_1_1".to_string()),
+        "Focus should stay at bottom-right when moving beyond bounds"
+    );
+
+    Ok(())
+}
+
+#[test]
 fn test_snake_navigation_8x8_grid() {
     // This test is expected to fail due to container boundary issues
     let mut grid = Grid::new(3, 2);
