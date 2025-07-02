@@ -11,8 +11,8 @@ use scopeguard::defer;
 
 use crate::{Canopy, backend::BackendControl};
 use canopy_core::{
-    Node, Result,
-    dump::dump,
+    Context, Node, Result,
+    dump::{dump, dump_with_focus},
     error,
     event::{Event, key, mouse},
     geom::{Expanse, Point},
@@ -339,7 +339,11 @@ fn event_emitter(evt_tx: mpsc::Sender<Event>) {
 
 /// Helper function to handle render errors by exiting alternate screen mode
 /// and displaying the error with a node tree dump
-fn handle_render_error<N: Node>(error: error::Error, root: &mut N) -> error::Error {
+fn handle_render_error<N: Node>(
+    error: error::Error,
+    root: &mut N,
+    focus_gen: Option<u64>,
+) -> error::Error {
     // Exit alternate screen mode to display error
     let mut stderr = std::io::stderr();
     #[allow(unused_must_use)]
@@ -356,7 +360,12 @@ fn handle_render_error<N: Node>(error: error::Error, root: &mut N) -> error::Err
     // Print error and node dump
     eprintln!("Render error: {error}");
     eprintln!("\nNode tree dump:");
-    match dump(root) {
+    let dump_result = if let Some(fg) = focus_gen {
+        dump_with_focus(root, fg)
+    } else {
+        dump(root)
+    };
+    match dump_result {
         Ok(dump_str) => eprintln!("{dump_str}"),
         Err(dump_err) => eprintln!("Failed to dump node tree: {dump_err}"),
     }
@@ -419,15 +428,55 @@ where
     cnpy.start_poller(cnpy.event_tx.clone());
 
     if let Err(e) = cnpy.render(&mut be, &mut root) {
-        return Err(handle_render_error(e, &mut root));
+        return Err(handle_render_error(
+            e,
+            &mut root,
+            Some(cnpy.current_focus_gen()),
+        ));
     }
     translate_result(be.flush())?;
 
     loop {
-        cnpy.event(&mut root, events.next()?)?;
+        let event = events.next()?;
+
+        // Check for Ctrl+C
+        if let Event::Key(key::Key {
+            key: key::KeyCode::Char('c'),
+            mods: key::Mods { ctrl: true, .. },
+        }) = &event
+        {
+            // Exit alternate screen mode
+            let mut stderr = std::io::stderr();
+            #[allow(unused_must_use)]
+            {
+                crossterm::execute!(
+                    stderr,
+                    terminal::LeaveAlternateScreen,
+                    cevent::DisableMouseCapture,
+                    ccursor::Show
+                );
+                terminal::disable_raw_mode();
+            }
+
+            // Print node tree dump
+            eprintln!("\nCtrl+C pressed - Node tree dump:");
+            match dump_with_focus(&mut root, cnpy.current_focus_gen()) {
+                Ok(dump_str) => eprintln!("{dump_str}"),
+                Err(dump_err) => eprintln!("Failed to dump node tree: {dump_err}"),
+            }
+
+            // Exit the program
+            std::process::exit(130); // 130 is the standard exit code for SIGINT
+        }
+
+        cnpy.event(&mut root, event)?;
         if cnpy.taint || cnpy.focus_changed() {
             if let Err(e) = cnpy.render(&mut be, &mut root) {
-                return Err(handle_render_error(e, &mut root));
+                return Err(handle_render_error(
+                    e,
+                    &mut root,
+                    Some(cnpy.current_focus_gen()),
+                ));
             }
             translate_result(be.flush())?;
             cnpy.taint = false;
