@@ -20,8 +20,7 @@ fn test_grid_dimensions() {
         let dimensions = grid.dimensions();
         assert_eq!(
             dimensions, expected,
-            "Grid({}, {}) should have dimensions {:?}, got {:?}",
-            recursion, divisions, expected, dimensions
+            "Grid({recursion}, {divisions}) should have dimensions {expected:?}, got {dimensions:?}"
         );
 
         // Also verify that dimensions match expected_size
@@ -30,9 +29,7 @@ fn test_grid_dimensions() {
         assert_eq!(
             (expected_size.w, expected_size.h),
             expected_pixels,
-            "Grid({}, {}) expected_size should match dimensions * 10",
-            recursion,
-            divisions
+            "Grid({recursion}, {divisions}) expected_size should match dimensions * 10"
         );
     }
 }

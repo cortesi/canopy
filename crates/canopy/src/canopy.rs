@@ -108,25 +108,31 @@ impl Context for Canopy {
         };
 
         // Collect all focusable nodes
-        if let Ok(focusable_nodes) = collect_focusable_nodes(root) {
-            // Find the currently focused node
-            if let Some((current_id, current_rect)) =
-                find_focused_node(self, root, &focusable_nodes)
-            {
-                // Find the best target in the specified direction
-                if let Some(target_id) =
-                    find_focus_target(current_rect, dir, &focusable_nodes, &current_id)
+        match collect_focusable_nodes(root) {
+            Ok(focusable_nodes) => {
+                // Find the currently focused node
+                if let Some((current_id, current_rect)) =
+                    find_focused_node(self, root, &focusable_nodes)
                 {
-                    // Set focus on the target
-                    walk_to_root(root, &target_id, &mut |node| {
-                        if node.id() == target_id && node.accept_focus() {
-                            self.set_focus(node);
-                        }
-                        Ok(())
-                    })
-                    .unwrap();
+                    // Find the best target in the specified direction
+                    if let Some(target_id) =
+                        find_focus_target(current_rect, dir, &focusable_nodes, &current_id)
+                    {
+                        // Find and set focus on the target node
+                        let mut found = false;
+                        preorder(root, &mut |node| -> Result<Walk<()>> {
+                            if node.id() == target_id && node.accept_focus() {
+                                self.set_focus(node);
+                                found = true;
+                                return Ok(Walk::Handle(()));
+                            }
+                            Ok(Walk::Continue)
+                        })
+                        .unwrap();
+                    }
                 }
             }
+            Err(_e) => {}
         }
     }
 

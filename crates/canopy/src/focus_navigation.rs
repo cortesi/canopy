@@ -1,24 +1,26 @@
 use canopy_core::{
-    Context, Direction, Node, NodeId, Rect, Result, ViewPort, ViewStack, tree::walk_to_root,
+    Context, Direction, Node, NodeId, Point, Rect, Result, ViewPort, ViewStack,
+    tree::{Walk, preorder},
 };
 
 /// Information about a focusable node
 #[derive(Debug, Clone)]
-pub(crate) struct FocusableNode {
-    pub(crate) id: NodeId,
-    pub(crate) rect: Rect,
+pub struct FocusableNode {
+    pub id: NodeId,
+    pub rect: Rect,
 }
 
 /// Collect all focusable nodes with their screen rectangles
 pub fn collect_focusable_nodes(root: &mut dyn Node) -> Result<Vec<FocusableNode>> {
     let mut nodes = Vec::new();
 
-    // Create initial ViewStack
+    // Create initial ViewStack - same as render_traversal
     let root_vp = root.vp();
     let screen_vp = ViewPort::new(root_vp.canvas(), root_vp.canvas().rect(), (0, 0))?;
     let mut view_stack = ViewStack::new(screen_vp);
 
-    collect_focusable_recursive(root, &mut view_stack, &mut nodes)?;
+    collect_focusable_recursive(root, &mut view_stack, &mut nodes, Point::zero())?;
+
     Ok(nodes)
 }
 
@@ -26,6 +28,7 @@ fn collect_focusable_recursive(
     node: &mut dyn Node,
     view_stack: &mut ViewStack,
     nodes: &mut Vec<FocusableNode>,
+    _parent_screen_pos: Point,
 ) -> Result<()> {
     if node.is_hidden() {
         return Ok(());
@@ -36,7 +39,8 @@ fn collect_focusable_recursive(
         return Ok(());
     }
 
-    // Push viewport
+    // Push the node's viewport onto the stack
+    // The node's position is already parent-relative
     view_stack.push(node_vp);
 
     // Get screen rect from projection
@@ -50,7 +54,7 @@ fn collect_focusable_recursive(
 
         // Process children
         node.children(&mut |child| {
-            collect_focusable_recursive(child, view_stack, nodes)?;
+            collect_focusable_recursive(child, view_stack, nodes, _parent_screen_pos)?;
             Ok(())
         })?;
     }
@@ -68,191 +72,122 @@ pub fn find_focus_target(
     candidates: &[FocusableNode],
     current_id: &NodeId,
 ) -> Option<NodeId> {
-    // Debug: print current rect
-    #[cfg(test)]
-    {
-        eprintln!("find_focus_target: current_rect = {current_rect:?}, direction = {direction:?}");
-        eprintln!("Total candidates: {}", candidates.len());
-    }
+    // Find the center point of the current rectangle
+    let current_center = Point {
+        x: current_rect.tl.x + current_rect.w / 2,
+        y: current_rect.tl.y + current_rect.h / 2,
+    };
 
-    // Filter out the current node and nodes that don't make sense for the direction
-    let valid_candidates: Vec<&FocusableNode> = candidates
+    // Filter candidates based on direction
+    // A candidate is valid if:
+    // 1. Its center is in the correct direction from current's center
+    // 2. It has overlap in the perpendicular axis (to prevent diagonal movement)
+    let mut valid_candidates: Vec<&FocusableNode> = candidates
         .iter()
         .filter(|n| &n.id != current_id)
         .filter(|n| {
-            let in_dir = is_in_direction(&current_rect, &n.rect, direction);
-            #[cfg(test)]
-            {
-                if !in_dir
-                    && matches!(direction, Direction::Right)
-                    && n.rect.tl.x > current_rect.tl.x
-                {
-                    eprintln!("  Candidate at {:?} rejected by is_in_direction", n.rect);
+            let candidate_center = Point {
+                x: n.rect.tl.x + n.rect.w / 2,
+                y: n.rect.tl.y + n.rect.h / 2,
+            };
+
+            match direction {
+                Direction::Right | Direction::Left => {
+                    // For horizontal movement, check:
+                    // 1. Center is in the right direction
+                    let center_ok = match direction {
+                        Direction::Right => candidate_center.x > current_center.x,
+                        Direction::Left => candidate_center.x < current_center.x,
+                        _ => unreachable!(),
+                    };
+
+                    // 2. There's vertical overlap between the rectangles
+                    let vertical_overlap = n.rect.tl.y < current_rect.tl.y + current_rect.h
+                        && n.rect.tl.y + n.rect.h > current_rect.tl.y;
+
+                    center_ok && vertical_overlap
+                }
+                Direction::Down | Direction::Up => {
+                    // For vertical movement, check:
+                    // 1. Center is in the right direction
+                    let center_ok = match direction {
+                        Direction::Down => candidate_center.y > current_center.y,
+                        Direction::Up => candidate_center.y < current_center.y,
+                        _ => unreachable!(),
+                    };
+
+                    // 2. There's horizontal overlap between the rectangles
+                    let horizontal_overlap = n.rect.tl.x < current_rect.tl.x + current_rect.w
+                        && n.rect.tl.x + n.rect.w > current_rect.tl.x;
+
+                    center_ok && horizontal_overlap
                 }
             }
-            in_dir
         })
         .collect();
 
-    #[cfg(test)]
-    eprintln!(
-        "Valid candidates after filtering: {}",
-        valid_candidates.len()
-    );
+    // Remove current node if it somehow got through
+    valid_candidates.retain(|n| &n.id != current_id);
 
     if valid_candidates.is_empty() {
         return None;
     }
 
-    // Find the best candidate based on direction
+    // Sort candidates by a score that considers:
+    // 1. Edge distance in the primary direction
+    // 2. Overlap amount in the secondary direction
+    // 3. Center-to-center distance as a tiebreaker
+    valid_candidates.sort_by_key(|n| {
+        match direction {
+            Direction::Right => {
+                // Primary: distance from current's right edge to candidate's left edge
+                let edge_dist = n
+                    .rect
+                    .tl
+                    .x
+                    .saturating_sub(current_rect.tl.x + current_rect.w);
 
-    valid_candidates
-        .into_iter()
-        .min_by_key(|n| distance_score(&current_rect, &n.rect, direction))
-        .map(|n| n.id.clone())
-}
+                // Secondary: vertical alignment (less distance = better alignment)
+                let vert_center_dist = current_center.y.abs_diff(n.rect.tl.y + n.rect.h / 2);
 
-/// Check if target is in the specified direction from source
-fn is_in_direction(source: &Rect, target: &Rect, direction: Direction) -> bool {
-    // Don't consider the exact same rectangle
-    if source == target {
-        return false;
-    }
+                // Score: prioritize edge distance, then vertical alignment
+                (edge_dist as u64) * 10000 + (vert_center_dist as u64)
+            }
+            Direction::Left => {
+                // Primary: distance from candidate's right edge to current's left edge
+                let edge_dist = current_rect.tl.x.saturating_sub(n.rect.tl.x + n.rect.w);
 
-    match direction {
-        Direction::Right => {
-            // Accept nodes that are:
-            // 1. Strictly to the right (no overlap)
-            // 2. On the same row (overlapping Y) but extending further right
-            if target.tl.x >= source.tl.x + source.w {
-                // Strictly to the right
-                true
-            } else {
-                // Check if on same row and extends further right
-                let same_row = (target.tl.y < source.tl.y + source.h)
-                    && (target.tl.y + target.h > source.tl.y);
-                let extends_right = target.tl.x + target.w > source.tl.x + source.w;
-                same_row && extends_right
+                // Secondary: vertical alignment
+                let vert_center_dist = current_center.y.abs_diff(n.rect.tl.y + n.rect.h / 2);
+
+                (edge_dist as u64) * 10000 + (vert_center_dist as u64)
+            }
+            Direction::Down => {
+                // Primary: distance from current's bottom edge to candidate's top edge
+                let edge_dist = n
+                    .rect
+                    .tl
+                    .y
+                    .saturating_sub(current_rect.tl.y + current_rect.h);
+
+                // Secondary: horizontal alignment
+                let horiz_center_dist = current_center.x.abs_diff(n.rect.tl.x + n.rect.w / 2);
+
+                (edge_dist as u64) * 10000 + (horiz_center_dist as u64)
+            }
+            Direction::Up => {
+                // Primary: distance from candidate's bottom edge to current's top edge
+                let edge_dist = current_rect.tl.y.saturating_sub(n.rect.tl.y + n.rect.h);
+
+                // Secondary: horizontal alignment
+                let horiz_center_dist = current_center.x.abs_diff(n.rect.tl.x + n.rect.w / 2);
+
+                (edge_dist as u64) * 10000 + (horiz_center_dist as u64)
             }
         }
-        Direction::Left => {
-            // Accept nodes that are:
-            // 1. Strictly to the left (no overlap)
-            // 2. On the same row (overlapping Y) but extending further left
-            if target.tl.x + target.w <= source.tl.x {
-                // Strictly to the left
-                true
-            } else {
-                // Check if on same row and extends further left
-                let same_row = (target.tl.y < source.tl.y + source.h)
-                    && (target.tl.y + target.h > source.tl.y);
-                let extends_left = target.tl.x < source.tl.x;
-                same_row && extends_left
-            }
-        }
-        Direction::Down => {
-            // Accept nodes that are:
-            // 1. Strictly below (no overlap)
-            // 2. On the same column (overlapping X) but extending further down
-            if target.tl.y >= source.tl.y + source.h {
-                // Strictly below
-                true
-            } else {
-                // Check if in same column and extends further down
-                let same_col = (target.tl.x < source.tl.x + source.w)
-                    && (target.tl.x + target.w > source.tl.x);
-                let extends_down = target.tl.y + target.h > source.tl.y + source.h;
-                same_col && extends_down
-            }
-        }
-        Direction::Up => {
-            // Accept nodes that are:
-            // 1. Strictly above (no overlap)
-            // 2. On the same column (overlapping X) but extending further up
-            if target.tl.y + target.h <= source.tl.y {
-                // Strictly above
-                true
-            } else {
-                // Check if in same column and extends further up
-                let same_col = (target.tl.x < source.tl.x + source.w)
-                    && (target.tl.x + target.w > source.tl.x);
-                let extends_up = target.tl.y < source.tl.y;
-                same_col && extends_up
-            }
-        }
-    }
-}
+    });
 
-/// Calculate a distance score for ranking candidates
-/// Lower scores are better
-fn distance_score(source: &Rect, target: &Rect, direction: Direction) -> u32 {
-    match direction {
-        Direction::Right => {
-            // For rightward movement in a grid:
-            // 1. Prefer nodes on the same row (small y difference)
-            // 2. Among those, prefer the closest one to the right
-            let y_diff = source.tl.y.abs_diff(target.tl.y) as u32;
-            let x_dist = target.tl.x.saturating_sub(source.tl.x) as u32;
-
-            // If on same row (y_diff == 0), prioritize by x distance
-            // Otherwise, prioritize by row difference, then x distance
-            if y_diff == 0 {
-                x_dist
-            } else {
-                // Not on same row - add a large penalty
-                100000 + y_diff * 1000 + x_dist
-            }
-        }
-        Direction::Left => {
-            // For leftward movement in a grid:
-            // 1. Prefer nodes on the same row (small y difference)
-            // 2. Among those, prefer the closest one to the left
-            let y_diff = source.tl.y.abs_diff(target.tl.y) as u32;
-            let x_dist = source.tl.x.saturating_sub(target.tl.x) as u32;
-
-            // If on same row (y_diff == 0), prioritize by x distance
-            // Otherwise, prioritize by row difference, then x distance
-            if y_diff == 0 {
-                x_dist
-            } else {
-                // Not on same row - add a large penalty
-                100000 + y_diff * 1000 + x_dist
-            }
-        }
-        Direction::Down => {
-            // For downward movement in a grid:
-            // 1. Prefer nodes in the same column (small x difference)
-            // 2. Among those, prefer the closest one below
-            let x_diff = source.tl.x.abs_diff(target.tl.x) as u32;
-            let y_dist = target.tl.y.saturating_sub(source.tl.y) as u32;
-
-            // If in same column (x_diff == 0), prioritize by y distance
-            // Otherwise, prioritize by column difference, then y distance
-            if x_diff == 0 {
-                y_dist
-            } else {
-                // Not in same column - add a penalty, but less than for horizontal movement
-                // since we often want to find the closest node below even if not perfectly aligned
-                10000 + x_diff * 100 + y_dist
-            }
-        }
-        Direction::Up => {
-            // For upward movement in a grid:
-            // 1. Prefer nodes in the same column (small x difference)
-            // 2. Among those, prefer the closest one above
-            let x_diff = source.tl.x.abs_diff(target.tl.x) as u32;
-            let y_dist = source.tl.y.saturating_sub(target.tl.y) as u32;
-
-            // If in same column (x_diff == 0), prioritize by y distance
-            // Otherwise, prioritize by column difference, then y distance
-            if x_diff == 0 {
-                y_dist
-            } else {
-                // Not in same column - add a penalty
-                10000 + x_diff * 100 + y_dist
-            }
-        }
-    }
+    valid_candidates.first().map(|n| n.id.clone())
 }
 
 /// Find the currently focused node and its screen rectangle
@@ -261,19 +196,25 @@ pub fn find_focused_node(
     root: &mut dyn Node,
     focusable_nodes: &[FocusableNode],
 ) -> Option<(NodeId, Rect)> {
-    for node in focusable_nodes {
-        let mut is_focused = false;
-        walk_to_root(root, &node.id, &mut |n| {
-            if ctx.is_focused(n) {
-                is_focused = true;
-            }
-            Ok(())
-        })
-        .ok()?;
+    // Use preorder traversal to find the focused node
+    let mut focused_id = None;
+    preorder(root, &mut |node| -> Result<Walk<()>> {
+        if ctx.is_focused(node) {
+            focused_id = Some(node.id());
+            return Ok(Walk::Handle(()));
+        }
+        Ok(Walk::Continue)
+    })
+    .ok()?;
 
-        if is_focused {
-            return Some((node.id.clone(), node.rect));
+    // Find the corresponding focusable node info
+    if let Some(id) = focused_id {
+        for node in focusable_nodes {
+            if node.id == id {
+                return Some((node.id.clone(), node.rect));
+            }
         }
     }
+
     None
 }
