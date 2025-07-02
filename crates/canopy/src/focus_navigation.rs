@@ -34,10 +34,10 @@ pub fn collect_focusable_nodes(
         stack.push(vp);
 
         if let Some((_, screen_rect)) = stack.projection() {
+            if focused.is_none() && ctx.is_focused(node) {
+                *focused = Some((node.id(), screen_rect));
+            }
             if node.accept_focus() {
-                if focused.is_none() && ctx.is_focused(node) {
-                    *focused = Some((node.id(), screen_rect));
-                }
                 acc.push(FocusableNode {
                     id: node.id(),
                     rect: screen_rect,

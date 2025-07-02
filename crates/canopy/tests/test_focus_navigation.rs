@@ -759,3 +759,94 @@ fn test_focus_bounds_focusgym() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_focus_after_splitting_navigation() -> Result<()> {
+    use canopy::Canopy;
+    use canopy_core::{Context, Expanse, Layout, Node, NodeState, Render, Result};
+
+    #[derive(canopy_core::StatefulNode)]
+    struct Block {
+        state: NodeState,
+        children: Vec<Block>,
+        horizontal: bool,
+    }
+
+    #[derive_commands]
+    impl Block {
+        fn new(horizontal: bool) -> Self {
+            Block {
+                state: NodeState::default(),
+                children: vec![],
+                horizontal,
+            }
+        }
+
+        fn split_once(&mut self) {
+            if self.children.is_empty() {
+                self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
+            }
+        }
+    }
+
+    impl Node for Block {
+        fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+            self.fill(sz)?;
+            if !self.children.is_empty() {
+                let parts = if self.horizontal {
+                    sz.rect().split_horizontal(self.children.len() as u16)?
+                } else {
+                    sz.rect().split_vertical(self.children.len() as u16)?
+                };
+                for (ch, rect) in self.children.iter_mut().zip(parts.into_iter()) {
+                    l.place_(ch, rect)?;
+                }
+            }
+            Ok(())
+        }
+
+        fn render(&mut self, _c: &dyn Context, _r: &mut Render) -> Result<()> {
+            Ok(())
+        }
+
+        fn accept_focus(&mut self) -> bool {
+            self.children.is_empty()
+        }
+
+        fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
+            for ch in &mut self.children {
+                f(ch)?;
+            }
+            Ok(())
+        }
+    }
+
+    // Build initial two-pane layout
+    let mut root = Block::new(true);
+    root.split_once();
+
+    let layout = Layout {};
+    root.layout(&layout, Expanse::new(40, 20))?;
+
+    let mut canopy = Canopy::new();
+    canopy.focus_first(&mut root);
+
+    // Split the right pane and focus its first child
+    canopy.focus_right(&mut root);
+    root.children[1].split_once();
+    root.layout(&layout, Expanse::new(40, 20))?;
+    canopy.focus_next(&mut root);
+
+    // Split again and focus the new child
+    if let Some(ch) = root.children[1].children.get_mut(0) {
+        ch.split_once();
+    }
+    root.layout(&layout, Expanse::new(40, 20))?;
+    canopy.focus_next(&mut root);
+
+    let before = canopy.current_focus_gen();
+    canopy.focus_left(&mut root);
+    assert_ne!(before, canopy.current_focus_gen(), "focus should move left");
+
+    Ok(())
+}
