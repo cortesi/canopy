@@ -658,13 +658,28 @@ impl Canopy {
                     return Ok(());
                 }
 
+                // Only try to rebase the point if it's within the node's screen rect
+                // This prevents "rebase of non-contained point" errors when the mouse
+                // is over a child node but we're processing a parent container
+                let screen_rect = x.vp().screen_rect();
+                let rebased_location = if screen_rect.contains_point(m.location) {
+                    screen_rect.rebase_point(m.location)?
+                } else {
+                    // If the mouse is outside this node's screen rect (e.g., over a child),
+                    // use a location relative to the node's origin
+                    Point {
+                        x: m.location.x.saturating_sub(screen_rect.tl.x),
+                        y: m.location.y.saturating_sub(screen_rect.tl.y),
+                    }
+                };
+
                 let hdl = x.handle_mouse(
                     self,
                     mouse::MouseEvent {
                         action: m.action,
                         button: m.button,
                         modifiers: m.modifiers,
-                        location: x.vp().screen_rect().rebase_point(m.location)?,
+                        location: rebased_location,
                     },
                 )?;
                 match hdl {
