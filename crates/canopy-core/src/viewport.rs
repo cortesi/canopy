@@ -1,30 +1,6 @@
 use crate::Result;
 use crate::error;
-use crate::geom::{Expanse, Line, Point, Rect};
-
-/// A projection from the virtual space of a node to the screen.
-#[cfg(test)]
-#[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq)]
-struct Projection {
-    /// A region in the node's canvas. This is always a sub-rectangle of the node's view.
-    region: Rect,
-    /// The absolute point on the screen to which the region is projected.
-    screen: Point,
-}
-
-#[cfg(test)]
-impl Projection {
-    fn new<R, S>(region: R, screen: S) -> Projection
-    where
-        R: Into<Rect>,
-        S: Into<Point>,
-    {
-        Projection {
-            region: region.into(),
-            screen: screen.into(),
-        }
-    }
-}
+use crate::geom::{Expanse, Point, Rect};
 
 /// A ViewPort manages the size of a node and its projection onto the screen. In many ways, this is
 /// the core of Canopy, and the viewport structure and its constraints determines many aspects of
@@ -254,22 +230,6 @@ impl ViewPort {
         }
     }
 
-    /// Project a point in virtual space to the screen. If the point is not
-    /// on-screen, return None.
-    pub fn project_point(&self, p: impl Into<Point>) -> Option<Point> {
-        let p = p.into();
-        if self.view.contains_point(p) {
-            let rp = self.view.rebase_point(p).unwrap();
-            // We know view is not larger than screen, so we can unwrap.
-            Some(Point {
-                x: self.position.x + rp.x,
-                y: self.position.y + rp.y,
-            })
-        } else {
-            None
-        }
-    }
-
     /// Take a rectangle on the physical screen, and calculate the matching portion of the view rectangle.
     pub fn unproject(&self, r: Rect) -> Result<Rect> {
         self.screen_rect().rebase_rect(&r)
@@ -289,183 +249,11 @@ impl ViewPort {
             None
         }
     }
-
-    /// Project a line in virtual space to the screen. Returns an offset from
-    /// the start of the input line, plus a Line that is the projected region.
-    pub fn project_line(&self, l: Line) -> Option<(u16, Line)> {
-        if let Some(o) = self.view.intersect(&l.rect()) {
-            let rebase = self.view.rebase_rect(&o).unwrap();
-            Some((
-                o.tl.x - l.tl.x,
-                Line {
-                    tl: self.position.scroll(rebase.tl.x as i16, rebase.tl.y as i16),
-                    w: rebase.w,
-                },
-            ))
-        } else {
-            None
-        }
-    }
-
-    /// Given a rectangle within our outer, calculate the intersection with our
-    /// current view, and generate a ViewPort that would correctly display the
-    /// child on our screen.
-    pub fn map<T: Into<Rect>>(&self, child: T) -> Result<Option<ViewPort>> {
-        let child = child.into();
-        if let Some(i) = self.view.intersect(&child) {
-            let view_relative = self.view.rebase_rect(&i).unwrap();
-            Ok(Some(ViewPort {
-                canvas: child.expanse(),
-                // The view is the intersection relative to the child's outer
-                view: Rect::new(i.tl.x - child.tl.x, i.tl.y - child.tl.y, i.w, i.h),
-                position: Point {
-                    x: self.position.x + view_relative.tl.x,
-                    y: self.position.y + view_relative.tl.y,
-                },
-            }))
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Calculate this node's projection, given a parent projection. If there is no screen overlap, return None.
-    #[cfg(test)]
-    fn projection(&self, parent_projection: Projection) -> Option<Projection> {
-        let view_in_parent = self.view.at(self.position);
-        if let Some(overlap) = parent_projection.region.intersect(&view_in_parent) {
-            let region = view_in_parent.rebase_rect(&overlap).ok()?;
-            // Now, to calculate the screen offset, we take the relative position in the parent's projection, then add
-            // that to the screen offset.
-            let p = parent_projection.region.rebase_point(overlap.tl).ok()?;
-            Some(Projection::new(
-                region,
-                (
-                    p.x + parent_projection.screen.x,
-                    p.y + parent_projection.screen.y,
-                ),
-            ))
-        } else {
-            None
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn view_projection() -> Result<()> {
-        let v = ViewPort::new((30, 30), (0, 0, 30, 30), (0, 0))?;
-        // Bottom-right subrect
-        assert_eq!(
-            v.projection(Projection::new((20, 20, 10, 10), (0, 0))),
-            Some(Projection::new((20, 20, 10, 10), (0, 0))),
-        );
-        assert_eq!(
-            v.projection(Projection::new((20, 20, 10, 10), (10, 10))),
-            Some(Projection::new((20, 20, 10, 10), (10, 10))),
-        );
-        // Top-left subrect
-        assert_eq!(
-            v.projection(Projection::new((0, 0, 10, 10), (0, 0))),
-            Some(Projection::new((0, 0, 10, 10), (0, 0))),
-        );
-        assert_eq!(
-            v.projection(Projection::new((0, 0, 10, 10), (10, 10))),
-            Some(Projection::new((0, 0, 10, 10), (10, 10))),
-        );
-        // Perfectly wrapping the view
-        assert_eq!(
-            v.projection(Projection::new((0, 0, 30, 30), (0, 0))),
-            Some(Projection::new((0, 0, 30, 30), (0, 0))),
-        );
-        assert_eq!(
-            v.projection(Projection::new((0, 0, 30, 30), (10, 10))),
-            Some(Projection::new((0, 0, 30, 30), (10, 10))),
-        );
-
-        // No overlap
-        let v = ViewPort::new((30, 30), (10, 10, 10, 10), (0, 0))?;
-        assert_eq!(
-            v.projection(Projection::new((10, 10, 10, 10), (0, 0))),
-            None
-        );
-
-        // No overlap
-        let v = ViewPort::new((30, 30), (10, 10, 10, 10), (5, 5))?;
-        assert_eq!(
-            v.projection(Projection::new((10, 10, 10, 10), (0, 0))),
-            Some(Projection::new((5, 5, 5, 5), (0, 0))),
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn view_map() -> Result<()> {
-        let v = ViewPort::new((100, 100), (30, 30, 20, 20), (200, 200))?;
-
-        // No overlap with view
-        assert!(v.map((10, 10, 2, 2))?.is_none(),);
-
-        assert_eq!(
-            v.map((30, 30, 10, 10))?,
-            Some(ViewPort::new((10, 10), (0, 0, 10, 10), (200, 200),)?)
-        );
-
-        assert_eq!(
-            v.map((40, 40, 10, 10))?,
-            Some(ViewPort::new((10, 10), (0, 0, 10, 10), (210, 210),)?)
-        );
-
-        assert_eq!(
-            v.map((25, 25, 10, 10))?,
-            Some(ViewPort::new((10, 10), (5, 5, 5, 5), (200, 200))?)
-        );
-
-        assert_eq!(
-            v.map((35, 35, 10, 10))?,
-            Some(ViewPort::new((10, 10), (0, 0, 10, 10), (205, 205),)?)
-        );
-
-        assert_eq!(
-            v.map((45, 45, 10, 10))?,
-            Some(ViewPort::new((10, 10), (0, 0, 5, 5), (215, 215),)?)
-        );
-
-        assert_eq!(
-            v.map((30, 21, 10, 10))?,
-            Some(ViewPort::new((10, 10), (0, 9, 10, 1), (200, 200),)?)
-        );
-
-        assert_eq!(
-            v.map((30, 49, 10, 10))?,
-            Some(ViewPort::new((10, 10), (0, 0, 10, 1), (200, 219),)?)
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn view_project_line() -> Result<()> {
-        let v = ViewPort::new((100, 100), (30, 30, 10, 10), (50, 50))?;
-
-        assert!(v.project_line(Line::new(10, 10, 10)).is_none());
-        assert_eq!(
-            v.project_line(Line::new(30, 30, 10)),
-            Some((0, Line::new(50, 50, 10)))
-        );
-        assert_eq!(
-            v.project_line(Line::new(20, 30, 15)),
-            Some((10, Line::new(50, 50, 5)))
-        );
-        assert_eq!(
-            v.project_line(Line::new(35, 30, 10)),
-            Some((0, Line::new(55, 50, 5)))
-        );
-
-        Ok(())
-    }
 
     #[test]
     fn view_project_rect() -> Result<()> {
@@ -484,18 +272,6 @@ mod tests {
             v.project_rect(Rect::new(35, 35, 15, 15)),
             Some(Rect::new(55, 55, 5, 5))
         );
-
-        Ok(())
-    }
-
-    #[test]
-    fn view_project_point() -> Result<()> {
-        let v = ViewPort::new((100, 100), (30, 30, 10, 10), (50, 50))?;
-
-        assert!(v.project_point((10, 10)).is_none());
-        assert_eq!(v.project_point((30, 30)), Some(Point { x: 50, y: 50 }),);
-        assert_eq!(v.project_point((35, 35)), Some(Point { x: 55, y: 55 }),);
-        assert_eq!(v.project_point((90, 90)), None,);
 
         Ok(())
     }
