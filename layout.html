@@ -170,24 +170,30 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="layout"><a class="header" href="#layout">Layout</a></h1>
-<p>Layout is probably the most complex part of Canopy, and understanding the principles behind it will make writing
-powerful widgets much easier.</p>
+<p>Layout is probably the most complex part of Canopy, and understanding the
+principles behind it will make writing powerful widgets much easier.</p>
 <h2 id="viewport"><a class="header" href="#viewport">Viewport</a></h2>
-<p>The core structure managing layout in Canopy is the <a href="doc/canopy/viewport/struct.Viewport.html">ViewPort</a>. Each node has
-one, kept in the assocaited node state.</p>
+<p>The core structure managing layout in Canopy is the
+<a href="doc/canopy/viewport/struct.Viewport.html">ViewPort</a>. Each node has one, kept
+in the assocaited node state.</p>
 <center>
     <img width=100% style="padding: 20px;" src="assets/viewport.svg">
 </center>
-<p>The <strong>ViewPort</strong> co-ordinates 3 different values - the virtual <strong>size</strong> of the node, a <strong>view</strong> into the content of the
-node, and a <strong>projection</strong> of the view onto the screen. To make this concrete, let's imagine a text widget. We calculate
-the <strong>size</strong> of the widget by wrapping the text to a given width - the height of the node is then the number of
-resulting lines. The resulting size might not all fit on screen. The <strong>view</strong> is a window onto the widget that does fit
-on screen, constrained to fall within the node's total <strong>size</strong>.</p>
-<p>The final value we need to understand is the <strong>projection</strong> - this is the location on the screen where the <strong>view</strong> is
-drawn. The tricky thing to understand is that the projection value is an offset within the <strong>view</strong> of the parent node.</p>
-<p>Finally, location on the physical screen to which the view is painted is the <strong>projection</strong>, represented by the top left
-point of the projection rectangle.</p>
-<p>The <strong>size</strong> and <strong>view</strong> are controlled by the node itself, while the <strong>projection</strong> is controlled by the parent node.</p>
+<p>The <strong>ViewPort</strong> co-ordinates 3 different values - the virtual <strong>size</strong> of the
+node, a <strong>view</strong> into the content of the node, and a <strong>projection</strong> of the view
+onto the screen. To make this concrete, let's imagine a text widget. We
+calculate the <strong>size</strong> of the widget by wrapping the text to a given width -
+the height of the node is then the number of resulting lines. The resulting
+size might not all fit on screen. The <strong>view</strong> is a window onto the widget that
+does fit on screen, constrained to fall within the node's total <strong>size</strong>.</p>
+<p>The final value we need to understand is the <strong>projection</strong> - this is the
+location on the screen where the <strong>view</strong> is drawn. The tricky thing to
+understand is that the projection value is an offset within the <strong>view</strong> of the
+parent node.</p>
+<p>Finally, location on the physical screen to which the view is painted is the
+<strong>projection</strong>, represented by the top left point of the projection rectangle.</p>
+<p>The <strong>size</strong> and <strong>view</strong> are controlled by the node itself, while the
+<strong>projection</strong> is controlled by the parent node.</p>
 <h2 id="fit"><a class="header" href="#fit">Fit</a></h2>
 <h2 id="rendering"><a class="header" href="#rendering">Rendering</a></h2>
 
