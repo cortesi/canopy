@@ -1,4 +1,4 @@
-use canopy_core::{Context, Direction, Node, NodeId, Rect, Result};
+use canopy_core::{Context, Direction, Node, NodeId, Rect, Result, ViewPort, ViewStack};
 
 /// Information about a focusable node
 #[derive(Debug, Clone)]
@@ -18,7 +18,7 @@ pub fn collect_focusable_nodes(
     fn recurse(
         ctx: &dyn Context,
         node: &mut dyn Node,
-        offset: (i16, i16),
+        stack: &mut ViewStack,
         acc: &mut Vec<FocusableNode>,
         focused: &mut Option<(NodeId, Rect)>,
     ) -> Result<()> {
@@ -31,31 +31,34 @@ pub fn collect_focusable_nodes(
             return Ok(());
         }
 
-        let pos = (
-            offset.0 + vp.position().x as i16,
-            offset.1 + vp.position().y as i16,
-        );
-        let screen = vp.view().shift(pos.0, pos.1);
+        stack.push(vp);
 
-        if node.accept_focus() {
-            if focused.is_none() && ctx.is_focused(node) {
-                *focused = Some((node.id(), screen));
+        if let Some((_, screen_rect)) = stack.projection() {
+            if node.accept_focus() {
+                if focused.is_none() && ctx.is_focused(node) {
+                    *focused = Some((node.id(), screen_rect));
+                }
+                acc.push(FocusableNode {
+                    id: node.id(),
+                    rect: screen_rect,
+                });
             }
-            acc.push(FocusableNode {
-                id: node.id(),
-                rect: screen,
-            });
+
+            node.children(&mut |child| {
+                recurse(ctx, child, stack, acc, focused)?;
+                Ok(())
+            })?;
         }
 
-        node.children(&mut |child| {
-            recurse(ctx, child, pos, acc, focused)?;
-            Ok(())
-        })?;
-
+        stack.pop()?;
         Ok(())
     }
 
-    recurse(ctx, root, (0, 0), &mut nodes, &mut focused)?;
+    let root_vp = root.vp();
+    let screen_vp = ViewPort::new(root_vp.canvas(), root_vp.canvas().rect(), (0, 0))?;
+    let mut stack = ViewStack::new(screen_vp);
+
+    recurse(ctx, root, &mut stack, &mut nodes, &mut focused)?;
     Ok((nodes, focused))
 }
 
