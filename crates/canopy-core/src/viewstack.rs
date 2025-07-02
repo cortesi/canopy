@@ -108,7 +108,18 @@ impl ViewStack {
                 .shift(viewport.position().x as i16, viewport.position().y as i16);
 
             // Project this rectangle through the parent to screen coordinates
-            if let Some(rect_on_screen) = parent.project_rect(child_rect_in_parent) {
+            // This replaces the deprecated project_rect function
+            if let Some(visible_in_parent) = parent.view().intersect(&child_rect_in_parent) {
+                // Rebase the visible portion relative to parent's view
+                let rebased = parent.view().rebase_rect(&visible_in_parent).unwrap();
+                // Translate by parent's position to get screen coordinates
+                let rect_on_screen = Rect {
+                    tl: parent
+                        .position()
+                        .scroll(rebased.tl.x as i16, rebased.tl.y as i16),
+                    w: rebased.w,
+                    h: rebased.h,
+                };
                 // Intersect with current screen area
                 current_screen = current_screen.intersect(&rect_on_screen)?;
             } else {

@@ -150,15 +150,6 @@ impl ViewPort {
         self.view.at(self.position)
     }
 
-    /// Set the screen, view and outer rects all to the same size. This is
-    /// useful for nodes that fill whatever space they're given.
-    pub fn set_fill(&self, screen: Rect) -> Self {
-        let mut vp = *self;
-        vp.view = screen;
-        vp.canvas = screen.into();
-        vp
-    }
-
     /// Set the node size and the target view size at the same time. We try to retain the old view position, but shift
     /// and resize it to be within the view if necessary.
     pub fn fit_size(&mut self, size: Expanse, view_size: Expanse) {
@@ -234,47 +225,11 @@ impl ViewPort {
     pub fn unproject(&self, r: Rect) -> Result<Rect> {
         self.screen_rect().rebase_rect(&r)
     }
-
-    /// Project a rect in virtual space to the screen. If the virtual rect and
-    /// the screen rect partially overlap, just the overlap is returned.
-    pub fn project_rect(&self, r: Rect) -> Option<Rect> {
-        if let Some(o) = self.view.intersect(&r) {
-            let r = self.view.rebase_rect(&o).unwrap();
-            Some(Rect {
-                tl: self.position.scroll(r.tl.x as i16, r.tl.y as i16),
-                w: r.w,
-                h: r.h,
-            })
-        } else {
-            None
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn view_project_rect() -> Result<()> {
-        let v = ViewPort::new((100, 100), (30, 30, 10, 10), (50, 50))?;
-
-        assert!(v.project_rect(Rect::new(10, 10, 10, 10)).is_none());
-        assert_eq!(
-            v.project_rect(Rect::new(30, 30, 10, 10)),
-            Some(Rect::new(50, 50, 10, 10))
-        );
-        assert_eq!(
-            v.project_rect(Rect::new(20, 20, 15, 15)),
-            Some(Rect::new(50, 50, 5, 5))
-        );
-        assert_eq!(
-            v.project_rect(Rect::new(35, 35, 15, 15)),
-            Some(Rect::new(55, 55, 5, 5))
-        );
-
-        Ok(())
-    }
 
     #[test]
     fn fit_size() -> Result<()> {
