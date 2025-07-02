@@ -1,6 +1,6 @@
 //! Utilities for working with a Canopy node tree.
 
-use crate::{NodeId, Result, geom::Point, node::Node, path::*};
+use crate::{NodeId, Result, ViewPort, ViewStack, geom::Point, node::Node, path::*};
 
 /// Walk is the return value from traversal closures.
 #[derive(PartialEq, Eq, Debug, Clone)]
@@ -75,10 +75,10 @@ pub enum Locate<R> {
     Continue,
 }
 
-/// Calls a closure on the root node under (x, y), then recurses up the tree to all children falling under the same
-/// point. The function returns the last node that the closure returned a value for, either with Locate::Match
-/// (continuing taversal) or Locate::Stop(stopping traversal). Hidden nodes and nodes that do not contain the location
-/// point are skipped.
+/// Calls a closure on the root node under (x, y), then recurses up the tree to all children
+/// falling under the same point. The function returns the last node that the closure returned a
+/// value for, either with Locate::Match (continuing taversal) or Locate::Stop(stopping traversal).
+/// Hidden nodes and nodes that do not contain the location point are skipped.
 pub fn locate<R>(
     root: &mut dyn Node,
     p: impl Into<Point>,
@@ -86,29 +86,99 @@ pub fn locate<R>(
 ) -> Result<Option<R>> {
     let p = p.into();
     let mut result = None;
-    preorder(root, &mut |inner| -> Result<Walk<R>> {
-        Ok(if !inner.is_hidden() {
-            let a = inner.vp().screen_rect();
-            if a.contains_point(p) {
-                match f(inner)? {
-                    Locate::Continue => Walk::Continue,
+
+    // Create the initial ViewStack with the root viewport
+    // The root viewport represents the screen with canvas=view at position (0,0)
+    let root_vp = root.vp();
+    let screen_vp = ViewPort::new(root_vp.canvas(), root_vp.canvas().rect(), (0, 0))?;
+    let mut view_stack = ViewStack::new(screen_vp);
+
+    locate_recursive(root, p, f, &mut view_stack, Point::zero(), &mut result)?;
+    Ok(result)
+}
+
+// Helper function to recursively locate nodes with ViewStack
+fn locate_recursive<R>(
+    node: &mut dyn Node,
+    p: Point,
+    f: &mut dyn FnMut(&mut dyn Node) -> Result<Locate<R>>,
+    view_stack: &mut ViewStack,
+    parent_screen_pos: Point,
+    result: &mut Option<R>,
+) -> Result<Walk<R>> {
+    if node.is_hidden() {
+        return Ok(Walk::Skip);
+    }
+
+    // Track whether we pushed a viewport
+    let mut pushed_viewport = false;
+
+    // Push the node's viewport onto the stack
+    let node_vp = node.vp();
+    // Only push if the viewport has a non-zero view
+    if !node_vp.view().is_zero() {
+        // Convert node position from screen coordinates to parent-relative coordinates
+        let relative_pos = Point {
+            x: node_vp.position().x.saturating_sub(parent_screen_pos.x),
+            y: node_vp.position().y.saturating_sub(parent_screen_pos.y),
+        };
+
+        // Create a new viewport with parent-relative position
+        let relative_vp = ViewPort::new(node_vp.canvas(), node_vp.view(), relative_pos)?;
+
+        view_stack.push(relative_vp);
+        pushed_viewport = true;
+    }
+
+    let mut walk_result = Walk::Continue;
+
+    // Only check if we pushed a viewport
+    if pushed_viewport {
+        // Get the screen rect using the ViewStack projection
+        if let Some((_, screen_rect)) = view_stack.projection() {
+            if screen_rect.contains_point(p) {
+                match f(node)? {
+                    Locate::Continue => {
+                        walk_result = Walk::Continue;
+                    }
                     Locate::Stop(x) => {
-                        result = Some(x);
-                        Walk::Skip
+                        *result = Some(x);
+                        walk_result = Walk::Skip;
                     }
                     Locate::Match(x) => {
-                        result = Some(x);
-                        Walk::Continue
+                        *result = Some(x);
+                        walk_result = Walk::Continue;
                     }
                 }
+
+                // Process children if we're continuing
+                if matches!(walk_result, Walk::Continue) {
+                    let node_screen_pos = node.vp().position();
+                    node.children(&mut |child| {
+                        match locate_recursive(child, p, f, view_stack, node_screen_pos, result)? {
+                            Walk::Skip => {}
+                            Walk::Continue => {}
+                            Walk::Handle(x) => {
+                                walk_result = Walk::Handle(x);
+                            }
+                        }
+                        Ok(())
+                    })?;
+                }
             } else {
-                Walk::Skip
+                walk_result = Walk::Skip;
             }
         } else {
-            Walk::Skip
-        })
-    })?;
-    Ok(result)
+            walk_result = Walk::Skip;
+        }
+    }
+
+    // Only pop if we pushed
+    if pushed_viewport {
+        view_stack.pop()?;
+    }
+
+    Ok(walk_result)
 }
 
 /// Find the ID of the leaf node at a given point.
