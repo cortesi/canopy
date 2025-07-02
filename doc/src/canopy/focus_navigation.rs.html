@@ -34,10 +34,10 @@
 <a href=#34 id=34 data-nosnippet>34</a>        stack.push(vp);
 <a href=#35 id=35 data-nosnippet>35</a>
 <a href=#36 id=36 data-nosnippet>36</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>((<span class="kw">_</span>, screen_rect)) = stack.projection() {
-<a href=#37 id=37 data-nosnippet>37</a>            <span class="kw">if </span>node.accept_focus() {
-<a href=#38 id=38 data-nosnippet>38</a>                <span class="kw">if </span>focused.is_none() &amp;&amp; ctx.is_focused(node) {
-<a href=#39 id=39 data-nosnippet>39</a>                    <span class="kw-2">*</span>focused = <span class="prelude-val">Some</span>((node.id(), screen_rect));
-<a href=#40 id=40 data-nosnippet>40</a>                }
+<a href=#37 id=37 data-nosnippet>37</a>            <span class="kw">if </span>focused.is_none() &amp;&amp; ctx.is_focused(node) {
+<a href=#38 id=38 data-nosnippet>38</a>                <span class="kw-2">*</span>focused = <span class="prelude-val">Some</span>((node.id(), screen_rect));
+<a href=#39 id=39 data-nosnippet>39</a>            }
+<a href=#40 id=40 data-nosnippet>40</a>            <span class="kw">if </span>node.accept_focus() {
 <a href=#41 id=41 data-nosnippet>41</a>                acc.push(FocusableNode {
 <a href=#42 id=42 data-nosnippet>42</a>                    id: node.id(),
 <a href=#43 id=43 data-nosnippet>43</a>                    rect: screen_rect,
