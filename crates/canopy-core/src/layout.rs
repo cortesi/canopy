@@ -2,7 +2,7 @@
 
 use crate::{
     Node, Result, ViewPort,
-    geom::{Expanse, Frame, Rect},
+    geom::{Expanse, Rect},
 };
 
 /// The Layout struct provides operations that a node can perform on children during its layout
@@ -19,23 +19,6 @@ impl Layout {
     /// Unhides the element and all its descendants, allowing them to be rendered again.
     pub fn unhide(&self, child: &mut dyn Node) {
         child.state_mut().hidden = false;
-    }
-
-    /// Frame a single child node. First, we calculate the inner size after subtracting the frame. We then fit the child
-    /// into this inner size, and project it appropriately in the parent view.
-    pub fn frame(&self, child: &mut dyn Node, sz: Expanse, border: u16) -> Result<Frame> {
-        child.state_mut().set_position(crate::geom::Point {
-            x: border,
-            y: border,
-        });
-        child.layout(
-            self,
-            Expanse {
-                w: sz.w.saturating_sub(border * 2),
-                h: sz.h.saturating_sub(border * 2),
-            },
-        )?;
-        Ok(crate::geom::Frame::new(sz.rect(), border))
     }
 
     /// Place a node in a given sub-rectangle of a parent's view.
@@ -193,42 +176,6 @@ mod tests {
             n.state().viewport,
             ViewPort::new(Expanse::new(20, 20), Rect::new(0, 0, 20, 20), (10, 10))?
         );
-
-        Ok(())
-    }
-
-    #[test]
-    #[ignore = "This test is not fixed yet"]
-    fn frame_does_not_overflow_small_parent() -> Result<()> {
-        let l = Layout {};
-        let mut child = TFixed::new(2, 2);
-        assert!(l.frame(&mut child, Expanse::new(1, 1), 1).is_err());
-        Ok(())
-    }
-
-    #[test]
-    #[ignore = "This test is not fixed yet"]
-    fn node_frame() -> Result<()> {
-        // If we have room, the adjustment just shifts the child node relative to the screen.
-        let mut n = TFixed::new(5, 5);
-        let l = Layout {};
-        l.frame(&mut n, Expanse::new(10, 10), 1)?;
-        assert_eq!(
-            n.state().viewport,
-            ViewPort::new(Expanse::new(5, 5), Rect::new(0, 0, 5, 5), (1, 1))?
-        );
-
-        // If if the child node is too large, it is clipped to the bottom and left
-        let mut n = TFixed::new(10, 10);
-        l.frame(&mut n, Expanse::new(10, 10), 1)?;
-        assert_eq!(
-            n.state().viewport,
-            ViewPort::new(Expanse::new(10, 10), Rect::new(0, 0, 10, 10), (1, 1))?
-        );
-
-        // If if the parent is smaller than the frame would require, we get a zero view
-        let mut n = TFixed::new(10, 10);
-        assert!(l.frame(&mut n, Expanse::new(0, 0), 1).is_err());
 
         Ok(())
     }
