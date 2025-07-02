@@ -2,7 +2,13 @@ use std::{io::Write, process, sync::mpsc};
 
 use comfy_table::{ContentArrangement, Table};
 
-use crate::{backend::BackendControl, inputmap, poll::Poller, script};
+use crate::{
+    backend::BackendControl,
+    focus::{collect_focusable_nodes, find_focus_target, find_focused_node},
+    inputmap,
+    poll::Poller,
+    script,
+};
 
 use canopy_core::{
     Context, EventOutcome, Layout, Node, NodeId, Render, Result, TermBuf, ViewPort, ViewStack,
@@ -103,10 +109,6 @@ impl Context for Canopy {
 
     /// Move focus in a specified direction within the subtree at root.
     fn focus_dir(&mut self, root: &mut dyn Node, dir: Direction) {
-        use crate::focus_navigation::{
-            collect_focusable_nodes, find_focus_target, find_focused_node,
-        };
-
         // Collect all focusable nodes
         match collect_focusable_nodes(root) {
             Ok(focusable_nodes) => {
@@ -813,8 +815,13 @@ pub trait Loader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tutils::*;
-    use canopy_core::{StatefulNode, geom::Rect};
+    use crate::{
+        self as canopy,
+        backend::test::{CanvasRender, TestRender},
+        commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
+        tutils::*,
+    };
+    use canopy_core::{Error, EventOutcome, NodeState, StatefulNode, derive_commands, geom::Rect};
 
     #[test]
     fn tbindings() -> Result<()> {
@@ -1220,11 +1227,6 @@ mod tests {
 
     #[test]
     fn tkey_no_render() -> Result<()> {
-        use crate as canopy;
-        use crate::backend::test::TestRender;
-        use crate::commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue};
-        use canopy_core::{Error, EventOutcome, NodeState};
-
         #[derive(canopy_core::StatefulNode)]
         struct N {
             state: NodeState,
@@ -1288,10 +1290,6 @@ mod tests {
 
     #[test]
     fn zero_size_child_ok() -> Result<()> {
-        use crate as canopy;
-        use crate::backend::test::CanvasRender;
-        use canopy_core::{NodeState, derive_commands};
-
         #[derive(canopy_core::StatefulNode)]
         struct Child {
             state: NodeState,

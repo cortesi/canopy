@@ -6,7 +6,7 @@ pub use canopy_core::*;
 
 // Modules that remain in canopy
 mod canopy;
-mod focus_navigation;
+mod focus;
 mod inputmap;
 mod poll;
 mod root;
