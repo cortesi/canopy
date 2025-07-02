@@ -76,6 +76,10 @@ fn test_snake_navigation(grid: &mut Grid) -> Result<()> {
                     let after = get_focused_cell(&canopy, grid);
 
                     if before == after {
+                        // Add debug info
+                        eprintln!("DEBUG: Failed to move right from row {row}, col {col}");
+                        eprintln!("  Before: {before:?}");
+                        eprintln!("  After: {after:?}");
                         return Err(Error::Focus(format!(
                             "Failed to move right from row {row}, col {col} (stuck at {before:?})"
                         )));

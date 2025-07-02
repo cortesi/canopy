@@ -28,7 +28,7 @@ fn collect_focusable_recursive(
     node: &mut dyn Node,
     view_stack: &mut ViewStack,
     nodes: &mut Vec<FocusableNode>,
-    _parent_screen_pos: Point,
+    parent_screen_pos: Point,
 ) -> Result<()> {
     if node.is_hidden() {
         return Ok(());
@@ -39,9 +39,27 @@ fn collect_focusable_recursive(
         return Ok(());
     }
 
-    // Push the node's viewport onto the stack
-    // The node's position is already parent-relative
-    view_stack.push(node_vp);
+    // Convert node position to parent-relative coordinates
+    // If the position is already parent-relative (from place_()), it will be small
+    // If the position is absolute (from place()), we need to subtract parent position
+    let relative_pos = if node_vp.position().x < parent_screen_pos.x
+        || node_vp.position().y < parent_screen_pos.y
+    {
+        // Position is smaller than parent position, so it's already parent-relative
+        node_vp.position()
+    } else {
+        // Position might be absolute, convert to parent-relative
+        Point {
+            x: node_vp.position().x.saturating_sub(parent_screen_pos.x),
+            y: node_vp.position().y.saturating_sub(parent_screen_pos.y),
+        }
+    };
+
+    // Create a new viewport with parent-relative position
+    let relative_vp = ViewPort::new(node_vp.canvas(), node_vp.view(), relative_pos)?;
+
+    // Push the viewport onto the stack
+    view_stack.push(relative_vp);
 
     // Get screen rect from projection
     if let Some((_, screen_rect)) = view_stack.projection() {
@@ -53,8 +71,11 @@ fn collect_focusable_recursive(
         }
 
         // Process children
+        // The screen_rect gives us the absolute screen position of this node
+        // We should use this as the parent position for children
+        let node_screen_pos = screen_rect.tl;
         node.children(&mut |child| {
-            collect_focusable_recursive(child, view_stack, nodes, _parent_screen_pos)?;
+            collect_focusable_recursive(child, view_stack, nodes, node_screen_pos)?;
             Ok(())
         })?;
     }
