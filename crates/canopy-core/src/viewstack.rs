@@ -108,7 +108,6 @@ impl ViewStack {
                 .shift(viewport.position().x as i16, viewport.position().y as i16);
 
             // Project this rectangle through the parent to screen coordinates
-            // This replaces the deprecated project_rect function
             if let Some(visible_in_parent) = parent.view().intersect(&child_rect_in_parent) {
                 // Rebase the visible portion relative to parent's view
                 let rebased = parent.view().rebase_rect(&visible_in_parent).unwrap();

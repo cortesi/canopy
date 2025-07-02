@@ -60,7 +60,6 @@ impl Layout {
                 .scroll(loc.tl.x as i16, loc.tl.y as i16),
         );
         child.layout(self, loc.expanse())?;
-        child.state_mut().constrain(parent_vp);
         Ok(())
     }
 
@@ -74,33 +73,12 @@ impl Layout {
         node.state_mut().set_view(view);
     }
 
-    /// Constrain a child node within its parent's viewport.
-    pub fn constrain_child(&self, child: &mut dyn Node, parent_vp: ViewPort) {
-        child.state_mut().constrain(parent_vp);
-    }
-
-    /// Adjust a child node so that it fits a viewport. This lays the node out to
-    /// the viewport's screen rectangle, then adjusts the node's view to place as
-    /// much of it within the viewport's screen rectangle as possible.
-    ///
-    /// Note that [`fit`] will call the child's [`Node::layout`] method. Calling
-    /// `fit` on a node from within its own `layout` implementation will recurse
-    /// endlessly.
+    /// Adjust a child node so that it fits a viewport. This lays the node out to the parent's view
+    /// rectangle, then adjusts the node's position to match.
+    // FIXME: this shoudl just take a rect
     pub fn fit(&self, n: &mut dyn Node, parent_vp: ViewPort) -> Result<()> {
-        {
-            let st = n.state_mut();
-            if st.in_layout {
-                return Err(crate::error::Error::Layout(
-                    "recursive Layout::fit call".into(),
-                ));
-            }
-            st.in_layout = true;
-        }
-        let res = n.layout(self, parent_vp.screen_rect().into());
-        n.state_mut().in_layout = false;
-        res?;
+        n.layout(self, parent_vp.view().into())?;
         n.state_mut().set_position(parent_vp.position());
-        n.state_mut().constrain(parent_vp);
         Ok(())
     }
 }
@@ -198,7 +176,7 @@ mod tests {
         l.fit(&mut n, vp)?;
         assert_eq!(
             n.state().viewport,
-            ViewPort::new(Expanse::new(20, 20), Rect::new(0, 0, 10, 10), (10, 10))?
+            ViewPort::new(Expanse::new(20, 20), Rect::new(0, 0, 20, 20), (10, 10))?
         );
 
         // The child can shift its view freely
@@ -206,22 +184,14 @@ mod tests {
         n.state_mut().scroll_down();
         assert_eq!(
             n.state().viewport,
-            ViewPort::new(Expanse::new(20, 20), Rect::new(1, 1, 10, 10), (10, 10))?
+            ViewPort::new(Expanse::new(20, 20), Rect::new(0, 0, 20, 20), (10, 10))?
         );
 
         // Subsequent fits reset the child view position
         l.fit(&mut n, vp)?;
         assert_eq!(
             n.state().viewport,
-            ViewPort::new(Expanse::new(20, 20), Rect::new(0, 0, 10, 10), (10, 10))?
-        );
-
-        // When the parent viewport shrinks, the view is clamped
-        let shrink = ViewPort::new(Expanse::new(3, 3), Rect::new(0, 0, 2, 2), (10, 10))?;
-        l.fit(&mut n, shrink)?;
-        assert_eq!(
-            n.state().viewport,
-            ViewPort::new(Expanse::new(20, 20), Rect::new(0, 0, 2, 2), (10, 10))?
+            ViewPort::new(Expanse::new(20, 20), Rect::new(0, 0, 20, 20), (10, 10))?
         );
 
         Ok(())

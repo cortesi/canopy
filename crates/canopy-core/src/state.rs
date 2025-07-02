@@ -148,12 +148,6 @@ impl NodeState {
         self.viewport.set_view(view);
     }
 
-    /// Constrain this viewport so that its screen rectangle falls within the
-    /// specified parent viewport.
-    pub fn constrain(&mut self, parent: ViewPort) {
-        self.viewport.constrain(parent);
-    }
-
     /// Set the node size and the target view size at the same time.
     pub fn fit_size(&mut self, size: crate::geom::Expanse, view_size: crate::geom::Expanse) {
         self.viewport.fit_size(size, view_size);

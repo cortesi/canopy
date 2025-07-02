@@ -1,5 +1,4 @@
 use crate::Result;
-use crate::error;
 use crate::geom::{Expanse, Point, Rect};
 
 /// A ViewPort manages the size of a node and its projection onto the screen. In many ways, this is
@@ -45,17 +44,11 @@ impl ViewPort {
     ) -> Result<ViewPort> {
         let view = view.into();
         let size = canvas.into();
-        if !size.rect().contains_rect(&view) {
-            Err(error::Error::Geometry(format!(
-                "view {view:?} not contained in size {size:?}",
-            )))
-        } else {
-            Ok(ViewPort {
-                canvas: size,
-                view,
-                position: position.into(),
-            })
-        }
+        Ok(ViewPort {
+            canvas: size,
+            view,
+            position: position.into(),
+        })
     }
 
     /// Position of this ViewPort's view within the parent canvas.
@@ -144,8 +137,7 @@ impl ViewPort {
         self.scroll_by(1, 0)
     }
 
-    /// Absolute rectangle for the screen region the node is being projected
-    /// onto.
+    /// Absolute rectangle for the screen region the node is being projected onto.
     pub fn screen_rect(&self) -> Rect {
         self.view.at(self.position)
     }
@@ -165,23 +157,6 @@ impl ViewPort {
         .clamp_within(self.canvas.rect())
         // Safe to unwrap because of w, h computation above.
         .unwrap();
-    }
-
-    /// Constrain this viewport so that its screen rectangle falls within the
-    /// specified parent viewport. If there is no overlap with the parent, the
-    /// view is reduced to zero.
-    pub fn constrain(&mut self, parent: ViewPort) {
-        let parent_screen = parent.screen_rect();
-        let screen = self.view.at(self.position);
-        if let Some(i) = parent_screen.intersect(&screen) {
-            let dx = i.tl.x - screen.tl.x;
-            let dy = i.tl.y - screen.tl.y;
-            self.position = i.tl;
-            self.view = Rect::new(self.view.tl.x + dx, self.view.tl.y + dy, i.w, i.h);
-        } else {
-            self.position = parent_screen.tl;
-            self.view = Rect::default();
-        }
     }
 
     /// Calculates the (pre, active, post) rectangles needed to draw a vertical
@@ -219,11 +194,6 @@ impl ViewPort {
                 margin.hslice(&post)?,
             )))
         }
-    }
-
-    /// Take a rectangle on the physical screen, and calculate the matching portion of the view rectangle.
-    pub fn unproject(&self, r: Rect) -> Result<Rect> {
-        self.screen_rect().rebase_rect(&r)
     }
 }
 
