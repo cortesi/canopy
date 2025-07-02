@@ -95,6 +95,11 @@ impl Node for Root {
         l.place(&mut self.node_a, vp, node_a_rect)?;
         Ok(())
     }
+
+    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
+        r.fill("", self.vp().view(), ' ')?;
+        Ok(())
+    }
 }
 
 impl Loader for Root {
@@ -106,7 +111,6 @@ impl Loader for Root {
 }
 
 #[test]
-#[ignore]
 fn test_simple_node_fill() -> Result<()> {
     let size = Expanse::new(30, 10);
     let mut h = Harness::with_size(Root::new(), size)?;

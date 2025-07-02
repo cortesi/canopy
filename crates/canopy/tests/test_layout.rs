@@ -104,6 +104,11 @@ impl Node for Root {
         l.place(&mut self.child, vp, loc)?;
         Ok(())
     }
+
+    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
+        r.fill("", self.vp().view(), ' ')?;
+        Ok(())
+    }
 }
 
 impl Loader for Root {
@@ -113,7 +118,6 @@ impl Loader for Root {
 }
 
 #[test]
-#[ignore]
 fn child_clamped_to_parent() -> Result<()> {
     let size = Expanse::new(4, 4);
     let root = Root::new();

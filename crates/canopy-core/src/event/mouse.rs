@@ -222,7 +222,6 @@ mod tests {
     use crate::event::mouse::*;
 
     #[test]
-    #[ignore]
     fn tmouse() -> Result<()> {
         assert_eq!(
             Mouse {

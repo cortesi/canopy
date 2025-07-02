@@ -526,13 +526,21 @@ impl Canopy {
                 let node_screen_pos = n.vp().position();
                 let canvas = n.vp().canvas().rect();
                 n.children(&mut |child| {
-                    if !child.is_hidden() && !canvas.contains_point(child.vp().position()) {
-                        return Err(error::Error::Render(format!(
-                            "Child node '{}' has position {:?} outside parent canvas {:?}",
-                            child.id(),
-                            child.vp().position(),
-                            canvas
-                        )));
+                    if !child.is_hidden() {
+                        // Convert child position from screen coordinates to parent-relative coordinates
+                        let child_relative_pos = Point {
+                            x: child.vp().position().x.saturating_sub(node_screen_pos.x),
+                            y: child.vp().position().y.saturating_sub(node_screen_pos.y),
+                        };
+
+                        if !canvas.contains_point(child_relative_pos) {
+                            return Err(error::Error::Render(format!(
+                                "Child node '{}' has position {:?} outside parent canvas {:?}",
+                                child.id(),
+                                child_relative_pos,
+                                canvas
+                            )));
+                        }
                     }
                     self.render_traversal(dest_buf, styl, view_stack, child, node_screen_pos)
                 })?;
@@ -1002,7 +1010,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn tmouse() -> Result<()> {
         run(|c, mut tr, mut root| {
             c.set_focus(&mut root);
@@ -1052,7 +1059,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn tresize() -> Result<()> {
         run(|c, mut tr, mut root| {
             let size = 100;
@@ -1073,7 +1079,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn trender() -> Result<()> {
         run(|c, mut tr, mut root| {
             tr.render(c, &mut root)?;
@@ -1176,7 +1181,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn tshift_right() -> Result<()> {
         run(|c, mut tr, mut root| {
             tr.render(c, &mut root)?;
