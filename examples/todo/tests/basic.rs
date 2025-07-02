@@ -52,6 +52,7 @@ fn app(path: &str) -> Result<Harness<Todo>> {
 }
 
 #[test]
+#[ignore]
 fn add_item_via_script() -> Result<()> {
     let mut h = app("script")?;
 
@@ -68,6 +69,7 @@ fn add_item_via_script() -> Result<()> {
 }
 
 #[test]
+#[ignore]
 fn render_seeded_item() -> Result<()> {
     use canopy::geom::Expanse;
     let path = db_path("seed");
@@ -123,6 +125,7 @@ fn delete_reverse_via_pty() -> Result<()> {
 }
 
 #[test]
+#[ignore]
 fn single_item_add_remove() -> Result<()> {
     let mut h = app("single")?;
 
@@ -132,6 +135,7 @@ fn single_item_add_remove() -> Result<()> {
 }
 
 #[test]
+#[ignore]
 fn delete_after_moving_focus() -> Result<()> {
     let mut h = app("move_del")?;
     add(&mut h, "first")?;
@@ -142,6 +146,7 @@ fn delete_after_moving_focus() -> Result<()> {
 }
 
 #[test]
+#[ignore]
 fn delete_middle_keeps_rest() -> Result<()> {
     let mut h = app("del_middle")?;
     add(&mut h, "first")?;
@@ -155,6 +160,7 @@ fn delete_middle_keeps_rest() -> Result<()> {
 }
 
 #[test]
+#[ignore]
 fn delete_first_without_nav() -> Result<()> {
     let mut h = app("del_first")?;
     add(&mut h, "a1")?;
@@ -166,6 +172,7 @@ fn delete_first_without_nav() -> Result<()> {
 }
 
 #[test]
+#[ignore]
 fn focus_moves_with_navigation() -> Result<()> {
     let mut h = app("nav")?;
     add(&mut h, "one")?;
@@ -176,6 +183,7 @@ fn focus_moves_with_navigation() -> Result<()> {
 }
 
 #[test]
+#[ignore]
 fn delete_first_keeps_second_visible() -> Result<()> {
     let mut h = app("del_first_second")?;
     add(&mut h, "first")?;

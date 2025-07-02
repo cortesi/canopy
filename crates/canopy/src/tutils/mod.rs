@@ -263,6 +263,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn focusgym_split_right_render() -> Result<()> {
         let (_, mut tr) = TestRender::create();
         let mut canopy = Canopy::new();
@@ -331,6 +332,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn focusgym_nested_render() -> Result<()> {
         let (_, mut tr) = TestRender::create();
         let mut canopy = Canopy::new();

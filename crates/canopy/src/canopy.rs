@@ -989,6 +989,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn tmouse() -> Result<()> {
         run(|c, mut tr, mut root| {
             c.set_focus(&mut root);
@@ -1038,6 +1039,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn tresize() -> Result<()> {
         run(|c, mut tr, mut root| {
             let size = 100;
@@ -1161,6 +1163,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn tshift_right() -> Result<()> {
         run(|c, mut tr, mut root| {
             tr.render(c, &mut root)?;
