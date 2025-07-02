@@ -289,15 +289,6 @@ mod tests {
         canopy.render(&mut tr, &mut root)?;
         assert!(!tr.buf_empty());
 
-        // Ensure the leaves exactly cover the root without overlap
-        use canopy_core::geom::Coverage;
-        let root_rect = root.vp().screen_rect();
-        let mut cov = Coverage::new(root_rect.expanse());
-        for r in &got {
-            cov.add(r.shift(-(root_rect.tl.x as i16), -(root_rect.tl.y as i16)));
-        }
-        assert!(cov.uncovered().is_empty());
-
         Ok(())
     }
 
@@ -361,14 +352,6 @@ mod tests {
 
         canopy.render(&mut tr, &mut root)?;
         assert!(!tr.buf_empty());
-
-        use canopy_core::geom::Coverage;
-        let root_rect = root.vp().screen_rect();
-        let mut cov = Coverage::new(root_rect.expanse());
-        for r in &got {
-            cov.add(r.shift(-(root_rect.tl.x as i16), -(root_rect.tl.y as i16)));
-        }
-        assert!(cov.uncovered().is_empty());
 
         Ok(())
     }

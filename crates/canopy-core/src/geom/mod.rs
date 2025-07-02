@@ -1,4 +1,3 @@
-mod coverage;
 mod expanse;
 mod frame;
 mod line;
@@ -6,7 +5,6 @@ mod linesegment;
 mod point;
 mod rect;
 
-pub use coverage::Coverage;
 pub use expanse::Expanse;
 pub use frame::Frame;
 pub use line::Line;
