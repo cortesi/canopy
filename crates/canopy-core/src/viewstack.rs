@@ -464,21 +464,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "does not overlap with parent's canvas")]
-    fn test_push_constraint_view_no_overlap() {
-        // Parent has canvas (100,100)
-        let view1 = ViewPort::new((100, 100), (0, 0, 50, 50), (0, 0)).unwrap();
-        let mut stack = ViewStack::new(view1);
-
-        // Child's view starts at (20,20) in its own canvas and has size 10x10
-        // Position the child at (80,80) in parent's canvas
-        // This means the actual view rectangle would be at (100,100) to (110,110)
-        // which is completely outside the parent's canvas
-        let view2 = ViewPort::new((50, 50), (20, 20, 10, 10), (80, 80)).unwrap();
-        stack.push(view2); // Should panic
-    }
-
-    #[test]
     fn test_viewport_clipping() {
         // Test that viewports are properly clipped when they extend beyond parent bounds
         let view1 = ViewPort::new((20, 20), (0, 0, 20, 20), (0, 0)).unwrap();

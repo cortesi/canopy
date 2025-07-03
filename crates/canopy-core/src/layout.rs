@@ -21,10 +21,20 @@ impl Layout {
         child.state_mut().hidden = false;
     }
 
-    /// Place a node in a given sub-rectangle of a parent's view.
+    /// Fill a node to occupy the given size, resetting its view to start at (0,0).
+    /// This is typically used for root nodes or nodes that should always show
+    /// their content from the top-left corner.
     pub fn fill(&self, n: &mut dyn Node, sz: Expanse) -> Result<()> {
         n.state_mut().set_canvas(sz);
         n.state_mut().set_view(sz.rect());
+        Ok(())
+    }
+    
+    /// Fill a node to occupy the given size while preserving its current scroll position.
+    /// This is useful for nodes that need to maintain their viewport position across
+    /// layout updates (e.g., scrollable content areas).
+    pub fn fill_preserve_scroll(&self, n: &mut dyn Node, sz: Expanse) -> Result<()> {
+        n.state_mut().fit_size(sz, sz);
         Ok(())
     }
 

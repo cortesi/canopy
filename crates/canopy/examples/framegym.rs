@@ -77,7 +77,8 @@ impl Node for TestPattern {
 
         // The viewport automatically handles the visible window for us
         // We just need to render the content that's visible
-        for y in 0..view.h {
+        for y in 0..view.h.saturating_sub(1) {
+            // Leave room for debug line
             let absolute_y = view.tl.y + y;
             if absolute_y >= self.size.h {
                 break;
@@ -125,6 +126,10 @@ impl FrameGym {
 }
 
 impl Node for FrameGym {
+    fn accept_focus(&mut self) -> bool {
+        false // Don't accept focus, let it go to the child
+    }
+
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         self.child.layout(l, sz)?;
         self.wrap(self.child.vp())?;

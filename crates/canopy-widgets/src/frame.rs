@@ -109,7 +109,8 @@ where
     }
 
     fn layout(&mut self, l: &Layout, sz: canopy_core::geom::Expanse) -> Result<()> {
-        l.fill(self, sz)?;
+        // Use fill_preserve_scroll to maintain scroll position during re-layouts
+        l.fill_preserve_scroll(self, sz)?;
         let vp = self.vp();
         // The child should be placed at (1,1) but we need to ensure its size is correct
         // The child's area is the frame size minus the border (1 pixel on each side)
