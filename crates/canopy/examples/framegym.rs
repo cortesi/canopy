@@ -119,7 +119,7 @@ impl FrameGym {
         FrameGym {
             state: NodeState::default(),
             child: frame::Frame::new(TestPattern::new())
-                .with_title("Test Pattern - Use arrow keys to scroll".to_string()),
+                .with_title("Test Pattern - Use arrow keys to scroll (Tab to focus)".to_string()),
         }
     }
 }
@@ -163,7 +163,9 @@ pub fn main() -> Result<()> {
 
     canopy::Binder::new(&mut cnpy)
         .defaults::<Root<FrameGym>>()
-        .with_path("frame_gym/")
+        .with_path("")
+        // Focus navigation
+        .key(key::KeyCode::Tab, "root::focus_next()")
         // Arrow keys for scrolling
         .key(key::KeyCode::Down, "test_pattern::scroll_down()")
         .key(key::KeyCode::Up, "test_pattern::scroll_up()")

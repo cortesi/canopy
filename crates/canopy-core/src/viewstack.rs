@@ -37,19 +37,23 @@ impl ViewStack {
             parent_canvas
         );
 
-        // Also check that at least some part of the child's view rectangle
-        // (at its position in parent's canvas) overlaps with the parent's canvas
-        // The actual rectangle occupied by the child in parent's canvas is:
-        // the child's view shifted by the child's position
-        let child_rect_in_parent = view
-            .view()
-            .shift(view.position().x as i16, view.position().y as i16);
+        // Check that the child's actual placement in the parent overlaps with parent's canvas
+        // The child occupies a rectangle at its position with size equal to its view size
+        let child_placement_in_parent = Rect::new(
+            view.position().x,
+            view.position().y,
+            view.view().w,
+            view.view().h,
+        );
 
         assert!(
-            parent_canvas.intersect(&child_rect_in_parent).is_some(),
-            "ViewPort's view {:?} at position {:?} does not overlap with parent's canvas {:?}",
-            view.view(),
+            parent_canvas
+                .intersect(&child_placement_in_parent)
+                .is_some(),
+            "ViewPort at position {:?} with size {}x{} does not overlap with parent's canvas {:?}",
             view.position(),
+            view.view().w,
+            view.view().h,
             parent_canvas
         );
 
