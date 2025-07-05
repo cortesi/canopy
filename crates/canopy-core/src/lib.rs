@@ -20,7 +20,7 @@ mod viewstack;
 pub mod cursor;
 pub mod dump;
 pub mod event;
-pub mod geom;
+pub use geom;
 pub mod path;
 pub mod style;
 pub mod tree;
