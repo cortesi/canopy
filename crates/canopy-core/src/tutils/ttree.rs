@@ -4,8 +4,8 @@
 */
 use std::cell::RefCell;
 
-use canopy_core::{self as canopy};
-use canopy_core::{
+use crate::{self as canopy};
+use crate::{
     event::{key, mouse},
     geom::Expanse,
     *,

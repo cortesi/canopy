@@ -10,7 +10,7 @@ use crate::{
     script,
 };
 
-use canopy_core::{
+use crate::{
     Context, EventOutcome, Layout, Node, NodeId, Render, Result, TermBuf, ViewPort, ViewStack,
     commands, cursor, error,
     event::{Event, key, mouse},
@@ -829,7 +829,7 @@ mod tests {
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
         tutils::*,
     };
-    use canopy_core::{Error, EventOutcome, NodeState, StatefulNode, derive_commands, geom::Rect};
+    use crate::{Error, EventOutcome, NodeState, StatefulNode, derive_commands, geom::Rect};
 
     #[test]
     fn tbindings() -> Result<()> {
@@ -1231,7 +1231,7 @@ mod tests {
 
     #[test]
     fn tkey_no_render() -> Result<()> {
-        #[derive(canopy_core::StatefulNode)]
+        #[derive(StatefulNode)]
         struct N {
             state: NodeState,
         }
@@ -1294,7 +1294,7 @@ mod tests {
 
     #[test]
     fn zero_size_child_ok() -> Result<()> {
-        #[derive(canopy_core::StatefulNode)]
+        #[derive(StatefulNode)]
         struct Child {
             state: NodeState,
         }
@@ -1304,7 +1304,7 @@ mod tests {
 
         impl Node for Child {}
 
-        #[derive(canopy_core::StatefulNode)]
+        #[derive(StatefulNode)]
         struct Parent {
             state: NodeState,
             child: Child,
