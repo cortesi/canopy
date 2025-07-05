@@ -43,14 +43,14 @@ impl Node for EditorView {
         self.core.resize_window(sr.w as usize, sr.h as usize);
         for (i, s) in self.core.window_text().iter().enumerate() {
             if let Some(t) = s {
-                r.text("text", vo.line(i as u16), t)?;
+                r.text("text", vo.line(i as u32), t)?;
             }
         }
         Ok(())
     }
 
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        let outer = Expanse::new(sz.w, self.core.wrapped_height() as u16);
+        let outer = Expanse::new(sz.w, self.core.wrapped_height() as u32);
         l.size(self, outer, sz)?;
         Ok(())
     }

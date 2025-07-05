@@ -14,7 +14,7 @@ use canopy_core::{
 pub struct TextBuf {
     pub value: String,
 
-    cursor_pos: u16,
+    cursor_pos: u32,
     window: LineSegment,
 }
 
@@ -22,26 +22,26 @@ impl TextBuf {
     fn new(start: &str) -> Self {
         TextBuf {
             value: start.to_owned(),
-            cursor_pos: start.len() as u16,
+            cursor_pos: start.len() as u32,
             window: LineSegment { off: 0, len: 0 },
         }
     }
 
     /// The location of the displayed cursor along the x axis
-    fn cursor_display(&self) -> u16 {
+    fn cursor_display(&self) -> u32 {
         self.cursor_pos - self.window.off
     }
 
     fn text(&self) -> String {
-        let end = self.window.far().min(self.value.len() as u16) as usize;
+        let end = self.window.far().min(self.value.len() as u32) as usize;
         let v = self.value[self.window.off as usize..end].to_owned();
         let extra = self.window.len as usize - v.len();
         format!("{}{}", v, " ".repeat(extra))
     }
 
     fn fix_window(&mut self) {
-        if self.cursor_pos > self.value.len() as u16 {
-            self.cursor_pos = self.value.len() as u16
+        if self.cursor_pos > self.value.len() as u32 {
+            self.cursor_pos = self.value.len() as u32
         }
         if self.cursor_pos < self.window.off {
             self.window.off = self.cursor_pos;
@@ -49,7 +49,7 @@ impl TextBuf {
             let mut off = self.cursor_pos - self.window.len;
             // When we're right at the end of the sequence, we need one extra
             // character for the cursor.
-            if self.cursor_pos == self.value.len() as u16 {
+            if self.cursor_pos == self.value.len() as u32 {
                 off += 1
             }
             self.window.off = off;
@@ -65,11 +65,11 @@ impl TextBuf {
     fn set_display_width(&mut self, val: usize) {
         self.window = LineSegment {
             off: self.window.off,
-            len: val as u16,
+            len: val as u32,
         };
     }
 
-    pub fn goto(&mut self, loc: u16) -> bool {
+    pub fn goto(&mut self, loc: u32) -> bool {
         let changed = self.cursor_pos != loc;
         self.cursor_pos = loc;
         self.fix_window();
@@ -101,7 +101,7 @@ impl TextBuf {
         }
     }
     pub fn right(&mut self) -> bool {
-        if self.cursor_pos < self.value.len() as u16 {
+        if self.cursor_pos < self.value.len() as u32 {
             self.cursor_pos += 1;
             self.fix_window();
             true
@@ -199,7 +199,7 @@ impl Node for Input {
 
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         self.textbuf.set_display_width(sz.w as usize);
-        let tbl = self.textbuf.value.len() as u16;
+        let tbl = self.textbuf.value.len() as u32;
         let expanse = if self.textbuf.window.len >= tbl {
             sz
         } else {

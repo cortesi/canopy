@@ -48,7 +48,7 @@ pub trait Context {
     /// Scroll the view to the specified position. The view is clamped within
     /// the outer rectangle. Returns `true` if movement occurred and taints the
     /// subtree on change.
-    fn scroll_to(&mut self, n: &mut dyn Node, x: u16, y: u16) -> bool {
+    fn scroll_to(&mut self, n: &mut dyn Node, x: u32, y: u32) -> bool {
         let before = n.vp().view();
         n.state_mut().scroll_to(x, y);
         let changed = before != n.vp().view();
@@ -61,7 +61,7 @@ pub trait Context {
     /// Scroll the view by the given offsets. The view rectangle is clamped
     /// within the outer rectangle. Returns `true` if movement occurred and
     /// taints the subtree on change.
-    fn scroll_by(&mut self, n: &mut dyn Node, x: i16, y: i16) -> bool {
+    fn scroll_by(&mut self, n: &mut dyn Node, x: i32, y: i32) -> bool {
         let before = n.vp().view();
         n.state_mut().scroll_by(x, y);
         let changed = before != n.vp().view();

@@ -147,7 +147,7 @@ where
             // position so remaining items stay visible.
             let vp_y = self.vp().view().tl.y;
             if itm.virt.tl.y < vp_y {
-                core.scroll_by(self, 0, -(itm.virt.h as i16));
+                core.scroll_by(self, 0, -(itm.virt.h as i32));
             }
             if self.ensure_selected_in_view(core) {
                 core.taint(self);

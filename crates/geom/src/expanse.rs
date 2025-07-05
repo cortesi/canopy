@@ -5,8 +5,8 @@ use super::{Point, Rect};
 /// to madate that the location of a `Rect` is (0, 0).
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct Expanse {
-    pub w: u16,
-    pub h: u16,
+    pub w: u32,
+    pub h: u32,
 }
 
 impl Default for Expanse {
@@ -17,13 +17,13 @@ impl Default for Expanse {
 }
 
 impl Expanse {
-    pub fn new(w: u16, h: u16) -> Expanse {
+    pub fn new(w: u32, h: u32) -> Expanse {
         Expanse { w, h }
     }
 
     /// The area of this expanse.
     pub fn area(&self) -> u32 {
-        self.w as u32 * self.h as u32
+        self.w * self.h
     }
 
     /// Return a `Rect` with the same dimensions as the `Expanse`, but a location at (0, 0).
@@ -46,8 +46,8 @@ impl From<Rect> for Expanse {
     }
 }
 
-impl From<(u16, u16)> for Expanse {
-    fn from(v: (u16, u16)) -> Expanse {
+impl From<(u32, u32)> for Expanse {
+    fn from(v: (u32, u32)) -> Expanse {
         Expanse { w: v.0, h: v.1 }
     }
 }

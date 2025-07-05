@@ -1,5 +1,5 @@
-use std::{fmt::Display, sync::mpsc};
 use crate::geom;
+use std::{fmt::Display, sync::mpsc};
 
 use thiserror::Error;
 

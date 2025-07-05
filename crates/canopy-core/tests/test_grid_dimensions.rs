@@ -25,7 +25,7 @@ fn test_grid_dimensions() {
 
         // Also verify that dimensions match expected_size
         let expected_size = grid.expected_size();
-        let expected_pixels = (expected.0 as u16 * 10, expected.1 as u16 * 10);
+        let expected_pixels = (expected.0 as u32 * 10, expected.1 as u32 * 10);
         assert_eq!(
             (expected_size.w, expected_size.h),
             expected_pixels,

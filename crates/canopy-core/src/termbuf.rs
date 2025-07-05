@@ -83,14 +83,14 @@ impl TermBuf {
         // Intersect the destination rectangle with our bounds
         if let Some(clipped_dest) = self.rect().intersect(&dest_rect) {
             // Calculate the offset into the source buffer based on clipping
-            let src_offset_x = (clipped_dest.tl.x - dest_rect.tl.x) as i16;
-            let src_offset_y = (clipped_dest.tl.y - dest_rect.tl.y) as i16;
+            let src_offset_x = (clipped_dest.tl.x - dest_rect.tl.x) as i32;
+            let src_offset_y = (clipped_dest.tl.y - dest_rect.tl.y) as i32;
 
             // Copy the visible portion
             for dy in 0..clipped_dest.h {
                 for dx in 0..clipped_dest.w {
-                    let src_x = (dx as i16 + src_offset_x) as u16;
-                    let src_y = (dy as i16 + src_offset_y) as u16;
+                    let src_x = (dx as i32 + src_offset_x) as u32;
+                    let src_y = (dy as i32 + src_offset_y) as u32;
                     let src_p = Point { x: src_x, y: src_y };
 
                     if let Some(cell) = src.get(src_p) {
@@ -200,7 +200,7 @@ impl TermBuf {
     }
 
     /// Return the contents of a line as a `String`.
-    pub fn line_text(&self, y: u16) -> Option<String> {
+    pub fn line_text(&self, y: u32) -> Option<String> {
         if y >= self.size.h {
             return None;
         }
@@ -246,7 +246,7 @@ impl TermBuf {
 
     /// Does the buffer contain the supplied substring with the given style?
     pub fn contains_text_style(&self, txt: &str, style: &crate::style::PartialStyle) -> bool {
-        let tl = txt.chars().count() as u16;
+        let tl = txt.chars().count() as u32;
         if tl == 0 || tl > self.size.w {
             return false;
         }
@@ -255,7 +255,7 @@ impl TermBuf {
                 let mut m = true;
                 let mut c = false;
                 for (i, ch) in txt.chars().enumerate() {
-                    if let Some(cell) = self.get(Point { x: x + i as u16, y }) {
+                    if let Some(cell) = self.get(Point { x: x + i as u32, y }) {
                         if cell.ch != ch {
                             m = false;
                             break;
@@ -344,7 +344,7 @@ impl TermBuf {
             // Get actual line character by character to handle NULL cells
             let mut actual_chars = Vec::new();
             for x in 0..self.size.w {
-                if let Some(cell) = self.get(Point { x, y: y as u16 }) {
+                if let Some(cell) = self.get(Point { x, y: y as u32 }) {
                     if cell.ch == NULL {
                         actual_chars.push('X');
                     } else {
