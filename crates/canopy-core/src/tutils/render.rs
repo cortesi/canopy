@@ -2,15 +2,15 @@ use crate::{Result, geom::Point, render::RenderBackend, style::Style};
 
 /// A dummy render backend that discards all output.
 /// This is useful for tests where we want to inspect the TermBuf directly.
-pub struct DummyBackend;
+pub struct NopBackend;
 
-impl DummyBackend {
+impl NopBackend {
     pub fn new() -> Self {
-        DummyBackend
+        NopBackend
     }
 }
 
-impl RenderBackend for DummyBackend {
+impl RenderBackend for NopBackend {
     fn style(&mut self, _style: Style) -> Result<()> {
         Ok(())
     }

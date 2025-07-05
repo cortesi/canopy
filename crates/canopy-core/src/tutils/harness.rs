@@ -1,5 +1,6 @@
 use super::buf;
-use crate::{Canopy, Loader, backend::dummy::DummyBackend};
+use super::render::NopBackend;
+use crate::{Canopy, Loader};
 use crate::{Node, Result, TermBuf, event::key, geom::Expanse};
 
 /// A simple harness that holds a [`Canopy`], a [`DummyBackend`] backend and a
@@ -7,14 +8,14 @@ use crate::{Node, Result, TermBuf, event::key, geom::Expanse};
 /// and can then inspect the render buffer.
 pub struct Harness<N> {
     core: Canopy,
-    render: DummyBackend,
+    render: NopBackend,
     root: N,
 }
 
 impl<N: Node + Loader> Harness<N> {
     /// Create a harness using `size` for the root layout.
     pub fn with_size(mut root: N, size: Expanse) -> Result<Self> {
-        let render = DummyBackend::new();
+        let render = NopBackend::new();
         let mut core = Canopy::new();
 
         <N as Loader>::load(&mut core);

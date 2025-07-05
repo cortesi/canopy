@@ -2,6 +2,7 @@ pub mod buf;
 pub mod dummyctx;
 pub mod grid;
 pub mod harness;
+pub mod render;
 pub mod ttree;
 
 #[cfg(test)]
