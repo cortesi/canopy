@@ -17,8 +17,8 @@
 <a href=#17 id=17 data-nosnippet>17</a></span><span class="attr">#[derive(Debug, PartialEq, Eq, StatefulNode)]
 <a href=#18 id=18 data-nosnippet>18</a></span><span class="kw">pub struct </span>TFixed {
 <a href=#19 id=19 data-nosnippet>19</a>    state: NodeState,
-<a href=#20 id=20 data-nosnippet>20</a>    <span class="kw">pub </span>w: u16,
-<a href=#21 id=21 data-nosnippet>21</a>    <span class="kw">pub </span>h: u16,
+<a href=#20 id=20 data-nosnippet>20</a>    <span class="kw">pub </span>w: u32,
+<a href=#21 id=21 data-nosnippet>21</a>    <span class="kw">pub </span>h: u32,
 <a href=#22 id=22 data-nosnippet>22</a>}
 <a href=#23 id=23 data-nosnippet>23</a>
 <a href=#24 id=24 data-nosnippet>24</a><span class="kw">impl </span>Node <span class="kw">for </span>TFixed {
@@ -31,7 +31,7 @@
 <a href=#31 id=31 data-nosnippet>31</a>
 <a href=#32 id=32 data-nosnippet>32</a><span class="attr">#[derive_commands]
 <a href=#33 id=33 data-nosnippet>33</a></span><span class="kw">impl </span>TFixed {
-<a href=#34 id=34 data-nosnippet>34</a>    <span class="kw">pub fn </span>new(w: u16, h: u16) -&gt; <span class="self">Self </span>{
+<a href=#34 id=34 data-nosnippet>34</a>    <span class="kw">pub fn </span>new(w: u32, h: u32) -&gt; <span class="self">Self </span>{
 <a href=#35 id=35 data-nosnippet>35</a>        TFixed {
 <a href=#36 id=36 data-nosnippet>36</a>            state: NodeState::default(),
 <a href=#37 id=37 data-nosnippet>37</a>            w,
@@ -68,10 +68,10 @@
 <a href=#68 id=68 data-nosnippet>68</a>        <span class="bool-val">false
 <a href=#69 id=69 data-nosnippet>69</a>    </span>}
 <a href=#70 id=70 data-nosnippet>70</a>    <span class="kw">fn </span>focus_dir(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _root: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, _dir: Direction) {}
-<a href=#71 id=71 data-nosnippet>71</a>    <span class="kw">fn </span>scroll_to(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, _x: u16, _y: u16) -&gt; bool {
+<a href=#71 id=71 data-nosnippet>71</a>    <span class="kw">fn </span>scroll_to(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, _x: u32, _y: u32) -&gt; bool {
 <a href=#72 id=72 data-nosnippet>72</a>        <span class="bool-val">false
 <a href=#73 id=73 data-nosnippet>73</a>    </span>}
-<a href=#74 id=74 data-nosnippet>74</a>    <span class="kw">fn </span>scroll_by(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, _x: i16, _y: i16) -&gt; bool {
+<a href=#74 id=74 data-nosnippet>74</a>    <span class="kw">fn </span>scroll_by(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, _x: i32, _y: i32) -&gt; bool {
 <a href=#75 id=75 data-nosnippet>75</a>        <span class="bool-val">false
 <a href=#76 id=76 data-nosnippet>76</a>    </span>}
 <a href=#77 id=77 data-nosnippet>77</a>    <span class="kw">fn </span>page_up(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; bool {
@@ -163,9 +163,9 @@
 <a href=#163 id=163 data-nosnippet>163</a>            <span class="kw">if </span>!<span class="self">self</span>.children.is_empty() {
 <a href=#164 id=164 data-nosnippet>164</a>                <span class="kw">let </span>vp = <span class="self">self</span>.vp();
 <a href=#165 id=165 data-nosnippet>165</a>                <span class="kw">let </span>vps = <span class="kw">if </span><span class="self">self</span>.horizontal {
-<a href=#166 id=166 data-nosnippet>166</a>                    vp.view().split_horizontal(<span class="self">self</span>.children.len() <span class="kw">as </span>u16)<span class="question-mark">?
+<a href=#166 id=166 data-nosnippet>166</a>                    vp.view().split_horizontal(<span class="self">self</span>.children.len() <span class="kw">as </span>u32)<span class="question-mark">?
 <a href=#167 id=167 data-nosnippet>167</a>                </span>} <span class="kw">else </span>{
-<a href=#168 id=168 data-nosnippet>168</a>                    vp.view().split_vertical(<span class="self">self</span>.children.len() <span class="kw">as </span>u16)<span class="question-mark">?
+<a href=#168 id=168 data-nosnippet>168</a>                    vp.view().split_vertical(<span class="self">self</span>.children.len() <span class="kw">as </span>u32)<span class="question-mark">?
 <a href=#169 id=169 data-nosnippet>169</a>                </span>};
 <a href=#170 id=170 data-nosnippet>170</a>                <span class="kw">for </span>(i, ch) <span class="kw">in </span><span class="self">self</span>.children.iter_mut().enumerate() {
 <a href=#171 id=171 data-nosnippet>171</a>                    l.place(ch, vp, vps[i])<span class="question-mark">?</span>;
@@ -224,9 +224,9 @@
 <a href=#224 id=224 data-nosnippet>224</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="macro">vec!</span>[area]);
 <a href=#225 id=225 data-nosnippet>225</a>        }
 <a href=#226 id=226 data-nosnippet>226</a>        <span class="kw">let </span>vps = <span class="kw">if </span>b.horizontal {
-<a href=#227 id=227 data-nosnippet>227</a>            area.split_horizontal(b.children.len() <span class="kw">as </span>u16)<span class="question-mark">?
+<a href=#227 id=227 data-nosnippet>227</a>            area.split_horizontal(b.children.len() <span class="kw">as </span>u32)<span class="question-mark">?
 <a href=#228 id=228 data-nosnippet>228</a>        </span>} <span class="kw">else </span>{
-<a href=#229 id=229 data-nosnippet>229</a>            area.split_vertical(b.children.len() <span class="kw">as </span>u16)<span class="question-mark">?
+<a href=#229 id=229 data-nosnippet>229</a>            area.split_vertical(b.children.len() <span class="kw">as </span>u32)<span class="question-mark">?
 <a href=#230 id=230 data-nosnippet>230</a>        </span>};
 <a href=#231 id=231 data-nosnippet>231</a>        <span class="kw">let </span><span class="kw-2">mut </span>ret = Vec::new();
 <a href=#232 id=232 data-nosnippet>232</a>        <span class="kw">for </span>(child, rect) <span class="kw">in </span>b.children.iter().zip(vps.into_iter()) {

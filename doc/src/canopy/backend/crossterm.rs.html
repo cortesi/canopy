@@ -156,7 +156,7 @@
 <a href=#156 id=156 data-nosnippet>156</a>    }
 <a href=#157 id=157 data-nosnippet>157</a>
 <a href=#158 id=158 data-nosnippet>158</a>    <span class="kw">fn </span>text(<span class="kw-2">&amp;mut </span><span class="self">self</span>, loc: Point, txt: <span class="kw-2">&amp;</span>str) -&gt; io::Result&lt;()&gt; {
-<a href=#159 id=159 data-nosnippet>159</a>        <span class="self">self</span>.fp.queue(ccursor::MoveTo(loc.x, loc.y))<span class="question-mark">?</span>;
+<a href=#159 id=159 data-nosnippet>159</a>        <span class="self">self</span>.fp.queue(ccursor::MoveTo(loc.x <span class="kw">as </span>u16, loc.y <span class="kw">as </span>u16))<span class="question-mark">?</span>;
 <a href=#160 id=160 data-nosnippet>160</a>        <span class="self">self</span>.fp.queue(style::Print(txt))<span class="question-mark">?</span>;
 <a href=#161 id=161 data-nosnippet>161</a>        <span class="prelude-val">Ok</span>(())
 <a href=#162 id=162 data-nosnippet>162</a>    }
@@ -302,13 +302,13 @@
 <a href=#302 id=302 data-nosnippet>302</a>                button,
 <a href=#303 id=303 data-nosnippet>303</a>                action,
 <a href=#304 id=304 data-nosnippet>304</a>                location: Point {
-<a href=#305 id=305 data-nosnippet>305</a>                    x: m.column,
-<a href=#306 id=306 data-nosnippet>306</a>                    y: m.row,
+<a href=#305 id=305 data-nosnippet>305</a>                    x: m.column.into(),
+<a href=#306 id=306 data-nosnippet>306</a>                    y: m.row.into(),
 <a href=#307 id=307 data-nosnippet>307</a>                },
 <a href=#308 id=308 data-nosnippet>308</a>                modifiers: translate_key_modifiers(m.modifiers),
 <a href=#309 id=309 data-nosnippet>309</a>            })
 <a href=#310 id=310 data-nosnippet>310</a>        }
-<a href=#311 id=311 data-nosnippet>311</a>        cevent::Event::Resize(x, y) =&gt; Event::Resize(Expanse::new(x, y)),
+<a href=#311 id=311 data-nosnippet>311</a>        cevent::Event::Resize(x, y) =&gt; Event::Resize(Expanse::new(x.into(), y.into())),
 <a href=#312 id=312 data-nosnippet>312</a>        cevent::Event::FocusGained =&gt; Event::FocusGained,
 <a href=#313 id=313 data-nosnippet>313</a>        cevent::Event::FocusLost =&gt; Event::FocusLost,
 <a href=#314 id=314 data-nosnippet>314</a>        cevent::Event::Paste(s) =&gt; Event::Paste(s),
@@ -424,7 +424,7 @@
 <a href=#424 id=424 data-nosnippet>424</a>    event_emitter(cnpy.event_tx.clone());
 <a href=#425 id=425 data-nosnippet>425</a>    <span class="kw">let </span>size = translate_result(terminal::size())<span class="question-mark">?</span>;
 <a href=#426 id=426 data-nosnippet>426</a>    cnpy.register_backend(ctrl);
-<a href=#427 id=427 data-nosnippet>427</a>    cnpy.set_root_size(Expanse::new(size.<span class="number">0</span>, size.<span class="number">1</span>), <span class="kw-2">&amp;mut </span>root)<span class="question-mark">?</span>;
+<a href=#427 id=427 data-nosnippet>427</a>    cnpy.set_root_size(Expanse::new(size.<span class="number">0</span>.into(), size.<span class="number">1</span>.into()), <span class="kw-2">&amp;mut </span>root)<span class="question-mark">?</span>;
 <a href=#428 id=428 data-nosnippet>428</a>    cnpy.start_poller(cnpy.event_tx.clone());
 <a href=#429 id=429 data-nosnippet>429</a>
 <a href=#430 id=430 data-nosnippet>430</a>    <span class="kw">if let </span><span class="prelude-val">Err</span>(e) = cnpy.render(<span class="kw-2">&amp;mut </span>be, <span class="kw-2">&amp;mut </span>root) {
