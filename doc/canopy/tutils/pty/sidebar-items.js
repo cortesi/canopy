@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["spawn_workspace_bin","spawn_workspace_example"],"struct":["PtyApp"]};

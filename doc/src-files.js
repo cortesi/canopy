@@ -1,3 +1,3 @@
-var srcIndex = new Map(JSON.parse('[["canopy",["",[["backend",[],["crossterm.rs","dummy.rs","mod.rs","test.rs"]],["inspector",[],["logs.rs","mod.rs","view.rs"]],["tutils",[],["harness.rs","mod.rs","pty.rs","ttree.rs"]]],["binder.rs","canopy.rs","focus.rs","inputmap.rs","lib.rs","poll.rs","root.rs","script.rs"]]],["canopy_derive",["",[],["lib.rs"]]]]'));
+var srcIndex = new Map(JSON.parse('[["canopy",["",[["inspector",[],["logs.rs","mod.rs","view.rs"]]],["lib.rs","root.rs"]]],["canopy_derive",["",[],["lib.rs"]]]]'));
 createSrcSidebar();
-//{"start":36,"fragment_lengths":[277,37]}
+//{"start":36,"fragment_lengths":[86,37]}
