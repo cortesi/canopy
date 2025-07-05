@@ -7,13 +7,13 @@ pub struct TestPattern {
     size: Expanse,
 }
 
-#[derive_commands]
 impl Default for TestPattern {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[derive_commands]
 impl TestPattern {
     pub fn new() -> Self {
         TestPattern {
@@ -128,8 +128,7 @@ impl FrameGym {
     pub fn new() -> Self {
         FrameGym {
             state: NodeState::default(),
-            child: frame::Frame::new(TestPattern::new())
-                .with_title("Test Pattern - Use arrow keys to scroll (Tab to focus)".to_string()),
+            child: frame::Frame::new(TestPattern::new()).with_title("Frame Gym".to_string()),
         }
     }
 }
@@ -181,4 +180,18 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
         // Quit
         .with_path("root")
         .key('q', "root::quit()");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use canopy::tutils::harness::Harness;
+
+    #[test]
+    fn test_framegym_script_execution() -> Result<()> {
+        let mut harness = Harness::new(FrameGym::new())?;
+        harness.render()?;
+        harness.script("test_pattern::scroll_down()")?;
+        Ok(())
+    }
 }

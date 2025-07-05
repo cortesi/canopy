@@ -18,7 +18,6 @@ struct Args {
 pub fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
     Root::<FocusGym>::load(&mut cnpy);
-
     setup_bindings(&mut cnpy)?;
 
     let args = Args::parse();

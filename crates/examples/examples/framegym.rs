@@ -17,6 +17,7 @@ struct Args {
 
 pub fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
+
     Root::<FrameGym>::load(&mut cnpy);
     setup_bindings(&mut cnpy);
 
