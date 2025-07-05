@@ -1,4 +1,4 @@
-use canopy_core::tutils::Grid;
+use canopy_core::tutils::grid::Grid;
 
 #[test]
 fn test_grid_dimensions() {

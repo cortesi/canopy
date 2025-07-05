@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use canopy::{
     self, Result, StatefulNode,
     commands::{ArgTypes, Args, CommandInvocation, CommandNode, ReturnSpec, ReturnTypes},
-    tutils::*,
+    tutils::dummyctx::DummyContext,
 };
 use canopy_derive::{command, derive_commands};
 

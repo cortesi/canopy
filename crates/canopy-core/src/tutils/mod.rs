@@ -1,14 +1,8 @@
 pub mod dummyctx;
-mod grid;
+pub mod grid;
 pub mod harness;
 pub mod pty;
 pub mod ttree;
-
-pub use dummyctx::*;
-pub use grid::{Grid, GridNode};
-pub use harness::*;
-pub use pty::*;
-pub use ttree::*;
 
 #[cfg(test)]
 mod tests {

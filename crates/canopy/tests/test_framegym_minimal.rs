@@ -1,4 +1,6 @@
-use canopy::{derive_commands, event::key, geom::Expanse, tutils::Harness, widgets::frame, *};
+use canopy::{
+    derive_commands, event::key, geom::Expanse, tutils::harness::Harness, widgets::frame, *,
+};
 
 /// Minimal version of framegym TestPattern
 #[derive(StatefulNode)]

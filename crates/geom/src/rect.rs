@@ -29,7 +29,7 @@ impl Rect {
 
     /// The width times the height of the rectangle
     pub fn area(&self) -> u32 {
-        self.w as u32 * self.h as u32
+        self.w * self.h
     }
 
     /// Creat a zero-sized `Rect` at the origin.

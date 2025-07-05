@@ -3,7 +3,7 @@ use canopy::{
     commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
     geom::{Point, Rect},
     state::NodeName,
-    tutils::Harness,
+    tutils::harness::Harness,
 };
 
 // Big node that expands to twice its given size

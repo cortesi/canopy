@@ -827,7 +827,7 @@ mod tests {
         self as canopy,
         backend::test::{CanvasRender, TestRender},
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
-        tutils::*,
+        tutils::ttree::{get_state, reset_state, run_ttree},
     };
     use crate::{Error, EventOutcome, NodeState, StatefulNode, derive_commands, geom::Rect};
 

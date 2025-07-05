@@ -23,7 +23,7 @@ impl Expanse {
 
     /// The area of this expanse.
     pub fn area(&self) -> u32 {
-        self.w as u32 * self.h as u32
+        self.w * self.h
     }
 
     /// Return a `Rect` with the same dimensions as the `Expanse`, but a location at (0, 0).

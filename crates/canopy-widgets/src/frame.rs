@@ -239,7 +239,7 @@ mod tests {
                     }
 
                     // Simple pattern: character based on position
-                    let ch = char::from_u32(((absolute_x + absolute_y) % 10) as u32 + '0' as u32)
+                    let ch = char::from_u32(((absolute_x + absolute_y) % 10) + '0' as u32)
                         .unwrap_or('?');
                     line.push(ch);
                 }
@@ -460,10 +460,7 @@ mod tests {
         ];
 
         for (scroll_x, scroll_y, test_name) in scroll_tests {
-            println!(
-                "\n=== Testing scroll position ({}, {}) - {} ===",
-                scroll_x, scroll_y, test_name
-            );
+            println!("\n=== Testing scroll position ({scroll_x}, {scroll_y}) - {test_name} ===");
             ctx.scroll_to(&mut frame.child, scroll_x, scroll_y);
 
             // Create main buffer
@@ -496,9 +493,9 @@ mod tests {
 
             // Copy frame to main buffer at its screen position
             if let Some((_canvas_rect, screen_rect)) = view_stack.projection() {
-                println!("Frame projection: screen_rect={:?}", screen_rect);
+                println!("Frame projection: screen_rect={screen_rect:?}");
                 let frame_buf = frame_render.get_buffer();
-                main_buf.copy_to_rect(&frame_buf, screen_rect);
+                main_buf.copy_to_rect(frame_buf, screen_rect);
             }
 
             // 2. Then render each child
@@ -525,12 +522,11 @@ mod tests {
                     // Copy child to main buffer at its projected screen position
                     if let Some((canvas_rect, screen_rect)) = view_stack.projection() {
                         println!(
-                            "Child projection: canvas_rect={:?}, screen_rect={:?}",
-                            canvas_rect, screen_rect
+                            "Child projection: canvas_rect={canvas_rect:?}, screen_rect={screen_rect:?}"
                         );
                         let child_buf = child_render.get_buffer();
                         println!("Child buffer first line: {:?}", child_buf.line_text(0));
-                        main_buf.copy_to_rect(&child_buf, screen_rect);
+                        main_buf.copy_to_rect(child_buf, screen_rect);
                     } else {
                         println!("No projection for child!");
                     }
@@ -545,11 +541,11 @@ mod tests {
             // Print the result
             println!("Buffer with viewport stack:");
             for line in main_buf.lines() {
-                println!("{}", line);
+                println!("{line}");
             }
 
             // Check for overdraw
-            check_frame_boundaries(&main_buf, &format!("Viewport stack test - {}", test_name));
+            check_frame_boundaries(&main_buf, &format!("Viewport stack test - {test_name}"));
         }
     }
 
@@ -671,7 +667,7 @@ mod tests {
         ];
 
         for (test_name, x, y) in test_cases {
-            println!("\n=== Testing: {} (scroll to {}, {}) ===", test_name, x, y);
+            println!("\n=== Testing: {test_name} (scroll to {x}, {y}) ===");
 
             // Scroll to position
             ctx.scroll_to(&mut frame.child, x, y);
@@ -692,11 +688,11 @@ mod tests {
             let buffer = render.get_buffer();
             println!("Buffer contents:");
             for line in buffer.lines() {
-                println!("{}", line);
+                println!("{line}");
             }
 
             // Check for overdraw
-            check_frame_boundaries(&buffer, test_name);
+            check_frame_boundaries(buffer, test_name);
         }
 
         // Also test incremental scrolling
@@ -718,7 +714,7 @@ mod tests {
                 .unwrap();
 
             let buffer = render.get_buffer();
-            check_frame_boundaries(&buffer, &format!("After {} scroll_down calls", i + 1));
+            check_frame_boundaries(buffer, &format!("After {} scroll_down calls", i + 1));
         }
 
         // Scroll right one column at a time
@@ -735,7 +731,7 @@ mod tests {
                 .unwrap();
 
             let buffer = render.get_buffer();
-            check_frame_boundaries(&buffer, &format!("After {} scroll_right calls", i + 1));
+            check_frame_boundaries(buffer, &format!("After {} scroll_right calls", i + 1));
         }
     }
 }

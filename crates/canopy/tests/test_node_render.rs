@@ -1,6 +1,6 @@
 use canopy::{
     Context, Expanse, Layout, Loader, Node, NodeState, Render, Result, StatefulNode, buf,
-    derive_commands, geom, tutils::Harness,
+    derive_commands, geom, tutils::harness::Harness,
 };
 
 // Define our node types

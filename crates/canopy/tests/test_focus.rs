@@ -1,6 +1,6 @@
 use canopy::tree::*;
 use canopy::*;
-use canopy_core::{Context, Expanse, Node, Rect, Result, tutils::Grid};
+use canopy_core::{Context, Expanse, Node, Rect, Result, tutils::grid::Grid};
 
 /// Helper function to get the currently focused cell name in a Grid
 fn get_focused_cell(canopy: &Canopy, grid: &mut Grid) -> Option<String> {

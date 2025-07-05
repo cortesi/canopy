@@ -1,7 +1,7 @@
 use canopy::path::Path;
 use canopy::tree::*;
 use canopy::*;
-use canopy_core::{Context, tutils::Grid};
+use canopy_core::{Context, tutils::grid::Grid};
 
 struct TreeLeaf {
     state: NodeState,

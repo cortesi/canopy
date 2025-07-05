@@ -196,7 +196,7 @@ impl ScriptHost {
 mod tests {
     use super::*;
     use crate::StatefulNode;
-    use crate::tutils::*;
+    use crate::tutils::ttree::{get_state, run_ttree};
 
     #[test]
     fn texecute() -> Result<()> {

@@ -1,4 +1,4 @@
-use canopy::{derive_commands, event::key, geom::Expanse, tutils::Harness, *};
+use canopy::{derive_commands, event::key, geom::Expanse, tutils::harness::Harness, *};
 
 /// Simple test to demonstrate viewport scrolling behavior
 #[derive(StatefulNode)]
