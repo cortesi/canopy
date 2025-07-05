@@ -80,7 +80,8 @@ impl ViewStack {
     /// represents the actual screen size. The position of the first viewport itself
     /// is ignored - only its view dimensions matter.
     pub fn root_screen(&self) -> Rect {
-        self.views[0].view().at((0, 0))
+        let v = self.views[0].view();
+        Rect::new(0, 0, v.w, v.h)
     }
 
     /// Calculates the projection from the final viewport's canvas to the screen.
@@ -98,7 +99,8 @@ impl ViewStack {
     pub fn projection(&self) -> Option<(Rect, Rect)> {
         // Start with the first viewport's view as the screen
         // The first viewport's position is ignored since it represents the physical screen
-        let mut current_screen = self.views[0].view().at((0, 0));
+        let first_view = self.views[0].view();
+        let mut current_screen = Rect::new(0, 0, first_view.w, first_view.h);
 
         // For each subsequent viewport, we need to calculate where its view
         // appears on screen, taking into account its position within the parent
@@ -107,9 +109,12 @@ impl ViewStack {
             let parent = &self.views[i - 1];
 
             // Calculate where the child viewport appears in the parent's canvas
-            let child_rect_in_parent = viewport
-                .view()
-                .shift(viewport.position().x as i16, viewport.position().y as i16);
+            let child_rect_in_parent = Rect::new(
+                viewport.position().x,
+                viewport.position().y,
+                viewport.view().w,
+                viewport.view().h,
+            );
 
             // Project this rectangle through the parent to screen coordinates
             if let Some(visible_in_parent) = parent.view().intersect(&child_rect_in_parent) {
@@ -145,18 +150,28 @@ impl ViewStack {
                 let _parent = &self.views[i - 1];
 
                 // Calculate where the child appears in parent's canvas
-                let child_rect_in_parent = viewport
-                    .view()
-                    .shift(viewport.position().x as i16, viewport.position().y as i16);
+                let child_rect_in_parent = Rect::new(
+                    viewport.position().x,
+                    viewport.position().y,
+                    viewport.view().w,
+                    viewport.view().h,
+                );
 
                 // Find the intersection with what's visible in the parent
                 if let Some(visible_part) = visible_in_parent.intersect(&child_rect_in_parent) {
                     // Transform this visible part to child's canvas coordinates
                     // by shifting back by the child's position
-                    visible_in_parent = visible_part.shift(
-                        -(viewport.position().x as i16),
-                        -(viewport.position().y as i16),
-                    );
+                    visible_in_parent = Rect {
+                        tl: visible_part
+                            .tl
+                            .scroll(
+                                -(viewport.position().x as i16),
+                                -(viewport.position().y as i16),
+                            )
+                            .scroll(viewport.view().tl.x as i16, viewport.view().tl.y as i16),
+                        w: visible_part.w,
+                        h: visible_part.h,
+                    };
                 } else {
                     // No intersection - nothing visible
                     return None;
@@ -414,8 +429,8 @@ mod tests {
                 ],
                 projections: vec![
                     Some(((10, 10, 80, 80), (0, 0, 80, 80))),
-                    Some(((5, 5, 60, 60), (10, 10, 60, 60))),
-                    Some(((10, 10, 40, 40), (25, 25, 40, 40))),
+                    Some(((5, 5, 60, 60), (5, 5, 60, 60))),
+                    Some(((10, 10, 40, 40), (10, 10, 40, 40))),
                 ],
             },
             TestCase {
@@ -427,8 +442,8 @@ mod tests {
                 ],
                 projections: vec![
                     Some(((0, 0, 40, 40), (0, 0, 40, 40))),
-                    Some(((5, 5, 25, 25), (10, 10, 25, 25))),
-                    Some(((5, 5, 15, 15), (15, 15, 15, 15))),
+                    Some(((5, 5, 25, 25), (5, 5, 25, 25))),
+                    Some(((5, 5, 15, 15), (5, 5, 15, 15))),
                 ],
             },
             TestCase {
