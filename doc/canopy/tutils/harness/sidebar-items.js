@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["run"],"struct":["Harness"]};
+window.SIDEBAR_ITEMS = {"struct":["Harness"]};

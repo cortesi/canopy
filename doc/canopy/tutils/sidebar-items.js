@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["GridNode"],"fn":["get_state","reset_state","run","spawn_workspace_bin","spawn_workspace_example"],"mod":["harness","pty","ttree"],"struct":["Ba","BaLa","BaLb","Bb","BbLa","BbLb","DummyContext","Grid","Harness","PtyApp","R","State","TFixed"]};
+window.SIDEBAR_ITEMS = {"mod":["dummyctx","grid","harness","pty","ttree"]};

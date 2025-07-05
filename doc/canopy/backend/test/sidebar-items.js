@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["TestBuf","TestRender"]};
+window.SIDEBAR_ITEMS = {"struct":["CanvasBuf","CanvasRender","TestBuf","TestRender"]};
