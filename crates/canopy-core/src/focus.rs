@@ -1,4 +1,4 @@
-use canopy_core::{
+use crate::{
     Context, Direction, Node, NodeId, Point, Rect, Result, ViewPort, ViewStack,
     tree::{Walk, preorder},
 };

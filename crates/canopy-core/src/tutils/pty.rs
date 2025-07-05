@@ -2,7 +2,7 @@ use expectrl::{Eof, Session, spawn};
 use std::process::Command;
 use std::time::Duration;
 
-use canopy_core::{Error, Result};
+use crate::{Error, Result};
 
 /// A handle to a process running under a pseudo terminal.
 pub struct PtyApp {
