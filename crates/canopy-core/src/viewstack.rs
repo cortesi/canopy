@@ -107,9 +107,17 @@ impl ViewStack {
             let parent = &self.views[i - 1];
 
             // Calculate where the child viewport appears in the parent's canvas
-            let child_rect_in_parent = viewport
-                .view()
-                .shift(viewport.position().x as i16, viewport.position().y as i16);
+            // The visible region of the child on the parent's canvas is the
+            // size of the child's view placed at the child's position. The
+            // view's top-left offset represents the scroll position within the
+            // child and should not influence its placement relative to the
+            // parent.
+            let child_rect_in_parent = Rect::new(
+                viewport.position().x,
+                viewport.position().y,
+                viewport.view().w,
+                viewport.view().h,
+            );
 
             // Project this rectangle through the parent to screen coordinates
             if let Some(visible_in_parent) = parent.view().intersect(&child_rect_in_parent) {
@@ -145,18 +153,30 @@ impl ViewStack {
                 let _parent = &self.views[i - 1];
 
                 // Calculate where the child appears in parent's canvas
-                let child_rect_in_parent = viewport
-                    .view()
-                    .shift(viewport.position().x as i16, viewport.position().y as i16);
+                // The portion of the child that could be visible in the parent
+                // is determined solely by the child's position and the size of
+                // its view. The view's offset represents the scroll position
+                // within the child and should not affect how it maps onto the
+                // parent canvas.
+                let child_rect_in_parent = Rect::new(
+                    viewport.position().x,
+                    viewport.position().y,
+                    viewport.view().w,
+                    viewport.view().h,
+                );
 
                 // Find the intersection with what's visible in the parent
                 if let Some(visible_part) = visible_in_parent.intersect(&child_rect_in_parent) {
-                    // Transform this visible part to child's canvas coordinates
-                    // by shifting back by the child's position
-                    visible_in_parent = visible_part.shift(
-                        -(viewport.position().x as i16),
-                        -(viewport.position().y as i16),
-                    );
+                    // Transform this visible part to coordinates within the
+                    // child's canvas. First rebase relative to the child's
+                    // position, then account for the view's offset within the
+                    // canvas.
+                    visible_in_parent = visible_part
+                        .shift(
+                            -(viewport.position().x as i16),
+                            -(viewport.position().y as i16),
+                        )
+                        .shift(viewport.view().tl.x as i16, viewport.view().tl.y as i16);
                 } else {
                     // No intersection - nothing visible
                     return None;
@@ -414,8 +434,8 @@ mod tests {
                 ],
                 projections: vec![
                     Some(((10, 10, 80, 80), (0, 0, 80, 80))),
-                    Some(((5, 5, 60, 60), (10, 10, 60, 60))),
-                    Some(((10, 10, 40, 40), (25, 25, 40, 40))),
+                    Some(((5, 5, 60, 60), (5, 5, 60, 60))),
+                    Some(((10, 10, 40, 40), (10, 10, 40, 40))),
                 ],
             },
             TestCase {
@@ -427,8 +447,8 @@ mod tests {
                 ],
                 projections: vec![
                     Some(((0, 0, 40, 40), (0, 0, 40, 40))),
-                    Some(((5, 5, 25, 25), (10, 10, 25, 25))),
-                    Some(((5, 5, 15, 15), (15, 15, 15, 15))),
+                    Some(((5, 5, 25, 25), (5, 5, 25, 25))),
+                    Some(((5, 5, 15, 15), (5, 5, 15, 15))),
                 ],
             },
             TestCase {

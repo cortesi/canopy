@@ -555,6 +555,7 @@ mod tests {
     #[test]
     fn test_frame_overdraw_with_multiple_scrolls() {
         use canopy_core::{
+            TermBuf, ViewStack,
             geom::Direction,
             path::Path,
             style::{StyleManager, StyleMap},
@@ -657,7 +658,8 @@ mod tests {
         let stylemap = StyleMap::new();
         let mut style_manager = StyleManager::default();
 
-        // Test various scroll positions
+        // Test various scroll positions using a ViewStack to ensure children are
+        // rendered within the frame boundaries.
         let test_cases = vec![
             ("Initial position", 0, 0),
             ("Scroll right edge", 12, 0),
@@ -672,30 +674,51 @@ mod tests {
         for (test_name, x, y) in test_cases {
             println!("\n=== Testing: {} (scroll to {}, {}) ===", test_name, x, y);
 
-            // Scroll to position
             ctx.scroll_to(&mut frame.child, x, y);
 
-            // Create fresh render for this test
-            let render_rect = geom::Rect::new(0, 0, 10, 10);
-            let mut render = Render::new(&stylemap, &mut style_manager, frame_size, render_rect);
+            let mut main_buf = TermBuf::empty(frame_size);
+            let screen_vp =
+                canopy_core::ViewPort::new(frame_size, frame_size.rect(), geom::Point::zero())
+                    .unwrap();
+            let mut view_stack = ViewStack::new(screen_vp);
 
-            // Render the frame first
-            frame.render(&ctx, &mut render).unwrap();
-
-            // Then render the child content
-            frame
-                .children(&mut |child| child.render(&ctx, &mut render))
-                .unwrap();
-
-            // Get the buffer and print it
-            let buffer = render.get_buffer();
-            println!("Buffer contents:");
-            for line in buffer.lines() {
-                println!("{}", line);
+            let frame_vp = frame.vp();
+            view_stack.push(frame_vp);
+            let mut frame_render = Render::new(
+                &stylemap,
+                &mut style_manager,
+                frame_vp.canvas(),
+                frame_vp.view(),
+            );
+            frame.render(&ctx, &mut frame_render).unwrap();
+            if let Some((_, screen_rect)) = view_stack.projection() {
+                let frame_buf = frame_render.get_buffer();
+                main_buf.copy_to_rect(&frame_buf, screen_rect);
             }
 
-            // Check for overdraw
-            check_frame_boundaries(&buffer, test_name);
+            frame
+                .children(&mut |child| {
+                    let child_vp = child.vp();
+                    view_stack.push(child_vp);
+                    let mut child_render = Render::new(
+                        &stylemap,
+                        &mut style_manager,
+                        child_vp.canvas(),
+                        child_vp.view(),
+                    );
+                    child.render(&ctx, &mut child_render)?;
+                    if let Some((_, screen_rect)) = view_stack.projection() {
+                        let child_buf = child_render.get_buffer();
+                        main_buf.copy_to_rect(&child_buf, screen_rect);
+                    }
+                    view_stack.pop().unwrap();
+                    Ok(())
+                })
+                .unwrap();
+
+            view_stack.pop().unwrap();
+
+            check_frame_boundaries(&main_buf, test_name);
         }
 
         // Also test incremental scrolling
@@ -708,16 +731,49 @@ mod tests {
         for i in 0..15 {
             ctx.scroll_down(&mut frame.child);
 
-            let render_rect = geom::Rect::new(0, 0, 10, 10);
-            let mut render = Render::new(&stylemap, &mut style_manager, frame_size, render_rect);
+            let mut main_buf = TermBuf::empty(frame_size);
+            let screen_vp =
+                canopy_core::ViewPort::new(frame_size, frame_size.rect(), geom::Point::zero())
+                    .unwrap();
+            let mut view_stack = ViewStack::new(screen_vp);
 
-            frame.render(&ctx, &mut render).unwrap();
+            let frame_vp = frame.vp();
+            view_stack.push(frame_vp);
+            let mut frame_render = Render::new(
+                &stylemap,
+                &mut style_manager,
+                frame_vp.canvas(),
+                frame_vp.view(),
+            );
+            frame.render(&ctx, &mut frame_render).unwrap();
+            if let Some((_, screen_rect)) = view_stack.projection() {
+                let frame_buf = frame_render.get_buffer();
+                main_buf.copy_to_rect(&frame_buf, screen_rect);
+            }
+
             frame
-                .children(&mut |child| child.render(&ctx, &mut render))
+                .children(&mut |child| {
+                    let child_vp = child.vp();
+                    view_stack.push(child_vp);
+                    let mut child_render = Render::new(
+                        &stylemap,
+                        &mut style_manager,
+                        child_vp.canvas(),
+                        child_vp.view(),
+                    );
+                    child.render(&ctx, &mut child_render)?;
+                    if let Some((_, screen_rect)) = view_stack.projection() {
+                        let child_buf = child_render.get_buffer();
+                        main_buf.copy_to_rect(&child_buf, screen_rect);
+                    }
+                    view_stack.pop().unwrap();
+                    Ok(())
+                })
                 .unwrap();
 
-            let buffer = render.get_buffer();
-            check_frame_boundaries(&buffer, &format!("After {} scroll_down calls", i + 1));
+            view_stack.pop().unwrap();
+
+            check_frame_boundaries(&main_buf, &format!("After {} scroll_down calls", i + 1));
         }
 
         // Scroll right one column at a time
@@ -725,16 +781,49 @@ mod tests {
         for i in 0..15 {
             ctx.scroll_right(&mut frame.child);
 
-            let render_rect = geom::Rect::new(0, 0, 10, 10);
-            let mut render = Render::new(&stylemap, &mut style_manager, frame_size, render_rect);
+            let mut main_buf = TermBuf::empty(frame_size);
+            let screen_vp =
+                canopy_core::ViewPort::new(frame_size, frame_size.rect(), geom::Point::zero())
+                    .unwrap();
+            let mut view_stack = ViewStack::new(screen_vp);
 
-            frame.render(&ctx, &mut render).unwrap();
+            let frame_vp = frame.vp();
+            view_stack.push(frame_vp);
+            let mut frame_render = Render::new(
+                &stylemap,
+                &mut style_manager,
+                frame_vp.canvas(),
+                frame_vp.view(),
+            );
+            frame.render(&ctx, &mut frame_render).unwrap();
+            if let Some((_, screen_rect)) = view_stack.projection() {
+                let frame_buf = frame_render.get_buffer();
+                main_buf.copy_to_rect(&frame_buf, screen_rect);
+            }
+
             frame
-                .children(&mut |child| child.render(&ctx, &mut render))
+                .children(&mut |child| {
+                    let child_vp = child.vp();
+                    view_stack.push(child_vp);
+                    let mut child_render = Render::new(
+                        &stylemap,
+                        &mut style_manager,
+                        child_vp.canvas(),
+                        child_vp.view(),
+                    );
+                    child.render(&ctx, &mut child_render)?;
+                    if let Some((_, screen_rect)) = view_stack.projection() {
+                        let child_buf = child_render.get_buffer();
+                        main_buf.copy_to_rect(&child_buf, screen_rect);
+                    }
+                    view_stack.pop().unwrap();
+                    Ok(())
+                })
                 .unwrap();
 
-            let buffer = render.get_buffer();
-            check_frame_boundaries(&buffer, &format!("After {} scroll_right calls", i + 1));
+            view_stack.pop().unwrap();
+
+            check_frame_boundaries(&main_buf, &format!("After {} scroll_right calls", i + 1));
         }
     }
 }
