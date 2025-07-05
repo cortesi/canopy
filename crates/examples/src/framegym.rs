@@ -23,32 +23,32 @@ impl TestPattern {
     }
 
     #[command]
-    fn scroll_down(&mut self, c: &mut dyn Context) {
+    pub fn scroll_down(&mut self, c: &mut dyn Context) {
         c.scroll_down(self);
     }
 
     #[command]
-    fn scroll_up(&mut self, c: &mut dyn Context) {
+    pub fn scroll_up(&mut self, c: &mut dyn Context) {
         c.scroll_up(self);
     }
 
     #[command]
-    fn scroll_left(&mut self, c: &mut dyn Context) {
+    pub fn scroll_left(&mut self, c: &mut dyn Context) {
         c.scroll_left(self);
     }
 
     #[command]
-    fn scroll_right(&mut self, c: &mut dyn Context) {
+    pub fn scroll_right(&mut self, c: &mut dyn Context) {
         c.scroll_right(self);
     }
 
     #[command]
-    fn page_down(&mut self, c: &mut dyn Context) {
+    pub fn page_down(&mut self, c: &mut dyn Context) {
         c.page_down(self);
     }
 
     #[command]
-    fn page_up(&mut self, c: &mut dyn Context) {
+    pub fn page_up(&mut self, c: &mut dyn Context) {
         c.page_up(self);
     }
 

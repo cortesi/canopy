@@ -113,7 +113,7 @@ impl Intervals {
     }
 
     #[command]
-    fn add_item(&mut self, c: &mut dyn Context) {
+    pub fn add_item(&mut self, c: &mut dyn Context) {
         let lst = &mut self.content.child;
         lst.append(IntervalItem::new());
         c.taint(self);

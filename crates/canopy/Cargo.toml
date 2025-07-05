@@ -13,7 +13,7 @@ tracing = "0.1.41"
 [dev-dependencies]
 clap = { version = "4.5.40", features = ["derive"] }
 rand = "0.9.1"
-criterion = "0.5"
+criterion = "0.6"
 
 [[bench]]
 name = "rendering"

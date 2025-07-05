@@ -116,21 +116,21 @@ impl ListGym {
 
     #[command]
     /// Add an item after the current focus
-    fn add_item(&mut self, _c: &dyn Context) {
+    pub fn add_item(&mut self, _c: &dyn Context) {
         let index = self.content.child.offset + 1;
         self.content.child.insert_after(Block::new(index));
     }
 
     #[command]
     /// Add an item at the end of the list
-    fn append_item(&mut self, _c: &dyn Context) {
+    pub fn append_item(&mut self, _c: &dyn Context) {
         let index = self.content.child.len();
         self.content.child.append(Block::new(index));
     }
 
     #[command]
     /// Add an item at the end of the list
-    fn clear(&mut self, _c: &dyn Context) {
+    pub fn clear(&mut self, _c: &dyn Context) {
         self.content.child.clear();
     }
 }

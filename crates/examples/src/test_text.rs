@@ -39,7 +39,7 @@ impl TextDisplay {
     }
 
     #[command]
-    fn redraw(&mut self, ctx: &mut dyn Context) {
+    pub fn redraw(&mut self, ctx: &mut dyn Context) {
         ctx.taint_tree(self);
     }
 }
