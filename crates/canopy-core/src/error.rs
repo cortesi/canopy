@@ -1,4 +1,5 @@
 use std::{fmt::Display, sync::mpsc};
+use crate::geom;
 
 use thiserror::Error;
 
@@ -46,5 +47,11 @@ pub enum Error {
 impl From<mpsc::RecvError> for Error {
     fn from(e: mpsc::RecvError) -> Self {
         Error::RunLoop(e.to_string())
+    }
+}
+
+impl From<geom::Error> for Error {
+    fn from(e: geom::Error) -> Self {
+        Error::Geometry(e.to_string())
     }
 }
