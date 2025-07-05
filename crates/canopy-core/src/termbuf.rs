@@ -317,6 +317,7 @@ impl TermBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::buf;
     use crate::style::{AttrSet, Color, PartialStyle};
     use crate::tutils::buf;
 
@@ -332,18 +333,22 @@ mod tests {
     fn basic_fill() {
         let mut tb = TermBuf::new(Expanse::new(4, 2), ' ', def_style());
         tb.fill(def_style(), Rect::new(1, 0, 2, 2), 'x');
-        assert_eq!(tb.get(Point { x: 1, y: 0 }).unwrap().ch, 'x');
-        assert_eq!(tb.get(Point { x: 2, y: 1 }).unwrap().ch, 'x');
-        assert_eq!(tb.get(Point { x: 3, y: 0 }).unwrap().ch, ' ');
+
+        buf::assert_matches(
+            &tb,
+            buf![
+                " xx "
+                " xx "
+            ],
+        );
     }
 
     #[test]
     fn text_write() {
         let mut tb = TermBuf::new(Expanse::new(5, 1), ' ', def_style());
         tb.text(def_style(), Line::new(0, 0, 5), "hi");
-        assert_eq!(tb.get((0, 0).into()).unwrap().ch, 'h');
-        assert_eq!(tb.get((1, 0).into()).unwrap().ch, 'i');
-        assert_eq!(tb.get((2, 0).into()).unwrap().ch, ' ');
+
+        buf::assert_matches(&tb, buf!["hi   "]);
     }
 
     #[test]
@@ -351,9 +356,16 @@ mod tests {
         let mut tb = TermBuf::new(Expanse::new(4, 4), ' ', def_style());
         let f = Frame::new(Rect::new(0, 0, 4, 4), 1);
         tb.solid_frame(def_style(), f, '#');
-        assert_eq!(tb.get((0, 0).into()).unwrap().ch, '#');
-        assert_eq!(tb.get((1, 1).into()).unwrap().ch, ' ');
-        assert_eq!(tb.get((3, 3).into()).unwrap().ch, '#');
+
+        buf::assert_matches(
+            &tb,
+            buf![
+                "####"
+                "#  #"
+                "#  #"
+                "####"
+            ],
+        );
     }
 
     struct RecBackend {
@@ -560,35 +572,66 @@ mod tests {
         // Test empty constructor
         let empty = TermBuf::empty(Expanse::new(5, 3));
         assert_eq!(empty.size(), Expanse::new(5, 3));
-        assert_eq!(empty.get(Point { x: 0, y: 0 }).unwrap().ch, NULL);
+        buf::assert_matches(
+            &empty,
+            buf![
+                "XXXXX"
+                "XXXXX"
+                "XXXXX"
+            ],
+        );
 
         // Test copy functionality
         let mut src = TermBuf::new(Expanse::new(5, 3), ' ', def_style());
         src.text(def_style(), Line::new(1, 1, 3), "ABC");
 
+        buf::assert_matches(
+            &src,
+            buf![
+                "     "
+                " ABC "
+                "     "
+            ],
+        );
+
         let mut dst = TermBuf::empty(Expanse::new(5, 3));
         dst.copy(&src, Rect::new(1, 1, 3, 1));
 
-        // Check that the text was copied
-        assert_eq!(dst.get(Point { x: 1, y: 1 }).unwrap().ch, 'A');
-        assert_eq!(dst.get(Point { x: 2, y: 1 }).unwrap().ch, 'B');
-        assert_eq!(dst.get(Point { x: 3, y: 1 }).unwrap().ch, 'C');
-
-        // Check that NULL characters were not copied
-        assert_eq!(dst.get(Point { x: 0, y: 0 }).unwrap().ch, NULL);
-        assert_eq!(dst.get(Point { x: 4, y: 1 }).unwrap().ch, NULL);
+        // Check that only the text was copied (spaces are not copied)
+        buf::assert_matches(
+            &dst,
+            buf![
+                "XXXXX"
+                "XABCX"
+                "XXXXX"
+            ],
+        );
 
         // Test copy with partial rectangle
         let mut dst2 = TermBuf::empty(Expanse::new(5, 3));
         dst2.copy(&src, Rect::new(2, 1, 2, 1));
-        assert_eq!(dst2.get(Point { x: 1, y: 1 }).unwrap().ch, NULL); // Not copied
-        assert_eq!(dst2.get(Point { x: 2, y: 1 }).unwrap().ch, 'B');
-        assert_eq!(dst2.get(Point { x: 3, y: 1 }).unwrap().ch, 'C');
+
+        buf::assert_matches(
+            &dst2,
+            buf![
+                "XXXXX"
+                "XXBCX"
+                "XXXXX"
+            ],
+        );
 
         // Test copy with different sizes (should do nothing)
         let mut wrong_size = TermBuf::empty(Expanse::new(4, 3));
         wrong_size.copy(&src, Rect::new(0, 0, 5, 3));
-        assert_eq!(wrong_size.get(Point { x: 0, y: 0 }).unwrap().ch, NULL);
+
+        buf::assert_matches(
+            &wrong_size,
+            buf![
+                "XXXX"
+                "XXXX"
+                "XXXX"
+            ],
+        );
     }
 
     #[test]
@@ -646,33 +689,46 @@ mod tests {
         // Create an empty buffer
         let mut tb = TermBuf::empty(Expanse::new(5, 3));
 
-        // Verify all cells are NULL initially
-        for y in 0..3 {
-            for x in 0..5 {
-                assert_eq!(tb.get(Point { x, y }).unwrap().ch, NULL);
-            }
-        }
+        // Verify all cells are NULL initially using buf macro
+        buf::assert_matches(
+            &tb,
+            buf![
+                "XXXXX"
+                "XXXXX"
+                "XXXXX"
+            ],
+        );
 
         // Add some content to part of the buffer
         tb.text(def_style(), Line::new(1, 1, 3), "ABC");
+
+        // Verify the content before fill_empty
+        buf::assert_matches(
+            &tb,
+            buf![
+                "XXXXX"
+                "XABCX"
+                "XXXXX"
+            ],
+        );
 
         // Fill empty cells with a specific character and style
         let mut fill_style = def_style();
         fill_style.fg = Color::Red;
         tb.fill_empty('.', fill_style.clone());
 
-        // Check that previously empty cells are now filled
-        assert_eq!(tb.get(Point { x: 0, y: 0 }).unwrap().ch, '.');
+        // Check that the buffer now has dots where there were NULLs
+        buf::assert_matches(
+            &tb,
+            buf![
+                "....."
+                ".ABC."
+                "....."
+            ],
+        );
+
+        // Verify specific style properties
         assert_eq!(tb.get(Point { x: 0, y: 0 }).unwrap().style.fg, Color::Red);
-
-        // Check that non-empty cells remain unchanged
-        assert_eq!(tb.get(Point { x: 1, y: 1 }).unwrap().ch, 'A');
-        assert_eq!(tb.get(Point { x: 2, y: 1 }).unwrap().ch, 'B');
-        assert_eq!(tb.get(Point { x: 3, y: 1 }).unwrap().ch, 'C');
         assert_eq!(tb.get(Point { x: 1, y: 1 }).unwrap().style.fg, Color::White);
-
-        // Check that the empty cells after the text are also filled
-        assert_eq!(tb.get(Point { x: 4, y: 1 }).unwrap().ch, '.');
-        assert_eq!(tb.get(Point { x: 4, y: 2 }).unwrap().ch, '.');
     }
 }
