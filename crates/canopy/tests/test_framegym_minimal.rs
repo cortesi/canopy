@@ -1,5 +1,10 @@
 use canopy::{
-    derive_commands, event::key, geom::Expanse, tutils::harness::Harness, widgets::frame, *,
+    derive_commands,
+    event::key,
+    geom::Expanse,
+    tutils::{buf, harness::Harness},
+    widgets::frame,
+    *,
 };
 
 /// Minimal version of framegym TestPattern
@@ -133,8 +138,8 @@ fn test_minimal_framegym_scrolling() -> Result<()> {
     }
 
     // Check initial state
-    assert!(harness.buf().contains_text("View: (0,0)"));
-    assert!(harness.buf().contains_text("aaaa")); // First content line
+    assert!(buf::contains_text(harness.buf(), "View: (0,0)"));
+    assert!(buf::contains_text(harness.buf(), "aaaa")); // First content line
 
     // Send down key
     println!("\n=== Sending Down key ===");
@@ -145,9 +150,12 @@ fn test_minimal_framegym_scrolling() -> Result<()> {
     println!("\n=== After scroll ===");
     println!(
         "Buffer contains 'View: (0,1)': {}",
-        buf.contains_text("View: (0,1)")
+        buf::contains_text(buf, "View: (0,1)")
     );
-    println!("Buffer contains 'bbbb': {}", buf.contains_text("bbbb"));
+    println!(
+        "Buffer contains 'bbbb': {}",
+        buf::contains_text(buf, "bbbb")
+    );
 
     // Debug: print actual buffer content
     println!("\nActual buffer content:");
@@ -159,12 +167,12 @@ fn test_minimal_framegym_scrolling() -> Result<()> {
     }
 
     assert!(
-        buf.contains_text("View: (0,1)"),
+        buf::contains_text(buf, "View: (0,1)"),
         "Should have scrolled to (0,1)"
     );
     // After scrolling down by 1, the first pattern line should now show 'b'
     assert!(
-        buf.contains_text("bbbb"),
+        buf::contains_text(buf, "bbbb"),
         "Should show 'b' pattern after scrolling"
     );
 

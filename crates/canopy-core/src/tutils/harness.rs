@@ -1,3 +1,4 @@
+use super::buf;
 use crate::{Canopy, Loader, backend::dummy::DummyBackend};
 use crate::{Node, Result, TermBuf, event::key, geom::Expanse};
 
@@ -64,7 +65,7 @@ impl<N: Node + Loader> Harness<N> {
 
     pub fn expect_contains(&self, txt: &str) {
         assert!(
-            self.buf().contains_text(txt),
+            buf::contains_text(self.buf(), txt),
             "render buffer missing '{txt}'"
         );
     }
@@ -74,10 +75,10 @@ impl<N: Node + Loader> Harness<N> {
         let buf = self.buf();
 
         // Debug helper: if assertion will fail, print what's in the buffer
-        if !buf.contains_text_style(txt, &PartialStyle::fg(solarized::BLUE)) {
+        if !buf::contains_text_style(buf, txt, &PartialStyle::fg(solarized::BLUE)) {
             eprintln!("Debug: Text '{txt}' not found with blue highlight");
             // First check if the text exists at all
-            if buf.contains_text(txt) {
+            if buf::contains_text(buf, txt) {
                 eprintln!("  Text '{txt}' exists in buffer but without blue highlight!");
             } else {
                 eprintln!("  Text '{txt}' not found in buffer at all!");
@@ -91,7 +92,7 @@ impl<N: Node + Loader> Harness<N> {
         }
 
         assert!(
-            buf.contains_text_style(txt, &PartialStyle::fg(solarized::BLUE)),
+            buf::contains_text_style(buf, txt, &PartialStyle::fg(solarized::BLUE)),
             "render buffer missing highlighted '{txt}'"
         );
     }

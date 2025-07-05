@@ -1,4 +1,10 @@
-use canopy::{derive_commands, event::key, geom::Expanse, tutils::harness::Harness, *};
+use canopy::{
+    derive_commands,
+    event::key,
+    geom::Expanse,
+    tutils::{buf, harness::Harness},
+    *,
+};
 
 /// Simple test to demonstrate viewport scrolling behavior
 #[derive(StatefulNode)]
@@ -69,15 +75,15 @@ fn test_scroll_behavior() -> Result<()> {
 
     // Initial render
     harness.render()?;
-    assert!(harness.buf().contains_text("Scroll position: (0, 0)"));
-    assert!(harness.buf().contains_text("Line 1"));
+    assert!(buf::contains_text(harness.buf(), "Scroll position: (0, 0)"));
+    assert!(buf::contains_text(harness.buf(), "Line 1"));
 
     // Send down key to trigger scroll
     harness.key(key::KeyCode::Down)?;
 
     // Check if scroll worked
-    assert!(harness.buf().contains_text("Scroll position: (0, 1)"));
-    assert!(harness.buf().contains_text("Line 2")); // Should now show Line 2 at the top
+    assert!(buf::contains_text(harness.buf(), "Scroll position: (0, 1)"));
+    assert!(buf::contains_text(harness.buf(), "Line 2")); // Should now show Line 2 at the top
 
     Ok(())
 }
