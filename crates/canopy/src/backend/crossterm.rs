@@ -156,8 +156,17 @@ impl CrosstermRender {
     }
 
     fn text(&mut self, loc: Point, txt: &str) -> io::Result<()> {
-        self.fp.queue(ccursor::MoveTo(loc.x, loc.y))?;
-        self.fp.queue(style::Print(txt))?;
+        let (w, h) = terminal::size()?;
+        let out = if loc.y == h.saturating_sub(1) && loc.x + txt.len() as u16 >= w {
+            let max = (w - 1).saturating_sub(loc.x) as usize;
+            &txt[..max]
+        } else {
+            txt
+        };
+        if !out.is_empty() {
+            self.fp.queue(ccursor::MoveTo(loc.x, loc.y))?;
+            self.fp.queue(style::Print(out))?;
+        }
         Ok(())
     }
 }

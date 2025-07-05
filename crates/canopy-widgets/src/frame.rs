@@ -244,8 +244,9 @@ mod tests {
                     line.push(ch);
                 }
 
-                // Use view.line like framegym does
-                r.text("text", view.line(y), &line)?;
+                let target_line =
+                    canopy_core::geom::Line::new(vp.position().x, vp.position().y + y, view.w);
+                r.text("text", target_line, &line)?;
             }
             Ok(())
         }
