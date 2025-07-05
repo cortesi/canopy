@@ -21,7 +21,14 @@ pub mod cursor;
 pub mod dump;
 pub mod event;
 pub use geom;
+pub mod backend;
+mod binder;
+mod canopy;
+mod focus;
+mod inputmap;
 pub mod path;
+mod poll;
+pub mod script;
 pub mod style;
 pub mod tree;
 pub mod tutils;
@@ -40,6 +47,13 @@ pub use state::StatefulNode as StatefulNodeTrait;
 pub use termbuf::TermBuf;
 pub use viewport::ViewPort;
 pub use viewstack::ViewStack;
+
+// Application-level types
+pub use binder::{Binder, DefaultBindings};
+pub use canopy::{Canopy, Loader};
+pub use focus::{FocusableNode, collect_focusable_nodes, find_focus_target, find_focused_node};
+pub use inputmap::{Input, InputMap, InputMode};
+pub use poll::Poller;
 
 // Export commonly used geometry types at the root
 pub use geom::{Direction, Expanse, Point, Rect};

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::script;
-use canopy_core::{Result, error, event::key::Key, event::mouse::Mouse, path::*};
+use crate::{Result, error, event::key::Key, event::mouse::Mouse, path::*};
 
 const DEFAULT_MODE: &str = "";
 
@@ -130,7 +130,7 @@ impl InputMap {
 mod tests {
     use super::*;
     use crate::script;
-    use canopy_core::{Result, event::key};
+    use crate::{Result, event::key};
 
     #[test]
     fn caseconfusion() -> Result<()> {

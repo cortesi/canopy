@@ -9,9 +9,9 @@ use std::{
 use color_backtrace::{BacktracePrinter, default_output_stream};
 use scopeguard::defer;
 
-use crate::{Canopy, backend::BackendControl};
-use canopy_core::{
-    Context, Node, Result,
+use crate::{
+    Canopy, Context, Node, Result,
+    backend::BackendControl,
     dump::{dump, dump_with_focus},
     error,
     event::{Event, key, mouse},

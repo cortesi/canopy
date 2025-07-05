@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use rhai;
 
-use canopy_core::{Context, Node, NodeId, NodeName, Result, commands::*, error};
+use crate::{Context, Node, NodeId, NodeName, Result, commands::*, error};
 
 pub type ScriptId = u64;
 
