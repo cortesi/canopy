@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["buf","dummyctx","grid","harness","ttree"]};
+window.SIDEBAR_ITEMS = {"mod":["buf","dummyctx","grid","harness","render","ttree"]};
