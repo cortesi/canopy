@@ -270,7 +270,7 @@ fn test_postorder() -> Result<()> {
 }
 
 // Helper function to test locate on a grid at a specific point
-fn test_locate_at_point(grid: &mut Grid, point: (u16, u16), expected_name: &str) -> Result<()> {
+fn test_locate_at_point(grid: &mut Grid, point: (u32, u32), expected_name: &str) -> Result<()> {
     let result = locate(grid, point, &mut |node| -> Result<Locate<String>> {
         let name = node.name().to_string();
         if name.starts_with("cell_") {
@@ -361,8 +361,8 @@ fn test_locate_3x3_grid() -> Result<()> {
     // Test all 9 cells systematically
     for row in 0..3 {
         for col in 0..3 {
-            let x = col as u16 * 10 + 5;
-            let y = row as u16 * 10 + 5;
+            let x = col as u32 * 10 + 5;
+            let y = row as u32 * 10 + 5;
             let expected = format!("cell_{col}_{row}");
             test_locate_at_point(&mut grid, (x, y), &expected)?;
         }

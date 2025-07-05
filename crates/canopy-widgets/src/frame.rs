@@ -185,7 +185,7 @@ mod tests {
     }
 
     impl ScrollableContent {
-        fn new(width: u16, height: u16) -> Self {
+        fn new(width: u32, height: u32) -> Self {
             ScrollableContent {
                 state: NodeState::default(),
                 canvas_size: Expanse::new(width, height),
@@ -239,7 +239,7 @@ mod tests {
                     }
 
                     // Simple pattern: character based on position
-                    let ch = char::from_u32(((absolute_x + absolute_y) % 10) as u32 + '0' as u32)
+                    let ch = char::from_u32(((absolute_x + absolute_y) % 10) + '0' as u32)
                         .unwrap_or('?');
                     line.push(ch);
                 }
@@ -392,11 +392,11 @@ mod tests {
                 true
             }
             fn focus_dir(&mut self, _root: &mut dyn Node, _dir: Direction) {}
-            fn scroll_to(&mut self, n: &mut dyn Node, x: u16, y: u16) -> bool {
+            fn scroll_to(&mut self, n: &mut dyn Node, x: u32, y: u32) -> bool {
                 n.state_mut().scroll_to(x, y);
                 true
             }
-            fn scroll_by(&mut self, n: &mut dyn Node, x: i16, y: i16) -> bool {
+            fn scroll_by(&mut self, n: &mut dyn Node, x: i32, y: i32) -> bool {
                 n.state_mut().scroll_by(x, y);
                 true
             }
@@ -498,7 +498,7 @@ mod tests {
             if let Some((_canvas_rect, screen_rect)) = view_stack.projection() {
                 println!("Frame projection: screen_rect={:?}", screen_rect);
                 let frame_buf = frame_render.get_buffer();
-                main_buf.copy_to_rect(&frame_buf, screen_rect);
+                main_buf.copy_to_rect(frame_buf, screen_rect);
             }
 
             // 2. Then render each child
@@ -530,7 +530,7 @@ mod tests {
                         );
                         let child_buf = child_render.get_buffer();
                         println!("Child buffer first line: {:?}", child_buf.line_text(0));
-                        main_buf.copy_to_rect(&child_buf, screen_rect);
+                        main_buf.copy_to_rect(child_buf, screen_rect);
                     } else {
                         println!("No projection for child!");
                     }
@@ -591,11 +591,11 @@ mod tests {
                 true
             }
             fn focus_dir(&mut self, _root: &mut dyn Node, _dir: Direction) {}
-            fn scroll_to(&mut self, n: &mut dyn Node, x: u16, y: u16) -> bool {
+            fn scroll_to(&mut self, n: &mut dyn Node, x: u32, y: u32) -> bool {
                 n.state_mut().scroll_to(x, y);
                 true
             }
-            fn scroll_by(&mut self, n: &mut dyn Node, x: i16, y: i16) -> bool {
+            fn scroll_by(&mut self, n: &mut dyn Node, x: i32, y: i32) -> bool {
                 n.state_mut().scroll_by(x, y);
                 true
             }
@@ -696,7 +696,7 @@ mod tests {
             }
 
             // Check for overdraw
-            check_frame_boundaries(&buffer, test_name);
+            check_frame_boundaries(buffer, test_name);
         }
 
         // Also test incremental scrolling
@@ -718,7 +718,7 @@ mod tests {
                 .unwrap();
 
             let buffer = render.get_buffer();
-            check_frame_boundaries(&buffer, &format!("After {} scroll_down calls", i + 1));
+            check_frame_boundaries(buffer, &format!("After {} scroll_down calls", i + 1));
         }
 
         // Scroll right one column at a time
@@ -735,7 +735,7 @@ mod tests {
                 .unwrap();
 
             let buffer = render.get_buffer();
-            check_frame_boundaries(&buffer, &format!("After {} scroll_right calls", i + 1));
+            check_frame_boundaries(buffer, &format!("After {} scroll_right calls", i + 1));
         }
     }
 }

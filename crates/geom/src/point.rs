@@ -4,8 +4,8 @@ use super::Rect;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
 pub struct Point {
-    pub x: u16,
-    pub y: u16,
+    pub x: u32,
+    pub y: u32,
 }
 
 impl Point {
@@ -16,7 +16,7 @@ impl Point {
         self.x == 0 && self.y == 0
     }
     /// Shift the point by an offset, avoiding under- or overflow.
-    pub fn scroll(&self, x: i16, y: i16) -> Self {
+    pub fn scroll(&self, x: i32, y: i32) -> Self {
         let nx = if x < 0 {
             self.x.saturating_sub(x.unsigned_abs())
         } else {
@@ -37,7 +37,7 @@ impl Point {
         }
     }
     /// Like scroll, but constrained within a rectangle.
-    pub fn scroll_within(&self, x: i16, y: i16, rect: Rect) -> Self {
+    pub fn scroll_within(&self, x: i32, y: i32, rect: Rect) -> Self {
         let nx = if x < 0 {
             self.x.saturating_sub(x.unsigned_abs())
         } else {
@@ -63,9 +63,9 @@ impl Add for Point {
     }
 }
 
-impl From<(u16, u16)> for Point {
+impl From<(u32, u32)> for Point {
     #[inline]
-    fn from(v: (u16, u16)) -> Point {
+    fn from(v: (u32, u32)) -> Point {
         Point { x: v.0, y: v.1 }
     }
 }

@@ -7,9 +7,9 @@ pub struct Rect {
     /// Top-left corner
     pub tl: Point,
     /// Width
-    pub w: u16,
+    pub w: u32,
     /// Height
-    pub h: u16,
+    pub h: u32,
 }
 
 impl Default for Rect {
@@ -19,7 +19,7 @@ impl Default for Rect {
 }
 
 impl Rect {
-    pub fn new(x: u16, y: u16, w: u16, h: u16) -> Self {
+    pub fn new(x: u32, y: u32, w: u32, h: u32) -> Self {
         Rect {
             tl: Point { x, y },
             w,
@@ -29,7 +29,7 @@ impl Rect {
 
     /// The width times the height of the rectangle
     pub fn area(&self) -> u32 {
-        self.w as u32 * self.h as u32
+        self.w * self.h
     }
 
     /// Creat a zero-sized `Rect` at the origin.
@@ -49,7 +49,7 @@ impl Rect {
     /// Carve a rectangle with a fixed width out of the start of the horizontal
     /// extent of this rect. Returns a [left, right] array. Left is either
     /// empty or has the extract width specified.
-    pub fn carve_hstart(&self, width: u16) -> (Rect, Rect) {
+    pub fn carve_hstart(&self, width: u32) -> (Rect, Rect) {
         let (h, t) = self.hextent().carve_start(width);
         // We can unwrap, because both extents are within our range by definition.
         (self.hslice(&h).unwrap(), self.hslice(&t).unwrap())
@@ -58,7 +58,7 @@ impl Rect {
     /// Carve a rectangle with a fixed width out of the end of the horizontal
     /// extent of this rect. Returns a [left, right] array. Right is either
     /// empty or has the exact width specified.
-    pub fn carve_hend(&self, width: u16) -> (Rect, Rect) {
+    pub fn carve_hend(&self, width: u32) -> (Rect, Rect) {
         let (h, t) = self.hextent().carve_end(width);
         // We can unwrap, because both extents are within our range by definition.
         (self.hslice(&h).unwrap(), self.hslice(&t).unwrap())
@@ -67,7 +67,7 @@ impl Rect {
     /// Carve a rectangle with a fixed height out of the start of the vertical
     /// extent of this rect. Returns a [top, bottom] array. Top is either empty
     /// or has the exact height specified.
-    pub fn carve_vstart(&self, height: u16) -> (Rect, Rect) {
+    pub fn carve_vstart(&self, height: u32) -> (Rect, Rect) {
         let (h, t) = self.vextent().carve_start(height);
         // We can unwrap, because both extents are within our range by definition.
         (self.vslice(&h).unwrap(), self.vslice(&t).unwrap())
@@ -76,7 +76,7 @@ impl Rect {
     /// Carve a rectangle with a fixed height out of the end of the vertical
     /// extent of this rect. Returns a [top, bottom] array. Bottom is either
     /// empty or has the exact height specified.
-    pub fn carve_vend(&self, height: u16) -> (Rect, Rect) {
+    pub fn carve_vend(&self, height: u32) -> (Rect, Rect) {
         let (h, t) = self.vextent().carve_end(height);
         // We can unwrap, because both extents are within our range by definition.
         (self.vslice(&h).unwrap(), self.vslice(&t).unwrap())
@@ -135,7 +135,7 @@ impl Rect {
 
     /// Extracts an inner rectangle, given a border width. If the border width
     /// would exceed the size of the Rect, we return a zero rect.
-    pub fn inner(&self, border: u16) -> Rect {
+    pub fn inner(&self, border: u32) -> Rect {
         if self.w < (border * 2) || self.h < (border * 2) {
             Rect::default()
         } else {
@@ -204,7 +204,7 @@ impl Rect {
 
     /// A safe function for shifting the rectangle by an offset, which won't
     /// under- or overflow.
-    pub fn shift(&self, x: i16, y: i16) -> Rect {
+    pub fn shift(&self, x: i32, y: i32) -> Rect {
         Rect {
             tl: self.tl.scroll(x, y),
             w: self.w,
@@ -215,7 +215,7 @@ impl Rect {
     /// Shift this rectangle, constrained to be within another rectangle. The
     /// size of the returned Rect is always equal to that of self. If self is
     /// larger than the enclosing rectangle, self unchanged.
-    pub fn shift_within(&self, x: i16, y: i16, rect: Rect) -> Self {
+    pub fn shift_within(&self, x: i32, y: i32, rect: Rect) -> Self {
         if rect.w < self.w || rect.h < self.h {
             *self
         } else {
@@ -237,9 +237,9 @@ impl Rect {
 
     /// Splits the rectangle horizontally into n sections, as close to equally
     /// sized as possible.
-    pub fn split_horizontal(&self, n: u16) -> Result<Vec<Rect>> {
+    pub fn split_horizontal(&self, n: u32) -> Result<Vec<Rect>> {
         let widths = split(self.w, n)?;
-        let mut off: u16 = self.tl.x;
+        let mut off: u32 = self.tl.x;
         let mut ret = vec![];
         for i in 0..n {
             ret.push(Rect::new(off, self.tl.y, widths[i as usize], self.h));
@@ -250,9 +250,9 @@ impl Rect {
 
     /// Splits the rectangle vertically into n sections, as close to equally
     /// sized as possible.
-    pub fn split_vertical(&self, n: u16) -> Result<Vec<Rect>> {
+    pub fn split_vertical(&self, n: u32) -> Result<Vec<Rect>> {
         let heights = split(self.h, n)?;
-        let mut off: u16 = self.tl.y;
+        let mut off: u32 = self.tl.y;
         let mut ret = vec![];
         for i in 0..n {
             ret.push(Rect::new(self.tl.x, off, self.w, heights[i as usize]));
@@ -263,10 +263,10 @@ impl Rect {
 
     /// Splits the rectangle into columns, with each column split into rows.
     /// Returns a Vec of rects per column.
-    pub fn split_panes(&self, spec: &[u16]) -> Result<Vec<Vec<Rect>>> {
+    pub fn split_panes(&self, spec: &[u32]) -> Result<Vec<Vec<Rect>>> {
         let mut ret = vec![];
 
-        let cols = split(self.w, spec.len() as u16)?;
+        let cols = split(self.w, spec.len() as u32)?;
         let mut x = self.tl.x;
         for (ci, width) in cols.iter().enumerate() {
             let mut y = self.tl.y;
@@ -299,7 +299,7 @@ impl Rect {
 
     /// Sweeps downwards from the bottom of the rectangle. Stops once the closure returns true.
     pub fn search_down(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
-        'outer: for y in self.tl.y + self.h..u16::MAX {
+        'outer: for y in self.tl.y + self.h..u32::MAX {
             for x in self.tl.x..(self.tl.x + self.w) {
                 if f(Point { x, y })? {
                     break 'outer;
@@ -323,7 +323,7 @@ impl Rect {
 
     /// Sweeps rightwards from the right of the rectangle. Stops once the closure returns true.
     pub fn search_right(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
-        'outer: for x in self.tl.x + self.w..u16::MAX {
+        'outer: for x in self.tl.x + self.w..u32::MAX {
             for y in self.tl.y..self.tl.y + self.h {
                 if f(Point { x, y })? {
                     break 'outer;
@@ -361,7 +361,7 @@ impl Rect {
     }
 
     // Return a line with a given offset in the rectangle. Panics if the rectangle size is exceeded.
-    pub fn line(&self, off: u16) -> Line {
+    pub fn line(&self, off: u32) -> Line {
         if off > self.h {
             panic!("offset exceeds rectangle height")
         }
@@ -450,8 +450,8 @@ impl From<Line> for Rect {
     }
 }
 
-impl From<(u16, u16, u16, u16)> for Rect {
-    fn from(v: (u16, u16, u16, u16)) -> Rect {
+impl From<(u32, u32, u32, u32)> for Rect {
+    fn from(v: (u32, u32, u32, u32)) -> Rect {
         let (x, y, w, h) = v;
         Rect {
             tl: (x, y).into(),
@@ -462,7 +462,7 @@ impl From<(u16, u16, u16, u16)> for Rect {
 }
 
 /// Split a length into n sections, as evenly as possible.
-fn split(len: u16, n: u16) -> Result<Vec<u16>> {
+fn split(len: u32, n: u32) -> Result<Vec<u32>> {
     if n == 0 {
         return Err(Error::Geometry("divide by zero".into()));
     }
@@ -718,8 +718,8 @@ mod tests {
             Rect::new(0, 0, 10, 10)
         );
         assert_eq!(
-            Rect::new(u16::MAX - 5, u16::MAX - 5, 10, 10).shift(10, 10),
-            Rect::new(u16::MAX, u16::MAX, 10, 10)
+            Rect::new(u32::MAX - 5, u32::MAX - 5, 10, 10).shift(10, 10),
+            Rect::new(u32::MAX, u32::MAX, 10, 10)
         );
         Ok(())
     }

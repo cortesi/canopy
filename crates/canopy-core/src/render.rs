@@ -140,9 +140,9 @@ impl<'a> Render<'a> {
             // Pad with spaces if needed
             if out.len() < adjusted_line.w as usize {
                 let pad_rect = geom::Rect::new(
-                    adjusted_line.tl.x + out.len() as u16,
+                    adjusted_line.tl.x + out.len() as u32,
                     adjusted_line.tl.y,
-                    adjusted_line.w - out.len() as u16,
+                    adjusted_line.w - out.len() as u32,
                     1,
                 );
                 self.buf.fill(style_res, pad_rect, ' ');

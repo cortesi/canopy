@@ -17,8 +17,8 @@ use canopy_core::{
 #[derive(Debug, PartialEq, Eq, StatefulNode)]
 pub struct TFixed {
     state: NodeState,
-    pub w: u16,
-    pub h: u16,
+    pub w: u32,
+    pub h: u32,
 }
 
 impl Node for TFixed {
@@ -31,7 +31,7 @@ impl Node for TFixed {
 
 #[derive_commands]
 impl TFixed {
-    pub fn new(w: u16, h: u16) -> Self {
+    pub fn new(w: u32, h: u32) -> Self {
         TFixed {
             state: NodeState::default(),
             w,
@@ -68,10 +68,10 @@ impl Context for DummyContext {
         false
     }
     fn focus_dir(&mut self, _root: &mut dyn Node, _dir: Direction) {}
-    fn scroll_to(&mut self, _n: &mut dyn Node, _x: u16, _y: u16) -> bool {
+    fn scroll_to(&mut self, _n: &mut dyn Node, _x: u32, _y: u32) -> bool {
         false
     }
-    fn scroll_by(&mut self, _n: &mut dyn Node, _x: i16, _y: i16) -> bool {
+    fn scroll_by(&mut self, _n: &mut dyn Node, _x: i32, _y: i32) -> bool {
         false
     }
     fn page_up(&mut self, _n: &mut dyn Node) -> bool {
@@ -163,9 +163,9 @@ mod tests {
             if !self.children.is_empty() {
                 let vp = self.vp();
                 let vps = if self.horizontal {
-                    vp.view().split_horizontal(self.children.len() as u16)?
+                    vp.view().split_horizontal(self.children.len() as u32)?
                 } else {
-                    vp.view().split_vertical(self.children.len() as u16)?
+                    vp.view().split_vertical(self.children.len() as u32)?
                 };
                 for (i, ch) in self.children.iter_mut().enumerate() {
                     l.place(ch, vp, vps[i])?;
@@ -224,9 +224,9 @@ mod tests {
             return Ok(vec![area]);
         }
         let vps = if b.horizontal {
-            area.split_horizontal(b.children.len() as u16)?
+            area.split_horizontal(b.children.len() as u32)?
         } else {
-            area.split_vertical(b.children.len() as u16)?
+            area.split_vertical(b.children.len() as u32)?
         };
         let mut ret = Vec::new();
         for (child, rect) in b.children.iter().zip(vps.into_iter()) {

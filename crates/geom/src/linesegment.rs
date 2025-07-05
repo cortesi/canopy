@@ -4,14 +4,14 @@ use crate::{Error, Result};
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct LineSegment {
     /// The offset of this extent.
-    pub off: u16,
+    pub off: u32,
     /// The length of this extent.
-    pub len: u16,
+    pub len: u32,
 }
 
 impl LineSegment {
     /// The far limit of the extent.
-    pub fn far(&self) -> u16 {
+    pub fn far(&self) -> u32 {
         self.off + self.len
     }
 
@@ -28,7 +28,7 @@ impl LineSegment {
     /// Carve off a fixed-size portion from the start of this LineSegment,
     /// returning a (head, tail) tuple. If the segment is too short to carve out
     /// the width specified, the length of the head will be zero.
-    pub fn carve_start(&self, n: u16) -> (LineSegment, LineSegment) {
+    pub fn carve_start(&self, n: u32) -> (LineSegment, LineSegment) {
         if self.len < n {
             (
                 LineSegment {
@@ -54,7 +54,7 @@ impl LineSegment {
     /// Carve off a fixed-size portion from the end of this LineSegment,
     /// returning a (head, tail) tuple. If the segment is too short to carve out
     /// the width specified, the length of the tail will be zero.
-    pub fn carve_end(&self, n: u16) -> (LineSegment, LineSegment) {
+    pub fn carve_end(&self, n: u32) -> (LineSegment, LineSegment) {
         if self.len < n {
             (
                 *self,
@@ -147,15 +147,15 @@ impl LineSegment {
             Ok((
                 LineSegment {
                     off: self.off,
-                    len: pre as u16,
+                    len: pre as u32,
                 },
                 LineSegment {
-                    off: self.off + pre as u16,
-                    len: active as u16,
+                    off: self.off + pre as u32,
+                    len: active as u32,
                 },
                 LineSegment {
-                    off: self.off + pre as u16 + active as u16,
-                    len: post as u16,
+                    off: self.off + pre as u32 + active as u32,
+                    len: post as u32,
                 },
             ))
         }

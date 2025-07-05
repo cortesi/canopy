@@ -49,10 +49,10 @@ impl TestPattern {
         c.page_up(self);
     }
 
-    fn generate_pattern_char(x: u16, y: u16) -> char {
+    fn generate_pattern_char(x: u32, y: u32) -> char {
         // Pattern: "abcdefghijklmnopqrstuvwxyz0123456789"
         let pattern = "abcdefghijklmnopqrstuvwxyz0123456789";
-        let pattern_len = pattern.len() as u16;
+        let pattern_len = pattern.len() as u32;
 
         // Offset each row by one more character than the previous
         let index = ((x + y) % pattern_len) as usize;

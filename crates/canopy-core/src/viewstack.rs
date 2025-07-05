@@ -124,7 +124,7 @@ impl ViewStack {
                 let rect_on_screen = Rect {
                     tl: current_screen
                         .tl
-                        .scroll(rebased.tl.x as i16, rebased.tl.y as i16),
+                        .scroll(rebased.tl.x as i32, rebased.tl.y as i32),
                     w: rebased.w,
                     h: rebased.h,
                 };
@@ -165,10 +165,10 @@ impl ViewStack {
                         tl: visible_part
                             .tl
                             .scroll(
-                                -(viewport.position().x as i16),
-                                -(viewport.position().y as i16),
+                                -(viewport.position().x as i32),
+                                -(viewport.position().y as i32),
                             )
-                            .scroll(viewport.view().tl.x as i16, viewport.view().tl.y as i16),
+                            .scroll(viewport.view().tl.x as i32, viewport.view().tl.y as i32),
                         w: visible_part.w,
                         h: visible_part.h,
                     };
@@ -199,8 +199,8 @@ mod tests {
 
     struct TestCase {
         name: &'static str,
-        viewports: Vec<((u16, u16), (u16, u16, u16, u16), (u16, u16))>,
-        projections: Vec<Option<((u16, u16, u16, u16), (u16, u16, u16, u16))>>,
+        viewports: Vec<((u32, u32), (u32, u32, u32, u32), (u32, u32))>,
+        projections: Vec<Option<((u32, u32, u32, u32), (u32, u32, u32, u32))>>,
     }
 
     impl TestCase {

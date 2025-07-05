@@ -10,7 +10,7 @@ pub struct Text {
     pub state: NodeState,
     pub raw: String,
     lines: Option<Vec<String>>,
-    fixed_width: Option<u16>,
+    fixed_width: Option<u32>,
     current_size: Expanse,
 }
 
@@ -27,7 +27,7 @@ impl Text {
         }
     }
     /// Add a fixed width, ignoring fit parameters
-    pub fn with_fixed_width(mut self, width: u16) -> Self {
+    pub fn with_fixed_width(mut self, width: u32) -> Self {
         self.fixed_width = Some(width);
         self
     }
@@ -83,7 +83,7 @@ impl Node for Text {
             }
             self.current_size = Expanse {
                 w,
-                h: split.len() as u16,
+                h: split.len() as u32,
             };
             self.lines = Some(split);
         }

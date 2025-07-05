@@ -22,13 +22,13 @@ pub struct Frame {
     /// The original outer rect
     outer_rect: Rect,
     /// The border width
-    border: u16,
+    border: u32,
 }
 
 impl Frame {
     /// Construct a new frame. If the rect is too small to fit the specified
     /// frame, we return a zero Frame.
-    pub fn new(rect: Rect, border: u16) -> Self {
+    pub fn new(rect: Rect, border: u32) -> Self {
         if rect.w <= (border * 2) || rect.h <= (border * 2) {
             let mut f = Frame::zero();
             f.outer_rect = rect;

@@ -288,13 +288,13 @@ impl State {
                 let (lstart, lend) = self.chunks[l.chunk].wraps[l.wrap_idx];
                 if c.len() == 0 && l.chunk == pos.chunk {
                     // We're at the first character of an empty chunk.
-                    return Some((0, y as u16).into());
+                    return Some((0, y as u32).into());
                 } else if pos.offset >= c.len() && l.chunk > pos.chunk {
                     // We're beyond the end of the chunk, which means we must be an insertion cursor. Place the cursor
                     // position at the first character of the next line.
-                    return Some((0, y as u16).into());
+                    return Some((0, y as u32).into());
                 } else if l.chunk == pos.chunk && lstart <= pos.offset && lend > pos.offset {
-                    return Some(((pos.offset - lstart) as u16, y as u16).into());
+                    return Some(((pos.offset - lstart) as u32, y as u32).into());
                 }
             }
         }
@@ -384,13 +384,13 @@ mod tests {
                 let w = w.unwrap();
                 let s = if let Some(x) = split[i].find("_") {
                     let cp = cp.unwrap();
-                    assert_eq!(cp.x, x as u16);
-                    assert_eq!(cp.y, i as u16);
+                    assert_eq!(cp.x, x as u32);
+                    assert_eq!(cp.y, i as u32);
                     split[i].replace("_", "")
                 } else if let Some(x) = split[i].find("<") {
                     let cp = cp.unwrap();
-                    assert_eq!(cp.x, (x - 1) as u16);
-                    assert_eq!(cp.y, i as u16);
+                    assert_eq!(cp.x, (x - 1) as u32);
+                    assert_eq!(cp.y, i as u32);
                     split[i].replace("<", "")
                 } else {
                     split[i].into()
