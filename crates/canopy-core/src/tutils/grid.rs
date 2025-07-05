@@ -160,15 +160,15 @@ impl Node for GridNode {
 
         if let GridNode::Container { children, .. } = self {
             let divisions = (children.len() as f64).sqrt() as usize;
-            let cell_width = sz.w / divisions as u16;
-            let cell_height = sz.h / divisions as u16;
+            let cell_width = sz.w / divisions as u32;
+            let cell_height = sz.h / divisions as u32;
 
             for (i, child) in children.iter_mut().enumerate() {
                 let row = i / divisions;
                 let col = i % divisions;
 
-                let x = col as u16 * cell_width;
-                let y = row as u16 * cell_height;
+                let x = col as u32 * cell_width;
+                let y = row as u32 * cell_height;
 
                 // Last cell in each row/column gets remaining space
                 let width = if col == divisions - 1 {
@@ -279,7 +279,7 @@ impl Grid {
         } else {
             self.divisions.pow(self.recursion as u32)
         };
-        let size = cells_per_side as u16 * 10; // Each cell is 10x10
+        let size = cells_per_side as u32 * 10; // Each cell is 10x10
         Expanse::new(size, size)
     }
 
@@ -295,7 +295,7 @@ impl Grid {
     }
 
     /// Helper to find the deepest leaf node at a given position
-    pub fn find_leaf_at(&mut self, x: u16, y: u16) -> Option<String> {
+    pub fn find_leaf_at(&mut self, x: u32, y: u32) -> Option<String> {
         // Keep track of all nodes we encounter
         let mut nodes = Vec::new();
         locate(self, (x, y), &mut |node| -> Result<Locate<()>> {

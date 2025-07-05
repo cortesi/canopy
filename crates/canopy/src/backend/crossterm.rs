@@ -156,7 +156,7 @@ impl CrosstermRender {
     }
 
     fn text(&mut self, loc: Point, txt: &str) -> io::Result<()> {
-        self.fp.queue(ccursor::MoveTo(loc.x, loc.y))?;
+        self.fp.queue(ccursor::MoveTo(loc.x as u16, loc.y as u16))?;
         self.fp.queue(style::Print(txt))?;
         Ok(())
     }
@@ -302,13 +302,13 @@ fn translate_event(e: cevent::Event) -> Event {
                 button,
                 action,
                 location: Point {
-                    x: m.column,
-                    y: m.row,
+                    x: m.column.into(),
+                    y: m.row.into(),
                 },
                 modifiers: translate_key_modifiers(m.modifiers),
             })
         }
-        cevent::Event::Resize(x, y) => Event::Resize(Expanse::new(x, y)),
+        cevent::Event::Resize(x, y) => Event::Resize(Expanse::new(x.into(), y.into())),
         cevent::Event::FocusGained => Event::FocusGained,
         cevent::Event::FocusLost => Event::FocusLost,
         cevent::Event::Paste(s) => Event::Paste(s),
@@ -424,7 +424,7 @@ where
     event_emitter(cnpy.event_tx.clone());
     let size = translate_result(terminal::size())?;
     cnpy.register_backend(ctrl);
-    cnpy.set_root_size(Expanse::new(size.0, size.1), &mut root)?;
+    cnpy.set_root_size(Expanse::new(size.0.into(), size.1.into()), &mut root)?;
     cnpy.start_poller(cnpy.event_tx.clone());
 
     if let Err(e) = cnpy.render(&mut be, &mut root) {

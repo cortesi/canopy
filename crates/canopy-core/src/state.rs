@@ -154,12 +154,12 @@ impl NodeState {
     }
 
     /// Scroll the view to the specified position.
-    pub fn scroll_to(&mut self, x: u16, y: u16) {
+    pub fn scroll_to(&mut self, x: u32, y: u32) {
         self.viewport.scroll_to(x, y);
     }
 
     /// Scroll the view by the given offsets.
-    pub fn scroll_by(&mut self, x: i16, y: i16) {
+    pub fn scroll_by(&mut self, x: i32, y: i32) {
         self.viewport.scroll_by(x, y);
     }
 

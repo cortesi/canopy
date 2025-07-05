@@ -4,7 +4,7 @@ use super::{Point, Rect};
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct Line {
     pub tl: Point,
-    pub w: u16,
+    pub w: u32,
 }
 
 impl Default for Line {
@@ -18,7 +18,7 @@ impl Default for Line {
 }
 
 impl Line {
-    pub fn new(x: u16, y: u16, w: u16) -> Line {
+    pub fn new(x: u32, y: u32, w: u32) -> Line {
         Line {
             tl: Point { x, y },
             w,

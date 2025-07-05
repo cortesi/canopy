@@ -56,9 +56,9 @@ impl Node for Block {
         self.fill(sz)?;
         if !self.children.is_empty() {
             let vps = if self.horizontal {
-                sz.rect().split_horizontal(self.children.len() as u16)?
+                sz.rect().split_horizontal(self.children.len() as u32)?
             } else {
-                sz.rect().split_vertical(self.children.len() as u16)?
+                sz.rect().split_vertical(self.children.len() as u32)?
             };
             for (i, child) in self.children.iter_mut().enumerate() {
                 l.place_(child, vps[i])?;

@@ -147,7 +147,7 @@ where
             // position so remaining items stay visible.
             let vp_y = self.vp().view().tl.y;
             if itm.virt.tl.y < vp_y {
-                core.scroll_by(self, 0, -(itm.virt.h as i16));
+                core.scroll_by(self, 0, -(itm.virt.h as i32));
             }
             if self.ensure_selected_in_view(core) {
                 core.taint(self);
@@ -323,11 +323,11 @@ where
         // let mut w = 0;
         // let mut h = 0;
         //
-        // let mut voffset: u16 = 0;
+        // let mut voffset: u32 = 0;
         // for itm in &mut self.items {
         //     itm.itm.layout(l, r)?;
         //     let item_view = itm.itm.vp().canvas().rect();
-        //     itm.virt = item_view.shift(0, voffset as i16);
+        //     itm.virt = item_view.shift(0, voffset as i32);
         //     voffset += item_view.h;
         // }
         //

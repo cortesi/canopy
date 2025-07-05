@@ -185,7 +185,7 @@ mod tests {
     }
 
     impl ScrollableContent {
-        fn new(width: u16, height: u16) -> Self {
+        fn new(width: u32, height: u32) -> Self {
             ScrollableContent {
                 state: NodeState::default(),
                 canvas_size: Expanse::new(width, height),
@@ -392,11 +392,11 @@ mod tests {
                 true
             }
             fn focus_dir(&mut self, _root: &mut dyn Node, _dir: Direction) {}
-            fn scroll_to(&mut self, n: &mut dyn Node, x: u16, y: u16) -> bool {
+            fn scroll_to(&mut self, n: &mut dyn Node, x: u32, y: u32) -> bool {
                 n.state_mut().scroll_to(x, y);
                 true
             }
-            fn scroll_by(&mut self, n: &mut dyn Node, x: i16, y: i16) -> bool {
+            fn scroll_by(&mut self, n: &mut dyn Node, x: i32, y: i32) -> bool {
                 n.state_mut().scroll_by(x, y);
                 true
             }
@@ -591,11 +591,11 @@ mod tests {
                 true
             }
             fn focus_dir(&mut self, _root: &mut dyn Node, _dir: Direction) {}
-            fn scroll_to(&mut self, n: &mut dyn Node, x: u16, y: u16) -> bool {
+            fn scroll_to(&mut self, n: &mut dyn Node, x: u32, y: u32) -> bool {
                 n.state_mut().scroll_to(x, y);
                 true
             }
-            fn scroll_by(&mut self, n: &mut dyn Node, x: i16, y: i16) -> bool {
+            fn scroll_by(&mut self, n: &mut dyn Node, x: i32, y: i32) -> bool {
                 n.state_mut().scroll_by(x, y);
                 true
             }

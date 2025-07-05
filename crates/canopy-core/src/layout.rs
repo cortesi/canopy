@@ -50,7 +50,7 @@ impl Layout {
         child.state_mut().set_position(
             parent_vp
                 .position()
-                .scroll(loc.tl.x as i16, loc.tl.y as i16),
+                .scroll(loc.tl.x as i32, loc.tl.y as i32),
         );
         child.layout(self, loc.expanse())?;
         Ok(())
@@ -89,12 +89,12 @@ mod tests {
     // Simple fixed-size test node
     struct TFixed {
         state: NodeState,
-        width: u16,
-        height: u16,
+        width: u32,
+        height: u32,
     }
 
     impl TFixed {
-        fn new(width: u16, height: u16) -> Self {
+        fn new(width: u32, height: u32) -> Self {
             TFixed {
                 state: NodeState::default(),
                 width,

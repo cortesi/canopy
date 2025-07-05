@@ -63,10 +63,10 @@ impl BufTest {
             !self.expected.is_empty(),
             "Cannot calculate buffer size from empty expected buffer"
         );
-        Expanse::new(self.expected[0].len() as u16, self.expected.len() as u16)
+        Expanse::new(self.expected[0].len() as u32, self.expected.len() as u32)
     }
 
-    fn line(mut self, x: u16, y: u16, width: u16, text: &'static str) -> Self {
+    fn line(mut self, x: u32, y: u32, width: u32, text: &'static str) -> Self {
         self.line = geom::Line {
             tl: geom::Point { x, y },
             w: width,

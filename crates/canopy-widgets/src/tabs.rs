@@ -42,7 +42,7 @@ impl Node for Tabs {
         for (i, rect) in self
             .vp()
             .view()
-            .split_horizontal(self.tabs.len() as u16)?
+            .split_horizontal(self.tabs.len() as u32)?
             .iter()
             .enumerate()
         {

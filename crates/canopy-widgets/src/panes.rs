@@ -80,10 +80,10 @@ where
     }
 
     /// Returns the shape of the current child grid
-    fn shape(&self) -> Vec<u16> {
+    fn shape(&self) -> Vec<u32> {
         let mut ret = vec![];
         for i in &self.children {
-            ret.push(i.len() as u16)
+            ret.push(i.len() as u32)
         }
         ret
     }
