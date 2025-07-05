@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ArgTypes","Args","ReturnTypes","ReturnValue"],"fn":["dispatch"],"struct":["CommandInvocation","CommandSet","CommandSpec","ReturnSpec"],"trait":["CommandNode"]};

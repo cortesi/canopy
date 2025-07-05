@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["core"],"struct":["CharPos","Editor","InsertPos","Window"],"trait":["Pos"]};
