@@ -199,6 +199,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "canopy-examples"
+version = "0.1.0"
+dependencies = [
+ "canopy",
+ "canopy-core",
+ "canopy-widgets",
+ "clap",
+ "rand",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "canopy-widgets"
 version = "0.0.1"
 dependencies = [
@@ -513,10 +526,6 @@ dependencies = [
  "libc",
  "windows-sys 0.60.2",
 ]
-
-[[package]]
-name = "examples"
-version = "0.1.0"
 
 [[package]]
 name = "fallible-iterator"

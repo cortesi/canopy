@@ -1,12 +1,10 @@
-use clap::Parser;
 use rand::Rng;
 
 use canopy::{
-    backend::crossterm::runloop,
-    event::key,
+    event::{key, mouse},
     geom::{Expanse, Rect},
     style::solarized,
-    widgets::{Text, frame, list::*},
+    widgets::{frame, list::*, Text},
     *,
 };
 
@@ -15,7 +13,7 @@ const TEXT: &str = "What a struggle must have gone on during long centuries betw
 const COLORS: &[&str] = &["red", "blue"];
 
 #[derive(StatefulNode)]
-struct Block {
+pub struct Block {
     state: NodeState,
     child: Text,
     color: String,
@@ -24,7 +22,7 @@ struct Block {
 
 #[derive_commands]
 impl Block {
-    fn new(index: usize) -> Self {
+    pub fn new(index: usize) -> Self {
         let mut rng = rand::rng();
         Block {
             state: NodeState::default(),
@@ -75,7 +73,7 @@ impl Node for Block {
 }
 
 #[derive(StatefulNode)]
-struct StatusBar {
+pub struct StatusBar {
     state: NodeState,
 }
 
@@ -91,15 +89,21 @@ impl Node for StatusBar {
 }
 
 #[derive(StatefulNode)]
-struct ListGym {
+pub struct ListGym {
     state: NodeState,
     content: frame::Frame<List<Block>>,
     statusbar: StatusBar,
 }
 
 #[derive_commands]
+impl Default for ListGym {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ListGym {
-    fn new() -> Self {
+    pub fn new() -> Self {
         let nodes: Vec<Block> = (0..10).map(Block::new).collect();
         ListGym {
             state: NodeState::default(),
@@ -164,21 +168,7 @@ impl Loader for ListGym {
     }
 }
 
-/// Simple program to greet a person
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-struct Args {
-    /// Number of times to greet
-    #[clap(short, long)]
-    commands: bool,
-
-    /// Number of times to greet
-    #[clap(short, long)]
-    inspector: bool,
-}
-
-pub fn main() -> Result<()> {
-    let mut cnpy = Canopy::new();
+pub fn setup_bindings(cnpy: &mut Canopy) {
     cnpy.style.add(
         "red/text",
         Some(solarized::RED),
@@ -203,15 +193,8 @@ pub fn main() -> Result<()> {
         None,
         Some(canopy::style::AttrSet::default()),
     );
-    Root::<ListGym>::load(&mut cnpy);
 
-    let args = Args::parse();
-    if args.commands {
-        cnpy.print_command_table(&mut std::io::stdout())?;
-        return Ok(());
-    }
-
-    canopy::Binder::new(&mut cnpy)
+    Binder::new(cnpy)
         .defaults::<Root<ListGym>>()
         .with_path("list_gym")
         .key('p', "print(\"foo\")")
@@ -223,9 +206,9 @@ pub fn main() -> Result<()> {
         .key('G', "list::select_last()")
         .key('d', "list::delete_selected()")
         .key('j', "list::select_next()")
-        .mouse(event::mouse::Action::ScrollDown, "list::select_next()")
+        .mouse(mouse::Action::ScrollDown, "list::select_next()")
         .key('k', "list::select_prev()")
-        .mouse(event::mouse::Action::ScrollUp, "list::select_prev()")
+        .mouse(mouse::Action::ScrollUp, "list::select_prev()")
         .key(key::KeyCode::Down, "list::select_next()")
         .key(key::KeyCode::Up, "list::select_prev()")
         .key('J', "list::scroll_down()")
@@ -237,10 +220,4 @@ pub fn main() -> Result<()> {
         .key(key::KeyCode::PageDown, "list::page_down()")
         .key(' ', "list::page_down()")
         .key(key::KeyCode::PageUp, "list::page_up()");
-
-    runloop(
-        cnpy,
-        Root::new(ListGym::new()).with_inspector(args.inspector),
-    )?;
-    Ok(())
 }

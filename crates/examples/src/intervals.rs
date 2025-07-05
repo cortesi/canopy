@@ -1,17 +1,16 @@
 use std::time::Duration;
 
 use canopy::{
-    backend::crossterm::runloop,
     derive_commands,
     event::{key, mouse},
     geom::Expanse,
     style::solarized,
-    widgets::{Text, frame, list::*},
+    widgets::{frame, list::*, Text},
     *,
 };
 
 #[derive(StatefulNode)]
-struct IntervalItem {
+pub struct IntervalItem {
     state: NodeState,
     child: Text,
     selected: bool,
@@ -19,8 +18,14 @@ struct IntervalItem {
 }
 
 #[derive_commands]
+impl Default for IntervalItem {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IntervalItem {
-    fn new() -> Self {
+    pub fn new() -> Self {
         IntervalItem {
             state: NodeState::default(),
             child: Text::new("0"),
@@ -67,7 +72,7 @@ impl Node for IntervalItem {
 }
 
 #[derive(StatefulNode)]
-struct StatusBar {
+pub struct StatusBar {
     state: NodeState,
 }
 
@@ -83,15 +88,21 @@ impl Node for StatusBar {
 }
 
 #[derive(StatefulNode)]
-struct Intervals {
+pub struct Intervals {
     state: NodeState,
     content: frame::Frame<List<IntervalItem>>,
     statusbar: StatusBar,
 }
 
 #[derive_commands]
+impl Default for Intervals {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Intervals {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Intervals {
             state: NodeState::default(),
             content: frame::Frame::new(List::new(vec![])),
@@ -130,8 +141,14 @@ impl Node for Intervals {
     }
 }
 
-pub fn main() -> Result<()> {
-    let mut cnpy = Canopy::new();
+impl Loader for Intervals {
+    fn load(c: &mut Canopy) {
+        c.add_commands::<Intervals>();
+        c.add_commands::<List<IntervalItem>>();
+    }
+}
+
+pub fn setup_bindings(cnpy: &mut Canopy) {
     cnpy.style.add(
         "statusbar/text",
         Some(solarized::BASE02),
@@ -139,31 +156,35 @@ pub fn main() -> Result<()> {
         None,
     );
 
-    cnpy.add_commands::<Root<Intervals>>();
-    cnpy.add_commands::<Intervals>();
-    cnpy.add_commands::<List<IntervalItem>>();
-
-    cnpy.bind_key('a', "intervals", "intervals::add_item()")?;
-    cnpy.bind_key('g', "intervals", "list::select_first()")?;
-    cnpy.bind_key('j', "intervals", "list::select_next()")?;
-    cnpy.bind_key('d', "intervals", "list::delete_selected()")?;
+    cnpy.bind_key('a', "intervals", "intervals::add_item()")
+        .unwrap();
+    cnpy.bind_key('g', "intervals", "list::select_first()")
+        .unwrap();
+    cnpy.bind_key('j', "intervals", "list::select_next()")
+        .unwrap();
+    cnpy.bind_key('d', "intervals", "list::delete_selected()")
+        .unwrap();
     cnpy.bind_mouse(
         mouse::Action::ScrollDown,
         "intervals",
         "list::select_next()",
-    )?;
-    cnpy.bind_key(key::KeyCode::Down, "intervals", "list::select_next()")?;
-    cnpy.bind_key('k', "intervals", "list::select_prev()")?;
-    cnpy.bind_key(key::KeyCode::Up, "intervals", "list::select_prev()")?;
-    cnpy.bind_mouse(mouse::Action::ScrollUp, "intervals", "list::select_prev()")?;
+    )
+    .unwrap();
+    cnpy.bind_key(key::KeyCode::Down, "intervals", "list::select_next()")
+        .unwrap();
+    cnpy.bind_key('k', "intervals", "list::select_prev()")
+        .unwrap();
+    cnpy.bind_key(key::KeyCode::Up, "intervals", "list::select_prev()")
+        .unwrap();
+    cnpy.bind_mouse(mouse::Action::ScrollUp, "intervals", "list::select_prev()")
+        .unwrap();
 
-    cnpy.bind_key(key::KeyCode::PageDown, "intervals", "list::page_down()")?;
-    cnpy.bind_key(' ', "intervals", "list::page_down()")?;
-    cnpy.bind_key(key::KeyCode::PageUp, "intervals", "list::page_up()")?;
+    cnpy.bind_key(key::KeyCode::PageDown, "intervals", "list::page_down()")
+        .unwrap();
+    cnpy.bind_key(' ', "intervals", "list::page_down()")
+        .unwrap();
+    cnpy.bind_key(key::KeyCode::PageUp, "intervals", "list::page_up()")
+        .unwrap();
 
-    cnpy.bind_key('q', "intervals", "root::quit()")?;
-
-    let root = Root::new(Intervals::new());
-    runloop(cnpy, root)?;
-    Ok(())
+    cnpy.bind_key('q', "intervals", "root::quit()").unwrap();
 }

@@ -1,14 +1,7 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub mod cedit;
+pub mod focusgym;
+pub mod framegym;
+pub mod intervals;
+pub mod listgym;
+pub mod pager;
+pub mod test_text;

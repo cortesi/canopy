@@ -1,14 +1,12 @@
 use canopy::{
-    backend::crossterm::runloop,
     derive_commands,
     event::{key, mouse},
     geom::{Expanse, Frame},
     *,
 };
-use clap::Parser;
 
 #[derive(StatefulNode)]
-struct Block {
+pub struct Block {
     state: NodeState,
     children: Vec<Block>,
     horizontal: bool,
@@ -94,14 +92,20 @@ impl Node for Block {
 }
 
 #[derive(StatefulNode)]
-struct FocusGym {
+pub struct FocusGym {
     state: NodeState,
     child: Block,
 }
 
 #[derive_commands]
+impl Default for FocusGym {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FocusGym {
-    fn new() -> Self {
+    pub fn new() -> Self {
         FocusGym {
             state: NodeState::default(),
             child: Block {
@@ -133,24 +137,8 @@ impl Loader for FocusGym {
     }
 }
 
-/// Simple program to greet a person
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-struct Args {
-    /// Number of times to greet
-    #[clap(short, long)]
-    commands: bool,
-
-    /// Number of times to greet
-    #[clap(short, long)]
-    inspector: bool,
-}
-
-pub fn main() -> Result<()> {
-    let mut cnpy = Canopy::new();
-    Root::<FocusGym>::load(&mut cnpy);
-
-    canopy::Binder::new(&mut cnpy)
+pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
+    canopy::Binder::new(cnpy)
         .defaults::<Root<FocusGym>>()
         .key('p', "print(\"xxxx\")")
         .with_path("focus_gym/")
@@ -171,16 +159,5 @@ pub fn main() -> Result<()> {
         .mouse(mouse::Button::Left, "block::focus()")
         .mouse(mouse::Button::Middle, "block::split()")
         .mouse(mouse::Button::Right, "block::add()");
-
-    let args = Args::parse();
-    if args.commands {
-        cnpy.print_command_table(&mut std::io::stdout())?;
-        return Ok(());
-    }
-
-    runloop(
-        cnpy,
-        Root::new(FocusGym::new()).with_inspector(args.inspector),
-    )?;
     Ok(())
 }

@@ -1,14 +1,20 @@
-use canopy::{backend::crossterm::runloop, derive_commands, widgets::Text, *};
+use canopy::{derive_commands, widgets::Text, *};
 
 #[derive(StatefulNode)]
-struct TextDisplay {
+pub struct TextDisplay {
     state: NodeState,
     text: Text,
 }
 
 #[derive_commands]
+impl Default for TextDisplay {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TextDisplay {
-    fn new() -> Self {
+    pub fn new() -> Self {
         let paragraph = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod \
                         tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, \
                         quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo \
@@ -55,15 +61,8 @@ impl Node for TextDisplay {
     }
 }
 
-pub fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
-    let mut cnpy = Canopy::new();
-    cnpy.add_commands::<Root<TextDisplay>>();
-    cnpy.add_commands::<TextDisplay>();
-
-    cnpy.bind_key('q', "root", "root::quit()")?;
-    cnpy.bind_key('r', "textdisplay", "textdisplay::redraw()")?;
-
-    let root = Root::new(TextDisplay::new());
-    runloop(cnpy, root)?;
-    Ok(())
+impl Loader for TextDisplay {
+    fn load(c: &mut Canopy) {
+        c.add_commands::<TextDisplay>();
+    }
 }

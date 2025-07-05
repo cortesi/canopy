@@ -1,18 +1,21 @@
-use canopy::{
-    backend::crossterm::runloop, derive_commands, event::key, geom::Expanse, widgets::frame, *,
-};
-use clap::Parser;
+use canopy::{derive_commands, event::key, geom::Expanse, widgets::frame, *};
 
 /// A widget that renders a test pattern
 #[derive(StatefulNode)]
-struct TestPattern {
+pub struct TestPattern {
     state: NodeState,
     size: Expanse,
 }
 
 #[derive_commands]
+impl Default for TestPattern {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TestPattern {
-    fn new() -> Self {
+    pub fn new() -> Self {
         TestPattern {
             state: NodeState::default(),
             size: Expanse::new(500, 500),
@@ -109,14 +112,20 @@ impl Node for TestPattern {
 }
 
 #[derive(StatefulNode)]
-struct FrameGym {
+pub struct FrameGym {
     state: NodeState,
     child: frame::Frame<TestPattern>,
 }
 
 #[derive_commands]
+impl Default for FrameGym {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FrameGym {
-    fn new() -> Self {
+    pub fn new() -> Self {
         FrameGym {
             state: NodeState::default(),
             child: frame::Frame::new(TestPattern::new())
@@ -149,24 +158,8 @@ impl Loader for FrameGym {
     }
 }
 
-/// Frame widget demonstration with scrolling test pattern
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-struct Args {
-    /// Print available commands
-    #[clap(short, long)]
-    commands: bool,
-
-    /// Enable inspector mode
-    #[clap(short, long)]
-    inspector: bool,
-}
-
-pub fn main() -> Result<()> {
-    let mut cnpy = Canopy::new();
-    Root::<FrameGym>::load(&mut cnpy);
-
-    canopy::Binder::new(&mut cnpy)
+pub fn setup_bindings(cnpy: &mut Canopy) {
+    Binder::new(cnpy)
         .defaults::<Root<FrameGym>>()
         .with_path("")
         // Focus navigation
@@ -188,16 +181,4 @@ pub fn main() -> Result<()> {
         // Quit
         .with_path("root")
         .key('q', "root::quit()");
-
-    let args = Args::parse();
-    if args.commands {
-        cnpy.print_command_table(&mut std::io::stdout())?;
-        return Ok(());
-    }
-
-    runloop(
-        cnpy,
-        Root::new(FrameGym::new()).with_inspector(args.inspector),
-    )?;
-    Ok(())
 }
