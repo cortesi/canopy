@@ -408,10 +408,8 @@ mod tests {
             view_stack.push(frame_vp);
 
             // Frame renders to its own buffer
-            let frame_canvas = frame_vp.canvas();
             let frame_view = frame_vp.view();
-            let mut frame_render =
-                Render::new(&stylemap, &mut style_manager, frame_canvas, frame_view);
+            let mut frame_render = Render::new(&stylemap, &mut style_manager, frame_view);
             frame.render(&ctx, &mut frame_render).unwrap();
 
             // Copy frame to main buffer at its screen position
@@ -436,10 +434,9 @@ mod tests {
                     view_stack.push(child_vp);
 
                     // Child renders to its own buffer
-                    let child_canvas = child_vp.canvas();
                     let child_view = child_vp.view();
                     let mut child_render =
-                        Render::new(&stylemap, &mut style_manager, child_canvas, child_view);
+                        Render::new(&stylemap, &mut style_manager,  child_view);
                     child.render(&ctx, &mut child_render)?;
 
                     // Copy child to main buffer at its projected screen position
@@ -516,7 +513,7 @@ mod tests {
 
             // Create fresh render for this test
             let render_rect = geom::Rect::new(0, 0, 10, 10);
-            let mut render = Render::new(&stylemap, &mut style_manager, frame_size, render_rect);
+            let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
 
             // Render the frame first
             frame.render(&ctx, &mut render).unwrap();
@@ -548,7 +545,7 @@ mod tests {
             frame.child.state_mut().scroll_down();
 
             let render_rect = geom::Rect::new(0, 0, 10, 10);
-            let mut render = Render::new(&stylemap, &mut style_manager, frame_size, render_rect);
+            let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
 
             frame.render(&ctx, &mut render).unwrap();
             frame
@@ -565,7 +562,7 @@ mod tests {
             frame.child.state_mut().scroll_right();
 
             let render_rect = geom::Rect::new(0, 0, 10, 10);
-            let mut render = Render::new(&stylemap, &mut style_manager, frame_size, render_rect);
+            let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
 
             frame.render(&ctx, &mut render).unwrap();
             frame

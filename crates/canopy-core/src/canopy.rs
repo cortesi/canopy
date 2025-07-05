@@ -508,10 +508,9 @@ impl Canopy {
 
                     // Create a new Render instance with the node's expanse and rect equal to its view
                     let vp = n.vp();
-                    let expanse = vp.canvas();
                     let rect = vp.view();
 
-                    let mut rndr = Render::new(&self.style, styl, expanse, rect);
+                    let mut rndr = Render::new(&self.style, styl, rect);
                     n.render(self, &mut rndr)?;
 
                     // Copy the rendered content from the Render buffer into the destination buffer
