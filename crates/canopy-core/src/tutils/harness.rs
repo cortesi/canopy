@@ -1,29 +1,5 @@
-use super::ttree;
-use crate::{
-    Canopy, Loader,
-    backend::{dummy::DummyBackend, test::TestRender},
-};
+use crate::{Canopy, Loader, backend::dummy::DummyBackend};
 use crate::{Node, Result, TermBuf, event::key, geom::Expanse};
-
-/// Run a function on our standard dummy app built from [`ttree`]. This helper
-/// is used extensively in unit tests across the codebase.
-pub fn run(func: impl FnOnce(&mut Canopy, TestRender, ttree::R) -> Result<()>) -> Result<()> {
-    let (_, tr) = TestRender::create();
-    let mut root = ttree::R::new();
-    let mut c = Canopy::new();
-
-    c.add_commands::<ttree::R>();
-    c.add_commands::<ttree::BaLa>();
-    c.add_commands::<ttree::BaLb>();
-    c.add_commands::<ttree::BbLa>();
-    c.add_commands::<ttree::BbLb>();
-    c.add_commands::<ttree::Ba>();
-    c.add_commands::<ttree::Bb>();
-
-    c.set_root_size(Expanse::new(100, 100), &mut root)?;
-    ttree::reset_state();
-    func(&mut c, tr, root)
-}
 
 /// A simple harness that holds a [`Canopy`], a [`DummyBackend`] backend and a
 /// root node. Tests drive the UI by sending key events and triggering renders

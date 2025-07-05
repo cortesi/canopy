@@ -1,125 +1,24 @@
+pub mod dummyctx;
 mod grid;
 pub mod harness;
 pub mod pty;
 pub mod ttree;
-use crate::{self as canopy};
-use crate::{
-    geom::{Direction, Expanse},
-    path::Path,
-    *,
-};
+
+pub use dummyctx::*;
 pub use grid::{Grid, GridNode};
 pub use harness::*;
 pub use pty::*;
 pub use ttree::*;
 
-// A fixed-size test node
-#[derive(Debug, PartialEq, Eq, StatefulNode)]
-pub struct TFixed {
-    state: NodeState,
-    pub w: u32,
-    pub h: u32,
-}
-
-impl Node for TFixed {
-    fn layout(&mut self, l: &Layout, _: Expanse) -> Result<()> {
-        let x = Expanse::new(self.w, self.h);
-        l.fill(self, x)?;
-        Ok(())
-    }
-}
-
-#[derive_commands]
-impl TFixed {
-    pub fn new(w: u32, h: u32) -> Self {
-        TFixed {
-            state: NodeState::default(),
-            w,
-            h,
-        }
-    }
-}
-
-pub struct DummyContext {}
-
-impl Context for DummyContext {
-    fn is_on_focus_path(&self, _n: &mut dyn Node) -> bool {
-        false
-    }
-    fn is_focused(&self, _n: &dyn Node) -> bool {
-        false
-    }
-    fn focus_down(&mut self, _root: &mut dyn Node) {}
-    fn focus_first(&mut self, _root: &mut dyn Node) {}
-    fn focus_left(&mut self, _root: &mut dyn Node) {}
-    fn focus_next(&mut self, _root: &mut dyn Node) {}
-    fn focus_path(&self, _root: &mut dyn Node) -> Path {
-        Path::empty()
-    }
-    fn focus_prev(&mut self, _root: &mut dyn Node) {}
-    fn focus_right(&mut self, _root: &mut dyn Node) {}
-    fn focus_up(&mut self, _root: &mut dyn Node) {}
-    fn needs_render(&self, _n: &dyn Node) -> bool {
-        false
-    }
-    fn set_focus(&mut self, _n: &mut dyn Node) -> bool {
-        false
-    }
-    fn focus_dir(&mut self, _root: &mut dyn Node, _dir: Direction) {}
-    fn scroll_to(&mut self, _n: &mut dyn Node, _x: u32, _y: u32) -> bool {
-        false
-    }
-    fn scroll_by(&mut self, _n: &mut dyn Node, _x: i32, _y: i32) -> bool {
-        false
-    }
-    fn page_up(&mut self, _n: &mut dyn Node) -> bool {
-        false
-    }
-    fn page_down(&mut self, _n: &mut dyn Node) -> bool {
-        false
-    }
-    fn scroll_up(&mut self, _n: &mut dyn Node) -> bool {
-        false
-    }
-    fn scroll_down(&mut self, _n: &mut dyn Node) -> bool {
-        false
-    }
-    fn scroll_left(&mut self, _n: &mut dyn Node) -> bool {
-        false
-    }
-    fn scroll_right(&mut self, _n: &mut dyn Node) -> bool {
-        false
-    }
-    fn taint(&mut self, _n: &mut dyn Node) {}
-    fn taint_tree(&mut self, _e: &mut dyn Node) {}
-
-    /// Start the backend renderer.
-    fn start(&mut self) -> Result<()> {
-        Ok(())
-    }
-
-    /// Stop the backend renderer, releasing control of the terminal.
-    fn stop(&mut self) -> Result<()> {
-        Ok(())
-    }
-
-    /// Stop the render backend and exit the process.
-    fn exit(&mut self, _code: i32) -> ! {
-        panic!("exit in dummy core")
-    }
-
-    fn current_focus_gen(&self) -> u64 {
-        0
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::geom::Rect;
+    use crate::{self as canopy};
+
     use crate::{
-        Canopy,
+        Context, Layout, Node, NodeState, Render, Result, StatefulNode,
         backend::test::{CanvasRender, TestRender},
+        derive_commands,
+        geom::{Expanse, Rect},
     };
 
     #[derive(StatefulNode)]
@@ -194,7 +93,7 @@ mod tests {
     #[test]
     fn block_renders() -> Result<()> {
         let (_, mut tr) = TestRender::create();
-        let mut canopy = Canopy::new();
+        let mut canopy = canopy::Canopy::new();
         let mut root = Block {
             state: NodeState::default(),
             children: vec![Block::new(false), Block::new(false)],
@@ -235,7 +134,7 @@ mod tests {
 
     #[test]
     fn focusgym_layout() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = canopy::Canopy::new();
         let mut root = Block {
             state: NodeState::default(),
             children: vec![Block::new(false), Block::new(false)],
@@ -264,7 +163,7 @@ mod tests {
     #[test]
     fn focusgym_split_right_render() -> Result<()> {
         let (_, mut tr) = TestRender::create();
-        let mut canopy = Canopy::new();
+        let mut canopy = canopy::Canopy::new();
         let mut root = Block {
             state: NodeState::default(),
             children: vec![Block::new(false), Block::new(false)],
@@ -292,7 +191,7 @@ mod tests {
 
     #[test]
     fn focusgym_nested_layout() -> Result<()> {
-        let mut canopy = Canopy::new();
+        let mut canopy = canopy::Canopy::new();
         let mut root = Block {
             state: NodeState::default(),
             children: vec![Block::new(false), Block::new(false)],
@@ -323,7 +222,7 @@ mod tests {
     #[test]
     fn focusgym_nested_render() -> Result<()> {
         let (_, mut tr) = TestRender::create();
-        let mut canopy = Canopy::new();
+        let mut canopy = canopy::Canopy::new();
         let mut root = Block {
             state: NodeState::default(),
             children: vec![Block::new(false), Block::new(false)],
@@ -391,7 +290,7 @@ mod tests {
 
         let size = Expanse::new(20, 10);
         let (buf, mut cr) = CanvasRender::create(size);
-        let mut canopy = Canopy::new();
+        let mut canopy = canopy::Canopy::new();
         let mut root = Root::new();
         let l = Layout {};
 
@@ -431,7 +330,7 @@ mod tests {
     #[test]
     fn render_on_focus_change() -> Result<()> {
         let (_, mut tr) = TestRender::create();
-        let mut canopy = Canopy::new();
+        let mut canopy = canopy::Canopy::new();
         let mut root = Block {
             state: NodeState::default(),
             children: vec![Block::new(false), Block::new(false)],

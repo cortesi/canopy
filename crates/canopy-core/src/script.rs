@@ -200,7 +200,7 @@ mod tests {
 
     #[test]
     fn texecute() -> Result<()> {
-        run(|c, _, mut root| {
+        run_ttree(|c, _, mut root| {
             let scr = c.script_host.compile("bb_la::c_leaf()")?;
             let id = root.a.a.id();
             c.run_script(&mut root, id, scr)?;

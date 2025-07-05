@@ -833,7 +833,7 @@ mod tests {
 
     #[test]
     fn tbindings() -> Result<()> {
-        run(|c, _, mut root| {
+        run_ttree(|c, _, mut root| {
             c.keymap.bind(
                 "",
                 inputmap::Input::Key('a'.into()),
@@ -888,7 +888,7 @@ mod tests {
 
     #[test]
     fn tkey() -> Result<()> {
-        run(|c, _, mut root| {
+        run_ttree(|c, _, mut root| {
             c.set_focus(&mut root);
             root.next_outcome = Some(EventOutcome::Handle);
             c.key(&mut root, 'a')?;
@@ -897,7 +897,7 @@ mod tests {
             Ok(())
         })?;
 
-        run(|c, _, mut root| {
+        run_ttree(|c, _, mut root| {
             c.set_focus(&mut root.a.a);
             root.a.a.next_outcome = Some(EventOutcome::Handle);
             c.key(&mut root, 'a')?;
@@ -906,7 +906,7 @@ mod tests {
             Ok(())
         })?;
 
-        run(|c, _, mut root| {
+        run_ttree(|c, _, mut root| {
             c.set_focus(&mut root.a.a);
             root.a.next_outcome = Some(EventOutcome::Handle);
             c.key(&mut root, 'a')?;
@@ -915,7 +915,7 @@ mod tests {
             Ok(())
         })?;
 
-        run(|c, _, mut root| {
+        run_ttree(|c, _, mut root| {
             c.set_focus(&mut root.a.a);
             root.next_outcome = Some(EventOutcome::Handle);
             c.key(&mut root, 'a')?;
@@ -927,7 +927,7 @@ mod tests {
             Ok(())
         })?;
 
-        run(|c, _, mut root| {
+        run_ttree(|c, _, mut root| {
             c.set_focus(&mut root.a);
             root.a.next_outcome = Some(EventOutcome::Handle);
             c.key(&mut root, 'a')?;
@@ -936,7 +936,7 @@ mod tests {
             Ok(())
         })?;
 
-        run(|c, _, mut root| {
+        run_ttree(|c, _, mut root| {
             c.set_focus(&mut root.a);
             root.next_outcome = Some(EventOutcome::Handle);
             c.key(&mut root, 'a')?;
@@ -956,7 +956,7 @@ mod tests {
             Ok(())
         })?;
 
-        run(|c, _, mut root| {
+        run_ttree(|c, _, mut root| {
             c.set_focus(&mut root.a.b);
             root.a.next_outcome = Some(EventOutcome::Ignore);
             root.next_outcome = Some(EventOutcome::Handle);
@@ -969,7 +969,7 @@ mod tests {
             Ok(())
         })?;
 
-        run(|c, _, mut root| {
+        run_ttree(|c, _, mut root| {
             c.set_focus(&mut root.a.a);
             root.a.a.next_outcome = Some(EventOutcome::Handle);
             c.key(&mut root, 'a')?;
@@ -978,7 +978,7 @@ mod tests {
             Ok(())
         })?;
 
-        run(|c, _, mut root| {
+        run_ttree(|c, _, mut root| {
             c.set_focus(&mut root.a.b);
             root.a.next_outcome = Some(EventOutcome::Handle);
             c.key(&mut root, 'a')?;
@@ -987,7 +987,7 @@ mod tests {
             Ok(())
         })?;
 
-        run(|c, _, mut root| {
+        run_ttree(|c, _, mut root| {
             c.set_focus(&mut root.a.b);
             root.a.b.next_outcome = Some(EventOutcome::Handle);
             c.key(&mut root, 'a')?;
@@ -996,7 +996,7 @@ mod tests {
             Ok(())
         })?;
 
-        run(|c, _, mut root| {
+        run_ttree(|c, _, mut root| {
             c.set_focus(&mut root.a.b);
             root.a.b.next_outcome = Some(EventOutcome::Handle);
             root.a.next_outcome = Some(EventOutcome::Handle);
@@ -1011,7 +1011,7 @@ mod tests {
 
     #[test]
     fn tmouse() -> Result<()> {
-        run(|c, mut tr, mut root| {
+        run_ttree(|c, mut tr, mut root| {
             c.set_focus(&mut root);
             root.next_outcome = Some(EventOutcome::Handle);
             let evt = root.a.a.make_mouse_event()?;
@@ -1025,7 +1025,7 @@ mod tests {
             Ok(())
         })?;
 
-        run(|c, mut tr, mut root| {
+        run_ttree(|c, mut tr, mut root| {
             root.a.a.next_outcome = Some(EventOutcome::Handle);
             let evt = root.a.a.make_mouse_event()?;
             tr.render(c, &mut root)?;
@@ -1035,7 +1035,7 @@ mod tests {
             Ok(())
         })?;
 
-        run(|c, mut tr, mut root| {
+        run_ttree(|c, mut tr, mut root| {
             root.a.a.next_outcome = Some(EventOutcome::Handle);
             let evt = root.a.a.make_mouse_event()?;
             tr.render(c, &mut root)?;
@@ -1045,7 +1045,7 @@ mod tests {
             Ok(())
         })?;
 
-        run(|c, mut tr, mut root| {
+        run_ttree(|c, mut tr, mut root| {
             root.a.a.next_outcome = Some(EventOutcome::Handle);
             let evt = root.a.a.make_mouse_event()?;
             tr.render(c, &mut root)?;
@@ -1060,7 +1060,7 @@ mod tests {
 
     #[test]
     fn tresize() -> Result<()> {
-        run(|c, mut tr, mut root| {
+        run_ttree(|c, mut tr, mut root| {
             let size = 100;
             assert_eq!(root.vp().screen_rect(), Rect::new(0, 0, size, size));
             tr.render(c, &mut root)?;
@@ -1080,7 +1080,7 @@ mod tests {
 
     #[test]
     fn trender() -> Result<()> {
-        run(|c, mut tr, mut root| {
+        run_ttree(|c, mut tr, mut root| {
             tr.render(c, &mut root)?;
             assert!(!tr.buf_empty());
 
@@ -1120,7 +1120,7 @@ mod tests {
 
     #[test]
     fn focus_path() -> Result<()> {
-        run(|c, _, mut root| {
+        run_ttree(|c, _, mut root| {
             assert_eq!(c.focus_path(&mut root), Path::empty());
             c.focus_next(&mut root);
             assert_eq!(c.focus_path(&mut root), Path::new(&["r"]));
@@ -1135,7 +1135,7 @@ mod tests {
 
     #[test]
     fn focus_next() -> Result<()> {
-        run(|c, _, mut root| {
+        run_ttree(|c, _, mut root| {
             assert!(!c.is_focused(&root));
             c.focus_next(&mut root);
             assert!(c.is_focused(&root));
@@ -1160,7 +1160,7 @@ mod tests {
 
     #[test]
     fn focus_prev() -> Result<()> {
-        run(|c, _, mut root| {
+        run_ttree(|c, _, mut root| {
             assert!(!c.is_focused(&root));
             c.focus_prev(&mut root);
             assert!(c.is_focused(&root.b.b));
@@ -1182,7 +1182,7 @@ mod tests {
 
     #[test]
     fn tshift_right() -> Result<()> {
-        run(|c, mut tr, mut root| {
+        run_ttree(|c, mut tr, mut root| {
             tr.render(c, &mut root)?;
             c.set_focus(&mut root.a.a);
             c.focus_right(&mut root);
@@ -1203,7 +1203,7 @@ mod tests {
 
     #[test]
     fn tfoci() -> Result<()> {
-        run(|c, _, mut root| {
+        run_ttree(|c, _, mut root| {
             assert_eq!(c.focus_path(&mut root), Path::empty());
 
             assert!(!c.is_on_focus_path(&mut root));

@@ -1,6 +1,7 @@
 use crate::Canopy;
 use crate::{
     Node, Result,
+    geom::Expanse,
     geom::Point,
     render::RenderBackend,
     style::{Style, StyleManager},
@@ -88,7 +89,6 @@ impl RenderBackend for TestRender {
 }
 
 /// A simple in-memory canvas for verifying render placement in tests.
-#[cfg(test)]
 #[derive(Default)]
 pub struct CanvasBuf {
     size: Expanse,
@@ -97,7 +97,6 @@ pub struct CanvasBuf {
     pub painted: Vec<Vec<bool>>,
 }
 
-#[cfg(test)]
 impl CanvasBuf {
     fn new(size: Expanse) -> Self {
         CanvasBuf {
@@ -121,12 +120,10 @@ impl CanvasBuf {
     }
 }
 
-#[cfg(test)]
 pub struct CanvasRender {
     pub canvas: Arc<Mutex<CanvasBuf>>,
 }
 
-#[cfg(test)]
 impl CanvasRender {
     pub fn create(size: Expanse) -> (Arc<Mutex<CanvasBuf>>, Self) {
         let buf = Arc::new(Mutex::new(CanvasBuf::new(size)));
@@ -135,7 +132,6 @@ impl CanvasRender {
     }
 }
 
-#[cfg(test)]
 impl RenderBackend for CanvasRender {
     fn reset(&mut self) -> Result<()> {
         self.canvas.lock().unwrap().clear();

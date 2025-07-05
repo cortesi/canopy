@@ -1,11 +1,9 @@
-/*! This module defines a standard tree of instrumented nodes for testing.
- *
- *
-*/
+/*! This module defines a standard tree of instrumented nodes for testing. */
 use std::cell::RefCell;
 
 use crate::{self as canopy};
 use crate::{
+    backend::test::TestRender,
     event::{key, mouse},
     geom::Expanse,
     *,
@@ -293,3 +291,23 @@ leaf!(BbLa);
 leaf!(BbLb);
 branch!(Ba, BaLa, BaLb);
 branch!(Bb, BbLa, BbLb);
+
+/// Run a function on our standard dummy app built from [`ttree`]. This helper
+/// is used extensively in unit tests across the codebase.
+pub fn run_ttree(func: impl FnOnce(&mut Canopy, TestRender, R) -> Result<()>) -> Result<()> {
+    let (_, tr) = TestRender::create();
+    let mut root = R::new();
+    let mut c = Canopy::new();
+
+    c.add_commands::<R>();
+    c.add_commands::<BaLa>();
+    c.add_commands::<BaLb>();
+    c.add_commands::<BbLa>();
+    c.add_commands::<BbLb>();
+    c.add_commands::<Ba>();
+    c.add_commands::<Bb>();
+
+    c.set_root_size(Expanse::new(100, 100), &mut root)?;
+    reset_state();
+    func(&mut c, tr, root)
+}
