@@ -1,7 +1,6 @@
 pub mod dummyctx;
 pub mod grid;
 pub mod harness;
-pub mod pty;
 pub mod ttree;
 
 #[cfg(test)]
