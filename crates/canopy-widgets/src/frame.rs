@@ -175,6 +175,7 @@ mod tests {
     use canopy_core::{
         Context, Expanse, Node, NodeState, Result, StatefulNode,
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
+        tutils::dummyctx::DummyContext,
     };
 
     /// A simple scrollable test widget for testing frame scrolling
@@ -352,8 +353,6 @@ mod tests {
     fn test_frame_overdraw_with_viewport_stack() {
         use canopy_core::{
             TermBuf, ViewStack,
-            geom::Direction,
-            path::Path,
             style::{StyleManager, StyleMap},
         };
 
@@ -362,84 +361,7 @@ mod tests {
         let content = ScrollableContent::new(20, 20);
         let mut frame = Frame::new(content);
 
-        // Simple test context
-        struct TestContext {
-            focused_node_id: Option<u64>,
-        }
-
-        impl Context for TestContext {
-            fn is_on_focus_path(&self, n: &mut dyn Node) -> bool {
-                self.focused_node_id == Some(n.state().id)
-            }
-            fn is_focused(&self, n: &dyn Node) -> bool {
-                self.focused_node_id == Some(n.state().id)
-            }
-            fn focus_down(&mut self, _root: &mut dyn Node) {}
-            fn focus_first(&mut self, _root: &mut dyn Node) {}
-            fn focus_left(&mut self, _root: &mut dyn Node) {}
-            fn focus_next(&mut self, _root: &mut dyn Node) {}
-            fn focus_path(&self, _root: &mut dyn Node) -> Path {
-                Path::empty()
-            }
-            fn focus_prev(&mut self, _root: &mut dyn Node) {}
-            fn focus_right(&mut self, _root: &mut dyn Node) {}
-            fn focus_up(&mut self, _root: &mut dyn Node) {}
-            fn needs_render(&self, _n: &dyn Node) -> bool {
-                true
-            }
-            fn set_focus(&mut self, n: &mut dyn Node) -> bool {
-                self.focused_node_id = Some(n.state().id);
-                true
-            }
-            fn focus_dir(&mut self, _root: &mut dyn Node, _dir: Direction) {}
-            fn scroll_to(&mut self, n: &mut dyn Node, x: u32, y: u32) -> bool {
-                n.state_mut().scroll_to(x, y);
-                true
-            }
-            fn scroll_by(&mut self, n: &mut dyn Node, x: i32, y: i32) -> bool {
-                n.state_mut().scroll_by(x, y);
-                true
-            }
-            fn page_up(&mut self, n: &mut dyn Node) -> bool {
-                n.state_mut().page_up();
-                true
-            }
-            fn page_down(&mut self, n: &mut dyn Node) -> bool {
-                n.state_mut().page_down();
-                true
-            }
-            fn scroll_up(&mut self, n: &mut dyn Node) -> bool {
-                n.state_mut().scroll_up();
-                true
-            }
-            fn scroll_down(&mut self, n: &mut dyn Node) -> bool {
-                n.state_mut().scroll_down();
-                true
-            }
-            fn scroll_left(&mut self, n: &mut dyn Node) -> bool {
-                n.state_mut().scroll_left();
-                true
-            }
-            fn scroll_right(&mut self, n: &mut dyn Node) -> bool {
-                n.state_mut().scroll_right();
-                true
-            }
-            fn taint(&mut self, _n: &mut dyn Node) {}
-            fn taint_tree(&mut self, _e: &mut dyn Node) {}
-            fn start(&mut self) -> Result<()> {
-                Ok(())
-            }
-            fn stop(&mut self) -> Result<()> {
-                Ok(())
-            }
-            fn exit(&mut self, _code: i32) -> ! {
-                std::process::exit(0)
-            }
-        }
-
-        let mut ctx = TestContext {
-            focused_node_id: None,
-        };
+        let ctx = DummyContext {};
         let layout = Layout {};
 
         // Layout the frame
@@ -461,7 +383,8 @@ mod tests {
 
         for (scroll_x, scroll_y, test_name) in scroll_tests {
             println!("\n=== Testing scroll position ({scroll_x}, {scroll_y}) - {test_name} ===");
-            ctx.scroll_to(&mut frame.child, scroll_x, scroll_y);
+            // DummyContext doesn't actually scroll, so we need to manually set the scroll position
+            frame.child.state_mut().scroll_to(scroll_x, scroll_y);
 
             // Create main buffer
             let mut main_buf = TermBuf::empty(frame_size);
@@ -551,86 +474,7 @@ mod tests {
 
     #[test]
     fn test_frame_overdraw_with_multiple_scrolls() {
-        use canopy_core::{
-            geom::Direction,
-            path::Path,
-            style::{StyleManager, StyleMap},
-        };
-
-        // Simple test context that tracks focus
-        struct TestContext {
-            focused_node_id: Option<u64>,
-        }
-
-        impl Context for TestContext {
-            fn is_on_focus_path(&self, n: &mut dyn Node) -> bool {
-                self.focused_node_id == Some(n.state().id)
-            }
-            fn is_focused(&self, n: &dyn Node) -> bool {
-                self.focused_node_id == Some(n.state().id)
-            }
-            fn focus_down(&mut self, _root: &mut dyn Node) {}
-            fn focus_first(&mut self, _root: &mut dyn Node) {}
-            fn focus_left(&mut self, _root: &mut dyn Node) {}
-            fn focus_next(&mut self, _root: &mut dyn Node) {}
-            fn focus_path(&self, _root: &mut dyn Node) -> Path {
-                Path::empty()
-            }
-            fn focus_prev(&mut self, _root: &mut dyn Node) {}
-            fn focus_right(&mut self, _root: &mut dyn Node) {}
-            fn focus_up(&mut self, _root: &mut dyn Node) {}
-            fn needs_render(&self, _n: &dyn Node) -> bool {
-                true
-            }
-            fn set_focus(&mut self, n: &mut dyn Node) -> bool {
-                self.focused_node_id = Some(n.state().id);
-                true
-            }
-            fn focus_dir(&mut self, _root: &mut dyn Node, _dir: Direction) {}
-            fn scroll_to(&mut self, n: &mut dyn Node, x: u32, y: u32) -> bool {
-                n.state_mut().scroll_to(x, y);
-                true
-            }
-            fn scroll_by(&mut self, n: &mut dyn Node, x: i32, y: i32) -> bool {
-                n.state_mut().scroll_by(x, y);
-                true
-            }
-            fn page_up(&mut self, n: &mut dyn Node) -> bool {
-                n.state_mut().page_up();
-                true
-            }
-            fn page_down(&mut self, n: &mut dyn Node) -> bool {
-                n.state_mut().page_down();
-                true
-            }
-            fn scroll_up(&mut self, n: &mut dyn Node) -> bool {
-                n.state_mut().scroll_up();
-                true
-            }
-            fn scroll_down(&mut self, n: &mut dyn Node) -> bool {
-                n.state_mut().scroll_down();
-                true
-            }
-            fn scroll_left(&mut self, n: &mut dyn Node) -> bool {
-                n.state_mut().scroll_left();
-                true
-            }
-            fn scroll_right(&mut self, n: &mut dyn Node) -> bool {
-                n.state_mut().scroll_right();
-                true
-            }
-            fn taint(&mut self, _n: &mut dyn Node) {}
-            fn taint_tree(&mut self, _e: &mut dyn Node) {}
-            fn start(&mut self) -> Result<()> {
-                Ok(())
-            }
-            fn stop(&mut self) -> Result<()> {
-                Ok(())
-            }
-            fn exit(&mut self, _code: i32) -> ! {
-                std::process::exit(0)
-            }
-        }
+        use canopy_core::style::{StyleManager, StyleMap};
 
         // Create a frame size of 10x10 with 1-pixel border
         // Inner area will be 8x8 at position (1,1)
@@ -642,9 +486,7 @@ mod tests {
         let mut frame = Frame::new(content);
 
         // Set up test context
-        let mut ctx = TestContext {
-            focused_node_id: None,
-        };
+        let ctx = DummyContext {};
 
         // Layout the frame
         let layout = Layout {};
@@ -669,8 +511,8 @@ mod tests {
         for (test_name, x, y) in test_cases {
             println!("\n=== Testing: {test_name} (scroll to {x}, {y}) ===");
 
-            // Scroll to position
-            ctx.scroll_to(&mut frame.child, x, y);
+            // Scroll to position - DummyContext doesn't actually scroll, so we do it directly
+            frame.child.state_mut().scroll_to(x, y);
 
             // Create fresh render for this test
             let render_rect = geom::Rect::new(0, 0, 10, 10);
@@ -699,11 +541,11 @@ mod tests {
         println!("\n=== Testing incremental scrolling ===");
 
         // Reset to origin
-        ctx.scroll_to(&mut frame.child, 0, 0);
+        frame.child.state_mut().scroll_to(0, 0);
 
         // Scroll down one line at a time
         for i in 0..15 {
-            ctx.scroll_down(&mut frame.child);
+            frame.child.state_mut().scroll_down();
 
             let render_rect = geom::Rect::new(0, 0, 10, 10);
             let mut render = Render::new(&stylemap, &mut style_manager, frame_size, render_rect);
@@ -718,9 +560,9 @@ mod tests {
         }
 
         // Scroll right one column at a time
-        ctx.scroll_to(&mut frame.child, 0, 0);
+        frame.child.state_mut().scroll_to(0, 0);
         for i in 0..15 {
-            ctx.scroll_right(&mut frame.child);
+            frame.child.state_mut().scroll_right();
 
             let render_rect = geom::Rect::new(0, 0, 10, 10);
             let mut render = Render::new(&stylemap, &mut style_manager, frame_size, render_rect);
