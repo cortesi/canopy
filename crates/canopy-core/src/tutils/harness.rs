@@ -47,6 +47,15 @@ impl<N: Node + Loader> Harness<N> {
         &mut self.root
     }
 
+    /// Execute a script on the app under test. The script is compiled and then
+    /// executed on the root node, similar to how key bindings work.
+    pub fn script(&mut self, script: &str) -> Result<()> {
+        let script_id = self.core.script_host.compile(script)?;
+        let root_id = self.root.id();
+        self.core.run_script(&mut self.root, root_id, script_id)?;
+        self.core.render(&mut self.render, &mut self.root)
+    }
+
     /// Access the current render buffer. Panics if a render has not yet been
     /// performed.
     pub fn buf(&self) -> &TermBuf {

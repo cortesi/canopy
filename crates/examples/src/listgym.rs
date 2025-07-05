@@ -221,3 +221,92 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
         .key(' ', "list::page_down()")
         .key(key::KeyCode::PageUp, "list::page_up()");
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use canopy::tutils::harness::Harness;
+
+    fn create_test_harness() -> Result<Harness<ListGym>> {
+        let root = ListGym::new();
+        let mut harness = Harness::new(root)?;
+
+        // Load the commands so scripts can find them
+        ListGym::load(harness.canopy());
+
+        Ok(harness)
+    }
+
+    #[test]
+    fn test_listgym_creates_and_renders() -> Result<()> {
+        let root = ListGym::new();
+        let mut harness = Harness::new(root)?;
+
+        // Test that we can render without crashing
+        harness.render()?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_listgym_initial_state() -> Result<()> {
+        let root = ListGym::new();
+        let mut harness = Harness::new(root)?;
+
+        // Verify initial state
+        assert_eq!(harness.root().content.child.len(), 10);
+
+        // Render and verify it still works
+        harness.render()?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_listgym_with_harness() -> Result<()> {
+        let root = ListGym::new();
+        let mut harness = Harness::with_size(root, Expanse::new(80, 20))?;
+
+        // Test that we can render with a specific size
+        harness.render()?;
+
+        // The harness should have created a render buffer
+        let _buf = harness.buf();
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_harness_script_method() -> Result<()> {
+        let mut harness = create_test_harness()?;
+        harness.render()?;
+
+        // Test that we can execute a simple print script
+        harness.script("print(\"Hello from script\")")?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_harness_script_with_list_navigation() -> Result<()> {
+        let mut harness = create_test_harness()?;
+        harness.render()?;
+
+        // Get initial offset
+        let initial_offset = harness.root().content.child.offset;
+
+        // Navigate using list commands (these are loaded by the List type)
+        harness.script("list::select_last()")?;
+
+        // Verify offset changed
+        assert!(harness.root().content.child.offset > initial_offset);
+
+        // Navigate back to first
+        harness.script("list::select_first()")?;
+
+        // Verify we're back at the start
+        assert_eq!(harness.root().content.child.offset, 0);
+
+        Ok(())
+    }
+}
