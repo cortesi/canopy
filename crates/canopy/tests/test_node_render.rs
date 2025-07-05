@@ -1,6 +1,7 @@
 use canopy::{
     Context, Expanse, Layout, Loader, Node, NodeState, Render, Result, StatefulNode, buf,
-    derive_commands, geom, tutils::harness::Harness,
+    derive_commands, geom,
+    tutils::{buf as tutils_buf, harness::Harness},
 };
 
 // Define our node types
@@ -116,17 +117,20 @@ fn test_simple_node_fill() -> Result<()> {
     let mut h = Harness::with_size(Root::new(), size)?;
     h.render()?;
     let buf = h.buf();
-    buf.assert_matches(buf![
-        "BBBBBBBBBB                    "
-        "BBBBBBBBBB                    "
-        "BBBBBBBBBB                    "
-        "BBBBBBBBBB                    "
-        "BBBBBBBBBB                    "
-        "                              "
-        "                              "
-        "                              "
-        "                              "
-        "                              "
-    ]);
+    tutils_buf::assert_matches(
+        buf,
+        buf![
+            "BBBBBBBBBB                    "
+            "BBBBBBBBBB                    "
+            "BBBBBBBBBB                    "
+            "BBBBBBBBBB                    "
+            "BBBBBBBBBB                    "
+            "                              "
+            "                              "
+            "                              "
+            "                              "
+            "                              "
+        ],
+    );
     Ok(())
 }

@@ -290,7 +290,7 @@ impl Canopy {
     }
 
     /// Get a reference to the current render buffer, if any.
-    pub fn render_buf(&self) -> Option<&TermBuf> {
+    pub fn buf(&self) -> Option<&TermBuf> {
         self.termbuf.as_ref()
     }
 

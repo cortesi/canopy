@@ -1,3 +1,4 @@
+pub mod buf;
 pub mod dummyctx;
 pub mod grid;
 pub mod harness;

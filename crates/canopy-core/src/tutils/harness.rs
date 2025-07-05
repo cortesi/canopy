@@ -59,9 +59,7 @@ impl<N: Node + Loader> Harness<N> {
     /// Access the current render buffer. Panics if a render has not yet been
     /// performed.
     pub fn buf(&self) -> &TermBuf {
-        self.core
-            .render_buf()
-            .expect("render buffer not initialized")
+        self.core.buf().expect("render buffer not initialized")
     }
 
     pub fn expect_contains(&self, txt: &str) {

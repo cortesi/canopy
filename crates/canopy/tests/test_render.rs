@@ -2,10 +2,11 @@ use canopy::{
     Expanse, buf, geom,
     render::Render,
     style::{StyleManager, StyleMap},
+    tutils::buf as tutils_buf,
 };
 
 fn assert_buffer_matches(render: &Render, expected: &[&str]) {
-    render.get_buffer().assert_matches(expected);
+    tutils_buf::assert_matches(render.get_buffer(), expected);
 }
 
 fn setup_render_test(_canvas_size: Expanse, _render_rect: geom::Rect) -> (StyleMap, StyleManager) {
@@ -115,9 +116,7 @@ impl BufTest {
             render_rect.w,
             render_rect.h
         );
-        render
-            .get_buffer()
-            .assert_matches_with_context(self.expected, Some(&context));
+        tutils_buf::assert_matches_with_context(render.get_buffer(), self.expected, Some(&context));
     }
 }
 
@@ -466,9 +465,7 @@ fn test_multiple_render_rects() {
         ];
 
         let context = format!("Testing render rect at position: {position}");
-        render
-            .get_buffer()
-            .assert_matches_with_context(expected, Some(&context));
+        tutils_buf::assert_matches_with_context(render.get_buffer(), expected, Some(&context));
     }
 }
 

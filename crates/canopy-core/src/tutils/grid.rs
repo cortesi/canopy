@@ -233,7 +233,7 @@ impl StatefulNode for GridNode {
 ///
 /// # Examples
 /// ```no_run
-/// use canopy_core::tutils::Grid;
+/// use canopy_core::tutils::grid::Grid;
 ///
 /// // Create a 2x2 grid with 4 cells
 /// let grid = Grid::new(1, 2);
