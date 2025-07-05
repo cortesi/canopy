@@ -244,6 +244,7 @@ mod tests {
                     line.push(ch);
                 }
 
+                // Use view.line like framegym does
                 r.text("text", view.line(y), &line)?;
             }
             Ok(())
@@ -295,5 +296,445 @@ mod tests {
             .unwrap();
 
         assert_eq!(child_count, 1);
+    }
+
+    // Helper function to check frame boundaries for overdraw
+    fn check_frame_boundaries(buffer: &canopy_core::TermBuf, test_name: &str) {
+        // Check bottom edge (row 9) - should contain frame characters
+        for x in 1..9 {
+            let cell = buffer.get(geom::Point { x, y: 9 });
+            if let Some(cell) = cell {
+                if cell.ch.is_ascii_digit() {
+                    panic!(
+                        "{}: Frame bottom edge at ({}, 9) was overdrawn with content character '{}'",
+                        test_name, x, cell.ch
+                    );
+                }
+            }
+        }
+
+        // Check right edge (column 9) - should contain frame characters
+        for y in 1..9 {
+            let cell = buffer.get(geom::Point { x: 9, y });
+            if let Some(cell) = cell {
+                if cell.ch.is_ascii_digit() {
+                    panic!(
+                        "{}: Frame right edge at (9, {}) was overdrawn with content character '{}'",
+                        test_name, y, cell.ch
+                    );
+                }
+            }
+        }
+
+        // Check corners
+        let corners = [
+            (0, 0, "top-left"),
+            (9, 0, "top-right"),
+            (0, 9, "bottom-left"),
+            (9, 9, "bottom-right"),
+        ];
+
+        for (x, y, corner_name) in corners {
+            let cell = buffer.get(geom::Point { x, y });
+            if let Some(cell) = cell {
+                if cell.ch.is_ascii_digit() {
+                    panic!(
+                        "{}: Frame {} corner at ({}, {}) was overdrawn with content character '{}'",
+                        test_name, corner_name, x, y, cell.ch
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_frame_overdraw_with_viewport_stack() {
+        use canopy_core::{
+            TermBuf, ViewStack,
+            geom::Direction,
+            path::Path,
+            style::{StyleManager, StyleMap},
+        };
+
+        // Create the components
+        let frame_size = Expanse::new(10, 10);
+        let content = ScrollableContent::new(20, 20);
+        let mut frame = Frame::new(content);
+
+        // Simple test context
+        struct TestContext {
+            focused_node_id: Option<u64>,
+        }
+
+        impl Context for TestContext {
+            fn is_on_focus_path(&self, n: &mut dyn Node) -> bool {
+                self.focused_node_id == Some(n.state().id)
+            }
+            fn is_focused(&self, n: &dyn Node) -> bool {
+                self.focused_node_id == Some(n.state().id)
+            }
+            fn focus_down(&mut self, _root: &mut dyn Node) {}
+            fn focus_first(&mut self, _root: &mut dyn Node) {}
+            fn focus_left(&mut self, _root: &mut dyn Node) {}
+            fn focus_next(&mut self, _root: &mut dyn Node) {}
+            fn focus_path(&self, _root: &mut dyn Node) -> Path {
+                Path::empty()
+            }
+            fn focus_prev(&mut self, _root: &mut dyn Node) {}
+            fn focus_right(&mut self, _root: &mut dyn Node) {}
+            fn focus_up(&mut self, _root: &mut dyn Node) {}
+            fn needs_render(&self, _n: &dyn Node) -> bool {
+                true
+            }
+            fn set_focus(&mut self, n: &mut dyn Node) -> bool {
+                self.focused_node_id = Some(n.state().id);
+                true
+            }
+            fn focus_dir(&mut self, _root: &mut dyn Node, _dir: Direction) {}
+            fn scroll_to(&mut self, n: &mut dyn Node, x: u16, y: u16) -> bool {
+                n.state_mut().scroll_to(x, y);
+                true
+            }
+            fn scroll_by(&mut self, n: &mut dyn Node, x: i16, y: i16) -> bool {
+                n.state_mut().scroll_by(x, y);
+                true
+            }
+            fn page_up(&mut self, n: &mut dyn Node) -> bool {
+                n.state_mut().page_up();
+                true
+            }
+            fn page_down(&mut self, n: &mut dyn Node) -> bool {
+                n.state_mut().page_down();
+                true
+            }
+            fn scroll_up(&mut self, n: &mut dyn Node) -> bool {
+                n.state_mut().scroll_up();
+                true
+            }
+            fn scroll_down(&mut self, n: &mut dyn Node) -> bool {
+                n.state_mut().scroll_down();
+                true
+            }
+            fn scroll_left(&mut self, n: &mut dyn Node) -> bool {
+                n.state_mut().scroll_left();
+                true
+            }
+            fn scroll_right(&mut self, n: &mut dyn Node) -> bool {
+                n.state_mut().scroll_right();
+                true
+            }
+            fn taint(&mut self, _n: &mut dyn Node) {}
+            fn taint_tree(&mut self, _e: &mut dyn Node) {}
+            fn start(&mut self) -> Result<()> {
+                Ok(())
+            }
+            fn stop(&mut self) -> Result<()> {
+                Ok(())
+            }
+            fn exit(&mut self, _code: i32) -> ! {
+                std::process::exit(0)
+            }
+        }
+
+        let mut ctx = TestContext {
+            focused_node_id: None,
+        };
+        let layout = Layout {};
+
+        // Layout the frame
+        frame.layout(&layout, frame_size).unwrap();
+
+        // Create style components
+        let stylemap = StyleMap::new();
+        let mut style_manager = StyleManager::default();
+
+        // Test multiple scroll positions to find potential overdraw
+        let scroll_tests = vec![
+            (0, 0, "Top-left"),
+            (5, 5, "Middle"),
+            (10, 10, "Near bottom-right"),
+            (12, 0, "Right edge"),
+            (0, 12, "Bottom edge"),
+            (12, 12, "Bottom-right corner"),
+        ];
+
+        for (scroll_x, scroll_y, test_name) in scroll_tests {
+            println!(
+                "\n=== Testing scroll position ({}, {}) - {} ===",
+                scroll_x, scroll_y, test_name
+            );
+            ctx.scroll_to(&mut frame.child, scroll_x, scroll_y);
+
+            // Create main buffer
+            let mut main_buf = TermBuf::empty(frame_size);
+
+            // Create ViewStack with screen viewport
+            let screen_vp =
+                canopy_core::ViewPort::new(frame_size, frame_size.rect(), geom::Point::zero())
+                    .unwrap();
+            let mut view_stack = ViewStack::new(screen_vp);
+
+            // Simulate how Canopy would render this:
+            // 1. First render the frame
+            let frame_vp = frame.vp();
+            println!(
+                "Frame viewport: canvas={:?}, view={:?}, pos={:?}",
+                frame_vp.canvas(),
+                frame_vp.view(),
+                frame_vp.position()
+            );
+
+            view_stack.push(frame_vp);
+
+            // Frame renders to its own buffer
+            let frame_canvas = frame_vp.canvas();
+            let frame_view = frame_vp.view();
+            let mut frame_render =
+                Render::new(&stylemap, &mut style_manager, frame_canvas, frame_view);
+            frame.render(&ctx, &mut frame_render).unwrap();
+
+            // Copy frame to main buffer at its screen position
+            if let Some((_canvas_rect, screen_rect)) = view_stack.projection() {
+                println!("Frame projection: screen_rect={:?}", screen_rect);
+                let frame_buf = frame_render.get_buffer();
+                main_buf.copy_to_rect(&frame_buf, screen_rect);
+            }
+
+            // 2. Then render each child
+            frame
+                .children(&mut |child| {
+                    let child_vp = child.vp();
+                    println!(
+                        "Child viewport: canvas={:?}, view={:?}, pos={:?}",
+                        child_vp.canvas(),
+                        child_vp.view(),
+                        child_vp.position()
+                    );
+
+                    // Push child viewport
+                    view_stack.push(child_vp);
+
+                    // Child renders to its own buffer
+                    let child_canvas = child_vp.canvas();
+                    let child_view = child_vp.view();
+                    let mut child_render =
+                        Render::new(&stylemap, &mut style_manager, child_canvas, child_view);
+                    child.render(&ctx, &mut child_render)?;
+
+                    // Copy child to main buffer at its projected screen position
+                    if let Some((canvas_rect, screen_rect)) = view_stack.projection() {
+                        println!(
+                            "Child projection: canvas_rect={:?}, screen_rect={:?}",
+                            canvas_rect, screen_rect
+                        );
+                        let child_buf = child_render.get_buffer();
+                        println!("Child buffer first line: {:?}", child_buf.line_text(0));
+                        main_buf.copy_to_rect(&child_buf, screen_rect);
+                    } else {
+                        println!("No projection for child!");
+                    }
+
+                    view_stack.pop().unwrap();
+                    Ok(())
+                })
+                .unwrap();
+
+            view_stack.pop().unwrap();
+
+            // Print the result
+            println!("Buffer with viewport stack:");
+            for line in main_buf.lines() {
+                println!("{}", line);
+            }
+
+            // Check for overdraw
+            check_frame_boundaries(&main_buf, &format!("Viewport stack test - {}", test_name));
+        }
+    }
+
+    #[test]
+    fn test_frame_overdraw_with_multiple_scrolls() {
+        use canopy_core::{
+            geom::Direction,
+            path::Path,
+            style::{StyleManager, StyleMap},
+        };
+
+        // Simple test context that tracks focus
+        struct TestContext {
+            focused_node_id: Option<u64>,
+        }
+
+        impl Context for TestContext {
+            fn is_on_focus_path(&self, n: &mut dyn Node) -> bool {
+                self.focused_node_id == Some(n.state().id)
+            }
+            fn is_focused(&self, n: &dyn Node) -> bool {
+                self.focused_node_id == Some(n.state().id)
+            }
+            fn focus_down(&mut self, _root: &mut dyn Node) {}
+            fn focus_first(&mut self, _root: &mut dyn Node) {}
+            fn focus_left(&mut self, _root: &mut dyn Node) {}
+            fn focus_next(&mut self, _root: &mut dyn Node) {}
+            fn focus_path(&self, _root: &mut dyn Node) -> Path {
+                Path::empty()
+            }
+            fn focus_prev(&mut self, _root: &mut dyn Node) {}
+            fn focus_right(&mut self, _root: &mut dyn Node) {}
+            fn focus_up(&mut self, _root: &mut dyn Node) {}
+            fn needs_render(&self, _n: &dyn Node) -> bool {
+                true
+            }
+            fn set_focus(&mut self, n: &mut dyn Node) -> bool {
+                self.focused_node_id = Some(n.state().id);
+                true
+            }
+            fn focus_dir(&mut self, _root: &mut dyn Node, _dir: Direction) {}
+            fn scroll_to(&mut self, n: &mut dyn Node, x: u16, y: u16) -> bool {
+                n.state_mut().scroll_to(x, y);
+                true
+            }
+            fn scroll_by(&mut self, n: &mut dyn Node, x: i16, y: i16) -> bool {
+                n.state_mut().scroll_by(x, y);
+                true
+            }
+            fn page_up(&mut self, n: &mut dyn Node) -> bool {
+                n.state_mut().page_up();
+                true
+            }
+            fn page_down(&mut self, n: &mut dyn Node) -> bool {
+                n.state_mut().page_down();
+                true
+            }
+            fn scroll_up(&mut self, n: &mut dyn Node) -> bool {
+                n.state_mut().scroll_up();
+                true
+            }
+            fn scroll_down(&mut self, n: &mut dyn Node) -> bool {
+                n.state_mut().scroll_down();
+                true
+            }
+            fn scroll_left(&mut self, n: &mut dyn Node) -> bool {
+                n.state_mut().scroll_left();
+                true
+            }
+            fn scroll_right(&mut self, n: &mut dyn Node) -> bool {
+                n.state_mut().scroll_right();
+                true
+            }
+            fn taint(&mut self, _n: &mut dyn Node) {}
+            fn taint_tree(&mut self, _e: &mut dyn Node) {}
+            fn start(&mut self) -> Result<()> {
+                Ok(())
+            }
+            fn stop(&mut self) -> Result<()> {
+                Ok(())
+            }
+            fn exit(&mut self, _code: i32) -> ! {
+                std::process::exit(0)
+            }
+        }
+
+        // Create a frame size of 10x10 with 1-pixel border
+        // Inner area will be 8x8 at position (1,1)
+        let frame_size = Expanse::new(10, 10);
+
+        // Create scrollable content that's larger than the frame
+        // Make it 20x20 so we can scroll it
+        let content = ScrollableContent::new(20, 20);
+        let mut frame = Frame::new(content);
+
+        // Set up test context
+        let mut ctx = TestContext {
+            focused_node_id: None,
+        };
+
+        // Layout the frame
+        let layout = Layout {};
+        frame.layout(&layout, frame_size).unwrap();
+
+        // Create render environment
+        let stylemap = StyleMap::new();
+        let mut style_manager = StyleManager::default();
+
+        // Test various scroll positions
+        let test_cases = vec![
+            ("Initial position", 0, 0),
+            ("Scroll right edge", 12, 0),
+            ("Scroll bottom edge", 0, 12),
+            ("Scroll bottom-right corner", 12, 12),
+            ("Scroll to middle", 6, 6),
+            ("Scroll extreme bottom", 0, 14),
+            ("Scroll extreme right", 14, 0),
+            ("Scroll extreme corner", 14, 14),
+        ];
+
+        for (test_name, x, y) in test_cases {
+            println!("\n=== Testing: {} (scroll to {}, {}) ===", test_name, x, y);
+
+            // Scroll to position
+            ctx.scroll_to(&mut frame.child, x, y);
+
+            // Create fresh render for this test
+            let render_rect = geom::Rect::new(0, 0, 10, 10);
+            let mut render = Render::new(&stylemap, &mut style_manager, frame_size, render_rect);
+
+            // Render the frame first
+            frame.render(&ctx, &mut render).unwrap();
+
+            // Then render the child content
+            frame
+                .children(&mut |child| child.render(&ctx, &mut render))
+                .unwrap();
+
+            // Get the buffer and print it
+            let buffer = render.get_buffer();
+            println!("Buffer contents:");
+            for line in buffer.lines() {
+                println!("{}", line);
+            }
+
+            // Check for overdraw
+            check_frame_boundaries(&buffer, test_name);
+        }
+
+        // Also test incremental scrolling
+        println!("\n=== Testing incremental scrolling ===");
+
+        // Reset to origin
+        ctx.scroll_to(&mut frame.child, 0, 0);
+
+        // Scroll down one line at a time
+        for i in 0..15 {
+            ctx.scroll_down(&mut frame.child);
+
+            let render_rect = geom::Rect::new(0, 0, 10, 10);
+            let mut render = Render::new(&stylemap, &mut style_manager, frame_size, render_rect);
+
+            frame.render(&ctx, &mut render).unwrap();
+            frame
+                .children(&mut |child| child.render(&ctx, &mut render))
+                .unwrap();
+
+            let buffer = render.get_buffer();
+            check_frame_boundaries(&buffer, &format!("After {} scroll_down calls", i + 1));
+        }
+
+        // Scroll right one column at a time
+        ctx.scroll_to(&mut frame.child, 0, 0);
+        for i in 0..15 {
+            ctx.scroll_right(&mut frame.child);
+
+            let render_rect = geom::Rect::new(0, 0, 10, 10);
+            let mut render = Render::new(&stylemap, &mut style_manager, frame_size, render_rect);
+
+            frame.render(&ctx, &mut render).unwrap();
+            frame
+                .children(&mut |child| child.render(&ctx, &mut render))
+                .unwrap();
+
+            let buffer = render.get_buffer();
+            check_frame_boundaries(&buffer, &format!("After {} scroll_right calls", i + 1));
+        }
     }
 }
