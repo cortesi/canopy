@@ -29,7 +29,7 @@ impl Layout {
         n.state_mut().set_view(sz.rect());
         Ok(())
     }
-    
+
     /// Fill a node to occupy the given size while preserving its current scroll position.
     /// This is useful for nodes that need to maintain their viewport position across
     /// layout updates (e.g., scrollable content areas).

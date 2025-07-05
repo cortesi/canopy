@@ -31,7 +31,7 @@ impl Node for MinimalPattern {
     }
 
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        println!("MinimalPattern layout: sz = {:?}", sz);
+        println!("MinimalPattern layout: sz = {sz:?}");
         let canvas_size = self.size;
         l.size(self, canvas_size, sz)?;
         println!("  After l.size: view = {:?}", self.vp().view());
@@ -87,7 +87,7 @@ impl Node for MinimalFrameGym {
     }
 
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        println!("MinimalFrameGym layout: sz = {:?}", sz);
+        println!("MinimalFrameGym layout: sz = {sz:?}");
         self.child.layout(l, sz)?;
         self.wrap(self.child.vp())?;
         Ok(())
@@ -126,7 +126,7 @@ fn test_minimal_framegym_scrolling() -> Result<()> {
     for (i, line) in harness.buf().lines().iter().enumerate() {
         let line_str = line.trim();
         if !line_str.is_empty() {
-            println!("  Line {}: '{}'", i, line_str);
+            println!("  Line {i}: '{line_str}'");
         }
     }
 
@@ -152,7 +152,7 @@ fn test_minimal_framegym_scrolling() -> Result<()> {
     for (i, line) in buf.lines().iter().enumerate() {
         let line_str = line.trim();
         if !line_str.is_empty() {
-            println!("  Line {}: '{}'", i, line_str);
+            println!("  Line {i}: '{line_str}'");
         }
     }
 

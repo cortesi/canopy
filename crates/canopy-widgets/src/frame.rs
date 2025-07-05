@@ -109,15 +109,13 @@ where
     }
 
     fn layout(&mut self, l: &Layout, sz: canopy_core::geom::Expanse) -> Result<()> {
-        // Use fill_preserve_scroll to maintain scroll position during re-layouts
-        l.fill_preserve_scroll(self, sz)?;
-        let vp = self.vp();
-        // The child should be placed at (1,1) but we need to ensure its size is correct
-        // The child's area is the frame size minus the border (1 pixel on each side)
-        let child_rect =
-            canopy_core::geom::Rect::new(1, 1, sz.w.saturating_sub(2), sz.h.saturating_sub(2));
-        l.place(&mut self.child, vp, child_rect)?;
+        // We are always exactly the layout size
+        self.state_mut().set_canvas(sz);
+        self.state_mut().set_view(sz.rect());
+
         self.frame = canopy_core::geom::Frame::new(sz.rect(), 1);
+        let inner = self.frame.inner();
+        l.place_(&mut self.child, inner)?;
         Ok(())
     }
 
