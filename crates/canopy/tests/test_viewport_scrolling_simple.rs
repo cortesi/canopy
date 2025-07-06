@@ -27,10 +27,10 @@ impl Node for ScrollTest {
         true
     }
 
-    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+    fn layout(&mut self, _l: &Layout, sz: Expanse) -> Result<()> {
         println!("In layout: view before = {:?}", self.vp().view());
         // Set a large canvas (100x100) but view only shows part of it (sz)
-        l.size(self, Expanse::new(100, 100), sz)?;
+        self.fit_size(Expanse::new(100, 100), sz);
         println!("In layout: view after = {:?}", self.vp().view());
         Ok(())
     }

@@ -69,7 +69,7 @@ impl Text {
 }
 
 impl Node for Text {
-    fn layout(&mut self, l: &Layout, s: Expanse) -> Result<()> {
+    fn layout(&mut self, _l: &Layout, s: Expanse) -> Result<()> {
         let w = if let Some(w) = self.fixed_width {
             w
         } else {
@@ -88,7 +88,7 @@ impl Node for Text {
             self.lines = Some(split);
         }
         let cs = self.current_size;
-        l.size(self, cs, s)?;
+        self.fit_size(cs, s);
         Ok(())
     }
 

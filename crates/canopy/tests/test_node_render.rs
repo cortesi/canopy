@@ -58,8 +58,8 @@ impl NodeB {
 }
 
 impl Node for NodeB {
-    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        l.size(self, sz, sz)?;
+    fn layout(&mut self, _l: &Layout, sz: Expanse) -> Result<()> {
+        self.fit_size(sz, sz);
         Ok(())
     }
 

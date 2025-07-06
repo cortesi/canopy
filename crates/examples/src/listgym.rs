@@ -52,7 +52,7 @@ impl Node for Block {
             w: vp.canvas().w + 2,
             h: self.child.vp().canvas().h,
         };
-        l.size(self, sz, sz)?;
+        self.fit_size(sz, sz);
         Ok(())
     }
 

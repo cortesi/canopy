@@ -244,10 +244,10 @@ mod tests {
             true
         }
 
-        fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+        fn layout(&mut self, _l: &Layout, sz: Expanse) -> Result<()> {
             // Report our desired size (which may be larger than the given size)
             let size = self.canvas_size;
-            l.size(self, size, sz)?;
+            self.fit_size(size, sz);
             Ok(())
         }
 

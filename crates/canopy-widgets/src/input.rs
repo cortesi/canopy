@@ -197,7 +197,7 @@ impl Node for Input {
         }
     }
 
-    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+    fn layout(&mut self, _l: &Layout, sz: Expanse) -> Result<()> {
         self.textbuf.set_display_width(sz.w as usize);
         let tbl = self.textbuf.value.len() as u32;
         let expanse = if self.textbuf.window.len >= tbl {
@@ -205,7 +205,7 @@ impl Node for Input {
         } else {
             Expanse::new(tbl, 1)
         };
-        l.size(self, expanse, sz)?;
+        self.fit_size(expanse, sz);
         Ok(())
     }
 }

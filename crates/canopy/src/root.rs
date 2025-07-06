@@ -145,14 +145,16 @@ where
     }
 
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        l.fill(self, sz)?;
+        self.set_view(sz.into());
+        self.set_canvas(sz);
+
         let vp = self.vp();
         if self.inspector_active {
             let parts = vp.view().split_horizontal(2)?;
             l.place(&mut self.inspector, parts[0])?;
             l.place(&mut self.app, parts[1])?;
         } else {
-            l.fit(&mut self.app, vp)?;
+            l.place(&mut self.app, sz.into())?;
         };
         Ok(())
     }

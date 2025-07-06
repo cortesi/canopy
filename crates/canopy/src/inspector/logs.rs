@@ -47,7 +47,7 @@ impl Node for LogItem {
             },
         )?;
         let sz = self.child.vp().canvas();
-        l.size(self, sz, target)?;
+        self.fit_size(sz, target);
         Ok(())
     }
 

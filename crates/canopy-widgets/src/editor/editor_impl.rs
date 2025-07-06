@@ -49,9 +49,9 @@ impl Node for EditorView {
         Ok(())
     }
 
-    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+    fn layout(&mut self, _l: &Layout, sz: Expanse) -> Result<()> {
         let outer = Expanse::new(sz.w, self.core.wrapped_height() as u32);
-        l.size(self, outer, sz)?;
+        self.fit_size(outer, sz);
         Ok(())
     }
 }

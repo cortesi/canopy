@@ -73,9 +73,9 @@ impl Node for TestPattern {
         true
     }
 
-    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+    fn layout(&mut self, _l: &Layout, sz: Expanse) -> Result<()> {
         let canvas_size = self.size;
-        l.size(self, canvas_size, sz)?;
+        self.fit_size(canvas_size, sz);
         Ok(())
     }
 
