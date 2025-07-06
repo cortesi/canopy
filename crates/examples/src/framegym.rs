@@ -80,8 +80,7 @@ impl Node for TestPattern {
 
         // The viewport automatically handles the visible window for us
         // We just need to render the content that's visible
-        for y in 0..view.h.saturating_sub(1) {
-            // Leave room for debug line
+        for y in 0..view.h {
             let absolute_y = view.tl.y + y;
             if absolute_y >= self.size.h {
                 break;
@@ -191,6 +190,14 @@ mod tests {
     fn test_framegym_basic() -> Result<()> {
         let mut harness = Harness::builder(FrameGym::new()).size(20, 20).build()?;
         harness.render()?;
+
+        // Debug: print all lines to see what's happening
+        println!("\n=== Rendered output ===");
+        for (i, line) in harness.tbuf().lines().iter().enumerate() {
+            println!("Line {i}: {line:?}");
+        }
+        println!("======================\n");
+
         let v = &harness.tbuf().lines()[18];
         // Check the last line of the content in the frame. "X" is uninitialized space in the
         // render buffer, so this means that the content didn't entirely fill the frame.

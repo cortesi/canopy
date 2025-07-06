@@ -474,30 +474,21 @@ mod tests {
         tb.text(def_style(), Line::new(0, 1, 10), "test line");
 
         // Test with foreground color partial style
-        assert!(BufTest::new(&tb).contains_text_style( "hello", &PartialStyle::fg(Color::Red)));
-        assert!(!BufTest::new(&tb).contains_text_style(
-            "world",
-            &PartialStyle::fg(Color::Red)
-        ));
+        assert!(BufTest::new(&tb).contains_text_style("hello", &PartialStyle::fg(Color::Red)));
+        assert!(!BufTest::new(&tb).contains_text_style("world", &PartialStyle::fg(Color::Red)));
 
-        assert!(BufTest::new(&tb).contains_text_style(
-            "world",
-            &PartialStyle::fg(Color::Blue)
-        ));
-        assert!(!BufTest::new(&tb).contains_text_style(
-            "hello",
-            &PartialStyle::fg(Color::Blue)
-        ));
+        assert!(BufTest::new(&tb).contains_text_style("world", &PartialStyle::fg(Color::Blue)));
+        assert!(!BufTest::new(&tb).contains_text_style("hello", &PartialStyle::fg(Color::Blue)));
 
         // Test with empty partial style (matches any style)
         let partial_any = PartialStyle::default();
-        assert!(BufTest::new(&tb).contains_text_style( "hello", &partial_any));
-        assert!(BufTest::new(&tb).contains_text_style( "world", &partial_any));
-        assert!(BufTest::new(&tb).contains_text_style( "test", &partial_any));
+        assert!(BufTest::new(&tb).contains_text_style("hello", &partial_any));
+        assert!(BufTest::new(&tb).contains_text_style("world", &partial_any));
+        assert!(BufTest::new(&tb).contains_text_style("test", &partial_any));
 
         // Test with multiple style attributes
         let partial_white_bg = PartialStyle::fg(Color::White).with_bg(Color::Black);
-        assert!(BufTest::new(&tb).contains_text_style( "test", &partial_white_bg));
+        assert!(BufTest::new(&tb).contains_text_style("test", &partial_white_bg));
     }
 
     #[test]
@@ -514,10 +505,7 @@ mod tests {
         assert!(BufTest::new(&tb).contains_text_fg("two", solarized::BLUE));
 
         // Test that it works the same as contains_text_style
-        assert!(BufTest::new(&tb).contains_text_style(
-            "two",
-            &PartialStyle::fg(solarized::BLUE)
-        ));
+        assert!(BufTest::new(&tb).contains_text_style("two", &PartialStyle::fg(solarized::BLUE)));
     }
 
     #[test]
@@ -590,29 +578,26 @@ mod tests {
         tb.text(italic_blue, Line::new(0, 1, 6), "italic");
 
         // Test using builder methods
-        assert!(BufTest::new(&tb).contains_text_style( "bold", &PartialStyle::fg(Color::Red)));
-        assert!(BufTest::new(&tb).contains_text_style(
-            "italic",
-            &PartialStyle::fg(Color::Blue)
-        ));
+        assert!(BufTest::new(&tb).contains_text_style("bold", &PartialStyle::fg(Color::Red)));
+        assert!(BufTest::new(&tb).contains_text_style("italic", &PartialStyle::fg(Color::Blue)));
 
         // Test with attributes
-        assert!(BufTest::new(&tb).contains_text_style(
-            "bold",
-            &PartialStyle::attrs(AttrSet::new(Attr::Bold))
-        ));
-        assert!(BufTest::new(&tb).contains_text_style(
-            "italic",
-            &PartialStyle::attrs(AttrSet::new(Attr::Italic))
-        ));
+        assert!(
+            BufTest::new(&tb)
+                .contains_text_style("bold", &PartialStyle::attrs(AttrSet::new(Attr::Bold)))
+        );
+        assert!(
+            BufTest::new(&tb)
+                .contains_text_style("italic", &PartialStyle::attrs(AttrSet::new(Attr::Italic)))
+        );
 
         // Test chaining
         let bold_red_style = PartialStyle::fg(Color::Red).with_attrs(AttrSet::new(Attr::Bold));
-        assert!(BufTest::new(&tb).contains_text_style( "bold", &bold_red_style));
+        assert!(BufTest::new(&tb).contains_text_style("bold", &bold_red_style));
 
         // Test that it doesn't match wrong combinations
         let italic_red = PartialStyle::fg(Color::Red).with_attrs(AttrSet::new(Attr::Italic));
-        assert!(!BufTest::new(&tb).contains_text_style( "bold", &italic_red));
+        assert!(!BufTest::new(&tb).contains_text_style("bold", &italic_red));
     }
 
     #[test]
