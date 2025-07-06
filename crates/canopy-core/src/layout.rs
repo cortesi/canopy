@@ -1,7 +1,7 @@
 //! Helper functions for `Node::layout` implementations.
 
 use crate::{
-    Node, Result, ViewPort,
+    Node, Result,
     geom::{Expanse, Rect},
 };
 
@@ -37,17 +37,11 @@ impl Layout {
         Ok(())
     }
 
-    /// Set the view rectangle for a node.
-    pub fn set_view(&self, node: &mut dyn Node, view: Rect) {
-        node.state_mut().set_view(view);
-    }
-
     /// Adjust a child node so that it fits a viewport. This lays the node out to the parent's view
     /// rectangle, then adjusts the node's position to match.
-    // FIXME: this shoudl just take a rect
-    pub fn fit(&self, n: &mut dyn Node, parent_vp: ViewPort) -> Result<()> {
-        n.layout(self, parent_vp.view().into())?;
-        n.state_mut().set_position(parent_vp.position());
+    pub fn fit(&self, n: &mut dyn Node, view: Rect) -> Result<()> {
+        n.layout(self, view.into())?;
+        n.state_mut().set_position(view.tl);
         Ok(())
     }
 }

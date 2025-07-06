@@ -28,8 +28,7 @@ impl Node for BenchmarkTextWrapper {
 
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         l.fill(self, sz)?;
-        let vp = self.vp();
-        l.fit(&mut self.text, vp)
+        l.fit(&mut self.text, sz.into())
     }
 
     fn render(&mut self, _c: &dyn Context, _r: &mut Render) -> Result<()> {

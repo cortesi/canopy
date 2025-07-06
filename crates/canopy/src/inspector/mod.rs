@@ -34,9 +34,8 @@ impl Inspector {
 }
 
 impl Node for Inspector {
-    fn layout(&mut self, l: &Layout, _: Expanse) -> Result<()> {
-        let vp = self.vp();
-        l.fit(&mut self.view, vp)?;
+    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+        l.fit(&mut self.view, sz.into())?;
         Ok(())
     }
 
