@@ -1,21 +1,11 @@
 
 # TODO
 
-- Start specializing into a Render, Layout and Event contexts
-  - Shift projection methods into Render
-    - Add new projection tracker to Render that tracks the screen rectangle for each nodes
-  - Make immutable methods from Context available on Render
-- Rewrite the renderer so that the projection point in ViewPort is always relative to the view of the parent node.
-  - ViewPort.screen_rect, project_point, etc. are now completely incorrect, and should be rewritten, probably by moving
-    them to Render
-- Introduce a Layout object that exposes all layout operations within fit methods only
-
 
 ## 0.1
 
 - Editor
   - Consolidate modal key bindings and consider how to support editor
-
 - Focus
   - Add ability to "pop" focus and inspect previous focus states within a subtree. This will unlock a lot of
     functionality for the inspector.
@@ -42,8 +32,6 @@
     - Graphs/stats
   - Add node names for relevant errors
   - Add warning logs where needed to aid debugging
-- Core
-  - Improve ergonomics - adding a function that returns a handle which re-enters rendering?
 - Renderer
   - Explicit colors - at the moment, we can only get colors from our color scheme
 - Support virtual cursors

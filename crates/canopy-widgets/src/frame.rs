@@ -131,9 +131,7 @@ where
     }
 
     fn layout(&mut self, l: &Layout, sz: canopy_core::geom::Expanse) -> Result<()> {
-        // We are always exactly the layout size
-        self.state_mut().set_canvas(sz);
-        self.state_mut().set_view(sz.rect());
+        self.fill(sz)?;
 
         self.frame = canopy_core::geom::Frame::new(sz.rect(), 1);
         let inner = self.frame.inner();
