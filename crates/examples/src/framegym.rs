@@ -191,7 +191,10 @@ mod tests {
     fn test_framegym_basic() -> Result<()> {
         let mut harness = Harness::builder(FrameGym::new()).size(20, 20).build()?;
         harness.render()?;
-        harness.tbuf().dump_line(18);
+        let v = &harness.tbuf().lines()[18];
+        // Check the last line of the content in the frame. "X" is uninitialized space in the
+        // render buffer, so this means that the content didn't entirely fill the frame.
+        assert!(!v.contains("X"));
         Ok(())
     }
 }

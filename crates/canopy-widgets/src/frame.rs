@@ -173,9 +173,10 @@ where
 mod tests {
     use super::*;
     use canopy_core::{
-        Context, Expanse, Node, NodeState, Result, StatefulNode,
+        Context, Expanse, Node, NodeState, Result, StatefulNode, TermBuf, ViewStack,
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
-        tutils::dummyctx::DummyContext,
+        style::{StyleManager, StyleMap},
+        tutils::{buf::BufTest, dummyctx::DummyContext},
     };
 
     /// A simple scrollable test widget for testing frame scrolling
@@ -351,11 +352,6 @@ mod tests {
 
     #[test]
     fn test_frame_overdraw_with_viewport_stack() {
-        use canopy_core::{
-            TermBuf, ViewStack,
-            style::{StyleManager, StyleMap},
-        };
-
         // Create the components
         let frame_size = Expanse::new(10, 10);
         let content = ScrollableContent::new(20, 20);
@@ -445,7 +441,7 @@ mod tests {
                             "Child projection: canvas_rect={canvas_rect:?}, screen_rect={screen_rect:?}"
                         );
                         let child_buf = child_render.get_buffer();
-                        println!("Child buffer first line: {:?}", canopy::tutils::buf::BufTest::new(child_buf).line_text(0));
+                        println!("Child buffer first line: {:?}", BufTest::new(child_buf).line_text(0));
                         main_buf.copy_to_rect(child_buf, screen_rect);
                     } else {
                         println!("No projection for child!");
@@ -460,7 +456,7 @@ mod tests {
 
             // Print the result
             println!("Buffer with viewport stack:");
-            for line in canopy::tutils::buf::BufTest::new(&main_buf).lines() {
+            for line in BufTest::new(&main_buf).lines() {
                 println!("{line}");
             }
 
@@ -471,8 +467,6 @@ mod tests {
 
     #[test]
     fn test_frame_overdraw_with_multiple_scrolls() {
-        use canopy_core::style::{StyleManager, StyleMap};
-
         // Create a frame size of 10x10 with 1-pixel border
         // Inner area will be 8x8 at position (1,1)
         let frame_size = Expanse::new(10, 10);
@@ -526,7 +520,7 @@ mod tests {
             // Get the buffer and print it
             let buffer = render.get_buffer();
             println!("Buffer contents:");
-            for line in canopy::tutils::buf::BufTest::new(buffer).lines() {
+            for line in BufTest::new(buffer).lines() {
                 println!("{line}");
             }
 
