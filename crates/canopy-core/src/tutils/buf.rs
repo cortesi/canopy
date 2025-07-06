@@ -204,6 +204,31 @@ pub fn contains_text_style(buf: &TermBuf, txt: &str, style: &PartialStyle) -> bo
     false
 }
 
+/// Dumps the contents of a TermBuf to the terminal for debugging purposes.
+/// This is useful for visualizing buffer contents directly in test output.
+pub fn dump(buf: &TermBuf) {
+    let width = buf.size().w as usize;
+
+    println!("\nTermBuf dump ({}x{}):", buf.size().w, buf.size().h);
+    println!("┌{}┐", "─".repeat(width));
+
+    for y in 0..buf.size().h {
+        print!("│");
+        for x in 0..buf.size().w {
+            if let Some(cell) = buf.get(Point { x, y }) {
+                if cell.ch == '\0' {
+                    print!("·");
+                } else {
+                    print!("{}", cell.ch);
+                }
+            }
+        }
+        println!("│");
+    }
+
+    println!("└{}┘", "─".repeat(width));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -291,5 +316,16 @@ mod tests {
             "hello",
             &PartialStyle::fg(Color::White)
         ));
+    }
+
+    #[test]
+    fn test_dump() {
+        let mut buf = TermBuf::empty(Expanse::new(5, 3));
+        buf.text(test_style(), crate::geom::Line::new(0, 0, 5), "hello");
+        buf.text(test_style(), crate::geom::Line::new(1, 1, 3), "abc");
+
+        // This test just verifies dump() runs without panicking
+        // The actual output goes to stdout
+        dump(&buf);
     }
 }

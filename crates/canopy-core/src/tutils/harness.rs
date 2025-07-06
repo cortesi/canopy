@@ -97,4 +97,66 @@ impl<N: Node + Loader> Harness<N> {
             "render buffer missing highlighted '{txt}'"
         );
     }
+
+    /// Dump the current render buffer to the terminal for debugging.
+    /// This is useful for visualizing the buffer contents during test development.
+    pub fn dump(&self) {
+        buf::dump(self.buf());
+    }
+
+    /// Alias for dump() to maintain backwards compatibility.
+    pub fn dump_buf(&self) {
+        self.dump();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{self as canopy};
+    use crate::{
+        Context, Layout, Loader, Node, NodeState, Render, StatefulNode, derive_commands,
+        geom::{Expanse, Line},
+    };
+
+    #[derive(StatefulNode)]
+    struct TestNode {
+        state: NodeState,
+    }
+
+    #[derive_commands]
+    impl TestNode {
+        fn new() -> Self {
+            TestNode {
+                state: NodeState::default(),
+            }
+        }
+    }
+
+    impl Node for TestNode {
+        fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
+            l.fill(self, sz)?;
+            Ok(())
+        }
+
+        fn render(&mut self, _ctx: &dyn Context, r: &mut Render) -> Result<()> {
+            r.text("base", Line::new(0, 0, 5), "test")?;
+            Ok(())
+        }
+    }
+
+    impl Loader for TestNode {}
+
+    #[test]
+    fn test_harness_dump() {
+        let mut h = Harness::with_size(TestNode::new(), Expanse::new(10, 3)).unwrap();
+        h.render().unwrap();
+
+        // This test just verifies dump() runs without panicking
+        // The actual output goes to stdout
+        h.dump();
+
+        // Also verify the text was rendered
+        assert!(buf::contains_text(h.buf(), "test"));
+    }
 }

@@ -188,10 +188,11 @@ mod tests {
     use canopy::tutils::harness::Harness;
 
     #[test]
-    fn test_framegym_script_execution() -> Result<()> {
+    fn test_framegym_basic() -> Result<()> {
         let mut harness = Harness::new(FrameGym::new())?;
         harness.render()?;
         harness.script("test_pattern::scroll_down()")?;
+        harness.dump();
         Ok(())
     }
 }
