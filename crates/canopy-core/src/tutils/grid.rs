@@ -318,11 +318,7 @@ impl Node for Grid {
     }
 
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        // The grid root takes up the full size
-        self.root.state_mut().set_canvas(sz);
-        self.root.state_mut().set_view(sz.rect());
-        self.root.state_mut().set_position((0, 0).into());
-        self.root.layout(l, sz)
+        l.place(&mut self.root, sz.rect())
     }
 
     fn render(&mut self, ctx: &dyn Context, render: &mut Render) -> Result<()> {

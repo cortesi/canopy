@@ -127,34 +127,6 @@ pub struct NodeState {
     // Has this node been initialized? This is used to determine if we need to
     // call the poll function during the pre-render sweep.
     pub initialized: bool,
-
-    // Set while inside `Node::layout` to detect recursive layout calls.
-    pub in_layout: bool,
-}
-
-impl NodeState {
-    /// Set the node's position within the parent canvas. This should only be called by the parent
-    /// node.
-    pub fn set_position(&mut self, p: crate::geom::Point) {
-        self.viewport.set_position(p)
-    }
-
-    /// Set the size of the node's canvas.
-    pub fn set_canvas(&mut self, sz: crate::geom::Expanse) {
-        self.viewport.set_canvas(sz);
-    }
-
-    /// Set the node's view - that is the portion of the node that is displayed. The view rectangle
-    /// is relative to the node's canvas, and must be fully contained within it. This method will
-    /// clamp the view rectangle to fit within the canvas size if it's larger than the canvas.
-    pub fn set_view(&mut self, view: crate::geom::Rect) {
-        self.viewport.set_view(view);
-    }
-
-    /// Set the node size and the target view size at the same time.
-    pub fn fit_size(&mut self, size: crate::geom::Expanse, view_size: crate::geom::Expanse) {
-        self.viewport.fit_size(size, view_size);
-    }
 }
 
 /// The node state object - each node needs to keep one of these, and offer it
@@ -172,7 +144,6 @@ impl Default for NodeState {
             hidden: false,
             viewport: ViewPort::default(),
             initialized: false,
-            in_layout: false,
         }
     }
 }
@@ -225,30 +196,30 @@ pub trait StatefulNode {
 
     /// Set our canvas size.
     fn set_canvas(&mut self, sz: crate::geom::Expanse) {
-        self.state_mut().set_canvas(sz);
+        self.state_mut().viewport.set_canvas(sz);
     }
 
     /// Set our view position and size.
     fn set_view(&mut self, view: crate::geom::Rect) {
-        self.state_mut().set_view(view);
+        self.state_mut().viewport.set_view(view);
     }
 
     /// Set both the canvas size and the view to fill the target size.
     fn fill(&mut self, sz: crate::geom::Expanse) -> Result<()> {
-        self.state_mut().set_canvas(sz);
-        self.state_mut().set_view(sz.rect());
+        self.state_mut().viewport.set_canvas(sz);
+        self.state_mut().viewport.set_view(sz.rect());
         Ok(())
     }
 
-    /// Wrap around a child by laying it out in our viewport, then seting our canvas size to match.
+    /// Wrap around a child by seting both our canvas size and view to equal to its view rectangle.
     fn wrap(&mut self, child: ViewPort) -> Result<()> {
-        self.set_canvas(child.canvas());
+        self.set_canvas(child.view().into());
         self.set_view(child.view());
         Ok(())
     }
 
     fn fit_size(&mut self, size: crate::geom::Expanse, view_size: crate::geom::Expanse) {
-        self.state_mut().fit_size(size, view_size);
+        self.state_mut().viewport.fit_size(size, view_size);
     }
 
     /// Scroll the view to the specified position.
