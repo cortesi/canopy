@@ -136,11 +136,11 @@
 <a href=#136 id=136 data-nosnippet>136</a>    <span class="kw">use crate</span>::{
 <a href=#137 id=137 data-nosnippet>137</a>        buf,
 <a href=#138 id=138 data-nosnippet>138</a>        style::{StyleManager, StyleMap},
-<a href=#139 id=139 data-nosnippet>139</a>        tutils::buf <span class="kw">as </span>tutils_buf,
+<a href=#139 id=139 data-nosnippet>139</a>        tutils::buf::BufTest,
 <a href=#140 id=140 data-nosnippet>140</a>    };
 <a href=#141 id=141 data-nosnippet>141</a>
 <a href=#142 id=142 data-nosnippet>142</a>    <span class="kw">fn </span>assert_buffer_matches(render: <span class="kw-2">&amp;</span>Render, expected: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str]) {
-<a href=#143 id=143 data-nosnippet>143</a>        tutils_buf::assert_matches(render.get_buffer(), expected);
+<a href=#143 id=143 data-nosnippet>143</a>        BufTest::new(render.get_buffer()).assert_matches(expected);
 <a href=#144 id=144 data-nosnippet>144</a>    }
 <a href=#145 id=145 data-nosnippet>145</a>
 <a href=#146 id=146 data-nosnippet>146</a>    <span class="attr">#[test]

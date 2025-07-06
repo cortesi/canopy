@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["assert_matches","assert_matches_with_context","buffer_matches","contains_text","contains_text_fg","contains_text_style"],"struct":["BufMatch"]};
+window.SIDEBAR_ITEMS = {"struct":["BufTest"]};

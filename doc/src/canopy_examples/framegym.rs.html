@@ -188,10 +188,10 @@
 <a href=#188 id=188 data-nosnippet>188</a>    <span class="kw">use </span>canopy::tutils::harness::Harness;
 <a href=#189 id=189 data-nosnippet>189</a>
 <a href=#190 id=190 data-nosnippet>190</a>    <span class="attr">#[test]
-<a href=#191 id=191 data-nosnippet>191</a>    </span><span class="kw">fn </span>test_framegym_script_execution() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#192 id=192 data-nosnippet>192</a>        <span class="kw">let </span><span class="kw-2">mut </span>harness = Harness::new(FrameGym::new())<span class="question-mark">?</span>;
+<a href=#191 id=191 data-nosnippet>191</a>    </span><span class="kw">fn </span>test_framegym_basic() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#192 id=192 data-nosnippet>192</a>        <span class="kw">let </span><span class="kw-2">mut </span>harness = Harness::builder(FrameGym::new()).size(<span class="number">20</span>, <span class="number">20</span>).build()<span class="question-mark">?</span>;
 <a href=#193 id=193 data-nosnippet>193</a>        harness.render()<span class="question-mark">?</span>;
-<a href=#194 id=194 data-nosnippet>194</a>        harness.script(<span class="string">"test_pattern::scroll_down()"</span>)<span class="question-mark">?</span>;
+<a href=#194 id=194 data-nosnippet>194</a>        harness.tbuf().dump_line(<span class="number">18</span>);
 <a href=#195 id=195 data-nosnippet>195</a>        <span class="prelude-val">Ok</span>(())
 <a href=#196 id=196 data-nosnippet>196</a>    }
 <a href=#197 id=197 data-nosnippet>197</a>}</code></pre></div></section></main></body></html>

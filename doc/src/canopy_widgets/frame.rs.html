@@ -445,7 +445,7 @@
 <a href=#445 id=445 data-nosnippet>445</a>                            <span class="string">"Child projection: canvas_rect={canvas_rect:?}, screen_rect={screen_rect:?}"
 <a href=#446 id=446 data-nosnippet>446</a>                        </span>);
 <a href=#447 id=447 data-nosnippet>447</a>                        <span class="kw">let </span>child_buf = child_render.get_buffer();
-<a href=#448 id=448 data-nosnippet>448</a>                        <span class="macro">println!</span>(<span class="string">"Child buffer first line: {:?}"</span>, child_buf.line_text(<span class="number">0</span>));
+<a href=#448 id=448 data-nosnippet>448</a>                        <span class="macro">println!</span>(<span class="string">"Child buffer first line: {:?}"</span>, canopy::tutils::buf::BufTest::new(child_buf).line_text(<span class="number">0</span>));
 <a href=#449 id=449 data-nosnippet>449</a>                        main_buf.copy_to_rect(child_buf, screen_rect);
 <a href=#450 id=450 data-nosnippet>450</a>                    } <span class="kw">else </span>{
 <a href=#451 id=451 data-nosnippet>451</a>                        <span class="macro">println!</span>(<span class="string">"No projection for child!"</span>);
@@ -460,7 +460,7 @@
 <a href=#460 id=460 data-nosnippet>460</a>
 <a href=#461 id=461 data-nosnippet>461</a>            <span class="comment">// Print the result
 <a href=#462 id=462 data-nosnippet>462</a>            </span><span class="macro">println!</span>(<span class="string">"Buffer with viewport stack:"</span>);
-<a href=#463 id=463 data-nosnippet>463</a>            <span class="kw">for </span>line <span class="kw">in </span>main_buf.lines() {
+<a href=#463 id=463 data-nosnippet>463</a>            <span class="kw">for </span>line <span class="kw">in </span>canopy::tutils::buf::BufTest::new(<span class="kw-2">&amp;</span>main_buf).lines() {
 <a href=#464 id=464 data-nosnippet>464</a>                <span class="macro">println!</span>(<span class="string">"{line}"</span>);
 <a href=#465 id=465 data-nosnippet>465</a>            }
 <a href=#466 id=466 data-nosnippet>466</a>
@@ -526,7 +526,7 @@
 <a href=#526 id=526 data-nosnippet>526</a>            <span class="comment">// Get the buffer and print it
 <a href=#527 id=527 data-nosnippet>527</a>            </span><span class="kw">let </span>buffer = render.get_buffer();
 <a href=#528 id=528 data-nosnippet>528</a>            <span class="macro">println!</span>(<span class="string">"Buffer contents:"</span>);
-<a href=#529 id=529 data-nosnippet>529</a>            <span class="kw">for </span>line <span class="kw">in </span>buffer.lines() {
+<a href=#529 id=529 data-nosnippet>529</a>            <span class="kw">for </span>line <span class="kw">in </span>canopy::tutils::buf::BufTest::new(buffer).lines() {
 <a href=#530 id=530 data-nosnippet>530</a>                <span class="macro">println!</span>(<span class="string">"{line}"</span>);
 <a href=#531 id=531 data-nosnippet>531</a>            }
 <a href=#532 id=532 data-nosnippet>532</a>
