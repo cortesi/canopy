@@ -1254,8 +1254,8 @@ mod tests {
                 true
             }
 
-            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-                l.fill(self, sz)
+            fn layout(&mut self, _l: &Layout, sz: Expanse) -> Result<()> {
+                self.fill(sz)
             }
 
             fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
@@ -1328,8 +1328,8 @@ mod tests {
                 f(&mut self.child)
             }
 
-            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-                l.fill(self, sz)?;
+            fn layout(&mut self, _l: &Layout, sz: Expanse) -> Result<()> {
+                self.fill(sz)?;
                 self.wrap(self.child.vp())?;
                 Ok(())
             }

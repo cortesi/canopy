@@ -155,46 +155,6 @@ impl NodeState {
     pub fn fit_size(&mut self, size: crate::geom::Expanse, view_size: crate::geom::Expanse) {
         self.viewport.fit_size(size, view_size);
     }
-
-    /// Scroll the view to the specified position.
-    pub fn scroll_to(&mut self, x: u32, y: u32) {
-        self.viewport.scroll_to(x, y);
-    }
-
-    /// Scroll the view by the given offsets.
-    pub fn scroll_by(&mut self, x: i32, y: i32) {
-        self.viewport.scroll_by(x, y);
-    }
-
-    /// Scroll the view up by the height of the view rectangle.
-    pub fn page_up(&mut self) {
-        self.viewport.page_up();
-    }
-
-    /// Scroll the view down by the height of the view rectangle.
-    pub fn page_down(&mut self) {
-        self.viewport.page_down();
-    }
-
-    /// Scroll the view up by one line.
-    pub fn scroll_up(&mut self) {
-        self.viewport.scroll_up();
-    }
-
-    /// Scroll the view down by one line.
-    pub fn scroll_down(&mut self) {
-        self.viewport.scroll_down();
-    }
-
-    /// Scroll the view left by one line.
-    pub fn scroll_left(&mut self) {
-        self.viewport.scroll_left();
-    }
-
-    /// Scroll the view right by one line.
-    pub fn scroll_right(&mut self) {
-        self.viewport.scroll_right();
-    }
 }
 
 /// The node state object - each node needs to keep one of these, and offer it
@@ -289,6 +249,46 @@ pub trait StatefulNode {
 
     fn fit_size(&mut self, size: crate::geom::Expanse, view_size: crate::geom::Expanse) {
         self.state_mut().fit_size(size, view_size);
+    }
+
+    /// Scroll the view to the specified position.
+    fn scroll_to(&mut self, x: u32, y: u32) {
+        self.state_mut().viewport.scroll_to(x, y);
+    }
+
+    /// Scroll the view by the given offsets.
+    fn scroll_by(&mut self, x: i32, y: i32) {
+        self.state_mut().viewport.scroll_by(x, y);
+    }
+
+    /// Scroll the view up by the height of the view rectangle.
+    fn page_up(&mut self) {
+        self.state_mut().viewport.page_up();
+    }
+
+    /// Scroll the view down by the height of the view rectangle.
+    fn page_down(&mut self) {
+        self.state_mut().viewport.page_down();
+    }
+
+    /// Scroll the view up by one line.
+    fn scroll_up(&mut self) {
+        self.state_mut().viewport.scroll_up();
+    }
+
+    /// Scroll the view down by one line.
+    fn scroll_down(&mut self) {
+        self.state_mut().viewport.scroll_down();
+    }
+
+    /// Scroll the view left by one line.
+    fn scroll_left(&mut self) {
+        self.state_mut().viewport.scroll_left();
+    }
+
+    /// Scroll the view right by one line.
+    fn scroll_right(&mut self) {
+        self.state_mut().viewport.scroll_right();
     }
 }
 

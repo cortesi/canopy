@@ -387,7 +387,7 @@ mod tests {
         for (scroll_x, scroll_y, test_name) in scroll_tests {
             println!("\n=== Testing scroll position ({scroll_x}, {scroll_y}) - {test_name} ===");
             // DummyContext doesn't actually scroll, so we need to manually set the scroll position
-            frame.child.state_mut().scroll_to(scroll_x, scroll_y);
+            frame.child.scroll_to(scroll_x, scroll_y);
 
             // Create main buffer
             let mut main_buf = TermBuf::empty(frame_size);
@@ -510,7 +510,7 @@ mod tests {
             println!("\n=== Testing: {test_name} (scroll to {x}, {y}) ===");
 
             // Scroll to position - DummyContext doesn't actually scroll, so we do it directly
-            frame.child.state_mut().scroll_to(x, y);
+            frame.child.scroll_to(x, y);
 
             // Create fresh render for this test
             let render_rect = geom::Rect::new(0, 0, 10, 10);
@@ -539,11 +539,11 @@ mod tests {
         println!("\n=== Testing incremental scrolling ===");
 
         // Reset to origin
-        frame.child.state_mut().scroll_to(0, 0);
+        frame.child.scroll_to(0, 0);
 
         // Scroll down one line at a time
         for i in 0..15 {
-            frame.child.state_mut().scroll_down();
+            frame.child.scroll_down();
 
             let render_rect = geom::Rect::new(0, 0, 10, 10);
             let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
@@ -558,9 +558,9 @@ mod tests {
         }
 
         // Scroll right one column at a time
-        frame.child.state_mut().scroll_to(0, 0);
+        frame.child.scroll_to(0, 0);
         for i in 0..15 {
-            frame.child.state_mut().scroll_right();
+            frame.child.scroll_right();
 
             let render_rect = geom::Rect::new(0, 0, 10, 10);
             let mut render = Render::new(&stylemap, &mut style_manager, render_rect);

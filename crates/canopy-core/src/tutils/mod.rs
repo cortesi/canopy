@@ -34,7 +34,7 @@ mod tests {
 
     impl Node for Block {
         fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-            l.fill(self, sz)?;
+            self.fill(sz)?;
             if !self.children.is_empty() {
                 let vp = self.vp();
                 let vps = if self.horizontal {

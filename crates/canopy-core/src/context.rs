@@ -50,7 +50,7 @@ pub trait Context {
     /// subtree on change.
     fn scroll_to(&mut self, n: &mut dyn Node, x: u32, y: u32) -> bool {
         let before = n.vp().view();
-        n.state_mut().scroll_to(x, y);
+        n.scroll_to(x, y);
         let changed = before != n.vp().view();
         if changed {
             self.taint_tree(n);
@@ -63,7 +63,7 @@ pub trait Context {
     /// taints the subtree on change.
     fn scroll_by(&mut self, n: &mut dyn Node, x: i32, y: i32) -> bool {
         let before = n.vp().view();
-        n.state_mut().scroll_by(x, y);
+        n.scroll_by(x, y);
         let changed = before != n.vp().view();
         if changed {
             self.taint_tree(n);
@@ -75,7 +75,7 @@ pub trait Context {
     /// taints the subtree on change.
     fn page_up(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
-        n.state_mut().page_up();
+        n.page_up();
         let changed = before != n.vp().view();
         if changed {
             self.taint_tree(n);
@@ -87,7 +87,7 @@ pub trait Context {
     /// and taints the subtree on change.
     fn page_down(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
-        n.state_mut().page_down();
+        n.page_down();
         let changed = before != n.vp().view();
         if changed {
             self.taint_tree(n);
@@ -99,7 +99,7 @@ pub trait Context {
     /// taints the subtree on change.
     fn scroll_up(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
-        n.state_mut().scroll_up();
+        n.scroll_up();
         let changed = before != n.vp().view();
         if changed {
             self.taint_tree(n);
@@ -111,7 +111,7 @@ pub trait Context {
     /// and taints the subtree on change.
     fn scroll_down(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
-        n.state_mut().scroll_down();
+        n.scroll_down();
         let changed = before != n.vp().view();
         if changed {
             self.taint_tree(n);
@@ -123,7 +123,7 @@ pub trait Context {
     /// and taints the subtree on change.
     fn scroll_left(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
-        n.state_mut().scroll_left();
+        n.scroll_left();
         let changed = before != n.vp().view();
         if changed {
             self.taint_tree(n);
@@ -135,7 +135,7 @@ pub trait Context {
     /// and taints the subtree on change.
     fn scroll_right(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
-        n.state_mut().scroll_right();
+        n.scroll_right();
         let changed = before != n.vp().view();
         if changed {
             self.taint_tree(n);

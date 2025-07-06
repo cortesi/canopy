@@ -282,9 +282,9 @@ impl Node for IrregularBlock {
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         if self.children.is_empty() {
             let self_expanse = self.rect.expanse();
-            l.fill(self, self_expanse)?;
+            self.fill(self_expanse)?;
         } else {
-            l.fill(self, sz)?;
+            self.fill(sz)?;
             let child_rects: Vec<Rect> = self.children.iter().map(|c| c.rect).collect();
             for (child, rect) in self.children.iter_mut().zip(child_rects.iter()) {
                 l.place(child, *rect)?;

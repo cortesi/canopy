@@ -188,7 +188,7 @@ impl Todo {
 
 impl Node for Todo {
     fn layout(&mut self, l: &Layout, sz: Expanse) -> canopy::Result<()> {
-        l.fill(self, sz)?;
+        self.fill(sz)?;
         let vp = self.vp();
         let (a, b) = vp.view().carve_vend(1);
         l.place(&mut self.statusbar, b)?;

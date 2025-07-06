@@ -156,7 +156,7 @@ impl Node for GridNode {
     }
 
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        l.fill(self, sz)?;
+        self.fill(sz)?;
 
         if let GridNode::Container { children, .. } = self {
             let divisions = (children.len() as f64).sqrt() as usize;

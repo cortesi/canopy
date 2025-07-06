@@ -44,8 +44,8 @@ impl CommandNode for Big {
 }
 
 impl Node for Big {
-    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        l.fill(self, Expanse::new(sz.w * 2, sz.h * 2))
+    fn layout(&mut self, _l: &Layout, sz: Expanse) -> Result<()> {
+        self.fill(Expanse::new(sz.w * 2, sz.h * 2))
     }
 
     fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
@@ -98,7 +98,7 @@ impl Node for Root {
     }
 
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        l.fill(self, sz)?;
+        self.fill(sz)?;
         let loc = Rect::new(sz.w.saturating_sub(1), sz.h.saturating_sub(1), sz.w, sz.h);
         l.place(&mut self.child, loc)?;
         Ok(())
