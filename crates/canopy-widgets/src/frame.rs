@@ -52,6 +52,30 @@ pub const SINGLE_THICK: FrameGlyphs = FrameGlyphs {
     vertical_active: '█',
 };
 
+/// Round corner thin Unicode box drawing frame set
+pub const ROUND: FrameGlyphs = FrameGlyphs {
+    topleft: '╭',
+    topright: '╮',
+    bottomleft: '╰',
+    bottomright: '╯',
+    horizontal: '─',
+    vertical: '│',
+    horizontal_active: '▄',
+    vertical_active: '█',
+};
+
+/// Round corner thick Unicode box drawing frame set
+pub const ROUND_THICK: FrameGlyphs = FrameGlyphs {
+    topleft: '╭',
+    topright: '╮',
+    bottomleft: '╰',
+    bottomright: '╯',
+    horizontal: '━',
+    vertical: '┃',
+    horizontal_active: '▄',
+    vertical_active: '█',
+};
+
 /// A frame around an element.
 ///
 /// Colors:
@@ -79,7 +103,7 @@ where
         Frame {
             child: c,
             state: NodeState::default(),
-            glyphs: SINGLE,
+            glyphs: ROUND,
             title: None,
             frame: geom::Frame::zero(),
         }
@@ -289,6 +313,30 @@ mod tests {
         assert_eq!(frame.glyphs.topright, '╗');
         assert_eq!(frame.glyphs.bottomleft, '╚');
         assert_eq!(frame.glyphs.bottomright, '╝');
+    }
+
+    #[test]
+    fn test_frame_with_round_corners() {
+        // Test ROUND glyphs
+        let content1 = ScrollableContent::new(10, 10);
+        let frame_round = Frame::new(content1).with_glyphs(ROUND);
+
+        assert_eq!(frame_round.glyphs.topleft, '╭');
+        assert_eq!(frame_round.glyphs.topright, '╮');
+        assert_eq!(frame_round.glyphs.bottomleft, '╰');
+        assert_eq!(frame_round.glyphs.bottomright, '╯');
+        assert_eq!(frame_round.glyphs.horizontal, '─');
+        assert_eq!(frame_round.glyphs.vertical, '│');
+
+        // Test ROUND_THICK glyphs
+        let content2 = ScrollableContent::new(10, 10);
+        let frame_round_thick = Frame::new(content2).with_glyphs(ROUND_THICK);
+        assert_eq!(frame_round_thick.glyphs.topleft, '╭');
+        assert_eq!(frame_round_thick.glyphs.topright, '╮');
+        assert_eq!(frame_round_thick.glyphs.bottomleft, '╰');
+        assert_eq!(frame_round_thick.glyphs.bottomright, '╯');
+        assert_eq!(frame_round_thick.glyphs.horizontal, '━');
+        assert_eq!(frame_round_thick.glyphs.vertical, '┃');
     }
 
     #[test]
