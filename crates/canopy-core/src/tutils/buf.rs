@@ -11,26 +11,21 @@ macro_rules! buf {
 
 /// A struct for configuring buffer matching behavior. By default, it treats 'X' as a special
 /// marker for NULL cells in the buffer, allowing us to test partial renders.
-pub struct BufMatch {
+pub struct BufTest<'a> {
+    buf: &'a TermBuf,
     null_char: char,
     any_char: Option<char>,
 }
 
-impl Default for BufMatch {
-    fn default() -> Self {
+impl<'a> BufTest<'a> {
+    /// Create a new BufTest with a reference to a TermBuf.
+    pub fn new(buf: &'a TermBuf) -> Self {
         Self {
+            buf,
             null_char: 'X',
             any_char: None,
         }
     }
-}
-
-impl BufMatch {
-    /// Create a new BufMatch with default settings.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Set the character used to match NULL cells in the buffer.
     /// Default is 'X'.
     pub fn with_null(mut self, null_char: char) -> Self {
@@ -46,16 +41,16 @@ impl BufMatch {
     }
 
     /// Returns true if the buffer content matches the expected lines.
-    pub fn matches(&self, buf: &TermBuf, expected: &[&str]) -> bool {
-        if expected.len() != buf.size().h as usize {
+    pub fn matches(&self, expected: &[&str]) -> bool {
+        if expected.len() != self.buf.size().h as usize {
             return false;
         }
 
         for (y, expected_line) in expected.iter().enumerate() {
             // Get actual line character by character to handle NULL cells
             let mut actual_chars = Vec::new();
-            for x in 0..buf.size().w {
-                if let Some(cell) = buf.get(Point { x, y: y as u32 }) {
+            for x in 0..self.buf.size().w {
+                if let Some(cell) = self.buf.get(Point { x, y: y as u32 }) {
                     if cell.ch == '\0' {
                         actual_chars.push(self.null_char);
                     } else {
@@ -89,20 +84,15 @@ impl BufMatch {
     }
 
     /// Assert that the buffer matches the expected lines with pretty printed output on failure.
-    pub fn assert_matches(&self, buf: &TermBuf, expected: &[&str]) {
-        self.assert_matches_with_context(buf, expected, None);
+    pub fn assert_matches(&self, expected: &[&str]) {
+        self.assert_matches_with_context(expected, None);
     }
 
     /// Assert that the buffer matches the expected lines with pretty printed output on failure,
     /// with optional context information.
-    pub fn assert_matches_with_context(
-        &self,
-        buf: &TermBuf,
-        expected: &[&str],
-        context: Option<&str>,
-    ) {
-        if !self.matches(buf, expected) {
-            let actual_lines = buf.lines();
+    pub fn assert_matches_with_context(&self, expected: &[&str], context: Option<&str>) {
+        if !self.matches(expected) {
+            let actual_lines = self.lines();
             let width = expected.first().map(|l| l.len()).unwrap_or(10).max(10);
 
             if let Some(ctx) = context {
@@ -126,115 +116,162 @@ impl BufMatch {
             panic!("Buffer contents did not match expected pattern");
         }
     }
-}
 
-/// Returns true if the buffer content matches the expected lines.
-/// This is the non-panicking version of assert_buffer_matches.
-///
-/// In expected lines, the character 'X' is treated as a special marker for NULL cells.
-/// NULL cells (containing '\0') in the actual buffer will match 'X' in the expected pattern.
-pub fn buffer_matches(buf: &TermBuf, expected: &[&str]) -> bool {
-    BufMatch::default().matches(buf, expected)
-}
-
-/// Assert that the buffer matches the expected lines with pretty printed output on failure.
-///
-/// In expected lines, the character 'X' is treated as a special marker for NULL cells.
-/// NULL cells (containing '\0') in the actual buffer will match 'X' in the expected pattern.
-/// This is useful for testing partial renders where some areas remain uninitialized.
-pub fn assert_matches(buf: &TermBuf, expected: &[&str]) {
-    BufMatch::default().assert_matches(buf, expected);
-}
-
-/// Assert that the buffer matches the expected lines with pretty printed output on failure,
-/// with optional context information.
-///
-/// In expected lines, the character 'X' is treated as a special marker for NULL cells.
-/// NULL cells (containing '\0') in the actual buffer will match 'X' in the expected pattern.
-///
-/// The context parameter allows providing additional information that will be displayed
-/// before the expected/actual comparison if the assertion fails.
-pub fn assert_matches_with_context(buf: &TermBuf, expected: &[&str], context: Option<&str>) {
-    BufMatch::default().assert_matches_with_context(buf, expected, context);
-}
-
-/// Does the buffer contain the supplied substring?
-pub fn contains_text(buf: &TermBuf, txt: &str) -> bool {
-    buf.lines().iter().any(|l| l.contains(txt))
-}
-
-/// Does the buffer contain the supplied substring in the given foreground colour?
-pub fn contains_text_fg(buf: &TermBuf, txt: &str, fg: crate::style::Color) -> bool {
-    contains_text_style(buf, txt, &PartialStyle::fg(fg))
-}
-
-/// Does the buffer contain the supplied substring with the given style?
-pub fn contains_text_style(buf: &TermBuf, txt: &str, style: &PartialStyle) -> bool {
-    let tl = txt.chars().count() as u32;
-    if tl == 0 || tl > buf.size().w {
-        return false;
+    /// Does the buffer contain the supplied substring?
+    pub fn contains_text(&self, txt: &str) -> bool {
+        self.lines().iter().any(|l| l.contains(txt))
     }
-    for y in 0..buf.size().h {
-        for x in 0..=buf.size().w.saturating_sub(tl) {
-            let mut m = true;
-            let mut c = false;
-            for (i, ch) in txt.chars().enumerate() {
-                if let Some(cell) = buf.get(Point { x: x + i as u32, y }) {
-                    if cell.ch != ch {
+
+    /// Does the buffer contain the supplied substring in the given foreground colour?
+    pub fn contains_text_fg(&self, txt: &str, fg: crate::style::Color) -> bool {
+        self.contains_text_style(txt, &PartialStyle::fg(fg))
+    }
+
+    /// Does the buffer contain the supplied substring with the given style?
+    pub fn contains_text_style(&self, txt: &str, style: &PartialStyle) -> bool {
+        let tl = txt.chars().count() as u32;
+        if tl == 0 || tl > self.buf.size().w {
+            return false;
+        }
+        for y in 0..self.buf.size().h {
+            for x in 0..=self.buf.size().w.saturating_sub(tl) {
+                let mut m = true;
+                let mut c = false;
+                for (i, ch) in txt.chars().enumerate() {
+                    if let Some(cell) = self.buf.get(Point { x: x + i as u32, y }) {
+                        if cell.ch != ch {
+                            m = false;
+                            break;
+                        }
+                        // Check if the cell style matches the partial style
+                        let style_matches = (style.fg.is_none() || style.fg == Some(cell.style.fg))
+                            && (style.bg.is_none() || style.bg == Some(cell.style.bg))
+                            && (style.attrs.is_none() || style.attrs == Some(cell.style.attrs));
+                        if style_matches {
+                            c = true;
+                        }
+                    } else {
                         m = false;
                         break;
                     }
-                    // Check if the cell style matches the partial style
-                    let style_matches = (style.fg.is_none() || style.fg == Some(cell.style.fg))
-                        && (style.bg.is_none() || style.bg == Some(cell.style.bg))
-                        && (style.attrs.is_none() || style.attrs == Some(cell.style.attrs));
-                    if style_matches {
-                        c = true;
-                    }
-                } else {
-                    m = false;
-                    break;
+                }
+                if m && c {
+                    return true;
                 }
             }
-            if m && c {
-                return true;
-            }
         }
+        false
     }
-    false
-}
 
-/// Dumps the contents of a TermBuf to the terminal for debugging purposes.
-/// This is useful for visualizing buffer contents directly in test output.
-/// Includes rulers on the bottom and right side for easy offset visualization.
-pub fn dump(buf: &TermBuf) {
-    let width = buf.size().w as usize;
+    /// Dumps the contents of the buffer to the terminal for debugging purposes.
+    pub fn dump(&self) {
+        let width = self.buf.size().w as usize;
 
-    println!("\nTermBuf dump ({}x{}):", buf.size().w, buf.size().h);
-    println!("┌{}┐", "─".repeat(width));
+        println!(
+            "\nTermBuf dump ({}x{}):",
+            self.buf.size().w,
+            self.buf.size().h
+        );
+        println!("┌{}┐", "─".repeat(width));
 
-    for y in 0..buf.size().h {
+        for y in 0..self.buf.size().h {
+            print!("│");
+            for x in 0..self.buf.size().w {
+                if let Some(cell) = self.buf.get(Point { x, y }) {
+                    if cell.ch == '\0' {
+                        print!("X");
+                    } else {
+                        print!("{}", cell.ch);
+                    }
+                }
+            }
+            println!("│{}", y % 10);
+        }
+
+        println!("└{}┘", "─".repeat(width));
+
+        // Bottom ruler
+        print!(" ");
+        for x in 0..width {
+            print!("{}", x % 10);
+        }
+        println!();
+    }
+
+    /// Dumps a single line from the buffer to the terminal for debugging purposes.
+    pub fn dump_line(&self, line_num: u32) {
+        if line_num >= self.buf.size().h {
+            println!(
+                "Error: Line {} is out of bounds (buffer height: {})",
+                line_num,
+                self.buf.size().h
+            );
+            return;
+        }
+
+        let width = self.buf.size().w as usize;
+
+        println!(
+            "\nTermBuf line {} (width: {}):",
+            line_num,
+            self.buf.size().w
+        );
+        println!("┌{}┐", "─".repeat(width));
+
         print!("│");
-        for x in 0..buf.size().w {
-            if let Some(cell) = buf.get(Point { x, y }) {
+        for x in 0..self.buf.size().w {
+            if let Some(cell) = self.buf.get(Point { x, y: line_num }) {
                 if cell.ch == '\0' {
-                    print!("·");
+                    print!("X");
                 } else {
                     print!("{}", cell.ch);
                 }
             }
         }
-        println!("│{}", y % 10);
+        println!("│");
+
+        println!("└{}┘", "─".repeat(width));
+
+        // Bottom ruler
+        print!(" ");
+        for x in 0..width {
+            print!("{}", x % 10);
+        }
+        println!();
     }
 
-    println!("└{}┘", "─".repeat(width));
-
-    // Bottom ruler
-    print!(" ");
-    for x in 0..width {
-        print!("{}", x % 10);
+    /// Return the contents of a line as a `String`.
+    pub fn line_text(&self, y: u32) -> Option<String> {
+        if y >= self.buf.size().h {
+            return None;
+        }
+        let mut ret = String::new();
+        for x in 0..self.buf.size().w {
+            if let Some(c) = self.buf.get(Point { x, y }) {
+                ret.push(c.ch);
+            }
+        }
+        Some(ret)
     }
-    println!();
+
+    /// Return the contents of the buffer as lines of text.
+    pub fn lines(&self) -> Vec<String> {
+        (0..self.buf.size().h)
+            .map(|y| {
+                let mut chars = Vec::new();
+                for x in 0..self.buf.size().w {
+                    if let Some(cell) = self.buf.get(Point { x, y }) {
+                        if cell.ch == '\0' {
+                            chars.push('X');
+                        } else {
+                            chars.push(cell.ch);
+                        }
+                    }
+                }
+                chars.into_iter().collect()
+            })
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -258,9 +295,9 @@ mod tests {
         let mut buf = TermBuf::empty(Expanse::new(5, 3));
         buf.text(test_style(), crate::geom::Line::new(0, 0, 5), "hello");
 
-        let matcher = BufMatch::default();
-        assert!(matcher.matches(&buf, &["hello", "XXXXX", "XXXXX"]));
-        assert!(!matcher.matches(&buf, &["world", "XXXXX", "XXXXX"]));
+        let matcher = BufTest::new(&buf);
+        assert!(matcher.matches(&["hello", "XXXXX", "XXXXX"]));
+        assert!(!matcher.matches(&["world", "XXXXX", "XXXXX"]));
     }
 
     #[test]
@@ -268,9 +305,9 @@ mod tests {
         let mut buf = TermBuf::empty(Expanse::new(4, 2));
         buf.text(test_style(), crate::geom::Line::new(0, 0, 2), "ab");
 
-        let matcher = BufMatch::new().with_null('_');
-        assert!(matcher.matches(&buf, &["ab__", "____"]));
-        assert!(!matcher.matches(&buf, &["abXX", "XXXX"])); // 'X' is not the null char anymore
+        let matcher = BufTest::new(&buf).with_null('_');
+        assert!(matcher.matches(&["ab__", "____"]));
+        assert!(!matcher.matches(&["abXX", "XXXX"])); // 'X' is not the null char anymore
     }
 
     #[test]
@@ -279,11 +316,11 @@ mod tests {
         buf.text(test_style(), crate::geom::Line::new(0, 0, 4), "test");
         buf.text(test_style(), crate::geom::Line::new(0, 1, 4), "word");
 
-        let matcher = BufMatch::new().with_any('?');
-        assert!(matcher.matches(&buf, &["????", "????"])); // all wildcards
-        assert!(matcher.matches(&buf, &["te??", "wo??"])); // partial wildcards
-        assert!(matcher.matches(&buf, &["test", "word"])); // exact match still works
-        assert!(!matcher.matches(&buf, &["fail", "word"])); // wrong text
+        let matcher = BufTest::new(&buf).with_any('?');
+        assert!(matcher.matches(&["????", "????"])); // all wildcards
+        assert!(matcher.matches(&["te??", "wo??"])); // partial wildcards
+        assert!(matcher.matches(&["test", "word"])); // exact match still works
+        assert!(!matcher.matches(&["fail", "word"])); // wrong text
     }
 
     #[test]
@@ -291,10 +328,10 @@ mod tests {
         let mut buf = TermBuf::empty(Expanse::new(6, 2));
         buf.text(test_style(), crate::geom::Line::new(0, 0, 3), "foo");
 
-        let matcher = BufMatch::new().with_null('_').with_any('*');
-        assert!(matcher.matches(&buf, &["foo___", "______"])); // custom null char
-        assert!(matcher.matches(&buf, &["***___", "******"])); // any + null
-        assert!(matcher.matches(&buf, &["f**___", "______"])); // mixed
+        let matcher = BufTest::new(&buf).with_null('_').with_any('*');
+        assert!(matcher.matches(&["foo___", "______"])); // custom null char
+        assert!(matcher.matches(&["***___", "******"])); // any + null
+        assert!(matcher.matches(&["f**___", "______"])); // mixed
     }
 
     #[test]
@@ -307,23 +344,16 @@ mod tests {
         buf.text(test_style(), crate::geom::Line::new(0, 0, 5), "hello");
         buf.text(red_style, crate::geom::Line::new(5, 0, 5), "world");
 
-        assert!(contains_text(&buf, "hello"));
-        assert!(contains_text(&buf, "world"));
-        assert!(!contains_text(&buf, "goodbye"));
+        let bt = BufTest::new(&buf);
+        assert!(bt.contains_text("hello"));
+        assert!(bt.contains_text("world"));
+        assert!(!bt.contains_text("goodbye"));
 
-        assert!(contains_text_fg(&buf, "world", Color::Red));
-        assert!(!contains_text_fg(&buf, "hello", Color::Red));
+        assert!(bt.contains_text_fg("world", Color::Red));
+        assert!(!bt.contains_text_fg("hello", Color::Red));
 
-        assert!(contains_text_style(
-            &buf,
-            "world",
-            &PartialStyle::fg(Color::Red)
-        ));
-        assert!(contains_text_style(
-            &buf,
-            "hello",
-            &PartialStyle::fg(Color::White)
-        ));
+        assert!(bt.contains_text_style("world", &PartialStyle::fg(Color::Red)));
+        assert!(bt.contains_text_style("hello", &PartialStyle::fg(Color::White)));
     }
 
     #[test]
@@ -334,7 +364,7 @@ mod tests {
 
         // This test just verifies dump() runs without panicking
         // The actual output goes to stdout
-        dump(&buf);
+        BufTest::new(&buf).dump();
     }
 
     #[test]
@@ -353,6 +383,63 @@ mod tests {
             "Row 10 test",
         );
 
-        dump(&buf);
+        BufTest::new(&buf).dump();
+    }
+
+    #[test]
+    fn test_dump_line() {
+        let mut buf = TermBuf::empty(Expanse::new(20, 5));
+        buf.text(test_style(), crate::geom::Line::new(0, 0, 10), "First line");
+        buf.text(
+            test_style(),
+            crate::geom::Line::new(5, 2, 15),
+            "Middle line at 5",
+        );
+        buf.text(
+            test_style(),
+            crate::geom::Line::new(0, 4, 20),
+            "Last line with text!",
+        );
+
+        // Test dumping various lines
+        let bt = BufTest::new(&buf);
+        bt.dump_line(0); // First line
+        bt.dump_line(2); // Middle line
+        bt.dump_line(4); // Last line
+        bt.dump_line(10); // Out of bounds - should print error
+    }
+
+    #[test]
+    fn test_buftest_instance_methods() {
+        let mut buf = TermBuf::new(Expanse::new(10, 2), ' ', test_style());
+
+        let mut red_style = test_style();
+        red_style.fg = Color::Red;
+
+        buf.text(test_style(), crate::geom::Line::new(0, 0, 5), "hello");
+        buf.text(red_style, crate::geom::Line::new(5, 0, 5), "world");
+
+        let bt = BufTest::new(&buf);
+
+        // Test contains_text
+        assert!(bt.contains_text("hello"));
+        assert!(bt.contains_text("world"));
+        assert!(!bt.contains_text("goodbye"));
+
+        // Test contains_text_fg
+        assert!(bt.contains_text_fg("world", Color::Red));
+        assert!(!bt.contains_text_fg("hello", Color::Red));
+
+        // Test contains_text_style
+        assert!(bt.contains_text_style("world", &PartialStyle::fg(Color::Red)));
+        assert!(bt.contains_text_style("hello", &PartialStyle::fg(Color::White)));
+
+        // Test lines
+        let lines = bt.lines();
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].starts_with("helloworld"));
+
+        // Test line_text
+        assert_eq!(bt.line_text(0).unwrap().trim(), "helloworld");
     }
 }

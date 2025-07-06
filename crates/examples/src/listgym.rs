@@ -232,7 +232,7 @@ mod tests {
         let mut harness = Harness::new(root)?;
 
         // Load the commands so scripts can find them
-        ListGym::load(harness.canopy());
+        ListGym::load(&mut harness.canopy);
 
         Ok(harness)
     }
@@ -254,7 +254,7 @@ mod tests {
         let mut harness = Harness::new(root)?;
 
         // Verify initial state
-        assert_eq!(harness.root().content.child.len(), 10);
+        assert_eq!(harness.root.content.child.len(), 10);
 
         // Render and verify it still works
         harness.render()?;
@@ -292,19 +292,19 @@ mod tests {
         harness.render()?;
 
         // Get initial offset
-        let initial_offset = harness.root().content.child.offset;
+        let initial_offset = harness.root.content.child.offset;
 
         // Navigate using list commands (these are loaded by the List type)
         harness.script("list::select_last()")?;
 
         // Verify offset changed
-        assert!(harness.root().content.child.offset > initial_offset);
+        assert!(harness.root.content.child.offset > initial_offset);
 
         // Navigate back to first
         harness.script("list::select_first()")?;
 
         // Verify we're back at the start
-        assert_eq!(harness.root().content.child.offset, 0);
+        assert_eq!(harness.root.content.child.offset, 0);
 
         Ok(())
     }

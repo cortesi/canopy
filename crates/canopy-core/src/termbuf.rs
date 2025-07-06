@@ -190,40 +190,6 @@ impl TermBuf {
     pub fn get(&self, p: Point) -> Option<&Cell> {
         self.idx(p).map(|i| &self.cells[i])
     }
-
-    /// Return the contents of a line as a `String`.
-    pub fn line_text(&self, y: u32) -> Option<String> {
-        if y >= self.size.h {
-            return None;
-        }
-        let mut ret = String::new();
-        for x in 0..self.size.w {
-            if let Some(c) = self.get(Point { x, y }) {
-                ret.push(c.ch);
-            }
-        }
-        Some(ret)
-    }
-
-    /// Return the contents of the buffer as lines of text.
-    /// NULL cells (containing '\0') are represented as 'X' for display purposes.
-    pub fn lines(&self) -> Vec<String> {
-        (0..self.size.h)
-            .map(|y| {
-                let mut chars = Vec::new();
-                for x in 0..self.size.w {
-                    if let Some(cell) = self.get(Point { x, y }) {
-                        if cell.ch == NULL {
-                            chars.push('X');
-                        } else {
-                            chars.push(cell.ch);
-                        }
-                    }
-                }
-                chars.into_iter().collect()
-            })
-            .collect()
-    }
 }
 
 impl TermBuf {
@@ -319,7 +285,7 @@ mod tests {
     use super::*;
     use crate::buf;
     use crate::style::{AttrSet, Color, PartialStyle};
-    use crate::tutils::buf;
+    use crate::tutils::buf::BufTest;
 
     fn def_style() -> Style {
         Style {
@@ -334,13 +300,10 @@ mod tests {
         let mut tb = TermBuf::new(Expanse::new(4, 2), ' ', def_style());
         tb.fill(def_style(), Rect::new(1, 0, 2, 2), 'x');
 
-        buf::assert_matches(
-            &tb,
-            buf![
-                " xx "
-                " xx "
-            ],
-        );
+        BufTest::new(&tb).assert_matches(buf![
+            " xx "
+            " xx "
+        ]);
     }
 
     #[test]
@@ -348,7 +311,7 @@ mod tests {
         let mut tb = TermBuf::new(Expanse::new(5, 1), ' ', def_style());
         tb.text(def_style(), Line::new(0, 0, 5), "hi");
 
-        buf::assert_matches(&tb, buf!["hi   "]);
+        BufTest::new(&tb).assert_matches(buf!["hi   "]);
     }
 
     #[test]
@@ -357,15 +320,12 @@ mod tests {
         let f = Frame::new(Rect::new(0, 0, 4, 4), 1);
         tb.solid_frame(def_style(), f, '#');
 
-        buf::assert_matches(
-            &tb,
-            buf![
-                "####"
-                "#  #"
-                "#  #"
-                "####"
-            ],
-        );
+        BufTest::new(&tb).assert_matches(buf![
+            "####"
+            "#  #"
+            "#  #"
+            "####"
+        ]);
     }
 
     struct RecBackend {
@@ -492,9 +452,10 @@ mod tests {
         tb.text(def_style(), Line::new(0, 0, 10), "hello");
         tb.text(def_style(), Line::new(0, 1, 10), "world");
 
-        assert!(buf::contains_text(&tb, "hello"));
-        assert!(buf::contains_text(&tb, "world"));
-        assert!(!buf::contains_text(&tb, "goodbye"));
+        let bt = BufTest::new(&tb);
+        assert!(bt.contains_text("hello"));
+        assert!(bt.contains_text("world"));
+        assert!(!bt.contains_text("goodbye"));
     }
 
     #[test]
@@ -513,37 +474,30 @@ mod tests {
         tb.text(def_style(), Line::new(0, 1, 10), "test line");
 
         // Test with foreground color partial style
-        assert!(buf::contains_text_style(
-            &tb,
-            "hello",
-            &PartialStyle::fg(Color::Red)
-        ));
-        assert!(!buf::contains_text_style(
-            &tb,
+        assert!(BufTest::new(&tb).contains_text_style( "hello", &PartialStyle::fg(Color::Red)));
+        assert!(!BufTest::new(&tb).contains_text_style(
             "world",
             &PartialStyle::fg(Color::Red)
         ));
 
-        assert!(buf::contains_text_style(
-            &tb,
+        assert!(BufTest::new(&tb).contains_text_style(
             "world",
             &PartialStyle::fg(Color::Blue)
         ));
-        assert!(!buf::contains_text_style(
-            &tb,
+        assert!(!BufTest::new(&tb).contains_text_style(
             "hello",
             &PartialStyle::fg(Color::Blue)
         ));
 
         // Test with empty partial style (matches any style)
         let partial_any = PartialStyle::default();
-        assert!(buf::contains_text_style(&tb, "hello", &partial_any));
-        assert!(buf::contains_text_style(&tb, "world", &partial_any));
-        assert!(buf::contains_text_style(&tb, "test", &partial_any));
+        assert!(BufTest::new(&tb).contains_text_style( "hello", &partial_any));
+        assert!(BufTest::new(&tb).contains_text_style( "world", &partial_any));
+        assert!(BufTest::new(&tb).contains_text_style( "test", &partial_any));
 
         // Test with multiple style attributes
         let partial_white_bg = PartialStyle::fg(Color::White).with_bg(Color::Black);
-        assert!(buf::contains_text_style(&tb, "test", &partial_white_bg));
+        assert!(BufTest::new(&tb).contains_text_style( "test", &partial_white_bg));
     }
 
     #[test]
@@ -557,11 +511,10 @@ mod tests {
         tb.text(blue_style, Line::new(0, 0, 3), "two");
 
         // Test the old method
-        assert!(buf::contains_text_fg(&tb, "two", solarized::BLUE));
+        assert!(BufTest::new(&tb).contains_text_fg("two", solarized::BLUE));
 
         // Test that it works the same as contains_text_style
-        assert!(buf::contains_text_style(
-            &tb,
+        assert!(BufTest::new(&tb).contains_text_style(
             "two",
             &PartialStyle::fg(solarized::BLUE)
         ));
@@ -572,66 +525,51 @@ mod tests {
         // Test empty constructor
         let empty = TermBuf::empty(Expanse::new(5, 3));
         assert_eq!(empty.size(), Expanse::new(5, 3));
-        buf::assert_matches(
-            &empty,
-            buf![
-                "XXXXX"
-                "XXXXX"
-                "XXXXX"
-            ],
-        );
+        BufTest::new(&empty).assert_matches(buf![
+            "XXXXX"
+            "XXXXX"
+            "XXXXX"
+        ]);
 
         // Test copy functionality
         let mut src = TermBuf::new(Expanse::new(5, 3), ' ', def_style());
         src.text(def_style(), Line::new(1, 1, 3), "ABC");
 
-        buf::assert_matches(
-            &src,
-            buf![
-                "     "
-                " ABC "
-                "     "
-            ],
-        );
+        BufTest::new(&src).assert_matches(buf![
+            "     "
+            " ABC "
+            "     "
+        ]);
 
         let mut dst = TermBuf::empty(Expanse::new(5, 3));
         dst.copy(&src, Rect::new(1, 1, 3, 1));
 
         // Check that only the text was copied (spaces are not copied)
-        buf::assert_matches(
-            &dst,
-            buf![
-                "XXXXX"
-                "XABCX"
-                "XXXXX"
-            ],
-        );
+        BufTest::new(&dst).assert_matches(buf![
+            "XXXXX"
+            "XABCX"
+            "XXXXX"
+        ]);
 
         // Test copy with partial rectangle
         let mut dst2 = TermBuf::empty(Expanse::new(5, 3));
         dst2.copy(&src, Rect::new(2, 1, 2, 1));
 
-        buf::assert_matches(
-            &dst2,
-            buf![
-                "XXXXX"
-                "XXBCX"
-                "XXXXX"
-            ],
-        );
+        BufTest::new(&dst2).assert_matches(buf![
+            "XXXXX"
+            "XXBCX"
+            "XXXXX"
+        ]);
 
         // Test copy with different sizes (should do nothing)
         let mut wrong_size = TermBuf::empty(Expanse::new(4, 3));
         wrong_size.copy(&src, Rect::new(0, 0, 5, 3));
 
-        buf::assert_matches(
-            &wrong_size,
-            buf![
-                "XXXX"
-                "XXXX"
-                "XXXX"
-            ],
-        );
+        BufTest::new(&wrong_size).assert_matches(buf![
+            "XXXX"
+            "XXXX"
+            "XXXX"
+        ]);
     }
 
     #[test]
@@ -652,36 +590,29 @@ mod tests {
         tb.text(italic_blue, Line::new(0, 1, 6), "italic");
 
         // Test using builder methods
-        assert!(buf::contains_text_style(
-            &tb,
-            "bold",
-            &PartialStyle::fg(Color::Red)
-        ));
-        assert!(buf::contains_text_style(
-            &tb,
+        assert!(BufTest::new(&tb).contains_text_style( "bold", &PartialStyle::fg(Color::Red)));
+        assert!(BufTest::new(&tb).contains_text_style(
             "italic",
             &PartialStyle::fg(Color::Blue)
         ));
 
         // Test with attributes
-        assert!(buf::contains_text_style(
-            &tb,
+        assert!(BufTest::new(&tb).contains_text_style(
             "bold",
             &PartialStyle::attrs(AttrSet::new(Attr::Bold))
         ));
-        assert!(buf::contains_text_style(
-            &tb,
+        assert!(BufTest::new(&tb).contains_text_style(
             "italic",
             &PartialStyle::attrs(AttrSet::new(Attr::Italic))
         ));
 
         // Test chaining
         let bold_red_style = PartialStyle::fg(Color::Red).with_attrs(AttrSet::new(Attr::Bold));
-        assert!(buf::contains_text_style(&tb, "bold", &bold_red_style));
+        assert!(BufTest::new(&tb).contains_text_style( "bold", &bold_red_style));
 
         // Test that it doesn't match wrong combinations
         let italic_red = PartialStyle::fg(Color::Red).with_attrs(AttrSet::new(Attr::Italic));
-        assert!(!buf::contains_text_style(&tb, "bold", &italic_red));
+        assert!(!BufTest::new(&tb).contains_text_style( "bold", &italic_red));
     }
 
     #[test]
@@ -690,27 +621,21 @@ mod tests {
         let mut tb = TermBuf::empty(Expanse::new(5, 3));
 
         // Verify all cells are NULL initially using buf macro
-        buf::assert_matches(
-            &tb,
-            buf![
-                "XXXXX"
-                "XXXXX"
-                "XXXXX"
-            ],
-        );
+        BufTest::new(&tb).assert_matches(buf![
+            "XXXXX"
+            "XXXXX"
+            "XXXXX"
+        ]);
 
         // Add some content to part of the buffer
         tb.text(def_style(), Line::new(1, 1, 3), "ABC");
 
         // Verify the content before fill_empty
-        buf::assert_matches(
-            &tb,
-            buf![
-                "XXXXX"
-                "XABCX"
-                "XXXXX"
-            ],
-        );
+        BufTest::new(&tb).assert_matches(buf![
+            "XXXXX"
+            "XABCX"
+            "XXXXX"
+        ]);
 
         // Fill empty cells with a specific character and style
         let mut fill_style = def_style();
@@ -718,14 +643,11 @@ mod tests {
         tb.fill_empty('.', fill_style.clone());
 
         // Check that the buffer now has dots where there were NULLs
-        buf::assert_matches(
-            &tb,
-            buf![
-                "....."
-                ".ABC."
-                "....."
-            ],
-        );
+        BufTest::new(&tb).assert_matches(buf![
+            "....."
+            ".ABC."
+            "....."
+        ]);
 
         // Verify specific style properties
         assert_eq!(tb.get(Point { x: 0, y: 0 }).unwrap().style.fg, Color::Red);

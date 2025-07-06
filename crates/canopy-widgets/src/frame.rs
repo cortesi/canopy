@@ -445,7 +445,7 @@ mod tests {
                             "Child projection: canvas_rect={canvas_rect:?}, screen_rect={screen_rect:?}"
                         );
                         let child_buf = child_render.get_buffer();
-                        println!("Child buffer first line: {:?}", child_buf.line_text(0));
+                        println!("Child buffer first line: {:?}", canopy::tutils::buf::BufTest::new(child_buf).line_text(0));
                         main_buf.copy_to_rect(child_buf, screen_rect);
                     } else {
                         println!("No projection for child!");
@@ -460,7 +460,7 @@ mod tests {
 
             // Print the result
             println!("Buffer with viewport stack:");
-            for line in main_buf.lines() {
+            for line in canopy::tutils::buf::BufTest::new(&main_buf).lines() {
                 println!("{line}");
             }
 
@@ -526,7 +526,7 @@ mod tests {
             // Get the buffer and print it
             let buffer = render.get_buffer();
             println!("Buffer contents:");
-            for line in buffer.lines() {
+            for line in canopy::tutils::buf::BufTest::new(buffer).lines() {
                 println!("{line}");
             }
 

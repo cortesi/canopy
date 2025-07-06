@@ -58,7 +58,9 @@ fn benchmark_text_rendering(c: &mut Criterion) {
         b.iter(|| {
             // Create a new Text node wrapped in our benchmark wrapper
             let wrapper = BenchmarkTextWrapper::new(sample_text);
-            let mut harness = Harness::with_size(wrapper, Expanse::new(80, 24))
+            let mut harness = Harness::builder(wrapper)
+                .size(80, 24)
+                .build()
                 .expect("Failed to create harness");
 
             // Perform the render

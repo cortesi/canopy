@@ -119,9 +119,8 @@ impl Loader for Root {
 
 #[test]
 fn child_clamped_to_parent() -> Result<()> {
-    let size = Expanse::new(4, 4);
     let root = Root::new();
-    let mut h = Harness::with_size(root, size)?;
+    let mut h = Harness::builder(root).size(4, 4).build()?;
     h.render()?;
 
     // The child (Big) node should be placed in bottom-right corner
@@ -130,8 +129,8 @@ fn child_clamped_to_parent() -> Result<()> {
     let buf = h.buf();
 
     // Check that only the bottom-right corner has 'x'
-    for y in 0..size.h {
-        for x in 0..size.w {
+    for y in 0..4 {
+        for x in 0..4 {
             let cell = buf.get(Point { x, y }).unwrap();
             // The child is placed at (3,3) with size (1,1) but expands to (2,2)
             // So it should be clamped to just the bottom-right corner

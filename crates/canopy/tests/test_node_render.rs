@@ -1,7 +1,7 @@
 use canopy::{
     Context, Expanse, Layout, Loader, Node, NodeState, Render, Result, StatefulNode, buf,
     derive_commands, geom,
-    tutils::{buf as tutils_buf, harness::Harness},
+    tutils::harness::Harness,
 };
 
 // Define our node types
@@ -113,24 +113,19 @@ impl Loader for Root {
 
 #[test]
 fn test_simple_node_fill() -> Result<()> {
-    let size = Expanse::new(30, 10);
-    let mut h = Harness::with_size(Root::new(), size)?;
+    let mut h = Harness::builder(Root::new()).size(30, 10).build()?;
     h.render()?;
-    let buf = h.buf();
-    tutils_buf::assert_matches(
-        buf,
-        buf![
-            "BBBBBBBBBB                    "
-            "BBBBBBBBBB                    "
-            "BBBBBBBBBB                    "
-            "BBBBBBBBBB                    "
-            "BBBBBBBBBB                    "
-            "                              "
-            "                              "
-            "                              "
-            "                              "
-            "                              "
-        ],
-    );
+    h.tbuf().assert_matches(buf![
+        "BBBBBBBBBB                    "
+        "BBBBBBBBBB                    "
+        "BBBBBBBBBB                    "
+        "BBBBBBBBBB                    "
+        "BBBBBBBBBB                    "
+        "                              "
+        "                              "
+        "                              "
+        "                              "
+        "                              "
+    ]);
     Ok(())
 }

@@ -136,11 +136,11 @@ mod tests {
     use crate::{
         buf,
         style::{StyleManager, StyleMap},
-        tutils::buf as tutils_buf,
+        tutils::buf::BufTest,
     };
 
     fn assert_buffer_matches(render: &Render, expected: &[&str]) {
-        tutils_buf::assert_matches(render.get_buffer(), expected);
+        BufTest::new(render.get_buffer()).assert_matches(expected);
     }
 
     #[test]

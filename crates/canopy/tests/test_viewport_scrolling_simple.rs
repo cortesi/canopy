@@ -1,10 +1,4 @@
-use canopy::{
-    derive_commands,
-    event::key,
-    geom::Expanse,
-    tutils::{buf, harness::Harness},
-    *,
-};
+use canopy::{derive_commands, event::key, geom::Expanse, tutils::harness::Harness, *};
 
 /// Simple test to demonstrate viewport scrolling behavior
 #[derive(StatefulNode)]
@@ -67,23 +61,22 @@ impl Loader for ScrollTest {
 
 #[test]
 fn test_scroll_behavior() -> Result<()> {
-    let mut harness = Harness::with_size(ScrollTest::new(), Expanse::new(30, 10))?;
-
-    // Bind scroll key
-    let cnpy = harness.canopy();
-    cnpy.bind_key(key::KeyCode::Down, "", "scroll_test::scroll_down()")?;
+    let mut harness = Harness::builder(ScrollTest::new()).size(30, 10).build()?;
+    harness
+        .canopy
+        .bind_key(key::KeyCode::Down, "", "scroll_test::scroll_down()")?;
 
     // Initial render
     harness.render()?;
-    assert!(buf::contains_text(harness.buf(), "Scroll position: (0, 0)"));
-    assert!(buf::contains_text(harness.buf(), "Line 1"));
+    assert!(harness.tbuf().contains_text("Scroll position: (0, 0)"));
+    assert!(harness.tbuf().contains_text("Line 1"));
 
     // Send down key to trigger scroll
     harness.key(key::KeyCode::Down)?;
 
     // Check if scroll worked
-    assert!(buf::contains_text(harness.buf(), "Scroll position: (0, 1)"));
-    assert!(buf::contains_text(harness.buf(), "Line 2")); // Should now show Line 2 at the top
+    assert!(harness.tbuf().contains_text("Scroll position: (0, 1)"));
+    assert!(harness.tbuf().contains_text("Line 2")); // Should now show Line 2 at the top
 
     Ok(())
 }
