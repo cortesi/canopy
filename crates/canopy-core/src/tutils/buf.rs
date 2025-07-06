@@ -206,6 +206,7 @@ pub fn contains_text_style(buf: &TermBuf, txt: &str, style: &PartialStyle) -> bo
 
 /// Dumps the contents of a TermBuf to the terminal for debugging purposes.
 /// This is useful for visualizing buffer contents directly in test output.
+/// Includes rulers on the bottom and right side for easy offset visualization.
 pub fn dump(buf: &TermBuf) {
     let width = buf.size().w as usize;
 
@@ -223,10 +224,17 @@ pub fn dump(buf: &TermBuf) {
                 }
             }
         }
-        println!("│");
+        println!("│{}", y % 10);
     }
 
     println!("└{}┘", "─".repeat(width));
+
+    // Bottom ruler
+    print!(" ");
+    for x in 0..width {
+        print!("{}", x % 10);
+    }
+    println!();
 }
 
 #[cfg(test)]
@@ -326,6 +334,25 @@ mod tests {
 
         // This test just verifies dump() runs without panicking
         // The actual output goes to stdout
+        dump(&buf);
+    }
+
+    #[test]
+    fn test_dump_with_larger_buffer() {
+        // Test with a larger buffer to see the ruler wrap around
+        let mut buf = TermBuf::empty(Expanse::new(25, 15));
+        buf.text(test_style(), crate::geom::Line::new(0, 0, 10), "0123456789");
+        buf.text(
+            test_style(),
+            crate::geom::Line::new(10, 5, 15),
+            "Offset at (10,5)",
+        );
+        buf.text(
+            test_style(),
+            crate::geom::Line::new(5, 10, 10),
+            "Row 10 test",
+        );
+
         dump(&buf);
     }
 }
