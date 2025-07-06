@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DOUBLE","SINGLE","SINGLE_THICK"],"struct":["Frame","FrameGlyphs"]};
+window.SIDEBAR_ITEMS = {"constant":["DOUBLE","ROUND","ROUND_THICK","SINGLE","SINGLE_THICK"],"struct":["Frame","FrameGlyphs"]};
