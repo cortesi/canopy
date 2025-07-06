@@ -99,9 +99,8 @@ impl Node for Root {
 
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         l.fill(self, sz)?;
-        let vp = self.vp();
         let loc = Rect::new(sz.w.saturating_sub(1), sz.h.saturating_sub(1), sz.w, sz.h);
-        l.place(&mut self.child, vp, loc)?;
+        l.place(&mut self.child, loc)?;
         Ok(())
     }
 

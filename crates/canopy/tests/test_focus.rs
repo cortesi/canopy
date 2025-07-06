@@ -287,7 +287,7 @@ impl Node for IrregularBlock {
             l.fill(self, sz)?;
             let child_rects: Vec<Rect> = self.children.iter().map(|c| c.rect).collect();
             for (child, rect) in self.children.iter_mut().zip(child_rects.iter()) {
-                l.place_(child, *rect)?;
+                l.place(child, *rect)?;
             }
         }
         Ok(())

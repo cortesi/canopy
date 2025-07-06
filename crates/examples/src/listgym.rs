@@ -45,8 +45,7 @@ impl Node for Block {
         // are based on the correct size.
         l.fill(self, target)?;
         let loc = Rect::new(2, 0, target.w.saturating_sub(2), target.h);
-        let vp = self.vp();
-        l.place(&mut self.child, vp, loc)?;
+        l.place(&mut self.child, loc)?;
 
         let vp = self.child.vp();
         let sz = Expanse {
@@ -144,8 +143,8 @@ impl Node for ListGym {
         l.fill(self, sz)?;
         let vp = self.vp();
         let (a, b) = vp.screen_rect().carve_vend(1);
-        l.place(&mut self.content, vp, a)?;
-        l.place(&mut self.statusbar, vp, b)?;
+        l.place(&mut self.content, a)?;
+        l.place(&mut self.statusbar, b)?;
         l.fill(self, sz)?;
         Ok(())
     }

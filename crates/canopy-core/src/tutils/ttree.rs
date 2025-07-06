@@ -173,8 +173,8 @@ macro_rules! branch {
                 l.fill(self, sz)?;
                 let vp = self.vp();
                 let parts = vp.view().split_vertical(2)?;
-                l.place(&mut self.a, vp, parts[0])?;
-                l.place(&mut self.b, vp, parts[1])?;
+                l.place(&mut self.a, parts[0])?;
+                l.place(&mut self.b, parts[1])?;
                 Ok(())
             }
 
@@ -257,8 +257,8 @@ impl Node for R {
         l.fill(self, sz)?;
         let vp = self.vp();
         let parts = vp.view().split_horizontal(2)?;
-        l.place(&mut self.a, vp, parts[0])?;
-        l.place(&mut self.b, vp, parts[1])?;
+        l.place(&mut self.a, parts[0])?;
+        l.place(&mut self.b, parts[1])?;
         Ok(())
     }
 

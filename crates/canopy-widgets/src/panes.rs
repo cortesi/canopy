@@ -105,7 +105,7 @@ impl<N: Node> Node for Panes<N> {
         let lst = vp.view().split_panes(&self.shape())?;
         for (ci, col) in self.children.iter_mut().enumerate() {
             for (ri, row) in col.iter_mut().enumerate() {
-                l.place(row, vp, lst[ci][ri])?;
+                l.place(row, lst[ci][ri])?;
             }
         }
         Ok(())

@@ -144,10 +144,10 @@ impl ViewPort {
 
     /// Set the node size and the target view size at the same time. We try to retain the old view position, but shift
     /// and resize it to be within the view if necessary.
-    pub fn fit_size(&mut self, size: Expanse, view_size: Expanse) {
-        let w = size.w.min(view_size.w);
-        let h = size.h.min(view_size.h);
-        self.canvas = size;
+    pub fn fit_size(&mut self, canvas: Expanse, view_size: Expanse) {
+        let w = canvas.w.min(view_size.w);
+        let h = canvas.h.min(view_size.h);
+        self.canvas = canvas;
         // Now we just clamp the rect into the view.
         self.view = Rect {
             tl: self.view.tl,

@@ -30,29 +30,10 @@ impl Layout {
         Ok(())
     }
 
-    /// Fill a node to occupy the given size while preserving its current scroll position.
-    /// This is useful for nodes that need to maintain their viewport position across
-    /// layout updates (e.g., scrollable content areas).
-    pub fn fill_preserve_scroll(&self, n: &mut dyn Node, sz: Expanse) -> Result<()> {
-        n.state_mut().fit_size(sz, sz);
-        Ok(())
-    }
-
     /// Lay the child out and place it in a given sub-rectangle of a parent's canvas.
-    pub fn place_(&self, child: &mut dyn Node, loc: Rect) -> Result<()> {
+    pub fn place(&self, child: &mut dyn Node, loc: Rect) -> Result<()> {
         child.layout(self, loc.into())?;
         child.state_mut().set_position(loc.tl);
-        Ok(())
-    }
-
-    /// Place a child in a given sub-rectangle of a parent's view.
-    pub fn place(&self, child: &mut dyn Node, parent_vp: ViewPort, loc: Rect) -> Result<()> {
-        child.state_mut().set_position(
-            parent_vp
-                .position()
-                .scroll(loc.tl.x as i32, loc.tl.y as i32),
-        );
-        child.layout(self, loc.expanse())?;
         Ok(())
     }
 

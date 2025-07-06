@@ -191,12 +191,12 @@ impl Node for Todo {
         l.fill(self, sz)?;
         let vp = self.vp();
         let (a, b) = vp.view().carve_vend(1);
-        l.place(&mut self.statusbar, vp, b)?;
-        l.place(&mut self.content, vp, a)?;
+        l.place(&mut self.statusbar, b)?;
+        l.place(&mut self.content, a)?;
 
         let a = self.vp().screen_rect();
         if let Some(add) = &mut self.adder {
-            l.place(add, vp, Rect::new(a.tl.x + 2, a.tl.y + a.h / 2, a.w - 4, 3))?;
+            l.place(add, Rect::new(a.tl.x + 2, a.tl.y + a.h / 2, a.w - 4, 3))?;
         }
         Ok(())
     }

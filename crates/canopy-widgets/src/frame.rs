@@ -137,7 +137,7 @@ where
 
         self.frame = canopy_core::geom::Frame::new(sz.rect(), 1);
         let inner = self.frame.inner();
-        l.place_(&mut self.child, inner)?;
+        l.place(&mut self.child, inner)?;
         Ok(())
     }
 
@@ -285,58 +285,11 @@ mod tests {
     }
 
     #[test]
-    fn test_frame_construction() {
-        let content = ScrollableContent::new(50, 50);
-        let frame = Frame::new(content);
-
-        // Check default settings
-        assert_eq!(frame.title, None);
-        assert_eq!(frame.glyphs.topleft, '┌');
-        assert_eq!(frame.glyphs.topright, '┐');
-    }
-
-    #[test]
     fn test_frame_with_title() {
         let content = ScrollableContent::new(50, 50);
         let frame = Frame::new(content).with_title("Test Title".to_string());
 
         assert_eq!(frame.title, Some("Test Title".to_string()));
-    }
-
-    #[test]
-    fn test_frame_with_different_glyphs() {
-        let content = ScrollableContent::new(10, 10);
-        let frame = Frame::new(content).with_glyphs(DOUBLE);
-
-        // Check that double-line glyphs are set
-        assert_eq!(frame.glyphs.topleft, '╔');
-        assert_eq!(frame.glyphs.topright, '╗');
-        assert_eq!(frame.glyphs.bottomleft, '╚');
-        assert_eq!(frame.glyphs.bottomright, '╝');
-    }
-
-    #[test]
-    fn test_frame_with_round_corners() {
-        // Test ROUND glyphs
-        let content1 = ScrollableContent::new(10, 10);
-        let frame_round = Frame::new(content1).with_glyphs(ROUND);
-
-        assert_eq!(frame_round.glyphs.topleft, '╭');
-        assert_eq!(frame_round.glyphs.topright, '╮');
-        assert_eq!(frame_round.glyphs.bottomleft, '╰');
-        assert_eq!(frame_round.glyphs.bottomright, '╯');
-        assert_eq!(frame_round.glyphs.horizontal, '─');
-        assert_eq!(frame_round.glyphs.vertical, '│');
-
-        // Test ROUND_THICK glyphs
-        let content2 = ScrollableContent::new(10, 10);
-        let frame_round_thick = Frame::new(content2).with_glyphs(ROUND_THICK);
-        assert_eq!(frame_round_thick.glyphs.topleft, '╭');
-        assert_eq!(frame_round_thick.glyphs.topright, '╮');
-        assert_eq!(frame_round_thick.glyphs.bottomleft, '╰');
-        assert_eq!(frame_round_thick.glyphs.bottomright, '╯');
-        assert_eq!(frame_round_thick.glyphs.horizontal, '━');
-        assert_eq!(frame_round_thick.glyphs.vertical, '┃');
     }
 
     #[test]

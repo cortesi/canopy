@@ -59,7 +59,7 @@ impl Node for Block {
                 sz.rect().split_vertical(self.children.len() as u32)?
             };
             for (i, child) in self.children.iter_mut().enumerate() {
-                l.place_(child, vps[i])?;
+                l.place(child, vps[i])?;
             }
         }
         Ok(())

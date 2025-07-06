@@ -111,8 +111,7 @@ impl Node for Editor {
     }
 
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        let vp = self.vp();
-        l.place(&mut self.view, vp, sz.rect())?;
+        l.place(&mut self.view, sz.rect())?;
         let vp = self.view.vp();
         self.wrap(vp)?;
         Ok(())

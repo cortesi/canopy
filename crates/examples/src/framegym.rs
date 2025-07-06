@@ -23,6 +23,11 @@ impl TestPattern {
     }
 
     #[command]
+    pub fn scroll_to_top(&mut self, c: &mut dyn Context) {
+        c.scroll_to(self, 0, 0);
+    }
+
+    #[command]
     pub fn scroll_down(&mut self, c: &mut dyn Context) {
         c.scroll_down(self);
     }
@@ -163,6 +168,7 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
         // Focus navigation
         .key(key::KeyCode::Tab, "root::focus_next()")
         // Arrow keys for scrolling
+        .key('g', "test_pattern::scroll_to_top()")
         .key(key::KeyCode::Down, "test_pattern::scroll_down()")
         .key(key::KeyCode::Up, "test_pattern::scroll_up()")
         .key(key::KeyCode::Left, "test_pattern::scroll_left()")

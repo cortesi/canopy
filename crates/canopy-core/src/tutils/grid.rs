@@ -183,7 +183,7 @@ impl Node for GridNode {
                 };
 
                 // Use the Layout trait's place_ method to properly position the child
-                l.place_(child, Rect::new(x, y, width, height))?;
+                l.place(child, Rect::new(x, y, width, height))?;
             }
         }
 

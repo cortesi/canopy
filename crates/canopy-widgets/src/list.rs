@@ -29,6 +29,7 @@ where
             itm,
         }
     }
+
     fn set_selected(&mut self, state: bool) {
         self.itm.set_selected(state)
     }
@@ -149,12 +150,9 @@ where
             if itm.virt.tl.y < vp_y {
                 core.scroll_by(self, 0, -(itm.virt.h as i32));
             }
-            if self.ensure_selected_in_view(core) {
-                core.taint(self);
-            }
+            self.ensure_selected_in_view(core);
         }
 
-        core.taint_tree(self);
         Some(itm.itm)
     }
 
@@ -229,42 +227,30 @@ where
         if self.is_empty() {
             return;
         }
-        let changed = self.select(0);
+        self.select(0);
         // Don't scroll - just ensure the selected item is in view
-        let scrolled = self.ensure_selected_in_view(c);
-        if changed || scrolled {
-            c.taint(self);
-        }
+        self.ensure_selected_in_view(c);
     }
 
     /// Move selection to the next item in the list, if possible.
     #[command]
     pub fn select_last(&mut self, c: &mut dyn Context) {
-        let changed = self.select(self.len());
-        let scrolled = self.ensure_selected_in_view(c);
-        if changed || scrolled {
-            c.taint(self);
-        }
+        self.select(self.len());
+        self.ensure_selected_in_view(c);
     }
 
     /// Move selection to the next item in the list, if possible.
     #[command]
     pub fn select_next(&mut self, c: &mut dyn Context) {
-        let changed = self.select(self.offset.saturating_add(1));
-        let scrolled = self.ensure_selected_in_view(c);
-        if changed || scrolled {
-            c.taint(self);
-        }
+        self.select(self.offset.saturating_add(1));
+        self.ensure_selected_in_view(c);
     }
 
     /// Move selection to the next previous the list, if possible.
     #[command]
     pub fn select_prev(&mut self, c: &mut dyn Context) {
-        let changed = self.select(self.offset.saturating_sub(1));
-        let scrolled = self.ensure_selected_in_view(c);
-        if changed || scrolled {
-            c.taint(self);
-        }
+        self.select(self.offset.saturating_sub(1));
+        self.ensure_selected_in_view(c);
     }
 
     /// Scroll the viewport down by one line.

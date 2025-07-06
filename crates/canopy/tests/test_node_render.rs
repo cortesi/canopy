@@ -43,7 +43,7 @@ impl Node for NodeA {
         let vp = self.vp();
 
         // Place B to fill A's entire space
-        l.place(&mut self.node_b, vp, vp.view())?;
+        l.place(&mut self.node_b, vp.view())?;
         Ok(())
     }
 }
@@ -88,11 +88,9 @@ impl Node for Root {
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         // Root fills the entire screen
         l.fill(self, sz)?;
-        let vp = self.vp();
-
         // Place A in a 10x5 rectangle
         let node_a_rect = geom::Rect::new(0, 0, 10, 5);
-        l.place(&mut self.node_a, vp, node_a_rect)?;
+        l.place(&mut self.node_a, node_a_rect)?;
         Ok(())
     }
 

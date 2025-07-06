@@ -125,8 +125,8 @@ impl Node for Intervals {
         l.fill(self, sz)?;
         let vp = self.vp();
         let (a, b) = vp.view().carve_vend(1);
-        l.place(&mut self.statusbar, vp, b)?;
-        l.place(&mut self.content, vp, a)?;
+        l.place(&mut self.statusbar, b)?;
+        l.place(&mut self.content, a)?;
         Ok(())
     }
 
