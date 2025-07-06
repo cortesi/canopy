@@ -154,7 +154,7 @@ where
         if let Some((pre, active, post)) = self.child.vp().vactive(f.right)? {
             rndr.fill(style, pre, self.glyphs.vertical)?;
             rndr.fill(style, post, self.glyphs.vertical)?;
-            rndr.fill(style, active, self.glyphs.vertical_active)?;
+            rndr.fill("frame/active", active, self.glyphs.vertical_active)?;
         } else {
             rndr.fill(style, f.right, self.glyphs.vertical)?;
         }
@@ -162,7 +162,7 @@ where
         if let Some((pre, active, post)) = self.child.vp().hactive(f.bottom)? {
             rndr.fill(style, pre, self.glyphs.horizontal)?;
             rndr.fill(style, post, self.glyphs.horizontal)?;
-            rndr.fill(style, active, self.glyphs.horizontal_active)?;
+            rndr.fill("frame/active", active, self.glyphs.horizontal_active)?;
         } else {
             rndr.fill(style, f.bottom, self.glyphs.horizontal)?;
         }
