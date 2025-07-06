@@ -1254,8 +1254,8 @@
 <a href=#1254 id=1254 data-nosnippet>1254</a>                <span class="bool-val">true
 <a href=#1255 id=1255 data-nosnippet>1255</a>            </span>}
 <a href=#1256 id=1256 data-nosnippet>1256</a>
-<a href=#1257 id=1257 data-nosnippet>1257</a>            <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l: <span class="kw-2">&amp;</span>Layout, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#1258 id=1258 data-nosnippet>1258</a>                l.fill(<span class="self">self</span>, sz)
+<a href=#1257 id=1257 data-nosnippet>1257</a>            <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _l: <span class="kw-2">&amp;</span>Layout, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#1258 id=1258 data-nosnippet>1258</a>                <span class="self">self</span>.fill(sz)
 <a href=#1259 id=1259 data-nosnippet>1259</a>            }
 <a href=#1260 id=1260 data-nosnippet>1260</a>
 <a href=#1261 id=1261 data-nosnippet>1261</a>            <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _c: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Context, r: <span class="kw-2">&amp;mut </span>Render) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
@@ -1328,8 +1328,8 @@
 <a href=#1328 id=1328 data-nosnippet>1328</a>                f(<span class="kw-2">&amp;mut </span><span class="self">self</span>.child)
 <a href=#1329 id=1329 data-nosnippet>1329</a>            }
 <a href=#1330 id=1330 data-nosnippet>1330</a>
-<a href=#1331 id=1331 data-nosnippet>1331</a>            <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l: <span class="kw-2">&amp;</span>Layout, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#1332 id=1332 data-nosnippet>1332</a>                l.fill(<span class="self">self</span>, sz)<span class="question-mark">?</span>;
+<a href=#1331 id=1331 data-nosnippet>1331</a>            <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _l: <span class="kw-2">&amp;</span>Layout, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#1332 id=1332 data-nosnippet>1332</a>                <span class="self">self</span>.fill(sz)<span class="question-mark">?</span>;
 <a href=#1333 id=1333 data-nosnippet>1333</a>                <span class="self">self</span>.wrap(<span class="self">self</span>.child.vp())<span class="question-mark">?</span>;
 <a href=#1334 id=1334 data-nosnippet>1334</a>                <span class="prelude-val">Ok</span>(())
 <a href=#1335 id=1335 data-nosnippet>1335</a>            }

@@ -122,11 +122,11 @@
 <a href=#122 id=122 data-nosnippet>122</a>
 <a href=#123 id=123 data-nosnippet>123</a><span class="kw">impl </span>Node <span class="kw">for </span>Intervals {
 <a href=#124 id=124 data-nosnippet>124</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l: <span class="kw-2">&amp;</span>Layout, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#125 id=125 data-nosnippet>125</a>        l.fill(<span class="self">self</span>, sz)<span class="question-mark">?</span>;
+<a href=#125 id=125 data-nosnippet>125</a>        <span class="self">self</span>.fill(sz)<span class="question-mark">?</span>;
 <a href=#126 id=126 data-nosnippet>126</a>        <span class="kw">let </span>vp = <span class="self">self</span>.vp();
 <a href=#127 id=127 data-nosnippet>127</a>        <span class="kw">let </span>(a, b) = vp.view().carve_vend(<span class="number">1</span>);
-<a href=#128 id=128 data-nosnippet>128</a>        l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.statusbar, vp, b)<span class="question-mark">?</span>;
-<a href=#129 id=129 data-nosnippet>129</a>        l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.content, vp, a)<span class="question-mark">?</span>;
+<a href=#128 id=128 data-nosnippet>128</a>        l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.statusbar, b)<span class="question-mark">?</span>;
+<a href=#129 id=129 data-nosnippet>129</a>        l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.content, a)<span class="question-mark">?</span>;
 <a href=#130 id=130 data-nosnippet>130</a>        <span class="prelude-val">Ok</span>(())
 <a href=#131 id=131 data-nosnippet>131</a>    }
 <a href=#132 id=132 data-nosnippet>132</a>

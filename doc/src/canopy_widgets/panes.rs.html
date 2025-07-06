@@ -100,12 +100,12 @@
 <a href=#100 id=100 data-nosnippet>100</a>    }
 <a href=#101 id=101 data-nosnippet>101</a>
 <a href=#102 id=102 data-nosnippet>102</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l: <span class="kw-2">&amp;</span>Layout, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#103 id=103 data-nosnippet>103</a>        l.fill(<span class="self">self</span>, sz)<span class="question-mark">?</span>;
+<a href=#103 id=103 data-nosnippet>103</a>        <span class="self">self</span>.fill(sz)<span class="question-mark">?</span>;
 <a href=#104 id=104 data-nosnippet>104</a>        <span class="kw">let </span>vp = <span class="self">self</span>.vp();
 <a href=#105 id=105 data-nosnippet>105</a>        <span class="kw">let </span>lst = vp.view().split_panes(<span class="kw-2">&amp;</span><span class="self">self</span>.shape())<span class="question-mark">?</span>;
 <a href=#106 id=106 data-nosnippet>106</a>        <span class="kw">for </span>(ci, col) <span class="kw">in </span><span class="self">self</span>.children.iter_mut().enumerate() {
 <a href=#107 id=107 data-nosnippet>107</a>            <span class="kw">for </span>(ri, row) <span class="kw">in </span>col.iter_mut().enumerate() {
-<a href=#108 id=108 data-nosnippet>108</a>                l.place(row, vp, lst[ci][ri])<span class="question-mark">?</span>;
+<a href=#108 id=108 data-nosnippet>108</a>                l.place(row, lst[ci][ri])<span class="question-mark">?</span>;
 <a href=#109 id=109 data-nosnippet>109</a>            }
 <a href=#110 id=110 data-nosnippet>110</a>        }
 <a href=#111 id=111 data-nosnippet>111</a>        <span class="prelude-val">Ok</span>(())

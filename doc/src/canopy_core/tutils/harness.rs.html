@@ -150,8 +150,8 @@
 <a href=#150 id=150 data-nosnippet>150</a>    }
 <a href=#151 id=151 data-nosnippet>151</a>
 <a href=#152 id=152 data-nosnippet>152</a>    <span class="kw">impl </span>Node <span class="kw">for </span>TestNode {
-<a href=#153 id=153 data-nosnippet>153</a>        <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l: <span class="kw-2">&amp;</span>Layout, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#154 id=154 data-nosnippet>154</a>            l.fill(<span class="self">self</span>, sz)<span class="question-mark">?</span>;
+<a href=#153 id=153 data-nosnippet>153</a>        <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _l: <span class="kw-2">&amp;</span>Layout, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#154 id=154 data-nosnippet>154</a>            <span class="self">self</span>.fill(sz)<span class="question-mark">?</span>;
 <a href=#155 id=155 data-nosnippet>155</a>            <span class="prelude-val">Ok</span>(())
 <a href=#156 id=156 data-nosnippet>156</a>        }
 <a href=#157 id=157 data-nosnippet>157</a>

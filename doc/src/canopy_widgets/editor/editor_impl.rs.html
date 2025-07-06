@@ -49,9 +49,9 @@
 <a href=#49 id=49 data-nosnippet>49</a>        <span class="prelude-val">Ok</span>(())
 <a href=#50 id=50 data-nosnippet>50</a>    }
 <a href=#51 id=51 data-nosnippet>51</a>
-<a href=#52 id=52 data-nosnippet>52</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l: <span class="kw-2">&amp;</span>Layout, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#52 id=52 data-nosnippet>52</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _l: <span class="kw-2">&amp;</span>Layout, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
 <a href=#53 id=53 data-nosnippet>53</a>        <span class="kw">let </span>outer = Expanse::new(sz.w, <span class="self">self</span>.core.wrapped_height() <span class="kw">as </span>u32);
-<a href=#54 id=54 data-nosnippet>54</a>        l.size(<span class="self">self</span>, outer, sz)<span class="question-mark">?</span>;
+<a href=#54 id=54 data-nosnippet>54</a>        <span class="self">self</span>.fit_size(outer, sz);
 <a href=#55 id=55 data-nosnippet>55</a>        <span class="prelude-val">Ok</span>(())
 <a href=#56 id=56 data-nosnippet>56</a>    }
 <a href=#57 id=57 data-nosnippet>57</a>}
@@ -111,14 +111,13 @@
 <a href=#111 id=111 data-nosnippet>111</a>    </span>}
 <a href=#112 id=112 data-nosnippet>112</a>
 <a href=#113 id=113 data-nosnippet>113</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;mut </span><span class="self">self</span>, l: <span class="kw-2">&amp;</span>Layout, sz: Expanse) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#114 id=114 data-nosnippet>114</a>        <span class="kw">let </span>vp = <span class="self">self</span>.vp();
-<a href=#115 id=115 data-nosnippet>115</a>        l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.view, vp, sz.rect())<span class="question-mark">?</span>;
-<a href=#116 id=116 data-nosnippet>116</a>        <span class="kw">let </span>vp = <span class="self">self</span>.view.vp();
-<a href=#117 id=117 data-nosnippet>117</a>        <span class="self">self</span>.wrap(vp)<span class="question-mark">?</span>;
-<a href=#118 id=118 data-nosnippet>118</a>        <span class="prelude-val">Ok</span>(())
-<a href=#119 id=119 data-nosnippet>119</a>    }
-<a href=#120 id=120 data-nosnippet>120</a>
-<a href=#121 id=121 data-nosnippet>121</a>    <span class="kw">fn </span>children(<span class="kw-2">&amp;mut </span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>FnMut(<span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#122 id=122 data-nosnippet>122</a>        f(<span class="kw-2">&amp;mut </span><span class="self">self</span>.view)
-<a href=#123 id=123 data-nosnippet>123</a>    }
-<a href=#124 id=124 data-nosnippet>124</a>}</code></pre></div></section></main></body></html>
+<a href=#114 id=114 data-nosnippet>114</a>        l.place(<span class="kw-2">&amp;mut </span><span class="self">self</span>.view, sz.rect())<span class="question-mark">?</span>;
+<a href=#115 id=115 data-nosnippet>115</a>        <span class="kw">let </span>vp = <span class="self">self</span>.view.vp();
+<a href=#116 id=116 data-nosnippet>116</a>        <span class="self">self</span>.wrap(vp)<span class="question-mark">?</span>;
+<a href=#117 id=117 data-nosnippet>117</a>        <span class="prelude-val">Ok</span>(())
+<a href=#118 id=118 data-nosnippet>118</a>    }
+<a href=#119 id=119 data-nosnippet>119</a>
+<a href=#120 id=120 data-nosnippet>120</a>    <span class="kw">fn </span>children(<span class="kw-2">&amp;mut </span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>FnMut(<span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#121 id=121 data-nosnippet>121</a>        f(<span class="kw-2">&amp;mut </span><span class="self">self</span>.view)
+<a href=#122 id=122 data-nosnippet>122</a>    }
+<a href=#123 id=123 data-nosnippet>123</a>}</code></pre></div></section></main></body></html>

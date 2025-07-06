@@ -144,10 +144,10 @@
 <a href=#144 id=144 data-nosnippet>144</a>
 <a href=#145 id=145 data-nosnippet>145</a>    <span class="doccomment">/// Set the node size and the target view size at the same time. We try to retain the old view position, but shift
 <a href=#146 id=146 data-nosnippet>146</a>    /// and resize it to be within the view if necessary.
-<a href=#147 id=147 data-nosnippet>147</a>    </span><span class="kw">pub fn </span>fit_size(<span class="kw-2">&amp;mut </span><span class="self">self</span>, size: Expanse, view_size: Expanse) {
-<a href=#148 id=148 data-nosnippet>148</a>        <span class="kw">let </span>w = size.w.min(view_size.w);
-<a href=#149 id=149 data-nosnippet>149</a>        <span class="kw">let </span>h = size.h.min(view_size.h);
-<a href=#150 id=150 data-nosnippet>150</a>        <span class="self">self</span>.canvas = size;
+<a href=#147 id=147 data-nosnippet>147</a>    </span><span class="kw">pub fn </span>fit_size(<span class="kw-2">&amp;mut </span><span class="self">self</span>, canvas: Expanse, view_size: Expanse) {
+<a href=#148 id=148 data-nosnippet>148</a>        <span class="kw">let </span>w = canvas.w.min(view_size.w);
+<a href=#149 id=149 data-nosnippet>149</a>        <span class="kw">let </span>h = canvas.h.min(view_size.h);
+<a href=#150 id=150 data-nosnippet>150</a>        <span class="self">self</span>.canvas = canvas;
 <a href=#151 id=151 data-nosnippet>151</a>        <span class="comment">// Now we just clamp the rect into the view.
 <a href=#152 id=152 data-nosnippet>152</a>        </span><span class="self">self</span>.view = Rect {
 <a href=#153 id=153 data-nosnippet>153</a>            tl: <span class="self">self</span>.view.tl,
