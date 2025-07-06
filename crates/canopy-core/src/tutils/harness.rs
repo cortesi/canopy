@@ -12,19 +12,75 @@ pub struct Harness<N> {
     root: N,
 }
 
-impl<N: Node + Loader> Harness<N> {
-    /// Create a harness using `size` for the root layout.
-    pub fn with_size(mut root: N, size: Expanse) -> Result<Self> {
+/// Builder for creating a test harness with a fluent API.
+pub struct HarnessBuilder<N> {
+    root: N,
+    size: Expanse,
+}
+
+impl<N: Node + Loader> HarnessBuilder<N> {
+    /// Create a new harness builder with the given root node.
+    fn new(root: N) -> Self {
+        Self {
+            root,
+            size: Expanse::new(100, 100), // default size
+        }
+    }
+
+    /// Set the size of the harness viewport.
+    pub fn size(mut self, width: u32, height: u32) -> Self {
+        self.size = Expanse::new(width, height);
+        self
+    }
+
+    /// Build the harness with the configured settings.
+    pub fn build(mut self) -> Result<Harness<N>> {
         let render = NopBackend::new();
         let mut core = Canopy::new();
 
         <N as Loader>::load(&mut core);
-        core.set_root_size(size, &mut root)?;
+        core.set_root_size(self.size, &mut self.root)?;
 
+        Ok(Harness {
+            core,
+            render,
+            root: self.root,
+        })
+    }
+}
+
+impl<N: Node + Loader> Harness<N> {
+    /// Create a harness builder for constructing a test harness with a fluent API.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use canopy_core::tutils::harness::Harness;
+    /// # use canopy_core::{Node, Loader};
+    /// # fn example<N: Node + Loader>(node: N) -> canopy_core::Result<()> {
+    /// let harness = Harness::builder(node)
+    ///     .size(80, 24)
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn builder(root: N) -> HarnessBuilder<N> {
+        HarnessBuilder::new(root)
+    }
+
+    /// Create a harness using `size` for the root layout.
+    ///
+    /// This method is kept for backwards compatibility. Consider using `builder()` instead.
+    pub fn with_size(mut root: N, size: Expanse) -> Result<Self> {
+        let render = NopBackend::new();
+        let mut core = Canopy::new();
+        <N as Loader>::load(&mut core);
+        core.set_root_size(size, &mut root)?;
         Ok(Harness { core, render, root })
     }
 
     /// Create a harness with a default root size of 100x100.
+    ///
+    /// This method is kept for backwards compatibility. Consider using `builder()` instead.
     pub fn new(root: N) -> Result<Self> {
         Self::with_size(root, Expanse::new(100, 100))
     }
@@ -158,5 +214,23 @@ mod tests {
 
         // Also verify the text was rendered
         assert!(buf::contains_text(h.buf(), "test"));
+    }
+
+    #[test]
+    fn test_harness_builder() {
+        // Test the new builder API
+        let mut h = Harness::builder(TestNode::new())
+            .size(20, 5)
+            .build()
+            .unwrap();
+
+        h.render().unwrap();
+
+        // Verify the text was rendered
+        assert!(buf::contains_text(h.buf(), "test"));
+
+        // Verify the size was set correctly
+        assert_eq!(h.buf().size().w, 20);
+        assert_eq!(h.buf().size().h, 5);
     }
 }

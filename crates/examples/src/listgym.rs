@@ -264,8 +264,7 @@ mod tests {
 
     #[test]
     fn test_listgym_with_harness() -> Result<()> {
-        let root = ListGym::new();
-        let mut harness = Harness::with_size(root, Expanse::new(80, 20))?;
+        let mut harness = Harness::builder(ListGym::new()).size(80, 20).build()?;
 
         // Test that we can render with a specific size
         harness.render()?;

@@ -189,7 +189,7 @@ mod tests {
 
     #[test]
     fn test_framegym_basic() -> Result<()> {
-        let mut harness = Harness::new(FrameGym::new())?;
+        let mut harness = Harness::builder(FrameGym::new()).size(20, 20).build()?;
         harness.render()?;
         harness.script("test_pattern::scroll_down()")?;
         harness.dump();
