@@ -7,29 +7,10 @@
 <a href=#7 id=7 data-nosnippet>7</a></span><span class="kw">pub struct </span>Layout {}
 <a href=#8 id=8 data-nosnippet>8</a>
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">impl </span>Layout {
-<a href=#10 id=10 data-nosnippet>10</a>    <span class="doccomment">/// Hides the element and all its descendants from rendering. The nodes are still included in
-<a href=#11 id=11 data-nosnippet>11</a>    /// the tree.
-<a href=#12 id=12 data-nosnippet>12</a>    </span><span class="kw">pub fn </span>hide(<span class="kw-2">&amp;</span><span class="self">self</span>, child: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {
-<a href=#13 id=13 data-nosnippet>13</a>        child.state_mut().hidden = <span class="bool-val">true</span>;
-<a href=#14 id=14 data-nosnippet>14</a>    }
-<a href=#15 id=15 data-nosnippet>15</a>
-<a href=#16 id=16 data-nosnippet>16</a>    <span class="doccomment">/// Unhides the element and all its descendants, allowing them to be rendered again.
-<a href=#17 id=17 data-nosnippet>17</a>    </span><span class="kw">pub fn </span>unhide(<span class="kw-2">&amp;</span><span class="self">self</span>, child: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node) {
-<a href=#18 id=18 data-nosnippet>18</a>        child.state_mut().hidden = <span class="bool-val">false</span>;
-<a href=#19 id=19 data-nosnippet>19</a>    }
-<a href=#20 id=20 data-nosnippet>20</a>
-<a href=#21 id=21 data-nosnippet>21</a>    <span class="doccomment">/// Lay the child out and place it in a given sub-rectangle of a parent's canvas.
-<a href=#22 id=22 data-nosnippet>22</a>    </span><span class="kw">pub fn </span>place(<span class="kw-2">&amp;</span><span class="self">self</span>, child: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, loc: Rect) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#23 id=23 data-nosnippet>23</a>        child.layout(<span class="self">self</span>, loc.into())<span class="question-mark">?</span>;
-<a href=#24 id=24 data-nosnippet>24</a>        child.state_mut().set_position(loc.tl);
-<a href=#25 id=25 data-nosnippet>25</a>        <span class="prelude-val">Ok</span>(())
-<a href=#26 id=26 data-nosnippet>26</a>    }
-<a href=#27 id=27 data-nosnippet>27</a>
-<a href=#28 id=28 data-nosnippet>28</a>    <span class="doccomment">/// Adjust a child node so that it fits a viewport. This lays the node out to the parent's view
-<a href=#29 id=29 data-nosnippet>29</a>    /// rectangle, then adjusts the node's position to match.
-<a href=#30 id=30 data-nosnippet>30</a>    </span><span class="kw">pub fn </span>fit(<span class="kw-2">&amp;</span><span class="self">self</span>, n: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, view: Rect) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#31 id=31 data-nosnippet>31</a>        n.layout(<span class="self">self</span>, view.into())<span class="question-mark">?</span>;
-<a href=#32 id=32 data-nosnippet>32</a>        n.state_mut().set_position(view.tl);
-<a href=#33 id=33 data-nosnippet>33</a>        <span class="prelude-val">Ok</span>(())
-<a href=#34 id=34 data-nosnippet>34</a>    }
-<a href=#35 id=35 data-nosnippet>35</a>}</code></pre></div></section></main></body></html>
+<a href=#10 id=10 data-nosnippet>10</a>    <span class="doccomment">/// Lay the child out and place it in a given sub-rectangle of a parent's canvas.
+<a href=#11 id=11 data-nosnippet>11</a>    </span><span class="kw">pub fn </span>place(<span class="kw-2">&amp;</span><span class="self">self</span>, child: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Node, loc: Rect) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#12 id=12 data-nosnippet>12</a>        child.layout(<span class="self">self</span>, loc.into())<span class="question-mark">?</span>;
+<a href=#13 id=13 data-nosnippet>13</a>        child.state_mut().viewport.set_position(loc.tl);
+<a href=#14 id=14 data-nosnippet>14</a>        <span class="prelude-val">Ok</span>(())
+<a href=#15 id=15 data-nosnippet>15</a>    }
+<a href=#16 id=16 data-nosnippet>16</a>}</code></pre></div></section></main></body></html>
