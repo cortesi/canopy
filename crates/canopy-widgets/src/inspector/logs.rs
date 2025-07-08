@@ -4,10 +4,11 @@ use std::{
 };
 use tracing_subscriber::fmt;
 
-use crate as canopy;
-use crate::widgets::{Text, list::*};
-use crate::{Canopy, Loader};
+use canopy_core as canopy;
+
+use crate::{Text, list::*};
 use canopy_core::{
+    Canopy, Loader, NodeState, derive_commands,
     geom::{Expanse, Rect},
     *,
 };

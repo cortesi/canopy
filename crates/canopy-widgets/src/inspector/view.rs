@@ -1,7 +1,8 @@
+use canopy_core as canopy;
+
 use super::logs::Logs;
-use crate as canopy;
-use crate::widgets::tabs;
-use canopy_core::*;
+use crate::tabs;
+use canopy_core::{NodeState, derive_commands, *};
 
 /// View contains the body of the inspector.
 #[derive(canopy_core::StatefulNode)]

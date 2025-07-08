@@ -222,6 +222,7 @@ dependencies = [
  "rhai",
  "textwrap",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

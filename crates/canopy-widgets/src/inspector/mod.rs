@@ -1,10 +1,12 @@
 mod logs;
 mod view;
 
-use crate as canopy;
-use crate::widgets::{frame, tabs};
-use crate::{Binder, Canopy, DefaultBindings, Loader};
-use canopy_core::{event::key::*, *};
+use canopy_core as canopy;
+
+use crate::{frame, tabs};
+use canopy_core::{
+    Binder, Canopy, DefaultBindings, Loader, NodeState, derive_commands, event::key::*, *,
+};
 
 use logs::Logs;
 
