@@ -171,37 +171,41 @@ where
 
     /// Move selection to the next item in the list, if possible.
     #[command]
-    pub fn select_first(&mut self, _c: &mut dyn Context) {
+    pub fn select_first(&mut self, c: &mut dyn Context) {
         if self.is_empty() {
             return;
         }
         self.select(0);
+        self.ensure_selected_visible(c);
     }
 
     /// Move selection to the next item in the list, if possible.
     #[command]
-    pub fn select_last(&mut self, _c: &mut dyn Context) {
+    pub fn select_last(&mut self, c: &mut dyn Context) {
         self.select(self.len());
+        self.ensure_selected_visible(c);
     }
 
     /// Move selection to the next item in the list, if possible.
     #[command]
-    pub fn select_next(&mut self, _c: &mut dyn Context) {
+    pub fn select_next(&mut self, c: &mut dyn Context) {
         if let Some(sel) = self.selected {
             self.select(sel.saturating_add(1));
         } else if !self.is_empty() {
             self.select(0);
         }
+        self.ensure_selected_visible(c);
     }
 
     /// Move selection to the next previous the list, if possible.
     #[command]
-    pub fn select_prev(&mut self, _c: &mut dyn Context) {
+    pub fn select_prev(&mut self, c: &mut dyn Context) {
         if let Some(sel) = self.selected {
             self.select(sel.saturating_sub(1));
         } else if !self.is_empty() {
             self.select(0);
         }
+        self.ensure_selected_visible(c);
     }
 
     /// Scroll the viewport down by one line.
@@ -238,6 +242,44 @@ where
     #[command]
     pub fn page_up(&mut self, c: &mut dyn Context) {
         c.page_up(self);
+    }
+
+    /// Ensure the selected item is visible in the viewport.
+    /// This adjusts the view to follow the selected item when it would
+    /// otherwise be partially or completely out of view.
+    fn ensure_selected_visible(&mut self, c: &mut dyn Context) {
+        if let Some(selected_idx) = self.selected {
+            if selected_idx >= self.items.len() {
+                return;
+            }
+
+            let selected_item = &self.items[selected_idx];
+            let item_pos = selected_item.vp().position();
+            let item_height = selected_item.vp().canvas().h;
+
+            let list_pos = self.vp().position();
+            let view = self.vp().view();
+
+            // Calculate item's position relative to our canvas
+            let item_y = item_pos.y.saturating_sub(list_pos.y);
+
+            // Check if item is above the current view
+            if item_y < view.tl.y {
+                // Scroll up to make the item visible at the top
+                let scroll_amount = view.tl.y - item_y;
+                for _ in 0..scroll_amount {
+                    c.scroll_up(self);
+                }
+            }
+            // Check if item is below the current view
+            else if item_y + item_height > view.tl.y + view.h {
+                // Scroll down to make the item visible at the bottom
+                let scroll_amount = (item_y + item_height) - (view.tl.y + view.h);
+                for _ in 0..scroll_amount {
+                    c.scroll_down(self);
+                }
+            }
+        }
     }
 }
 
@@ -282,8 +324,33 @@ where
         Ok(())
     }
 
-    fn render(&mut self, _c: &dyn Context, rndr: &mut Render) -> Result<()> {
+    fn render(&mut self, c: &dyn Context, rndr: &mut Render) -> Result<()> {
+        // First, clear the background
         rndr.fill("", self.vp().canvas().rect(), ' ')?;
+
+        // Get our view rectangle and position
+        let view = self.vp().view();
+        let list_pos = self.vp().position();
+
+        // Render each item that intersects with our view
+        for item in &mut self.items {
+            let item_pos = item.vp().position();
+            let item_canvas = item.vp().canvas();
+
+            // Calculate item's position relative to our canvas
+            let item_y = item_pos.y.saturating_sub(list_pos.y);
+            let item_rect = Rect::new(0, item_y, item_canvas.w, item_canvas.h);
+
+            // Check if this item intersects with our view
+            if item_rect.vextent().intersection(&view.vextent()).is_some() {
+                // The item is at least partially visible, so render it
+                item.render(c, rndr)?;
+            } else if item_y > view.tl.y + view.h {
+                // We've passed all visible items, stop rendering
+                break;
+            }
+        }
+
         Ok(())
     }
 }
@@ -692,4 +759,5 @@ mod tests {
         // The exact behavior depends on how scrolling works in the framework
         assert!(bt.contains_text("item"));
     }
+    
 }

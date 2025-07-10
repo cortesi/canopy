@@ -306,4 +306,52 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_view_follows_selection() -> Result<()> {
+        // Create a small harness that can only show a few items
+        let mut harness = Harness::builder(ListGym::new())
+            .size(40, 10) // Small height to force scrolling
+            .build()?;
+
+        // Load commands
+        ListGym::load(&mut harness.canopy);
+
+        // Initial render
+        harness.render()?;
+
+        // Get the initial view position of the list
+        let initial_view = harness.root.content.child.vp().view();
+        println!("Initial view: {initial_view:?}");
+
+        // Move selection down past what's visible
+        // The list has 10 items (0-9), and with a height of 10 minus frame and status bar,
+        // only a few items are visible at once
+        for i in 0..8 {
+            harness.script("list::select_next()")?;
+            let selected = harness.root.content.child.selected.unwrap();
+            println!("After select_next {i}: selected = {selected}");
+        }
+
+        // The selected item should now be 8
+        assert_eq!(harness.root.content.child.selected, Some(8));
+
+        // Get the current view position
+        let current_view = harness.root.content.child.vp().view();
+        println!("Current view after navigation: {current_view:?}");
+
+        // The view should have scrolled down to keep the selected item visible
+        // If the view hasn't moved, this test should fail
+        assert!(
+            current_view.tl.y > initial_view.tl.y,
+            "View should have scrolled down to follow selection. Initial y: {}, Current y: {}",
+            initial_view.tl.y,
+            current_view.tl.y
+        );
+
+        // The test demonstrates that the view should follow the selection,
+        // but currently it doesn't, so this assertion should fail
+
+        Ok(())
+    }
 }
