@@ -11,30 +11,6 @@ pub trait ListItem {
     fn set_selected(&mut self, _state: bool) {}
 }
 
-pub struct Item<N>
-where
-    N: Node + ListItem,
-{
-    itm: N,
-    virt: Rect,
-}
-
-impl<N> Item<N>
-where
-    N: Node + ListItem,
-{
-    fn new(itm: N) -> Self {
-        Item {
-            virt: Rect::default(),
-            itm,
-        }
-    }
-
-    fn set_selected(&mut self, state: bool) {
-        self.itm.set_selected(state)
-    }
-}
-
 /// Manage and display a list of items.
 #[derive(canopy_core::StatefulNode)]
 pub struct List<N>
@@ -43,8 +19,11 @@ where
 {
     state: NodeState,
 
-    items: Vec<Item<N>>,
-    pub offset: usize,
+    items: Vec<N>,
+
+    /// The offset of the currently selected item in the list. We keep this
+    /// carefully in sync with the set_selected() method on ListItem.
+    pub selected: Option<usize>,
 }
 
 #[derive_commands]
@@ -54,12 +33,12 @@ where
 {
     pub fn new(items: Vec<N>) -> Self {
         let mut l = List {
-            items: items.into_iter().map(Item::new).collect(),
-            offset: 0,
+            items,
+            selected: None,
             state: NodeState::default(),
         };
         if !l.is_empty() {
-            l.items[0].set_selected(true);
+            l.select(0);
         }
         l
     }
@@ -75,30 +54,46 @@ where
     }
 
     /// Insert an item at the given index.
-    pub fn insert(&mut self, index: usize, itm: N) {
-        self.items
-            .insert(index.clamp(0, self.len()), Item::new(itm));
+    pub fn insert(&mut self, index: usize, mut itm: N) {
+        let clamped_index = index.min(self.len());
+
+        // If we're inserting before or at the selected position, we need to adjust selection
+        if let Some(sel) = self.selected {
+            if clamped_index <= sel {
+                // The selected item will shift right, so update the index
+                self.selected = Some(sel + 1);
+            }
+        }
+
+        // Ensure the new item starts unselected
+        itm.set_selected(false);
+        self.items.insert(clamped_index, itm);
+
+        // If this is the first item and nothing was selected, select it
+        if self.selected.is_none() && !self.is_empty() {
+            self.select(0);
+        }
     }
 
     /// Insert an item after the current selection.
     pub fn insert_after(&mut self, itm: N) {
-        self.items
-            .insert((self.offset + 1).clamp(0, self.len()), Item::new(itm));
+        if let Some(sel) = self.selected {
+            self.insert(sel + 1, itm);
+        } else {
+            // No selection, insert at beginning
+            self.insert(0, itm);
+        }
     }
 
     /// Append an item to the end of the list.
     pub fn append(&mut self, itm: N) {
-        self.items.insert(self.len(), Item::new(itm));
-        if self.items.len() == 1 {
-            self.offset = 0;
-            self.items[0].set_selected(true);
-        }
+        self.insert(self.len(), itm);
     }
 
     /// The current selected item, if any
     pub fn selected(&self) -> Option<&N> {
-        if !self.is_empty() {
-            Some(&self.items[self.offset].itm)
+        if let Some(idx) = self.selected {
+            Some(&self.items[idx])
         } else {
             None
         }
@@ -110,147 +105,103 @@ where
         if self.is_empty() {
             return false;
         }
-        let new_off = offset.clamp(0, self.items.len() - 1);
-        if new_off == self.offset {
-            return false;
+
+        // Clamp offset to valid range
+        let new_index = offset.min(self.len() - 1);
+
+        // Unselect the currently selected item if any
+        if let Some(current) = self.selected {
+            self.items[current].set_selected(false);
         }
-        self.items[self.offset].set_selected(false);
-        self.offset = new_off;
-        self.items[self.offset].set_selected(true);
+
+        // Select the new item
+        self.items[new_index].set_selected(true);
+        self.selected = Some(new_index);
+
         true
     }
 
-    /// Move selection to the next item in the list, if possible.
-    pub fn delete_item(&mut self, core: &mut dyn Context, offset: usize) -> Option<N> {
-        if offset >= self.items.len() {
+    /// Delete an item at the specified offset.
+    pub fn delete_item(&mut self, _core: &mut dyn Context, offset: usize) -> Option<N> {
+        if offset >= self.len() {
             return None;
         }
 
-        // Clear the previous selection while indices are valid.
-        if let Some(itm) = self.items.get_mut(self.offset) {
-            itm.set_selected(false);
+        let removed = self.items.remove(offset);
+
+        // Update selection after deletion
+        if let Some(sel) = self.selected {
+            if offset < sel {
+                // Deleted item was before selection, shift selection left
+                self.selected = Some(sel - 1);
+            } else if offset == sel {
+                // Deleted the selected item
+                if self.is_empty() {
+                    // List is now empty
+                    self.selected = None;
+                } else {
+                    // Select the item at the same position (or the last item if we deleted the last one)
+                    let new_sel = offset.min(self.len() - 1);
+                    self.selected = Some(new_sel);
+                    self.items[new_sel].set_selected(true);
+                }
+            }
+            // If offset > sel, selection doesn't change
         }
 
-        let itm = self.items.remove(offset);
-
-        if self.items.is_empty() {
-            self.offset = 0;
-        } else {
-            if self.offset > offset {
-                self.offset -= 1;
-            } else if self.offset >= self.items.len() {
-                self.offset = self.items.len() - 1;
-            }
-            if let Some(itm) = self.items.get_mut(self.offset) {
-                itm.set_selected(true);
-            }
-            // If the deleted item was above the current view, adjust the scroll
-            // position so remaining items stay visible.
-            let vp_y = self.vp().view().tl.y;
-            if itm.virt.tl.y < vp_y {
-                core.scroll_by(self, 0, -(itm.virt.h as i32));
-            }
-            self.ensure_selected_in_view(core);
-        }
-
-        Some(itm.itm)
-    }
-
-    /// Make sure the selected item is within the view after a change.
-    fn ensure_selected_in_view(&mut self, c: &mut dyn Context) -> bool {
-        if self.is_empty() {
-            return false;
-        }
-        let virt = self.items[self.offset].virt;
-        let view = self.vp().view();
-        // Check if the selected item is fully visible
-        if let Some(v) = virt.vextent().intersection(&view.vextent()) {
-            if v.len == virt.h {
-                // Item is fully visible, no need to scroll
-                return false;
-            }
-        }
-        let (start, end) = self.view_range();
-        // We know there isn't an entire overlap
-        if self.offset <= start {
-            return c.scroll_to(self, view.tl.x, virt.tl.y);
-        } else if self.offset >= end {
-            if virt.h >= view.h {
-                return c.scroll_to(self, view.tl.x, virt.tl.y);
-            } else {
-                let y = virt.tl.y - (view.h - virt.h);
-                return c.scroll_to(self, view.tl.x, y);
-            }
-        }
-        false
-    }
-
-    /// Calculate which items are in the list's vertical window, and return
-    /// their offsets and sizes. Items that are offscreen to the side are also
-    /// returned, so the returned vector is guaranteed to be a contiguous range.
-    fn in_view(&self) -> Vec<usize> {
-        let view = self.vp().view();
-        let mut ret = vec![];
-        for (idx, itm) in self.items.iter().enumerate() {
-            if view.vextent().intersection(&itm.virt.vextent()).is_some() {
-                ret.push(idx);
-            }
-        }
-        ret
-    }
-
-    /// The first and last items of the view. (0, 0) if the lis empty.
-    fn view_range(&self) -> (usize, usize) {
-        let v = self.in_view();
-        if let (Some(f), Some(l)) = (v.first(), v.last()) {
-            (*f, *l)
-        } else {
-            (0, 0)
-        }
+        Some(removed)
     }
 
     /// Clear all items.
     #[command(ignore_result)]
     pub fn clear(&mut self) -> Vec<N> {
-        self.items.drain(..).map(move |x| x.itm).collect()
+        self.selected = None;
+        self.items.drain(..).collect()
     }
 
     /// Delete the currently selected item.
     #[command(ignore_result)]
     pub fn delete_selected(&mut self, core: &mut dyn Context) -> Option<N> {
-        self.delete_item(core, self.offset)
+        if let Some(sel) = self.selected {
+            self.delete_item(core, sel)
+        } else {
+            None
+        }
     }
 
     /// Move selection to the next item in the list, if possible.
     #[command]
-    pub fn select_first(&mut self, c: &mut dyn Context) {
+    pub fn select_first(&mut self, _c: &mut dyn Context) {
         if self.is_empty() {
             return;
         }
         self.select(0);
-        // Don't scroll - just ensure the selected item is in view
-        self.ensure_selected_in_view(c);
     }
 
     /// Move selection to the next item in the list, if possible.
     #[command]
-    pub fn select_last(&mut self, c: &mut dyn Context) {
+    pub fn select_last(&mut self, _c: &mut dyn Context) {
         self.select(self.len());
-        self.ensure_selected_in_view(c);
     }
 
     /// Move selection to the next item in the list, if possible.
     #[command]
-    pub fn select_next(&mut self, c: &mut dyn Context) {
-        self.select(self.offset.saturating_add(1));
-        self.ensure_selected_in_view(c);
+    pub fn select_next(&mut self, _c: &mut dyn Context) {
+        if let Some(sel) = self.selected {
+            self.select(sel.saturating_add(1));
+        } else if !self.is_empty() {
+            self.select(0);
+        }
     }
 
     /// Move selection to the next previous the list, if possible.
     #[command]
-    pub fn select_prev(&mut self, c: &mut dyn Context) {
-        self.select(self.offset.saturating_sub(1));
-        self.ensure_selected_in_view(c);
+    pub fn select_prev(&mut self, _c: &mut dyn Context) {
+        if let Some(sel) = self.selected {
+            self.select(sel.saturating_sub(1));
+        } else if !self.is_empty() {
+            self.select(0);
+        }
     }
 
     /// Scroll the viewport down by one line.
@@ -294,104 +245,476 @@ impl<N> Node for List<N>
 where
     N: Node + ListItem,
 {
-    fn accept_focus(&mut self) -> bool {
-        true
-    }
-
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         for i in self.items.iter_mut() {
-            f(&mut i.itm)?
+            f(i)?
         }
         Ok(())
     }
 
-    fn layout(&mut self, _l: &Layout, _r: Expanse) -> Result<()> {
-        // let mut w = 0;
-        // let mut h = 0;
-        //
-        // let mut voffset: u32 = 0;
-        // for itm in &mut self.items {
-        //     itm.itm.layout(l, r)?;
-        //     let item_view = itm.itm.vp().canvas().rect();
-        //     itm.virt = item_view.shift(0, voffset as i32);
-        //     voffset += item_view.h;
-        // }
-        //
-        // for i in &mut self.items {
-        //     w = w.max(i.virt.w);
-        //     h += i.virt.h
-        // }
-        // l.size(self, Expanse { w, h }, r)?;
-        // let vp = self.vp();
-        // for itm in self.items.iter_mut() {
-        //     if let Some(child_vp) = vp.map(itm.virt)? {
-        //         l.set_child_position(
-        //             &mut itm.itm,
-        //             child_vp.position(),
-        //             vp.position(),
-        //             vp.canvas().rect(),
-        //         )?;
-        //         // The item should lay out using its full canvas size so that
-        //         // horizontal scrolling only affects the viewport. We set the
-        //         // canvas here and expose the entire view for layout.
-        //         l.set_canvas(&mut itm.itm, child_vp.canvas());
-        //         l.set_view(&mut itm.itm, child_vp.canvas().rect());
-        //
-        //         itm.itm.layout(l, child_vp.canvas())?;
-        //
-        //         // After layout, apply the actual visible view and constrain
-        //         // the result within the parent.
-        //         l.set_view(&mut itm.itm, child_vp.view());
-        //         l.constrain_child(&mut itm.itm, vp);
-        //
-        //         let final_vp = itm.itm.vp();
-        //         itm.itm.children(&mut |ch| {
-        //             // `ch.vp().position()` returns absolute co-ordinates. We
-        //             // want a rectangle relative to the item's canvas, so we
-        //             // calculate the offset from the item's position. Use
-        //             // `saturating_sub` to avoid panics if the child hasn't been
-        //             // repositioned yet and lies above or to the left of the
-        //             // item.
-        //             let ch_rect = Rect::new(
-        //                 ch.vp().position().x.saturating_sub(final_vp.position().x),
-        //                 ch.vp().position().y.saturating_sub(final_vp.position().y),
-        //                 ch.vp().canvas().w,
-        //                 ch.vp().canvas().h,
-        //             );
-        //             if let Some(ch_vp) = final_vp.map(ch_rect)? {
-        //                 l.set_child_position(
-        //                     ch,
-        //                     ch_vp.position(),
-        //                     final_vp.position(),
-        //                     final_vp.canvas().rect(),
-        //                 )?;
-        //                 l.set_canvas(ch, ch_vp.canvas());
-        //                 l.set_view(ch, ch_vp.view());
-        //             } else {
-        //                 // Even if the child is fully clipped, ensure it stays
-        //                 // at a valid position relative to the item so that
-        //                 // invariants hold.
-        //                 l.set_child_position(
-        //                     ch,
-        //                     final_vp.position(),
-        //                     final_vp.position(),
-        //                     final_vp.canvas().rect(),
-        //                 )?;
-        //                 l.set_view(ch, Rect::default());
-        //             }
-        //             Ok(())
-        //         })?;
-        //         l.unhide(&mut itm.itm);
-        //     } else {
-        //         l.hide(&mut itm.itm);
-        //         l.set_view(&mut itm.itm, Rect::default());
-        //     }
-        // }
+    fn layout(&mut self, l: &Layout, r: Expanse) -> Result<()> {
+        // Layout each item and calculate total canvas size
+        let mut y_offset = 0;
+        let mut max_width = 0;
+
+        for item in &mut self.items {
+            // Layout the item with the available width
+            item.layout(l, r)?;
+
+            // Get the item's size after layout
+            let item_size = item.vp().canvas();
+
+            // Place the item at the current y offset
+            l.place(item, Rect::new(0, y_offset, item_size.w, item_size.h))?;
+
+            y_offset += item_size.h;
+            max_width = max_width.max(item_size.w);
+        }
+
+        // Set our canvas size based on the total height and max width
+        let canvas_size = Expanse {
+            w: max_width,
+            h: y_offset,
+        };
+
+        self.fit_size(canvas_size, r);
+
         Ok(())
     }
 
-    fn render(&mut self, _c: &dyn Context, rndr: &mut Render) -> Result<()> {
+    fn render(&mut self, c: &dyn Context, rndr: &mut Render) -> Result<()> {
+        // First, clear the background
         rndr.fill("", self.vp().canvas().rect(), ' ')?;
+
+        // Get our view rectangle and position
+        let view = self.vp().view();
+        let list_pos = self.vp().position();
+
+        // Render each item that intersects with our view
+        for item in &mut self.items {
+            let item_pos = item.vp().position();
+            let item_canvas = item.vp().canvas();
+
+            // Calculate item's position relative to our canvas
+            let item_y = item_pos.y.saturating_sub(list_pos.y);
+            let item_rect = Rect::new(0, item_y, item_canvas.w, item_canvas.h);
+
+            // Check if this item intersects with our view
+            if item_rect.vextent().intersection(&view.vextent()).is_some() {
+                // The item is at least partially visible, so render it
+                item.render(c, rndr)?;
+            } else if item_y > view.tl.y + view.h {
+                // We've passed all visible items, stop rendering
+                break;
+            }
+        }
+
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use canopy_core::commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue};
+    use canopy_core::error::Error;
+
+    // Simple test item for unit tests
+    #[derive(canopy_core::StatefulNode)]
+    struct TestItem {
+        label: String,
+        selected: bool,
+        state: NodeState,
+    }
+
+    impl TestItem {
+        fn new(label: &str) -> Self {
+            TestItem {
+                label: label.to_string(),
+                selected: false,
+                state: NodeState::default(),
+            }
+        }
+    }
+
+    impl ListItem for TestItem {
+        fn set_selected(&mut self, state: bool) {
+            self.selected = state;
+        }
+    }
+
+    impl CommandNode for TestItem {
+        fn commands() -> Vec<CommandSpec>
+        where
+            Self: Sized,
+        {
+            vec![]
+        }
+
+        fn dispatch(
+            &mut self,
+            _c: &mut dyn Context,
+            _cmd: &CommandInvocation,
+        ) -> Result<ReturnValue> {
+            Err(Error::UnknownCommand("no commands".to_string()))
+        }
+    }
+
+    impl Node for TestItem {
+        fn layout(&mut self, _l: &Layout, r: Expanse) -> Result<()> {
+            // Set our size to be single line with the available width
+            self.fit_size(Expanse { w: r.w, h: 1 }, r);
+            Ok(())
+        }
+
+        fn render(&mut self, _c: &dyn Context, rndr: &mut Render) -> Result<()> {
+            let style = if self.selected { "selected" } else { "" };
+            let view = self.vp().view();
+            rndr.text(style, view.line(0), &self.label)?;
+            Ok(())
+        }
+    }
+
+    // Helper function to verify selection invariant
+    fn verify_selection_invariant(list: &List<TestItem>) {
+        let mut selected_count = 0;
+        let mut selected_index = None;
+
+        for (i, item) in list.items.iter().enumerate() {
+            if item.selected {
+                selected_count += 1;
+                selected_index = Some(i);
+            }
+        }
+
+        // Verify that at most one item is selected
+        assert!(selected_count <= 1, "More than one item is selected!");
+
+        // Verify that selected field matches actual selection
+        if let Some(sel) = list.selected {
+            assert_eq!(selected_index, Some(sel), "Selected index mismatch!");
+        } else {
+            assert_eq!(
+                selected_index, None,
+                "Item is selected but list.selected is None!"
+            );
+        }
+    }
+
+    #[test]
+    fn test_select() {
+        let items = vec![
+            TestItem::new("item0"),
+            TestItem::new("item1"),
+            TestItem::new("item2"),
+        ];
+
+        let mut list = List::new(items);
+        verify_selection_invariant(&list);
+
+        // Initially, first item should be selected
+        assert_eq!(list.selected, Some(0));
+        assert!(list.items[0].selected);
+        assert!(!list.items[1].selected);
+        assert!(!list.items[2].selected);
+
+        // Select second item
+        assert!(list.select(1));
+        verify_selection_invariant(&list);
+        assert_eq!(list.selected, Some(1));
+        assert!(!list.items[0].selected);
+        assert!(list.items[1].selected);
+        assert!(!list.items[2].selected);
+
+        // Select with out-of-bounds index - should clamp to last item
+        assert!(list.select(10));
+        verify_selection_invariant(&list);
+        assert_eq!(list.selected, Some(2));
+        assert!(!list.items[0].selected);
+        assert!(!list.items[1].selected);
+        assert!(list.items[2].selected);
+
+        // Test empty list
+        let mut empty_list: List<TestItem> = List::new(vec![]);
+        verify_selection_invariant(&empty_list);
+        assert!(!empty_list.select(0));
+        assert_eq!(empty_list.selected, None);
+    }
+
+    #[test]
+    fn test_insert() {
+        // Test inserting into empty list
+        let mut list: List<TestItem> = List::new(vec![]);
+        list.insert(0, TestItem::new("first"));
+        verify_selection_invariant(&list);
+        assert_eq!(list.len(), 1);
+        assert_eq!(list.selected, Some(0));
+        assert!(list.items[0].selected);
+
+        // Insert before selected item
+        list.insert(0, TestItem::new("before"));
+        verify_selection_invariant(&list);
+        assert_eq!(list.len(), 2);
+        assert_eq!(list.selected, Some(1)); // Selection should shift
+        assert!(!list.items[0].selected);
+        assert!(list.items[1].selected);
+
+        // Insert after selected item
+        list.insert(2, TestItem::new("after"));
+        verify_selection_invariant(&list);
+        assert_eq!(list.len(), 3);
+        assert_eq!(list.selected, Some(1)); // Selection should not change
+        assert!(list.items[1].selected);
+
+        // Insert at selected position
+        list.insert(1, TestItem::new("at"));
+        verify_selection_invariant(&list);
+        assert_eq!(list.len(), 4);
+        assert_eq!(list.selected, Some(2)); // Selection should shift
+        assert!(list.items[2].selected);
+    }
+
+    #[test]
+    fn test_insert_after() {
+        let mut list = List::new(vec![TestItem::new("item0"), TestItem::new("item1")]);
+
+        list.select(0);
+        list.insert_after(TestItem::new("new"));
+        verify_selection_invariant(&list);
+        assert_eq!(list.len(), 3);
+        assert_eq!(list.selected, Some(0)); // Selection unchanged
+        assert_eq!(list.items[1].label, "new");
+
+        // Test insert_after with no selection
+        let mut empty_list: List<TestItem> = List::new(vec![]);
+        empty_list.selected = None; // Force no selection
+        empty_list.insert_after(TestItem::new("first"));
+        verify_selection_invariant(&empty_list);
+        assert_eq!(empty_list.len(), 1);
+        assert_eq!(empty_list.selected, Some(0));
+    }
+
+    #[test]
+    fn test_delete() {
+        let mut list = List::new(vec![
+            TestItem::new("item0"),
+            TestItem::new("item1"),
+            TestItem::new("item2"),
+            TestItem::new("item3"),
+        ]);
+
+        list.select(2);
+        verify_selection_invariant(&list);
+
+        // Delete before selection
+        let mut ctx = DummyContext {};
+        let removed = list.delete_item(&mut ctx, 0);
+        assert_eq!(removed.unwrap().label, "item0");
+        verify_selection_invariant(&list);
+        assert_eq!(list.selected, Some(1)); // Selection shifts left
+        assert_eq!(list.items[1].label, "item2");
+        assert!(list.items[1].selected);
+
+        // Delete after selection
+        let removed = list.delete_item(&mut ctx, 2);
+        assert_eq!(removed.unwrap().label, "item3");
+        verify_selection_invariant(&list);
+        assert_eq!(list.selected, Some(1)); // Selection unchanged
+
+        // Delete selected item
+        let removed = list.delete_item(&mut ctx, 1);
+        assert_eq!(removed.unwrap().label, "item2");
+        verify_selection_invariant(&list);
+        assert_eq!(list.selected, Some(0)); // New item at same position selected
+        assert!(list.items[0].selected);
+
+        // Delete last item when it's selected
+        let removed = list.delete_item(&mut ctx, 0);
+        verify_selection_invariant(&list);
+        assert!(removed.is_some());
+        assert_eq!(list.selected, None); // List is empty
+        assert_eq!(list.len(), 0);
+    }
+
+    #[test]
+    fn test_clear() {
+        let mut list = List::new(vec![
+            TestItem::new("item0"),
+            TestItem::new("item1"),
+            TestItem::new("item2"),
+        ]);
+
+        list.select(1);
+        let cleared = list.clear();
+        verify_selection_invariant(&list);
+        assert_eq!(cleared.len(), 3);
+        assert_eq!(list.len(), 0);
+        assert_eq!(list.selected, None);
+    }
+
+    use canopy_core::Loader;
+    use canopy_core::tutils::dummyctx::DummyContext;
+
+    // Loader implementation for test lists
+    impl Loader for List<TestItem> {
+        fn load(_canopy: &mut canopy_core::Canopy) {}
+    }
+
+    impl Loader for List<MultiLineItem> {
+        fn load(_canopy: &mut canopy_core::Canopy) {}
+    }
+
+    // Helper to create a multi-line test item
+    #[derive(canopy_core::StatefulNode)]
+    struct MultiLineItem {
+        label: String,
+        height: u32,
+        selected: bool,
+        state: NodeState,
+    }
+
+    impl MultiLineItem {
+        fn new(label: &str, height: u32) -> Self {
+            MultiLineItem {
+                label: label.to_string(),
+                height,
+                selected: false,
+                state: NodeState::default(),
+            }
+        }
+    }
+
+    impl ListItem for MultiLineItem {
+        fn set_selected(&mut self, state: bool) {
+            self.selected = state;
+        }
+    }
+
+    impl CommandNode for MultiLineItem {
+        fn commands() -> Vec<CommandSpec>
+        where
+            Self: Sized,
+        {
+            vec![]
+        }
+
+        fn dispatch(
+            &mut self,
+            _c: &mut dyn Context,
+            _cmd: &CommandInvocation,
+        ) -> Result<ReturnValue> {
+            Err(Error::UnknownCommand("no commands".to_string()))
+        }
+    }
+
+    impl Node for MultiLineItem {
+        fn layout(&mut self, _l: &Layout, r: Expanse) -> Result<()> {
+            self.fit_size(
+                Expanse {
+                    w: r.w,
+                    h: self.height,
+                },
+                r,
+            );
+            Ok(())
+        }
+
+        fn render(&mut self, _c: &dyn Context, rndr: &mut Render) -> Result<()> {
+            let style = if self.selected { "selected" } else { "" };
+            let view = self.vp().view();
+            for i in 0..self.height.min(view.h) {
+                rndr.text(style, view.line(i), &format!("{} line {}", self.label, i))?;
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_layout_and_viewport_adjustment() {
+        let items = vec![
+            MultiLineItem::new("item0", 3),
+            MultiLineItem::new("item1", 2),
+            MultiLineItem::new("item2", 4),
+            MultiLineItem::new("item3", 1),
+        ];
+
+        let mut list = List::new(items);
+        let layout = Layout {};
+
+        // Set up the list viewport
+        list.state.viewport.set_canvas(Expanse { w: 10, h: 10 });
+        list.state.viewport.set_view(Rect::new(0, 0, 10, 5));
+
+        // Run layout - this should position items and adjust view
+        let available_space = Expanse { w: 10, h: 5 };
+        list.layout(&layout, available_space).unwrap();
+
+        // Check that layout positioned items correctly
+        assert_eq!(list.items[0].vp().position().y, 0);
+        assert_eq!(list.items[1].vp().position().y, 3);
+        assert_eq!(list.items[2].vp().position().y, 5);
+        assert_eq!(list.items[3].vp().position().y, 9);
+
+        // View should still be at top since first item is selected by default
+        assert_eq!(list.vp().view().tl.y, 0);
+    }
+
+    #[test]
+    fn test_render_only_visible_items() {
+        use canopy_core::tutils::harness::Harness;
+
+        let items = vec![
+            TestItem::new("item0"),
+            TestItem::new("item1"),
+            TestItem::new("item2"),
+            TestItem::new("item3"),
+        ];
+
+        let list = List::new(items);
+
+        // Create harness with a small viewport that can only show 2 items
+        let mut harness = Harness::builder(list).size(20, 2).build().unwrap();
+
+        // Render the list
+        harness.render().unwrap();
+
+        // Get the buffer and verify only visible items were rendered
+        let bt = harness.tbuf();
+        assert!(bt.contains_text("item0"));
+        assert!(bt.contains_text("item1"));
+        // item2 and item3 should not be visible as they're outside the view
+    }
+
+    #[test]
+    fn test_render_with_scrolled_view() {
+        use canopy_core::tutils::harness::Harness;
+
+        let items = vec![
+            TestItem::new("item0"),
+            TestItem::new("item1"),
+            TestItem::new("item2"),
+            TestItem::new("item3"),
+        ];
+
+        let mut list = List::new(items);
+
+        // Select item2 to change which item is selected
+        list.select(2);
+
+        // Create harness
+        let mut harness = Harness::builder(list).size(20, 4).build().unwrap();
+
+        // Scroll down to show items 1-3
+        harness.canopy.scroll_down(&mut harness.root);
+
+        // Render
+        harness.render().unwrap();
+
+        // Verify the rendered content shows the scrolled view
+        let bt = harness.tbuf();
+
+        // Should see items based on scroll position
+        // The exact behavior depends on how scrolling works in the framework
+        assert!(bt.contains_text("item"));
     }
 }

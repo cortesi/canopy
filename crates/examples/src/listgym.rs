@@ -116,7 +116,7 @@ impl ListGym {
     #[command]
     /// Add an item after the current focus
     pub fn add_item(&mut self, _c: &dyn Context) {
-        let index = self.content.child.offset + 1;
+        let index = self.content.child.selected.unwrap_or(0) + 1;
         self.content.child.insert_after(Block::new(index));
     }
 
@@ -289,20 +289,20 @@ mod tests {
         let mut harness = create_test_harness()?;
         harness.render()?;
 
-        // Get initial offset
-        let initial_offset = harness.root.content.child.offset;
+        // Get initial selected
+        let initial_selected = harness.root.content.child.selected;
 
         // Navigate using list commands (these are loaded by the List type)
         harness.script("list::select_last()")?;
 
-        // Verify offset changed
-        assert!(harness.root.content.child.offset > initial_offset);
+        // Verify selected changed
+        assert!(harness.root.content.child.selected > initial_selected);
 
         // Navigate back to first
         harness.script("list::select_first()")?;
 
         // Verify we're back at the start
-        assert_eq!(harness.root.content.child.offset, 0);
+        assert_eq!(harness.root.content.child.selected, Some(0));
 
         Ok(())
     }
