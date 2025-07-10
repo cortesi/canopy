@@ -417,10 +417,12 @@ impl Canopy {
 
     /// Is this node render tainted?
     fn is_tainted(&self, n: &dyn Node) -> bool {
-        let s = n.state();
-        // Tainting if render_gen is 0 lets us initialize a nodestate
-        // without knowing about the app state
-        self.render_gen == s.render_gen || s.render_gen == 0
+        true
+
+        // let s = n.state();
+        // // Tainting if render_gen is 0 lets us initialize a nodestate
+        // // without knowing about the app state
+        // self.render_gen == s.render_gen || s.render_gen == 0
     }
 
     /// Has the focus changed since the last render sweep?
