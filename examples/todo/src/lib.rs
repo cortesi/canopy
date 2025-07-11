@@ -102,7 +102,6 @@ impl Todo {
         let mut adder = frame::Frame::new(Input::new(""));
         c.set_focus(&mut adder.child);
         self.adder = Some(adder);
-        c.taint(self);
         Ok(())
     }
 
@@ -112,7 +111,6 @@ impl Todo {
         if let Some(t) = lst.selected() {
             store::get().delete_todo(t.todo.id).unwrap();
             lst.delete_selected(c);
-            c.taint_tree(self);
         }
         Ok(())
     }
@@ -129,7 +127,6 @@ impl Todo {
                 self.content.child.select(new_index);
             }
         }
-        c.taint_tree(self);
         c.set_focus(&mut self.content);
         Ok(())
     }
@@ -137,7 +134,6 @@ impl Todo {
     #[command]
     pub fn cancel_add(&mut self, c: &mut dyn Context) -> canopy::Result<()> {
         self.adder = None;
-        c.taint_tree(self);
         c.focus_first(self);
         Ok(())
     }

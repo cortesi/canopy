@@ -101,7 +101,6 @@ where
     pub fn hide_inspector(&mut self, c: &mut dyn Context) -> Result<()> {
         self.inspector_active = false;
         self.inspector.hide();
-        c.taint_tree(self);
         c.focus_first(&mut self.app);
         Ok(())
     }
@@ -111,7 +110,6 @@ where
     pub fn activate_inspector(&mut self, c: &mut dyn Context) -> Result<()> {
         self.inspector_active = true;
         self.inspector.unhide();
-        c.taint_tree(self);
         c.focus_first(&mut self.inspector);
         Ok(())
     }

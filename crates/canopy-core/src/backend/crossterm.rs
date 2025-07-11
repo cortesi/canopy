@@ -470,16 +470,13 @@ where
         }
 
         cnpy.event(&mut root, event)?;
-        if cnpy.taint || cnpy.focus_changed() {
-            if let Err(e) = cnpy.render(&mut be, &mut root) {
-                return Err(handle_render_error(
-                    e,
-                    &mut root,
-                    Some(cnpy.current_focus_gen()),
-                ));
-            }
-            translate_result(be.flush())?;
-            cnpy.taint = false;
+        if let Err(e) = cnpy.render(&mut be, &mut root) {
+            return Err(handle_render_error(
+                e,
+                &mut root,
+                Some(cnpy.current_focus_gen()),
+            ));
         }
+        translate_result(be.flush())?;
     }
 }

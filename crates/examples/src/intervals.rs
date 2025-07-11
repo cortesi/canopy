@@ -46,9 +46,8 @@ impl ListItem for IntervalItem {
 }
 
 impl Node for IntervalItem {
-    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
+    fn poll(&mut self, _c: &mut dyn Context) -> Option<Duration> {
         self.inc();
-        c.taint(self);
         Some(Duration::from_secs(1))
     }
 
@@ -113,10 +112,9 @@ impl Intervals {
     }
 
     #[command]
-    pub fn add_item(&mut self, c: &mut dyn Context) {
+    pub fn add_item(&mut self, _c: &mut dyn Context) {
         let lst = &mut self.content.child;
         lst.append(IntervalItem::new());
-        c.taint(self);
     }
 }
 

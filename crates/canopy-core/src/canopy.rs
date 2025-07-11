@@ -30,17 +30,9 @@ pub struct Canopy {
     /// changed.
     last_render_focus_gen: u64,
 
-    /// A counter that is incremented every time we render. All items that
-    /// require rendering during the current sweep will have a state `render_gen`
-    /// equal to this.
-    render_gen: u64,
-
     /// The poller is responsible for tracking nodes that have pending poll
     /// events, and scheduling their execution.
     poller: Poller,
-
-    /// Has the tree been tainted? Resets to false before every event sweep.
-    pub(crate) taint: bool,
 
     /// Root window size
     pub(crate) root_size: Option<Expanse>,
@@ -59,31 +51,9 @@ pub struct Canopy {
 }
 
 impl Context for Canopy {
-    /// Does the node need to render in the next sweep? This checks if the node
-    /// is currently hidden, and if not, signals that we should render if:
-    ///
-    /// - the node is tainted
-    /// - its focus status has changed
-    /// - it is forcing a render
+    /// Does the node need to render in the next sweep? Returns true for all visible nodes.
     fn needs_render(&self, n: &dyn Node) -> bool {
-        !n.is_hidden() && (n.force_render(self) || self.is_tainted(n) || self.node_focus_changed(n))
-    }
-
-    /// Taint a node for render.
-    fn taint(&mut self, n: &mut dyn Node) {
-        let r = n.state_mut();
-        r.render_gen = self.render_gen;
-        self.taint = true;
-    }
-
-    /// Mark a tree of nodes for render.
-    fn taint_tree(&mut self, e: &mut dyn Node) {
-        postorder(e, &mut |x| -> Result<Walk<()>> {
-            self.taint(x);
-            Ok(Walk::Continue)
-        })
-        // Unwrap is safe, because no operations in the closure can fail.
-        .unwrap();
+        !n.is_hidden()
     }
 
     /// Is the specified node on the focus path? A node is on the focus path if it
@@ -270,8 +240,6 @@ impl Canopy {
         Canopy {
             focus_gen: 1,
             last_render_focus_gen: 1,
-            render_gen: 1,
-            taint: false,
             poller: Poller::new(tx.clone()),
             event_tx: tx,
             event_rx: Some(rx),
@@ -389,19 +357,6 @@ impl Canopy {
         writeln!(w, "{table}").map_err(|x| error::Error::Internal(x.to_string()))
     }
 
-    /// Has the focus status of this node changed since the last render
-    /// sweep?
-    fn node_focus_changed(&self, n: &dyn Node) -> bool {
-        if self.focus_changed() {
-            let s = n.state();
-            // Our focus has changed if we're the currently focused node, or
-            // if we were previously focused during the last sweep.
-            s.focus_gen == self.focus_gen || s.focus_gen == self.last_render_focus_gen
-        } else {
-            false
-        }
-    }
-
     /// Has the focus path status of this node changed since the last render
     /// sweep?
     pub fn node_focus_path_changed(&self, n: &dyn Node) -> bool {
@@ -413,16 +368,6 @@ impl Canopy {
         } else {
             false
         }
-    }
-
-    /// Is this node render tainted?
-    fn is_tainted(&self, n: &dyn Node) -> bool {
-        true
-
-        // let s = n.state();
-        // // Tainting if render_gen is 0 lets us initialize a nodestate
-        // // without knowing about the app state
-        // self.render_gen == s.render_gen || s.render_gen == 0
     }
 
     /// Has the focus changed since the last render sweep?
@@ -547,11 +492,7 @@ impl Canopy {
                 })?;
             }
 
-            // This is a new node - we don't want it perpetually stuck in
-            // render, so we need to update its render_gen.
-            if n.state().render_gen == 0 {
-                n.state_mut().render_gen = self.render_gen;
-            }
+            // No longer needed since we don't track render_gen
 
             // Only pop if we pushed
             if pushed_viewport {
@@ -585,8 +526,7 @@ impl Canopy {
         Ok(())
     }
 
-    /// Render a tree of nodes. If force is true, all visible nodes are
-    /// rendered, otherwise we check the taint state. Hidden nodes and their
+    /// Render a tree of nodes. All visible nodes are rendered. Hidden nodes and their
     /// children are ignored.
     pub(crate) fn render<R: RenderBackend>(
         &mut self,
@@ -635,7 +575,6 @@ impl Canopy {
                 self.termbuf = Some(next);
             }
 
-            self.render_gen += 1;
             self.last_render_focus_gen = self.focus_gen;
             self.post_render(be, &mut styl, root)?;
         }
@@ -696,7 +635,6 @@ impl Canopy {
                 match hdl {
                     EventOutcome::Handle => {
                         handled = true;
-                        self.taint_tree(x);
                     }
                     EventOutcome::Consume => {
                         handled = true;
@@ -737,10 +675,7 @@ impl Canopy {
                     Walk::Handle(Some((s, x.id())))
                 } else {
                     match x.handle_key(self, k)? {
-                        EventOutcome::Handle => {
-                            self.taint_tree(x);
-                            Walk::Handle(None)
-                        }
+                        EventOutcome::Handle => Walk::Handle(None),
                         EventOutcome::Consume => Walk::Handle(None),
                         _ => {
                             path.pop();
@@ -764,7 +699,6 @@ impl Canopy {
                 if let Some(d) = x.poll(self) {
                     self.poller.schedule(x.id(), d);
                 }
-                self.taint_tree(x);
             };
             Ok(Walk::Continue)
         })?;
@@ -792,10 +726,9 @@ impl Canopy {
         Ok(())
     }
 
-    /// Set the size on the root node, and taint the tree.
+    /// Set the size on the root node.
     pub(crate) fn set_root_size(&mut self, size: Expanse, root: &mut dyn Node) -> Result<()> {
         self.root_size = Some(size);
-        self.taint_tree(root);
         // Apply layout immediately so viewport reflects the new size
         let l = Layout {};
         root.layout(&l, size)?;
@@ -1085,14 +1018,12 @@ mod tests {
             tr.render(c, &mut root)?;
             assert!(!tr.buf_empty());
 
+            // The TestRender backend clears its buffer on reset(), so when nothing
+            // actually changes in the output, the buffer will be empty after render
             tr.render(c, &mut root)?;
             assert!(tr.buf_empty());
-
-            c.taint(&mut root.a);
             tr.render(c, &mut root)?;
-            c.taint(&mut root.a.b);
             tr.render(c, &mut root)?;
-            c.taint_tree(&mut root.a);
             tr.render(c, &mut root)?;
 
             tr.render(c, &mut root)?;
@@ -1281,14 +1212,11 @@ mod tests {
         canopy.render(&mut tr, &mut root)?;
         assert!(!tr.buf_empty());
         tr.text.lock().unwrap().text.clear();
-        canopy.taint = false;
 
         canopy.key(&mut root, 'a')?;
-        assert!(!canopy.taint);
-        if canopy.taint || canopy.focus_changed() {
-            canopy.render(&mut tr, &mut root)?;
-            canopy.taint = false;
-        }
+        // If the key event was consumed and didn't actually change anything visible,
+        // the test buffer will be empty after render since reset() clears it
+        canopy.render(&mut tr, &mut root)?;
         assert!(tr.buf_empty());
         Ok(())
     }

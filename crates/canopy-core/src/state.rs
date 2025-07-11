@@ -96,10 +96,6 @@ pub struct NodeState {
     // Unique node ID
     pub id: u64,
 
-    /// If this is equal to the global render_gen, we render during the current
-    /// sweep.
-    pub render_gen: u64,
-
     /// This node's focus generation. We increment the global focus counter when
     /// focus changes, invalidating the current focus generation without having
     /// to update all node states.
@@ -111,11 +107,6 @@ pub struct NodeState {
 
     // The last render sweep during which this node held focus.
     pub rendered_focus_gen: u64,
-
-    /// Set to the `render_gen` during the pre-render sweep if focus has
-    /// changed, and this node was either on the old focus path, or is on the
-    /// new focus path.
-    pub focus_path_render_gen: u64,
 
     /// The view for this node. The inner rectangle always has the same size as
     /// the screen_area.
@@ -136,10 +127,8 @@ impl Default for NodeState {
         let id = CURRENT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         NodeState {
             id,
-            render_gen: 0,
             focus_gen: 0,
             focus_path_gen: 0,
-            focus_path_render_gen: 0,
             rendered_focus_gen: 0,
             hidden: false,
             viewport: ViewPort::default(),

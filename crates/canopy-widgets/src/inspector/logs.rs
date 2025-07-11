@@ -97,7 +97,7 @@ pub struct Logs {
 }
 
 impl Node for Logs {
-    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
+    fn poll(&mut self, _c: &mut dyn Context) -> Option<Duration> {
         if !self.started {
             // Configure a custom event formatter
             let format = fmt::format()
@@ -117,9 +117,7 @@ impl Node for Logs {
         {
             let buf = self.buf.clone();
             let mut b = buf.lock().unwrap();
-            if !b.is_empty() {
-                c.taint_tree(self);
-            }
+            b.is_empty();
             let vals = b.drain(0..);
             for i in vals {
                 self.list.append(LogItem::new(&i));

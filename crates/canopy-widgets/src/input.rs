@@ -132,26 +132,20 @@ impl Input {
 
     /// Move the cursor left.
     #[command]
-    fn left(&mut self, c: &mut dyn Context) {
-        if self.textbuf.left() {
-            c.taint(self);
-        }
+    fn left(&mut self, _c: &mut dyn Context) {
+        if self.textbuf.left() {}
     }
 
     /// Move the cursor right.
     #[command]
-    fn right(&mut self, c: &mut dyn Context) {
-        if self.textbuf.right() {
-            c.taint(self);
-        }
+    fn right(&mut self, _c: &mut dyn Context) {
+        if self.textbuf.right() {}
     }
 
     /// Delete a character at the input location.
     #[command]
-    fn backspace(&mut self, c: &mut dyn Context) {
-        if self.textbuf.backspace() {
-            c.taint(self);
-        }
+    fn backspace(&mut self, _c: &mut dyn Context) {
+        if self.textbuf.backspace() {}
     }
 }
 

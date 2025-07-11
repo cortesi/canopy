@@ -2,8 +2,7 @@ use crate::{Direction, Node, Result, path::Path};
 
 /// The API exposed to nodes by Canopy.
 pub trait Context {
-    /// Does the node need to render in the next sweep? This checks if the node is currently hidden, and if not, signals
-    /// that we should render if the node is tainted, its focus status has changed, or if it is forcing a render.
+    /// Does the node need to render in the next sweep? Returns true for all visible nodes.
     fn needs_render(&self, n: &dyn Node) -> bool;
 
     /// Is the specified node on the focus path? A node is on the focus path if it
@@ -46,108 +45,70 @@ pub trait Context {
     fn focus_dir(&mut self, root: &mut dyn Node, dir: Direction);
 
     /// Scroll the view to the specified position. The view is clamped within
-    /// the outer rectangle. Returns `true` if movement occurred and taints the
-    /// subtree on change.
+    /// the outer rectangle. Returns `true` if movement occurred.
     fn scroll_to(&mut self, n: &mut dyn Node, x: u32, y: u32) -> bool {
         let before = n.vp().view();
         n.scroll_to(x, y);
-        let changed = before != n.vp().view();
-        if changed {
-            self.taint_tree(n);
-        }
-        changed
+
+        before != n.vp().view()
     }
 
     /// Scroll the view by the given offsets. The view rectangle is clamped
-    /// within the outer rectangle. Returns `true` if movement occurred and
-    /// taints the subtree on change.
+    /// within the outer rectangle. Returns `true` if movement occurred.
     fn scroll_by(&mut self, n: &mut dyn Node, x: i32, y: i32) -> bool {
         let before = n.vp().view();
         n.scroll_by(x, y);
-        let changed = before != n.vp().view();
-        if changed {
-            self.taint_tree(n);
-        }
-        changed
+
+        before != n.vp().view()
     }
 
-    /// Scroll the view up by one page. Returns `true` if movement occurred and
-    /// taints the subtree on change.
+    /// Scroll the view up by one page. Returns `true` if movement occurred.
     fn page_up(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
         n.page_up();
-        let changed = before != n.vp().view();
-        if changed {
-            self.taint_tree(n);
-        }
-        changed
+
+        before != n.vp().view()
     }
 
-    /// Scroll the view down by one page. Returns `true` if movement occurred
-    /// and taints the subtree on change.
+    /// Scroll the view down by one page. Returns `true` if movement occurred.
     fn page_down(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
         n.page_down();
-        let changed = before != n.vp().view();
-        if changed {
-            self.taint_tree(n);
-        }
-        changed
+
+        before != n.vp().view()
     }
 
-    /// Scroll the view up by one line. Returns `true` if movement occurred and
-    /// taints the subtree on change.
+    /// Scroll the view up by one line. Returns `true` if movement occurred.
     fn scroll_up(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
         n.scroll_up();
-        let changed = before != n.vp().view();
-        if changed {
-            self.taint_tree(n);
-        }
-        changed
+
+        before != n.vp().view()
     }
 
-    /// Scroll the view down by one line. Returns `true` if movement occurred
-    /// and taints the subtree on change.
+    /// Scroll the view down by one line. Returns `true` if movement occurred.
     fn scroll_down(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
         n.scroll_down();
-        let changed = before != n.vp().view();
-        if changed {
-            self.taint_tree(n);
-        }
-        changed
+
+        before != n.vp().view()
     }
 
-    /// Scroll the view left by one line. Returns `true` if movement occurred
-    /// and taints the subtree on change.
+    /// Scroll the view left by one line. Returns `true` if movement occurred.
     fn scroll_left(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
         n.scroll_left();
-        let changed = before != n.vp().view();
-        if changed {
-            self.taint_tree(n);
-        }
-        changed
+
+        before != n.vp().view()
     }
 
-    /// Scroll the view right by one line. Returns `true` if movement occurred
-    /// and taints the subtree on change.
+    /// Scroll the view right by one line. Returns `true` if movement occurred.
     fn scroll_right(&mut self, n: &mut dyn Node) -> bool {
         let before = n.vp().view();
         n.scroll_right();
-        let changed = before != n.vp().view();
-        if changed {
-            self.taint_tree(n);
-        }
-        changed
+
+        before != n.vp().view()
     }
-
-    /// Taint a node to signal that it should be re-rendered.
-    fn taint(&mut self, n: &mut dyn Node);
-
-    /// Taint the entire subtree under a node.
-    fn taint_tree(&mut self, e: &mut dyn Node);
 
     /// Start the backend renderer.
     fn start(&mut self) -> Result<()>;

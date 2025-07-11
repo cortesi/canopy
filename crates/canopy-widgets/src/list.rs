@@ -759,5 +759,4 @@ mod tests {
         // The exact behavior depends on how scrolling works in the framework
         assert!(bt.contains_text("item"));
     }
-    
 }

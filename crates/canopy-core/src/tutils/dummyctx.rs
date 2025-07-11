@@ -19,8 +19,8 @@ impl Context for DummyContext {
     fn focus_prev(&mut self, _root: &mut dyn Node) {}
     fn focus_right(&mut self, _root: &mut dyn Node) {}
     fn focus_up(&mut self, _root: &mut dyn Node) {}
-    fn needs_render(&self, _n: &dyn Node) -> bool {
-        false
+    fn needs_render(&self, n: &dyn Node) -> bool {
+        !n.is_hidden()
     }
     fn set_focus(&mut self, _n: &mut dyn Node) -> bool {
         false
@@ -50,8 +50,6 @@ impl Context for DummyContext {
     fn scroll_right(&mut self, _n: &mut dyn Node) -> bool {
         false
     }
-    fn taint(&mut self, _n: &mut dyn Node) {}
-    fn taint_tree(&mut self, _e: &mut dyn Node) {}
 
     /// Start the backend renderer.
     fn start(&mut self) -> Result<()> {
