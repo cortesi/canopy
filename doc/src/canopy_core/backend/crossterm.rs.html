@@ -470,16 +470,13 @@
 <a href=#470 id=470 data-nosnippet>470</a>        </span>}
 <a href=#471 id=471 data-nosnippet>471</a>
 <a href=#472 id=472 data-nosnippet>472</a>        cnpy.event(<span class="kw-2">&amp;mut </span>root, event)<span class="question-mark">?</span>;
-<a href=#473 id=473 data-nosnippet>473</a>        <span class="kw">if </span>cnpy.taint || cnpy.focus_changed() {
-<a href=#474 id=474 data-nosnippet>474</a>            <span class="kw">if let </span><span class="prelude-val">Err</span>(e) = cnpy.render(<span class="kw-2">&amp;mut </span>be, <span class="kw-2">&amp;mut </span>root) {
-<a href=#475 id=475 data-nosnippet>475</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(handle_render_error(
-<a href=#476 id=476 data-nosnippet>476</a>                    e,
-<a href=#477 id=477 data-nosnippet>477</a>                    <span class="kw-2">&amp;mut </span>root,
-<a href=#478 id=478 data-nosnippet>478</a>                    <span class="prelude-val">Some</span>(cnpy.current_focus_gen()),
-<a href=#479 id=479 data-nosnippet>479</a>                ));
-<a href=#480 id=480 data-nosnippet>480</a>            }
-<a href=#481 id=481 data-nosnippet>481</a>            translate_result(be.flush())<span class="question-mark">?</span>;
-<a href=#482 id=482 data-nosnippet>482</a>            cnpy.taint = <span class="bool-val">false</span>;
-<a href=#483 id=483 data-nosnippet>483</a>        }
-<a href=#484 id=484 data-nosnippet>484</a>    }
-<a href=#485 id=485 data-nosnippet>485</a>}</code></pre></div></section></main></body></html>
+<a href=#473 id=473 data-nosnippet>473</a>        <span class="kw">if let </span><span class="prelude-val">Err</span>(e) = cnpy.render(<span class="kw-2">&amp;mut </span>be, <span class="kw-2">&amp;mut </span>root) {
+<a href=#474 id=474 data-nosnippet>474</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(handle_render_error(
+<a href=#475 id=475 data-nosnippet>475</a>                e,
+<a href=#476 id=476 data-nosnippet>476</a>                <span class="kw-2">&amp;mut </span>root,
+<a href=#477 id=477 data-nosnippet>477</a>                <span class="prelude-val">Some</span>(cnpy.current_focus_gen()),
+<a href=#478 id=478 data-nosnippet>478</a>            ));
+<a href=#479 id=479 data-nosnippet>479</a>        }
+<a href=#480 id=480 data-nosnippet>480</a>        translate_result(be.flush())<span class="question-mark">?</span>;
+<a href=#481 id=481 data-nosnippet>481</a>    }
+<a href=#482 id=482 data-nosnippet>482</a>}</code></pre></div></section></main></body></html>
