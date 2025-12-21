@@ -4,7 +4,8 @@ This document tracks the status of API review findings and recommendations for t
 
 ## Status Summary
 
-- [x] **Gate `testing` utilities behind feature flag** (Renamed from `tutils` to `testing` and gated behind `testing` feature)
+- [x] **Gate `testing` utilities behind feature flag** (Renamed from `tutils` to `testing` and
+  gated behind `testing` feature)
 - [x] **Make `Frame` fields private**
 - [x] **Make `CommandSet.commands` private**
 - [x] **Make `Render.style` private**
@@ -62,9 +63,12 @@ pub struct Render<'a> {
 
 **Location:** `crates/canopy/src/core/commands.rs`
 
-**Problem:** `CommandSpec`, `CommandInvocation`, and `ReturnSpec` expose all fields publicly. This limits future evolution and validation.
+**Problem:** `CommandSpec`, `CommandInvocation`, and `ReturnSpec` expose all fields publicly. This
+limits future evolution and validation.
 
-**Recommendation:** Consider making fields private with builders/accessors for `CommandSpec` (constructed by users). `CommandInvocation` and `ReturnSpec` are often created internally, but also by users for testing/scripting.
+**Recommendation:** Consider making fields private with builders/accessors for `CommandSpec`
+(constructed by users). `CommandInvocation` and `ReturnSpec` are often created internally, but also
+by users for testing/scripting.
 
 ### 4. Duplicate Exports
 
@@ -82,7 +86,8 @@ pub struct Render<'a> {
 - `tutils` (now `testing`) is gated behind `#[cfg(any(test, feature = "testing"))]`.
 
 ### Findings (Warnings)
-- **Allocation-heavy signatures**: `CommandNode::commands() -> Vec<CommandSpec>` forces allocation. *Decision: Keep for now for dynamic commands.*
+- **Allocation-heavy signatures**: `CommandNode::commands() -> Vec<CommandSpec>` forces
+  allocation. *Decision: Keep for now for dynamic commands.*
 - **Name collisions**: `Input` (event) vs `Input` (widget). *deferred*
 
 ### Findings (Suggestions)
