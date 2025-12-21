@@ -1,9 +1,9 @@
 (function() {
-    var implementors = Object.fromEntries([["canopy_core",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/error/trait.Error.html\" title=\"trait core::error::Error\">Error</a> for <a class=\"enum\" href=\"canopy_core/error/enum.Error.html\" title=\"enum canopy_core::error::Error\">Error</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/error/trait.Error.html\" title=\"trait core::error::Error\">Error</a> for <a class=\"struct\" href=\"canopy_core/error/struct.ParseError.html\" title=\"struct canopy_core::error::ParseError\">ParseError</a>"]]],["geom",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/error/trait.Error.html\" title=\"trait core::error::Error\">Error</a> for <a class=\"enum\" href=\"geom/enum.Error.html\" title=\"enum geom::Error\">Error</a>"]]]]);
+    var implementors = Object.fromEntries([["canopy",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/error/trait.Error.html\" title=\"trait core::error::Error\">Error</a> for <a class=\"enum\" href=\"canopy/core/error/enum.Error.html\" title=\"enum canopy::core::error::Error\">Error</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/error/trait.Error.html\" title=\"trait core::error::Error\">Error</a> for <a class=\"enum\" href=\"canopy/geom/enum.Error.html\" title=\"enum canopy::geom::Error\">Error</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/error/trait.Error.html\" title=\"trait core::error::Error\">Error</a> for <a class=\"struct\" href=\"canopy/core/error/struct.ParseError.html\" title=\"struct canopy::core::error::ParseError\">ParseError</a>"]]]]);
     if (window.register_implementors) {
         window.register_implementors(implementors);
     } else {
         window.pending_implementors = implementors;
     }
 })()
-//{"start":57,"fragment_lengths":[556,243]}
+//{"start":57,"fragment_lengths":[800]}

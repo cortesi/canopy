@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["dump","dump_with_focus"]};
