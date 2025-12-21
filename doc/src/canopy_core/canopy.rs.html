@@ -647,7 +647,7 @@
 <a href=#647 id=647 data-nosnippet>647</a>            <span class="kw">let </span>def_style = styl.get(<span class="kw-2">&amp;</span><span class="self">self</span>.style, <span class="string">""</span>);
 <a href=#648 id=648 data-nosnippet>648</a>
 <a href=#649 id=649 data-nosnippet>649</a>            <span class="comment">// Create a new termbuf initialized with spaces and default style
-<a href=#650 id=650 data-nosnippet>650</a>            </span><span class="kw">let </span><span class="kw-2">mut </span>next = TermBuf::empty_with_style(root_size, def_style);
+<a href=#650 id=650 data-nosnippet>650</a>            </span><span class="kw">let </span><span class="kw-2">mut </span>next = TermBuf::new(root_size, <span class="string">' '</span>, def_style);
 <a href=#651 id=651 data-nosnippet>651</a>
 <a href=#652 id=652 data-nosnippet>652</a>            <span class="self">self</span>.pre_render(be, root)<span class="question-mark">?</span>;
 <a href=#653 id=653 data-nosnippet>653</a>
