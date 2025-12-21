@@ -53,7 +53,7 @@ impl Node for TodoItem {
 
     fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
         if self.selected {
-            r.style.push_layer("blue");
+            r.push_layer("blue");
         }
         Ok(())
     }
@@ -69,7 +69,7 @@ impl StatusBar {}
 
 impl Node for StatusBar {
     fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
-        r.style.push_layer("statusbar");
+        r.push_layer("statusbar");
         r.text("statusbar/text", self.vp().view().line(0), "todo")?;
         Ok(())
     }

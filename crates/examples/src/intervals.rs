@@ -45,7 +45,7 @@ impl IntervalItem {
     /// Increment the counter and refresh the display.
     fn inc(&mut self) {
         self.value += 1;
-        self.child = Text::new(&format!("{}", self.value))
+        self.child = Text::new(format!("{}", self.value))
     }
 }
 
@@ -74,7 +74,7 @@ impl Node for IntervalItem {
 
     fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
         if self.selected {
-            r.style.push_layer("blue");
+            r.push_layer("blue");
         }
         Ok(())
     }
@@ -92,7 +92,7 @@ impl StatusBar {}
 
 impl Node for StatusBar {
     fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
-        r.style.push_layer("statusbar");
+        r.push_layer("statusbar");
         r.text("statusbar/text", self.vp().view().line(0), "intervals")?;
         Ok(())
     }

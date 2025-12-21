@@ -172,7 +172,7 @@ where
 #[derive(Debug)]
 pub struct CommandSet {
     /// Command lookup table by full name.
-    pub commands: HashMap<String, CommandSpec>,
+    commands: HashMap<String, CommandSpec>,
 }
 
 impl Default for CommandSet {
@@ -190,10 +190,30 @@ impl CommandSet {
     }
 
     /// Add command specs to the set.
-    pub fn commands(&mut self, cmds: &[CommandSpec]) {
+    pub fn add(&mut self, cmds: &[CommandSpec]) {
         for i in cmds {
             self.commands.insert(i.fullname(), i.clone());
         }
+    }
+
+    /// Get a command by fully qualified name.
+    pub fn get(&self, name: &str) -> Option<&CommandSpec> {
+        self.commands.get(name)
+    }
+
+    /// Iterate over all commands.
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &CommandSpec)> {
+        self.commands.iter()
+    }
+
+    /// Number of commands in the set.
+    pub fn len(&self) -> usize {
+        self.commands.len()
+    }
+
+    /// Whether the set is empty.
+    pub fn is_empty(&self) -> bool {
+        self.commands.is_empty()
     }
 }
 

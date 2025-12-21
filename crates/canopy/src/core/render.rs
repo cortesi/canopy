@@ -24,7 +24,7 @@ pub struct Render<'a> {
     /// The terminal buffer to render to.
     buf: TermBuf,
     /// The style manager used to apply styles.
-    pub style: &'a mut StyleManager,
+    style: &'a mut StyleManager,
     /// The style map used to resolve style names to styles.
     stylemap: &'a StyleMap,
     /// The rectangle within the termbuf that we render to.
@@ -49,6 +49,11 @@ impl<'a> Render<'a> {
             stylemap,
             rect,
         }
+    }
+
+    /// Push a style layer.
+    pub fn push_layer(&mut self, name: &str) {
+        self.style.push_layer(name);
     }
 
     /// Fill a rectangle with a specified character. Writes out of bounds will be clipped.

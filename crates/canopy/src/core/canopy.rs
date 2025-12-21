@@ -446,12 +446,12 @@ impl Canopy {
     pub fn add_commands<T: commands::CommandNode>(&mut self) {
         let cmds = <T>::commands();
         self.script_host.load_commands(&cmds);
-        self.commands.commands(&cmds);
+        self.commands.add(&cmds);
     }
 
     /// Output a formatted table of commands to a writer.
     pub fn print_command_table(&self, w: &mut dyn Write) -> Result<()> {
-        let mut cmds: Vec<&commands::CommandSpec> = self.commands.commands.values().collect();
+        let mut cmds: Vec<&commands::CommandSpec> = self.commands.iter().map(|(_, v)| v).collect();
 
         cmds.sort_by_key(|a| a.fullname());
 

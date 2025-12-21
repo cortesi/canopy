@@ -51,7 +51,7 @@ impl Node for Inspector {
     }
 
     fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
-        r.style.push_layer("inspector");
+        r.push_layer("inspector");
         Ok(())
     }
 
