@@ -647,7 +647,7 @@ impl Canopy {
             let def_style = styl.get(&self.style, "");
 
             // Create a new termbuf initialized with spaces and default style
-            let mut next = TermBuf::empty_with_style(root_size, def_style);
+            let mut next = TermBuf::new(root_size, ' ', def_style);
 
             self.pre_render(be, root)?;
 
