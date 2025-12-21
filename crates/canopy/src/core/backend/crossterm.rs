@@ -334,16 +334,16 @@ fn event_emitter(evt_tx: mpsc::Sender<Event>) {
         loop {
             match cevent::read() {
                 Ok(evt) => {
-                    let ret = evt_tx.send(translate_event(evt));
-                    if ret.is_err() {
-                        // FIXME: Do a bit more work here. Restore context,
-                        // exit.
+                    if evt_tx.send(translate_event(evt)).is_err() {
+                        // The receiver has been dropped, which usually means the application is shutting down.
                         return;
                     }
                 }
-                Err(_) => {
-                    // FIXME: Do a bit more work here. Restore context,
-                    // exit.
+                Err(e) => {
+                    // Log the error and notify the main loop if possible, or exit gracefully.
+                    tracing::error!("Crossterm event read error: {}", e);
+                    // We can't easily notify the main loop without a dedicated error channel or 
+                    // a special Event variant. For now, we'll just exit the thread.
                     return;
                 }
             }

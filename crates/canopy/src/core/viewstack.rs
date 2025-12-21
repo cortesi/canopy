@@ -127,12 +127,8 @@ impl ViewStack {
                 return None;
             }
 
-            let viewport_screen_rect = Rect::new(
-                eff_x as u32,
-                eff_y as u32,
-                eff_w as u32,
-                eff_h as u32,
-            );
+            let viewport_screen_rect =
+                Rect::new(eff_x as u32, eff_y as u32, eff_w as u32, eff_h as u32);
 
             // Intersect with the accumulated clip
             screen_clip = screen_clip.intersect(&viewport_screen_rect)?;

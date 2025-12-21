@@ -25,7 +25,7 @@ pub struct CanopyCore {
     /// A counter that is incremented every time focus changes. The current focus
     /// will have a state `focus_gen` equal to this.
     pub(crate) focus_gen: u64,
-    
+
     /// Active backend controller.
     pub(crate) backend: Option<Box<dyn BackendControl>>,
 }
@@ -566,14 +566,14 @@ impl Canopy {
                         //
                         // render_buf (0,0) corresponds to vp.view().tl in the canvas.
                         // So canvas_rect.tl corresponds to (canvas_rect.tl - vp.view().tl) in render_buf.
-                        
+
                         let src_rect = Rect::new(
                             canvas_rect.tl.x.saturating_sub(vp.view().tl.x),
                             canvas_rect.tl.y.saturating_sub(vp.view().tl.y),
                             canvas_rect.w,
-                            canvas_rect.h
+                            canvas_rect.h,
                         );
-                        
+
                         dest_buf.copy_rect_to_rect(render_buf, src_rect, screen_rect);
                     }
                 }

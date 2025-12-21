@@ -109,11 +109,19 @@ impl Node for Text {
         let vo = self.vp().view();
         if let Some(lines) = self.lines.as_ref() {
             for i in 0..vo.h {
-                let out = &lines[(vo.tl.y + i) as usize]
-                    .chars()
-                    .skip(vo.tl.x as usize)
-                    .collect::<String>();
-                rndr.text("text", vo.line(i), out)?;
+                let line_idx = (vo.tl.y + i) as usize;
+                if line_idx < lines.len() {
+                    let line = &lines[line_idx];
+                    let start_char = vo.tl.x as usize;
+                    
+                    let start_byte = line.char_indices()
+                        .nth(start_char)
+                        .map(|(i, _)| i)
+                        .unwrap_or(line.len());
+                    
+                    let out = &line[start_byte..];
+                    rndr.text("text", vo.line(i), out)?;
+                }
             }
         }
         Ok(())

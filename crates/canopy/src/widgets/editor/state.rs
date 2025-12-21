@@ -107,7 +107,7 @@ impl State {
     {
         let pos = pos.into();
         let s = s.as_ref();
-        
+
         // Capture old cursor position
         let cursor = match self.cursor {
             Cursor::Insert(p) => p,
@@ -142,12 +142,14 @@ impl State {
             );
 
             if cursor.chunk == pos.chunk && cursor >= pos {
-                 let d = cursor.offset - pos.offset;
-                 let new_chunk = pos.chunk + trailer.len();
-                 let new_offset = last.len() + d;
-                 self.cursor = self.cursor.at(self, new_chunk, new_offset);
+                let d = cursor.offset - pos.offset;
+                let new_chunk = pos.chunk + trailer.len();
+                let new_offset = last.len() + d;
+                self.cursor = self.cursor.at(self, new_chunk, new_offset);
             } else if cursor.chunk > pos.chunk {
-                 self.cursor = self.cursor.shift_chunk(self, s.len().saturating_sub(1) as isize);
+                self.cursor = self
+                    .cursor
+                    .shift_chunk(self, s.len().saturating_sub(1) as isize);
             }
         }
     }
@@ -167,7 +169,7 @@ impl State {
     {
         let start: InsertPos = start.into();
         let end: InsertPos = end.into();
-        
+
         // Capture old cursor position (as InsertPos) before modification
         let cursor = match self.cursor {
             Cursor::Insert(p) => p,
@@ -180,7 +182,7 @@ impl State {
             // We're doing a delete that doesn't cross chunk boundaries.
             //
             self.chunks[start.chunk].replace_range(start.offset..end.offset, "");
-            
+
             // We only need to adjust the cursor if it was beyond the deletion point
             if cursor > start && cursor < end {
                 // If it was within the deleted text, the new cursor position is at the start of the deleted chunk.
