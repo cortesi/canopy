@@ -1,7 +1,9 @@
 use crate::{
-    Context, Direction, Node, NodeId, Point, Rect, Result, ViewPort, ViewStack,
+    Context, Direction, Node, NodeId, Point, Rect, Result,
     tree::{Walk, preorder},
 };
+
+use super::{viewport::ViewPort, viewstack::ViewStack};
 
 /// Information about a focusable node
 #[derive(Debug, Clone)]

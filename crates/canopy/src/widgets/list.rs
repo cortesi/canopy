@@ -1,5 +1,5 @@
-use crate::core as canopy;
-use crate::core::{
+use crate as canopy;
+use crate::{
     Context, Layout, Node, NodeState, Render, Result, StatefulNode, derive_commands,
     geom::{Expanse, Rect},
     *,
@@ -12,7 +12,7 @@ pub trait ListItem {
 }
 
 /// Manage and display a list of items.
-#[derive(crate::core::StatefulNode)]
+#[derive(StatefulNode)]
 pub struct List<N>
 where
     N: Node + ListItem,
@@ -336,7 +336,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::core::{
+    use crate::{
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
         error::Error,
     };
@@ -344,7 +344,7 @@ mod tests {
     use super::*;
 
     // Simple test item for unit tests
-    #[derive(crate::core::StatefulNode)]
+    #[derive(StatefulNode)]
     struct TestItem {
         label: String,
         selected: bool,
@@ -576,19 +576,19 @@ mod tests {
         assert_eq!(list.selected, None);
     }
 
-    use crate::core::{Loader, tutils::dummyctx::DummyContext};
+    use crate::{Canopy, Loader, tutils::dummyctx::DummyContext};
 
     // Loader implementation for test lists
     impl Loader for List<TestItem> {
-        fn load(_canopy: &mut crate::core::Canopy) {}
+        fn load(_canopy: &mut Canopy) {}
     }
 
     impl Loader for List<MultiLineItem> {
-        fn load(_canopy: &mut crate::core::Canopy) {}
+        fn load(_canopy: &mut Canopy) {}
     }
 
     // Helper to create a multi-line test item
-    #[derive(crate::core::StatefulNode)]
+    #[derive(StatefulNode)]
     struct MultiLineItem {
         label: String,
         height: u32,
@@ -684,7 +684,7 @@ mod tests {
 
     #[test]
     fn test_render_only_visible_items() {
-        use crate::core::tutils::harness::Harness;
+        use crate::tutils::harness::Harness;
 
         let items = vec![
             TestItem::new("item0"),
@@ -710,7 +710,7 @@ mod tests {
 
     #[test]
     fn test_render_with_scrolled_view() {
-        use crate::core::tutils::harness::Harness;
+        use crate::tutils::harness::Harness;
 
         let items = vec![
             TestItem::new("item0"),

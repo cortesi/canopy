@@ -4,8 +4,8 @@ use std::{
     time::Duration,
 };
 
-use crate::core as canopy;
-use crate::core::{
+use crate as canopy;
+use crate::{
     Canopy, Loader, NodeState, derive_commands,
     geom::{Expanse, Rect},
     *,
@@ -14,7 +14,7 @@ use tracing_subscriber::fmt;
 
 use crate::widgets::{Text, list::*};
 
-#[derive(crate::core::StatefulNode)]
+#[derive(StatefulNode)]
 /// List item for a single log entry.
 struct LogItem {
     /// Node state.
@@ -96,7 +96,7 @@ impl Write for LogWriter {
 }
 
 /// Inspector log panel.
-#[derive(crate::core::StatefulNode)]
+#[derive(StatefulNode)]
 pub struct Logs {
     /// Node state.
     state: NodeState,

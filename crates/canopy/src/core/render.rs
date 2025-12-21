@@ -1,7 +1,9 @@
 use crate::{
-    Result, TermBuf, geom,
+    Result, geom,
     style::{AttrSet, Color, Style, StyleManager, StyleMap},
 };
+
+use super::termbuf::TermBuf;
 
 /// The trait implemented by renderers.
 pub trait RenderBackend {

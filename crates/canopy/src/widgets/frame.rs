@@ -1,5 +1,5 @@
-use crate::core as canopy;
-use crate::core::{
+use crate as canopy;
+use crate::{
     Context, Layout, Node, NodeState, Render, Result, StatefulNode, derive_commands, geom,
 };
 
@@ -84,7 +84,7 @@ pub const ROUND_THICK: FrameGlyphs = FrameGlyphs {
 };
 
 /// A frame around an element with optional title and indicators.
-#[derive(crate::core::StatefulNode)]
+#[derive(StatefulNode)]
 pub struct Frame<N>
 where
     N: Node,
@@ -207,9 +207,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::core::{
-        Context, Expanse, Node, NodeState, Result, StatefulNode, TermBuf, ViewStack,
+    use crate::{
+        Context, Expanse, Node, NodeState, Result, StatefulNode,
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
+        core::{termbuf::TermBuf, viewport::ViewPort, viewstack::ViewStack},
         geom::Line,
         style::{StyleManager, StyleMap},
         tutils::{buf::BufTest, dummyctx::DummyContext},
@@ -316,7 +317,7 @@ mod tests {
     }
 
     // Helper function to check frame boundaries for overdraw
-    fn check_frame_boundaries(buffer: &crate::core::TermBuf, test_name: &str) {
+    fn check_frame_boundaries(buffer: &TermBuf, test_name: &str) {
         // Check bottom edge (row 9) - should contain frame characters
         for x in 1..9 {
             let cell = buffer.get(geom::Point { x, y: 9 });
@@ -401,8 +402,7 @@ mod tests {
 
             // Create ViewStack with screen viewport
             let screen_vp =
-                crate::core::ViewPort::new(frame_size, frame_size.rect(), geom::Point::zero())
-                    .unwrap();
+                ViewPort::new(frame_size, frame_size.rect(), geom::Point::zero()).unwrap();
             let mut view_stack = ViewStack::new(screen_vp);
 
             // Simulate how Canopy would render this:

@@ -5,7 +5,7 @@ pub mod test;
 
 use std::{fmt::Debug, process};
 
-use crate::core::Result;
+use crate::Result;
 
 /// A handle for controlling our rendering back-end. The primary use is to
 /// suspend and resume rendering to permit us to fork out to another process

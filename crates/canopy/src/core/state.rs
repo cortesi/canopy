@@ -8,8 +8,9 @@ use convert_case::{Case, Casing};
 use crate::{
     Result, error,
     geom::{Expanse, Rect},
-    viewport::ViewPort,
 };
+
+use super::viewport::ViewPort;
 
 /// Global counter for node IDs.
 static CURRENT_ID: AtomicU64 = AtomicU64::new(0);
@@ -106,32 +107,35 @@ impl TryFrom<&str> for NodeName {
 /// An opaque structure that Canopy uses to track node state. Each Node has to
 /// keep a NodeState structure, and offer it up through the `Node::state()`
 /// method on request.
+///
+/// Users should not access the internal fields directly. Use the methods on
+/// [`StatefulNode`] to interact with node state.
 #[derive(Debug, PartialEq, Eq)]
 pub struct NodeState {
-    /// Unique node ID.
-    pub id: u64,
+    /// Unique node ID - internal, use `StatefulNode::id()` to access.
+    pub(crate) id: u64,
 
     /// This node's focus generation. We increment the global focus counter when
     /// focus changes, invalidating the current focus generation without having
     /// to update all node states.
-    pub focus_gen: u64,
+    pub(crate) focus_gen: u64,
 
     /// Set to be equal to the focus_gen during a pre-render sweep, if focus has
     /// changed.
-    pub focus_path_gen: u64,
+    pub(crate) focus_path_gen: u64,
 
     /// The last render sweep during which this node held focus.
-    pub rendered_focus_gen: u64,
+    pub(crate) rendered_focus_gen: u64,
 
     /// The view for this node. The inner rectangle always has the same size as
     /// the screen_area.
-    pub viewport: ViewPort,
+    pub(crate) viewport: ViewPort,
 
-    /// Whether this node is hidden.
-    pub hidden: bool,
+    /// Whether this node is hidden - use `hide()`/`unhide()`/`is_hidden()` methods.
+    pub(crate) hidden: bool,
 
     /// Whether the node has been initialized for polling.
-    pub initialized: bool,
+    pub(crate) initialized: bool,
 }
 
 /// The node state object - each node needs to keep one of these, and offer it
@@ -270,7 +274,7 @@ pub trait StatefulNode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::Result;
+    use crate::Result;
 
     #[test]
     fn nodename() -> Result<()> {

@@ -5,9 +5,8 @@
 //! and subdivisions, making it easy to create complex nested grid structures.
 
 use crate::{
-    Layout, Node, NodeName, NodeState, Result, StatefulNode,
+    Context, Layout, Node, NodeName, NodeState, Result, StatefulNode,
     commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
-    context::Context,
     geom::{Expanse, Rect},
     render::Render,
     tree::{Locate, locate},
@@ -244,7 +243,7 @@ impl StatefulNode for GridNode {
 ///
 /// # Examples
 /// ```no_run
-/// use crate::core::tutils::grid::Grid;
+/// use canopy::tutils::grid::Grid;
 ///
 /// // Create a 2x2 grid with 4 cells
 /// let grid = Grid::new(1, 2);

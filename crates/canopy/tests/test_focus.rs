@@ -2,8 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use canopy::core::{Context, Expanse, Node, Rect, Result, tutils::grid::Grid};
-    use canopy::{tree::*, *};
+    use canopy::{Context, Expanse, Node, Rect, Result, tree::*, tutils::grid::Grid, *};
 
     /// Helper function to get the currently focused cell name in a Grid
     fn get_focused_cell(canopy: &Canopy, grid: &mut Grid) -> Option<String> {

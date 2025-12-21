@@ -396,7 +396,7 @@ impl StyleManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::Result;
+    use crate::Result;
 
     #[test]
     fn style_parse_path() -> Result<()> {

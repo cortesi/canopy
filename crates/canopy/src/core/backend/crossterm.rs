@@ -342,7 +342,7 @@ fn event_emitter(evt_tx: mpsc::Sender<Event>) {
                 Err(e) => {
                     // Log the error and notify the main loop if possible, or exit gracefully.
                     tracing::error!("Crossterm event read error: {}", e);
-                    // We can't easily notify the main loop without a dedicated error channel or 
+                    // We can't easily notify the main loop without a dedicated error channel or
                     // a special Event variant. For now, we'll just exit the thread.
                     return;
                 }

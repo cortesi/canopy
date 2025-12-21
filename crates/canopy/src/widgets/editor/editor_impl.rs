@@ -1,12 +1,11 @@
-use crate::core as canopy;
-use crate::core::{
+use crate::{
     Context, Layout, Node, NodeState, Render, Result, StatefulNode, command, cursor,
     derive_commands, geom::Expanse,
 };
 
 use super::core;
 
-#[derive(crate::core::StatefulNode)]
+#[derive(StatefulNode)]
 /// Internal editor view node.
 pub struct EditorView {
     /// Node state.
@@ -60,7 +59,7 @@ impl Node for EditorView {
 }
 
 /// A simple editor
-#[derive(crate::core::StatefulNode)]
+#[derive(StatefulNode)]
 pub struct Editor {
     /// Node state.
     state: NodeState,

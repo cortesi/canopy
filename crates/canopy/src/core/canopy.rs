@@ -3,19 +3,25 @@ use std::{io::Write, process, sync::mpsc};
 use comfy_table::{ContentArrangement, Table, presets::UTF8_FULL};
 
 use crate::{
-    Context, EventOutcome, Layout, Node, NodeId, Render, Result, TermBuf, ViewPort, ViewStack,
+    Context, EventOutcome, Layout, Node, NodeId, Render, Result,
     backend::BackendControl,
     commands, cursor, error,
     event::{Event, key, mouse},
-    focus::{collect_focusable_nodes, find_focus_target, find_focused_node},
     geom::{Direction, Expanse, Point, Rect},
-    inputmap,
     path::*,
-    poll::Poller,
     render::RenderBackend,
     script,
     style::{StyleManager, StyleMap, solarized},
     tree::*,
+};
+
+use super::{
+    focus::{collect_focusable_nodes, find_focus_target, find_focused_node},
+    inputmap,
+    poll::Poller,
+    termbuf::TermBuf,
+    viewport::ViewPort,
+    viewstack::ViewStack,
 };
 
 /// Core state required for Context implementation.

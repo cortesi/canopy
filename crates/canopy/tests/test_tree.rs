@@ -2,8 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use canopy::core::{Context, tutils::grid::Grid};
-    use canopy::{path::Path, tree::*, *};
+    use canopy::{Context, path::Path, tree::*, tutils::grid::Grid, *};
 
     struct TreeLeaf {
         state: NodeState,

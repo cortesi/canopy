@@ -1,6 +1,8 @@
 //! Utilities for working with a Canopy node tree.
 
-use crate::{NodeId, Result, ViewPort, ViewStack, geom::Point, node::Node, path::*};
+use crate::{NodeId, Result, geom::Point, node::Node, path::*};
+
+use super::{viewport::ViewPort, viewstack::ViewStack};
 
 /// Walk is the return value from traversal closures.
 #[derive(PartialEq, Eq, Debug, Clone)]

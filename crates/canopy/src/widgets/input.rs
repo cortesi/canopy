@@ -1,5 +1,5 @@
-use crate::core as canopy;
-use crate::core::{
+use crate as canopy;
+use crate::{
     Context, Layout, Node, NodeState, Render, Result, StatefulNode, command, derive_commands,
     event::key,
     geom::{Expanse, LineSegment, Point},
@@ -122,7 +122,7 @@ impl TextBuf {
 }
 
 /// A single input line, one character high.
-#[derive(crate::core::StatefulNode)]
+#[derive(StatefulNode)]
 /// Single-line text input widget.
 pub struct Input {
     /// Node state.

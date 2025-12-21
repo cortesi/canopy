@@ -1,11 +1,11 @@
-use crate::core as canopy;
-use crate::core::{
+use crate as canopy;
+use crate::{
     Context, Layout, Node, NodeState, Render, Result, StatefulNode, command, derive_commands,
     geom::Expanse,
 };
 
 /// Multiline text widget with wrapping and scrolling.
-#[derive(crate::core::StatefulNode)]
+#[derive(StatefulNode)]
 pub struct Text {
     /// Node state.
     pub state: NodeState,
@@ -113,12 +113,13 @@ impl Node for Text {
                 if line_idx < lines.len() {
                     let line = &lines[line_idx];
                     let start_char = vo.tl.x as usize;
-                    
-                    let start_byte = line.char_indices()
+
+                    let start_byte = line
+                        .char_indices()
                         .nth(start_char)
                         .map(|(i, _)| i)
                         .unwrap_or(line.len());
-                    
+
                     let out = &line[start_byte..];
                     rndr.text("text", vo.line(i), out)?;
                 }

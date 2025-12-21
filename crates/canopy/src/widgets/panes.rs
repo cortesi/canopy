@@ -1,10 +1,10 @@
-use crate::core as canopy;
-use crate::core::{
+use crate as canopy;
+use crate::{
     Context, Layout, Node, NodeState, Result, StatefulNode, derive_commands, geom::Expanse,
 };
 
 /// Panes manages a set of child nodes arranged in a 2d grid.
-#[derive(crate::core::StatefulNode)]
+#[derive(StatefulNode)]
 pub struct Panes<N: Node> {
     /// Child nodes arranged by column.
     pub children: Vec<Vec<N>>,

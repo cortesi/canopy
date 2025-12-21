@@ -2,8 +2,9 @@
 use crate::{
     geom::Point,
     style::{Color, PartialStyle},
-    termbuf::TermBuf,
 };
+
+use crate::core::termbuf::TermBuf;
 
 /// A helper macro to create buffers for the termbuf match assertions.
 #[macro_export]

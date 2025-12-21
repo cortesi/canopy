@@ -1,5 +1,5 @@
-use crate::core as canopy;
-use crate::core::{
+use crate as canopy;
+use crate::{
     Binder, Canopy, Context, DefaultBindings, Layout, Loader, Node, NodeState, Render, Result,
     command, derive_commands, event::key::*, *,
 };
@@ -8,7 +8,7 @@ use crate::widgets::inspector::Inspector;
 
 /// A Root node that lives at the base of a Canopy app. It manages modal
 /// windows, houses the Inspector and exposes a set of built-in functions.
-#[derive(crate::core::StatefulNode)]
+#[derive(StatefulNode)]
 pub struct Root<T>
 where
     T: Node,

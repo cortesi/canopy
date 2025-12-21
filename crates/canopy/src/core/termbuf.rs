@@ -1,5 +1,5 @@
 use crate::{
-    core::Result,
+    Result,
     geom::{Expanse, Frame, Line, Point, Rect},
     render::RenderBackend,
     style::{AttrSet, Color, Style},
@@ -545,7 +545,7 @@ mod tests {
 
     #[test]
     fn contains_text_fg_compat() {
-        use crate::core::style::solarized;
+        use crate::style::solarized;
         let mut tb = TermBuf::new(Expanse::new(10, 1), ' ', def_style());
 
         let mut blue_style = def_style();
@@ -614,7 +614,7 @@ mod tests {
 
     #[test]
     fn contains_text_style_builders() {
-        use crate::core::style::Attr;
+        use crate::style::Attr;
         let mut tb = TermBuf::new(Expanse::new(10, 2), ' ', def_style());
 
         // Create styles with different attributes

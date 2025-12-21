@@ -1,5 +1,7 @@
 use super::{buf::BufTest, render::NopBackend};
-use crate::{Canopy, Loader, Node, Result, TermBuf, event::key, geom::Expanse};
+use crate::{Canopy, Loader, Node, Result, event::key, geom::Expanse};
+
+use crate::core::termbuf::TermBuf;
 
 /// A simple harness that holds a [`Canopy`], a [`DummyBackend`] backend and a
 /// root node. Tests drive the UI by sending key events and triggering renders
@@ -57,9 +59,9 @@ impl<N: Node + Loader> Harness<N> {
     ///
     /// # Example
     /// ```no_run
-    /// # use crate::core::tutils::harness::Harness;
-    /// # use crate::core::{Node, Loader};
-    /// # fn example<N: Node + Loader>(node: N) -> crate::core::Result<()> {
+    /// # use canopy::tutils::harness::Harness;
+    /// # use canopy::{Node, Loader, Result};
+    /// # fn example<N: Node + Loader>(node: N) -> Result<()> {
     /// let harness = Harness::builder(node)
     ///     .size(80, 24)
     ///     .build()?;

@@ -1,4 +1,4 @@
-use crate::core::geom::Point;
+use crate::geom::Point;
 
 use super::primitives::*;
 
