@@ -1,9 +1,13 @@
 use canopy::{
+    Binder, Canopy, Context, Layout, Loader, command, derive_commands,
+    error::Result,
     event::{key, mouse},
     geom::{Expanse, Rect},
+    node::Node,
+    render::Render,
+    state::{NodeState, StatefulNode},
     style::{AttrSet, solarized},
-    widgets::{Text, frame, list::*},
-    *,
+    widgets::{Root, Text, frame, list::*},
 };
 use rand::Rng;
 
@@ -13,7 +17,7 @@ const TEXT: &str = "What a struggle must have gone on during long centuries betw
 /// Alternating color names for list items.
 const COLORS: &[&str] = &["red", "blue"];
 
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 /// List item block for the list gym demo.
 pub struct Block {
     /// Node state.
@@ -78,7 +82,7 @@ impl Node for Block {
     }
 }
 
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 /// Status bar widget for the list gym demo.
 pub struct StatusBar {
     /// Node state.
@@ -96,7 +100,7 @@ impl Node for StatusBar {
     }
 }
 
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 /// Root node for the list gym demo.
 pub struct ListGym {
     /// Node state.
@@ -130,21 +134,21 @@ impl ListGym {
     #[command]
     /// Add an item after the current focus
     pub fn add_item(&mut self, _c: &dyn Context) {
-        let index = self.content.child.selected.unwrap_or(0) + 1;
-        self.content.child.insert_after(Block::new(index));
+        let index = self.content.child().selected_index().unwrap_or(0) + 1;
+        self.content.child_mut().insert_after(Block::new(index));
     }
 
     #[command]
     /// Add an item at the end of the list
     pub fn append_item(&mut self, _c: &dyn Context) {
-        let index = self.content.child.len();
-        self.content.child.append(Block::new(index));
+        let index = self.content.child().len();
+        self.content.child_mut().append(Block::new(index));
     }
 
     #[command]
     /// Add an item at the end of the list
     pub fn clear(&mut self, _c: &dyn Context) {
-        self.content.child.clear();
+        self.content.child_mut().clear();
     }
 }
 
@@ -237,7 +241,7 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
 
 #[cfg(test)]
 mod tests {
-    use canopy::tutils::harness::Harness;
+    use canopy::{state::StatefulNode, testing::harness::Harness};
 
     use super::*;
 
@@ -268,7 +272,7 @@ mod tests {
         let mut harness = Harness::new(root)?;
 
         // Verify initial state
-        assert_eq!(harness.root.content.child.len(), 10);
+        assert_eq!(harness.root.content.child().len(), 10);
 
         // Render and verify it still works
         harness.render()?;
@@ -306,19 +310,19 @@ mod tests {
         harness.render()?;
 
         // Get initial selected
-        let initial_selected = harness.root.content.child.selected;
+        let initial_selected = harness.root.content.child().selected_index();
 
         // Navigate using list commands (these are loaded by the List type)
         harness.script("list::select_last()")?;
 
         // Verify selected changed
-        assert!(harness.root.content.child.selected > initial_selected);
+        assert!(harness.root.content.child().selected_index() > initial_selected);
 
         // Navigate back to first
         harness.script("list::select_first()")?;
 
         // Verify we're back at the start
-        assert_eq!(harness.root.content.child.selected, Some(0));
+        assert_eq!(harness.root.content.child().selected_index(), Some(0));
 
         Ok(())
     }
@@ -337,7 +341,7 @@ mod tests {
         harness.render()?;
 
         // Get the initial view position of the list
-        let initial_view = harness.root.content.child.vp().view();
+        let initial_view = harness.root.content.child().vp().view();
         println!("Initial view: {initial_view:?}");
 
         // Move selection down past what's visible
@@ -345,15 +349,15 @@ mod tests {
         // only a few items are visible at once
         for i in 0..8 {
             harness.script("list::select_next()")?;
-            let selected = harness.root.content.child.selected.unwrap();
+            let selected = harness.root.content.child().selected_index().unwrap();
             println!("After select_next {i}: selected = {selected}");
         }
 
         // The selected item should now be 8
-        assert_eq!(harness.root.content.child.selected, Some(8));
+        assert_eq!(harness.root.content.child().selected_index(), Some(8));
 
         // Get the current view position
-        let current_view = harness.root.content.child.vp().view();
+        let current_view = harness.root.content.child().vp().view();
         println!("Current view after navigation: {current_view:?}");
 
         // The view should have scrolled down to keep the selected item visible

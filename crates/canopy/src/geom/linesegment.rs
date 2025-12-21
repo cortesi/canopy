@@ -1,4 +1,4 @@
-use crate::{Error, Result};
+use super::{Error, Result};
 
 /// An exctent is a directionless one-dimensional line segment.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]

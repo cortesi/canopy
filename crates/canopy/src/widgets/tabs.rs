@@ -1,15 +1,20 @@
-use crate as canopy;
-use crate::{Context, Node, NodeState, Render, Result, StatefulNode, command, derive_commands};
+use crate::{
+    Context, command, derive_commands,
+    error::Result,
+    node::Node,
+    render::Render,
+    state::{NodeState, StatefulNode},
+};
 
 /// A tab control managing a set of nodes with titles.
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 pub struct Tabs {
     /// Node state.
-    pub state: NodeState,
+    state: NodeState,
     /// Tab titles.
-    pub tabs: Vec<String>,
+    tabs: Vec<String>,
     /// Active tab index.
-    pub active: usize,
+    active: usize,
 }
 
 #[derive_commands]

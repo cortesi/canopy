@@ -1,6 +1,13 @@
-use canopy::{derive_commands, widgets::Text, *};
+use canopy::{
+    Canopy, Context, Layout, Loader, command, derive_commands,
+    error::Result,
+    geom::Expanse,
+    node::Node,
+    state::{NodeState, StatefulNode},
+    widgets::Text,
+};
 
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 /// Demo node that displays placeholder text.
 pub struct TextDisplay {
     /// Node state.

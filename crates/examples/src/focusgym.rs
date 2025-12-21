@@ -1,11 +1,15 @@
 use canopy::{
-    derive_commands,
+    Binder, Canopy, Context, Layout, Loader, command, derive_commands,
+    error::Result,
     event::{key, mouse},
     geom::{Expanse, Frame},
-    *,
+    node::Node,
+    render::Render,
+    state::{NodeState, StatefulNode},
+    widgets::Root,
 };
 
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 /// A focusable block that can split into children.
 pub struct Block {
     /// Node state.
@@ -100,7 +104,7 @@ impl Node for Block {
     }
 }
 
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 /// Root node for the focus gym demo.
 pub struct FocusGym {
     /// Node state.
@@ -152,7 +156,7 @@ impl Loader for FocusGym {
 
 /// Install key bindings for the focus gym demo.
 pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
-    canopy::Binder::new(cnpy)
+    Binder::new(cnpy)
         .defaults::<Root<FocusGym>>()
         .key('p', "print(\"xxxx\")")
         .with_path("focus_gym/")

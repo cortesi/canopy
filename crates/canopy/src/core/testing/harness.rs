@@ -1,7 +1,7 @@
 use super::{buf::BufTest, render::NopBackend};
-use crate::{Canopy, Loader, Node, Result, event::key, geom::Expanse};
-
-use crate::core::termbuf::TermBuf;
+use crate::{
+    Canopy, Loader, core::termbuf::TermBuf, error::Result, event::key, geom::Expanse, node::Node,
+};
 
 /// A simple harness that holds a [`Canopy`], a [`DummyBackend`] backend and a
 /// root node. Tests drive the UI by sending key events and triggering renders
@@ -59,8 +59,8 @@ impl<N: Node + Loader> Harness<N> {
     ///
     /// # Example
     /// ```no_run
-    /// # use canopy::tutils::harness::Harness;
-    /// # use canopy::{Node, Loader, Result};
+    /// # use canopy::testing::harness::Harness;
+    /// # use canopy::{Loader, error::Result, node::Node};
     /// # fn example<N: Node + Loader>(node: N) -> Result<()> {
     /// let harness = Harness::builder(node)
     ///     .size(80, 24)
@@ -134,12 +134,15 @@ impl<N: Node + Loader> Harness<N> {
 mod tests {
     use super::*;
     use crate::{
-        self as canopy, Context, Layout, Loader, Node, NodeState, Render, StatefulNode,
-        derive_commands,
+        Context, Layout, Loader, derive_commands,
+        error::Result,
         geom::{Expanse, Line},
+        node::Node,
+        render::Render,
+        state::{NodeState, StatefulNode},
     };
 
-    #[derive(StatefulNode)]
+    #[derive(canopy::StatefulNode)]
     struct TestNode {
         state: NodeState,
     }

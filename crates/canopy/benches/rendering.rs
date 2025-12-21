@@ -3,14 +3,20 @@
 use std::hint::black_box;
 
 use canopy::{
-    Canopy, Context, Layout, Loader, Node, NodeState, Render, Result, StatefulNode,
-    derive_commands, geom::Expanse, tutils::harness::Harness, widgets::Text,
+    Canopy, Context, Layout, Loader, derive_commands,
+    error::Result,
+    geom::Expanse,
+    node::Node,
+    render::Render,
+    state::{NodeState, StatefulNode},
+    testing::harness::Harness,
+    widgets::Text,
 };
 use criterion::{Criterion, criterion_group, criterion_main};
 
 // Simple wrapper to provide Loader implementation for Text widget
 /// Wrapper node used for text render benchmarks.
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 struct BenchmarkTextWrapper {
     /// Node state.
     state: NodeState,

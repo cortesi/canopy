@@ -26,10 +26,11 @@ pub mod script;
 pub mod state;
 /// Styling and color helpers.
 pub mod style;
+/// Testing utilities.
+#[cfg(any(test, feature = "testing"))]
+pub mod testing;
 /// Tree traversal utilities.
 pub mod tree;
-/// Testing utilities.
-pub mod tutils;
 
 // Core modules - internal
 /// Binding utilities.

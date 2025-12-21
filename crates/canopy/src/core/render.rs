@@ -1,9 +1,9 @@
+use super::termbuf::TermBuf;
 use crate::{
-    Result, geom,
+    error::Result,
+    geom,
     style::{AttrSet, Color, Style, StyleManager, StyleMap},
 };
-
-use super::termbuf::TermBuf;
 
 /// The trait implemented by renderers.
 pub trait RenderBackend {
@@ -146,7 +146,7 @@ mod tests {
     use crate::{
         buf,
         style::{StyleManager, StyleMap},
-        tutils::buf::BufTest,
+        testing::buf::BufTest,
     };
 
     fn assert_buffer_matches(render: &Render, expected: &[&str]) {

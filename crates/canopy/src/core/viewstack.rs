@@ -1,9 +1,11 @@
 #![allow(dead_code)]
 #![allow(clippy::type_complexity)]
 
-use crate::{Error, Result, geom::Rect};
-
 use super::viewport::ViewPort;
+use crate::{
+    error::{Error, Result},
+    geom::Rect,
+};
 
 /// A stack of viewports that manages nested view transformations.
 pub struct ViewStack {

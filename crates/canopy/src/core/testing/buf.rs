@@ -1,10 +1,9 @@
 //! Utilities for working with TermBufs in tests.
 use crate::{
+    core::termbuf::TermBuf,
     geom::Point,
     style::{Color, PartialStyle},
 };
-
-use crate::core::termbuf::TermBuf;
 
 /// A helper macro to create buffers for the termbuf match assertions.
 #[macro_export]

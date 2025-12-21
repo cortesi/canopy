@@ -1,15 +1,19 @@
-use anyhow::Result;
+use anyhow::Result as AnyResult;
 use canopy::{
+    Binder, Canopy, Context, Layout, Loader, command, derive_commands,
+    error::Result,
     event::{key, mouse},
     geom::{Expanse, Rect},
+    node::Node,
+    render::Render,
+    state::{NodeState, StatefulNode},
     style::solarized,
     widgets::{Input, Text, frame, list::*},
-    *,
 };
 
 pub mod store;
 
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 pub struct TodoItem {
     pub state: NodeState,
     pub child: Text,
@@ -36,21 +40,18 @@ impl ListItem for TodoItem {
 
 #[derive_commands]
 impl Node for TodoItem {
-    fn layout(&mut self, l: &Layout, sz: Expanse) -> canopy::Result<()> {
+    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         self.child.layout(l, sz)?;
         let vp = self.child.vp();
         self.wrap(vp)?;
         Ok(())
     }
 
-    fn children(
-        &mut self,
-        f: &mut dyn FnMut(&mut dyn Node) -> canopy::Result<()>,
-    ) -> canopy::Result<()> {
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         f(&mut self.child)
     }
 
-    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> canopy::Result<()> {
+    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
         if self.selected {
             r.style.push_layer("blue");
         }
@@ -58,7 +59,7 @@ impl Node for TodoItem {
     }
 }
 
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 pub struct StatusBar {
     pub state: NodeState,
 }
@@ -67,14 +68,14 @@ pub struct StatusBar {
 impl StatusBar {}
 
 impl Node for StatusBar {
-    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> canopy::Result<()> {
+    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
         r.style.push_layer("statusbar");
         r.text("statusbar/text", self.vp().view().line(0), "todo")?;
         Ok(())
     }
 }
 
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 pub struct Todo {
     pub state: NodeState,
     pub content: frame::Frame<List<TodoItem>>,
@@ -84,7 +85,7 @@ pub struct Todo {
 
 #[derive_commands]
 impl Todo {
-    pub fn new() -> Result<Self> {
+    pub fn new() -> AnyResult<Self> {
         let mut r = Todo {
             state: NodeState::default(),
             content: frame::Frame::new(List::new(vec![])),
@@ -98,16 +99,16 @@ impl Todo {
     }
 
     #[command]
-    pub fn enter_item(&mut self, c: &mut dyn Context) -> canopy::Result<()> {
+    pub fn enter_item(&mut self, c: &mut dyn Context) -> Result<()> {
         let mut adder = frame::Frame::new(Input::new(""));
-        c.set_focus(&mut adder.child);
+        c.set_focus(adder.child_mut());
         self.adder = Some(adder);
         Ok(())
     }
 
     #[command]
-    pub fn delete_item(&mut self, c: &mut dyn Context) -> canopy::Result<()> {
-        let lst = &mut self.content.child;
+    pub fn delete_item(&mut self, c: &mut dyn Context) -> Result<()> {
+        let lst = self.content.child_mut();
         if let Some(t) = lst.selected() {
             store::get().delete_todo(t.todo.id).unwrap();
             lst.delete_selected(c);
@@ -116,15 +117,15 @@ impl Todo {
     }
 
     #[command]
-    pub fn accept_add(&mut self, c: &mut dyn Context) -> canopy::Result<()> {
+    pub fn accept_add(&mut self, c: &mut dyn Context) -> Result<()> {
         if let Some(adder) = self.adder.take() {
-            let value = adder.child.textbuf.value;
+            let value = adder.child().value().to_owned();
             if !value.is_empty() {
                 let item = store::get().add_todo(&value).unwrap();
-                self.content.child.append(TodoItem::new(item));
+                self.content.child_mut().append(TodoItem::new(item));
                 // Select the newly added item (which is the last one)
-                let new_index = self.content.child.len().saturating_sub(1);
-                self.content.child.select(new_index);
+                let new_index = self.content.child().len().saturating_sub(1);
+                self.content.child_mut().select(new_index);
             }
         }
         c.set_focus(&mut self.content);
@@ -132,58 +133,58 @@ impl Todo {
     }
 
     #[command]
-    pub fn cancel_add(&mut self, c: &mut dyn Context) -> canopy::Result<()> {
+    pub fn cancel_add(&mut self, c: &mut dyn Context) -> Result<()> {
         self.adder = None;
         c.focus_first(self);
         Ok(())
     }
 
-    fn load(&mut self) -> canopy::Result<()> {
+    fn load(&mut self) -> Result<()> {
         let s = store::get().todos().unwrap();
         let todos = s.iter().map(|x| TodoItem::new(x.clone()));
         for i in todos {
-            self.content.child.append(i);
+            self.content.child_mut().append(i);
         }
         // Select the first item if any exist
-        if !self.content.child.is_empty() {
-            self.content.child.select(0);
+        if !self.content.child().is_empty() {
+            self.content.child_mut().select(0);
         }
         Ok(())
     }
 
     #[command]
-    pub fn select_first(&mut self, c: &mut dyn Context) -> canopy::Result<()> {
-        self.content.child.select_first(c);
+    pub fn select_first(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.content.child_mut().select_first(c);
         Ok(())
     }
 
     #[command]
-    pub fn select_next(&mut self, c: &mut dyn Context) -> canopy::Result<()> {
-        self.content.child.select_next(c);
+    pub fn select_next(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.content.child_mut().select_next(c);
         Ok(())
     }
 
     #[command]
-    pub fn select_prev(&mut self, c: &mut dyn Context) -> canopy::Result<()> {
-        self.content.child.select_prev(c);
+    pub fn select_prev(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.content.child_mut().select_prev(c);
         Ok(())
     }
 
     #[command]
-    pub fn page_down(&mut self, c: &mut dyn Context) -> canopy::Result<()> {
-        self.content.child.page_down(c);
+    pub fn page_down(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.content.child_mut().page_down(c);
         Ok(())
     }
 
     #[command]
-    pub fn page_up(&mut self, c: &mut dyn Context) -> canopy::Result<()> {
-        self.content.child.page_up(c);
+    pub fn page_up(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.content.child_mut().page_up(c);
         Ok(())
     }
 }
 
 impl Node for Todo {
-    fn layout(&mut self, l: &Layout, sz: Expanse) -> canopy::Result<()> {
+    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         self.fill(sz)?;
         let vp = self.vp();
         let (a, b) = vp.view().carve_vend(1);
@@ -201,10 +202,7 @@ impl Node for Todo {
         true
     }
 
-    fn children(
-        &mut self,
-        f: &mut dyn FnMut(&mut dyn Node) -> canopy::Result<()>,
-    ) -> canopy::Result<()> {
+    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
         f(&mut self.statusbar)?;
         f(&mut self.content)?;
         if let Some(a) = &mut self.adder {
@@ -257,7 +255,7 @@ pub fn bind_keys(cnpy: &mut Canopy) {
         .key(key::KeyCode::Esc, "todo::cancel_add()");
 }
 
-pub fn open_store(path: &str) -> Result<()> {
+pub fn open_store(path: &str) -> AnyResult<()> {
     store::open(path)
 }
 
@@ -267,7 +265,7 @@ pub fn setup_app(cnpy: &mut Canopy) {
     bind_keys(cnpy);
 }
 
-pub fn create_app(db_path: &str) -> Result<(Canopy, Todo)> {
+pub fn create_app(db_path: &str) -> AnyResult<(Canopy, Todo)> {
     open_store(db_path)?;
 
     let mut cnpy = Canopy::new();

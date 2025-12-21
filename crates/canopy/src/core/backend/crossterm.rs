@@ -11,12 +11,13 @@ use color_backtrace::{BacktracePrinter, default_output_stream};
 use scopeguard::defer;
 
 use crate::{
-    Canopy, Context, Node, Result,
+    Canopy, Context,
     backend::BackendControl,
-    dump::{dump, dump_with_focus},
-    error,
+    core::dump::{dump, dump_with_focus},
+    error::{self, Result},
     event::{Event, key, mouse},
     geom::{Expanse, Point},
+    node::Node,
     render::RenderBackend,
     style::{Color, Style},
 };

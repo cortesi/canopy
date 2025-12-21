@@ -1,11 +1,15 @@
-use crate as canopy;
-use crate::{NodeState, derive_commands, *};
-
 use super::logs::Logs;
-use crate::widgets::tabs;
+use crate::{
+    Layout, derive_commands,
+    error::Result,
+    geom::Expanse,
+    node::Node,
+    state::{NodeState, StatefulNode},
+    widgets::tabs,
+};
 
 /// View contains the body of the inspector.
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 pub struct View {
     /// Tab strip for inspector sections.
     tabs: tabs::Tabs,

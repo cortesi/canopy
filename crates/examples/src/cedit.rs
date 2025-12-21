@@ -1,12 +1,14 @@
 use canopy::{
-    derive_commands,
+    Binder, Canopy, Layout, Loader, derive_commands,
+    error::Result,
     event::key,
     geom::Expanse,
-    widgets::{Editor, frame},
-    *,
+    node::Node,
+    state::{NodeState, StatefulNode},
+    widgets::{Root, editor::Editor, frame},
 };
 
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 /// Simple editor wrapper for the cedit demo.
 pub struct Ed {
     /// Node state.

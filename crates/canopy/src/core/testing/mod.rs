@@ -1,3 +1,5 @@
+/// Backend utilities for tests.
+pub mod backend;
 /// Buffer testing utilities.
 pub mod buf;
 /// Dummy context for tests.
@@ -13,12 +15,17 @@ pub mod ttree;
 
 #[cfg(test)]
 mod tests {
+    use super::backend::TestRender;
     use crate::{
-        self as canopy, Context, Layout, Node, NodeState, Render, Result, StatefulNode,
-        backend::test::TestRender, derive_commands, geom::Expanse,
+        Context, Layout, derive_commands,
+        error::Result,
+        geom::Expanse,
+        node::Node,
+        render::Render,
+        state::{NodeState, StatefulNode},
     };
 
-    #[derive(StatefulNode)]
+    #[derive(canopy::StatefulNode)]
     struct Block {
         state: NodeState,
         children: Vec<Self>,

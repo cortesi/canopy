@@ -3,16 +3,21 @@ mod logs;
 /// Inspector view layout.
 mod view;
 
-use crate as canopy;
-use crate::{
-    Binder, Canopy, DefaultBindings, Loader, NodeState, derive_commands, event::key::*, *,
-};
 use logs::Logs;
 
-use crate::widgets::{frame, tabs};
+use crate::{
+    Binder, Canopy, Context, DefaultBindings, Layout, Loader, derive_commands,
+    error::Result,
+    event::key::*,
+    geom::Expanse,
+    node::Node,
+    render::Render,
+    state::{NodeState, StatefulNode},
+    widgets::{frame, tabs},
+};
 
 /// Inspector overlay node.
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 pub struct Inspector {
     /// Node state.
     state: NodeState,

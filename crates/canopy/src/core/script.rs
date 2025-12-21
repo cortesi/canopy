@@ -3,7 +3,13 @@ use std::{collections::HashMap, result::Result as StdResult};
 use rhai::{self, plugin::TypeId};
 use scoped_tls::scoped_thread_local;
 
-use crate::{Context, Node, NodeId, NodeName, Result, commands::*, error};
+use crate::{
+    Context,
+    commands::*,
+    error::{self, Result},
+    node::Node,
+    state::{NodeId, NodeName},
+};
 
 /// Script identifier.
 pub type ScriptId = u64;
@@ -214,8 +220,8 @@ impl ScriptHost {
 mod tests {
     use super::*;
     use crate::{
-        StatefulNode,
-        tutils::ttree::{get_state, run_ttree},
+        state::StatefulNode,
+        testing::ttree::{get_state, run_ttree},
     };
 
     #[test]

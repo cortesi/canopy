@@ -5,11 +5,14 @@ mod tests {
     use std::marker::PhantomData;
 
     use canopy::{
-        self, Result, StatefulNode,
+        self,
         commands::{
             ArgTypes, Args, CommandInvocation, CommandNode, CommandSpec, ReturnSpec, ReturnTypes,
         },
-        tutils::dummyctx::DummyContext,
+        error::Result,
+        node::Node,
+        state::{NodeState, StatefulNode},
+        testing::dummyctx::DummyContext,
     };
     use canopy_derive::{command, derive_commands};
     #[cfg(test)]
@@ -19,16 +22,16 @@ mod tests {
     fn statefulnode() {
         #[derive(canopy::StatefulNode)]
         struct FooBar {
-            state: canopy::NodeState,
+            state: NodeState,
         }
 
-        impl canopy::Node for FooBar {}
+        impl Node for FooBar {}
 
         #[derive_commands]
         impl FooBar {}
 
         let f = FooBar {
-            state: canopy::NodeState::default(),
+            state: NodeState::default(),
         };
 
         assert_eq!(f.name(), "foo_bar");
@@ -38,7 +41,7 @@ mod tests {
     fn commands() {
         #[derive(canopy::StatefulNode)]
         struct Foo {
-            state: canopy::NodeState,
+            state: NodeState,
             a_triggered: bool,
             b_triggered: bool,
             c_triggered: bool,
@@ -47,29 +50,29 @@ mod tests {
             naked_isize: Option<isize>,
         }
 
-        impl canopy::Node for Foo {}
+        impl Node for Foo {}
 
         struct Opaque {}
 
         #[derive(canopy::StatefulNode)]
         struct Bar<N>
         where
-            N: canopy::Node,
+            N: Node,
         {
-            state: canopy::NodeState,
+            state: NodeState,
             a_triggered: bool,
             p: PhantomData<N>,
         }
 
-        impl<N> canopy::Node for Bar<N> where N: canopy::Node {}
+        impl<N> Node for Bar<N> where N: Node {}
 
         #[derive_commands]
         impl<N> Bar<N>
         where
-            N: canopy::Node,
+            N: Node,
         {
             #[command]
-            fn a(&mut self, _core: &dyn canopy::Context) -> canopy::Result<()> {
+            fn a(&mut self, _core: &dyn canopy::Context) -> Result<()> {
                 self.a_triggered = true;
                 Ok(())
             }
@@ -86,7 +89,7 @@ mod tests {
             }
 
             #[command]
-            fn b(&mut self, _core: &dyn canopy::Context) -> canopy::Result<()> {
+            fn b(&mut self, _core: &dyn canopy::Context) -> Result<()> {
                 self.b_triggered = true;
                 Ok(())
             }
@@ -120,13 +123,13 @@ mod tests {
             }
 
             #[command]
-            fn result_str(&mut self, _core: &dyn canopy::Context) -> canopy::Result<String> {
+            fn result_str(&mut self, _core: &dyn canopy::Context) -> Result<String> {
                 self.naked_str_triggered = true;
                 Ok("".into())
             }
 
             #[command]
-            fn nocore(&self) -> canopy::Result<String> {
+            fn nocore(&self) -> Result<String> {
                 Ok("".into())
             }
         }
@@ -200,7 +203,7 @@ mod tests {
             ]
         );
         let mut f = Foo {
-            state: canopy::NodeState::default(),
+            state: NodeState::default(),
             a_triggered: false,
             b_triggered: false,
             c_triggered: false,

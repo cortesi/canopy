@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    Result, error,
+    error::{self, Result},
     event::{key::Key, mouse::Mouse},
     path::*,
     script,
@@ -147,7 +147,7 @@ impl InputMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Result, event::key, script};
+    use crate::{error::Result, event::key, script};
 
     #[test]
     fn caseconfusion() -> Result<()> {

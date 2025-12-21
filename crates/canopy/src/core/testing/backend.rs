@@ -1,8 +1,10 @@
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    Canopy, Node, Result,
+    Canopy,
+    error::Result,
     geom::{Expanse, Point},
+    node::Node,
     render::RenderBackend,
     style::{Style, StyleManager},
 };

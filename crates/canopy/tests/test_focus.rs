@@ -2,7 +2,15 @@
 
 #[cfg(test)]
 mod tests {
-    use canopy::{Context, Expanse, Node, Rect, Result, tree::*, tutils::grid::Grid, *};
+    use canopy::{
+        Canopy, Context, Layout, derive_commands,
+        error::{Error, Result},
+        geom::{Expanse, Rect},
+        node::Node,
+        state::{NodeState, StatefulNode},
+        testing::grid::Grid,
+        tree::*,
+    };
 
     /// Helper function to get the currently focused cell name in a Grid
     fn get_focused_cell(canopy: &Canopy, grid: &mut Grid) -> Option<String> {
@@ -24,8 +32,6 @@ mod tests {
 
     /// Test helper to perform snake navigation through a grid and verify all cells are visited
     fn test_snake_navigation(grid: &mut Grid) -> Result<()> {
-        use canopy::Canopy;
-
         let (grid_width, grid_height) = grid.dimensions();
         let total_cells = grid_width * grid_height;
 
@@ -252,7 +258,7 @@ mod tests {
 
     // Irregular layout tests
 
-    #[derive(StatefulNode)]
+    #[derive(canopy::StatefulNode)]
     struct IrregularBlock {
         state: NodeState,
         children: Vec<Self>,

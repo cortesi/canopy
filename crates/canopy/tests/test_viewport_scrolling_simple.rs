@@ -2,10 +2,19 @@
 
 #[cfg(test)]
 mod tests {
-    use canopy::{derive_commands, event::key, geom::Expanse, tutils::harness::Harness, *};
+    use canopy::{
+        Canopy, Context, Layout, Loader, command, derive_commands,
+        error::Result,
+        event::key,
+        geom::Expanse,
+        node::Node,
+        render::Render,
+        state::{NodeState, StatefulNode},
+        testing::harness::Harness,
+    };
 
     /// Simple test to demonstrate viewport scrolling behavior
-    #[derive(StatefulNode)]
+    #[derive(canopy::StatefulNode)]
     struct ScrollTest {
         state: NodeState,
     }

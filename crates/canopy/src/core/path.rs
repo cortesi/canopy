@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::{Result, error};
+use crate::error::{self, Result};
 
 /// A path of node name components.
 #[derive(Debug, Clone, PartialEq, Eq)]

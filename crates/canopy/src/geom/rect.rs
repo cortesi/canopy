@@ -1,5 +1,4 @@
-use super::{Direction, Expanse, Line, LineSegment, Point};
-use crate::{Error, Result};
+use super::{Direction, Error, Expanse, Line, LineSegment, Point, Result};
 
 /// A rectangle
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]

@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
 use crate::{
-    Context, Error, Node, NodeId, Result,
-    state::{NodeName, StatefulNode},
+    Context,
+    error::{Error, Result},
+    node::Node,
+    state::{NodeId, NodeName, StatefulNode},
     tree,
 };
 

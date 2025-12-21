@@ -18,11 +18,13 @@
 use std::time::Duration;
 
 use crate::{
-    Context, Layout, Render, Result,
+    Context, Layout,
     commands::CommandNode,
     cursor,
+    error::Result,
     event::{key, mouse},
     geom::Expanse,
+    render::Render,
     state::StatefulNode,
 };
 

@@ -5,8 +5,12 @@ mod tests {
     use std::cell::RefCell;
 
     use canopy::{
-        commands::{CommandInvocation, dispatch},
-        *,
+        Canopy, Context, command,
+        commands::{CommandInvocation, CommandNode, dispatch},
+        derive_commands,
+        error::Result,
+        node::Node,
+        state::{NodeState, StatefulNode},
     };
 
     // Test helper to record command calls
@@ -22,7 +26,7 @@ mod tests {
         STATE_PATH.with(|s| s.borrow_mut().clear());
     }
 
-    #[derive(StatefulNode)]
+    #[derive(canopy::StatefulNode)]
     struct TestLeaf {
         state: NodeState,
     }
@@ -39,7 +43,7 @@ mod tests {
 
     impl Node for TestLeaf {}
 
-    #[derive(StatefulNode)]
+    #[derive(canopy::StatefulNode)]
     struct TestBranch {
         state: NodeState,
         la: TestLeaf,
@@ -58,7 +62,7 @@ mod tests {
     impl TestBranch {}
 
     #[allow(dead_code)]
-    #[derive(StatefulNode)]
+    #[derive(canopy::StatefulNode)]
     struct TestRoot {
         state: NodeState,
         a: TestBranch,
@@ -120,7 +124,7 @@ mod tests {
 
     #[test]
     fn test_load_commands() -> Result<()> {
-        #[derive(StatefulNode)]
+        #[derive(canopy::StatefulNode)]
         struct Foo {
             state: NodeState,
             a_triggered: bool,

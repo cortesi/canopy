@@ -1,9 +1,12 @@
+use super::{viewport::ViewPort, viewstack::ViewStack};
 use crate::{
-    Context, Direction, Node, NodeId, Point, Rect, Result,
+    Context,
+    error::Result,
+    geom::{Direction, Point, Rect},
+    node::Node,
+    state::NodeId,
     tree::{Walk, preorder},
 };
-
-use super::{viewport::ViewPort, viewstack::ViewStack};
 
 /// Information about a focusable node
 #[derive(Debug, Clone)]

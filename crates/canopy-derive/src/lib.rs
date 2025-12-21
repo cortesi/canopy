@@ -168,7 +168,7 @@ impl quote::ToTokens for Command {
         let args = &self.args;
 
         tokens.extend(quote! {canopy::commands::CommandSpec {
-            node: canopy::NodeName::convert(#node_name),
+            node: canopy::state::NodeName::convert(#node_name),
             command: #command.to_string(),
             docs: #docs.to_string(),
             ret: #ret,
@@ -363,13 +363,13 @@ pub fn derive_commands(
             fn commands() -> Vec<canopy::commands::CommandSpec> {
                 vec![#(#commands),*]
             }
-            fn dispatch(&mut self, core: &mut dyn canopy::Context, cmd: &canopy::commands::CommandInvocation) -> canopy::Result<canopy::commands::ReturnValue> {
+            fn dispatch(&mut self, core: &mut dyn canopy::Context, cmd: &canopy::commands::CommandInvocation) -> canopy::error::Result<canopy::commands::ReturnValue> {
                 if cmd.node != self.name() {
-                    return Err(canopy::Error::UnknownCommand(cmd.command.to_string()));
+                    return Err(canopy::error::Error::UnknownCommand(cmd.command.to_string()));
                 }
                 match cmd.command.as_str() {
                     #(#invocations),*
-                    _ => Err(canopy::Error::UnknownCommand(cmd.command.to_string()))
+                    _ => Err(canopy::error::Error::UnknownCommand(cmd.command.to_string()))
                 }
             }
         }
@@ -405,15 +405,15 @@ pub fn derive_statefulnode(input: proc_macro::TokenStream) -> proc_macro::TokenS
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let rname = name.to_string();
     let expanded = quote! {
-        impl #impl_generics canopy::StatefulNode for #name #ty_generics #where_clause {
-            fn state_mut(&mut self) -> &mut canopy::NodeState {
+        impl #impl_generics canopy::state::StatefulNode for #name #ty_generics #where_clause {
+            fn state_mut(&mut self) -> &mut canopy::state::NodeState {
                 &mut self.state
             }
-            fn state(&self) -> &canopy::NodeState {
+            fn state(&self) -> &canopy::state::NodeState {
                 &self.state
             }
-            fn name(&self) -> canopy::NodeName {
-                canopy::NodeName::convert(#rname)
+            fn name(&self) -> canopy::state::NodeName {
+                canopy::state::NodeName::convert(#rname)
             }
         }
     };

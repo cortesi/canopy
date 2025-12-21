@@ -1,6 +1,5 @@
-use crate::geom::Point;
-
 use super::{effect, effect::Effector, primitives::InsertPos, state};
+use crate::geom::Point;
 
 /// The editor Core exposes the operations that can be performed on a text buffer. It's a facade over the state, with
 /// added operations to support a redo/undo stack.

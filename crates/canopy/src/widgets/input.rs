@@ -1,9 +1,11 @@
-use crate as canopy;
 use crate::{
-    Context, Layout, Node, NodeState, Render, Result, StatefulNode, command, derive_commands,
+    Context, Layout, command, cursor, derive_commands,
+    error::Result,
     event::key,
     geom::{Expanse, LineSegment, Point},
-    *,
+    node::{EventOutcome, Node},
+    render::Render,
+    state::{NodeState, StatefulNode},
 };
 
 /// A text buffer that exposes edit functionality for a single line. It also
@@ -12,7 +14,7 @@ use crate::{
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TextBuf {
     /// Raw input text value.
-    pub value: String,
+    value: String,
 
     /// Cursor position in bytes within value.
     cursor_pos: u32,
@@ -74,13 +76,6 @@ impl TextBuf {
         };
     }
 
-    /// Move the cursor to a specific location.
-    pub fn goto(&mut self, loc: u32) -> bool {
-        let changed = self.cursor_pos != loc;
-        self.cursor_pos = loc;
-        self.fix_window();
-        changed
-    }
     /// Insert a character at the cursor position.
     pub fn insert(&mut self, c: char) -> bool {
         self.value.insert(self.cursor_pos as usize, c);
@@ -122,13 +117,13 @@ impl TextBuf {
 }
 
 /// A single input line, one character high.
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 /// Single-line text input widget.
 pub struct Input {
     /// Node state.
     state: NodeState,
     /// Text buffer for the input.
-    pub textbuf: TextBuf,
+    textbuf: TextBuf,
 }
 
 #[derive_commands]
@@ -143,6 +138,11 @@ impl Input {
     /// Return the current input text.
     pub fn text(&self) -> String {
         self.textbuf.text()
+    }
+
+    /// Return the raw input value without padding.
+    pub fn value(&self) -> &str {
+        &self.textbuf.value
     }
 
     /// Move the cursor left.

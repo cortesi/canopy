@@ -1,8 +1,10 @@
-use crate as canopy;
 use crate::{
-    Context, Layout, Node, NodeState, Render, Result, StatefulNode, derive_commands,
+    Context, Layout, command, derive_commands,
+    error::Result,
     geom::{Expanse, Rect},
-    *,
+    node::Node,
+    render::Render,
+    state::{NodeState, StatefulNode},
 };
 
 /// ListItem must be implemented by items displayed in a `List`.
@@ -12,7 +14,7 @@ pub trait ListItem {
 }
 
 /// Manage and display a list of items.
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 pub struct List<N>
 where
     N: Node + ListItem,
@@ -25,7 +27,7 @@ where
 
     /// The offset of the currently selected item in the list. We keep this
     /// carefully in sync with the set_selected() method on ListItem.
-    pub selected: Option<usize>,
+    selected: Option<usize>,
 }
 
 #[derive_commands]
@@ -100,6 +102,11 @@ where
         } else {
             None
         }
+    }
+
+    /// The current selected index, if any.
+    pub fn selected_index(&self) -> Option<usize> {
+        self.selected
     }
 
     /// Select an item at a specified offset, clamping the offset to make sure
@@ -336,15 +343,14 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::{
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
         error::Error,
     };
 
-    use super::*;
-
     // Simple test item for unit tests
-    #[derive(StatefulNode)]
+    #[derive(canopy::StatefulNode)]
     struct TestItem {
         label: String,
         selected: bool,
@@ -576,7 +582,7 @@ mod tests {
         assert_eq!(list.selected, None);
     }
 
-    use crate::{Canopy, Loader, tutils::dummyctx::DummyContext};
+    use crate::{Canopy, Loader, testing::dummyctx::DummyContext};
 
     // Loader implementation for test lists
     impl Loader for List<TestItem> {
@@ -588,7 +594,7 @@ mod tests {
     }
 
     // Helper to create a multi-line test item
-    #[derive(StatefulNode)]
+    #[derive(canopy::StatefulNode)]
     struct MultiLineItem {
         label: String,
         height: u32,
@@ -684,7 +690,7 @@ mod tests {
 
     #[test]
     fn test_render_only_visible_items() {
-        use crate::tutils::harness::Harness;
+        use crate::testing::harness::Harness;
 
         let items = vec![
             TestItem::new("item0"),
@@ -710,7 +716,7 @@ mod tests {
 
     #[test]
     fn test_render_with_scrolled_view() {
-        use crate::tutils::harness::Harness;
+        use crate::testing::harness::Harness;
 
         let items = vec![
             TestItem::new("item0"),

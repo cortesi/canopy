@@ -23,7 +23,7 @@ simple, implementing them by hand would be tedious, so Canopy has derive helpers
 attribute. For example:
 
 ```rust
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 struct MyNode {
     state: NodeState,
     value: u64,

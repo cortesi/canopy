@@ -1,11 +1,14 @@
 use canopy::{
-    derive_commands,
+    Canopy, Layout, Loader, derive_commands,
+    error::Result,
     event::{key, mouse},
+    geom::Expanse,
+    node::Node,
+    state::{NodeState, StatefulNode},
     widgets::{Text, frame},
-    *,
 };
 
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 /// Simple pager widget for file contents.
 pub struct Pager {
     /// Node state.

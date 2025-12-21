@@ -2,11 +2,14 @@
 use std::cell::RefCell;
 
 use crate::{
-    self as canopy,
-    backend::test::TestRender,
+    Canopy, Context, Layout, command, derive_commands,
+    error::Result,
     event::{key, mouse},
     geom::Expanse,
-    *,
+    node::{EventOutcome, Node},
+    render::Render,
+    state::{NodeName, NodeState, StatefulNode},
+    testing::backend::TestRender,
 };
 
 /// Thread-local state tracked by test nodes.
@@ -60,7 +63,7 @@ pub fn get_state() -> State {
 macro_rules! leaf {
     ($a:ident) => {
         /// Test leaf node with instrumented behavior.
-        #[derive(Debug, PartialEq, Eq, StatefulNode)]
+        #[derive(Debug, PartialEq, Eq, canopy::StatefulNode)]
         pub struct $a {
             /// Node state.
             state: NodeState,
@@ -145,7 +148,7 @@ macro_rules! leaf {
 macro_rules! branch {
     ($name:ident, $la:ident, $lb:ident) => {
         /// Test branch node with two children.
-        #[derive(Debug, PartialEq, Eq, StatefulNode)]
+        #[derive(Debug, PartialEq, Eq, canopy::StatefulNode)]
         pub struct $name {
             /// Node state.
             state: NodeState,
@@ -226,7 +229,7 @@ macro_rules! branch {
     };
 }
 
-#[derive(Debug, PartialEq, Eq, StatefulNode)]
+#[derive(Debug, PartialEq, Eq, canopy::StatefulNode)]
 /// Root node for the test tree.
 pub struct R {
     /// Node state.

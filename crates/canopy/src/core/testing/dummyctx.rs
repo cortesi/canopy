@@ -1,4 +1,4 @@
-use crate::{geom::Direction, path::Path, *};
+use crate::{Context, error::Result, geom::Direction, node::Node, path::Path};
 
 /// Minimal context implementation for tests.
 pub struct DummyContext {}

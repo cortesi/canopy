@@ -78,7 +78,7 @@ impl From<(u32, u32)> for Point {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Result;
+    use crate::geom::Result;
 
     #[test]
     fn add() -> Result<()> {

@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
-use canopy::{event::key::KeyCode, tutils::harness::Harness};
+use canopy::{error::Result as CanopyResult, event::key::KeyCode, testing::harness::Harness};
 use todo::{Todo, open_store, setup_app};
 
 fn db_path(tag: &str) -> std::path::PathBuf {
@@ -15,7 +15,7 @@ fn db_path(tag: &str) -> std::path::PathBuf {
     ))
 }
 
-fn add(h: &mut Harness<Todo>, text: &str) -> canopy::Result<()> {
+fn add(h: &mut Harness<Todo>, text: &str) -> CanopyResult<()> {
     h.key('a')?;
     for ch in text.chars() {
         h.key(ch)?;
@@ -25,7 +25,7 @@ fn add(h: &mut Harness<Todo>, text: &str) -> canopy::Result<()> {
     Ok(())
 }
 
-fn del_first(h: &mut Harness<Todo>, _next: Option<&str>) -> canopy::Result<()> {
+fn del_first(h: &mut Harness<Todo>, _next: Option<&str>) -> CanopyResult<()> {
     h.key('g')?;
     h.key('d')?;
     // if let Some(txt) = next {
@@ -34,7 +34,7 @@ fn del_first(h: &mut Harness<Todo>, _next: Option<&str>) -> canopy::Result<()> {
     Ok(())
 }
 
-fn del_no_nav(h: &mut Harness<Todo>, _next: Option<&str>) -> canopy::Result<()> {
+fn del_no_nav(h: &mut Harness<Todo>, _next: Option<&str>) -> CanopyResult<()> {
     h.key('d')?;
     // if let Some(txt) = next {
     //     h.expect_highlight(txt);
@@ -60,7 +60,7 @@ fn add_item_via_script() -> Result<()> {
     h.key('i')?;
     use canopy::event::key::KeyCode;
     h.key(KeyCode::Enter)?;
-    assert_eq!(h.root.content.child.len(), 1);
+    assert_eq!(h.root.content.child().len(), 1);
     let todos = todo::store::get().todos().unwrap();
     assert_eq!(todos.len(), 1);
     assert_eq!(todos[0].item.trim(), "hi");
@@ -76,7 +76,7 @@ fn add_item_with_char_newline() {
     h.key('h').unwrap();
     h.key('i').unwrap();
     h.key('\n').unwrap();
-    assert_eq!(h.root.content.child.len(), 1);
+    assert_eq!(h.root.content.child().len(), 1);
 }
 
 #[test]
@@ -139,7 +139,7 @@ fn delete_middle_keeps_rest() -> Result<()> {
     h.key('j')?;
     h.key('j')?;
     h.key('d')?;
-    assert_eq!(h.root.content.child.len(), 2);
+    assert_eq!(h.root.content.child().len(), 2);
     Ok(())
 }
 
@@ -176,7 +176,7 @@ fn delete_first_keeps_second_visible() -> Result<()> {
     h.key('d')?; // Delete first item
 
     // After deletion, we still have one item
-    assert_eq!(h.root.content.child.len(), 1);
+    assert_eq!(h.root.content.child().len(), 1);
 
     // Check that the database still has the right item
     let todos = todo::store::get().todos()?;

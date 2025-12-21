@@ -9,3 +9,6 @@ canopy = { path = "../../crates/canopy" }
 clap = { version = "4.5.40", features = ["derive"] }
 rusqlite = "0.38"
 tracing = "0.1.41"
+
+[dev-dependencies]
+canopy = { path = "../../crates/canopy", features = ["testing"] }

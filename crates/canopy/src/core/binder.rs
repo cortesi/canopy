@@ -1,5 +1,6 @@
 use crate::{
-    Canopy, Result,
+    Canopy,
+    error::Result,
     event::{key::Key, mouse::Mouse},
 };
 

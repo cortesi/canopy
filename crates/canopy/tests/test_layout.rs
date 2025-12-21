@@ -3,11 +3,14 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Context, Expanse, Layout, Loader, Node, NodeState, Render, Result, StatefulNode,
+        Context, Layout, Loader,
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
-        geom::{Point, Rect},
-        state::NodeName,
-        tutils::harness::Harness,
+        error::Result,
+        geom::{Expanse, Point, Rect},
+        node::Node,
+        render::Render,
+        state::{NodeName, NodeState, StatefulNode},
+        testing::harness::Harness,
     };
 
     // Big node that expands to twice its given size

@@ -3,10 +3,11 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Expanse, buf, geom,
+        buf, geom,
+        geom::Expanse,
         render::Render,
         style::{StyleManager, StyleMap},
-        tutils::buf::BufTest as TBufTest,
+        testing::buf::BufTest as TBufTest,
     };
 
     fn assert_buffer_matches(render: &Render, expected: &[&str]) {

@@ -1,6 +1,6 @@
 //! Helper functions for `Node::layout` implementations.
 
-use crate::{Node, Result, geom::Rect};
+use crate::{error::Result, geom::Rect, node::Node};
 
 /// The Layout struct provides operations that a node can perform on children during its layout
 /// phase.

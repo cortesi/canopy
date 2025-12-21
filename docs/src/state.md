@@ -21,7 +21,7 @@ for you. All you need to do is make sure that the struct for your node has an at
 `NodeState`.
 
 ```rust
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 struct MyNode {
     state: NodeState,
     // ...

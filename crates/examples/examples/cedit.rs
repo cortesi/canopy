@@ -2,7 +2,7 @@
 
 use std::{env, error::Error, fs, result::Result as StdResult};
 
-use canopy::{backend::crossterm::runloop, *};
+use canopy::{Canopy, Loader, backend::crossterm::runloop, widgets::Root};
 use canopy_examples::cedit::{Ed, setup_bindings};
 
 /// Run the cedit example.

@@ -5,12 +5,12 @@ use std::{
 
 use convert_case::{Case, Casing};
 
+use super::viewport::ViewPort;
 use crate::{
-    Result, error,
+    error,
+    error::Result,
     geom::{Expanse, Rect},
 };
-
-use super::viewport::ViewPort;
 
 /// Global counter for node IDs.
 static CURRENT_ID: AtomicU64 = AtomicU64::new(0);
@@ -274,7 +274,7 @@ pub trait StatefulNode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Result;
+    use crate::error::Result;
 
     #[test]
     fn nodename() -> Result<()> {

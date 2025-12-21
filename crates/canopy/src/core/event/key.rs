@@ -330,7 +330,7 @@ impl From<KeyCode> for Key {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Result, event::key::*};
+    use crate::{error::Result, event::key::*};
 
     #[test]
     fn normalize() -> Result<()> {

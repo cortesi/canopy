@@ -2,7 +2,7 @@
 
 use std::io;
 
-use canopy::{backend::crossterm::runloop, *};
+use canopy::{Canopy, Loader, backend::crossterm::runloop, error::Result, widgets::Root};
 use canopy_examples::framegym::{FrameGym, setup_bindings};
 use clap::Parser;
 

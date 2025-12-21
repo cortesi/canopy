@@ -2,19 +2,6 @@ use std::{io::Write, process, sync::mpsc};
 
 use comfy_table::{ContentArrangement, Table, presets::UTF8_FULL};
 
-use crate::{
-    Context, EventOutcome, Layout, Node, NodeId, Render, Result,
-    backend::BackendControl,
-    commands, cursor, error,
-    event::{Event, key, mouse},
-    geom::{Direction, Expanse, Point, Rect},
-    path::*,
-    render::RenderBackend,
-    script,
-    style::{StyleManager, StyleMap, solarized},
-    tree::*,
-};
-
 use super::{
     focus::{collect_focusable_nodes, find_focus_target, find_focused_node},
     inputmap,
@@ -22,6 +9,21 @@ use super::{
     termbuf::TermBuf,
     viewport::ViewPort,
     viewstack::ViewStack,
+};
+use crate::{
+    Context, Layout,
+    backend::BackendControl,
+    commands, cursor,
+    error::{self, Result},
+    event::{Event, key, mouse},
+    geom::{Direction, Expanse, Point, Rect},
+    node::{EventOutcome, Node},
+    path::*,
+    render::{Render, RenderBackend},
+    script,
+    state::NodeId,
+    style::{StyleManager, StyleMap, solarized},
+    tree::*,
 };
 
 /// Core state required for Context implementation.
@@ -867,12 +869,16 @@ pub trait Loader {
 mod tests {
     use super::*;
     use crate::{
-        self as canopy, Error, EventOutcome, NodeState, StatefulNode,
-        backend::test::{CanvasRender, TestRender},
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
         derive_commands,
+        error::{Error, Result},
         geom::Rect,
-        tutils::ttree::{get_state, reset_state, run_ttree},
+        node::EventOutcome,
+        state::{NodeState, StatefulNode},
+        testing::{
+            backend::{CanvasRender, TestRender},
+            ttree::{get_state, reset_state, run_ttree},
+        },
     };
 
     #[test]
@@ -1273,7 +1279,7 @@ mod tests {
 
     #[test]
     fn tkey_no_render() -> Result<()> {
-        #[derive(StatefulNode)]
+        #[derive(canopy::StatefulNode)]
         struct N {
             state: NodeState,
         }
@@ -1333,7 +1339,7 @@ mod tests {
 
     #[test]
     fn zero_size_child_ok() -> Result<()> {
-        #[derive(StatefulNode)]
+        #[derive(canopy::StatefulNode)]
         struct Child {
             state: NodeState,
         }
@@ -1343,7 +1349,7 @@ mod tests {
 
         impl Node for Child {}
 
-        #[derive(StatefulNode)]
+        #[derive(canopy::StatefulNode)]
         struct Parent {
             state: NodeState,
             child: Child,

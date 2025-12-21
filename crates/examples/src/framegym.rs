@@ -1,7 +1,16 @@
-use canopy::{derive_commands, event::key, geom::Expanse, widgets::frame, *};
+use canopy::{
+    Binder, Canopy, Context, Layout, Loader, command, derive_commands,
+    error::Result,
+    event::key,
+    geom::Expanse,
+    node::Node,
+    render::Render,
+    state::{NodeState, StatefulNode},
+    widgets::{Root, frame},
+};
 
 /// A widget that renders a test pattern.
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 pub struct TestPattern {
     /// Node state.
     state: NodeState,
@@ -126,7 +135,7 @@ impl Node for TestPattern {
     }
 }
 
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 /// Root node for the frame gym demo.
 pub struct FrameGym {
     /// Node state.
@@ -205,7 +214,7 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
 
 #[cfg(test)]
 mod tests {
-    use canopy::tutils::harness::Harness;
+    use canopy::testing::harness::Harness;
 
     use super::*;
 

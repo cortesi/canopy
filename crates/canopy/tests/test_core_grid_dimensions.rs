@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use canopy::tutils::grid::Grid;
+    use canopy::testing::grid::Grid;
 
     #[test]
     fn test_grid_dimensions() {

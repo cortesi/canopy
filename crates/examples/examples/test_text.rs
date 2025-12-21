@@ -2,7 +2,7 @@
 
 use std::{error::Error, result::Result as StdResult};
 
-use canopy::{backend::crossterm::runloop, *};
+use canopy::{Canopy, Loader, backend::crossterm::runloop, widgets::Root};
 use canopy_examples::test_text::TextDisplay;
 
 /// Run the test_text example.

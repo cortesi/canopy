@@ -1,6 +1,10 @@
-use crate as canopy;
 use crate::{
-    Context, Layout, Node, NodeState, Render, Result, StatefulNode, derive_commands, geom,
+    Context, Layout, derive_commands,
+    error::Result,
+    geom,
+    node::Node,
+    render::Render,
+    state::{NodeState, StatefulNode},
 };
 
 /// Defines the set of glyphs used to draw the frame.
@@ -84,21 +88,21 @@ pub const ROUND_THICK: FrameGlyphs = FrameGlyphs {
 };
 
 /// A frame around an element with optional title and indicators.
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 pub struct Frame<N>
 where
     N: Node,
 {
     /// Child node wrapped by the frame.
-    pub child: N,
+    child: N,
     /// Node state.
-    pub state: NodeState,
+    state: NodeState,
     /// Glyph set for rendering.
-    pub glyphs: FrameGlyphs,
+    glyphs: FrameGlyphs,
     /// Optional title string.
-    pub title: Option<String>,
+    title: Option<String>,
     /// Cached frame geometry.
-    pub frame: geom::Frame,
+    frame: geom::Frame,
 }
 
 #[derive_commands]
@@ -127,6 +131,31 @@ where
     pub fn with_title(mut self, title: String) -> Self {
         self.title = Some(title);
         self
+    }
+
+    /// Return a reference to the wrapped child node.
+    pub fn child(&self) -> &N {
+        &self.child
+    }
+
+    /// Return a mutable reference to the wrapped child node.
+    pub fn child_mut(&mut self) -> &mut N {
+        &mut self.child
+    }
+
+    /// Return the glyph set used by the frame.
+    pub fn glyphs(&self) -> &FrameGlyphs {
+        &self.glyphs
+    }
+
+    /// Return the optional title string.
+    pub fn title(&self) -> Option<&str> {
+        self.title.as_deref()
+    }
+
+    /// Return the cached frame geometry.
+    pub fn frame(&self) -> &geom::Frame {
+        &self.frame
     }
 }
 
@@ -207,19 +236,21 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::{
-        Context, Expanse, Node, NodeState, Result, StatefulNode,
+        Context,
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
         core::{termbuf::TermBuf, viewport::ViewPort, viewstack::ViewStack},
-        geom::Line,
+        error::Result,
+        geom::{Expanse, Line},
+        node::Node,
+        state::NodeState,
         style::{StyleManager, StyleMap},
-        tutils::{buf::BufTest, dummyctx::DummyContext},
+        testing::{buf::BufTest, dummyctx::DummyContext},
     };
 
-    use super::*;
-
     /// A simple scrollable test widget for testing frame scrolling
-    #[derive(StatefulNode)]
+    #[derive(canopy::StatefulNode)]
     struct ScrollableContent {
         state: NodeState,
         canvas_size: Expanse,
@@ -297,7 +328,7 @@ mod tests {
         let content = ScrollableContent::new(50, 50);
         let frame = Frame::new(content).with_title("Test Title".to_string());
 
-        assert_eq!(frame.title, Some("Test Title".to_string()));
+        assert_eq!(frame.title(), Some("Test Title"));
     }
 
     #[test]
@@ -395,7 +426,7 @@ mod tests {
         for (scroll_x, scroll_y, test_name) in scroll_tests {
             println!("\n=== Testing scroll position ({scroll_x}, {scroll_y}) - {test_name} ===");
             // DummyContext doesn't actually scroll, so we need to manually set the scroll position
-            frame.child.scroll_to(scroll_x, scroll_y);
+            frame.child_mut().scroll_to(scroll_x, scroll_y);
 
             // Create main buffer
             let mut main_buf = TermBuf::empty(frame_size);
@@ -517,7 +548,7 @@ mod tests {
             println!("\n=== Testing: {test_name} (scroll to {x}, {y}) ===");
 
             // Scroll to position - DummyContext doesn't actually scroll, so we do it directly
-            frame.child.scroll_to(x, y);
+            frame.child_mut().scroll_to(x, y);
 
             // Create fresh render for this test
             let render_rect = geom::Rect::new(0, 0, 10, 10);
@@ -546,11 +577,11 @@ mod tests {
         println!("\n=== Testing incremental scrolling ===");
 
         // Reset to origin
-        frame.child.scroll_to(0, 0);
+        frame.child_mut().scroll_to(0, 0);
 
         // Scroll down one line at a time
         for i in 0..15 {
-            frame.child.scroll_down();
+            frame.child_mut().scroll_down();
 
             let render_rect = geom::Rect::new(0, 0, 10, 10);
             let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
@@ -565,9 +596,9 @@ mod tests {
         }
 
         // Scroll right one column at a time
-        frame.child.scroll_to(0, 0);
+        frame.child_mut().scroll_to(0, 0);
         for i in 0..15 {
-            frame.child.scroll_right();
+            frame.child_mut().scroll_right();
 
             let render_rect = geom::Rect::new(0, 0, 10, 10);
             let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
@@ -622,11 +653,11 @@ mod tests {
         // Should have: corner, maybe a separator, title, separator(s), corner
         println!("Top line length: {}", top_line.len());
         assert!(
-            top_line.starts_with(frame.glyphs.topleft),
+            top_line.starts_with(frame.glyphs().topleft),
             "Should start with top-left corner"
         );
         assert!(
-            top_line.ends_with(frame.glyphs.topright),
+            top_line.ends_with(frame.glyphs().topright),
             "Should end with top-right corner"
         );
 
@@ -641,7 +672,7 @@ mod tests {
         );
 
         // The rest should be filled with horizontal line characters
-        let horizontal_count = top_line.matches(frame.glyphs.horizontal).count();
+        let horizontal_count = top_line.matches(frame.glyphs().horizontal).count();
         assert!(
             horizontal_count > 10,
             "Most of the line should be filled with horizontal characters"
@@ -667,7 +698,7 @@ mod tests {
 
         // This test verifies the fix is working correctly
 
-        println!("Frame top rect width: {}", frame.frame.top.w);
-        println!("Title: '{}'", frame.title.as_ref().unwrap());
+        println!("Frame top rect width: {}", frame.frame().top.w);
+        println!("Title: '{}'", frame.title().unwrap());
     }
 }

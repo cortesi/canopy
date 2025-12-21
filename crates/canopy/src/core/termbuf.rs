@@ -1,5 +1,5 @@
 use crate::{
-    Result,
+    error::Result,
     geom::{Expanse, Frame, Line, Point, Rect},
     render::RenderBackend,
     style::{AttrSet, Color, Style},
@@ -336,7 +336,7 @@ mod tests {
     use crate::{
         buf,
         style::{AttrSet, Color, PartialStyle},
-        tutils::buf::BufTest,
+        testing::buf::BufTest,
     };
 
     fn def_style() -> Style {

@@ -1,15 +1,18 @@
 use std::time::Duration;
 
 use canopy::{
-    derive_commands,
+    Canopy, Context, Layout, Loader, command, derive_commands,
+    error::Result,
     event::{key, mouse},
     geom::Expanse,
+    node::Node,
+    render::Render,
+    state::{NodeState, StatefulNode},
     style::solarized,
     widgets::{Text, frame, list::*},
-    *,
 };
 
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 /// List item that increments on a timer.
 pub struct IntervalItem {
     /// Node state.
@@ -77,7 +80,7 @@ impl Node for IntervalItem {
     }
 }
 
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 /// Status bar widget for the intervals demo.
 pub struct StatusBar {
     /// Node state.
@@ -95,7 +98,7 @@ impl Node for StatusBar {
     }
 }
 
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 /// Root node for the intervals demo.
 pub struct Intervals {
     /// Node state.
@@ -128,8 +131,7 @@ impl Intervals {
     #[command]
     /// Append a new list item.
     pub fn add_item(&mut self, _c: &mut dyn Context) {
-        let lst = &mut self.content.child;
-        lst.append(IntervalItem::new());
+        self.content.child_mut().append(IntervalItem::new());
     }
 }
 

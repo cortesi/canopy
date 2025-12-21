@@ -1,5 +1,5 @@
 use crate::{
-    Result,
+    error::Result,
     geom::{Expanse, Point, Rect},
 };
 

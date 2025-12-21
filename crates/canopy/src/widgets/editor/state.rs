@@ -1,6 +1,5 @@
-use crate::geom::Point;
-
 use super::primitives::*;
+use crate::geom::Point;
 
 /// Default wrapping width for new states.
 const DEFAULT_WRAP: usize = 80;

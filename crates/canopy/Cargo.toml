@@ -33,6 +33,9 @@ clap = { version = "4.5.40", features = ["derive"] }
 rand = "0.9.1"
 criterion = "0.8"
 
+[features]
+testing = []
+
 [[bench]]
 name = "rendering"
 harness = false

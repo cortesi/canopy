@@ -1,4 +1,4 @@
-use crate::{Direction, Node, Result, path::Path};
+use crate::{error::Result, geom::Direction, node::Node, path::Path};
 
 /// The API exposed to nodes by Canopy.
 pub trait Context {

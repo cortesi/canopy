@@ -2,7 +2,16 @@
 
 #[cfg(test)]
 mod tests {
-    use canopy::{Context, path::Path, tree::*, tutils::grid::Grid, *};
+    use canopy::{
+        Context, Layout, derive_commands,
+        error::{Error, Result},
+        geom::Expanse,
+        node::Node,
+        path::Path,
+        state::{NodeName, NodeState, StatefulNode},
+        testing::grid::Grid,
+        tree::*,
+    };
 
     struct TreeLeaf {
         state: NodeState,

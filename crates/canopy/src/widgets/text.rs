@@ -1,16 +1,19 @@
-use crate as canopy;
 use crate::{
-    Context, Layout, Node, NodeState, Render, Result, StatefulNode, command, derive_commands,
+    Context, Layout, command, derive_commands,
+    error::Result,
     geom::Expanse,
+    node::Node,
+    render::Render,
+    state::{NodeState, StatefulNode},
 };
 
 /// Multiline text widget with wrapping and scrolling.
-#[derive(StatefulNode)]
+#[derive(canopy::StatefulNode)]
 pub struct Text {
     /// Node state.
-    pub state: NodeState,
+    state: NodeState,
     /// Raw text content.
-    pub raw: String,
+    raw: String,
     /// Wrapped lines cache.
     lines: Option<Vec<String>>,
     /// Optional fixed width for wrapping.
@@ -36,6 +39,18 @@ impl Text {
     pub fn with_fixed_width(mut self, width: u32) -> Self {
         self.fixed_width = Some(width);
         self
+    }
+
+    /// Return the raw text content.
+    pub fn raw(&self) -> &str {
+        &self.raw
+    }
+
+    /// Replace the raw text content and reset wrapping state.
+    pub fn set_raw(&mut self, raw: &str) {
+        self.raw = raw.to_owned();
+        self.lines = None;
+        self.current_size = Expanse::default();
     }
 
     #[command]

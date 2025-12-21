@@ -3,23 +3,29 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Context, Expanse, Layout, Loader, Node, NodeState, Render, Result, StatefulNode, buf,
-        derive_commands, geom, tutils::harness::Harness,
+        Context, Layout, Loader, buf, derive_commands,
+        error::Result,
+        geom,
+        geom::Expanse,
+        node::Node,
+        render::Render,
+        state::{NodeState, StatefulNode},
+        testing::harness::Harness,
     };
 
     // Define our node types
-    #[derive(StatefulNode)]
+    #[derive(canopy::StatefulNode)]
     struct NodeB {
         state: NodeState,
     }
 
-    #[derive(StatefulNode)]
+    #[derive(canopy::StatefulNode)]
     struct NodeA {
         state: NodeState,
         node_b: NodeB,
     }
 
-    #[derive(StatefulNode)]
+    #[derive(canopy::StatefulNode)]
     struct Root {
         state: NodeState,
         node_a: NodeA,
