@@ -1,1 +1,0 @@
-searchState.loadedDescShard("canopy_derive", 0, "Derive an implementation of the StatefulNode trait for a …\nMark a method as a command. This macro should be used to …\nDerive an implementation of the <code>CommandNode</code> trait. This …")
