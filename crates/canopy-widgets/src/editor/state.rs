@@ -2,6 +2,7 @@ use canopy_core::geom::Point;
 
 use super::primitives::*;
 
+/// Default wrapping width for new states.
 const DEFAULT_WRAP: usize = 80;
 
 /// The current state of the editor
@@ -13,6 +14,7 @@ pub struct State {
     pub cursor: Cursor,
     /// The current wrap width
     pub width: usize,
+    /// Visible window of wrapped lines.
     pub window: Window,
 }
 
@@ -315,6 +317,7 @@ impl State {
         buf
     }
 
+    /// Return the total number of wrapped lines.
     pub fn line_height(&self) -> usize {
         self.chunks.iter().map(|x| x.wraps.len()).sum()
     }

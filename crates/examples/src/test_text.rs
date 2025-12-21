@@ -1,8 +1,11 @@
 use canopy::{derive_commands, widgets::Text, *};
 
 #[derive(StatefulNode)]
+/// Demo node that displays placeholder text.
 pub struct TextDisplay {
+    /// Node state.
     state: NodeState,
+    /// Text widget.
     text: Text,
 }
 
@@ -14,6 +17,7 @@ impl Default for TextDisplay {
 }
 
 impl TextDisplay {
+    /// Construct a new text display demo.
     pub fn new() -> Self {
         let paragraph = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod \
                         tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, \
@@ -39,6 +43,7 @@ impl TextDisplay {
     }
 
     #[command]
+    /// Trigger a redraw.
     pub fn redraw(&mut self, _ctx: &mut dyn Context) {}
 }
 

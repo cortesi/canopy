@@ -7,22 +7,29 @@ use crate::{
     script,
 };
 
+/// Default input mode name.
 const DEFAULT_MODE: &str = "";
 
 /// An action to be taken in response to an event, if the path matches.
 #[derive(Debug)]
 struct BoundAction {
+    /// Path matcher for the binding.
     pathmatch: PathMatcher,
+    /// Script identifier to execute.
     script: script::ScriptId,
 }
 
+/// Input event used for bindings.
 #[derive(Debug, Hash, PartialEq, Eq)]
 pub enum Input {
+    /// Mouse input.
     Mouse(Mouse),
+    /// Keyboard input.
     Key(Key),
 }
 
 impl Input {
+    /// Normalize key variants for matching.
     fn normalize(&self) -> Self {
         match *self {
             Self::Mouse(m) => Self::Mouse(m),
@@ -34,10 +41,12 @@ impl Input {
 /// A InputMode contains a set of bound keys and mouse actions.
 #[derive(Debug)]
 pub struct InputMode {
+    /// Input bindings for this mode.
     inputs: HashMap<Input, Vec<BoundAction>>,
 }
 
 impl InputMode {
+    /// Construct an empty input mode.
     fn new() -> Self {
         Self {
             inputs: HashMap::new(),
@@ -53,7 +62,7 @@ impl InputMode {
     }
 
     /// Resolve a key with a given path filter to a script.
-    pub fn resolve(&self, path: &Path, input: Input) -> Option<script::ScriptId> {
+    pub fn resolve(&self, path: &Path, input: &Input) -> Option<script::ScriptId> {
         let input = input.normalize();
         let mut ret = (0, None);
         for k in self.inputs.get(&input)? {
@@ -76,7 +85,9 @@ impl InputMode {
 /// an action is handled by a node. If no action is handled, the key is ignored.
 #[derive(Debug)]
 pub struct InputMap {
+    /// Registered modes and bindings.
     modes: HashMap<String, InputMode>,
+    /// Current active mode name.
     current_mode: String,
 }
 
@@ -87,6 +98,7 @@ impl Default for InputMap {
 }
 
 impl InputMap {
+    /// Construct a new input map with the default mode.
     pub fn new() -> Self {
         let default = InputMode::new();
         let mut modes = HashMap::new();
@@ -98,6 +110,7 @@ impl InputMap {
     }
 
     #[allow(dead_code)]
+    /// Set the current input mode.
     pub fn set_mode(&mut self, mode: &str) -> Result<()> {
         if !mode.is_empty() && !self.modes.contains_key(mode) {
             Err(error::Error::Invalid(format!("Unknown mode: {mode}")))
@@ -107,7 +120,8 @@ impl InputMap {
         }
     }
 
-    pub fn resolve(&self, path: &Path, input: Input) -> Option<script::ScriptId> {
+    /// Resolve a binding in the current mode.
+    pub fn resolve(&self, path: &Path, input: &Input) -> Option<script::ScriptId> {
         // Unwrap is safe, because we make it impossible for our current mode to
         // be non-existent.
         let m = self.modes.get(&self.current_mode).unwrap();
@@ -144,12 +158,12 @@ mod tests {
         m.insert(PathMatcher::new("foo")?, Input::Key('A'.into()), a_foo);
 
         assert_eq!(
-            m.resolve(&"foo".into(), Input::Key(key::Shift + 'A'))
+            m.resolve(&"foo".into(), &Input::Key(key::Shift + 'A'))
                 .unwrap(),
             a_foo
         );
         assert_eq!(
-            m.resolve(&"foo".into(), Input::Key(key::Shift + 'a'))
+            m.resolve(&"foo".into(), &Input::Key(key::Shift + 'a'))
                 .unwrap(),
             a_foo
         );
@@ -170,29 +184,29 @@ mod tests {
         m.insert(PathMatcher::new("")?, Input::Key('b'.into()), b);
 
         assert_eq!(
-            m.resolve(&"foo".into(), Input::Key('a'.into())).unwrap(),
+            m.resolve(&"foo".into(), &Input::Key('a'.into())).unwrap(),
             a_foo
         );
         assert_eq!(
-            m.resolve(&"bar".into(), Input::Key('a'.into())).unwrap(),
+            m.resolve(&"bar".into(), &Input::Key('a'.into())).unwrap(),
             a_bar,
         );
         assert_eq!(
-            m.resolve(&"bar/foo".into(), Input::Key('a'.into()))
+            m.resolve(&"bar/foo".into(), &Input::Key('a'.into()))
                 .unwrap(),
             a_foo,
         );
         assert_eq!(
-            m.resolve(&"foo/bar".into(), Input::Key('a'.into()))
+            m.resolve(&"foo/bar".into(), &Input::Key('a'.into()))
                 .unwrap(),
             a_bar
         );
         assert!(
-            m.resolve(&"foo/bar".into(), Input::Key('x'.into()))
+            m.resolve(&"foo/bar".into(), &Input::Key('x'.into()))
                 .is_none()
         );
         assert!(
-            m.resolve(&"nonexistent".into(), Input::Key('a'.into()))
+            m.resolve(&"nonexistent".into(), &Input::Key('a'.into()))
                 .is_none()
         );
 
@@ -211,13 +225,13 @@ mod tests {
         m.bind("m", Input::Key('a'.into()), "", a_m)?;
 
         assert_eq!(
-            m.resolve(&"foo/bar".into(), Input::Key('a'.into()))
+            m.resolve(&"foo/bar".into(), &Input::Key('a'.into()))
                 .unwrap(),
             a_default
         );
         m.set_mode("m")?;
         assert_eq!(
-            m.resolve(&"foo/bar".into(), Input::Key('a'.into()))
+            m.resolve(&"foo/bar".into(), &Input::Key('a'.into()))
                 .unwrap(),
             a_m
         );

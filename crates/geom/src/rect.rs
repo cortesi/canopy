@@ -19,6 +19,7 @@ impl Default for Rect {
 }
 
 impl Rect {
+    /// Construct a rectangle from coordinates and size.
     pub fn new(x: u32, y: u32, w: u32, h: u32) -> Self {
         Self {
             tl: Point { x, y },
@@ -360,7 +361,7 @@ impl Rect {
         }
     }
 
-    // Return a line with a given offset in the rectangle. Panics if the rectangle size is exceeded.
+    /// Return a line with a given offset in the rectangle.
     pub fn line(&self, off: u32) -> Line {
         if off > self.h {
             panic!("offset exceeds rectangle height")
@@ -452,11 +453,11 @@ impl From<Line> for Rect {
 
 impl From<(u32, u32, u32, u32)> for Rect {
     fn from(v: (u32, u32, u32, u32)) -> Self {
-        let (x, y, w, h) = v;
+        let (x_pos, y_pos, width, height) = v;
         Self {
-            tl: (x, y).into(),
-            w,
-            h,
+            tl: (x_pos, y_pos).into(),
+            w: width,
+            h: height,
         }
     }
 }

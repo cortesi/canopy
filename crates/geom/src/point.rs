@@ -2,16 +2,21 @@ use std::ops::Add;
 
 use super::Rect;
 
+/// A 2D point in integer cell coordinates.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
 pub struct Point {
+    /// X coordinate.
     pub x: u32,
+    /// Y coordinate.
     pub y: u32,
 }
 
 impl Point {
+    /// Return the origin point.
     pub fn zero() -> Self {
         (0, 0).into()
     }
+    /// Return true when both coordinates are zero.
     pub fn is_zero(&self) -> bool {
         self.x == 0 && self.y == 0
     }

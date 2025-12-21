@@ -1,9 +1,12 @@
-use std::{env, fs};
+//! Launch the pager example.
+
+use std::{env, error::Error, fs, result::Result as StdResult};
 
 use canopy::{backend::crossterm::runloop, *};
-use canopy_examples::pager::{setup_bindings, Pager};
+use canopy_examples::pager::{Pager, setup_bindings};
 
-pub fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// Run the pager example.
+pub fn main() -> StdResult<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
     if args.len() != 2 {
         println!("Usage: pager filename");
@@ -13,7 +16,7 @@ pub fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         setup_bindings(&mut cnpy);
 
         let contents = fs::read_to_string(args[1].clone())?;
-        let root = Root::new(Pager::new(contents));
+        let root = Root::new(Pager::new(&contents));
         runloop(cnpy, root)?;
     }
     Ok(())

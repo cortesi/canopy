@@ -1,6 +1,6 @@
 use std::{io::Write, process, sync::mpsc};
 
-use comfy_table::{ContentArrangement, Table};
+use comfy_table::{ContentArrangement, Table, presets::UTF8_FULL};
 
 use crate::{
     Context, EventOutcome, Layout, Node, NodeId, Render, Result, TermBuf, ViewPort, ViewStack,
@@ -18,6 +18,7 @@ use crate::{
     tree::*,
 };
 
+/// Application runtime state and renderer coordination.
 #[derive(Debug)]
 pub struct Canopy {
     /// A counter that is incremented every time focus changes. The current focus
@@ -34,16 +35,24 @@ pub struct Canopy {
     /// Root window size
     pub(crate) root_size: Option<Expanse>,
 
+    /// Script execution host.
     pub(crate) script_host: script::ScriptHost,
+    /// Input mapping table.
     pub(crate) keymap: inputmap::InputMap,
+    /// Registered command set.
     pub(crate) commands: commands::CommandSet,
+    /// Active backend controller.
     pub(crate) backend: Option<Box<dyn BackendControl>>,
 
+    /// Cached terminal buffer.
     termbuf: Option<TermBuf>,
 
+    /// Event sender channel.
     pub(crate) event_tx: mpsc::Sender<Event>,
+    /// Event receiver channel.
     pub(crate) event_rx: Option<mpsc::Receiver<Event>>,
 
+    /// Style map used for rendering.
     pub style: StyleMap,
 }
 
@@ -222,7 +231,7 @@ impl Context for Canopy {
 
     /// Stop the render backend and exit the process.
     fn exit(&mut self, code: i32) -> ! {
-        let _ = self.stop();
+        let _ = self.stop().ok();
         process::exit(code)
     }
 
@@ -232,6 +241,7 @@ impl Context for Canopy {
 }
 
 impl Canopy {
+    /// Construct a new Canopy instance.
     pub fn new() -> Self {
         let (tx, rx) = mpsc::channel();
         Self {
@@ -250,6 +260,7 @@ impl Canopy {
         }
     }
 
+    /// Register a backend controller.
     pub fn register_backend<T: BackendControl + 'static>(&mut self, be: T) {
         self.backend = Some(Box::new(be))
     }
@@ -259,6 +270,7 @@ impl Canopy {
         self.termbuf.as_ref()
     }
 
+    /// Run a compiled script by id on the target node.
     pub fn run_script(
         &mut self,
         root: &mut dyn Node,
@@ -344,7 +356,7 @@ impl Canopy {
 
         let mut table = Table::new();
         table.set_content_arrangement(ContentArrangement::Dynamic);
-        table.load_preset(comfy_table::presets::UTF8_FULL);
+        table.load_preset(UTF8_FULL);
         for i in cmds {
             table.add_row(vec![
                 comfy_table::Cell::new(i.fullname()).fg(comfy_table::Color::Green),
@@ -411,6 +423,7 @@ impl Canopy {
         Ok(())
     }
 
+    /// Render a node subtree into the destination buffer.
     fn render_traversal(
         &mut self,
         dest_buf: &mut TermBuf,
@@ -637,8 +650,9 @@ impl Canopy {
                         handled = true;
                     }
                     _ => {
-                        if let Some(s) =
-                            self.keymap.resolve(&path, inputmap::Input::Mouse(m.into()))
+                        if let Some(s) = self
+                            .keymap
+                            .resolve(&path, &inputmap::Input::Mouse(m.into()))
                         {
                             handled = true;
                             script = Some((s, x.id()));
@@ -668,7 +682,7 @@ impl Canopy {
             Walk<Option<(script::ScriptId, NodeId)>>,
         > {
             Ok(
-                if let Some(s) = self.keymap.resolve(&path, inputmap::Input::Key(k)) {
+                if let Some(s) = self.keymap.resolve(&path, &inputmap::Input::Key(k)) {
                     Walk::Handle(Some((s, x.id())))
                 } else {
                     match x.handle_key(self, k)? {
@@ -690,7 +704,7 @@ impl Canopy {
 
     /// Handle a poll event by traversing the complete node tree, and triggering
     /// poll on each ID in the poll set.
-    fn poll(&mut self, ids: Vec<NodeId>, root: &mut dyn Node) -> Result<()> {
+    fn poll(&mut self, ids: &[NodeId], root: &mut dyn Node) -> Result<()> {
         preorder(root, &mut |x| -> Result<Walk<()>> {
             if ids.contains(&x.id())
                 && let Some(d) = x.poll(self)
@@ -715,7 +729,7 @@ impl Canopy {
                 self.set_root_size(s, root)?;
             }
             Event::Poll(ids) => {
-                self.poll(ids, root)?;
+                self.poll(&ids, root)?;
             }
             // FIXME: Implement new crossterm events.
             _ => {}
@@ -748,6 +762,7 @@ impl Canopy {
 /// themselves and their children. The most common use for this trait is to load
 /// the command sets from a node tree.
 pub trait Loader {
+    /// Load commands or resources into the canopy instance.
     fn load(_: &mut Canopy) {}
 }
 
@@ -1237,6 +1252,7 @@ mod tests {
             child: Child,
         }
 
+        #[derive_commands]
         impl Parent {
             fn new() -> Self {
                 Self {
@@ -1247,9 +1263,6 @@ mod tests {
                 }
             }
         }
-
-        #[derive_commands]
-        impl Parent {}
 
         impl Node for Parent {
             fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {

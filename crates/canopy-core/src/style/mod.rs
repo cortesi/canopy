@@ -1,4 +1,6 @@
+/// Color helpers.
 mod color;
+/// Solarized theme helpers.
 pub mod solarized;
 
 use std::collections::HashMap;
@@ -6,24 +8,36 @@ use std::collections::HashMap;
 pub use color::Color;
 
 /// A text attribute.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Attr {
+    /// Bold text.
     Bold,
+    /// Crossed out text.
     CrossedOut,
+    /// Dim text.
     Dim,
+    /// Italic text.
     Italic,
+    /// Overlined text.
     Overline,
+    /// Underlined text.
     Underline,
 }
 
 /// A set of active text attributes.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct AttrSet {
+    /// Bold flag.
     pub bold: bool,
+    /// Crossed out flag.
     pub crossedout: bool,
+    /// Dim flag.
     pub dim: bool,
+    /// Italic flag.
     pub italic: bool,
+    /// Overline flag.
     pub overline: bool,
+    /// Underline flag.
     pub underline: bool,
 }
 
@@ -72,8 +86,11 @@ impl AttrSet {
 /// A resolved style specification.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Style {
+    /// Foreground color.
     pub fg: Color,
+    /// Background color.
     pub bg: Color,
+    /// Text attributes.
     pub attrs: AttrSet,
 }
 
@@ -81,8 +98,11 @@ pub struct Style {
 /// Partial styles are completely resolved during the style resolution process.
 #[derive(Default, Debug, PartialEq, Eq, Clone)]
 pub struct PartialStyle {
+    /// Optional foreground color.
     pub fg: Option<Color>,
+    /// Optional background color.
     pub bg: Option<Color>,
+    /// Optional attributes.
     pub attrs: Option<AttrSet>,
 }
 
@@ -114,6 +134,7 @@ impl PartialStyle {
         }
     }
 
+    /// Resolve the partial style into a full style.
     pub fn resolve(&self) -> Style {
         Style {
             fg: self.fg.unwrap(),
@@ -122,16 +143,19 @@ impl PartialStyle {
         }
     }
 
+    /// Set the foreground color.
     pub fn with_fg(mut self, fg: Color) -> Self {
         self.fg = Some(fg);
         self
     }
 
+    /// Set the background color.
     pub fn with_bg(mut self, bg: Color) -> Self {
         self.bg = Some(bg);
         self
     }
 
+    /// Add a single attribute.
     pub fn with_attr(mut self, attr: Attr) -> Self {
         if let Some(attrs) = self.attrs {
             self.attrs = Some(attrs.with(attr));
@@ -141,11 +165,13 @@ impl PartialStyle {
         self
     }
 
+    /// Replace the attributes set.
     pub fn with_attrs(mut self, attrs: AttrSet) -> Self {
         self.attrs = Some(attrs);
         self
     }
 
+    /// Merge two partial styles.
     pub fn join(&self, other: &Self) -> Self {
         Self {
             fg: if self.fg.is_some() { self.fg } else { other.fg },
@@ -158,11 +184,13 @@ impl PartialStyle {
         }
     }
 
+    /// Return true if all components are set.
     pub fn is_complete(&self) -> bool {
         self.fg.is_some() && self.bg.is_some() && self.attrs.is_some()
     }
 }
 
+/// Split a style path into components.
 fn parse_path(path: &str) -> Vec<String> {
     path.split('/')
         .filter_map(|s| {
@@ -175,12 +203,15 @@ fn parse_path(path: &str) -> Vec<String> {
         .collect()
 }
 
+/// Map of style paths to partial styles.
 #[derive(Debug, Default)]
 pub struct StyleMap {
+    /// Path-to-style map.
     styles: HashMap<Vec<String>, PartialStyle>,
 }
 
 impl StyleMap {
+    /// Construct a style map with defaults.
     pub fn new() -> Self {
         let mut cs = Self {
             styles: HashMap::new(),
@@ -273,10 +304,11 @@ impl StyleMap {
 /// "/frame/selected", "foo", ""].
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct StyleManager {
-    // The current render level
+    /// Current render level.
     level: usize,
-    // A list of selected layers, along with which render level they were set at
+    /// Active layer names.
     layers: Vec<String>,
+    /// Render levels corresponding to layers.
     layer_levels: Vec<usize>,
 }
 
@@ -287,6 +319,7 @@ impl Default for StyleManager {
 }
 
 impl StyleManager {
+    /// Construct a new style manager.
     pub fn new() -> Self {
         Self {
             level: 0,
@@ -295,20 +328,19 @@ impl StyleManager {
         }
     }
 
-    // Reset all layers and levels.
+    /// Reset all layers and levels.
     pub fn reset(&mut self) {
         self.level = 0;
         self.layers = vec![];
         self.layer_levels = vec![0];
     }
 
-    // Increment a render level.
+    /// Increment the render level.
     pub fn push(&mut self) {
         self.level += 1
     }
 
-    // Decrement a render level. A layer pushed onto the stack with the  current
-    // render level will be removed.
+    /// Decrement the render level and pop any layers at this level.
     pub fn pop(&mut self) {
         if self.level != 0 {
             if self.layer_levels.last() == Some(&self.level) {
@@ -330,7 +362,7 @@ impl StyleManager {
         self.resolve(smap, &self.layers, &parse_path(path))
     }
 
-    // Look up one suffix along a layer chain
+    /// Look up one suffix along a layer chain.
     fn lookup(&self, smap: &StyleMap, layers: &[String], suffix: &[String]) -> PartialStyle {
         let mut ret = PartialStyle::default();
         // Look up the path on all layers to the root.
@@ -487,7 +519,7 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn style_layers() -> Result<()> {
+    fn style_layers_basic() -> Result<()> {
         let mut c = StyleManager::new();
         assert!(c.layers.is_empty());
         assert_eq!(c.layer_levels, Vec::<usize>::new());
@@ -502,6 +534,15 @@ mod tests {
         assert_eq!(c.level, 1);
         assert_eq!(c.layers, vec!["foo"]);
         assert_eq!(c.layer_levels, vec![1]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn style_layers_nested() -> Result<()> {
+        let mut c = StyleManager::new();
+        c.push();
+        c.push_layer("foo");
 
         c.push();
         c.push();

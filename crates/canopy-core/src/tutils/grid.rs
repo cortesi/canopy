@@ -16,11 +16,19 @@ use crate::{
 /// A node in the grid that can be either a leaf cell or a container with children
 pub enum GridNode {
     /// A leaf cell in the grid
-    Cell { state: NodeState, name_str: String },
+    Cell {
+        /// Node state.
+        state: NodeState,
+        /// Node name string.
+        name_str: String,
+    },
     /// A container node with child nodes
     Container {
+        /// Node state.
         state: NodeState,
+        /// Node name string.
         name_str: String,
+        /// Child nodes.
         children: Vec<Self>,
     },
 }
@@ -123,6 +131,7 @@ impl GridNode {
         }
     }
 
+    /// Return a reference to the node state.
     fn state(&self) -> &NodeState {
         match self {
             Self::Cell { state, .. } => state,
@@ -130,6 +139,7 @@ impl GridNode {
         }
     }
 
+    /// Return a mutable reference to the node state.
     fn state_mut(&mut self) -> &mut NodeState {
         match self {
             Self::Cell { state, .. } => state,
@@ -137,6 +147,7 @@ impl GridNode {
         }
     }
 
+    /// Return the node name string.
     fn name_str(&self) -> &str {
         match self {
             Self::Cell { name_str, .. } => name_str,
@@ -245,8 +256,11 @@ impl StatefulNode for GridNode {
 /// let grid = Grid::new(1, 3);
 /// ```
 pub struct Grid {
+    /// Root node for the grid.
     root: GridNode,
+    /// Recursion depth.
     recursion: usize,
+    /// Number of subdivisions per level.
     divisions: usize,
 }
 

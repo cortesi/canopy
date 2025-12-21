@@ -2,7 +2,8 @@
 name = "canopy"
 authors = ["Aldo Cortesi <aldo@corte.si>"]
 version = "0.0.1"
-edition = "2024"
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
 canopy-core = { path = "../canopy-core" }

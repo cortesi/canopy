@@ -5,15 +5,20 @@ use canopy::{
     event::{key, mouse},
     geom::Expanse,
     style::solarized,
-    widgets::{frame, list::*, Text},
+    widgets::{Text, frame, list::*},
     *,
 };
 
 #[derive(StatefulNode)]
+/// List item that increments on a timer.
 pub struct IntervalItem {
+    /// Node state.
     state: NodeState,
+    /// Text display for the value.
     child: Text,
+    /// Selection state.
     selected: bool,
+    /// Current counter value.
     value: u64,
 }
 
@@ -25,6 +30,7 @@ impl Default for IntervalItem {
 }
 
 impl IntervalItem {
+    /// Construct a new interval item.
     pub fn new() -> Self {
         Self {
             state: NodeState::default(),
@@ -33,6 +39,7 @@ impl IntervalItem {
             value: 0,
         }
     }
+    /// Increment the counter and refresh the display.
     fn inc(&mut self) {
         self.value += 1;
         self.child = Text::new(&format!("{}", self.value))
@@ -71,7 +78,9 @@ impl Node for IntervalItem {
 }
 
 #[derive(StatefulNode)]
+/// Status bar widget for the intervals demo.
 pub struct StatusBar {
+    /// Node state.
     state: NodeState,
 }
 
@@ -87,9 +96,13 @@ impl Node for StatusBar {
 }
 
 #[derive(StatefulNode)]
+/// Root node for the intervals demo.
 pub struct Intervals {
+    /// Node state.
     state: NodeState,
+    /// List content frame.
     content: frame::Frame<List<IntervalItem>>,
+    /// Status bar widget.
     statusbar: StatusBar,
 }
 
@@ -101,6 +114,7 @@ impl Default for Intervals {
 }
 
 impl Intervals {
+    /// Construct a new intervals demo.
     pub fn new() -> Self {
         Self {
             state: NodeState::default(),
@@ -112,6 +126,7 @@ impl Intervals {
     }
 
     #[command]
+    /// Append a new list item.
     pub fn add_item(&mut self, _c: &mut dyn Context) {
         let lst = &mut self.content.child;
         lst.append(IntervalItem::new());
@@ -146,6 +161,7 @@ impl Loader for Intervals {
     }
 }
 
+/// Install key bindings for the intervals demo.
 pub fn setup_bindings(cnpy: &mut Canopy) {
     cnpy.style.add(
         "statusbar/text",

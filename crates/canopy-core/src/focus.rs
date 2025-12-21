@@ -6,7 +6,9 @@ use crate::{
 /// Information about a focusable node
 #[derive(Debug, Clone)]
 pub struct FocusableNode {
+    /// Node identifier.
     pub id: NodeId,
+    /// Screen rectangle for the node.
     pub rect: Rect,
 }
 
@@ -24,6 +26,7 @@ pub fn collect_focusable_nodes(root: &mut dyn Node) -> Result<Vec<FocusableNode>
     Ok(nodes)
 }
 
+/// Recursively collect focusable nodes and their screen rectangles.
 fn collect_focusable_recursive(
     node: &mut dyn Node,
     view_stack: &mut ViewStack,

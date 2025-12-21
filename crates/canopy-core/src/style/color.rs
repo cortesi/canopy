@@ -1,24 +1,45 @@
+/// A terminal color value.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub enum Color {
+    /// Black.
     Black,
+    /// Dark grey.
     DarkGrey,
+    /// Red.
     Red,
+    /// Dark red.
     DarkRed,
+    /// Green.
     Green,
+    /// Dark green.
     DarkGreen,
+    /// Yellow.
     Yellow,
+    /// Dark yellow.
     DarkYellow,
+    /// Blue.
     Blue,
+    /// Dark blue.
     DarkBlue,
+    /// Magenta.
     Magenta,
+    /// Dark magenta.
     DarkMagenta,
+    /// Cyan.
     Cyan,
+    /// Dark cyan.
     DarkCyan,
+    /// White.
     White,
+    /// Grey.
     Grey,
+    /// RGB color.
     Rgb {
+        /// Red channel.
         r: u8,
+        /// Green channel.
         g: u8,
+        /// Blue channel.
         b: u8,
     },
 
@@ -60,21 +81,8 @@ macro_rules! rgb {
 }
 
 impl Color {
-    /// Constructs a Color from a hex RGB string.
-    ///
-    /// # Arguments
-    /// * `hex` - A hex string in the format "#RRGGBB" or "RRGGBB"
-    ///
-    /// # Examples
-    /// ```
-    /// use canopy_core::style::Color;
-    ///
-    /// let color = Color::rgb("#FF0000"); // Red
-    /// let color = Color::rgb("00FF00");  // Green
-    /// ```
-    ///
-    /// # Panics
-    /// Panics if the string is not a valid hex color.
+    /// Construct a color from a hex RGB string.
+    /// Accepts "#RRGGBB" or "RRGGBB" and panics on invalid input.
     pub fn rgb(hex: &str) -> Self {
         let hex = hex.trim_start_matches('#');
 
@@ -146,14 +154,15 @@ mod tests {
     fn test_rgb_macro() {
         // Test that the macro produces the same results as the function
         const MACRO_RED: Color = rgb!("#FF0000");
+        const MACRO_GREEN: Color = rgb!("00FF00");
+        const MACRO_BLUE: Color = rgb!("#0000FF");
+
         let func_red = Color::rgb("#FF0000");
         assert_eq!(MACRO_RED, func_red);
 
-        const MACRO_GREEN: Color = rgb!("00FF00");
         let func_green = Color::rgb("00FF00");
         assert_eq!(MACRO_GREEN, func_green);
 
-        const MACRO_BLUE: Color = rgb!("#0000FF");
         let func_blue = Color::rgb("#0000FF");
         assert_eq!(MACRO_BLUE, func_blue);
     }

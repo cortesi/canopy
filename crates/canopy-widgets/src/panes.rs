@@ -6,7 +6,9 @@ use canopy_core::{
 /// Panes manages a set of child nodes arranged in a 2d grid.
 #[derive(canopy_core::StatefulNode)]
 pub struct Panes<N: Node> {
+    /// Child nodes arranged by column.
     pub children: Vec<Vec<N>>,
+    /// Node state.
     pub state: NodeState,
 }
 
@@ -15,6 +17,7 @@ impl<N> Panes<N>
 where
     N: Node,
 {
+    /// Construct panes with a single child.
     pub fn new(n: N) -> Self {
         Self {
             children: vec![vec![n]],
@@ -75,7 +78,7 @@ where
         Ok(())
     }
 
-    /// Returns the shape of the current child grid
+    /// Returns the shape of the current child grid.
     fn shape(&self) -> Vec<u32> {
         let mut ret = vec![];
         for i in &self.children {

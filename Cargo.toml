@@ -2,6 +2,10 @@
 resolver = "2"
 members = ["crates/*", "examples/*"]
 
+[workspace.package]
+edition = "2024"
+license = "MIT"
+
 [workspace.lints.rust]
 missing_docs = "warn"
 

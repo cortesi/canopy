@@ -1,4 +1,6 @@
-use std::vec;
+//! Proc-macro support for canopy commands and nodes.
+
+use std::{fmt, result::Result as StdResult, vec};
 
 use lazy_static::lazy_static;
 use proc_macro_error::*;
@@ -7,21 +9,25 @@ use regex::Regex;
 use structmeta::StructMeta;
 use syn::{DeriveInput, Meta, parse_macro_input};
 
-type Result<T> = std::result::Result<T, Error>;
+/// Local result type for macro parsing.
+type Result<T> = StdResult<T, Error>;
 
 lazy_static! {
     /// A regex that matches all plausible permutations of a canopy::Context type specification
     static ref RE_CORE: Regex = Regex::new("& (mut )??dyn (canopy :: )??Context").unwrap();
 }
 
+/// Errors raised while parsing command metadata.
 #[derive(PartialEq, Eq, thiserror::Error, Debug, Clone)]
 enum Error {
+    /// Failed to parse an attribute payload.
     Parse(String),
+    /// Unsupported argument or return type.
     Unsupported(String),
 }
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{self:?}")
     }
 }
@@ -35,12 +41,16 @@ impl From<Error> for Diagnostic {
 /// Arguments to the "command" derive macro.
 #[derive(Debug, Default, StructMeta)]
 struct MacroArgs {
+    /// Ignore command return value when dispatching.
     ignore_result: bool,
 }
 
+/// Argument type signatures supported by command macros.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ArgTypes {
+    /// Dynamic context argument.
     Context,
+    /// `isize` argument.
     ISize,
 }
 
@@ -53,20 +63,26 @@ impl quote::ToTokens for ArgTypes {
     }
 }
 
+/// Return type signatures supported by command macros.
 #[derive(Debug, Clone)]
 enum ReturnTypes {
     /// No return value - an empty tuple if Result is enabled.
     Void,
+    /// String return value.
     String,
 }
 
+/// Return specification for a command.
 #[derive(Debug, Clone)]
 struct Return {
+    /// Whether the command returns a Result wrapper.
     result: bool,
+    /// The concrete return type.
     typ: ReturnTypes,
 }
 
 impl Return {
+    /// Build a return spec.
     fn new(typ: ReturnTypes, result: bool) -> Self {
         Self { typ, result }
     }
@@ -87,13 +103,20 @@ impl quote::ToTokens for Return {
     }
 }
 
+/// Parsed command metadata.
 #[derive(Debug)]
 struct Command {
+    /// Node name used by the command.
     node: String,
+    /// Command name.
     command: String,
+    /// Doc text to expose to users.
     docs: String,
+    /// Return description.
     ret: Return,
+    /// Macro arguments provided on the method.
     macro_args: MacroArgs,
+    /// Parsed argument kinds.
     args: Vec<ArgTypes>,
 }
 
@@ -154,6 +177,7 @@ impl quote::ToTokens for Command {
     }
 }
 
+/// Parse a method annotated with `command`.
 fn parse_command_method(node: &str, method: &syn::ImplItemFn) -> Result<Option<Command>> {
     let mut docs: Vec<String> = vec![];
     let mut args = None;

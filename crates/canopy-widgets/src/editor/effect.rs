@@ -1,5 +1,6 @@
 use super::{primitives, state};
 
+/// Apply and revert editor state changes.
 pub(super) trait Effector {
     /// Modifies the provided state and returns a new state to apply this effect.
     fn apply(&self, c: &mut state::State);
@@ -8,9 +9,12 @@ pub(super) trait Effector {
     fn revert(&self, c: &mut state::State);
 }
 
+/// An editor state change that can be applied or reverted.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Effect {
+    /// Insert text effect.
     Insert(Insert),
+    /// Delete text effect.
     Delete(Delete),
 }
 
@@ -30,15 +34,20 @@ impl Effector for Effect {
     }
 }
 
+/// Insert text effect details.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Insert {
+    /// Insert position.
     pos: primitives::InsertPos,
+    /// Lines of inserted text.
     text: Vec<String>,
+    /// Cursor before the insert.
     prev_cursor: primitives::Cursor,
 }
 
 impl Insert {
-    pub(super) fn new(s: &state::State, pos: primitives::InsertPos, text: String) -> Self {
+    /// Construct an insert effect.
+    pub(super) fn new(s: &state::State, pos: primitives::InsertPos, text: &str) -> Self {
         Self {
             pos,
             text: text.split("\n").map(|s| s.to_string()).collect(),
@@ -64,15 +73,21 @@ impl Effector for Insert {
     }
 }
 
+/// Delete text effect details.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Delete {
+    /// Starting position.
     start: primitives::InsertPos,
+    /// Ending position.
     end: primitives::InsertPos,
+    /// Cursor before the delete.
     prev_cursor: primitives::Cursor,
+    /// Deleted lines.
     deleted_text: Vec<String>,
 }
 
 impl Delete {
+    /// Construct a delete effect.
     pub(super) fn new(
         s: &state::State,
         start: primitives::InsertPos,

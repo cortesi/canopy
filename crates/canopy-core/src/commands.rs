@@ -6,19 +6,26 @@ use crate::{
     tree,
 };
 
+/// Supported argument types for command signatures.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ArgTypes {
+    /// Dynamic context argument.
     Context,
+    /// Signed integer argument.
     ISize,
 }
 
+/// Runtime command argument values.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Args {
+    /// Context placeholder.
     Context,
+    /// Signed integer value.
     ISize(isize),
 }
 
 impl Args {
+    /// Return the contained `isize` value.
     pub fn as_isize(&self) -> Result<isize> {
         match self {
             Self::ISize(i) => Ok(*i),
@@ -32,6 +39,7 @@ impl Args {
 pub enum ReturnTypes {
     /// No return value.
     Void,
+    /// String return value.
     String,
 }
 
@@ -45,14 +53,18 @@ pub struct ReturnSpec {
 }
 
 impl ReturnSpec {
+    /// Construct a return specification.
     pub fn new(typ: ReturnTypes, result: bool) -> Self {
         Self { typ, result }
     }
 }
 
+/// Runtime return values from command dispatch.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReturnValue {
+    /// No return value.
     Void,
+    /// String return value.
     String(String),
 }
 
@@ -80,7 +92,7 @@ pub struct CommandSpec {
     pub docs: String,
     /// The return type of the command.
     pub ret: ReturnSpec,
-
+    /// Argument types for the command.
     pub args: Vec<ArgTypes>,
 }
 
@@ -154,8 +166,10 @@ where
     Ok(v.value())
 }
 
+/// Collection of available commands keyed by name.
 #[derive(Debug)]
 pub struct CommandSet {
+    /// Command lookup table by full name.
     pub commands: HashMap<String, CommandSpec>,
 }
 
@@ -166,12 +180,14 @@ impl Default for CommandSet {
 }
 
 impl CommandSet {
+    /// Construct an empty command set.
     pub fn new() -> Self {
         Self {
             commands: HashMap::new(),
         }
     }
 
+    /// Add command specs to the set.
     pub fn commands(&mut self, cmds: &[CommandSpec]) {
         for i in cmds {
             self.commands.insert(i.fullname(), i.clone());

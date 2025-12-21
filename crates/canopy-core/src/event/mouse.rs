@@ -2,19 +2,27 @@ use std::ops::Add;
 
 use crate::{event::key, geom::Point};
 
-/// An abstract specification for a mouse action
+/// An abstract specification for a mouse action.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct Mouse {
+    /// Mouse action type.
     pub action: Action,
+    /// Mouse button.
     pub button: Button,
+    /// Keyboard modifiers.
     pub modifiers: key::Mods,
 }
 
+/// Mouse button codes.
 #[derive(Debug, PartialOrd, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum Button {
+    /// Left mouse button.
     Left,
+    /// Right mouse button.
     Right,
+    /// Middle mouse button.
     Middle,
+    /// No button (for move/scroll).
     None,
 }
 
@@ -48,15 +56,24 @@ impl Add<Action> for Button {
     }
 }
 
+/// Mouse action kinds.
 #[derive(Debug, PartialOrd, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum Action {
+    /// Button press.
     Down,
+    /// Button release.
     Up,
+    /// Mouse drag with button held.
     Drag,
+    /// Mouse moved without button.
     Moved,
+    /// Scroll wheel down.
     ScrollDown,
+    /// Scroll wheel up.
     ScrollUp,
+    /// Horizontal scroll left.
     ScrollLeft,
+    /// Horizontal scroll right.
     ScrollRight,
 }
 
@@ -144,14 +161,14 @@ impl From<Action> for Mouse {
     }
 }
 
-impl std::cmp::PartialEq<Button> for Mouse {
+impl PartialEq<Button> for Mouse {
     fn eq(&self, k: &Button) -> bool {
         let m: Self = (*k).into();
         *self == m
     }
 }
 
-impl std::cmp::PartialEq<Action> for Mouse {
+impl PartialEq<Action> for Mouse {
     fn eq(&self, k: &Action) -> bool {
         let m: Self = (*k).into();
         *self == m
@@ -192,25 +209,29 @@ impl Add<key::Mods> for Mouse {
 /// specification, but also includes a location.
 #[derive(Debug, Clone, Copy)]
 pub struct MouseEvent {
+    /// Mouse action type.
     pub action: Action,
+    /// Mouse button.
     pub button: Button,
+    /// Keyboard modifiers.
     pub modifiers: key::Mods,
+    /// Cursor location in screen space.
     pub location: Point,
 }
 
-impl std::cmp::PartialEq<Mouse> for MouseEvent {
+impl PartialEq<Mouse> for MouseEvent {
     fn eq(&self, o: &Mouse) -> bool {
         self.action == o.action && self.button == o.button && self.modifiers == o.modifiers
     }
 }
 
-impl std::cmp::PartialEq<Mouse> for &MouseEvent {
+impl PartialEq<Mouse> for &MouseEvent {
     fn eq(&self, o: &Mouse) -> bool {
         self.action == o.action && self.button == o.button && self.modifiers == o.modifiers
     }
 }
 
-impl std::cmp::PartialEq<Action> for MouseEvent {
+impl PartialEq<Action> for MouseEvent {
     fn eq(&self, o: &Action) -> bool {
         let m: Mouse = (*o).into();
         self == m

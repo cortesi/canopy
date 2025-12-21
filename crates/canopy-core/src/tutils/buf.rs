@@ -1,5 +1,9 @@
 //! Utilities for working with TermBufs in tests.
-use crate::{geom::Point, style::PartialStyle, termbuf::TermBuf};
+use crate::{
+    geom::Point,
+    style::{Color, PartialStyle},
+    termbuf::TermBuf,
+};
 
 /// A helper macro to create buffers for the termbuf match assertions.
 #[macro_export]
@@ -12,8 +16,11 @@ macro_rules! buf {
 /// A struct for configuring buffer matching behavior. By default, it treats 'X' as a special
 /// marker for NULL cells in the buffer, allowing us to test partial renders.
 pub struct BufTest<'a> {
+    /// Reference to the buffer under test.
     buf: &'a TermBuf,
+    /// Character used to represent NULL cells.
     null_char: char,
+    /// Optional wildcard character.
     any_char: Option<char>,
 }
 
@@ -123,7 +130,7 @@ impl<'a> BufTest<'a> {
     }
 
     /// Does the buffer contain the supplied substring in the given foreground colour?
-    pub fn contains_text_fg(&self, txt: &str, fg: crate::style::Color) -> bool {
+    pub fn contains_text_fg(&self, txt: &str, fg: Color) -> bool {
         self.contains_text_style(txt, &PartialStyle::fg(fg))
     }
 
@@ -278,12 +285,12 @@ impl<'a> BufTest<'a> {
 mod tests {
     use super::*;
     use crate::{
-        geom::Expanse,
-        style::{AttrSet, Color},
+        geom::{Expanse, Line},
+        style::{AttrSet, Color, Style},
     };
 
-    fn test_style() -> crate::style::Style {
-        crate::style::Style {
+    fn test_style() -> Style {
+        Style {
             fg: Color::White,
             bg: Color::Black,
             attrs: AttrSet::default(),
@@ -293,7 +300,7 @@ mod tests {
     #[test]
     fn test_bufmatch_default() {
         let mut buf = TermBuf::empty(Expanse::new(5, 3));
-        buf.text(test_style(), crate::geom::Line::new(0, 0, 5), "hello");
+        buf.text(&test_style(), Line::new(0, 0, 5), "hello");
 
         let matcher = BufTest::new(&buf);
         assert!(matcher.matches(&["hello", "XXXXX", "XXXXX"]));
@@ -303,7 +310,7 @@ mod tests {
     #[test]
     fn test_bufmatch_custom_null() {
         let mut buf = TermBuf::empty(Expanse::new(4, 2));
-        buf.text(test_style(), crate::geom::Line::new(0, 0, 2), "ab");
+        buf.text(&test_style(), Line::new(0, 0, 2), "ab");
 
         let matcher = BufTest::new(&buf).with_null('_');
         assert!(matcher.matches(&["ab__", "____"]));
@@ -313,8 +320,8 @@ mod tests {
     #[test]
     fn test_bufmatch_any_char() {
         let mut buf = TermBuf::new(Expanse::new(4, 2), ' ', test_style());
-        buf.text(test_style(), crate::geom::Line::new(0, 0, 4), "test");
-        buf.text(test_style(), crate::geom::Line::new(0, 1, 4), "word");
+        buf.text(&test_style(), Line::new(0, 0, 4), "test");
+        buf.text(&test_style(), Line::new(0, 1, 4), "word");
 
         let matcher = BufTest::new(&buf).with_any('?');
         assert!(matcher.matches(&["????", "????"])); // all wildcards
@@ -326,7 +333,7 @@ mod tests {
     #[test]
     fn test_bufmatch_combined() {
         let mut buf = TermBuf::empty(Expanse::new(6, 2));
-        buf.text(test_style(), crate::geom::Line::new(0, 0, 3), "foo");
+        buf.text(&test_style(), Line::new(0, 0, 3), "foo");
 
         let matcher = BufTest::new(&buf).with_null('_').with_any('*');
         assert!(matcher.matches(&["foo___", "______"])); // custom null char
@@ -341,8 +348,8 @@ mod tests {
         let mut red_style = test_style();
         red_style.fg = Color::Red;
 
-        buf.text(test_style(), crate::geom::Line::new(0, 0, 5), "hello");
-        buf.text(red_style, crate::geom::Line::new(5, 0, 5), "world");
+        buf.text(&test_style(), Line::new(0, 0, 5), "hello");
+        buf.text(&red_style, Line::new(5, 0, 5), "world");
 
         let bt = BufTest::new(&buf);
         assert!(bt.contains_text("hello"));
@@ -359,8 +366,8 @@ mod tests {
     #[test]
     fn test_dump() {
         let mut buf = TermBuf::empty(Expanse::new(5, 3));
-        buf.text(test_style(), crate::geom::Line::new(0, 0, 5), "hello");
-        buf.text(test_style(), crate::geom::Line::new(1, 1, 3), "abc");
+        buf.text(&test_style(), Line::new(0, 0, 5), "hello");
+        buf.text(&test_style(), Line::new(1, 1, 3), "abc");
 
         // This test just verifies dump() runs without panicking
         // The actual output goes to stdout
@@ -371,17 +378,9 @@ mod tests {
     fn test_dump_with_larger_buffer() {
         // Test with a larger buffer to see the ruler wrap around
         let mut buf = TermBuf::empty(Expanse::new(25, 15));
-        buf.text(test_style(), crate::geom::Line::new(0, 0, 10), "0123456789");
-        buf.text(
-            test_style(),
-            crate::geom::Line::new(10, 5, 15),
-            "Offset at (10,5)",
-        );
-        buf.text(
-            test_style(),
-            crate::geom::Line::new(5, 10, 10),
-            "Row 10 test",
-        );
+        buf.text(&test_style(), Line::new(0, 0, 10), "0123456789");
+        buf.text(&test_style(), Line::new(10, 5, 15), "Offset at (10,5)");
+        buf.text(&test_style(), Line::new(5, 10, 10), "Row 10 test");
 
         BufTest::new(&buf).dump();
     }
@@ -389,17 +388,9 @@ mod tests {
     #[test]
     fn test_dump_line() {
         let mut buf = TermBuf::empty(Expanse::new(20, 5));
-        buf.text(test_style(), crate::geom::Line::new(0, 0, 10), "First line");
-        buf.text(
-            test_style(),
-            crate::geom::Line::new(5, 2, 15),
-            "Middle line at 5",
-        );
-        buf.text(
-            test_style(),
-            crate::geom::Line::new(0, 4, 20),
-            "Last line with text!",
-        );
+        buf.text(&test_style(), Line::new(0, 0, 10), "First line");
+        buf.text(&test_style(), Line::new(5, 2, 15), "Middle line at 5");
+        buf.text(&test_style(), Line::new(0, 4, 20), "Last line with text!");
 
         // Test dumping various lines
         let bt = BufTest::new(&buf);
@@ -416,8 +407,8 @@ mod tests {
         let mut red_style = test_style();
         red_style.fg = Color::Red;
 
-        buf.text(test_style(), crate::geom::Line::new(0, 0, 5), "hello");
-        buf.text(red_style, crate::geom::Line::new(5, 0, 5), "world");
+        buf.text(&test_style(), Line::new(0, 0, 5), "hello");
+        buf.text(&red_style, Line::new(5, 0, 5), "world");
 
         let bt = BufTest::new(&buf);
 

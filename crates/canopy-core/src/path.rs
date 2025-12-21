@@ -1,17 +1,22 @@
+use std::fmt;
+
 use crate::{Result, error};
 
+/// A path of node name components.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Path {
+    /// Stored path components.
     path: Vec<String>,
 }
 
-impl std::fmt::Display for Path {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Path {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "/{}", self.path.join("/"))
     }
 }
 
 impl Path {
+    /// Construct an empty path.
     pub fn empty() -> Self {
         Self { path: vec![] }
     }
@@ -22,6 +27,7 @@ impl Path {
         self.path.pop()
     }
 
+    /// Construct a path from a slice of components.
     pub fn new<T: AsRef<str>>(v: &[T]) -> Self {
         Self {
             path: v.iter().map(|x| x.as_ref().to_string()).collect(),
@@ -70,23 +76,15 @@ impl From<&str> for Path {
 }
 
 /// A match expression that can be applied to paths.
-///
-/// Examples:
-///
-///  - "foo" any path containing "foo"
-///  - "foo/*/bar" any path containing "foo" followed by "bar"
-///  - "foo/*/bar/" any path containing "foo" folowed by "bar" as a final component
-///  - "/foo/*/bar/" any path starting with "foo" folowed by "bar" as a final component
-///
-/// The specificity of the matcher is a rough measure of the number of
-/// significant match components in the specification. When disambiguating key
-/// bindings, we prefer more specific matches.
+/// The matcher supports `*` wildcards and optional leading or trailing slashes.
 #[derive(Debug, Clone)]
 pub struct PathMatcher {
+    /// Compiled regular expression.
     expr: regex::Regex,
 }
 
 impl PathMatcher {
+    /// Compile a path matcher from a filter string.
     pub fn new(path: &str) -> Result<Self> {
         let parts = path.split('/');
         let mut pattern = parts

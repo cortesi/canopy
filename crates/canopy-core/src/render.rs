@@ -6,13 +6,14 @@ use crate::{
 /// The trait implemented by renderers.
 pub trait RenderBackend {
     /// Apply a style to the following text output
-    fn style(&mut self, style: Style) -> Result<()>;
+    fn style(&mut self, style: &Style) -> Result<()>;
     /// Output text to screen. This method is used for all text output.
     fn text(&mut self, loc: geom::Point, txt: &str) -> Result<()>;
     /// Flush output to the terminal.
     fn flush(&mut self) -> Result<()>;
     /// Exit the process, relinquishing screen control.
     fn exit(&mut self, code: i32) -> !;
+    /// Reset the backend to a clean state.
     fn reset(&mut self) -> Result<()>;
 }
 
@@ -29,6 +30,7 @@ pub struct Render<'a> {
 }
 
 impl<'a> Render<'a> {
+    /// Construct a renderer for the given rectangle.
     pub fn new(stylemap: &'a StyleMap, style: &'a mut StyleManager, rect: geom::Rect) -> Self {
         let buf = TermBuf::new(
             (rect.w, rect.h),
@@ -58,7 +60,7 @@ impl<'a> Render<'a> {
                 intersection.w,
                 intersection.h,
             );
-            self.buf.fill(style, adjusted, c);
+            self.buf.fill(&style, adjusted, c);
         }
         Ok(())
     }
@@ -107,7 +109,7 @@ impl<'a> Render<'a> {
                 w: intersection.w,
             };
 
-            self.buf.text(style_res.clone(), adjusted_line, &out);
+            self.buf.text(&style_res, adjusted_line, &out);
 
             // Pad with spaces if needed
             if out.len() < adjusted_line.w as usize {
@@ -117,7 +119,7 @@ impl<'a> Render<'a> {
                     adjusted_line.w - out.len() as u32,
                     1,
                 );
-                self.buf.fill(style_res, pad_rect, ' ');
+                self.buf.fill(&style_res, pad_rect, ' ');
             }
         }
         Ok(())

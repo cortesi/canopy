@@ -1,6 +1,9 @@
-use canopy::{backend::crossterm::runloop, *};
-use canopy_examples::intervals::{setup_bindings, Intervals};
+//! Launch the intervals example.
 
+use canopy::{backend::crossterm::runloop, *};
+use canopy_examples::intervals::{Intervals, setup_bindings};
+
+/// Run the intervals example.
 pub fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
     Root::<Intervals>::load(&mut cnpy);

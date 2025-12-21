@@ -1,7 +1,9 @@
+/// Crossterm backend implementation.
 pub mod crossterm;
+/// Test backend utilities.
 pub mod test;
 
-use std::process;
+use std::{fmt::Debug, process};
 
 use crate::Result;
 
@@ -9,7 +11,7 @@ use crate::Result;
 /// suspend and resume rendering to permit us to fork out to another process
 /// that wants to control the terminal - for example, spawning an external
 /// editor.
-pub trait BackendControl: std::fmt::Debug {
+pub trait BackendControl: Debug {
     /// Start the backend renderer.
     fn start(&mut self) -> Result<()>;
 
@@ -18,7 +20,7 @@ pub trait BackendControl: std::fmt::Debug {
 
     /// Stop the render backend and exit the process.
     fn exit(&mut self, code: i32) -> ! {
-        let _ = self.stop();
+        let _ = self.stop().ok();
         process::exit(code)
     }
 }

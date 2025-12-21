@@ -6,14 +6,19 @@ use canopy::{
 };
 
 #[derive(StatefulNode)]
+/// A focusable block that can split into children.
 pub struct Block {
+    /// Node state.
     state: NodeState,
+    /// Child blocks.
     children: Vec<Self>,
+    /// True for horizontal layout.
     horizontal: bool,
 }
 
 #[derive_commands]
 impl Block {
+    /// Construct a block with the requested orientation.
     fn new(orientation: bool) -> Self {
         Self {
             state: NodeState::default(),
@@ -22,11 +27,13 @@ impl Block {
         }
     }
 
+    /// Return true when the available area is too small to split.
     fn size_limited(&self, a: Expanse) -> bool {
         (self.horizontal && a.w <= 4) || (!self.horizontal && a.h <= 4)
     }
 
     #[command]
+    /// Add a nested block if space permits.
     fn add(&mut self) {
         if !self.children.is_empty() && !self.size_limited(self.children[0].vp().view().into()) {
             self.children.push(Self::new(!self.horizontal));
@@ -34,6 +41,7 @@ impl Block {
     }
 
     #[command]
+    /// Split into two child blocks.
     fn split(&mut self, c: &mut dyn Context) -> Result<()> {
         if !self.size_limited(self.vp().view().into()) {
             self.children = vec![Self::new(!self.horizontal), Self::new(!self.horizontal)];
@@ -43,6 +51,7 @@ impl Block {
     }
 
     #[command]
+    /// Focus this block.
     fn focus(&mut self, c: &mut dyn Context) -> Result<()> {
         c.set_focus(self);
         Ok(())
@@ -92,8 +101,11 @@ impl Node for Block {
 }
 
 #[derive(StatefulNode)]
+/// Root node for the focus gym demo.
 pub struct FocusGym {
+    /// Node state.
     state: NodeState,
+    /// Root block.
     child: Block,
 }
 
@@ -105,6 +117,7 @@ impl Default for FocusGym {
 }
 
 impl FocusGym {
+    /// Construct a new focus gym.
     pub fn new() -> Self {
         Self {
             state: NodeState::default(),
@@ -137,6 +150,7 @@ impl Loader for FocusGym {
     }
 }
 
+/// Install key bindings for the focus gym demo.
 pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
     canopy::Binder::new(cnpy)
         .defaults::<Root<FocusGym>>()

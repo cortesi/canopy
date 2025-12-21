@@ -1,8 +1,14 @@
+/// Buffer testing utilities.
 pub mod buf;
+/// Dummy context for tests.
 pub mod dummyctx;
+/// Grid test helpers.
 pub mod grid;
+/// Harness for node testing.
 pub mod harness;
+/// Render helpers for tests.
 pub mod render;
+/// Test tree helpers.
 pub mod ttree;
 
 #[cfg(test)]

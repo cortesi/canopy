@@ -1,20 +1,25 @@
+//! Launch the list gym example.
+
+use std::io;
+
 use canopy::{backend::crossterm::runloop, *};
-use canopy_examples::listgym::{setup_bindings, ListGym};
+use canopy_examples::listgym::{ListGym, setup_bindings};
 use clap::Parser;
 
-/// Simple program to greet a person
+/// CLI flags for the list gym example.
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    /// Number of times to greet
+    /// Print available commands and exit.
     #[clap(short, long)]
     commands: bool,
 
-    /// Number of times to greet
+    /// Enable the inspector overlay.
     #[clap(short, long)]
     inspector: bool,
 }
 
+/// Run the list gym example.
 pub fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
     Root::<ListGym>::load(&mut cnpy);
@@ -22,7 +27,7 @@ pub fn main() -> Result<()> {
 
     let args = Args::parse();
     if args.commands {
-        cnpy.print_command_table(&mut std::io::stdout())?;
+        cnpy.print_command_table(&mut io::stdout())?;
         return Ok(());
     }
 

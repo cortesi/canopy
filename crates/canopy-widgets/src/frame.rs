@@ -3,19 +3,27 @@ use canopy_core::{
     Context, Layout, Node, NodeState, Render, Result, StatefulNode, derive_commands, geom,
 };
 
-/// Defines the set of glyphs used to draw the frame
+/// Defines the set of glyphs used to draw the frame.
 pub struct FrameGlyphs {
+    /// Top-left corner glyph.
     pub topleft: char,
+    /// Top-right corner glyph.
     pub topright: char,
+    /// Bottom-left corner glyph.
     pub bottomleft: char,
+    /// Bottom-right corner glyph.
     pub bottomright: char,
+    /// Horizontal border glyph.
     pub horizontal: char,
+    /// Vertical border glyph.
     pub vertical: char,
+    /// Active vertical indicator glyph.
     pub vertical_active: char,
+    /// Active horizontal indicator glyph.
     pub horizontal_active: char,
 }
 
-/// Single line thin Unicode box drawing frame set
+/// Single line thin Unicode box drawing frame set.
 pub const SINGLE: FrameGlyphs = FrameGlyphs {
     topleft: '┌',
     topright: '┐',
@@ -27,7 +35,7 @@ pub const SINGLE: FrameGlyphs = FrameGlyphs {
     vertical_active: '█',
 };
 
-/// Double line Unicode box drawing frame set
+/// Double line Unicode box drawing frame set.
 pub const DOUBLE: FrameGlyphs = FrameGlyphs {
     topleft: '╔',
     topright: '╗',
@@ -39,7 +47,7 @@ pub const DOUBLE: FrameGlyphs = FrameGlyphs {
     vertical_active: '█',
 };
 
-/// Single line thick Unicode box drawing frame set
+/// Single line thick Unicode box drawing frame set.
 pub const SINGLE_THICK: FrameGlyphs = FrameGlyphs {
     topleft: '┏',
     topright: '┓',
@@ -51,7 +59,7 @@ pub const SINGLE_THICK: FrameGlyphs = FrameGlyphs {
     vertical_active: '█',
 };
 
-/// Round corner thin Unicode box drawing frame set
+/// Round corner thin Unicode box drawing frame set.
 pub const ROUND: FrameGlyphs = FrameGlyphs {
     topleft: '╭',
     topright: '╮',
@@ -63,7 +71,7 @@ pub const ROUND: FrameGlyphs = FrameGlyphs {
     vertical_active: '█',
 };
 
-/// Round corner thick Unicode box drawing frame set
+/// Round corner thick Unicode box drawing frame set.
 pub const ROUND_THICK: FrameGlyphs = FrameGlyphs {
     topleft: '╭',
     topright: '╮',
@@ -75,21 +83,21 @@ pub const ROUND_THICK: FrameGlyphs = FrameGlyphs {
     vertical_active: '█',
 };
 
-/// A frame around an element.
-///
-/// Colors:
-///     frame:          normal frame border
-///     frame/focused   frame border if we hold focus
-///     frame/active    color of active area indicator
+/// A frame around an element with optional title and indicators.
 #[derive(canopy_core::StatefulNode)]
 pub struct Frame<N>
 where
     N: Node,
 {
+    /// Child node wrapped by the frame.
     pub child: N,
+    /// Node state.
     pub state: NodeState,
+    /// Glyph set for rendering.
     pub glyphs: FrameGlyphs,
+    /// Optional title string.
     pub title: Option<String>,
+    /// Cached frame geometry.
     pub frame: geom::Frame,
 }
 
@@ -98,6 +106,7 @@ impl<N> Frame<N>
 where
     N: Node,
 {
+    /// Construct a frame around the child node.
     pub fn new(c: N) -> Self {
         Self {
             child: c,
@@ -108,13 +117,13 @@ where
         }
     }
 
-    /// Build a frame with a specified glyph set
+    /// Build a frame with a specified glyph set.
     pub fn with_glyphs(mut self, glyphs: FrameGlyphs) -> Self {
         self.glyphs = glyphs;
         self
     }
 
-    /// Build a frame with a specified title
+    /// Build a frame with a specified title.
     pub fn with_title(mut self, title: String) -> Self {
         self.title = Some(title);
         self
@@ -129,10 +138,10 @@ where
         c.needs_render(&self.child)
     }
 
-    fn layout(&mut self, l: &Layout, sz: canopy_core::geom::Expanse) -> Result<()> {
+    fn layout(&mut self, l: &Layout, sz: geom::Expanse) -> Result<()> {
         self.fill(sz)?;
 
-        self.frame = canopy_core::geom::Frame::new(sz.rect(), 1);
+        self.frame = geom::Frame::new(sz.rect(), 1);
         let inner = self.frame.inner();
         l.place(&mut self.child, inner)?;
         Ok(())
@@ -201,6 +210,7 @@ mod tests {
     use canopy_core::{
         Context, Expanse, Node, NodeState, Result, StatefulNode, TermBuf, ViewStack,
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
+        geom::Line,
         style::{StyleManager, StyleMap},
         tutils::{buf::BufTest, dummyctx::DummyContext},
     };
@@ -274,8 +284,7 @@ mod tests {
                     line.push(ch);
                 }
 
-                let target_line =
-                    canopy_core::geom::Line::new(vp.position().x, vp.position().y + y, view.w);
+                let target_line = Line::new(vp.position().x, vp.position().y + y, view.w);
                 r.text("text", target_line, &line)?;
             }
             Ok(())

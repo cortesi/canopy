@@ -6,13 +6,17 @@ use canopy_core::{
 /// A tab control managing a set of nodes with titles.
 #[derive(canopy_core::StatefulNode)]
 pub struct Tabs {
+    /// Node state.
     pub state: NodeState,
+    /// Tab titles.
     pub tabs: Vec<String>,
+    /// Active tab index.
     pub active: usize,
 }
 
 #[derive_commands]
 impl Tabs {
+    /// Construct tabs with the provided titles.
     pub fn new(tabs: Vec<String>) -> Self {
         Self {
             state: NodeState::default(),

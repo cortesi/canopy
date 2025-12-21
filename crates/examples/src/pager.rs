@@ -1,22 +1,26 @@
 use canopy::{
     derive_commands,
     event::{key, mouse},
-    widgets::{frame, Text},
+    widgets::{Text, frame},
     *,
 };
 
 #[derive(StatefulNode)]
+/// Simple pager widget for file contents.
 pub struct Pager {
+    /// Node state.
     state: NodeState,
+    /// Text widget frame.
     child: frame::Frame<Text>,
 }
 
 #[derive_commands]
 impl Pager {
-    pub fn new(contents: String) -> Self {
+    /// Construct a pager with initial contents.
+    pub fn new(contents: &str) -> Self {
         Self {
             state: NodeState::default(),
-            child: frame::Frame::new(Text::new(&contents)),
+            child: frame::Frame::new(Text::new(contents)),
         }
     }
 }
@@ -44,6 +48,7 @@ impl Loader for Pager {
     }
 }
 
+/// Install key bindings for the pager demo.
 pub fn setup_bindings(cnpy: &mut Canopy) {
     cnpy.bind_key('g', "pager", "text::scroll_to_top()")
         .unwrap();

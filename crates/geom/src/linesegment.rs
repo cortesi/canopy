@@ -88,6 +88,7 @@ impl LineSegment {
         self.off <= other.off && self.far() >= other.far()
     }
 
+    /// Return true if the two segments overlap.
     pub fn intersects(&self, other: &Self) -> bool {
         self.intersection(other).is_some()
     }

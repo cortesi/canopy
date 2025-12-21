@@ -1,5 +1,5 @@
 use std::{
-    io::Write,
+    io::{Result as IoResult, Write},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -15,14 +15,19 @@ use tracing_subscriber::fmt;
 use crate::{Text, list::*};
 
 #[derive(canopy_core::StatefulNode)]
+/// List item for a single log entry.
 struct LogItem {
+    /// Node state.
     state: NodeState,
+    /// Selection state.
     selected: bool,
+    /// Text display.
     child: Text,
 }
 
 #[derive_commands]
 impl LogItem {
+    /// Construct a log item from text.
     fn new(txt: &str) -> Self {
         Self {
             state: NodeState::default(),
@@ -71,28 +76,35 @@ impl Node for LogItem {
     }
 }
 
+/// Log writer that appends to a shared buffer.
 struct LogWriter {
+    /// Shared log buffer.
     buf: Arc<Mutex<Vec<String>>>,
 }
 
 impl Write for LogWriter {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
         self.buf
             .lock()
             .unwrap()
             .push(String::from_utf8_lossy(buf).to_string().trim().to_string());
         Ok(buf.len())
     }
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> IoResult<()> {
         Ok(())
     }
 }
 
+/// Inspector log panel.
 #[derive(canopy_core::StatefulNode)]
 pub struct Logs {
+    /// Node state.
     state: NodeState,
+    /// List of log items.
     list: List<LogItem>,
+    /// Whether logging is initialized.
     started: bool,
+    /// Shared log buffer.
     buf: Arc<Mutex<Vec<String>>>,
 }
 
@@ -138,6 +150,7 @@ impl Node for Logs {
 
 #[derive_commands]
 impl Logs {
+    /// Construct a log panel.
     pub fn new() -> Self {
         Self {
             state: NodeState::default(),

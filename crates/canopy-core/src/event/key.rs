@@ -1,10 +1,14 @@
 //! This module contains the core primitives to represent keyboard input.
 use std::ops::Add;
 
+/// Modifier key state.
 #[derive(Default, Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Mods {
+    /// Shift is active.
     pub shift: bool,
+    /// Control is active.
     pub ctrl: bool,
+    /// Alt is active.
     pub alt: bool,
 }
 
@@ -39,6 +43,7 @@ impl Add<Self> for Mods {
     }
 }
 
+/// No modifiers pressed.
 #[allow(non_upper_case_globals)]
 pub const Empty: Mods = Mods {
     shift: false,
@@ -46,6 +51,7 @@ pub const Empty: Mods = Mods {
     alt: false,
 };
 
+/// Shift-only modifier state.
 #[allow(non_upper_case_globals)]
 pub const Shift: Mods = Mods {
     shift: true,
@@ -53,6 +59,7 @@ pub const Shift: Mods = Mods {
     alt: false,
 };
 
+/// Control-only modifier state.
 #[allow(non_upper_case_globals)]
 pub const Ctrl: Mods = Mods {
     shift: false,
@@ -60,6 +67,7 @@ pub const Ctrl: Mods = Mods {
     alt: false,
 };
 
+/// Alt-only modifier state.
 #[allow(non_upper_case_globals)]
 pub const Alt: Mods = Mods {
     shift: false,
@@ -67,6 +75,7 @@ pub const Alt: Mods = Mods {
     alt: true,
 };
 
+/// Physical modifier key codes.
 #[derive(Debug, PartialOrd, PartialEq, Hash, Eq, Clone, Copy)]
 pub enum ModifierKeyCode {
     /// Left Shift key.
@@ -99,6 +108,7 @@ pub enum ModifierKeyCode {
     IsoLevel5Shift,
 }
 
+/// Media key codes.
 #[derive(Debug, PartialOrd, PartialEq, Hash, Eq, Clone, Copy)]
 pub enum MediaKeyCode {
     /// Play media key.
@@ -129,31 +139,54 @@ pub enum MediaKeyCode {
     MuteVolume,
 }
 
+/// Logical key codes.
 #[derive(Debug, PartialOrd, PartialEq, Hash, Eq, Clone, Copy)]
 pub enum KeyCode {
+    /// Backspace key.
     Backspace,
+    /// Enter/return key.
     Enter,
+    /// Left arrow key.
     Left,
+    /// Right arrow key.
     Right,
+    /// Up arrow key.
     Up,
+    /// Down arrow key.
     Down,
+    /// Home key.
     Home,
+    /// End key.
     End,
+    /// Page up key.
     PageUp,
+    /// Page down key.
     PageDown,
+    /// Tab key.
     Tab,
     /// Shift + Tab key.
     BackTab,
+    /// Delete key.
     Delete,
+    /// Insert key.
     Insert,
+    /// Null key code.
     Null,
+    /// Escape key.
     Esc,
+    /// Caps lock key.
     CapsLock,
+    /// Scroll lock key.
     ScrollLock,
+    /// Num lock key.
     NumLock,
+    /// Print screen key.
     PrintScreen,
+    /// Pause key.
     Pause,
+    /// Menu key.
     Menu,
+    /// Keypad "begin" key.
     KeypadBegin,
     /// F key.
     ///
@@ -163,7 +196,9 @@ pub enum KeyCode {
     ///
     /// `KeyEvent::Char('c')` represents `c` character, etc.
     Char(char),
+    /// Media key code.
     Media(MediaKeyCode),
+    /// Modifier key code.
     Modifier(ModifierKeyCode),
 }
 
@@ -173,12 +208,16 @@ impl From<char> for KeyCode {
     }
 }
 
+/// Keys that should be preserved verbatim in text input.
 const LEAVE_INTACT: &[KeyCode] = &[KeyCode::Enter, KeyCode::Char(' ')];
 
 /// A keystroke along with modifiers.
+/// A keystroke along with modifiers.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Key {
+    /// Modifier state.
     pub mods: Mods,
+    /// Key code.
     pub key: KeyCode,
 }
 
@@ -249,7 +288,7 @@ impl Key {
     }
 }
 
-impl std::cmp::PartialEq<KeyCode> for Key {
+impl PartialEq<KeyCode> for Key {
     fn eq(&self, c: &KeyCode) -> bool {
         // If there are modifiers, we never match.
         if self.mods != Empty {
@@ -259,13 +298,13 @@ impl std::cmp::PartialEq<KeyCode> for Key {
     }
 }
 
-impl std::cmp::PartialEq<char> for Key {
+impl PartialEq<char> for Key {
     fn eq(&self, c: &char) -> bool {
         *self == KeyCode::Char(*c)
     }
 }
 
-impl std::cmp::PartialEq<Key> for char {
+impl PartialEq<Key> for char {
     fn eq(&self, k: &Key) -> bool {
         *k == KeyCode::Char(*self)
     }

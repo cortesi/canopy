@@ -11,13 +11,17 @@ use canopy_core::{
 /// naturally to cursor movements.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TextBuf {
+    /// Raw input text value.
     pub value: String,
 
+    /// Cursor position in bytes within value.
     cursor_pos: u32,
+    /// Visible window into the value.
     window: LineSegment,
 }
 
 impl TextBuf {
+    /// Construct a new text buffer with initial content.
     fn new(start: &str) -> Self {
         Self {
             value: start.to_owned(),
@@ -26,11 +30,12 @@ impl TextBuf {
         }
     }
 
-    /// The location of the displayed cursor along the x axis
+    /// The location of the displayed cursor along the x axis.
     fn cursor_display(&self) -> u32 {
         self.cursor_pos - self.window.off
     }
 
+    /// Render the visible text, padded to the window width.
     fn text(&self) -> String {
         let end = self.window.far().min(self.value.len() as u32) as usize;
         let v = self.value[self.window.off as usize..end].to_owned();
@@ -38,6 +43,7 @@ impl TextBuf {
         format!("{}{}", v, " ".repeat(extra))
     }
 
+    /// Clamp cursor and window state to valid bounds.
     fn fix_window(&mut self) {
         if self.cursor_pos > self.value.len() as u32 {
             self.cursor_pos = self.value.len() as u32
@@ -60,7 +66,7 @@ impl TextBuf {
         }
     }
 
-    /// Should be called during layout
+    /// Set the visible window width during layout.
     fn set_display_width(&mut self, val: usize) {
         self.window = LineSegment {
             off: self.window.off,
@@ -68,18 +74,21 @@ impl TextBuf {
         };
     }
 
+    /// Move the cursor to a specific location.
     pub fn goto(&mut self, loc: u32) -> bool {
         let changed = self.cursor_pos != loc;
         self.cursor_pos = loc;
         self.fix_window();
         changed
     }
+    /// Insert a character at the cursor position.
     pub fn insert(&mut self, c: char) -> bool {
         self.value.insert(self.cursor_pos as usize, c);
         self.cursor_pos += 1;
         self.fix_window();
         true
     }
+    /// Delete the character before the cursor.
     pub fn backspace(&mut self) -> bool {
         if !self.value.is_empty() && self.cursor_pos > 0 {
             self.value.remove(self.cursor_pos as usize - 1);
@@ -90,6 +99,7 @@ impl TextBuf {
             false
         }
     }
+    /// Move the cursor left by one character.
     pub fn left(&mut self) -> bool {
         if self.cursor_pos > 0 {
             self.cursor_pos -= 1;
@@ -99,6 +109,7 @@ impl TextBuf {
             false
         }
     }
+    /// Move the cursor right by one character.
     pub fn right(&mut self) -> bool {
         if self.cursor_pos < self.value.len() as u32 {
             self.cursor_pos += 1;
@@ -112,19 +123,24 @@ impl TextBuf {
 
 /// A single input line, one character high.
 #[derive(canopy_core::StatefulNode)]
+/// Single-line text input widget.
 pub struct Input {
+    /// Node state.
     state: NodeState,
+    /// Text buffer for the input.
     pub textbuf: TextBuf,
 }
 
 #[derive_commands]
 impl Input {
+    /// Construct a new input with initial text.
     pub fn new(txt: &str) -> Self {
         Self {
             state: NodeState::default(),
             textbuf: TextBuf::new(txt),
         }
     }
+    /// Return the current input text.
     pub fn text(&self) -> String {
         self.textbuf.text()
     }

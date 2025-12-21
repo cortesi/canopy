@@ -196,7 +196,7 @@ dependencies = [
  "anyhow",
  "canopy",
  "lazy_static",
- "litrs 0.4.2",
+ "litrs",
  "pretty_assertions",
  "proc-macro-error",
  "proc-macro2",
@@ -506,7 +506,7 @@ version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4b8a88685455ed29a21542a33abd9cb6510b6b129abadabdcef0f4c55bc8f61"
 dependencies = [
- "litrs 1.0.0",
+ "litrs",
 ]
 
 [[package]]
@@ -690,15 +690,6 @@ name = "linux-raw-sys"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df1d3c3b53da64cf5760482273a98e575c651a67eec7f77df96b5b642de8f039"
-
-[[package]]
-name = "litrs"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5e54036fe321fd421e10d732f155734c4e4afd610dd556d9a82833ab3ee0bed"
-dependencies = [
- "proc-macro2",
-]
 
 [[package]]
 name = "litrs"

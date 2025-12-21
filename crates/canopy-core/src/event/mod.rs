@@ -1,4 +1,6 @@
+/// Keyboard event types.
 pub mod key;
+/// Mouse event types.
 pub mod mouse;
 
 use std::sync::mpsc;
@@ -28,20 +30,19 @@ pub enum Event {
 /// An emitter that is polled by the application to retrieve events.
 #[allow(dead_code)]
 pub(crate) struct EventSource {
+    /// Event receiver channel.
     rx: mpsc::Receiver<Event>,
 }
 
 #[allow(dead_code)]
 impl EventSource {
+    /// Construct a new event source.
     pub fn new(rx: mpsc::Receiver<Event>) -> Self {
         Self { rx }
     }
-}
 
-#[allow(dead_code)]
-impl EventSource {
-    /// Retrieve the next event, blocking until an event is recieved or the
-    /// underlying channel closes..
+    /// Retrieve the next event, blocking until an event is received or the
+    /// underlying channel closes.
     pub fn next(&self) -> Result<Event, mpsc::RecvError> {
         self.rx.recv()
     }

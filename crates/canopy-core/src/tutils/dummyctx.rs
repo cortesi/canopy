@@ -1,5 +1,6 @@
 use crate::{geom::Direction, path::Path, *};
 
+/// Minimal context implementation for tests.
 pub struct DummyContext {}
 
 impl Context for DummyContext {

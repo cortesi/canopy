@@ -1,3 +1,10 @@
+use std::{
+    hash::{Hash, Hasher},
+    ops::RangeBounds,
+};
+
+use textwrap::{WordSeparator, core, wrap_algorithms};
+
 use super::state::State;
 
 /// A position that can be clamped within the bounds of a `State`.
@@ -32,6 +39,7 @@ pub trait Pos: Sized {
         Self::new(s, chunk.saturating_add_signed(n), offset)
     }
 
+    /// Shift up or down by visual line.
     fn shift_line(&self, s: &State, n: isize) -> Self {
         let (chunk, offset) = self.chunk_offset();
         if let Some(l) = Line::from_position(s, (chunk, offset))
@@ -103,6 +111,7 @@ impl Cursor {
         }
     }
 
+    /// Constrain the cursor to valid positions in the state.
     pub fn constrain(&self, s: &State) -> Self {
         match self {
             Self::Insert(p) => Self::Insert(p.constrain(s)),
@@ -237,11 +246,14 @@ impl From<InsertPos> for CharPos {
 /// line is always the set width of the editor.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Line {
+    /// Chunk index for the wrapped line.
     pub chunk: usize,
+    /// Wrapped line index within the chunk.
     pub wrap_idx: usize,
 }
 
 impl Line {
+    /// Find the wrapped line that contains a cursor position.
     pub(super) fn from_position<T: Into<InsertPos>>(s: &State, pos: T) -> Option<Self> {
         let pos = pos.into();
         for (i, (wstart, wend)) in s.chunks[pos.chunk].wraps.iter().enumerate() {
@@ -255,6 +267,7 @@ impl Line {
         None
     }
 
+    /// Return the length of the wrapped line in bytes.
     pub fn len(&self, s: &State) -> usize {
         let (start, end) = s.chunks[self.chunk].wraps[self.wrap_idx];
         end - start
@@ -338,7 +351,9 @@ impl From<(usize, usize)> for Line {
 /// A window of wrapped lines, represented as a line offset and a height.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Window {
+    /// Starting wrapped line.
     pub line: Line,
+    /// Number of wrapped lines in the window.
     pub height: usize,
 }
 
@@ -406,14 +421,11 @@ impl Window {
 /// Split the input text into lines of the given width, and return the start and end offsets for each line.
 fn wrap_offsets(s: &str, width: usize) -> Vec<(usize, usize)> {
     let mut offsets = Vec::new();
-    let words = textwrap::core::break_words(
-        textwrap::WordSeparator::UnicodeBreakProperties.find_words(s),
-        width,
-    );
+    let words = core::break_words(WordSeparator::UnicodeBreakProperties.find_words(s), width);
     if words.is_empty() {
         return vec![(0, 0)];
     }
-    let lines = textwrap::wrap_algorithms::wrap_first_fit(&words, &[width as f64]);
+    let lines = wrap_algorithms::wrap_first_fit(&words, &[width as f64]);
     for l in lines {
         let start = unsafe { l[0].word.as_ptr().offset_from(s.as_ptr()) };
         let last = l[l.len() - 1];
@@ -443,13 +455,14 @@ impl PartialEq for Chunk {
     }
 }
 
-impl std::hash::Hash for Chunk {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+impl Hash for Chunk {
+    fn hash<H: Hasher>(&self, state: &mut H) {
         self.text.hash(state);
     }
 }
 
 impl Chunk {
+    /// Construct a chunk and wrap it to the given width.
     pub fn new(s: &str, wrap_width: usize) -> Self {
         let mut l = Self {
             text: s.into(),
@@ -483,20 +496,24 @@ impl Chunk {
         self.find_wrap(off).is_none()
     }
 
-    pub fn replace_range<R: std::ops::RangeBounds<usize>>(&mut self, range: R, s: &str) {
+    /// Replace a range of text and rewrap.
+    pub fn replace_range<R: RangeBounds<usize>>(&mut self, range: R, s: &str) {
         self.text.replace_range(range, s);
         self.wrap(self.wrap_width);
     }
 
+    /// Append text and rewrap.
     pub fn push_str(&mut self, s: &str) {
         self.text.push_str(s);
         self.wrap(self.wrap_width);
     }
 
+    /// Borrow the chunk as a string.
     pub fn as_str(&self) -> &str {
         &self.text
     }
 
+    /// Return the number of bytes in the chunk.
     pub fn len(&self) -> usize {
         self.text.len()
     }

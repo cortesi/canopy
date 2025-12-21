@@ -21,7 +21,7 @@ pub fn dump_with_focus(root: &mut dyn Node, focus_gen: u64) -> Result<String> {
     Ok(String::from_utf8_lossy(buffer.as_slice()).into_owned())
 }
 
-/// Helper to write an indented, colored label followed by a value
+/// Helper to write an indented, colored label followed by a value.
 fn write_field(buffer: &mut Buffer, indent: &str, label: &str, value: &str) {
     write!(buffer, "{indent}  ").unwrap();
     buffer
@@ -32,6 +32,7 @@ fn write_field(buffer: &mut Buffer, indent: &str, label: &str, value: &str) {
     writeln!(buffer, " {value}").unwrap();
 }
 
+/// Walk a node subtree and emit formatted debug output.
 fn dump_node(
     buffer: &mut Buffer,
     node: &mut dyn Node,

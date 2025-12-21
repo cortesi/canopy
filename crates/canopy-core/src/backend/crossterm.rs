@@ -1,7 +1,8 @@
 use std::{
-    io::{self, Write},
+    io::{self, Stderr, Write},
     panic,
     process::exit,
+    result::Result as StdResult,
     sync::mpsc,
     thread,
 };
@@ -19,17 +20,20 @@ use crate::{
     render::RenderBackend,
     style::{Color, Style},
 };
-/// Simple event source wrapper for receiving events
+/// Simple event source wrapper for receiving events.
 struct EventSource {
+    /// Event receiver channel.
     rx: mpsc::Receiver<Event>,
 }
 
 impl EventSource {
+    /// Construct a new event source.
     fn new(rx: mpsc::Receiver<Event>) -> Self {
         Self { rx }
     }
 
-    fn next(&self) -> std::result::Result<Event, mpsc::RecvError> {
+    /// Block until the next event arrives.
+    fn next(&self) -> StdResult<Event, mpsc::RecvError> {
         self.rx.recv()
     }
 }
@@ -38,6 +42,7 @@ use crossterm::{
     self, ExecutableCommand, QueueableCommand, cursor as ccursor, event as cevent, style, terminal,
 };
 
+/// Translate a canopy color into a crossterm color.
 fn translate_color(c: Color) -> style::Color {
     match c {
         Color::Black => style::Color::Black,
@@ -61,6 +66,7 @@ fn translate_color(c: Color) -> style::Color {
     }
 }
 
+/// Map IO results into canopy errors.
 fn translate_result<T>(e: io::Result<T>) -> Result<T> {
     match e {
         Ok(t) => Ok(t),
@@ -68,12 +74,15 @@ fn translate_result<T>(e: io::Result<T>) -> Result<T> {
     }
 }
 
+/// Crossterm-backed implementation of `BackendControl`.
 #[derive(Debug)]
 pub struct CrosstermControl {
-    fp: std::io::Stderr,
+    /// Stderr handle used for control output.
+    fp: Stderr,
 }
 
 impl CrosstermControl {
+    /// Enter alternate screen and raw mode.
     fn enter(&mut self) -> io::Result<()> {
         terminal::enable_raw_mode()?;
         self.fp.execute(terminal::EnterAlternateScreen)?;
@@ -82,6 +91,7 @@ impl CrosstermControl {
         terminal::disable_raw_mode()?;
         Ok(())
     }
+    /// Leave alternate screen and restore terminal state.
     fn exit(&mut self) -> io::Result<()> {
         self.fp.execute(terminal::LeaveAlternateScreen)?;
         self.fp.execute(cevent::DisableMouseCapture)?;
@@ -93,9 +103,7 @@ impl CrosstermControl {
 
 impl Default for CrosstermControl {
     fn default() -> Self {
-        Self {
-            fp: std::io::stderr(),
-        }
+        Self { fp: io::stderr() }
     }
 }
 
@@ -108,17 +116,21 @@ impl BackendControl for CrosstermControl {
     }
 }
 
+/// Crossterm-backed render backend.
 pub struct CrosstermRender {
-    fp: std::io::Stderr,
+    /// Stderr handle used for rendering output.
+    fp: Stderr,
 }
 
 impl CrosstermRender {
+    /// Flush pending output.
     fn flush(&mut self) -> io::Result<()> {
         self.fp.flush()?;
         Ok(())
     }
 
-    fn style(&mut self, s: Style) -> io::Result<()> {
+    /// Apply a style to subsequent output.
+    fn apply_style(&mut self, s: &Style) -> io::Result<()> {
         // Order is important here - if we reset after setting foreground and
         // background colors they are lost.
         if s.attrs.is_empty() {
@@ -155,6 +167,7 @@ impl CrosstermRender {
         Ok(())
     }
 
+    /// Write text at a position.
     fn text(&mut self, loc: Point, txt: &str) -> io::Result<()> {
         self.fp.queue(ccursor::MoveTo(loc.x as u16, loc.y as u16))?;
         self.fp.queue(style::Print(txt))?;
@@ -164,9 +177,7 @@ impl CrosstermRender {
 
 impl Default for CrosstermRender {
     fn default() -> Self {
-        Self {
-            fp: std::io::stderr(),
-        }
+        Self { fp: io::stderr() }
     }
 }
 
@@ -175,8 +186,8 @@ impl RenderBackend for CrosstermRender {
         translate_result(self.flush())
     }
 
-    fn style(&mut self, s: Style) -> Result<()> {
-        translate_result(self.style(s))
+    fn style(&mut self, s: &Style) -> Result<()> {
+        translate_result(self.apply_style(s))
     }
 
     fn text(&mut self, loc: Point, txt: &str) -> Result<()> {
@@ -197,6 +208,7 @@ impl RenderBackend for CrosstermRender {
     }
 }
 
+/// Translate crossterm key modifiers into canopy modifiers.
 fn translate_key_modifiers(mods: cevent::KeyModifiers) -> key::Mods {
     key::Mods {
         shift: mods.contains(cevent::KeyModifiers::SHIFT),
@@ -205,6 +217,7 @@ fn translate_key_modifiers(mods: cevent::KeyModifiers) -> key::Mods {
     }
 }
 
+/// Translate a crossterm mouse button into a canopy button.
 fn translate_button(b: cevent::MouseButton) -> mouse::Button {
     match b {
         cevent::MouseButton::Left => mouse::Button::Left,
@@ -213,7 +226,7 @@ fn translate_button(b: cevent::MouseButton) -> mouse::Button {
     }
 }
 
-/// Translate a crossterm event into a canopy event
+/// Translate a crossterm event into a canopy event.
 fn translate_event(e: cevent::Event) -> Event {
     match e {
         cevent::Event::Key(k) => Event::Key(key::Key {
@@ -315,6 +328,7 @@ fn translate_event(e: cevent::Event) -> Event {
     }
 }
 
+/// Thread entry that forwards crossterm events into the channel.
 fn event_emitter(evt_tx: mpsc::Sender<Event>) {
     thread::spawn(move || {
         loop {
@@ -345,7 +359,7 @@ fn handle_render_error<N: Node>(
     focus_gen: Option<u64>,
 ) -> error::Error {
     // Exit alternate screen mode to display error
-    let mut stderr = std::io::stderr();
+    let mut stderr = io::stderr();
     #[allow(unused_must_use)]
     {
         crossterm::execute!(
@@ -373,6 +387,7 @@ fn handle_render_error<N: Node>(
     error
 }
 
+/// Run the main render/event loop using the crossterm backend.
 pub fn runloop<N>(mut cnpy: Canopy, mut root: N) -> Result<()>
 where
     N: Node,
@@ -381,7 +396,7 @@ where
     let ctrl = CrosstermControl::default();
 
     translate_result(terminal::enable_raw_mode())?;
-    let mut w = std::io::stderr();
+    let mut w = io::stderr();
 
     translate_result(crossterm::execute!(
         w,
@@ -391,7 +406,7 @@ where
     ))?;
 
     defer! {
-        let mut stderr = std::io::stderr();
+        let mut stderr = io::stderr();
         #[allow(unused_must_use)]
         {
             crossterm::execute!(stderr, terminal::LeaveAlternateScreen, cevent::DisableMouseCapture, ccursor::Show);
@@ -400,7 +415,7 @@ where
     }
 
     panic::set_hook(Box::new(|pi| {
-        let mut stderr = std::io::stderr();
+        let mut stderr = io::stderr();
         #[allow(unused_must_use)]
         {
             crossterm::execute!(
@@ -446,7 +461,7 @@ where
         }) = &event
         {
             // Exit alternate screen mode
-            let mut stderr = std::io::stderr();
+            let mut stderr = io::stderr();
             #[allow(unused_must_use)]
             {
                 crossterm::execute!(
@@ -466,7 +481,7 @@ where
             }
 
             // Exit the program
-            std::process::exit(130); // 130 is the standard exit code for SIGINT
+            exit(130); // 130 is the standard exit code for SIGINT
         }
 
         cnpy.event(&mut root, event)?;

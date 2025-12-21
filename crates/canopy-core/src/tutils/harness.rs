@@ -15,7 +15,9 @@ pub struct Harness<N> {
 
 /// Builder for creating a test harness with a fluent API.
 pub struct HarnessBuilder<N> {
+    /// Root node under test.
     root: N,
+    /// Viewport size for the harness.
     size: Expanse,
 }
 
@@ -96,6 +98,7 @@ impl<N: Node + Loader> Harness<N> {
         self.canopy.buf().expect("render buffer not initialized")
     }
 
+    /// Send a key event and render.
     pub fn key<T>(&mut self, k: T) -> Result<()>
     where
         T: Into<key::Key>,
@@ -104,6 +107,7 @@ impl<N: Node + Loader> Harness<N> {
         self.canopy.render(&mut self.backend, &mut self.root)
     }
 
+    /// Render the root node into the harness backend.
     pub fn render(&mut self) -> Result<()> {
         self.canopy.render(&mut self.backend, &mut self.root)
     }

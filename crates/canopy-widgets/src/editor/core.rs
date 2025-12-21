@@ -6,13 +6,16 @@ use super::{effect, effect::Effector, primitives::InsertPos, state};
 /// added operations to support a redo/undo stack.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Core {
+    /// Current editor state.
     state: state::State,
     /// The history of operations on this text buffer.
     history: Vec<effect::Effect>,
+    /// Redo stack for reverted operations.
     redo: Vec<effect::Effect>,
 }
 
 impl Core {
+    /// Construct a new editor core from the provided text.
     pub fn new(text: &str) -> Self {
         Self {
             state: state::State::new(text),
@@ -52,6 +55,7 @@ impl Core {
         }
     }
 
+    /// Apply an effect and record it for undo/redo.
     fn action(&mut self, e: effect::Effect) {
         e.apply(&mut self.state);
         self.history.push(e);
@@ -63,7 +67,7 @@ impl Core {
         self.action(effect::Effect::Insert(effect::Insert::new(
             &self.state,
             self.state.cursor.insert(&self.state),
-            text.to_string(),
+            text,
         )));
     }
 
@@ -79,18 +83,22 @@ impl Core {
         )));
     }
 
+    /// Return the visible wrapped lines for the current window.
     pub fn window_text(&self) -> Vec<Option<&str>> {
         self.state.window_text()
     }
 
+    /// Return the total wrapped line count for the document.
     pub fn wrapped_height(&self) -> usize {
         self.state.line_height()
     }
 
+    /// Resize the visible window to a new width and height.
     pub fn resize_window(&mut self, width: usize, height: usize) {
         self.state.resize_window(width, height);
     }
 
+    /// Return the cursor position in screen coordinates.
     pub fn cursor_position(&self) -> Option<Point> {
         self.state.cursor_position()
     }

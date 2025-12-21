@@ -66,12 +66,13 @@ pub fn walk_focus_path_e<R>(
     .value())
 }
 
+/// Result of a locate traversal.
 pub enum Locate<R> {
-    // Note the match and continue traversal.
+    /// Note the match and continue traversal.
     Match(R),
-    // Match and don't traverse children.
+    /// Note the match and stop traversal.
     Stop(R),
-    // Continue looking.
+    /// Continue looking.
     Continue,
 }
 
@@ -98,6 +99,7 @@ pub fn locate<R>(
 }
 
 // Helper function to recursively locate nodes with ViewStack
+/// Recursively locate a node at the given point.
 fn locate_recursive<R>(
     node: &mut dyn Node,
     p: Point,

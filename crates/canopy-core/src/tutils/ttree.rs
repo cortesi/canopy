@@ -12,17 +12,21 @@ use crate::{
 /// Thread-local state tracked by test nodes.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct State {
+    /// Recorded event path entries.
     pub path: Vec<String>,
 }
 
 impl State {
+    /// Construct a new empty state.
     pub fn new() -> Self {
         Self { path: vec![] }
     }
+    /// Clear recorded events.
     pub fn reset(&mut self) {
         self.path = vec![];
     }
-    pub fn add_event(&mut self, n: &NodeName, evt: &str, result: EventOutcome) {
+    /// Record a node event.
+    pub fn add_event(&mut self, n: &NodeName, evt: &str, result: &EventOutcome) {
         let outcome = match result {
             EventOutcome::Handle => "handle",
             EventOutcome::Consume => "consume",
@@ -30,6 +34,7 @@ impl State {
         };
         self.path.push(format!("{n}@{evt}->{outcome}"))
     }
+    /// Record a command invocation.
     pub fn add_command(&mut self, n: &NodeName, cmd: &str) {
         self.path.push(format!("{n}.{cmd}()"))
     }
@@ -39,23 +44,28 @@ thread_local! {
     pub (crate) static TSTATE: RefCell<State> = RefCell::new(State::new());
 }
 
+/// Clear the global test state.
 pub fn reset_state() {
     TSTATE.with(|s| {
         s.borrow_mut().reset();
     });
 }
 
-/// Get and reset the state
+/// Get the current test state.
 pub fn get_state() -> State {
     TSTATE.with(|s| s.borrow().clone())
 }
 
+/// Build a test leaf node type.
 macro_rules! leaf {
     ($a:ident) => {
+        /// Test leaf node with instrumented behavior.
         #[derive(Debug, PartialEq, Eq, StatefulNode)]
         pub struct $a {
+            /// Node state.
             state: NodeState,
 
+            /// Next event outcome override.
             pub next_outcome: Option<EventOutcome>,
         }
 
@@ -87,6 +97,7 @@ macro_rules! leaf {
 
         #[derive_commands]
         impl $a {
+            /// Construct a new leaf node.
             pub fn new() -> Self {
                 $a {
                     state: NodeState::default(),
@@ -103,6 +114,7 @@ macro_rules! leaf {
                 Ok(())
             }
 
+            /// Build a synthetic mouse event at the node's location.
             pub fn make_mouse_event(&self) -> Result<mouse::MouseEvent> {
                 let a = self.vp().screen_rect();
                 Ok(mouse::MouseEvent {
@@ -121,7 +133,7 @@ macro_rules! leaf {
                     EventOutcome::Ignore
                 };
                 TSTATE.with(|s| {
-                    s.borrow_mut().add_event(&self.name(), evt, ret.clone());
+                    s.borrow_mut().add_event(&self.name(), evt, &ret);
                 });
                 Ok(ret)
             }
@@ -129,19 +141,26 @@ macro_rules! leaf {
     };
 }
 
+/// Build a test branch node type.
 macro_rules! branch {
     ($name:ident, $la:ident, $lb:ident) => {
+        /// Test branch node with two children.
         #[derive(Debug, PartialEq, Eq, StatefulNode)]
         pub struct $name {
+            /// Node state.
             state: NodeState,
 
+            /// Next event outcome override.
             pub next_outcome: Option<EventOutcome>,
+            /// Left child node.
             pub a: $la,
+            /// Right child node.
             pub b: $lb,
         }
 
         #[derive_commands]
         impl $name {
+            /// Construct a new branch node.
             pub fn new() -> Self {
                 $name {
                     state: NodeState::default(),
@@ -158,7 +177,7 @@ macro_rules! branch {
                     EventOutcome::Ignore
                 };
                 TSTATE.with(|s| {
-                    s.borrow_mut().add_event(&self.name(), evt, ret.clone());
+                    s.borrow_mut().add_event(&self.name(), evt, &ret);
                 });
                 Ok(ret)
             }
@@ -208,16 +227,22 @@ macro_rules! branch {
 }
 
 #[derive(Debug, PartialEq, Eq, StatefulNode)]
+/// Root node for the test tree.
 pub struct R {
+    /// Node state.
     state: NodeState,
 
+    /// Next event outcome override.
     pub next_outcome: Option<EventOutcome>,
+    /// Left branch.
     pub a: Ba,
+    /// Right branch.
     pub b: Bb,
 }
 
 #[derive_commands]
 impl R {
+    /// Construct a new test root.
     pub fn new() -> Self {
         Self {
             state: NodeState::default(),
@@ -234,6 +259,7 @@ impl R {
         });
         Ok(())
     }
+    /// Record a test event for this node.
     fn handle(&mut self, evt: &str) -> Result<EventOutcome> {
         let ret = if let Some(x) = self.next_outcome.clone() {
             self.next_outcome = None;
@@ -242,7 +268,7 @@ impl R {
             EventOutcome::Ignore
         };
         TSTATE.with(|s| {
-            s.borrow_mut().add_event(&self.name(), evt, ret.clone());
+            s.borrow_mut().add_event(&self.name(), evt, &ret);
         });
         Ok(ret)
     }

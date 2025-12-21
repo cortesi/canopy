@@ -7,13 +7,17 @@ use canopy_core::{
 use super::core;
 
 #[derive(canopy_core::StatefulNode)]
+/// Internal editor view node.
 pub struct EditorView {
+    /// Node state.
     state: NodeState,
+    /// Core editor state and logic.
     core: core::Core,
 }
 
 #[derive_commands]
 impl EditorView {
+    /// Construct a new editor view.
     pub fn new(txt: &str) -> Self {
         Self {
             state: NodeState::default(),
@@ -58,12 +62,15 @@ impl Node for EditorView {
 /// A simple editor
 #[derive(canopy_core::StatefulNode)]
 pub struct Editor {
+    /// Node state.
     state: NodeState,
+    /// Editor view node.
     view: EditorView,
 }
 
 #[derive_commands]
 impl Editor {
+    /// Construct a new editor with the provided text.
     pub fn new(txt: &str) -> Self {
         Self {
             state: NodeState::default(),

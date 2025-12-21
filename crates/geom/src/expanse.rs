@@ -5,7 +5,9 @@ use super::{Point, Rect};
 /// to madate that the location of a `Rect` is (0, 0).
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct Expanse {
+    /// Width in cells.
     pub w: u32,
+    /// Height in cells.
     pub h: u32,
 }
 
@@ -17,6 +19,7 @@ impl Default for Expanse {
 }
 
 impl Expanse {
+    /// Construct a size from width and height.
     pub fn new(w: u32, h: u32) -> Self {
         Self { w, h }
     }

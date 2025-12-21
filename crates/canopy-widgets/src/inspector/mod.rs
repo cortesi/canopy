@@ -1,4 +1,6 @@
+/// Log panel widget.
 mod logs;
+/// Inspector view layout.
 mod view;
 
 use canopy_core as canopy;
@@ -9,10 +11,12 @@ use logs::Logs;
 
 use crate::{frame, tabs};
 
+/// Inspector overlay node.
 #[derive(canopy_core::StatefulNode)]
-
 pub struct Inspector {
+    /// Node state.
     state: NodeState,
+    /// Root view frame.
     view: frame::Frame<view::View>,
 }
 
@@ -24,6 +28,7 @@ impl Default for Inspector {
 
 #[derive_commands]
 impl Inspector {
+    /// Construct a new inspector.
     pub fn new() -> Self {
         let mut i = Self {
             state: NodeState::default(),

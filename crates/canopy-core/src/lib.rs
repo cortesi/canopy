@@ -7,31 +7,55 @@ pub use canopy_derive::{
 };
 
 // Core modules
+/// Command definition and dispatch.
 pub mod commands;
+/// Context trait and helpers.
 mod context;
+/// Core error types.
 pub mod error;
+/// Layout helpers.
 mod layout;
+/// Node traits and helpers.
 pub mod node;
+/// Rendering interfaces.
 pub mod render;
+/// Shared node state types.
 pub mod state;
+/// Terminal buffer types.
 mod termbuf;
+/// Viewport management.
 mod viewport;
+/// View stack utilities.
 mod viewstack;
 
+/// Cursor and position helpers.
 pub mod cursor;
+/// Debug dump utilities.
 pub mod dump;
+/// Input event types.
 pub mod event;
 pub use geom;
+/// Backend implementations.
 pub mod backend;
+/// Binding utilities.
 mod binder;
+/// Core Canopy application implementation.
 mod canopy;
+/// Focus traversal helpers.
 mod focus;
+/// Input mapping.
 mod inputmap;
+/// Path and traversal helpers.
 pub mod path;
+/// Polling utilities.
 mod poll;
+/// Scripting support.
 pub mod script;
+/// Styling and color helpers.
 pub mod style;
+/// Tree traversal utilities.
 pub mod tree;
+/// Testing utilities.
 pub mod tutils;
 
 // Public exports

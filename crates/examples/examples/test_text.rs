@@ -1,7 +1,12 @@
+//! Launch the test_text example.
+
+use std::{error::Error, result::Result as StdResult};
+
 use canopy::{backend::crossterm::runloop, *};
 use canopy_examples::test_text::TextDisplay;
 
-pub fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+/// Run the test_text example.
+pub fn main() -> StdResult<(), Box<dyn Error>> {
     let mut cnpy = Canopy::new();
     cnpy.add_commands::<Root<TextDisplay>>();
     TextDisplay::load(&mut cnpy);

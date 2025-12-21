@@ -1,26 +1,34 @@
 use canopy::{
     event::{key, mouse},
     geom::{Expanse, Rect},
-    style::solarized,
-    widgets::{frame, list::*, Text},
+    style::{AttrSet, solarized},
+    widgets::{Text, frame, list::*},
     *,
 };
 use rand::Rng;
 
+/// Sample text content for list items.
 const TEXT: &str = "What a struggle must have gone on during long centuries between the several kinds of trees, each annually scattering its seeds by the thousand; what war between insect and insect — between insects, snails, and other animals with birds and beasts of prey — all striving to increase, all feeding on each other, or on the trees, their seeds and seedlings, or on the other plants which first clothed the ground and thus checked the growth of the trees.";
 
+/// Alternating color names for list items.
 const COLORS: &[&str] = &["red", "blue"];
 
 #[derive(StatefulNode)]
+/// List item block for the list gym demo.
 pub struct Block {
+    /// Node state.
     state: NodeState,
+    /// Text content.
     child: Text,
+    /// Color layer name.
     color: String,
+    /// Selection state.
     selected: bool,
 }
 
 #[derive_commands]
 impl Block {
+    /// Construct a block for the given index.
     pub fn new(index: usize) -> Self {
         let mut rng = rand::rng();
         Self {
@@ -71,7 +79,9 @@ impl Node for Block {
 }
 
 #[derive(StatefulNode)]
+/// Status bar widget for the list gym demo.
 pub struct StatusBar {
+    /// Node state.
     state: NodeState,
 }
 
@@ -87,9 +97,13 @@ impl Node for StatusBar {
 }
 
 #[derive(StatefulNode)]
+/// Root node for the list gym demo.
 pub struct ListGym {
+    /// Node state.
     state: NodeState,
+    /// List content frame.
     content: frame::Frame<List<Block>>,
+    /// Status bar widget.
     statusbar: StatusBar,
 }
 
@@ -101,6 +115,7 @@ impl Default for ListGym {
 }
 
 impl ListGym {
+    /// Construct a new list gym demo.
     pub fn new() -> Self {
         let nodes: Vec<Block> = (0..10).map(Block::new).collect();
         Self {
@@ -165,30 +180,31 @@ impl Loader for ListGym {
     }
 }
 
+/// Install key bindings for the list gym demo.
 pub fn setup_bindings(cnpy: &mut Canopy) {
     cnpy.style.add(
         "red/text",
         Some(solarized::RED),
         None,
-        Some(canopy::style::AttrSet::default()),
+        Some(AttrSet::default()),
     );
     cnpy.style.add(
         "blue/text",
         Some(solarized::BLUE),
         None,
-        Some(canopy::style::AttrSet::default()),
+        Some(AttrSet::default()),
     );
     cnpy.style.add(
         "green/text",
         Some(solarized::GREEN),
         None,
-        Some(canopy::style::AttrSet::default()),
+        Some(AttrSet::default()),
     );
     cnpy.style.add(
         "statusbar/text",
         Some(solarized::BLUE),
         None,
-        Some(canopy::style::AttrSet::default()),
+        Some(AttrSet::default()),
     );
 
     Binder::new(cnpy)

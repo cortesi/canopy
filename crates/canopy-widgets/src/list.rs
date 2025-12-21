@@ -7,6 +7,7 @@ use canopy_core::{
 
 /// ListItem must be implemented by items displayed in a `List`.
 pub trait ListItem {
+    /// Update selection state for the item.
     fn set_selected(&mut self, _state: bool) {}
 }
 
@@ -16,8 +17,10 @@ pub struct List<N>
 where
     N: Node + ListItem,
 {
+    /// Node state.
     state: NodeState,
 
+    /// Stored list items.
     items: Vec<N>,
 
     /// The offset of the currently selected item in the list. We keep this
@@ -30,6 +33,7 @@ impl<N> List<N>
 where
     N: Node + ListItem,
 {
+    /// Construct a list from the provided items.
     pub fn new(items: Vec<N>) -> Self {
         let mut l = Self {
             items,

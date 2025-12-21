@@ -1,15 +1,25 @@
-use std::sync::atomic::AtomicU64;
+use std::{
+    fmt,
+    sync::atomic::{AtomicU64, Ordering},
+};
 
 use convert_case::{Case, Casing};
 
-use crate::{Result, error, viewport::ViewPort};
+use crate::{
+    Result, error,
+    geom::{Expanse, Rect},
+    viewport::ViewPort,
+};
 
+/// Global counter for node IDs.
 static CURRENT_ID: AtomicU64 = AtomicU64::new(0);
 
+/// Return true if the character is valid in a node name.
 pub fn valid_nodename_char(c: char) -> bool {
     (c.is_ascii_lowercase() || c.is_ascii_digit()) || c == '_'
 }
 
+/// Return true if the full name is valid.
 pub fn valid_nodename(name: &str) -> bool {
     name.chars().all(valid_nodename_char)
 }
@@ -17,12 +27,14 @@ pub fn valid_nodename(name: &str) -> bool {
 /// A unique ID for a node.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NodeId {
+    /// Numeric identifier.
     id: u64,
+    /// Node name.
     name: NodeName,
 }
 
-impl std::fmt::Display for NodeId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for NodeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}#{}", self.name, self.id)
     }
 }
@@ -37,6 +49,7 @@ impl PartialEq<u64> for NodeId {
 /// underscores.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NodeName {
+    /// Stored node name string.
     name: String,
 }
 
@@ -63,8 +76,8 @@ impl NodeName {
     }
 }
 
-impl std::fmt::Display for NodeName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for NodeName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name)
     }
 }
@@ -95,7 +108,7 @@ impl TryFrom<&str> for NodeName {
 /// method on request.
 #[derive(Debug, PartialEq, Eq)]
 pub struct NodeState {
-    // Unique node ID
+    /// Unique node ID.
     pub id: u64,
 
     /// This node's focus generation. We increment the global focus counter when
@@ -107,18 +120,17 @@ pub struct NodeState {
     /// changed.
     pub focus_path_gen: u64,
 
-    // The last render sweep during which this node held focus.
+    /// The last render sweep during which this node held focus.
     pub rendered_focus_gen: u64,
 
     /// The view for this node. The inner rectangle always has the same size as
     /// the screen_area.
     pub viewport: ViewPort,
 
-    // Is this node hidden?
+    /// Whether this node is hidden.
     pub hidden: bool,
 
-    // Has this node been initialized? This is used to determine if we need to
-    // call the poll function during the pre-render sweep.
+    /// Whether the node has been initialized for polling.
     pub initialized: bool,
 }
 
@@ -126,7 +138,7 @@ pub struct NodeState {
 /// up by implementing the StatefulNode trait.
 impl Default for NodeState {
     fn default() -> Self {
-        let id = CURRENT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let id = CURRENT_ID.fetch_add(1, Ordering::Relaxed);
         Self {
             id,
             focus_gen: 0,
@@ -186,17 +198,17 @@ pub trait StatefulNode {
     }
 
     /// Set our canvas size.
-    fn set_canvas(&mut self, sz: crate::geom::Expanse) {
+    fn set_canvas(&mut self, sz: Expanse) {
         self.state_mut().viewport.set_canvas(sz);
     }
 
     /// Set our view position and size.
-    fn set_view(&mut self, view: crate::geom::Rect) {
+    fn set_view(&mut self, view: Rect) {
         self.state_mut().viewport.set_view(view);
     }
 
     /// Set both the canvas size and the view to fill the target size.
-    fn fill(&mut self, sz: crate::geom::Expanse) -> Result<()> {
+    fn fill(&mut self, sz: Expanse) -> Result<()> {
         self.state_mut().viewport.set_canvas(sz);
         self.state_mut().viewport.set_view(sz.rect());
         Ok(())
@@ -209,7 +221,8 @@ pub trait StatefulNode {
         Ok(())
     }
 
-    fn fit_size(&mut self, size: crate::geom::Expanse, view_size: crate::geom::Expanse) {
+    /// Resize the canvas and view according to fit policy.
+    fn fit_size(&mut self, size: Expanse, view_size: Expanse) {
         self.state_mut().viewport.fit_size(size, view_size);
     }
 

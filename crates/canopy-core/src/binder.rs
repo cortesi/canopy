@@ -6,12 +6,16 @@ use crate::{
 /// Binder provides an ergonomic way to specify a set of key bindings using a
 /// builder patttern.
 pub struct Binder<'a> {
+    /// Active input mode.
     mode: String,
+    /// Path filter for binding targets.
     path_filter: String,
+    /// Canopy instance being configured.
     cnpy: &'a mut Canopy,
 }
 
 impl<'a> Binder<'a> {
+    /// Construct a new binder for the canopy instance.
     pub fn new(cnpy: &'a mut Canopy) -> Self {
         Binder {
             mode: "".into(),
@@ -81,6 +85,8 @@ impl<'a> Binder<'a> {
     }
 }
 
+/// Provide a set of default input bindings.
 pub trait DefaultBindings {
+    /// Attach default bindings to a binder.
     fn defaults(b: Binder) -> Binder;
 }

@@ -11,7 +11,9 @@ use crate::{NodeId, event::Event};
 /// A node that has a pending callback.
 #[derive(Debug)]
 struct PendingNode {
+    /// Scheduled time for the callback.
     time: SystemTime,
+    /// Node identifier to poll.
     node_id: NodeId,
 }
 
@@ -26,7 +28,7 @@ impl Eq for PendingNode {}
 /// Reverse order so nodes with the closest callback time are at the top.
 impl PartialOrd for PendingNode {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(other.time.cmp(&self.time))
+        Some(self.cmp(other))
     }
 }
 
@@ -40,10 +42,12 @@ impl Ord for PendingNode {
 /// A heap that tracks the current list of pending callbacks.
 #[derive(Default, Debug)]
 struct PendingHeap {
+    /// Pending node heap.
     nodes: BinaryHeap<PendingNode>,
 }
 
 impl PendingHeap {
+    /// Add a node with an explicit time base.
     fn _add(&mut self, now: SystemTime, node_id: NodeId, duration: Duration) {
         self.nodes.push(PendingNode {
             time: now + duration,
@@ -56,6 +60,7 @@ impl PendingHeap {
         self._add(SystemTime::now(), node_id, duration);
     }
 
+    /// Calculate the wait time relative to a given timestamp.
     fn _current_wait(&self, now: SystemTime) -> Option<Duration> {
         self.nodes
             .peek()
@@ -69,6 +74,7 @@ impl PendingHeap {
         self._current_wait(SystemTime::now())
     }
 
+    /// Collect due node IDs relative to a given timestamp.
     fn _collect(&mut self, now: SystemTime) -> Vec<NodeId> {
         let mut v = vec![];
         while let Some(n) = self.nodes.pop() {
@@ -94,11 +100,14 @@ impl PendingHeap {
 pub struct Poller {
     /// Handle for the scheduler thread
     handle: Option<thread::JoinHandle<()>>,
+    /// Pending heap shared with the scheduler thread.
     pending: Arc<Mutex<PendingHeap>>,
+    /// Event sender for poll notifications.
     event_tx: mpsc::Sender<Event>,
 }
 
 impl Poller {
+    /// Construct a new poller.
     pub(crate) fn new(event_tx: mpsc::Sender<Event>) -> Self {
         Self {
             handle: None,

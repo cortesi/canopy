@@ -1,9 +1,11 @@
 use canopy::{derive_commands, event::key, geom::Expanse, widgets::frame, *};
 
-/// A widget that renders a test pattern
+/// A widget that renders a test pattern.
 #[derive(StatefulNode)]
 pub struct TestPattern {
+    /// Node state.
     state: NodeState,
+    /// Virtual canvas size.
     size: Expanse,
 }
 
@@ -15,6 +17,7 @@ impl Default for TestPattern {
 
 #[derive_commands]
 impl TestPattern {
+    /// Construct the test pattern node.
     pub fn new() -> Self {
         Self {
             state: NodeState::default(),
@@ -23,40 +26,48 @@ impl TestPattern {
     }
 
     #[command]
+    /// Scroll to the top-left corner.
     pub fn scroll_to_top(&mut self, c: &mut dyn Context) {
         c.scroll_to(self, 0, 0);
     }
 
     #[command]
+    /// Scroll down by one line.
     pub fn scroll_down(&mut self, c: &mut dyn Context) {
         c.scroll_down(self);
     }
 
     #[command]
+    /// Scroll up by one line.
     pub fn scroll_up(&mut self, c: &mut dyn Context) {
         c.scroll_up(self);
     }
 
     #[command]
+    /// Scroll left by one column.
     pub fn scroll_left(&mut self, c: &mut dyn Context) {
         c.scroll_left(self);
     }
 
     #[command]
+    /// Scroll right by one column.
     pub fn scroll_right(&mut self, c: &mut dyn Context) {
         c.scroll_right(self);
     }
 
     #[command]
+    /// Page down in the viewport.
     pub fn page_down(&mut self, c: &mut dyn Context) {
         c.page_down(self);
     }
 
     #[command]
+    /// Page up in the viewport.
     pub fn page_up(&mut self, c: &mut dyn Context) {
         c.page_up(self);
     }
 
+    /// Return the character for the test pattern at a position.
     fn generate_pattern_char(x: u32, y: u32) -> char {
         // Pattern: "abcdefghijklmnopqrstuvwxyz0123456789"
         let pattern = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -116,8 +127,11 @@ impl Node for TestPattern {
 }
 
 #[derive(StatefulNode)]
+/// Root node for the frame gym demo.
 pub struct FrameGym {
+    /// Node state.
     state: NodeState,
+    /// Framed test pattern.
     child: frame::Frame<TestPattern>,
 }
 
@@ -129,6 +143,7 @@ impl Default for FrameGym {
 }
 
 impl FrameGym {
+    /// Construct a new frame gym.
     pub fn new() -> Self {
         Self {
             state: NodeState::default(),
@@ -161,6 +176,7 @@ impl Loader for FrameGym {
     }
 }
 
+/// Install key bindings for the frame gym demo.
 pub fn setup_bindings(cnpy: &mut Canopy) {
     Binder::new(cnpy)
         .defaults::<Root<FrameGym>>()

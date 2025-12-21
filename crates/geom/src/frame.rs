@@ -83,6 +83,7 @@ impl Frame {
     pub fn outer(&self) -> Rect {
         self.outer_rect
     }
+    /// Return a zero-sized frame.
     pub fn zero() -> Self {
         Self {
             top: Rect::zero(),

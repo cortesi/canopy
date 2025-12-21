@@ -7,8 +7,11 @@ use crate::tabs;
 /// View contains the body of the inspector.
 #[derive(canopy_core::StatefulNode)]
 pub struct View {
+    /// Tab strip for inspector sections.
     tabs: tabs::Tabs,
+    /// Log list panel.
     logs: Logs,
+    /// Node state.
     state: NodeState,
 }
 
@@ -29,6 +32,7 @@ impl Node for View {
 
 #[derive_commands]
 impl View {
+    /// Construct a new inspector view.
     pub fn new() -> Self {
         Self {
             state: NodeState::default(),

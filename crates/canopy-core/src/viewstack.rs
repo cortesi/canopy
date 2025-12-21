@@ -4,24 +4,20 @@
 use crate::{Error, Result, geom::Rect, viewport::ViewPort};
 
 /// A stack of viewports that manages nested view transformations.
-///
-/// Invariants:
-/// - The stack always contains at least one viewport, enforced by:
-///   - `new()` requiring an initial viewport
-///   - `pop()` preventing removal of the last item
-/// - The first viewport's view represents the physical screen dimensions
-///   (i.e., its view size defines the screen size for the entire stack)
 pub struct ViewStack {
+    /// Stored viewport stack.
     views: Vec<ViewPort>,
 }
 
 impl ViewStack {
+    /// Construct a stack with an initial viewport.
     pub fn new(initial: ViewPort) -> Self {
         Self {
             views: vec![initial],
         }
     }
 
+    /// Push a viewport onto the stack.
     pub fn push(&mut self, view: ViewPort) {
         // Ensure the new viewport is positioned within the parent's canvas
         // We know views always has at least one item
@@ -58,6 +54,7 @@ impl ViewStack {
         self.views.push(view);
     }
 
+    /// Pop the top viewport, keeping at least one in the stack.
     pub fn pop(&mut self) -> Result<ViewPort> {
         if self.views.len() <= 1 {
             return Err(Error::Geometry(

@@ -1,3 +1,5 @@
+//! Rendering benchmarks for canopy.
+
 use std::hint::black_box;
 
 use canopy::{
@@ -7,14 +9,18 @@ use canopy::{
 use criterion::{Criterion, criterion_group, criterion_main};
 
 // Simple wrapper to provide Loader implementation for Text widget
+/// Wrapper node used for text render benchmarks.
 #[derive(StatefulNode)]
 struct BenchmarkTextWrapper {
+    /// Node state.
     state: NodeState,
+    /// Text widget under test.
     text: Text,
 }
 
 #[derive_commands]
 impl BenchmarkTextWrapper {
+    /// Construct a wrapper with the provided content.
     fn new(content: &str) -> Self {
         Self {
             state: NodeState::default(),
@@ -44,6 +50,7 @@ impl Loader for BenchmarkTextWrapper {
     }
 }
 
+/// Benchmark rendering a text node.
 fn benchmark_text_rendering(c: &mut Criterion) {
     c.bench_function("text_node_render", |b| {
         // Create a sample text with multiple lines

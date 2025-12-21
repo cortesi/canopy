@@ -1,47 +1,63 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, result::Result as StdResult};
 
-use rhai;
+use rhai::{self, plugin::TypeId};
 use scoped_tls::scoped_thread_local;
 
 use crate::{Context, Node, NodeId, NodeName, Result, commands::*, error};
 
+/// Script identifier.
 pub type ScriptId = u64;
 
+/// Compiled script with source text.
 #[derive(Debug, Clone)]
 pub struct Script {
+    /// Compiled AST.
     ast: rhai::AST,
+    /// Original source text.
     source: String,
 }
 
 impl Script {
+    /// Return the script source text.
     pub fn source(&self) -> &str {
         &self.source
     }
 }
 
+/// Script execution context shared via thread-local pointer.
 struct ScriptGlobal<'a> {
+    /// Core context handle.
     core: &'a mut dyn Context,
+    /// Root node handle.
     root: &'a mut dyn Node,
+    /// Node identifier for dispatch.
     node_id: NodeId,
 }
 
 scoped_thread_local!(static SCRIPT_GLOBAL: *const ());
 
 #[derive(Debug)]
+/// Script host that owns the Rhai engine and scripts.
 pub(crate) struct ScriptHost {
+    /// Rhai engine instance.
     engine: rhai::Engine,
+    /// Loaded scripts by ID.
     scripts: HashMap<ScriptId, Script>,
+    /// Next script ID.
     current_id: u64,
 }
 
+/// Argument list passed to Rhai function handlers.
 type FnCallArgs<'a> = [&'a mut rhai::Dynamic];
 
-type ScriptResult<T> = std::result::Result<T, Box<rhai::EvalAltResult>>;
+/// Result type for script execution helpers.
+type ScriptResult<T> = StdResult<T, Box<rhai::EvalAltResult>>;
 
 /// This is a re-implementation of the Module::set_raw_fn from rhai. It turns out that set_raw_fn wants to assume that
 /// the function is a module, which imposes some internal constraints on the number of arguments.
 // Helper function removed - using FuncRegistration API directly instead
 impl ScriptHost {
+    /// Construct a new script host.
     pub fn new() -> Self {
         let mut engine = rhai::Engine::new();
         engine.on_debug(move |s, src, pos| {
@@ -57,6 +73,7 @@ impl ScriptHost {
         }
     }
 
+    /// Load command specs into the script engine.
     pub fn load_commands(&mut self, cmds: &[CommandSpec]) {
         // We can't enable this yet - see:
         //      https://github.com/rhaiscript/rhai/issues/574
@@ -78,7 +95,7 @@ impl ScriptHost {
                 match a {
                     ArgTypes::Context => {}
                     ArgTypes::ISize => {
-                        rhai_arg_types.push(rhai::plugin::TypeId::of::<i64>());
+                        rhai_arg_types.push(TypeId::of::<i64>());
                     }
                 }
             }
@@ -169,8 +186,9 @@ impl ScriptHost {
         Ok(self.current_id)
     }
 
+    /// Execute a script by id for the given node.
     pub fn execute(
-        &mut self,
+        &self,
         core: &mut dyn Context,
         root: &mut dyn Node,
         node_id: NodeId,

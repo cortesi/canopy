@@ -2,22 +2,26 @@ use canopy::{
     derive_commands,
     event::key,
     geom::Expanse,
-    widgets::{frame, Editor},
+    widgets::{Editor, frame},
     *,
 };
 
 #[derive(StatefulNode)]
+/// Simple editor wrapper for the cedit demo.
 pub struct Ed {
+    /// Node state.
     state: NodeState,
+    /// Wrapped editor widget.
     child: frame::Frame<Editor>,
 }
 
 #[derive_commands]
 impl Ed {
-    pub fn new(contents: String) -> Self {
+    /// Construct an editor with initial contents.
+    pub fn new(contents: &str) -> Self {
         Self {
             state: NodeState::default(),
-            child: frame::Frame::new(Editor::new(&contents)),
+            child: frame::Frame::new(Editor::new(contents)),
         }
     }
 }
@@ -42,6 +46,7 @@ impl Loader for Ed {
     }
 }
 
+/// Install key bindings for the cedit demo.
 pub fn setup_bindings(cnpy: &mut Canopy) {
     Binder::new(cnpy)
         .defaults::<Root<Ed>>()

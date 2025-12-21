@@ -13,9 +13,13 @@ pub struct Root<T>
 where
     T: Node,
 {
+    /// Application root node.
     app: T,
+    /// Node state.
     state: NodeState,
+    /// Inspector overlay node.
     inspector: Inspector,
+    /// Whether the inspector is visible.
     inspector_active: bool,
 }
 
@@ -24,6 +28,7 @@ impl<T> Root<T>
 where
     T: Node,
 {
+    /// Construct a root node wrapping the application.
     pub fn new(app: T) -> Self {
         Self {
             app,

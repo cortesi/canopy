@@ -10,14 +10,17 @@ use crate::{
 /// A handle to a vector that contains the result of the render.
 #[derive(Default)]
 pub struct TestBuf {
+    /// Captured text fragments.
     pub text: Vec<String>,
 }
 
 impl TestBuf {
+    /// Return true if no text has been captured.
     pub fn is_empty(&self) -> bool {
         self.text.is_empty()
     }
 
+    /// Return true if any captured line contains the provided substring.
     pub fn contains(&self, s: &str) -> bool {
         self.text.iter().any(|l| l.contains(s))
     }
@@ -25,6 +28,7 @@ impl TestBuf {
 
 /// A render backend for testing, which logs render outcomes.
 pub struct TestRender {
+    /// Shared buffer of captured text.
     pub text: Arc<Mutex<TestBuf>>,
 }
 
@@ -38,23 +42,28 @@ impl TestRender {
         (tb, Self { text: tb2 })
     }
 
+    /// Render a node tree into the test buffer.
     pub fn render(&mut self, c: &mut Canopy, e: &mut dyn Node) -> Result<()> {
         c.render(self, e)?;
         Ok(())
     }
 
+    /// Return the default style manager used in tests.
     pub fn styleman(&self) -> StyleManager {
         StyleManager::default()
     }
 
+    /// Return captured text lines.
     pub fn buf_text(&self) -> Vec<String> {
         self.text.lock().unwrap().text.clone()
     }
 
+    /// Return true if no text has been captured.
     pub fn buf_empty(&self) -> bool {
         self.text.lock().unwrap().text.is_empty()
     }
 
+    /// Return true if any captured line contains the substring.
     pub fn contains_text(&self, txt: &str) -> bool {
         self.text.lock().unwrap().contains(txt)
     }
@@ -70,7 +79,7 @@ impl RenderBackend for TestRender {
         Ok(())
     }
 
-    fn style(&mut self, _s: Style) -> Result<()> {
+    fn style(&mut self, _s: &Style) -> Result<()> {
         Ok(())
     }
 
@@ -90,13 +99,16 @@ impl RenderBackend for TestRender {
 /// A simple in-memory canvas for verifying render placement in tests.
 #[derive(Default)]
 pub struct CanvasBuf {
+    /// Canvas size.
     size: Expanse,
+    /// Character cells.
     pub cells: Vec<Vec<char>>,
     /// Track which cells have been written to during a render.
     pub painted: Vec<Vec<bool>>,
 }
 
 impl CanvasBuf {
+    /// Construct a new canvas buffer.
     fn new(size: Expanse) -> Self {
         Self {
             size,
@@ -105,6 +117,7 @@ impl CanvasBuf {
         }
     }
 
+    /// Clear all cell contents and paint markers.
     fn clear(&mut self) {
         for row in &mut self.cells {
             for c in row.iter_mut() {
@@ -119,11 +132,14 @@ impl CanvasBuf {
     }
 }
 
+/// A render backend that draws into an in-memory canvas.
 pub struct CanvasRender {
+    /// Shared canvas buffer for render output.
     pub canvas: Arc<Mutex<CanvasBuf>>,
 }
 
 impl CanvasRender {
+    /// Create a new canvas render backend.
     pub fn create(size: Expanse) -> (Arc<Mutex<CanvasBuf>>, Self) {
         let buf = Arc::new(Mutex::new(CanvasBuf::new(size)));
         let buf2 = buf.clone();
@@ -141,7 +157,7 @@ impl RenderBackend for CanvasRender {
         Ok(())
     }
 
-    fn style(&mut self, _s: Style) -> Result<()> {
+    fn style(&mut self, _s: &Style) -> Result<()> {
         Ok(())
     }
 
