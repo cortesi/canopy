@@ -1,4 +1,5 @@
 use crate::{
+    core::Result,
     geom::{Expanse, Frame, Line, Point, Rect},
     render::RenderBackend,
     style::{AttrSet, Color, Style},
@@ -244,7 +245,7 @@ impl TermBuf {
     }
     /// Diff this terminal buffer against a previous state, emitting changes
     /// to the provided render backend.
-    pub fn diff<R: RenderBackend>(&self, prev: &Self, backend: &mut R) -> crate::core::Result<()> {
+    pub fn diff<R: RenderBackend>(&self, prev: &Self, backend: &mut R) -> Result<()> {
         let mut wrote = false;
         if self.size != prev.size {
             return self.render(backend);
@@ -297,7 +298,7 @@ impl TermBuf {
 
     /// Render this terminal buffer in full using the provided backend,
     /// batching runs of text with the same style.
-    pub fn render<R: RenderBackend>(&self, backend: &mut R) -> crate::core::Result<()> {
+    pub fn render<R: RenderBackend>(&self, backend: &mut R) -> Result<()> {
         let mut wrote = false;
         for y in 0..self.size.h {
             let mut x = 0;
@@ -390,17 +391,17 @@ mod tests {
     }
 
     impl RenderBackend for RecBackend {
-        fn style(&mut self, s: &Style) -> crate::core::Result<()> {
+        fn style(&mut self, s: &Style) -> Result<()> {
             self.ops.push(format!("style {s:?}"));
             Ok(())
         }
 
-        fn text(&mut self, loc: Point, txt: &str) -> crate::core::Result<()> {
+        fn text(&mut self, loc: Point, txt: &str) -> Result<()> {
             self.ops.push(format!("text {} {} {}", loc.x, loc.y, txt));
             Ok(())
         }
 
-        fn flush(&mut self) -> crate::core::Result<()> {
+        fn flush(&mut self) -> Result<()> {
             Ok(())
         }
 
@@ -408,7 +409,7 @@ mod tests {
             unreachable!()
         }
 
-        fn reset(&mut self) -> crate::core::Result<()> {
+        fn reset(&mut self) -> Result<()> {
             Ok(())
         }
     }

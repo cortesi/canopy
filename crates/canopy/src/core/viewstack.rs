@@ -110,18 +110,18 @@ impl ViewStack {
 
             // Calculate the screen rect of the current viewport's view, handling negative coordinates
             // by clamping to 0 and reducing dimensions accordingly.
-            let x = view_screen_origin_x;
-            let y = view_screen_origin_y;
-            let w = viewport.view().w as i32;
-            let h = viewport.view().h as i32;
+            let view_x = view_screen_origin_x;
+            let view_y = view_screen_origin_y;
+            let view_w = viewport.view().w as i32;
+            let view_h = viewport.view().h as i32;
 
             // Effective start positions (clamped to 0)
-            let eff_x = x.max(0);
-            let eff_y = y.max(0);
+            let eff_x = view_x.max(0);
+            let eff_y = view_y.max(0);
 
             // Effective dimensions
-            let eff_w = w - (eff_x - x);
-            let eff_h = h - (eff_y - y);
+            let eff_w = view_w - (eff_x - view_x);
+            let eff_h = view_h - (eff_y - view_y);
 
             if eff_w <= 0 || eff_h <= 0 {
                 return None;
@@ -135,10 +135,7 @@ impl ViewStack {
             );
 
             // Intersect with the accumulated clip
-            screen_clip = match screen_clip.intersect(&viewport_screen_rect) {
-                Some(r) => r,
-                None => return None,
-            };
+            screen_clip = screen_clip.intersect(&viewport_screen_rect)?;
         }
 
         let screen_rect = screen_clip;
