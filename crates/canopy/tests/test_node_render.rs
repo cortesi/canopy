@@ -24,7 +24,7 @@ struct Root {
 #[derive_commands]
 impl NodeA {
     fn new() -> Self {
-        NodeA {
+        Self {
             state: NodeState::default(),
             node_b: NodeB::new(),
         }
@@ -51,7 +51,7 @@ impl Node for NodeA {
 #[derive_commands]
 impl NodeB {
     fn new() -> Self {
-        NodeB {
+        Self {
             state: NodeState::default(),
         }
     }
@@ -72,7 +72,7 @@ impl Node for NodeB {
 #[derive_commands]
 impl Root {
     fn new() -> Self {
-        Root {
+        Self {
             state: NodeState::default(),
             node_a: NodeA::new(),
         }
@@ -102,7 +102,7 @@ impl Node for Root {
 
 impl Loader for Root {
     fn load(c: &mut canopy::Canopy) {
-        c.add_commands::<Root>();
+        c.add_commands::<Self>();
         c.add_commands::<NodeA>();
         c.add_commands::<NodeB>();
     }

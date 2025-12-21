@@ -1,5 +1,4 @@
 use canopy_core as canopy;
-
 use canopy_core::{
     Context, Layout, Node, NodeState, Render, Result, StatefulNode, command, derive_commands,
     geom::Expanse,
@@ -17,7 +16,7 @@ pub struct Text {
 #[derive_commands]
 impl Text {
     pub fn new(raw: &str) -> Self {
-        Text {
+        Self {
             state: NodeState::default(),
 
             raw: raw.to_owned(),

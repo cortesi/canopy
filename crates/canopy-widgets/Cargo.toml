@@ -13,3 +13,6 @@ tracing-subscriber = "0.3"
 regex = "1.11.1"
 rhai = { version = "1.22.2", features = ["internals"] }
 pad = "0.1.6"
+
+[lints]
+workspace = true

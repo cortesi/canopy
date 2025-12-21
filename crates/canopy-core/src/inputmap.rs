@@ -1,7 +1,11 @@
 use std::collections::HashMap;
 
-use crate::script;
-use crate::{Result, error, event::key::Key, event::mouse::Mouse, path::*};
+use crate::{
+    Result, error,
+    event::{key::Key, mouse::Mouse},
+    path::*,
+    script,
+};
 
 const DEFAULT_MODE: &str = "";
 
@@ -19,10 +23,10 @@ pub enum Input {
 }
 
 impl Input {
-    fn normalize(&self) -> Input {
+    fn normalize(&self) -> Self {
         match *self {
-            Input::Mouse(m) => Input::Mouse(m),
-            Input::Key(k) => Input::Key(k.normalize()),
+            Self::Mouse(m) => Self::Mouse(m),
+            Self::Key(k) => Self::Key(k.normalize()),
         }
     }
 }
@@ -35,7 +39,7 @@ pub struct InputMode {
 
 impl InputMode {
     fn new() -> Self {
-        InputMode {
+        Self {
             inputs: HashMap::new(),
         }
     }
@@ -53,10 +57,10 @@ impl InputMode {
         let input = input.normalize();
         let mut ret = (0, None);
         for k in self.inputs.get(&input)? {
-            if let Some(p) = k.pathmatch.check(path) {
-                if ret.1.is_none() || p > ret.0 {
-                    ret = (p, Some(k.script));
-                }
+            if let Some(p) = k.pathmatch.check(path)
+                && (ret.1.is_none() || p > ret.0)
+            {
+                ret = (p, Some(k.script));
             }
         }
         ret.1
@@ -87,7 +91,7 @@ impl InputMap {
         let default = InputMode::new();
         let mut modes = HashMap::new();
         modes.insert(DEFAULT_MODE.to_string(), default);
-        InputMap {
+        Self {
             current_mode: DEFAULT_MODE.into(),
             modes,
         }
@@ -129,8 +133,7 @@ impl InputMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::script;
-    use crate::{Result, event::key};
+    use crate::{Result, event::key, script};
 
     #[test]
     fn caseconfusion() -> Result<()> {

@@ -13,7 +13,7 @@ struct Big {
 
 impl Big {
     fn new() -> Self {
-        Big {
+        Self {
             state: NodeState::default(),
         }
     }
@@ -61,7 +61,7 @@ struct Root {
 
 impl Root {
     fn new() -> Self {
-        Root {
+        Self {
             state: NodeState::default(),
             child: Big::new(),
         }

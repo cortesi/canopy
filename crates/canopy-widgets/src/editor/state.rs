@@ -1,6 +1,6 @@
-use super::primitives::*;
-
 use canopy_core::geom::Point;
+
+use super::primitives::*;
 
 const DEFAULT_WRAP: usize = 80;
 
@@ -27,7 +27,7 @@ impl State {
         if t.is_empty() {
             t.push(Chunk::new("", DEFAULT_WRAP))
         }
-        State {
+        Self {
             chunks: t,
             cursor,
             width: DEFAULT_WRAP,
@@ -59,7 +59,7 @@ impl State {
                 txt.push(i.into());
             }
         }
-        let mut n = State::new(&txt.join("\n"));
+        let mut n = Self::new(&txt.join("\n"));
         if let Some(x) = cursor {
             n.cursor = x;
         }

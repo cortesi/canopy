@@ -17,15 +17,15 @@ pub enum Effect {
 impl Effector for Effect {
     fn apply(&self, s: &mut state::State) {
         match self {
-            Effect::Insert(i) => i.apply(s),
-            Effect::Delete(d) => d.apply(s),
+            Self::Insert(i) => i.apply(s),
+            Self::Delete(d) => d.apply(s),
         }
     }
 
     fn revert(&self, c: &mut state::State) {
         match self {
-            Effect::Insert(i) => i.revert(c),
-            Effect::Delete(d) => d.revert(c),
+            Self::Insert(i) => i.revert(c),
+            Self::Delete(d) => d.revert(c),
         }
     }
 }

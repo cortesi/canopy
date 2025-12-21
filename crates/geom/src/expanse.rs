@@ -11,14 +11,14 @@ pub struct Expanse {
 
 impl Default for Expanse {
     /// Constructs a zero-valued size.
-    fn default() -> Expanse {
-        Expanse { w: 0, h: 0 }
+    fn default() -> Self {
+        Self { w: 0, h: 0 }
     }
 }
 
 impl Expanse {
-    pub fn new(w: u32, h: u32) -> Expanse {
-        Expanse { w, h }
+    pub fn new(w: u32, h: u32) -> Self {
+        Self { w, h }
     }
 
     /// The area of this expanse.
@@ -35,19 +35,19 @@ impl Expanse {
         }
     }
     /// True if this Size can completely enclose the target size in both dimensions.
-    pub fn contains(&self, other: &Expanse) -> bool {
+    pub fn contains(&self, other: &Self) -> bool {
         self.w >= other.w && self.h >= other.h
     }
 }
 
 impl From<Rect> for Expanse {
-    fn from(r: Rect) -> Expanse {
-        Expanse { w: r.w, h: r.h }
+    fn from(r: Rect) -> Self {
+        Self { w: r.w, h: r.h }
     }
 }
 
 impl From<(u32, u32)> for Expanse {
-    fn from(v: (u32, u32)) -> Expanse {
-        Expanse { w: v.0, h: v.1 }
+    fn from(v: (u32, u32)) -> Self {
+        Self { w: v.0, h: v.1 }
     }
 }

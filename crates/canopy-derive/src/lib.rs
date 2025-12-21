@@ -27,8 +27,8 @@ impl std::fmt::Display for Error {
 }
 
 impl From<Error> for Diagnostic {
-    fn from(e: Error) -> Diagnostic {
-        Diagnostic::spanned(proc_macro2::Span::call_site(), Level::Error, format!("{e}"))
+    fn from(e: Error) -> Self {
+        Self::spanned(proc_macro2::Span::call_site(), Level::Error, format!("{e}"))
     }
 }
 
@@ -47,8 +47,8 @@ enum ArgTypes {
 impl quote::ToTokens for ArgTypes {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         match self {
-            ArgTypes::Context => tokens.extend(quote! {canopy::commands::ArgTypes::Context}),
-            ArgTypes::ISize => tokens.extend(quote! {canopy::commands::ArgTypes::ISize}),
+            Self::Context => tokens.extend(quote! {canopy::commands::ArgTypes::Context}),
+            Self::ISize => tokens.extend(quote! {canopy::commands::ArgTypes::ISize}),
         }
     }
 }
@@ -324,10 +324,10 @@ pub fn derive_commands(
 
     let mut commands = vec![];
     for i in input.items {
-        if let syn::ImplItem::Fn(m) = i {
-            if let Some(command) = parse_command_method(&node_name, &m).unwrap_or_abort() {
-                commands.push(command);
-            }
+        if let syn::ImplItem::Fn(m) = i
+            && let Some(command) = parse_command_method(&node_name, &m).unwrap_or_abort()
+        {
+            commands.push(command);
         }
     }
 

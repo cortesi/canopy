@@ -1,6 +1,6 @@
-use super::effect::Effector;
-use super::{effect, primitives::InsertPos, state};
 use canopy_core::geom::Point;
+
+use super::{effect, effect::Effector, primitives::InsertPos, state};
 
 /// The editor Core exposes the operations that can be performed on a text buffer. It's a facade over the state, with
 /// added operations to support a redo/undo stack.
@@ -14,7 +14,7 @@ pub struct Core {
 
 impl Core {
     pub fn new(text: &str) -> Self {
-        Core {
+        Self {
             state: state::State::new(text),
             history: Vec::new(),
             redo: Vec::new(),
@@ -23,7 +23,7 @@ impl Core {
 
     #[cfg(test)]
     pub(crate) fn from_spec(spec: &str) -> Self {
-        Core {
+        Self {
             state: state::State::from_spec(spec),
             history: Vec::new(),
             redo: Vec::new(),

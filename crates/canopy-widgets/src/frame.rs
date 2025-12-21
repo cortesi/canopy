@@ -1,5 +1,4 @@
 use canopy_core as canopy;
-
 use canopy_core::{
     Context, Layout, Node, NodeState, Render, Result, StatefulNode, derive_commands, geom,
 };
@@ -100,7 +99,7 @@ where
     N: Node,
 {
     pub fn new(c: N) -> Self {
-        Frame {
+        Self {
             child: c,
             state: NodeState::default(),
             glyphs: ROUND,
@@ -199,13 +198,14 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use canopy_core::{
         Context, Expanse, Node, NodeState, Result, StatefulNode, TermBuf, ViewStack,
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
         style::{StyleManager, StyleMap},
         tutils::{buf::BufTest, dummyctx::DummyContext},
     };
+
+    use super::*;
 
     /// A simple scrollable test widget for testing frame scrolling
     #[derive(StatefulNode)]
@@ -216,7 +216,7 @@ mod tests {
 
     impl ScrollableContent {
         fn new(width: u32, height: u32) -> Self {
-            ScrollableContent {
+            Self {
                 state: NodeState::default(),
                 canvas_size: Expanse::new(width, height),
             }
@@ -311,26 +311,26 @@ mod tests {
         // Check bottom edge (row 9) - should contain frame characters
         for x in 1..9 {
             let cell = buffer.get(geom::Point { x, y: 9 });
-            if let Some(cell) = cell {
-                if cell.ch.is_ascii_digit() {
-                    panic!(
-                        "{}: Frame bottom edge at ({}, 9) was overdrawn with content character '{}'",
-                        test_name, x, cell.ch
-                    );
-                }
+            if let Some(cell) = cell
+                && cell.ch.is_ascii_digit()
+            {
+                panic!(
+                    "{}: Frame bottom edge at ({}, 9) was overdrawn with content character '{}'",
+                    test_name, x, cell.ch
+                );
             }
         }
 
         // Check right edge (column 9) - should contain frame characters
         for y in 1..9 {
             let cell = buffer.get(geom::Point { x: 9, y });
-            if let Some(cell) = cell {
-                if cell.ch.is_ascii_digit() {
-                    panic!(
-                        "{}: Frame right edge at (9, {}) was overdrawn with content character '{}'",
-                        test_name, y, cell.ch
-                    );
-                }
+            if let Some(cell) = cell
+                && cell.ch.is_ascii_digit()
+            {
+                panic!(
+                    "{}: Frame right edge at (9, {}) was overdrawn with content character '{}'",
+                    test_name, y, cell.ch
+                );
             }
         }
 
@@ -344,13 +344,13 @@ mod tests {
 
         for (x, y, corner_name) in corners {
             let cell = buffer.get(geom::Point { x, y });
-            if let Some(cell) = cell {
-                if cell.ch.is_ascii_digit() {
-                    panic!(
-                        "{}: Frame {} corner at ({}, {}) was overdrawn with content character '{}'",
-                        test_name, corner_name, x, y, cell.ch
-                    );
-                }
+            if let Some(cell) = cell
+                && cell.ch.is_ascii_digit()
+            {
+                panic!(
+                    "{}: Frame {} corner at ({}, {}) was overdrawn with content character '{}'",
+                    test_name, corner_name, x, y, cell.ch
+                );
             }
         }
     }

@@ -30,12 +30,12 @@ impl Frame {
     /// frame, we return a zero Frame.
     pub fn new(rect: Rect, border: u32) -> Self {
         if rect.w <= (border * 2) || rect.h <= (border * 2) {
-            let mut f = Frame::zero();
+            let mut f = Self::zero();
             f.outer_rect = rect;
             f.border = border;
             f
         } else {
-            Frame {
+            Self {
                 top: Rect::new(rect.tl.x + border, rect.tl.y, rect.w - 2 * border, border),
                 bottom: Rect::new(
                     rect.tl.x + border,
@@ -84,7 +84,7 @@ impl Frame {
         self.outer_rect
     }
     pub fn zero() -> Self {
-        Frame {
+        Self {
             top: Rect::zero(),
             bottom: Rect::zero(),
             left: Rect::zero(),

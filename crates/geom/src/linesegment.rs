@@ -17,9 +17,9 @@ impl LineSegment {
 
     /// Return a line segment that encloses this line segment and another. If
     /// the lines overlap or abut, this is equivalent to joining the segments.
-    pub fn enclose(&self, other: &LineSegment) -> LineSegment {
+    pub fn enclose(&self, other: &Self) -> Self {
         let off = self.off.min(other.off);
-        LineSegment {
+        Self {
             off,
             len: self.far().max(other.far()) - off,
         }
@@ -28,10 +28,10 @@ impl LineSegment {
     /// Carve off a fixed-size portion from the start of this LineSegment,
     /// returning a (head, tail) tuple. If the segment is too short to carve out
     /// the width specified, the length of the head will be zero.
-    pub fn carve_start(&self, n: u32) -> (LineSegment, LineSegment) {
+    pub fn carve_start(&self, n: u32) -> (Self, Self) {
         if self.len < n {
             (
-                LineSegment {
+                Self {
                     off: self.off,
                     len: 0,
                 },
@@ -39,11 +39,11 @@ impl LineSegment {
             )
         } else {
             (
-                LineSegment {
+                Self {
                     off: self.off,
                     len: n,
                 },
-                LineSegment {
+                Self {
                     off: self.off + n,
                     len: self.len - n,
                 },
@@ -54,23 +54,23 @@ impl LineSegment {
     /// Carve off a fixed-size portion from the end of this LineSegment,
     /// returning a (head, tail) tuple. If the segment is too short to carve out
     /// the width specified, the length of the tail will be zero.
-    pub fn carve_end(&self, n: u32) -> (LineSegment, LineSegment) {
+    pub fn carve_end(&self, n: u32) -> (Self, Self) {
         if self.len < n {
             (
                 *self,
-                LineSegment {
+                Self {
                     off: self.far(),
                     len: 0,
                 },
             )
         } else {
-            let s = LineSegment {
+            let s = Self {
                 off: self.off,
                 len: self.len - n,
             };
             (
                 s,
-                LineSegment {
+                Self {
                     off: s.far(),
                     len: n,
                 },
@@ -79,22 +79,22 @@ impl LineSegment {
     }
 
     /// Are these two line segments adjacent but non-overlapping?
-    pub fn abuts(&self, other: &LineSegment) -> bool {
+    pub fn abuts(&self, other: &Self) -> bool {
         self.far() == other.off || other.far() == self.off
     }
 
     /// Does other lie completely within this extent.
-    pub fn contains(&self, other: &LineSegment) -> bool {
+    pub fn contains(&self, other: &Self) -> bool {
         self.off <= other.off && self.far() >= other.far()
     }
 
-    pub fn intersects(&self, other: &LineSegment) -> bool {
+    pub fn intersects(&self, other: &Self) -> bool {
         self.intersection(other).is_some()
     }
 
     /// Return the intersection between this line segment and other. The line
     /// segment returned will always have a non-zero length.
-    pub fn intersection(&self, other: &LineSegment) -> Option<LineSegment> {
+    pub fn intersection(&self, other: &Self) -> Option<Self> {
         if self.len == 0 || other.len == 0 {
             None
         } else if self.contains(other) {
@@ -102,12 +102,12 @@ impl LineSegment {
         } else if other.contains(self) {
             Some(*self)
         } else if self.off <= other.off && other.off < self.far() {
-            Some(LineSegment {
+            Some(Self {
                 off: other.off,
                 len: self.far() - other.off,
             })
         } else if other.off <= self.off && self.off < other.far() {
-            Some(LineSegment {
+            Some(Self {
                 off: self.off,
                 len: other.far() - self.off,
             })
@@ -119,11 +119,7 @@ impl LineSegment {
     /// Split this extent into (pre, active, post) extents, based on the
     /// position of a window within a view. The main use for this funtion is
     /// computation of the active indicator size and position in a scrollbar.
-    pub fn split_active(
-        &self,
-        window: LineSegment,
-        view: LineSegment,
-    ) -> Result<(LineSegment, LineSegment, LineSegment)> {
+    pub fn split_active(&self, window: Self, view: Self) -> Result<(Self, Self, Self)> {
         if window.len == 0 {
             Err(Error::Geometry("window cannot be zero length".into()))
         } else if !view.contains(&window) {
@@ -145,15 +141,15 @@ impl LineSegment {
             let post = lenf - active - pre;
 
             Ok((
-                LineSegment {
+                Self {
                     off: self.off,
                     len: pre as u32,
                 },
-                LineSegment {
+                Self {
                     off: self.off + pre as u32,
                     len: active as u32,
                 },
-                LineSegment {
+                Self {
                     off: self.off + pre as u32 + active as u32,
                     len: post as u32,
                 },

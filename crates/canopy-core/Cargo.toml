@@ -11,7 +11,7 @@ bitvec = "1.0.1"
 tracing = "0.1.41"
 canopy-derive = { path = "../canopy-derive" }
 scopeguard = "1.2.0"
-convert_case = "0.8.0"
+convert_case = "0.10"
 rhai = { version = "1.22.2", features = ["internals"] }
 regex = "1.11.1"
 termcolor = "1.4.1"
@@ -19,3 +19,6 @@ geom = { path = "../geom" }
 comfy-table = "7.1.4"
 color-backtrace = "0.7.0"
 scoped-tls = "1.0.1"
+
+[lints]
+workspace = true

@@ -21,7 +21,7 @@ pub enum Args {
 impl Args {
     pub fn as_isize(&self) -> Result<isize> {
         match self {
-            Args::ISize(i) => Ok(*i),
+            Self::ISize(i) => Ok(*i),
             _ => Err(Error::Internal(format!("Expected isize, got {self:?}"))),
         }
     }
@@ -167,7 +167,7 @@ impl Default for CommandSet {
 
 impl CommandSet {
     pub fn new() -> Self {
-        CommandSet {
+        Self {
             commands: HashMap::new(),
         }
     }

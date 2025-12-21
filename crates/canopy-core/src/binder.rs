@@ -1,6 +1,7 @@
-use crate::event::key::Key;
-use crate::event::mouse::Mouse;
-use crate::{Canopy, Result};
+use crate::{
+    Canopy, Result,
+    event::{key::Key, mouse::Mouse},
+};
 
 /// Binder provides an ergonomic way to specify a set of key bindings using a
 /// builder patttern.

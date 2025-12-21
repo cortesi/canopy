@@ -26,7 +26,7 @@ impl Default for IntervalItem {
 
 impl IntervalItem {
     pub fn new() -> Self {
-        IntervalItem {
+        Self {
             state: NodeState::default(),
             child: Text::new("0"),
             selected: false,
@@ -102,7 +102,7 @@ impl Default for Intervals {
 
 impl Intervals {
     pub fn new() -> Self {
-        Intervals {
+        Self {
             state: NodeState::default(),
             content: frame::Frame::new(List::new(vec![])),
             statusbar: StatusBar {
@@ -141,7 +141,7 @@ impl Node for Intervals {
 
 impl Loader for Intervals {
     fn load(c: &mut Canopy) {
-        c.add_commands::<Intervals>();
+        c.add_commands::<Self>();
         c.add_commands::<List<IntervalItem>>();
     }
 }

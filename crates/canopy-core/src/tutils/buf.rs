@@ -69,10 +69,10 @@ impl<'a> BufTest<'a> {
             }
 
             for (expected_ch, actual_ch) in expected_trimmed.chars().zip(actual_trimmed.chars()) {
-                if let Some(any) = self.any_char {
-                    if expected_ch == any {
-                        continue; // any_char matches anything
-                    }
+                if let Some(any) = self.any_char
+                    && expected_ch == any
+                {
+                    continue; // any_char matches anything
                 }
                 if expected_ch != actual_ch {
                     return false;

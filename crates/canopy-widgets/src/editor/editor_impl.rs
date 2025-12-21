@@ -1,5 +1,4 @@
 use canopy_core as canopy;
-
 use canopy_core::{
     Context, Layout, Node, NodeState, Render, Result, StatefulNode, command, cursor,
     derive_commands, geom::Expanse,
@@ -16,7 +15,7 @@ pub struct EditorView {
 #[derive_commands]
 impl EditorView {
     pub fn new(txt: &str) -> Self {
-        EditorView {
+        Self {
             state: NodeState::default(),
             core: core::Core::new(txt),
         }
@@ -66,7 +65,7 @@ pub struct Editor {
 #[derive_commands]
 impl Editor {
     pub fn new(txt: &str) -> Self {
-        Editor {
+        Self {
             state: NodeState::default(),
             view: EditorView::new(txt),
         }

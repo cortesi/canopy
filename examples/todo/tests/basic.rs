@@ -2,7 +2,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use canopy::{event::key::KeyCode, tutils::harness::Harness};
-
 use todo::{Todo, open_store, setup_app};
 
 fn db_path(tag: &str) -> std::path::PathBuf {

@@ -9,8 +9,8 @@ pub struct Line {
 
 impl Default for Line {
     /// Constructs a zero-valued size.
-    fn default() -> Line {
-        Line {
+    fn default() -> Self {
+        Self {
             tl: Point::default(),
             w: 0,
         }
@@ -18,8 +18,8 @@ impl Default for Line {
 }
 
 impl Line {
-    pub fn new(x: u32, y: u32, w: u32) -> Line {
-        Line {
+    pub fn new(x: u32, y: u32, w: u32) -> Self {
+        Self {
             tl: Point { x, y },
             w,
         }

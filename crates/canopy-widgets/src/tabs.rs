@@ -1,5 +1,4 @@
 use canopy_core as canopy;
-
 use canopy_core::{
     Context, Node, NodeState, Render, Result, StatefulNode, command, derive_commands,
 };
@@ -15,7 +14,7 @@ pub struct Tabs {
 #[derive_commands]
 impl Tabs {
     pub fn new(tabs: Vec<String>) -> Self {
-        Tabs {
+        Self {
             state: NodeState::default(),
             active: 0,
             tabs,

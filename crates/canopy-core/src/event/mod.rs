@@ -1,9 +1,9 @@
 pub mod key;
 pub mod mouse;
 
-use crate::{NodeId, geom::Expanse};
-
 use std::sync::mpsc;
+
+use crate::{NodeId, geom::Expanse};
 
 /// This enum represents all the event types that drive the application.
 #[derive(Debug)]
@@ -34,7 +34,7 @@ pub(crate) struct EventSource {
 #[allow(dead_code)]
 impl EventSource {
     pub fn new(rx: mpsc::Receiver<Event>) -> Self {
-        EventSource { rx }
+        Self { rx }
     }
 }
 

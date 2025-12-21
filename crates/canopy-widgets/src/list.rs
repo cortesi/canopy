@@ -1,5 +1,4 @@
 use canopy_core as canopy;
-
 use canopy_core::{
     Context, Layout, Node, NodeState, Render, Result, StatefulNode, derive_commands,
     geom::{Expanse, Rect},
@@ -32,7 +31,7 @@ where
     N: Node + ListItem,
 {
     pub fn new(items: Vec<N>) -> Self {
-        let mut l = List {
+        let mut l = Self {
             items,
             selected: None,
             state: NodeState::default(),
@@ -58,11 +57,11 @@ where
         let clamped_index = index.min(self.len());
 
         // If we're inserting before or at the selected position, we need to adjust selection
-        if let Some(sel) = self.selected {
-            if clamped_index <= sel {
-                // The selected item will shift right, so update the index
-                self.selected = Some(sel + 1);
-            }
+        if let Some(sel) = self.selected
+            && clamped_index <= sel
+        {
+            // The selected item will shift right, so update the index
+            self.selected = Some(sel + 1);
         }
 
         // Ensure the new item starts unselected
@@ -357,9 +356,12 @@ where
 
 #[cfg(test)]
 mod tests {
+    use canopy_core::{
+        commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
+        error::Error,
+    };
+
     use super::*;
-    use canopy_core::commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue};
-    use canopy_core::error::Error;
 
     // Simple test item for unit tests
     #[derive(canopy_core::StatefulNode)]
@@ -371,7 +373,7 @@ mod tests {
 
     impl TestItem {
         fn new(label: &str) -> Self {
-            TestItem {
+            Self {
                 label: label.to_string(),
                 selected: false,
                 state: NodeState::default(),
@@ -594,8 +596,7 @@ mod tests {
         assert_eq!(list.selected, None);
     }
 
-    use canopy_core::Loader;
-    use canopy_core::tutils::dummyctx::DummyContext;
+    use canopy_core::{Loader, tutils::dummyctx::DummyContext};
 
     // Loader implementation for test lists
     impl Loader for List<TestItem> {
@@ -617,7 +618,7 @@ mod tests {
 
     impl MultiLineItem {
         fn new(label: &str, height: u32) -> Self {
-            MultiLineItem {
+            Self {
                 label: label.to_string(),
                 height,
                 selected: false,

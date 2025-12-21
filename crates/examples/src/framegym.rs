@@ -16,7 +16,7 @@ impl Default for TestPattern {
 #[derive_commands]
 impl TestPattern {
     pub fn new() -> Self {
-        TestPattern {
+        Self {
             state: NodeState::default(),
             size: Expanse::new(500, 500),
         }
@@ -130,7 +130,7 @@ impl Default for FrameGym {
 
 impl FrameGym {
     pub fn new() -> Self {
-        FrameGym {
+        Self {
             state: NodeState::default(),
             child: frame::Frame::new(TestPattern::new()).with_title("Frame Gym".to_string()),
         }
@@ -156,7 +156,7 @@ impl Node for FrameGym {
 
 impl Loader for FrameGym {
     fn load(c: &mut Canopy) {
-        c.add_commands::<FrameGym>();
+        c.add_commands::<Self>();
         c.add_commands::<TestPattern>();
     }
 }
@@ -189,8 +189,9 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use canopy::tutils::harness::Harness;
+
+    use super::*;
 
     #[test]
     fn test_framegym_basic() -> Result<()> {

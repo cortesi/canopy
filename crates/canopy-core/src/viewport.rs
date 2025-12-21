@@ -1,5 +1,7 @@
-use crate::Result;
-use crate::geom::{Expanse, Point, Rect};
+use crate::{
+    Result,
+    geom::{Expanse, Point, Rect},
+};
 
 /// A ViewPort manages the size of a node and its projection onto the screen. In many ways, this is
 /// the core of Canopy, and the viewport structure and its constraints determines many aspects of
@@ -41,10 +43,10 @@ impl ViewPort {
         canvas: impl Into<Expanse>,
         view: impl Into<Rect>,
         position: impl Into<Point>,
-    ) -> Result<ViewPort> {
+    ) -> Result<Self> {
         let view = view.into();
         let size = canvas.into();
-        Ok(ViewPort {
+        Ok(Self {
             canvas: size,
             view,
             position: position.into(),

@@ -7,5 +7,5 @@ edition = "2024"
 anyhow = "1.0.98"
 canopy = { path = "../../crates/canopy" }
 clap = { version = "4.5.40", features = ["derive"] }
-rusqlite = "0.36.0"
+rusqlite = "0.38"
 tracing = "0.1.41"

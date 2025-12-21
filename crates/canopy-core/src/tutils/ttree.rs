@@ -1,8 +1,8 @@
 /*! This module defines a standard tree of instrumented nodes for testing. */
 use std::cell::RefCell;
 
-use crate::{self as canopy};
 use crate::{
+    self as canopy,
     backend::test::TestRender,
     event::{key, mouse},
     geom::Expanse,
@@ -17,7 +17,7 @@ pub struct State {
 
 impl State {
     pub fn new() -> Self {
-        State { path: vec![] }
+        Self { path: vec![] }
     }
     pub fn reset(&mut self) {
         self.path = vec![];
@@ -219,7 +219,7 @@ pub struct R {
 #[derive_commands]
 impl R {
     pub fn new() -> Self {
-        R {
+        Self {
             state: NodeState::default(),
             a: Ba::new(),
             b: Bb::new(),

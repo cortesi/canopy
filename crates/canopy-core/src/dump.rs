@@ -1,6 +1,8 @@
-use crate::{Node, Result};
 use std::io::Write;
+
 use termcolor::{Buffer, Color, ColorSpec, WriteColor};
+
+use crate::{Node, Result};
 
 /// Traverses a tree of nodes and returns a string showing the node names and
 /// viewports for each node for visual display. This is a debug function.

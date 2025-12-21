@@ -1,5 +1,4 @@
-use std::env;
-use std::fs;
+use std::{env, fs};
 
 use canopy::{backend::crossterm::runloop, *};
 use canopy_examples::pager::{setup_bindings, Pager};

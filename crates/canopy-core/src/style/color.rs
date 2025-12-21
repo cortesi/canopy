@@ -92,14 +92,13 @@ impl Color {
         let b = u8::from_str_radix(&hex[4..6], 16)
             .expect("Invalid hex color: failed to parse blue component");
 
-        Color::Rgb { r, g, b }
+        Self::Rgb { r, g, b }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rgb;
 
     #[test]
     fn test_rgb_from_hex() {

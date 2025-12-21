@@ -1,5 +1,4 @@
-use canopy::tree::*;
-use canopy::*;
+use canopy::{tree::*, *};
 use canopy_core::{Context, Expanse, Node, Rect, Result, tutils::grid::Grid};
 
 /// Helper function to get the currently focused cell name in a Grid
@@ -253,7 +252,7 @@ fn test_snake_navigation_8x8_grid() {
 #[derive(StatefulNode)]
 struct IrregularBlock {
     state: NodeState,
-    children: Vec<IrregularBlock>,
+    children: Vec<Self>,
     rect: Rect,
     name_str: String,
 }
@@ -261,7 +260,7 @@ struct IrregularBlock {
 #[derive_commands]
 impl IrregularBlock {
     fn new(name: &str, rect: Rect) -> Self {
-        IrregularBlock {
+        Self {
             state: NodeState::default(),
             children: vec![],
             rect,
@@ -269,7 +268,7 @@ impl IrregularBlock {
         }
     }
 
-    fn add_child(&mut self, child: IrregularBlock) {
+    fn add_child(&mut self, child: Self) {
         self.children.push(child);
     }
 }

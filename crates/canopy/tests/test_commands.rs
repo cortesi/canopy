@@ -1,5 +1,7 @@
-use canopy::commands::{CommandInvocation, dispatch};
-use canopy::*;
+use canopy::{
+    commands::{CommandInvocation, dispatch},
+    *,
+};
 
 // Test helper to record command calls
 thread_local! {

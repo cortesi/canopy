@@ -14,7 +14,7 @@ pub struct Pager {
 #[derive_commands]
 impl Pager {
     pub fn new(contents: String) -> Self {
-        Pager {
+        Self {
             state: NodeState::default(),
             child: frame::Frame::new(Text::new(&contents)),
         }

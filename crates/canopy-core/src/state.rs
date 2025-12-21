@@ -1,6 +1,8 @@
-use crate::{Result, error, viewport::ViewPort};
-use convert_case::{Case, Casing};
 use std::sync::atomic::AtomicU64;
+
+use convert_case::{Case, Casing};
+
+use crate::{Result, error, viewport::ViewPort};
 
 static CURRENT_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -55,7 +57,7 @@ impl NodeName {
     /// characters.
     pub fn convert(name: &str) -> Self {
         let name = name.to_case(Case::Snake);
-        NodeName {
+        Self {
             name: name.chars().filter(|x| valid_nodename_char(*x)).collect(),
         }
     }
@@ -125,7 +127,7 @@ pub struct NodeState {
 impl Default for NodeState {
     fn default() -> Self {
         let id = CURRENT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        NodeState {
+        Self {
             id,
             focus_gen: 0,
             focus_path_gen: 0,

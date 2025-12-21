@@ -15,7 +15,7 @@ pub struct Ed {
 #[derive_commands]
 impl Ed {
     pub fn new(contents: String) -> Self {
-        Ed {
+        Self {
             state: NodeState::default(),
             child: frame::Frame::new(Editor::new(&contents)),
         }
@@ -37,7 +37,7 @@ impl Node for Ed {
 
 impl Loader for Ed {
     fn load(c: &mut Canopy) {
-        c.add_commands::<Ed>();
+        c.add_commands::<Self>();
         c.add_commands::<Editor>();
     }
 }

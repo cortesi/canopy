@@ -13,7 +13,7 @@ impl std::fmt::Display for Path {
 
 impl Path {
     pub fn empty() -> Self {
-        Path { path: vec![] }
+        Self { path: vec![] }
     }
 
     /// Pop an item off the end of the path, modifying it in place. Return None
@@ -23,7 +23,7 @@ impl Path {
     }
 
     pub fn new<T: AsRef<str>>(v: &[T]) -> Self {
-        Path {
+        Self {
             path: v.iter().map(|x| x.as_ref().to_string()).collect(),
         }
     }
@@ -31,13 +31,13 @@ impl Path {
 
 impl From<Vec<String>> for Path {
     fn from(path: Vec<String>) -> Self {
-        Path { path }
+        Self { path }
     }
 }
 
 impl From<&[&str]> for Path {
     fn from(v: &[&str]) -> Self {
-        Path {
+        Self {
             path: v
                 .iter()
                 .filter_map(|x| {
@@ -54,7 +54,7 @@ impl From<&[&str]> for Path {
 
 impl From<&str> for Path {
     fn from(v: &str) -> Self {
-        Path {
+        Self {
             path: v
                 .split('/')
                 .filter_map(|x| {
@@ -109,7 +109,7 @@ impl PathMatcher {
             pattern += "$";
         }
         let expr = regex::Regex::new(&pattern).map_err(|e| error::Error::Invalid(e.to_string()))?;
-        Ok(PathMatcher { expr })
+        Ok(Self { expr })
     }
 
     /// Check whether the path filter matches a given path. Returns the position

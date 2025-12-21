@@ -1,8 +1,9 @@
 mod color;
 pub mod solarized;
 
-pub use color::Color;
 use std::collections::HashMap;
+
+pub use color::Color;
 
 /// A text attribute.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -29,7 +30,7 @@ pub struct AttrSet {
 impl Default for AttrSet {
     /// Construct an empty set of text attributes.
     fn default() -> Self {
-        AttrSet {
+        Self {
             bold: false,
             crossedout: false,
             dim: false,
@@ -121,17 +122,17 @@ impl PartialStyle {
         }
     }
 
-    pub fn with_fg(mut self, fg: Color) -> PartialStyle {
+    pub fn with_fg(mut self, fg: Color) -> Self {
         self.fg = Some(fg);
         self
     }
 
-    pub fn with_bg(mut self, bg: Color) -> PartialStyle {
+    pub fn with_bg(mut self, bg: Color) -> Self {
         self.bg = Some(bg);
         self
     }
 
-    pub fn with_attr(mut self, attr: Attr) -> PartialStyle {
+    pub fn with_attr(mut self, attr: Attr) -> Self {
         if let Some(attrs) = self.attrs {
             self.attrs = Some(attrs.with(attr));
         } else {
@@ -140,13 +141,13 @@ impl PartialStyle {
         self
     }
 
-    pub fn with_attrs(mut self, attrs: AttrSet) -> PartialStyle {
+    pub fn with_attrs(mut self, attrs: AttrSet) -> Self {
         self.attrs = Some(attrs);
         self
     }
 
-    pub fn join(&self, other: &PartialStyle) -> PartialStyle {
-        PartialStyle {
+    pub fn join(&self, other: &Self) -> Self {
+        Self {
             fg: if self.fg.is_some() { self.fg } else { other.fg },
             bg: if self.bg.is_some() { self.bg } else { other.bg },
             attrs: if self.attrs.is_some() {
@@ -181,7 +182,7 @@ pub struct StyleMap {
 
 impl StyleMap {
     pub fn new() -> Self {
-        let mut cs = StyleMap {
+        let mut cs = Self {
             styles: HashMap::new(),
         };
         cs.add(
@@ -281,13 +282,13 @@ pub struct StyleManager {
 
 impl Default for StyleManager {
     fn default() -> Self {
-        StyleManager::new()
+        Self::new()
     }
 }
 
 impl StyleManager {
     pub fn new() -> Self {
-        StyleManager {
+        Self {
             level: 0,
             layers: vec![],
             layer_levels: vec![],

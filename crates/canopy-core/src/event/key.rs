@@ -27,11 +27,11 @@ impl Add<char> for Mods {
     }
 }
 
-impl Add<Mods> for Mods {
-    type Output = Mods;
+impl Add<Self> for Mods {
+    type Output = Self;
 
-    fn add(self, other: Mods) -> Self::Output {
-        Mods {
+    fn add(self, other: Self) -> Self::Output {
+        Self {
             shift: self.shift || other.shift,
             ctrl: self.ctrl || other.ctrl,
             alt: self.alt || other.alt,
@@ -169,7 +169,7 @@ pub enum KeyCode {
 
 impl From<char> for KeyCode {
     fn from(c: char) -> Self {
-        KeyCode::Char(c)
+        Self::Char(c)
     }
 }
 
@@ -216,11 +216,11 @@ impl Key {
     /// `normalize` must be called explicitly when needed - all comparison and
     /// conversion methods are literal and stright-forward, and don't perform
     /// normalization automatically.
-    pub fn normalize(&self) -> Key {
+    pub fn normalize(&self) -> Self {
         if self.mods.shift {
             if let KeyCode::Char(c) = self.key {
                 if c.is_ascii_lowercase() {
-                    Key {
+                    Self {
                         mods: Mods {
                             shift: false,
                             alt: self.mods.alt,
@@ -231,7 +231,7 @@ impl Key {
                 } else if LEAVE_INTACT.contains(&self.key) {
                     *self
                 } else {
-                    Key {
+                    Self {
                         mods: Mods {
                             shift: false,
                             alt: self.mods.alt,
@@ -273,7 +273,7 @@ impl std::cmp::PartialEq<Key> for char {
 
 impl From<char> for Key {
     fn from(c: char) -> Self {
-        Key {
+        Self {
             mods: Empty,
             key: KeyCode::Char(c),
         }
@@ -282,7 +282,7 @@ impl From<char> for Key {
 
 impl From<KeyCode> for Key {
     fn from(c: KeyCode) -> Self {
-        Key {
+        Self {
             mods: Empty,
             key: c,
         }

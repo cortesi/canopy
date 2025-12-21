@@ -1,5 +1,3 @@
-use rand::Rng;
-
 use canopy::{
     event::{key, mouse},
     geom::{Expanse, Rect},
@@ -7,6 +5,7 @@ use canopy::{
     widgets::{frame, list::*, Text},
     *,
 };
+use rand::Rng;
 
 const TEXT: &str = "What a struggle must have gone on during long centuries between the several kinds of trees, each annually scattering its seeds by the thousand; what war between insect and insect — between insects, snails, and other animals with birds and beasts of prey — all striving to increase, all feeding on each other, or on the trees, their seeds and seedlings, or on the other plants which first clothed the ground and thus checked the growth of the trees.";
 
@@ -24,7 +23,7 @@ pub struct Block {
 impl Block {
     pub fn new(index: usize) -> Self {
         let mut rng = rand::rng();
-        Block {
+        Self {
             state: NodeState::default(),
             child: Text::new(TEXT).with_fixed_width(rng.random_range(10..150)),
             color: String::from(COLORS[index % 2]),
@@ -104,7 +103,7 @@ impl Default for ListGym {
 impl ListGym {
     pub fn new() -> Self {
         let nodes: Vec<Block> = (0..10).map(Block::new).collect();
-        ListGym {
+        Self {
             state: NodeState::default(),
             content: frame::Frame::new(List::new(nodes)),
             statusbar: StatusBar {
@@ -162,7 +161,7 @@ impl Node for ListGym {
 impl Loader for ListGym {
     fn load(c: &mut Canopy) {
         c.add_commands::<List<Block>>();
-        c.add_commands::<ListGym>();
+        c.add_commands::<Self>();
     }
 }
 
@@ -222,8 +221,9 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use canopy::tutils::harness::Harness;
+
+    use super::*;
 
     fn create_test_harness() -> Result<Harness<ListGym>> {
         let root = ListGym::new();

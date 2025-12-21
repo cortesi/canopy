@@ -31,7 +31,7 @@ impl Point {
     }
     /// Clamp a point, constraining it to fall within `rect`.
     pub fn clamp(&self, rect: Rect) -> Self {
-        Point {
+        Self {
             x: self.x.clamp(rect.tl.x, rect.tl.x + rect.w),
             y: self.y.clamp(rect.tl.y, rect.tl.y + rect.h),
         }
@@ -48,7 +48,7 @@ impl Point {
         } else {
             self.y.saturating_add(y.unsigned_abs())
         };
-        Point { x: nx, y: ny }.clamp(rect)
+        Self { x: nx, y: ny }.clamp(rect)
     }
 }
 
@@ -65,8 +65,8 @@ impl Add for Point {
 
 impl From<(u32, u32)> for Point {
     #[inline]
-    fn from(v: (u32, u32)) -> Point {
-        Point { x: v.0, y: v.1 }
+    fn from(v: (u32, u32)) -> Self {
+        Self { x: v.0, y: v.1 }
     }
 }
 

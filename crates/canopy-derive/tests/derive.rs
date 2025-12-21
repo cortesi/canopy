@@ -6,7 +6,6 @@ use canopy::{
     tutils::dummyctx::DummyContext,
 };
 use canopy_derive::{command, derive_commands};
-
 #[cfg(test)]
 use pretty_assertions::assert_eq;
 

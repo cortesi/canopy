@@ -1,5 +1,4 @@
 use canopy_core as canopy;
-
 use canopy_core::{
     Context, Layout, Node, NodeState, Result, StatefulNode, derive_commands, geom::Expanse,
 };
@@ -17,7 +16,7 @@ where
     N: Node,
 {
     pub fn new(n: N) -> Self {
-        Panes {
+        Self {
             children: vec![vec![n]],
             state: NodeState::default(),
         }

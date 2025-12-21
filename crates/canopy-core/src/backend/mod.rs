@@ -1,8 +1,9 @@
 pub mod crossterm;
 pub mod test;
 
-use crate::Result;
 use std::process;
+
+use crate::Result;
 
 /// A handle for controlling our rendering back-end. The primary use is to
 /// suspend and resume rendering to permit us to fork out to another process

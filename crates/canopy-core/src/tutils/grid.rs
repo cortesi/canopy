@@ -21,7 +21,7 @@ pub enum GridNode {
     Container {
         state: NodeState,
         name_str: String,
-        children: Vec<GridNode>,
+        children: Vec<Self>,
     },
 }
 
@@ -29,7 +29,7 @@ impl GridNode {
     /// Create a new leaf cell at the given coordinates
     pub fn new_cell(x: usize, y: usize) -> Self {
         let name = format!("cell_{x}_{y}");
-        GridNode::Cell {
+        Self::Cell {
             state: NodeState::default(),
             name_str: name,
         }
@@ -53,7 +53,7 @@ impl GridNode {
 
         if recursion == 0 {
             // Base case - create a leaf cell
-            GridNode::Cell {
+            Self::Cell {
                 state: NodeState::default(),
                 name_str: name,
             }
@@ -77,7 +77,7 @@ impl GridNode {
                 }
             }
 
-            GridNode::Container {
+            Self::Container {
                 state: NodeState::default(),
                 name_str: name,
                 children,
@@ -115,7 +115,7 @@ impl GridNode {
                 }
             }
 
-            GridNode::Container {
+            Self::Container {
                 state: NodeState::default(),
                 name_str: "grid".to_string(),
                 children,
@@ -125,29 +125,29 @@ impl GridNode {
 
     fn state(&self) -> &NodeState {
         match self {
-            GridNode::Cell { state, .. } => state,
-            GridNode::Container { state, .. } => state,
+            Self::Cell { state, .. } => state,
+            Self::Container { state, .. } => state,
         }
     }
 
     fn state_mut(&mut self) -> &mut NodeState {
         match self {
-            GridNode::Cell { state, .. } => state,
-            GridNode::Container { state, .. } => state,
+            Self::Cell { state, .. } => state,
+            Self::Container { state, .. } => state,
         }
     }
 
     fn name_str(&self) -> &str {
         match self {
-            GridNode::Cell { name_str, .. } => name_str,
-            GridNode::Container { name_str, .. } => name_str,
+            Self::Cell { name_str, .. } => name_str,
+            Self::Container { name_str, .. } => name_str,
         }
     }
 }
 
 impl Node for GridNode {
     fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-        if let GridNode::Container { children, .. } = self {
+        if let Self::Container { children, .. } = self {
             for child in children {
                 f(child)?;
             }
@@ -158,7 +158,7 @@ impl Node for GridNode {
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
         self.fill(sz)?;
 
-        if let GridNode::Container { children, .. } = self {
+        if let Self::Container { children, .. } = self {
             let divisions = (children.len() as f64).sqrt() as usize;
             let cell_width = sz.w / divisions as u32;
             let cell_height = sz.h / divisions as u32;
@@ -197,7 +197,7 @@ impl Node for GridNode {
 
     fn accept_focus(&mut self) -> bool {
         // Only leaf cells can accept focus
-        matches!(self, GridNode::Cell { .. })
+        matches!(self, Self::Cell { .. })
     }
 }
 
@@ -264,7 +264,7 @@ impl Grid {
     /// * `Grid::new(1, 3)` - 3x3 grid = 9 cells of 10x10 each
     pub fn new(recursion: usize, divisions: usize) -> Self {
         let root = GridNode::new_root(recursion, divisions);
-        Grid {
+        Self {
             root,
             recursion,
             divisions,
@@ -307,8 +307,7 @@ impl Grid {
         // Return the last (deepest) node that is a cell or container
         nodes
             .into_iter()
-            .filter(|n| n.starts_with("cell_") || n.starts_with("container_"))
-            .next_back()
+            .rfind(|n| n.starts_with("cell_") || n.starts_with("container_"))
     }
 }
 

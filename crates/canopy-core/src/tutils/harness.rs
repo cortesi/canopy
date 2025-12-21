@@ -1,7 +1,5 @@
-use super::buf::BufTest;
-use super::render::NopBackend;
-use crate::{Canopy, Loader};
-use crate::{Node, Result, TermBuf, event::key, geom::Expanse};
+use super::{buf::BufTest, render::NopBackend};
+use crate::{Canopy, Loader, Node, Result, TermBuf, event::key, geom::Expanse};
 
 /// A simple harness that holds a [`Canopy`], a [`DummyBackend`] backend and a
 /// root node. Tests drive the UI by sending key events and triggering renders
@@ -78,7 +76,7 @@ impl<N: Node + Loader> Harness<N> {
         let mut core = Canopy::new();
         <N as Loader>::load(&mut core);
         core.set_root_size(size, &mut root)?;
-        Ok(Harness {
+        Ok(Self {
             canopy: core,
             backend: render,
             root,
@@ -121,7 +119,7 @@ impl<N: Node + Loader> Harness<N> {
 
     /// Get a BufTest instance that references the current buffer. This provides convenient
     /// access to buffer testing utilities.
-    pub fn tbuf(&self) -> BufTest {
+    pub fn tbuf(&self) -> BufTest<'_> {
         BufTest::new(self.buf())
     }
 }
@@ -129,9 +127,9 @@ impl<N: Node + Loader> Harness<N> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{self as canopy};
     use crate::{
-        Context, Layout, Loader, Node, NodeState, Render, StatefulNode, derive_commands,
+        self as canopy, Context, Layout, Loader, Node, NodeState, Render, StatefulNode,
+        derive_commands,
         geom::{Expanse, Line},
     };
 
@@ -143,7 +141,7 @@ mod tests {
     #[derive_commands]
     impl TestNode {
         fn new() -> Self {
-            TestNode {
+            Self {
                 state: NodeState::default(),
             }
         }

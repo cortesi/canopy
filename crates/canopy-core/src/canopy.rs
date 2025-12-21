@@ -3,20 +3,17 @@ use std::{io::Write, process, sync::mpsc};
 use comfy_table::{ContentArrangement, Table};
 
 use crate::{
-    backend::BackendControl,
-    focus::{collect_focusable_nodes, find_focus_target, find_focused_node},
-    inputmap,
-    poll::Poller,
-    script,
-};
-
-use crate::{
     Context, EventOutcome, Layout, Node, NodeId, Render, Result, TermBuf, ViewPort, ViewStack,
+    backend::BackendControl,
     commands, cursor, error,
     event::{Event, key, mouse},
+    focus::{collect_focusable_nodes, find_focus_target, find_focused_node},
     geom::{Direction, Expanse, Point},
+    inputmap,
     path::*,
+    poll::Poller,
     render::RenderBackend,
+    script,
     style::{StyleManager, StyleMap, solarized},
     tree::*,
 };
@@ -237,7 +234,7 @@ impl Context for Canopy {
 impl Canopy {
     pub fn new() -> Self {
         let (tx, rx) = mpsc::channel();
-        Canopy {
+        Self {
             focus_gen: 1,
             last_render_focus_gen: 1,
             poller: Poller::new(tx.clone()),
@@ -544,7 +541,7 @@ impl Canopy {
             let def_style = styl.get(&self.style, "");
 
             // Create a new termbuf initialized with spaces and default style
-            let mut next = TermBuf::empty_with_style(root_size, def_style.clone());
+            let mut next = TermBuf::empty_with_style(root_size, def_style);
 
             self.pre_render(be, root)?;
 
@@ -695,10 +692,10 @@ impl Canopy {
     /// poll on each ID in the poll set.
     fn poll(&mut self, ids: Vec<NodeId>, root: &mut dyn Node) -> Result<()> {
         preorder(root, &mut |x| -> Result<Walk<()>> {
-            if ids.contains(&x.id()) {
-                if let Some(d) = x.poll(self) {
-                    self.poller.schedule(x.id(), d);
-                }
+            if ids.contains(&x.id())
+                && let Some(d) = x.poll(self)
+            {
+                self.poller.schedule(x.id(), d);
             };
             Ok(Walk::Continue)
         })?;
@@ -758,12 +755,13 @@ pub trait Loader {
 mod tests {
     use super::*;
     use crate::{
-        self as canopy,
+        self as canopy, Error, EventOutcome, NodeState, StatefulNode,
         backend::test::{CanvasRender, TestRender},
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
+        derive_commands,
+        geom::Rect,
         tutils::ttree::{get_state, reset_state, run_ttree},
     };
-    use crate::{Error, EventOutcome, NodeState, StatefulNode, derive_commands, geom::Rect};
 
     #[test]
     fn tbindings() -> Result<()> {
@@ -1241,7 +1239,7 @@ mod tests {
 
         impl Parent {
             fn new() -> Self {
-                Parent {
+                Self {
                     state: NodeState::default(),
                     child: Child {
                         state: NodeState::default(),

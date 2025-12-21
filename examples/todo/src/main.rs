@@ -1,7 +1,6 @@
 use anyhow::Result;
 use canopy::backend::crossterm::runloop;
 use clap::Parser;
-
 use todo::create_app;
 
 #[derive(Parser, Debug)]

@@ -61,6 +61,6 @@ impl Node for TextDisplay {
 
 impl Loader for TextDisplay {
     fn load(c: &mut Canopy) {
-        c.add_commands::<TextDisplay>();
+        c.add_commands::<Self>();
     }
 }

@@ -1,7 +1,7 @@
-use scoped_tls::scoped_thread_local;
 use std::collections::HashMap;
 
 use rhai;
+use scoped_tls::scoped_thread_local;
 
 use crate::{Context, Node, NodeId, NodeName, Result, commands::*, error};
 
@@ -50,7 +50,7 @@ impl ScriptHost {
         });
         engine.on_print(move |s| tracing::info!("{}", s));
 
-        ScriptHost {
+        Self {
             engine,
             scripts: HashMap::new(),
             current_id: 0,
@@ -195,8 +195,10 @@ impl ScriptHost {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::StatefulNode;
-    use crate::tutils::ttree::{get_state, run_ttree};
+    use crate::{
+        StatefulNode,
+        tutils::ttree::{get_state, run_ttree},
+    };
 
     #[test]
     fn texecute() -> Result<()> {

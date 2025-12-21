@@ -1,18 +1,18 @@
 use std::{
     io::Write,
     sync::{Arc, Mutex},
+    time::Duration,
 };
-use tracing_subscriber::fmt;
 
 use canopy_core as canopy;
-
-use crate::{Text, list::*};
 use canopy_core::{
     Canopy, Loader, NodeState, derive_commands,
     geom::{Expanse, Rect},
     *,
 };
-use std::time::Duration;
+use tracing_subscriber::fmt;
+
+use crate::{Text, list::*};
 
 #[derive(canopy_core::StatefulNode)]
 struct LogItem {
@@ -24,7 +24,7 @@ struct LogItem {
 #[derive_commands]
 impl LogItem {
     fn new(txt: &str) -> Self {
-        LogItem {
+        Self {
             state: NodeState::default(),
             selected: false,
             child: Text::new(txt),
@@ -139,7 +139,7 @@ impl Node for Logs {
 #[derive_commands]
 impl Logs {
     pub fn new() -> Self {
-        Logs {
+        Self {
             state: NodeState::default(),
             list: List::new(vec![]),
             started: false,

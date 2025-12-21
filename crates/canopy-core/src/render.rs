@@ -1,7 +1,6 @@
 use crate::{
     Result, TermBuf, geom,
-    style::{AttrSet, Color, Style},
-    style::{StyleManager, StyleMap},
+    style::{AttrSet, Color, Style, StyleManager, StyleMap},
 };
 
 /// The trait implemented by renderers.

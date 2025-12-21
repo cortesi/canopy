@@ -1,5 +1,6 @@
-use crate::{event::key, geom::Point};
 use std::ops::Add;
+
+use crate::{event::key, geom::Point};
 
 /// An abstract specification for a mouse action
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -63,14 +64,14 @@ impl Action {
     /// Is this a button-driven action?
     pub fn is_button(&self) -> bool {
         match self {
-            Action::Down => true,
-            Action::Up => true,
-            Action::Drag => true,
-            Action::Moved => false,
-            Action::ScrollUp => false,
-            Action::ScrollDown => false,
-            Action::ScrollLeft => false,
-            Action::ScrollRight => false,
+            Self::Down => true,
+            Self::Up => true,
+            Self::Drag => true,
+            Self::Moved => false,
+            Self::ScrollUp => false,
+            Self::ScrollDown => false,
+            Self::ScrollLeft => false,
+            Self::ScrollRight => false,
         }
     }
 }
@@ -111,7 +112,7 @@ impl Add<Button> for Action {
 
 impl From<MouseEvent> for Mouse {
     fn from(o: MouseEvent) -> Self {
-        Mouse {
+        Self {
             action: o.action,
             modifiers: o.modifiers,
             button: o.button,
@@ -121,7 +122,7 @@ impl From<MouseEvent> for Mouse {
 
 impl From<Button> for Mouse {
     fn from(e: Button) -> Self {
-        Mouse {
+        Self {
             action: Action::Down,
             modifiers: key::Empty,
             button: e,
@@ -131,7 +132,7 @@ impl From<Button> for Mouse {
 
 impl From<Action> for Mouse {
     fn from(e: Action) -> Self {
-        Mouse {
+        Self {
             action: e,
             modifiers: key::Empty,
             button: if e.is_button() {
@@ -145,20 +146,20 @@ impl From<Action> for Mouse {
 
 impl std::cmp::PartialEq<Button> for Mouse {
     fn eq(&self, k: &Button) -> bool {
-        let m: Mouse = (*k).into();
+        let m: Self = (*k).into();
         *self == m
     }
 }
 
 impl std::cmp::PartialEq<Action> for Mouse {
     fn eq(&self, k: &Action) -> bool {
-        let m: Mouse = (*k).into();
+        let m: Self = (*k).into();
         *self == m
     }
 }
 
 impl Add<Button> for Mouse {
-    type Output = Mouse;
+    type Output = Self;
 
     fn add(self, other: Button) -> Self::Output {
         let mut r = self;
@@ -168,7 +169,7 @@ impl Add<Button> for Mouse {
 }
 
 impl Add<Action> for Mouse {
-    type Output = Mouse;
+    type Output = Self;
 
     fn add(self, other: Action) -> Self::Output {
         let mut r = self;
@@ -178,7 +179,7 @@ impl Add<Action> for Mouse {
 }
 
 impl Add<key::Mods> for Mouse {
-    type Output = Mouse;
+    type Output = Self;
 
     fn add(self, other: key::Mods) -> Self::Output {
         let mut r = self;
@@ -218,8 +219,7 @@ impl std::cmp::PartialEq<Action> for MouseEvent {
 
 #[cfg(test)]
 mod tests {
-    use crate::error::Result;
-    use crate::event::mouse::*;
+    use crate::{error::Result, event::mouse::*};
 
     #[test]
     fn tmouse() -> Result<()> {

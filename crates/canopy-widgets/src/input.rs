@@ -1,5 +1,4 @@
 use canopy_core as canopy;
-
 use canopy_core::{
     Context, Layout, Node, NodeState, Render, Result, StatefulNode, command, derive_commands,
     event::key,
@@ -20,7 +19,7 @@ pub struct TextBuf {
 
 impl TextBuf {
     fn new(start: &str) -> Self {
-        TextBuf {
+        Self {
             value: start.to_owned(),
             cursor_pos: start.len() as u32,
             window: LineSegment { off: 0, len: 0 },
@@ -121,7 +120,7 @@ pub struct Input {
 #[derive_commands]
 impl Input {
     pub fn new(txt: &str) -> Self {
-        Input {
+        Self {
             state: NodeState::default(),
             textbuf: TextBuf::new(txt),
         }

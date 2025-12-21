@@ -13,14 +13,14 @@ pub struct Rect {
 }
 
 impl Default for Rect {
-    fn default() -> Rect {
-        Rect::zero()
+    fn default() -> Self {
+        Self::zero()
     }
 }
 
 impl Rect {
     pub fn new(x: u32, y: u32, w: u32, h: u32) -> Self {
-        Rect {
+        Self {
             tl: Point { x, y },
             w,
             h,
@@ -33,13 +33,13 @@ impl Rect {
     }
 
     /// Creat a zero-sized `Rect` at the origin.
-    pub fn zero() -> Rect {
-        Rect::new(0, 0, 0, 0)
+    pub fn zero() -> Self {
+        Self::new(0, 0, 0, 0)
     }
 
     /// Return a rect with the same size, with the top left at the given point.
     pub fn at(&self, p: impl Into<Point>) -> Self {
-        Rect {
+        Self {
             tl: p.into(),
             w: self.w,
             h: self.h,
@@ -49,7 +49,7 @@ impl Rect {
     /// Carve a rectangle with a fixed width out of the start of the horizontal
     /// extent of this rect. Returns a [left, right] array. Left is either
     /// empty or has the extract width specified.
-    pub fn carve_hstart(&self, width: u32) -> (Rect, Rect) {
+    pub fn carve_hstart(&self, width: u32) -> (Self, Self) {
         let (h, t) = self.hextent().carve_start(width);
         // We can unwrap, because both extents are within our range by definition.
         (self.hslice(&h).unwrap(), self.hslice(&t).unwrap())
@@ -58,7 +58,7 @@ impl Rect {
     /// Carve a rectangle with a fixed width out of the end of the horizontal
     /// extent of this rect. Returns a [left, right] array. Right is either
     /// empty or has the exact width specified.
-    pub fn carve_hend(&self, width: u32) -> (Rect, Rect) {
+    pub fn carve_hend(&self, width: u32) -> (Self, Self) {
         let (h, t) = self.hextent().carve_end(width);
         // We can unwrap, because both extents are within our range by definition.
         (self.hslice(&h).unwrap(), self.hslice(&t).unwrap())
@@ -67,7 +67,7 @@ impl Rect {
     /// Carve a rectangle with a fixed height out of the start of the vertical
     /// extent of this rect. Returns a [top, bottom] array. Top is either empty
     /// or has the exact height specified.
-    pub fn carve_vstart(&self, height: u32) -> (Rect, Rect) {
+    pub fn carve_vstart(&self, height: u32) -> (Self, Self) {
         let (h, t) = self.vextent().carve_start(height);
         // We can unwrap, because both extents are within our range by definition.
         (self.vslice(&h).unwrap(), self.vslice(&t).unwrap())
@@ -76,7 +76,7 @@ impl Rect {
     /// Carve a rectangle with a fixed height out of the end of the vertical
     /// extent of this rect. Returns a [top, bottom] array. Bottom is either
     /// empty or has the exact height specified.
-    pub fn carve_vend(&self, height: u32) -> (Rect, Rect) {
+    pub fn carve_vend(&self, height: u32) -> (Self, Self) {
         let (h, t) = self.vextent().carve_end(height);
         // We can unwrap, because both extents are within our range by definition.
         (self.vslice(&h).unwrap(), self.vslice(&t).unwrap())
@@ -85,13 +85,13 @@ impl Rect {
     /// Clamp this rectangle, shifting it to lie within another rectangle. The
     /// size of the returned Rect is always equal to that of self. If self is
     /// larger than the enclosing rectangle, return an error.
-    pub fn clamp_within(&self, rect: impl Into<Rect>) -> Result<Self> {
+    pub fn clamp_within(&self, rect: impl Into<Self>) -> Result<Self> {
         let rect = rect.into();
         if rect.w < self.w || rect.h < self.h {
             Err(Error::Geometry("can't clamp to smaller rectangle".into()))
         } else {
-            Ok(Rect {
-                tl: self.tl.clamp(Rect {
+            Ok(Self {
+                tl: self.tl.clamp(Self {
                     tl: rect.tl,
                     h: rect.h.saturating_sub(self.h),
                     w: rect.w.saturating_sub(self.w),
@@ -116,7 +116,7 @@ impl Rect {
     /// Does this rectangle completely enclose the other? If other is
     /// zero-sized but its origin lies within this rect, it's considered
     /// contained.
-    pub fn contains_rect(&self, other: &Rect) -> bool {
+    pub fn contains_rect(&self, other: &Self) -> bool {
         // The rectangle is completely contained if both the upper left and the
         // lower right points are inside self. There's a subtlety here: if other
         // is zero-sized, but it's origin lies within this rect, it is
@@ -135,11 +135,11 @@ impl Rect {
 
     /// Extracts an inner rectangle, given a border width. If the border width
     /// would exceed the size of the Rect, we return a zero rect.
-    pub fn inner(&self, border: u32) -> Rect {
+    pub fn inner(&self, border: u32) -> Self {
         if self.w < (border * 2) || self.h < (border * 2) {
-            Rect::default()
+            Self::default()
         } else {
-            Rect::new(
+            Self::new(
                 self.tl.x + border,
                 self.tl.y + border,
                 self.w - (border * 2),
@@ -153,7 +153,7 @@ impl Rect {
         if !self.hextent().contains(e) {
             Err(Error::Geometry("extract extent outside rectangle".into()))
         } else {
-            Ok(Rect::new(e.off, self.tl.y, e.len, self.h))
+            Ok(Self::new(e.off, self.tl.y, e.len, self.h))
         }
     }
 
@@ -166,10 +166,10 @@ impl Rect {
     }
 
     /// Calculate the intersection of this rectangle and another.
-    pub fn intersect(&self, other: &Rect) -> Option<Self> {
+    pub fn intersect(&self, other: &Self) -> Option<Self> {
         let h = self.hextent().intersection(&other.hextent())?;
         let v = self.vextent().intersection(&other.vextent())?;
-        Some(Rect::new(h.off, v.off, h.len, v.len))
+        Some(Self::new(h.off, v.off, h.len, v.len))
     }
 
     /// Given a point that falls within this rectangle, shift the point to be
@@ -189,13 +189,13 @@ impl Rect {
     /// Given a rectangle contained within this rectangle, shift the inner
     /// rectangle to be relative to our origin. If the rect is not entirely
     /// contained, an error is returned.
-    pub fn rebase_rect(&self, other: &Rect) -> Result<Rect> {
+    pub fn rebase_rect(&self, other: &Self) -> Result<Self> {
         if !self.contains_rect(other) {
             return Err(Error::Geometry(format!(
                 "rebase of non-contained rect - outer={self:?} inner={other:?}",
             )));
         }
-        Ok(Rect {
+        Ok(Self {
             tl: self.rebase_point(other.tl)?,
             w: other.w,
             h: other.h,
@@ -204,8 +204,8 @@ impl Rect {
 
     /// A safe function for shifting the rectangle by an offset, which won't
     /// under- or overflow.
-    pub fn shift(&self, x: i32, y: i32) -> Rect {
-        Rect {
+    pub fn shift(&self, x: i32, y: i32) -> Self {
+        Self {
             tl: self.tl.scroll(x, y),
             w: self.w,
             h: self.h,
@@ -215,15 +215,15 @@ impl Rect {
     /// Shift this rectangle, constrained to be within another rectangle. The
     /// size of the returned Rect is always equal to that of self. If self is
     /// larger than the enclosing rectangle, self unchanged.
-    pub fn shift_within(&self, x: i32, y: i32, rect: Rect) -> Self {
+    pub fn shift_within(&self, x: i32, y: i32, rect: Self) -> Self {
         if rect.w < self.w || rect.h < self.h {
             *self
         } else {
-            Rect {
+            Self {
                 tl: self.tl.scroll_within(
                     x,
                     y,
-                    Rect {
+                    Self {
                         tl: rect.tl,
                         h: rect.h.saturating_sub(self.h),
                         w: rect.w.saturating_sub(self.w),
@@ -237,12 +237,12 @@ impl Rect {
 
     /// Splits the rectangle horizontally into n sections, as close to equally
     /// sized as possible.
-    pub fn split_horizontal(&self, n: u32) -> Result<Vec<Rect>> {
+    pub fn split_horizontal(&self, n: u32) -> Result<Vec<Self>> {
         let widths = split(self.w, n)?;
         let mut off: u32 = self.tl.x;
         let mut ret = vec![];
         for i in 0..n {
-            ret.push(Rect::new(off, self.tl.y, widths[i as usize], self.h));
+            ret.push(Self::new(off, self.tl.y, widths[i as usize], self.h));
             off += widths[i as usize];
         }
         Ok(ret)
@@ -250,12 +250,12 @@ impl Rect {
 
     /// Splits the rectangle vertically into n sections, as close to equally
     /// sized as possible.
-    pub fn split_vertical(&self, n: u32) -> Result<Vec<Rect>> {
+    pub fn split_vertical(&self, n: u32) -> Result<Vec<Self>> {
         let heights = split(self.h, n)?;
         let mut off: u32 = self.tl.y;
         let mut ret = vec![];
         for i in 0..n {
-            ret.push(Rect::new(self.tl.x, off, self.w, heights[i as usize]));
+            ret.push(Self::new(self.tl.x, off, self.w, heights[i as usize]));
             off += heights[i as usize];
         }
         Ok(ret)
@@ -263,7 +263,7 @@ impl Rect {
 
     /// Splits the rectangle into columns, with each column split into rows.
     /// Returns a Vec of rects per column.
-    pub fn split_panes(&self, spec: &[u32]) -> Result<Vec<Vec<Rect>>> {
+    pub fn split_panes(&self, spec: &[u32]) -> Result<Vec<Vec<Self>>> {
         let mut ret = vec![];
 
         let cols = split(self.w, spec.len() as u32)?;
@@ -272,7 +272,7 @@ impl Rect {
             let mut y = self.tl.y;
             let mut colret = vec![];
             for height in split(self.h, spec[ci])? {
-                colret.push(Rect {
+                colret.push(Self {
                     tl: (x, y).into(),
                     w: *width,
                     h: height,
@@ -348,7 +348,7 @@ impl Rect {
         if !self.vextent().contains(e) {
             Err(Error::Geometry("extract extent outside rectangle".into()))
         } else {
-            Ok(Rect::new(self.tl.x, e.off, self.w, e.len))
+            Ok(Self::new(self.tl.x, e.off, self.w, e.len))
         }
     }
 
@@ -384,19 +384,19 @@ impl Rect {
 
     /// Subtract a rectangle from this one, returning a set of rectangles
     /// describing what remains.
-    pub fn sub(&self, other: &Rect) -> Vec<Rect> {
+    pub fn sub(&self, other: &Self) -> Vec<Self> {
         if other == self {
             vec![]
         } else if let Some(isec) = self.intersect(other) {
             let rects = vec![
                 // Left
-                Rect {
+                Self {
                     tl: self.tl,
                     h: self.h,
                     w: isec.tl.x.saturating_sub(self.tl.x),
                 },
                 // Right
-                Rect {
+                Self {
                     tl: Point {
                         x: isec.tl.x + isec.w,
                         y: self.tl.y,
@@ -405,7 +405,7 @@ impl Rect {
                     w: (self.tl.x + self.w).saturating_sub(isec.tl.x + isec.w),
                 },
                 // Top
-                Rect {
+                Self {
                     tl: Point {
                         x: isec.tl.x,
                         y: self.tl.y,
@@ -414,7 +414,7 @@ impl Rect {
                     w: isec.w,
                 },
                 // Bottom
-                Rect {
+                Self {
                     tl: Point {
                         x: isec.tl.x,
                         y: isec.tl.y + isec.h,
@@ -431,8 +431,8 @@ impl Rect {
 }
 
 impl From<Expanse> for Rect {
-    fn from(s: Expanse) -> Rect {
-        Rect {
+    fn from(s: Expanse) -> Self {
+        Self {
             tl: Point::default(),
             w: s.w,
             h: s.h,
@@ -441,8 +441,8 @@ impl From<Expanse> for Rect {
 }
 
 impl From<Line> for Rect {
-    fn from(l: Line) -> Rect {
-        Rect {
+    fn from(l: Line) -> Self {
+        Self {
             tl: l.tl,
             w: l.w,
             h: 1,
@@ -451,9 +451,9 @@ impl From<Line> for Rect {
 }
 
 impl From<(u32, u32, u32, u32)> for Rect {
-    fn from(v: (u32, u32, u32, u32)) -> Rect {
+    fn from(v: (u32, u32, u32, u32)) -> Self {
         let (x, y, w, h) = v;
-        Rect {
+        Self {
             tl: (x, y).into(),
             w,
             h,

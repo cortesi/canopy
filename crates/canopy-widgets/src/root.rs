@@ -1,10 +1,10 @@
 use canopy_core as canopy;
-
-use crate::inspector::Inspector;
 use canopy_core::{
     Binder, Canopy, Context, DefaultBindings, Layout, Loader, Node, NodeState, Render, Result,
     command, derive_commands, event::key::*, *,
 };
+
+use crate::inspector::Inspector;
 
 /// A Root node that lives at the base of a Canopy app. It manages modal
 /// windows, houses the Inspector and exposes a set of built-in functions.
@@ -24,8 +24,8 @@ impl<T> Root<T>
 where
     T: Node,
 {
-    pub fn new(app: T) -> Root<T> {
-        Root {
+    pub fn new(app: T) -> Self {
+        Self {
             app,
             state: NodeState::default(),
             inspector: Inspector::new(),
@@ -182,7 +182,7 @@ where
     T: Loader + Node,
 {
     fn load(c: &mut Canopy) {
-        c.add_commands::<Root<T>>();
+        c.add_commands::<Self>();
         T::load(c);
         Inspector::load(c);
     }

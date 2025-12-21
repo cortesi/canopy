@@ -18,19 +18,19 @@ impl<T> Walk<T> {
     /// The handle value of the traversal, if any.
     pub fn value(self) -> Option<T> {
         match self {
-            Walk::Handle(v) => Some(v),
+            Self::Handle(v) => Some(v),
             _ => None,
         }
     }
     /// Did the traversal return Handle?
     pub fn is_handled(&self) -> bool {
-        matches!(self, Walk::Handle(_))
+        matches!(self, Self::Handle(_))
     }
     /// Did the traversal return Continue?
     pub fn is_continue(&self) -> bool {
         match self {
-            Walk::Skip | Walk::Handle(_) => false,
-            Walk::Continue => true,
+            Self::Skip | Self::Handle(_) => false,
+            Self::Continue => true,
         }
     }
 }

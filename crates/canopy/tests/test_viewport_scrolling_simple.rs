@@ -9,7 +9,7 @@ struct ScrollTest {
 #[derive_commands]
 impl ScrollTest {
     fn new() -> Self {
-        ScrollTest {
+        Self {
             state: NodeState::default(),
         }
     }
@@ -55,7 +55,7 @@ impl Node for ScrollTest {
 
 impl Loader for ScrollTest {
     fn load(c: &mut Canopy) {
-        c.add_commands::<ScrollTest>();
+        c.add_commands::<Self>();
     }
 }
 

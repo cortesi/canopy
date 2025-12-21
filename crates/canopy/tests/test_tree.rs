@@ -1,6 +1,4 @@
-use canopy::path::Path;
-use canopy::tree::*;
-use canopy::*;
+use canopy::{path::Path, tree::*, *};
 use canopy_core::{Context, tutils::grid::Grid};
 
 struct TreeLeaf {
@@ -10,7 +8,7 @@ struct TreeLeaf {
 
 impl TreeLeaf {
     fn new(name: &str) -> Self {
-        TreeLeaf {
+        Self {
             state: NodeState::default(),
             name_str: name.to_string(),
         }
@@ -45,7 +43,7 @@ struct TreeBranch {
 
 impl TreeBranch {
     fn new(name: &str, la_name: &str, lb_name: &str) -> Self {
-        TreeBranch {
+        Self {
             state: NodeState::default(),
             name_str: name.to_string(),
             la: TreeLeaf::new(la_name),
@@ -87,7 +85,7 @@ struct TreeRoot {
 
 impl TreeRoot {
     fn new() -> Self {
-        TreeRoot {
+        Self {
             state: NodeState::default(),
             ba: TreeBranch::new("ba", "ba_la", "ba_lb"),
             bb: TreeBranch::new("bb", "bb_la", "bb_lb"),

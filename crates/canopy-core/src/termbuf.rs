@@ -22,11 +22,8 @@ pub struct TermBuf {
 impl TermBuf {
     pub fn new(size: impl Into<Expanse>, ch: char, style: Style) -> Self {
         let size = size.into();
-        let cell = Cell {
-            ch,
-            style: style.clone(),
-        };
-        TermBuf {
+        let cell = Cell { ch, style };
+        Self {
             size,
             cells: vec![cell; size.area() as usize],
         }
@@ -47,7 +44,7 @@ impl TermBuf {
     }
 
     /// Copy non-NULL characters from a rectangle of another TermBuf into this one
-    pub fn copy(&mut self, src: &TermBuf, rect: Rect) {
+    pub fn copy(&mut self, src: &Self, rect: Rect) {
         if src.size != self.size {
             return;
         }
@@ -57,10 +54,10 @@ impl TermBuf {
             for y in isec.tl.y..isec.tl.y + isec.h {
                 for x in isec.tl.x..isec.tl.x + isec.w {
                     let p = Point { x, y };
-                    if let Some(cell) = src.get(p) {
-                        if cell.ch != NULL {
-                            self.put(p, cell.ch, cell.style.clone());
-                        }
+                    if let Some(cell) = src.get(p)
+                        && cell.ch != NULL
+                    {
+                        self.put(p, cell.ch, cell.style.clone());
                     }
                 }
             }
@@ -68,7 +65,7 @@ impl TermBuf {
     }
 
     /// Copy non-NULL characters from a source TermBuf into a destination rectangle
-    pub fn copy_to_rect(&mut self, src: &TermBuf, dest_rect: Rect) {
+    pub fn copy_to_rect(&mut self, src: &Self, dest_rect: Rect) {
         // The source buffer represents content to be placed at dest_rect
         // We need to map from source coordinates to destination coordinates
 
@@ -85,14 +82,14 @@ impl TermBuf {
                     let src_y = (dy as i32 + src_offset_y) as u32;
                     let src_p = Point { x: src_x, y: src_y };
 
-                    if let Some(cell) = src.get(src_p) {
-                        if cell.ch != NULL {
-                            let dest_p = Point {
-                                x: clipped_dest.tl.x + dx,
-                                y: clipped_dest.tl.y + dy,
-                            };
-                            self.put(dest_p, cell.ch, cell.style.clone());
-                        }
+                    if let Some(cell) = src.get(src_p)
+                        && cell.ch != NULL
+                    {
+                        let dest_p = Point {
+                            x: clipped_dest.tl.x + dx,
+                            y: clipped_dest.tl.y + dy,
+                        };
+                        self.put(dest_p, cell.ch, cell.style.clone());
                     }
                 }
             }
@@ -195,7 +192,7 @@ impl TermBuf {
 impl TermBuf {
     /// Diff this terminal buffer against a previous state, emitting changes
     /// to the provided render backend.
-    pub fn diff<R: RenderBackend>(&self, prev: &TermBuf, backend: &mut R) -> crate::Result<()> {
+    pub fn diff<R: RenderBackend>(&self, prev: &Self, backend: &mut R) -> crate::Result<()> {
         let mut wrote = false;
         if self.size != prev.size {
             return self.render(backend);
@@ -283,9 +280,11 @@ impl TermBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::buf;
-    use crate::style::{AttrSet, Color, PartialStyle};
-    use crate::tutils::buf::BufTest;
+    use crate::{
+        buf,
+        style::{AttrSet, Color, PartialStyle},
+        tutils::buf::BufTest,
+    };
 
     fn def_style() -> Style {
         Style {
@@ -334,7 +333,7 @@ mod tests {
 
     impl RecBackend {
         fn new() -> Self {
-            RecBackend { ops: Vec::new() }
+            Self { ops: Vec::new() }
         }
     }
 
@@ -366,7 +365,7 @@ mod tests {
     fn diff_no_change() {
         let style = def_style();
         let tb1 = TermBuf::new(Expanse::new(3, 1), ' ', style.clone());
-        let tb2 = TermBuf::new(Expanse::new(3, 1), ' ', style.clone());
+        let tb2 = TermBuf::new(Expanse::new(3, 1), ' ', style);
         let mut be = RecBackend::new();
         tb2.diff(&tb1, &mut be).unwrap();
         assert!(be.ops.is_empty());
@@ -625,7 +624,7 @@ mod tests {
         // Fill empty cells with a specific character and style
         let mut fill_style = def_style();
         fill_style.fg = Color::Red;
-        tb.fill_empty('.', fill_style.clone());
+        tb.fill_empty('.', fill_style);
 
         // Check that the buffer now has dots where there were NULLs
         BufTest::new(&tb).assert_matches(buf![

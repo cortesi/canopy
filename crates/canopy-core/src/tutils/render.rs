@@ -6,7 +6,7 @@ pub struct NopBackend;
 
 impl NopBackend {
     pub fn new() -> Self {
-        NopBackend
+        Self
     }
 }
 

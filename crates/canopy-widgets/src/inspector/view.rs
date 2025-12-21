@@ -1,8 +1,8 @@
 use canopy_core as canopy;
+use canopy_core::{NodeState, derive_commands, *};
 
 use super::logs::Logs;
 use crate::tabs;
-use canopy_core::{NodeState, derive_commands, *};
 
 /// View contains the body of the inspector.
 #[derive(canopy_core::StatefulNode)]
@@ -30,7 +30,7 @@ impl Node for View {
 #[derive_commands]
 impl View {
     pub fn new() -> Self {
-        View {
+        Self {
             state: NodeState::default(),
             tabs: tabs::Tabs::new(vec!["Stats".into(), "Logs".into()]),
             logs: Logs::new(),

@@ -2,13 +2,12 @@ mod logs;
 mod view;
 
 use canopy_core as canopy;
-
-use crate::{frame, tabs};
 use canopy_core::{
     Binder, Canopy, DefaultBindings, Loader, NodeState, derive_commands, event::key::*, *,
 };
-
 use logs::Logs;
+
+use crate::{frame, tabs};
 
 #[derive(canopy_core::StatefulNode)]
 
@@ -26,7 +25,7 @@ impl Default for Inspector {
 #[derive_commands]
 impl Inspector {
     pub fn new() -> Self {
-        let mut i = Inspector {
+        let mut i = Self {
             state: NodeState::default(),
             view: frame::Frame::new(view::View::new()),
         };
@@ -72,7 +71,7 @@ impl DefaultBindings for Inspector {
 
 impl Loader for Inspector {
     fn load(c: &mut Canopy) {
-        c.add_commands::<Inspector>();
+        c.add_commands::<Self>();
         c.add_commands::<tabs::Tabs>();
         Logs::load(c);
     }

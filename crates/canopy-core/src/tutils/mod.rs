@@ -7,24 +7,22 @@ pub mod ttree;
 
 #[cfg(test)]
 mod tests {
-    use crate::{self as canopy};
-
     use crate::{
-        Context, Layout, Node, NodeState, Render, Result, StatefulNode, backend::test::TestRender,
-        derive_commands, geom::Expanse,
+        self as canopy, Context, Layout, Node, NodeState, Render, Result, StatefulNode,
+        backend::test::TestRender, derive_commands, geom::Expanse,
     };
 
     #[derive(StatefulNode)]
     struct Block {
         state: NodeState,
-        children: Vec<Block>,
+        children: Vec<Self>,
         horizontal: bool,
     }
 
     #[derive_commands]
     impl Block {
         fn new(horizontal: bool) -> Self {
-            Block {
+            Self {
                 state: NodeState::default(),
                 children: vec![],
                 horizontal,

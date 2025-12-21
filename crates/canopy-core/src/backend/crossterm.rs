@@ -26,7 +26,7 @@ struct EventSource {
 
 impl EventSource {
     fn new(rx: mpsc::Receiver<Event>) -> Self {
-        EventSource { rx }
+        Self { rx }
     }
 
     fn next(&self) -> std::result::Result<Event, mpsc::RecvError> {
@@ -92,8 +92,8 @@ impl CrosstermControl {
 }
 
 impl Default for CrosstermControl {
-    fn default() -> CrosstermControl {
-        CrosstermControl {
+    fn default() -> Self {
+        Self {
             fp: std::io::stderr(),
         }
     }
@@ -163,8 +163,8 @@ impl CrosstermRender {
 }
 
 impl Default for CrosstermRender {
-    fn default() -> CrosstermRender {
-        CrosstermRender {
+    fn default() -> Self {
+        Self {
             fp: std::io::stderr(),
         }
     }

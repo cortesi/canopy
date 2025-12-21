@@ -6,8 +6,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use crate::NodeId;
-use crate::event::Event;
+use crate::{NodeId, event::Event};
 
 /// A node that has a pending callback.
 #[derive(Debug)]
@@ -144,8 +143,10 @@ impl Poller {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tutils::ttree::{BaLa, BaLb};
-    use crate::{Result, StatefulNode};
+    use crate::{
+        Result, StatefulNode,
+        tutils::ttree::{BaLa, BaLb},
+    };
     #[test]
     fn pendingheap() -> Result<()> {
         let now = SystemTime::now();

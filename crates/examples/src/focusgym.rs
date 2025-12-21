@@ -8,14 +8,14 @@ use canopy::{
 #[derive(StatefulNode)]
 pub struct Block {
     state: NodeState,
-    children: Vec<Block>,
+    children: Vec<Self>,
     horizontal: bool,
 }
 
 #[derive_commands]
 impl Block {
     fn new(orientation: bool) -> Self {
-        Block {
+        Self {
             state: NodeState::default(),
             children: vec![],
             horizontal: orientation,
@@ -29,14 +29,14 @@ impl Block {
     #[command]
     fn add(&mut self) {
         if !self.children.is_empty() && !self.size_limited(self.children[0].vp().view().into()) {
-            self.children.push(Block::new(!self.horizontal));
+            self.children.push(Self::new(!self.horizontal));
         }
     }
 
     #[command]
     fn split(&mut self, c: &mut dyn Context) -> Result<()> {
         if !self.size_limited(self.vp().view().into()) {
-            self.children = vec![Block::new(!self.horizontal), Block::new(!self.horizontal)];
+            self.children = vec![Self::new(!self.horizontal), Self::new(!self.horizontal)];
             c.focus_next(self);
         }
         Ok(())
@@ -106,7 +106,7 @@ impl Default for FocusGym {
 
 impl FocusGym {
     pub fn new() -> Self {
-        FocusGym {
+        Self {
             state: NodeState::default(),
             child: Block {
                 state: NodeState::default(),
@@ -132,7 +132,7 @@ impl Node for FocusGym {
 
 impl Loader for FocusGym {
     fn load(c: &mut Canopy) {
-        c.add_commands::<FocusGym>();
+        c.add_commands::<Self>();
         c.add_commands::<Block>();
     }
 }

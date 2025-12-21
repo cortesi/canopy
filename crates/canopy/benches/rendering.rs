@@ -1,8 +1,10 @@
+use std::hint::black_box;
+
 use canopy::{
     Canopy, Context, Layout, Loader, Node, NodeState, Render, Result, StatefulNode,
     derive_commands, geom::Expanse, tutils::harness::Harness, widgets::Text,
 };
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 
 // Simple wrapper to provide Loader implementation for Text widget
 #[derive(StatefulNode)]
@@ -14,7 +16,7 @@ struct BenchmarkTextWrapper {
 #[derive_commands]
 impl BenchmarkTextWrapper {
     fn new(content: &str) -> Self {
-        BenchmarkTextWrapper {
+        Self {
             state: NodeState::default(),
             text: Text::new(content),
         }
@@ -27,8 +29,8 @@ impl Node for BenchmarkTextWrapper {
     }
 
     fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        l.fill(self, sz)?;
-        l.fit(&mut self.text, sz.into())
+        self.fill(sz)?;
+        l.place(&mut self.text, sz.into())
     }
 
     fn render(&mut self, _c: &dyn Context, _r: &mut Render) -> Result<()> {

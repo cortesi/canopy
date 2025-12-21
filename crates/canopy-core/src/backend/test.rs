@@ -1,12 +1,11 @@
-use crate::Canopy;
+use std::sync::{Arc, Mutex};
+
 use crate::{
-    Node, Result,
-    geom::Expanse,
-    geom::Point,
+    Canopy, Node, Result,
+    geom::{Expanse, Point},
     render::RenderBackend,
     style::{Style, StyleManager},
 };
-use std::sync::{Arc, Mutex};
 
 /// A handle to a vector that contains the result of the render.
 #[derive(Default)]
@@ -36,7 +35,7 @@ impl TestRender {
     pub fn create() -> (Arc<Mutex<TestBuf>>, Self) {
         let tb = Arc::new(Mutex::new(TestBuf::default()));
         let tb2 = tb.clone();
-        (tb, TestRender { text: tb2 })
+        (tb, Self { text: tb2 })
     }
 
     pub fn render(&mut self, c: &mut Canopy, e: &mut dyn Node) -> Result<()> {
@@ -99,7 +98,7 @@ pub struct CanvasBuf {
 
 impl CanvasBuf {
     fn new(size: Expanse) -> Self {
-        CanvasBuf {
+        Self {
             size,
             cells: vec![vec![' '; size.w as usize]; size.h as usize],
             painted: vec![vec![false; size.w as usize]; size.h as usize],
@@ -128,7 +127,7 @@ impl CanvasRender {
     pub fn create(size: Expanse) -> (Arc<Mutex<CanvasBuf>>, Self) {
         let buf = Arc::new(Mutex::new(CanvasBuf::new(size)));
         let buf2 = buf.clone();
-        (buf, CanvasRender { canvas: buf2 })
+        (buf, Self { canvas: buf2 })
     }
 }
 

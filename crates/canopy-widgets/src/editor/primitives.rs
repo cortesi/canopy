@@ -34,16 +34,16 @@ pub trait Pos: Sized {
 
     fn shift_line(&self, s: &State, n: isize) -> Self {
         let (chunk, offset) = self.chunk_offset();
-        if let Some(l) = Line::from_position(s, (chunk, offset)) {
-            if let Some(ret) = l.shift(s, n) {
-                let line_offset = offset - l.first_pos(s).offset;
-                return if line_offset > ret.len(s) {
-                    // If our line offset takes us beyond the end of the line, we return the last position.
-                    Self::new(s, ret.chunk, ret.first_pos(s).offset + ret.len(s))
-                } else {
-                    Self::new(s, ret.chunk, ret.first_pos(s).offset + line_offset)
-                };
-            }
+        if let Some(l) = Line::from_position(s, (chunk, offset))
+            && let Some(ret) = l.shift(s, n)
+        {
+            let line_offset = offset - l.first_pos(s).offset;
+            return if line_offset > ret.len(s) {
+                // If our line offset takes us beyond the end of the line, we return the last position.
+                Self::new(s, ret.chunk, ret.first_pos(s).offset + ret.len(s))
+            } else {
+                Self::new(s, ret.chunk, ret.first_pos(s).offset + line_offset)
+            };
         }
         Self::new(s, chunk, offset)
     }
@@ -63,24 +63,24 @@ impl Cursor {
     /// Shift left or right within a chunk
     pub fn shift(&self, s: &State, n: isize) -> Self {
         match self {
-            Cursor::Insert(p) => Cursor::Insert(p.shift(s, n)),
-            Cursor::Char(p) => Cursor::Char(p.shift(s, n)),
+            Self::Insert(p) => Self::Insert(p.shift(s, n)),
+            Self::Char(p) => Self::Char(p.shift(s, n)),
         }
     }
 
     /// Shift up and down in the list of chunks.
     pub fn shift_chunk(&self, s: &State, n: isize) -> Self {
         match self {
-            Cursor::Insert(p) => Cursor::Insert(p.shift_chunk(s, n)),
-            Cursor::Char(p) => Cursor::Char(p.shift_chunk(s, n)),
+            Self::Insert(p) => Self::Insert(p.shift_chunk(s, n)),
+            Self::Char(p) => Self::Char(p.shift_chunk(s, n)),
         }
     }
 
     /// Shift up and down along wrapped lines.
     pub fn shift_line(&self, s: &State, n: isize) -> Self {
         match self {
-            Cursor::Insert(p) => Cursor::Insert(p.shift_line(s, n)),
-            Cursor::Char(p) => Cursor::Char(p.shift_line(s, n)),
+            Self::Insert(p) => Self::Insert(p.shift_line(s, n)),
+            Self::Char(p) => Self::Char(p.shift_line(s, n)),
         }
     }
 
@@ -89,8 +89,8 @@ impl Cursor {
     /// the line.
     pub fn insert(&self, s: &State) -> InsertPos {
         match self {
-            Cursor::Insert(p) => *p,
-            Cursor::Char(p) => (*p).into(),
+            Self::Insert(p) => *p,
+            Self::Char(p) => (*p).into(),
         }
         .constrain(s)
     }
@@ -98,15 +98,15 @@ impl Cursor {
     /// Return a cursor of matching type at the given chunk and offset.
     pub fn at(&self, s: &State, chunk: usize, offset: usize) -> Self {
         match self {
-            Cursor::Insert(_) => Cursor::Insert(InsertPos::new(s, chunk, offset)),
-            Cursor::Char(_) => Cursor::Char(CharPos::new(s, chunk, offset)),
+            Self::Insert(_) => Self::Insert(InsertPos::new(s, chunk, offset)),
+            Self::Char(_) => Self::Char(CharPos::new(s, chunk, offset)),
         }
     }
 
     pub fn constrain(&self, s: &State) -> Self {
         match self {
-            Cursor::Insert(p) => Cursor::Insert(p.constrain(s)),
-            Cursor::Char(p) => Cursor::Char(p.constrain(s)),
+            Self::Insert(p) => Self::Insert(p.constrain(s)),
+            Self::Char(p) => Self::Char(p.constrain(s)),
         }
     }
 }
@@ -132,7 +132,7 @@ pub struct InsertPos {
 impl Pos for InsertPos {
     /// Create a new InsertPos and constrain it within the state.
     fn new(s: &State, chunk: usize, offset: usize) -> Self {
-        InsertPos { chunk, offset }.constrain(s)
+        Self { chunk, offset }.constrain(s)
     }
 
     fn is_between(&self, s: &State) -> bool {
@@ -147,12 +147,12 @@ impl Pos for InsertPos {
     fn constrain(&self, s: &State) -> Self {
         let ep = s.last();
         if self.chunk > ep.chunk {
-            InsertPos {
+            Self {
                 chunk: ep.chunk,
                 offset: s.chunks[ep.chunk].len(),
             }
         } else if self.offset + 1 > s.chunks[self.chunk].len() {
-            InsertPos {
+            Self {
                 chunk: self.chunk,
                 offset: s.chunks[self.chunk].len(),
             }
@@ -164,14 +164,14 @@ impl Pos for InsertPos {
 
 impl From<(usize, usize)> for InsertPos {
     fn from((chunk, offset): (usize, usize)) -> Self {
-        InsertPos { chunk, offset }
+        Self { chunk, offset }
     }
 }
 
 impl From<CharPos> for InsertPos {
     fn from(cp: CharPos) -> Self {
         let (chunk, offset) = cp.chunk_offset();
-        InsertPos { chunk, offset }
+        Self { chunk, offset }
     }
 }
 
@@ -187,7 +187,7 @@ pub struct CharPos {
 impl Pos for CharPos {
     /// Create a new CharPos and constrain it within the state.
     fn new(s: &State, chunk: usize, offset: usize) -> Self {
-        CharPos { chunk, offset }.constrain(s)
+        Self { chunk, offset }.constrain(s)
     }
 
     fn chunk_offset(&self) -> (usize, usize) {
@@ -202,12 +202,12 @@ impl Pos for CharPos {
     fn constrain(&self, s: &State) -> Self {
         let ep = s.last();
         if self.chunk > ep.chunk {
-            CharPos {
+            Self {
                 chunk: ep.chunk,
                 offset: s.chunks[ep.chunk].len().saturating_sub(1),
             }
         } else if s.chunks[self.chunk].len() <= self.offset {
-            CharPos {
+            Self {
                 chunk: self.chunk,
                 offset: s.chunks[self.chunk].len().saturating_sub(1),
             }
@@ -219,14 +219,14 @@ impl Pos for CharPos {
 
 impl From<(usize, usize)> for CharPos {
     fn from((chunk, offset): (usize, usize)) -> Self {
-        CharPos { chunk, offset }
+        Self { chunk, offset }
     }
 }
 
 impl From<InsertPos> for CharPos {
     fn from(cp: InsertPos) -> Self {
         let (chunk, offset) = cp.chunk_offset();
-        CharPos {
+        Self {
             chunk,
             offset: offset.saturating_sub(1),
         }
@@ -242,11 +242,11 @@ pub struct Line {
 }
 
 impl Line {
-    pub(super) fn from_position<T: Into<InsertPos>>(s: &State, pos: T) -> Option<Line> {
+    pub(super) fn from_position<T: Into<InsertPos>>(s: &State, pos: T) -> Option<Self> {
         let pos = pos.into();
         for (i, (wstart, wend)) in s.chunks[pos.chunk].wraps.iter().enumerate() {
             if *wstart <= pos.offset && (pos.offset < *wend || *wstart == *wend) {
-                return Some(Line {
+                return Some(Self {
                     chunk: pos.chunk,
                     wrap_idx: i,
                 });
@@ -279,7 +279,7 @@ impl Line {
     }
 
     /// Get a Line from a given wrapped line number. If the specified offset is out of range, the last line is returned.
-    pub fn from_lineno(s: &State, line_number: usize) -> Line {
+    pub fn from_lineno(s: &State, line_number: usize) -> Self {
         let mut wrapped_offset = 0;
         for (i, c) in s.chunks.iter().enumerate() {
             if wrapped_offset + c.wraps.len() > line_number {
@@ -295,7 +295,7 @@ impl Line {
     }
 
     /// Shift by a number of lines, returning the resulting line. If the line is beyond bounds, return None.
-    pub(super) fn shift(&self, s: &State, n: isize) -> Option<Line> {
+    pub(super) fn shift(&self, s: &State, n: isize) -> Option<Self> {
         // FIXME: Make this more efficient
         let mut chunk = self.chunk;
         let mut wrap_idx = self.wrap_idx;
@@ -322,13 +322,13 @@ impl Line {
                 }
             }
         }
-        Some(Line { chunk, wrap_idx })
+        Some(Self { chunk, wrap_idx })
     }
 }
 
 impl From<(usize, usize)> for Line {
     fn from((chunk, offset): (usize, usize)) -> Self {
-        Line {
+        Self {
             chunk,
             wrap_idx: offset,
         }
@@ -346,14 +346,14 @@ impl Window {
     /// Create a Window from a line number and a screen height.
     pub(super) fn from_lineno(s: &State, lineno: usize, height: usize) -> Self {
         let line = Line::from_lineno(s, lineno);
-        Window { line, height }
+        Self { line, height }
     }
 
     /// A window starting at a specific offset line, with the same dimensions as this one.
     #[cfg(test)]
     pub(super) fn at_line(&self, s: &State, lineno: usize) -> Self {
         let line = Line::from_lineno(s, lineno);
-        Window {
+        Self {
             line,
             height: self.height,
         }
@@ -361,7 +361,7 @@ impl Window {
 
     /// A window with a specified height, and the same dimensions as this one.
     pub(super) fn with_height(&self, height: usize) -> Self {
-        Window {
+        Self {
             line: self.line,
             height,
         }
@@ -393,10 +393,10 @@ impl Window {
 
         if pos >= start + self.height {
             // Cursor is below
-            Window::from_lineno(s, pos.saturating_sub(self.height - 1), self.height)
+            Self::from_lineno(s, pos.saturating_sub(self.height - 1), self.height)
         } else if pos < start {
             // Cursor is above
-            Window::from_lineno(s, pos, self.height)
+            Self::from_lineno(s, pos, self.height)
         } else {
             *self
         }
@@ -450,8 +450,8 @@ impl std::hash::Hash for Chunk {
 }
 
 impl Chunk {
-    pub fn new(s: &str, wrap_width: usize) -> Chunk {
-        let mut l = Chunk {
+    pub fn new(s: &str, wrap_width: usize) -> Self {
+        let mut l = Self {
             text: s.into(),
             wraps: vec![],
             wrap_width,
