@@ -1,16 +1,13 @@
-#![allow(clippy::new_without_default)]
-//! A library for building terminal UIs.
+// The canopy library.
 
-// Re-export everything from canopy-core
-// Hide the test utils from docs. We need to expose it for integration tests, but it's not for external use.
-#[doc(hidden)]
-pub use canopy_core::tutils;
-pub use canopy_core::*;
-// Re-export canopy-specific types
-pub use canopy_core::{
-    Binder, Canopy, DefaultBindings, FocusableNode, Input, InputMap, InputMode, Loader, Poller,
-    collect_focusable_nodes, find_focus_target, find_focused_node,
-};
-// Re-export widgets from canopy-widgets
-pub use canopy_widgets as widgets;
-pub use canopy_widgets::Root;
+pub mod core;
+pub mod geom;
+pub mod widgets;
+
+// Re-export core types to the root for convenience, matching previous behavior.
+pub use core::*;
+pub use widgets::Root;
+
+// Allow internal references to `canopy::` to resolve to this crate.
+// This is often needed for proc-macros that assume the crate is named `canopy`.
+use crate as canopy;

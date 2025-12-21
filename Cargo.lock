@@ -160,33 +160,25 @@ checksum = "5dd9dc738b7a8311c7ade152424974d8115f2cdad61e8dab8dac9f2362298510"
 name = "canopy"
 version = "0.0.1"
 dependencies = [
- "canopy-core",
- "canopy-widgets",
- "clap",
- "criterion",
- "rand",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "canopy-core"
-version = "0.0.1"
-dependencies = [
  "bitvec",
  "canopy-derive",
+ "clap",
  "color-backtrace",
  "comfy-table",
  "convert_case",
+ "criterion",
  "crossterm",
- "geom",
+ "pad",
+ "rand",
  "regex",
  "rhai",
  "scoped-tls",
  "scopeguard",
  "termcolor",
+ "textwrap",
  "thiserror",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -212,24 +204,8 @@ name = "canopy-examples"
 version = "0.1.0"
 dependencies = [
  "canopy",
- "canopy-core",
- "canopy-widgets",
  "clap",
  "rand",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "canopy-widgets"
-version = "0.0.1"
-dependencies = [
- "canopy-core",
- "canopy-derive",
- "pad",
- "regex",
- "rhai",
- "textwrap",
  "tracing",
  "tracing-subscriber",
 ]
@@ -554,10 +530,6 @@ name = "funty"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
-
-[[package]]
-name = "geom"
-version = "0.1.0"
 
 [[package]]
 name = "getrandom"

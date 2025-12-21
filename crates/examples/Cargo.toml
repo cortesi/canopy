@@ -6,8 +6,6 @@ license.workspace = true
 
 [dependencies]
 canopy = { path = "../canopy" }
-canopy-core = { path = "../canopy-core" }
-canopy-widgets = { path = "../canopy-widgets" }
 clap = { version = "4.5.0", features = ["derive"] }
 rand = "0.9.1"
 tracing = "0.1.41"
