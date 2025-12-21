@@ -21,14 +21,14 @@ struct BoundAction {
 
 /// Input event used for bindings.
 #[derive(Debug, Hash, PartialEq, Eq)]
-pub enum Input {
+pub enum InputSpec {
     /// Mouse input.
     Mouse(Mouse),
     /// Keyboard input.
     Key(Key),
 }
 
-impl Input {
+impl InputSpec {
     /// Normalize key variants for matching.
     fn normalize(&self) -> Self {
         match *self {
@@ -42,7 +42,7 @@ impl Input {
 #[derive(Debug)]
 pub struct InputMode {
     /// Input bindings for this mode.
-    inputs: HashMap<Input, Vec<BoundAction>>,
+    inputs: HashMap<InputSpec, Vec<BoundAction>>,
 }
 
 impl InputMode {
@@ -54,7 +54,7 @@ impl InputMode {
     }
 
     /// Insert a key binding into this mode
-    fn insert(&mut self, path_filter: PathMatcher, input: Input, script: script::ScriptId) {
+    fn insert(&mut self, path_filter: PathMatcher, input: InputSpec, script: script::ScriptId) {
         self.inputs.entry(input).or_default().push(BoundAction {
             pathmatch: path_filter,
             script,
@@ -62,7 +62,7 @@ impl InputMode {
     }
 
     /// Resolve a key with a given path filter to a script.
-    pub fn resolve(&self, path: &Path, input: &Input) -> Option<script::ScriptId> {
+    pub fn resolve(&self, path: &Path, input: &InputSpec) -> Option<script::ScriptId> {
         let input = input.normalize();
         let mut ret = (0, None);
         for k in self.inputs.get(&input)? {
@@ -121,7 +121,7 @@ impl InputMap {
     }
 
     /// Resolve a binding in the current mode.
-    pub fn resolve(&self, path: &Path, input: &Input) -> Option<script::ScriptId> {
+    pub fn resolve(&self, path: &Path, input: &InputSpec) -> Option<script::ScriptId> {
         // Unwrap is safe, because we make it impossible for our current mode to
         // be non-existent.
         let m = self.modes.get(&self.current_mode).unwrap();
@@ -132,7 +132,7 @@ impl InputMap {
     pub fn bind(
         &mut self,
         mode: &str,
-        input: Input,
+        input: InputSpec,
         path_filter: &str,
         script: script::ScriptId,
     ) -> Result<()> {
@@ -155,15 +155,15 @@ mod tests {
         let mut m = InputMode::new();
         let a_foo = e.compile("x()")?;
 
-        m.insert(PathMatcher::new("foo")?, Input::Key('A'.into()), a_foo);
+        m.insert(PathMatcher::new("foo")?, InputSpec::Key('A'.into()), a_foo);
 
         assert_eq!(
-            m.resolve(&"foo".into(), &Input::Key(key::Shift + 'A'))
+            m.resolve(&"foo".into(), &InputSpec::Key(key::Shift + 'A'))
                 .unwrap(),
             a_foo
         );
         assert_eq!(
-            m.resolve(&"foo".into(), &Input::Key(key::Shift + 'a'))
+            m.resolve(&"foo".into(), &InputSpec::Key(key::Shift + 'a'))
                 .unwrap(),
             a_foo
         );
@@ -179,34 +179,36 @@ mod tests {
         let a_foo = e.compile("x()")?;
         let a_bar = e.compile("x()")?;
         let b = e.compile("x()")?;
-        m.insert(PathMatcher::new("foo")?, Input::Key('a'.into()), a_foo);
-        m.insert(PathMatcher::new("bar")?, Input::Key('a'.into()), a_bar);
-        m.insert(PathMatcher::new("")?, Input::Key('b'.into()), b);
+        m.insert(PathMatcher::new("foo")?, InputSpec::Key('a'.into()), a_foo);
+        m.insert(PathMatcher::new("bar")?, InputSpec::Key('a'.into()), a_bar);
+        m.insert(PathMatcher::new("")?, InputSpec::Key('b'.into()), b);
 
         assert_eq!(
-            m.resolve(&"foo".into(), &Input::Key('a'.into())).unwrap(),
+            m.resolve(&"foo".into(), &InputSpec::Key('a'.into()))
+                .unwrap(),
             a_foo
         );
         assert_eq!(
-            m.resolve(&"bar".into(), &Input::Key('a'.into())).unwrap(),
+            m.resolve(&"bar".into(), &InputSpec::Key('a'.into()))
+                .unwrap(),
             a_bar,
         );
         assert_eq!(
-            m.resolve(&"bar/foo".into(), &Input::Key('a'.into()))
+            m.resolve(&"bar/foo".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
             a_foo,
         );
         assert_eq!(
-            m.resolve(&"foo/bar".into(), &Input::Key('a'.into()))
+            m.resolve(&"foo/bar".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
             a_bar
         );
         assert!(
-            m.resolve(&"foo/bar".into(), &Input::Key('x'.into()))
+            m.resolve(&"foo/bar".into(), &InputSpec::Key('x'.into()))
                 .is_none()
         );
         assert!(
-            m.resolve(&"nonexistent".into(), &Input::Key('a'.into()))
+            m.resolve(&"nonexistent".into(), &InputSpec::Key('a'.into()))
                 .is_none()
         );
 
@@ -221,17 +223,17 @@ mod tests {
         let a_default = e.compile("x()")?;
         let a_m = e.compile("x()")?;
 
-        m.bind("", Input::Key('a'.into()), "", a_default)?;
-        m.bind("m", Input::Key('a'.into()), "", a_m)?;
+        m.bind("", InputSpec::Key('a'.into()), "", a_default)?;
+        m.bind("m", InputSpec::Key('a'.into()), "", a_m)?;
 
         assert_eq!(
-            m.resolve(&"foo/bar".into(), &Input::Key('a'.into()))
+            m.resolve(&"foo/bar".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
             a_default
         );
         m.set_mode("m")?;
         assert_eq!(
-            m.resolve(&"foo/bar".into(), &Input::Key('a'.into()))
+            m.resolve(&"foo/bar".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
             a_m
         );

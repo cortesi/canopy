@@ -128,8 +128,8 @@ where
     }
 
     /// Build a frame with a specified title.
-    pub fn with_title(mut self, title: String) -> Self {
-        self.title = Some(title);
+    pub fn with_title(mut self, title: impl Into<String>) -> Self {
+        self.title = Some(title.into());
         self
     }
 

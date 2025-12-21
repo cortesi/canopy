@@ -20,11 +20,15 @@ pub struct Tabs {
 #[derive_commands]
 impl Tabs {
     /// Construct tabs with the provided titles.
-    pub fn new(tabs: Vec<String>) -> Self {
+    pub fn new<I>(tabs: I) -> Self
+    where
+        I: IntoIterator,
+        I::Item: AsRef<str>,
+    {
         Self {
             state: NodeState::default(),
             active: 0,
-            tabs,
+            tabs: tabs.into_iter().map(|s| s.as_ref().to_string()).collect(),
         }
     }
 

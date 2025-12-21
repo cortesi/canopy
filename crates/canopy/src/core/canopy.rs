@@ -408,7 +408,7 @@ impl Canopy {
     {
         self.keymap.bind(
             mode,
-            inputmap::Input::Mouse(mouse.into()),
+            inputmap::InputSpec::Mouse(mouse.into()),
             path_filter,
             self.script_host.compile(script)?,
         )
@@ -435,7 +435,7 @@ impl Canopy {
     {
         self.keymap.bind(
             mode,
-            inputmap::Input::Key(key.into()),
+            inputmap::InputSpec::Key(key.into()),
             path_filter,
             self.script_host.compile(script)?,
         )
@@ -751,7 +751,7 @@ impl Canopy {
                     _ => {
                         if let Some(s) = self
                             .keymap
-                            .resolve(&path, &inputmap::Input::Mouse(m.into()))
+                            .resolve(&path, &inputmap::InputSpec::Mouse(m.into()))
                         {
                             handled = true;
                             script = Some((s, x.id()));
@@ -781,7 +781,7 @@ impl Canopy {
             Walk<Option<(script::ScriptId, NodeId)>>,
         > {
             Ok(
-                if let Some(s) = self.keymap.resolve(&path, &inputmap::Input::Key(k)) {
+                if let Some(s) = self.keymap.resolve(&path, &inputmap::InputSpec::Key(k)) {
                     Walk::Handle(Some((s, x.id())))
                 } else {
                     match x.handle_key(self, k)? {
@@ -886,19 +886,19 @@ mod tests {
         run_ttree(|c, _, mut root| {
             c.keymap.bind(
                 "",
-                inputmap::Input::Key('a'.into()),
+                inputmap::InputSpec::Key('a'.into()),
                 "",
                 c.script_host.compile("ba_la::c_leaf()")?,
             )?;
             c.keymap.bind(
                 "",
-                inputmap::Input::Key('r'.into()),
+                inputmap::InputSpec::Key('r'.into()),
                 "",
                 c.script_host.compile("r::c_root()")?,
             )?;
             c.keymap.bind(
                 "",
-                inputmap::Input::Key('x'.into()),
+                inputmap::InputSpec::Key('x'.into()),
                 "ba/",
                 c.script_host.compile("r::c_root()")?,
             )?;

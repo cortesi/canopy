@@ -31,10 +31,13 @@ pub mod widgets;
 pub use core::testing;
 // Re-export core application types
 pub use core::{Binder, Canopy, Context, DefaultBindings, Layout, Loader, Poller};
+// Re-export terminal buffer and text buffer
+pub use core::termbuf::TermBuf;
+pub use widgets::input::TextBuf;
 // Re-export focus utilities
 pub use core::{FocusableNode, collect_focusable_nodes, find_focus_target, find_focused_node};
 // Re-export input mapping
-pub use core::{Input, InputMap, InputMode};
+pub use core::{InputMap, InputMode, InputSpec};
 pub use core::{
     backend, commands, cursor, error, event, node, path, render, script, state, style, tree,
 };

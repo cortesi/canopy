@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use std::{
     fmt,
     sync::atomic::{AtomicU64, Ordering},
@@ -52,6 +53,13 @@ impl PartialEq<u64> for NodeId {
 pub struct NodeName {
     /// Stored node name string.
     name: String,
+}
+
+impl FromStr for NodeName {
+    type Err = error::Error;
+    fn from_str(s: &str) -> Result<Self> {
+        Self::new(s)
+    }
 }
 
 impl NodeName {

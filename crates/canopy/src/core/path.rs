@@ -1,4 +1,5 @@
 use std::fmt;
+use std::str::FromStr;
 
 use crate::error::{self, Result};
 
@@ -7,6 +8,13 @@ use crate::error::{self, Result};
 pub struct Path {
     /// Stored path components.
     path: Vec<String>,
+}
+
+impl FromStr for Path {
+    type Err = error::Error;
+    fn from_str(s: &str) -> Result<Self> {
+        Ok(Self::from(s))
+    }
 }
 
 impl fmt::Display for Path {
@@ -28,9 +36,13 @@ impl Path {
     }
 
     /// Construct a path from a slice of components.
-    pub fn new<T: AsRef<str>>(v: &[T]) -> Self {
+    pub fn new<I>(v: I) -> Self
+    where
+        I: IntoIterator,
+        I::Item: AsRef<str>,
+    {
         Self {
-            path: v.iter().map(|x| x.as_ref().to_string()).collect(),
+            path: v.into_iter().map(|x| x.as_ref().to_string()).collect(),
         }
     }
 }

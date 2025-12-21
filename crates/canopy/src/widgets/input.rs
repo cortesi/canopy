@@ -24,10 +24,12 @@ pub struct TextBuf {
 
 impl TextBuf {
     /// Construct a new text buffer with initial content.
-    fn new(start: &str) -> Self {
+    fn new(start: impl Into<String>) -> Self {
+        let value = start.into();
+        let cursor_pos = value.len() as u32;
         Self {
-            value: start.to_owned(),
-            cursor_pos: start.len() as u32,
+            value,
+            cursor_pos,
             window: LineSegment { off: 0, len: 0 },
         }
     }
@@ -37,12 +39,10 @@ impl TextBuf {
         self.cursor_pos - self.window.off
     }
 
-    /// Render the visible text, padded to the window width.
-    fn text(&self) -> String {
+    /// Return the visible text slice.
+    fn text(&self) -> &str {
         let end = self.window.far().min(self.value.len() as u32) as usize;
-        let v = self.value[self.window.off as usize..end].to_owned();
-        let extra = self.window.len as usize - v.len();
-        format!("{}{}", v, " ".repeat(extra))
+        &self.value[self.window.off as usize..end]
     }
 
     /// Clamp cursor and window state to valid bounds.
@@ -129,14 +129,14 @@ pub struct Input {
 #[derive_commands]
 impl Input {
     /// Construct a new input with initial text.
-    pub fn new(txt: &str) -> Self {
+    pub fn new(txt: impl Into<String>) -> Self {
         Self {
             state: NodeState::default(),
             textbuf: TextBuf::new(txt),
         }
     }
     /// Return the current input text.
-    pub fn text(&self) -> String {
+    pub fn text(&self) -> &str {
         self.textbuf.text()
     }
 
@@ -190,7 +190,7 @@ impl Node for Input {
     }
 
     fn render(&mut self, _: &dyn Context, r: &mut Render) -> Result<()> {
-        r.text("text", self.vp().view().line(0), &self.textbuf.text())
+        r.text("text", self.vp().view().line(0), self.textbuf.text())
     }
 
     fn handle_key(&mut self, _c: &mut dyn Context, k: key::Key) -> Result<EventOutcome> {

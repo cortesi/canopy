@@ -25,11 +25,11 @@ pub struct Text {
 #[derive_commands]
 impl Text {
     /// Construct a text widget with raw content.
-    pub fn new(raw: &str) -> Self {
+    pub fn new(raw: impl Into<String>) -> Self {
         Self {
             state: NodeState::default(),
 
-            raw: raw.to_owned(),
+            raw: raw.into(),
             lines: None,
             fixed_width: None,
             current_size: Expanse::default(),
@@ -47,8 +47,8 @@ impl Text {
     }
 
     /// Replace the raw text content and reset wrapping state.
-    pub fn set_raw(&mut self, raw: &str) {
-        self.raw = raw.to_owned();
+    pub fn set_raw(&mut self, raw: impl Into<String>) {
+        self.raw = raw.into();
         self.lines = None;
         self.current_size = Expanse::default();
     }

@@ -40,7 +40,7 @@ impl View {
     pub fn new() -> Self {
         Self {
             state: NodeState::default(),
-            tabs: tabs::Tabs::new(vec!["Stats".into(), "Logs".into()]),
+            tabs: tabs::Tabs::new(vec!["Stats", "Logs"]),
             logs: Logs::new(),
         }
     }

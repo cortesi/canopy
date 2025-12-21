@@ -21,7 +21,7 @@ pub(crate) mod root;
 /// Tabs widget.
 pub mod tabs;
 
-pub use input::Input;
+pub use input::{Input, TextBuf};
 pub use panes::Panes;
 pub use root::Root;
 pub use text::Text;

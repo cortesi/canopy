@@ -59,6 +59,6 @@ pub use binder::{Binder, DefaultBindings};
 pub use canopy::{Canopy, Loader};
 pub use context::Context;
 pub use focus::{FocusableNode, collect_focusable_nodes, find_focus_target, find_focused_node};
-pub use inputmap::{Input, InputMap, InputMode};
+pub use inputmap::{InputMap, InputMode, InputSpec};
 pub use layout::Layout;
 pub use poll::Poller;
