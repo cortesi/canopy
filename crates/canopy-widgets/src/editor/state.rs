@@ -107,13 +107,19 @@ impl State {
     {
         let pos = pos.into();
         let s = s.as_ref();
+        
+        // Capture old cursor position
+        let cursor = match self.cursor {
+            Cursor::Insert(p) => p,
+            Cursor::Char(p) => p.into(),
+        };
+
         if s.len() == 1 {
             // Simple case - there are no newlines, we just insert the text in-place.
             let s = &s[0].to_string();
             self.chunks[pos.chunk].insert(pos.offset, s);
 
-            let cursor = self.cursor.insert(self);
-            if cursor >= pos {
+            if cursor.chunk == pos.chunk && cursor >= pos {
                 // Adjust the cursor if it was after the insert point.
                 self.cursor = self.cursor.shift(self, s.len() as isize);
             }
@@ -135,15 +141,13 @@ impl State {
                 trailer.iter().map(|x| Chunk::new(x, self.width)),
             );
 
-            let cursor = self.cursor.insert(self);
-            if cursor >= pos {
-                // The cursor was at or beyond the insert position, so we have to adjust it.
-                self.cursor = self
-                    .cursor
-                    .shift_chunk(self, s.len().saturating_sub(1) as isize);
-                if self.cursor.insert(self).chunk == pos.chunk + trailer.len() {
-                    self.cursor = self.cursor.shift(self, last.len() as isize);
-                }
+            if cursor.chunk == pos.chunk && cursor >= pos {
+                 let d = cursor.offset - pos.offset;
+                 let new_chunk = pos.chunk + trailer.len();
+                 let new_offset = last.len() + d;
+                 self.cursor = self.cursor.at(self, new_chunk, new_offset);
+            } else if cursor.chunk > pos.chunk {
+                 self.cursor = self.cursor.shift_chunk(self, s.len().saturating_sub(1) as isize);
             }
         }
     }
@@ -163,7 +167,12 @@ impl State {
     {
         let start: InsertPos = start.into();
         let end: InsertPos = end.into();
-        let cursor = self.cursor.insert(self);
+        
+        // Capture old cursor position (as InsertPos) before modification
+        let cursor = match self.cursor {
+            Cursor::Insert(p) => p,
+            Cursor::Char(p) => p.into(),
+        };
 
         if start.chunk > self.chunks.len() || end == start {
             // Out of bounds, so this is a no-op
@@ -171,17 +180,17 @@ impl State {
             // We're doing a delete that doesn't cross chunk boundaries.
             //
             self.chunks[start.chunk].replace_range(start.offset..end.offset, "");
-            let ip = self.cursor.insert(self);
+            
             // We only need to adjust the cursor if it was beyond the deletion point
-            if ip > start && ip < end {
+            if cursor > start && cursor < end {
                 // If it was within the deleted text, the new cursor position is at the start of the deleted chunk.
                 self.cursor = self.cursor.at(self, start.chunk, start.offset);
-            } else if ip > start && ip.chunk == start.chunk {
+            } else if cursor > start && cursor.chunk == start.chunk {
                 // If it was beyond the deleted text, we shift the cursor back by the number of chars deleted.
                 self.cursor = self.cursor.at(
                     self,
-                    ip.chunk,
-                    ip.offset.saturating_sub(end.offset - start.offset - 1),
+                    cursor.chunk,
+                    cursor.offset.saturating_sub(end.offset - start.offset),
                 );
             } else {
                 self.cursor = self.cursor.constrain(self);
@@ -295,7 +304,10 @@ impl State {
                     // We're beyond the end of the chunk, which means we must be an insertion cursor. Place the cursor
                     // position at the first character of the next line.
                     return Some((0, y as u32).into());
-                } else if l.chunk == pos.chunk && lstart <= pos.offset && lend > pos.offset {
+                } else if l.chunk == pos.chunk
+                    && lstart <= pos.offset
+                    && (lend > pos.offset || (pos.offset == c.len() && pos.offset == lend))
+                {
                     return Some(((pos.offset - lstart) as u32, y as u32).into());
                 }
             }
@@ -424,7 +436,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Test expectations don't match current implementation behavior"]
     fn insert_ins() {
         seq("_", |x| x.insert((0, 0), "a"), "a_");
         seq("xx_", |x| x.insert((0, 0), "a"), "axx_");
@@ -437,7 +448,7 @@ mod tests {
 
         seq("x_y", |x| x.insert((0, 0), "a"), "ax_y");
         seq("x_y", |x| x.insert((0, 1), "a"), "xa_y");
-        seq("x_y", |x| x.insert((0, 2), "a"), "xya_");
+        seq("x_y", |x| x.insert((0, 2), "a"), "x_ya");
 
         seq("a\n_b", |x| x.insert((0, 0), "x"), "xa\n_b");
         seq("a\n_b", |x| x.insert((0, 1), "x"), "ax\n_b");
@@ -460,7 +471,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Test expectations don't match current implementation behavior"]
     fn delete() {
         seq("a_", |x| x.delete((0, 0), (0, 1)), "_");
         seq("ab_", |x| x.delete((0, 0), (0, 1)), "b_");
@@ -513,7 +523,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Test expectations don't match current implementation behavior"]
     fn wrap() {
         let mut s = State::from_spec("aaaaaaaaa_");
         assert_window(&mut s, 5, 10, 0, "aaaaa\naaaa_");

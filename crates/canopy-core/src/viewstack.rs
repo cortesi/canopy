@@ -95,43 +95,53 @@ impl ViewStack {
         // Start with the first viewport's view as the screen
         // The first viewport's position is ignored since it represents the physical screen
         let first_view = self.views[0].view();
-        let mut current_screen = Rect::new(0, 0, first_view.w, first_view.h);
+        let mut screen_clip = Rect::new(0, 0, first_view.w, first_view.h);
+        let mut view_screen_origin_x = 0i32;
+        let mut view_screen_origin_y = 0i32;
 
-        // For each subsequent viewport, we need to calculate where its view
-        // appears on screen, taking into account its position within the parent
         for i in 1..self.views.len() {
             let viewport = &self.views[i];
             let parent = &self.views[i - 1];
 
-            // Calculate where the child viewport appears in the parent's canvas
-            let child_rect_in_parent = Rect::new(
-                viewport.position().x,
-                viewport.position().y,
-                viewport.view().w,
-                viewport.view().h,
-            );
+            // Update the screen origin for the current viewport
+            // New Origin = Old Origin + (Child Pos - Parent View TL)
+            view_screen_origin_x += viewport.position().x as i32 - parent.view().tl.x as i32;
+            view_screen_origin_y += viewport.position().y as i32 - parent.view().tl.y as i32;
 
-            // Project this rectangle through the parent to screen coordinates
-            if let Some(visible_in_parent) = parent.view().intersect(&child_rect_in_parent) {
-                // Rebase the visible portion relative to parent's view
-                let rebased = parent.view().rebase_rect(&visible_in_parent).unwrap();
-                // Translate to screen coordinates by adding the offset from current_screen
-                let rect_on_screen = Rect {
-                    tl: current_screen
-                        .tl
-                        .scroll(rebased.tl.x as i32, rebased.tl.y as i32),
-                    w: rebased.w,
-                    h: rebased.h,
-                };
-                // Intersect with current screen area
-                current_screen = current_screen.intersect(&rect_on_screen)?;
-            } else {
-                // No overlap with parent's view
+            // Calculate the screen rect of the current viewport's view, handling negative coordinates
+            // by clamping to 0 and reducing dimensions accordingly.
+            let x = view_screen_origin_x;
+            let y = view_screen_origin_y;
+            let w = viewport.view().w as i32;
+            let h = viewport.view().h as i32;
+
+            // Effective start positions (clamped to 0)
+            let eff_x = x.max(0);
+            let eff_y = y.max(0);
+
+            // Effective dimensions
+            let eff_w = w - (eff_x - x);
+            let eff_h = h - (eff_y - y);
+
+            if eff_w <= 0 || eff_h <= 0 {
                 return None;
             }
+
+            let viewport_screen_rect = Rect::new(
+                eff_x as u32,
+                eff_y as u32,
+                eff_w as u32,
+                eff_h as u32,
+            );
+
+            // Intersect with the accumulated clip
+            screen_clip = match screen_clip.intersect(&viewport_screen_rect) {
+                Some(r) => r,
+                None => return None,
+            };
         }
 
-        let screen_rect = current_screen;
+        let screen_rect = screen_clip;
 
         // Now calculate the canvas rect by tracking through the viewport transformations
         let canvas_rect = if self.views.len() == 1 {

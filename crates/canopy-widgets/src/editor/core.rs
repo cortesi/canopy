@@ -171,7 +171,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Test expectations don't match current implementation behavior"]
     fn delete() {
         tundo("a_", |c| c.delete((0, 0), (0, 1)), "_");
         tundo("ab_", |c| c.delete((0, 0), (0, 1)), "b_");

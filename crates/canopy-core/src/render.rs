@@ -94,11 +94,17 @@ impl<'a> Render<'a> {
 
             let take_amount = intersection.w as usize;
 
-            let out = txt
-                .chars()
-                .skip(skip_amount)
-                .take(take_amount)
-                .collect::<String>();
+            let start_byte = txt
+                .char_indices()
+                .nth(skip_amount)
+                .map(|(i, _)| i)
+                .unwrap_or(txt.len());
+            let end_byte = txt
+                .char_indices()
+                .nth(skip_amount + take_amount)
+                .map(|(i, _)| i)
+                .unwrap_or(txt.len());
+            let out = &txt[start_byte..end_byte];
 
             // Adjust the line position relative to our buffer
             let adjusted_line = geom::Line {
@@ -109,14 +115,15 @@ impl<'a> Render<'a> {
                 w: intersection.w,
             };
 
-            self.buf.text(&style_res, adjusted_line, &out);
+            self.buf.text(&style_res, adjusted_line, out);
 
             // Pad with spaces if needed
-            if out.len() < adjusted_line.w as usize {
+            let out_width = out.chars().count();
+            if out_width < adjusted_line.w as usize {
                 let pad_rect = geom::Rect::new(
-                    adjusted_line.tl.x + out.len() as u32,
+                    adjusted_line.tl.x + out_width as u32,
                     adjusted_line.tl.y,
-                    adjusted_line.w - out.len() as u32,
+                    adjusted_line.w - out_width as u32,
                     1,
                 );
                 self.buf.fill(&style_res, pad_rect, ' ');

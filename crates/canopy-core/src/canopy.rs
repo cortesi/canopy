@@ -8,7 +8,7 @@ use crate::{
     commands, cursor, error,
     event::{Event, key, mouse},
     focus::{collect_focusable_nodes, find_focus_target, find_focused_node},
-    geom::{Direction, Expanse, Point},
+    geom::{Direction, Expanse, Point, Rect},
     inputmap,
     path::*,
     poll::Poller,
@@ -18,45 +18,19 @@ use crate::{
     tree::*,
 };
 
-/// Application runtime state and renderer coordination.
+/// Core state required for Context implementation.
+/// This is separated from Canopy to allow splitting borrows between the script host and the context.
 #[derive(Debug)]
-pub struct Canopy {
+pub struct CanopyCore {
     /// A counter that is incremented every time focus changes. The current focus
     /// will have a state `focus_gen` equal to this.
-    focus_gen: u64,
-    /// Stores the focus_gen during the last render. Used to detect if focus has
-    /// changed.
-    last_render_focus_gen: u64,
-
-    /// The poller is responsible for tracking nodes that have pending poll
-    /// events, and scheduling their execution.
-    poller: Poller,
-
-    /// Root window size
-    pub(crate) root_size: Option<Expanse>,
-
-    /// Script execution host.
-    pub(crate) script_host: script::ScriptHost,
-    /// Input mapping table.
-    pub(crate) keymap: inputmap::InputMap,
-    /// Registered command set.
-    pub(crate) commands: commands::CommandSet,
+    pub(crate) focus_gen: u64,
+    
     /// Active backend controller.
     pub(crate) backend: Option<Box<dyn BackendControl>>,
-
-    /// Cached terminal buffer.
-    termbuf: Option<TermBuf>,
-
-    /// Event sender channel.
-    pub(crate) event_tx: mpsc::Sender<Event>,
-    /// Event receiver channel.
-    pub(crate) event_rx: Option<mpsc::Receiver<Event>>,
-
-    /// Style map used for rendering.
-    pub style: StyleMap,
 }
 
-impl Context for Canopy {
+impl Context for CanopyCore {
     /// Does the node need to render in the next sweep? Returns true for all visible nodes.
     fn needs_render(&self, n: &dyn Node) -> bool {
         !n.is_hidden()
@@ -240,12 +214,134 @@ impl Context for Canopy {
     }
 }
 
+impl CanopyCore {
+    /// Call a closure on the currently focused node and all its ancestors to the
+    /// root. If the closure returns Walk::Handle, traversal stops. Handle::Skip is
+    /// ignored.
+    pub(crate) fn walk_focus_path<R>(
+        &self,
+        root: &mut dyn Node,
+        f: &mut dyn FnMut(&mut dyn Node) -> Result<Walk<R>>,
+    ) -> Result<Option<R>> {
+        walk_focus_path_e(self.focus_gen, root, f)
+    }
+}
+
+/// Application runtime state and renderer coordination.
+#[derive(Debug)]
+pub struct Canopy {
+    /// Core state.
+    pub(crate) core: CanopyCore,
+
+    /// Stores the focus_gen during the last render. Used to detect if focus has
+    /// changed.
+    last_render_focus_gen: u64,
+
+    /// The poller is responsible for tracking nodes that have pending poll
+    /// events, and scheduling their execution.
+    poller: Poller,
+
+    /// Root window size
+    pub(crate) root_size: Option<Expanse>,
+
+    /// Script execution host.
+    pub(crate) script_host: script::ScriptHost,
+    /// Input mapping table.
+    pub(crate) keymap: inputmap::InputMap,
+    /// Registered command set.
+    pub(crate) commands: commands::CommandSet,
+
+    /// Cached terminal buffer.
+    termbuf: Option<TermBuf>,
+
+    /// Event sender channel.
+    pub(crate) event_tx: mpsc::Sender<Event>,
+    /// Event receiver channel.
+    pub(crate) event_rx: Option<mpsc::Receiver<Event>>,
+
+    /// Style map used for rendering.
+    pub style: StyleMap,
+}
+
+impl Context for Canopy {
+    fn needs_render(&self, n: &dyn Node) -> bool {
+        self.core.needs_render(n)
+    }
+
+    fn is_on_focus_path(&self, n: &mut dyn Node) -> bool {
+        self.core.is_on_focus_path(n)
+    }
+
+    fn focus_path(&self, root: &mut dyn Node) -> Path {
+        self.core.focus_path(root)
+    }
+
+    fn focus_dir(&mut self, root: &mut dyn Node, dir: Direction) {
+        self.core.focus_dir(root, dir)
+    }
+
+    fn focus_right(&mut self, root: &mut dyn Node) {
+        self.core.focus_right(root)
+    }
+
+    fn focus_left(&mut self, root: &mut dyn Node) {
+        self.core.focus_left(root)
+    }
+
+    fn focus_up(&mut self, root: &mut dyn Node) {
+        self.core.focus_up(root)
+    }
+
+    fn focus_down(&mut self, root: &mut dyn Node) {
+        self.core.focus_down(root)
+    }
+
+    fn focus_first(&mut self, root: &mut dyn Node) {
+        self.core.focus_first(root)
+    }
+
+    fn focus_next(&mut self, root: &mut dyn Node) {
+        self.core.focus_next(root)
+    }
+
+    fn focus_prev(&mut self, root: &mut dyn Node) {
+        self.core.focus_prev(root)
+    }
+
+    fn set_focus(&mut self, n: &mut dyn Node) -> bool {
+        self.core.set_focus(n)
+    }
+
+    fn is_focused(&self, n: &dyn Node) -> bool {
+        self.core.is_focused(n)
+    }
+
+    fn start(&mut self) -> Result<()> {
+        self.core.start()
+    }
+
+    fn stop(&mut self) -> Result<()> {
+        self.core.stop()
+    }
+
+    fn exit(&mut self, code: i32) -> ! {
+        self.core.exit(code)
+    }
+
+    fn current_focus_gen(&self) -> u64 {
+        self.core.current_focus_gen()
+    }
+}
+
 impl Canopy {
     /// Construct a new Canopy instance.
     pub fn new() -> Self {
         let (tx, rx) = mpsc::channel();
         Self {
-            focus_gen: 1,
+            core: CanopyCore {
+                focus_gen: 1,
+                backend: None,
+            },
             last_render_focus_gen: 1,
             poller: Poller::new(tx.clone()),
             event_tx: tx,
@@ -255,14 +351,13 @@ impl Canopy {
             script_host: script::ScriptHost::new(),
             style: solarized::solarized_dark(),
             root_size: None,
-            backend: None,
             termbuf: None,
         }
     }
 
     /// Register a backend controller.
     pub fn register_backend<T: BackendControl + 'static>(&mut self, be: T) {
-        self.backend = Some(Box::new(be))
+        self.core.backend = Some(Box::new(be))
     }
 
     /// Get a reference to the current render buffer, if any.
@@ -277,11 +372,9 @@ impl Canopy {
         node_id: NodeId,
         sid: script::ScriptId,
     ) -> Result<()> {
-        let this: *mut dyn Context = self;
+        let core = &mut self.core;
         let script_host = &mut self.script_host;
-        // SAFETY: `this` is valid for the duration of this call because we have
-        // a mutable reference to `self`.
-        unsafe { script_host.execute(&mut *this, root, node_id, sid) }?;
+        script_host.execute(core, root, node_id, sid)?;
         Ok(())
     }
 
@@ -373,7 +466,8 @@ impl Canopy {
             let s = n.state();
             // Our focus has changed if we're the currently on the focus path, or
             // if we were previously focused during the last sweep.
-            s.focus_path_gen == self.focus_gen || s.focus_path_gen == self.last_render_focus_gen
+            s.focus_path_gen == self.core.focus_gen
+                || s.focus_path_gen == self.last_render_focus_gen
         } else {
             false
         }
@@ -381,7 +475,7 @@ impl Canopy {
 
     /// Has the focus changed since the last render sweep?
     pub(crate) fn focus_changed(&self) -> bool {
-        self.focus_gen != self.last_render_focus_gen
+        self.core.focus_gen != self.last_render_focus_gen
     }
 
     /// Register the poller channel
@@ -413,7 +507,7 @@ impl Canopy {
         }
 
         if self.focus_changed() {
-            let fg = self.focus_gen;
+            let fg = self.core.focus_gen;
             self.walk_focus_path(root, &mut |n| -> Result<Walk<()>> {
                 n.state_mut().focus_path_gen = fg;
                 Ok(Walk::Continue)
@@ -430,7 +524,6 @@ impl Canopy {
         styl: &mut StyleManager,
         view_stack: &mut ViewStack,
         n: &mut dyn Node,
-        parent_screen_pos: Point,
     ) -> Result<()> {
         if !n.is_hidden() {
             styl.push();
@@ -442,16 +535,8 @@ impl Canopy {
             let node_vp = n.vp();
             // Only push if the viewport has a non-zero view
             if !node_vp.view().is_zero() {
-                // Convert node position from screen coordinates to parent-relative coordinates
-                let relative_pos = Point {
-                    x: node_vp.position().x.saturating_sub(parent_screen_pos.x),
-                    y: node_vp.position().y.saturating_sub(parent_screen_pos.y),
-                };
-
-                // Create a new viewport with parent-relative position
-                let relative_vp = ViewPort::new(node_vp.canvas(), node_vp.view(), relative_pos)?;
-
-                view_stack.push(relative_vp);
+                // The node's position is already relative to the parent's canvas
+                view_stack.push(node_vp);
                 pushed_viewport = true;
             }
 
@@ -460,7 +545,7 @@ impl Canopy {
                 if self.needs_render(n) {
                     if self.is_focused(n) {
                         let s = &mut n.state_mut();
-                        s.rendered_focus_gen = self.focus_gen;
+                        s.rendered_focus_gen = self.core.focus_gen;
                     }
 
                     // Create a new Render instance with the node's expanse and rect equal to its view
@@ -471,34 +556,42 @@ impl Canopy {
                     n.render(self, &mut rndr)?;
 
                     // Copy the rendered content from the Render buffer into the destination buffer
-                    if let Some((_, screen_rect)) = view_stack.projection() {
+                    if let Some((canvas_rect, screen_rect)) = view_stack.projection() {
                         // Get the render buffer and copy it to the destination at the screen rect
                         let render_buf = rndr.get_buffer();
-                        dest_buf.copy_to_rect(render_buf, screen_rect);
+                        // canvas_rect is relative to the viewport's canvas.
+                        // The render_buf is sized to the viewport's view.
+                        // We need to map canvas_rect (which is the visible slice of the canvas)
+                        // to the coordinates of render_buf.
+                        //
+                        // render_buf (0,0) corresponds to vp.view().tl in the canvas.
+                        // So canvas_rect.tl corresponds to (canvas_rect.tl - vp.view().tl) in render_buf.
+                        
+                        let src_rect = Rect::new(
+                            canvas_rect.tl.x.saturating_sub(vp.view().tl.x),
+                            canvas_rect.tl.y.saturating_sub(vp.view().tl.y),
+                            canvas_rect.w,
+                            canvas_rect.h
+                        );
+                        
+                        dest_buf.copy_rect_to_rect(render_buf, src_rect, screen_rect);
                     }
                 }
 
                 // Process children
-                let node_screen_pos = n.vp().position();
                 let canvas = n.vp().canvas().rect();
                 n.children(&mut |child| {
                     if !child.is_hidden() {
-                        // Convert child position from screen coordinates to parent-relative coordinates
-                        let child_relative_pos = Point {
-                            x: child.vp().position().x.saturating_sub(node_screen_pos.x),
-                            y: child.vp().position().y.saturating_sub(node_screen_pos.y),
-                        };
-
-                        if !canvas.contains_point(child_relative_pos) {
+                        if !canvas.contains_point(child.vp().position()) {
                             return Err(error::Error::Render(format!(
                                 "Child node '{}' has position {:?} outside parent canvas {:?}",
                                 child.id(),
-                                child_relative_pos,
+                                child.vp().position(),
                                 canvas
                             )));
                         }
                     }
-                    self.render_traversal(dest_buf, styl, view_stack, child, node_screen_pos)
+                    self.render_traversal(dest_buf, styl, view_stack, child)
                 })?;
             }
 
@@ -564,7 +657,7 @@ impl Canopy {
             let mut view_stack = ViewStack::new(screen_vp);
 
             // Render the tree into the new buffer
-            self.render_traversal(&mut next, &mut styl, &mut view_stack, root, Point::zero())?;
+            self.render_traversal(&mut next, &mut styl, &mut view_stack, root)?;
 
             // Update the screen buffer
             if let Some(prev) = &self.termbuf {
@@ -585,7 +678,7 @@ impl Canopy {
                 self.termbuf = Some(next);
             }
 
-            self.last_render_focus_gen = self.focus_gen;
+            self.last_render_focus_gen = self.core.focus_gen;
             self.post_render(be, &mut styl, root)?;
         }
 
@@ -678,7 +771,7 @@ impl Canopy {
     {
         let k = tk.into();
         let mut path = self.focus_path(root);
-        let v = walk_focus_path_e(self.focus_gen, root, &mut |x| -> Result<
+        let v = walk_focus_path_e(self.core.focus_gen, root, &mut |x| -> Result<
             Walk<Option<(script::ScriptId, NodeId)>>,
         > {
             Ok(
@@ -754,7 +847,7 @@ impl Canopy {
         root: &mut dyn Node,
         f: &mut dyn FnMut(&mut dyn Node) -> Result<Walk<R>>,
     ) -> Result<Option<R>> {
-        walk_focus_path_e(self.focus_gen, root, f)
+        self.core.walk_focus_path(root, f)
     }
 }
 

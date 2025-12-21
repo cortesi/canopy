@@ -327,33 +327,9 @@ where
         Ok(())
     }
 
-    fn render(&mut self, c: &dyn Context, rndr: &mut Render) -> Result<()> {
+    fn render(&mut self, _c: &dyn Context, rndr: &mut Render) -> Result<()> {
         // First, clear the background
         rndr.fill("", self.vp().canvas().rect(), ' ')?;
-
-        // Get our view rectangle and position
-        let view = self.vp().view();
-        let list_pos = self.vp().position();
-
-        // Render each item that intersects with our view
-        for item in &mut self.items {
-            let item_pos = item.vp().position();
-            let item_canvas = item.vp().canvas();
-
-            // Calculate item's position relative to our canvas
-            let item_y = item_pos.y.saturating_sub(list_pos.y);
-            let item_rect = Rect::new(0, item_y, item_canvas.w, item_canvas.h);
-
-            // Check if this item intersects with our view
-            if item_rect.vextent().intersection(&view.vextent()).is_some() {
-                // The item is at least partially visible, so render it
-                item.render(c, rndr)?;
-            } else if item_y > view.tl.y + view.h {
-                // We've passed all visible items, stop rendering
-                break;
-            }
-        }
-
         Ok(())
     }
 }
