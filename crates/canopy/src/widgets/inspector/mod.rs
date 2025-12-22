@@ -4,25 +4,51 @@ mod logs;
 mod view;
 
 use logs::Logs;
+use taffy::style::{Dimension, Display, FlexDirection};
 
 use crate::{
-    Binder, Canopy, Context, DefaultBindings, Layout, Loader, derive_commands,
+    Binder, Canopy, Context, DefaultBindings, Loader, NodeId, ViewContext,
+    core::Core,
+    derive_commands,
     error::Result,
-    event::key::*,
-    geom::Expanse,
-    node::Node,
+    event::{Event, key::*},
+    geom::Rect,
     render::Render,
-    state::{NodeState, StatefulNode},
+    state::NodeName,
+    widget::{EventOutcome, Widget},
     widgets::{frame, tabs},
 };
 
-/// Inspector overlay node.
-#[derive(canopy::StatefulNode)]
-pub struct Inspector {
-    /// Node state.
-    state: NodeState,
-    /// Root view frame.
-    view: frame::Frame<view::View>,
+/// Inspector overlay widget.
+pub struct Inspector;
+
+#[derive_commands]
+impl Inspector {
+    /// Construct a new inspector.
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Build the inspector subtree and return its node id.
+    pub fn install(core: &mut Core) -> Result<NodeId> {
+        let (view_id, _tabs, _logs) = view::View::install(core)?;
+        let frame_id = core.add(frame::Frame::new());
+        core.set_children(frame_id, vec![view_id])?;
+        core.build(frame_id).style(|style| {
+            style.flex_grow = 1.0;
+            style.flex_shrink = 1.0;
+            style.flex_basis = Dimension::Auto;
+        });
+
+        let inspector_id = core.add(Self::new());
+        core.set_children(inspector_id, vec![frame_id])?;
+        core.build(inspector_id).style(|style| {
+            style.display = Display::Flex;
+            style.flex_direction = FlexDirection::Column;
+        });
+
+        Ok(inspector_id)
+    }
 }
 
 impl Default for Inspector {
@@ -31,32 +57,18 @@ impl Default for Inspector {
     }
 }
 
-#[derive_commands]
-impl Inspector {
-    /// Construct a new inspector.
-    pub fn new() -> Self {
-        let mut i = Self {
-            state: NodeState::default(),
-            view: frame::Frame::new(view::View::new()),
-        };
-        i.hide();
-        i
-    }
-}
-
-impl Node for Inspector {
-    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        l.place(&mut self.view, sz.into())?;
-        Ok(())
-    }
-
-    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
+impl Widget for Inspector {
+    fn render(&mut self, r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
         r.push_layer("inspector");
         Ok(())
     }
 
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-        f(&mut self.view)
+    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+        EventOutcome::Ignore
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("inspector")
     }
 }
 
@@ -65,17 +77,17 @@ impl DefaultBindings for Inspector {
         b.with_path("inspector/")
             .key(KeyCode::Tab, "tabs::next()")
             .with_path("logs")
-            .key('C', "list::clear()")
-            .key('d', "list::delete_selected()")
-            .key('j', "list::select_next()")
-            .key('k', "list::select_prev()")
-            .key('g', "list::select_first()")
-            .key('G', "list::select_last()")
-            .key(' ', "list::page_down()")
-            .key(KeyCode::PageDown, "list::page_down()")
-            .key(KeyCode::PageUp, "list::page_up()")
-            .key(KeyCode::Down, "list::select_next()")
-            .key(KeyCode::Down, "list::select_prev()")
+            .key('C', "logs::clear()")
+            .key('d', "logs::delete_selected()")
+            .key('j', "logs::select_next()")
+            .key('k', "logs::select_prev()")
+            .key('g', "logs::select_first()")
+            .key('G', "logs::select_last()")
+            .key(' ', "logs::page_down()")
+            .key(KeyCode::PageDown, "logs::page_down()")
+            .key(KeyCode::PageUp, "logs::page_up()")
+            .key(KeyCode::Down, "logs::select_next()")
+            .key(KeyCode::Down, "logs::select_prev()")
     }
 }
 

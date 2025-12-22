@@ -17,14 +17,14 @@ pub fn main() -> Result<()> {
     let args = Args::parse();
 
     if let Some(path) = args.path {
-        let (cnpy, todo) = create_app(&path)?;
+        let cnpy = create_app(&path)?;
 
         if args.commands {
             cnpy.print_command_table(&mut std::io::stdout())?;
             return Ok(());
         }
 
-        runloop(cnpy, todo)?;
+        runloop(cnpy)?;
     } else {
         println!("Specify a file path");
     }

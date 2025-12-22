@@ -1,8 +1,14 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    any::Any,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use anyhow::Result;
-use canopy::{error::Result as CanopyResult, event::key::KeyCode, testing::harness::Harness};
-use todo::{Todo, open_store, setup_app};
+use canopy::{
+    error::Result as CanopyResult, event::key::KeyCode, testing::harness::Harness,
+    widgets::list::List,
+};
+use todo::{Todo, TodoItem, open_store, setup_app};
 
 fn db_path(tag: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!(
@@ -15,7 +21,7 @@ fn db_path(tag: &str) -> std::path::PathBuf {
     ))
 }
 
-fn add(h: &mut Harness<Todo>, text: &str) -> CanopyResult<()> {
+fn add(h: &mut Harness, text: &str) -> CanopyResult<()> {
     h.key('a')?;
     for ch in text.chars() {
         h.key(ch)?;
@@ -25,7 +31,7 @@ fn add(h: &mut Harness<Todo>, text: &str) -> CanopyResult<()> {
     Ok(())
 }
 
-fn del_first(h: &mut Harness<Todo>, _next: Option<&str>) -> CanopyResult<()> {
+fn del_first(h: &mut Harness, _next: Option<&str>) -> CanopyResult<()> {
     h.key('g')?;
     h.key('d')?;
     // if let Some(txt) = next {
@@ -34,7 +40,7 @@ fn del_first(h: &mut Harness<Todo>, _next: Option<&str>) -> CanopyResult<()> {
     Ok(())
 }
 
-fn del_no_nav(h: &mut Harness<Todo>, _next: Option<&str>) -> CanopyResult<()> {
+fn del_no_nav(h: &mut Harness, _next: Option<&str>) -> CanopyResult<()> {
     h.key('d')?;
     // if let Some(txt) = next {
     //     h.expect_highlight(txt);
@@ -42,7 +48,25 @@ fn del_no_nav(h: &mut Harness<Todo>, _next: Option<&str>) -> CanopyResult<()> {
     Ok(())
 }
 
-fn app(path: &str) -> Result<Harness<Todo>> {
+fn list_len(h: &mut Harness) -> usize {
+    let list_id = h
+        .canopy
+        .core
+        .nodes
+        .iter()
+        .find(|(_, node)| node.name == "list")
+        .map(|(id, _)| id)
+        .expect("list node not found");
+    h.with_widget(list_id, |widget| {
+        let any = widget as &mut dyn Any;
+        let list = any
+            .downcast_mut::<List<TodoItem>>()
+            .expect("list type mismatch");
+        list.len()
+    })
+}
+
+fn app(path: &str) -> Result<Harness> {
     open_store(db_path(path).to_str().unwrap())?;
     let mut h = Harness::new(Todo::new()?)?;
     setup_app(&mut h.canopy);
@@ -60,7 +84,7 @@ fn add_item_via_script() -> Result<()> {
     h.key('i')?;
     use canopy::event::key::KeyCode;
     h.key(KeyCode::Enter)?;
-    assert_eq!(h.root.content.child().len(), 1);
+    assert_eq!(list_len(&mut h), 1);
     let todos = todo::store::get().todos().unwrap();
     assert_eq!(todos.len(), 1);
     assert_eq!(todos[0].item.trim(), "hi");
@@ -76,7 +100,7 @@ fn add_item_with_char_newline() {
     h.key('h').unwrap();
     h.key('i').unwrap();
     h.key('\n').unwrap();
-    assert_eq!(h.root.content.child().len(), 1);
+    assert_eq!(list_len(&mut h), 1);
 }
 
 #[test]
@@ -139,7 +163,7 @@ fn delete_middle_keeps_rest() -> Result<()> {
     h.key('j')?;
     h.key('j')?;
     h.key('d')?;
-    assert_eq!(h.root.content.child().len(), 2);
+    assert_eq!(list_len(&mut h), 2);
     Ok(())
 }
 
@@ -176,7 +200,7 @@ fn delete_first_keeps_second_visible() -> Result<()> {
     h.key('d')?; // Delete first item
 
     // After deletion, we still have one item
-    assert_eq!(h.root.content.child().len(), 1);
+    assert_eq!(list_len(&mut h), 1);
 
     // Check that the database still has the right item
     let todos = todo::store::get().todos()?;

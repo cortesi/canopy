@@ -3,40 +3,26 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Context, Layout, Loader,
+        Canopy, Context, Loader, ViewContext,
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
         error::Result,
+        event::Event,
         geom::{Expanse, Point, Rect},
-        node::Node,
         render::Render,
-        state::{NodeName, NodeState, StatefulNode},
+        state::NodeName,
         testing::harness::Harness,
+        widget::{EventOutcome, Widget},
+    };
+    use taffy::{
+        geometry::{Rect as TaffyRect, Size},
+        style::{AvailableSpace, Dimension, LengthPercentageAuto, Position},
     };
 
-    // Big node that expands to twice its given size
-    struct Big {
-        state: NodeState,
-    }
+    struct Big;
 
     impl Big {
         fn new() -> Self {
-            Self {
-                state: NodeState::default(),
-            }
-        }
-    }
-
-    impl StatefulNode for Big {
-        fn name(&self) -> NodeName {
-            NodeName::convert("big")
-        }
-
-        fn state(&self) -> &NodeState {
-            &self.state
-        }
-
-        fn state_mut(&mut self) -> &mut NodeState {
-            &mut self.state
+            Self
         }
     }
 
@@ -54,42 +40,44 @@ mod tests {
         }
     }
 
-    impl Node for Big {
-        fn layout(&mut self, _l: &Layout, sz: Expanse) -> Result<()> {
-            self.fill(Expanse::new(sz.w * 2, sz.h * 2))
+    impl Widget for Big {
+        fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
+            r.fill("", ctx.canvas().rect(), 'x')
         }
 
-        fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
-            r.fill("", self.vp().canvas().rect(), 'x')
+        fn measure(
+            &self,
+            known_dimensions: Size<Option<f32>>,
+            available_space: Size<AvailableSpace>,
+        ) -> Size<f32> {
+            let width = known_dimensions
+                .width
+                .or_else(|| available_space.width.into_option())
+                .unwrap_or(0.0);
+            let height = known_dimensions
+                .height
+                .or_else(|| available_space.height.into_option())
+                .unwrap_or(0.0);
+            Size {
+                width: width * 2.0,
+                height: height * 2.0,
+            }
+        }
+
+        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+            EventOutcome::Ignore
+        }
+
+        fn name(&self) -> NodeName {
+            NodeName::convert("big")
         }
     }
 
-    // Root node that places Big child in bottom-right corner
-    struct Root {
-        state: NodeState,
-        child: Big,
-    }
+    struct Root;
 
     impl Root {
         fn new() -> Self {
-            Self {
-                state: NodeState::default(),
-                child: Big::new(),
-            }
-        }
-    }
-
-    impl StatefulNode for Root {
-        fn name(&self) -> NodeName {
-            NodeName::convert("root")
-        }
-
-        fn state(&self) -> &NodeState {
-            &self.state
-        }
-
-        fn state_mut(&mut self) -> &mut NodeState {
-            &mut self.state
+            Self
         }
     }
 
@@ -107,47 +95,49 @@ mod tests {
         }
     }
 
-    impl Node for Root {
-        fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-            f(&mut self.child)
+    impl Widget for Root {
+        fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
+            r.fill("", ctx.view(), ' ')
         }
 
-        fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-            self.fill(sz)?;
-            let loc = Rect::new(sz.w.saturating_sub(1), sz.h.saturating_sub(1), sz.w, sz.h);
-            l.place(&mut self.child, loc)?;
-            Ok(())
+        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+            EventOutcome::Ignore
         }
 
-        fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
-            r.fill("", self.vp().view(), ' ')?;
-            Ok(())
+        fn name(&self) -> NodeName {
+            NodeName::convert("root")
         }
     }
 
     impl Loader for Root {
-        fn load(_c: &mut canopy::Canopy) {
-            // No commands to load
-        }
+        fn load(_c: &mut Canopy) {}
     }
 
     #[test]
     fn child_clamped_to_parent() -> Result<()> {
-        let root = Root::new();
-        let mut h = Harness::builder(root).size(4, 4).build()?;
+        let mut h = Harness::builder(Root::new()).size(4, 4).build()?;
+        let child = h.canopy.core.add(Big::new());
+        h.canopy.core.set_children(h.root, vec![child])?;
+
+        h.canopy.core.build(child).style(|style| {
+            style.size.width = Dimension::Points(4.0);
+            style.size.height = Dimension::Points(4.0);
+            style.position = Position::Absolute;
+            style.inset = TaffyRect {
+                left: LengthPercentageAuto::Points(3.0),
+                right: LengthPercentageAuto::Auto,
+                top: LengthPercentageAuto::Points(3.0),
+                bottom: LengthPercentageAuto::Auto,
+            };
+        });
+
+        h.canopy.set_root_size(Expanse::new(4, 4))?;
         h.render()?;
 
-        // The child (Big) node should be placed in bottom-right corner
-        // Big expands to 2x2 when given 1x1, so it should be clamped to parent
-        // We expect the bottom-right corner to have 'x'
         let buf = h.buf();
-
-        // Check that only the bottom-right corner has 'x'
         for y in 0..4 {
             for x in 0..4 {
                 let cell = buf.get(Point { x, y }).unwrap();
-                // The child is placed at (3,3) with size (1,1) but expands to (2,2)
-                // So it should be clamped to just the bottom-right corner
                 if x == 3 && y == 3 {
                     assert_eq!(cell.ch, 'x', "Expected 'x' at ({x}, {y})");
                 } else {

@@ -8,6 +8,8 @@ anyhow = "1.0.98"
 canopy = { path = "../../crates/canopy" }
 clap = { version = "4.5.40", features = ["derive"] }
 rusqlite = "0.38"
+taffy = "0.3"
+textwrap = "0.16.2"
 tracing = "0.1.41"
 
 [dev-dependencies]

@@ -22,7 +22,8 @@ struct Args {
 /// Run the focus gym example.
 pub fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
-    Root::<FocusGym>::load(&mut cnpy);
+    Root::load(&mut cnpy);
+    FocusGym::load(&mut cnpy);
     setup_bindings(&mut cnpy)?;
 
     let args = Args::parse();
@@ -31,9 +32,8 @@ pub fn main() -> Result<()> {
         return Ok(());
     }
 
-    runloop(
-        cnpy,
-        Root::new(FocusGym::new()).with_inspector(args.inspector),
-    )?;
+    let app_id = cnpy.core.add(FocusGym::new());
+    Root::install_with_inspector(&mut cnpy.core, app_id, args.inspector)?;
+    runloop(cnpy)?;
     Ok(())
 }

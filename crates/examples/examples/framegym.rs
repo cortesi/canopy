@@ -23,7 +23,8 @@ struct Args {
 pub fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
 
-    Root::<FrameGym>::load(&mut cnpy);
+    Root::load(&mut cnpy);
+    FrameGym::load(&mut cnpy);
     setup_bindings(&mut cnpy);
 
     let args = Args::parse();
@@ -32,9 +33,8 @@ pub fn main() -> Result<()> {
         return Ok(());
     }
 
-    runloop(
-        cnpy,
-        Root::new(FrameGym::new()).with_inspector(args.inspector),
-    )?;
+    let app_id = cnpy.core.add(FrameGym::new());
+    Root::install_with_inspector(&mut cnpy.core, app_id, args.inspector)?;
+    runloop(cnpy)?;
     Ok(())
 }

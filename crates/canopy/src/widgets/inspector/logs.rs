@@ -4,77 +4,65 @@ use std::{
     time::Duration,
 };
 
+use taffy::{geometry::Size, style::AvailableSpace};
 use tracing_subscriber::fmt;
 
 use crate::{
-    Canopy, Context, Layout, Loader, derive_commands,
+    Canopy, Context, Loader, ViewContext, command, derive_commands,
     error::Result,
+    event::Event,
     geom::{Expanse, Rect},
-    node::Node,
     render::Render,
-    state::{NodeState, StatefulNode},
-    widgets::{Text, list::*},
+    state::NodeName,
+    widget::{EventOutcome, Widget},
+    widgets::list::{List, ListItem},
 };
 
-#[derive(canopy::StatefulNode)]
 /// List item for a single log entry.
-struct LogItem {
-    /// Node state.
-    state: NodeState,
-    /// Selection state.
-    selected: bool,
+pub(super) struct LogItem {
     /// Text display.
-    child: Text,
+    text: String,
 }
 
-#[derive_commands]
 impl LogItem {
     /// Construct a log item from text.
     fn new(txt: &str) -> Self {
         Self {
-            state: NodeState::default(),
-            selected: false,
-            child: Text::new(txt),
+            text: txt.to_string(),
         }
     }
 }
 
 impl ListItem for LogItem {
-    fn set_selected(&mut self, state: bool) {
-        self.selected = state
-    }
-}
-
-impl Node for LogItem {
-    fn layout(&mut self, l: &Layout, target: Expanse) -> Result<()> {
-        self.child.layout(
-            l,
-            Expanse {
-                w: target.w - 2,
-                h: target.h,
-            },
-        )?;
-        let sz = self.child.vp().canvas();
-        self.fit_size(sz, target);
-        Ok(())
+    fn measure(&self, available_width: u32) -> Expanse {
+        let text_width = available_width.saturating_sub(2).max(1) as usize;
+        let lines = textwrap::wrap(&self.text, text_width);
+        Expanse::new(available_width.max(1), lines.len() as u32)
     }
 
-    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
-        let vp = self.vp();
-        let v = vp.view();
-        let status = Rect::new(v.tl.x, v.tl.y, 1, v.h);
-        if self.selected {
-            r.fill("blue", status, '\u{2588}')?;
+    fn render(&mut self, rndr: &mut Render, area: Rect, selected: bool) -> Result<()> {
+        let status = Rect::new(area.tl.x, area.tl.y, 1, area.h);
+        if selected {
+            rndr.fill("blue", status, '\u{2588}')?;
         } else {
-            r.fill("", status, ' ')?;
+            rndr.fill("", status, ' ')?;
         }
-        let buf = Rect::new(v.tl.x + 1, v.tl.y, 1, v.h);
-        r.fill("", buf, ' ')?;
-        Ok(())
-    }
 
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-        f(&mut self.child)
+        if area.w < 2 {
+            return Ok(());
+        }
+
+        let spacer = Rect::new(area.tl.x + 1, area.tl.y, 1, area.h);
+        rndr.fill("", spacer, ' ')?;
+
+        let text_rect = Rect::new(area.tl.x + 2, area.tl.y, area.w - 2, area.h);
+        let text_width = text_rect.w.max(1) as usize;
+        let lines = textwrap::wrap(&self.text, text_width);
+        for (idx, line) in lines.iter().enumerate().take(text_rect.h as usize) {
+            rndr.text("text", text_rect.line(idx as u32), line)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -98,10 +86,7 @@ impl Write for LogWriter {
 }
 
 /// Inspector log panel.
-#[derive(canopy::StatefulNode)]
 pub struct Logs {
-    /// Node state.
-    state: NodeState,
     /// List of log items.
     list: List<LogItem>,
     /// Whether logging is initialized.
@@ -110,10 +95,25 @@ pub struct Logs {
     buf: Arc<Mutex<Vec<String>>>,
 }
 
-impl Node for Logs {
+impl Widget for Logs {
+    fn render(&mut self, rndr: &mut Render, area: Rect, ctx: &dyn ViewContext) -> Result<()> {
+        self.list.render(rndr, area, ctx)
+    }
+
+    fn measure(
+        &self,
+        known_dimensions: Size<Option<f32>>,
+        available_space: Size<AvailableSpace>,
+    ) -> Size<f32> {
+        self.list.measure(known_dimensions, available_space)
+    }
+
+    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+        EventOutcome::Ignore
+    }
+
     fn poll(&mut self, _c: &mut dyn Context) -> Option<Duration> {
         if !self.started {
-            // Configure a custom event formatter
             let format = fmt::format()
                 .with_level(true)
                 .with_line_number(true)
@@ -128,25 +128,13 @@ impl Node for Logs {
                 .init();
             self.started = true;
         }
-        {
-            let buf = self.buf.clone();
-            let mut b = buf.lock().unwrap();
-            b.is_empty();
-            let vals = b.drain(0..);
-            for i in vals {
-                self.list.append(LogItem::new(&i));
-            }
-        }
+
+        self.flush_buffer();
         Some(Duration::from_millis(100))
     }
 
-    fn render(&mut self, _: &dyn Context, _: &mut Render) -> Result<()> {
-        Ok(())
-    }
-
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-        f(&mut self.list)?;
-        Ok(())
+    fn name(&self) -> NodeName {
+        NodeName::convert("logs")
     }
 }
 
@@ -155,16 +143,97 @@ impl Logs {
     /// Construct a log panel.
     pub fn new() -> Self {
         Self {
-            state: NodeState::default(),
             list: List::new(vec![]),
             started: false,
             buf: Arc::new(Mutex::new(vec![])),
         }
     }
+
+    /// Drain buffered log lines into the list.
+    fn flush_buffer(&mut self) {
+        let buf = self.buf.clone();
+        let mut b = buf.lock().unwrap();
+        let vals = b.drain(..);
+        for i in vals {
+            self.list.append(LogItem::new(&i));
+        }
+    }
+
+    #[command(ignore_result)]
+    /// Clear all items.
+    pub fn clear(&mut self) -> Vec<LogItem> {
+        self.list.clear()
+    }
+
+    #[command(ignore_result)]
+    /// Delete the currently selected item.
+    pub fn delete_selected(&mut self, c: &mut dyn Context) -> Option<LogItem> {
+        self.list.delete_selected(c)
+    }
+
+    #[command]
+    /// Move selection to the first item.
+    pub fn select_first(&mut self, c: &mut dyn Context) {
+        self.list.select_first(c);
+    }
+
+    #[command]
+    /// Move selection to the last item.
+    pub fn select_last(&mut self, c: &mut dyn Context) {
+        self.list.select_last(c);
+    }
+
+    #[command]
+    /// Move selection to the next item.
+    pub fn select_next(&mut self, c: &mut dyn Context) {
+        self.list.select_next(c);
+    }
+
+    #[command]
+    /// Move selection to the previous item.
+    pub fn select_prev(&mut self, c: &mut dyn Context) {
+        self.list.select_prev(c);
+    }
+
+    #[command]
+    /// Scroll the viewport down by one line.
+    pub fn scroll_down(&mut self, c: &mut dyn Context) {
+        self.list.scroll_down(c);
+    }
+
+    #[command]
+    /// Scroll the viewport up by one line.
+    pub fn scroll_up(&mut self, c: &mut dyn Context) {
+        self.list.scroll_up(c);
+    }
+
+    #[command]
+    /// Scroll the viewport left by one line.
+    pub fn scroll_left(&mut self, c: &mut dyn Context) {
+        self.list.scroll_left(c);
+    }
+
+    #[command]
+    /// Scroll the viewport right by one line.
+    pub fn scroll_right(&mut self, c: &mut dyn Context) {
+        self.list.scroll_right(c);
+    }
+
+    #[command]
+    /// Scroll the viewport down by one page.
+    pub fn page_down(&mut self, c: &mut dyn Context) {
+        self.list.page_down(c);
+    }
+
+    #[command]
+    /// Scroll the viewport up by one page.
+    pub fn page_up(&mut self, c: &mut dyn Context) {
+        self.list.page_up(c);
+    }
 }
 
 impl Loader for Logs {
     fn load(c: &mut Canopy) {
-        c.add_commands::<List<LogItem>>();
+        c.add_commands::<Self>();
     }
 }

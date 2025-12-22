@@ -12,11 +12,14 @@ pub fn main() -> StdResult<(), Box<dyn Error>> {
         println!("Usage: cedit filename");
     } else {
         let mut cnpy = Canopy::new();
-        Root::<Ed>::load(&mut cnpy);
+        Root::load(&mut cnpy);
+        Ed::load(&mut cnpy);
         setup_bindings(&mut cnpy);
 
         let contents = fs::read_to_string(args[1].clone())?;
-        runloop(cnpy, Root::new(Ed::new(&contents)).with_inspector(false))?;
+        let app_id = cnpy.core.add(Ed::new(&contents));
+        Root::install_with_inspector(&mut cnpy.core, app_id, false)?;
+        runloop(cnpy)?;
     }
     Ok(())
 }

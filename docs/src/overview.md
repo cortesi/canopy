@@ -33,11 +33,9 @@ system used to draw to screen is relative to the node's own area.
 </center>
 
 Rendering is done with a pre-order traversal of the tree. Since Rust is fast and terminals are slow, the key to
-performance is to send as few operations to the terminal as possible. Canopy uses a mark-and-sweep mechanism to redraw
-only what's needed. Nodes that need rendering are tainted using the
-[Core.taint](doc/canopy/trait.Core.html#tymethod.taint) or
-[Core.taint_tree](doc/canopy/trait.Core.html#tymethod.taint_tree) functions. Nodes are automatically tainted if they
-handle an event or if their focus status changes. During the render sweep, we call the
-[Node.render](doc/canopy/trait.Node.html#method.render) method on each tainted node.
-
+performance is to send as few operations to the terminal as possible. Canopy
+renders all visible widgets into an off-screen buffer and diffs against the
+previous frame to minimize terminal updates. During the traversal, each node's
+[`Widget::render`](doc/canopy/trait.Widget.html#tymethod.render) method is
+invoked in pre-order so children draw on top of parents.
 

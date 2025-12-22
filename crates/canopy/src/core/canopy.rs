@@ -1,255 +1,38 @@
-use std::{io::Write, process, sync::mpsc};
+use std::{io::Write, sync::mpsc};
 
 use comfy_table::{ContentArrangement, Table, presets::UTF8_FULL};
 
-use super::{
-    focus::{collect_focusable_nodes, find_focus_target, find_focused_node},
-    inputmap,
-    poll::Poller,
-    termbuf::TermBuf,
-    viewport::ViewPort,
-    viewstack::ViewStack,
-};
+use super::{inputmap, poll::Poller, termbuf::TermBuf, viewport::ViewPort, viewstack::ViewStack};
 use crate::{
-    Context, Layout,
     backend::BackendControl,
-    commands, cursor,
+    commands,
+    core::{Core, NodeId, context::CoreViewContext},
+    cursor,
     error::{self, Result},
     event::{Event, key, mouse},
-    geom::{Direction, Expanse, Point, Rect},
-    node::{EventOutcome, Node},
-    path::*,
+    geom::{Expanse, Point, Rect},
+    path::Path,
     render::{Render, RenderBackend},
     script,
-    state::NodeId,
     style::{StyleManager, StyleMap, solarized},
-    tree::*,
+    widget::EventOutcome,
 };
 
-/// Core state required for Context implementation.
-/// This is separated from Canopy to allow splitting borrows between the script host and the context.
-#[derive(Debug)]
-pub struct CanopyCore {
-    /// A counter that is incremented every time focus changes. The current focus
-    /// will have a state `focus_gen` equal to this.
-    pub(crate) focus_gen: u64,
-
-    /// Active backend controller.
-    pub(crate) backend: Option<Box<dyn BackendControl>>,
-}
-
-impl Context for CanopyCore {
-    /// Does the node need to render in the next sweep? Returns true for all visible nodes.
-    fn needs_render(&self, n: &dyn Node) -> bool {
-        !n.is_hidden()
-    }
-
-    /// Is the specified node on the focus path? A node is on the focus path if it
-    /// has focus, or if it's the ancestor of a node with focus.
-    fn is_on_focus_path(&self, n: &mut dyn Node) -> bool {
-        self.walk_focus_path(n, &mut |_| -> Result<Walk<bool>> { Ok(Walk::Handle(true)) })
-            // We're safe to unwrap, because our closure can't return an error.
-            .unwrap()
-            .unwrap_or(false)
-    }
-
-    /// Return the focus path for the subtree under `root`.
-    fn focus_path(&self, root: &mut dyn Node) -> Path {
-        let mut p = Vec::new();
-        self.walk_focus_path(root, &mut |n| -> Result<Walk<()>> {
-            p.insert(0, n.name().to_string());
-            Ok(Walk::Continue)
-        })
-        // We're safe to unwrap because our closure can't return an error.
-        .unwrap();
-        Path::new(&p)
-    }
-
-    /// Move focus in a specified direction within the subtree at root.
-    fn focus_dir(&mut self, root: &mut dyn Node, dir: Direction) {
-        // Collect all focusable nodes
-        match collect_focusable_nodes(root) {
-            Ok(focusable_nodes) => {
-                // Find the currently focused node
-                if let Some((current_id, current_rect)) =
-                    find_focused_node(self, root, &focusable_nodes)
-                {
-                    // Find the best target in the specified direction
-                    if let Some(target_id) =
-                        find_focus_target(current_rect, dir, &focusable_nodes, &current_id)
-                    {
-                        // Find and set focus on the target node
-                        let mut found = false;
-                        preorder(root, &mut |node| -> Result<Walk<()>> {
-                            if node.id() == target_id && node.accept_focus() {
-                                self.set_focus(node);
-                                found = true;
-                                return Ok(Walk::Handle(()));
-                            }
-                            Ok(Walk::Continue)
-                        })
-                        .unwrap();
-                    }
-                }
-            }
-            Err(_e) => {}
-        }
-    }
-
-    /// Move focus to  right of the currently focused node within the subtree at root.
-    fn focus_right(&mut self, root: &mut dyn Node) {
-        self.focus_dir(root, Direction::Right)
-    }
-
-    /// Move focus to the left of the currently focused node within the subtree at root.
-    fn focus_left(&mut self, root: &mut dyn Node) {
-        self.focus_dir(root, Direction::Left)
-    }
-
-    /// Move focus upward of the currently focused node within the subtree at root.
-    fn focus_up(&mut self, root: &mut dyn Node) {
-        self.focus_dir(root, Direction::Up)
-    }
-
-    /// Move focus downward of the currently focused node within the subtree at root.
-    fn focus_down(&mut self, root: &mut dyn Node) {
-        self.focus_dir(root, Direction::Down)
-    }
-
-    /// Focus the first node that accepts focus in the pre-order traversal of
-    /// the subtree at root.
-    fn focus_first(&mut self, root: &mut dyn Node) {
-        let mut focus_set = false;
-        preorder(root, &mut |x| -> Result<Walk<()>> {
-            Ok(if x.is_hidden() {
-                Walk::Skip
-            } else if !focus_set && x.accept_focus() {
-                self.set_focus(x);
-                focus_set = true;
-                Walk::Handle(())
-            } else {
-                Walk::Continue
-            })
-        })
-        // Unwrap is safe, because the closure cannot fail.
-        .unwrap();
-    }
-
-    /// Focus the next node in the pre-order traversal of root. If no node with
-    /// focus is found, we focus the first node we can find instead.
-    fn focus_next(&mut self, root: &mut dyn Node) {
-        let mut focus_seen = false;
-        let ret = preorder(root, &mut |x| -> Result<Walk<()>> {
-            if x.is_hidden() {
-                return Ok(Walk::Skip);
-            }
-            if focus_seen {
-                if x.accept_focus() {
-                    self.set_focus(x);
-                    return Ok(Walk::Handle(()));
-                }
-            } else if self.is_focused(x) {
-                focus_seen = true;
-            }
-            Ok(Walk::Continue)
-        })
-        // Unwrap is safe, because the closure cannot fail.
-        .unwrap();
-        if !ret.is_handled() {
-            self.focus_first(root)
-        }
-    }
-
-    /// Focus the previous node in the pre-order traversal of `root`. If no node
-    /// with focus is found, we focus the first node we can find instead.
-    fn focus_prev(&mut self, root: &mut dyn Node) {
-        let current = self.focus_gen;
-        let mut first = true;
-        preorder(root, &mut |x| -> Result<Walk<()>> {
-            if x.is_hidden() {
-                return Ok(Walk::Skip);
-            }
-            if first {
-                // We skip the first node in the traversal
-                first = false
-            } else if x.state().focus_gen == current {
-                // This is the node that was previously focused, so we can stop.
-                return Ok(Walk::Handle(()));
-            } else if x.accept_focus() {
-                // Speculatively set focus on this node.
-                self.set_focus(x);
-            }
-            Ok(Walk::Continue)
-        })
-        // Unwrap is safe, because the closure cannot fail.
-        .unwrap();
-    }
-
-    /// Focus a node. Returns `true` if focus changed.
-    fn set_focus(&mut self, n: &mut dyn Node) -> bool {
-        if self.is_focused(n) {
-            false
-        } else {
-            self.focus_gen += 1;
-            n.state_mut().focus_gen = self.focus_gen;
-            true
-        }
-    }
-
-    /// Does the node have terminal focus?
-    fn is_focused(&self, n: &dyn Node) -> bool {
-        n.state().focus_gen == self.focus_gen
-    }
-
-    /// Start the backend renderer.
-    fn start(&mut self) -> Result<()> {
-        self.backend.as_mut().unwrap().start()
-    }
-
-    /// Stop the backend renderer, releasing control of the terminal.
-    fn stop(&mut self) -> Result<()> {
-        self.backend.as_mut().unwrap().stop()
-    }
-
-    /// Stop the render backend and exit the process.
-    fn exit(&mut self, code: i32) -> ! {
-        let _ = self.stop().ok();
-        process::exit(code)
-    }
-
-    fn current_focus_gen(&self) -> u64 {
-        self.focus_gen
-    }
-}
-
-impl CanopyCore {
-    /// Call a closure on the currently focused node and all its ancestors to the
-    /// root. If the closure returns Walk::Handle, traversal stops. Handle::Skip is
-    /// ignored.
-    pub(crate) fn walk_focus_path<R>(
-        &self,
-        root: &mut dyn Node,
-        f: &mut dyn FnMut(&mut dyn Node) -> Result<Walk<R>>,
-    ) -> Result<Option<R>> {
-        walk_focus_path_e(self.focus_gen, root, f)
-    }
-}
-
 /// Application runtime state and renderer coordination.
-#[derive(Debug)]
 pub struct Canopy {
     /// Core state.
-    pub(crate) core: CanopyCore,
+    pub core: Core,
 
-    /// Stores the focus_gen during the last render. Used to detect if focus has
-    /// changed.
+    /// Stores the focus_gen during the last render.
     last_render_focus_gen: u64,
 
-    /// The poller is responsible for tracking nodes that have pending poll
-    /// events, and scheduling their execution.
+    /// Last focus path ids, used to detect focus path changes.
+    last_focus_path: Vec<NodeId>,
+
+    /// The poller is responsible for tracking nodes that have pending poll events.
     poller: Poller,
 
-    /// Root window size
+    /// Root window size.
     pub(crate) root_size: Option<Expanse>,
 
     /// Script execution host.
@@ -271,86 +54,14 @@ pub struct Canopy {
     pub style: StyleMap,
 }
 
-impl Context for Canopy {
-    fn needs_render(&self, n: &dyn Node) -> bool {
-        self.core.needs_render(n)
-    }
-
-    fn is_on_focus_path(&self, n: &mut dyn Node) -> bool {
-        self.core.is_on_focus_path(n)
-    }
-
-    fn focus_path(&self, root: &mut dyn Node) -> Path {
-        self.core.focus_path(root)
-    }
-
-    fn focus_dir(&mut self, root: &mut dyn Node, dir: Direction) {
-        self.core.focus_dir(root, dir)
-    }
-
-    fn focus_right(&mut self, root: &mut dyn Node) {
-        self.core.focus_right(root)
-    }
-
-    fn focus_left(&mut self, root: &mut dyn Node) {
-        self.core.focus_left(root)
-    }
-
-    fn focus_up(&mut self, root: &mut dyn Node) {
-        self.core.focus_up(root)
-    }
-
-    fn focus_down(&mut self, root: &mut dyn Node) {
-        self.core.focus_down(root)
-    }
-
-    fn focus_first(&mut self, root: &mut dyn Node) {
-        self.core.focus_first(root)
-    }
-
-    fn focus_next(&mut self, root: &mut dyn Node) {
-        self.core.focus_next(root)
-    }
-
-    fn focus_prev(&mut self, root: &mut dyn Node) {
-        self.core.focus_prev(root)
-    }
-
-    fn set_focus(&mut self, n: &mut dyn Node) -> bool {
-        self.core.set_focus(n)
-    }
-
-    fn is_focused(&self, n: &dyn Node) -> bool {
-        self.core.is_focused(n)
-    }
-
-    fn start(&mut self) -> Result<()> {
-        self.core.start()
-    }
-
-    fn stop(&mut self) -> Result<()> {
-        self.core.stop()
-    }
-
-    fn exit(&mut self, code: i32) -> ! {
-        self.core.exit(code)
-    }
-
-    fn current_focus_gen(&self) -> u64 {
-        self.core.current_focus_gen()
-    }
-}
-
 impl Canopy {
     /// Construct a new Canopy instance.
     pub fn new() -> Self {
         let (tx, rx) = mpsc::channel();
+        let core = Core::new();
         Self {
-            core: CanopyCore {
-                focus_gen: 1,
-                backend: None,
-            },
-            last_render_focus_gen: 1,
+            last_render_focus_gen: core.focus_gen,
+            last_focus_path: Vec::new(),
             poller: Poller::new(tx.clone()),
             event_tx: tx,
             event_rx: Some(rx),
@@ -360,6 +71,7 @@ impl Canopy {
             style: solarized::solarized_dark(),
             root_size: None,
             termbuf: None,
+            core,
         }
     }
 
@@ -374,16 +86,8 @@ impl Canopy {
     }
 
     /// Run a compiled script by id on the target node.
-    pub fn run_script(
-        &mut self,
-        root: &mut dyn Node,
-        node_id: NodeId,
-        sid: script::ScriptId,
-    ) -> Result<()> {
-        let core = &mut self.core;
-        let script_host = &mut self.script_host;
-        script_host.execute(core, root, node_id, sid)?;
-        Ok(())
+    pub fn run_script(&mut self, node_id: NodeId, sid: script::ScriptId) -> Result<()> {
+        self.script_host.execute(&mut self.core, node_id, sid)
     }
 
     /// Bind a mouse action in the global mode with a given path filter to a script.
@@ -394,8 +98,7 @@ impl Canopy {
         self.bind_mode_mouse(mouse, "", path_filter, script)
     }
 
-    /// Bind a mouse action in a specified mode with a given path filter to a
-    /// script.
+    /// Bind a mouse action in a specified mode with a given path filter to a script.
     pub fn bind_mode_mouse<K>(
         &mut self,
         mouse: K,
@@ -441,8 +144,7 @@ impl Canopy {
         )
     }
 
-    /// Load the commands from a command node using the default node name
-    /// derived from the name of the struct.
+    /// Load the commands from a command node using the default node name.
     pub fn add_commands<T: commands::CommandNode>(&mut self) {
         let cmds = <T>::commands();
         self.script_host.load_commands(&cmds);
@@ -467,62 +169,72 @@ impl Canopy {
         writeln!(w, "{table}").map_err(|x| error::Error::Internal(x.to_string()))
     }
 
-    /// Has the focus path status of this node changed since the last render
-    /// sweep?
-    pub fn node_focus_path_changed(&self, n: &dyn Node) -> bool {
-        if self.focus_changed() {
-            let s = n.state();
-            // Our focus has changed if we're the currently on the focus path, or
-            // if we were previously focused during the last sweep.
-            s.focus_path_gen == self.core.focus_gen
-                || s.focus_path_gen == self.last_render_focus_gen
-        } else {
-            false
-        }
-    }
-
     /// Has the focus changed since the last render sweep?
     pub(crate) fn focus_changed(&self) -> bool {
         self.core.focus_gen != self.last_render_focus_gen
     }
 
-    /// Register the poller channel
+    /// Has the focus path status of this node changed since the last render sweep?
+    pub fn node_focus_path_changed(&self, node_id: NodeId) -> bool {
+        if self.focus_changed() {
+            self.core.is_on_focus_path(node_id) || self.last_focus_path.contains(&node_id)
+        } else {
+            false
+        }
+    }
+
+    /// Register the poller channel.
     pub(crate) fn start_poller(&mut self, tx: mpsc::Sender<Event>) {
         self.event_tx = tx;
     }
 
     /// Pre-render sweep of the tree.
-    pub(crate) fn pre_render<R: RenderBackend>(
-        &mut self,
-        _r: &mut R,
-        root: &mut dyn Node,
-    ) -> Result<()> {
-        let mut seen = false;
-        preorder(root, &mut |x| -> Result<Walk<()>> {
-            if self.is_focused(x) {
-                seen = true;
+    pub(crate) fn pre_render(&mut self) -> Result<bool> {
+        let root = self.core.root;
+        let mut focus_seen = false;
+        let mut layout_dirty = false;
+        let mut stack = vec![root];
+        while let Some(id) = stack.pop() {
+            let hidden = self.core.nodes.get(id).map(|n| n.hidden).unwrap_or(false);
+            if hidden {
+                continue;
             }
-            if !x.is_initialized() {
-                if let Some(d) = x.poll(self) {
-                    self.poller.schedule(x.id(), d);
+
+            if self.core.is_focused(id) {
+                focus_seen = true;
+            }
+
+            let initialized = self
+                .core
+                .nodes
+                .get(id)
+                .map(|n| n.initialized)
+                .unwrap_or(false);
+            if !initialized {
+                layout_dirty = true;
+                let next = self.core.with_widget_mut(id, |w, core| {
+                    let mut ctx = crate::core::context::CoreContext::new(core, id);
+                    w.poll(&mut ctx)
+                });
+                if let Some(d) = next {
+                    self.poller.schedule(id, d);
                 }
-                x.state_mut().initialized = true;
+                if let Some(node) = self.core.nodes.get_mut(id) {
+                    node.initialized = true;
+                }
             }
-            Ok(Walk::Continue)
-        })?;
-        if !seen {
-            self.focus_first(root);
+
+            let children = self.core.nodes[id].children.clone();
+            for child in children.into_iter().rev() {
+                stack.push(child);
+            }
         }
 
-        if self.focus_changed() {
-            let fg = self.core.focus_gen;
-            self.walk_focus_path(root, &mut |n| -> Result<Walk<()>> {
-                n.state_mut().focus_path_gen = fg;
-                Ok(Walk::Continue)
-            })?;
+        if !focus_seen {
+            self.core.focus_first(root);
         }
 
-        Ok(())
+        Ok(layout_dirty)
     }
 
     /// Render a node subtree into the destination buffer.
@@ -531,335 +243,310 @@ impl Canopy {
         dest_buf: &mut TermBuf,
         styl: &mut StyleManager,
         view_stack: &mut ViewStack,
-        n: &mut dyn Node,
+        node_id: NodeId,
     ) -> Result<()> {
-        if !n.is_hidden() {
-            styl.push();
+        let (hidden, vp, viewport, children) = {
+            let node = &self.core.nodes[node_id];
+            (node.hidden, node.vp, node.viewport, node.children.clone())
+        };
 
-            // Track whether we pushed a viewport
-            let mut pushed_viewport = false;
-
-            // Push the node's viewport onto the stack
-            let node_vp = n.vp();
-            // Only push if the viewport has a non-zero view
-            if !node_vp.view().is_zero() {
-                // The node's position is already relative to the parent's canvas
-                view_stack.push(node_vp);
-                pushed_viewport = true;
-            }
-
-            // Only render if we pushed a viewport
-            if pushed_viewport {
-                if self.needs_render(n) {
-                    if self.is_focused(n) {
-                        let s = &mut n.state_mut();
-                        s.rendered_focus_gen = self.core.focus_gen;
-                    }
-
-                    // Create a new Render instance with the node's expanse and rect equal to its view
-                    let vp = n.vp();
-                    let rect = vp.view();
-
-                    let mut rndr = Render::new(&self.style, styl, rect);
-                    n.render(self, &mut rndr)?;
-
-                    // Copy the rendered content from the Render buffer into the destination buffer
-                    if let Some((canvas_rect, screen_rect)) = view_stack.projection() {
-                        // Get the render buffer and copy it to the destination at the screen rect
-                        let render_buf = rndr.get_buffer();
-                        // canvas_rect is relative to the viewport's canvas.
-                        // The render_buf is sized to the viewport's view.
-                        // We need to map canvas_rect (which is the visible slice of the canvas)
-                        // to the coordinates of render_buf.
-                        //
-                        // render_buf (0,0) corresponds to vp.view().tl in the canvas.
-                        // So canvas_rect.tl corresponds to (canvas_rect.tl - vp.view().tl) in render_buf.
-
-                        let src_rect = Rect::new(
-                            canvas_rect.tl.x.saturating_sub(vp.view().tl.x),
-                            canvas_rect.tl.y.saturating_sub(vp.view().tl.y),
-                            canvas_rect.w,
-                            canvas_rect.h,
-                        );
-
-                        dest_buf.copy_rect_to_rect(render_buf, src_rect, screen_rect);
-                    }
-                }
-
-                // Process children
-                let canvas = n.vp().canvas().rect();
-                n.children(&mut |child| {
-                    if !child.is_hidden() && !canvas.contains_point(child.vp().position()) {
-                        return Err(error::Error::Render(format!(
-                            "Child node '{}' has position {:?} outside parent canvas {:?}",
-                            child.id(),
-                            child.vp().position(),
-                            canvas
-                        )));
-                    }
-                    self.render_traversal(dest_buf, styl, view_stack, child)
-                })?;
-            }
-
-            // No longer needed since we don't track render_gen
-
-            // Only pop if we pushed
-            if pushed_viewport {
-                view_stack.pop()?;
-            }
-            styl.pop();
+        if hidden {
+            return Ok(());
         }
+
+        styl.push();
+
+        let mut pushed_viewport = false;
+        if !vp.view().is_zero() {
+            view_stack.push(vp);
+            pushed_viewport = true;
+        }
+
+        if pushed_viewport {
+            let rect = vp.view();
+            let mut rndr = Render::new(&self.style, styl, rect);
+
+            let render_result = self.core.with_widget_view(node_id, |widget, core| {
+                let ctx = CoreViewContext::new(core, node_id);
+                widget.render(&mut rndr, viewport, &ctx)
+            });
+            render_result?;
+
+            if let Some((canvas_rect, screen_rect)) = view_stack.projection() {
+                let render_buf = rndr.get_buffer();
+                let src_rect = Rect::new(
+                    canvas_rect.tl.x.saturating_sub(vp.view().tl.x),
+                    canvas_rect.tl.y.saturating_sub(vp.view().tl.y),
+                    canvas_rect.w,
+                    canvas_rect.h,
+                );
+                dest_buf.copy_rect_to_rect(render_buf, src_rect, screen_rect);
+            }
+
+            let canvas = vp.canvas().rect();
+            for child in children {
+                let (hidden, child_vp) = {
+                    let node = &self.core.nodes[child];
+                    (node.hidden, node.vp)
+                };
+                if !hidden && !position_within_canvas(canvas, child_vp.view(), child_vp.position())
+                {
+                    return Err(error::Error::Render(format!(
+                        "Child node '{child:?}' has position {:?} outside parent canvas {:?}",
+                        child_vp.position(),
+                        canvas
+                    )));
+                }
+                self.render_traversal(dest_buf, styl, view_stack, child)?;
+            }
+        }
+
+        if pushed_viewport {
+            view_stack.pop()?;
+        }
+        styl.pop();
+
         Ok(())
     }
 
     /// Post-render sweep of the tree.
     pub(crate) fn post_render<R: RenderBackend>(
-        &self,
+        &mut self,
         _r: &mut R,
         _styl: &mut StyleManager,
-        root: &mut dyn Node,
     ) -> Result<()> {
-        let mut cn: Option<(NodeId, ViewPort, cursor::Cursor)> = None;
-        self.walk_focus_path(root, &mut |n| -> Result<Walk<()>> {
-            Ok(if let Some(c) = n.cursor() {
-                cn = Some((n.id(), n.vp(), c));
-                Walk::Handle(())
-            } else {
-                Walk::Continue
-            })
-        })?;
-        if let Some((_nid, _vp, _c)) = cn {
+        let mut current = self.core.focus;
+        let mut cursor_spec: Option<(NodeId, ViewPort, cursor::Cursor)> = None;
+        while let Some(id) = current {
+            let cursor = self.core.with_widget_view(id, |w, _| w.cursor());
+            if let Some(node_cursor) = cursor
+                && let Some(node) = self.core.nodes.get(id)
+            {
+                cursor_spec = Some((id, node.vp, node_cursor));
+                break;
+            }
+            current = self.core.nodes.get(id).and_then(|n| n.parent);
+        }
+
+        if let Some((_nid, _vp, _c)) = cursor_spec {
             // TODO: render virtual cursor here
         }
 
         Ok(())
     }
 
-    /// Render a tree of nodes. All visible nodes are rendered. Hidden nodes and their
-    /// children are ignored.
-    pub(crate) fn render<R: RenderBackend>(
-        &mut self,
-        be: &mut R,
-        root: &mut dyn Node,
-    ) -> Result<()> {
+    /// Render the widget tree. All visible nodes are rendered.
+    pub(crate) fn render<R: RenderBackend>(&mut self, be: &mut R) -> Result<()> {
         if let Some(root_size) = self.root_size {
-            let l = Layout {};
-            root.layout(&l, root_size)?;
+            self.core.update_layout(root_size)?;
 
             let mut styl = StyleManager::default();
             be.reset()?;
             styl.reset();
 
             let def_style = styl.get(&self.style, "");
-
-            // Create a new termbuf initialized with spaces and default style
             let mut next = TermBuf::new(root_size, ' ', def_style);
 
-            self.pre_render(be, root)?;
+            let layout_dirty = self.pre_render()?;
+            if layout_dirty {
+                self.core.update_layout(root_size)?;
+            }
 
-            // Create a ViewStack with a screen viewport
-            // The screen viewport has canvas=view=root_size at position (0,0)
             let screen_vp = ViewPort::new(root_size, root_size.rect(), (0, 0))?;
             let mut view_stack = ViewStack::new(screen_vp);
 
-            // Render the tree into the new buffer
-            self.render_traversal(&mut next, &mut styl, &mut view_stack, root)?;
+            self.render_traversal(&mut next, &mut styl, &mut view_stack, self.core.root)?;
 
-            // Update the screen buffer
             if let Some(prev) = &self.termbuf {
-                // Clone the previous buffer
                 let mut screen_buf = prev.clone();
-
-                // Copy the rendered content into the cloned buffer
                 screen_buf.copy(&next, root_size.rect());
-
-                // Diff and render to screen
                 screen_buf.diff(prev, be)?;
-
-                // Swap the updated buffer
                 self.termbuf = Some(screen_buf);
             } else {
-                // First render - just render the entire buffer
                 next.render(be)?;
                 self.termbuf = Some(next);
             }
 
             self.last_render_focus_gen = self.core.focus_gen;
-            self.post_render(be, &mut styl, root)?;
+            self.last_focus_path = self.core.focus_path_ids();
+            self.post_render(be, &mut styl)?;
         }
 
         Ok(())
     }
 
-    /// Return the path for the uppermost node at a specific location. Return an empty
-    /// path if the location is outside of the node tree.
-    fn location_path(&self, root: &mut dyn Node, location: Point) -> Path {
-        let id = locate(root, location, &mut |x| -> Result<Locate<NodeId>> {
-            Ok(Locate::Match(x.id()))
-        });
-
-        if let Some(id) = id.unwrap() {
-            node_path(&id, root)
+    /// Return the path for the uppermost node at a specific location.
+    fn location_path(&self, location: Point) -> Result<Path> {
+        if let Some(id) = self.core.locate_node(self.core.root, location)? {
+            Ok(self.core.node_path(self.core.root, id))
         } else {
-            Path::empty()
+            Ok(Path::empty())
         }
     }
 
-    /// Propagate a mouse event through the node under the event and all its
-    /// ancestors. Events are handled only once, and then ignored.
-    pub(crate) fn mouse(&mut self, root: &mut dyn Node, m: mouse::MouseEvent) -> Result<()> {
-        let mut path = self.location_path(root, m.location);
+    /// Propagate a mouse event through the node under the event and all its ancestors.
+    pub(crate) fn mouse(&mut self, m: mouse::MouseEvent) -> Result<()> {
+        let mut path = self.location_path(m.location)?;
         let mut script = None;
-        let mut handled = false;
-        if let Some(nid) = node_at(root, m.location) {
-            walk_to_root(root, &nid, &mut |x| {
-                if handled {
-                    return Ok(());
-                }
 
-                // Only try to rebase the point if it's within the node's screen rect
-                // This prevents "rebase of non-contained point" errors when the mouse
-                // is over a child node but we're processing a parent container
-                let screen_rect = x.vp().screen_rect();
+        if let Some(nid) = self.core.locate_node(self.core.root, m.location)? {
+            let mut target = Some(nid);
+            while let Some(id) = target {
+                let screen_rect = self
+                    .core
+                    .nodes
+                    .get(id)
+                    .map(|n| n.viewport)
+                    .unwrap_or_default();
                 let rebased_location = if screen_rect.contains_point(m.location) {
                     screen_rect.rebase_point(m.location)?
                 } else {
-                    // If the mouse is outside this node's screen rect (e.g., over a child),
-                    // use a location relative to the node's origin
                     Point {
                         x: m.location.x.saturating_sub(screen_rect.tl.x),
                         y: m.location.y.saturating_sub(screen_rect.tl.y),
                     }
                 };
 
-                let hdl = x.handle_mouse(
-                    self,
-                    mouse::MouseEvent {
+                let outcome = self.core.dispatch_event_on_node(
+                    id,
+                    &Event::Mouse(mouse::MouseEvent {
                         action: m.action,
                         button: m.button,
                         modifiers: m.modifiers,
                         location: rebased_location,
-                    },
-                )?;
-                match hdl {
-                    EventOutcome::Handle => {
-                        handled = true;
+                    }),
+                );
+
+                match outcome {
+                    EventOutcome::Handle | EventOutcome::Consume => {
+                        break;
                     }
-                    EventOutcome::Consume => {
-                        handled = true;
-                    }
-                    _ => {
+                    EventOutcome::Ignore => {
                         if let Some(s) = self
                             .keymap
                             .resolve(&path, &inputmap::InputSpec::Mouse(m.into()))
                         {
-                            handled = true;
-                            script = Some((s, x.id()));
-                        } else {
-                            path.pop();
+                            script = Some((s, id));
+                            break;
                         }
+                        path.pop();
+                        target = self.core.nodes[id].parent;
                     }
-                };
-                Ok(())
-            })?;
+                }
+            }
         }
+
         if let Some((sid, nid)) = script {
-            self.run_script(root, nid, sid)?;
+            self.run_script(nid, sid)?;
         }
 
         Ok(())
     }
 
     /// Propagate a key event through the focus and all its ancestors.
-    pub(crate) fn key<T>(&mut self, root: &mut dyn Node, tk: T) -> Result<()>
+    pub(crate) fn key<T>(&mut self, tk: T) -> Result<()>
     where
         T: Into<key::Key>,
     {
         let k = tk.into();
-        let mut path = self.focus_path(root);
-        let v = walk_focus_path_e(self.core.focus_gen, root, &mut |x| -> Result<
-            Walk<Option<(script::ScriptId, NodeId)>>,
-        > {
-            Ok(
-                if let Some(s) = self.keymap.resolve(&path, &inputmap::InputSpec::Key(k)) {
-                    Walk::Handle(Some((s, x.id())))
-                } else {
-                    match x.handle_key(self, k)? {
-                        EventOutcome::Handle => Walk::Handle(None),
-                        EventOutcome::Consume => Walk::Handle(None),
-                        _ => {
-                            path.pop();
-                            Walk::Continue
-                        }
-                    }
-                },
-            )
-        })?;
-        if let Some(Some((sid, nid))) = v {
-            self.run_script(root, nid, sid)?;
+        if self.core.focus.is_none() {
+            self.core.focus_first(self.core.root);
+        }
+
+        let start = self.core.focus.unwrap_or(self.core.root);
+        let mut path = self.core.node_path(self.core.root, start);
+        let mut target = Some(start);
+        let mut script = None;
+
+        while let Some(id) = target {
+            if let Some(s) = self.keymap.resolve(&path, &inputmap::InputSpec::Key(k)) {
+                script = Some((s, id));
+                break;
+            }
+
+            let outcome = self.core.dispatch_event_on_node(id, &Event::Key(k));
+            match outcome {
+                EventOutcome::Handle | EventOutcome::Consume => {
+                    break;
+                }
+                EventOutcome::Ignore => {
+                    path.pop();
+                    target = self.core.nodes[id].parent;
+                }
+            }
+        }
+
+        if let Some((sid, nid)) = script {
+            self.run_script(nid, sid)?;
+        }
+
+        Ok(())
+    }
+
+    /// Handle poll events by executing callbacks on each node in the list.
+    fn poll(&mut self, ids: &[NodeId]) -> Result<()> {
+        for id in ids {
+            if self.core.nodes.contains_key(*id) {
+                let next = self.core.with_widget_mut(*id, |w, core| {
+                    let mut ctx = crate::core::context::CoreContext::new(core, *id);
+                    w.poll(&mut ctx)
+                });
+                if let Some(d) = next {
+                    self.poller.schedule(*id, d);
+                }
+            }
         }
         Ok(())
     }
 
-    /// Handle a poll event by traversing the complete node tree, and triggering
-    /// poll on each ID in the poll set.
-    fn poll(&mut self, ids: &[NodeId], root: &mut dyn Node) -> Result<()> {
-        preorder(root, &mut |x| -> Result<Walk<()>> {
-            if ids.contains(&x.id())
-                && let Some(d) = x.poll(self)
-            {
-                self.poller.schedule(x.id(), d);
-            };
-            Ok(Walk::Continue)
-        })?;
-        Ok(())
-    }
-
     /// Propagate an event through the tree.
-    pub(crate) fn event(&mut self, root: &mut dyn Node, e: Event) -> Result<()> {
+    pub(crate) fn event(&mut self, e: Event) -> Result<()> {
         match e {
             Event::Key(k) => {
-                self.key(root, k)?;
+                self.key(k)?;
             }
             Event::Mouse(m) => {
-                self.mouse(root, m)?;
+                self.mouse(m)?;
             }
             Event::Resize(s) => {
-                self.set_root_size(s, root)?;
+                self.set_root_size(s)?;
             }
             Event::Poll(ids) => {
-                self.poll(&ids, root)?;
+                self.poll(&ids)?;
             }
-            // FIXME: Implement new crossterm events.
             _ => {}
         };
         Ok(())
     }
 
     /// Set the size on the root node.
-    pub(crate) fn set_root_size(&mut self, size: Expanse, root: &mut dyn Node) -> Result<()> {
+    pub fn set_root_size(&mut self, size: Expanse) -> Result<()> {
         self.root_size = Some(size);
-        // Apply layout immediately so viewport reflects the new size
-        let l = Layout {};
-        root.layout(&l, size)?;
+        self.core.update_layout(size)?;
         Ok(())
-    }
-
-    /// Call a closure on the currently focused node and all its ancestors to the
-    /// root. If the closure returns Walk::Handle, traversal stops. Handle::Skip is
-    /// ignored.
-    pub(crate) fn walk_focus_path<R>(
-        &self,
-        root: &mut dyn Node,
-        f: &mut dyn FnMut(&mut dyn Node) -> Result<Walk<R>>,
-    ) -> Result<Option<R>> {
-        self.core.walk_focus_path(root, f)
     }
 }
 
-/// A trait that allows widgets to perform recursive initialization of
-/// themselves and their children. The most common use for this trait is to load
-/// the command sets from a node tree.
+/// Validate a child viewport position against the parent canvas bounds.
+fn position_within_canvas(canvas: Rect, view: Rect, position: Point) -> bool {
+    let max_x = canvas.tl.x.saturating_add(canvas.w);
+    let max_y = canvas.tl.y.saturating_add(canvas.h);
+
+    let x_ok = if view.w == 0 {
+        position.x >= canvas.tl.x && position.x <= max_x
+    } else {
+        position.x >= canvas.tl.x && position.x < max_x
+    };
+    let y_ok = if view.h == 0 {
+        position.y >= canvas.tl.y && position.y <= max_y
+    } else {
+        position.y >= canvas.tl.y && position.y < max_y
+    };
+
+    x_ok && y_ok
+}
+
+/// A trait that allows widgets to perform recursive initialization of themselves and their children.
 pub trait Loader {
     /// Load commands or resources into the canopy instance.
     fn load(_: &mut Canopy) {}
@@ -867,23 +554,52 @@ pub trait Loader {
 
 #[cfg(test)]
 mod tests {
+    use std::any::Any;
+
+    use taffy::style::Dimension;
+
     use super::*;
     use crate::{
+        Context, ViewContext,
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
         derive_commands,
         error::{Error, Result},
-        geom::Rect,
-        node::EventOutcome,
-        state::{NodeState, StatefulNode},
+        geom::{Direction, Rect},
+        path::Path,
+        state::NodeName,
         testing::{
             backend::{CanvasRender, TestRender},
-            ttree::{get_state, reset_state, run_ttree},
+            ttree::{Ba, BaLa, BaLb, OutcomeTarget, R, get_state, reset_state, run_ttree},
         },
+        widget::{EventOutcome, Widget},
     };
+
+    fn set_outcome<T: Any + OutcomeTarget>(core: &mut Core, id: NodeId, outcome: EventOutcome) {
+        core.with_widget_mut(id, |w, _| {
+            let any = w as &mut dyn Any;
+            if let Some(node) = any.downcast_mut::<T>() {
+                node.set_outcome(outcome);
+            }
+        });
+    }
+
+    fn make_mouse_event(core: &Core, node_id: NodeId) -> mouse::MouseEvent {
+        let loc = core
+            .nodes
+            .get(node_id)
+            .map(|n| n.viewport.tl)
+            .unwrap_or_default();
+        mouse::MouseEvent {
+            action: mouse::Action::Down,
+            button: mouse::Button::Left,
+            modifiers: key::Empty,
+            location: loc,
+        }
+    }
 
     #[test]
     fn tbindings() -> Result<()> {
-        run_ttree(|c, _, mut root| {
+        run_ttree(|c, _, tree| {
             c.keymap.bind(
                 "",
                 inputmap::InputSpec::Key('a'.into()),
@@ -903,31 +619,31 @@ mod tests {
                 c.script_host.compile("r::c_root()")?,
             )?;
 
-            c.set_focus(&mut root.a.a);
-            c.key(&mut root, 'a')?;
+            c.core.set_focus(tree.a_a);
+            c.key('a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la.c_leaf()"]);
 
             reset_state();
-            c.key(&mut root, 'r')?;
+            c.key('r')?;
             let s = get_state();
             assert_eq!(s.path, vec!["r.c_root()"]);
 
             reset_state();
-            c.set_focus(&mut root.a);
-            c.key(&mut root, 'a')?;
+            c.core.set_focus(tree.a);
+            c.key('a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la.c_leaf()"]);
 
             reset_state();
-            c.set_focus(&mut root.a.a);
-            c.key(&mut root, 'x')?;
+            c.core.set_focus(tree.a_a);
+            c.key('x')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@key->ignore", "r.c_root()"]);
 
             reset_state();
-            c.set_focus(&mut root);
-            c.key(&mut root, 'x')?;
+            c.core.set_focus(tree.root);
+            c.key('x')?;
             let s = get_state();
             assert_eq!(s.path, vec!["r@key->ignore"]);
 
@@ -938,37 +654,37 @@ mod tests {
 
     #[test]
     fn tkey() -> Result<()> {
-        run_ttree(|c, _, mut root| {
-            c.set_focus(&mut root);
-            root.next_outcome = Some(EventOutcome::Handle);
-            c.key(&mut root, 'a')?;
+        run_ttree(|c, _, tree| {
+            c.core.set_focus(tree.root);
+            set_outcome::<R>(&mut c.core, tree.root, EventOutcome::Handle);
+            c.key('a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["r@key->handle"]);
             Ok(())
         })?;
 
-        run_ttree(|c, _, mut root| {
-            c.set_focus(&mut root.a.a);
-            root.a.a.next_outcome = Some(EventOutcome::Handle);
-            c.key(&mut root, 'a')?;
+        run_ttree(|c, _, tree| {
+            c.core.set_focus(tree.a_a);
+            set_outcome::<BaLa>(&mut c.core, tree.a_a, EventOutcome::Handle);
+            c.key('a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@key->handle"]);
             Ok(())
         })?;
 
-        run_ttree(|c, _, mut root| {
-            c.set_focus(&mut root.a.a);
-            root.a.next_outcome = Some(EventOutcome::Handle);
-            c.key(&mut root, 'a')?;
+        run_ttree(|c, _, tree| {
+            c.core.set_focus(tree.a_a);
+            set_outcome::<Ba>(&mut c.core, tree.a, EventOutcome::Handle);
+            c.key('a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@key->ignore", "ba@key->handle"]);
             Ok(())
         })?;
 
-        run_ttree(|c, _, mut root| {
-            c.set_focus(&mut root.a.a);
-            root.next_outcome = Some(EventOutcome::Handle);
-            c.key(&mut root, 'a')?;
+        run_ttree(|c, _, tree| {
+            c.core.set_focus(tree.a_a);
+            set_outcome::<R>(&mut c.core, tree.root, EventOutcome::Handle);
+            c.key('a')?;
             let s = get_state();
             assert_eq!(
                 s.path,
@@ -977,22 +693,22 @@ mod tests {
             Ok(())
         })?;
 
-        run_ttree(|c, _, mut root| {
-            c.set_focus(&mut root.a);
-            root.a.next_outcome = Some(EventOutcome::Handle);
-            c.key(&mut root, 'a')?;
+        run_ttree(|c, _, tree| {
+            c.core.set_focus(tree.a);
+            set_outcome::<Ba>(&mut c.core, tree.a, EventOutcome::Handle);
+            c.key('a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba@key->handle"]);
             Ok(())
         })?;
 
-        run_ttree(|c, _, mut root| {
-            c.set_focus(&mut root.a);
-            root.next_outcome = Some(EventOutcome::Handle);
-            c.key(&mut root, 'a')?;
+        run_ttree(|c, _, tree| {
+            c.core.set_focus(tree.a);
+            set_outcome::<R>(&mut c.core, tree.root, EventOutcome::Handle);
+            c.key('a')?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba@key->ignore", "r@key->handle"]);
-            c.key(&mut root, 'a')?;
+            c.key('a')?;
             let s = get_state();
             assert_eq!(
                 s.path,
@@ -1006,11 +722,11 @@ mod tests {
             Ok(())
         })?;
 
-        run_ttree(|c, _, mut root| {
-            c.set_focus(&mut root.a.b);
-            root.a.next_outcome = Some(EventOutcome::Ignore);
-            root.next_outcome = Some(EventOutcome::Handle);
-            c.key(&mut root, 'a')?;
+        run_ttree(|c, _, tree| {
+            c.core.set_focus(tree.a_b);
+            set_outcome::<Ba>(&mut c.core, tree.a, EventOutcome::Ignore);
+            set_outcome::<R>(&mut c.core, tree.root, EventOutcome::Handle);
+            c.key('a')?;
             let s = get_state();
             assert_eq!(
                 s.path,
@@ -1019,40 +735,40 @@ mod tests {
             Ok(())
         })?;
 
-        run_ttree(|c, _, mut root| {
-            c.set_focus(&mut root.a.a);
-            root.a.a.next_outcome = Some(EventOutcome::Handle);
-            c.key(&mut root, 'a')?;
+        run_ttree(|c, _, tree| {
+            c.core.set_focus(tree.a_a);
+            set_outcome::<BaLa>(&mut c.core, tree.a_a, EventOutcome::Handle);
+            c.key('a')?;
             let s = get_state();
-            assert_eq!(s.path, vec!["ba_la@key->handle",]);
+            assert_eq!(s.path, vec!["ba_la@key->handle"]);
             Ok(())
         })?;
 
-        run_ttree(|c, _, mut root| {
-            c.set_focus(&mut root.a.b);
-            root.a.next_outcome = Some(EventOutcome::Handle);
-            c.key(&mut root, 'a')?;
+        run_ttree(|c, _, tree| {
+            c.core.set_focus(tree.a_b);
+            set_outcome::<Ba>(&mut c.core, tree.a, EventOutcome::Handle);
+            c.key('a')?;
             let s = get_state();
-            assert_eq!(s.path, vec!["ba_lb@key->ignore", "ba@key->handle",]);
+            assert_eq!(s.path, vec!["ba_lb@key->ignore", "ba@key->handle"]);
             Ok(())
         })?;
 
-        run_ttree(|c, _, mut root| {
-            c.set_focus(&mut root.a.b);
-            root.a.b.next_outcome = Some(EventOutcome::Handle);
-            c.key(&mut root, 'a')?;
+        run_ttree(|c, _, tree| {
+            c.core.set_focus(tree.a_b);
+            set_outcome::<BaLb>(&mut c.core, tree.a_b, EventOutcome::Handle);
+            c.key('a')?;
             let s = get_state();
-            assert_eq!(s.path, vec!["ba_lb@key->handle",]);
+            assert_eq!(s.path, vec!["ba_lb@key->handle"]);
             Ok(())
         })?;
 
-        run_ttree(|c, _, mut root| {
-            c.set_focus(&mut root.a.b);
-            root.a.b.next_outcome = Some(EventOutcome::Handle);
-            root.a.next_outcome = Some(EventOutcome::Handle);
-            c.key(&mut root, 'a')?;
+        run_ttree(|c, _, tree| {
+            c.core.set_focus(tree.a_b);
+            set_outcome::<BaLb>(&mut c.core, tree.a_b, EventOutcome::Handle);
+            set_outcome::<Ba>(&mut c.core, tree.a, EventOutcome::Handle);
+            c.key('a')?;
             let s = get_state();
-            assert_eq!(s.path, vec!["ba_lb@key->handle",]);
+            assert_eq!(s.path, vec!["ba_lb@key->handle"]);
             Ok(())
         })?;
 
@@ -1061,12 +777,12 @@ mod tests {
 
     #[test]
     fn tmouse() -> Result<()> {
-        run_ttree(|c, mut tr, mut root| {
-            c.set_focus(&mut root);
-            root.next_outcome = Some(EventOutcome::Handle);
-            let evt = root.a.a.make_mouse_event()?;
-            tr.render(c, &mut root)?;
-            c.mouse(&mut root, evt)?;
+        run_ttree(|c, mut tr, tree| {
+            c.core.set_focus(tree.root);
+            set_outcome::<R>(&mut c.core, tree.root, EventOutcome::Handle);
+            tr.render(c)?;
+            let evt = make_mouse_event(&c.core, tree.a_a);
+            c.mouse(evt)?;
             let s = get_state();
             assert_eq!(
                 s.path,
@@ -1075,33 +791,33 @@ mod tests {
             Ok(())
         })?;
 
-        run_ttree(|c, mut tr, mut root| {
-            root.a.a.next_outcome = Some(EventOutcome::Handle);
-            let evt = root.a.a.make_mouse_event()?;
-            tr.render(c, &mut root)?;
-            c.mouse(&mut root, evt)?;
+        run_ttree(|c, mut tr, tree| {
+            set_outcome::<BaLa>(&mut c.core, tree.a_a, EventOutcome::Handle);
+            tr.render(c)?;
+            let evt = make_mouse_event(&c.core, tree.a_a);
+            c.mouse(evt)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@mouse->handle"]);
             Ok(())
         })?;
 
-        run_ttree(|c, mut tr, mut root| {
-            root.a.a.next_outcome = Some(EventOutcome::Handle);
-            let evt = root.a.a.make_mouse_event()?;
-            tr.render(c, &mut root)?;
-            c.mouse(&mut root, evt)?;
+        run_ttree(|c, mut tr, tree| {
+            set_outcome::<BaLa>(&mut c.core, tree.a_a, EventOutcome::Handle);
+            tr.render(c)?;
+            let evt = make_mouse_event(&c.core, tree.a_a);
+            c.mouse(evt)?;
             let s = get_state();
             assert_eq!(s.path, vec!["ba_la@mouse->handle"]);
             Ok(())
         })?;
 
-        run_ttree(|c, mut tr, mut root| {
-            root.a.a.next_outcome = Some(EventOutcome::Handle);
-            let evt = root.a.a.make_mouse_event()?;
-            tr.render(c, &mut root)?;
-            c.mouse(&mut root, evt)?;
+        run_ttree(|c, mut tr, tree| {
+            set_outcome::<BaLa>(&mut c.core, tree.a_a, EventOutcome::Handle);
+            tr.render(c)?;
+            let evt = make_mouse_event(&c.core, tree.a_a);
+            c.mouse(evt)?;
             let s = get_state();
-            assert_eq!(s.path, vec!["ba_la@mouse->handle",]);
+            assert_eq!(s.path, vec!["ba_la@mouse->handle"]);
             Ok(())
         })?;
 
@@ -1110,19 +826,25 @@ mod tests {
 
     #[test]
     fn tresize() -> Result<()> {
-        run_ttree(|c, mut tr, mut root| {
+        run_ttree(|c, mut tr, tree| {
             let size = 100;
-            assert_eq!(root.vp().screen_rect(), Rect::new(0, 0, size, size));
-            tr.render(c, &mut root)?;
-            assert_eq!(root.a.vp().screen_rect(), Rect::new(0, 0, size / 2, size));
+            tr.render(c)?;
             assert_eq!(
-                root.b.vp().screen_rect(),
+                c.core.nodes[tree.root].viewport,
+                Rect::new(0, 0, size, size)
+            );
+            assert_eq!(
+                c.core.nodes[tree.a].viewport,
+                Rect::new(0, 0, size / 2, size)
+            );
+            assert_eq!(
+                c.core.nodes[tree.b].viewport,
                 Rect::new(size / 2, 0, size / 2, size)
             );
 
-            c.set_root_size(Expanse::new(50, 50), &mut root)?;
-            tr.render(c, &mut root)?;
-            assert_eq!(root.b.vp().screen_rect(), Rect::new(25, 0, 25, 50));
+            c.set_root_size(Expanse::new(50, 50))?;
+            tr.render(c)?;
+            assert_eq!(c.core.nodes[tree.b].viewport, Rect::new(25, 0, 25, 50));
             Ok(())
         })?;
         Ok(())
@@ -1130,34 +852,32 @@ mod tests {
 
     #[test]
     fn trender() -> Result<()> {
-        run_ttree(|c, mut tr, mut root| {
-            tr.render(c, &mut root)?;
+        run_ttree(|c, mut tr, tree| {
+            tr.render(c)?;
             assert!(!tr.buf_empty());
 
-            // The TestRender backend clears its buffer on reset(), so when nothing
-            // actually changes in the output, the buffer will be empty after render
-            tr.render(c, &mut root)?;
+            tr.render(c)?;
             assert!(tr.buf_empty());
-            tr.render(c, &mut root)?;
-            tr.render(c, &mut root)?;
-            tr.render(c, &mut root)?;
+            tr.render(c)?;
+            tr.render(c)?;
+            tr.render(c)?;
 
-            tr.render(c, &mut root)?;
+            tr.render(c)?;
             assert!(tr.buf_empty());
 
-            c.set_focus(&mut root.a.a);
-            tr.render(c, &mut root)?;
+            c.core.set_focus(tree.a_a);
+            tr.render(c)?;
             assert!(tr.buf_empty());
 
-            c.focus_next(&mut root);
-            tr.render(c, &mut root)?;
+            c.core.focus_next(c.core.root);
+            tr.render(c)?;
             assert!(tr.buf_empty());
 
-            c.focus_prev(&mut root);
-            tr.render(c, &mut root)?;
+            c.core.focus_prev(c.core.root);
+            tr.render(c)?;
             assert!(tr.buf_empty());
 
-            tr.render(c, &mut root)?;
+            tr.render(c)?;
             assert!(tr.buf_empty());
 
             Ok(())
@@ -1168,14 +888,17 @@ mod tests {
 
     #[test]
     fn focus_path() -> Result<()> {
-        run_ttree(|c, _, mut root| {
-            assert_eq!(c.focus_path(&mut root), Path::empty());
-            c.focus_next(&mut root);
-            assert_eq!(c.focus_path(&mut root), Path::new(&["r"]));
-            c.focus_next(&mut root);
-            assert_eq!(c.focus_path(&mut root), Path::new(&["r", "ba"]));
-            c.focus_next(&mut root);
-            assert_eq!(c.focus_path(&mut root), Path::new(&["r", "ba", "ba_la"]));
+        run_ttree(|c, _, _tree| {
+            assert_eq!(c.core.focus_path(c.core.root), Path::empty());
+            c.core.focus_next(c.core.root);
+            assert_eq!(c.core.focus_path(c.core.root), Path::new(&["r"]));
+            c.core.focus_next(c.core.root);
+            assert_eq!(c.core.focus_path(c.core.root), Path::new(&["r", "ba"]));
+            c.core.focus_next(c.core.root);
+            assert_eq!(
+                c.core.focus_path(c.core.root),
+                Path::new(&["r", "ba", "ba_la"])
+            );
             Ok(())
         })?;
         Ok(())
@@ -1183,24 +906,28 @@ mod tests {
 
     #[test]
     fn focus_next() -> Result<()> {
-        run_ttree(|c, _, mut root| {
-            assert!(!c.is_focused(&root));
-            c.focus_next(&mut root);
-            assert!(c.is_focused(&root));
+        run_ttree(|c, _, tree| {
+            assert!(!c.core.is_focused(tree.root));
+            c.core.focus_next(c.core.root);
+            assert!(c.core.is_focused(tree.root));
 
-            c.focus_next(&mut root);
-            assert!(c.is_focused(&root.a));
+            c.core.focus_next(c.core.root);
+            assert!(c.core.is_focused(tree.a));
 
-            c.focus_next(&mut root);
-            assert!(c.is_focused(&root.a.a));
-            c.focus_next(&mut root);
-            assert!(c.is_focused(&root.a.b));
-            c.focus_next(&mut root);
-            assert!(c.is_focused(&root.b));
+            c.core.focus_next(c.core.root);
+            assert!(c.core.is_focused(tree.a_a));
+            c.core.focus_next(c.core.root);
+            assert!(c.core.is_focused(tree.a_b));
+            c.core.focus_next(c.core.root);
+            assert!(c.core.is_focused(tree.b));
 
-            c.set_focus(&mut root.b.b);
-            c.focus_next(&mut root);
-            assert!(c.is_focused(&root));
+            c.core.focus_next(c.core.root);
+            assert!(c.core.is_focused(tree.b_a));
+            c.core.focus_next(c.core.root);
+            assert!(c.core.is_focused(tree.b_b));
+
+            c.core.focus_next(c.core.root);
+            assert!(c.core.is_focused(tree.root));
             Ok(())
         })?;
         Ok(())
@@ -1208,20 +935,20 @@ mod tests {
 
     #[test]
     fn focus_prev() -> Result<()> {
-        run_ttree(|c, _, mut root| {
-            assert!(!c.is_focused(&root));
-            c.focus_prev(&mut root);
-            assert!(c.is_focused(&root.b.b));
+        run_ttree(|c, _, tree| {
+            assert!(!c.core.is_focused(tree.root));
+            c.core.focus_prev(c.core.root);
+            assert!(c.core.is_focused(tree.b_b));
 
-            c.focus_prev(&mut root);
-            assert!(c.is_focused(&root.b.a));
+            c.core.focus_prev(c.core.root);
+            assert!(c.core.is_focused(tree.b_a));
 
-            c.focus_prev(&mut root);
-            assert!(c.is_focused(&root.b));
+            c.core.focus_prev(c.core.root);
+            assert!(c.core.is_focused(tree.b));
 
-            c.set_focus(&mut root);
-            c.focus_prev(&mut root);
-            assert!(c.is_focused(&root.b.b));
+            c.core.set_focus(tree.root);
+            c.core.focus_prev(c.core.root);
+            assert!(c.core.is_focused(tree.b_b));
 
             Ok(())
         })?;
@@ -1230,19 +957,19 @@ mod tests {
 
     #[test]
     fn tshift_right() -> Result<()> {
-        run_ttree(|c, mut tr, mut root| {
-            tr.render(c, &mut root)?;
-            c.set_focus(&mut root.a.a);
-            c.focus_right(&mut root);
-            assert!(c.is_focused(&root.b.a));
-            c.focus_right(&mut root);
-            assert!(c.is_focused(&root.b.a));
+        run_ttree(|c, mut tr, tree| {
+            tr.render(c)?;
+            c.core.set_focus(tree.a_a);
+            c.core.focus_dir(c.core.root, Direction::Right);
+            assert!(c.core.is_focused(tree.b_a));
+            c.core.focus_dir(c.core.root, Direction::Right);
+            assert!(c.core.is_focused(tree.b_a));
 
-            c.set_focus(&mut root.a.b);
-            c.focus_right(&mut root);
-            assert!(c.is_focused(&root.b.b));
-            c.focus_right(&mut root);
-            assert!(c.is_focused(&root.b.b));
+            c.core.set_focus(tree.a_b);
+            c.core.focus_dir(c.core.root, Direction::Right);
+            assert!(c.core.is_focused(tree.b_b));
+            c.core.focus_dir(c.core.root, Direction::Right);
+            assert!(c.core.is_focused(tree.b_b));
             Ok(())
         })?;
 
@@ -1251,26 +978,32 @@ mod tests {
 
     #[test]
     fn tfoci() -> Result<()> {
-        run_ttree(|c, _, mut root| {
-            assert_eq!(c.focus_path(&mut root), Path::empty());
+        run_ttree(|c, _, tree| {
+            assert_eq!(c.core.focus_path(c.core.root), Path::empty());
 
-            assert!(!c.is_on_focus_path(&mut root));
-            assert!(!c.is_on_focus_path(&mut root.a));
+            assert!(!c.core.is_on_focus_path(tree.root));
+            assert!(!c.core.is_on_focus_path(tree.a));
 
-            c.set_focus(&mut root.a.a);
-            assert!(c.is_on_focus_path(&mut root));
-            assert!(c.is_on_focus_path(&mut root.a));
-            assert!(!c.is_on_focus_path(&mut root.b));
-            assert_eq!(c.focus_path(&mut root), Path::new(&["r", "ba", "ba_la"]));
+            c.core.set_focus(tree.a_a);
+            assert!(c.core.is_on_focus_path(tree.root));
+            assert!(c.core.is_on_focus_path(tree.a));
+            assert!(!c.core.is_on_focus_path(tree.b));
+            assert_eq!(
+                c.core.focus_path(c.core.root),
+                Path::new(&["r", "ba", "ba_la"])
+            );
 
-            c.set_focus(&mut root.a);
-            assert_eq!(c.focus_path(&mut root), Path::new(&["r", "ba"]));
+            c.core.set_focus(tree.a);
+            assert_eq!(c.core.focus_path(c.core.root), Path::new(&["r", "ba"]));
 
-            c.set_focus(&mut root);
-            assert_eq!(c.focus_path(&mut root), Path::new(&["r"]));
+            c.core.set_focus(tree.root);
+            assert_eq!(c.core.focus_path(c.core.root), Path::new(&["r"]));
 
-            c.set_focus(&mut root.b.a);
-            assert_eq!(c.focus_path(&mut root), Path::new(&["r", "bb", "bb_la"]));
+            c.core.set_focus(tree.b_a);
+            assert_eq!(
+                c.core.focus_path(c.core.root),
+                Path::new(&["r", "bb", "bb_la"])
+            );
             Ok(())
         })?;
 
@@ -1279,10 +1012,7 @@ mod tests {
 
     #[test]
     fn tkey_no_render() -> Result<()> {
-        #[derive(canopy::StatefulNode)]
-        struct N {
-            state: NodeState,
-        }
+        struct N;
 
         impl CommandNode for N {
             fn commands() -> Vec<CommandSpec> {
@@ -1298,94 +1028,113 @@ mod tests {
             }
         }
 
-        impl Node for N {
+        impl Widget for N {
             fn accept_focus(&mut self) -> bool {
                 true
             }
 
-            fn layout(&mut self, _l: &Layout, sz: Expanse) -> Result<()> {
-                self.fill(sz)
+            fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
+                r.text("any", ctx.view().line(0), "<n>")
             }
 
-            fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
-                r.text("any", self.vp().view().line(0), "<n>")
+            fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+                match event {
+                    Event::Key(_) => EventOutcome::Consume,
+                    _ => EventOutcome::Ignore,
+                }
             }
 
-            fn handle_key(&mut self, _c: &mut dyn Context, _k: key::Key) -> Result<EventOutcome> {
-                Ok(EventOutcome::Consume)
+            fn name(&self) -> NodeName {
+                NodeName::convert("n")
             }
         }
 
         let (_, mut tr) = TestRender::create();
         let mut canopy = Canopy::new();
-        let mut root = N {
-            state: NodeState::default(),
-        };
         canopy.add_commands::<N>();
+        canopy.core.set_widget(canopy.core.root, N);
 
-        canopy.set_root_size(Expanse::new(10, 1), &mut root)?;
-        canopy.set_focus(&mut root);
-        canopy.render(&mut tr, &mut root)?;
+        canopy.set_root_size(Expanse::new(10, 1))?;
+        canopy.core.set_focus(canopy.core.root);
+        canopy.render(&mut tr)?;
         assert!(!tr.buf_empty());
+        let prev_buf = canopy.termbuf.clone().expect("missing termbuf");
         tr.text.lock().unwrap().text.clear();
 
-        canopy.key(&mut root, 'a')?;
-        // If the key event was consumed and didn't actually change anything visible,
-        // the test buffer will be empty after render since reset() clears it
-        canopy.render(&mut tr, &mut root)?;
-        assert!(tr.buf_empty());
+        canopy.key('a')?;
+        canopy.render(&mut tr)?;
+        let next_buf = canopy.termbuf.clone().expect("missing termbuf");
+        assert_eq!(prev_buf.cells, next_buf.cells);
         Ok(())
     }
 
     #[test]
     fn zero_size_child_ok() -> Result<()> {
-        #[derive(canopy::StatefulNode)]
-        struct Child {
-            state: NodeState,
-        }
+        struct Child;
 
         #[derive_commands]
         impl Child {}
 
-        impl Node for Child {}
+        impl Widget for Child {
+            fn render(
+                &mut self,
+                _r: &mut Render,
+                _area: Rect,
+                _ctx: &dyn ViewContext,
+            ) -> Result<()> {
+                Ok(())
+            }
 
-        #[derive(canopy::StatefulNode)]
-        struct Parent {
-            state: NodeState,
-            child: Child,
+            fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+                EventOutcome::Ignore
+            }
+
+            fn name(&self) -> NodeName {
+                NodeName::convert("child")
+            }
         }
+
+        struct Parent;
 
         #[derive_commands]
         impl Parent {
             fn new() -> Self {
-                Self {
-                    state: NodeState::default(),
-                    child: Child {
-                        state: NodeState::default(),
-                    },
-                }
+                Self
             }
         }
 
-        impl Node for Parent {
-            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-                f(&mut self.child)
+        impl Widget for Parent {
+            fn render(
+                &mut self,
+                _r: &mut Render,
+                _area: Rect,
+                _ctx: &dyn ViewContext,
+            ) -> Result<()> {
+                Ok(())
             }
 
-            fn layout(&mut self, _l: &Layout, sz: Expanse) -> Result<()> {
-                self.fill(sz)?;
-                self.wrap(self.child.vp())?;
-                Ok(())
+            fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+                EventOutcome::Ignore
+            }
+
+            fn name(&self) -> NodeName {
+                NodeName::convert("parent")
             }
         }
 
         let size = Expanse::new(5, 1);
         let (_, mut cr) = CanvasRender::create(size);
         let mut canopy = Canopy::new();
-        let mut root = Parent::new();
+        canopy.core.set_widget(canopy.core.root, Parent::new());
+        let child = canopy.core.add(Child);
+        canopy.core.set_children(canopy.core.root, vec![child])?;
+        canopy.core.build(child).style(|style| {
+            style.size.width = Dimension::Points(0.0);
+            style.size.height = Dimension::Points(0.0);
+        });
 
-        canopy.set_root_size(size, &mut root)?;
-        canopy.render(&mut cr, &mut root)?;
+        canopy.set_root_size(size)?;
+        canopy.render(&mut cr)?;
         Ok(())
     }
 }

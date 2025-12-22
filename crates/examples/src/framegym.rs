@@ -1,19 +1,21 @@
+use std::time::Duration;
+
 use canopy::{
-    Binder, Canopy, Context, Layout, Loader, command, derive_commands,
+    Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
     error::Result,
-    event::key,
-    geom::Expanse,
-    node::Node,
+    event::{Event, key},
+    geom::{Expanse, Rect},
     render::Render,
-    state::{NodeState, StatefulNode},
+    widget::{EventOutcome, Widget},
     widgets::{Root, frame},
+};
+use taffy::{
+    geometry::Size,
+    style::{AvailableSpace, Dimension, Display, FlexDirection, Style},
 };
 
 /// A widget that renders a test pattern.
-#[derive(canopy::StatefulNode)]
 pub struct TestPattern {
-    /// Node state.
-    state: NodeState,
     /// Virtual canvas size.
     size: Expanse,
 }
@@ -29,7 +31,6 @@ impl TestPattern {
     /// Construct the test pattern node.
     pub fn new() -> Self {
         Self {
-            state: NodeState::default(),
             size: Expanse::new(500, 500),
         }
     }
@@ -37,43 +38,43 @@ impl TestPattern {
     #[command]
     /// Scroll to the top-left corner.
     pub fn scroll_to_top(&mut self, c: &mut dyn Context) {
-        c.scroll_to(self, 0, 0);
+        c.scroll_to(0, 0);
     }
 
     #[command]
     /// Scroll down by one line.
     pub fn scroll_down(&mut self, c: &mut dyn Context) {
-        c.scroll_down(self);
+        c.scroll_down();
     }
 
     #[command]
     /// Scroll up by one line.
     pub fn scroll_up(&mut self, c: &mut dyn Context) {
-        c.scroll_up(self);
+        c.scroll_up();
     }
 
     #[command]
     /// Scroll left by one column.
     pub fn scroll_left(&mut self, c: &mut dyn Context) {
-        c.scroll_left(self);
+        c.scroll_left();
     }
 
     #[command]
     /// Scroll right by one column.
     pub fn scroll_right(&mut self, c: &mut dyn Context) {
-        c.scroll_right(self);
+        c.scroll_right();
     }
 
     #[command]
     /// Page down in the viewport.
     pub fn page_down(&mut self, c: &mut dyn Context) {
-        c.page_down(self);
+        c.page_down();
     }
 
     #[command]
     /// Page up in the viewport.
     pub fn page_up(&mut self, c: &mut dyn Context) {
-        c.page_up(self);
+        c.page_up();
     }
 
     /// Return the character for the test pattern at a position.
@@ -88,20 +89,13 @@ impl TestPattern {
     }
 }
 
-impl Node for TestPattern {
+impl Widget for TestPattern {
     fn accept_focus(&mut self) -> bool {
         true
     }
 
-    fn layout(&mut self, _l: &Layout, sz: Expanse) -> Result<()> {
-        let canvas_size = self.size;
-        self.fit_size(canvas_size, sz);
-        Ok(())
-    }
-
-    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
-        let vp = self.vp();
-        let view = vp.view();
+    fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
+        let view = ctx.view();
 
         // The viewport automatically handles the visible window for us
         // We just need to render the content that's visible
@@ -133,48 +127,88 @@ impl Node for TestPattern {
 
         Ok(())
     }
+
+    fn measure(
+        &self,
+        _known_dimensions: Size<Option<f32>>,
+        _available_space: Size<AvailableSpace>,
+    ) -> Size<f32> {
+        Size {
+            width: self.size.w as f32,
+            height: self.size.h as f32,
+        }
+    }
+
+    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+        EventOutcome::Ignore
+    }
 }
 
-#[derive(canopy::StatefulNode)]
 /// Root node for the frame gym demo.
 pub struct FrameGym {
-    /// Node state.
-    state: NodeState,
-    /// Framed test pattern.
-    child: frame::Frame<TestPattern>,
+    /// Frame node id.
+    frame_id: Option<NodeId>,
 }
 
-#[derive_commands]
 impl Default for FrameGym {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[derive_commands]
 impl FrameGym {
     /// Construct a new frame gym.
     pub fn new() -> Self {
-        Self {
-            state: NodeState::default(),
-            child: frame::Frame::new(TestPattern::new()).with_title("Frame Gym".to_string()),
+        Self { frame_id: None }
+    }
+
+    /// Ensure the frame and pattern nodes are built.
+    fn ensure_tree(&mut self, c: &mut dyn Context) {
+        if self.frame_id.is_some() {
+            return;
         }
+
+        let pattern_id = c.add(Box::new(TestPattern::new()));
+        let frame_id = c.add(Box::new(frame::Frame::new().with_title("Frame Gym")));
+        c.mount_child(frame_id, pattern_id)
+            .expect("Failed to mount pattern");
+        c.set_children(c.node_id(), vec![frame_id])
+            .expect("Failed to attach frame");
+
+        let mut update_root = |style: &mut Style| {
+            style.display = Display::Flex;
+            style.flex_direction = FlexDirection::Column;
+        };
+        c.with_style(c.node_id(), &mut update_root)
+            .expect("Failed to style root");
+
+        let mut grow = |style: &mut Style| {
+            style.flex_grow = 1.0;
+            style.flex_shrink = 1.0;
+            style.flex_basis = Dimension::Auto;
+        };
+        c.with_style(frame_id, &mut grow)
+            .expect("Failed to style frame");
+        c.with_style(pattern_id, &mut grow)
+            .expect("Failed to style pattern");
+
+        self.frame_id = Some(frame_id);
     }
 }
 
-impl Node for FrameGym {
-    fn accept_focus(&mut self) -> bool {
-        false // Don't accept focus, let it go to the child
-    }
-
-    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        self.child.layout(l, sz)?;
-        self.wrap(self.child.vp())?;
+impl Widget for FrameGym {
+    fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-        f(&mut self.child)?;
-        Ok(())
+    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+        EventOutcome::Ignore
+    }
+
+    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
+        self.ensure_tree(c);
+        None
     }
 }
 
@@ -188,7 +222,7 @@ impl Loader for FrameGym {
 /// Install key bindings for the frame gym demo.
 pub fn setup_bindings(cnpy: &mut Canopy) {
     Binder::new(cnpy)
-        .defaults::<Root<FrameGym>>()
+        .defaults::<Root>()
         .with_path("")
         // Focus navigation
         .key(key::KeyCode::Tab, "root::focus_next()")
@@ -205,8 +239,8 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
         .key('l', "test_pattern::scroll_right()")
         // Page navigation
         .key(key::KeyCode::PageDown, "test_pattern::page_down()")
-        .key(key::KeyCode::PageUp, "test_pattern::page_up()")
         .key(' ', "test_pattern::page_down()")
+        .key(key::KeyCode::PageUp, "test_pattern::page_up()")
         // Quit
         .with_path("root")
         .key('q', "root::quit()");

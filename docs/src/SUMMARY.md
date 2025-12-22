@@ -2,9 +2,9 @@
 
 - [Overview](./overview.md)
 - [Nodes](./nodes.md)
-    - [trait StatefulNode](./state.md)
+    - [Node names](./state.md)
     - [trait CommandNode](./commands.md)
-    - [trait Node](./nodetrait.md)
+    - [Widget](./nodetrait.md)
         - [Layout and Rendering](./layout.md)
         - [Polling](./polling.md)
         - [Cursor](./cursor.md)

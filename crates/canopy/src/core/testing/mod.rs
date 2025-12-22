@@ -15,82 +15,81 @@ pub mod ttree;
 
 #[cfg(test)]
 mod tests {
+    use taffy::style::{Dimension, Display, FlexDirection, Style};
+
     use super::backend::TestRender;
     use crate::{
-        Context, Layout, derive_commands,
+        Canopy, Context, ViewContext, derive_commands,
         error::Result,
-        geom::Expanse,
-        node::Node,
+        event::Event,
+        geom::{Expanse, Rect},
         render::Render,
-        state::{NodeState, StatefulNode},
+        state::NodeName,
+        widget::{EventOutcome, Widget},
     };
 
-    #[derive(canopy::StatefulNode)]
     struct Block {
-        state: NodeState,
-        children: Vec<Self>,
         horizontal: bool,
     }
 
     #[derive_commands]
     impl Block {
         fn new(horizontal: bool) -> Self {
-            Self {
-                state: NodeState::default(),
-                children: vec![],
-                horizontal,
-            }
+            Self { horizontal }
         }
     }
 
-    impl Node for Block {
-        fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-            self.fill(sz)?;
-            if !self.children.is_empty() {
-                let vp = self.vp();
-                let vps = if self.horizontal {
-                    vp.view().split_horizontal(self.children.len() as u32)?
-                } else {
-                    vp.view().split_vertical(self.children.len() as u32)?
-                };
-                for (i, ch) in self.children.iter_mut().enumerate() {
-                    l.place(ch, vps[i])?;
-                }
+    impl Widget for Block {
+        fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
+            if ctx.children(ctx.node_id()).is_empty() {
+                r.fill("blue", ctx.view(), 'x')?;
             }
             Ok(())
         }
 
-        fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
-            if self.children.is_empty() {
-                r.fill("blue", self.vp().view(), 'x')?;
-            }
-            Ok(())
+        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+            EventOutcome::Ignore
         }
 
-        fn accept_focus(&mut self) -> bool {
-            true
+        fn configure_style(&self, style: &mut Style) {
+            style.display = Display::Flex;
+            style.flex_direction = if self.horizontal {
+                FlexDirection::Row
+            } else {
+                FlexDirection::Column
+            };
         }
 
-        fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-            for c in &mut self.children {
-                f(c)?;
-            }
-            Ok(())
+        fn name(&self) -> NodeName {
+            NodeName::convert("block")
         }
     }
 
     #[test]
     fn block_renders() -> Result<()> {
         let (_, mut tr) = TestRender::create();
-        let mut canopy = canopy::Canopy::new();
-        let mut root = Block {
-            state: NodeState::default(),
-            children: vec![Block::new(false), Block::new(false)],
-            horizontal: true,
-        };
+        let mut canopy = Canopy::new();
 
-        canopy.set_root_size(Expanse::new(20, 10), &mut root)?;
-        canopy.render(&mut tr, &mut root)?;
+        canopy.core.set_widget(canopy.core.root, Block::new(true));
+        let left = canopy.core.add(Block::new(false));
+        let right = canopy.core.add(Block::new(false));
+        canopy
+            .core
+            .set_children(canopy.core.root, vec![left, right])?;
+
+        canopy.core.build(left).style(|style| {
+            style.flex_grow = 1.0;
+            style.flex_shrink = 1.0;
+            style.flex_basis = Dimension::Auto;
+        });
+        canopy.core.build(right).style(|style| {
+            style.flex_grow = 1.0;
+            style.flex_shrink = 1.0;
+            style.flex_basis = Dimension::Auto;
+        });
+
+        canopy.set_root_size(Expanse::new(20, 10))?;
+        canopy.render(&mut tr)?;
         assert!(!tr.buf_empty());
         Ok(())
     }
@@ -98,19 +97,32 @@ mod tests {
     #[test]
     fn render_on_focus_change() -> Result<()> {
         let (_, mut tr) = TestRender::create();
-        let mut canopy = canopy::Canopy::new();
-        let mut root = Block {
-            state: NodeState::default(),
-            children: vec![Block::new(false), Block::new(false)],
-            horizontal: true,
-        };
+        let mut canopy = Canopy::new();
 
-        canopy.set_root_size(Expanse::new(20, 10), &mut root)?;
-        canopy.render(&mut tr, &mut root)?;
+        canopy.core.set_widget(canopy.core.root, Block::new(true));
+        let left = canopy.core.add(Block::new(false));
+        let right = canopy.core.add(Block::new(false));
+        canopy
+            .core
+            .set_children(canopy.core.root, vec![left, right])?;
+
+        canopy.core.build(left).style(|style| {
+            style.flex_grow = 1.0;
+            style.flex_shrink = 1.0;
+            style.flex_basis = Dimension::Auto;
+        });
+        canopy.core.build(right).style(|style| {
+            style.flex_grow = 1.0;
+            style.flex_shrink = 1.0;
+            style.flex_basis = Dimension::Auto;
+        });
+
+        canopy.set_root_size(Expanse::new(20, 10))?;
+        canopy.render(&mut tr)?;
         tr.text.lock().unwrap().text.clear();
 
-        canopy.focus_next(&mut root);
-        canopy.render(&mut tr, &mut root)?;
+        canopy.core.focus_next(canopy.core.root);
+        canopy.render(&mut tr)?;
         assert!(tr.buf_empty());
 
         Ok(())

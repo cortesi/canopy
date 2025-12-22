@@ -1,15 +1,19 @@
 /*! This module defines a standard tree of instrumented nodes for testing. */
 use std::cell::RefCell;
 
+use taffy::style::{Dimension, Display, FlexDirection};
+
 use crate::{
-    Canopy, Context, Layout, command, derive_commands,
+    Canopy, Context, NodeId, ViewContext, command,
+    core::Core,
+    derive_commands,
     error::Result,
-    event::{key, mouse},
-    geom::Expanse,
-    node::{EventOutcome, Node},
+    event::Event,
+    geom::{Expanse, Rect},
     render::Render,
-    state::{NodeName, NodeState, StatefulNode},
+    state::NodeName,
     testing::backend::TestRender,
+    widget::{EventOutcome, Widget},
 };
 
 /// Thread-local state tracked by test nodes.
@@ -44,7 +48,7 @@ impl State {
 }
 
 thread_local! {
-    pub (crate) static TSTATE: RefCell<State> = RefCell::new(State::new());
+    pub(crate) static TSTATE: RefCell<State> = RefCell::new(State::new());
 }
 
 /// Clear the global test state.
@@ -59,78 +63,41 @@ pub fn get_state() -> State {
     TSTATE.with(|s| s.borrow().clone())
 }
 
-/// Build a test leaf node type.
+/// Allows tests to set the next event outcome on a node.
+pub trait OutcomeTarget {
+    /// Set the next event outcome.
+    fn set_outcome(&mut self, outcome: EventOutcome);
+}
+
+/// Generate a test leaf node type with instrumentation hooks.
 macro_rules! leaf {
     ($a:ident) => {
         /// Test leaf node with instrumented behavior.
-        #[derive(Debug, PartialEq, Eq, canopy::StatefulNode)]
         pub struct $a {
-            /// Node state.
-            state: NodeState,
-
             /// Next event outcome override.
             pub next_outcome: Option<EventOutcome>,
-        }
-
-        impl Node for $a {
-            fn accept_focus(&mut self) -> bool {
-                true
-            }
-            fn layout(&mut self, _l: &Layout, sz: Expanse) -> Result<()> {
-                self.fill(sz)
-            }
-            fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
-                r.text(
-                    "any",
-                    self.vp().view().line(0),
-                    &format!("<{}>", self.name().clone()),
-                )
-            }
-            fn handle_key(&mut self, _: &mut dyn Context, _: key::Key) -> Result<EventOutcome> {
-                self.handle("key")
-            }
-            fn handle_mouse(
-                &mut self,
-                _: &mut dyn Context,
-                _: mouse::MouseEvent,
-            ) -> Result<EventOutcome> {
-                self.handle("mouse")
-            }
         }
 
         #[derive_commands]
         impl $a {
             /// Construct a new leaf node.
             pub fn new() -> Self {
-                $a {
-                    state: NodeState::default(),
-                    next_outcome: None,
-                }
+                $a { next_outcome: None }
             }
 
             #[command]
             /// A command that appears only on leaf nodes.
-            pub fn c_leaf(&self, _core: &dyn Context) -> Result<()> {
+            pub fn c_leaf(&self, _core: &mut dyn Context) -> Result<()> {
                 TSTATE.with(|s| {
                     s.borrow_mut().add_command(&self.name(), "c_leaf");
                 });
                 Ok(())
             }
+        }
 
-            /// Build a synthetic mouse event at the node's location.
-            pub fn make_mouse_event(&self) -> Result<mouse::MouseEvent> {
-                let a = self.vp().screen_rect();
-                Ok(mouse::MouseEvent {
-                    action: mouse::Action::Down,
-                    button: mouse::Button::Left,
-                    modifiers: key::Empty,
-                    location: a.tl,
-                })
-            }
-
-            fn handle(&mut self, evt: &str) -> Result<EventOutcome> {
-                let ret = if let Some(x) = self.next_outcome.clone() {
-                    self.next_outcome = None;
+        impl $a {
+            fn handle(&mut self, evt: &str) -> EventOutcome {
+                let ret = if let Some(x) = self.next_outcome.take() {
                     x
                 } else {
                     EventOutcome::Ignore
@@ -138,43 +105,60 @@ macro_rules! leaf {
                 TSTATE.with(|s| {
                     s.borrow_mut().add_event(&self.name(), evt, &ret);
                 });
-                Ok(ret)
+                ret
+            }
+        }
+
+        impl Widget for $a {
+            fn accept_focus(&mut self) -> bool {
+                true
+            }
+
+            fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
+                r.text("any", ctx.view().line(0), &format!("<{}>", self.name()))
+            }
+
+            fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+                match event {
+                    Event::Key(_) => self.handle("key"),
+                    Event::Mouse(_) => self.handle("mouse"),
+                    _ => EventOutcome::Ignore,
+                }
+            }
+
+            fn name(&self) -> NodeName {
+                NodeName::convert(stringify!($a))
+            }
+        }
+
+        impl OutcomeTarget for $a {
+            fn set_outcome(&mut self, outcome: EventOutcome) {
+                self.next_outcome = Some(outcome);
             }
         }
     };
 }
 
-/// Build a test branch node type.
+/// Generate a test branch node type with instrumentation hooks.
 macro_rules! branch {
-    ($name:ident, $la:ident, $lb:ident) => {
-        /// Test branch node with two children.
-        #[derive(Debug, PartialEq, Eq, canopy::StatefulNode)]
+    ($name:ident) => {
+        /// Test branch node with instrumented behavior.
         pub struct $name {
-            /// Node state.
-            state: NodeState,
-
             /// Next event outcome override.
             pub next_outcome: Option<EventOutcome>,
-            /// Left child node.
-            pub a: $la,
-            /// Right child node.
-            pub b: $lb,
         }
 
         #[derive_commands]
         impl $name {
             /// Construct a new branch node.
             pub fn new() -> Self {
-                $name {
-                    state: NodeState::default(),
-                    a: $la::new(),
-                    b: $lb::new(),
-                    next_outcome: None,
-                }
+                $name { next_outcome: None }
             }
-            fn handle(&mut self, evt: &str) -> Result<EventOutcome> {
-                let ret = if let Some(x) = self.next_outcome.clone() {
-                    self.next_outcome = None;
+        }
+
+        impl $name {
+            fn handle(&mut self, evt: &str) -> EventOutcome {
+                let ret = if let Some(x) = self.next_outcome.take() {
                     x
                 } else {
                     EventOutcome::Ignore
@@ -182,90 +166,72 @@ macro_rules! branch {
                 TSTATE.with(|s| {
                     s.borrow_mut().add_event(&self.name(), evt, &ret);
                 });
-                Ok(ret)
+                ret
             }
         }
 
-        impl Node for $name {
+        impl Widget for $name {
             fn accept_focus(&mut self) -> bool {
                 true
             }
 
-            fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-                self.fill(sz)?;
-                let vp = self.vp();
-                let parts = vp.view().split_vertical(2)?;
-                l.place(&mut self.a, parts[0])?;
-                l.place(&mut self.b, parts[1])?;
-                Ok(())
+            fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
+                r.text("any", ctx.view().line(0), &format!("<{}>", self.name()))
             }
 
-            fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
-                r.text(
-                    "any",
-                    self.vp().view().line(0),
-                    &format!("<{}>", self.name().clone()),
-                )
+            fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+                match event {
+                    Event::Key(_) => self.handle("key"),
+                    Event::Mouse(_) => self.handle("mouse"),
+                    _ => EventOutcome::Ignore,
+                }
             }
 
-            fn handle_key(&mut self, _: &mut dyn Context, _: key::Key) -> Result<EventOutcome> {
-                self.handle("key")
+            fn name(&self) -> NodeName {
+                NodeName::convert(stringify!($name))
             }
+        }
 
-            fn handle_mouse(
-                &mut self,
-                _: &mut dyn Context,
-                _: mouse::MouseEvent,
-            ) -> Result<EventOutcome> {
-                self.handle("mouse")
-            }
-
-            fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-                f(&mut self.a)?;
-                f(&mut self.b)?;
-                Ok(())
+        impl OutcomeTarget for $name {
+            fn set_outcome(&mut self, outcome: EventOutcome) {
+                self.next_outcome = Some(outcome);
             }
         }
     };
 }
 
-#[derive(Debug, PartialEq, Eq, canopy::StatefulNode)]
+leaf!(BaLa);
+leaf!(BaLb);
+leaf!(BbLa);
+leaf!(BbLb);
+branch!(Ba);
+branch!(Bb);
+
 /// Root node for the test tree.
 pub struct R {
-    /// Node state.
-    state: NodeState,
-
     /// Next event outcome override.
     pub next_outcome: Option<EventOutcome>,
-    /// Left branch.
-    pub a: Ba,
-    /// Right branch.
-    pub b: Bb,
 }
 
 #[derive_commands]
 impl R {
     /// Construct a new test root.
     pub fn new() -> Self {
-        Self {
-            state: NodeState::default(),
-            a: Ba::new(),
-            b: Bb::new(),
-            next_outcome: None,
-        }
+        Self { next_outcome: None }
     }
+
     #[command]
-    /// A command that appears only on leaf nodes.
-    pub fn c_root(&self, _core: &dyn Context) -> Result<()> {
+    /// A command that appears only on root.
+    pub fn c_root(&self, _core: &mut dyn Context) -> Result<()> {
         TSTATE.with(|s| {
             s.borrow_mut().add_command(&self.name(), "c_root");
         });
         Ok(())
     }
-    /// Record a test event for this node.
-    fn handle(&mut self, evt: &str) -> Result<EventOutcome> {
-        let ret = if let Some(x) = self.next_outcome.clone() {
-            self.next_outcome = None;
+
+    /// Handle an event and record the outcome.
+    fn handle(&mut self, evt: &str) -> EventOutcome {
+        let ret = if let Some(x) = self.next_outcome.take() {
             x
         } else {
             EventOutcome::Ignore
@@ -273,60 +239,121 @@ impl R {
         TSTATE.with(|s| {
             s.borrow_mut().add_event(&self.name(), evt, &ret);
         });
-        Ok(ret)
+        ret
     }
 }
 
-impl Node for R {
+impl OutcomeTarget for R {
+    fn set_outcome(&mut self, outcome: EventOutcome) {
+        self.next_outcome = Some(outcome);
+    }
+}
+
+impl Widget for R {
     fn accept_focus(&mut self) -> bool {
         true
     }
 
-    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        self.fill(sz)?;
-        let vp = self.vp();
-        let parts = vp.view().split_horizontal(2)?;
-        l.place(&mut self.a, parts[0])?;
-        l.place(&mut self.b, parts[1])?;
-        Ok(())
+    fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
+        r.text("any", ctx.view().line(0), &format!("<{}>", self.name()))
     }
 
-    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
-        r.text(
-            "any",
-            self.vp().view().line(0),
-            &format!("<{}>", self.name()),
-        )
+    fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+        match event {
+            Event::Key(_) => self.handle("key"),
+            Event::Mouse(_) => self.handle("mouse"),
+            _ => EventOutcome::Ignore,
+        }
     }
 
-    fn handle_key(&mut self, _: &mut dyn Context, _: key::Key) -> Result<EventOutcome> {
-        self.handle("key")
-    }
-
-    fn handle_mouse(&mut self, _: &mut dyn Context, _: mouse::MouseEvent) -> Result<EventOutcome> {
-        self.handle("mouse")
-    }
-
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-        f(&mut self.a)?;
-        f(&mut self.b)?;
-        Ok(())
+    fn name(&self) -> NodeName {
+        NodeName::convert("r")
     }
 }
 
-leaf!(BaLa);
-leaf!(BaLb);
-leaf!(BbLa);
-leaf!(BbLb);
-branch!(Ba, BaLa, BaLb);
-branch!(Bb, BbLa, BbLb);
+/// Node IDs for the test tree.
+#[derive(Debug, Clone, Copy)]
+pub struct TestTree {
+    /// Root node id.
+    pub root: NodeId,
+    /// Left branch node id.
+    pub a: NodeId,
+    /// Right branch node id.
+    pub b: NodeId,
+    /// Left-left leaf id.
+    pub a_a: NodeId,
+    /// Left-right leaf id.
+    pub a_b: NodeId,
+    /// Right-left leaf id.
+    pub b_a: NodeId,
+    /// Right-right leaf id.
+    pub b_b: NodeId,
+}
 
-/// Run a function on our standard dummy app built from [`ttree`]. This helper
-/// is used extensively in unit tests across the codebase.
-pub fn run_ttree(func: impl FnOnce(&mut Canopy, TestRender, R) -> Result<()>) -> Result<()> {
+/// Build the standard test tree and attach layout styles.
+fn build_tree(core: &mut Core) -> Result<TestTree> {
+    core.set_widget(core.root, R::new());
+
+    let a = core.add(Ba::new());
+    let b = core.add(Bb::new());
+    let a_a = core.add(BaLa::new());
+    let a_b = core.add(BaLb::new());
+    let b_a = core.add(BbLa::new());
+    let b_b = core.add(BbLb::new());
+
+    core.set_children(core.root, vec![a, b])?;
+    core.set_children(a, vec![a_a, a_b])?;
+    core.set_children(b, vec![b_a, b_b])?;
+
+    core.build(core.root).style(|style| {
+        style.display = Display::Flex;
+        style.flex_direction = FlexDirection::Row;
+        style.size.width = Dimension::Percent(1.0);
+        style.size.height = Dimension::Percent(1.0);
+    });
+
+    style_flex_child(core, a);
+    style_flex_child(core, b);
+    core.build(a).style(|style| {
+        style.display = Display::Flex;
+        style.flex_direction = FlexDirection::Column;
+    });
+    core.build(b).style(|style| {
+        style.display = Display::Flex;
+        style.flex_direction = FlexDirection::Column;
+    });
+
+    style_flex_child(core, a_a);
+    style_flex_child(core, a_b);
+    style_flex_child(core, b_a);
+    style_flex_child(core, b_b);
+
+    Ok(TestTree {
+        root: core.root,
+        a,
+        b,
+        a_a,
+        a_b,
+        b_a,
+        b_b,
+    })
+}
+
+/// Apply flex sizing to a child node.
+fn style_flex_child(core: &mut Core, id: NodeId) {
+    core.build(id).style(|style| {
+        style.flex_grow = 1.0;
+        style.flex_shrink = 1.0;
+        style.flex_basis = Dimension::Auto;
+    });
+}
+
+/// Run a function on our standard dummy app built from [`ttree`].
+pub fn run_ttree(func: impl FnOnce(&mut Canopy, TestRender, TestTree) -> Result<()>) -> Result<()> {
     let (_, tr) = TestRender::create();
-    let mut root = R::new();
     let mut c = Canopy::new();
+
+    let tree = build_tree(&mut c.core)?;
 
     c.add_commands::<R>();
     c.add_commands::<BaLa>();
@@ -336,7 +363,7 @@ pub fn run_ttree(func: impl FnOnce(&mut Canopy, TestRender, R) -> Result<()>) ->
     c.add_commands::<Ba>();
     c.add_commands::<Bb>();
 
-    c.set_root_size(Expanse::new(100, 100), &mut root)?;
+    c.set_root_size(Expanse::new(100, 100))?;
     reset_state();
-    func(&mut c, tr, root)
+    func(&mut c, tr, tree)
 }

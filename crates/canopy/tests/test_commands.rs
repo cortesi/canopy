@@ -5,12 +5,14 @@ mod tests {
     use std::cell::RefCell;
 
     use canopy::{
-        Canopy, Context, command,
+        Context, Core, ViewContext, command,
         commands::{CommandInvocation, CommandNode, dispatch},
         derive_commands,
         error::Result,
-        node::Node,
-        state::{NodeState, StatefulNode},
+        event::Event,
+        geom::Rect,
+        render::Render,
+        widget::{EventOutcome, Widget},
     };
 
     // Test helper to record command calls
@@ -26,10 +28,7 @@ mod tests {
         STATE_PATH.with(|s| s.borrow_mut().clear());
     }
 
-    #[derive(canopy::StatefulNode)]
-    struct TestLeaf {
-        state: NodeState,
-    }
+    struct TestLeaf;
 
     #[derive_commands]
     impl TestLeaf {
@@ -41,74 +40,44 @@ mod tests {
         }
     }
 
-    impl Node for TestLeaf {}
-
-    #[derive(canopy::StatefulNode)]
-    struct TestBranch {
-        state: NodeState,
-        la: TestLeaf,
-        lb: TestLeaf,
-    }
-
-    impl Node for TestBranch {
-        fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-            f(&mut self.la)?;
-            f(&mut self.lb)?;
+    impl Widget for TestLeaf {
+        fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
+
+        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+            EventOutcome::Ignore
+        }
     }
+
+    struct TestBranch;
 
     #[derive_commands]
     impl TestBranch {}
 
-    #[allow(dead_code)]
-    #[derive(canopy::StatefulNode)]
-    struct TestRoot {
-        state: NodeState,
-        a: TestBranch,
-        b: TestBranch,
-    }
-
-    impl Node for TestRoot {
-        fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-            f(&mut self.a)?;
-            f(&mut self.b)?;
+    impl Widget for TestBranch {
+        fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
+        }
+
+        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+            EventOutcome::Ignore
         }
     }
 
-    #[derive_commands]
-    impl TestRoot {}
-
     #[test]
     fn test_command_dispatch() -> Result<()> {
-        // The test is simpler - just verify commands can be called
-        let mut canopy = Canopy::new();
-        let leaf = TestLeaf {
-            state: NodeState::default(),
-        };
-
-        // Call the command directly to verify it works
-        leaf.c_leaf(&mut canopy);
-        assert_eq!(state_path(), vec!["test_leaf.c_leaf()"]);
-
-        // Verify dispatch mechanism works with a simple tree
         reset_state();
-        let mut root = TestBranch {
-            state: NodeState::default(),
-            la: TestLeaf {
-                state: NodeState::default(),
-            },
-            lb: TestLeaf {
-                state: NodeState::default(),
-            },
-        };
 
-        // Dispatch to a specific node
+        let mut core = Core::new();
+        let leaf_id = core.add(TestLeaf);
+        let branch_id = core.add(TestBranch);
+        core.set_children(branch_id, vec![leaf_id])?;
+        core.set_children(core.root, vec![branch_id])?;
+
         let result = dispatch(
-            &mut canopy,
-            root.la.id(),
-            &mut root,
+            &mut core,
+            branch_id,
             &CommandInvocation {
                 node: "test_leaf".try_into()?,
                 command: "c_leaf".into(),
@@ -116,22 +85,18 @@ mod tests {
             },
         )?;
 
-        // For now, just verify no error occurred
         assert!(result.is_some());
+        assert_eq!(state_path(), vec!["test_leaf.c_leaf()"]);
 
         Ok(())
     }
 
     #[test]
     fn test_load_commands() -> Result<()> {
-        #[derive(canopy::StatefulNode)]
         struct Foo {
-            state: NodeState,
             a_triggered: bool,
             b_triggered: bool,
         }
-
-        impl Node for Foo {}
 
         #[derive_commands]
         impl Foo {
@@ -147,6 +112,21 @@ mod tests {
             fn b(&mut self, _core: &mut dyn Context) -> Result<()> {
                 self.b_triggered = true;
                 Ok(())
+            }
+        }
+
+        impl Widget for Foo {
+            fn render(
+                &mut self,
+                _r: &mut Render,
+                _area: Rect,
+                _ctx: &dyn ViewContext,
+            ) -> Result<()> {
+                Ok(())
+            }
+
+            fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+                EventOutcome::Ignore
             }
         }
 

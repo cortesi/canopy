@@ -5,7 +5,7 @@ pub mod mouse;
 
 use std::sync::mpsc;
 
-use crate::{geom::Expanse, state::NodeId};
+use crate::{NodeId, geom::Expanse};
 
 /// This enum represents all the event types that drive the application.
 #[derive(Debug)]

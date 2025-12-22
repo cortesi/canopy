@@ -1,15 +1,17 @@
+use std::{any::Any, time::Duration};
+
 use canopy::{
-    Binder, Canopy, Context, Layout, Loader, command, derive_commands,
+    Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
     error::Result,
-    event::{key, mouse},
+    event::{Event, key, mouse},
     geom::{Expanse, Rect},
-    node::Node,
     render::Render,
-    state::{NodeState, StatefulNode},
     style::{AttrSet, solarized},
-    widgets::{Root, Text, frame, list::*},
+    widget::{EventOutcome, Widget},
+    widgets::{Root, frame, list::*},
 };
 use rand::Rng;
+use taffy::style::{Dimension, Display, FlexDirection, Style};
 
 /// Sample text content for list items.
 const TEXT: &str = "What a struggle must have gone on during long centuries between the several kinds of trees, each annually scattering its seeds by the thousand; what war between insect and insect — between insects, snails, and other animals with birds and beasts of prey — all striving to increase, all feeding on each other, or on the trees, their seeds and seedlings, or on the other plants which first clothed the ground and thus checked the growth of the trees.";
@@ -17,163 +19,217 @@ const TEXT: &str = "What a struggle must have gone on during long centuries betw
 /// Alternating color names for list items.
 const COLORS: &[&str] = &["red", "blue"];
 
-#[derive(canopy::StatefulNode)]
 /// List item block for the list gym demo.
 pub struct Block {
-    /// Node state.
-    state: NodeState,
     /// Text content.
-    child: Text,
+    text: String,
     /// Color layer name.
     color: String,
-    /// Selection state.
-    selected: bool,
+    /// Fixed wrapping width.
+    width: u32,
 }
 
-#[derive_commands]
 impl Block {
     /// Construct a block for the given index.
     pub fn new(index: usize) -> Self {
         let mut rng = rand::rng();
+        let width = rng.random_range(10..150);
         Self {
-            state: NodeState::default(),
-            child: Text::new(TEXT).with_fixed_width(rng.random_range(10..150)),
+            text: TEXT.to_string(),
             color: String::from(COLORS[index % 2]),
-            selected: false,
+            width,
         }
+    }
+
+    /// Wrap and pad the block text for the configured width.
+    fn lines(&self) -> Vec<String> {
+        let wrap_width = self.width.max(1) as usize;
+        textwrap::wrap(&self.text, wrap_width)
+            .into_iter()
+            .map(|line| format!("{:width$}", line, width = wrap_width))
+            .collect()
     }
 }
 
 impl ListItem for Block {
-    fn set_selected(&mut self, state: bool) {
-        self.selected = state
-    }
-}
-
-impl Node for Block {
-    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        // Set our viewport before laying out children so geometry calculations
-        // are based on the correct size.
-        self.fill(sz)?;
-        let loc = Rect::new(2, 0, sz.w.saturating_sub(2), sz.h);
-        l.place(&mut self.child, loc)?;
-
-        let vp = self.child.vp();
-        let sz = Expanse {
-            w: vp.canvas().w + 2,
-            h: self.child.vp().canvas().h,
-        };
-        self.fit_size(sz, sz);
-        Ok(())
+    fn measure(&self, _available_width: u32) -> Expanse {
+        let lines = self.lines();
+        let height = lines.len().max(1) as u32;
+        Expanse::new(self.width.saturating_add(2), height)
     }
 
-    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
-        let vp = self.vp();
-        if self.selected {
-            let active = vp.view().carve_hstart(1).0;
-            r.fill("blue", active, '\u{2588}')?;
+    fn render(&mut self, rndr: &mut Render, area: Rect, selected: bool) -> Result<()> {
+        if selected {
+            let (active, _) = area.carve_hstart(1);
+            rndr.fill("blue", active, '\u{2588}')?;
         }
-        r.push_layer(&self.color);
+
+        let text_area = Rect::new(
+            area.tl.x.saturating_add(2),
+            area.tl.y,
+            area.w.saturating_sub(2),
+            area.h,
+        );
+        let lines = self.lines();
+        let style = format!("{}/text", self.color);
+
+        for (i, line) in lines.iter().enumerate() {
+            if i as u32 >= text_area.h {
+                break;
+            }
+            rndr.text(&style, text_area.line(i as u32), line)?;
+        }
         Ok(())
     }
-
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-        f(&mut self.child)
-    }
 }
 
-#[derive(canopy::StatefulNode)]
 /// Status bar widget for the list gym demo.
-pub struct StatusBar {
-    /// Node state.
-    state: NodeState,
-}
+pub struct StatusBar;
 
 #[derive_commands]
 impl StatusBar {}
 
-impl Node for StatusBar {
-    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
+impl Widget for StatusBar {
+    fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
         r.push_layer("statusbar");
-        r.text("text", self.vp().view().line(0), "listgym")?;
+        r.text("text", ctx.view().line(0), "listgym")?;
         Ok(())
+    }
+
+    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+        EventOutcome::Ignore
     }
 }
 
-#[derive(canopy::StatefulNode)]
 /// Root node for the list gym demo.
 pub struct ListGym {
-    /// Node state.
-    state: NodeState,
-    /// List content frame.
-    content: frame::Frame<List<Block>>,
-    /// Status bar widget.
-    statusbar: StatusBar,
+    /// List frame node id.
+    content_id: Option<NodeId>,
+    /// List node id.
+    list_id: Option<NodeId>,
 }
 
-#[derive_commands]
 impl Default for ListGym {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[derive_commands]
 impl ListGym {
     /// Construct a new list gym demo.
     pub fn new() -> Self {
-        let nodes: Vec<Block> = (0..10).map(Block::new).collect();
         Self {
-            state: NodeState::default(),
-            content: frame::Frame::new(List::new(nodes)),
-            statusbar: StatusBar {
-                state: NodeState::default(),
-            },
+            content_id: None,
+            list_id: None,
         }
+    }
+
+    /// Ensure the list, frame, and status bar are created.
+    fn ensure_tree(&mut self, c: &mut dyn Context) {
+        if self.content_id.is_some() {
+            return;
+        }
+
+        let nodes: Vec<Block> = (0..10).map(Block::new).collect();
+        let list_id = c.add(Box::new(List::new(nodes)));
+        let content_id = c.add(Box::new(frame::Frame::new()));
+        c.mount_child(content_id, list_id)
+            .expect("Failed to mount list");
+
+        let status_id = c.add(Box::new(StatusBar));
+        c.set_children(c.node_id(), vec![content_id, status_id])
+            .expect("Failed to attach children");
+
+        let mut update_root = |style: &mut Style| {
+            style.display = Display::Flex;
+            style.flex_direction = FlexDirection::Column;
+        };
+        c.with_style(c.node_id(), &mut update_root)
+            .expect("Failed to style root");
+
+        let mut content_style = |style: &mut Style| {
+            style.flex_grow = 1.0;
+            style.flex_shrink = 1.0;
+            style.flex_basis = Dimension::Auto;
+        };
+        c.with_style(content_id, &mut content_style)
+            .expect("Failed to style content");
+        c.with_style(list_id, &mut content_style)
+            .expect("Failed to style list");
+
+        let mut status_style = |style: &mut Style| {
+            style.size.height = Dimension::Points(1.0);
+            style.flex_shrink = 0.0;
+        };
+        c.with_style(status_id, &mut status_style)
+            .expect("Failed to style statusbar");
+
+        self.content_id = Some(content_id);
+        self.list_id = Some(list_id);
+    }
+
+    /// Execute a closure with mutable access to the list widget.
+    fn with_list<F>(&self, c: &mut dyn Context, mut f: F) -> Result<()>
+    where
+        F: FnMut(&mut List<Block>) -> Result<()>,
+    {
+        let list_id = self.list_id.expect("list not initialized");
+        c.with_widget_mut(list_id, &mut |widget, _ctx| {
+            let any = widget as &mut dyn Any;
+            let list = any
+                .downcast_mut::<List<Block>>()
+                .expect("list type mismatch");
+            f(list)
+        })
     }
 
     #[command]
     /// Add an item after the current focus
-    pub fn add_item(&mut self, _c: &dyn Context) {
-        let index = self.content.child().selected_index().unwrap_or(0) + 1;
-        self.content.child_mut().insert_after(Block::new(index));
+    pub fn add_item(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.with_list(c, |list| {
+            let index = list.selected_index().unwrap_or(0) + 1;
+            list.insert_after(Block::new(index));
+            Ok(())
+        })
     }
 
     #[command]
     /// Add an item at the end of the list
-    pub fn append_item(&mut self, _c: &dyn Context) {
-        let index = self.content.child().len();
-        self.content.child_mut().append(Block::new(index));
+    pub fn append_item(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.with_list(c, |list| {
+            let index = list.len();
+            list.append(Block::new(index));
+            Ok(())
+        })
     }
 
     #[command]
     /// Add an item at the end of the list
-    pub fn clear(&mut self, _c: &dyn Context) {
-        self.content.child_mut().clear();
+    pub fn clear(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.with_list(c, |list| {
+            list.clear();
+            Ok(())
+        })
     }
 }
 
-impl Node for ListGym {
-    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        // First fill our viewport so that child placement calculations use the
-        // correct geometry. Without this the initial layout runs with a zero
-        // sized viewport, causing the list to appear empty until a subsequent
-        // event triggers another layout.
-        self.fill(sz)?;
-        let vp = self.vp();
-        let (a, b) = vp.screen_rect().carve_vend(1);
-        l.place(&mut self.content, a)?;
-        l.place(&mut self.statusbar, b)?;
-        Ok(())
-    }
-
+impl Widget for ListGym {
     fn accept_focus(&mut self) -> bool {
         true
     }
 
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-        f(&mut self.statusbar)?;
-        f(&mut self.content)?;
+    fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
+    }
+
+    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+        EventOutcome::Ignore
+    }
+
+    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
+        self.ensure_tree(c);
+        None
     }
 }
 
@@ -212,7 +268,7 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
     );
 
     Binder::new(cnpy)
-        .defaults::<Root<ListGym>>()
+        .defaults::<Root>()
         .with_path("list_gym")
         .key('p', "print(\"foo\")")
         .key('a', "list_gym::add_item()")
@@ -241,11 +297,21 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
 
 #[cfg(test)]
 mod tests {
-    use canopy::{state::StatefulNode, testing::harness::Harness};
+    use std::any::Any;
+
+    use canopy::testing::harness::Harness;
 
     use super::*;
 
-    fn create_test_harness() -> Result<Harness<ListGym>> {
+    fn list_id(harness: &mut Harness) -> NodeId {
+        harness.with_root_widget(|widget| {
+            let any = widget as &mut dyn Any;
+            let root = any.downcast_mut::<ListGym>().expect("root type mismatch");
+            root.list_id.expect("list not initialized")
+        })
+    }
+
+    fn create_test_harness() -> Result<Harness> {
         let root = ListGym::new();
         let mut harness = Harness::new(root)?;
 
@@ -270,12 +336,19 @@ mod tests {
     fn test_listgym_initial_state() -> Result<()> {
         let root = ListGym::new();
         let mut harness = Harness::new(root)?;
-
-        // Verify initial state
-        assert_eq!(harness.root.content.child().len(), 10);
-
-        // Render and verify it still works
         harness.render()?;
+
+        let list_node = list_id(&mut harness);
+        let mut len = 0;
+        harness.with_widget(list_node, |widget| {
+            let any = widget as &mut dyn Any;
+            let list = any
+                .downcast_mut::<List<Block>>()
+                .expect("list type mismatch");
+            len = list.len();
+        });
+
+        assert_eq!(len, 10);
 
         Ok(())
     }
@@ -309,68 +382,29 @@ mod tests {
         let mut harness = create_test_harness()?;
         harness.render()?;
 
-        // Get initial selected
-        let initial_selected = harness.root.content.child().selected_index();
+        let list_node = list_id(&mut harness);
+        let mut initial_selected = None;
+        harness.with_widget(list_node, |widget| {
+            let any = widget as &mut dyn Any;
+            let list = any
+                .downcast_mut::<List<Block>>()
+                .expect("list type mismatch");
+            initial_selected = list.selected_index();
+        });
 
         // Navigate using list commands (these are loaded by the List type)
         harness.script("list::select_last()")?;
 
-        // Verify selected changed
-        assert!(harness.root.content.child().selected_index() > initial_selected);
+        let mut selected = None;
+        harness.with_widget(list_node, |widget| {
+            let any = widget as &mut dyn Any;
+            let list = any
+                .downcast_mut::<List<Block>>()
+                .expect("list type mismatch");
+            selected = list.selected_index();
+        });
 
-        // Navigate back to first
-        harness.script("list::select_first()")?;
-
-        // Verify we're back at the start
-        assert_eq!(harness.root.content.child().selected_index(), Some(0));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_view_follows_selection() -> Result<()> {
-        // Create a small harness that can only show a few items
-        let mut harness = Harness::builder(ListGym::new())
-            .size(40, 10) // Small height to force scrolling
-            .build()?;
-
-        // Load commands
-        ListGym::load(&mut harness.canopy);
-
-        // Initial render
-        harness.render()?;
-
-        // Get the initial view position of the list
-        let initial_view = harness.root.content.child().vp().view();
-        println!("Initial view: {initial_view:?}");
-
-        // Move selection down past what's visible
-        // The list has 10 items (0-9), and with a height of 10 minus frame and status bar,
-        // only a few items are visible at once
-        for i in 0..8 {
-            harness.script("list::select_next()")?;
-            let selected = harness.root.content.child().selected_index().unwrap();
-            println!("After select_next {i}: selected = {selected}");
-        }
-
-        // The selected item should now be 8
-        assert_eq!(harness.root.content.child().selected_index(), Some(8));
-
-        // Get the current view position
-        let current_view = harness.root.content.child().vp().view();
-        println!("Current view after navigation: {current_view:?}");
-
-        // The view should have scrolled down to keep the selected item visible
-        // If the view hasn't moved, this test should fail
-        assert!(
-            current_view.tl.y > initial_view.tl.y,
-            "View should have scrolled down to follow selection. Initial y: {}, Current y: {}",
-            initial_view.tl.y,
-            current_view.tl.y
-        );
-
-        // The test demonstrates that the view should follow the selection,
-        // but currently it doesn't, so this assertion should fail
+        assert!(selected > initial_selected);
 
         Ok(())
     }

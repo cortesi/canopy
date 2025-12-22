@@ -6,10 +6,12 @@ use canopy_examples::intervals::{Intervals, setup_bindings};
 /// Run the intervals example.
 pub fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
-    Root::<Intervals>::load(&mut cnpy);
+    Root::load(&mut cnpy);
+    Intervals::load(&mut cnpy);
     setup_bindings(&mut cnpy);
 
-    let root = Root::new(Intervals::new());
-    runloop(cnpy, root)?;
+    let app_id = cnpy.core.add(Intervals::new());
+    Root::install(&mut cnpy.core, app_id)?;
+    runloop(cnpy)?;
     Ok(())
 }

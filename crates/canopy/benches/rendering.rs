@@ -1,27 +1,26 @@
 //! Rendering benchmarks for canopy.
 
-use std::hint::black_box;
+use std::{hint::black_box, time::Duration};
 
 use canopy::{
-    Canopy, Context, Layout, Loader, derive_commands,
+    Context, Loader, NodeId, ViewContext, derive_commands,
     error::Result,
-    geom::Expanse,
-    node::Node,
+    event::Event,
+    geom::Rect,
     render::Render,
-    state::{NodeState, StatefulNode},
     testing::harness::Harness,
+    widget::{EventOutcome, Widget},
     widgets::Text,
 };
 use criterion::{Criterion, criterion_group, criterion_main};
+use taffy::style::{Dimension, Display, FlexDirection, Style};
 
-// Simple wrapper to provide Loader implementation for Text widget
 /// Wrapper node used for text render benchmarks.
-#[derive(canopy::StatefulNode)]
 struct BenchmarkTextWrapper {
-    /// Node state.
-    state: NodeState,
-    /// Text widget under test.
-    text: Text,
+    /// Text content to render.
+    content: String,
+    /// Text node id.
+    text_id: Option<NodeId>,
 }
 
 #[derive_commands]
@@ -29,32 +28,56 @@ impl BenchmarkTextWrapper {
     /// Construct a wrapper with the provided content.
     fn new(content: &str) -> Self {
         Self {
-            state: NodeState::default(),
-            text: Text::new(content),
+            content: content.to_string(),
+            text_id: None,
         }
     }
+
+    /// Ensure the text child node is created and styled.
+    fn ensure_tree(&mut self, c: &mut dyn Context) {
+        if self.text_id.is_some() {
+            return;
+        }
+
+        let text_id = c.add(Box::new(Text::new(self.content.clone())));
+        c.set_children(c.node_id(), vec![text_id])
+            .expect("Failed to attach text");
+
+        let mut update_root = |style: &mut Style| {
+            style.display = Display::Flex;
+            style.flex_direction = FlexDirection::Column;
+        };
+        c.with_style(c.node_id(), &mut update_root)
+            .expect("Failed to style root");
+
+        let mut grow = |style: &mut Style| {
+            style.flex_grow = 1.0;
+            style.flex_shrink = 1.0;
+            style.flex_basis = Dimension::Auto;
+        };
+        c.with_style(text_id, &mut grow)
+            .expect("Failed to style text");
+
+        self.text_id = Some(text_id);
+    }
 }
 
-impl Node for BenchmarkTextWrapper {
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-        f(&mut self.text)
-    }
-
-    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        self.fill(sz)?;
-        l.place(&mut self.text, sz.into())
-    }
-
-    fn render(&mut self, _c: &dyn Context, _r: &mut Render) -> Result<()> {
+impl Widget for BenchmarkTextWrapper {
+    fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
-}
 
-impl Loader for BenchmarkTextWrapper {
-    fn load(_c: &mut Canopy) {
-        // No commands to register for this simple wrapper
+    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+        EventOutcome::Ignore
+    }
+
+    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
+        self.ensure_tree(c);
+        None
     }
 }
+
+impl Loader for BenchmarkTextWrapper {}
 
 /// Benchmark rendering a text node.
 fn benchmark_text_rendering(c: &mut Criterion) {

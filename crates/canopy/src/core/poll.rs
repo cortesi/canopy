@@ -6,7 +6,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use crate::{event::Event, state::NodeId};
+use crate::{NodeId, event::Event};
 
 /// A node that has a pending callback.
 #[derive(Debug)]
@@ -151,28 +151,27 @@ impl Poller {
 
 #[cfg(test)]
 mod tests {
+    use slotmap::SlotMap;
+
     use super::*;
-    use crate::{
-        error::Result,
-        state::StatefulNode,
-        testing::ttree::{BaLa, BaLb},
-    };
+    use crate::error::Result;
     #[test]
     fn pendingheap() -> Result<()> {
         let now = SystemTime::now();
 
         let mut ph = PendingHeap::default();
-        let n1 = BaLa::new();
-        let n2 = BaLb::new();
+        let mut map: SlotMap<NodeId, ()> = SlotMap::with_key();
+        let n1 = map.insert(());
+        let n2 = map.insert(());
 
         assert_eq!(ph._current_wait(now), None);
-        ph._add(now, n1.id(), Duration::from_secs(10));
+        ph._add(now, n1, Duration::from_secs(10));
         assert_eq!(ph._current_wait(now).unwrap(), Duration::from_secs(10));
-        ph._add(now, n2.id(), Duration::from_secs(100));
+        ph._add(now, n2, Duration::from_secs(100));
         assert!(ph._current_wait(now).unwrap() <= Duration::from_secs(10));
         assert_eq!(
             ph._collect(SystemTime::now() + Duration::from_secs(11)),
-            vec![n1.id()]
+            vec![n1]
         );
         assert!(ph._current_wait(now).unwrap() <= Duration::from_secs(100));
 

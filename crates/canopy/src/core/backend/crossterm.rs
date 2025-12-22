@@ -11,13 +11,15 @@ use color_backtrace::{BacktracePrinter, default_output_stream};
 use scopeguard::defer;
 
 use crate::{
-    Canopy, Context,
+    Canopy, NodeId,
     backend::BackendControl,
-    core::dump::{dump, dump_with_focus},
+    core::{
+        Core,
+        dump::{dump, dump_with_focus},
+    },
     error::{self, Result},
     event::{Event, key, mouse},
     geom::{Expanse, Point},
-    node::Node,
     render::RenderBackend,
     style::{Color, Style},
 };
@@ -354,10 +356,11 @@ fn event_emitter(evt_tx: mpsc::Sender<Event>) {
 
 /// Helper function to handle render errors by exiting alternate screen mode
 /// and displaying the error with a node tree dump
-fn handle_render_error<N: Node>(
+fn handle_render_error(
     error: error::Error,
-    root: &mut N,
-    focus_gen: Option<u64>,
+    core: &Core,
+    root: NodeId,
+    focus: Option<NodeId>,
 ) -> error::Error {
     // Exit alternate screen mode to display error
     let mut stderr = io::stderr();
@@ -375,10 +378,10 @@ fn handle_render_error<N: Node>(
     // Print error and node dump
     eprintln!("Render error: {error}");
     eprintln!("\nNode tree dump:");
-    let dump_result = if let Some(fg) = focus_gen {
-        dump_with_focus(root, fg)
+    let dump_result = if focus.is_some() {
+        dump_with_focus(core, root, focus)
     } else {
-        dump(root)
+        dump(core, root)
     };
     match dump_result {
         Ok(dump_str) => eprintln!("{dump_str}"),
@@ -389,10 +392,7 @@ fn handle_render_error<N: Node>(
 }
 
 /// Run the main render/event loop using the crossterm backend.
-pub fn runloop<N>(mut cnpy: Canopy, mut root: N) -> Result<()>
-where
-    N: Node,
-{
+pub fn runloop(mut cnpy: Canopy) -> Result<()> {
     let mut be = CrosstermRender::default();
     let ctrl = CrosstermControl::default();
 
@@ -440,14 +440,15 @@ where
     event_emitter(cnpy.event_tx.clone());
     let size = translate_result(terminal::size())?;
     cnpy.register_backend(ctrl);
-    cnpy.set_root_size(Expanse::new(size.0.into(), size.1.into()), &mut root)?;
+    cnpy.set_root_size(Expanse::new(size.0.into(), size.1.into()))?;
     cnpy.start_poller(cnpy.event_tx.clone());
 
-    if let Err(e) = cnpy.render(&mut be, &mut root) {
+    if let Err(e) = cnpy.render(&mut be) {
         return Err(handle_render_error(
             e,
-            &mut root,
-            Some(cnpy.current_focus_gen()),
+            &cnpy.core,
+            cnpy.core.root,
+            cnpy.core.focus,
         ));
     }
     translate_result(be.flush())?;
@@ -476,7 +477,7 @@ where
 
             // Print node tree dump
             eprintln!("\nCtrl+C pressed - Node tree dump:");
-            match dump_with_focus(&mut root, cnpy.current_focus_gen()) {
+            match dump_with_focus(&cnpy.core, cnpy.core.root, cnpy.core.focus) {
                 Ok(dump_str) => eprintln!("{dump_str}"),
                 Err(dump_err) => eprintln!("Failed to dump node tree: {dump_err}"),
             }
@@ -485,12 +486,13 @@ where
             exit(130); // 130 is the standard exit code for SIGINT
         }
 
-        cnpy.event(&mut root, event)?;
-        if let Err(e) = cnpy.render(&mut be, &mut root) {
+        cnpy.event(event)?;
+        if let Err(e) = cnpy.render(&mut be) {
             return Err(handle_render_error(
                 e,
-                &mut root,
-                Some(cnpy.current_focus_gen()),
+                &cnpy.core,
+                cnpy.core.root,
+                cnpy.core.focus,
             ));
         }
         translate_result(be.flush())?;

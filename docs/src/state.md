@@ -1,33 +1,22 @@
-# trait StatefulNode
+# Node names
 
-Canopy tracks housekeeping data for each node - this includes whether the node has focus, the size and location of the
-node, whether the node has been tainted, and so on. This data is tracked in an opaque structure called `NodeState`, and
-each node is responsible for keeping its own state and returning it back to Canopy on request. The mechanism for doing
-this is the [StatefulNode](doc/canopy/trait.StatefulNode.html) trait. There are three functions that need to be implemented to support this trait:
+Every node in the tree has a **node name**, which is used for command dispatch
+and path matching in input bindings. Names are stored as a `NodeName`, which is
+validated to contain only lowercase ASCII letters, digits, and underscores.
 
-```rust
-/// The name of this node, used for debugging and command dispatch.
-fn name(&self) -> NodeName;
+## Default naming
 
-/// Get a reference to the node's state object.
-fn state(&self) -> &NodeState;
+Widgets can override `Widget::name` to control the node name, but if they
+don't, the default implementation converts the Rust type name to snake case and
+removes invalid characters. This means a widget named `FocusGym` becomes the
+node name `focus_gym`.
 
-/// Get a mutable reference to the node's state object.
-fn state_mut(&mut self) -> &mut NodeState;
-```
+## Manual conversion
 
-These are simple enough to implement by hand, but it's such common boilerplate that Canopy provides a macro to do this
-for you. All you need to do is make sure that the struct for your node has an attribute called `state` of type
-`NodeState`.
+If you need to construct a node name yourself, use:
 
 ```rust
-#[derive(canopy::StatefulNode)]
-struct MyNode {
-    state: NodeState,
-    // ...
-}
+use canopy::state::NodeName;
+
+let name = NodeName::convert("MyWidget");
 ```
-
-The derive macro takes the name of the struct converted to snake case as the node name - in this case it would be
-`my_node`.
-

@@ -4,7 +4,6 @@ use crate::{
     Canopy,
     error::Result,
     geom::{Expanse, Point},
-    node::Node,
     render::RenderBackend,
     style::{Style, StyleManager},
 };
@@ -45,8 +44,8 @@ impl TestRender {
     }
 
     /// Render a node tree into the test buffer.
-    pub fn render(&mut self, c: &mut Canopy, e: &mut dyn Node) -> Result<()> {
-        c.render(self, e)?;
+    pub fn render(&mut self, c: &mut Canopy) -> Result<()> {
+        c.render(self)?;
         Ok(())
     }
 

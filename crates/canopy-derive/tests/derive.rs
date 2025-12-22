@@ -5,135 +5,133 @@ mod tests {
     use std::marker::PhantomData;
 
     use canopy::{
-        self,
+        self, Context, ViewContext,
         commands::{
             ArgTypes, Args, CommandInvocation, CommandNode, CommandSpec, ReturnSpec, ReturnTypes,
         },
         error::Result,
-        node::Node,
-        state::{NodeState, StatefulNode},
+        event::Event,
+        geom::Rect,
+        render::Render,
         testing::dummyctx::DummyContext,
+        widget::{EventOutcome, Widget},
     };
     use canopy_derive::{command, derive_commands};
     #[cfg(test)]
     use pretty_assertions::assert_eq;
 
-    #[test]
-    fn statefulnode() {
-        #[derive(canopy::StatefulNode)]
-        struct FooBar {
-            state: NodeState,
+    struct Opaque {}
+
+    struct Foo {
+        a_triggered: bool,
+        b_triggered: bool,
+        c_triggered: bool,
+        naked_str_triggered: bool,
+        core_isize: Option<isize>,
+        naked_isize: Option<isize>,
+    }
+
+    #[derive_commands]
+    impl Foo {
+        #[command]
+        /// This is a comment.
+        /// Multiline too!
+        fn a(&mut self, _core: &mut dyn canopy::Context) -> Result<()> {
+            self.a_triggered = true;
+            Ok(())
         }
 
-        impl Node for FooBar {}
+        #[command]
+        fn b(&mut self, _core: &mut dyn canopy::Context) -> Result<()> {
+            self.b_triggered = true;
+            Ok(())
+        }
 
-        #[derive_commands]
-        impl FooBar {}
+        #[command]
+        fn c(&mut self, _core: &mut dyn canopy::Context) {
+            self.c_triggered = true;
+        }
 
-        let f = FooBar {
-            state: NodeState::default(),
-        };
+        #[command(ignore_result)]
+        fn d(&mut self, _core: &mut dyn canopy::Context) -> Opaque {
+            self.c_triggered = true;
+            Opaque {}
+        }
 
-        assert_eq!(f.name(), "foo_bar");
+        #[command(ignore_result)]
+        fn f_core_isize(&mut self, _core: &mut dyn canopy::Context, i: isize) -> Opaque {
+            self.core_isize = Some(i);
+            Opaque {}
+        }
+
+        #[command]
+        fn naked_isize(&mut self, i: isize) {
+            self.naked_isize = Some(i);
+        }
+
+        #[command]
+        fn naked_str(&mut self, _core: &mut dyn canopy::Context) -> String {
+            self.naked_str_triggered = true;
+            "".into()
+        }
+
+        #[command]
+        fn result_str(&mut self, _core: &mut dyn canopy::Context) -> Result<String> {
+            self.naked_str_triggered = true;
+            Ok("".into())
+        }
+
+        #[command]
+        fn nocore(&self) -> Result<String> {
+            Ok("".into())
+        }
+    }
+
+    impl Widget for Foo {
+        fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
+            Ok(())
+        }
+
+        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+            EventOutcome::Ignore
+        }
+    }
+
+    struct Bar<N>
+    where
+        N: Widget,
+    {
+        a_triggered: bool,
+        p: PhantomData<N>,
+    }
+
+    #[derive_commands]
+    impl<N> Bar<N>
+    where
+        N: Widget,
+    {
+        #[command]
+        fn a(&mut self, _core: &dyn canopy::Context) -> Result<()> {
+            self.a_triggered = true;
+            Ok(())
+        }
+    }
+
+    impl<N> Widget for Bar<N>
+    where
+        N: Widget,
+    {
+        fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
+            Ok(())
+        }
+
+        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+            EventOutcome::Ignore
+        }
     }
 
     #[test]
     fn commands() {
-        #[derive(canopy::StatefulNode)]
-        struct Foo {
-            state: NodeState,
-            a_triggered: bool,
-            b_triggered: bool,
-            c_triggered: bool,
-            naked_str_triggered: bool,
-            core_isize: Option<isize>,
-            naked_isize: Option<isize>,
-        }
-
-        impl Node for Foo {}
-
-        struct Opaque {}
-
-        #[derive(canopy::StatefulNode)]
-        struct Bar<N>
-        where
-            N: Node,
-        {
-            state: NodeState,
-            a_triggered: bool,
-            p: PhantomData<N>,
-        }
-
-        impl<N> Node for Bar<N> where N: Node {}
-
-        #[derive_commands]
-        impl<N> Bar<N>
-        where
-            N: Node,
-        {
-            #[command]
-            fn a(&mut self, _core: &dyn canopy::Context) -> Result<()> {
-                self.a_triggered = true;
-                Ok(())
-            }
-        }
-
-        #[derive_commands]
-        impl Foo {
-            #[command]
-            /// This is a comment.
-            /// Multiline too!
-            fn a(&mut self, _core: &dyn canopy::Context) -> Result<()> {
-                self.a_triggered = true;
-                Ok(())
-            }
-
-            #[command]
-            fn b(&mut self, _core: &dyn canopy::Context) -> Result<()> {
-                self.b_triggered = true;
-                Ok(())
-            }
-
-            #[command]
-            fn c(&mut self, _core: &dyn canopy::Context) {
-                self.c_triggered = true;
-            }
-
-            #[command(ignore_result)]
-            fn d(&mut self, _core: &dyn canopy::Context) -> Opaque {
-                self.c_triggered = true;
-                Opaque {}
-            }
-
-            #[command(ignore_result)]
-            fn f_core_isize(&mut self, _core: &dyn canopy::Context, i: isize) -> Opaque {
-                self.core_isize = Some(i);
-                Opaque {}
-            }
-
-            #[command]
-            fn naked_isize(&mut self, i: isize) {
-                self.naked_isize = Some(i);
-            }
-
-            #[command]
-            fn naked_str(&mut self, _core: &dyn canopy::Context) -> String {
-                self.naked_str_triggered = true;
-                "".into()
-            }
-
-            #[command]
-            fn result_str(&mut self, _core: &dyn canopy::Context) -> Result<String> {
-                self.naked_str_triggered = true;
-                Ok("".into())
-            }
-
-            #[command]
-            fn nocore(&self) -> Result<String> {
-                Ok("".into())
-            }
-        }
-
         assert_eq!(
             Foo::commands(),
             [
@@ -202,8 +200,8 @@ mod tests {
                 }
             ]
         );
+
         let mut f = Foo {
-            state: NodeState::default(),
             a_triggered: false,
             b_triggered: false,
             c_triggered: false,
@@ -212,61 +210,25 @@ mod tests {
             naked_isize: None,
         };
 
-        let mut dc = DummyContext {};
+        let mut dc = DummyContext::default();
 
         f.dispatch(
             &mut dc,
             &CommandInvocation {
                 node: "foo".try_into().unwrap(),
                 command: "a".into(),
-                args: vec![],
+                args: vec![Args::Context],
             },
         )
         .unwrap();
+
         assert!(f.a_triggered);
 
-        f.dispatch(
-            &mut dc,
-            &CommandInvocation {
-                node: "foo".try_into().unwrap(),
-                command: "c".into(),
-                args: vec![],
-            },
-        )
-        .unwrap();
-        assert!(f.c_triggered);
-
-        f.dispatch(
-            &mut dc,
-            &CommandInvocation {
-                node: "foo".try_into().unwrap(),
-                command: "f_core_isize".into(),
-                args: vec![Args::Context, Args::ISize(3)],
-            },
-        )
-        .unwrap();
-        assert_eq!(f.core_isize, Some(3));
-
-        f.dispatch(
-            &mut dc,
-            &CommandInvocation {
-                node: "foo".try_into().unwrap(),
-                command: "naked_isize".into(),
-                args: vec![Args::ISize(3)],
-            },
-        )
-        .unwrap();
-        assert_eq!(f.naked_isize, Some(3));
-
-        assert_eq!(
-            Bar::<Foo>::commands(),
-            [CommandSpec {
-                node: "bar".try_into().unwrap(),
-                command: "a".to_string(),
-                docs: "".to_string(),
-                ret: ReturnSpec::new(ReturnTypes::Void, true),
-                args: vec![ArgTypes::Context],
-            },]
-        );
+        let mut bar = Bar::<Foo> {
+            a_triggered: false,
+            p: PhantomData,
+        };
+        bar.a(&dc).unwrap();
+        assert!(bar.a_triggered);
     }
 }

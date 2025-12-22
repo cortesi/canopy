@@ -8,13 +8,14 @@ use canopy_examples::test_text::TextDisplay;
 /// Run the test_text example.
 pub fn main() -> StdResult<(), Box<dyn Error>> {
     let mut cnpy = Canopy::new();
-    cnpy.add_commands::<Root<TextDisplay>>();
+    Root::load(&mut cnpy);
     TextDisplay::load(&mut cnpy);
 
     cnpy.bind_key('q', "root", "root::quit()")?;
-    cnpy.bind_key('r', "textdisplay", "textdisplay::redraw()")?;
+    cnpy.bind_key('r', "text_display", "text_display::redraw()")?;
 
-    let root = Root::new(TextDisplay::new());
-    runloop(cnpy, root)?;
+    let app_id = cnpy.core.add(TextDisplay::new());
+    Root::install(&mut cnpy.core, app_id)?;
+    runloop(cnpy)?;
     Ok(())
 }

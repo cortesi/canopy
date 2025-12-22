@@ -6,8 +6,8 @@ principles behind it will make writing powerful widgets much easier.
 ## Viewport
 
 The core structure managing layout in Canopy is the
-[ViewPort](doc/canopy/viewport/struct.Viewport.html). Each node has one, kept
-in the assocaited node state.
+[ViewPort](doc/canopy/viewport/struct.Viewport.html). Each node has one stored
+in the Core-managed node data.
 
 <center>
     <img width=100% style="padding: 20px;" src="assets/viewport.svg">
@@ -39,5 +39,4 @@ The **size** and **view** are controlled by the node itself, while the
 
 
 ## Rendering
-
 

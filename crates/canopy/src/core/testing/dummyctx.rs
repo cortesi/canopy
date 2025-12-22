@@ -1,73 +1,178 @@
-use crate::{Context, error::Result, geom::Direction, node::Node, path::Path};
+use std::process;
 
-/// Minimal context implementation for tests.
-pub struct DummyContext {}
+use slotmap::Key;
+use taffy::style::Style;
 
-impl Context for DummyContext {
-    fn is_on_focus_path(&self, _n: &mut dyn Node) -> bool {
+use crate::{
+    Context, ViewContext,
+    core::{NodeId, viewport::ViewPort},
+    error::Result,
+    geom::{Direction, Expanse, Rect},
+    path::Path,
+    widget::Widget,
+};
+
+/// Dummy context for tests.
+pub struct DummyContext {
+    /// Current node identifier.
+    node_id: NodeId,
+    /// Root node identifier.
+    root_id: NodeId,
+}
+
+impl Default for DummyContext {
+    fn default() -> Self {
+        Self {
+            node_id: NodeId::null(),
+            root_id: NodeId::null(),
+        }
+    }
+}
+
+impl ViewContext for DummyContext {
+    fn node_id(&self) -> NodeId {
+        self.node_id
+    }
+
+    fn root_id(&self) -> NodeId {
+        self.root_id
+    }
+
+    fn viewport(&self) -> Rect {
+        Rect::zero()
+    }
+
+    fn view(&self) -> Rect {
+        Rect::zero()
+    }
+
+    fn canvas(&self) -> Expanse {
+        Expanse::new(0, 0)
+    }
+
+    fn node_viewport(&self, _node: NodeId) -> Option<Rect> {
+        None
+    }
+
+    fn node_view(&self, _node: NodeId) -> Option<Rect> {
+        None
+    }
+
+    fn node_canvas(&self, _node: NodeId) -> Option<Expanse> {
+        None
+    }
+
+    fn node_vp(&self, _node: NodeId) -> Option<ViewPort> {
+        None
+    }
+
+    fn children(&self, _node: NodeId) -> Vec<NodeId> {
+        Vec::new()
+    }
+
+    fn is_focused(&self) -> bool {
         false
     }
-    fn is_focused(&self, _n: &dyn Node) -> bool {
+
+    fn node_is_focused(&self, _node: NodeId) -> bool {
         false
     }
-    fn focus_down(&mut self, _root: &mut dyn Node) {}
-    fn focus_first(&mut self, _root: &mut dyn Node) {}
-    fn focus_left(&mut self, _root: &mut dyn Node) {}
-    fn focus_next(&mut self, _root: &mut dyn Node) {}
-    fn focus_path(&self, _root: &mut dyn Node) -> Path {
+
+    fn is_on_focus_path(&self) -> bool {
+        false
+    }
+
+    fn node_is_on_focus_path(&self, _node: NodeId) -> bool {
+        false
+    }
+
+    fn focus_path(&self, _root: NodeId) -> Path {
         Path::empty()
     }
-    fn focus_prev(&mut self, _root: &mut dyn Node) {}
-    fn focus_right(&mut self, _root: &mut dyn Node) {}
-    fn focus_up(&mut self, _root: &mut dyn Node) {}
-    fn needs_render(&self, n: &dyn Node) -> bool {
-        !n.is_hidden()
-    }
-    fn set_focus(&mut self, _n: &mut dyn Node) -> bool {
-        false
-    }
-    fn focus_dir(&mut self, _root: &mut dyn Node, _dir: Direction) {}
-    fn scroll_to(&mut self, _n: &mut dyn Node, _x: u32, _y: u32) -> bool {
-        false
-    }
-    fn scroll_by(&mut self, _n: &mut dyn Node, _x: i32, _y: i32) -> bool {
-        false
-    }
-    fn page_up(&mut self, _n: &mut dyn Node) -> bool {
-        false
-    }
-    fn page_down(&mut self, _n: &mut dyn Node) -> bool {
-        false
-    }
-    fn scroll_up(&mut self, _n: &mut dyn Node) -> bool {
-        false
-    }
-    fn scroll_down(&mut self, _n: &mut dyn Node) -> bool {
-        false
-    }
-    fn scroll_left(&mut self, _n: &mut dyn Node) -> bool {
-        false
-    }
-    fn scroll_right(&mut self, _n: &mut dyn Node) -> bool {
+}
+
+impl Context for DummyContext {
+    fn set_focus(&mut self, _node: NodeId) -> bool {
         false
     }
 
-    /// Start the backend renderer.
+    fn focus_dir(&mut self, _root: NodeId, _dir: Direction) {}
+
+    fn focus_first(&mut self, _root: NodeId) {}
+
+    fn focus_next(&mut self, _root: NodeId) {}
+
+    fn focus_prev(&mut self, _root: NodeId) {}
+
+    fn scroll_to(&mut self, _x: u32, _y: u32) -> bool {
+        false
+    }
+
+    fn scroll_by(&mut self, _x: i32, _y: i32) -> bool {
+        false
+    }
+
+    fn page_up(&mut self) -> bool {
+        false
+    }
+
+    fn page_down(&mut self) -> bool {
+        false
+    }
+
+    fn scroll_up(&mut self) -> bool {
+        false
+    }
+
+    fn scroll_down(&mut self) -> bool {
+        false
+    }
+
+    fn scroll_left(&mut self) -> bool {
+        false
+    }
+
+    fn scroll_right(&mut self) -> bool {
+        false
+    }
+
+    fn with_style(&mut self, _node: NodeId, _f: &mut dyn FnMut(&mut Style)) -> Result<()> {
+        Ok(())
+    }
+
+    fn add(&mut self, _widget: Box<dyn Widget>) -> NodeId {
+        NodeId::null()
+    }
+
+    fn with_widget_mut(
+        &mut self,
+        _node: NodeId,
+        _f: &mut dyn FnMut(&mut dyn Widget, &mut dyn Context) -> Result<()>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    fn mount_child(&mut self, _parent: NodeId, _child: NodeId) -> Result<()> {
+        Ok(())
+    }
+
+    fn detach_child(&mut self, _parent: NodeId, _child: NodeId) -> Result<()> {
+        Ok(())
+    }
+
+    fn set_children(&mut self, _parent: NodeId, _children: Vec<NodeId>) -> Result<()> {
+        Ok(())
+    }
+
     fn start(&mut self) -> Result<()> {
         Ok(())
     }
 
-    /// Stop the backend renderer, releasing control of the terminal.
     fn stop(&mut self) -> Result<()> {
         Ok(())
     }
 
-    /// Stop the render backend and exit the process.
-    fn exit(&mut self, _code: i32) -> ! {
-        panic!("exit in dummy core")
-    }
-
-    fn current_focus_gen(&self) -> u64 {
-        0
+    fn exit(&mut self, code: i32) -> ! {
+        process::exit(code)
     }
 }

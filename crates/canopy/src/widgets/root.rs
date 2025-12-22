@@ -1,42 +1,34 @@
+use taffy::style::{Dimension, Display, FlexDirection, Style};
+
 use crate::{
-    Binder, Canopy, Context, DefaultBindings, Layout, Loader, command, derive_commands,
+    Binder, Canopy, Context, DefaultBindings, Loader, NodeId, ViewContext, command,
+    core::Core,
+    derive_commands,
     error::Result,
-    event::key::*,
-    geom::Expanse,
-    node::Node,
-    render::Render,
-    state::{NodeState, StatefulNode},
+    event::{Event, key::*},
+    geom::Rect,
+    state::NodeName,
+    widget::{EventOutcome, Widget},
     widgets::inspector::Inspector,
 };
 
-/// A Root node that lives at the base of a Canopy app. It manages modal
-/// windows, houses the Inspector and exposes a set of built-in functions.
-#[derive(canopy::StatefulNode)]
-pub struct Root<T>
-where
-    T: Node,
-{
+/// A Root widget that lives at the base of a Canopy app.
+pub struct Root {
     /// Application root node.
-    app: T,
-    /// Node state.
-    state: NodeState,
+    app: NodeId,
     /// Inspector overlay node.
-    inspector: Inspector,
+    inspector: NodeId,
     /// Whether the inspector is visible.
     inspector_active: bool,
 }
 
 #[derive_commands]
-impl<T> Root<T>
-where
-    T: Node,
-{
-    /// Construct a root node wrapping the application.
-    pub fn new(app: T) -> Self {
+impl Root {
+    /// Construct a root widget wrapping the application and inspector nodes.
+    pub fn new(app: NodeId, inspector: NodeId) -> Self {
         Self {
             app,
-            state: NodeState::default(),
-            inspector: Inspector::new(),
+            inspector,
             inspector_active: false,
         }
     }
@@ -44,10 +36,35 @@ where
     /// Start with the inspector open.
     pub fn with_inspector(mut self, state: bool) -> Self {
         self.inspector_active = state;
-        if state {
-            self.inspector.unhide();
-        }
         self
+    }
+
+    /// Synchronize the root layout based on inspector visibility.
+    fn sync_layout(&self, c: &mut dyn Context) -> Result<()> {
+        let root_id = c.node_id();
+        if self.inspector_active {
+            c.set_children(root_id, vec![self.inspector, self.app])?;
+        } else {
+            c.set_children(root_id, vec![self.app])?;
+        }
+
+        let mut update_root = |style: &mut Style| {
+            style.display = Display::Flex;
+            style.flex_direction = FlexDirection::Row;
+        };
+        c.with_style(root_id, &mut update_root)?;
+
+        let mut update_child = |style: &mut Style| {
+            style.flex_grow = 1.0;
+            style.flex_shrink = 1.0;
+            style.flex_basis = Dimension::Auto;
+        };
+        c.with_style(self.app, &mut update_child)?;
+        if self.inspector_active {
+            c.with_style(self.inspector, &mut update_child)?;
+        }
+
+        Ok(())
     }
 
     #[command]
@@ -65,42 +82,42 @@ where
     #[command]
     /// Focus the next node in a pre-order traversal of the app.
     pub fn focus_next(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.focus_next(self);
+        c.focus_next(c.root_id());
         Ok(())
     }
 
     #[command]
-    /// Focus the next node in a pre-order traversal of the app.
+    /// Focus the previous node in a pre-order traversal of the app.
     pub fn focus_prev(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.focus_prev(self);
+        c.focus_prev(c.root_id());
         Ok(())
     }
 
     #[command]
     /// Shift focus right.
     pub fn focus_right(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.focus_right(self);
+        c.focus_right(c.root_id());
         Ok(())
     }
 
     #[command]
     /// Shift focus left.
     pub fn focus_left(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.focus_left(self);
+        c.focus_left(c.root_id());
         Ok(())
     }
 
     #[command]
     /// Shift focus up.
     pub fn focus_up(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.focus_up(self);
+        c.focus_up(c.root_id());
         Ok(())
     }
 
     #[command]
     /// Shift focus down.
     pub fn focus_down(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.focus_down(self);
+        c.focus_down(c.root_id());
         Ok(())
     }
 
@@ -108,8 +125,8 @@ where
     /// Hide the inspector.
     pub fn hide_inspector(&mut self, c: &mut dyn Context) -> Result<()> {
         self.inspector_active = false;
-        self.inspector.hide();
-        c.focus_first(&mut self.app);
+        self.sync_layout(c)?;
+        c.focus_first(self.app);
         Ok(())
     }
 
@@ -117,13 +134,13 @@ where
     /// Show the inspector.
     pub fn activate_inspector(&mut self, c: &mut dyn Context) -> Result<()> {
         self.inspector_active = true;
-        self.inspector.unhide();
-        c.focus_first(&mut self.inspector);
+        self.sync_layout(c)?;
+        c.focus_first(self.inspector);
         Ok(())
     }
 
     #[command]
-    /// Show the inspector.
+    /// Toggle inspector visibility.
     pub fn toggle_inspector(&mut self, c: &mut dyn Context) -> Result<()> {
         if self.inspector_active {
             self.hide_inspector(c)
@@ -135,46 +152,73 @@ where
     #[command]
     /// If we're currently focused in the inspector, shift focus into the app pane instead.
     pub fn focus_app(&mut self, c: &mut dyn Context) -> Result<()> {
-        if c.is_on_focus_path(&mut self.inspector) {
-            c.focus_first(&mut self.app);
+        if c.node_is_on_focus_path(self.inspector) {
+            c.focus_first(self.app);
         }
         Ok(())
     }
-}
 
-impl<T> Node for Root<T>
-where
-    T: Node,
-{
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-        f(&mut self.inspector)?;
-        f(&mut self.app)
+    /// Helper to install a root widget into the core and configure children.
+    pub fn install(core: &mut Core, app: NodeId) -> Result<NodeId> {
+        Self::install_with_inspector(core, app, false)
     }
 
-    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        self.set_view(sz.into());
-        self.set_canvas(sz);
-
-        let vp = self.vp();
-        if self.inspector_active {
-            let parts = vp.view().split_horizontal(2)?;
-            l.place(&mut self.inspector, parts[0])?;
-            l.place(&mut self.app, parts[1])?;
+    /// Helper to install a root widget into the core with an optional inspector pane.
+    pub fn install_with_inspector(
+        core: &mut Core,
+        app: NodeId,
+        inspector_active: bool,
+    ) -> Result<NodeId> {
+        let inspector = Inspector::install(core)?;
+        let root = Self::new(app, inspector).with_inspector(inspector_active);
+        core.set_widget(core.root, root);
+        if inspector_active {
+            core.set_children(core.root, vec![inspector, app])?;
         } else {
-            l.place(&mut self.app, sz.into())?;
-        };
-        Ok(())
-    }
-
-    fn render(&mut self, _c: &dyn Context, _r: &mut Render) -> Result<()> {
-        Ok(())
+            core.set_children(core.root, vec![app])?;
+        }
+        core.build(core.root).flex_row().w_full();
+        core.build(app).style(|style| {
+            style.flex_grow = 1.0;
+            style.flex_shrink = 1.0;
+            style.flex_basis = Dimension::Auto;
+        });
+        if inspector_active {
+            core.build(inspector).style(|style| {
+                style.flex_grow = 1.0;
+                style.flex_shrink = 1.0;
+                style.flex_basis = Dimension::Auto;
+            });
+        }
+        Ok(core.root)
     }
 }
 
-impl<T> DefaultBindings for Root<T>
-where
-    T: Node,
-{
+impl Widget for Root {
+    fn render(
+        &mut self,
+        _rndr: &mut crate::render::Render,
+        _area: Rect,
+        _ctx: &dyn ViewContext,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+        EventOutcome::Ignore
+    }
+
+    fn configure_style(&self, style: &mut Style) {
+        style.size.width = Dimension::Percent(1.0);
+        style.size.height = Dimension::Percent(1.0);
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("root")
+    }
+}
+
+impl DefaultBindings for Root {
     fn defaults(b: Binder) -> Binder {
         b.defaults::<Inspector>()
             .with_path("root")
@@ -185,13 +229,190 @@ where
     }
 }
 
-impl<T> Loader for Root<T>
-where
-    T: Loader + Node,
-{
+impl Loader for Root {
     fn load(c: &mut Canopy) {
         c.add_commands::<Self>();
-        T::load(c);
         Inspector::load(c);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use taffy::style::{Dimension, Display, FlexDirection, Style};
+
+    use super::*;
+    use crate::{
+        Context, ViewContext,
+        commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
+        error::{Error, Result},
+        geom::Expanse,
+        render::Render,
+        state::NodeName,
+        testing::render::NopBackend,
+        widget::{EventOutcome, Widget},
+    };
+
+    struct App;
+
+    impl CommandNode for App {
+        fn commands() -> Vec<CommandSpec> {
+            Vec::new()
+        }
+
+        fn dispatch(
+            &mut self,
+            _c: &mut dyn Context,
+            cmd: &CommandInvocation,
+        ) -> Result<ReturnValue> {
+            Err(Error::UnknownCommand(cmd.command.clone()))
+        }
+    }
+
+    impl Widget for App {
+        fn render(
+            &mut self,
+            _rndr: &mut Render,
+            _area: Rect,
+            _ctx: &dyn ViewContext,
+        ) -> Result<()> {
+            Ok(())
+        }
+
+        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+            EventOutcome::Ignore
+        }
+
+        fn name(&self) -> NodeName {
+            NodeName::convert("app")
+        }
+    }
+
+    struct FocusLeaf {
+        name: &'static str,
+    }
+
+    impl FocusLeaf {
+        fn new(name: &'static str) -> Self {
+            Self { name }
+        }
+    }
+
+    impl CommandNode for FocusLeaf {
+        fn commands() -> Vec<CommandSpec> {
+            Vec::new()
+        }
+
+        fn dispatch(
+            &mut self,
+            _c: &mut dyn Context,
+            cmd: &CommandInvocation,
+        ) -> Result<ReturnValue> {
+            Err(Error::UnknownCommand(cmd.command.clone()))
+        }
+    }
+
+    impl Widget for FocusLeaf {
+        fn accept_focus(&mut self) -> bool {
+            true
+        }
+
+        fn render(
+            &mut self,
+            _rndr: &mut Render,
+            _area: Rect,
+            _ctx: &dyn ViewContext,
+        ) -> Result<()> {
+            Ok(())
+        }
+
+        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+            EventOutcome::Ignore
+        }
+
+        fn poll(&mut self, _ctx: &mut dyn Context) -> Option<Duration> {
+            None
+        }
+
+        fn name(&self) -> NodeName {
+            NodeName::convert(self.name)
+        }
+    }
+
+    fn setup_root_tree() -> Result<(Canopy, NopBackend, NodeId, NodeId)> {
+        let mut canopy = Canopy::new();
+        Root::load(&mut canopy);
+
+        let app_id = canopy.core.add(App);
+        let left = canopy.core.add(FocusLeaf::new("left"));
+        let right = canopy.core.add(FocusLeaf::new("right"));
+        canopy.core.set_children(app_id, vec![left, right])?;
+
+        canopy.core.build(app_id).style(|style| {
+            style.display = Display::Flex;
+            style.flex_direction = FlexDirection::Row;
+        });
+
+        let grow = |style: &mut Style| {
+            style.flex_grow = 1.0;
+            style.flex_shrink = 1.0;
+            style.flex_basis = Dimension::Auto;
+        };
+        canopy.core.build(left).style(grow);
+        canopy.core.build(right).style(grow);
+
+        Root::install(&mut canopy.core, app_id)?;
+        canopy.set_root_size(Expanse::new(20, 6))?;
+
+        let mut backend = NopBackend::new();
+        canopy.render(&mut backend)?;
+
+        Ok((canopy, backend, left, right))
+    }
+
+    fn run_script(canopy: &mut Canopy, script: &str) -> Result<()> {
+        let script_id = canopy.script_host.compile(script)?;
+        canopy.run_script(canopy.core.root, script_id)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_root_focus_dir_commands_via_script() -> Result<()> {
+        let (mut canopy, mut backend, left, right) = setup_root_tree()?;
+
+        assert_eq!(canopy.core.focus, Some(left));
+
+        run_script(&mut canopy, "root::focus_right()")?;
+        assert_eq!(canopy.core.focus, Some(right));
+
+        run_script(&mut canopy, "root::focus_left()")?;
+        assert_eq!(canopy.core.focus, Some(left));
+
+        run_script(&mut canopy, "root::focus_up()")?;
+        run_script(&mut canopy, "root::focus_down()")?;
+
+        canopy.render(&mut backend)?;
+        assert!(canopy.core.focus.is_some());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_root_focus_next_prev_commands_via_script() -> Result<()> {
+        let (mut canopy, mut backend, left, right) = setup_root_tree()?;
+
+        assert_eq!(canopy.core.focus, Some(left));
+
+        run_script(&mut canopy, "root::focus_next()")?;
+        assert_eq!(canopy.core.focus, Some(right));
+
+        run_script(&mut canopy, "root::focus_prev()")?;
+        assert_eq!(canopy.core.focus, Some(left));
+
+        canopy.render(&mut backend)?;
+        assert!(canopy.core.focus.is_some());
+
+        Ok(())
     }
 }

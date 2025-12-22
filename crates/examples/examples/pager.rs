@@ -12,12 +12,14 @@ pub fn main() -> StdResult<(), Box<dyn Error>> {
         println!("Usage: pager filename");
     } else {
         let mut cnpy = Canopy::new();
-        Root::<Pager>::load(&mut cnpy);
+        Root::load(&mut cnpy);
+        Pager::load(&mut cnpy);
         setup_bindings(&mut cnpy);
 
         let contents = fs::read_to_string(args[1].clone())?;
-        let root = Root::new(Pager::new(&contents));
-        runloop(cnpy, root)?;
+        let app_id = cnpy.core.add(Pager::new(&contents));
+        Root::install(&mut cnpy.core, app_id)?;
+        runloop(cnpy)?;
     }
     Ok(())
 }

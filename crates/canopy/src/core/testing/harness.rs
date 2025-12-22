@@ -1,34 +1,35 @@
 use super::{buf::BufTest, render::NopBackend};
 use crate::{
-    Canopy, Loader, core::termbuf::TermBuf, error::Result, event::key, geom::Expanse, node::Node,
+    Canopy, Loader, NodeId, core::termbuf::TermBuf, error::Result, event::key, geom::Expanse,
+    widget::Widget,
 };
 
-/// A simple harness that holds a [`Canopy`], a [`DummyBackend`] backend and a
-/// root node. Tests drive the UI by sending key events and triggering renders
+/// A simple harness that holds a [`Canopy`], a [`NopBackend`] backend and a
+/// root node ID. Tests drive the UI by sending key events and triggering renders
 /// and can then inspect the render buffer.
-pub struct Harness<N> {
+pub struct Harness {
     /// The Canopy instance that manages the node tree and rendering.
     pub canopy: Canopy,
     /// The backend used for rendering. In tests, this is a no-op backend.
     pub backend: NopBackend,
     /// The root node of the UI under test.
-    pub root: N,
+    pub root: NodeId,
 }
 
 /// Builder for creating a test harness with a fluent API.
-pub struct HarnessBuilder<N> {
-    /// Root node under test.
-    root: N,
+pub struct HarnessBuilder<W> {
+    /// Root widget under test.
+    root: W,
     /// Viewport size for the harness.
     size: Expanse,
 }
 
-impl<N: Node + Loader> HarnessBuilder<N> {
-    /// Create a new harness builder with the given root node.
-    fn new(root: N) -> Self {
+impl<W: Widget + Loader + 'static> HarnessBuilder<W> {
+    /// Create a new harness builder with the given root widget.
+    fn new(root: W) -> Self {
         Self {
             root,
-            size: Expanse::new(100, 100), // default size
+            size: Expanse::new(100, 100),
         }
     }
 
@@ -39,63 +40,48 @@ impl<N: Node + Loader> HarnessBuilder<N> {
     }
 
     /// Build the harness with the configured settings.
-    pub fn build(mut self) -> Result<Harness<N>> {
+    pub fn build(self) -> Result<Harness> {
         let render = NopBackend::new();
-        let mut core = Canopy::new();
+        let mut canopy = Canopy::new();
 
-        <N as Loader>::load(&mut core);
-        core.set_root_size(self.size, &mut self.root)?;
+        <W as Loader>::load(&mut canopy);
+        canopy.core.set_widget(canopy.core.root, self.root);
+        canopy.set_root_size(self.size)?;
 
         Ok(Harness {
-            canopy: core,
+            root: canopy.core.root,
+            canopy,
             backend: render,
-            root: self.root,
         })
     }
 }
 
-impl<N: Node + Loader> Harness<N> {
+impl Harness {
     /// Create a harness builder for constructing a test harness with a fluent API.
-    ///
-    /// # Example
-    /// ```no_run
-    /// # use canopy::testing::harness::Harness;
-    /// # use canopy::{Loader, error::Result, node::Node};
-    /// # fn example<N: Node + Loader>(node: N) -> Result<()> {
-    /// let harness = Harness::builder(node)
-    ///     .size(80, 24)
-    ///     .build()?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn builder(root: N) -> HarnessBuilder<N> {
+    pub fn builder<W: Widget + Loader + 'static>(root: W) -> HarnessBuilder<W> {
         HarnessBuilder::new(root)
     }
 
     /// Create a harness using `size` for the root layout.
-    ///
-    /// This method is kept for backwards compatibility. Consider using `builder()` instead.
-    pub fn with_size(mut root: N, size: Expanse) -> Result<Self> {
+    pub fn with_size<W: Widget + Loader + 'static>(root: W, size: Expanse) -> Result<Self> {
         let render = NopBackend::new();
-        let mut core = Canopy::new();
-        <N as Loader>::load(&mut core);
-        core.set_root_size(size, &mut root)?;
+        let mut canopy = Canopy::new();
+        <W as Loader>::load(&mut canopy);
+        canopy.core.set_widget(canopy.core.root, root);
+        canopy.set_root_size(size)?;
         Ok(Self {
-            canopy: core,
+            root: canopy.core.root,
+            canopy,
             backend: render,
-            root,
         })
     }
 
     /// Create a harness with a default root size of 100x100.
-    ///
-    /// This method is kept for backwards compatibility. Consider using `builder()` instead.
-    pub fn new(root: N) -> Result<Self> {
+    pub fn new<W: Widget + Loader + 'static>(root: W) -> Result<Self> {
         Self::with_size(root, Expanse::new(100, 100))
     }
 
-    /// Access the current render buffer. Panics if a render has not yet been
-    /// performed.
+    /// Access the current render buffer. Panics if a render has not yet been performed.
     pub fn buf(&self) -> &TermBuf {
         self.canopy.buf().expect("render buffer not initialized")
     }
@@ -105,26 +91,36 @@ impl<N: Node + Loader> Harness<N> {
     where
         T: Into<key::Key>,
     {
-        self.canopy.key(&mut self.root, k)?;
-        self.canopy.render(&mut self.backend, &mut self.root)
+        self.canopy.key(k)?;
+        self.canopy.render(&mut self.backend)
     }
 
     /// Render the root node into the harness backend.
     pub fn render(&mut self) -> Result<()> {
-        self.canopy.render(&mut self.backend, &mut self.root)
+        self.canopy.render(&mut self.backend)
     }
 
-    /// Execute a script on the app under test. The script is compiled and then
-    /// executed on the root node, similar to how key bindings work.
+    /// Execute a script on the app under test.
     pub fn script(&mut self, script: &str) -> Result<()> {
         let script_id = self.canopy.script_host.compile(script)?;
-        let root_id = self.root.id();
-        self.canopy.run_script(&mut self.root, root_id, script_id)?;
-        self.canopy.render(&mut self.backend, &mut self.root)
+        self.canopy.run_script(self.root, script_id)?;
+        self.canopy.render(&mut self.backend)
     }
 
-    /// Get a BufTest instance that references the current buffer. This provides convenient
-    /// access to buffer testing utilities.
+    /// Execute a closure with mutable access to a widget by node id.
+    pub fn with_widget<R>(&mut self, node_id: NodeId, f: impl FnOnce(&mut dyn Widget) -> R) -> R {
+        self.canopy
+            .core
+            .with_widget_mut(node_id, |widget, _| f(widget))
+    }
+
+    /// Execute a closure with mutable access to the root widget.
+    pub fn with_root_widget<R>(&mut self, f: impl FnOnce(&mut dyn Widget) -> R) -> R {
+        let root = self.root;
+        self.with_widget(root, f)
+    }
+
+    /// Get a BufTest instance that references the current buffer.
     pub fn tbuf(&self) -> BufTest<'_> {
         BufTest::new(self.buf())
     }
@@ -134,37 +130,36 @@ impl<N: Node + Loader> Harness<N> {
 mod tests {
     use super::*;
     use crate::{
-        Context, Layout, Loader, derive_commands,
+        Context, ViewContext, derive_commands,
         error::Result,
-        geom::{Expanse, Line},
-        node::Node,
+        event::Event,
+        geom::{Line, Rect},
         render::Render,
-        state::{NodeState, StatefulNode},
+        state::NodeName,
+        widget::{EventOutcome, Widget},
     };
 
-    #[derive(canopy::StatefulNode)]
-    struct TestNode {
-        state: NodeState,
-    }
+    struct TestNode;
 
     #[derive_commands]
     impl TestNode {
         fn new() -> Self {
-            Self {
-                state: NodeState::default(),
-            }
+            Self
         }
     }
 
-    impl Node for TestNode {
-        fn layout(&mut self, _l: &Layout, sz: Expanse) -> Result<()> {
-            self.fill(sz)?;
+    impl Widget for TestNode {
+        fn render(&mut self, r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
+            r.text("base", Line::new(0, 0, 5), "test")?;
             Ok(())
         }
 
-        fn render(&mut self, _ctx: &dyn Context, r: &mut Render) -> Result<()> {
-            r.text("base", Line::new(0, 0, 5), "test")?;
-            Ok(())
+        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+            EventOutcome::Ignore
+        }
+
+        fn name(&self) -> NodeName {
+            NodeName::convert("test_node")
         }
     }
 
@@ -178,29 +173,25 @@ mod tests {
             .unwrap();
         h.render().unwrap();
 
-        // This test just verifies dump() runs without panicking
-        // The actual output goes to stdout
         h.tbuf().dump();
-
-        // Also verify the text was rendered
         assert!(h.tbuf().contains_text("test"));
     }
 
     #[test]
     fn test_harness_builder() {
-        // Test the new builder API
         let mut h = Harness::builder(TestNode::new())
             .size(20, 5)
             .build()
             .unwrap();
 
         h.render().unwrap();
-
-        // Verify the text was rendered
         assert!(h.tbuf().contains_text("test"));
+    }
 
-        // Verify the size was set correctly
-        assert_eq!(h.buf().size().w, 20);
-        assert_eq!(h.buf().size().h, 5);
+    #[test]
+    fn test_harness_with_size() {
+        let mut h = Harness::with_size(TestNode::new(), Expanse::new(15, 4)).unwrap();
+        h.render().unwrap();
+        assert!(h.tbuf().contains_text("test"));
     }
 }

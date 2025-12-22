@@ -1,38 +1,45 @@
+use taffy::{
+    geometry::Line,
+    style::{Display, GridPlacement, Style, TrackSizingFunction},
+    style_helpers::{FromFlex, line},
+};
+
 use crate::{
-    Context, Layout, derive_commands,
+    Context, NodeId, ViewContext, derive_commands,
     error::Result,
-    geom::Expanse,
-    node::Node,
-    state::{NodeState, StatefulNode},
+    event::Event,
+    geom::Rect,
+    state::NodeName,
+    widget::{EventOutcome, Widget},
 };
 
 /// Panes manages a set of child nodes arranged in a 2d grid.
-#[derive(canopy::StatefulNode)]
-pub struct Panes<N: Node> {
+pub struct Panes {
     /// Child nodes arranged by column.
-    children: Vec<Vec<N>>,
-    /// Node state.
-    state: NodeState,
+    columns: Vec<Vec<NodeId>>,
 }
 
 #[derive_commands]
-impl<N> Panes<N>
-where
-    N: Node,
-{
-    /// Construct panes with a single child.
-    pub fn new(n: N) -> Self {
+impl Panes {
+    /// Construct panes with no children.
+    pub fn new() -> Self {
         Self {
-            children: vec![vec![n]],
-            state: NodeState::default(),
+            columns: Vec::new(),
+        }
+    }
+
+    /// Construct panes with a single child.
+    pub fn with_child(child: NodeId) -> Self {
+        Self {
+            columns: vec![vec![child]],
         }
     }
 
     /// Get the offset of the current focus in the children vector.
-    pub fn focus_coords(&mut self, c: &dyn Context) -> Option<(usize, usize)> {
-        for (x, col) in self.children.iter_mut().enumerate() {
-            for (y, row) in col.iter_mut().enumerate() {
-                if c.is_on_focus_path(row) {
+    pub fn focus_coords(&self, c: &dyn Context) -> Option<(usize, usize)> {
+        for (x, col) in self.columns.iter().enumerate() {
+            for (y, row) in col.iter().enumerate() {
+                if c.node_is_on_focus_path(*row) {
                     return Some((x, y));
                 }
             }
@@ -43,73 +50,104 @@ where
     /// Delete the focus node. If a column ends up empty, it is removed.
     pub fn delete_focus(&mut self, c: &mut dyn Context) -> Result<()> {
         if let Some((x, y)) = self.focus_coords(c) {
-            c.focus_next(self);
-            self.children[x].remove(y);
-            if self.children[x].is_empty() {
-                self.children.remove(x);
+            c.focus_next(c.root_id());
+            self.columns[x].remove(y);
+            if self.columns[x].is_empty() {
+                self.columns.remove(x);
+            }
+            self.sync_layout(c)?;
+        }
+        Ok(())
+    }
+
+    /// Insert a node, splitting vertically.
+    pub fn insert_row(&mut self, c: &mut dyn Context, n: NodeId) -> Result<()> {
+        if let Some((x, y)) = self.focus_coords(c) {
+            self.columns[x].insert(y, n);
+        } else {
+            self.columns.push(vec![n]);
+        }
+        self.sync_layout(c)
+    }
+
+    /// Insert a node in a new column.
+    pub fn insert_col(&mut self, c: &mut dyn Context, n: NodeId) -> Result<()> {
+        let coords = self.focus_coords(c);
+        if let Some((x, _)) = coords {
+            self.columns.insert(x + 1, vec![n]);
+        } else {
+            self.columns.push(vec![n]);
+        }
+        self.sync_layout(c)
+    }
+
+    /// Sync child layout and grid placement styles.
+    fn sync_layout(&self, c: &mut dyn Context) -> Result<()> {
+        let node_id = c.node_id();
+        let mut children = Vec::new();
+        let mut rows = 0usize;
+        for col in &self.columns {
+            rows = rows.max(col.len());
+            children.extend(col.iter().copied());
+        }
+
+        c.set_children(node_id, children)?;
+
+        let cols = self.columns.len().max(1);
+        let rows = rows.max(1);
+
+        let mut col_tracks = Vec::new();
+        for _ in 0..cols {
+            col_tracks.push(TrackSizingFunction::from_flex(1.0));
+        }
+
+        let mut row_tracks = Vec::new();
+        for _ in 0..rows {
+            row_tracks.push(TrackSizingFunction::from_flex(1.0));
+        }
+
+        let mut update_panes = |style: &mut Style| {
+            style.display = Display::Grid;
+            style.grid_template_columns = col_tracks.clone();
+            style.grid_template_rows = row_tracks.clone();
+        };
+        c.with_style(node_id, &mut update_panes)?;
+
+        for (col_idx, col) in self.columns.iter().enumerate() {
+            for (row_idx, child) in col.iter().enumerate() {
+                let mut update_child = |style: &mut Style| {
+                    style.grid_column = line::<Line<GridPlacement>>((col_idx + 1) as i16);
+                    style.grid_row = line::<Line<GridPlacement>>((row_idx + 1) as i16);
+                };
+                c.with_style(*child, &mut update_child)?;
             }
         }
+
         Ok(())
-    }
-
-    /// Insert a node, splitting vertically. If we have a focused node, the new
-    /// node is inserted in a row beneath it. If not, a new column is added.
-    pub fn insert_row(&mut self, c: &mut dyn Context, n: N)
-    where
-        N: Node,
-    {
-        if let Some((x, y)) = self.focus_coords(c) {
-            self.children[x].insert(y, n);
-        } else {
-            self.children.push(vec![n]);
-        }
-    }
-
-    /// Insert a node in a new column. If we have a focused node, the new node
-    /// is added in a new column to the right.
-    pub fn insert_col(&mut self, c: &mut dyn Context, mut n: N) -> Result<()>
-    where
-        N: Node,
-    {
-        let coords = self.focus_coords(c);
-        c.focus_next(&mut n);
-        if let Some((x, _)) = coords {
-            self.children.insert(x + 1, vec![n])
-        } else {
-            self.children.push(vec![n])
-        }
-        Ok(())
-    }
-
-    /// Returns the shape of the current child grid.
-    fn shape(&self) -> Vec<u32> {
-        let mut ret = vec![];
-        for i in &self.children {
-            ret.push(i.len() as u32)
-        }
-        ret
     }
 }
 
-impl<N: Node> Node for Panes<N> {
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-        for col in &mut self.children {
-            for row in col {
-                f(row)?
-            }
-        }
+impl Default for Panes {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Widget for Panes {
+    fn render(
+        &mut self,
+        _rndr: &mut crate::render::Render,
+        _area: Rect,
+        _ctx: &dyn ViewContext,
+    ) -> Result<()> {
         Ok(())
     }
 
-    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        self.fill(sz)?;
-        let vp = self.vp();
-        let lst = vp.view().split_panes(&self.shape())?;
-        for (ci, col) in self.children.iter_mut().enumerate() {
-            for (ri, row) in col.iter_mut().enumerate() {
-                l.place(row, lst[ci][ri])?;
-            }
-        }
-        Ok(())
+    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+        EventOutcome::Ignore
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("panes")
     }
 }

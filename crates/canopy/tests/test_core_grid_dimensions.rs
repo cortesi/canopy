@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use canopy::testing::grid::Grid;
+    use canopy::{Canopy, testing::grid::Grid};
 
     #[test]
     fn test_grid_dimensions() {
@@ -20,7 +20,9 @@ mod tests {
         ];
 
         for (recursion, divisions, expected) in test_cases {
-            let grid = Grid::new(recursion, divisions);
+            let mut canopy = Canopy::new();
+            let grid = Grid::install(&mut canopy.core, recursion, divisions)
+                .expect("Failed to build grid");
             let dimensions = grid.dimensions();
             assert_eq!(
                 dimensions, expected,

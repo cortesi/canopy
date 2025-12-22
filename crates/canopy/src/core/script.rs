@@ -4,11 +4,11 @@ use rhai::{self, plugin::TypeId};
 use scoped_tls::scoped_thread_local;
 
 use crate::{
-    Context,
+    NodeId,
     commands::*,
+    core::Core,
     error::{self, Result},
-    node::Node,
-    state::{NodeId, NodeName},
+    state::NodeName,
 };
 
 /// Script identifier.
@@ -33,9 +33,7 @@ impl Script {
 /// Script execution context shared via thread-local pointer.
 struct ScriptGlobal<'a> {
     /// Core context handle.
-    core: &'a mut dyn Context,
-    /// Root node handle.
-    root: &'a mut dyn Node,
+    core: &'a mut Core,
     /// Node identifier for dispatch.
     node_id: NodeId,
 }
@@ -116,7 +114,6 @@ impl ScriptHost {
                     // which lives for the duration of this closure.
                     let sg = unsafe { &mut *(*ptr as *mut ScriptGlobal) };
                     let core = &mut *sg.core;
-                    let root = &mut *sg.root;
 
                     let mut ciargs = vec![];
                     let mut arg_types = arg_types.clone();
@@ -143,7 +140,7 @@ impl ScriptHost {
                         command: command.clone(),
                         args: ciargs,
                     };
-                    if let Some(ret) = dispatch(core, sg.node_id.clone(), root, &ci).unwrap() {
+                    if let Some(ret) = dispatch(core, sg.node_id, &ci).unwrap() {
                         Ok(match ret {
                             ReturnValue::Void => rhai::Dynamic::UNIT,
                             ReturnValue::String(s) => rhai::Dynamic::from(s),
@@ -193,19 +190,9 @@ impl ScriptHost {
     }
 
     /// Execute a script by id for the given node.
-    pub fn execute(
-        &self,
-        core: &mut dyn Context,
-        root: &mut dyn Node,
-        node_id: NodeId,
-        sid: ScriptId,
-    ) -> Result<()> {
+    pub fn execute(&self, core: &mut Core, node_id: NodeId, sid: ScriptId) -> Result<()> {
         let s = self.scripts.get(&sid).unwrap();
-        let sg = ScriptGlobal {
-            core,
-            root,
-            node_id,
-        };
+        let sg = ScriptGlobal { core, node_id };
         let ptr = &sg as *const _ as *const ();
         SCRIPT_GLOBAL.set(&ptr, || {
             self.engine
@@ -219,17 +206,13 @@ impl ScriptHost {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        state::StatefulNode,
-        testing::ttree::{get_state, run_ttree},
-    };
+    use crate::testing::ttree::{get_state, run_ttree};
 
     #[test]
     fn texecute() -> Result<()> {
-        run_ttree(|c, _, mut root| {
+        run_ttree(|c, _, tree| {
             let scr = c.script_host.compile("bb_la::c_leaf()")?;
-            let id = root.a.a.id();
-            c.run_script(&mut root, id, scr)?;
+            c.run_script(tree.b_a, scr)?;
             assert_eq!(get_state().path, ["bb_la.c_leaf()"]);
             Ok(())
         })?;

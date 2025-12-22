@@ -2,10 +2,9 @@ use std::collections::HashMap;
 
 use crate::{
     Context,
+    core::{Core, NodeId, context::CoreContext},
     error::{Error, Result},
-    node::Node,
-    state::{NodeId, NodeName, StatefulNode},
-    tree,
+    state::NodeName,
 };
 
 /// Supported argument types for command signatures.
@@ -82,8 +81,7 @@ pub struct CommandInvocation {
 }
 
 /// CommandDefinition encapsulates the definition of a command that can be
-/// performed on a Node. Commands are used for key bindings, mouse actions and
-/// general automation.
+/// performed on a node.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommandSpec {
     /// The name of the node.
@@ -105,9 +103,8 @@ impl CommandSpec {
     }
 }
 
-/// The CommandNode trait is implemented by all Nodes to expose the set of supported commands. With rare exceptions,
-/// this is done with the `commands` macro.
-pub trait CommandNode: StatefulNode {
+/// The CommandNode trait is implemented by widgets to expose commands.
+pub trait CommandNode {
     /// Return a list of commands for this node.
     fn commands() -> Vec<CommandSpec>
     where
@@ -117,55 +114,67 @@ pub trait CommandNode: StatefulNode {
     fn dispatch(&mut self, c: &mut dyn Context, cmd: &CommandInvocation) -> Result<ReturnValue>;
 }
 
-/// Dispatch a command relative to a node. This searches the node tree for a
-/// matching node::command in the following order:
-///     - A pre-order traversal of the current node subtree
-///     - The path from the current node to the root
-pub fn dispatch<T>(
-    core: &mut dyn Context,
-    current_id: T,
-    root: &mut dyn Node,
+/// Dispatch a command relative to a node.
+pub fn dispatch(
+    core: &mut Core,
+    current_id: NodeId,
     cmd: &CommandInvocation,
-) -> Result<Option<ReturnValue>>
-where
-    T: Into<NodeId>,
-{
-    let mut seen = false;
-    let uid = current_id.into();
-    let v = tree::postorder(root, &mut |x| -> Result<tree::Walk<ReturnValue>> {
-        if seen {
-            // We're now on the path to the root
-            let _pre_focus = core.current_focus_gen();
-            match x.dispatch(core, cmd) {
-                Err(Error::UnknownCommand(_)) => Ok(tree::Walk::Continue),
-                Err(e) => Err(e),
-                Ok(v) => Ok(tree::Walk::Handle(v)),
-            }
-        } else if x.id() == uid {
-            seen = true;
-            // Preorder traversal from the focus node into its descendants. Our
-            // focus node will be the first node visited.
-            match tree::preorder(x, &mut |x| -> Result<tree::Walk<ReturnValue>> {
-                let _pre_focus = core.current_focus_gen();
-                match x.dispatch(core, cmd) {
-                    Err(Error::UnknownCommand(_)) => Ok(tree::Walk::Continue),
-                    Err(e) => Err(e),
-                    Ok(v) => {
-                        // No longer need to check taint status since everything is always tainted
-                        Ok(tree::Walk::Handle(v))
-                    }
-                }
-            }) {
-                Err(Error::UnknownCommand(_)) => Ok(tree::Walk::Continue),
-                Err(e) => Err(e),
-                Ok(tree::Walk::Handle(t)) => Ok(tree::Walk::Handle(t)),
-                Ok(v) => Ok(v),
-            }
-        } else {
-            Ok(tree::Walk::Continue)
+) -> Result<Option<ReturnValue>> {
+    if let Some(ret) = dispatch_subtree(core, current_id, cmd)? {
+        return Ok(Some(ret));
+    }
+
+    let mut current = core.nodes[current_id].parent;
+    while let Some(id) = current {
+        if let Some(ret) = dispatch_on_node(core, id, cmd)? {
+            return Ok(Some(ret));
         }
-    })?;
-    Ok(v.value())
+        current = core.nodes[id].parent;
+    }
+
+    Ok(None)
+}
+
+/// Dispatch a command within the subtree rooted at `root`.
+fn dispatch_subtree(
+    core: &mut Core,
+    root: NodeId,
+    cmd: &CommandInvocation,
+) -> Result<Option<ReturnValue>> {
+    let mut stack = vec![root];
+    while let Some(id) = stack.pop() {
+        if let Some(ret) = dispatch_on_node(core, id, cmd)? {
+            return Ok(Some(ret));
+        }
+        let children = core.nodes[id].children.clone();
+        for child in children.into_iter().rev() {
+            stack.push(child);
+        }
+    }
+    Ok(None)
+}
+
+/// Dispatch a command on a node if its name matches the invocation.
+fn dispatch_on_node(
+    core: &mut Core,
+    node_id: NodeId,
+    cmd: &CommandInvocation,
+) -> Result<Option<ReturnValue>> {
+    let name_match = core.nodes[node_id].name == cmd.node;
+    if !name_match {
+        return Ok(None);
+    }
+
+    let result = core.with_widget_mut(node_id, |widget, core| {
+        let mut ctx = CoreContext::new(core, node_id);
+        widget.dispatch(&mut ctx, cmd)
+    });
+
+    match result {
+        Ok(ret) => Ok(Some(ret)),
+        Err(Error::UnknownCommand(_)) => Ok(None),
+        Err(err) => Err(err),
+    }
 }
 
 /// Collection of available commands keyed by name.
@@ -201,24 +210,8 @@ impl CommandSet {
         self.commands.get(name)
     }
 
-    /// Iterate over all commands.
+    /// Return an iterator over all command specs.
     pub fn iter(&self) -> impl Iterator<Item = (&String, &CommandSpec)> {
         self.commands.iter()
     }
-
-    /// Number of commands in the set.
-    pub fn len(&self) -> usize {
-        self.commands.len()
-    }
-
-    /// Whether the set is empty.
-    pub fn is_empty(&self) -> bool {
-        self.commands.is_empty()
-    }
-}
-
-// Tests moved to canopy crate to avoid circular dependency
-#[cfg(test)]
-mod tests {
-    // TODO: Move command dispatch tests from canopy-core to canopy crate
 }

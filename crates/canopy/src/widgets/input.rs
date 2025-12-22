@@ -1,11 +1,13 @@
+use taffy::{geometry::Size, style::AvailableSpace};
+
 use crate::{
-    Context, Layout, command, cursor, derive_commands,
+    Context, ViewContext, command, cursor, derive_commands,
     error::Result,
-    event::key,
-    geom::{Expanse, LineSegment, Point},
-    node::{EventOutcome, Node},
+    event::{Event, key},
+    geom::{LineSegment, Point, Rect},
     render::Render,
-    state::{NodeState, StatefulNode},
+    state::NodeName,
+    widget::{EventOutcome, Widget},
 };
 
 /// A text buffer that exposes edit functionality for a single line. It also
@@ -36,7 +38,7 @@ impl TextBuf {
 
     /// The location of the displayed cursor along the x axis.
     fn cursor_display(&self) -> u32 {
-        self.cursor_pos - self.window.off
+        self.cursor_pos.saturating_sub(self.window.off)
     }
 
     /// Return the visible text slice.
@@ -53,33 +55,35 @@ impl TextBuf {
         if self.cursor_pos < self.window.off {
             self.window.off = self.cursor_pos;
         } else if self.cursor_pos >= self.window.far() {
-            let mut off = self.cursor_pos - self.window.len;
-            // When we're right at the end of the sequence, we need one extra
-            // character for the cursor.
+            let mut off = self.cursor_pos.saturating_sub(self.window.len);
             if self.cursor_pos == self.value.len() as u32 {
-                off += 1
+                off = off.saturating_add(1)
             }
             self.window.off = off;
         }
 
         if self.cursor_display() >= self.window.len {
-            let delta = self.cursor_display() - self.window.len + 1;
-            self.window.off += delta;
+            let delta = self
+                .cursor_display()
+                .saturating_sub(self.window.len)
+                .saturating_add(1);
+            self.window.off = self.window.off.saturating_add(delta);
         }
     }
 
-    /// Set the visible window width during layout.
+    /// Set the visible window width.
     fn set_display_width(&mut self, val: usize) {
         self.window = LineSegment {
             off: self.window.off,
             len: val as u32,
         };
+        self.fix_window();
     }
 
     /// Insert a character at the cursor position.
     pub fn insert(&mut self, c: char) -> bool {
         self.value.insert(self.cursor_pos as usize, c);
-        self.cursor_pos += 1;
+        self.cursor_pos = self.cursor_pos.saturating_add(1);
         self.fix_window();
         true
     }
@@ -87,7 +91,7 @@ impl TextBuf {
     pub fn backspace(&mut self) -> bool {
         if !self.value.is_empty() && self.cursor_pos > 0 {
             self.value.remove(self.cursor_pos as usize - 1);
-            self.cursor_pos -= 1;
+            self.cursor_pos = self.cursor_pos.saturating_sub(1);
             self.fix_window();
             true
         } else {
@@ -97,7 +101,7 @@ impl TextBuf {
     /// Move the cursor left by one character.
     pub fn left(&mut self) -> bool {
         if self.cursor_pos > 0 {
-            self.cursor_pos -= 1;
+            self.cursor_pos = self.cursor_pos.saturating_sub(1);
             self.fix_window();
             true
         } else {
@@ -107,7 +111,7 @@ impl TextBuf {
     /// Move the cursor right by one character.
     pub fn right(&mut self) -> bool {
         if self.cursor_pos < self.value.len() as u32 {
-            self.cursor_pos += 1;
+            self.cursor_pos = self.cursor_pos.saturating_add(1);
             self.fix_window();
             true
         } else {
@@ -116,12 +120,8 @@ impl TextBuf {
     }
 }
 
-/// A single input line, one character high.
-#[derive(canopy::StatefulNode)]
 /// Single-line text input widget.
 pub struct Input {
-    /// Node state.
-    state: NodeState,
     /// Text buffer for the input.
     textbuf: TextBuf,
 }
@@ -131,7 +131,6 @@ impl Input {
     /// Construct a new input with initial text.
     pub fn new(txt: impl Into<String>) -> Self {
         Self {
-            state: NodeState::default(),
             textbuf: TextBuf::new(txt),
         }
     }
@@ -145,35 +144,31 @@ impl Input {
         &self.textbuf.value
     }
 
+    /// Replace the input value and reset the cursor.
+    pub fn set_value(&mut self, value: impl Into<String>) {
+        self.textbuf = TextBuf::new(value);
+    }
+
     /// Move the cursor left.
     #[command]
     fn left(&mut self, _c: &mut dyn Context) {
-        if self.textbuf.left() {}
+        let _ = self.textbuf.left();
     }
 
     /// Move the cursor right.
     #[command]
     fn right(&mut self, _c: &mut dyn Context) {
-        if self.textbuf.right() {}
+        let _ = self.textbuf.right();
     }
 
     /// Delete a character at the input location.
     #[command]
     fn backspace(&mut self, _c: &mut dyn Context) {
-        if self.textbuf.backspace() {}
+        let _ = self.textbuf.backspace();
     }
 }
 
-// DefaultBindings is part of canopy, not canopy-core
-// impl DefaultBindings for Input {
-//     fn defaults(b: Binder) -> Binder {
-//         b.key(key::KeyCode::Left, "input::left()")
-//             .key(key::KeyCode::Right, "input::right()")
-//             .key(key::KeyCode::Backspace, "input::backspace()")
-//     }
-// }
-
-impl Node for Input {
+impl Widget for Input {
     fn accept_focus(&mut self) -> bool {
         true
     }
@@ -189,32 +184,41 @@ impl Node for Input {
         })
     }
 
-    fn render(&mut self, _: &dyn Context, r: &mut Render) -> Result<()> {
-        r.text("text", self.vp().view().line(0), self.textbuf.text())
+    fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
+        self.textbuf.set_display_width(ctx.view().w as usize);
+        r.text("text", ctx.view().line(0), self.textbuf.text())
     }
 
-    fn handle_key(&mut self, _c: &mut dyn Context, k: key::Key) -> Result<EventOutcome> {
-        match k {
-            key::Key {
-                mods: _,
+    fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+        match event {
+            Event::Key(key::Key {
                 key: key::KeyCode::Char(c),
-            } => {
-                self.textbuf.insert(c);
-                Ok(EventOutcome::Handle)
+                ..
+            }) => {
+                self.textbuf.insert(*c);
+                EventOutcome::Handle
             }
-            _ => Ok(EventOutcome::Ignore),
+            _ => EventOutcome::Ignore,
         }
     }
 
-    fn layout(&mut self, _l: &Layout, sz: Expanse) -> Result<()> {
-        self.textbuf.set_display_width(sz.w as usize);
-        let tbl = self.textbuf.value.len() as u32;
-        let expanse = if self.textbuf.window.len >= tbl {
-            sz
-        } else {
-            Expanse::new(tbl, 1)
-        };
-        self.fit_size(expanse, sz);
-        Ok(())
+    fn measure(
+        &self,
+        known_dimensions: Size<Option<f32>>,
+        available_space: Size<AvailableSpace>,
+    ) -> Size<f32> {
+        let width = known_dimensions
+            .width
+            .or_else(|| available_space.width.into_option())
+            .unwrap_or(self.value().len() as f32);
+        let text_len = self.value().len() as f32;
+        Size {
+            width: width.max(text_len),
+            height: 1.0,
+        }
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("input")
     }
 }

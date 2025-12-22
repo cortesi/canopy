@@ -1,16 +1,15 @@
 use crate::{
-    Context, command, derive_commands,
+    Context, ViewContext, command, derive_commands,
     error::Result,
-    node::Node,
+    event::Event,
+    geom::Rect,
     render::Render,
-    state::{NodeState, StatefulNode},
+    state::NodeName,
+    widget::{EventOutcome, Widget},
 };
 
 /// A tab control managing a set of nodes with titles.
-#[derive(canopy::StatefulNode)]
 pub struct Tabs {
-    /// Node state.
-    state: NodeState,
     /// Tab titles.
     tabs: Vec<String>,
     /// Active tab index.
@@ -26,7 +25,6 @@ impl Tabs {
         I::Item: AsRef<str>,
     {
         Self {
-            state: NodeState::default(),
             active: 0,
             tabs: tabs.into_iter().map(|s| s.as_ref().to_string()).collect(),
         }
@@ -35,20 +33,27 @@ impl Tabs {
     /// Select the next tab.
     #[command]
     pub fn next(&mut self, _c: &mut dyn Context) {
-        self.active = (self.active + 1) % self.tabs.len();
+        if !self.tabs.is_empty() {
+            self.active = (self.active + 1) % self.tabs.len();
+        }
     }
 
     /// Select the previous tab.
     #[command]
     pub fn prev(&mut self, _c: &mut dyn Context) {
-        self.active = (self.active.wrapping_sub(1)) % self.tabs.len();
+        if !self.tabs.is_empty() {
+            self.active = (self.active.wrapping_sub(1)) % self.tabs.len();
+        }
     }
 }
 
-impl Node for Tabs {
-    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
-        for (i, rect) in self
-            .vp()
+impl Widget for Tabs {
+    fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
+        if self.tabs.is_empty() {
+            return Ok(());
+        }
+
+        for (i, rect) in ctx
             .view()
             .split_horizontal(self.tabs.len() as u32)?
             .iter()
@@ -64,5 +69,13 @@ impl Node for Tabs {
             r.text("", end.line(0), " ")?;
         }
         Ok(())
+    }
+
+    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+        EventOutcome::Ignore
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("tabs")
     }
 }

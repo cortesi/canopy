@@ -1,20 +1,8 @@
-use std::str::FromStr;
-use std::{
-    fmt,
-    sync::atomic::{AtomicU64, Ordering},
-};
+use std::{fmt, str::FromStr};
 
 use convert_case::{Case, Casing};
 
-use super::viewport::ViewPort;
-use crate::{
-    error,
-    error::Result,
-    geom::{Expanse, Rect},
-};
-
-/// Global counter for node IDs.
-static CURRENT_ID: AtomicU64 = AtomicU64::new(0);
+use crate::{error, error::Result};
 
 /// Return true if the character is valid in a node name.
 pub fn valid_nodename_char(c: char) -> bool {
@@ -24,27 +12,6 @@ pub fn valid_nodename_char(c: char) -> bool {
 /// Return true if the full name is valid.
 pub fn valid_nodename(name: &str) -> bool {
     name.chars().all(valid_nodename_char)
-}
-
-/// A unique ID for a node.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct NodeId {
-    /// Numeric identifier.
-    id: u64,
-    /// Node name.
-    name: NodeName,
-}
-
-impl fmt::Display for NodeId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}#{}", self.name, self.id)
-    }
-}
-
-impl PartialEq<u64> for NodeId {
-    fn eq(&self, other: &u64) -> bool {
-        self.id == *other
-    }
 }
 
 /// A node name, which consists of lowercase ASCII alphanumeric characters, plus
@@ -112,186 +79,25 @@ impl TryFrom<&str> for NodeName {
     }
 }
 
-/// An opaque structure that Canopy uses to track node state. Each Node has to
-/// keep a NodeState structure, and offer it up through the `Node::state()`
-/// method on request.
-///
-/// Users should not access the internal fields directly. Use the methods on
-/// [`StatefulNode`] to interact with node state.
-#[derive(Debug, PartialEq, Eq)]
-pub struct NodeState {
-    /// Unique node ID - internal, use `StatefulNode::id()` to access.
-    pub(crate) id: u64,
-
-    /// This node's focus generation. We increment the global focus counter when
-    /// focus changes, invalidating the current focus generation without having
-    /// to update all node states.
-    pub(crate) focus_gen: u64,
-
-    /// Set to be equal to the focus_gen during a pre-render sweep, if focus has
-    /// changed.
-    pub(crate) focus_path_gen: u64,
-
-    /// The last render sweep during which this node held focus.
-    pub(crate) rendered_focus_gen: u64,
-
-    /// The view for this node. The inner rectangle always has the same size as
-    /// the screen_area.
-    pub(crate) viewport: ViewPort,
-
-    /// Whether this node is hidden - use `hide()`/`unhide()`/`is_hidden()` methods.
-    pub(crate) hidden: bool,
-
-    /// Whether the node has been initialized for polling.
-    pub(crate) initialized: bool,
-}
-
-/// The node state object - each node needs to keep one of these, and offer it
-/// up by implementing the StatefulNode trait.
-impl Default for NodeState {
-    fn default() -> Self {
-        let id = CURRENT_ID.fetch_add(1, Ordering::Relaxed);
-        Self {
-            id,
-            focus_gen: 0,
-            focus_path_gen: 0,
-            rendered_focus_gen: 0,
-            hidden: false,
-            viewport: ViewPort::default(),
-            initialized: false,
-        }
-    }
-}
-
-/// The interface implemented by all nodes that track state.
-pub trait StatefulNode {
-    /// The name of this node, used for debugging and command dispatch.
-    fn name(&self) -> NodeName;
-
-    /// Get a reference to the node's state object.
-    fn state(&self) -> &NodeState;
-
-    /// Get a mutable reference to the node's state object.
-    fn state_mut(&mut self) -> &mut NodeState;
-
-    /// Hides the element and all its descendants from rendering. The nodes are
-    /// still included in the tree.
-    fn hide(&mut self) {
-        self.state_mut().hidden = true;
-    }
-
-    /// Hides the element
-    fn unhide(&mut self) {
-        self.state_mut().hidden = false;
-    }
-
-    /// Is this element hidden?
-    fn is_hidden(&self) -> bool {
-        self.state().hidden
-    }
-
-    /// Get the node's `ViewPort`.
-    fn vp(&self) -> ViewPort {
-        self.state().viewport
-    }
-
-    /// A unique ID for this node.
-    fn id(&self) -> NodeId {
-        NodeId {
-            id: self.state().id,
-            name: self.name(),
-        }
-    }
-
-    /// Has this node been initialized? That is, has its poll function been
-    /// called for the first time to schedule future polls.
-    fn is_initialized(&self) -> bool {
-        self.state().initialized
-    }
-
-    /// Set our canvas size.
-    fn set_canvas(&mut self, sz: Expanse) {
-        self.state_mut().viewport.set_canvas(sz);
-    }
-
-    /// Set our view position and size.
-    fn set_view(&mut self, view: Rect) {
-        self.state_mut().viewport.set_view(view);
-    }
-
-    /// Set both the canvas size and the view to fill the target size.
-    fn fill(&mut self, sz: Expanse) -> Result<()> {
-        self.state_mut().viewport.set_canvas(sz);
-        self.state_mut().viewport.set_view(sz.rect());
-        Ok(())
-    }
-
-    /// Wrap around a child by seting both our canvas size and view to equal to its view rectangle.
-    fn wrap(&mut self, child: ViewPort) -> Result<()> {
-        self.set_canvas(child.view().into());
-        self.set_view(child.view());
-        Ok(())
-    }
-
-    /// Resize the canvas and view according to fit policy.
-    fn fit_size(&mut self, size: Expanse, view_size: Expanse) {
-        self.state_mut().viewport.fit_size(size, view_size);
-    }
-
-    /// Scroll the view to the specified position.
-    fn scroll_to(&mut self, x: u32, y: u32) {
-        self.state_mut().viewport.scroll_to(x, y);
-    }
-
-    /// Scroll the view by the given offsets.
-    fn scroll_by(&mut self, x: i32, y: i32) {
-        self.state_mut().viewport.scroll_by(x, y);
-    }
-
-    /// Scroll the view up by the height of the view rectangle.
-    fn page_up(&mut self) {
-        self.state_mut().viewport.page_up();
-    }
-
-    /// Scroll the view down by the height of the view rectangle.
-    fn page_down(&mut self) {
-        self.state_mut().viewport.page_down();
-    }
-
-    /// Scroll the view up by one line.
-    fn scroll_up(&mut self) {
-        self.state_mut().viewport.scroll_up();
-    }
-
-    /// Scroll the view down by one line.
-    fn scroll_down(&mut self) {
-        self.state_mut().viewport.scroll_down();
-    }
-
-    /// Scroll the view left by one line.
-    fn scroll_left(&mut self) {
-        self.state_mut().viewport.scroll_left();
-    }
-
-    /// Scroll the view right by one line.
-    fn scroll_right(&mut self) {
-        self.state_mut().viewport.scroll_right();
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::Result;
 
     #[test]
-    fn nodename() -> Result<()> {
+    fn valid_nodename_char_is_ascii() {
+        assert!(valid_nodename_char('a'));
+        assert!(valid_nodename_char('0'));
+        assert!(valid_nodename_char('_'));
+        assert!(!valid_nodename_char('A'));
+        assert!(!valid_nodename_char('-'));
+    }
+
+    #[test]
+    fn nodename_convert() {
         assert_eq!(NodeName::try_from("foo").unwrap(), "foo");
         assert!(NodeName::try_from("Foo").is_err());
         assert_eq!(NodeName::convert("Foo"), "foo");
         assert_eq!(NodeName::convert("FooBar"), "foo_bar");
         assert_eq!(NodeName::convert("FooBar Voing"), "foo_bar_voing");
-
-        Ok(())
     }
 }

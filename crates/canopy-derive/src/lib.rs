@@ -7,7 +7,7 @@ use proc_macro_error::*;
 use quote::quote;
 use regex::Regex;
 use structmeta::StructMeta;
-use syn::{DeriveInput, Meta, parse_macro_input};
+use syn::{Meta, parse_macro_input};
 
 /// Local result type for macro parsing.
 type Result<T> = StdResult<T, Error>;
@@ -364,9 +364,6 @@ pub fn derive_commands(
                 vec![#(#commands),*]
             }
             fn dispatch(&mut self, core: &mut dyn canopy::Context, cmd: &canopy::commands::CommandInvocation) -> canopy::error::Result<canopy::commands::ReturnValue> {
-                if cmd.node != self.name() {
-                    return Err(canopy::error::Error::UnknownCommand(cmd.command.to_string()));
-                }
                 match cmd.command.as_str() {
                     #(#invocations),*
                     _ => Err(canopy::error::Error::UnknownCommand(cmd.command.to_string()))
@@ -394,28 +391,4 @@ pub fn command(
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     input
-}
-
-/// Derive an implementation of the StatefulNode trait for a struct. The struct
-/// should have a `self.state` attribute of type `NodeState`.
-#[proc_macro_derive(StatefulNode)]
-pub fn derive_statefulnode(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-    let name = input.ident;
-    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-    let rname = name.to_string();
-    let expanded = quote! {
-        impl #impl_generics canopy::state::StatefulNode for #name #ty_generics #where_clause {
-            fn state_mut(&mut self) -> &mut canopy::state::NodeState {
-                &mut self.state
-            }
-            fn state(&self) -> &canopy::state::NodeState {
-                &self.state
-            }
-            fn name(&self) -> canopy::state::NodeName {
-                canopy::state::NodeName::convert(#rname)
-            }
-        }
-    };
-    proc_macro::TokenStream::from(expanded)
 }

@@ -1,214 +1,392 @@
+use std::any::Any;
+
 use anyhow::Result as AnyResult;
 use canopy::{
-    Binder, Canopy, Context, Layout, Loader, command, derive_commands,
+    Binder, Canopy, Context, Loader, NodeId, command, derive_commands,
     error::Result,
     event::{key, mouse},
     geom::{Expanse, Rect},
-    node::Node,
     render::Render,
-    state::{NodeState, StatefulNode},
     style::solarized,
-    widgets::{Input, Text, frame, list::*},
+    widget::{EventOutcome, Widget},
+    widgets::{Input, frame, list::*},
+};
+use taffy::{
+    geometry::Rect as TaffyRect,
+    style::{
+        AlignItems, Dimension, Display, FlexDirection, JustifyContent, LengthPercentage, Position,
+    },
 };
 
 pub mod store;
 
-#[derive(canopy::StatefulNode)]
+/// List item for a todo entry.
 pub struct TodoItem {
-    pub state: NodeState,
-    pub child: Text,
-    pub selected: bool,
-    pub todo: store::Todo,
+    /// Stored todo.
+    todo: store::Todo,
 }
 
 impl TodoItem {
     pub fn new(t: store::Todo) -> Self {
-        TodoItem {
-            state: NodeState::default(),
-            child: Text::new(&t.item),
-            selected: false,
-            todo: t,
-        }
+        Self { todo: t }
     }
 }
 
 impl ListItem for TodoItem {
-    fn set_selected(&mut self, state: bool) {
-        self.selected = state
-    }
-}
-
-#[derive_commands]
-impl Node for TodoItem {
-    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        self.child.layout(l, sz)?;
-        let vp = self.child.vp();
-        self.wrap(vp)?;
-        Ok(())
+    fn measure(&self, available_width: u32) -> Expanse {
+        let width = available_width.max(1) as usize;
+        let lines = textwrap::wrap(&self.todo.item, width);
+        let height = lines.len().max(1) as u32;
+        Expanse::new(available_width.max(1), height)
     }
 
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-        f(&mut self.child)
-    }
+    fn render(&mut self, rndr: &mut Render, area: Rect, selected: bool) -> Result<()> {
+        let width = area.w.max(1) as usize;
+        let lines = textwrap::wrap(&self.todo.item, width);
+        let style = if selected { "blue/text" } else { "text" };
 
-    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
-        if self.selected {
-            r.push_layer("blue");
+        for (i, line) in lines.iter().enumerate() {
+            if i as u32 >= area.h {
+                break;
+            }
+            rndr.text(style, area.line(i as u32), line)?;
         }
         Ok(())
     }
 }
 
-#[derive(canopy::StatefulNode)]
-pub struct StatusBar {
-    pub state: NodeState,
-}
+/// Status bar widget for the todo demo.
+pub struct StatusBar;
 
 #[derive_commands]
 impl StatusBar {}
 
-impl Node for StatusBar {
-    fn render(&mut self, _c: &dyn Context, r: &mut Render) -> Result<()> {
+impl Widget for StatusBar {
+    fn render(
+        &mut self,
+        r: &mut Render,
+        _area: canopy::geom::Rect,
+        ctx: &dyn canopy::ViewContext,
+    ) -> Result<()> {
         r.push_layer("statusbar");
-        r.text("statusbar/text", self.vp().view().line(0), "todo")?;
+        r.text("statusbar/text", ctx.view().line(0), "todo")?;
         Ok(())
+    }
+
+    fn on_event(&mut self, _event: &canopy::event::Event, _ctx: &mut dyn Context) -> EventOutcome {
+        EventOutcome::Ignore
     }
 }
 
-#[derive(canopy::StatefulNode)]
+/// Overlay container for the add dialog.
+pub struct Overlay;
+
+#[derive_commands]
+impl Overlay {}
+
+impl Widget for Overlay {
+    fn render(
+        &mut self,
+        _r: &mut Render,
+        _area: canopy::geom::Rect,
+        _ctx: &dyn canopy::ViewContext,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    fn on_event(&mut self, _event: &canopy::event::Event, _ctx: &mut dyn Context) -> EventOutcome {
+        EventOutcome::Ignore
+    }
+}
+
+/// Root node for the todo demo.
 pub struct Todo {
-    pub state: NodeState,
-    pub content: frame::Frame<List<TodoItem>>,
-    pub statusbar: StatusBar,
-    pub adder: Option<frame::Frame<Input>>,
+    pending: Vec<store::Todo>,
+    content_id: Option<NodeId>,
+    list_id: Option<NodeId>,
+    status_id: Option<NodeId>,
+    overlay_id: Option<NodeId>,
+    input_id: Option<NodeId>,
+    adder_active: bool,
 }
 
 #[derive_commands]
 impl Todo {
     pub fn new() -> AnyResult<Self> {
-        let mut r = Todo {
-            state: NodeState::default(),
-            content: frame::Frame::new(List::new(vec![])),
-            statusbar: StatusBar {
-                state: NodeState::default(),
-            },
-            adder: None,
+        let pending = store::get().todos()?;
+        Ok(Self {
+            pending,
+            content_id: None,
+            list_id: None,
+            status_id: None,
+            overlay_id: None,
+            input_id: None,
+            adder_active: false,
+        })
+    }
+
+    fn ensure_tree(&mut self, c: &mut dyn Context) -> Result<()> {
+        if self.content_id.is_some() {
+            return Ok(());
+        }
+
+        let list_id = c.add(Box::new(List::new(Vec::<TodoItem>::new())));
+        let content_id = c.add(Box::new(frame::Frame::new()));
+        c.mount_child(content_id, list_id)?;
+
+        let status_id = c.add(Box::new(StatusBar));
+        c.set_children(c.node_id(), vec![content_id, status_id])?;
+
+        let mut update_root = |style: &mut taffy::style::Style| {
+            style.display = Display::Flex;
+            style.flex_direction = FlexDirection::Column;
         };
-        r.load()?;
-        Ok(r)
+        c.with_style(c.node_id(), &mut update_root)?;
+
+        let mut content_style = |style: &mut taffy::style::Style| {
+            style.flex_grow = 1.0;
+            style.flex_shrink = 1.0;
+            style.flex_basis = Dimension::Auto;
+        };
+        c.with_style(content_id, &mut content_style)?;
+        c.with_style(list_id, &mut content_style)?;
+
+        let mut status_style = |style: &mut taffy::style::Style| {
+            style.size.height = Dimension::Points(1.0);
+            style.flex_shrink = 0.0;
+        };
+        c.with_style(status_id, &mut status_style)?;
+
+        self.content_id = Some(content_id);
+        self.list_id = Some(list_id);
+        self.status_id = Some(status_id);
+
+        if !self.pending.is_empty() {
+            let pending = std::mem::take(&mut self.pending);
+            self.with_list(c, |list, _ctx| {
+                for item in pending.iter().cloned() {
+                    list.append(TodoItem::new(item));
+                }
+                Ok(())
+            })?;
+        }
+
+        Ok(())
+    }
+
+    fn ensure_overlay(&mut self, c: &mut dyn Context) -> Result<()> {
+        if self.overlay_id.is_some() {
+            return Ok(());
+        }
+
+        let overlay_id = c.add(Box::new(Overlay));
+        let input_id = c.add(Box::new(Input::new("")));
+        let adder_frame_id = c.add(Box::new(frame::Frame::new()));
+        c.mount_child(adder_frame_id, input_id)?;
+        c.set_children(overlay_id, vec![adder_frame_id])?;
+
+        let mut overlay_style = |style: &mut taffy::style::Style| {
+            style.position = Position::Absolute;
+            style.inset = TaffyRect {
+                left: LengthPercentage::Points(0.0).into(),
+                right: LengthPercentage::Points(0.0).into(),
+                top: LengthPercentage::Points(0.0).into(),
+                bottom: LengthPercentage::Points(0.0).into(),
+            };
+            style.display = Display::Flex;
+            style.justify_content = Some(JustifyContent::Center);
+            style.align_items = Some(AlignItems::Center);
+        };
+        c.with_style(overlay_id, &mut overlay_style)?;
+
+        let mut frame_style = |style: &mut taffy::style::Style| {
+            style.size.width = Dimension::Percent(1.0);
+            style.size.height = Dimension::Points(3.0);
+            style.margin = TaffyRect {
+                left: LengthPercentage::Points(2.0).into(),
+                right: LengthPercentage::Points(2.0).into(),
+                top: LengthPercentage::Points(0.0).into(),
+                bottom: LengthPercentage::Points(0.0).into(),
+            };
+        };
+        c.with_style(adder_frame_id, &mut frame_style)?;
+
+        let mut input_style = |style: &mut taffy::style::Style| {
+            style.flex_grow = 1.0;
+            style.flex_shrink = 1.0;
+            style.flex_basis = Dimension::Auto;
+        };
+        c.with_style(input_id, &mut input_style)?;
+
+        self.overlay_id = Some(overlay_id);
+        self.input_id = Some(input_id);
+
+        Ok(())
+    }
+
+    fn sync_children(&mut self, c: &mut dyn Context) -> Result<()> {
+        let content_id = self.content_id.expect("content not initialized");
+        let status_id = self.status_id.expect("status not initialized");
+        let mut children = vec![content_id, status_id];
+        if self.adder_active {
+            self.ensure_overlay(c)?;
+            if let Some(overlay_id) = self.overlay_id {
+                children.push(overlay_id);
+            }
+        }
+        c.set_children(c.node_id(), children)?;
+        Ok(())
+    }
+
+    fn with_list<F>(&mut self, c: &mut dyn Context, mut f: F) -> Result<()>
+    where
+        F: FnMut(&mut List<TodoItem>, &mut dyn Context) -> Result<()>,
+    {
+        let list_id = self.list_id.expect("list not initialized");
+        c.with_widget_mut(list_id, &mut |widget, ctx| {
+            let any = widget as &mut dyn Any;
+            let list = any
+                .downcast_mut::<List<TodoItem>>()
+                .expect("list type mismatch");
+            f(list, ctx)
+        })
+    }
+
+    fn with_input<F>(&mut self, c: &mut dyn Context, mut f: F) -> Result<()>
+    where
+        F: FnMut(&mut Input) -> Result<()>,
+    {
+        let input_id = self.input_id.expect("input not initialized");
+        c.with_widget_mut(input_id, &mut |widget, _ctx| {
+            let any = widget as &mut dyn Any;
+            let input = any.downcast_mut::<Input>().expect("input type mismatch");
+            f(input)
+        })
     }
 
     #[command]
     pub fn enter_item(&mut self, c: &mut dyn Context) -> Result<()> {
-        let mut adder = frame::Frame::new(Input::new(""));
-        c.set_focus(adder.child_mut());
-        self.adder = Some(adder);
+        self.ensure_tree(c)?;
+        self.ensure_overlay(c)?;
+        self.adder_active = true;
+        self.sync_children(c)?;
+        self.with_input(c, |input| {
+            input.set_value("");
+            Ok(())
+        })?;
+        if let Some(input_id) = self.input_id {
+            c.set_focus(input_id);
+        }
         Ok(())
     }
 
     #[command]
     pub fn delete_item(&mut self, c: &mut dyn Context) -> Result<()> {
-        let lst = self.content.child_mut();
-        if let Some(t) = lst.selected() {
-            store::get().delete_todo(t.todo.id).unwrap();
-            lst.delete_selected(c);
+        let mut to_delete = None;
+        self.with_list(c, |list, ctx| {
+            to_delete = list.selected().map(|item| item.todo.id);
+            let _ = list.delete_selected(ctx);
+            Ok(())
+        })?;
+        if let Some(id) = to_delete {
+            store::get().delete_todo(id).unwrap();
         }
         Ok(())
     }
 
     #[command]
     pub fn accept_add(&mut self, c: &mut dyn Context) -> Result<()> {
-        if let Some(adder) = self.adder.take() {
-            let value = adder.child().value().to_owned();
-            if !value.is_empty() {
-                let item = store::get().add_todo(&value).unwrap();
-                self.content.child_mut().append(TodoItem::new(item));
-                // Select the newly added item (which is the last one)
-                let new_index = self.content.child().len().saturating_sub(1);
-                self.content.child_mut().select(new_index);
-            }
+        let mut value = String::new();
+        self.with_input(c, |input| {
+            value = input.value().to_string();
+            Ok(())
+        })?;
+
+        if !value.is_empty() {
+            let item = store::get().add_todo(&value).unwrap();
+            self.with_list(c, |list, ctx| {
+                list.append(TodoItem::new(item.clone()));
+                list.select_last(ctx);
+                Ok(())
+            })?;
         }
-        c.set_focus(&mut self.content);
+
+        self.adder_active = false;
+        self.sync_children(c)?;
+        c.set_focus(c.node_id());
         Ok(())
     }
 
     #[command]
     pub fn cancel_add(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.adder = None;
-        c.focus_first(self);
-        Ok(())
-    }
-
-    fn load(&mut self) -> Result<()> {
-        let s = store::get().todos().unwrap();
-        let todos = s.iter().map(|x| TodoItem::new(x.clone()));
-        for i in todos {
-            self.content.child_mut().append(i);
-        }
-        // Select the first item if any exist
-        if !self.content.child().is_empty() {
-            self.content.child_mut().select(0);
-        }
+        self.adder_active = false;
+        self.sync_children(c)?;
+        c.set_focus(c.node_id());
         Ok(())
     }
 
     #[command]
     pub fn select_first(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.content.child_mut().select_first(c);
-        Ok(())
+        self.with_list(c, |list, ctx| {
+            list.select_first(ctx);
+            Ok(())
+        })
     }
 
     #[command]
     pub fn select_next(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.content.child_mut().select_next(c);
-        Ok(())
+        self.with_list(c, |list, ctx| {
+            list.select_next(ctx);
+            Ok(())
+        })
     }
 
     #[command]
     pub fn select_prev(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.content.child_mut().select_prev(c);
-        Ok(())
+        self.with_list(c, |list, ctx| {
+            list.select_prev(ctx);
+            Ok(())
+        })
     }
 
     #[command]
     pub fn page_down(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.content.child_mut().page_down(c);
-        Ok(())
+        self.with_list(c, |list, ctx| {
+            list.page_down(ctx);
+            Ok(())
+        })
     }
 
     #[command]
     pub fn page_up(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.content.child_mut().page_up(c);
-        Ok(())
+        self.with_list(c, |list, ctx| {
+            list.page_up(ctx);
+            Ok(())
+        })
     }
 }
 
-impl Node for Todo {
-    fn layout(&mut self, l: &Layout, sz: Expanse) -> Result<()> {
-        self.fill(sz)?;
-        let vp = self.vp();
-        let (a, b) = vp.view().carve_vend(1);
-        l.place(&mut self.statusbar, b)?;
-        l.place(&mut self.content, a)?;
-
-        let a = self.vp().screen_rect();
-        if let Some(add) = &mut self.adder {
-            l.place(add, Rect::new(a.tl.x + 2, a.tl.y + a.h / 2, a.w - 4, 3))?;
-        }
-        Ok(())
-    }
-
+impl Widget for Todo {
     fn accept_focus(&mut self) -> bool {
         true
     }
 
-    fn children(&mut self, f: &mut dyn FnMut(&mut dyn Node) -> Result<()>) -> Result<()> {
-        f(&mut self.statusbar)?;
-        f(&mut self.content)?;
-        if let Some(a) = &mut self.adder {
-            f(a)?;
-        }
+    fn render(
+        &mut self,
+        _r: &mut Render,
+        _area: canopy::geom::Rect,
+        _ctx: &dyn canopy::ViewContext,
+    ) -> Result<()> {
         Ok(())
+    }
+
+    fn on_event(&mut self, _event: &canopy::event::Event, _ctx: &mut dyn Context) -> EventOutcome {
+        EventOutcome::Ignore
+    }
+
+    fn poll(&mut self, c: &mut dyn Context) -> Option<std::time::Duration> {
+        let _ = self.ensure_tree(c);
+        None
     }
 }
 
@@ -260,17 +438,20 @@ pub fn open_store(path: &str) -> AnyResult<()> {
 }
 
 pub fn setup_app(cnpy: &mut Canopy) {
+    canopy::widgets::Root::load(cnpy);
     <Todo as Loader>::load(cnpy);
     style(cnpy);
     bind_keys(cnpy);
 }
 
-pub fn create_app(db_path: &str) -> AnyResult<(Canopy, Todo)> {
+pub fn create_app(db_path: &str) -> AnyResult<Canopy> {
     open_store(db_path)?;
 
     let mut cnpy = Canopy::new();
     setup_app(&mut cnpy);
 
     let todo = Todo::new()?;
-    Ok((cnpy, todo))
+    let app_id = cnpy.core.add(todo);
+    canopy::widgets::Root::install(&mut cnpy.core, app_id)?;
+    Ok(cnpy)
 }
