@@ -15,7 +15,10 @@ mod tests {
     };
     use taffy::{
         geometry::{Rect as TaffyRect, Size},
-        style::{AvailableSpace, Dimension, LengthPercentageAuto, Position},
+        style::{
+            AvailableSpace, Dimension, Display, FlexDirection, LengthPercentage,
+            LengthPercentageAuto, Position,
+        },
     };
 
     struct Big;
@@ -70,6 +73,89 @@ mod tests {
 
         fn name(&self) -> NodeName {
             NodeName::convert("big")
+        }
+    }
+
+    struct Container;
+
+    impl Container {
+        fn new() -> Self {
+            Self
+        }
+    }
+
+    impl CommandNode for Container {
+        fn commands() -> Vec<CommandSpec> {
+            vec![]
+        }
+
+        fn dispatch(
+            &mut self,
+            _c: &mut dyn Context,
+            _cmd: &CommandInvocation,
+        ) -> Result<ReturnValue> {
+            Ok(ReturnValue::Void)
+        }
+    }
+
+    impl Widget for Container {
+        fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
+            r.fill("", ctx.view(), ' ')
+        }
+
+        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+            EventOutcome::Ignore
+        }
+
+        fn name(&self) -> NodeName {
+            NodeName::convert("container")
+        }
+    }
+
+    struct Huge;
+
+    impl Huge {
+        fn new() -> Self {
+            Self
+        }
+    }
+
+    impl CommandNode for Huge {
+        fn commands() -> Vec<CommandSpec> {
+            vec![]
+        }
+
+        fn dispatch(
+            &mut self,
+            _c: &mut dyn Context,
+            _cmd: &CommandInvocation,
+        ) -> Result<ReturnValue> {
+            Ok(ReturnValue::Void)
+        }
+    }
+
+    impl Widget for Huge {
+        fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
+            r.fill("", ctx.view(), 'x')
+        }
+
+        fn measure(
+            &self,
+            _known_dimensions: Size<Option<f32>>,
+            _available_space: Size<AvailableSpace>,
+        ) -> Size<f32> {
+            Size {
+                width: 500.0,
+                height: 500.0,
+            }
+        }
+
+        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
+            EventOutcome::Ignore
+        }
+
+        fn name(&self) -> NodeName {
+            NodeName::convert("huge")
         }
     }
 
@@ -145,6 +231,52 @@ mod tests {
                 }
             }
         }
+        Ok(())
+    }
+
+    #[test]
+    fn child_respects_parent_padding() -> Result<()> {
+        let mut h = Harness::builder(Root::new()).size(20, 20).build()?;
+        let container = h.canopy.core.add(Container::new());
+        let child = h.canopy.core.add(Huge::new());
+        h.canopy.core.set_children(h.root, vec![container])?;
+        h.canopy.core.set_children(container, vec![child])?;
+
+        h.canopy.core.build(h.root).style(|style| {
+            style.display = Display::Flex;
+            style.flex_direction = FlexDirection::Column;
+        });
+
+        h.canopy.core.build(container).style(|style| {
+            style.display = Display::Flex;
+            style.flex_direction = FlexDirection::Column;
+            style.flex_grow = 1.0;
+            style.flex_shrink = 1.0;
+            style.flex_basis = Dimension::Auto;
+            style.padding = TaffyRect {
+                left: LengthPercentage::Points(1.0),
+                right: LengthPercentage::Points(1.0),
+                top: LengthPercentage::Points(1.0),
+                bottom: LengthPercentage::Points(1.0),
+            };
+        });
+
+        h.canopy.core.build(child).style(|style| {
+            style.flex_grow = 1.0;
+            style.flex_shrink = 1.0;
+            style.flex_basis = Dimension::Auto;
+        });
+
+        h.canopy.set_root_size(Expanse::new(20, 20))?;
+        h.render()?;
+
+        let container_view = h.canopy.core.nodes[container].vp.view();
+        let child_vp = h.canopy.core.nodes[child].vp;
+        assert_eq!(child_vp.position().x, container_view.tl.x + 1);
+        assert_eq!(child_vp.position().y, container_view.tl.y + 1);
+        assert_eq!(child_vp.view().w + 2, container_view.w);
+        assert_eq!(child_vp.view().h + 2, container_view.h);
+
         Ok(())
     }
 }

@@ -248,26 +248,64 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
 
 #[cfg(test)]
 mod tests {
-    use canopy::testing::harness::Harness;
+    use canopy::{NodeId, testing::harness::Harness};
+    use taffy::{geometry::Rect as TaffyRect, style::LengthPercentage};
 
     use super::*;
+
+    fn find_node_id(harness: &Harness, name: &str) -> NodeId {
+        harness
+            .canopy
+            .core
+            .nodes
+            .iter()
+            .find_map(|(id, node)| (node.name == name).then_some(id))
+            .unwrap_or_else(|| panic!("Missing node named '{name}'"))
+    }
 
     #[test]
     fn test_framegym_basic() -> Result<()> {
         let mut harness = Harness::builder(FrameGym::new()).size(20, 20).build()?;
         harness.render()?;
 
-        // Debug: print all lines to see what's happening
-        println!("\n=== Rendered output ===");
-        for (i, line) in harness.tbuf().lines().iter().enumerate() {
-            println!("Line {i}: {line:?}");
-        }
-        println!("======================\n");
+        let frame_id = find_node_id(&harness, "frame");
+        let pattern_id = find_node_id(&harness, "test_pattern");
+        let frame_vp = harness.canopy.core.nodes[frame_id].vp;
+        let pattern_vp = harness.canopy.core.nodes[pattern_id].vp;
+        let frame_view = frame_vp.view();
+        let pattern_view = pattern_vp.view();
+        let pattern_pos = pattern_vp.position();
+        let frame_canvas = frame_vp.canvas();
+        let frame_style = &harness.canopy.core.nodes[frame_id].style;
 
-        let v = &harness.tbuf().lines()[18];
-        // Check the last line of the content in the frame. "X" is uninitialized space in the
-        // render buffer, so this means that the content didn't entirely fill the frame.
-        assert!(!v.contains("X"));
+        assert_eq!(pattern_pos.x, frame_view.tl.x + 1);
+        assert_eq!(pattern_pos.y, frame_view.tl.y + 1);
+        assert_eq!(frame_canvas.w, frame_view.w);
+        assert_eq!(frame_canvas.h, frame_view.h);
+        assert_eq!(
+            frame_style.padding,
+            TaffyRect {
+                left: LengthPercentage::Points(1.0),
+                right: LengthPercentage::Points(1.0),
+                top: LengthPercentage::Points(1.0),
+                bottom: LengthPercentage::Points(1.0),
+            }
+        );
+        assert_eq!(pattern_view.w + 2, frame_view.w);
+        assert_eq!(pattern_view.h + 2, frame_view.h);
+
+        let lines = harness.tbuf().lines();
+        let last_col = lines[0].chars().count() - 1;
+        assert_eq!(lines[0].chars().next(), Some('╭'));
+        assert_eq!(lines[0].chars().nth(last_col), Some('╮'));
+        assert_eq!(lines[19].chars().next(), Some('╰'));
+        assert_eq!(lines[19].chars().nth(last_col), Some('╯'));
+
+        for line in &lines[1..19] {
+            assert_eq!(line.chars().next(), Some('│'));
+            let right = line.chars().nth(last_col);
+            assert!(matches!(right, Some('│' | '█')));
+        }
         Ok(())
     }
 }

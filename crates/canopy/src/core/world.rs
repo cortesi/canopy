@@ -7,7 +7,7 @@ use taffy::{
     error::TaffyError,
     geometry::Size,
     node::{MeasureFunc, Node as TaffyNode},
-    style::{AvailableSpace, Dimension, Style},
+    style::{AvailableSpace, Dimension, LengthPercentage, Style},
 };
 
 use crate::{
@@ -760,40 +760,43 @@ fn sync_viewports(
         .max(start_y);
     let mut view_size = Expanse::new((end_x - start_x) as u32, (end_y - start_y) as u32);
 
-    let mut canvas_size = if let Some(widget) = nodes[node_id].widget.as_ref() {
-        let available = Size {
-            width: AvailableSpace::Definite(view_size.w as f32),
-            height: AvailableSpace::Definite(view_size.h as f32),
-        };
-        let measured = widget.canvas_size(
-            Size {
-                width: None,
-                height: None,
-            },
-            available,
-        );
-        Expanse::new(
-            measured.width.round() as u32,
-            measured.height.round() as u32,
-        )
-    } else {
-        view_size
-    };
-
     let min_size = min_size_from_style(&nodes[node_id].style);
     view_size = clamp_expanse(view_size, min_size);
-    canvas_size = clamp_expanse(canvas_size, min_size);
 
     {
         let parent_canvas = view_stack.top().canvas().rect();
-        let node = &mut nodes[node_id];
-        node.vp.fit_size(canvas_size, view_size);
+        let bounds = parent_content_bounds(nodes, node_id, parent_canvas);
         let raw_position = Point {
             x: start_x as u32,
             y: start_y as u32,
         };
-        node.vp
-            .set_position(clamp_child_position(parent_canvas, view_size, raw_position));
+        let position = clamp_child_position(bounds, view_size, raw_position);
+        let view_size = clamp_child_view_size(bounds, position, view_size);
+
+        let mut canvas_size = if let Some(widget) = nodes[node_id].widget.as_ref() {
+            let available = Size {
+                width: AvailableSpace::Definite(view_size.w as f32),
+                height: AvailableSpace::Definite(view_size.h as f32),
+            };
+            let measured = widget.canvas_size(
+                Size {
+                    width: None,
+                    height: None,
+                },
+                available,
+            );
+            Expanse::new(
+                measured.width.round() as u32,
+                measured.height.round() as u32,
+            )
+        } else {
+            view_size
+        };
+        canvas_size = clamp_expanse(canvas_size, min_size);
+
+        let node = &mut nodes[node_id];
+        node.vp.fit_size(canvas_size, view_size);
+        node.vp.set_position(position);
     }
 
     let mut pushed = false;
@@ -821,10 +824,10 @@ fn sync_viewports(
     Ok(())
 }
 
-/// Clamp a child viewport position so it remains within the parent canvas bounds.
-fn clamp_child_position(parent_canvas: Rect, view_size: Expanse, position: Point) -> Point {
-    let max_x = parent_canvas.tl.x.saturating_add(parent_canvas.w);
-    let max_y = parent_canvas.tl.y.saturating_add(parent_canvas.h);
+/// Clamp a child viewport position so it remains within the provided bounds.
+fn clamp_child_position(bounds: Rect, view_size: Expanse, position: Point) -> Point {
+    let max_x = bounds.tl.x.saturating_add(bounds.w);
+    let max_y = bounds.tl.y.saturating_add(bounds.h);
     let max_x = if view_size.w == 0 {
         max_x
     } else {
@@ -837,8 +840,71 @@ fn clamp_child_position(parent_canvas: Rect, view_size: Expanse, position: Point
     };
 
     Point {
-        x: position.x.clamp(parent_canvas.tl.x, max_x),
-        y: position.y.clamp(parent_canvas.tl.y, max_y),
+        x: position.x.clamp(bounds.tl.x, max_x),
+        y: position.y.clamp(bounds.tl.y, max_y),
+    }
+}
+
+/// Clamp a child view size so it fits within the provided bounds.
+fn clamp_child_view_size(bounds: Rect, position: Point, view_size: Expanse) -> Expanse {
+    let max_x = bounds.tl.x.saturating_add(bounds.w);
+    let max_y = bounds.tl.y.saturating_add(bounds.h);
+    let max_w = max_x.saturating_sub(position.x);
+    let max_h = max_y.saturating_sub(position.y);
+    Expanse::new(view_size.w.min(max_w), view_size.h.min(max_h))
+}
+
+/// Padding resolved into concrete cell counts.
+struct ResolvedPadding {
+    /// Left padding in cells.
+    left: u32,
+    /// Right padding in cells.
+    right: u32,
+    /// Top padding in cells.
+    top: u32,
+    /// Bottom padding in cells.
+    bottom: u32,
+}
+
+/// Compute the content bounds for a child within a parent canvas.
+fn parent_content_bounds(
+    nodes: &SlotMap<NodeId, Node>,
+    node_id: NodeId,
+    parent_canvas: Rect,
+) -> Rect {
+    let Some(parent_id) = nodes[node_id].parent else {
+        return parent_canvas;
+    };
+    let padding = resolve_padding(&nodes[parent_id].style, parent_canvas.w);
+    let width = parent_canvas
+        .w
+        .saturating_sub(padding.left.saturating_add(padding.right));
+    let height = parent_canvas
+        .h
+        .saturating_sub(padding.top.saturating_add(padding.bottom));
+    Rect::new(
+        parent_canvas.tl.x.saturating_add(padding.left),
+        parent_canvas.tl.y.saturating_add(padding.top),
+        width,
+        height,
+    )
+}
+
+/// Resolve padding for a style into cell counts.
+fn resolve_padding(style: &Style, base_width: u32) -> ResolvedPadding {
+    let resolve = |value: LengthPercentage| -> u32 {
+        let base = base_width as f32;
+        match value {
+            LengthPercentage::Points(points) => points.max(0.0).round() as u32,
+            LengthPercentage::Percent(percent) => (base * percent).max(0.0).round() as u32,
+        }
+    };
+    let padding = style.padding;
+    ResolvedPadding {
+        left: resolve(padding.left),
+        right: resolve(padding.right),
+        top: resolve(padding.top),
+        bottom: resolve(padding.bottom),
     }
 }
 
