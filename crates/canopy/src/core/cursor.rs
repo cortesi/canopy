@@ -3,7 +3,7 @@ use std::ops::Add;
 use crate::geom;
 
 /// Cursor glyph shape variants.
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum CursorShape {
     /// Underscore cursor.
     Underscore,

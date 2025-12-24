@@ -1,8 +1,11 @@
+use std::mem;
+
 use crate::{
+    cursor,
     error::Result,
     geom::{Expanse, Frame, Line, Point, Rect},
     render::RenderBackend,
-    style::{AttrSet, Color, Style},
+    style::{Attr, AttrSet, Color, Style},
 };
 
 /// NULL character constant.
@@ -191,6 +194,26 @@ impl TermBuf {
                 };
             }
         }
+    }
+
+    /// Overlay a cursor on a cell by adjusting its style.
+    pub fn overlay_cursor(&mut self, location: Point, shape: cursor::CursorShape) {
+        let Some(idx) = self.idx(location) else {
+            return;
+        };
+        let mut cell = self.cells[idx].clone();
+        match shape {
+            cursor::CursorShape::Underscore => {
+                cell.style.attrs = cell.style.attrs.with(Attr::Underline);
+            }
+            cursor::CursorShape::Block | cursor::CursorShape::Line => {
+                mem::swap(&mut cell.style.fg, &mut cell.style.bg);
+            }
+        }
+        if cell.ch == NULL {
+            cell.ch = ' ';
+        }
+        self.cells[idx] = cell;
     }
 
     /// Fill the frame outline with a glyph and style.

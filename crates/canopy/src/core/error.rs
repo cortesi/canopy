@@ -1,8 +1,4 @@
-use std::{
-    fmt::{self, Display},
-    result::Result as StdResult,
-    sync::mpsc,
-};
+use std::{result::Result as StdResult, sync::mpsc};
 
 use thiserror::Error;
 
@@ -13,47 +9,70 @@ pub type Result<T> = StdResult<T, Error>;
 
 /// Parse error marker type.
 #[derive(PartialEq, Eq, Error, Debug, Clone)]
-pub struct ParseError {}
+#[error("{message}")]
+pub struct ParseError {
+    /// Parse error message, optionally including location.
+    message: String,
+}
 
-impl Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{self:?}")
+impl ParseError {
+    /// Construct a parse error from a message.
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+
+    /// Construct a parse error with optional line/offset information.
+    pub fn with_position(
+        message: impl Into<String>,
+        line: Option<usize>,
+        offset: Option<usize>,
+    ) -> Self {
+        let message = message.into();
+        let message = match (line, offset) {
+            (Some(line), Some(offset)) => format!("{message} (line {line}, offset {offset})"),
+            (Some(line), None) => format!("{message} (line {line})"),
+            (None, Some(offset)) => format!("{message} (offset {offset})"),
+            (None, None) => message,
+        };
+        Self { message }
     }
 }
 
 /// Core error type.
 #[derive(PartialEq, Eq, Error, Debug, Clone)]
 pub enum Error {
-    #[error("focus")]
+    #[error("focus: {0}")]
     /// Focus-related failure.
     Focus(String),
-    #[error("render")]
+    #[error("render: {0}")]
     /// Rendering failure.
     Render(String),
-    #[error("geometry")]
+    #[error("geometry: {0}")]
     /// Geometry failure.
     Geometry(String),
-    #[error("layout")]
+    #[error("layout: {0}")]
     /// Layout failure.
     Layout(String),
-    #[error("runloop")]
+    #[error("runloop: {0}")]
     /// Run loop failure.
     RunLoop(String),
-    #[error("internal")]
+    #[error("internal: {0}")]
     /// Internal error.
     Internal(String),
-    #[error("invalid")]
+    #[error("invalid: {0}")]
     /// Invalid input error.
     Invalid(String),
-    #[error("unknown command")]
+    #[error("unknown command: {0}")]
     /// Command not found.
     UnknownCommand(String),
 
-    #[error("parse error")]
+    #[error("parse error: {0}")]
     /// Parsing failure.
-    Parse(ParseError),
+    Parse(#[source] ParseError),
 
-    #[error("script run error")]
+    #[error("script run error: {0}")]
     /// Script execution failure.
     Script(String),
 

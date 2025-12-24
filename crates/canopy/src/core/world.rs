@@ -268,6 +268,29 @@ impl Core {
         Ok(())
     }
 
+    /// Set a node's hidden flag. Returns `true` if visibility changed.
+    pub fn set_hidden(&mut self, node_id: NodeId, hidden: bool) -> bool {
+        let Some(node) = self.nodes.get_mut(node_id) else {
+            return false;
+        };
+        let changed = node.hidden != hidden;
+        node.hidden = hidden;
+        if changed {
+            self.ensure_focus_visible();
+        }
+        changed
+    }
+
+    /// Hide a node. Returns `true` if visibility changed.
+    pub fn hide(&mut self, node_id: NodeId) -> bool {
+        self.set_hidden(node_id, true)
+    }
+
+    /// Show a node. Returns `true` if visibility changed.
+    pub fn show(&mut self, node_id: NodeId) -> bool {
+        self.set_hidden(node_id, false)
+    }
+
     /// Start a builder chain for a node.
     pub fn build(&mut self, id: NodeId) -> NodeBuilder<'_> {
         NodeBuilder { core: self, id }

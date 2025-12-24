@@ -91,7 +91,6 @@ impl CrosstermControl {
         self.fp.execute(terminal::EnterAlternateScreen)?;
         self.fp.execute(cevent::EnableMouseCapture)?;
         self.fp.execute(ccursor::Hide)?;
-        terminal::disable_raw_mode()?;
         Ok(())
     }
     /// Leave alternate screen and restore terminal state.

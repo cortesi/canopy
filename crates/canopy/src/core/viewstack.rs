@@ -293,7 +293,10 @@ mod tests {
         // Cannot pop the last item
         let result = stack.pop();
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "geometry");
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "geometry: Cannot pop the last viewport from stack"
+        );
     }
 
     #[test]

@@ -9,7 +9,7 @@ mod tests {
         commands::{
             ArgTypes, Args, CommandInvocation, CommandNode, CommandSpec, ReturnSpec, ReturnTypes,
         },
-        error::Result,
+        error::{Error, Result},
         event::Event,
         geom::Rect,
         render::Render,
@@ -27,6 +27,7 @@ mod tests {
         b_triggered: bool,
         c_triggered: bool,
         naked_str_triggered: bool,
+        ignored_result_triggered: bool,
         core_isize: Option<isize>,
         naked_isize: Option<isize>,
     }
@@ -79,6 +80,12 @@ mod tests {
         fn result_str(&mut self, _core: &mut dyn canopy::Context) -> Result<String> {
             self.naked_str_triggered = true;
             Ok("".into())
+        }
+
+        #[command(ignore_result)]
+        fn ignored_result(&mut self, _core: &mut dyn canopy::Context) -> Result<String> {
+            self.ignored_result_triggered = true;
+            Err(Error::Invalid("boom".into()))
         }
 
         #[command]
@@ -193,6 +200,13 @@ mod tests {
                 },
                 CommandSpec {
                     node: "foo".try_into().unwrap(),
+                    command: "ignored_result".to_string(),
+                    docs: "".to_string(),
+                    ret: ReturnSpec::new(ReturnTypes::Void, true),
+                    args: vec![ArgTypes::Context],
+                },
+                CommandSpec {
+                    node: "foo".try_into().unwrap(),
                     command: "nocore".to_string(),
                     docs: "".to_string(),
                     ret: ReturnSpec::new(ReturnTypes::String, true),
@@ -206,6 +220,7 @@ mod tests {
             b_triggered: false,
             c_triggered: false,
             naked_str_triggered: false,
+            ignored_result_triggered: false,
             core_isize: None,
             naked_isize: None,
         };
@@ -223,6 +238,27 @@ mod tests {
         .unwrap();
 
         assert!(f.a_triggered);
+
+        let err = f.dispatch(
+            &mut dc,
+            &CommandInvocation {
+                node: "foo".try_into().unwrap(),
+                command: "ignored_result".into(),
+                args: vec![Args::Context],
+            },
+        );
+        assert!(matches!(err, Err(Error::Invalid(_))));
+        assert!(f.ignored_result_triggered);
+
+        let err = f.dispatch(
+            &mut dc,
+            &CommandInvocation {
+                node: "foo".try_into().unwrap(),
+                command: "naked_isize".into(),
+                args: vec![],
+            },
+        );
+        assert!(matches!(err, Err(Error::Invalid(_))));
 
         let mut bar = Bar::<Foo> {
             a_triggered: false,

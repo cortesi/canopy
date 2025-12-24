@@ -57,6 +57,24 @@ type FnCallArgs<'a> = [&'a mut rhai::Dynamic];
 /// Result type for script execution helpers.
 type ScriptResult<T> = StdResult<T, Box<rhai::EvalAltResult>>;
 
+/// Format a Rhai position for error messages.
+fn format_position(pos: rhai::Position) -> String {
+    let line = pos.line();
+    let offset = pos.position();
+    match (line, offset) {
+        (Some(line), Some(offset)) => format!(" (line {line}, offset {offset})"),
+        (Some(line), None) => format!(" (line {line})"),
+        (None, Some(offset)) => format!(" (offset {offset})"),
+        (None, None) => String::new(),
+    }
+}
+
+/// Convert a Rhai parse error into a Canopy parse error.
+fn format_parse_error(err: &rhai::ParseError) -> error::ParseError {
+    let pos = err.position();
+    error::ParseError::with_position(err.err_type().to_string(), pos.line(), pos.position())
+}
+
 /// This is a re-implementation of the Module::set_raw_fn from rhai. It turns out that set_raw_fn wants to assume that
 /// the function is a module, which imposes some internal constraints on the number of arguments.
 // Helper function removed - using FuncRegistration API directly instead
@@ -84,11 +102,7 @@ impl ScriptHost {
         // engine.set_strict_variables(true);
         let mut modules: HashMap<NodeName, rhai::Module> = HashMap::new();
         for i in cmds {
-            if !modules.contains_key(&i.node) {
-                let m = rhai::Module::new();
-                modules.insert(i.node.clone(), m);
-            }
-            let m = modules.get_mut(&i.node).unwrap();
+            let m = modules.entry(i.node.clone()).or_default();
 
             let node = i.node.clone();
             let command = i.command.clone();
@@ -106,7 +120,7 @@ impl ScriptHost {
 
             // For dynamic argument handling, we need to use the module's raw function API
             // Since FuncRegistration doesn't support our use case directly
-            let func = move |_context: Option<rhai::NativeCallContext>,
+            let func = move |context: Option<rhai::NativeCallContext>,
                              args: &mut FnCallArgs|
                   -> ScriptResult<rhai::Dynamic> {
                 SCRIPT_GLOBAL.with(|ptr| {
@@ -114,6 +128,21 @@ impl ScriptHost {
                     // which lives for the duration of this closure.
                     let sg = unsafe { &mut *(*ptr as *mut ScriptGlobal) };
                     let core = &mut *sg.core;
+                    let node_id = sg.node_id;
+                    let command_label = format!("{node}::{command}");
+                    let call_pos = context
+                        .as_ref()
+                        .map(|ctx| ctx.call_position())
+                        .unwrap_or(rhai::Position::NONE);
+
+                    let make_error = |message: String| {
+                        Box::new(rhai::EvalAltResult::ErrorRuntime(
+                            rhai::Dynamic::from(format!(
+                                "command {command_label} on node {node_id:?}: {message}"
+                            )),
+                            call_pos,
+                        ))
+                    };
 
                     let mut ciargs = vec![];
                     let mut arg_types = arg_types.clone();
@@ -121,16 +150,25 @@ impl ScriptHost {
                         ciargs.push(Args::Context);
                         arg_types.remove(0);
                     }
-                    // I believe this is guaranteed by rhai
-                    assert!(args.len() == arg_types.len());
+                    if args.len() != arg_types.len() {
+                        return Err(make_error(format!(
+                            "expected {} arguments, got {}",
+                            arg_types.len(),
+                            args.len()
+                        )));
+                    }
                     for (i, a) in arg_types.iter().enumerate() {
                         match a {
                             ArgTypes::Context => {
-                                panic!("unexpected")
+                                return Err(make_error(
+                                    "unexpected context argument in command signature".into(),
+                                ));
                             }
                             ArgTypes::ISize => {
-                                // The type here should be guaranteed by rhai
-                                ciargs.push(Args::ISize(args[i].as_int().unwrap() as isize));
+                                let val = args[i].as_int().map_err(|err| {
+                                    make_error(format!("argument {i} expected integer: {err}"))
+                                })?;
+                                ciargs.push(Args::ISize(val as isize));
                             }
                         }
                     }
@@ -140,13 +178,13 @@ impl ScriptHost {
                         command: command.clone(),
                         args: ciargs,
                     };
-                    if let Some(ret) = dispatch(core, sg.node_id, &ci).unwrap() {
-                        Ok(match ret {
+                    match dispatch(core, sg.node_id, &ci) {
+                        Ok(Some(ret)) => Ok(match ret {
                             ReturnValue::Void => rhai::Dynamic::UNIT,
                             ReturnValue::String(s) => rhai::Dynamic::from(s),
-                        })
-                    } else {
-                        Ok(rhai::Dynamic::UNIT)
+                        }),
+                        Ok(None) => Ok(rhai::Dynamic::UNIT),
+                        Err(err) => Err(make_error(err.to_string())),
                     }
                 })
             };
@@ -180,7 +218,7 @@ impl ScriptHost {
         let ast = self
             .engine
             .compile(source)
-            .map_err(|_e| error::Error::Parse(error::ParseError {}))?;
+            .map_err(|err| error::Error::Parse(format_parse_error(&err)))?;
         let s = Script {
             ast,
             source: source.into(),
@@ -191,13 +229,18 @@ impl ScriptHost {
 
     /// Execute a script by id for the given node.
     pub fn execute(&self, core: &mut Core, node_id: NodeId, sid: ScriptId) -> Result<()> {
-        let s = self.scripts.get(&sid).unwrap();
+        let s = self.scripts.get(&sid).ok_or_else(|| {
+            error::Error::Script(format!("script {sid} not found for node {node_id:?}"))
+        })?;
         let sg = ScriptGlobal { core, node_id };
         let ptr = &sg as *const _ as *const ();
         SCRIPT_GLOBAL.set(&ptr, || {
-            self.engine
-                .run_ast(&s.ast)
-                .map_err(|e| error::Error::Script(e.to_string()))
+            self.engine.run_ast(&s.ast).map_err(|e| {
+                let location = format_position(e.position());
+                error::Error::Script(format!(
+                    "script {sid} on node {node_id:?} failed{location}: {e}"
+                ))
+            })
         })?;
         Ok(())
     }
@@ -209,11 +252,29 @@ mod tests {
     use crate::testing::ttree::{get_state, run_ttree};
 
     #[test]
+    fn tcompile_error_reports_details() {
+        let mut host = ScriptHost::new();
+        let err = host.compile("let =").unwrap_err();
+        assert!(matches!(err, error::Error::Parse(_)));
+    }
+
+    #[test]
     fn texecute() -> Result<()> {
         run_ttree(|c, _, tree| {
             let scr = c.script_host.compile("bb_la::c_leaf()")?;
             c.run_script(tree.b_a, scr)?;
             assert_eq!(get_state().path, ["bb_la.c_leaf()"]);
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    #[test]
+    fn truntime_error_returns_script_error() -> Result<()> {
+        run_ttree(|c, _, tree| {
+            let scr = c.script_host.compile("nope::missing()")?;
+            let err = c.run_script(tree.b_a, scr);
+            assert!(matches!(err, Err(error::Error::Script(_))));
             Ok(())
         })?;
         Ok(())

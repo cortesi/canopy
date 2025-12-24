@@ -124,6 +124,7 @@ impl Command {
     /// Output the invocation clause of a match macro
     fn invocation_clause(&self) -> proc_macro2::TokenStream {
         let ident = syn::Ident::new(&self.command, proc_macro2::Span::call_site());
+        let command = &self.command;
 
         let mut args = vec![];
         for (i, a) in self.args.iter().enumerate() {
@@ -132,12 +133,37 @@ impl Command {
                     args.push(quote! {core});
                 }
                 ArgTypes::ISize => {
-                    args.push(quote! {cmd.args[#i].as_isize()?});
+                    args.push(quote! {{
+                        let arg = cmd.args.get(#i).ok_or_else(|| {
+                            canopy::error::Error::Invalid(format!(
+                                "missing argument {} for command '{}'",
+                                #i,
+                                #command,
+                            ))
+                        })?;
+                        match arg {
+                            canopy::commands::Args::ISize(val) => *val,
+                            other => {
+                                return Err(canopy::error::Error::Invalid(format!(
+                                    "invalid argument {} for command '{}': expected isize, got {:?}",
+                                    #i,
+                                    #command,
+                                    other,
+                                )));
+                            }
+                        }
+                    }});
                 }
             }
         }
 
-        let mut inv = if self.ret.result {
+        let mut inv = if self.macro_args.ignore_result {
+            if self.ret.result {
+                quote! {let _ = self.#ident (#(#args),*) ?;}
+            } else {
+                quote! {let _ = self.#ident (#(#args),*) ;}
+            }
+        } else if self.ret.result {
             quote! {let s = self.#ident (#(#args),*) ?;}
         } else {
             quote! {let s = self.#ident (#(#args),*) ;}
@@ -154,7 +180,6 @@ impl Command {
             }
         };
 
-        let command = &self.command;
         quote! { #command => { #inv } }
     }
 }
@@ -174,6 +199,59 @@ impl quote::ToTokens for Command {
             ret: #ret,
             args: vec![#(#args),*]
         }})
+    }
+}
+
+/// Parse a supported return type into a Return spec.
+fn parse_return_type(ty: &syn::Type) -> Option<Return> {
+    match ty {
+        syn::Type::Path(p) => {
+            if p.path.is_ident("String") {
+                Some(Return::new(ReturnTypes::String, false))
+            } else if p.path.segments.last().unwrap().ident == "Result" {
+                match &p.path.segments.last().unwrap().arguments {
+                    syn::PathArguments::AngleBracketed(a) => {
+                        if a.args.len() != 1 {
+                            None
+                        } else {
+                            match a.args.first().unwrap() {
+                                syn::GenericArgument::Type(syn::Type::Path(t)) => {
+                                    if t.path.is_ident("String") {
+                                        Some(Return::new(ReturnTypes::String, true))
+                                    } else {
+                                        None
+                                    }
+                                }
+                                syn::GenericArgument::Type(syn::Type::Tuple(e)) => {
+                                    if e.elems.is_empty() {
+                                        Some(Return::new(ReturnTypes::Void, true))
+                                    } else {
+                                        None
+                                    }
+                                }
+                                _ => None,
+                            }
+                        }
+                    }
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Return true if the type is a Result wrapper.
+fn is_result_type(ty: &syn::Type) -> bool {
+    if let syn::Type::Path(p) = ty {
+        p.path
+            .segments
+            .last()
+            .is_some_and(|seg| seg.ident == "Result")
+    } else {
+        false
     }
 }
 
@@ -234,6 +312,12 @@ fn parse_command_method(node: &str, method: &syn::ImplItemFn) -> Result<Option<C
                 syn::Type::Reference(x) => {
                     if RE_CORE.is_match(&quote!(#x).to_string()) {
                         args.push(ArgTypes::Context);
+                    } else {
+                        return Err(Error::Unsupported(format!(
+                            "unsupported argument type {:?} on command: {}",
+                            quote! {#x},
+                            method.sig.ident
+                        )));
                     }
                 }
                 syn::Type::Path(x) => {
@@ -260,48 +344,14 @@ fn parse_command_method(node: &str, method: &syn::ImplItemFn) -> Result<Option<C
         }
     }
 
-    let ret = if macroargs.ignore_result {
-        Some(Return::new(ReturnTypes::Void, false))
-    } else {
-        match &method.sig.output {
-            syn::ReturnType::Default => Some(Return::new(ReturnTypes::Void, false)),
-            syn::ReturnType::Type(_, ty) => match &**ty {
-                syn::Type::Path(p) => {
-                    if p.path.is_ident("String") {
-                        Some(Return::new(ReturnTypes::String, false))
-                    } else if p.path.segments.last().unwrap().ident == "Result" {
-                        match &p.path.segments.last().unwrap().arguments {
-                            syn::PathArguments::AngleBracketed(a) => {
-                                if a.args.len() != 1 {
-                                    None
-                                } else {
-                                    match a.args.first().unwrap() {
-                                        syn::GenericArgument::Type(syn::Type::Path(t)) => {
-                                            if t.path.is_ident("String") {
-                                                Some(Return::new(ReturnTypes::String, true))
-                                            } else {
-                                                None
-                                            }
-                                        }
-                                        syn::GenericArgument::Type(syn::Type::Tuple(e)) => {
-                                            if e.elems.is_empty() {
-                                                Some(Return::new(ReturnTypes::Void, true))
-                                            } else {
-                                                None
-                                            }
-                                        }
-                                        _ => None,
-                                    }
-                                }
-                            }
-                            _ => None,
-                        }
-                    } else {
-                        None
-                    }
-                }
-                _ => None,
-            },
+    let ret = match &method.sig.output {
+        syn::ReturnType::Default => Some(Return::new(ReturnTypes::Void, false)),
+        syn::ReturnType::Type(_, ty) => {
+            if macroargs.ignore_result {
+                Some(Return::new(ReturnTypes::Void, is_result_type(ty)))
+            } else {
+                parse_return_type(ty)
+            }
         }
     };
 
@@ -391,4 +441,34 @@ pub fn command(
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     input
+}
+
+#[cfg(test)]
+mod tests {
+    use syn::parse_quote;
+
+    use super::*;
+
+    #[test]
+    fn ignore_result_preserves_result_flag() {
+        let method: syn::ImplItemFn = parse_quote! {
+            #[command(ignore_result)]
+            fn ignored(&mut self, _core: &mut dyn canopy::Context) -> Result<String> {
+                Ok("ok".into())
+            }
+        };
+        let cmd = parse_command_method("foo", &method).unwrap().unwrap();
+        assert!(cmd.ret.result);
+        assert!(matches!(cmd.ret.typ, ReturnTypes::Void));
+    }
+
+    #[test]
+    fn rejects_unsupported_reference_args() {
+        let method: syn::ImplItemFn = parse_quote! {
+            #[command]
+            fn bad_ref(&mut self, _core: &mut dyn canopy::Context, name: &str) {}
+        };
+        let err = parse_command_method("foo", &method).unwrap_err();
+        assert!(matches!(err, Error::Unsupported(_)));
+    }
 }

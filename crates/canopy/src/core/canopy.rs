@@ -310,26 +310,29 @@ impl Canopy {
     }
 
     /// Post-render sweep of the tree.
-    pub(crate) fn post_render<R: RenderBackend>(
-        &mut self,
-        _r: &mut R,
-        _styl: &mut StyleManager,
-    ) -> Result<()> {
+    pub(crate) fn post_render(&mut self, buf: &mut TermBuf) -> Result<()> {
         let mut current = self.core.focus;
-        let mut cursor_spec: Option<(NodeId, ViewPort, cursor::Cursor)> = None;
+        let mut cursor_spec: Option<(NodeId, Rect, cursor::Cursor)> = None;
         while let Some(id) = current {
             let cursor = self.core.with_widget_view(id, |w, _| w.cursor());
             if let Some(node_cursor) = cursor
                 && let Some(node) = self.core.nodes.get(id)
             {
-                cursor_spec = Some((id, node.vp, node_cursor));
+                cursor_spec = Some((id, node.viewport, node_cursor));
                 break;
             }
             current = self.core.nodes.get(id).and_then(|n| n.parent);
         }
 
-        if let Some((_nid, _vp, _c)) = cursor_spec {
-            // TODO: render virtual cursor here
+        if let Some((_nid, viewport, c)) = cursor_spec {
+            let view_rect = Rect::new(0, 0, viewport.w, viewport.h);
+            if view_rect.contains_point(c.location) {
+                let screen_pos = Point {
+                    x: viewport.tl.x.saturating_add(c.location.x),
+                    y: viewport.tl.y.saturating_add(c.location.y),
+                };
+                buf.overlay_cursor(screen_pos, c.shape);
+            }
         }
 
         Ok(())
@@ -356,6 +359,7 @@ impl Canopy {
             let mut view_stack = ViewStack::new(screen_vp);
 
             self.render_traversal(&mut next, &mut styl, &mut view_stack, self.core.root)?;
+            self.post_render(&mut next)?;
 
             if let Some(prev) = &self.termbuf {
                 let mut screen_buf = prev.clone();
@@ -369,7 +373,6 @@ impl Canopy {
 
             self.last_render_focus_gen = self.core.focus_gen;
             self.last_focus_path = self.core.focus_path_ids();
-            self.post_render(be, &mut styl)?;
         }
 
         Ok(())
@@ -398,7 +401,7 @@ impl Canopy {
                     .get(id)
                     .map(|n| n.viewport)
                     .unwrap_or_default();
-                let rebased_location = if screen_rect.contains_point(m.location) {
+                let local_location = if screen_rect.contains_point(m.location) {
                     screen_rect.rebase_point(m.location)?
                 } else {
                     Point {
@@ -413,7 +416,7 @@ impl Canopy {
                         action: m.action,
                         button: m.button,
                         modifiers: m.modifiers,
-                        location: rebased_location,
+                        location: local_location,
                     }),
                 );
 

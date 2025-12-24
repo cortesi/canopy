@@ -187,6 +187,8 @@ dependencies = [
  "thiserror",
  "tracing",
  "tracing-subscriber",
+ "unicode-segmentation",
+ "unicode-width 0.2.2",
 ]
 
 [[package]]

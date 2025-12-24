@@ -141,6 +141,19 @@ pub trait Context: ViewContext {
     /// Replace the children list for a parent node.
     fn set_children(&mut self, parent: NodeId, children: Vec<NodeId>) -> Result<()>;
 
+    /// Set node visibility. Returns `true` if visibility changed.
+    fn set_hidden(&mut self, node: NodeId, hidden: bool) -> bool;
+
+    /// Hide a node. Returns `true` if visibility changed.
+    fn hide(&mut self, node: NodeId) -> bool {
+        self.set_hidden(node, true)
+    }
+
+    /// Show a node. Returns `true` if visibility changed.
+    fn show(&mut self, node: NodeId) -> bool {
+        self.set_hidden(node, false)
+    }
+
     /// Start the backend renderer.
     fn start(&mut self) -> Result<()>;
 
@@ -402,6 +415,10 @@ impl<'a> Context for CoreContext<'a> {
 
     fn set_children(&mut self, parent: NodeId, children: Vec<NodeId>) -> Result<()> {
         self.core.set_children(parent, children)
+    }
+
+    fn set_hidden(&mut self, node: NodeId, hidden: bool) -> bool {
+        self.core.set_hidden(node, hidden)
     }
 
     fn start(&mut self) -> Result<()> {

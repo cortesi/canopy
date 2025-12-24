@@ -164,6 +164,10 @@ impl Context for DummyContext {
         Ok(())
     }
 
+    fn set_hidden(&mut self, _node: NodeId, _hidden: bool) -> bool {
+        false
+    }
+
     fn start(&mut self) -> Result<()> {
         Ok(())
     }
