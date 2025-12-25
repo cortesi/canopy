@@ -263,24 +263,18 @@ impl Canopy {
         }
 
         if pushed_viewport {
-            let rect = vp.view();
-            let mut rndr = Render::new(&self.style, styl, rect);
+            let (clip, screen_origin) = match view_stack.projection() {
+                Some((canvas_rect, screen_rect)) => (canvas_rect, screen_rect.tl),
+                None => (Rect::zero(), Point::zero()),
+            };
+            {
+                let mut rndr = Render::new_shared(&self.style, styl, dest_buf, clip, screen_origin);
 
-            let render_result = self.core.with_widget_view(node_id, |widget, core| {
-                let ctx = CoreViewContext::new(core, node_id);
-                widget.render(&mut rndr, viewport, &ctx)
-            });
-            render_result?;
-
-            if let Some((canvas_rect, screen_rect)) = view_stack.projection() {
-                let render_buf = rndr.get_buffer();
-                let src_rect = Rect::new(
-                    canvas_rect.tl.x.saturating_sub(vp.view().tl.x),
-                    canvas_rect.tl.y.saturating_sub(vp.view().tl.y),
-                    canvas_rect.w,
-                    canvas_rect.h,
-                );
-                dest_buf.copy_rect_to_rect(render_buf, src_rect, screen_rect);
+                let render_result = self.core.with_widget_view(node_id, |widget, core| {
+                    let ctx = CoreViewContext::new(core, node_id);
+                    widget.render(&mut rndr, viewport, &ctx)
+                });
+                render_result?;
             }
 
             let canvas = vp.canvas().rect();

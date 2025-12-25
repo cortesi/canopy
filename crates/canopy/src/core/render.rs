@@ -19,16 +19,45 @@ pub trait RenderBackend {
     fn reset(&mut self) -> Result<()>;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Signed translation offset in cell coordinates.
+struct Offset {
+    /// Horizontal offset.
+    x: i32,
+    /// Vertical offset.
+    y: i32,
+}
+
+impl Offset {
+    /// Compute the translation from a source point to a destination point.
+    fn between(dest: geom::Point, src: geom::Point) -> Self {
+        Self {
+            x: dest.x as i32 - src.x as i32,
+            y: dest.y as i32 - src.y as i32,
+        }
+    }
+}
+
+/// Buffer target for rendering operations.
+enum RenderTarget<'a> {
+    /// Owned offscreen buffer.
+    Owned(TermBuf),
+    /// Shared destination buffer.
+    Shared(&'a mut TermBuf),
+}
+
 /// A renderer that only renders to a specific rectangle within the target terminal buffer.
 pub struct Render<'a> {
     /// The terminal buffer to render to.
-    buf: TermBuf,
+    target: RenderTarget<'a>,
     /// The style manager used to apply styles.
     style: &'a mut StyleManager,
     /// The style map used to resolve style names to styles.
     stylemap: &'a StyleMap,
-    /// The rectangle within the termbuf that we render to.
-    rect: geom::Rect,
+    /// The rectangle in canvas coordinates that is visible for rendering.
+    clip: geom::Rect,
+    /// Translation offset from canvas coordinates to buffer coordinates.
+    origin: Offset,
 }
 
 impl<'a> Render<'a> {
@@ -44,10 +73,28 @@ impl<'a> Render<'a> {
             },
         );
         Render {
-            buf,
+            target: RenderTarget::Owned(buf),
             style,
             stylemap,
-            rect,
+            clip: rect,
+            origin: Offset::between(geom::Point::zero(), rect.tl),
+        }
+    }
+
+    /// Construct a renderer that writes directly into a shared buffer.
+    pub(crate) fn new_shared(
+        stylemap: &'a StyleMap,
+        style: &'a mut StyleManager,
+        buf: &'a mut TermBuf,
+        clip: geom::Rect,
+        screen_origin: geom::Point,
+    ) -> Self {
+        Render {
+            target: RenderTarget::Shared(buf),
+            style,
+            stylemap,
+            clip,
+            origin: Offset::between(screen_origin, clip.tl),
         }
     }
 
@@ -58,16 +105,10 @@ impl<'a> Render<'a> {
 
     /// Fill a rectangle with a specified character. Writes out of bounds will be clipped.
     pub fn fill(&mut self, style: &str, r: geom::Rect, c: char) -> Result<()> {
-        if let Some(intersection) = r.intersect(&self.rect) {
+        if let Some(intersection) = r.intersect(&self.clip) {
             let style = self.style.get(self.stylemap, style);
-            // Adjust the intersection to be relative to our buffer's origin
-            let adjusted = geom::Rect::new(
-                intersection.tl.x - self.rect.tl.x,
-                intersection.tl.y - self.rect.tl.y,
-                intersection.w,
-                intersection.h,
-            );
-            self.buf.fill(&style, adjusted, c);
+            let adjusted = self.translate_rect(intersection);
+            self.buffer_mut().fill(&style, adjusted, c);
         }
         Ok(())
     }
@@ -89,16 +130,11 @@ impl<'a> Render<'a> {
     /// rectangle, it will be truncated; if it is shorter, it will be padded.
     pub fn text(&mut self, style: &str, l: geom::Line, txt: &str) -> Result<()> {
         let line_rect = geom::Rect::new(l.tl.x, l.tl.y, l.w, 1);
-        if let Some(intersection) = line_rect.intersect(&self.rect) {
+        if let Some(intersection) = line_rect.intersect(&self.clip) {
             let style_res = self.style.get(self.stylemap, style);
 
             // Calculate how much of the text to skip and take
-            let skip_amount = if l.tl.x < self.rect.tl.x {
-                (self.rect.tl.x - l.tl.x) as usize
-            } else {
-                0
-            };
-
+            let skip_amount = intersection.tl.x.saturating_sub(l.tl.x) as usize;
             let take_amount = intersection.w as usize;
 
             let start_byte = txt
@@ -113,16 +149,12 @@ impl<'a> Render<'a> {
                 .unwrap_or(txt.len());
             let out = &txt[start_byte..end_byte];
 
-            // Adjust the line position relative to our buffer
             let adjusted_line = geom::Line {
-                tl: geom::Point {
-                    x: intersection.tl.x - self.rect.tl.x,
-                    y: intersection.tl.y - self.rect.tl.y,
-                },
+                tl: self.translate_point(intersection.tl),
                 w: intersection.w,
             };
 
-            self.buf.text(&style_res, adjusted_line, out);
+            self.buffer_mut().text(&style_res, adjusted_line, out);
 
             // Pad with spaces if needed
             let out_width = out.chars().count();
@@ -133,7 +165,7 @@ impl<'a> Render<'a> {
                     adjusted_line.w - out_width as u32,
                     1,
                 );
-                self.buf.fill(&style_res, pad_rect, ' ');
+                self.buffer_mut().fill(&style_res, pad_rect, ' ');
             }
         }
         Ok(())
@@ -141,7 +173,48 @@ impl<'a> Render<'a> {
 
     /// Get a reference to the internal buffer
     pub fn get_buffer(&self) -> &TermBuf {
-        &self.buf
+        self.buffer()
+    }
+
+    /// Access the underlying buffer.
+    fn buffer(&self) -> &TermBuf {
+        match &self.target {
+            RenderTarget::Owned(buf) => buf,
+            RenderTarget::Shared(buf) => buf,
+        }
+    }
+
+    /// Access the underlying buffer mutably.
+    fn buffer_mut(&mut self) -> &mut TermBuf {
+        match &mut self.target {
+            RenderTarget::Owned(buf) => buf,
+            RenderTarget::Shared(buf) => buf,
+        }
+    }
+
+    /// Translate a point from canvas coordinates to buffer coordinates.
+    fn translate_point(&self, p: geom::Point) -> geom::Point {
+        let x = p.x as i32 + self.origin.x;
+        let y = p.y as i32 + self.origin.y;
+        debug_assert!(
+            x >= 0 && y >= 0,
+            "translated point out of bounds: {:?} + {:?}",
+            p,
+            self.origin
+        );
+        geom::Point {
+            x: x.max(0) as u32,
+            y: y.max(0) as u32,
+        }
+    }
+
+    /// Translate a rectangle from canvas coordinates to buffer coordinates.
+    fn translate_rect(&self, rect: geom::Rect) -> geom::Rect {
+        geom::Rect {
+            tl: self.translate_point(rect.tl),
+            w: rect.w,
+            h: rect.h,
+        }
     }
 }
 
@@ -270,6 +343,39 @@ mod tests {
                 "XXXXXXXXXX"
             ),
         );
+    }
+
+    #[test]
+    fn test_shared_render_clips_to_canvas_rect() {
+        let stylemap = StyleMap::new();
+        let mut style_manager = StyleManager::new();
+        let default_style = style_manager.get(&stylemap, "");
+        let mut target = TermBuf::empty_with_style(geom::Expanse::new(6, 4), default_style);
+
+        let clip = geom::Rect::new(2, 1, 2, 2);
+        let screen_origin = geom::Point { x: 3, y: 0 };
+        {
+            let mut render = Render::new_shared(
+                &stylemap,
+                &mut style_manager,
+                &mut target,
+                clip,
+                screen_origin,
+            );
+            render
+                .fill("default", geom::Rect::new(0, 0, 6, 4), '#')
+                .unwrap();
+            render
+                .text("default", geom::Line::new(1, 2, 4), "abcd")
+                .unwrap();
+        }
+
+        BufTest::new(&target).assert_matches(buf!(
+            "XXX##X"
+            "XXXbcX"
+            "XXXXXX"
+            "XXXXXX"
+        ));
     }
 
     #[test]

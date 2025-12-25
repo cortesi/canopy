@@ -107,46 +107,6 @@ impl TermBuf {
         }
     }
 
-    /// Copy non-NULL characters from a specified rectangle in source TermBuf into a destination rectangle.
-    /// The source rectangle determines the region of the source buffer to copy.
-    /// The destination rectangle determines where to place it on the destination buffer.
-    /// Both rectangles must have the same size.
-    pub fn copy_rect_to_rect(&mut self, src: &Self, src_rect: Rect, dest_rect: Rect) {
-        debug_assert_eq!(src_rect.w, dest_rect.w);
-        debug_assert_eq!(src_rect.h, dest_rect.h);
-
-        // Intersect the destination rectangle with our bounds
-        if let Some(clipped_dest) = self.rect().intersect(&dest_rect) {
-            // Calculate the offset into the destination rect (how much was clipped off the top/left)
-            let clip_offset_x = clipped_dest.tl.x - dest_rect.tl.x;
-            let clip_offset_y = clipped_dest.tl.y - dest_rect.tl.y;
-
-            // Calculate the corresponding start point in the source rect
-            let src_start_x = src_rect.tl.x + clip_offset_x;
-            let src_start_y = src_rect.tl.y + clip_offset_y;
-
-            // Copy the visible portion
-            for dy in 0..clipped_dest.h {
-                for dx in 0..clipped_dest.w {
-                    let src_p = Point {
-                        x: src_start_x + dx,
-                        y: src_start_y + dy,
-                    };
-
-                    if let Some(cell) = src.get(src_p)
-                        && cell.ch != NULL
-                    {
-                        let dest_p = Point {
-                            x: clipped_dest.tl.x + dx,
-                            y: clipped_dest.tl.y + dy,
-                        };
-                        self.put(dest_p, cell.ch, cell.style.clone());
-                    }
-                }
-            }
-        }
-    }
-
     /// Return the buffer size.
     pub fn size(&self) -> Expanse {
         self.size
