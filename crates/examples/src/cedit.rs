@@ -5,11 +5,11 @@ use canopy::{
     error::Result,
     event::{Event, key},
     geom::Rect,
+    layout::{Dimension, Display, FlexDirection, Style},
     render::Render,
     widget::{EventOutcome, Widget},
     widgets::{Root, editor::Editor, frame},
 };
-use taffy::style::{Dimension, Display, FlexDirection, Style};
 
 /// Simple editor wrapper for the cedit demo.
 pub struct Ed {

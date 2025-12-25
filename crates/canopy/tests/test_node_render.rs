@@ -7,12 +7,12 @@ mod tests {
         error::Result,
         event::Event,
         geom::{Expanse, Rect},
+        layout::{Dimension, Display, FlexDirection},
         render::Render,
         state::NodeName,
         testing::harness::Harness,
         widget::{EventOutcome, Widget},
     };
-    use taffy::style::{Dimension, Display, FlexDirection};
 
     struct NodeB;
 

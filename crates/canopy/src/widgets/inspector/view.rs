@@ -1,5 +1,3 @@
-use taffy::style::{Dimension, Display, FlexDirection};
-
 use crate::{
     Context, NodeId, ViewContext,
     core::Core,
@@ -7,6 +5,7 @@ use crate::{
     error::Result,
     event::Event,
     geom::Rect,
+    layout::{Dimension, Display, FlexDirection},
     state::NodeName,
     widget::{EventOutcome, Widget},
     widgets::tabs::Tabs,

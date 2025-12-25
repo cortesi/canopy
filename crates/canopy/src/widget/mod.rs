@@ -5,14 +5,17 @@ use std::{
     time::Duration,
 };
 
-use taffy::{
-    geometry::Size,
-    style::{AvailableSpace, Style},
-};
-
 use crate::{
-    Context, commands::CommandNode, core::context::ViewContext, cursor, error::Result,
-    event::Event, geom::Rect, render::Render, state::NodeName,
+    Context,
+    commands::CommandNode,
+    core::context::ViewContext,
+    cursor,
+    error::Result,
+    event::Event,
+    geom::Rect,
+    layout::{AvailableSpace, Size, Style},
+    render::Render,
+    state::NodeName,
 };
 
 /// The result of an event handler.

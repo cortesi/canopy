@@ -4,7 +4,6 @@ mod logs;
 mod view;
 
 use logs::Logs;
-use taffy::style::{Dimension, Display, FlexDirection};
 
 use crate::{
     Binder, Canopy, Context, DefaultBindings, Loader, NodeId, ViewContext,
@@ -13,6 +12,7 @@ use crate::{
     error::Result,
     event::{Event, key::*},
     geom::Rect,
+    layout::{Dimension, Display, FlexDirection},
     render::Render,
     state::NodeName,
     widget::{EventOutcome, Widget},

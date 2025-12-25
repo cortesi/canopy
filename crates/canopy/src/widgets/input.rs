@@ -1,4 +1,3 @@
-use taffy::{geometry::Size, style::AvailableSpace};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
@@ -7,6 +6,7 @@ use crate::{
     error::Result,
     event::{Event, key},
     geom::{LineSegment, Point, Rect},
+    layout::{AvailableSpace, Size},
     render::Render,
     state::NodeName,
     widget::{EventOutcome, Widget},

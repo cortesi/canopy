@@ -216,7 +216,6 @@ dependencies = [
  "canopy",
  "clap",
  "rand",
- "taffy",
  "textwrap",
  "tracing",
  "tracing-subscriber",

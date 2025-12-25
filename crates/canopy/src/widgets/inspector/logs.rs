@@ -4,7 +4,6 @@ use std::{
     time::Duration,
 };
 
-use taffy::{geometry::Size, style::AvailableSpace};
 use tracing_subscriber::fmt;
 
 use crate::{
@@ -12,6 +11,7 @@ use crate::{
     error::Result,
     event::Event,
     geom::{Expanse, Rect},
+    layout::{AvailableSpace, Size},
     render::Render,
     state::NodeName,
     widget::{EventOutcome, Widget},

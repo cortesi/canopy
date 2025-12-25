@@ -7,12 +7,12 @@ mod tests {
         error::Result,
         event::{Event, key},
         geom::Rect,
+        layout::{AvailableSpace, Size},
         render::Render,
         state::NodeName,
         testing::harness::Harness,
         widget::{EventOutcome, Widget},
     };
-    use taffy::{geometry::Size, style::AvailableSpace};
 
     /// Simple test widget to demonstrate viewport scrolling behavior.
     struct ScrollTest;

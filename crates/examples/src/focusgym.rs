@@ -5,13 +5,10 @@ use canopy::{
     error::Result,
     event::{Event, key, mouse},
     geom::{Expanse, Rect},
+    layout::{AvailableSpace, Dimension, Display, FlexDirection, Size, Style},
     render::Render,
     widget::{EventOutcome, Widget},
     widgets::Root,
-};
-use taffy::{
-    geometry::Size,
-    style::{AvailableSpace, Dimension, Display, FlexDirection, Style},
 };
 
 /// A focusable block that can split into children.

@@ -8,12 +8,12 @@ mod tests {
         error::{Error, Result},
         event::Event,
         geom::{Direction, Expanse, Rect},
+        layout::{Dimension, Display, FlexDirection},
         render::Render,
         state::NodeName,
         testing::grid::Grid,
         widget::{EventOutcome, Widget},
     };
-    use taffy::style::{Dimension, Display, FlexDirection};
 
     struct FocusLeaf {
         name: &'static str,

@@ -5,12 +5,12 @@ use canopy::{
     error::Result,
     event::{Event, key, mouse},
     geom::{Expanse, Rect},
+    layout::{Dimension, Display, FlexDirection, Style},
     render::Render,
     style::solarized,
     widget::{EventOutcome, Widget},
     widgets::{frame, list::*},
 };
-use taffy::style::{Dimension, Display, FlexDirection, Style};
 
 /// List item that increments on a timer.
 pub struct IntervalItem {

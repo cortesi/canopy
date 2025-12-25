@@ -1,5 +1,3 @@
-use taffy::style::{Dimension, Display, FlexDirection, Style};
-
 use crate::{
     Binder, Canopy, Context, DefaultBindings, Loader, NodeId, ViewContext, command,
     core::Core,
@@ -7,6 +5,7 @@ use crate::{
     error::Result,
     event::{Event, key::*},
     geom::Rect,
+    layout::{Dimension, Display, FlexDirection, Style},
     state::NodeName,
     widget::{EventOutcome, Widget},
     widgets::inspector::Inspector,
@@ -240,14 +239,13 @@ impl Loader for Root {
 mod tests {
     use std::time::Duration;
 
-    use taffy::style::{Dimension, Display, FlexDirection, Style};
-
     use super::*;
     use crate::{
         Context, ViewContext,
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
         error::{Error, Result},
         geom::Expanse,
+        layout::{Dimension, Display, FlexDirection, Style},
         render::Render,
         state::NodeName,
         testing::render::NopBackend,

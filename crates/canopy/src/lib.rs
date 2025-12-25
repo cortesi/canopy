@@ -26,6 +26,7 @@ mod core;
 
 // Public modules
 pub mod geom;
+pub mod layout;
 pub mod widget;
 pub mod widgets;
 

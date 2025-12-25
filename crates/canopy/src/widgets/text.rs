@@ -1,10 +1,9 @@
-use taffy::{geometry::Size, style::AvailableSpace};
-
 use crate::{
     Context, ViewContext, command, derive_commands,
     error::Result,
     event::Event,
     geom::Rect,
+    layout::{AvailableSpace, Size},
     render::Render,
     state::NodeName,
     widget::{EventOutcome, Widget},

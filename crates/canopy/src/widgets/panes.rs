@@ -1,14 +1,9 @@
-use taffy::{
-    geometry::Line,
-    style::{Display, GridPlacement, Style, TrackSizingFunction},
-    style_helpers::{FromFlex, line},
-};
-
 use crate::{
     Context, NodeId, ViewContext, derive_commands,
     error::Result,
     event::Event,
     geom::Rect,
+    layout::{Display, FromFlex, GridPlacement, Line, Style, TrackSizingFunction, line},
     state::NodeName,
     widget::{EventOutcome, Widget},
 };

@@ -7,13 +7,13 @@ mod tests {
         error::{Error, Result},
         event::Event,
         geom::{Direction, Expanse, Point, Rect},
+        layout::{Dimension, Display, FlexDirection},
         path::Path,
         render::Render,
         state::NodeName,
         testing::grid::Grid,
         widget::{EventOutcome, Widget},
     };
-    use taffy::style::{Dimension, Display, FlexDirection};
 
     #[derive(Debug, Clone, PartialEq)]
     enum Walk<T> {

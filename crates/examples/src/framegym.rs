@@ -5,13 +5,10 @@ use canopy::{
     error::Result,
     event::{Event, key},
     geom::{Expanse, Rect},
+    layout::{AvailableSpace, Dimension, Display, FlexDirection, Size, Style},
     render::Render,
     widget::{EventOutcome, Widget},
     widgets::{Root, frame},
-};
-use taffy::{
-    geometry::Size,
-    style::{AvailableSpace, Dimension, Display, FlexDirection, Style},
 };
 
 /// A widget that renders a test pattern.
@@ -248,8 +245,7 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
 
 #[cfg(test)]
 mod tests {
-    use canopy::{NodeId, testing::harness::Harness};
-    use taffy::{geometry::Rect as TaffyRect, style::LengthPercentage};
+    use canopy::{NodeId, layout, layout::LengthPercentage, testing::harness::Harness};
 
     use super::*;
 
@@ -284,7 +280,7 @@ mod tests {
         assert_eq!(frame_canvas.h, frame_view.h);
         assert_eq!(
             frame_style.padding,
-            TaffyRect {
+            layout::Rect {
                 left: LengthPercentage::Points(1.0),
                 right: LengthPercentage::Points(1.0),
                 top: LengthPercentage::Points(1.0),

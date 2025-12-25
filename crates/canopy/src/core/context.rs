@@ -1,11 +1,10 @@
 use std::process;
 
-use taffy::style::Style;
-
 use super::{id::NodeId, viewport::ViewPort, world::Core};
 use crate::{
     error::{Error, Result},
     geom::{Direction, Expanse, Rect},
+    layout::Style,
     path::Path,
     widget::Widget,
 };
@@ -119,7 +118,7 @@ pub trait Context: ViewContext {
     /// Scroll the view right by one line. Returns `true` if movement occurred.
     fn scroll_right(&mut self) -> bool;
 
-    /// Update the Taffy style for a node.
+    /// Update the layout style for a node.
     fn with_style(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Style)) -> Result<()>;
 
     /// Add a new widget node to the core.

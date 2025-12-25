@@ -1,13 +1,9 @@
-use taffy::{
-    geometry::Rect as TaffyRect,
-    style::{LengthPercentage, Style},
-};
-
 use crate::{
     Context, ViewContext, derive_commands,
     error::Result,
     event::Event,
     geom,
+    layout::{self, LengthPercentage, Style},
     render::Render,
     state::NodeName,
     widget::{EventOutcome, Widget},
@@ -205,7 +201,7 @@ impl Widget for Frame {
     }
 
     fn configure_style(&self, style: &mut Style) {
-        style.padding = TaffyRect {
+        style.padding = layout::Rect {
             left: LengthPercentage::Points(1.0),
             right: LengthPercentage::Points(1.0),
             top: LengthPercentage::Points(1.0),

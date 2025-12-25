@@ -8,17 +8,15 @@ mod tests {
         error::Result,
         event::Event,
         geom::{Expanse, Point, Rect},
+        layout,
+        layout::{
+            AvailableSpace, Dimension, Display, FlexDirection, LengthPercentage,
+            LengthPercentageAuto, Position, Size,
+        },
         render::Render,
         state::NodeName,
         testing::harness::Harness,
         widget::{EventOutcome, Widget},
-    };
-    use taffy::{
-        geometry::{Rect as TaffyRect, Size},
-        style::{
-            AvailableSpace, Dimension, Display, FlexDirection, LengthPercentage,
-            LengthPercentageAuto, Position,
-        },
     };
 
     struct Big;
@@ -209,7 +207,7 @@ mod tests {
             style.size.width = Dimension::Points(4.0);
             style.size.height = Dimension::Points(4.0);
             style.position = Position::Absolute;
-            style.inset = TaffyRect {
+            style.inset = layout::Rect {
                 left: LengthPercentageAuto::Points(3.0),
                 right: LengthPercentageAuto::Auto,
                 top: LengthPercentageAuto::Points(3.0),
@@ -253,7 +251,7 @@ mod tests {
             style.flex_grow = 1.0;
             style.flex_shrink = 1.0;
             style.flex_basis = Dimension::Auto;
-            style.padding = TaffyRect {
+            style.padding = layout::Rect {
                 left: LengthPercentage::Points(1.0),
                 right: LengthPercentage::Points(1.0),
                 top: LengthPercentage::Points(1.0),

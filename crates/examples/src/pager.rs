@@ -5,11 +5,11 @@ use canopy::{
     error::Result,
     event::{Event, key, mouse},
     geom::Rect,
+    layout::{Dimension, Display, FlexDirection, Style},
     render::Render,
     widget::{EventOutcome, Widget},
     widgets::{Text, frame},
 };
-use taffy::style::{Dimension, Display, FlexDirection, Style};
 
 /// Simple pager widget for file contents.
 pub struct Pager {

@@ -1,6 +1,5 @@
-use taffy::style::{Dimension, Display, FlexDirection, Style};
-
 use super::{id::NodeId, world::Core};
+use crate::layout::{Dimension, Display, FlexDirection, Style};
 
 /// Fluent builder for node layout and hierarchy.
 pub struct NodeBuilder<'a> {
@@ -11,7 +10,7 @@ pub struct NodeBuilder<'a> {
 }
 
 impl<'a> NodeBuilder<'a> {
-    /// Modify the Taffy style for this node.
+    /// Modify the layout style for this node.
     pub fn style(self, f: impl FnOnce(&mut Style)) -> Self {
         let t_id = self.core.nodes[self.id].taffy_id;
         let mut style = self.core.taffy.style(t_id).cloned().unwrap_or_default();

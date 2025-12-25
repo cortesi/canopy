@@ -5,11 +5,11 @@ use canopy::{
     error::Result,
     event::Event,
     geom::Rect,
+    layout::{Dimension, Display, FlexDirection, Style},
     render::Render,
     widget::{EventOutcome, Widget},
     widgets::Text,
 };
-use taffy::style::{Dimension, Display, FlexDirection, Style};
 
 /// Demo node that displays placeholder text.
 pub struct TextDisplay {
