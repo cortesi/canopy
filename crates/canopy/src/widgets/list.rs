@@ -1,12 +1,11 @@
 use crate::{
     Context, ViewContext, command, derive_commands,
     error::Result,
-    event::Event,
     geom::{Expanse, Rect},
     layout::{AvailableSpace, Size},
     render::Render,
     state::NodeName,
-    widget::{EventOutcome, Widget},
+    widget::Widget,
 };
 
 /// ListItem must be implemented by items displayed in a `List`.
@@ -327,10 +326,6 @@ where
             width: max_width.max(available_width) as f32,
             height: height as f32,
         }
-    }
-
-    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
     }
 
     fn name(&self) -> NodeName {

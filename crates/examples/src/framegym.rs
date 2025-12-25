@@ -3,11 +3,11 @@ use std::time::Duration;
 use canopy::{
     Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
     error::Result,
-    event::{Event, key},
+    event::key,
     geom::{Expanse, Rect},
     layout::{AvailableSpace, Dimension, Display, FlexDirection, Size, Style},
     render::Render,
-    widget::{EventOutcome, Widget},
+    widget::Widget,
     widgets::{Root, frame},
 };
 
@@ -135,10 +135,6 @@ impl Widget for TestPattern {
             height: self.size.h as f32,
         }
     }
-
-    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
-    }
 }
 
 /// Root node for the frame gym demo.
@@ -197,10 +193,6 @@ impl FrameGym {
 impl Widget for FrameGym {
     fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
-    }
-
-    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
     }
 
     fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {

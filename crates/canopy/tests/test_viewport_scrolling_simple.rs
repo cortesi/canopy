@@ -5,13 +5,13 @@ mod tests {
     use canopy::{
         Canopy, Context, Loader, ViewContext, command, derive_commands,
         error::Result,
-        event::{Event, key},
+        event::key,
         geom::Rect,
         layout::{AvailableSpace, Size},
         render::Render,
         state::NodeName,
         testing::harness::Harness,
-        widget::{EventOutcome, Widget},
+        widget::Widget,
     };
 
     /// Simple test widget to demonstrate viewport scrolling behavior.
@@ -57,10 +57,6 @@ mod tests {
                 width: 100.0,
                 height: 100.0,
             }
-        }
-
-        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-            EventOutcome::Ignore
         }
 
         fn name(&self) -> NodeName {

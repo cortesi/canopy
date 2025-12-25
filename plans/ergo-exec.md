@@ -23,14 +23,14 @@ Audit current Taffy exposure, add a stable `canopy::layout` surface, and update 
 
 Introduce `on_mount` and ensure it is called exactly once per node after context binding.
 
-7. [ ] Add `Widget::on_mount` with a default `Ok(())` implementation in
+7. [x] Add `Widget::on_mount` with a default `Ok(())` implementation in
        `crates/canopy/src/widget/mod.rs`.
-8. [ ] Call `on_mount` from the mount path in `crates/canopy/src/core/world.rs` and plumb
+8. [x] Call `on_mount` from the mount path in `crates/canopy/src/core/world.rs` and plumb
        failures through existing `Result` handling.
-9. [ ] Move example initialization from `ensure_tree`-style guards to `on_mount` in
+9. [x] Move example initialization from `ensure_tree`-style guards to `on_mount` in
        `crates/examples/src/focusgym.rs`.
-10. [ ] Add or update tests to prove `on_mount` is called once and after context binding.
-11. [ ] Run the full test and lint suite for this stage and resolve any failures or warnings.
+10. [x] Add or update tests to prove `on_mount` is called once and after context binding.
+11. [x] Run the full test and lint suite for this stage and resolve any failures or warnings.
 
 3. Stage Three: Typed widget access and style read access
 

@@ -1,13 +1,13 @@
-use std::{any::Any, time::Duration};
+use std::any::Any;
 
 use canopy::{
     Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
     error::Result,
-    event::{Event, key, mouse},
+    event::{key, mouse},
     geom::{Expanse, Rect},
     layout::{AvailableSpace, Dimension, Display, FlexDirection, Size, Style},
     render::Render,
-    widget::{EventOutcome, Widget},
+    widget::Widget,
     widgets::Root,
 };
 
@@ -227,10 +227,6 @@ impl Widget for Block {
         Ok(())
     }
 
-    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
-    }
-
     fn configure_style(&self, style: &mut Style) {
         style.min_size.width = Dimension::Points(1.0);
         style.min_size.height = Dimension::Points(1.0);
@@ -256,12 +252,8 @@ impl FocusGym {
         Self { root_block: None }
     }
 
-    /// Ensure the initial tree of blocks is built.
-    fn ensure_tree(&mut self, c: &mut dyn Context) -> Result<()> {
-        if self.root_block.is_some() {
-            return Ok(());
-        }
-
+    /// Build the initial tree of blocks.
+    fn build_tree(&mut self, c: &mut dyn Context) -> Result<()> {
         let root_block = c.add(Box::new(Block::new(true)));
         let left = c.add(Box::new(Block::new(false)));
         let right = c.add(Box::new(Block::new(false)));
@@ -324,8 +316,7 @@ impl FocusGym {
 
     #[command]
     /// Delete the currently focused block.
-    fn delete_focused(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.ensure_tree(c)?;
+    fn delete_focused(&self, c: &mut dyn Context) -> Result<()> {
         let Some(root_block) = self.root_block else {
             return Ok(());
         };
@@ -368,13 +359,11 @@ impl Widget for FocusGym {
         Ok(())
     }
 
-    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
-    }
-
-    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
-        self.ensure_tree(c).ok();
-        None
+    fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
+        if self.root_block.is_some() {
+            return Ok(());
+        }
+        self.build_tree(c)
     }
 }
 

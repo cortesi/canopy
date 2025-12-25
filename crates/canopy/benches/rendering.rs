@@ -3,14 +3,8 @@
 use std::{hint::black_box, time::Duration};
 
 use canopy::{
-    Context, Loader, NodeId, ViewContext, derive_commands,
-    error::Result,
-    event::Event,
-    geom::Rect,
-    render::Render,
-    testing::harness::Harness,
-    widget::{EventOutcome, Widget},
-    widgets::Text,
+    Context, Loader, NodeId, ViewContext, derive_commands, error::Result, geom::Rect,
+    render::Render, testing::harness::Harness, widget::Widget, widgets::Text,
 };
 use criterion::{Criterion, criterion_group, criterion_main};
 use taffy::style::{Dimension, Display, FlexDirection, Style};
@@ -65,10 +59,6 @@ impl BenchmarkTextWrapper {
 impl Widget for BenchmarkTextWrapper {
     fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
-    }
-
-    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
     }
 
     fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {

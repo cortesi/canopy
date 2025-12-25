@@ -1,12 +1,11 @@
 use crate::{
     Context, ViewContext, command, derive_commands,
     error::Result,
-    event::Event,
     geom::Rect,
     layout::{AvailableSpace, Size},
     render::Render,
     state::NodeName,
-    widget::{EventOutcome, Widget},
+    widget::Widget,
 };
 
 /// Multiline text widget with wrapping and scrolling.
@@ -140,10 +139,6 @@ impl Widget for Text {
         let height = lines.len() as f32;
 
         Size { width, height }
-    }
-
-    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
     }
 
     fn name(&self) -> NodeName {

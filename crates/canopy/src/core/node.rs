@@ -33,4 +33,6 @@ pub struct Node {
     pub name: NodeName,
     /// Whether polling has been initialized.
     pub initialized: bool,
+    /// Whether the widget mount hook has run.
+    pub mounted: bool,
 }

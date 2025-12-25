@@ -3,11 +3,11 @@ use std::time::Duration;
 use canopy::{
     Canopy, Context, Loader, NodeId, ViewContext, derive_commands,
     error::Result,
-    event::{Event, key, mouse},
+    event::{key, mouse},
     geom::Rect,
     layout::{Dimension, Display, FlexDirection, Style},
     render::Render,
-    widget::{EventOutcome, Widget},
+    widget::Widget,
     widgets::{Text, frame},
 };
 
@@ -70,10 +70,6 @@ impl Widget for Pager {
 
     fn render(&mut self, _rndr: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
-    }
-
-    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
     }
 
     fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {

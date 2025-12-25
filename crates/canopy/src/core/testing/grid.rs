@@ -7,14 +7,13 @@ use taffy::{
 };
 
 use crate::{
-    Context, NodeId, ViewContext,
+    NodeId, ViewContext,
     core::Core,
     derive_commands,
     error::Result,
-    event::Event,
     geom::{Expanse, Point, Rect},
     state::NodeName,
-    widget::{EventOutcome, Widget},
+    widget::Widget,
 };
 
 /// A grid node widget used for testing.
@@ -45,10 +44,6 @@ impl Widget for GridWidget {
         _ctx: &dyn ViewContext,
     ) -> Result<()> {
         Ok(())
-    }
-
-    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
     }
 
     fn name(&self) -> NodeName {

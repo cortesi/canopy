@@ -8,7 +8,7 @@ use canopy::{
     geom::{Expanse, Rect},
     render::Render,
     style::solarized,
-    widget::{EventOutcome, Widget},
+    widget::Widget,
     widgets::{Input, frame, list::*},
 };
 use taffy::{
@@ -72,10 +72,6 @@ impl Widget for StatusBar {
         r.text("statusbar/text", ctx.view().line(0), "todo")?;
         Ok(())
     }
-
-    fn on_event(&mut self, _event: &canopy::event::Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
-    }
 }
 
 /// Overlay container for the add dialog.
@@ -92,10 +88,6 @@ impl Widget for Overlay {
         _ctx: &dyn canopy::ViewContext,
     ) -> Result<()> {
         Ok(())
-    }
-
-    fn on_event(&mut self, _event: &canopy::event::Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
     }
 }
 
@@ -378,10 +370,6 @@ impl Widget for Todo {
         _ctx: &dyn canopy::ViewContext,
     ) -> Result<()> {
         Ok(())
-    }
-
-    fn on_event(&mut self, _event: &canopy::event::Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
     }
 
     fn poll(&mut self, c: &mut dyn Context) -> Option<std::time::Duration> {

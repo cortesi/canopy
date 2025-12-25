@@ -204,6 +204,12 @@ impl Canopy {
                 focus_seen = true;
             }
 
+            let mounted = self.core.nodes.get(id).map(|n| n.mounted).unwrap_or(false);
+            if !mounted {
+                layout_dirty = true;
+                self.core.mount_node(id)?;
+            }
+
             let initialized = self
                 .core
                 .nodes
@@ -1082,10 +1088,6 @@ mod tests {
                 Ok(())
             }
 
-            fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-                EventOutcome::Ignore
-            }
-
             fn name(&self) -> NodeName {
                 NodeName::convert("child")
             }
@@ -1108,10 +1110,6 @@ mod tests {
                 _ctx: &dyn ViewContext,
             ) -> Result<()> {
                 Ok(())
-            }
-
-            fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-                EventOutcome::Ignore
             }
 
             fn name(&self) -> NodeName {

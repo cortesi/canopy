@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use scoped_tls::scoped_thread_local;
 use slotmap::SlotMap;
 use taffy::{
@@ -93,6 +91,7 @@ impl Core {
             hidden: false,
             name: root_name,
             initialized: false,
+            mounted: false,
         });
         taffy
             .set_measure(
@@ -142,6 +141,7 @@ impl Core {
             hidden: false,
             name,
             initialized: false,
+            mounted: false,
         });
 
         self.taffy
@@ -172,12 +172,36 @@ impl Core {
         node.widget = Some(Box::new(widget));
         node.name = name;
         node.style = style.clone();
+        node.mounted = false;
 
         let taffy_id = node.taffy_id;
         self.taffy
             .set_style(taffy_id, style)
             .map_err(|err| map_taffy_error(&err))
             .expect("Failed to set taffy style");
+    }
+
+    /// Run the mount hook for a node if it has not been mounted yet.
+    pub(crate) fn mount_node(&mut self, node_id: NodeId) -> Result<()> {
+        let should_mount = self
+            .nodes
+            .get(node_id)
+            .map(|node| !node.mounted)
+            .unwrap_or(false);
+        if !should_mount {
+            return Ok(());
+        }
+
+        self.with_widget_mut(node_id, |widget, core| {
+            let mut ctx = CoreContext::new(core, node_id);
+            widget.on_mount(&mut ctx)
+        })?;
+
+        if let Some(node) = self.nodes.get_mut(node_id) {
+            node.mounted = true;
+        }
+
+        Ok(())
     }
 
     /// Mount a child under a parent in both the arena and Taffy.
@@ -207,6 +231,8 @@ impl Core {
         self.taffy
             .add_child(parent_taffy, child_taffy)
             .map_err(|err| map_taffy_error(&err))?;
+
+        self.mount_node(child)?;
 
         Ok(())
     }
@@ -264,6 +290,11 @@ impl Core {
         self.taffy
             .set_children(parent_taffy, &taffy_children)
             .map_err(|err| map_taffy_error(&err))?;
+
+        let new_children = self.nodes[parent].children.clone();
+        for child in new_children {
+            self.mount_node(child)?;
+        }
 
         Ok(())
     }
@@ -987,14 +1018,6 @@ impl Widget for RootContainer {
 
     fn name(&self) -> NodeName {
         NodeName::convert("root")
-    }
-
-    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
-    }
-
-    fn poll(&mut self, _ctx: &mut dyn Context) -> Option<Duration> {
-        None
     }
 }
 

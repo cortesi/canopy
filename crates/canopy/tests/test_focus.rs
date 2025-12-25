@@ -6,13 +6,12 @@ mod tests {
         Canopy, Core, NodeId, ViewContext,
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
         error::{Error, Result},
-        event::Event,
         geom::{Direction, Expanse, Rect},
         layout::{Dimension, Display, FlexDirection},
         render::Render,
         state::NodeName,
         testing::grid::Grid,
-        widget::{EventOutcome, Widget},
+        widget::Widget,
     };
 
     struct FocusLeaf {
@@ -46,10 +45,6 @@ mod tests {
 
         fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
-        }
-
-        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn canopy::Context) -> EventOutcome {
-            EventOutcome::Ignore
         }
 
         fn name(&self) -> NodeName {

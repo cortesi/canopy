@@ -1,13 +1,12 @@
 use crate::{
-    Context, NodeId, ViewContext,
+    NodeId, ViewContext,
     core::Core,
     derive_commands,
     error::Result,
-    event::Event,
     geom::Rect,
     layout::{Dimension, Display, FlexDirection},
     state::NodeName,
-    widget::{EventOutcome, Widget},
+    widget::Widget,
     widgets::tabs::Tabs,
 };
 
@@ -22,10 +21,6 @@ impl Widget for View {
         _ctx: &dyn ViewContext,
     ) -> Result<()> {
         Ok(())
-    }
-
-    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
     }
 
     fn name(&self) -> NodeName {

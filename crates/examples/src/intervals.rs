@@ -3,12 +3,12 @@ use std::{any::Any, time::Duration};
 use canopy::{
     Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
     error::Result,
-    event::{Event, key, mouse},
+    event::{key, mouse},
     geom::{Expanse, Rect},
     layout::{Dimension, Display, FlexDirection, Style},
     render::Render,
     style::solarized,
-    widget::{EventOutcome, Widget},
+    widget::Widget,
     widgets::{frame, list::*},
 };
 
@@ -60,10 +60,6 @@ impl Widget for StatusBar {
         r.push_layer("statusbar");
         r.text("statusbar/text", ctx.view().line(0), "intervals")?;
         Ok(())
-    }
-
-    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
     }
 }
 
@@ -156,10 +152,6 @@ impl Widget for Intervals {
 
     fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
-    }
-
-    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
     }
 
     fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {

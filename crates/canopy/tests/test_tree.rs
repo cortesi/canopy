@@ -3,16 +3,15 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Context, Core, NodeId, ViewContext, derive_commands,
+        Canopy, Core, NodeId, ViewContext, derive_commands,
         error::{Error, Result},
-        event::Event,
         geom::{Direction, Expanse, Point, Rect},
         layout::{Dimension, Display, FlexDirection},
         path::Path,
         render::Render,
         state::NodeName,
         testing::grid::Grid,
-        widget::{EventOutcome, Widget},
+        widget::Widget,
     };
 
     #[derive(Debug, Clone, PartialEq)]
@@ -38,10 +37,6 @@ mod tests {
     impl Widget for TreeWidget {
         fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
-        }
-
-        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-            EventOutcome::Ignore
         }
 
         fn name(&self) -> NodeName {

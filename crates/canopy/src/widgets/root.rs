@@ -3,11 +3,11 @@ use crate::{
     core::Core,
     derive_commands,
     error::Result,
-    event::{Event, key::*},
+    event::key::*,
     geom::Rect,
     layout::{Dimension, Display, FlexDirection, Style},
     state::NodeName,
-    widget::{EventOutcome, Widget},
+    widget::Widget,
     widgets::inspector::Inspector,
 };
 
@@ -203,10 +203,6 @@ impl Widget for Root {
         Ok(())
     }
 
-    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
-    }
-
     fn configure_style(&self, style: &mut Style) {
         style.size.width = Dimension::Percent(1.0);
         style.size.height = Dimension::Percent(1.0);
@@ -237,8 +233,6 @@ impl Loader for Root {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
     use super::*;
     use crate::{
         Context, ViewContext,
@@ -249,7 +243,7 @@ mod tests {
         render::Render,
         state::NodeName,
         testing::render::NopBackend,
-        widget::{EventOutcome, Widget},
+        widget::Widget,
     };
 
     struct App;
@@ -276,10 +270,6 @@ mod tests {
             _ctx: &dyn ViewContext,
         ) -> Result<()> {
             Ok(())
-        }
-
-        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-            EventOutcome::Ignore
         }
 
         fn name(&self) -> NodeName {
@@ -323,14 +313,6 @@ mod tests {
             _ctx: &dyn ViewContext,
         ) -> Result<()> {
             Ok(())
-        }
-
-        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-            EventOutcome::Ignore
-        }
-
-        fn poll(&mut self, _ctx: &mut dyn Context) -> Option<Duration> {
-            None
         }
 
         fn name(&self) -> NodeName {

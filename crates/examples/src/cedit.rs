@@ -3,11 +3,11 @@ use std::time::Duration;
 use canopy::{
     Binder, Canopy, Context, Loader, NodeId, ViewContext, derive_commands,
     error::Result,
-    event::{Event, key},
+    event::key,
     geom::Rect,
     layout::{Dimension, Display, FlexDirection, Style},
     render::Render,
-    widget::{EventOutcome, Widget},
+    widget::Widget,
     widgets::{Root, editor::Editor, frame},
 };
 
@@ -67,10 +67,6 @@ impl Ed {
 impl Widget for Ed {
     fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
-    }
-
-    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
     }
 
     fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {

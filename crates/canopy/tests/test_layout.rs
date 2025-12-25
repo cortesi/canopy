@@ -6,7 +6,6 @@ mod tests {
         Canopy, Context, Loader, ViewContext,
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
         error::Result,
-        event::Event,
         geom::{Expanse, Point, Rect},
         layout,
         layout::{
@@ -16,7 +15,7 @@ mod tests {
         render::Render,
         state::NodeName,
         testing::harness::Harness,
-        widget::{EventOutcome, Widget},
+        widget::Widget,
     };
 
     struct Big;
@@ -65,10 +64,6 @@ mod tests {
             }
         }
 
-        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-            EventOutcome::Ignore
-        }
-
         fn name(&self) -> NodeName {
             NodeName::convert("big")
         }
@@ -99,10 +94,6 @@ mod tests {
     impl Widget for Container {
         fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
             r.fill("", ctx.view(), ' ')
-        }
-
-        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-            EventOutcome::Ignore
         }
 
         fn name(&self) -> NodeName {
@@ -148,10 +139,6 @@ mod tests {
             }
         }
 
-        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-            EventOutcome::Ignore
-        }
-
         fn name(&self) -> NodeName {
             NodeName::convert("huge")
         }
@@ -182,10 +169,6 @@ mod tests {
     impl Widget for Root {
         fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
             r.fill("", ctx.view(), ' ')
-        }
-
-        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-            EventOutcome::Ignore
         }
 
         fn name(&self) -> NodeName {

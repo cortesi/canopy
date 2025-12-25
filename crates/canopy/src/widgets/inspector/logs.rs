@@ -9,12 +9,11 @@ use tracing_subscriber::fmt;
 use crate::{
     Canopy, Context, Loader, ViewContext, command, derive_commands,
     error::Result,
-    event::Event,
     geom::{Expanse, Rect},
     layout::{AvailableSpace, Size},
     render::Render,
     state::NodeName,
-    widget::{EventOutcome, Widget},
+    widget::Widget,
     widgets::list::{List, ListItem},
 };
 
@@ -106,10 +105,6 @@ impl Widget for Logs {
         available_space: Size<AvailableSpace>,
     ) -> Size<f32> {
         self.list.measure(known_dimensions, available_space)
-    }
-
-    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
     }
 
     fn poll(&mut self, _c: &mut dyn Context) -> Option<Duration> {

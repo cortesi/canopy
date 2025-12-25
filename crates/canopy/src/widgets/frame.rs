@@ -1,12 +1,11 @@
 use crate::{
-    Context, ViewContext, derive_commands,
+    ViewContext, derive_commands,
     error::Result,
-    event::Event,
     geom,
     layout::{self, LengthPercentage, Style},
     render::Render,
     state::NodeName,
-    widget::{EventOutcome, Widget},
+    widget::Widget,
 };
 
 /// Defines the set of glyphs used to draw the frame.
@@ -194,10 +193,6 @@ impl Widget for Frame {
         }
 
         Ok(())
-    }
-
-    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
     }
 
     fn configure_style(&self, style: &mut Style) {

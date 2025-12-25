@@ -3,15 +3,14 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Context, Core, Loader, NodeId, ViewContext, buf, derive_commands,
+        Canopy, Core, Loader, NodeId, ViewContext, buf, derive_commands,
         error::Result,
-        event::Event,
         geom::{Expanse, Rect},
         layout::{Dimension, Display, FlexDirection},
         render::Render,
         state::NodeName,
         testing::harness::Harness,
-        widget::{EventOutcome, Widget},
+        widget::Widget,
     };
 
     struct NodeB;
@@ -27,10 +26,6 @@ mod tests {
         fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
             r.fill("", ctx.view(), 'B')?;
             Ok(())
-        }
-
-        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-            EventOutcome::Ignore
         }
 
         fn name(&self) -> NodeName {
@@ -52,10 +47,6 @@ mod tests {
             Ok(())
         }
 
-        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-            EventOutcome::Ignore
-        }
-
         fn name(&self) -> NodeName {
             NodeName::convert("node_a")
         }
@@ -73,10 +64,6 @@ mod tests {
     impl Widget for Root {
         fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
-        }
-
-        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-            EventOutcome::Ignore
         }
 
         fn name(&self) -> NodeName {

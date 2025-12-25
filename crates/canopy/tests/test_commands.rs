@@ -9,10 +9,9 @@ mod tests {
         commands::{CommandInvocation, CommandNode, dispatch},
         derive_commands,
         error::Result,
-        event::Event,
         geom::Rect,
         render::Render,
-        widget::{EventOutcome, Widget},
+        widget::Widget,
     };
 
     // Test helper to record command calls
@@ -44,10 +43,6 @@ mod tests {
         fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
-
-        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-            EventOutcome::Ignore
-        }
     }
 
     struct TestBranch;
@@ -58,10 +53,6 @@ mod tests {
     impl Widget for TestBranch {
         fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
-        }
-
-        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-            EventOutcome::Ignore
         }
     }
 
@@ -123,10 +114,6 @@ mod tests {
                 _ctx: &dyn ViewContext,
             ) -> Result<()> {
                 Ok(())
-            }
-
-            fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-                EventOutcome::Ignore
             }
         }
 

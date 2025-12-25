@@ -1,11 +1,10 @@
 use crate::{
     Context, NodeId, ViewContext, derive_commands,
     error::Result,
-    event::Event,
     geom::Rect,
     layout::{Display, FromFlex, GridPlacement, Line, Style, TrackSizingFunction, line},
     state::NodeName,
-    widget::{EventOutcome, Widget},
+    widget::Widget,
 };
 
 /// Panes manages a set of child nodes arranged in a 2d grid.
@@ -136,10 +135,6 @@ impl Widget for Panes {
         _ctx: &dyn ViewContext,
     ) -> Result<()> {
         Ok(())
-    }
-
-    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
     }
 
     fn name(&self) -> NodeName {

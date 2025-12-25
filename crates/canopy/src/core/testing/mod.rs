@@ -19,13 +19,12 @@ mod tests {
 
     use super::backend::TestRender;
     use crate::{
-        Canopy, Context, ViewContext, derive_commands,
+        Canopy, ViewContext, derive_commands,
         error::Result,
-        event::Event,
         geom::{Expanse, Rect},
         render::Render,
         state::NodeName,
-        widget::{EventOutcome, Widget},
+        widget::Widget,
     };
 
     struct Block {
@@ -45,10 +44,6 @@ mod tests {
                 r.fill("blue", ctx.view(), 'x')?;
             }
             Ok(())
-        }
-
-        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-            EventOutcome::Ignore
         }
 
         fn configure_style(&self, style: &mut Style) {

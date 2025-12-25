@@ -2,12 +2,11 @@ use super::core;
 use crate::{
     Context, ViewContext, command, cursor, derive_commands,
     error::Result,
-    event::Event,
     geom::Rect,
     layout::{AvailableSpace, Size},
     render::Render,
     state::NodeName,
-    widget::{EventOutcome, Widget},
+    widget::Widget,
 };
 
 /// A simple editor widget.
@@ -82,10 +81,6 @@ impl Widget for Editor {
         core.resize_window(wrap_width, 0);
         let height = core.wrapped_height() as f32;
         Size { width, height }
-    }
-
-    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
     }
 
     fn name(&self) -> NodeName {

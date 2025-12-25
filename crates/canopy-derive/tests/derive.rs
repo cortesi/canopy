@@ -5,16 +5,15 @@ mod tests {
     use std::marker::PhantomData;
 
     use canopy::{
-        self, Context, ViewContext,
+        self, ViewContext,
         commands::{
             ArgTypes, Args, CommandInvocation, CommandNode, CommandSpec, ReturnSpec, ReturnTypes,
         },
         error::{Error, Result},
-        event::Event,
         geom::Rect,
         render::Render,
         testing::dummyctx::DummyContext,
-        widget::{EventOutcome, Widget},
+        widget::Widget,
     };
     use canopy_derive::{command, derive_commands};
     #[cfg(test)]
@@ -98,10 +97,6 @@ mod tests {
         fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
-
-        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-            EventOutcome::Ignore
-        }
     }
 
     struct Bar<N>
@@ -130,10 +125,6 @@ mod tests {
     {
         fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
-        }
-
-        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-            EventOutcome::Ignore
         }
     }
 

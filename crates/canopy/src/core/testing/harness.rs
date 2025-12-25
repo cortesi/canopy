@@ -130,13 +130,12 @@ impl Harness {
 mod tests {
     use super::*;
     use crate::{
-        Context, ViewContext, derive_commands,
+        ViewContext, derive_commands,
         error::Result,
-        event::Event,
         geom::{Line, Rect},
         render::Render,
         state::NodeName,
-        widget::{EventOutcome, Widget},
+        widget::Widget,
     };
 
     struct TestNode;
@@ -152,10 +151,6 @@ mod tests {
         fn render(&mut self, r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
             r.text("base", Line::new(0, 0, 5), "test")?;
             Ok(())
-        }
-
-        fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-            EventOutcome::Ignore
         }
 
         fn name(&self) -> NodeName {

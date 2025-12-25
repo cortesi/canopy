@@ -1,11 +1,6 @@
 use crate::{
-    Context, ViewContext, command, derive_commands,
-    error::Result,
-    event::Event,
-    geom::Rect,
-    render::Render,
-    state::NodeName,
-    widget::{EventOutcome, Widget},
+    Context, ViewContext, command, derive_commands, error::Result, geom::Rect, render::Render,
+    state::NodeName, widget::Widget,
 };
 
 /// A tab control managing a set of nodes with titles.
@@ -69,10 +64,6 @@ impl Widget for Tabs {
             r.text("", end.line(0), " ")?;
         }
         Ok(())
-    }
-
-    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
     }
 
     fn name(&self) -> NodeName {

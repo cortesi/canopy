@@ -6,16 +6,16 @@ mod view;
 use logs::Logs;
 
 use crate::{
-    Binder, Canopy, Context, DefaultBindings, Loader, NodeId, ViewContext,
+    Binder, Canopy, DefaultBindings, Loader, NodeId, ViewContext,
     core::Core,
     derive_commands,
     error::Result,
-    event::{Event, key::*},
+    event::key::*,
     geom::Rect,
     layout::{Dimension, Display, FlexDirection},
     render::Render,
     state::NodeName,
-    widget::{EventOutcome, Widget},
+    widget::Widget,
     widgets::{frame, tabs},
 };
 
@@ -61,10 +61,6 @@ impl Widget for Inspector {
     fn render(&mut self, r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
         r.push_layer("inspector");
         Ok(())
-    }
-
-    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
     }
 
     fn name(&self) -> NodeName {
