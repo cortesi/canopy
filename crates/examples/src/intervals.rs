@@ -142,7 +142,7 @@ impl Intervals {
 }
 
 impl Widget for Intervals {
-    fn accept_focus(&mut self) -> bool {
+    fn accept_focus(&self) -> bool {
         true
     }
 

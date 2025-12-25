@@ -48,14 +48,14 @@ Reduce downcast boilerplate and make `Style` the source of truth for layout valu
 
 Add child-mount helpers, focus traversal utilities, and a `NodeBuilder` entry point in `Context`.
 
-17. [ ] Add `Context::add_child` and `Context::add_children` plus implementations in
+17. [x] Add `Context::add_child` and `Context::add_children` plus implementations in
         `crates/canopy/src/core/world.rs` or related context types.
-18. [ ] Add `ViewContext::focused_leaf`, `ViewContext::focusable_leaves`, and
+18. [x] Add `ViewContext::focused_leaf`, `ViewContext::focusable_leaves`, and
         `Context::suggest_focus_after_remove` with shared traversal helpers.
-19. [ ] Expose `Context::build` to return `NodeBuilder` and add any agreed helpers such as
+19. [x] Expose `Context::build` to return `NodeBuilder` and add any agreed helpers such as
         `flex_item` or `fill` in `crates/canopy/src/core/builder.rs`.
-20. [ ] Update focus-heavy examples to use the new utilities and builder chain where helpful.
-21. [ ] Run the full test and lint suite for this stage and resolve any failures or warnings.
+20. [x] Update focus-heavy examples to use the new utilities and builder chain where helpful.
+21. [x] Run the full test and lint suite for this stage and resolve any failures or warnings.
 
 5. Stage Five: Optional typed IDs and command bindings
 

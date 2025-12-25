@@ -3,7 +3,7 @@ use canopy::{
     error::Result,
     event::{key, mouse},
     geom::{Expanse, Rect},
-    layout::{AvailableSpace, Dimension, Display, FlexDirection, Size, Style},
+    layout::{AvailableSpace, Dimension, Size, Style},
     render::Render,
     widget::Widget,
     widgets::Root,
@@ -29,11 +29,8 @@ impl Block {
 
     /// Initialize flex defaults for a node.
     fn init_flex(c: &mut dyn Context, node_id: NodeId) -> Result<()> {
-        c.with_style(node_id, &mut |style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        })
+        c.build(node_id).flex_item(1.0, 1.0, Dimension::Auto);
+        Ok(())
     }
 
     /// Return true when the available area is too small to split.
@@ -46,15 +43,12 @@ impl Block {
         let node_id = c.node_id();
         c.set_children(node_id, self.children.clone())?;
 
-        let mut update_root = |style: &mut Style| {
-            style.display = Display::Flex;
-            style.flex_direction = if self.horizontal {
-                FlexDirection::Row
-            } else {
-                FlexDirection::Column
-            };
-        };
-        c.with_style(node_id, &mut update_root)
+        if self.horizontal {
+            c.build(node_id).flex_row();
+        } else {
+            c.build(node_id).flex_col();
+        }
+        Ok(())
     }
 
     /// Adjust flex factors by the requested deltas and apply the updated style.
@@ -150,7 +144,7 @@ impl Block {
 }
 
 impl Widget for Block {
-    fn accept_focus(&mut self) -> bool {
+    fn accept_focus(&self) -> bool {
         self.children.is_empty()
     }
 
@@ -242,51 +236,24 @@ impl FocusGym {
             block.sync_layout(ctx)
         })?;
 
-        let mut update_root = |style: &mut Style| {
-            style.display = Display::Flex;
-            style.flex_direction = FlexDirection::Column;
-        };
-        c.with_style(c.node_id(), &mut update_root)?;
-
-        let mut grow = |style: &mut Style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        };
-        c.with_style(root_block, &mut grow)?;
+        c.build(c.node_id()).flex_col();
+        c.build(root_block).flex_item(1.0, 1.0, Dimension::Auto);
 
         self.root_block = Some(root_block);
         Ok(())
     }
 
-    /// Find the focused node in the subtree rooted at the given node.
-    fn find_focused(
-        &self,
-        c: &dyn ViewContext,
-        node: NodeId,
-        parent: Option<NodeId>,
-    ) -> Option<(Option<NodeId>, NodeId)> {
-        if c.node_is_focused(node) {
-            return Some((parent, node));
-        }
-        for child in c.children(node) {
-            if let Some(found) = self.find_focused(c, child, Some(node)) {
+    /// Find the parent of a node in the subtree rooted at `root`.
+    fn find_parent(&self, c: &dyn ViewContext, root: NodeId, target: NodeId) -> Option<NodeId> {
+        for child in c.children(root) {
+            if child == target {
+                return Some(root);
+            }
+            if let Some(found) = self.find_parent(c, child, target) {
                 return Some(found);
             }
         }
         None
-    }
-
-    /// Collect focusable leaf nodes in preorder.
-    fn collect_focusable(&self, c: &dyn ViewContext, node: NodeId, out: &mut Vec<NodeId>) {
-        let children = c.children(node);
-        if children.is_empty() {
-            out.push(node);
-            return;
-        }
-        for child in children {
-            self.collect_focusable(c, child, out);
-        }
     }
 
     #[command]
@@ -295,27 +262,19 @@ impl FocusGym {
         let Some(root_block) = self.root_block else {
             return Ok(());
         };
-        let Some((parent, focused)) = self.find_focused(c, root_block, None) else {
+        let Some(focused) = c.focused_leaf(root_block) else {
             return Ok(());
         };
-        let Some(parent_id) = parent else {
+        let Some(parent_id) = self.find_parent(c, root_block, focused) else {
             return Ok(());
         };
-
-        let mut before = Vec::new();
-        self.collect_focusable(c, root_block, &mut before);
-        let focus_index = before.iter().position(|id| *id == focused);
+        let target = c.suggest_focus_after_remove(root_block, focused);
 
         c.with_widget(parent_id, |block: &mut Block, ctx| {
             block.children.retain(|id| *id != focused);
             block.sync_layout(ctx)
         })?;
 
-        let mut after = Vec::new();
-        self.collect_focusable(c, root_block, &mut after);
-        let target = focus_index
-            .and_then(|idx| after.get(idx).copied())
-            .or_else(|| after.last().copied());
         if let Some(target) = target {
             c.set_focus(target);
         } else {

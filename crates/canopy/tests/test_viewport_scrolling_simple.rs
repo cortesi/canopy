@@ -30,7 +30,7 @@ mod tests {
     }
 
     impl Widget for ScrollTest {
-        fn accept_focus(&mut self) -> bool {
+        fn accept_focus(&self) -> bool {
             true
         }
 

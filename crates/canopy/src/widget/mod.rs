@@ -66,7 +66,7 @@ pub trait Widget: Any + Send + CommandNode {
     }
 
     /// Attempt to focus this widget.
-    fn accept_focus(&mut self) -> bool {
+    fn accept_focus(&self) -> bool {
         false
     }
 

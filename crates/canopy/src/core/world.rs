@@ -156,6 +156,24 @@ impl Core {
         node_id
     }
 
+    /// Update the layout style for a node.
+    pub(crate) fn with_style(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Style)) -> Result<()> {
+        let t_id = self
+            .nodes
+            .get(node)
+            .ok_or_else(|| Error::Internal("missing node".into()))?
+            .taffy_id;
+        let mut style = self.taffy.style(t_id).cloned().unwrap_or_default();
+        f(&mut style);
+        self.taffy
+            .set_style(t_id, style.clone())
+            .map_err(|err| map_taffy_error(&err))?;
+        if let Some(node) = self.nodes.get_mut(node) {
+            node.style = style;
+        }
+        Ok(())
+    }
+
     /// Replace the widget stored at a node.
     pub fn set_widget<W>(&mut self, node_id: NodeId, widget: W)
     where
@@ -323,8 +341,8 @@ impl Core {
     }
 
     /// Start a builder chain for a node.
-    pub fn build(&mut self, id: NodeId) -> NodeBuilder<'_> {
-        NodeBuilder { core: self, id }
+    pub fn build(&mut self, id: NodeId) -> NodeBuilder<'_, Self> {
+        NodeBuilder { ctx: self, id }
     }
 
     /// Run layout computation and synchronize viewports.
@@ -376,24 +394,6 @@ impl Core {
         let result = f(&mut *widget, self);
         self.nodes[node_id].widget = Some(widget);
         result
-    }
-
-    /// Take a mutable reference to a widget if present, returning None if unavailable.
-    pub(crate) fn with_widget_mut_opt<R>(
-        &mut self,
-        node_id: NodeId,
-        f: impl FnOnce(&mut dyn Widget, &mut Self) -> R,
-    ) -> Option<R> {
-        let widget = {
-            let node = self.nodes.get_mut(node_id)?;
-            node.widget.take()?
-        };
-        let mut widget = widget;
-        let result = f(&mut *widget, self);
-        if let Some(node) = self.nodes.get_mut(node_id) {
-            node.widget = Some(widget);
-        }
-        Some(result)
     }
 
     /// Take a mutable reference to a widget for rendering with a shared Core context.
@@ -645,13 +645,15 @@ impl Core {
     }
 
     /// Check whether a node reports it can accept focus.
-    fn node_accepts_focus(&mut self, node_id: NodeId) -> bool {
-        self.with_widget_mut_opt(node_id, |w, _| w.accept_focus())
-            .unwrap_or(false)
+    fn node_accepts_focus(&self, node_id: NodeId) -> bool {
+        self.nodes
+            .get(node_id)
+            .and_then(|node| node.widget.as_ref())
+            .is_some_and(|widget| widget.accept_focus())
     }
 
     /// Find the first focusable node, preferring nodes with non-zero view size.
-    fn first_focusable(&mut self, root: NodeId) -> Option<NodeId> {
+    fn first_focusable(&self, root: NodeId) -> Option<NodeId> {
         let mut fallback = None;
         let mut stack = vec![root];
         while let Some(id) = stack.pop() {

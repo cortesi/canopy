@@ -1,25 +1,59 @@
 use super::{id::NodeId, world::Core};
-use crate::layout::{Dimension, Display, FlexDirection, Style};
+use crate::{
+    Context,
+    error::Result,
+    layout::{Dimension, Display, FlexDirection, Style},
+};
+
+/// Shared builder hooks for applying layout and mounting nodes.
+pub trait BuildContext {
+    /// Update the style for a node.
+    fn with_style(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Style)) -> Result<()>;
+
+    /// Attach a child to a parent node.
+    fn mount_child(&mut self, parent: NodeId, child: NodeId) -> Result<()>;
+}
+
+impl BuildContext for dyn Context + '_ {
+    fn with_style(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Style)) -> Result<()> {
+        self.with_style(node, f)
+    }
+
+    fn mount_child(&mut self, parent: NodeId, child: NodeId) -> Result<()> {
+        self.mount_child(parent, child)
+    }
+}
+
+impl BuildContext for Core {
+    fn with_style(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Style)) -> Result<()> {
+        self.with_style(node, f)
+    }
+
+    fn mount_child(&mut self, parent: NodeId, child: NodeId) -> Result<()> {
+        self.mount_child(parent, child)
+    }
+}
 
 /// Fluent builder for node layout and hierarchy.
-pub struct NodeBuilder<'a> {
-    /// Mutable core reference used to apply changes.
-    pub(crate) core: &'a mut Core,
+pub struct NodeBuilder<'a, C: BuildContext + ?Sized> {
+    /// Mutable context reference used to apply changes.
+    pub(crate) ctx: &'a mut C,
     /// Node being configured.
     pub(crate) id: NodeId,
 }
 
-impl<'a> NodeBuilder<'a> {
+impl<'a, C: BuildContext + ?Sized> NodeBuilder<'a, C> {
     /// Modify the layout style for this node.
     pub fn style(self, f: impl FnOnce(&mut Style)) -> Self {
-        let t_id = self.core.nodes[self.id].taffy_id;
-        let mut style = self.core.taffy.style(t_id).cloned().unwrap_or_default();
-        f(&mut style);
-        self.core
-            .taffy
-            .set_style(t_id, style.clone())
-            .expect("Failed to set Taffy style");
-        self.core.nodes[self.id].style = style;
+        let mut f = Some(f);
+        let mut apply = |style: &mut Style| {
+            if let Some(f) = f.take() {
+                f(style);
+            }
+        };
+        self.ctx
+            .with_style(self.id, &mut apply)
+            .expect("Failed to set node style");
         self
     }
 
@@ -39,14 +73,33 @@ impl<'a> NodeBuilder<'a> {
         })
     }
 
+    /// Configure this node as a flex item with the provided factors.
+    pub fn flex_item(self, grow: f32, shrink: f32, basis: Dimension) -> Self {
+        self.style(|s| {
+            s.flex_grow = grow;
+            s.flex_shrink = shrink;
+            s.flex_basis = basis;
+        })
+    }
+
     /// Set width to 100%.
     pub fn w_full(self) -> Self {
         self.style(|s| s.size.width = Dimension::Percent(1.0))
     }
 
+    /// Set height to 100%.
+    pub fn h_full(self) -> Self {
+        self.style(|s| s.size.height = Dimension::Percent(1.0))
+    }
+
+    /// Set width and height to 100%.
+    pub fn fill(self) -> Self {
+        self.w_full().h_full()
+    }
+
     /// Add a child and return the parent builder.
     pub fn add_child(self, child_id: NodeId) -> Self {
-        self.core
+        self.ctx
             .mount_child(self.id, child_id)
             .expect("Failed to mount child node");
         self

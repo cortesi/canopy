@@ -33,7 +33,7 @@ impl GridWidget {
 }
 
 impl Widget for GridWidget {
-    fn accept_focus(&mut self) -> bool {
+    fn accept_focus(&self) -> bool {
         self.leaf
     }
 

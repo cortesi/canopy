@@ -44,7 +44,7 @@ impl Editor {
 }
 
 impl Widget for Editor {
-    fn accept_focus(&mut self) -> bool {
+    fn accept_focus(&self) -> bool {
         true
     }
 

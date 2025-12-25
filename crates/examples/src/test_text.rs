@@ -85,7 +85,7 @@ impl TextDisplay {
 }
 
 impl Widget for TextDisplay {
-    fn accept_focus(&mut self) -> bool {
+    fn accept_focus(&self) -> bool {
         true
     }
 

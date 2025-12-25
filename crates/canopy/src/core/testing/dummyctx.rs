@@ -93,6 +93,14 @@ impl ViewContext for DummyContext {
     fn focus_path(&self, _root: NodeId) -> Path {
         Path::empty()
     }
+
+    fn focused_leaf(&self, _root: NodeId) -> Option<NodeId> {
+        None
+    }
+
+    fn focusable_leaves(&self, _root: NodeId) -> Vec<NodeId> {
+        Vec::new()
+    }
 }
 
 impl Context for DummyContext {

@@ -3,7 +3,7 @@ use std::{
     process,
 };
 
-use super::{id::NodeId, viewport::ViewPort, world::Core};
+use super::{builder::NodeBuilder, id::NodeId, viewport::ViewPort, world::Core};
 use crate::{
     error::{Error, Result},
     geom::{Direction, Expanse, Rect},
@@ -61,6 +61,12 @@ pub trait ViewContext {
 
     /// Return the focus path for the subtree under `root`.
     fn focus_path(&self, root: NodeId) -> Path;
+
+    /// Return the focused leaf under the subtree rooted at `root`.
+    fn focused_leaf(&self, root: NodeId) -> Option<NodeId>;
+
+    /// Return focusable leaves in pre-order under the subtree rooted at `root`.
+    fn focusable_leaves(&self, root: NodeId) -> Vec<NodeId>;
 }
 
 /// Mutable context available to widgets during event handling.
@@ -223,6 +229,105 @@ impl dyn Context + '_ {
             Ok(None)
         }
     }
+
+    /// Add a widget under `parent` and return the new node ID.
+    pub fn add_child<W: Widget + 'static>(&mut self, parent: NodeId, widget: W) -> Result<NodeId> {
+        let child = self.add(Box::new(widget));
+        self.mount_child(parent, child)?;
+        Ok(child)
+    }
+
+    /// Add multiple boxed widgets under `parent` and return their node IDs.
+    pub fn add_children<I>(&mut self, parent: NodeId, widgets: I) -> Result<Vec<NodeId>>
+    where
+        I: IntoIterator<Item = Box<dyn Widget>>,
+    {
+        let mut ids = Vec::new();
+        for widget in widgets {
+            let child = self.add(widget);
+            self.mount_child(parent, child)?;
+            ids.push(child);
+        }
+        Ok(ids)
+    }
+
+    /// Return a builder for the specified node.
+    pub fn build(&mut self, node: NodeId) -> NodeBuilder<'_, dyn Context + '_> {
+        NodeBuilder {
+            ctx: self,
+            id: node,
+        }
+    }
+
+    /// Suggest a focus target after removing `removed` from the subtree rooted at `root`.
+    pub fn suggest_focus_after_remove(&mut self, root: NodeId, removed: NodeId) -> Option<NodeId> {
+        let focusables = self.focusable_leaves(root);
+        if let Some(index) = focusables.iter().position(|id| *id == removed) {
+            if let Some(next) = focusables.get(index + 1).copied() {
+                return Some(next);
+            }
+            if index > 0 {
+                return Some(focusables[index - 1]);
+            }
+            return None;
+        }
+        self.focused_leaf(root)
+    }
+}
+
+/// Return whether a node's widget reports it accepts focus.
+fn node_accepts_focus(core: &Core, node_id: NodeId) -> bool {
+    core.nodes
+        .get(node_id)
+        .and_then(|node| node.widget.as_ref())
+        .is_some_and(|widget| widget.accept_focus())
+}
+
+/// Return true if `node` is within the subtree rooted at `root`.
+fn is_descendant(core: &Core, root: NodeId, node: NodeId) -> bool {
+    let mut current = Some(node);
+    while let Some(id) = current {
+        if id == root {
+            return true;
+        }
+        current = core.nodes.get(id).and_then(|n| n.parent);
+    }
+    false
+}
+
+/// Collect focusable leaves in pre-order for a core subtree.
+fn focusable_leaves_for(core: &Core, root: NodeId) -> Vec<NodeId> {
+    let mut out = Vec::new();
+    let mut stack = vec![root];
+    while let Some(id) = stack.pop() {
+        let Some(node) = core.nodes.get(id) else {
+            continue;
+        };
+        if node.hidden {
+            continue;
+        }
+        if node_accepts_focus(core, id) {
+            out.push(id);
+        }
+        for child in node.children.iter().rev() {
+            stack.push(*child);
+        }
+    }
+    out
+}
+
+/// Return the focused leaf within the core subtree rooted at `root`.
+fn focused_leaf_for(core: &Core, root: NodeId) -> Option<NodeId> {
+    let focused = core.focus?;
+    let node = core.nodes.get(focused)?;
+    if node.hidden || !is_descendant(core, root, focused) {
+        return None;
+    }
+    if node_accepts_focus(core, focused) {
+        Some(focused)
+    } else {
+        None
+    }
 }
 
 /// Context implementation bound to a specific node.
@@ -323,6 +428,14 @@ impl<'a> ViewContext for CoreContext<'a> {
 
     fn focus_path(&self, root: NodeId) -> Path {
         self.core.focus_path(root)
+    }
+
+    fn focused_leaf(&self, root: NodeId) -> Option<NodeId> {
+        focused_leaf_for(self.core, root)
+    }
+
+    fn focusable_leaves(&self, root: NodeId) -> Vec<NodeId> {
+        focusable_leaves_for(self.core, root)
     }
 }
 
@@ -436,22 +549,7 @@ impl<'a> Context for CoreContext<'a> {
     }
 
     fn with_style(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Style)) -> Result<()> {
-        let t_id = self
-            .core
-            .nodes
-            .get(node)
-            .ok_or_else(|| Error::Internal("missing node".into()))?
-            .taffy_id;
-        let mut style = self.core.taffy.style(t_id).cloned().unwrap_or_default();
-        f(&mut style);
-        self.core
-            .taffy
-            .set_style(t_id, style.clone())
-            .map_err(|e| Error::Layout(e.to_string()))?;
-        if let Some(node) = self.core.nodes.get_mut(node) {
-            node.style = style;
-        }
-        Ok(())
+        self.core.with_style(node, f)
     }
 
     fn add(&mut self, widget: Box<dyn Widget>) -> NodeId {
@@ -609,5 +707,13 @@ impl<'a> ViewContext for CoreViewContext<'a> {
 
     fn focus_path(&self, root: NodeId) -> Path {
         self.core.focus_path(root)
+    }
+
+    fn focused_leaf(&self, root: NodeId) -> Option<NodeId> {
+        focused_leaf_for(self.core, root)
+    }
+
+    fn focusable_leaves(&self, root: NodeId) -> Vec<NodeId> {
+        focusable_leaves_for(self.core, root)
     }
 }
