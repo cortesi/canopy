@@ -1,7 +1,4 @@
-use std::{
-    any::Any,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use canopy::{
@@ -57,13 +54,7 @@ fn list_len(h: &mut Harness) -> usize {
         .find(|(_, node)| node.name == "list")
         .map(|(id, _)| id)
         .expect("list node not found");
-    h.with_widget(list_id, |widget| {
-        let any = widget as &mut dyn Any;
-        let list = any
-            .downcast_mut::<List<TodoItem>>()
-            .expect("list type mismatch");
-        list.len()
-    })
+    h.with_widget(list_id, |list: &mut List<TodoItem>| list.len())
 }
 
 fn app(path: &str) -> Result<Harness> {

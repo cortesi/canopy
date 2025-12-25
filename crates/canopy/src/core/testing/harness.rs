@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use super::{buf::BufTest, render::NopBackend};
 use crate::{
     Canopy, Loader, NodeId, core::termbuf::TermBuf, error::Result, event::key, geom::Expanse,
@@ -108,14 +110,22 @@ impl Harness {
     }
 
     /// Execute a closure with mutable access to a widget by node id.
-    pub fn with_widget<R>(&mut self, node_id: NodeId, f: impl FnOnce(&mut dyn Widget) -> R) -> R {
-        self.canopy
-            .core
-            .with_widget_mut(node_id, |widget, _| f(widget))
+    pub fn with_widget<W, R>(&mut self, node_id: NodeId, f: impl FnOnce(&mut W) -> R) -> R
+    where
+        W: Widget + 'static,
+    {
+        self.canopy.core.with_widget_mut(node_id, |widget, _| {
+            let any = widget as &mut dyn Any;
+            let widget = any.downcast_mut::<W>().expect("widget type mismatch");
+            f(widget)
+        })
     }
 
     /// Execute a closure with mutable access to the root widget.
-    pub fn with_root_widget<R>(&mut self, f: impl FnOnce(&mut dyn Widget) -> R) -> R {
+    pub fn with_root_widget<W, R>(&mut self, f: impl FnOnce(&mut W) -> R) -> R
+    where
+        W: Widget + 'static,
+    {
         let root = self.root;
         self.with_widget(root, f)
     }

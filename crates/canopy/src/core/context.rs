@@ -1,4 +1,7 @@
-use std::process;
+use std::{
+    any::{Any, type_name},
+    process,
+};
 
 use super::{id::NodeId, viewport::ViewPort, world::Core};
 use crate::{
@@ -25,6 +28,9 @@ pub trait ViewContext {
 
     /// Canvas size for the current node.
     fn canvas(&self) -> Expanse;
+
+    /// Cached layout style for the current node.
+    fn style(&self) -> Style;
 
     /// Screen-space rectangle for a specific node.
     fn node_viewport(&self, node: NodeId) -> Option<Rect>;
@@ -168,6 +174,57 @@ pub trait Context: ViewContext {
     }
 }
 
+impl dyn Context + '_ {
+    /// Execute a closure with mutable access to a widget of type `W`.
+    pub fn with_widget<W, R>(
+        &mut self,
+        node: NodeId,
+        mut f: impl FnMut(&mut W, &mut dyn Context) -> Result<R>,
+    ) -> Result<R>
+    where
+        W: Widget + 'static,
+    {
+        let mut output = None;
+        self.with_widget_mut(node, &mut |widget, ctx| {
+            let any = widget as &mut dyn Any;
+            let widget = any.downcast_mut::<W>().ok_or_else(|| {
+                Error::Invalid(format!("expected widget type {}", type_name::<W>()))
+            })?;
+            output = Some(f(widget, ctx)?);
+            Ok(())
+        })?;
+        output.ok_or_else(|| Error::Internal("missing widget result".into()))
+    }
+
+    /// Execute a closure with mutable access to a widget of type `W` if it matches.
+    pub fn try_with_widget<W, R>(
+        &mut self,
+        node: NodeId,
+        mut f: impl FnMut(&mut W, &mut dyn Context) -> Result<R>,
+    ) -> Result<Option<R>>
+    where
+        W: Widget + 'static,
+    {
+        let mut output = None;
+        let mut matched = false;
+        self.with_widget_mut(node, &mut |widget, ctx| {
+            let any = widget as &mut dyn Any;
+            if let Some(widget) = any.downcast_mut::<W>() {
+                matched = true;
+                output = Some(f(widget, ctx)?);
+            }
+            Ok(())
+        })?;
+        if matched {
+            output
+                .ok_or_else(|| Error::Internal("missing widget result".into()))
+                .map(Some)
+        } else {
+            Ok(None)
+        }
+    }
+}
+
 /// Context implementation bound to a specific node.
 pub struct CoreContext<'a> {
     /// Core state reference.
@@ -213,6 +270,14 @@ impl<'a> ViewContext for CoreContext<'a> {
             .nodes
             .get(self.node_id)
             .map(|n| n.vp.canvas())
+            .unwrap_or_default()
+    }
+
+    fn style(&self) -> Style {
+        self.core
+            .nodes
+            .get(self.node_id)
+            .map(|n| n.style.clone())
             .unwrap_or_default()
     }
 
@@ -491,6 +556,14 @@ impl<'a> ViewContext for CoreViewContext<'a> {
             .nodes
             .get(self.node_id)
             .map(|n| n.vp.canvas())
+            .unwrap_or_default()
+    }
+
+    fn style(&self) -> Style {
+        self.core
+            .nodes
+            .get(self.node_id)
+            .map(|n| n.style.clone())
             .unwrap_or_default()
     }
 

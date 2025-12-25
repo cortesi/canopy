@@ -2,10 +2,8 @@
 
 #[cfg(test)]
 mod tests {
-    use std::any::Any;
-
     use canopy::{
-        Context, Core, Loader, NodeId, ViewContext,
+        Context, Loader, NodeId, ViewContext,
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
         error::Result,
         geom::Rect,
@@ -113,43 +111,34 @@ mod tests {
         }
     }
 
-    fn mount_probe(core: &Core, node_id: NodeId) -> &MountProbe {
-        let widget = core.nodes[node_id]
-            .widget
-            .as_ref()
-            .expect("missing mount probe widget");
-        let any = widget.as_ref() as &dyn Any;
-        any.downcast_ref::<MountProbe>()
-            .expect("mount probe type mismatch")
-    }
-
-    fn child_probe(core: &Core, node_id: NodeId) -> &ChildProbe {
-        let widget = core.nodes[node_id]
-            .widget
-            .as_ref()
-            .expect("missing child probe widget");
-        let any = widget.as_ref() as &dyn Any;
-        any.downcast_ref::<ChildProbe>()
-            .expect("child probe type mismatch")
-    }
-
     #[test]
     fn on_mount_runs_once_with_bound_context() -> Result<()> {
         let mut harness = Harness::builder(MountProbe::new()).size(10, 10).build()?;
         harness.render()?;
         harness.render()?;
 
-        let child_id = {
-            let probe = mount_probe(&harness.canopy.core, harness.root);
-            assert_eq!(probe.mount_calls, 1);
-            assert_eq!(probe.mounted_id, Some(harness.root));
-            assert_eq!(probe.mounted_root, Some(harness.canopy.core.root));
-            probe.child_id.expect("child id missing")
-        };
+        let (mount_calls, mounted_id, mounted_root, child_id) =
+            harness.with_widget(harness.root, |probe: &mut MountProbe| {
+                (
+                    probe.mount_calls,
+                    probe.mounted_id,
+                    probe.mounted_root,
+                    probe.child_id,
+                )
+            });
 
-        let child = child_probe(&harness.canopy.core, child_id);
-        assert_eq!(child.mount_calls, 1);
-        assert_eq!(child.mounted_id, Some(child_id));
+        assert_eq!(mount_calls, 1);
+        assert_eq!(mounted_id, Some(harness.root));
+        assert_eq!(mounted_root, Some(harness.canopy.core.root));
+        let child_id = child_id.expect("child id missing");
+
+        let (child_calls, child_mounted_id) = harness
+            .with_widget(child_id, |probe: &mut ChildProbe| {
+                (probe.mount_calls, probe.mounted_id)
+            });
+
+        assert_eq!(child_calls, 1);
+        assert_eq!(child_mounted_id, Some(child_id));
 
         Ok(())
     }

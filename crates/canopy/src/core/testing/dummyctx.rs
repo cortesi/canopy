@@ -50,6 +50,10 @@ impl ViewContext for DummyContext {
         Expanse::new(0, 0)
     }
 
+    fn style(&self) -> Style {
+        Style::default()
+    }
+
     fn node_viewport(&self, _node: NodeId) -> Option<Rect> {
         None
     }

@@ -1,4 +1,4 @@
-use std::{any::Any, time::Duration};
+use std::time::Duration;
 
 use canopy::{
     Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
@@ -134,11 +134,7 @@ impl Intervals {
     /// Append a new list item.
     pub fn add_item(&mut self, c: &mut dyn Context) -> Result<()> {
         let list_id = self.list_id.expect("list not initialized");
-        c.with_widget_mut(list_id, &mut |widget, _ctx| {
-            let any = widget as &mut dyn Any;
-            let list = any
-                .downcast_mut::<List<IntervalItem>>()
-                .expect("list type mismatch");
+        c.with_widget(list_id, |list: &mut List<IntervalItem>, _ctx| {
             list.append(IntervalItem::new());
             Ok(())
         })
@@ -158,11 +154,7 @@ impl Widget for Intervals {
         self.ensure_tree(c);
 
         if let Some(list_id) = self.list_id {
-            c.with_widget_mut(list_id, &mut |widget, _ctx| {
-                let any = widget as &mut dyn Any;
-                let list = any
-                    .downcast_mut::<List<IntervalItem>>()
-                    .expect("list type mismatch");
+            c.with_widget(list_id, |list: &mut List<IntervalItem>, _ctx| {
                 list.for_each_mut(|item| item.tick());
                 Ok(())
             })

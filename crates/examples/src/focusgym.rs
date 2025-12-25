@@ -1,5 +1,3 @@
-use std::any::Any;
-
 use canopy::{
     Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
     error::Result,
@@ -17,10 +15,6 @@ pub struct Block {
     children: Vec<NodeId>,
     /// True for horizontal layout.
     horizontal: bool,
-    /// Flex grow factor for this block as a child.
-    flex_grow: f32,
-    /// Flex shrink factor for this block as a child.
-    flex_shrink: f32,
 }
 
 #[derive_commands]
@@ -30,9 +24,16 @@ impl Block {
         Self {
             children: vec![],
             horizontal: orientation,
-            flex_grow: 1.0,
-            flex_shrink: 1.0,
         }
+    }
+
+    /// Initialize flex defaults for a node.
+    fn init_flex(c: &mut dyn Context, node_id: NodeId) -> Result<()> {
+        c.with_style(node_id, &mut |style| {
+            style.flex_grow = 1.0;
+            style.flex_shrink = 1.0;
+            style.flex_basis = Dimension::Auto;
+        })
     }
 
     /// Return true when the available area is too small to split.
@@ -53,45 +54,11 @@ impl Block {
                 FlexDirection::Column
             };
         };
-        c.with_style(node_id, &mut update_root)?;
-
-        for child in &self.children {
-            let mut flex = (1.0, 1.0);
-            c.with_widget_mut(*child, &mut |widget, _ctx| {
-                let any = widget as &mut dyn Any;
-                if let Some(block) = any.downcast_mut::<Self>() {
-                    flex = (block.flex_grow, block.flex_shrink);
-                }
-                Ok(())
-            })?;
-            c.with_style(*child, &mut |style| {
-                style.flex_grow = flex.0;
-                style.flex_shrink = flex.1;
-                style.flex_basis = Dimension::Auto;
-            })?;
-        }
-
-        Ok(())
-    }
-
-    /// Apply the current flex factors to this node's layout style.
-    fn apply_flex(&self, c: &mut dyn Context) -> Result<()> {
-        let grow = self.flex_grow;
-        let shrink = self.flex_shrink;
-        c.with_style(c.node_id(), &mut |style| {
-            style.flex_grow = grow;
-            style.flex_shrink = shrink;
-            style.flex_basis = Dimension::Auto;
-        })
+        c.with_style(node_id, &mut update_root)
     }
 
     /// Adjust flex factors by the requested deltas and apply the updated style.
-    fn adjust_flex(
-        &mut self,
-        c: &mut dyn Context,
-        grow_delta: f32,
-        shrink_delta: f32,
-    ) -> Result<()> {
+    fn adjust_flex(&self, c: &mut dyn Context, grow_delta: f32, shrink_delta: f32) -> Result<()> {
         if let Some(view) = c.node_view(c.node_id())
             && (view.w <= 1 || view.h <= 1)
             && (grow_delta < 0.0 || shrink_delta > 0.0)
@@ -99,10 +66,15 @@ impl Block {
             return Ok(());
         }
 
+        let style = c.style();
         let min = 0.0;
-        self.flex_grow = (self.flex_grow + grow_delta).max(min);
-        self.flex_shrink = (self.flex_shrink + shrink_delta).max(min);
-        self.apply_flex(c)
+        let grow = (style.flex_grow + grow_delta).max(min);
+        let shrink = (style.flex_shrink + shrink_delta).max(min);
+        c.with_style(c.node_id(), &mut |style| {
+            style.flex_grow = grow;
+            style.flex_shrink = shrink;
+            style.flex_basis = Dimension::Auto;
+        })
     }
 
     #[command]
@@ -120,6 +92,7 @@ impl Block {
 
         if !self.children.is_empty() {
             let child = c.add(Box::new(Self::new(!self.horizontal)));
+            Self::init_flex(c, child)?;
             self.children.push(child);
             self.sync_layout(c)?;
         }
@@ -135,6 +108,8 @@ impl Block {
         if !self.size_limited(size) {
             let left = c.add(Box::new(Self::new(!self.horizontal)));
             let right = c.add(Box::new(Self::new(!self.horizontal)));
+            Self::init_flex(c, left)?;
+            Self::init_flex(c, right)?;
             self.children = vec![left, right];
             self.sync_layout(c)?;
             c.focus_next(c.node_id());
@@ -144,25 +119,25 @@ impl Block {
 
     #[command]
     /// Increase this block's flex grow coefficient.
-    fn flex_grow_inc(&mut self, c: &mut dyn Context) -> Result<()> {
+    fn flex_grow_inc(&self, c: &mut dyn Context) -> Result<()> {
         self.adjust_flex(c, 0.5, 0.0)
     }
 
     #[command]
     /// Decrease this block's flex grow coefficient.
-    fn flex_grow_dec(&mut self, c: &mut dyn Context) -> Result<()> {
+    fn flex_grow_dec(&self, c: &mut dyn Context) -> Result<()> {
         self.adjust_flex(c, -0.5, 0.0)
     }
 
     #[command]
     /// Increase this block's flex shrink coefficient.
-    fn flex_shrink_inc(&mut self, c: &mut dyn Context) -> Result<()> {
+    fn flex_shrink_inc(&self, c: &mut dyn Context) -> Result<()> {
         self.adjust_flex(c, 0.0, 0.5)
     }
 
     #[command]
     /// Decrease this block's flex shrink coefficient.
-    fn flex_shrink_dec(&mut self, c: &mut dyn Context) -> Result<()> {
+    fn flex_shrink_dec(&self, c: &mut dyn Context) -> Result<()> {
         self.adjust_flex(c, 0.0, -0.5)
     }
 
@@ -257,12 +232,12 @@ impl FocusGym {
         let root_block = c.add(Box::new(Block::new(true)));
         let left = c.add(Box::new(Block::new(false)));
         let right = c.add(Box::new(Block::new(false)));
+        Block::init_flex(c, left)?;
+        Block::init_flex(c, right)?;
 
         c.set_children(c.node_id(), vec![root_block])?;
 
-        c.with_widget_mut(root_block, &mut |widget, ctx| {
-            let any = widget as &mut dyn Any;
-            let block = any.downcast_mut::<Block>().expect("block type mismatch");
+        c.with_widget(root_block, |block: &mut Block, ctx| {
             block.children = vec![left, right];
             block.sync_layout(ctx)
         })?;
@@ -331,13 +306,9 @@ impl FocusGym {
         self.collect_focusable(c, root_block, &mut before);
         let focus_index = before.iter().position(|id| *id == focused);
 
-        c.with_widget_mut(parent_id, &mut |widget, ctx| {
-            let any = widget as &mut dyn Any;
-            if let Some(block) = any.downcast_mut::<Block>() {
-                block.children.retain(|id| *id != focused);
-                block.sync_layout(ctx)?;
-            }
-            Ok(())
+        c.with_widget(parent_id, |block: &mut Block, ctx| {
+            block.children.retain(|id| *id != focused);
+            block.sync_layout(ctx)
         })?;
 
         let mut after = Vec::new();
@@ -424,9 +395,7 @@ mod tests {
     }
 
     fn root_block_id(harness: &mut Harness) -> NodeId {
-        harness.with_root_widget(|widget| {
-            let any = widget as &mut dyn Any;
-            let root = any.downcast_mut::<FocusGym>().expect("root type mismatch");
+        harness.with_root_widget(|root: &mut FocusGym| {
             root.root_block.expect("root block not initialized")
         })
     }

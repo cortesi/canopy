@@ -36,13 +36,13 @@ Introduce `on_mount` and ensure it is called exactly once per node after context
 
 Reduce downcast boilerplate and make `Style` the source of truth for layout values.
 
-12. [ ] Add `Context::with_widget` and `Context::try_with_widget` in
+12. [x] Add `Context::with_widget` and `Context::try_with_widget` in
         `crates/canopy/src/core/context.rs` and implement them in the core context.
-13. [ ] Add `ViewContext::style` returning a cloned `Style` based on cached node style in
+13. [x] Add `ViewContext::style` returning a cloned `Style` based on cached node style in
         `crates/canopy/src/core/node.rs`.
-14. [ ] Replace downcast boilerplate in examples/tests with typed accessors where applicable.
-15. [ ] Remove redundant widget fields that merely mirror `Style` in example code.
-16. [ ] Run the full test and lint suite for this stage and resolve any failures or warnings.
+14. [x] Replace downcast boilerplate in examples/tests with typed accessors where applicable.
+15. [x] Remove redundant widget fields that merely mirror `Style` in example code.
+16. [x] Run the full test and lint suite for this stage and resolve any failures or warnings.
 
 4. Stage Four: Mount helpers, focus utilities, and builder exposure
 

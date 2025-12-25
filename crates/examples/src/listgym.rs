@@ -1,4 +1,4 @@
-use std::{any::Any, time::Duration};
+use std::time::Duration;
 
 use canopy::{
     Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
@@ -171,13 +171,7 @@ impl ListGym {
         F: FnMut(&mut List<Block>) -> Result<()>,
     {
         let list_id = self.list_id.expect("list not initialized");
-        c.with_widget_mut(list_id, &mut |widget, _ctx| {
-            let any = widget as &mut dyn Any;
-            let list = any
-                .downcast_mut::<List<Block>>()
-                .expect("list type mismatch");
-            f(list)
-        })
+        c.with_widget(list_id, |list: &mut List<Block>, _ctx| f(list))
     }
 
     #[command]
@@ -289,18 +283,12 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
 
 #[cfg(test)]
 mod tests {
-    use std::any::Any;
-
     use canopy::testing::harness::Harness;
 
     use super::*;
 
     fn list_id(harness: &mut Harness) -> NodeId {
-        harness.with_root_widget(|widget| {
-            let any = widget as &mut dyn Any;
-            let root = any.downcast_mut::<ListGym>().expect("root type mismatch");
-            root.list_id.expect("list not initialized")
-        })
+        harness.with_root_widget(|root: &mut ListGym| root.list_id.expect("list not initialized"))
     }
 
     fn create_test_harness() -> Result<Harness> {
@@ -332,11 +320,7 @@ mod tests {
 
         let list_node = list_id(&mut harness);
         let mut len = 0;
-        harness.with_widget(list_node, |widget| {
-            let any = widget as &mut dyn Any;
-            let list = any
-                .downcast_mut::<List<Block>>()
-                .expect("list type mismatch");
+        harness.with_widget(list_node, |list: &mut List<Block>| {
             len = list.len();
         });
 
@@ -376,11 +360,7 @@ mod tests {
 
         let list_node = list_id(&mut harness);
         let mut initial_selected = None;
-        harness.with_widget(list_node, |widget| {
-            let any = widget as &mut dyn Any;
-            let list = any
-                .downcast_mut::<List<Block>>()
-                .expect("list type mismatch");
+        harness.with_widget(list_node, |list: &mut List<Block>| {
             initial_selected = list.selected_index();
         });
 
@@ -388,11 +368,7 @@ mod tests {
         harness.script("list::select_last()")?;
 
         let mut selected = None;
-        harness.with_widget(list_node, |widget| {
-            let any = widget as &mut dyn Any;
-            let list = any
-                .downcast_mut::<List<Block>>()
-                .expect("list type mismatch");
+        harness.with_widget(list_node, |list: &mut List<Block>| {
             selected = list.selected_index();
         });
 
