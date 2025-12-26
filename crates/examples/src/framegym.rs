@@ -11,6 +11,9 @@ use canopy::{
     widgets::{Root, frame},
 };
 
+/// Base characters used to generate the test pattern.
+const PATTERN: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+
 /// A widget that renders a test pattern.
 pub struct TestPattern {
     /// Virtual canvas size.
@@ -76,13 +79,8 @@ impl TestPattern {
 
     /// Return the character for the test pattern at a position.
     fn generate_pattern_char(x: u32, y: u32) -> char {
-        // Pattern: "abcdefghijklmnopqrstuvwxyz0123456789"
-        let pattern = "abcdefghijklmnopqrstuvwxyz0123456789";
-        let pattern_len = pattern.len() as u32;
-
-        // Offset each row by one more character than the previous
-        let index = ((x + y) % pattern_len) as usize;
-        pattern.chars().nth(index).unwrap_or(' ')
+        let index = ((x + y) % PATTERN.len() as u32) as usize;
+        PATTERN[index] as char
     }
 }
 
@@ -102,7 +100,7 @@ impl Widget for TestPattern {
                 break;
             }
 
-            let mut line = String::new();
+            let mut line = String::with_capacity(view.w as usize);
             for x in 0..view.w {
                 let absolute_x = view.tl.x + x;
                 if absolute_x >= self.size.w {
@@ -203,7 +201,6 @@ impl Loader for FrameGym {
 pub fn setup_bindings(cnpy: &mut Canopy) {
     Binder::new(cnpy)
         .defaults::<Root>()
-        .with_path("")
         // Focus navigation
         .key_command(key::KeyCode::Tab, Root::cmd_focus_next())
         // Arrow keys for scrolling

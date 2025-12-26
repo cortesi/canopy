@@ -20,7 +20,7 @@ struct Args {
 }
 
 /// Run the list gym example.
-pub fn main() -> Result<()> {
+fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
     Root::load(&mut cnpy);
     ListGym::load(&mut cnpy);

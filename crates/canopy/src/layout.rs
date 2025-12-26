@@ -3,7 +3,8 @@
 //! This module provides a clean abstraction over the underlying layout engine,
 //! hiding implementation details while exposing a fluent API for flexbox layouts.
 
-use taffy::style::LengthPercentage;
+use style::LengthPercentage;
+use taffy::{geometry, style};
 
 /// Display mode for layout.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -17,7 +18,7 @@ pub enum Display {
     None,
 }
 
-impl From<Display> for taffy::style::Display {
+impl From<Display> for style::Display {
     fn from(d: Display) -> Self {
         match d {
             Display::Flex => Self::Flex,
@@ -27,12 +28,12 @@ impl From<Display> for taffy::style::Display {
     }
 }
 
-impl From<taffy::style::Display> for Display {
-    fn from(d: taffy::style::Display) -> Self {
+impl From<style::Display> for Display {
+    fn from(d: style::Display) -> Self {
         match d {
-            taffy::style::Display::Flex => Self::Flex,
-            taffy::style::Display::Grid => Self::Grid,
-            taffy::style::Display::None => Self::None,
+            style::Display::Flex => Self::Flex,
+            style::Display::Grid => Self::Grid,
+            style::Display::None => Self::None,
         }
     }
 }
@@ -51,7 +52,7 @@ pub enum FlexDirection {
     ColumnReverse,
 }
 
-impl From<FlexDirection> for taffy::style::FlexDirection {
+impl From<FlexDirection> for style::FlexDirection {
     fn from(d: FlexDirection) -> Self {
         match d {
             FlexDirection::Row => Self::Row,
@@ -62,13 +63,13 @@ impl From<FlexDirection> for taffy::style::FlexDirection {
     }
 }
 
-impl From<taffy::style::FlexDirection> for FlexDirection {
-    fn from(d: taffy::style::FlexDirection) -> Self {
+impl From<style::FlexDirection> for FlexDirection {
+    fn from(d: style::FlexDirection) -> Self {
         match d {
-            taffy::style::FlexDirection::Row => Self::Row,
-            taffy::style::FlexDirection::Column => Self::Column,
-            taffy::style::FlexDirection::RowReverse => Self::RowReverse,
-            taffy::style::FlexDirection::ColumnReverse => Self::ColumnReverse,
+            style::FlexDirection::Row => Self::Row,
+            style::FlexDirection::Column => Self::Column,
+            style::FlexDirection::RowReverse => Self::RowReverse,
+            style::FlexDirection::ColumnReverse => Self::ColumnReverse,
         }
     }
 }
@@ -85,7 +86,7 @@ pub enum Dimension {
     Percent(f32),
 }
 
-impl From<Dimension> for taffy::style::Dimension {
+impl From<Dimension> for style::Dimension {
     fn from(d: Dimension) -> Self {
         match d {
             Dimension::Auto => Self::Auto,
@@ -95,12 +96,12 @@ impl From<Dimension> for taffy::style::Dimension {
     }
 }
 
-impl From<taffy::style::Dimension> for Dimension {
-    fn from(d: taffy::style::Dimension) -> Self {
+impl From<style::Dimension> for Dimension {
+    fn from(d: style::Dimension) -> Self {
         match d {
-            taffy::style::Dimension::Auto => Self::Auto,
-            taffy::style::Dimension::Points(p) => Self::Points(p),
-            taffy::style::Dimension::Percent(p) => Self::Percent(p),
+            style::Dimension::Auto => Self::Auto,
+            style::Dimension::Points(p) => Self::Points(p),
+            style::Dimension::Percent(p) => Self::Percent(p),
         }
     }
 }
@@ -182,7 +183,7 @@ impl Edges {
     }
 }
 
-impl From<Edges> for taffy::geometry::Rect<LengthPercentage> {
+impl From<Edges> for geometry::Rect<LengthPercentage> {
     fn from(e: Edges) -> Self {
         Self {
             top: e.top.into(),
@@ -193,8 +194,8 @@ impl From<Edges> for taffy::geometry::Rect<LengthPercentage> {
     }
 }
 
-impl From<taffy::geometry::Rect<LengthPercentage>> for Edges {
-    fn from(r: taffy::geometry::Rect<LengthPercentage>) -> Self {
+impl From<geometry::Rect<LengthPercentage>> for Edges {
+    fn from(r: geometry::Rect<LengthPercentage>) -> Self {
         Self {
             top: r.top.into(),
             right: r.right.into(),
@@ -220,7 +221,7 @@ impl<T> Size<T> {
     }
 }
 
-impl<T, U> From<Size<T>> for taffy::geometry::Size<U>
+impl<T, U> From<Size<T>> for geometry::Size<U>
 where
     T: Into<U>,
 {
@@ -232,11 +233,11 @@ where
     }
 }
 
-impl<T, U> From<taffy::geometry::Size<T>> for Size<U>
+impl<T, U> From<geometry::Size<T>> for Size<U>
 where
     T: Into<U>,
 {
-    fn from(s: taffy::geometry::Size<T>) -> Self {
+    fn from(s: geometry::Size<T>) -> Self {
         Self {
             width: s.width.into(),
             height: s.height.into(),
@@ -265,7 +266,7 @@ impl AvailableSpace {
     }
 }
 
-impl From<AvailableSpace> for taffy::style::AvailableSpace {
+impl From<AvailableSpace> for style::AvailableSpace {
     fn from(a: AvailableSpace) -> Self {
         match a {
             AvailableSpace::Definite(v) => Self::Definite(v),
@@ -275,12 +276,12 @@ impl From<AvailableSpace> for taffy::style::AvailableSpace {
     }
 }
 
-impl From<taffy::style::AvailableSpace> for AvailableSpace {
-    fn from(a: taffy::style::AvailableSpace) -> Self {
+impl From<style::AvailableSpace> for AvailableSpace {
+    fn from(a: style::AvailableSpace) -> Self {
         match a {
-            taffy::style::AvailableSpace::Definite(v) => Self::Definite(v),
-            taffy::style::AvailableSpace::MinContent => Self::MinContent,
-            taffy::style::AvailableSpace::MaxContent => Self::MaxContent,
+            style::AvailableSpace::Definite(v) => Self::Definite(v),
+            style::AvailableSpace::MinContent => Self::MinContent,
+            style::AvailableSpace::MaxContent => Self::MaxContent,
         }
     }
 }
@@ -291,7 +292,8 @@ impl From<taffy::style::AvailableSpace> for AvailableSpace {
 /// for configuring flexbox and grid layouts.
 #[derive(Clone, Debug, Default)]
 pub struct Layout {
-    pub(crate) inner: taffy::style::Style,
+    /// Underlying taffy style used to compute layout.
+    pub(crate) inner: style::Style,
 }
 
 impl Layout {
@@ -301,7 +303,7 @@ impl Layout {
     }
 
     /// Create a layout from a taffy style (internal use).
-    pub(crate) fn from_taffy(style: taffy::style::Style) -> Self {
+    pub(crate) fn from_taffy(style: style::Style) -> Self {
         Self { inner: style }
     }
 
@@ -309,7 +311,7 @@ impl Layout {
     ///
     /// Use this for advanced layout features not yet exposed through
     /// the Layout wrapper API (e.g., absolute positioning, grid layout).
-    pub fn as_taffy_mut(&mut self) -> &mut taffy::style::Style {
+    pub fn as_taffy_mut(&mut self) -> &mut style::Style {
         &mut self.inner
     }
 
@@ -323,15 +325,15 @@ impl Layout {
 
     /// Set display to flex with column direction.
     pub fn flex_col(&mut self) -> &mut Self {
-        self.inner.display = taffy::style::Display::Flex;
-        self.inner.flex_direction = taffy::style::FlexDirection::Column;
+        self.inner.display = style::Display::Flex;
+        self.inner.flex_direction = style::FlexDirection::Column;
         self
     }
 
     /// Set display to flex with row direction.
     pub fn flex_row(&mut self) -> &mut Self {
-        self.inner.display = taffy::style::Display::Flex;
-        self.inner.flex_direction = taffy::style::FlexDirection::Row;
+        self.inner.display = style::Display::Flex;
+        self.inner.flex_direction = style::FlexDirection::Row;
         self
     }
 
@@ -392,13 +394,13 @@ impl Layout {
 
     /// Set width to 100%.
     pub fn w_full(&mut self) -> &mut Self {
-        self.inner.size.width = taffy::style::Dimension::Percent(1.0);
+        self.inner.size.width = style::Dimension::Percent(1.0);
         self
     }
 
     /// Set height to 100%.
     pub fn h_full(&mut self) -> &mut Self {
-        self.inner.size.height = taffy::style::Dimension::Percent(1.0);
+        self.inner.size.height = style::Dimension::Percent(1.0);
         self
     }
 
@@ -453,7 +455,7 @@ impl Layout {
 
     /// Set margin on all edges.
     pub fn margin(&mut self, edges: Edges) -> &mut Self {
-        let rect = taffy::geometry::Rect {
+        let rect = geometry::Rect {
             top: length_to_auto(edges.top),
             right: length_to_auto(edges.right),
             bottom: length_to_auto(edges.bottom),
@@ -522,11 +524,11 @@ impl Layout {
 }
 
 /// Convert a Length to a LengthPercentageAuto for margin.
-fn length_to_auto(l: Length) -> taffy::style::LengthPercentageAuto {
+fn length_to_auto(l: Length) -> style::LengthPercentageAuto {
     match l {
-        Length::Zero => taffy::style::LengthPercentageAuto::Points(0.0),
-        Length::Points(p) => taffy::style::LengthPercentageAuto::Points(p),
-        Length::Percent(p) => taffy::style::LengthPercentageAuto::Percent(p),
+        Length::Zero => style::LengthPercentageAuto::Points(0.0),
+        Length::Points(p) => style::LengthPercentageAuto::Points(p),
+        Length::Percent(p) => style::LengthPercentageAuto::Percent(p),
     }
 }
 

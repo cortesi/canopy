@@ -4,7 +4,7 @@ use canopy::{Canopy, Loader, backend::crossterm::runloop, error::Result, widgets
 use canopy_examples::intervals::{Intervals, setup_bindings};
 
 /// Run the intervals example.
-pub fn main() -> Result<()> {
+fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
     Root::load(&mut cnpy);
     Intervals::load(&mut cnpy);

@@ -20,7 +20,7 @@ struct Args {
 }
 
 /// Run the frame gym example.
-pub fn main() -> Result<()> {
+fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
 
     Root::load(&mut cnpy);

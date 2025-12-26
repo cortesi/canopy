@@ -73,11 +73,8 @@ impl ListItem for Block {
         let lines = self.lines();
         let style = format!("{}/text", self.color);
 
-        for (i, line) in lines.iter().enumerate() {
-            if i as u32 >= text_area.h {
-                break;
-            }
-            rndr.text(&style, text_area.line(i as u32), line)?;
+        for (row, line) in lines.iter().take(text_area.h as usize).enumerate() {
+            rndr.text(&style, text_area.line(row as u32), line)?;
         }
         Ok(())
     }
@@ -173,7 +170,7 @@ impl ListGym {
     }
 
     #[command]
-    /// Add an item after the current focus
+    /// Add an item after the current focus.
     pub fn add_item(&mut self, c: &mut dyn Context) -> Result<()> {
         self.with_list(c, |list| {
             let index = list.selected_index().unwrap_or(0) + 1;
@@ -183,7 +180,7 @@ impl ListGym {
     }
 
     #[command]
-    /// Add an item at the end of the list
+    /// Add an item at the end of the list.
     pub fn append_item(&mut self, c: &mut dyn Context) -> Result<()> {
         self.with_list(c, |list| {
             let index = list.len();
@@ -193,7 +190,7 @@ impl ListGym {
     }
 
     #[command]
-    /// Add an item at the end of the list
+    /// Clear all items from the list.
     pub fn clear(&mut self, c: &mut dyn Context) -> Result<()> {
         self.with_list(c, |list| {
             list.clear();
@@ -254,7 +251,7 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
     Binder::new(cnpy)
         .defaults::<Root>()
         .with_path("list_gym")
-        .key('p', "print(\"foo\")")
+        .key('p', "print(\"list gym\")")
         .key('a', "list_gym::add_item()")
         .key('A', "list_gym::append_item()")
         .key('C', "list_gym::clear()")

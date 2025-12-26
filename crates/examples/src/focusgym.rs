@@ -241,7 +241,7 @@ impl Loader for FocusGym {
 pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
     Binder::new(cnpy)
         .defaults::<Root>()
-        .key('p', "print(\"xxxx\")")
+        .key('p', "print(\"focus gym\")")
         .with_path("focus_gym/")
         .key(key::KeyCode::Tab, "root::focus_next()")
         .mouse(mouse::Action::ScrollDown, "root::focus_next()")

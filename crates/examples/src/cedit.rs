@@ -86,5 +86,5 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
         .key('j', "editor::cursor_shift_chunk(1)")
         .key('k', "editor::cursor_shift_chunk(-1)")
         .key(key::KeyCode::Tab, "root::focus_next()")
-        .key('p', "print(\"xxxx\")");
+        .key('p', "print(\"cedit\")");
 }

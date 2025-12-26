@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use canopy::{
-    Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
+    Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
     error::Result,
     event::{key, mouse},
     geom::{Expanse, Rect},
@@ -183,35 +183,19 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
         None,
     );
 
-    cnpy.bind_key('a', "intervals", "intervals::add_item()")
-        .unwrap();
-    cnpy.bind_key('g', "intervals", "list::select_first()")
-        .unwrap();
-    cnpy.bind_key('j', "intervals", "list::select_next()")
-        .unwrap();
-    cnpy.bind_key('d', "intervals", "list::delete_selected()")
-        .unwrap();
-    cnpy.bind_mouse(
-        mouse::Action::ScrollDown,
-        "intervals",
-        "list::select_next()",
-    )
-    .unwrap();
-    cnpy.bind_key(key::KeyCode::Down, "intervals", "list::select_next()")
-        .unwrap();
-    cnpy.bind_key('k', "intervals", "list::select_prev()")
-        .unwrap();
-    cnpy.bind_key(key::KeyCode::Up, "intervals", "list::select_prev()")
-        .unwrap();
-    cnpy.bind_mouse(mouse::Action::ScrollUp, "intervals", "list::select_prev()")
-        .unwrap();
-
-    cnpy.bind_key(key::KeyCode::PageDown, "intervals", "list::page_down()")
-        .unwrap();
-    cnpy.bind_key(' ', "intervals", "list::page_down()")
-        .unwrap();
-    cnpy.bind_key(key::KeyCode::PageUp, "intervals", "list::page_up()")
-        .unwrap();
-
-    cnpy.bind_key('q', "intervals", "root::quit()").unwrap();
+    Binder::new(cnpy)
+        .with_path("intervals")
+        .key('a', "intervals::add_item()")
+        .key('g', "list::select_first()")
+        .key('j', "list::select_next()")
+        .key(key::KeyCode::Down, "list::select_next()")
+        .mouse(mouse::Action::ScrollDown, "list::select_next()")
+        .key('k', "list::select_prev()")
+        .key(key::KeyCode::Up, "list::select_prev()")
+        .mouse(mouse::Action::ScrollUp, "list::select_prev()")
+        .key('d', "list::delete_selected()")
+        .key(key::KeyCode::PageDown, "list::page_down()")
+        .key(' ', "list::page_down()")
+        .key(key::KeyCode::PageUp, "list::page_up()")
+        .key('q', "root::quit()");
 }

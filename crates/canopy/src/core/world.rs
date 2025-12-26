@@ -3,7 +3,9 @@ use slotmap::SlotMap;
 use taffy::{
     Taffy,
     error::TaffyError,
+    geometry,
     node::{MeasureFunc, Node as TaffyNode},
+    style,
 };
 
 use crate::{
@@ -20,7 +22,7 @@ use crate::{
     error::{Error, Result},
     event::Event,
     geom::{Direction, Expanse, Point, Rect},
-    layout::Layout,
+    layout::{AvailableSpace, Layout, Size},
     path::Path,
     render::Render,
     state::NodeName,
@@ -38,28 +40,27 @@ struct MeasureContext<'a> {
 /// Resolve the measure function for a node if present.
 fn measure_for_node(
     node_id: NodeId,
-    known_dimensions: taffy::geometry::Size<Option<f32>>,
-    available_space: taffy::geometry::Size<taffy::style::AvailableSpace>,
-) -> taffy::geometry::Size<f32> {
+    known_dimensions: geometry::Size<Option<f32>>,
+    available_space: geometry::Size<style::AvailableSpace>,
+) -> geometry::Size<f32> {
     MEASURE_CONTEXT.with(|ctx| {
         let ctx = unsafe { &*(*ctx as *const MeasureContext<'_>) };
         ctx.nodes
             .get(node_id)
             .and_then(|node| node.widget.as_ref())
             .map(|widget| {
-                let known: crate::layout::Size<Option<f32>> = known_dimensions.into();
-                let avail: crate::layout::Size<crate::layout::AvailableSpace> =
-                    crate::layout::Size {
-                        width: available_space.width.into(),
-                        height: available_space.height.into(),
-                    };
+                let known: Size<Option<f32>> = known_dimensions.into();
+                let avail: Size<AvailableSpace> = Size {
+                    width: available_space.width.into(),
+                    height: available_space.height.into(),
+                };
                 let result = widget.view_size(known, avail);
-                taffy::geometry::Size {
+                geometry::Size {
                     width: result.width,
                     height: result.height,
                 }
             })
-            .unwrap_or(taffy::geometry::Size {
+            .unwrap_or(geometry::Size {
                 width: 0.0,
                 height: 0.0,
             })
@@ -360,15 +361,15 @@ impl Core {
         let root_taffy = self.nodes[self.root].taffy_id;
         {
             let layout = &mut self.nodes[self.root].layout;
-            layout.inner.size.width = taffy::style::Dimension::Points(screen_size.w as f32);
-            layout.inner.size.height = taffy::style::Dimension::Points(screen_size.h as f32);
+            layout.inner.size.width = style::Dimension::Points(screen_size.w as f32);
+            layout.inner.size.height = style::Dimension::Points(screen_size.h as f32);
             self.taffy
                 .set_style(root_taffy, layout.inner.clone())
                 .map_err(|err| map_taffy_error(&err))?;
         }
-        let available_space = taffy::geometry::Size {
-            width: taffy::style::AvailableSpace::Definite(screen_size.w as f32),
-            height: taffy::style::AvailableSpace::Definite(screen_size.h as f32),
+        let available_space = geometry::Size {
+            width: style::AvailableSpace::Definite(screen_size.w as f32),
+            height: style::AvailableSpace::Definite(screen_size.h as f32),
         };
 
         let ctx = MeasureContext { nodes: &self.nodes };
@@ -819,12 +820,12 @@ fn sync_viewports(
         let view_size = clamp_child_view_size(bounds, position, view_size);
 
         let mut canvas_size = if let Some(widget) = nodes[node_id].widget.as_ref() {
-            let available = crate::layout::Size {
-                width: crate::layout::AvailableSpace::Definite(view_size.w as f32),
-                height: crate::layout::AvailableSpace::Definite(view_size.h as f32),
+            let available = Size {
+                width: AvailableSpace::Definite(view_size.w as f32),
+                height: AvailableSpace::Definite(view_size.h as f32),
             };
             let measured = widget.canvas_size(
-                crate::layout::Size {
+                Size {
                     width: None,
                     height: None,
                 },
@@ -937,7 +938,7 @@ fn parent_content_bounds(
 
 /// Resolve padding for a layout into cell counts.
 fn resolve_padding(layout: &Layout, base_width: u32) -> ResolvedPadding {
-    use taffy::style::LengthPercentage;
+    use style::LengthPercentage;
     let resolve = |value: LengthPercentage| -> u32 {
         let base = base_width as f32;
         match value {
@@ -968,9 +969,9 @@ fn min_size_from_layout(layout: &Layout) -> Expanse {
 }
 
 /// Convert a min-size dimension into a non-negative cell count.
-fn dimension_to_min(dim: taffy::style::Dimension) -> u32 {
+fn dimension_to_min(dim: style::Dimension) -> u32 {
     match dim {
-        taffy::style::Dimension::Points(points) => points.max(0.0).ceil() as u32,
+        style::Dimension::Points(points) => points.max(0.0).ceil() as u32,
         _ => 0,
     }
 }

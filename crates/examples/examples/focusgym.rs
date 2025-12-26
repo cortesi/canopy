@@ -20,7 +20,7 @@ struct Args {
 }
 
 /// Run the focus gym example.
-pub fn main() -> Result<()> {
+fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
     Root::load(&mut cnpy);
     FocusGym::load(&mut cnpy);

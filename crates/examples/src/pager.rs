@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use canopy::{
-    Canopy, Context, Loader, ViewContext, derive_commands,
+    Binder, Canopy, Context, Loader, ViewContext, derive_commands,
     error::Result,
     event::{key, mouse},
     geom::Rect,
@@ -77,38 +77,22 @@ impl Loader for Pager {
 
 /// Install key bindings for the pager demo.
 pub fn setup_bindings(cnpy: &mut Canopy) {
-    cnpy.bind_key_command('g', "pager", Text::cmd_scroll_to_top())
-        .unwrap();
-
-    cnpy.bind_key_command('j', "pager", Text::cmd_scroll_down())
-        .unwrap();
-    cnpy.bind_key_command(key::KeyCode::Down, "pager", Text::cmd_scroll_down())
-        .unwrap();
-    cnpy.bind_mouse_command(mouse::Action::ScrollDown, "pager", Text::cmd_scroll_down())
-        .unwrap();
-    cnpy.bind_key_command('k', "pager", Text::cmd_scroll_up())
-        .unwrap();
-    cnpy.bind_key_command(key::KeyCode::Up, "pager", Text::cmd_scroll_up())
-        .unwrap();
-    cnpy.bind_mouse_command(mouse::Action::ScrollUp, "pager", Text::cmd_scroll_up())
-        .unwrap();
-
-    cnpy.bind_key_command('h', "pager", Text::cmd_scroll_left())
-        .unwrap();
-    cnpy.bind_key_command(key::KeyCode::Left, "pager", Text::cmd_scroll_left())
-        .unwrap();
-    cnpy.bind_key_command('l', "pager", Text::cmd_scroll_right())
-        .unwrap();
-    cnpy.bind_key_command(key::KeyCode::Right, "pager", Text::cmd_scroll_right())
-        .unwrap();
-
-    cnpy.bind_key_command(key::KeyCode::PageDown, "pager", Text::cmd_page_down())
-        .unwrap();
-    cnpy.bind_key_command(' ', "pager", Text::cmd_page_down())
-        .unwrap();
-    cnpy.bind_key_command(key::KeyCode::PageUp, "pager", Text::cmd_page_up())
-        .unwrap();
-
-    cnpy.bind_key_command('q', "root", Root::cmd_quit())
-        .unwrap();
+    Binder::new(cnpy)
+        .with_path("pager")
+        .key_command('g', Text::cmd_scroll_to_top())
+        .key_command('j', Text::cmd_scroll_down())
+        .key_command(key::KeyCode::Down, Text::cmd_scroll_down())
+        .mouse_command(mouse::Action::ScrollDown, Text::cmd_scroll_down())
+        .key_command('k', Text::cmd_scroll_up())
+        .key_command(key::KeyCode::Up, Text::cmd_scroll_up())
+        .mouse_command(mouse::Action::ScrollUp, Text::cmd_scroll_up())
+        .key_command('h', Text::cmd_scroll_left())
+        .key_command(key::KeyCode::Left, Text::cmd_scroll_left())
+        .key_command('l', Text::cmd_scroll_right())
+        .key_command(key::KeyCode::Right, Text::cmd_scroll_right())
+        .key_command(key::KeyCode::PageDown, Text::cmd_page_down())
+        .key_command(' ', Text::cmd_page_down())
+        .key_command(key::KeyCode::PageUp, Text::cmd_page_up())
+        .with_path("root")
+        .key_command('q', Root::cmd_quit());
 }
