@@ -112,7 +112,8 @@ impl Widget for Block {
         ctx.children().is_empty()
     }
 
-    fn measure(
+    /// Block has no intrinsic size; it relies entirely on flex layout.
+    fn view_size(
         &self,
         _known_dimensions: Size<Option<f32>>,
         _available_space: Size<AvailableSpace>,
@@ -123,6 +124,10 @@ impl Widget for Block {
         }
     }
 
+    /// Block's canvas matches its layout allocation (no scrolling).
+    ///
+    /// Unlike `view_size` which returns (0, 0) for flex layout, `canvas_size` must return the
+    /// actual available space so viewport calculations work correctly.
     fn canvas_size(
         &self,
         known_dimensions: Size<Option<f32>>,

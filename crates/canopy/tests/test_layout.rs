@@ -45,7 +45,7 @@ mod tests {
             r.fill("", ctx.canvas().rect(), 'x')
         }
 
-        fn measure(
+        fn view_size(
             &self,
             known_dimensions: Size<Option<f32>>,
             available_space: Size<AvailableSpace>,
@@ -128,7 +128,7 @@ mod tests {
             r.fill("", ctx.view(), 'x')
         }
 
-        fn measure(
+        fn view_size(
             &self,
             _known_dimensions: Size<Option<f32>>,
             _available_space: Size<AvailableSpace>,

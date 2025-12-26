@@ -67,7 +67,7 @@ impl Widget for Editor {
         Ok(())
     }
 
-    fn measure(
+    fn view_size(
         &self,
         known_dimensions: Size<Option<f32>>,
         available_space: Size<AvailableSpace>,

@@ -48,7 +48,7 @@ fn measure_for_node(
         ctx.nodes
             .get(node_id)
             .and_then(|node| node.widget.as_ref())
-            .map(|widget| widget.measure(known_dimensions, available_space))
+            .map(|widget| widget.view_size(known_dimensions, available_space))
             .unwrap_or(Size {
                 width: 0.0,
                 height: 0.0,

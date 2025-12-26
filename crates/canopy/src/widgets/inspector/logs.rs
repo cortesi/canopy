@@ -99,12 +99,12 @@ impl Widget for Logs {
         self.list.render(rndr, area, ctx)
     }
 
-    fn measure(
+    fn view_size(
         &self,
         known_dimensions: Size<Option<f32>>,
         available_space: Size<AvailableSpace>,
     ) -> Size<f32> {
-        self.list.measure(known_dimensions, available_space)
+        self.list.view_size(known_dimensions, available_space)
     }
 
     fn poll(&mut self, _c: &mut dyn Context) -> Option<Duration> {

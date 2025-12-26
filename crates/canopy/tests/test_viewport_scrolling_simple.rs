@@ -48,7 +48,7 @@ mod tests {
             Ok(())
         }
 
-        fn measure(
+        fn view_size(
             &self,
             _known_dimensions: Size<Option<f32>>,
             _available_space: Size<AvailableSpace>,

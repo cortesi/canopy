@@ -34,8 +34,14 @@ pub trait Widget: Any + Send + CommandNode {
     /// Render the widget into the buffer for the visible area.
     fn render(&mut self, frame: &mut Render, area: Rect, ctx: &dyn ViewContext) -> Result<()>;
 
-    /// Calculate intrinsic size for leaf nodes.
-    fn measure(
+    /// Returns the size this widget requests for its view (visible area).
+    ///
+    /// This determines how much space the widget requests during layout. For widgets that rely
+    /// entirely on flex layout (flex_grow/flex_shrink), return `Size { width: 0.0, height: 0.0 }`
+    /// to indicate no size preference.
+    ///
+    /// The default implementation returns the available space when known, or zero otherwise.
+    fn view_size(
         &self,
         known_dimensions: Size<Option<f32>>,
         available_space: Size<AvailableSpace>,
@@ -51,13 +57,20 @@ pub trait Widget: Any + Send + CommandNode {
         Size { width, height }
     }
 
-    /// Calculate the canvas size for this node.
+    /// Returns the total canvas size (scrollable content area).
+    ///
+    /// For scrollable widgets, this may exceed `view_size` to enable scrolling. For example, a
+    /// list with 100 items in a 10-row view would return 100 for height here, while `view_size`
+    /// returns 10 (the visible area).
+    ///
+    /// The default implementation delegates to `view_size`. Override when content can exceed the
+    /// view bounds.
     fn canvas_size(
         &self,
         known_dimensions: Size<Option<f32>>,
         available_space: Size<AvailableSpace>,
     ) -> Size<f32> {
-        self.measure(known_dimensions, available_space)
+        self.view_size(known_dimensions, available_space)
     }
 
     /// Handle events.
