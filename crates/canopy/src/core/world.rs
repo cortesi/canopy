@@ -820,17 +820,11 @@ fn sync_viewports(
         let view_size = clamp_child_view_size(bounds, position, view_size);
 
         let mut canvas_size = if let Some(widget) = nodes[node_id].widget.as_ref() {
-            let available = Size {
-                width: AvailableSpace::Definite(view_size.w as f32),
-                height: AvailableSpace::Definite(view_size.h as f32),
+            let view = Size {
+                width: view_size.w as f32,
+                height: view_size.h as f32,
             };
-            let measured = widget.canvas_size(
-                Size {
-                    width: None,
-                    height: None,
-                },
-                available,
-            );
+            let measured = widget.canvas_size(view);
             Expanse::new(
                 measured.width.round() as u32,
                 measured.height.round() as u32,

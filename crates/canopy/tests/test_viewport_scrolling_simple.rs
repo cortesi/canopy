@@ -3,14 +3,8 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Context, Loader, ViewContext, command, derive_commands,
-        error::Result,
-        event::key,
-        geom::Rect,
-        layout::{AvailableSpace, Size},
-        render::Render,
-        state::NodeName,
-        testing::harness::Harness,
+        Canopy, Context, Loader, ViewContext, command, derive_commands, error::Result, event::key,
+        geom::Rect, layout::Size, render::Render, state::NodeName, testing::harness::Harness,
         widget::Widget,
     };
 
@@ -48,11 +42,8 @@ mod tests {
             Ok(())
         }
 
-        fn view_size(
-            &self,
-            _known_dimensions: Size<Option<f32>>,
-            _available_space: Size<AvailableSpace>,
-        ) -> Size<f32> {
+        /// Canvas is larger than view to enable scrolling.
+        fn canvas_size(&self, _view: Size<f32>) -> Size<f32> {
             Size {
                 width: 100.0,
                 height: 100.0,

@@ -2,7 +2,7 @@ use crate::{
     Context, ViewContext, command, derive_commands,
     error::Result,
     geom::{Expanse, Rect},
-    layout::{AvailableSpace, Size},
+    layout::Size,
     render::Render,
     state::NodeName,
     widget::Widget,
@@ -303,16 +303,8 @@ where
         Ok(())
     }
 
-    fn canvas_size(
-        &self,
-        known_dimensions: Size<Option<f32>>,
-        available_space: Size<AvailableSpace>,
-    ) -> Size<f32> {
-        let width = known_dimensions
-            .width
-            .or_else(|| available_space.width.into_option())
-            .unwrap_or(0.0);
-        let available_width = width.max(1.0) as u32;
+    fn canvas_size(&self, view: Size<f32>) -> Size<f32> {
+        let available_width = view.width.max(1.0) as u32;
 
         let mut height = 0u32;
         let mut max_width = 0u32;

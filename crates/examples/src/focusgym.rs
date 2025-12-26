@@ -122,26 +122,6 @@ impl Widget for Block {
         }
     }
 
-    /// Block's canvas matches its layout allocation (no scrolling).
-    ///
-    /// Unlike `view_size` which returns (0, 0) for flex layout, `canvas_size` must return the
-    /// actual available space so viewport calculations work correctly.
-    fn canvas_size(
-        &self,
-        known_dimensions: Size<Option<f32>>,
-        available_space: Size<AvailableSpace>,
-    ) -> Size<f32> {
-        let width = known_dimensions
-            .width
-            .or_else(|| available_space.width.into_option())
-            .unwrap_or(0.0);
-        let height = known_dimensions
-            .height
-            .or_else(|| available_space.height.into_option())
-            .unwrap_or(0.0);
-        Size { width, height }
-    }
-
     fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
         // Only render leaf blocks (those without children)
         if ctx.children().is_empty() {
