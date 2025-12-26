@@ -12,7 +12,7 @@ use crate::{
     error::Result,
     event::key::*,
     geom::Rect,
-    layout::{Dimension, Display, FlexDirection},
+    layout::Dimension,
     render::Render,
     state::NodeName,
     widget::Widget,
@@ -34,18 +34,15 @@ impl Inspector {
         let (view_id, _tabs, _logs) = view::View::install(core)?;
         let frame_id = core.add(frame::Frame::new());
         core.set_children(frame_id, vec![view_id])?;
-        core.build(frame_id).style(|style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        });
+        core.with_layout_of(frame_id, |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })?;
 
         let inspector_id = core.add(Self::new());
         core.set_children(inspector_id, vec![frame_id])?;
-        core.build(inspector_id).style(|style| {
-            style.display = Display::Flex;
-            style.flex_direction = FlexDirection::Column;
-        });
+        core.with_layout_of(inspector_id, |layout| {
+            layout.flex_col();
+        })?;
 
         Ok(inspector_id)
     }

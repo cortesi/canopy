@@ -166,10 +166,18 @@ impl FrameGym {
             .add_child_to(frame_id, TestPattern::new())
             .expect("Failed to mount pattern");
 
-        c.build().flex_col();
-        c.build_node(frame_id).flex_item(1.0, 1.0, Dimension::Auto);
-        c.build_node(pattern_id)
-            .flex_item(1.0, 1.0, Dimension::Auto);
+        c.with_layout(&mut |layout| {
+            layout.flex_col();
+        })
+        .expect("Failed to configure layout");
+        c.with_layout_of(frame_id, &mut |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })
+        .expect("Failed to configure frame layout");
+        c.with_layout_of(pattern_id, &mut |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })
+        .expect("Failed to configure pattern layout");
     }
 }
 
@@ -220,7 +228,11 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
 
 #[cfg(test)]
 mod tests {
-    use canopy::{NodeId, layout, layout::LengthPercentage, testing::harness::Harness};
+    use canopy::{
+        NodeId,
+        layout::{Edges, Length},
+        testing::harness::Harness,
+    };
 
     use super::*;
 
@@ -247,21 +259,13 @@ mod tests {
         let pattern_view = pattern_vp.view();
         let pattern_pos = pattern_vp.position();
         let frame_canvas = frame_vp.canvas();
-        let frame_style = &harness.canopy.core.nodes[frame_id].style;
+        let frame_layout = &harness.canopy.core.nodes[frame_id].layout;
 
         assert_eq!(pattern_pos.x, frame_view.tl.x + 1);
         assert_eq!(pattern_pos.y, frame_view.tl.y + 1);
         assert_eq!(frame_canvas.w, frame_view.w);
         assert_eq!(frame_canvas.h, frame_view.h);
-        assert_eq!(
-            frame_style.padding,
-            layout::Rect {
-                left: LengthPercentage::Points(1.0),
-                right: LengthPercentage::Points(1.0),
-                top: LengthPercentage::Points(1.0),
-                bottom: LengthPercentage::Points(1.0),
-            }
-        );
+        assert_eq!(frame_layout.get_padding(), Edges::all(Length::Points(1.0)));
         assert_eq!(pattern_view.w + 2, frame_view.w);
         assert_eq!(pattern_view.h + 2, frame_view.h);
 

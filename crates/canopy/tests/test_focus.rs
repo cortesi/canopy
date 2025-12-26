@@ -7,7 +7,7 @@ mod tests {
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
         error::{Error, Result},
         geom::{Direction, Expanse, Rect},
-        layout::{Dimension, Display, FlexDirection},
+        layout::Dimension,
         render::Render,
         state::NodeName,
         testing::grid::Grid,
@@ -54,15 +54,12 @@ mod tests {
 
     fn attach_grid(core: &mut Core, grid_root: NodeId, size: Expanse) -> Result<()> {
         core.set_children(core.root, vec![grid_root])?;
-        core.build(core.root).style(|style| {
-            style.display = Display::Flex;
-            style.flex_direction = FlexDirection::Column;
-        });
-        core.build(grid_root).style(|style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        });
+        core.with_layout_of(core.root, |layout| {
+            layout.flex_col();
+        })?;
+        core.with_layout_of(grid_root, |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })?;
         core.update_layout(size)?;
         Ok(())
     }
@@ -244,26 +241,22 @@ mod tests {
         canopy
             .core
             .set_children(canopy.core.root, vec![first, second])?;
-        canopy.core.build(canopy.core.root).style(|style| {
-            style.display = Display::Flex;
-            style.flex_direction = FlexDirection::Column;
-        });
-        canopy.core.build(first).style(|style| {
-            style.size.width = Dimension::Points(10.0);
-            style.size.height = Dimension::Points(5.0);
-        });
-        canopy.core.build(second).style(|style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        });
+        canopy.core.with_layout_of(canopy.core.root, |layout| {
+            layout.flex_col();
+        })?;
+        canopy.core.with_layout_of(first, |layout| {
+            layout.size(Dimension::Points(10.0), Dimension::Points(5.0));
+        })?;
+        canopy.core.with_layout_of(second, |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })?;
 
         canopy.core.update_layout(Expanse::new(10, 10))?;
         canopy.core.set_focus(first);
 
-        canopy.core.build(first).style(|style| {
-            style.size.height = Dimension::Points(0.0);
-        });
+        canopy.core.with_layout_of(first, |layout| {
+            layout.height(Dimension::Points(0.0));
+        })?;
         canopy.core.update_layout(Expanse::new(10, 10))?;
 
         assert_eq!(canopy.core.focus, Some(second));

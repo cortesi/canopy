@@ -2,7 +2,7 @@ use crate::{
     ViewContext, derive_commands,
     error::Result,
     geom,
-    layout::{self, LengthPercentage, Style},
+    layout::{Edges, Layout, Length},
     render::Render,
     state::NodeName,
     widget::Widget,
@@ -195,13 +195,8 @@ impl Widget for Frame {
         Ok(())
     }
 
-    fn configure_style(&self, style: &mut Style) {
-        style.padding = layout::Rect {
-            left: LengthPercentage::Points(1.0),
-            right: LengthPercentage::Points(1.0),
-            top: LengthPercentage::Points(1.0),
-            bottom: LengthPercentage::Points(1.0),
-        };
+    fn layout(&self, layout: &mut Layout) {
+        layout.padding(Edges::all(Length::Points(1.0)));
     }
 
     fn name(&self) -> NodeName {

@@ -3,9 +3,7 @@ use slotmap::SlotMap;
 use taffy::{
     Taffy,
     error::TaffyError,
-    geometry::Size,
     node::{MeasureFunc, Node as TaffyNode},
-    style::{AvailableSpace, Dimension, LengthPercentage, Style},
 };
 
 use crate::{
@@ -13,7 +11,6 @@ use crate::{
     backend::BackendControl,
     commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
     core::{
-        builder::NodeBuilder,
         context::{CoreContext, CoreViewContext},
         id::NodeId,
         node::Node,
@@ -23,6 +20,7 @@ use crate::{
     error::{Error, Result},
     event::Event,
     geom::{Direction, Expanse, Point, Rect},
+    layout::Layout,
     path::Path,
     render::Render,
     state::NodeName,
@@ -40,16 +38,28 @@ struct MeasureContext<'a> {
 /// Resolve the measure function for a node if present.
 fn measure_for_node(
     node_id: NodeId,
-    known_dimensions: Size<Option<f32>>,
-    available_space: Size<AvailableSpace>,
-) -> Size<f32> {
+    known_dimensions: taffy::geometry::Size<Option<f32>>,
+    available_space: taffy::geometry::Size<taffy::style::AvailableSpace>,
+) -> taffy::geometry::Size<f32> {
     MEASURE_CONTEXT.with(|ctx| {
         let ctx = unsafe { &*(*ctx as *const MeasureContext<'_>) };
         ctx.nodes
             .get(node_id)
             .and_then(|node| node.widget.as_ref())
-            .map(|widget| widget.view_size(known_dimensions, available_space))
-            .unwrap_or(Size {
+            .map(|widget| {
+                let known: crate::layout::Size<Option<f32>> = known_dimensions.into();
+                let avail: crate::layout::Size<crate::layout::AvailableSpace> =
+                    crate::layout::Size {
+                        width: available_space.width.into(),
+                        height: available_space.height.into(),
+                    };
+                let result = widget.view_size(known, avail);
+                taffy::geometry::Size {
+                    width: result.width,
+                    height: result.height,
+                }
+            })
+            .unwrap_or(taffy::geometry::Size {
                 width: 0.0,
                 height: 0.0,
             })
@@ -77,11 +87,11 @@ impl Core {
     pub fn new() -> Self {
         let mut taffy = Taffy::new();
         let mut nodes = SlotMap::with_key();
-        let mut style = Style::default();
+        let mut layout = Layout::default();
         let root_widget = RootContainer;
-        root_widget.configure_style(&mut style);
+        root_widget.layout(&mut layout);
         let taffy_id = taffy
-            .new_leaf(style.clone())
+            .new_leaf(layout.inner.clone())
             .expect("Failed to create root taffy node");
         let root_name = root_widget.name();
         let root = nodes.insert(Node {
@@ -89,7 +99,7 @@ impl Core {
             parent: None,
             children: Vec::new(),
             taffy_id,
-            style,
+            layout,
             viewport: Rect::zero(),
             vp: ViewPort::default(),
             hidden: false,
@@ -126,11 +136,11 @@ impl Core {
 
     /// Add a boxed widget to the arena and return its node ID.
     pub fn add_boxed(&mut self, widget: Box<dyn Widget>) -> NodeId {
-        let mut style = Style::default();
-        widget.configure_style(&mut style);
+        let mut layout = Layout::default();
+        widget.layout(&mut layout);
         let taffy_id = self
             .taffy
-            .new_leaf(style.clone())
+            .new_leaf(layout.inner.clone())
             .expect("Failed to create taffy node");
 
         let name = widget.name();
@@ -139,7 +149,7 @@ impl Core {
             parent: None,
             children: Vec::new(),
             taffy_id,
-            style,
+            layout,
             viewport: Rect::zero(),
             vp: ViewPort::default(),
             hidden: false,
@@ -160,20 +170,21 @@ impl Core {
         node_id
     }
 
-    /// Update the layout style for a node.
-    pub(crate) fn with_style(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Style)) -> Result<()> {
+    /// Update the layout for a node.
+    pub fn with_layout_of(&mut self, node: NodeId, f: impl FnOnce(&mut Layout)) -> Result<()> {
         let t_id = self
             .nodes
             .get(node)
             .ok_or_else(|| Error::Internal("missing node".into()))?
             .taffy_id;
-        let mut style = self.taffy.style(t_id).cloned().unwrap_or_default();
-        f(&mut style);
+        let taffy_style = self.taffy.style(t_id).cloned().unwrap_or_default();
+        let mut layout = Layout::from_taffy(taffy_style);
+        f(&mut layout);
         self.taffy
-            .set_style(t_id, style.clone())
+            .set_style(t_id, layout.inner.clone())
             .map_err(|err| map_taffy_error(&err))?;
         if let Some(node) = self.nodes.get_mut(node) {
-            node.style = style;
+            node.layout = layout;
         }
         Ok(())
     }
@@ -184,23 +195,23 @@ impl Core {
         W: Widget + 'static,
     {
         let name = widget.name();
-        let mut style = self
+        let mut layout = self
             .nodes
             .get(node_id)
-            .map(|node| node.style.clone())
+            .map(|node| node.layout.clone())
             .unwrap_or_default();
-        widget.configure_style(&mut style);
+        widget.layout(&mut layout);
         let node = self.nodes.get_mut(node_id).expect("Unknown node id");
         node.widget = Some(Box::new(widget));
         node.name = name;
-        node.style = style.clone();
+        node.layout = layout.clone();
         node.mounted = false;
 
         let taffy_id = node.taffy_id;
         self.taffy
-            .set_style(taffy_id, style)
+            .set_style(taffy_id, layout.inner)
             .map_err(|err| map_taffy_error(&err))
-            .expect("Failed to set taffy style");
+            .expect("Failed to set taffy layout");
     }
 
     /// Run the mount hook for a node if it has not been mounted yet.
@@ -344,26 +355,20 @@ impl Core {
         self.set_hidden(node_id, false)
     }
 
-    /// Start a builder chain for a node.
-    pub fn build(&mut self, id: NodeId) -> NodeBuilder<'_, Self> {
-        NodeBuilder { ctx: self, id }
-    }
-
     /// Run layout computation and synchronize viewports.
     pub fn update_layout(&mut self, screen_size: Expanse) -> Result<()> {
         let root_taffy = self.nodes[self.root].taffy_id;
         {
-            let mut style = self.nodes[self.root].style.clone();
-            style.size.width = Dimension::Points(screen_size.w as f32);
-            style.size.height = Dimension::Points(screen_size.h as f32);
+            let layout = &mut self.nodes[self.root].layout;
+            layout.inner.size.width = taffy::style::Dimension::Points(screen_size.w as f32);
+            layout.inner.size.height = taffy::style::Dimension::Points(screen_size.h as f32);
             self.taffy
-                .set_style(root_taffy, style.clone())
+                .set_style(root_taffy, layout.inner.clone())
                 .map_err(|err| map_taffy_error(&err))?;
-            self.nodes[self.root].style = style;
         }
-        let available_space = Size {
-            width: AvailableSpace::Definite(screen_size.w as f32),
-            height: AvailableSpace::Definite(screen_size.h as f32),
+        let available_space = taffy::geometry::Size {
+            width: taffy::style::AvailableSpace::Definite(screen_size.w as f32),
+            height: taffy::style::AvailableSpace::Definite(screen_size.h as f32),
         };
 
         let ctx = MeasureContext { nodes: &self.nodes };
@@ -800,7 +805,7 @@ fn sync_viewports(
         .max(start_y);
     let mut view_size = Expanse::new((end_x - start_x) as u32, (end_y - start_y) as u32);
 
-    let min_size = min_size_from_style(&nodes[node_id].style);
+    let min_size = min_size_from_layout(&nodes[node_id].layout);
     view_size = clamp_expanse(view_size, min_size);
 
     {
@@ -814,12 +819,12 @@ fn sync_viewports(
         let view_size = clamp_child_view_size(bounds, position, view_size);
 
         let mut canvas_size = if let Some(widget) = nodes[node_id].widget.as_ref() {
-            let available = Size {
-                width: AvailableSpace::Definite(view_size.w as f32),
-                height: AvailableSpace::Definite(view_size.h as f32),
+            let available = crate::layout::Size {
+                width: crate::layout::AvailableSpace::Definite(view_size.w as f32),
+                height: crate::layout::AvailableSpace::Definite(view_size.h as f32),
             };
             let measured = widget.canvas_size(
-                Size {
+                crate::layout::Size {
                     width: None,
                     height: None,
                 },
@@ -915,7 +920,7 @@ fn parent_content_bounds(
     let Some(parent_id) = nodes[node_id].parent else {
         return parent_canvas;
     };
-    let padding = resolve_padding(&nodes[parent_id].style, parent_canvas.w);
+    let padding = resolve_padding(&nodes[parent_id].layout, parent_canvas.w);
     let width = parent_canvas
         .w
         .saturating_sub(padding.left.saturating_add(padding.right));
@@ -930,8 +935,9 @@ fn parent_content_bounds(
     )
 }
 
-/// Resolve padding for a style into cell counts.
-fn resolve_padding(style: &Style, base_width: u32) -> ResolvedPadding {
+/// Resolve padding for a layout into cell counts.
+fn resolve_padding(layout: &Layout, base_width: u32) -> ResolvedPadding {
+    use taffy::style::LengthPercentage;
     let resolve = |value: LengthPercentage| -> u32 {
         let base = base_width as f32;
         match value {
@@ -939,7 +945,7 @@ fn resolve_padding(style: &Style, base_width: u32) -> ResolvedPadding {
             LengthPercentage::Percent(percent) => (base * percent).max(0.0).round() as u32,
         }
     };
-    let padding = style.padding;
+    let padding = layout.inner.padding;
     ResolvedPadding {
         left: resolve(padding.left),
         right: resolve(padding.right),
@@ -953,18 +959,18 @@ fn clamp_expanse(size: Expanse, min_size: Expanse) -> Expanse {
     Expanse::new(size.w.max(min_size.w), size.h.max(min_size.h))
 }
 
-/// Derive a minimum layout size from a node's style.
-fn min_size_from_style(style: &Style) -> Expanse {
+/// Derive a minimum layout size from a node's layout.
+fn min_size_from_layout(layout: &Layout) -> Expanse {
     Expanse::new(
-        dimension_to_min(style.min_size.width),
-        dimension_to_min(style.min_size.height),
+        dimension_to_min(layout.inner.min_size.width),
+        dimension_to_min(layout.inner.min_size.height),
     )
 }
 
 /// Convert a min-size dimension into a non-negative cell count.
-fn dimension_to_min(dim: Dimension) -> u32 {
+fn dimension_to_min(dim: taffy::style::Dimension) -> u32 {
     match dim {
-        Dimension::Points(points) => points.max(0.0).ceil() as u32,
+        taffy::style::Dimension::Points(points) => points.max(0.0).ceil() as u32,
         _ => 0,
     }
 }

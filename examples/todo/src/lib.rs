@@ -6,6 +6,7 @@ use canopy::{
     error::Result,
     event::{key, mouse},
     geom::{Expanse, Rect},
+    layout::{Dimension, Edges, Length},
     render::Render,
     style::solarized,
     widget::Widget,
@@ -13,9 +14,7 @@ use canopy::{
 };
 use taffy::{
     geometry::Rect as TaffyRect,
-    style::{
-        AlignItems, Dimension, Display, FlexDirection, JustifyContent, LengthPercentage, Position,
-    },
+    style::{AlignItems, JustifyContent, LengthPercentage, Position},
 };
 
 pub mod store;
@@ -129,25 +128,20 @@ impl Todo {
         let status_id = c.add_orphan(StatusBar);
         c.set_children(vec![content_id, status_id])?;
 
-        let mut update_root = |style: &mut taffy::style::Style| {
-            style.display = Display::Flex;
-            style.flex_direction = FlexDirection::Column;
-        };
-        c.with_style(&mut update_root)?;
+        c.with_layout(&mut |layout| {
+            layout.flex_col();
+        })?;
 
-        let mut content_style = |style: &mut taffy::style::Style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        };
-        c.with_style_of(content_id, &mut content_style)?;
-        c.with_style_of(list_id, &mut content_style)?;
+        c.with_layout_of(content_id, &mut |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })?;
+        c.with_layout_of(list_id, &mut |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })?;
 
-        let mut status_style = |style: &mut taffy::style::Style| {
-            style.size.height = Dimension::Points(1.0);
-            style.flex_shrink = 0.0;
-        };
-        c.with_style_of(status_id, &mut status_style)?;
+        c.with_layout_of(status_id, &mut |layout| {
+            layout.height(Dimension::Points(1.0)).flex_shrink(0.0);
+        })?;
 
         self.content_id = Some(content_id);
         self.list_id = Some(list_id);
@@ -177,7 +171,9 @@ impl Todo {
         c.mount_child_to(adder_frame_id, input_id)?;
         c.set_children_of(overlay_id, vec![adder_frame_id])?;
 
-        let mut overlay_style = |style: &mut taffy::style::Style| {
+        // Overlay uses advanced positioning features via taffy directly
+        c.with_layout_of(overlay_id, &mut |layout| {
+            let style = layout.as_taffy_mut();
             style.position = Position::Absolute;
             style.inset = TaffyRect {
                 left: LengthPercentage::Points(0.0).into(),
@@ -185,30 +181,21 @@ impl Todo {
                 top: LengthPercentage::Points(0.0).into(),
                 bottom: LengthPercentage::Points(0.0).into(),
             };
-            style.display = Display::Flex;
+            style.display = taffy::style::Display::Flex;
             style.justify_content = Some(JustifyContent::Center);
             style.align_items = Some(AlignItems::Center);
-        };
-        c.with_style_of(overlay_id, &mut overlay_style)?;
+        })?;
 
-        let mut frame_style = |style: &mut taffy::style::Style| {
-            style.size.width = Dimension::Percent(1.0);
-            style.size.height = Dimension::Points(3.0);
-            style.margin = TaffyRect {
-                left: LengthPercentage::Points(2.0).into(),
-                right: LengthPercentage::Points(2.0).into(),
-                top: LengthPercentage::Points(0.0).into(),
-                bottom: LengthPercentage::Points(0.0).into(),
-            };
-        };
-        c.with_style_of(adder_frame_id, &mut frame_style)?;
+        c.with_layout_of(adder_frame_id, &mut |layout| {
+            layout
+                .width(Dimension::Percent(1.0))
+                .height(Dimension::Points(3.0))
+                .margin(Edges::symmetric(Length::Zero, Length::Points(2.0)));
+        })?;
 
-        let mut input_style = |style: &mut taffy::style::Style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        };
-        c.with_style_of(input_id, &mut input_style)?;
+        c.with_layout_of(input_id, &mut |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })?;
 
         self.overlay_id = Some(overlay_id);
         self.input_id = Some(input_id);

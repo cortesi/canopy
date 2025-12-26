@@ -1,17 +1,12 @@
 //! Grid test utility for creating configurable grid layouts.
 
-use taffy::{
-    geometry::Line,
-    style::{Display, GridPlacement, TrackSizingFunction},
-    style_helpers::{FromFlex, line},
-};
-
 use crate::{
     NodeId, ViewContext,
     core::Core,
     derive_commands,
     error::Result,
     geom::{Expanse, Point, Rect},
+    layout::{Display, FromFlex, GridPlacement, Line, TrackSizingFunction, line},
     state::NodeName,
     widget::Widget,
 };
@@ -140,17 +135,19 @@ fn build_node(
 
     core.set_children(node_id, children.iter().map(|(_, _, id)| *id).collect())?;
 
-    core.build(node_id).style(|style| {
-        style.display = Display::Grid;
-        style.grid_template_columns = vec![TrackSizingFunction::from_flex(1.0); divisions];
-        style.grid_template_rows = vec![TrackSizingFunction::from_flex(1.0); divisions];
-    });
+    core.with_layout_of(node_id, |layout| {
+        let inner = layout.as_taffy_mut();
+        inner.display = Display::Grid.into();
+        inner.grid_template_columns = vec![TrackSizingFunction::from_flex(1.0); divisions];
+        inner.grid_template_rows = vec![TrackSizingFunction::from_flex(1.0); divisions];
+    })?;
 
     for (row, col, child) in children {
-        core.build(child).style(|style| {
-            style.grid_row = line::<Line<GridPlacement>>((row + 1) as i16);
-            style.grid_column = line::<Line<GridPlacement>>((col + 1) as i16);
-        });
+        core.with_layout_of(child, |layout| {
+            let inner = layout.as_taffy_mut();
+            inner.grid_row = line::<Line<GridPlacement>>((row + 1) as i16);
+            inner.grid_column = line::<Line<GridPlacement>>((col + 1) as i16);
+        })?;
     }
 
     Ok(node_id)

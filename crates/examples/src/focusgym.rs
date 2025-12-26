@@ -3,7 +3,7 @@ use canopy::{
     error::Result,
     event::{key, mouse},
     geom::{Expanse, Rect},
-    layout::{AvailableSpace, Dimension, Size, Style},
+    layout::{AvailableSpace, Dimension, Layout, Size},
     render::Render,
     widget::Widget,
     widgets::Root,
@@ -27,7 +27,7 @@ impl Block {
         (self.horizontal && a.w <= 4) || (!self.horizontal && a.h <= 4)
     }
 
-    /// Adjust flex factors by the requested deltas and apply the updated style.
+    /// Adjust flex factors by the requested deltas and apply the updated layout.
     fn adjust_flex(&self, c: &mut dyn Context, grow_delta: f32, shrink_delta: f32) -> Result<()> {
         if let Some(view) = c.node_view(c.node_id())
             && (view.w <= 1 || view.h <= 1)
@@ -36,14 +36,12 @@ impl Block {
             return Ok(());
         }
 
-        let style = c.style();
+        let layout = c.layout();
         let min = 0.0;
-        let grow = (style.flex_grow + grow_delta).max(min);
-        let shrink = (style.flex_shrink + shrink_delta).max(min);
-        c.with_style(&mut |style| {
-            style.flex_grow = grow;
-            style.flex_shrink = shrink;
-            style.flex_basis = Dimension::Auto;
+        let grow = (layout.get_flex_grow() + grow_delta).max(min);
+        let shrink = (layout.get_flex_shrink() + shrink_delta).max(min);
+        c.with_layout(&mut |layout| {
+            layout.flex_item(grow, shrink, Dimension::Auto);
         })
     }
 
@@ -166,20 +164,15 @@ impl Widget for Block {
         Ok(())
     }
 
-    fn configure_style(&self, style: &mut Style) {
-        use canopy::layout::{Display, FlexDirection};
-
-        style.display = Display::Flex;
-        style.flex_direction = if self.horizontal {
-            FlexDirection::Row
+    fn layout(&self, layout: &mut Layout) {
+        if self.horizontal {
+            layout.flex_row();
         } else {
-            FlexDirection::Column
-        };
-        style.flex_grow = 1.0;
-        style.flex_shrink = 1.0;
-        style.flex_basis = Dimension::Auto;
-        style.min_size.width = Dimension::Points(1.0);
-        style.min_size.height = Dimension::Points(1.0);
+            layout.flex_col();
+        }
+        layout
+            .flex_item(1.0, 1.0, Dimension::Auto)
+            .min_size(Dimension::Points(1.0), Dimension::Points(1.0));
     }
 }
 
@@ -227,7 +220,9 @@ impl Widget for FocusGym {
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.build().flex_col();
+        c.with_layout(&mut |layout| {
+            layout.flex_col();
+        })?;
         let root_block = c.add_child(Block::new(true))?;
         c.add_child_to(root_block, Block::new(false))?;
         c.add_child_to(root_block, Block::new(false))?;
@@ -416,15 +411,15 @@ mod tests {
             .copied()
             .expect("missing left child");
 
-        let grow_before = core.nodes[left].style.flex_grow;
-        let shrink_before = core.nodes[left].style.flex_shrink;
+        let grow_before = core.nodes[left].layout.get_flex_grow();
+        let shrink_before = core.nodes[left].layout.get_flex_shrink();
 
         harness.key(']')?;
         harness.key('}')?;
 
         let core = &harness.canopy.core;
-        let grow_after = core.nodes[left].style.flex_grow;
-        let shrink_after = core.nodes[left].style.flex_shrink;
+        let grow_after = core.nodes[left].layout.get_flex_grow();
+        let shrink_after = core.nodes[left].layout.get_flex_shrink();
 
         assert!(grow_after > grow_before);
         assert!(shrink_after > shrink_before);
@@ -475,15 +470,15 @@ mod tests {
         let view = core.nodes[left].vp.view();
         assert!(view.w <= 1 || view.h <= 1);
 
-        let grow_before = core.nodes[left].style.flex_grow;
-        let shrink_before = core.nodes[left].style.flex_shrink;
+        let grow_before = core.nodes[left].layout.get_flex_grow();
+        let shrink_before = core.nodes[left].layout.get_flex_shrink();
 
         harness.key('[')?;
         harness.key('}')?;
 
         let core = &harness.canopy.core;
-        assert_eq!(core.nodes[left].style.flex_grow, grow_before);
-        assert_eq!(core.nodes[left].style.flex_shrink, shrink_before);
+        assert_eq!(core.nodes[left].layout.get_flex_grow(), grow_before);
+        assert_eq!(core.nodes[left].layout.get_flex_shrink(), shrink_before);
 
         Ok(())
     }

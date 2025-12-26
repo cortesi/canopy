@@ -76,9 +76,10 @@ Then bindings can match on instance keys, and commands can remain type-based.
 You can justify either, but the inconsistency is surprising to users implementing
 widgets and writing bindings.
 
-Also, `PathMatcher` is regex-based and matches substrings unless anchored. The
-“winner” is based on match end index, not segment specificity. This can produce
-unintuitive precedence when multiple patterns match.
+Also, `PathMatcher` is regex-backed and matches substrings unless anchored, and
+`*` wildcards can span multiple segments. The “winner” is based on match end
+index, not segment specificity. This can produce unintuitive precedence when
+multiple patterns match.
 
 **Recommendation:** formalize input routing as explicit phases:
 
@@ -86,9 +87,10 @@ unintuitive precedence when multiple patterns match.
 * **Target/bubble phase**: widget handles first; bindings can be fallback.
 * Optionally allow bindings to specify which phase they belong to.
 
-And reimplement path matching as a **segment-aware glob** (not raw regex). That
-will improve both correctness and ergonomics. If you keep regex, document the
-exact precedence rules and caveats prominently.
+And reimplement path matching as a **segment-aware glob** (single-segment `*`,
+`**` for multi-segment) rather than the current substring matcher. That will
+improve both correctness and ergonomics. If you keep the current matcher,
+document the exact precedence rules and caveats prominently.
 
 ---
 
@@ -120,33 +122,7 @@ pseudo-namespaces would reduce ambiguity a lot.
 
 ---
 
-### D) Rendering model allocates a buffer per node per frame
-
-`Render::new` allocates a `TermBuf` of the node’s view size on every render
-traversal.
-
-That’s a very clean and safe approach, but it can become memory- and CPU-heavy
-if:
-
-* you have deep trees,
-* many nodes have large views,
-* you render frequently (which you do).
-
-**Bigger recommendation:** move toward one of:
-
-1. **Single composed buffer + clip stack**: pass a render context that writes
-   into the final `TermBuf` with an active clip rect + translation offset stack.
-   This avoids per-node allocations entirely.
-2. **Buffer pool reuse**: cache per-node `TermBuf` allocations keyed by
-   `(node_id, view_size)` and reuse across frames (still more complex than #1,
-   but incremental).
-
-If you keep per-node buffers for now, at least consider a `Vec<Cell>` arena
-reused per frame to amortize allocations.
-
----
-
-### E) Public extensibility is constrained by crate-private render APIs
+### D) Public extensibility is constrained by crate-private render APIs
 
 `Canopy::render` is `pub(crate)`, meaning downstream crates cannot implement
 custom backends or drive the event loop manually without using your crossterm
@@ -172,21 +148,9 @@ scripting feel far less “toy”:
 * `bool`, `usize`, `String` are immediate wins.
 * Optionally `char`, `i64`, and small enums.
 
-### 2) Provide typed widget access helpers
+### 2) Improve `PathMatcher` semantics (even without redesign)
 
-Right now, every app ends up writing the same downcast boilerplate.
-
-Add helpers like:
-
-* `Context::with_widget_mut_typed<T: Widget + 'static>(...) -> Result<()>`
-* `ViewContext::get_widget_typed<T: Widget + 'static>(...) -> Option<&T>`
-
-Even if these are implemented via `Any` downcast under the hood, they
-dramatically improve ergonomics and reduce user error.
-
-### 3) Improve `PathMatcher` semantics (even without redesign)
-
-If you don’t want to replace regex right now:
+If you don’t want to redesign matching right now:
 
 * enforce anchors by default (match whole segments, not substring),
 * define a simple specificity rule (e.g. longer pattern string wins; anchored
@@ -223,6 +187,63 @@ Adopt a DOM-like model:
 Allow bindings to attach to capture or bubble. This removes the current key/mouse
 inconsistency and makes behavior predictable.
 
+**Before (current behavior)**
+
+Key bindings run before the widget, so the binding can pre-empt the focused
+widget even if the widget would have handled the key:
+
+```rust
+// Current API: key bindings are checked before the widget.
+canopy.bind_key(key::Ctrl + 's', "editor/", "editor::save()")?;
+
+// If focus is inside an input widget, the binding still fires first.
+// The input widget only sees the key if no binding matched.
+```
+
+Mouse bindings run after the widget, so the binding is only a fallback if the
+widget ignores the event:
+
+```rust
+// Current API: mouse bindings only run if the widget ignores the event.
+canopy.bind_mouse(mouse::Button::Right, "list/", "list::open_context()")?;
+
+// If the list widget handles right-click, the binding never runs.
+```
+
+**After (proposed behavior)**
+
+Bindings declare a phase, so you can choose whether they pre-empt or defer to
+the widget:
+
+```rust
+// Proposed API sketch.
+canopy.bind_key(
+    InputPhase::Capture,
+    key::Ctrl + 's',
+    "editor/",
+    "editor::save()",
+)?;
+
+canopy.bind_mouse(
+    InputPhase::Bubble,
+    mouse::Button::Right,
+    "list/",
+    "list::open_context()",
+)?;
+```
+
+That gives you predictable, explicit ordering:
+
+```text
+Capture:  root → ... → target  (bindings can intercept)
+Target:   target widget        (widget handler runs)
+Bubble:   target → ... → root  (bindings can act as fallback)
+```
+
+If you want today’s behavior, you can keep the defaults (key bindings in
+capture, mouse bindings in bubble). If you want consistency, set both to the
+same phase, or make it configurable per binding.
+
 ---
 
 ### 3) Rethink command targeting
@@ -241,35 +262,15 @@ trees.
 
 ---
 
-### 4) Rendering refactor to avoid per-node allocations
-
-If you’re aiming for scalability and smoothness, this is the big one.
-
-A global buffer with a render context containing:
-
-* translation offset (canvas → screen),
-* clip rect,
-* style stack,
-
-will give you:
-
-* fewer allocations,
-* less copying,
-* simpler cursor injection.
-
----
-
-### 5) Improve backend abstraction and expose rendering publicly
+### 4) Improve backend abstraction and expose rendering publicly
 
 Make downstream-driven event loops and backends first-class:
 
 * public render/step APIs
-* optionally feature-gate crossterm backend + scripting to slim dependencies for
-  embedding use cases.
 
 ---
 
-### 6) Tighten the docs: your `docs/src/*` appear pre-refactor
+### 5) Tighten the docs: your `docs/src/*` appear pre-refactor
 
 Many docs refer to old types (`Root` structure, `Node::handle_key`, etc.) and
 will mislead users of the new API. Shipping updated docs and a migration guide
@@ -281,12 +282,11 @@ will pay back immediately in fewer “mysterious behavior” issues.
 
 1. **Expand `derive_commands` argument types** (biggest immediate scripting UX
    win).
-2. **Add typed widget access helpers** (cleans up app code).
-3. **Improve `PathMatcher` semantics** (reduce binding surprises without a full
+2. **Improve `PathMatcher` semantics** (reduce binding surprises without a full
    redesign).
-4. Start a design doc for splitting node instance naming from command namespace,
+3. Start a design doc for splitting node instance naming from command namespace,
    improving input routing phases, and clarifying command targeting.
 
-If you want, I can also propose concrete API signatures for typed widget access,
-capture/bubble routing, and command targeting in a way that keeps `Context`
-object-safe and doesn’t explode your public surface.
+If you want, I can also propose concrete API signatures for capture/bubble
+routing, command targeting, and the namespace/instance split in a way that
+keeps `Context` object-safe and doesn’t explode your public surface.

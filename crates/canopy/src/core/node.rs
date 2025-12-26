@@ -1,8 +1,9 @@
-use taffy::{node::Node as TaffyNode, style::Style};
+use taffy::node::Node as TaffyNode;
 
 use crate::{
     core::{id::NodeId, viewport::ViewPort},
     geom::Rect,
+    layout::Layout,
     state::NodeName,
     widget::Widget,
 };
@@ -19,8 +20,8 @@ pub struct Node {
 
     /// Associated Taffy node.
     pub taffy_id: TaffyNode,
-    /// Cached Taffy style for quick access.
-    pub style: Style,
+    /// Cached layout configuration for quick access.
+    pub layout: Layout,
 
     /// Screen-space rectangle for the visible view.
     pub viewport: Rect,

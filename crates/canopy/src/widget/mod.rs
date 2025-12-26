@@ -13,7 +13,7 @@ use crate::{
     error::Result,
     event::Event,
     geom::Rect,
-    layout::{AvailableSpace, Size, Style},
+    layout::{AvailableSpace, Layout, Size},
     render::Render,
     state::NodeName,
 };
@@ -96,8 +96,8 @@ pub trait Widget: Any + Send + CommandNode {
         None
     }
 
-    /// Configure default layout style for this widget.
-    fn configure_style(&self, _style: &mut Style) {}
+    /// Configure default layout for this widget.
+    fn layout(&self, _layout: &mut Layout) {}
 
     /// Called exactly once when the widget is first mounted in the tree, before the first render.
     ///

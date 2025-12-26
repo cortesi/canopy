@@ -6,7 +6,7 @@ mod tests {
         Canopy, Core, NodeId, ViewContext, derive_commands,
         error::{Error, Result},
         geom::{Direction, Expanse, Point, Rect},
-        layout::{Dimension, Display, FlexDirection},
+        layout::Dimension,
         path::Path,
         render::Render,
         state::NodeName,
@@ -265,15 +265,12 @@ mod tests {
 
     fn attach_grid(core: &mut Core, grid_root: NodeId, size: Expanse) -> Result<()> {
         core.set_children(core.root, vec![grid_root])?;
-        core.build(core.root).style(|style| {
-            style.display = Display::Flex;
-            style.flex_direction = FlexDirection::Column;
-        });
-        core.build(grid_root).style(|style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        });
+        core.with_layout_of(core.root, |layout| {
+            layout.flex_col();
+        })?;
+        core.with_layout_of(grid_root, |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })?;
         core.update_layout(size)?;
         Ok(())
     }

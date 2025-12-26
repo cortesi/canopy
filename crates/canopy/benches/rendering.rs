@@ -4,10 +4,9 @@ use std::{hint::black_box, time::Duration};
 
 use canopy::{
     Context, Loader, NodeId, ViewContext, derive_commands, error::Result, geom::Rect,
-    render::Render, testing::harness::Harness, widget::Widget, widgets::Text,
+    layout::Dimension, render::Render, testing::harness::Harness, widget::Widget, widgets::Text,
 };
 use criterion::{Criterion, criterion_group, criterion_main};
-use taffy::style::{Dimension, Display, FlexDirection, Style};
 
 /// Wrapper node used for text render benchmarks.
 struct BenchmarkTextWrapper {
@@ -37,20 +36,15 @@ impl BenchmarkTextWrapper {
         c.set_children(vec![text_id])
             .expect("Failed to attach text");
 
-        let mut update_root = |style: &mut Style| {
-            style.display = Display::Flex;
-            style.flex_direction = FlexDirection::Column;
-        };
-        c.with_style(&mut update_root)
-            .expect("Failed to style root");
+        c.with_layout(&mut |layout| {
+            layout.flex_col();
+        })
+        .expect("Failed to style root");
 
-        let mut grow = |style: &mut Style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        };
-        c.with_style_of(text_id, &mut grow)
-            .expect("Failed to style text");
+        c.with_layout_of(text_id, &mut |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })
+        .expect("Failed to style text");
 
         self.text_id = Some(text_id);
     }

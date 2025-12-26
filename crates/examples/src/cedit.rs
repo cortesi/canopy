@@ -39,9 +39,18 @@ impl Ed {
             .add_child_to(frame_id, Editor::new(&self.contents))
             .expect("Failed to mount editor");
 
-        c.build().flex_col();
-        c.build_node(frame_id).flex_item(1.0, 1.0, Dimension::Auto);
-        c.build_node(editor).flex_item(1.0, 1.0, Dimension::Auto);
+        c.with_layout(&mut |layout| {
+            layout.flex_col();
+        })
+        .expect("Failed to configure layout");
+        c.with_layout_of(frame_id, &mut |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })
+        .expect("Failed to configure frame layout");
+        c.with_layout_of(editor, &mut |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })
+        .expect("Failed to configure editor layout");
     }
 }
 

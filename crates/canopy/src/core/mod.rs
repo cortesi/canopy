@@ -37,8 +37,6 @@ pub mod viewstack;
 // Core modules - internal
 /// Binding utilities.
 pub mod binder;
-/// Builder API for nodes.
-pub mod builder;
 /// Core Canopy application implementation.
 pub mod canopy;
 /// Core context traits and implementations.

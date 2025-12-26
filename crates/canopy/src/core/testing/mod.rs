@@ -15,13 +15,12 @@ pub mod ttree;
 
 #[cfg(test)]
 mod tests {
-    use taffy::style::{Dimension, Display, FlexDirection, Style};
-
     use super::backend::TestRender;
     use crate::{
         Canopy, ViewContext, derive_commands,
         error::Result,
         geom::{Expanse, Rect},
+        layout::{Dimension, Layout},
         render::Render,
         state::NodeName,
         widget::Widget,
@@ -46,13 +45,12 @@ mod tests {
             Ok(())
         }
 
-        fn configure_style(&self, style: &mut Style) {
-            style.display = Display::Flex;
-            style.flex_direction = if self.horizontal {
-                FlexDirection::Row
+        fn layout(&self, layout: &mut Layout) {
+            if self.horizontal {
+                layout.flex_row();
             } else {
-                FlexDirection::Column
-            };
+                layout.flex_col();
+            }
         }
 
         fn name(&self) -> NodeName {
@@ -72,16 +70,12 @@ mod tests {
             .core
             .set_children(canopy.core.root, vec![left, right])?;
 
-        canopy.core.build(left).style(|style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        });
-        canopy.core.build(right).style(|style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        });
+        canopy.core.with_layout_of(left, |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })?;
+        canopy.core.with_layout_of(right, |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })?;
 
         canopy.set_root_size(Expanse::new(20, 10))?;
         canopy.render(&mut tr)?;
@@ -101,16 +95,12 @@ mod tests {
             .core
             .set_children(canopy.core.root, vec![left, right])?;
 
-        canopy.core.build(left).style(|style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        });
-        canopy.core.build(right).style(|style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        });
+        canopy.core.with_layout_of(left, |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })?;
+        canopy.core.with_layout_of(right, |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })?;
 
         canopy.set_root_size(Expanse::new(20, 10))?;
         canopy.render(&mut tr)?;

@@ -1,13 +1,13 @@
 use std::process;
 
 use slotmap::Key;
-use taffy::style::Style;
 
 use crate::{
     Context, ViewContext,
     core::{NodeId, viewport::ViewPort},
     error::Result,
     geom::{Direction, Expanse, Rect},
+    layout::Layout,
     path::Path,
     widget::Widget,
 };
@@ -50,8 +50,8 @@ impl ViewContext for DummyContext {
         Expanse::new(0, 0)
     }
 
-    fn style(&self) -> Style {
-        Style::default()
+    fn layout(&self) -> Layout {
+        Layout::default()
     }
 
     fn node_viewport(&self, _node: NodeId) -> Option<Rect> {
@@ -152,7 +152,7 @@ impl Context for DummyContext {
         false
     }
 
-    fn with_style_of(&mut self, _node: NodeId, _f: &mut dyn FnMut(&mut Style)) -> Result<()> {
+    fn with_layout_of(&mut self, _node: NodeId, _f: &mut dyn FnMut(&mut Layout)) -> Result<()> {
         Ok(())
     }
 

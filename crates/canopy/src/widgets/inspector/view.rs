@@ -1,13 +1,6 @@
 use crate::{
-    NodeId, ViewContext,
-    core::Core,
-    derive_commands,
-    error::Result,
-    geom::Rect,
-    layout::{Dimension, Display, FlexDirection},
-    state::NodeName,
-    widget::Widget,
-    widgets::tabs::Tabs,
+    NodeId, ViewContext, core::Core, derive_commands, error::Result, geom::Rect, layout::Dimension,
+    state::NodeName, widget::Widget, widgets::tabs::Tabs,
 };
 
 /// View contains the body of the inspector.
@@ -41,19 +34,15 @@ impl View {
         let logs = core.add(super::logs::Logs::new());
         let view_id = core.add(Self::new());
         core.set_children(view_id, vec![tabs, logs])?;
-        core.build(view_id).style(|style| {
-            style.display = Display::Flex;
-            style.flex_direction = FlexDirection::Column;
-        });
-        core.build(tabs).style(|style| {
-            style.size.height = Dimension::Points(1.0);
-            style.flex_shrink = 0.0;
-        });
-        core.build(logs).style(|style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        });
+        core.with_layout_of(view_id, |layout| {
+            layout.flex_col();
+        })?;
+        core.with_layout_of(tabs, |layout| {
+            layout.height(Dimension::Points(1.0)).flex_shrink(0.0);
+        })?;
+        core.with_layout_of(logs, |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })?;
         Ok((view_id, tabs, logs))
     }
 }

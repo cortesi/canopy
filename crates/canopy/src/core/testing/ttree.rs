@@ -1,8 +1,6 @@
 /*! This module defines a standard tree of instrumented nodes for testing. */
 use std::cell::RefCell;
 
-use taffy::style::{Dimension, Display, FlexDirection};
-
 use crate::{
     Canopy, Context, NodeId, ViewContext, command,
     core::Core,
@@ -10,6 +8,7 @@ use crate::{
     error::Result,
     event::Event,
     geom::{Expanse, Rect},
+    layout::Dimension,
     render::Render,
     state::NodeName,
     testing::backend::TestRender,
@@ -305,28 +304,23 @@ fn build_tree(core: &mut Core) -> Result<TestTree> {
     core.set_children(a, vec![a_a, a_b])?;
     core.set_children(b, vec![b_a, b_b])?;
 
-    core.build(core.root).style(|style| {
-        style.display = Display::Flex;
-        style.flex_direction = FlexDirection::Row;
-        style.size.width = Dimension::Percent(1.0);
-        style.size.height = Dimension::Percent(1.0);
-    });
+    core.with_layout_of(core.root, |layout| {
+        layout.flex_row().fill();
+    })?;
 
-    style_flex_child(core, a);
-    style_flex_child(core, b);
-    core.build(a).style(|style| {
-        style.display = Display::Flex;
-        style.flex_direction = FlexDirection::Column;
-    });
-    core.build(b).style(|style| {
-        style.display = Display::Flex;
-        style.flex_direction = FlexDirection::Column;
-    });
+    style_flex_child(core, a)?;
+    style_flex_child(core, b)?;
+    core.with_layout_of(a, |layout| {
+        layout.flex_col();
+    })?;
+    core.with_layout_of(b, |layout| {
+        layout.flex_col();
+    })?;
 
-    style_flex_child(core, a_a);
-    style_flex_child(core, a_b);
-    style_flex_child(core, b_a);
-    style_flex_child(core, b_b);
+    style_flex_child(core, a_a)?;
+    style_flex_child(core, a_b)?;
+    style_flex_child(core, b_a)?;
+    style_flex_child(core, b_b)?;
 
     Ok(TestTree {
         root: core.root,
@@ -340,12 +334,10 @@ fn build_tree(core: &mut Core) -> Result<TestTree> {
 }
 
 /// Apply flex sizing to a child node.
-fn style_flex_child(core: &mut Core, id: NodeId) {
-    core.build(id).style(|style| {
-        style.flex_grow = 1.0;
-        style.flex_shrink = 1.0;
-        style.flex_basis = Dimension::Auto;
-    });
+fn style_flex_child(core: &mut Core, id: NodeId) -> Result<()> {
+    core.with_layout_of(id, |layout| {
+        layout.flex_item(1.0, 1.0, Dimension::Auto);
+    })
 }
 
 /// Run a function on our standard dummy app built from [`ttree`].

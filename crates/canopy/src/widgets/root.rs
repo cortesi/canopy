@@ -5,7 +5,7 @@ use crate::{
     error::Result,
     event::key::*,
     geom::Rect,
-    layout::{Dimension, Display, FlexDirection, Style},
+    layout::{Dimension, Layout},
     state::NodeName,
     widget::Widget,
     widgets::inspector::Inspector,
@@ -46,20 +46,17 @@ impl Root {
             c.set_children(vec![self.app])?;
         }
 
-        let mut update_root = |style: &mut Style| {
-            style.display = Display::Flex;
-            style.flex_direction = FlexDirection::Row;
-        };
-        c.with_style(&mut update_root)?;
+        c.with_layout(&mut |layout| {
+            layout.flex_row();
+        })?;
 
-        let mut update_child = |style: &mut Style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        };
-        c.with_style_of(self.app, &mut update_child)?;
+        c.with_layout_of(self.app, &mut |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })?;
         if self.inspector_active {
-            c.with_style_of(self.inspector, &mut update_child)?;
+            c.with_layout_of(self.inspector, &mut |layout| {
+                layout.flex_item(1.0, 1.0, Dimension::Auto);
+            })?;
         }
 
         Ok(())
@@ -175,18 +172,16 @@ impl Root {
         } else {
             core.set_children(core.root, vec![app])?;
         }
-        core.build(core.root).flex_row().w_full();
-        core.build(app).style(|style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        });
+        core.with_layout_of(core.root, |layout| {
+            layout.flex_row().w_full();
+        })?;
+        core.with_layout_of(app, |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })?;
         if inspector_active {
-            core.build(inspector).style(|style| {
-                style.flex_grow = 1.0;
-                style.flex_shrink = 1.0;
-                style.flex_basis = Dimension::Auto;
-            });
+            core.with_layout_of(inspector, |layout| {
+                layout.flex_item(1.0, 1.0, Dimension::Auto);
+            })?;
         }
         Ok(core.root)
     }
@@ -202,9 +197,8 @@ impl Widget for Root {
         Ok(())
     }
 
-    fn configure_style(&self, style: &mut Style) {
-        style.size.width = Dimension::Percent(1.0);
-        style.size.height = Dimension::Percent(1.0);
+    fn layout(&self, layout: &mut Layout) {
+        layout.fill();
     }
 
     fn name(&self) -> NodeName {
@@ -238,7 +232,6 @@ mod tests {
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
         error::{Error, Result},
         geom::Expanse,
-        layout::{Dimension, Display, FlexDirection, Style},
         render::Render,
         state::NodeName,
         testing::render::NopBackend,
@@ -328,18 +321,16 @@ mod tests {
         let right = canopy.core.add(FocusLeaf::new("right"));
         canopy.core.set_children(app_id, vec![left, right])?;
 
-        canopy.core.build(app_id).style(|style| {
-            style.display = Display::Flex;
-            style.flex_direction = FlexDirection::Row;
-        });
+        canopy.core.with_layout_of(app_id, |layout| {
+            layout.flex_row();
+        })?;
 
-        let grow = |style: &mut Style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        };
-        canopy.core.build(left).style(grow);
-        canopy.core.build(right).style(grow);
+        canopy.core.with_layout_of(left, |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })?;
+        canopy.core.with_layout_of(right, |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })?;
 
         Root::install(&mut canopy.core, app_id)?;
         canopy.set_root_size(Expanse::new(20, 6))?;

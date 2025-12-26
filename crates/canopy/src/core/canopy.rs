@@ -616,8 +616,6 @@ pub trait Loader {
 mod tests {
     use std::any::Any;
 
-    use taffy::style::Dimension;
-
     use super::*;
     use crate::{
         Context, ViewContext,
@@ -625,6 +623,7 @@ mod tests {
         derive_commands,
         error::{Error, Result},
         geom::{Direction, Rect},
+        layout::Dimension,
         path::Path,
         state::NodeName,
         testing::{
@@ -1180,10 +1179,9 @@ mod tests {
         canopy.core.set_widget(canopy.core.root, Parent::new());
         let child = canopy.core.add(Child);
         canopy.core.set_children(canopy.core.root, vec![child])?;
-        canopy.core.build(child).style(|style| {
-            style.size.width = Dimension::Points(0.0);
-            style.size.height = Dimension::Points(0.0);
-        });
+        canopy.core.with_layout_of(child, |layout| {
+            layout.size(Dimension::Points(0.0), Dimension::Points(0.0));
+        })?;
 
         canopy.set_root_size(size)?;
         canopy.render(&mut cr)?;

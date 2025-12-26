@@ -4,7 +4,6 @@ use std::{
 };
 
 use super::{
-    builder::NodeBuilder,
     id::{NodeId, TypedId},
     viewport::ViewPort,
     world::Core,
@@ -12,7 +11,7 @@ use super::{
 use crate::{
     error::{Error, Result},
     geom::{Direction, Expanse, Rect},
-    layout::Style,
+    layout::Layout,
     path::Path,
     widget::Widget,
 };
@@ -34,8 +33,8 @@ pub trait ViewContext {
     /// Canvas size for the current node.
     fn canvas(&self) -> Expanse;
 
-    /// Cached layout style for the current node.
-    fn style(&self) -> Style;
+    /// Cached layout configuration for the current node.
+    fn layout(&self) -> Layout;
 
     /// Screen-space rectangle for a specific node.
     fn node_viewport(&self, node: NodeId) -> Option<Rect>;
@@ -223,14 +222,14 @@ pub trait Context: ViewContext {
     /// Scroll the view right by one line. Returns `true` if movement occurred.
     fn scroll_right(&mut self) -> bool;
 
-    /// Update the layout style for the current node.
-    fn with_style(&mut self, f: &mut dyn FnMut(&mut Style)) -> Result<()> {
+    /// Update the layout for the current node.
+    fn with_layout(&mut self, f: &mut dyn FnMut(&mut Layout)) -> Result<()> {
         let node = self.node_id();
-        self.with_style_of(node, f)
+        self.with_layout_of(node, f)
     }
 
-    /// Update the layout style for a specific node.
-    fn with_style_of(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Style)) -> Result<()>;
+    /// Update the layout for a specific node.
+    fn with_layout_of(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Layout)) -> Result<()>;
 
     /// Add a new widget node to the core.
     fn add(&mut self, widget: Box<dyn Widget>) -> NodeId;
@@ -454,20 +453,6 @@ impl dyn Context + '_ {
         }
     }
 
-    /// Return a builder for the current node.
-    pub fn build(&mut self) -> NodeBuilder<'_, dyn Context + '_> {
-        let id = self.node_id();
-        NodeBuilder { ctx: self, id }
-    }
-
-    /// Return a builder for a specific node.
-    pub fn build_node(&mut self, node: NodeId) -> NodeBuilder<'_, dyn Context + '_> {
-        NodeBuilder {
-            ctx: self,
-            id: node,
-        }
-    }
-
     /// Suggest a focus target after removing `removed` from the subtree rooted at `root`.
     pub fn suggest_focus_after_remove(&mut self, root: NodeId, removed: NodeId) -> Option<NodeId> {
         let focusables = self.focusable_leaves(root);
@@ -590,11 +575,11 @@ impl<'a> ViewContext for CoreContext<'a> {
             .unwrap_or_default()
     }
 
-    fn style(&self) -> Style {
+    fn layout(&self) -> Layout {
         self.core
             .nodes
             .get(self.node_id)
-            .map(|n| n.style.clone())
+            .map(|n| n.layout.clone())
             .unwrap_or_default()
     }
 
@@ -764,8 +749,8 @@ impl<'a> Context for CoreContext<'a> {
         }
     }
 
-    fn with_style_of(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Style)) -> Result<()> {
-        self.core.with_style(node, f)
+    fn with_layout_of(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Layout)) -> Result<()> {
+        self.core.with_layout_of(node, |layout| f(layout))
     }
 
     fn add(&mut self, widget: Box<dyn Widget>) -> NodeId {
@@ -873,11 +858,11 @@ impl<'a> ViewContext for CoreViewContext<'a> {
             .unwrap_or_default()
     }
 
-    fn style(&self) -> Style {
+    fn layout(&self) -> Layout {
         self.core
             .nodes
             .get(self.node_id)
-            .map(|n| n.style.clone())
+            .map(|n| n.layout.clone())
             .unwrap_or_default()
     }
 

@@ -2,7 +2,7 @@ use crate::{
     Context, NodeId, ViewContext, derive_commands,
     error::Result,
     geom::Rect,
-    layout::{Display, FromFlex, GridPlacement, Line, Style, TrackSizingFunction, line},
+    layout::{Display, FromFlex, GridPlacement, Line, TrackSizingFunction, line},
     state::NodeName,
     widget::Widget,
 };
@@ -99,20 +99,20 @@ impl Panes {
             row_tracks.push(TrackSizingFunction::from_flex(1.0));
         }
 
-        let mut update_panes = |style: &mut Style| {
-            style.display = Display::Grid;
-            style.grid_template_columns = col_tracks.clone();
-            style.grid_template_rows = row_tracks.clone();
-        };
-        c.with_style(&mut update_panes)?;
+        c.with_layout(&mut |layout| {
+            let inner = layout.as_taffy_mut();
+            inner.display = Display::Grid.into();
+            inner.grid_template_columns = col_tracks.clone();
+            inner.grid_template_rows = row_tracks.clone();
+        })?;
 
         for (col_idx, col) in self.columns.iter().enumerate() {
             for (row_idx, child) in col.iter().enumerate() {
-                let mut update_child = |style: &mut Style| {
-                    style.grid_column = line::<Line<GridPlacement>>((col_idx + 1) as i16);
-                    style.grid_row = line::<Line<GridPlacement>>((row_idx + 1) as i16);
-                };
-                c.with_style_of(*child, &mut update_child)?;
+                c.with_layout_of(*child, &mut |layout| {
+                    let inner = layout.as_taffy_mut();
+                    inner.grid_column = line::<Line<GridPlacement>>((col_idx + 1) as i16);
+                    inner.grid_row = line::<Line<GridPlacement>>((row_idx + 1) as i16);
+                })?;
             }
         }
 

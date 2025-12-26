@@ -93,14 +93,22 @@ impl Intervals {
             .expect("Failed to mount list");
         let status_id = c.add_child(StatusBar).expect("Failed to mount statusbar");
 
-        c.build().flex_col();
-        c.build_node(content_id)
-            .flex_item(1.0, 1.0, Dimension::Auto);
-        c.build_node(list_id).flex_item(1.0, 1.0, Dimension::Auto);
-        c.build_node(status_id).style(|style| {
-            style.size.height = Dimension::Points(1.0);
-            style.flex_shrink = 0.0;
-        });
+        c.with_layout(&mut |layout| {
+            layout.flex_col();
+        })
+        .expect("Failed to configure layout");
+        c.with_layout_of(content_id, &mut |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })
+        .expect("Failed to configure content layout");
+        c.with_layout_of(list_id, &mut |layout| {
+            layout.flex_item(1.0, 1.0, Dimension::Auto);
+        })
+        .expect("Failed to configure list layout");
+        c.with_layout_of(status_id, &mut |layout| {
+            layout.height(Dimension::Points(1.0)).flex_shrink(0.0);
+        })
+        .expect("Failed to configure status layout");
     }
 
     /// Content frame node id.
