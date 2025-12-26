@@ -95,3 +95,13 @@ pub trait Widget: Any + Send + CommandNode {
         NodeName::convert(short)
     }
 }
+
+/// Convert widgets into boxed trait objects.
+impl<W> From<W> for Box<dyn Widget>
+where
+    W: Widget + 'static,
+{
+    fn from(widget: W) -> Self {
+        Box::new(widget)
+    }
+}

@@ -1,22 +1,20 @@
 use std::time::Duration;
 
 use canopy::{
-    Canopy, Context, Loader, NodeId, ViewContext, derive_commands,
+    Canopy, Context, Loader, ViewContext, derive_commands,
     error::Result,
     event::{key, mouse},
     geom::Rect,
-    layout::{Dimension, Display, FlexDirection, Style},
+    layout::Dimension,
     render::Render,
     widget::Widget,
-    widgets::{Text, frame},
+    widgets::{Root, Text, frame},
 };
 
 /// Simple pager widget for file contents.
 pub struct Pager {
     /// Contents to display.
     contents: String,
-    /// Frame node id.
-    frame_id: Option<NodeId>,
 }
 
 #[derive_commands]
@@ -25,41 +23,25 @@ impl Pager {
     pub fn new(contents: &str) -> Self {
         Self {
             contents: contents.to_string(),
-            frame_id: None,
         }
     }
 
     /// Ensure the frame and text subtree is built.
-    fn ensure_tree(&mut self, c: &mut dyn Context) {
-        if self.frame_id.is_some() {
+    fn ensure_tree(&self, c: &mut dyn Context) {
+        if !c.children(c.node_id()).is_empty() {
             return;
         }
 
-        let text_id = c.add(Box::new(Text::new(self.contents.clone())));
-        let frame_id = c.add(Box::new(frame::Frame::new()));
-        c.mount_child(frame_id, text_id)
+        let frame_id = c
+            .add_child(c.node_id(), frame::Frame::new())
+            .expect("Failed to mount frame");
+        let text_id = c
+            .add_child(frame_id, Text::new(self.contents.clone()))
             .expect("Failed to mount text");
-        c.set_children(c.node_id(), vec![frame_id])
-            .expect("Failed to attach frame");
 
-        let mut update_root = |style: &mut Style| {
-            style.display = Display::Flex;
-            style.flex_direction = FlexDirection::Column;
-        };
-        c.with_style(c.node_id(), &mut update_root)
-            .expect("Failed to style root");
-
-        let mut grow = |style: &mut Style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        };
-        c.with_style(frame_id, &mut grow)
-            .expect("Failed to style frame");
-        c.with_style(text_id, &mut grow)
-            .expect("Failed to style text");
-
-        self.frame_id = Some(frame_id);
+        c.build(c.node_id()).flex_col();
+        c.build(frame_id).flex_item(1.0, 1.0, Dimension::Auto);
+        c.build(text_id).flex_item(1.0, 1.0, Dimension::Auto);
     }
 }
 
@@ -86,32 +68,38 @@ impl Loader for Pager {
 
 /// Install key bindings for the pager demo.
 pub fn setup_bindings(cnpy: &mut Canopy) {
-    cnpy.bind_key('g', "pager", "text::scroll_to_top()")
+    cnpy.bind_key_command('g', "pager", Text::cmd_scroll_to_top())
         .unwrap();
 
-    cnpy.bind_key('j', "pager", "text::scroll_down()").unwrap();
-    cnpy.bind_key(key::KeyCode::Down, "pager", "text::scroll_down()")
+    cnpy.bind_key_command('j', "pager", Text::cmd_scroll_down())
         .unwrap();
-    cnpy.bind_mouse(mouse::Action::ScrollDown, "pager", "text::scroll_down()")
+    cnpy.bind_key_command(key::KeyCode::Down, "pager", Text::cmd_scroll_down())
         .unwrap();
-    cnpy.bind_key('k', "pager", "text::scroll_up()").unwrap();
-    cnpy.bind_key(key::KeyCode::Up, "pager", "text::scroll_up()")
+    cnpy.bind_mouse_command(mouse::Action::ScrollDown, "pager", Text::cmd_scroll_down())
         .unwrap();
-    cnpy.bind_mouse(mouse::Action::ScrollUp, "pager", "text::scroll_up()")
+    cnpy.bind_key_command('k', "pager", Text::cmd_scroll_up())
         .unwrap();
-
-    cnpy.bind_key('h', "pager", "text::scroll_left()").unwrap();
-    cnpy.bind_key(key::KeyCode::Left, "pager", "text::scroll_left()")
+    cnpy.bind_key_command(key::KeyCode::Up, "pager", Text::cmd_scroll_up())
         .unwrap();
-    cnpy.bind_key('l', "pager", "text::scroll_right()").unwrap();
-    cnpy.bind_key(key::KeyCode::Right, "pager", "text::scroll_right()")
+    cnpy.bind_mouse_command(mouse::Action::ScrollUp, "pager", Text::cmd_scroll_up())
         .unwrap();
 
-    cnpy.bind_key(key::KeyCode::PageDown, "pager", "text::page_down()")
+    cnpy.bind_key_command('h', "pager", Text::cmd_scroll_left())
         .unwrap();
-    cnpy.bind_key(' ', "pager", "text::page_down()").unwrap();
-    cnpy.bind_key(key::KeyCode::PageUp, "pager", "text::page_up()")
+    cnpy.bind_key_command(key::KeyCode::Left, "pager", Text::cmd_scroll_left())
+        .unwrap();
+    cnpy.bind_key_command('l', "pager", Text::cmd_scroll_right())
+        .unwrap();
+    cnpy.bind_key_command(key::KeyCode::Right, "pager", Text::cmd_scroll_right())
         .unwrap();
 
-    cnpy.bind_key('q', "root", "root::quit()").unwrap();
+    cnpy.bind_key_command(key::KeyCode::PageDown, "pager", Text::cmd_page_down())
+        .unwrap();
+    cnpy.bind_key_command(' ', "pager", Text::cmd_page_down())
+        .unwrap();
+    cnpy.bind_key_command(key::KeyCode::PageUp, "pager", Text::cmd_page_up())
+        .unwrap();
+
+    cnpy.bind_key_command('q', "root", Root::cmd_quit())
+        .unwrap();
 }

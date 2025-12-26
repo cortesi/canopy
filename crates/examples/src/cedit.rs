@@ -1,11 +1,11 @@
 use std::time::Duration;
 
 use canopy::{
-    Binder, Canopy, Context, Loader, NodeId, ViewContext, derive_commands,
+    Binder, Canopy, Context, Loader, ViewContext, derive_commands,
     error::Result,
     event::key,
     geom::Rect,
-    layout::{Dimension, Display, FlexDirection, Style},
+    layout::Dimension,
     render::Render,
     widget::Widget,
     widgets::{Root, editor::Editor, frame},
@@ -15,8 +15,6 @@ use canopy::{
 pub struct Ed {
     /// Initial contents for the editor.
     contents: String,
-    /// Editor node id.
-    editor: Option<NodeId>,
 }
 
 #[derive_commands]
@@ -25,42 +23,25 @@ impl Ed {
     pub fn new(contents: &str) -> Self {
         Self {
             contents: contents.to_string(),
-            editor: None,
         }
     }
 
     /// Ensure the editor subtree is constructed and styled.
-    fn ensure_tree(&mut self, c: &mut dyn Context) {
-        if self.editor.is_some() {
+    fn ensure_tree(&self, c: &mut dyn Context) {
+        if !c.children(c.node_id()).is_empty() {
             return;
         }
 
-        let editor = c.add(Box::new(Editor::new(&self.contents)));
-        let frame_id = c.add(Box::new(frame::Frame::new()));
-
-        c.mount_child(frame_id, editor)
+        let frame_id = c
+            .add_child(c.node_id(), frame::Frame::new())
+            .expect("Failed to mount frame");
+        let editor = c
+            .add_child(frame_id, Editor::new(&self.contents))
             .expect("Failed to mount editor");
-        c.set_children(c.node_id(), vec![frame_id])
-            .expect("Failed to attach frame");
 
-        let mut update_root = |style: &mut Style| {
-            style.display = Display::Flex;
-            style.flex_direction = FlexDirection::Column;
-        };
-        c.with_style(c.node_id(), &mut update_root)
-            .expect("Failed to style root");
-
-        let mut grow = |style: &mut Style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        };
-        c.with_style(frame_id, &mut grow)
-            .expect("Failed to style frame");
-        c.with_style(editor, &mut grow)
-            .expect("Failed to style editor");
-
-        self.editor = Some(editor);
+        c.build(c.node_id()).flex_col();
+        c.build(frame_id).flex_item(1.0, 1.0, Dimension::Auto);
+        c.build(editor).flex_item(1.0, 1.0, Dimension::Auto);
     }
 }
 

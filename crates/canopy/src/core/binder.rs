@@ -1,5 +1,6 @@
 use crate::{
     Canopy,
+    commands::CommandBinding,
     error::Result,
     event::{key::Key, mouse::Mouse},
 };
@@ -55,7 +56,7 @@ impl<'a> Binder<'a> {
         Ok(self)
     }
 
-    /// Bind a key to a script, panicing if there is any error (usually in
+    /// Bind a key to a script, panicking if there is any error (usually in
     /// compilation of the script). This is often acceptable for initial default
     /// key bindings where scripts don't come from user input.
     pub fn key<K>(self, key: K, script: &str) -> Self
@@ -63,6 +64,25 @@ impl<'a> Binder<'a> {
         Key: From<K>,
     {
         self.try_key(key, script).unwrap()
+    }
+
+    /// Bind a key to a typed command fallibly.
+    pub fn try_key_command<K, C>(self, key: K, command: C) -> Result<Self>
+    where
+        Key: From<K>,
+        C: CommandBinding,
+    {
+        let script = command.script()?;
+        self.try_key(key, &script)
+    }
+
+    /// Bind a key to a typed command, panicking if there is any error.
+    pub fn key_command<K, C>(self, key: K, command: C) -> Self
+    where
+        Key: From<K>,
+        C: CommandBinding,
+    {
+        self.try_key_command(key, command).unwrap()
     }
 
     /// Bind a mouse action to a script fallibly.
@@ -75,7 +95,7 @@ impl<'a> Binder<'a> {
         Ok(self)
     }
 
-    /// Bind a mouse action to a script, panicing if there is any error (usually
+    /// Bind a mouse action to a script, panicking if there is any error (usually
     /// in compilation of the script). This is often acceptable for initial
     /// default key bindings where scripts don't come from user input.
     pub fn mouse<K>(self, m: K, script: &str) -> Self
@@ -83,6 +103,25 @@ impl<'a> Binder<'a> {
         Mouse: From<K>,
     {
         self.try_mouse(m, script).unwrap()
+    }
+
+    /// Bind a mouse action to a typed command fallibly.
+    pub fn try_mouse_command<K, C>(self, m: K, command: C) -> Result<Self>
+    where
+        Mouse: From<K>,
+        C: CommandBinding,
+    {
+        let script = command.script()?;
+        self.try_mouse(m, &script)
+    }
+
+    /// Bind a mouse action to a typed command, panicking if there is any error.
+    pub fn mouse_command<K, C>(self, m: K, command: C) -> Self
+    where
+        Mouse: From<K>,
+        C: CommandBinding,
+    {
+        self.try_mouse_command(m, command).unwrap()
     }
 }
 

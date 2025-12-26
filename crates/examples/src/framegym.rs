@@ -1,11 +1,11 @@
 use std::time::Duration;
 
 use canopy::{
-    Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
+    Binder, Canopy, Context, Loader, ViewContext, command, derive_commands,
     error::Result,
     event::key,
     geom::{Expanse, Rect},
-    layout::{AvailableSpace, Dimension, Display, FlexDirection, Size, Style},
+    layout::{AvailableSpace, Dimension, Size},
     render::Render,
     widget::Widget,
     widgets::{Root, frame},
@@ -138,10 +138,7 @@ impl Widget for TestPattern {
 }
 
 /// Root node for the frame gym demo.
-pub struct FrameGym {
-    /// Frame node id.
-    frame_id: Option<NodeId>,
-}
+pub struct FrameGym;
 
 impl Default for FrameGym {
     fn default() -> Self {
@@ -153,40 +150,25 @@ impl Default for FrameGym {
 impl FrameGym {
     /// Construct a new frame gym.
     pub fn new() -> Self {
-        Self { frame_id: None }
+        Self
     }
 
     /// Ensure the frame and pattern nodes are built.
-    fn ensure_tree(&mut self, c: &mut dyn Context) {
-        if self.frame_id.is_some() {
+    fn ensure_tree(&self, c: &mut dyn Context) {
+        if !c.children(c.node_id()).is_empty() {
             return;
         }
 
-        let pattern_id = c.add(Box::new(TestPattern::new()));
-        let frame_id = c.add(Box::new(frame::Frame::new().with_title("Frame Gym")));
-        c.mount_child(frame_id, pattern_id)
+        let frame_id = c
+            .add_child(c.node_id(), frame::Frame::new().with_title("Frame Gym"))
+            .expect("Failed to mount frame");
+        let pattern_id = c
+            .add_child(frame_id, TestPattern::new())
             .expect("Failed to mount pattern");
-        c.set_children(c.node_id(), vec![frame_id])
-            .expect("Failed to attach frame");
 
-        let mut update_root = |style: &mut Style| {
-            style.display = Display::Flex;
-            style.flex_direction = FlexDirection::Column;
-        };
-        c.with_style(c.node_id(), &mut update_root)
-            .expect("Failed to style root");
-
-        let mut grow = |style: &mut Style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        };
-        c.with_style(frame_id, &mut grow)
-            .expect("Failed to style frame");
-        c.with_style(pattern_id, &mut grow)
-            .expect("Failed to style pattern");
-
-        self.frame_id = Some(frame_id);
+        c.build(c.node_id()).flex_col();
+        c.build(frame_id).flex_item(1.0, 1.0, Dimension::Auto);
+        c.build(pattern_id).flex_item(1.0, 1.0, Dimension::Auto);
     }
 }
 
@@ -214,9 +196,9 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
         .defaults::<Root>()
         .with_path("")
         // Focus navigation
-        .key(key::KeyCode::Tab, "root::focus_next()")
+        .key_command(key::KeyCode::Tab, Root::cmd_focus_next())
         // Arrow keys for scrolling
-        .key('g', "test_pattern::scroll_to_top()")
+        .key_command('g', TestPattern::cmd_scroll_to_top())
         .key(key::KeyCode::Down, "test_pattern::scroll_down()")
         .key(key::KeyCode::Up, "test_pattern::scroll_up()")
         .key(key::KeyCode::Left, "test_pattern::scroll_left()")

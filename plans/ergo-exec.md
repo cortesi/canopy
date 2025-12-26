@@ -61,12 +61,12 @@ Add child-mount helpers, focus traversal utilities, and a `NodeBuilder` entry po
 
 Implement optional type-safe ergonomics for node IDs and command bindings.
 
-22. [ ] Add `TypedId<T>` and `Context::add_typed` in canopy core, plus example coverage.
-23. [ ] Extend `derive_commands` or `Binder` to support typed command references in
+22. [x] Add `TypedId<T>` and `Context::add_typed` in canopy core, plus example coverage.
+23. [x] Extend `derive_commands` or `Binder` to support typed command references in
         `crates/canopy-derive/src/lib.rs` and `crates/canopy/src/core/binder.rs`.
-24. [ ] Update one or two examples to demonstrate typed command bindings without removing
+24. [x] Update one or two examples to demonstrate typed command bindings without removing
         string-based bindings.
-25. [ ] Run the full test and lint suite for this stage and resolve any failures or warnings.
+25. [x] Run the full test and lint suite for this stage and resolve any failures or warnings.
 
 6. Stage Six: Documentation and final validation
 

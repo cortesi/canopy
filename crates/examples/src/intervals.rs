@@ -5,7 +5,7 @@ use canopy::{
     error::Result,
     event::{key, mouse},
     geom::{Expanse, Rect},
-    layout::{Dimension, Display, FlexDirection, Style},
+    layout::Dimension,
     render::Render,
     style::solarized,
     widget::Widget,
@@ -64,12 +64,7 @@ impl Widget for StatusBar {
 }
 
 /// Root node for the intervals demo.
-pub struct Intervals {
-    /// Content frame node id.
-    content_id: Option<NodeId>,
-    /// List node id.
-    list_id: Option<NodeId>,
-}
+pub struct Intervals;
 
 impl Default for Intervals {
     fn default() -> Self {
@@ -81,60 +76,64 @@ impl Default for Intervals {
 impl Intervals {
     /// Construct a new intervals demo.
     pub fn new() -> Self {
-        Self {
-            content_id: None,
-            list_id: None,
-        }
+        Self
     }
 
     /// Ensure the frame, list, and status bar are created.
-    fn ensure_tree(&mut self, c: &mut dyn Context) {
-        if self.content_id.is_some() {
+    fn ensure_tree(&self, c: &mut dyn Context) {
+        if !c.children(c.node_id()).is_empty() {
             return;
         }
 
-        let list_id = c.add(Box::new(List::new(Vec::<IntervalItem>::new())));
-        let content_id = c.add(Box::new(frame::Frame::new()));
-        c.mount_child(content_id, list_id)
+        let content_id = c
+            .add_child(c.node_id(), frame::Frame::new())
+            .expect("Failed to mount content frame");
+        let list_id = c
+            .add_child(content_id, List::new(Vec::<IntervalItem>::new()))
             .expect("Failed to mount list");
+        let status_id = c
+            .add_child(c.node_id(), StatusBar)
+            .expect("Failed to mount statusbar");
 
-        let status_id = c.add(Box::new(StatusBar));
-        c.set_children(c.node_id(), vec![content_id, status_id])
-            .expect("Failed to attach children");
-
-        let mut update_root = |style: &mut Style| {
-            style.display = Display::Flex;
-            style.flex_direction = FlexDirection::Column;
-        };
-        c.with_style(c.node_id(), &mut update_root)
-            .expect("Failed to style root");
-
-        let mut content_style = |style: &mut Style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        };
-        c.with_style(content_id, &mut content_style)
-            .expect("Failed to style content");
-        c.with_style(list_id, &mut content_style)
-            .expect("Failed to style list");
-
-        let mut status_style = |style: &mut Style| {
+        c.build(c.node_id()).flex_col();
+        c.build(content_id).flex_item(1.0, 1.0, Dimension::Auto);
+        c.build(list_id).flex_item(1.0, 1.0, Dimension::Auto);
+        c.build(status_id).style(|style| {
             style.size.height = Dimension::Points(1.0);
             style.flex_shrink = 0.0;
-        };
-        c.with_style(status_id, &mut status_style)
-            .expect("Failed to style statusbar");
+        });
+    }
 
-        self.content_id = Some(content_id);
-        self.list_id = Some(list_id);
+    /// Content frame node id.
+    fn content_id(c: &dyn Context) -> Option<NodeId> {
+        c.children(c.node_id()).first().copied()
+    }
+
+    /// List node id inside the content frame.
+    fn list_id(c: &dyn Context) -> Option<NodeId> {
+        let content_id = Self::content_id(c)?;
+        let children = c.children(content_id);
+        match children.as_slice() {
+            [] => None,
+            [list_id] => Some(*list_id),
+            _ => panic!("expected a single list child"),
+        }
+    }
+
+    /// Execute a closure with mutable access to the list widget.
+    fn with_list<F>(&self, c: &mut dyn Context, mut f: F) -> Result<()>
+    where
+        F: FnMut(&mut List<IntervalItem>) -> Result<()>,
+    {
+        self.ensure_tree(c);
+        let list_id = Self::list_id(c).expect("list not initialized");
+        c.with_widget(list_id, |list: &mut List<IntervalItem>, _ctx| f(list))
     }
 
     #[command]
     /// Append a new list item.
     pub fn add_item(&mut self, c: &mut dyn Context) -> Result<()> {
-        let list_id = self.list_id.expect("list not initialized");
-        c.with_widget(list_id, |list: &mut List<IntervalItem>, _ctx| {
+        self.with_list(c, |list| {
             list.append(IntervalItem::new());
             Ok(())
         })
@@ -151,15 +150,11 @@ impl Widget for Intervals {
     }
 
     fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
-        self.ensure_tree(c);
-
-        if let Some(list_id) = self.list_id {
-            c.with_widget(list_id, |list: &mut List<IntervalItem>, _ctx| {
-                list.for_each_mut(|item| item.tick());
-                Ok(())
-            })
-            .ok();
-        }
+        self.with_list(c, |list| {
+            list.for_each_mut(|item| item.tick());
+            Ok(())
+        })
+        .ok();
 
         Some(Duration::from_secs(1))
     }

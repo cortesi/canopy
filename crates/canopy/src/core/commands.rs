@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, marker::PhantomData};
 
 use crate::{
     Context,
@@ -8,7 +8,7 @@ use crate::{
 };
 
 /// Supported argument types for command signatures.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArgTypes {
     /// Dynamic context argument.
     Context,
@@ -103,6 +103,102 @@ impl CommandSpec {
     }
 }
 
+/// Typed reference to a command defined on a widget type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandRef<T> {
+    /// Node name associated with the command.
+    node: NodeName,
+    /// Command identifier.
+    command: &'static str,
+    /// Argument types defined by the command signature.
+    arg_types: &'static [ArgTypes],
+    /// Marker for the command's widget type.
+    _marker: PhantomData<fn() -> T>,
+}
+
+impl<T> CommandRef<T> {
+    /// Create a typed command reference.
+    pub fn new(node: NodeName, command: &'static str, arg_types: &'static [ArgTypes]) -> Self {
+        Self {
+            node,
+            command,
+            arg_types,
+            _marker: PhantomData,
+        }
+    }
+
+    /// Build a call to this command with no additional arguments.
+    pub fn call(self) -> CommandCall<T> {
+        CommandCall {
+            command: self,
+            args: Vec::new(),
+        }
+    }
+
+    /// Build a call to this command with isize arguments.
+    pub fn call_with<I>(self, args: I) -> CommandCall<T>
+    where
+        I: IntoIterator<Item = isize>,
+    {
+        CommandCall {
+            command: self,
+            args: args.into_iter().collect(),
+        }
+    }
+
+    /// Return the number of non-context arguments expected by this command.
+    fn expected_args(&self) -> usize {
+        expected_isize_args(self.arg_types)
+    }
+}
+
+/// A typed command invocation with arguments.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandCall<T> {
+    /// Target command reference.
+    command: CommandRef<T>,
+    /// Arguments provided to the command.
+    args: Vec<isize>,
+}
+
+/// Render a command binding into a script string.
+pub trait CommandBinding {
+    /// Build the script source for this command binding.
+    fn script(self) -> Result<String>;
+}
+
+impl<T> CommandBinding for CommandRef<T> {
+    fn script(self) -> Result<String> {
+        let expected = self.expected_args();
+        if expected != 0 {
+            return Err(Error::Invalid(format!(
+                "command {}::{} expects {expected} arguments",
+                self.node, self.command
+            )));
+        }
+        Ok(format_command_call(&self.node, self.command, &[]))
+    }
+}
+
+impl<T> CommandBinding for CommandCall<T> {
+    fn script(self) -> Result<String> {
+        let expected = self.command.expected_args();
+        if expected != self.args.len() {
+            return Err(Error::Invalid(format!(
+                "command {}::{} expects {expected} arguments, got {}",
+                self.command.node,
+                self.command.command,
+                self.args.len()
+            )));
+        }
+        Ok(format_command_call(
+            &self.command.node,
+            self.command.command,
+            &self.args,
+        ))
+    }
+}
+
 /// The CommandNode trait is implemented by widgets to expose commands.
 pub trait CommandNode {
     /// Return a list of commands for this node.
@@ -133,6 +229,27 @@ pub fn dispatch(
     }
 
     Ok(None)
+}
+
+/// Count the number of isize arguments in a command signature.
+fn expected_isize_args(arg_types: &[ArgTypes]) -> usize {
+    arg_types
+        .iter()
+        .filter(|arg| matches!(arg, ArgTypes::ISize))
+        .count()
+}
+
+/// Render a command call string for a node and argument list.
+fn format_command_call(node: &NodeName, command: &str, args: &[isize]) -> String {
+    if args.is_empty() {
+        return format!("{node}::{command}()");
+    }
+    let rendered = args
+        .iter()
+        .map(|arg| arg.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("{node}::{command}({rendered})")
 }
 
 /// Dispatch a command within the subtree rooted at `root`.

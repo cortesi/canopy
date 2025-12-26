@@ -1,21 +1,14 @@
 use std::time::Duration;
 
 use canopy::{
-    Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
-    error::Result,
-    geom::Rect,
-    layout::{Dimension, Display, FlexDirection, Style},
-    render::Render,
-    widget::Widget,
-    widgets::Text,
+    Canopy, Context, Loader, ViewContext, command, derive_commands, error::Result, geom::Rect,
+    layout::Dimension, render::Render, widget::Widget, widgets::Text,
 };
 
 /// Demo node that displays placeholder text.
 pub struct TextDisplay {
     /// Text content for the demo.
     paragraph: String,
-    /// Text node id.
-    text_id: Option<NodeId>,
 }
 
 impl Default for TextDisplay {
@@ -47,7 +40,6 @@ impl TextDisplay {
 
         Self {
             paragraph: paragraph.to_string(),
-            text_id: None,
         }
     }
 
@@ -56,31 +48,17 @@ impl TextDisplay {
     pub fn redraw(&mut self, _ctx: &mut dyn Context) {}
 
     /// Ensure the text node is created and attached.
-    fn ensure_tree(&mut self, c: &mut dyn Context) {
-        if self.text_id.is_some() {
+    fn ensure_tree(&self, c: &mut dyn Context) {
+        if !c.children(c.node_id()).is_empty() {
             return;
         }
 
-        let text_id = c.add(Box::new(Text::new(self.paragraph.clone())));
-        c.set_children(c.node_id(), vec![text_id])
-            .expect("Failed to attach text");
+        let text_id = c
+            .add_child(c.node_id(), Text::new(self.paragraph.clone()))
+            .expect("Failed to mount text");
 
-        let mut update_root = |style: &mut Style| {
-            style.display = Display::Flex;
-            style.flex_direction = FlexDirection::Column;
-        };
-        c.with_style(c.node_id(), &mut update_root)
-            .expect("Failed to style root");
-
-        let mut grow = |style: &mut Style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        };
-        c.with_style(text_id, &mut grow)
-            .expect("Failed to style text");
-
-        self.text_id = Some(text_id);
+        c.build(c.node_id()).flex_col();
+        c.build(text_id).flex_item(1.0, 1.0, Dimension::Auto);
     }
 }
 

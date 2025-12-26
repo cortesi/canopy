@@ -11,10 +11,10 @@ use canopy::{
 
 /// A focusable block that can split into children.
 pub struct Block {
-    /// Child blocks.
-    children: Vec<NodeId>,
     /// True for horizontal layout.
     horizontal: bool,
+    /// Whether this block currently has children.
+    has_children: bool,
 }
 
 #[derive_commands]
@@ -22,8 +22,8 @@ impl Block {
     /// Construct a block with the requested orientation.
     fn new(orientation: bool) -> Self {
         Self {
-            children: vec![],
             horizontal: orientation,
+            has_children: false,
         }
     }
 
@@ -39,9 +39,10 @@ impl Block {
     }
 
     /// Synchronize child layout styles and ordering.
-    fn sync_layout(&self, c: &mut dyn Context) -> Result<()> {
+    fn sync_layout(&mut self, c: &mut dyn Context, children: &[NodeId]) -> Result<()> {
         let node_id = c.node_id();
-        c.set_children(node_id, self.children.clone())?;
+        c.set_children(node_id, children.to_vec())?;
+        self.has_children = !children.is_empty();
 
         if self.horizontal {
             c.build(node_id).flex_row();
@@ -74,7 +75,8 @@ impl Block {
     #[command]
     /// Add a nested block if space permits.
     fn add(&mut self, c: &mut dyn Context) -> Result<()> {
-        let first_child = self.children.first().copied();
+        let mut children = c.children(c.node_id());
+        let first_child = children.first().copied();
         if let Some(child_id) = first_child
             && let Some(view) = c.node_view(child_id)
         {
@@ -84,11 +86,11 @@ impl Block {
             }
         }
 
-        if !self.children.is_empty() {
-            let child = c.add(Box::new(Self::new(!self.horizontal)));
+        if !children.is_empty() {
+            let child = c.add_widget(Self::new(!self.horizontal));
             Self::init_flex(c, child)?;
-            self.children.push(child);
-            self.sync_layout(c)?;
+            children.push(child);
+            self.sync_layout(c, &children)?;
         }
 
         Ok(())
@@ -100,12 +102,12 @@ impl Block {
         let view = c.view();
         let size = Expanse::new(view.w, view.h);
         if !self.size_limited(size) {
-            let left = c.add(Box::new(Self::new(!self.horizontal)));
-            let right = c.add(Box::new(Self::new(!self.horizontal)));
+            let left = c.add_widget(Self::new(!self.horizontal));
+            let right = c.add_widget(Self::new(!self.horizontal));
             Self::init_flex(c, left)?;
             Self::init_flex(c, right)?;
-            self.children = vec![left, right];
-            self.sync_layout(c)?;
+            let children = [left, right];
+            self.sync_layout(c, &children)?;
             c.focus_next(c.node_id());
         }
         Ok(())
@@ -145,7 +147,7 @@ impl Block {
 
 impl Widget for Block {
     fn accept_focus(&self) -> bool {
-        self.children.is_empty()
+        !self.has_children
     }
 
     fn measure(
@@ -176,7 +178,7 @@ impl Widget for Block {
     }
 
     fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
-        if self.children.is_empty() {
+        if !self.has_children {
             let view = ctx.view();
             let bc = if ctx.is_focused() { "violet" } else { "blue" };
             if view.is_zero() {
@@ -203,10 +205,7 @@ impl Widget for Block {
 }
 
 /// Root node for the focus gym demo.
-pub struct FocusGym {
-    /// Root block id.
-    root_block: Option<NodeId>,
-}
+pub struct FocusGym;
 
 impl Default for FocusGym {
     fn default() -> Self {
@@ -218,38 +217,40 @@ impl Default for FocusGym {
 impl FocusGym {
     /// Construct a new focus gym.
     pub fn new() -> Self {
-        Self { root_block: None }
+        Self
     }
 
     /// Build the initial tree of blocks.
-    fn build_tree(&mut self, c: &mut dyn Context) -> Result<()> {
-        let root_block = c.add(Box::new(Block::new(true)));
-        let left = c.add(Box::new(Block::new(false)));
-        let right = c.add(Box::new(Block::new(false)));
+    fn build_tree(&self, c: &mut dyn Context) -> Result<()> {
+        let root_block = c.add_child(c.node_id(), Block::new(true))?;
+        let left = c.add_widget(Block::new(false));
+        let right = c.add_widget(Block::new(false));
         Block::init_flex(c, left)?;
         Block::init_flex(c, right)?;
 
-        c.set_children(c.node_id(), vec![root_block])?;
-
         c.with_widget(root_block, |block: &mut Block, ctx| {
-            block.children = vec![left, right];
-            block.sync_layout(ctx)
+            let children = [left, right];
+            block.sync_layout(ctx, &children)
         })?;
 
         c.build(c.node_id()).flex_col();
         c.build(root_block).flex_item(1.0, 1.0, Dimension::Auto);
 
-        self.root_block = Some(root_block);
         Ok(())
     }
 
+    /// Return the root block id, if present.
+    fn root_block_id(c: &dyn Context) -> Option<NodeId> {
+        c.only_child()
+    }
+
     /// Find the parent of a node in the subtree rooted at `root`.
-    fn find_parent(&self, c: &dyn ViewContext, root: NodeId, target: NodeId) -> Option<NodeId> {
+    fn find_parent(c: &dyn ViewContext, root: NodeId, target: NodeId) -> Option<NodeId> {
         for child in c.children(root) {
             if child == target {
                 return Some(root);
             }
-            if let Some(found) = self.find_parent(c, child, target) {
+            if let Some(found) = Self::find_parent(c, child, target) {
                 return Some(found);
             }
         }
@@ -259,20 +260,21 @@ impl FocusGym {
     #[command]
     /// Delete the currently focused block.
     fn delete_focused(&self, c: &mut dyn Context) -> Result<()> {
-        let Some(root_block) = self.root_block else {
+        let Some(root_block) = Self::root_block_id(c) else {
             return Ok(());
         };
         let Some(focused) = c.focused_leaf(root_block) else {
             return Ok(());
         };
-        let Some(parent_id) = self.find_parent(c, root_block, focused) else {
+        let Some(parent_id) = Self::find_parent(c, root_block, focused) else {
             return Ok(());
         };
         let target = c.suggest_focus_after_remove(root_block, focused);
 
         c.with_widget(parent_id, |block: &mut Block, ctx| {
-            block.children.retain(|id| *id != focused);
-            block.sync_layout(ctx)
+            let mut children = ctx.children(parent_id);
+            children.retain(|id| *id != focused);
+            block.sync_layout(ctx, &children)
         })?;
 
         if let Some(target) = target {
@@ -290,7 +292,7 @@ impl Widget for FocusGym {
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        if self.root_block.is_some() {
+        if Self::root_block_id(c).is_some() {
             return Ok(());
         }
         self.build_tree(c)
@@ -353,10 +355,14 @@ mod tests {
         Ok(harness)
     }
 
-    fn root_block_id(harness: &mut Harness) -> NodeId {
-        harness.with_root_widget(|root: &mut FocusGym| {
-            root.root_block.expect("root block not initialized")
-        })
+    fn root_block_id(harness: &Harness) -> NodeId {
+        harness
+            .canopy
+            .core
+            .nodes
+            .get(harness.root)
+            .and_then(|node| node.children.first().copied())
+            .expect("root block not initialized")
     }
 
     macro_rules! find_separator_column {
@@ -421,8 +427,8 @@ mod tests {
 
     #[test]
     fn test_horizontal_children_fill_height() -> Result<()> {
-        let mut harness = setup_harness(Expanse::new(60, 14))?;
-        let root_block = root_block_id(&mut harness);
+        let harness = setup_harness(Expanse::new(60, 14))?;
+        let root_block = root_block_id(&harness);
         let core = &harness.canopy.core;
         let parent = core.nodes[root_block].viewport;
         let children = core.nodes[root_block].children.clone();
@@ -438,7 +444,7 @@ mod tests {
     #[test]
     fn test_vertical_children_fill_width_and_height() -> Result<()> {
         let mut harness = setup_harness(Expanse::new(60, 14))?;
-        let root_block = root_block_id(&mut harness);
+        let root_block = root_block_id(&harness);
         let core = &harness.canopy.core;
         let left = core.nodes[root_block]
             .children
@@ -465,7 +471,7 @@ mod tests {
     #[test]
     fn test_flex_grow_and_shrink_commands_update_style() -> Result<()> {
         let mut harness = setup_harness(Expanse::new(60, 14))?;
-        let root_block = root_block_id(&mut harness);
+        let root_block = root_block_id(&harness);
         let core = &harness.canopy.core;
         let left = core.nodes[root_block]
             .children
@@ -492,7 +498,7 @@ mod tests {
     #[test]
     fn test_flex_grow_affects_layout() -> Result<()> {
         let mut harness = setup_harness(Expanse::new(60, 14))?;
-        let root_block = root_block_id(&mut harness);
+        let root_block = root_block_id(&harness);
         let core = &harness.canopy.core;
         let left = core.nodes[root_block]
             .children
@@ -521,7 +527,7 @@ mod tests {
     #[test]
     fn test_flex_adjust_refuses_at_min_size() -> Result<()> {
         let mut harness = setup_harness(Expanse::new(2, 2))?;
-        let root_block = root_block_id(&mut harness);
+        let root_block = root_block_id(&harness);
         let core = &harness.canopy.core;
         let left = core.nodes[root_block]
             .children
@@ -556,7 +562,7 @@ mod tests {
     #[test]
     fn test_single_separator_between_root_children() -> Result<()> {
         let mut harness = setup_harness(Expanse::new(40, 12))?;
-        let root_block = root_block_id(&mut harness);
+        let root_block = root_block_id(&harness);
         let core = &harness.canopy.core;
         let left = core.nodes[root_block]
             .children
@@ -585,7 +591,7 @@ mod tests {
     #[test]
     fn test_delete_focused_block() -> Result<()> {
         let mut harness = setup_harness(Expanse::new(60, 14))?;
-        let root_block = root_block_id(&mut harness);
+        let root_block = root_block_id(&harness);
         let core = &harness.canopy.core;
         let left = core.nodes[root_block]
             .children
@@ -612,7 +618,7 @@ mod tests {
         let mut harness = setup_harness(Expanse::new(40, 12))?;
         harness.key('s')?;
 
-        let root_block = root_block_id(&mut harness);
+        let root_block = root_block_id(&harness);
         let right = harness.canopy.core.nodes[root_block]
             .children
             .get(1)

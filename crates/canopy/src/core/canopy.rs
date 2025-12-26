@@ -117,6 +117,21 @@ impl Canopy {
         )
     }
 
+    /// Bind a mouse action in the global mode with a given path filter to a typed command.
+    pub fn bind_mouse_command<K, C>(
+        &mut self,
+        mouse: K,
+        path_filter: &str,
+        command: C,
+    ) -> Result<()>
+    where
+        mouse::Mouse: From<K>,
+        C: commands::CommandBinding,
+    {
+        let script = command.script()?;
+        self.bind_mouse(mouse, path_filter, &script)
+    }
+
     /// Bind a key in the global mode, with a given path filter to a script.
     pub fn bind_key<K>(&mut self, key: K, path_filter: &str, script: &str) -> Result<()>
     where
@@ -142,6 +157,48 @@ impl Canopy {
             path_filter,
             self.script_host.compile(script)?,
         )
+    }
+
+    /// Bind a key in the global mode with a given path filter to a typed command.
+    pub fn bind_key_command<K, C>(&mut self, key: K, path_filter: &str, command: C) -> Result<()>
+    where
+        key::Key: From<K>,
+        C: commands::CommandBinding,
+    {
+        let script = command.script()?;
+        self.bind_key(key, path_filter, &script)
+    }
+
+    /// Bind a key within a given mode, with a given path filter, to a typed command.
+    pub fn bind_mode_key_command<K, C>(
+        &mut self,
+        key: K,
+        mode: &str,
+        path_filter: &str,
+        command: C,
+    ) -> Result<()>
+    where
+        key::Key: From<K>,
+        C: commands::CommandBinding,
+    {
+        let script = command.script()?;
+        self.bind_mode_key(key, mode, path_filter, &script)
+    }
+
+    /// Bind a mouse action in a specified mode with a given path filter to a typed command.
+    pub fn bind_mode_mouse_command<K, C>(
+        &mut self,
+        mouse: K,
+        mode: &str,
+        path_filter: &str,
+        command: C,
+    ) -> Result<()>
+    where
+        mouse::Mouse: From<K>,
+        C: commands::CommandBinding,
+    {
+        let script = command.script()?;
+        self.bind_mode_mouse(mouse, mode, path_filter, &script)
     }
 
     /// Load the commands from a command node using the default node name.

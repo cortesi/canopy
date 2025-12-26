@@ -58,7 +58,7 @@ pub mod world;
 pub use binder::{Binder, DefaultBindings};
 pub use canopy::{Canopy, Loader};
 pub use context::{Context, ViewContext};
-pub use id::NodeId;
+pub use id::{NodeId, TypedId};
 pub use inputmap::{InputMap, InputMode, InputSpec};
 pub use poll::Poller;
 pub use world::Core;

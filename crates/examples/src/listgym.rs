@@ -5,7 +5,7 @@ use canopy::{
     error::Result,
     event::{key, mouse},
     geom::{Expanse, Rect},
-    layout::{Dimension, Display, FlexDirection, Style},
+    layout::Dimension,
     render::Render,
     style::{AttrSet, solarized},
     widget::Widget,
@@ -98,12 +98,7 @@ impl Widget for StatusBar {
 }
 
 /// Root node for the list gym demo.
-pub struct ListGym {
-    /// List frame node id.
-    content_id: Option<NodeId>,
-    /// List node id.
-    list_id: Option<NodeId>,
-}
+pub struct ListGym;
 
 impl Default for ListGym {
     fn default() -> Self {
@@ -115,54 +110,33 @@ impl Default for ListGym {
 impl ListGym {
     /// Construct a new list gym demo.
     pub fn new() -> Self {
-        Self {
-            content_id: None,
-            list_id: None,
-        }
+        Self
     }
 
     /// Ensure the list, frame, and status bar are created.
-    fn ensure_tree(&mut self, c: &mut dyn Context) {
-        if self.content_id.is_some() {
+    fn ensure_tree(&self, c: &mut dyn Context) {
+        if !c.children(c.node_id()).is_empty() {
             return;
         }
 
         let nodes: Vec<Block> = (0..10).map(Block::new).collect();
-        let list_id = c.add(Box::new(List::new(nodes)));
-        let content_id = c.add(Box::new(frame::Frame::new()));
-        c.mount_child(content_id, list_id)
+        let content_id = c
+            .add_child(c.node_id(), frame::Frame::new())
+            .expect("Failed to mount content frame");
+        let list_id = c
+            .add_child(content_id, List::new(nodes))
             .expect("Failed to mount list");
+        let status_id = c
+            .add_child(c.node_id(), StatusBar)
+            .expect("Failed to mount statusbar");
 
-        let status_id = c.add(Box::new(StatusBar));
-        c.set_children(c.node_id(), vec![content_id, status_id])
-            .expect("Failed to attach children");
-
-        let mut update_root = |style: &mut Style| {
-            style.display = Display::Flex;
-            style.flex_direction = FlexDirection::Column;
-        };
-        c.with_style(c.node_id(), &mut update_root)
-            .expect("Failed to style root");
-
-        let mut content_style = |style: &mut Style| {
-            style.flex_grow = 1.0;
-            style.flex_shrink = 1.0;
-            style.flex_basis = Dimension::Auto;
-        };
-        c.with_style(content_id, &mut content_style)
-            .expect("Failed to style content");
-        c.with_style(list_id, &mut content_style)
-            .expect("Failed to style list");
-
-        let mut status_style = |style: &mut Style| {
+        c.build(c.node_id()).flex_col();
+        c.build(content_id).flex_item(1.0, 1.0, Dimension::Auto);
+        c.build(list_id).flex_item(1.0, 1.0, Dimension::Auto);
+        c.build(status_id).style(|style| {
             style.size.height = Dimension::Points(1.0);
             style.flex_shrink = 0.0;
-        };
-        c.with_style(status_id, &mut status_style)
-            .expect("Failed to style statusbar");
-
-        self.content_id = Some(content_id);
-        self.list_id = Some(list_id);
+        });
     }
 
     /// Execute a closure with mutable access to the list widget.
@@ -170,8 +144,25 @@ impl ListGym {
     where
         F: FnMut(&mut List<Block>) -> Result<()>,
     {
-        let list_id = self.list_id.expect("list not initialized");
+        self.ensure_tree(c);
+        let list_id = Self::list_id(c).expect("list not initialized");
         c.with_widget(list_id, |list: &mut List<Block>, _ctx| f(list))
+    }
+
+    /// Content frame node id.
+    fn content_id(c: &dyn Context) -> Option<NodeId> {
+        c.children(c.node_id()).first().copied()
+    }
+
+    /// List node id inside the content frame.
+    fn list_id(c: &dyn Context) -> Option<NodeId> {
+        let content_id = Self::content_id(c)?;
+        let children = c.children(content_id);
+        match children.as_slice() {
+            [] => None,
+            [list_id] => Some(*list_id),
+            _ => panic!("expected a single list child"),
+        }
     }
 
     #[command]
@@ -287,8 +278,27 @@ mod tests {
 
     use super::*;
 
-    fn list_id(harness: &mut Harness) -> NodeId {
-        harness.with_root_widget(|root: &mut ListGym| root.list_id.expect("list not initialized"))
+    fn list_id(harness: &Harness) -> NodeId {
+        let root_children = &harness
+            .canopy
+            .core
+            .nodes
+            .get(harness.root)
+            .expect("root node missing")
+            .children;
+        let content_id = *root_children.first().expect("list not initialized");
+        let content_children = &harness
+            .canopy
+            .core
+            .nodes
+            .get(content_id)
+            .expect("content node missing")
+            .children;
+        match content_children.as_slice() {
+            [] => panic!("list not initialized"),
+            [list_id] => *list_id,
+            _ => panic!("expected a single list child"),
+        }
     }
 
     fn create_test_harness() -> Result<Harness> {
@@ -318,7 +328,7 @@ mod tests {
         let mut harness = Harness::new(root)?;
         harness.render()?;
 
-        let list_node = list_id(&mut harness);
+        let list_node = list_id(&harness);
         let mut len = 0;
         harness.with_widget(list_node, |list: &mut List<Block>| {
             len = list.len();
@@ -358,7 +368,7 @@ mod tests {
         let mut harness = create_test_harness()?;
         harness.render()?;
 
-        let list_node = list_id(&mut harness);
+        let list_node = list_id(&harness);
         let mut initial_selected = None;
         harness.with_widget(list_node, |list: &mut List<Block>| {
             initial_selected = list.selected_index();

@@ -33,7 +33,7 @@ impl BenchmarkTextWrapper {
             return;
         }
 
-        let text_id = c.add(Box::new(Text::new(self.content.clone())));
+        let text_id = c.add_widget(Text::new(self.content.clone()));
         c.set_children(c.node_id(), vec![text_id])
             .expect("Failed to attach text");
 

@@ -38,7 +38,7 @@ pub use core::testing;
 // Re-export core application types
 pub use core::{
     Binder, Canopy, Context, Core, DefaultBindings, InputMap, InputMode, InputSpec, Loader, NodeId,
-    Poller, ViewContext,
+    Poller, TypedId, ViewContext,
 };
 // Re-export input mapping
 pub use core::{backend, commands, cursor, error, event, path, render, script, state, style};

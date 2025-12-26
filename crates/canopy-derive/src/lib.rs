@@ -182,6 +182,29 @@ impl Command {
 
         quote! { #command => { #inv } }
     }
+
+    /// Output a typed command reference function for the command.
+    fn typed_ref_fn(&self) -> proc_macro2::TokenStream {
+        let ident = syn::Ident::new(
+            &format!("cmd_{}", self.command),
+            proc_macro2::Span::call_site(),
+        );
+        let node = &self.node;
+        let command = &self.command;
+        let args = &self.args;
+        let doc = format!("Return a typed command reference for `{node}::{command}`.");
+
+        quote! {
+            #[doc = #doc]
+            pub fn #ident() -> canopy::commands::CommandRef<Self> {
+                canopy::commands::CommandRef::new(
+                    canopy::state::NodeName::convert(#node),
+                    #command,
+                    &[#(#args),*],
+                )
+            }
+        }
+    }
 }
 
 impl quote::ToTokens for Command {
@@ -407,6 +430,8 @@ pub fn derive_commands(
 
     let invocations: Vec<proc_macro2::TokenStream> =
         commands.iter().map(|x| x.invocation_clause()).collect();
+    let typed_refs: Vec<proc_macro2::TokenStream> =
+        commands.iter().map(|x| x.typed_ref_fn()).collect();
 
     let expanded = quote! {
         impl #impl_generics canopy::commands::CommandNode for #name #where_clause {
@@ -419,6 +444,10 @@ pub fn derive_commands(
                     _ => Err(canopy::error::Error::UnknownCommand(cmd.command.to_string()))
                 }
             }
+        }
+
+        impl #impl_generics #name #where_clause {
+            #(#typed_refs)*
         }
     };
     let out = quote! {

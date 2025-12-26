@@ -3,7 +3,12 @@ use std::{
     process,
 };
 
-use super::{builder::NodeBuilder, id::NodeId, viewport::ViewPort, world::Core};
+use super::{
+    builder::NodeBuilder,
+    id::{NodeId, TypedId},
+    viewport::ViewPort,
+    world::Core,
+};
 use crate::{
     error::{Error, Result},
     geom::{Direction, Expanse, Rect},
@@ -202,6 +207,18 @@ impl dyn Context + '_ {
         output.ok_or_else(|| Error::Internal("missing widget result".into()))
     }
 
+    /// Execute a closure with mutable access to a widget using a typed node ID.
+    pub fn with_typed<W, R>(
+        &mut self,
+        node: TypedId<W>,
+        f: impl FnMut(&mut W, &mut dyn Context) -> Result<R>,
+    ) -> Result<R>
+    where
+        W: Widget + 'static,
+    {
+        self.with_widget(node.into(), f)
+    }
+
     /// Execute a closure with mutable access to a widget of type `W` if it matches.
     pub fn try_with_widget<W, R>(
         &mut self,
@@ -230,9 +247,32 @@ impl dyn Context + '_ {
         }
     }
 
+    /// Execute a closure with mutable access to a widget using a typed node ID if it matches.
+    pub fn try_with_typed<W, R>(
+        &mut self,
+        node: TypedId<W>,
+        f: impl FnMut(&mut W, &mut dyn Context) -> Result<R>,
+    ) -> Result<Option<R>>
+    where
+        W: Widget + 'static,
+    {
+        self.try_with_widget(node.into(), f)
+    }
+
+    /// Add a widget to the core and return the new node ID.
+    pub fn add_widget<W: Widget + 'static>(&mut self, widget: W) -> NodeId {
+        self.add(widget.into())
+    }
+
+    /// Add a widget to the core and return a typed node identifier.
+    pub fn add_typed<W: Widget + 'static>(&mut self, widget: W) -> TypedId<W> {
+        let node = self.add_widget(widget);
+        TypedId::new(node)
+    }
+
     /// Add a widget under `parent` and return the new node ID.
     pub fn add_child<W: Widget + 'static>(&mut self, parent: NodeId, widget: W) -> Result<NodeId> {
-        let child = self.add(Box::new(widget));
+        let child = self.add_widget(widget);
         self.mount_child(parent, child)?;
         Ok(child)
     }
@@ -249,6 +289,20 @@ impl dyn Context + '_ {
             ids.push(child);
         }
         Ok(ids)
+    }
+
+    /// Return the only child of this node, or `None` if there are no children.
+    ///
+    /// # Panics
+    ///
+    /// Panics if there is more than one child.
+    pub fn only_child(&self) -> Option<NodeId> {
+        let children = self.children(self.node_id());
+        match children.len() {
+            0 => None,
+            1 => children.into_iter().next(),
+            _ => panic!("expected a single child for node {:?}", self.node_id()),
+        }
     }
 
     /// Return a builder for the specified node.
