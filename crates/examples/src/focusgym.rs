@@ -1,5 +1,5 @@
 use canopy::{
-    Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
+    Binder, Canopy, Context, Loader, ViewContext, command, derive_commands,
     error::Result,
     event::{key, mouse},
     geom::{Expanse, Rect},
@@ -184,13 +184,8 @@ impl Widget for Block {
 }
 
 /// Root node for the focus gym demo.
+#[derive(Default)]
 pub struct FocusGym;
-
-impl Default for FocusGym {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 #[derive_commands]
 impl FocusGym {
@@ -199,34 +194,16 @@ impl FocusGym {
         Self
     }
 
-    /// Return the root block id, if present.
-    fn root_block_id(c: &dyn Context) -> Option<NodeId> {
-        c.only_child()
-    }
-
-    /// Find the parent of a node in the subtree rooted at `root`.
-    fn find_parent(c: &dyn ViewContext, root: NodeId, target: NodeId) -> Option<NodeId> {
-        for child in c.children_of(root) {
-            if child == target {
-                return Some(root);
-            }
-            if let Some(found) = Self::find_parent(c, child, target) {
-                return Some(found);
-            }
-        }
-        None
-    }
-
     #[command]
     /// Delete the currently focused block.
     fn delete_focused(&self, c: &mut dyn Context) -> Result<()> {
-        let Some(root_block) = Self::root_block_id(c) else {
+        let Some(root_block) = c.only_child() else {
             return Ok(());
         };
         let Some(focused) = c.focused_leaf(root_block) else {
             return Ok(());
         };
-        let Some(parent_id) = Self::find_parent(c, root_block, focused) else {
+        let Some(parent_id) = c.parent_of(focused) else {
             return Ok(());
         };
         let target = c.suggest_focus_after_remove(root_block, focused);
@@ -299,6 +276,7 @@ pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use canopy::{
+        NodeId,
         geom::{Expanse, Point},
         testing::harness::Harness,
     };

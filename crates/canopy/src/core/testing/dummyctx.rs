@@ -101,6 +101,10 @@ impl ViewContext for DummyContext {
     fn focusable_leaves(&self, _root: NodeId) -> Vec<NodeId> {
         Vec::new()
     }
+
+    fn parent_of(&self, _node: NodeId) -> Option<NodeId> {
+        None
+    }
 }
 
 impl Context for DummyContext {

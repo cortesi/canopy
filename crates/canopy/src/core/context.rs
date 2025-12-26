@@ -77,6 +77,9 @@ pub trait ViewContext {
 
     /// Return focusable leaves in pre-order under the subtree rooted at `root`.
     fn focusable_leaves(&self, root: NodeId) -> Vec<NodeId>;
+
+    /// Return the parent of a node, or `None` if it is the root or not found.
+    fn parent_of(&self, node: NodeId) -> Option<NodeId>;
 }
 
 /// Mutable context available to widgets during event handling.
@@ -646,6 +649,10 @@ impl<'a> ViewContext for CoreContext<'a> {
     fn focusable_leaves(&self, root: NodeId) -> Vec<NodeId> {
         focusable_leaves_for(self.core, root)
     }
+
+    fn parent_of(&self, node: NodeId) -> Option<NodeId> {
+        self.core.nodes.get(node).and_then(|n| n.parent)
+    }
 }
 
 impl<'a> Context for CoreContext<'a> {
@@ -924,5 +931,9 @@ impl<'a> ViewContext for CoreViewContext<'a> {
 
     fn focusable_leaves(&self, root: NodeId) -> Vec<NodeId> {
         focusable_leaves_for(self.core, root)
+    }
+
+    fn parent_of(&self, node: NodeId) -> Option<NodeId> {
+        self.core.nodes.get(node).and_then(|n| n.parent)
     }
 }
