@@ -1089,7 +1089,7 @@ mod tests {
         }
 
         impl Widget for N {
-            fn accept_focus(&self) -> bool {
+            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
                 true
             }
 

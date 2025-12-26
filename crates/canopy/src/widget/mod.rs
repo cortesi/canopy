@@ -66,7 +66,10 @@ pub trait Widget: Any + Send + CommandNode {
     }
 
     /// Attempt to focus this widget.
-    fn accept_focus(&self) -> bool {
+    ///
+    /// Widgets can use the provided context to query their tree state (e.g., whether they have
+    /// children) when deciding whether to accept focus.
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         false
     }
 

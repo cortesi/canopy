@@ -486,7 +486,10 @@ fn node_accepts_focus(core: &Core, node_id: NodeId) -> bool {
     core.nodes
         .get(node_id)
         .and_then(|node| node.widget.as_ref())
-        .is_some_and(|widget| widget.accept_focus())
+        .is_some_and(|widget| {
+            let ctx = CoreViewContext::new(core, node_id);
+            widget.accept_focus(&ctx)
+        })
 }
 
 /// Return true if `node` is within the subtree rooted at `root`.

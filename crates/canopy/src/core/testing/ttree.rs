@@ -110,7 +110,7 @@ macro_rules! leaf {
         }
 
         impl Widget for $a {
-            fn accept_focus(&self) -> bool {
+            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
                 true
             }
 
@@ -171,7 +171,7 @@ macro_rules! branch {
         }
 
         impl Widget for $name {
-            fn accept_focus(&self) -> bool {
+            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
                 true
             }
 
@@ -250,7 +250,7 @@ impl OutcomeTarget for R {
 }
 
 impl Widget for R {
-    fn accept_focus(&self) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 

@@ -280,7 +280,7 @@ impl Input {
 }
 
 impl Widget for Input {
-    fn accept_focus(&self) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 

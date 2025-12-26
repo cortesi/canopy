@@ -283,19 +283,119 @@ The Widget trait has two sizing methods with confusing semantics:
 
 ---
 
-# Stage 8: Final Cleanup and Validation
+# Stage 8: Fix Widget::accept_focus Signature
 
-52. [ ] Review the final `FocusGym::on_mount` implementation - it should now match the target.
+The `accept_focus(&self)` signature is a design mistake - widgets can't query their tree context
+(e.g., whether they have children) to make focus decisions. This forces patterns like Block's
+`has_children` field and `sync_layout` method.
 
-53. [ ] Run full test suite: `cargo nextest run --all --all-features`
+## 8A: Update Widget Trait
 
-54. [ ] Run clippy and fix any warnings: `cargo clippy --all --all-targets --all-features`
+52. [x] In `crates/canopy/src/widget/mod.rs`, change signature:
+        ```rust
+        // Before
+        fn accept_focus(&self) -> bool { false }
 
-55. [ ] Format code: `cargo +nightly fmt --all`
+        // After
+        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool { false }
+        ```
 
-56. [ ] Manually test focusgym example: `cargo run --example focusgym`
+53. [x] Update call sites in `crates/canopy/src/core/context.rs`:
+        - `node_accepts_focus` function needs to construct ViewContext
+
+54. [x] Update call sites in `crates/canopy/src/core/world.rs`:
+        - `node_accepts_focus` method needs to construct ViewContext
+
+55. [x] Update all Widget implementations to take new parameter:
+        - `crates/canopy/src/widgets/editor/editor_impl.rs`
+        - `crates/canopy/src/widgets/root.rs`
+        - `crates/canopy/src/widgets/input.rs`
+        - `crates/canopy/src/core/testing/grid.rs`
+        - `crates/canopy/src/core/testing/ttree.rs`
+        - `crates/canopy/src/core/canopy.rs` (test widget)
+        - `crates/canopy/tests/test_focus.rs`
+        - `crates/canopy/tests/test_viewport_scrolling_simple.rs`
+        - `examples/todo/src/lib.rs`
+        - All example files in `crates/examples/src/`
+
+56. [x] Run tests to verify no regressions
+
+## 8B: Simplify Block Widget
+
+57. [x] Move Block's flex defaults to `configure_style`:
+        ```rust
+        fn configure_style(&self, style: &mut Style) {
+            style.display = Display::Flex;
+            style.flex_direction = if self.horizontal {
+                FlexDirection::Row
+            } else {
+                FlexDirection::Column
+            };
+            style.flex_grow = 1.0;
+            style.flex_shrink = 1.0;
+            style.flex_basis = Dimension::Auto;
+            style.min_size.width = Dimension::Points(1.0);
+            style.min_size.height = Dimension::Points(1.0);
+        }
+        ```
+
+58. [x] Update Block::accept_focus to query context:
+        ```rust
+        fn accept_focus(&self, ctx: &dyn ViewContext) -> bool {
+            ctx.children().is_empty()
+        }
+        ```
+
+59. [x] Remove `has_children` field from Block struct
+
+60. [x] Remove `sync_layout` method from Block (no longer needed)
+
+61. [x] Remove `init_flex` method from Block (handled by configure_style)
+
+62. [x] Simplify `Block::split` to use `add_child`:
+        ```rust
+        fn split(&self, c: &mut dyn Context) -> Result<()> {
+            let view = c.view();
+            let size = Expanse::new(view.w, view.h);
+            if !self.size_limited(size) && c.children().is_empty() {
+                c.add_child(Self::new(!self.horizontal))?;
+                c.add_child(Self::new(!self.horizontal))?;
+                c.focus_next();
+            }
+            Ok(())
+        }
+        ```
+
+63. [x] Simplify `Block::add` similarly
+
+64. [x] Simplify `FocusGym::on_mount`:
+        ```rust
+        fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
+            c.build().flex_col();
+            let root_block = c.add_child(Block::new(true))?;
+            c.add_child_to(root_block, Block::new(false))?;
+            c.add_child_to(root_block, Block::new(false))?;
+            Ok(())
+        }
+        ```
+
+65. [x] Run tests: `cargo nextest run --all --all-features` (172 passed)
+
+---
+
+# Stage 9: Final Cleanup and Validation
+
+66. [ ] Review the final `FocusGym::on_mount` implementation - it should now match the target.
+
+67. [ ] Run full test suite: `cargo nextest run --all --all-features`
+
+68. [ ] Run clippy and fix any warnings: `cargo clippy --all --all-targets --all-features`
+
+69. [ ] Format code: `cargo +nightly fmt --all`
+
+70. [ ] Manually test focusgym example: `cargo run --example focusgym`
         - Verify splits work correctly
         - Verify focus navigation works
         - Verify flex grow/shrink adjustments work
 
-57. [ ] Update ergo.md to mark as complete and document any deviations from the original plan.
+71. [ ] Update ergo.md to mark as complete and document any deviations from the original plan.

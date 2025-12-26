@@ -13,7 +13,11 @@ use crate::{
     backend::BackendControl,
     commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
     core::{
-        builder::NodeBuilder, context::CoreContext, id::NodeId, node::Node, viewport::ViewPort,
+        builder::NodeBuilder,
+        context::{CoreContext, CoreViewContext},
+        id::NodeId,
+        node::Node,
+        viewport::ViewPort,
         viewstack::ViewStack,
     },
     error::{Error, Result},
@@ -649,7 +653,10 @@ impl Core {
         self.nodes
             .get(node_id)
             .and_then(|node| node.widget.as_ref())
-            .is_some_and(|widget| widget.accept_focus())
+            .is_some_and(|widget| {
+                let ctx = CoreViewContext::new(self, node_id);
+                widget.accept_focus(&ctx)
+            })
     }
 
     /// Find the first focusable node, preferring nodes with non-zero view size.

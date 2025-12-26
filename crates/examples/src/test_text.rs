@@ -63,7 +63,7 @@ impl TextDisplay {
 }
 
 impl Widget for TextDisplay {
-    fn accept_focus(&self) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 

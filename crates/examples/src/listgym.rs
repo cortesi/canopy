@@ -195,7 +195,7 @@ impl ListGym {
 }
 
 impl Widget for ListGym {
-    fn accept_focus(&self) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 

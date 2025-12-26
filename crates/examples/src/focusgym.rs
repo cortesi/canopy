@@ -13,42 +13,18 @@ use canopy::{
 pub struct Block {
     /// True for horizontal layout.
     horizontal: bool,
-    /// Whether this block currently has children.
-    has_children: bool,
 }
 
 #[derive_commands]
 impl Block {
     /// Construct a block with the requested orientation.
-    fn new(orientation: bool) -> Self {
-        Self {
-            horizontal: orientation,
-            has_children: false,
-        }
-    }
-
-    /// Initialize flex defaults for a node.
-    fn init_flex(c: &mut dyn Context, node_id: NodeId) -> Result<()> {
-        c.build_node(node_id).flex_item(1.0, 1.0, Dimension::Auto);
-        Ok(())
+    fn new(horizontal: bool) -> Self {
+        Self { horizontal }
     }
 
     /// Return true when the available area is too small to split.
     fn size_limited(&self, a: Expanse) -> bool {
         (self.horizontal && a.w <= 4) || (!self.horizontal && a.h <= 4)
-    }
-
-    /// Synchronize child layout styles and ordering.
-    fn sync_layout(&mut self, c: &mut dyn Context, children: &[NodeId]) -> Result<()> {
-        c.set_children(children.to_vec())?;
-        self.has_children = !children.is_empty();
-
-        if self.horizontal {
-            c.build().flex_row();
-        } else {
-            c.build().flex_col();
-        }
-        Ok(())
     }
 
     /// Adjust flex factors by the requested deltas and apply the updated style.
@@ -73,40 +49,27 @@ impl Block {
 
     #[command]
     /// Add a nested block if space permits.
-    fn add(&mut self, c: &mut dyn Context) -> Result<()> {
-        let mut children = c.children();
-        let first_child = children.first().copied();
-        if let Some(child_id) = first_child
-            && let Some(view) = c.node_view(child_id)
+    fn add(&self, c: &mut dyn Context) -> Result<()> {
+        if let Some(first_child) = c.children().first().copied()
+            && let Some(view) = c.node_view(first_child)
         {
             let size = Expanse::new(view.w, view.h);
             if self.size_limited(size) {
                 return Ok(());
             }
+            c.add_child(Self::new(!self.horizontal))?;
         }
-
-        if !children.is_empty() {
-            let child = c.add_orphan(Self::new(!self.horizontal));
-            Self::init_flex(c, child)?;
-            children.push(child);
-            self.sync_layout(c, &children)?;
-        }
-
         Ok(())
     }
 
     #[command]
     /// Split into two child blocks.
-    fn split(&mut self, c: &mut dyn Context) -> Result<()> {
+    fn split(&self, c: &mut dyn Context) -> Result<()> {
         let view = c.view();
         let size = Expanse::new(view.w, view.h);
-        if !self.size_limited(size) {
-            let left = c.add_orphan(Self::new(!self.horizontal));
-            let right = c.add_orphan(Self::new(!self.horizontal));
-            Self::init_flex(c, left)?;
-            Self::init_flex(c, right)?;
-            let children = [left, right];
-            self.sync_layout(c, &children)?;
+        if !self.size_limited(size) && c.children().is_empty() {
+            c.add_child(Self::new(!self.horizontal))?;
+            c.add_child(Self::new(!self.horizontal))?;
             c.focus_next();
         }
         Ok(())
@@ -145,8 +108,8 @@ impl Block {
 }
 
 impl Widget for Block {
-    fn accept_focus(&self) -> bool {
-        !self.has_children
+    fn accept_focus(&self, ctx: &dyn ViewContext) -> bool {
+        ctx.children().is_empty()
     }
 
     fn measure(
@@ -177,7 +140,8 @@ impl Widget for Block {
     }
 
     fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
-        if !self.has_children {
+        // Only render leaf blocks (those without children)
+        if ctx.children().is_empty() {
             let view = ctx.view();
             let bc = if ctx.is_focused() { "violet" } else { "blue" };
             if view.is_zero() {
@@ -198,6 +162,17 @@ impl Widget for Block {
     }
 
     fn configure_style(&self, style: &mut Style) {
+        use canopy::layout::{Display, FlexDirection};
+
+        style.display = Display::Flex;
+        style.flex_direction = if self.horizontal {
+            FlexDirection::Row
+        } else {
+            FlexDirection::Column
+        };
+        style.flex_grow = 1.0;
+        style.flex_shrink = 1.0;
+        style.flex_basis = Dimension::Auto;
         style.min_size.width = Dimension::Points(1.0);
         style.min_size.height = Dimension::Points(1.0);
     }
@@ -251,11 +226,9 @@ impl FocusGym {
         };
         let target = c.suggest_focus_after_remove(root_block, focused);
 
-        c.with_widget(parent_id, |block: &mut Block, ctx| {
-            let mut children = ctx.children_of(parent_id);
-            children.retain(|id| *id != focused);
-            block.sync_layout(ctx, &children)
-        })?;
+        let mut children = c.children_of(parent_id);
+        children.retain(|id| *id != focused);
+        c.set_children_of(parent_id, children)?;
 
         if let Some(target) = target {
             c.set_focus(target);
@@ -272,21 +245,10 @@ impl Widget for FocusGym {
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        let root_block = c.add_child(Block::new(true))?;
-        let left = c.add_orphan(Block::new(false));
-        let right = c.add_orphan(Block::new(false));
-        Block::init_flex(c, left)?;
-        Block::init_flex(c, right)?;
-
-        c.with_widget(root_block, |block: &mut Block, ctx| {
-            let children = [left, right];
-            block.sync_layout(ctx, &children)
-        })?;
-
         c.build().flex_col();
-        c.build_node(root_block)
-            .flex_item(1.0, 1.0, Dimension::Auto);
-
+        let root_block = c.add_child(Block::new(true))?;
+        c.add_child_to(root_block, Block::new(false))?;
+        c.add_child_to(root_block, Block::new(false))?;
         Ok(())
     }
 }

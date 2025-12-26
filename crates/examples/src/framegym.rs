@@ -87,7 +87,7 @@ impl TestPattern {
 }
 
 impl Widget for TestPattern {
-    fn accept_focus(&self) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 

@@ -2,7 +2,7 @@ use std::any::Any;
 
 use anyhow::Result as AnyResult;
 use canopy::{
-    Binder, Canopy, Context, Loader, NodeId, command, derive_commands,
+    Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
     error::Result,
     event::{key, mouse},
     geom::{Expanse, Rect},
@@ -359,7 +359,7 @@ impl Todo {
 }
 
 impl Widget for Todo {
-    fn accept_focus(&self) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 
