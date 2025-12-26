@@ -44,7 +44,7 @@ impl Panes {
     /// Delete the focus node. If a column ends up empty, it is removed.
     pub fn delete_focus(&mut self, c: &mut dyn Context) -> Result<()> {
         if let Some((x, y)) = self.focus_coords(c) {
-            c.focus_next(c.root_id());
+            c.focus_next_global();
             self.columns[x].remove(y);
             if self.columns[x].is_empty() {
                 self.columns.remove(x);
@@ -77,7 +77,6 @@ impl Panes {
 
     /// Sync child layout and grid placement styles.
     fn sync_layout(&self, c: &mut dyn Context) -> Result<()> {
-        let node_id = c.node_id();
         let mut children = Vec::new();
         let mut rows = 0usize;
         for col in &self.columns {
@@ -85,7 +84,7 @@ impl Panes {
             children.extend(col.iter().copied());
         }
 
-        c.set_children(node_id, children)?;
+        c.set_children(children)?;
 
         let cols = self.columns.len().max(1);
         let rows = rows.max(1);
@@ -105,7 +104,7 @@ impl Panes {
             style.grid_template_columns = col_tracks.clone();
             style.grid_template_rows = row_tracks.clone();
         };
-        c.with_style(node_id, &mut update_panes)?;
+        c.with_style(&mut update_panes)?;
 
         for (col_idx, col) in self.columns.iter().enumerate() {
             for (row_idx, child) in col.iter().enumerate() {
@@ -113,7 +112,7 @@ impl Panes {
                     style.grid_column = line::<Line<GridPlacement>>((col_idx + 1) as i16);
                     style.grid_row = line::<Line<GridPlacement>>((row_idx + 1) as i16);
                 };
-                c.with_style(*child, &mut update_child)?;
+                c.with_style_of(*child, &mut update_child)?;
             }
         }
 

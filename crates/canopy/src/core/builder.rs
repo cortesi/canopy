@@ -8,28 +8,28 @@ use crate::{
 /// Shared builder hooks for applying layout and mounting nodes.
 pub trait BuildContext {
     /// Update the style for a node.
-    fn with_style(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Style)) -> Result<()>;
+    fn with_style_of(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Style)) -> Result<()>;
 
     /// Attach a child to a parent node.
-    fn mount_child(&mut self, parent: NodeId, child: NodeId) -> Result<()>;
+    fn mount_child_to(&mut self, parent: NodeId, child: NodeId) -> Result<()>;
 }
 
 impl BuildContext for dyn Context + '_ {
-    fn with_style(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Style)) -> Result<()> {
-        self.with_style(node, f)
+    fn with_style_of(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Style)) -> Result<()> {
+        Context::with_style_of(self, node, f)
     }
 
-    fn mount_child(&mut self, parent: NodeId, child: NodeId) -> Result<()> {
-        self.mount_child(parent, child)
+    fn mount_child_to(&mut self, parent: NodeId, child: NodeId) -> Result<()> {
+        Context::mount_child_to(self, parent, child)
     }
 }
 
 impl BuildContext for Core {
-    fn with_style(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Style)) -> Result<()> {
+    fn with_style_of(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Style)) -> Result<()> {
         self.with_style(node, f)
     }
 
-    fn mount_child(&mut self, parent: NodeId, child: NodeId) -> Result<()> {
+    fn mount_child_to(&mut self, parent: NodeId, child: NodeId) -> Result<()> {
         self.mount_child(parent, child)
     }
 }
@@ -52,7 +52,7 @@ impl<'a, C: BuildContext + ?Sized> NodeBuilder<'a, C> {
             }
         };
         self.ctx
-            .with_style(self.id, &mut apply)
+            .with_style_of(self.id, &mut apply)
             .expect("Failed to set node style");
         self
     }
@@ -100,7 +100,7 @@ impl<'a, C: BuildContext + ?Sized> NodeBuilder<'a, C> {
     /// Add a child and return the parent builder.
     pub fn add_child(self, child_id: NodeId) -> Self {
         self.ctx
-            .mount_child(self.id, child_id)
+            .mount_child_to(self.id, child_id)
             .expect("Failed to mount child node");
         self
     }

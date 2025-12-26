@@ -29,7 +29,7 @@ impl Block {
 
     /// Initialize flex defaults for a node.
     fn init_flex(c: &mut dyn Context, node_id: NodeId) -> Result<()> {
-        c.build(node_id).flex_item(1.0, 1.0, Dimension::Auto);
+        c.build_node(node_id).flex_item(1.0, 1.0, Dimension::Auto);
         Ok(())
     }
 
@@ -40,14 +40,13 @@ impl Block {
 
     /// Synchronize child layout styles and ordering.
     fn sync_layout(&mut self, c: &mut dyn Context, children: &[NodeId]) -> Result<()> {
-        let node_id = c.node_id();
-        c.set_children(node_id, children.to_vec())?;
+        c.set_children(children.to_vec())?;
         self.has_children = !children.is_empty();
 
         if self.horizontal {
-            c.build(node_id).flex_row();
+            c.build().flex_row();
         } else {
-            c.build(node_id).flex_col();
+            c.build().flex_col();
         }
         Ok(())
     }
@@ -65,7 +64,7 @@ impl Block {
         let min = 0.0;
         let grow = (style.flex_grow + grow_delta).max(min);
         let shrink = (style.flex_shrink + shrink_delta).max(min);
-        c.with_style(c.node_id(), &mut |style| {
+        c.with_style(&mut |style| {
             style.flex_grow = grow;
             style.flex_shrink = shrink;
             style.flex_basis = Dimension::Auto;
@@ -75,7 +74,7 @@ impl Block {
     #[command]
     /// Add a nested block if space permits.
     fn add(&mut self, c: &mut dyn Context) -> Result<()> {
-        let mut children = c.children(c.node_id());
+        let mut children = c.children();
         let first_child = children.first().copied();
         if let Some(child_id) = first_child
             && let Some(view) = c.node_view(child_id)
@@ -87,7 +86,7 @@ impl Block {
         }
 
         if !children.is_empty() {
-            let child = c.add_widget(Self::new(!self.horizontal));
+            let child = c.add_orphan(Self::new(!self.horizontal));
             Self::init_flex(c, child)?;
             children.push(child);
             self.sync_layout(c, &children)?;
@@ -102,13 +101,13 @@ impl Block {
         let view = c.view();
         let size = Expanse::new(view.w, view.h);
         if !self.size_limited(size) {
-            let left = c.add_widget(Self::new(!self.horizontal));
-            let right = c.add_widget(Self::new(!self.horizontal));
+            let left = c.add_orphan(Self::new(!self.horizontal));
+            let right = c.add_orphan(Self::new(!self.horizontal));
             Self::init_flex(c, left)?;
             Self::init_flex(c, right)?;
             let children = [left, right];
             self.sync_layout(c, &children)?;
-            c.focus_next(c.node_id());
+            c.focus_next();
         }
         Ok(())
     }
@@ -227,7 +226,7 @@ impl FocusGym {
 
     /// Find the parent of a node in the subtree rooted at `root`.
     fn find_parent(c: &dyn ViewContext, root: NodeId, target: NodeId) -> Option<NodeId> {
-        for child in c.children(root) {
+        for child in c.children_of(root) {
             if child == target {
                 return Some(root);
             }
@@ -253,7 +252,7 @@ impl FocusGym {
         let target = c.suggest_focus_after_remove(root_block, focused);
 
         c.with_widget(parent_id, |block: &mut Block, ctx| {
-            let mut children = ctx.children(parent_id);
+            let mut children = ctx.children_of(parent_id);
             children.retain(|id| *id != focused);
             block.sync_layout(ctx, &children)
         })?;
@@ -261,7 +260,7 @@ impl FocusGym {
         if let Some(target) = target {
             c.set_focus(target);
         } else {
-            c.focus_first(c.root_id());
+            c.focus_first_global();
         }
         Ok(())
     }
@@ -273,9 +272,9 @@ impl Widget for FocusGym {
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        let root_block = c.add_child(c.node_id(), Block::new(true))?;
-        let left = c.add_widget(Block::new(false));
-        let right = c.add_widget(Block::new(false));
+        let root_block = c.add_child(Block::new(true))?;
+        let left = c.add_orphan(Block::new(false));
+        let right = c.add_orphan(Block::new(false));
         Block::init_flex(c, left)?;
         Block::init_flex(c, right)?;
 
@@ -284,8 +283,9 @@ impl Widget for FocusGym {
             block.sync_layout(ctx, &children)
         })?;
 
-        c.build(c.node_id()).flex_col();
-        c.build(root_block).flex_item(1.0, 1.0, Dimension::Auto);
+        c.build().flex_col();
+        c.build_node(root_block)
+            .flex_item(1.0, 1.0, Dimension::Auto);
 
         Ok(())
     }

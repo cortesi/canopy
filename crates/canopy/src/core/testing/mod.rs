@@ -40,7 +40,7 @@ mod tests {
 
     impl Widget for Block {
         fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
-            if ctx.children(ctx.node_id()).is_empty() {
+            if ctx.children().is_empty() {
                 r.fill("blue", ctx.view(), 'x')?;
             }
             Ok(())

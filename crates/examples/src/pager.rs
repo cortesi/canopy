@@ -28,20 +28,20 @@ impl Pager {
 
     /// Ensure the frame and text subtree is built.
     fn ensure_tree(&self, c: &mut dyn Context) {
-        if !c.children(c.node_id()).is_empty() {
+        if !c.children().is_empty() {
             return;
         }
 
         let frame_id = c
-            .add_child(c.node_id(), frame::Frame::new())
+            .add_child(frame::Frame::new())
             .expect("Failed to mount frame");
         let text_id = c
-            .add_child(frame_id, Text::new(self.contents.clone()))
+            .add_child_to(frame_id, Text::new(self.contents.clone()))
             .expect("Failed to mount text");
 
-        c.build(c.node_id()).flex_col();
-        c.build(frame_id).flex_item(1.0, 1.0, Dimension::Auto);
-        c.build(text_id).flex_item(1.0, 1.0, Dimension::Auto);
+        c.build().flex_col();
+        c.build_node(frame_id).flex_item(1.0, 1.0, Dimension::Auto);
+        c.build_node(text_id).flex_item(1.0, 1.0, Dimension::Auto);
     }
 }
 

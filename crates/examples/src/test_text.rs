@@ -49,16 +49,16 @@ impl TextDisplay {
 
     /// Ensure the text node is created and attached.
     fn ensure_tree(&self, c: &mut dyn Context) {
-        if !c.children(c.node_id()).is_empty() {
+        if !c.children().is_empty() {
             return;
         }
 
         let text_id = c
-            .add_child(c.node_id(), Text::new(self.paragraph.clone()))
+            .add_child(Text::new(self.paragraph.clone()))
             .expect("Failed to mount text");
 
-        c.build(c.node_id()).flex_col();
-        c.build(text_id).flex_item(1.0, 1.0, Dimension::Auto);
+        c.build().flex_col();
+        c.build_node(text_id).flex_item(1.0, 1.0, Dimension::Auto);
     }
 }
 

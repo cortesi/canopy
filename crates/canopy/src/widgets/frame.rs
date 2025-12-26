@@ -168,7 +168,7 @@ impl Widget for Frame {
             rndr.fill(style, f.top, self.glyphs.horizontal)?;
         }
 
-        let child = ctx.children(ctx.node_id()).into_iter().next();
+        let child = ctx.children().into_iter().next();
         if let Some(child_id) = child {
             if let Some(child_vp) = ctx.node_vp(child_id) {
                 if let Some((pre, active, post)) = child_vp.vactive(f.right)? {

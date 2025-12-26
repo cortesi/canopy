@@ -70,7 +70,7 @@ impl ViewContext for DummyContext {
         None
     }
 
-    fn children(&self, _node: NodeId) -> Vec<NodeId> {
+    fn children_of(&self, _node: NodeId) -> Vec<NodeId> {
         Vec::new()
     }
 
@@ -108,13 +108,13 @@ impl Context for DummyContext {
         false
     }
 
-    fn focus_dir(&mut self, _root: NodeId, _dir: Direction) {}
+    fn focus_dir_in(&mut self, _root: NodeId, _dir: Direction) {}
 
-    fn focus_first(&mut self, _root: NodeId) {}
+    fn focus_first_in(&mut self, _root: NodeId) {}
 
-    fn focus_next(&mut self, _root: NodeId) {}
+    fn focus_next_in(&mut self, _root: NodeId) {}
 
-    fn focus_prev(&mut self, _root: NodeId) {}
+    fn focus_prev_in(&mut self, _root: NodeId) {}
 
     fn scroll_to(&mut self, _x: u32, _y: u32) -> bool {
         false
@@ -148,7 +148,7 @@ impl Context for DummyContext {
         false
     }
 
-    fn with_style(&mut self, _node: NodeId, _f: &mut dyn FnMut(&mut Style)) -> Result<()> {
+    fn with_style_of(&mut self, _node: NodeId, _f: &mut dyn FnMut(&mut Style)) -> Result<()> {
         Ok(())
     }
 
@@ -164,19 +164,19 @@ impl Context for DummyContext {
         Ok(())
     }
 
-    fn mount_child(&mut self, _parent: NodeId, _child: NodeId) -> Result<()> {
+    fn mount_child_to(&mut self, _parent: NodeId, _child: NodeId) -> Result<()> {
         Ok(())
     }
 
-    fn detach_child(&mut self, _parent: NodeId, _child: NodeId) -> Result<()> {
+    fn detach_child_from(&mut self, _parent: NodeId, _child: NodeId) -> Result<()> {
         Ok(())
     }
 
-    fn set_children(&mut self, _parent: NodeId, _children: Vec<NodeId>) -> Result<()> {
+    fn set_children_of(&mut self, _parent: NodeId, _children: Vec<NodeId>) -> Result<()> {
         Ok(())
     }
 
-    fn set_hidden(&mut self, _node: NodeId, _hidden: bool) -> bool {
+    fn set_hidden_of(&mut self, _node: NodeId, _hidden: bool) -> bool {
         false
     }
 

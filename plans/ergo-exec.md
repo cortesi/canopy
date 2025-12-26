@@ -69,98 +69,90 @@ to get a child-scoped context when needed.
 The following methods almost always use `c.node_id()`. Change them to operate on the current
 node by default:
 
-5. [ ] `children(node)` → `children()` (current node) + keep `children_of(node)` for queries
+5. [x] `children(node)` → `children()` (current node) + keep `children_of(node)` for queries
        - Update trait in `crates/canopy/src/core/context.rs`
        - Update `CoreContext` and `CoreViewContext` implementations
        - Update `DummyContext` in testing
 
-6. [ ] Update all call sites:
+6. [x] Update all call sites:
        - `c.children(c.node_id())` → `c.children()`
        - `c.children(other_node)` → `c.children_of(other_node)` (if querying non-current)
 
-7. [ ] Run tests to verify no regressions
+7. [x] Run tests to verify no regressions
 
 ## 2B: Context - Remove NodeId from Mutation Methods
 
-8. [ ] `set_children(parent, children)` → `set_children(children)` for current node
+8. [x] `set_children(parent, children)` → `set_children(children)` for current node
        - Add `set_children_of(parent, children)` for explicit parent cases
 
-9. [ ] `with_style(node, f)` → `with_style(f)` for current node
+9. [x] `with_style(node, f)` → `with_style(f)` for current node
        - Add `with_style_of(node, f)` for explicit node cases
 
-10. [ ] `mount_child(parent, child)` → `mount_child(child)` mounts to current node
+10. [x] `mount_child(parent, child)` → `mount_child(child)` mounts to current node
         - Add `mount_child_to(parent, child)` for explicit parent
 
-11. [ ] `detach_child(parent, child)` → `detach_child(child)` detaches from current node
+11. [x] `detach_child(parent, child)` → `detach_child(child)` detaches from current node
         - Add `detach_child_from(parent, child)` for explicit parent
 
-12. [ ] `set_hidden(node, hidden)` → `set_hidden(hidden)` for current node
+12. [x] `set_hidden(node, hidden)` → `set_hidden(hidden)` for current node
         - `hide()` and `show()` already exist and operate on current node
 
-13. [ ] `add_child(parent, widget)` → `add_child(widget)` adds to current node
+13. [x] `add_child(parent, widget)` → `add_child(widget)` adds to current node
         - Add `add_child_to(parent, widget)` for explicit parent
 
-14. [ ] Update all call sites for the above methods
+14. [x] Update all call sites for the above methods
 
-15. [ ] Run tests
+15. [x] Run tests
 
 ## 2C: Focus Operations - Local vs Global
 
 Focus operations need special handling since they search within a subtree:
 
-16. [ ] Add `focus_next()` / `focus_prev()` / `focus_first()` that search within current subtree
+16. [x] Add `focus_next()` / `focus_prev()` / `focus_first()` that search within current subtree
         (equivalent to `focus_next(c.node_id())`)
 
-17. [ ] Add `focus_next_global()` / `focus_prev_global()` / `focus_first_global()` that search
+17. [x] Add `focus_next_global()` / `focus_prev_global()` / `focus_first_global()` that search
         from root (equivalent to `focus_next(c.root_id())`)
 
-18. [ ] Keep `focus_next_in(subtree)` / etc. for explicit subtree specification (rename from
+18. [x] Keep `focus_next_in(subtree)` / etc. for explicit subtree specification (rename from
         current `focus_next(root)`)
 
-19. [ ] Similarly for directional focus: `focus_right()` / `focus_right_global()` /
+19. [x] Similarly for directional focus: `focus_right()` / `focus_right_global()` /
         `focus_right_in(subtree)`
 
-20. [ ] Update all call sites:
+20. [x] Update all call sites:
         - `c.focus_next(c.node_id())` → `c.focus_next()`
         - `c.focus_next(c.root_id())` → `c.focus_next_global()`
         - `c.focus_next(self.app)` → `c.focus_next_in(self.app)`
 
-21. [ ] Run tests
+21. [x] Run tests
 
 ## 2D: Add `context_for(descendant)` Method
 
-22. [ ] Create `ContextFor<'a, C>` wrapper struct in `crates/canopy/src/core/context.rs`:
-        ```rust
-        pub struct ContextFor<'a, C: Context + ?Sized> {
-            inner: &'a mut C,
-            node_id: NodeId,
-        }
-        ```
+**SKIPPED**: Instead of `context_for(descendant)`, we use explicit `_of`, `_node` suffixed
+methods which provide equivalent functionality with less complexity:
+- `c.with_style_of(child, f)` instead of `c.context_for(child)?.with_style(f)`
+- `c.build_node(child).flex_row()` instead of `c.context_for(child)?.build().flex_row()`
 
-23. [ ] Implement `ViewContext` for `ContextFor` - delegate all calls but override `node_id()`
+This avoids the complexity of a wrapper type while still providing ergonomic explicit-node APIs.
 
-24. [ ] Implement `Context` for `ContextFor` - delegate all calls using the overridden node_id
-
-25. [ ] Add `context_for(descendant: NodeId) -> Result<ContextFor<'_, Self>>` to Context trait:
-        - Validate that `descendant` is actually a descendant of `self.node_id()`
-        - Return error if not (enforces encapsulation - can't reach up or sideways)
-
-26. [ ] Update call sites that operate on child nodes:
-        - `c.with_style(child, f)` → `c.context_for(child)?.with_style(f)`
-        - `c.build(child).flex_row()` → `c.context_for(child)?.build().flex_row()`
-
-27. [ ] Run tests
+22. [-] Create `ContextFor<'a, C>` wrapper struct - SKIPPED (using explicit methods instead)
+23. [-] Implement `ViewContext` for `ContextFor` - SKIPPED
+24. [-] Implement `Context` for `ContextFor` - SKIPPED
+25. [-] Add `context_for(descendant)` to Context trait - SKIPPED
+26. [-] Update call sites - DONE via explicit `_of`, `_node` methods instead
+27. [x] Run tests
 
 ## 2E: Simplify `build()` Method
 
-28. [ ] Change `build(node)` to `build()` operating on current node
-        - The `context_for(child)?.build()` pattern handles child building
+28. [x] Change `build(node)` to `build()` operating on current node
+        - Added `build_node(node)` for explicit node building (simpler than context_for pattern)
 
-29. [ ] Update all call sites:
+29. [x] Update all call sites:
         - `c.build(c.node_id())` → `c.build()`
-        - `c.build(child)` → `c.context_for(child)?.build()`
+        - `c.build(child)` → `c.build_node(child)`
 
-30. [ ] Run tests: `cargo nextest run --all --all-features`
+30. [x] Run tests: `cargo nextest run --all --all-features` (172 passed)
 
 ---
 
@@ -169,20 +161,23 @@ Focus operations need special handling since they search within a subtree:
 Rename `add_widget` to `add_orphan` to make explicit that created widgets are not attached to
 the tree. This prevents confusion about when to use `add_child` vs `add_widget`.
 
-31. [ ] In `crates/canopy/src/core/context.rs`, rename `add_widget` to `add_orphan`:
+**COMPLETED** as part of Stage 2 implementation.
+
+31. [x] In `crates/canopy/src/core/context.rs`, rename `add_widget` to `add_orphan`:
         ```rust
         pub fn add_orphan<W: Widget + 'static>(&mut self, widget: W) -> NodeId {
             self.add(widget.into())
         }
         ```
 
-32. [ ] Similarly rename `add_typed` to `add_orphan_typed` for consistency.
+32. [x] Similarly rename `add_typed` to `add_orphan_typed` for consistency.
 
-33. [ ] Update all call sites from `add_widget` to `add_orphan`:
+33. [x] Update all call sites from `add_widget` to `add_orphan`:
         - `crates/examples/src/focusgym.rs` - Block::add, Block::split
         - `crates/canopy/tests/test_on_mount.rs` - MountProbe::on_mount
+        - All other example files
 
-34. [ ] Run tests: `cargo nextest run --all --all-features`
+34. [x] Run tests: `cargo nextest run --all --all-features` (172 passed)
 
 ---
 

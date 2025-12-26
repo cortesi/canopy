@@ -49,8 +49,13 @@ pub trait ViewContext {
     /// Full viewport state for a specific node.
     fn node_vp(&self, node: NodeId) -> Option<ViewPort>;
 
-    /// Children of a node in tree order.
-    fn children(&self, node: NodeId) -> Vec<NodeId>;
+    /// Children of the current node in tree order.
+    fn children(&self) -> Vec<NodeId> {
+        self.children_of(self.node_id())
+    }
+
+    /// Children of a specific node in tree order.
+    fn children_of(&self, node: NodeId) -> Vec<NodeId>;
 
     /// Does the current node have focus?
     fn is_focused(&self) -> bool;
@@ -79,36 +84,116 @@ pub trait Context: ViewContext {
     /// Focus a node. Returns `true` if focus changed.
     fn set_focus(&mut self, node: NodeId) -> bool;
 
-    /// Move focus in a specified direction within the subtree at root.
-    fn focus_dir(&mut self, root: NodeId, dir: Direction);
-
-    /// Focus the first node that accepts focus in the pre-order traversal of the subtree at root.
-    fn focus_first(&mut self, root: NodeId);
-
-    /// Focus the next node in the pre-order traversal of root.
-    fn focus_next(&mut self, root: NodeId);
-
-    /// Focus the previous node in the pre-order traversal of root.
-    fn focus_prev(&mut self, root: NodeId);
-
-    /// Move focus to the right of the currently focused node within the subtree at root.
-    fn focus_right(&mut self, root: NodeId) {
-        self.focus_dir(root, Direction::Right)
+    /// Move focus in a specified direction within the current node's subtree.
+    fn focus_dir(&mut self, dir: Direction) {
+        self.focus_dir_in(self.node_id(), dir)
     }
 
-    /// Move focus to the left of the currently focused node within the subtree at root.
-    fn focus_left(&mut self, root: NodeId) {
-        self.focus_dir(root, Direction::Left)
+    /// Move focus in a specified direction within the specified subtree.
+    fn focus_dir_in(&mut self, root: NodeId, dir: Direction);
+
+    /// Move focus in a specified direction within the entire tree (from root).
+    fn focus_dir_global(&mut self, dir: Direction) {
+        self.focus_dir_in(self.root_id(), dir)
     }
 
-    /// Move focus upward of the currently focused node within the subtree at root.
-    fn focus_up(&mut self, root: NodeId) {
-        self.focus_dir(root, Direction::Up)
+    /// Focus the first node that accepts focus in the current node's subtree.
+    fn focus_first(&mut self) {
+        self.focus_first_in(self.node_id())
     }
 
-    /// Move focus downward of the currently focused node within the subtree at root.
-    fn focus_down(&mut self, root: NodeId) {
-        self.focus_dir(root, Direction::Down)
+    /// Focus the first node that accepts focus in the specified subtree.
+    fn focus_first_in(&mut self, root: NodeId);
+
+    /// Focus the first node that accepts focus in the entire tree (from root).
+    fn focus_first_global(&mut self) {
+        self.focus_first_in(self.root_id())
+    }
+
+    /// Focus the next node in the current node's subtree.
+    fn focus_next(&mut self) {
+        self.focus_next_in(self.node_id())
+    }
+
+    /// Focus the next node in the specified subtree.
+    fn focus_next_in(&mut self, root: NodeId);
+
+    /// Focus the next node in the entire tree (from root).
+    fn focus_next_global(&mut self) {
+        self.focus_next_in(self.root_id())
+    }
+
+    /// Focus the previous node in the current node's subtree.
+    fn focus_prev(&mut self) {
+        self.focus_prev_in(self.node_id())
+    }
+
+    /// Focus the previous node in the specified subtree.
+    fn focus_prev_in(&mut self, root: NodeId);
+
+    /// Focus the previous node in the entire tree (from root).
+    fn focus_prev_global(&mut self) {
+        self.focus_prev_in(self.root_id())
+    }
+
+    /// Move focus to the right within the current node's subtree.
+    fn focus_right(&mut self) {
+        self.focus_dir(Direction::Right)
+    }
+
+    /// Move focus to the right within the specified subtree.
+    fn focus_right_in(&mut self, root: NodeId) {
+        self.focus_dir_in(root, Direction::Right)
+    }
+
+    /// Move focus to the right within the entire tree (from root).
+    fn focus_right_global(&mut self) {
+        self.focus_dir_global(Direction::Right)
+    }
+
+    /// Move focus to the left within the current node's subtree.
+    fn focus_left(&mut self) {
+        self.focus_dir(Direction::Left)
+    }
+
+    /// Move focus to the left within the specified subtree.
+    fn focus_left_in(&mut self, root: NodeId) {
+        self.focus_dir_in(root, Direction::Left)
+    }
+
+    /// Move focus to the left within the entire tree (from root).
+    fn focus_left_global(&mut self) {
+        self.focus_dir_global(Direction::Left)
+    }
+
+    /// Move focus upward within the current node's subtree.
+    fn focus_up(&mut self) {
+        self.focus_dir(Direction::Up)
+    }
+
+    /// Move focus upward within the specified subtree.
+    fn focus_up_in(&mut self, root: NodeId) {
+        self.focus_dir_in(root, Direction::Up)
+    }
+
+    /// Move focus upward within the entire tree (from root).
+    fn focus_up_global(&mut self) {
+        self.focus_dir_global(Direction::Up)
+    }
+
+    /// Move focus downward within the current node's subtree.
+    fn focus_down(&mut self) {
+        self.focus_dir(Direction::Down)
+    }
+
+    /// Move focus downward within the specified subtree.
+    fn focus_down_in(&mut self, root: NodeId) {
+        self.focus_dir_in(root, Direction::Down)
+    }
+
+    /// Move focus downward within the entire tree (from root).
+    fn focus_down_global(&mut self) {
+        self.focus_dir_global(Direction::Down)
     }
 
     /// Scroll the view to the specified position. Returns `true` if movement occurred.
@@ -135,8 +220,14 @@ pub trait Context: ViewContext {
     /// Scroll the view right by one line. Returns `true` if movement occurred.
     fn scroll_right(&mut self) -> bool;
 
-    /// Update the layout style for a node.
-    fn with_style(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Style)) -> Result<()>;
+    /// Update the layout style for the current node.
+    fn with_style(&mut self, f: &mut dyn FnMut(&mut Style)) -> Result<()> {
+        let node = self.node_id();
+        self.with_style_of(node, f)
+    }
+
+    /// Update the layout style for a specific node.
+    fn with_style_of(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Style)) -> Result<()>;
 
     /// Add a new widget node to the core.
     fn add(&mut self, widget: Box<dyn Widget>) -> NodeId;
@@ -148,26 +239,56 @@ pub trait Context: ViewContext {
         f: &mut dyn FnMut(&mut dyn Widget, &mut dyn Context) -> Result<()>,
     ) -> Result<()>;
 
-    /// Attach a child to a parent node.
-    fn mount_child(&mut self, parent: NodeId, child: NodeId) -> Result<()>;
-
-    /// Detach a child from a parent node.
-    fn detach_child(&mut self, parent: NodeId, child: NodeId) -> Result<()>;
-
-    /// Replace the children list for a parent node.
-    fn set_children(&mut self, parent: NodeId, children: Vec<NodeId>) -> Result<()>;
-
-    /// Set node visibility. Returns `true` if visibility changed.
-    fn set_hidden(&mut self, node: NodeId, hidden: bool) -> bool;
-
-    /// Hide a node. Returns `true` if visibility changed.
-    fn hide(&mut self, node: NodeId) -> bool {
-        self.set_hidden(node, true)
+    /// Attach a child to the current node.
+    fn mount_child(&mut self, child: NodeId) -> Result<()> {
+        self.mount_child_to(self.node_id(), child)
     }
 
-    /// Show a node. Returns `true` if visibility changed.
-    fn show(&mut self, node: NodeId) -> bool {
-        self.set_hidden(node, false)
+    /// Attach a child to a specific parent node.
+    fn mount_child_to(&mut self, parent: NodeId, child: NodeId) -> Result<()>;
+
+    /// Detach a child from the current node.
+    fn detach_child(&mut self, child: NodeId) -> Result<()> {
+        self.detach_child_from(self.node_id(), child)
+    }
+
+    /// Detach a child from a specific parent node.
+    fn detach_child_from(&mut self, parent: NodeId, child: NodeId) -> Result<()>;
+
+    /// Replace the children list for the current node.
+    fn set_children(&mut self, children: Vec<NodeId>) -> Result<()> {
+        self.set_children_of(self.node_id(), children)
+    }
+
+    /// Replace the children list for a specific parent node.
+    fn set_children_of(&mut self, parent: NodeId, children: Vec<NodeId>) -> Result<()>;
+
+    /// Set the current node's visibility. Returns `true` if visibility changed.
+    fn set_hidden(&mut self, hidden: bool) -> bool {
+        self.set_hidden_of(self.node_id(), hidden)
+    }
+
+    /// Set a specific node's visibility. Returns `true` if visibility changed.
+    fn set_hidden_of(&mut self, node: NodeId, hidden: bool) -> bool;
+
+    /// Hide the current node. Returns `true` if visibility changed.
+    fn hide(&mut self) -> bool {
+        self.set_hidden(true)
+    }
+
+    /// Hide a specific node. Returns `true` if visibility changed.
+    fn hide_node(&mut self, node: NodeId) -> bool {
+        self.set_hidden_of(node, true)
+    }
+
+    /// Show the current node. Returns `true` if visibility changed.
+    fn show(&mut self) -> bool {
+        self.set_hidden(false)
+    }
+
+    /// Show a specific node. Returns `true` if visibility changed.
+    fn show_node(&mut self, node: NodeId) -> bool {
+        self.set_hidden_of(node, false)
     }
 
     /// Start the backend renderer.
@@ -259,33 +380,58 @@ impl dyn Context + '_ {
         self.try_with_widget(node.into(), f)
     }
 
-    /// Add a widget to the core and return the new node ID.
-    pub fn add_widget<W: Widget + 'static>(&mut self, widget: W) -> NodeId {
+    /// Add a widget to the core but do not attach it to any parent (orphan).
+    pub fn add_orphan<W: Widget + 'static>(&mut self, widget: W) -> NodeId {
         self.add(widget.into())
     }
 
-    /// Add a widget to the core and return a typed node identifier.
-    pub fn add_typed<W: Widget + 'static>(&mut self, widget: W) -> TypedId<W> {
-        let node = self.add_widget(widget);
+    /// Add a widget to the core and return a typed node identifier (orphan).
+    pub fn add_orphan_typed<W: Widget + 'static>(&mut self, widget: W) -> TypedId<W> {
+        let node = self.add_orphan(widget);
         TypedId::new(node)
     }
 
-    /// Add a widget under `parent` and return the new node ID.
-    pub fn add_child<W: Widget + 'static>(&mut self, parent: NodeId, widget: W) -> Result<NodeId> {
-        let child = self.add_widget(widget);
-        self.mount_child(parent, child)?;
+    /// Add a widget as a child of the current node and return the new node ID.
+    pub fn add_child<W: Widget + 'static>(&mut self, widget: W) -> Result<NodeId> {
+        let child = self.add_orphan(widget);
+        self.mount_child(child)?;
         Ok(child)
     }
 
-    /// Add multiple boxed widgets under `parent` and return their node IDs.
-    pub fn add_children<I>(&mut self, parent: NodeId, widgets: I) -> Result<Vec<NodeId>>
+    /// Add a widget as a child of a specific parent and return the new node ID.
+    pub fn add_child_to<W: Widget + 'static>(
+        &mut self,
+        parent: NodeId,
+        widget: W,
+    ) -> Result<NodeId> {
+        let child = self.add_orphan(widget);
+        self.mount_child_to(parent, child)?;
+        Ok(child)
+    }
+
+    /// Add multiple boxed widgets as children of the current node and return their node IDs.
+    pub fn add_children<I>(&mut self, widgets: I) -> Result<Vec<NodeId>>
     where
         I: IntoIterator<Item = Box<dyn Widget>>,
     {
         let mut ids = Vec::new();
         for widget in widgets {
             let child = self.add(widget);
-            self.mount_child(parent, child)?;
+            self.mount_child(child)?;
+            ids.push(child);
+        }
+        Ok(ids)
+    }
+
+    /// Add multiple boxed widgets as children of a specific parent and return their node IDs.
+    pub fn add_children_to<I>(&mut self, parent: NodeId, widgets: I) -> Result<Vec<NodeId>>
+    where
+        I: IntoIterator<Item = Box<dyn Widget>>,
+    {
+        let mut ids = Vec::new();
+        for widget in widgets {
+            let child = self.add(widget);
+            self.mount_child_to(parent, child)?;
             ids.push(child);
         }
         Ok(ids)
@@ -297,7 +443,7 @@ impl dyn Context + '_ {
     ///
     /// Panics if there is more than one child.
     pub fn only_child(&self) -> Option<NodeId> {
-        let children = self.children(self.node_id());
+        let children = self.children();
         match children.len() {
             0 => None,
             1 => children.into_iter().next(),
@@ -305,8 +451,14 @@ impl dyn Context + '_ {
         }
     }
 
-    /// Return a builder for the specified node.
-    pub fn build(&mut self, node: NodeId) -> NodeBuilder<'_, dyn Context + '_> {
+    /// Return a builder for the current node.
+    pub fn build(&mut self) -> NodeBuilder<'_, dyn Context + '_> {
+        let id = self.node_id();
+        NodeBuilder { ctx: self, id }
+    }
+
+    /// Return a builder for a specific node.
+    pub fn build_node(&mut self, node: NodeId) -> NodeBuilder<'_, dyn Context + '_> {
         NodeBuilder {
             ctx: self,
             id: node,
@@ -456,7 +608,7 @@ impl<'a> ViewContext for CoreContext<'a> {
         self.core.nodes.get(node).map(|n| n.vp)
     }
 
-    fn children(&self, node: NodeId) -> Vec<NodeId> {
+    fn children_of(&self, node: NodeId) -> Vec<NodeId> {
         self.core
             .nodes
             .get(node)
@@ -498,19 +650,19 @@ impl<'a> Context for CoreContext<'a> {
         self.core.set_focus(node)
     }
 
-    fn focus_dir(&mut self, root: NodeId, dir: Direction) {
+    fn focus_dir_in(&mut self, root: NodeId, dir: Direction) {
         self.core.focus_dir(root, dir);
     }
 
-    fn focus_first(&mut self, root: NodeId) {
+    fn focus_first_in(&mut self, root: NodeId) {
         self.core.focus_first(root);
     }
 
-    fn focus_next(&mut self, root: NodeId) {
+    fn focus_next_in(&mut self, root: NodeId) {
         self.core.focus_next(root);
     }
 
-    fn focus_prev(&mut self, root: NodeId) {
+    fn focus_prev_in(&mut self, root: NodeId) {
         self.core.focus_prev(root);
     }
 
@@ -602,7 +754,7 @@ impl<'a> Context for CoreContext<'a> {
         }
     }
 
-    fn with_style(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Style)) -> Result<()> {
+    fn with_style_of(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Style)) -> Result<()> {
         self.core.with_style(node, f)
     }
 
@@ -621,19 +773,19 @@ impl<'a> Context for CoreContext<'a> {
         })
     }
 
-    fn mount_child(&mut self, parent: NodeId, child: NodeId) -> Result<()> {
+    fn mount_child_to(&mut self, parent: NodeId, child: NodeId) -> Result<()> {
         self.core.mount_child(parent, child)
     }
 
-    fn detach_child(&mut self, parent: NodeId, child: NodeId) -> Result<()> {
+    fn detach_child_from(&mut self, parent: NodeId, child: NodeId) -> Result<()> {
         self.core.detach_child(parent, child)
     }
 
-    fn set_children(&mut self, parent: NodeId, children: Vec<NodeId>) -> Result<()> {
+    fn set_children_of(&mut self, parent: NodeId, children: Vec<NodeId>) -> Result<()> {
         self.core.set_children(parent, children)
     }
 
-    fn set_hidden(&mut self, node: NodeId, hidden: bool) -> bool {
+    fn set_hidden_of(&mut self, node: NodeId, hidden: bool) -> bool {
         self.core.set_hidden(node, hidden)
     }
 
@@ -735,7 +887,7 @@ impl<'a> ViewContext for CoreViewContext<'a> {
         self.core.nodes.get(node).map(|n| n.vp)
     }
 
-    fn children(&self, node: NodeId) -> Vec<NodeId> {
+    fn children_of(&self, node: NodeId) -> Vec<NodeId> {
         self.core
             .nodes
             .get(node)

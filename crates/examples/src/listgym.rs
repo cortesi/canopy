@@ -115,25 +115,24 @@ impl ListGym {
 
     /// Ensure the list, frame, and status bar are created.
     fn ensure_tree(&self, c: &mut dyn Context) {
-        if !c.children(c.node_id()).is_empty() {
+        if !c.children().is_empty() {
             return;
         }
 
         let nodes: Vec<Block> = (0..10).map(Block::new).collect();
         let content_id = c
-            .add_child(c.node_id(), frame::Frame::new())
+            .add_child(frame::Frame::new())
             .expect("Failed to mount content frame");
         let list_id = c
-            .add_child(content_id, List::new(nodes))
+            .add_child_to(content_id, List::new(nodes))
             .expect("Failed to mount list");
-        let status_id = c
-            .add_child(c.node_id(), StatusBar)
-            .expect("Failed to mount statusbar");
+        let status_id = c.add_child(StatusBar).expect("Failed to mount statusbar");
 
-        c.build(c.node_id()).flex_col();
-        c.build(content_id).flex_item(1.0, 1.0, Dimension::Auto);
-        c.build(list_id).flex_item(1.0, 1.0, Dimension::Auto);
-        c.build(status_id).style(|style| {
+        c.build().flex_col();
+        c.build_node(content_id)
+            .flex_item(1.0, 1.0, Dimension::Auto);
+        c.build_node(list_id).flex_item(1.0, 1.0, Dimension::Auto);
+        c.build_node(status_id).style(|style| {
             style.size.height = Dimension::Points(1.0);
             style.flex_shrink = 0.0;
         });
@@ -151,13 +150,13 @@ impl ListGym {
 
     /// Content frame node id.
     fn content_id(c: &dyn Context) -> Option<NodeId> {
-        c.children(c.node_id()).first().copied()
+        c.children().first().copied()
     }
 
     /// List node id inside the content frame.
     fn list_id(c: &dyn Context) -> Option<NodeId> {
         let content_id = Self::content_id(c)?;
-        let children = c.children(content_id);
+        let children = c.children_of(content_id);
         match children.as_slice() {
             [] => None,
             [list_id] => Some(*list_id),

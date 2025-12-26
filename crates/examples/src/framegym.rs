@@ -155,20 +155,21 @@ impl FrameGym {
 
     /// Ensure the frame and pattern nodes are built.
     fn ensure_tree(&self, c: &mut dyn Context) {
-        if !c.children(c.node_id()).is_empty() {
+        if !c.children().is_empty() {
             return;
         }
 
         let frame_id = c
-            .add_child(c.node_id(), frame::Frame::new().with_title("Frame Gym"))
+            .add_child(frame::Frame::new().with_title("Frame Gym"))
             .expect("Failed to mount frame");
         let pattern_id = c
-            .add_child(frame_id, TestPattern::new())
+            .add_child_to(frame_id, TestPattern::new())
             .expect("Failed to mount pattern");
 
-        c.build(c.node_id()).flex_col();
-        c.build(frame_id).flex_item(1.0, 1.0, Dimension::Auto);
-        c.build(pattern_id).flex_item(1.0, 1.0, Dimension::Auto);
+        c.build().flex_col();
+        c.build_node(frame_id).flex_item(1.0, 1.0, Dimension::Auto);
+        c.build_node(pattern_id)
+            .flex_item(1.0, 1.0, Dimension::Auto);
     }
 }
 

@@ -33,15 +33,15 @@ impl BenchmarkTextWrapper {
             return;
         }
 
-        let text_id = c.add_widget(Text::new(self.content.clone()));
-        c.set_children(c.node_id(), vec![text_id])
+        let text_id = c.add_orphan(Text::new(self.content.clone()));
+        c.set_children(vec![text_id])
             .expect("Failed to attach text");
 
         let mut update_root = |style: &mut Style| {
             style.display = Display::Flex;
             style.flex_direction = FlexDirection::Column;
         };
-        c.with_style(c.node_id(), &mut update_root)
+        c.with_style(&mut update_root)
             .expect("Failed to style root");
 
         let mut grow = |style: &mut Style| {
@@ -49,7 +49,7 @@ impl BenchmarkTextWrapper {
             style.flex_shrink = 1.0;
             style.flex_basis = Dimension::Auto;
         };
-        c.with_style(text_id, &mut grow)
+        c.with_style_of(text_id, &mut grow)
             .expect("Failed to style text");
 
         self.text_id = Some(text_id);

@@ -40,27 +40,26 @@ impl Root {
 
     /// Synchronize the root layout based on inspector visibility.
     fn sync_layout(&self, c: &mut dyn Context) -> Result<()> {
-        let root_id = c.node_id();
         if self.inspector_active {
-            c.set_children(root_id, vec![self.inspector, self.app])?;
+            c.set_children(vec![self.inspector, self.app])?;
         } else {
-            c.set_children(root_id, vec![self.app])?;
+            c.set_children(vec![self.app])?;
         }
 
         let mut update_root = |style: &mut Style| {
             style.display = Display::Flex;
             style.flex_direction = FlexDirection::Row;
         };
-        c.with_style(root_id, &mut update_root)?;
+        c.with_style(&mut update_root)?;
 
         let mut update_child = |style: &mut Style| {
             style.flex_grow = 1.0;
             style.flex_shrink = 1.0;
             style.flex_basis = Dimension::Auto;
         };
-        c.with_style(self.app, &mut update_child)?;
+        c.with_style_of(self.app, &mut update_child)?;
         if self.inspector_active {
-            c.with_style(self.inspector, &mut update_child)?;
+            c.with_style_of(self.inspector, &mut update_child)?;
         }
 
         Ok(())
@@ -81,42 +80,42 @@ impl Root {
     #[command]
     /// Focus the next node in a pre-order traversal of the app.
     pub fn focus_next(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.focus_next(c.root_id());
+        c.focus_next_global();
         Ok(())
     }
 
     #[command]
     /// Focus the previous node in a pre-order traversal of the app.
     pub fn focus_prev(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.focus_prev(c.root_id());
+        c.focus_prev_global();
         Ok(())
     }
 
     #[command]
     /// Shift focus right.
     pub fn focus_right(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.focus_right(c.root_id());
+        c.focus_right_global();
         Ok(())
     }
 
     #[command]
     /// Shift focus left.
     pub fn focus_left(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.focus_left(c.root_id());
+        c.focus_left_global();
         Ok(())
     }
 
     #[command]
     /// Shift focus up.
     pub fn focus_up(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.focus_up(c.root_id());
+        c.focus_up_global();
         Ok(())
     }
 
     #[command]
     /// Shift focus down.
     pub fn focus_down(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.focus_down(c.root_id());
+        c.focus_down_global();
         Ok(())
     }
 
@@ -125,7 +124,7 @@ impl Root {
     pub fn hide_inspector(&mut self, c: &mut dyn Context) -> Result<()> {
         self.inspector_active = false;
         self.sync_layout(c)?;
-        c.focus_first(self.app);
+        c.focus_first_in(self.app);
         Ok(())
     }
 
@@ -134,7 +133,7 @@ impl Root {
     pub fn activate_inspector(&mut self, c: &mut dyn Context) -> Result<()> {
         self.inspector_active = true;
         self.sync_layout(c)?;
-        c.focus_first(self.inspector);
+        c.focus_first_in(self.inspector);
         Ok(())
     }
 
@@ -152,7 +151,7 @@ impl Root {
     /// If we're currently focused in the inspector, shift focus into the app pane instead.
     pub fn focus_app(&mut self, c: &mut dyn Context) -> Result<()> {
         if c.node_is_on_focus_path(self.inspector) {
-            c.focus_first(self.app);
+            c.focus_first_in(self.app);
         }
         Ok(())
     }

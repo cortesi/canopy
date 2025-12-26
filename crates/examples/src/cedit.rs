@@ -28,20 +28,20 @@ impl Ed {
 
     /// Ensure the editor subtree is constructed and styled.
     fn ensure_tree(&self, c: &mut dyn Context) {
-        if !c.children(c.node_id()).is_empty() {
+        if !c.children().is_empty() {
             return;
         }
 
         let frame_id = c
-            .add_child(c.node_id(), frame::Frame::new())
+            .add_child(frame::Frame::new())
             .expect("Failed to mount frame");
         let editor = c
-            .add_child(frame_id, Editor::new(&self.contents))
+            .add_child_to(frame_id, Editor::new(&self.contents))
             .expect("Failed to mount editor");
 
-        c.build(c.node_id()).flex_col();
-        c.build(frame_id).flex_item(1.0, 1.0, Dimension::Auto);
-        c.build(editor).flex_item(1.0, 1.0, Dimension::Auto);
+        c.build().flex_col();
+        c.build_node(frame_id).flex_item(1.0, 1.0, Dimension::Auto);
+        c.build_node(editor).flex_item(1.0, 1.0, Dimension::Auto);
     }
 }
 

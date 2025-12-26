@@ -122,32 +122,32 @@ impl Todo {
             return Ok(());
         }
 
-        let list_id = c.add(Box::new(List::new(Vec::<TodoItem>::new())));
-        let content_id = c.add(Box::new(frame::Frame::new()));
-        c.mount_child(content_id, list_id)?;
+        let list_id = c.add_orphan(List::new(Vec::<TodoItem>::new()));
+        let content_id = c.add_orphan(frame::Frame::new());
+        c.mount_child_to(content_id, list_id)?;
 
-        let status_id = c.add(Box::new(StatusBar));
-        c.set_children(c.node_id(), vec![content_id, status_id])?;
+        let status_id = c.add_orphan(StatusBar);
+        c.set_children(vec![content_id, status_id])?;
 
         let mut update_root = |style: &mut taffy::style::Style| {
             style.display = Display::Flex;
             style.flex_direction = FlexDirection::Column;
         };
-        c.with_style(c.node_id(), &mut update_root)?;
+        c.with_style(&mut update_root)?;
 
         let mut content_style = |style: &mut taffy::style::Style| {
             style.flex_grow = 1.0;
             style.flex_shrink = 1.0;
             style.flex_basis = Dimension::Auto;
         };
-        c.with_style(content_id, &mut content_style)?;
-        c.with_style(list_id, &mut content_style)?;
+        c.with_style_of(content_id, &mut content_style)?;
+        c.with_style_of(list_id, &mut content_style)?;
 
         let mut status_style = |style: &mut taffy::style::Style| {
             style.size.height = Dimension::Points(1.0);
             style.flex_shrink = 0.0;
         };
-        c.with_style(status_id, &mut status_style)?;
+        c.with_style_of(status_id, &mut status_style)?;
 
         self.content_id = Some(content_id);
         self.list_id = Some(list_id);
@@ -171,11 +171,11 @@ impl Todo {
             return Ok(());
         }
 
-        let overlay_id = c.add(Box::new(Overlay));
-        let input_id = c.add(Box::new(Input::new("")));
-        let adder_frame_id = c.add(Box::new(frame::Frame::new()));
-        c.mount_child(adder_frame_id, input_id)?;
-        c.set_children(overlay_id, vec![adder_frame_id])?;
+        let overlay_id = c.add_orphan(Overlay);
+        let input_id = c.add_orphan(Input::new(""));
+        let adder_frame_id = c.add_orphan(frame::Frame::new());
+        c.mount_child_to(adder_frame_id, input_id)?;
+        c.set_children_of(overlay_id, vec![adder_frame_id])?;
 
         let mut overlay_style = |style: &mut taffy::style::Style| {
             style.position = Position::Absolute;
@@ -189,7 +189,7 @@ impl Todo {
             style.justify_content = Some(JustifyContent::Center);
             style.align_items = Some(AlignItems::Center);
         };
-        c.with_style(overlay_id, &mut overlay_style)?;
+        c.with_style_of(overlay_id, &mut overlay_style)?;
 
         let mut frame_style = |style: &mut taffy::style::Style| {
             style.size.width = Dimension::Percent(1.0);
@@ -201,14 +201,14 @@ impl Todo {
                 bottom: LengthPercentage::Points(0.0).into(),
             };
         };
-        c.with_style(adder_frame_id, &mut frame_style)?;
+        c.with_style_of(adder_frame_id, &mut frame_style)?;
 
         let mut input_style = |style: &mut taffy::style::Style| {
             style.flex_grow = 1.0;
             style.flex_shrink = 1.0;
             style.flex_basis = Dimension::Auto;
         };
-        c.with_style(input_id, &mut input_style)?;
+        c.with_style_of(input_id, &mut input_style)?;
 
         self.overlay_id = Some(overlay_id);
         self.input_id = Some(input_id);
@@ -226,7 +226,7 @@ impl Todo {
                 children.push(overlay_id);
             }
         }
-        c.set_children(c.node_id(), children)?;
+        c.set_children(children)?;
         Ok(())
     }
 
