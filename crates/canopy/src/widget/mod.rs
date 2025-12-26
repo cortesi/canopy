@@ -83,7 +83,10 @@ pub trait Widget: Any + Send + CommandNode {
     /// Configure default layout style for this widget.
     fn configure_style(&self, _style: &mut Style) {}
 
-    /// Called once when the widget is first mounted in the tree, before the first render.
+    /// Called exactly once when the widget is first mounted in the tree, before the first render.
+    ///
+    /// The framework guarantees single invocation via an internal `mounted` flag on each node.
+    /// There is no need to guard against multiple calls within this method.
     fn on_mount(&mut self, _ctx: &mut dyn Context) -> Result<()> {
         Ok(())
     }

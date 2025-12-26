@@ -220,25 +220,6 @@ impl FocusGym {
         Self
     }
 
-    /// Build the initial tree of blocks.
-    fn build_tree(&self, c: &mut dyn Context) -> Result<()> {
-        let root_block = c.add_child(c.node_id(), Block::new(true))?;
-        let left = c.add_widget(Block::new(false));
-        let right = c.add_widget(Block::new(false));
-        Block::init_flex(c, left)?;
-        Block::init_flex(c, right)?;
-
-        c.with_widget(root_block, |block: &mut Block, ctx| {
-            let children = [left, right];
-            block.sync_layout(ctx, &children)
-        })?;
-
-        c.build(c.node_id()).flex_col();
-        c.build(root_block).flex_item(1.0, 1.0, Dimension::Auto);
-
-        Ok(())
-    }
-
     /// Return the root block id, if present.
     fn root_block_id(c: &dyn Context) -> Option<NodeId> {
         c.only_child()
@@ -292,10 +273,21 @@ impl Widget for FocusGym {
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        if Self::root_block_id(c).is_some() {
-            return Ok(());
-        }
-        self.build_tree(c)
+        let root_block = c.add_child(c.node_id(), Block::new(true))?;
+        let left = c.add_widget(Block::new(false));
+        let right = c.add_widget(Block::new(false));
+        Block::init_flex(c, left)?;
+        Block::init_flex(c, right)?;
+
+        c.with_widget(root_block, |block: &mut Block, ctx| {
+            let children = [left, right];
+            block.sync_layout(ctx, &children)
+        })?;
+
+        c.build(c.node_id()).flex_col();
+        c.build(root_block).flex_item(1.0, 1.0, Dimension::Auto);
+
+        Ok(())
     }
 }
 
