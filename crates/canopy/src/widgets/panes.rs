@@ -3,7 +3,7 @@ use crate::{
     commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
     derive_commands,
     error::{Error, Result},
-    layout::Layout,
+    layout::{Layout, Sizing},
     state::NodeName,
     widget::Widget,
 };
@@ -144,7 +144,8 @@ impl Panes {
             })?;
             for pane in pane_nodes {
                 c.with_layout_of(pane, &mut |layout| {
-                    *layout = Layout::fill();
+                    layout.width = Sizing::Flex(1);
+                    layout.height = Sizing::Flex(1);
                 })?;
             }
         }

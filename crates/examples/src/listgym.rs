@@ -2,14 +2,14 @@ use std::time::Duration;
 
 use canopy::{
     Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
-    error::Result,
+    error::{Error, Result},
     event::{key, mouse},
     geom::{Expanse, Line, Point, Rect},
     layout::{Layout, Sizing},
     render::Render,
     style::{AttrSet, solarized},
     widget::Widget,
-    widgets::{Root, frame, list::*},
+    widgets::{Panes, Root, frame, list::*},
 };
 use rand::Rng;
 
@@ -115,12 +115,42 @@ impl ListItem for Block {
 pub struct StatusBar;
 
 #[derive_commands]
-impl StatusBar {}
+impl StatusBar {
+    /// Build the status text based on the focused column.
+    fn label(&self, ctx: &dyn ViewContext) -> String {
+        let columns = Self::column_nodes(ctx);
+        let total = columns.len();
+        let focused = columns
+            .iter()
+            .position(|node| ctx.node_is_on_focus_path(*node));
+
+        match (focused, total) {
+            (Some(idx), total) if total > 0 => {
+                format!("listgym  col {}/{}", idx + 1, total)
+            }
+            _ => "listgym".to_string(),
+        }
+    }
+
+    /// Collect column container node ids from the panes widget.
+    fn column_nodes(ctx: &dyn ViewContext) -> Vec<NodeId> {
+        let root_children = ctx.children_of(ctx.root_id());
+        let Some(content_id) = root_children.first().copied() else {
+            return Vec::new();
+        };
+        let content_children = ctx.children_of(content_id);
+        let Some(panes_id) = content_children.first().copied() else {
+            return Vec::new();
+        };
+        ctx.children_of(panes_id)
+    }
+}
 
 impl Widget for StatusBar {
     fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         r.push_layer("statusbar");
-        r.text("text", ctx.view().outer_rect_local().line(0), "listgym")?;
+        let label = self.label(ctx);
+        r.text("text", ctx.view().outer_rect_local().line(0), &label)?;
         Ok(())
     }
 }
@@ -141,19 +171,18 @@ impl ListGym {
         Self
     }
 
-    /// Ensure the list, frame, and status bar are created.
-    fn ensure_tree(&self, c: &mut dyn Context) {
+    /// Ensure the list, panes, and status bar are created.
+    fn ensure_tree(&self, c: &mut dyn Context) -> Result<()> {
         if !c.children().is_empty() {
-            return;
+            return Ok(());
         }
 
-        let nodes: Vec<Block> = (0..10).map(Block::new).collect();
         let content_id = c
             .add_child(frame::Frame::new())
             .expect("Failed to mount content frame");
-        let list_id = c
-            .add_child_to(content_id, List::new(nodes))
-            .expect("Failed to mount list");
+        let panes_id = c
+            .add_child_to(content_id, Panes::new())
+            .expect("Failed to mount panes");
         let status_id = c.add_child(StatusBar).expect("Failed to mount statusbar");
 
         c.with_layout(&mut |layout| {
@@ -165,14 +194,34 @@ impl ListGym {
             layout.height = Sizing::Flex(1);
         })
         .expect("Failed to configure content layout");
-        c.with_layout_of(list_id, &mut |layout| {
+        c.with_layout_of(panes_id, &mut |layout| {
             *layout = Layout::fill();
         })
-        .expect("Failed to configure list layout");
+        .expect("Failed to configure panes layout");
         c.with_layout_of(status_id, &mut |layout| {
             *layout = Layout::row().flex_horizontal(1).fixed_height(1);
         })
         .expect("Failed to configure status layout");
+
+        let (frame_id, list_id) = Self::create_column(c)?;
+        c.with_widget(panes_id, |panes: &mut Panes, ctx| {
+            panes.insert_col(ctx, frame_id)
+        })?;
+        c.set_focus(list_id);
+
+        Ok(())
+    }
+
+    /// Create a framed list column and return (frame, list) node ids.
+    fn create_column(c: &mut dyn Context) -> Result<(NodeId, NodeId)> {
+        let nodes: Vec<Block> = (0..10).map(Block::new).collect();
+        let list_id = c.add_orphan(List::new(nodes));
+        let frame_id = c.add_orphan(frame::Frame::new());
+        c.mount_child_to(frame_id, list_id)?;
+        c.with_layout_of(list_id, &mut |layout| {
+            *layout = Layout::fill();
+        })?;
+        Ok((frame_id, list_id))
     }
 
     /// Execute a closure with mutable access to the list widget.
@@ -180,8 +229,8 @@ impl ListGym {
     where
         F: FnMut(&mut List<Block>) -> Result<()>,
     {
-        self.ensure_tree(c);
-        let list_id = Self::list_id(c).expect("list not initialized");
+        self.ensure_tree(c)?;
+        let list_id = Self::list_id(c)?;
         c.with_widget(list_id, |list: &mut List<Block>, _ctx| f(list))
     }
 
@@ -191,14 +240,67 @@ impl ListGym {
     }
 
     /// List node id inside the content frame.
-    fn list_id(c: &dyn Context) -> Option<NodeId> {
+    fn panes_id(c: &dyn Context) -> Option<NodeId> {
         let content_id = Self::content_id(c)?;
         let children = c.children_of(content_id);
         match children.as_slice() {
             [] => None,
-            [list_id] => Some(*list_id),
-            _ => panic!("expected a single list child"),
+            [panes_id] => Some(*panes_id),
+            _ => panic!("expected a single panes child"),
         }
+    }
+
+    /// Find the list to target for list commands.
+    fn list_id(c: &dyn Context) -> Result<NodeId> {
+        let panes_id =
+            Self::panes_id(c).ok_or_else(|| Error::Invalid("list not initialized".into()))?;
+        let lists = Self::column_lists(c, panes_id);
+        if lists.is_empty() {
+            return Err(Error::Invalid("list not initialized".into()));
+        }
+        if let Some(id) = lists
+            .iter()
+            .copied()
+            .find(|id| c.node_is_on_focus_path(*id))
+        {
+            return Ok(id);
+        }
+        Ok(lists[0])
+    }
+
+    /// Move focus between columns.
+    fn shift_column(&self, c: &mut dyn Context, forward: bool) -> Result<()> {
+        self.ensure_tree(c)?;
+        let panes_id = Self::panes_id(c).expect("panes not initialized");
+        let columns = Self::column_lists(c, panes_id);
+        if columns.is_empty() {
+            return Ok(());
+        }
+
+        let current = columns.iter().position(|id| c.node_is_on_focus_path(*id));
+        let next_idx = match (current, forward) {
+            (Some(idx), true) => (idx + 1) % columns.len(),
+            (Some(idx), false) => (idx + columns.len() - 1) % columns.len(),
+            (None, true) => 0,
+            (None, false) => columns.len() - 1,
+        };
+        c.set_focus(columns[next_idx]);
+        Ok(())
+    }
+
+    /// Collect the list nodes for each column, in column order.
+    fn column_lists(c: &dyn Context, panes_id: NodeId) -> Vec<NodeId> {
+        let mut lists = Vec::new();
+        for column_id in c.children_of(panes_id) {
+            let Some(frame_id) = c.children_of(column_id).first().copied() else {
+                continue;
+            };
+            let Some(list_id) = c.children_of(frame_id).first().copied() else {
+                continue;
+            };
+            lists.push(list_id);
+        }
+        lists
     }
 
     #[command]
@@ -229,6 +331,40 @@ impl ListGym {
             Ok(())
         })
     }
+
+    #[command]
+    /// Add a new column containing a list.
+    pub fn add_column(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.ensure_tree(c)?;
+        let panes_id = Self::panes_id(c).expect("panes not initialized");
+        let (frame_id, list_id) = Self::create_column(c)?;
+        c.with_widget(panes_id, |panes: &mut Panes, ctx| {
+            panes.insert_col(ctx, frame_id)
+        })?;
+        c.set_focus(list_id);
+        Ok(())
+    }
+
+    #[command]
+    /// Delete the focused column.
+    pub fn delete_column(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.ensure_tree(c)?;
+        let panes_id = Self::panes_id(c).expect("panes not initialized");
+        c.with_widget(panes_id, |panes: &mut Panes, ctx| panes.delete_focus(ctx))?;
+        Ok(())
+    }
+
+    #[command]
+    /// Move focus to the next column.
+    pub fn next_column(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.shift_column(c, true)
+    }
+
+    #[command]
+    /// Move focus to the previous column.
+    pub fn prev_column(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.shift_column(c, false)
+    }
 }
 
 impl Widget for ListGym {
@@ -241,7 +377,7 @@ impl Widget for ListGym {
     }
 
     fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
-        self.ensure_tree(c);
+        self.ensure_tree(c).ok()?;
         None
     }
 }
@@ -303,6 +439,10 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
         .key('l', "list::scroll_right()")
         .key(key::KeyCode::Left, "list::scroll_left()")
         .key(key::KeyCode::Right, "list::scroll_right()")
+        .key('s', "list_gym::add_column()")
+        .key('x', "list_gym::delete_column()")
+        .key(key::KeyCode::Tab, "list_gym::next_column()")
+        .key(key::KeyCode::BackTab, "list_gym::prev_column()")
         .key(key::KeyCode::PageDown, "list::page_down()")
         .key(' ', "list::page_down()")
         .key(key::KeyCode::PageUp, "list::page_up()");
@@ -314,7 +454,7 @@ mod tests {
 
     use super::*;
 
-    fn list_id(harness: &Harness) -> NodeId {
+    fn panes_id(harness: &Harness) -> NodeId {
         let root_children = &harness
             .canopy
             .core
@@ -331,10 +471,75 @@ mod tests {
             .expect("content node missing")
             .children;
         match content_children.as_slice() {
-            [] => panic!("list not initialized"),
-            [list_id] => *list_id,
-            _ => panic!("expected a single list child"),
+            [] => panic!("panes not initialized"),
+            [panes_id] => *panes_id,
+            _ => panic!("expected a single panes child"),
         }
+    }
+
+    fn list_id(harness: &Harness) -> NodeId {
+        let panes_id = panes_id(harness);
+        let panes_children = &harness
+            .canopy
+            .core
+            .nodes
+            .get(panes_id)
+            .expect("panes node missing")
+            .children;
+        let column_id = *panes_children.first().expect("pane column not initialized");
+        let column_children = &harness
+            .canopy
+            .core
+            .nodes
+            .get(column_id)
+            .expect("column node missing")
+            .children;
+        let frame_id = *column_children.first().expect("frame not initialized");
+        let frame_children = &harness
+            .canopy
+            .core
+            .nodes
+            .get(frame_id)
+            .expect("frame node missing")
+            .children;
+        *frame_children.first().expect("list not initialized")
+    }
+
+    fn column_list_ids(harness: &Harness) -> Vec<NodeId> {
+        let panes_id = panes_id(harness);
+        let panes_children = &harness
+            .canopy
+            .core
+            .nodes
+            .get(panes_id)
+            .expect("panes node missing")
+            .children;
+
+        let mut lists = Vec::new();
+        for column_id in panes_children {
+            let column_children = &harness
+                .canopy
+                .core
+                .nodes
+                .get(*column_id)
+                .expect("column node missing")
+                .children;
+            let Some(frame_id) = column_children.first().copied() else {
+                continue;
+            };
+            let frame_children = &harness
+                .canopy
+                .core
+                .nodes
+                .get(frame_id)
+                .expect("frame node missing")
+                .children;
+            let Some(list_id) = frame_children.first().copied() else {
+                continue;
+            };
+            lists.push(list_id);
+        }
+        lists
     }
 
     fn create_test_harness() -> Result<Harness> {
@@ -419,6 +624,77 @@ mod tests {
         });
 
         assert!(selected > initial_selected);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_listgym_adds_and_deletes_columns() -> Result<()> {
+        let mut harness = create_test_harness()?;
+        harness.render()?;
+
+        let panes_id = panes_id(&harness);
+        let initial_cols = harness
+            .canopy
+            .core
+            .nodes
+            .get(panes_id)
+            .expect("panes node missing")
+            .children
+            .len();
+
+        harness.script("list_gym::add_column()")?;
+        let after_add = harness
+            .canopy
+            .core
+            .nodes
+            .get(panes_id)
+            .expect("panes node missing")
+            .children
+            .len();
+        assert_eq!(after_add, initial_cols + 1);
+
+        harness.script("list_gym::delete_column()")?;
+        let after_delete = harness
+            .canopy
+            .core
+            .nodes
+            .get(panes_id)
+            .expect("panes node missing")
+            .children
+            .len();
+        assert_eq!(after_delete, initial_cols);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_listgym_add_item_command() -> Result<()> {
+        let mut harness = create_test_harness()?;
+        harness.render()?;
+
+        harness.script("list_gym::add_item()")?;
+        harness.script("list_gym::add_column()")?;
+        harness.script("list_gym::add_item()")?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_listgym_tabs_between_columns() -> Result<()> {
+        let mut harness = create_test_harness()?;
+        harness.render()?;
+
+        harness.script("list_gym::add_column()")?;
+        let lists = column_list_ids(&harness);
+        assert_eq!(lists.len(), 2);
+        assert!(harness.canopy.core.is_on_focus_path(lists[1]));
+
+        harness.script("list_gym::next_column()")?;
+        assert!(harness.canopy.core.is_on_focus_path(lists[0]));
+
+        harness.script("list_gym::prev_column()")?;
+        assert!(harness.canopy.core.is_on_focus_path(lists[1]));
 
         Ok(())
     }

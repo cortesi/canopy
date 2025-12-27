@@ -253,13 +253,13 @@ where
     /// Scroll the view down by one page.
     #[command]
     pub fn page_down(&mut self, c: &mut dyn Context) {
-        c.page_down();
+        self.page_shift(c, true);
     }
 
     /// Scroll the view up by one page.
     #[command]
     pub fn page_up(&mut self, c: &mut dyn Context) {
-        c.page_up();
+        self.page_shift(c, false);
     }
 
     /// Ensure the selected item is visible in the view.
@@ -270,21 +270,74 @@ where
         };
 
         let view_rect = c.view().view_rect();
-        let mut y_offset = 0u32;
+        let metrics = self.item_metrics(view_rect.w.max(1));
+        let Some((start, height)) = metrics.get(selected_idx).copied() else {
+            return;
+        };
 
-        for (idx, item) in self.items.iter().enumerate() {
-            let size = item.measure(view_rect.w);
-            if idx == selected_idx {
-                if y_offset < view_rect.tl.y {
-                    let delta = view_rect.tl.y - y_offset;
-                    let _ = c.scroll_by(0, -(delta as i32));
-                } else if y_offset + size.h > view_rect.tl.y + view_rect.h {
-                    let delta = (y_offset + size.h) - (view_rect.tl.y + view_rect.h);
-                    let _ = c.scroll_by(0, delta as i32);
-                }
-                break;
-            }
+        if start < view_rect.tl.y {
+            let delta = view_rect.tl.y - start;
+            let _ = c.scroll_by(0, -(delta as i32));
+        } else if start.saturating_add(height) > view_rect.tl.y.saturating_add(view_rect.h) {
+            let delta = start.saturating_add(height) - (view_rect.tl.y + view_rect.h);
+            let _ = c.scroll_by(0, delta as i32);
+        }
+    }
+
+    /// Move selection by one page and keep it visible.
+    fn page_shift(&mut self, c: &mut dyn Context, forward: bool) {
+        if self.is_empty() {
+            return;
+        }
+
+        let view_rect = c.view().view_rect();
+        if view_rect.h == 0 {
+            return;
+        }
+
+        let metrics = self.item_metrics(view_rect.w.max(1));
+        let selected_idx = self.selected.unwrap_or(0).min(self.len() - 1);
+        let Some((start, _height)) = metrics.get(selected_idx).copied() else {
+            return;
+        };
+
+        let page = view_rect.h.max(1);
+        let target_y = if forward {
+            start.saturating_add(page)
+        } else {
+            start.saturating_sub(page)
+        };
+
+        if let Some(target_idx) = Self::index_at_y(&metrics, target_y) {
+            self.select(target_idx);
+            self.ensure_selected_visible(c);
+        }
+    }
+
+    /// Build (start, height) tuples for each item.
+    fn item_metrics(&self, available_width: u32) -> Vec<(u32, u32)> {
+        let mut metrics = Vec::with_capacity(self.items.len());
+        let mut y_offset = 0u32;
+        for item in &self.items {
+            let size = item.measure(available_width);
+            metrics.push((y_offset, size.h));
             y_offset = y_offset.saturating_add(size.h);
+        }
+        metrics
+    }
+
+    /// Find the item index covering a y coordinate; fallback to last item.
+    fn index_at_y(metrics: &[(u32, u32)], y: u32) -> Option<usize> {
+        for (idx, (start, height)) in metrics.iter().enumerate() {
+            if y < start.saturating_add(*height) {
+                return Some(idx);
+            }
+        }
+
+        if metrics.is_empty() {
+            None
+        } else {
+            Some(metrics.len() - 1)
         }
     }
 }
@@ -360,5 +413,75 @@ where
 
     fn name(&self) -> NodeName {
         NodeName::convert("list")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Canopy, Loader, testing::harness::Harness};
+
+    struct TestItem {
+        height: u32,
+    }
+
+    impl ListItem for TestItem {
+        fn measure(&self, _available_width: u32) -> Expanse {
+            Expanse::new(10, self.height)
+        }
+
+        fn render(
+            &mut self,
+            _rndr: &mut Render,
+            _area: Rect,
+            _selected: bool,
+            _offset: Point,
+            _full_size: Expanse,
+        ) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    impl Loader for List<TestItem> {
+        fn load(c: &mut Canopy) {
+            c.add_commands::<Self>();
+        }
+    }
+
+    #[test]
+    fn test_page_down_moves_selection_and_allows_prev() -> Result<()> {
+        let items = (0..20).map(|_| TestItem { height: 1 }).collect();
+        let root = List::new(items);
+        let mut harness = Harness::builder(root).size(20, 5).build()?;
+        harness.render()?;
+
+        let mut initial = None;
+        harness.with_root_widget::<List<TestItem>, _>(|list| {
+            initial = list.selected_index();
+        });
+
+        for _ in 0..3 {
+            harness.script("list::page_down()")?;
+        }
+
+        let mut after = None;
+        harness.with_root_widget::<List<TestItem>, _>(|list| {
+            after = list.selected_index();
+        });
+
+        let after_idx = after.expect("selection missing");
+        let initial_idx = initial.unwrap_or(0);
+        assert!(after_idx > initial_idx);
+
+        harness.script("list::select_prev()")?;
+
+        let mut final_sel = None;
+        harness.with_root_widget::<List<TestItem>, _>(|list| {
+            final_sel = list.selected_index();
+        });
+
+        assert_eq!(final_sel, Some(after_idx.saturating_sub(1)));
+
+        Ok(())
     }
 }
