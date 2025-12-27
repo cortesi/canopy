@@ -5,7 +5,7 @@ use canopy::{
     error::{Error, Result},
     event::{key, mouse},
     geom::{Expanse, Line, Point, Rect},
-    layout::{Layout, Sizing},
+    layout::Layout,
     render::Render,
     style::{AttrSet, solarized},
     widget::Widget,
@@ -135,11 +135,7 @@ impl StatusBar {
     /// Collect column container node ids from the panes widget.
     fn column_nodes(ctx: &dyn ViewContext) -> Vec<NodeId> {
         let root_children = ctx.children_of(ctx.root_id());
-        let Some(content_id) = root_children.first().copied() else {
-            return Vec::new();
-        };
-        let content_children = ctx.children_of(content_id);
-        let Some(panes_id) = content_children.first().copied() else {
+        let Some(panes_id) = root_children.first().copied() else {
             return Vec::new();
         };
         ctx.children_of(panes_id)
@@ -177,23 +173,13 @@ impl ListGym {
             return Ok(());
         }
 
-        let content_id = c
-            .add_child(frame::Frame::new())
-            .expect("Failed to mount content frame");
-        let panes_id = c
-            .add_child_to(content_id, Panes::new())
-            .expect("Failed to mount panes");
+        let panes_id = c.add_child(Panes::new()).expect("Failed to mount panes");
         let status_id = c.add_child(StatusBar).expect("Failed to mount statusbar");
 
         c.with_layout(&mut |layout| {
             *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })
         .expect("Failed to configure layout");
-        c.with_layout_of(content_id, &mut |layout| {
-            layout.width = Sizing::Flex(1);
-            layout.height = Sizing::Flex(1);
-        })
-        .expect("Failed to configure content layout");
         c.with_layout_of(panes_id, &mut |layout| {
             *layout = Layout::fill();
         })
@@ -234,20 +220,9 @@ impl ListGym {
         c.with_widget(list_id, |list: &mut List<Block>, _ctx| f(list))
     }
 
-    /// Content frame node id.
-    fn content_id(c: &dyn Context) -> Option<NodeId> {
-        c.children().first().copied()
-    }
-
-    /// List node id inside the content frame.
+    /// Panes node id, if initialized.
     fn panes_id(c: &dyn Context) -> Option<NodeId> {
-        let content_id = Self::content_id(c)?;
-        let children = c.children_of(content_id);
-        match children.as_slice() {
-            [] => None,
-            [panes_id] => Some(*panes_id),
-            _ => panic!("expected a single panes child"),
-        }
+        c.children().first().copied()
     }
 
     /// Find the list to target for list commands.
@@ -462,19 +437,7 @@ mod tests {
             .get(harness.root)
             .expect("root node missing")
             .children;
-        let content_id = *root_children.first().expect("list not initialized");
-        let content_children = &harness
-            .canopy
-            .core
-            .nodes
-            .get(content_id)
-            .expect("content node missing")
-            .children;
-        match content_children.as_slice() {
-            [] => panic!("panes not initialized"),
-            [panes_id] => *panes_id,
-            _ => panic!("expected a single panes child"),
-        }
+        *root_children.first().expect("list not initialized")
     }
 
     fn list_id(harness: &Harness) -> NodeId {
