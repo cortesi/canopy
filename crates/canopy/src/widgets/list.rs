@@ -351,10 +351,14 @@ where
         let view_rect = view.view_rect();
         let content_origin = view.content_origin();
         let scroll = view.tl;
+        let view_bottom = view_rect.tl.y.saturating_add(view_rect.h);
         rndr.fill("", view.view_rect_local(), ' ')?;
 
         let mut y_offset = 0u32;
         for (idx, item) in self.items.iter_mut().enumerate() {
+            if y_offset >= view_bottom {
+                break;
+            }
             let size = item.measure(view_rect.w.max(1));
             let item_rect = Rect::new(0, y_offset, size.w, size.h);
             let selected = self.selected == Some(idx);

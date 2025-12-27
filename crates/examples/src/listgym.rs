@@ -21,12 +21,12 @@ const COLORS: &[&str] = &["red", "blue"];
 
 /// List item block for the list gym demo.
 pub struct Block {
-    /// Text content.
-    text: String,
     /// Color layer name.
     color: String,
     /// Fixed wrapping width.
     width: u32,
+    /// Cached wrapped lines.
+    lines: Vec<String>,
 }
 
 impl Block {
@@ -34,17 +34,18 @@ impl Block {
     pub fn new(index: usize) -> Self {
         let mut rng = rand::rng();
         let width = rng.random_range(10..150);
+        let lines = Self::wrap_lines(TEXT, width);
         Self {
-            text: TEXT.to_string(),
             color: String::from(COLORS[index % 2]),
             width,
+            lines,
         }
     }
 
     /// Wrap and pad the block text for the configured width.
-    fn lines(&self) -> Vec<String> {
-        let wrap_width = self.width.max(1) as usize;
-        textwrap::wrap(&self.text, wrap_width)
+    fn wrap_lines(text: &str, width: u32) -> Vec<String> {
+        let wrap_width = width.max(1) as usize;
+        textwrap::wrap(text, wrap_width)
             .into_iter()
             .map(|line| format!("{:width$}", line, width = wrap_width))
             .collect()
@@ -53,8 +54,7 @@ impl Block {
 
 impl ListItem for Block {
     fn measure(&self, _available_width: u32) -> Expanse {
-        let lines = self.lines();
-        let height = lines.len().max(1) as u32;
+        let height = self.lines.len().max(1) as u32;
         Expanse::new(self.width.saturating_add(2), height)
     }
 
@@ -78,7 +78,7 @@ impl ListItem for Block {
             rndr.fill("blue", active, '\u{2588}')?;
         }
 
-        let lines = self.lines();
+        let lines = &self.lines;
         let style = format!("{}/text", self.color);
         let text_start = 2u32;
         let text_end = text_start.saturating_add(self.width);
