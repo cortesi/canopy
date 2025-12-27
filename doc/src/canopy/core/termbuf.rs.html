@@ -1,5 +1,5 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/canopy/src/core/termbuf.rs`."><title>termbuf.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="canopy" data-themes="" data-resource-suffix="" data-rustdoc-version="1.92.0 (ded5c06cf 2025-12-08)" data-channel="1.92.0" data-search-js="search-d69d8955.js" data-stringdex-js="stringdex-c3e638e9.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-ce535bd0.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">canopy/core/</div>termbuf.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use crate</span>::{
-<a href=#2 id=2 data-nosnippet>2</a>    core::Result,
+<a href=#2 id=2 data-nosnippet>2</a>    error::Result,
 <a href=#3 id=3 data-nosnippet>3</a>    geom::{Expanse, Frame, Line, Point, Rect},
 <a href=#4 id=4 data-nosnippet>4</a>    render::RenderBackend,
 <a href=#5 id=5 data-nosnippet>5</a>    style::{AttrSet, Color, Style},
@@ -336,7 +336,7 @@
 <a href=#336 id=336 data-nosnippet>336</a>    <span class="kw">use crate</span>::{
 <a href=#337 id=337 data-nosnippet>337</a>        buf,
 <a href=#338 id=338 data-nosnippet>338</a>        style::{AttrSet, Color, PartialStyle},
-<a href=#339 id=339 data-nosnippet>339</a>        tutils::buf::BufTest,
+<a href=#339 id=339 data-nosnippet>339</a>        testing::buf::BufTest,
 <a href=#340 id=340 data-nosnippet>340</a>    };
 <a href=#341 id=341 data-nosnippet>341</a>
 <a href=#342 id=342 data-nosnippet>342</a>    <span class="kw">fn </span>def_style() -&gt; Style {
@@ -545,7 +545,7 @@
 <a href=#545 id=545 data-nosnippet>545</a>
 <a href=#546 id=546 data-nosnippet>546</a>    <span class="attr">#[test]
 <a href=#547 id=547 data-nosnippet>547</a>    </span><span class="kw">fn </span>contains_text_fg_compat() {
-<a href=#548 id=548 data-nosnippet>548</a>        <span class="kw">use </span><span class="kw">crate</span>::core::style::solarized;
+<a href=#548 id=548 data-nosnippet>548</a>        <span class="kw">use </span><span class="kw">crate</span>::style::solarized;
 <a href=#549 id=549 data-nosnippet>549</a>        <span class="kw">let </span><span class="kw-2">mut </span>tb = TermBuf::new(Expanse::new(<span class="number">10</span>, <span class="number">1</span>), <span class="string">' '</span>, def_style());
 <a href=#550 id=550 data-nosnippet>550</a>
 <a href=#551 id=551 data-nosnippet>551</a>        <span class="kw">let </span><span class="kw-2">mut </span>blue_style = def_style();
@@ -614,7 +614,7 @@
 <a href=#614 id=614 data-nosnippet>614</a>
 <a href=#615 id=615 data-nosnippet>615</a>    <span class="attr">#[test]
 <a href=#616 id=616 data-nosnippet>616</a>    </span><span class="kw">fn </span>contains_text_style_builders() {
-<a href=#617 id=617 data-nosnippet>617</a>        <span class="kw">use </span><span class="kw">crate</span>::core::style::Attr;
+<a href=#617 id=617 data-nosnippet>617</a>        <span class="kw">use </span><span class="kw">crate</span>::style::Attr;
 <a href=#618 id=618 data-nosnippet>618</a>        <span class="kw">let </span><span class="kw-2">mut </span>tb = TermBuf::new(Expanse::new(<span class="number">10</span>, <span class="number">2</span>), <span class="string">' '</span>, def_style());
 <a href=#619 id=619 data-nosnippet>619</a>
 <a href=#620 id=620 data-nosnippet>620</a>        <span class="comment">// Create styles with different attributes

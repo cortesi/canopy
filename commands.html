@@ -201,7 +201,7 @@ simple, implementing them by hand would be tedious, so Canopy has derive helpers
 attribute. For example:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>#[derive(StatefulNode)]
+</span>#[derive(canopy::StatefulNode)]
 struct MyNode {
     state: NodeState,
     value: u64,

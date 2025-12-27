@@ -199,7 +199,7 @@ for you. All you need to do is make sure that the struct for your node has an at
 <code>NodeState</code>.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>#[derive(StatefulNode)]
+</span>#[derive(canopy::StatefulNode)]
 struct MyNode {
     state: NodeState,
     // ...

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"macro":["buf","rgb"],"mod":["core","geom","widgets"]};
+window.SIDEBAR_ITEMS = {"attr":["command","derive_commands"],"derive":["StatefulNode"],"enum":["InputSpec"],"fn":["collect_focusable_nodes","find_focus_target","find_focused_node"],"macro":["rgb"],"mod":["backend","commands","cursor","error","event","geom","node","path","render","script","state","style","tree","widgets"],"struct":["Binder","Canopy","FocusableNode","InputMap","InputMode","Layout","Poller","TermBuf","TextBuf"],"trait":["Context","DefaultBindings","Loader"]};
