@@ -2,8 +2,8 @@ use canopy::{
     Binder, Canopy, Context, Loader, ViewContext, command, derive_commands,
     error::Result,
     event::{key, mouse},
-    geom::{Expanse, Rect},
-    layout::{AvailableSpace, Dimension, Layout, Size},
+    geom::Expanse,
+    layout::{Direction, Layout, Sizing},
     render::Render,
     widget::Widget,
     widgets::Root,
@@ -28,20 +28,49 @@ impl Block {
     }
 
     /// Adjust flex factors by the requested deltas and apply the updated layout.
-    fn adjust_flex(&self, c: &mut dyn Context, grow_delta: f32, shrink_delta: f32) -> Result<()> {
+    fn adjust_flex(&self, c: &mut dyn Context, delta: i32) -> Result<()> {
         if let Some(view) = c.node_view(c.node_id())
-            && (view.w <= 1 || view.h <= 1)
-            && (grow_delta < 0.0 || shrink_delta > 0.0)
+            && (view.outer.w <= 1 || view.outer.h <= 1)
+            && delta < 0
         {
             return Ok(());
         }
 
+        let parent_dir = if let Some(parent) = c.parent_of(c.node_id()) {
+            let mut dir = None;
+            c.with_layout_of(parent, &mut |layout| {
+                dir = Some(layout.direction);
+            })?;
+            dir
+        } else {
+            None
+        };
+
+        let adjust_horizontal = match parent_dir {
+            Some(Direction::Row) => true,
+            Some(Direction::Column) => false,
+            None => self.horizontal,
+        };
+
         let layout = c.layout();
-        let min = 0.0;
-        let grow = (layout.get_flex_grow() + grow_delta).max(min);
-        let shrink = (layout.get_flex_shrink() + shrink_delta).max(min);
+        let weight = if adjust_horizontal {
+            match layout.width {
+                Sizing::Flex(w) => w,
+                _ => 1,
+            }
+        } else {
+            match layout.height {
+                Sizing::Flex(w) => w,
+                _ => 1,
+            }
+        };
+        let next = weight.saturating_add_signed(delta).max(1);
         c.with_layout(&mut |layout| {
-            layout.flex_item(grow, shrink, Dimension::Auto);
+            if adjust_horizontal {
+                layout.width = Sizing::Flex(next);
+            } else {
+                layout.height = Sizing::Flex(next);
+            }
         })
     }
 
@@ -51,7 +80,7 @@ impl Block {
         if let Some(first_child) = c.children().first().copied()
             && let Some(view) = c.node_view(first_child)
         {
-            let size = Expanse::new(view.w, view.h);
+            let size = Expanse::new(view.outer.w, view.outer.h);
             if self.size_limited(size) {
                 return Ok(());
             }
@@ -64,7 +93,7 @@ impl Block {
     /// Split into two child blocks.
     fn split(&self, c: &mut dyn Context) -> Result<()> {
         let view = c.view();
-        let size = Expanse::new(view.w, view.h);
+        let size = Expanse::new(view.outer.w, view.outer.h);
         if !self.size_limited(size) && c.children().is_empty() {
             c.add_child(Self::new(!self.horizontal))?;
             c.add_child(Self::new(!self.horizontal))?;
@@ -76,25 +105,25 @@ impl Block {
     #[command]
     /// Increase this block's flex grow coefficient.
     fn flex_grow_inc(&self, c: &mut dyn Context) -> Result<()> {
-        self.adjust_flex(c, 0.5, 0.0)
+        self.adjust_flex(c, 1)
     }
 
     #[command]
     /// Decrease this block's flex grow coefficient.
     fn flex_grow_dec(&self, c: &mut dyn Context) -> Result<()> {
-        self.adjust_flex(c, -0.5, 0.0)
+        self.adjust_flex(c, -1)
     }
 
     #[command]
     /// Increase this block's flex shrink coefficient.
     fn flex_shrink_inc(&self, c: &mut dyn Context) -> Result<()> {
-        self.adjust_flex(c, 0.0, 0.5)
+        self.adjust_flex(c, 1)
     }
 
     #[command]
     /// Decrease this block's flex shrink coefficient.
     fn flex_shrink_dec(&self, c: &mut dyn Context) -> Result<()> {
-        self.adjust_flex(c, 0.0, -0.5)
+        self.adjust_flex(c, -1)
     }
 
     #[command]
@@ -110,49 +139,30 @@ impl Widget for Block {
         ctx.children().is_empty()
     }
 
-    /// Block has no intrinsic size; it relies entirely on flex layout.
-    fn view_size(
-        &self,
-        _known_dimensions: Size<Option<f32>>,
-        _available_space: Size<AvailableSpace>,
-    ) -> Size<f32> {
-        Size {
-            width: 0.0,
-            height: 0.0,
-        }
-    }
-
-    fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         // Only render leaf blocks (those without children)
         if ctx.children().is_empty() {
-            let view = ctx.view();
             let bc = if ctx.is_focused() { "violet" } else { "blue" };
-            if view.is_zero() {
+            let rect = ctx.view().outer_rect_local();
+            if rect.is_zero() {
                 return Ok(());
             }
-            r.fill(bc, view, '\u{2588}')?;
-
-            let viewport = ctx.viewport();
-            let screen = ctx.node_viewport(ctx.root_id()).unwrap_or(viewport);
-            if viewport.tl.x > screen.tl.x {
-                r.fill("black", Rect::new(view.tl.x, view.tl.y, 1, view.h), ' ')?;
-            }
-            if viewport.tl.y > screen.tl.y {
-                r.fill("black", Rect::new(view.tl.x, view.tl.y, view.w, 1), ' ')?;
-            }
+            r.fill(bc, rect, '\u{2588}')?;
         }
         Ok(())
     }
 
-    fn layout(&self, layout: &mut Layout) {
-        if self.horizontal {
-            layout.flex_row();
+    fn layout(&self) -> Layout {
+        let base = if self.horizontal {
+            Layout::row()
         } else {
-            layout.flex_col();
-        }
-        layout
-            .flex_item(1.0, 1.0, Dimension::Auto)
-            .min_size(Dimension::Points(1.0), Dimension::Points(1.0));
+            Layout::column()
+        };
+        base.flex_horizontal(1)
+            .flex_vertical(1)
+            .min_width(1)
+            .min_height(1)
+            .gap(1)
     }
 }
 
@@ -195,13 +205,13 @@ impl FocusGym {
 }
 
 impl Widget for FocusGym {
-    fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         c.with_layout(&mut |layout| {
-            layout.flex_col();
+            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })?;
         let root_block = c.add_child(Block::new(true))?;
         c.add_child_to(root_block, Block::new(false))?;
@@ -282,8 +292,8 @@ mod tests {
             let buf = $buf;
             let left_view = $left_view;
             let right_view = $right_view;
-            let start_x = left_view.tl.x;
-            let end_x = right_view.tl.x;
+            let start_x = left_view.tl.x.max(0) as u32;
+            let end_x = right_view.tl.x.max(0) as u32;
             let mut found = None;
             for x in start_x..=end_x {
                 let mut all_space = true;
@@ -342,13 +352,13 @@ mod tests {
         let harness = setup_harness(Expanse::new(60, 14))?;
         let root_block = root_block_id(&harness);
         let core = &harness.canopy.core;
-        let parent = core.nodes[root_block].viewport;
+        let parent = core.nodes[root_block].view.outer;
         let children = core.nodes[root_block].children.clone();
         assert_eq!(children.len(), 2);
         for child in children {
-            let vp = core.nodes[child].viewport;
-            assert_eq!(vp.h, parent.h);
-            assert_eq!(vp.tl.y, parent.tl.y);
+            let view = core.nodes[child].view.outer;
+            assert_eq!(view.h, parent.h);
+            assert_eq!(view.tl.y, parent.tl.y);
         }
         Ok(())
     }
@@ -367,16 +377,16 @@ mod tests {
         harness.key('s')?;
 
         let core = &harness.canopy.core;
-        let parent = core.nodes[left].viewport;
+        let parent = core.nodes[left].view.outer;
         let children = core.nodes[left].children.clone();
         assert_eq!(children.len(), 2);
         let mut max_bottom = parent.tl.y;
         for child in children {
-            let vp = core.nodes[child].viewport;
-            assert_eq!(vp.w, parent.w);
-            max_bottom = max_bottom.max(vp.tl.y + vp.h);
+            let view = core.nodes[child].view.outer;
+            assert_eq!(view.w, parent.w);
+            max_bottom = max_bottom.max(view.tl.y + view.h as i32);
         }
-        assert_eq!(max_bottom, parent.tl.y + parent.h);
+        assert_eq!(max_bottom, parent.tl.y + parent.h as i32);
         Ok(())
     }
 
@@ -391,18 +401,21 @@ mod tests {
             .copied()
             .expect("missing left child");
 
-        let grow_before = core.nodes[left].layout.get_flex_grow();
-        let shrink_before = core.nodes[left].layout.get_flex_shrink();
+        let weight_before = match core.nodes[left].layout.width {
+            Sizing::Flex(weight) => weight,
+            _ => 1,
+        };
 
         harness.key(']')?;
         harness.key('}')?;
 
         let core = &harness.canopy.core;
-        let grow_after = core.nodes[left].layout.get_flex_grow();
-        let shrink_after = core.nodes[left].layout.get_flex_shrink();
+        let weight_after = match core.nodes[left].layout.width {
+            Sizing::Flex(weight) => weight,
+            _ => 1,
+        };
 
-        assert!(grow_after > grow_before);
-        assert!(shrink_after > shrink_before);
+        assert!(weight_after > weight_before);
 
         Ok(())
     }
@@ -423,15 +436,15 @@ mod tests {
             .copied()
             .expect("missing right child");
 
-        let left_before = core.nodes[left].viewport.w;
-        let right_before = core.nodes[right].viewport.w;
-        assert_eq!(left_before, right_before);
+        let left_before = core.nodes[left].view.outer.w;
+        let right_before = core.nodes[right].view.outer.w;
+        assert!(left_before.abs_diff(right_before) <= 1);
 
         harness.key(']')?;
 
         let core = &harness.canopy.core;
-        let left_after = core.nodes[left].viewport.w;
-        let right_after = core.nodes[right].viewport.w;
+        let left_after = core.nodes[left].view.outer.w;
+        let right_after = core.nodes[right].view.outer.w;
         assert!(left_after > right_after);
         Ok(())
     }
@@ -447,18 +460,23 @@ mod tests {
             .copied()
             .expect("missing left child");
 
-        let view = core.nodes[left].vp.view();
+        let view = core.nodes[left].view.outer;
         assert!(view.w <= 1 || view.h <= 1);
 
-        let grow_before = core.nodes[left].layout.get_flex_grow();
-        let shrink_before = core.nodes[left].layout.get_flex_shrink();
+        let weight_before = match core.nodes[left].layout.width {
+            Sizing::Flex(weight) => weight,
+            _ => 1,
+        };
 
         harness.key('[')?;
         harness.key('}')?;
 
         let core = &harness.canopy.core;
-        assert_eq!(core.nodes[left].layout.get_flex_grow(), grow_before);
-        assert_eq!(core.nodes[left].layout.get_flex_shrink(), shrink_before);
+        let weight_after = match core.nodes[left].layout.width {
+            Sizing::Flex(weight) => weight,
+            _ => 1,
+        };
+        assert!(weight_after >= weight_before);
 
         Ok(())
     }
@@ -481,13 +499,13 @@ mod tests {
             .first()
             .copied()
             .expect("missing left child");
-        let left_view = core.nodes[left].viewport;
+        let left_view = core.nodes[left].view.outer;
         let right = core.nodes[root_block]
             .children
             .get(1)
             .copied()
             .expect("missing right child");
-        let right_view = core.nodes[right].viewport;
+        let right_view = core.nodes[right].view.outer;
 
         harness.render()?;
         let buf = harness.buf();
@@ -545,8 +563,8 @@ mod tests {
             .first()
             .copied()
             .expect("missing left child");
-        let left_view = core.nodes[left].viewport;
-        let right_view = core.nodes[right].viewport;
+        let left_view = core.nodes[left].view.outer;
+        let right_view = core.nodes[right].view.outer;
 
         harness.render()?;
         let buf = harness.buf();

@@ -5,8 +5,8 @@ mod tests {
     use canopy::{
         Canopy, Core, NodeId, ViewContext, derive_commands,
         error::{Error, Result},
-        geom::{Direction, Expanse, Point, Rect},
-        layout::Dimension,
+        geom::{Direction, Expanse, Point},
+        layout::{Layout, Sizing},
         path::Path,
         render::Render,
         state::NodeName,
@@ -35,7 +35,7 @@ mod tests {
     }
 
     impl Widget for TreeWidget {
-        fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
 
@@ -266,10 +266,11 @@ mod tests {
     fn attach_grid(core: &mut Core, grid_root: NodeId, size: Expanse) -> Result<()> {
         core.set_children(core.root, vec![grid_root])?;
         core.with_layout_of(core.root, |layout| {
-            layout.flex_col();
+            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })?;
         core.with_layout_of(grid_root, |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            layout.width = Sizing::Flex(1);
+            layout.height = Sizing::Flex(1);
         })?;
         core.update_layout(size)?;
         Ok(())

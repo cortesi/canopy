@@ -7,8 +7,8 @@ use crate::{
     derive_commands,
     error::Result,
     event::Event,
-    geom::{Expanse, Rect},
-    layout::Dimension,
+    geom::Expanse,
+    layout::Layout,
     render::Render,
     state::NodeName,
     testing::backend::TestRender,
@@ -113,8 +113,12 @@ macro_rules! leaf {
                 true
             }
 
-            fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
-                r.text("any", ctx.view().line(0), &format!("<{}>", self.name()))
+            fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+                r.text(
+                    "any",
+                    ctx.view().outer_rect_local().line(0),
+                    &format!("<{}>", self.name()),
+                )
             }
 
             fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
@@ -174,8 +178,12 @@ macro_rules! branch {
                 true
             }
 
-            fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
-                r.text("any", ctx.view().line(0), &format!("<{}>", self.name()))
+            fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+                r.text(
+                    "any",
+                    ctx.view().outer_rect_local().line(0),
+                    &format!("<{}>", self.name()),
+                )
             }
 
             fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
@@ -253,8 +261,12 @@ impl Widget for R {
         true
     }
 
-    fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
-        r.text("any", ctx.view().line(0), &format!("<{}>", self.name()))
+    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        r.text(
+            "any",
+            ctx.view().outer_rect_local().line(0),
+            &format!("<{}>", self.name()),
+        )
     }
 
     fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
@@ -305,22 +317,26 @@ fn build_tree(core: &mut Core) -> Result<TestTree> {
     core.set_children(b, vec![b_a, b_b])?;
 
     core.with_layout_of(core.root, |layout| {
-        layout.flex_row().fill();
+        *layout = Layout::row().flex_horizontal(1).flex_vertical(1);
     })?;
-
-    style_flex_child(core, a)?;
-    style_flex_child(core, b)?;
     core.with_layout_of(a, |layout| {
-        layout.flex_col();
+        *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
     })?;
     core.with_layout_of(b, |layout| {
-        layout.flex_col();
+        *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
     })?;
-
-    style_flex_child(core, a_a)?;
-    style_flex_child(core, a_b)?;
-    style_flex_child(core, b_a)?;
-    style_flex_child(core, b_b)?;
+    core.with_layout_of(a_a, |layout| {
+        *layout = Layout::fill();
+    })?;
+    core.with_layout_of(a_b, |layout| {
+        *layout = Layout::fill();
+    })?;
+    core.with_layout_of(b_a, |layout| {
+        *layout = Layout::fill();
+    })?;
+    core.with_layout_of(b_b, |layout| {
+        *layout = Layout::fill();
+    })?;
 
     Ok(TestTree {
         root: core.root,
@@ -330,13 +346,6 @@ fn build_tree(core: &mut Core) -> Result<TestTree> {
         a_b,
         b_a,
         b_b,
-    })
-}
-
-/// Apply flex sizing to a child node.
-fn style_flex_child(core: &mut Core, id: NodeId) -> Result<()> {
-    core.with_layout_of(id, |layout| {
-        layout.flex_item(1.0, 1.0, Dimension::Auto);
     })
 }
 

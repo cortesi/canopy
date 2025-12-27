@@ -2,8 +2,8 @@ use super::core;
 use crate::{
     Context, ViewContext, command, cursor, derive_commands,
     error::Result,
-    geom::Rect,
-    layout::{AvailableSpace, Size},
+    geom::Line,
+    layout::{Constraint, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
     widget::Widget,
@@ -56,31 +56,35 @@ impl Widget for Editor {
         })
     }
 
-    fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
-        self.core.resize_window(view.w as usize, view.h as usize);
+        let view_rect = view.view_rect();
+        let content_origin = view.content_origin();
+        self.core
+            .resize_window(view_rect.w as usize, view_rect.h as usize);
         for (i, line) in self.core.window_text().iter().enumerate() {
             if let Some(text) = line {
-                r.text("text", view.line(i as u32), text)?;
+                let line_rect = Line::new(
+                    content_origin.x,
+                    content_origin.y.saturating_add(i as u32),
+                    view_rect.w,
+                );
+                r.text("text", line_rect, text)?;
             }
         }
         Ok(())
     }
 
-    fn view_size(
-        &self,
-        known_dimensions: Size<Option<f32>>,
-        available_space: Size<AvailableSpace>,
-    ) -> Size<f32> {
-        let width = known_dimensions
-            .width
-            .or_else(|| available_space.width.into_option())
-            .unwrap_or(0.0);
-        let wrap_width = width.max(1.0) as usize;
+    fn measure(&self, c: MeasureConstraints) -> Measurement {
+        let width = match c.width {
+            Constraint::Exact(n) | Constraint::AtMost(n) => n.max(1),
+            Constraint::Unbounded => 1,
+        };
+        let wrap_width = width as usize;
         let mut core = self.core.clone();
         core.resize_window(wrap_width, 0);
-        let height = core.wrapped_height() as f32;
-        Size { width, height }
+        let height = core.wrapped_height() as u32;
+        c.clamp(Size::new(width, height))
     }
 
     fn name(&self) -> NodeName {

@@ -29,10 +29,8 @@ pub mod style;
 /// Testing utilities.
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
-/// Viewport management.
-pub mod viewport;
-/// View stack utilities.
-pub mod viewstack;
+/// View management.
+pub mod view;
 
 // Core modules - internal
 /// Binding utilities.

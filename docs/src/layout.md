@@ -3,34 +3,20 @@
 Layout is probably the most complex part of Canopy, and understanding the
 principles behind it will make writing powerful widgets much easier.
 
-## Viewport
+## View
 
-The core structure managing layout in Canopy is the
-[ViewPort](doc/canopy/viewport/struct.Viewport.html). Each node has one stored
-in the Core-managed node data.
+Layout computes a `View` for every node. A view captures:
 
-<center>
-    <img width=100% style="padding: 20px;" src="assets/viewport.svg">
-</center>
+- **Outer rect**: the node's allocated rectangle in screen coordinates.
+- **Content rect**: the inner rectangle after subtracting padding (also in screen
+  coordinates). Children are laid out and clipped to this area.
+- **Scroll offset**: the top-left of the visible window in content coordinates.
+- **Canvas size**: the total scrollable extent in content coordinates.
 
-The **ViewPort** co-ordinates 3 different values - the virtual **size** of the
-node, a **view** into the content of the node, and a **projection** of the view
-onto the screen. To make this concrete, let's imagine a text widget. We
-calculate the **size** of the widget by wrapping the text to a given width -
-the height of the node is then the number of resulting lines. The resulting
-size might not all fit on screen. The **view** is a window onto the widget that
-does fit on screen, constrained to fall within the node's total **size**.
-
-The final value we need to understand is the **projection** - this is the
-location on the screen where the **view** is drawn. The tricky thing to
-understand is that the projection value is an offset within the **view** of the
-parent node.
-
-Finally, location on the physical screen to which the view is painted is the
-**projection**, represented by the top left point of the projection rectangle.
-
-The **size** and **view** are controlled by the node itself, while the
-**projection** is controlled by the parent node.
+Children are positioned in the parent's content coordinate space. During render,
+the engine translates child positions by the parent's scroll offset and clips
+children to the parent's content rect. Widgets can query the current view to draw
+scrollbars or react to available content space.
 
 
 ## Fit
@@ -39,4 +25,3 @@ The **size** and **view** are controlled by the node itself, while the
 
 
 ## Rendering
-

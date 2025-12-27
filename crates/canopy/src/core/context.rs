@@ -5,12 +5,12 @@ use std::{
 
 use super::{
     id::{NodeId, TypedId},
-    viewport::ViewPort,
+    view::View,
     world::Core,
 };
 use crate::{
     error::{Error, Result},
-    geom::{Direction, Expanse, Rect},
+    geom::{Direction, Expanse, Point, PointI32, Rect, RectI32},
     layout::Layout,
     path::Path,
     widget::Widget,
@@ -24,29 +24,37 @@ pub trait ViewContext {
     /// The root node of the tree.
     fn root_id(&self) -> NodeId;
 
-    /// Screen-space rectangle for the current node's visible view.
-    fn viewport(&self) -> Rect;
-
-    /// View rectangle for the current node, relative to its canvas.
-    fn view(&self) -> Rect;
-
-    /// Canvas size for the current node.
-    fn canvas(&self) -> Expanse;
+    /// View information for the current node.
+    fn view(&self) -> &View;
 
     /// Cached layout configuration for the current node.
     fn layout(&self) -> Layout;
 
-    /// Screen-space rectangle for a specific node.
-    fn node_viewport(&self, node: NodeId) -> Option<Rect>;
+    /// View information for a specific node.
+    fn node_view(&self, node: NodeId) -> Option<View>;
 
-    /// View rectangle for a specific node.
-    fn node_view(&self, node: NodeId) -> Option<Rect>;
+    /// Mark this node dirty so the next frame re-runs layout.
+    fn taint(&self);
 
-    /// Canvas size for a specific node.
-    fn node_canvas(&self, node: NodeId) -> Option<Expanse>;
+    /// Canvas size for the current node.
+    fn canvas(&self) -> Expanse {
+        self.view().canvas
+    }
 
-    /// Full viewport state for a specific node.
-    fn node_vp(&self, node: NodeId) -> Option<ViewPort>;
+    /// Visible view rectangle in content coordinates.
+    fn view_rect(&self) -> Rect {
+        self.view().view_rect()
+    }
+
+    /// Visible view rectangle in local outer coordinates.
+    fn view_rect_local(&self) -> Rect {
+        self.view().view_rect_local()
+    }
+
+    /// Local outer rectangle for this node.
+    fn outer_rect_local(&self) -> Rect {
+        self.view().outer_rect_local()
+    }
 
     /// Children of the current node in tree order.
     fn children(&self) -> Vec<NodeId> {
@@ -79,6 +87,38 @@ pub trait ViewContext {
 
     /// Return the parent of a node, or `None` if it is the root or not found.
     fn parent_of(&self, node: NodeId) -> Option<NodeId>;
+}
+
+/// Default zero-sized view used when a node lacks layout data.
+const DEFAULT_VIEW: View = View {
+    outer: RectI32 {
+        tl: PointI32 { x: 0, y: 0 },
+        w: 0,
+        h: 0,
+    },
+    content: RectI32 {
+        tl: PointI32 { x: 0, y: 0 },
+        w: 0,
+        h: 0,
+    },
+    tl: Point { x: 0, y: 0 },
+    canvas: Expanse { w: 0, h: 0 },
+};
+
+/// Clamp a scroll offset so it stays within the view/canvas bounds.
+fn clamp_scroll_offset(scroll: &mut Point, view: Expanse, canvas: Expanse) {
+    let max_x = if view.w == 0 {
+        0
+    } else {
+        canvas.w.saturating_sub(view.w)
+    };
+    let max_y = if view.h == 0 {
+        0
+    } else {
+        canvas.h.saturating_sub(view.h)
+    };
+    scroll.x = scroll.x.min(max_x);
+    scroll.y = scroll.y.min(max_y);
 }
 
 /// Mutable context available to widgets during event handling.
@@ -551,52 +591,30 @@ impl<'a> ViewContext for CoreContext<'a> {
         self.core.root
     }
 
-    fn viewport(&self) -> Rect {
+    fn view(&self) -> &View {
         self.core
             .nodes
             .get(self.node_id)
-            .map(|n| n.viewport)
-            .unwrap_or_default()
-    }
-
-    fn view(&self) -> Rect {
-        self.core
-            .nodes
-            .get(self.node_id)
-            .map(|n| n.vp.view())
-            .unwrap_or_default()
-    }
-
-    fn canvas(&self) -> Expanse {
-        self.core
-            .nodes
-            .get(self.node_id)
-            .map(|n| n.vp.canvas())
-            .unwrap_or_default()
+            .map(|n| &n.view)
+            .unwrap_or(&DEFAULT_VIEW)
     }
 
     fn layout(&self) -> Layout {
         self.core
             .nodes
             .get(self.node_id)
-            .map(|n| n.layout.clone())
+            .map(|n| n.layout)
             .unwrap_or_default()
     }
 
-    fn node_viewport(&self, node: NodeId) -> Option<Rect> {
-        self.core.nodes.get(node).map(|n| n.viewport)
+    fn node_view(&self, node: NodeId) -> Option<View> {
+        self.core.nodes.get(node).map(|n| n.view)
     }
 
-    fn node_view(&self, node: NodeId) -> Option<Rect> {
-        self.core.nodes.get(node).map(|n| n.vp.view())
-    }
-
-    fn node_canvas(&self, node: NodeId) -> Option<Expanse> {
-        self.core.nodes.get(node).map(|n| n.vp.canvas())
-    }
-
-    fn node_vp(&self, node: NodeId) -> Option<ViewPort> {
-        self.core.nodes.get(node).map(|n| n.vp)
+    fn taint(&self) {
+        if let Some(node) = self.core.nodes.get(self.node_id) {
+            node.layout_dirty.set(true);
+        }
     }
 
     fn children_of(&self, node: NodeId) -> Vec<NodeId> {
@@ -664,9 +682,10 @@ impl<'a> Context for CoreContext<'a> {
     fn scroll_to(&mut self, x: u32, y: u32) -> bool {
         let node = self.core.nodes.get_mut(self.node_id);
         if let Some(node) = node {
-            let before = node.vp.view();
-            node.vp.scroll_to(x, y);
-            before != node.vp.view()
+            let before = node.scroll;
+            node.scroll = Point { x, y };
+            clamp_scroll_offset(&mut node.scroll, node.content_size, node.canvas);
+            before != node.scroll
         } else {
             false
         }
@@ -675,9 +694,10 @@ impl<'a> Context for CoreContext<'a> {
     fn scroll_by(&mut self, x: i32, y: i32) -> bool {
         let node = self.core.nodes.get_mut(self.node_id);
         if let Some(node) = node {
-            let before = node.vp.view();
-            node.vp.scroll_by(x, y);
-            before != node.vp.view()
+            let before = node.scroll;
+            node.scroll = node.scroll.scroll(x, y);
+            clamp_scroll_offset(&mut node.scroll, node.content_size, node.canvas);
+            before != node.scroll
         } else {
             false
         }
@@ -686,9 +706,10 @@ impl<'a> Context for CoreContext<'a> {
     fn page_up(&mut self) -> bool {
         let node = self.core.nodes.get_mut(self.node_id);
         if let Some(node) = node {
-            let before = node.vp.view();
-            node.vp.page_up();
-            before != node.vp.view()
+            let before = node.scroll;
+            node.scroll = node.scroll.scroll(0, -(node.content_size.h as i32));
+            clamp_scroll_offset(&mut node.scroll, node.content_size, node.canvas);
+            before != node.scroll
         } else {
             false
         }
@@ -697,9 +718,10 @@ impl<'a> Context for CoreContext<'a> {
     fn page_down(&mut self) -> bool {
         let node = self.core.nodes.get_mut(self.node_id);
         if let Some(node) = node {
-            let before = node.vp.view();
-            node.vp.page_down();
-            before != node.vp.view()
+            let before = node.scroll;
+            node.scroll = node.scroll.scroll(0, node.content_size.h as i32);
+            clamp_scroll_offset(&mut node.scroll, node.content_size, node.canvas);
+            before != node.scroll
         } else {
             false
         }
@@ -708,9 +730,10 @@ impl<'a> Context for CoreContext<'a> {
     fn scroll_up(&mut self) -> bool {
         let node = self.core.nodes.get_mut(self.node_id);
         if let Some(node) = node {
-            let before = node.vp.view();
-            node.vp.scroll_up();
-            before != node.vp.view()
+            let before = node.scroll;
+            node.scroll = node.scroll.scroll(0, -1);
+            clamp_scroll_offset(&mut node.scroll, node.content_size, node.canvas);
+            before != node.scroll
         } else {
             false
         }
@@ -719,9 +742,10 @@ impl<'a> Context for CoreContext<'a> {
     fn scroll_down(&mut self) -> bool {
         let node = self.core.nodes.get_mut(self.node_id);
         if let Some(node) = node {
-            let before = node.vp.view();
-            node.vp.scroll_down();
-            before != node.vp.view()
+            let before = node.scroll;
+            node.scroll = node.scroll.scroll(0, 1);
+            clamp_scroll_offset(&mut node.scroll, node.content_size, node.canvas);
+            before != node.scroll
         } else {
             false
         }
@@ -730,9 +754,10 @@ impl<'a> Context for CoreContext<'a> {
     fn scroll_left(&mut self) -> bool {
         let node = self.core.nodes.get_mut(self.node_id);
         if let Some(node) = node {
-            let before = node.vp.view();
-            node.vp.scroll_left();
-            before != node.vp.view()
+            let before = node.scroll;
+            node.scroll = node.scroll.scroll(-1, 0);
+            clamp_scroll_offset(&mut node.scroll, node.content_size, node.canvas);
+            before != node.scroll
         } else {
             false
         }
@@ -741,9 +766,10 @@ impl<'a> Context for CoreContext<'a> {
     fn scroll_right(&mut self) -> bool {
         let node = self.core.nodes.get_mut(self.node_id);
         if let Some(node) = node {
-            let before = node.vp.view();
-            node.vp.scroll_right();
-            before != node.vp.view()
+            let before = node.scroll;
+            node.scroll = node.scroll.scroll(1, 0);
+            clamp_scroll_offset(&mut node.scroll, node.content_size, node.canvas);
+            before != node.scroll
         } else {
             false
         }
@@ -834,52 +860,30 @@ impl<'a> ViewContext for CoreViewContext<'a> {
         self.core.root
     }
 
-    fn viewport(&self) -> Rect {
+    fn view(&self) -> &View {
         self.core
             .nodes
             .get(self.node_id)
-            .map(|n| n.viewport)
-            .unwrap_or_default()
-    }
-
-    fn view(&self) -> Rect {
-        self.core
-            .nodes
-            .get(self.node_id)
-            .map(|n| n.vp.view())
-            .unwrap_or_default()
-    }
-
-    fn canvas(&self) -> Expanse {
-        self.core
-            .nodes
-            .get(self.node_id)
-            .map(|n| n.vp.canvas())
-            .unwrap_or_default()
+            .map(|n| &n.view)
+            .unwrap_or(&DEFAULT_VIEW)
     }
 
     fn layout(&self) -> Layout {
         self.core
             .nodes
             .get(self.node_id)
-            .map(|n| n.layout.clone())
+            .map(|n| n.layout)
             .unwrap_or_default()
     }
 
-    fn node_viewport(&self, node: NodeId) -> Option<Rect> {
-        self.core.nodes.get(node).map(|n| n.viewport)
+    fn node_view(&self, node: NodeId) -> Option<View> {
+        self.core.nodes.get(node).map(|n| n.view)
     }
 
-    fn node_view(&self, node: NodeId) -> Option<Rect> {
-        self.core.nodes.get(node).map(|n| n.vp.view())
-    }
-
-    fn node_canvas(&self, node: NodeId) -> Option<Expanse> {
-        self.core.nodes.get(node).map(|n| n.vp.canvas())
-    }
-
-    fn node_vp(&self, node: NodeId) -> Option<ViewPort> {
-        self.core.nodes.get(node).map(|n| n.vp)
+    fn taint(&self) {
+        if let Some(node) = self.core.nodes.get(self.node_id) {
+            node.layout_dirty.set(true);
+        }
     }
 
     fn children_of(&self, node: NodeId) -> Vec<NodeId> {

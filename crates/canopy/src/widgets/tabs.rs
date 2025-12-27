@@ -1,6 +1,6 @@
 use crate::{
-    Context, ViewContext, command, derive_commands, error::Result, geom::Rect, render::Render,
-    state::NodeName, widget::Widget,
+    Context, ViewContext, command, derive_commands, error::Result, render::Render, state::NodeName,
+    widget::Widget,
 };
 
 /// A tab control managing a set of nodes with titles.
@@ -43,17 +43,16 @@ impl Tabs {
 }
 
 impl Widget for Tabs {
-    fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         if self.tabs.is_empty() {
             return Ok(());
         }
 
-        for (i, rect) in ctx
+        let rects = ctx
             .view()
-            .split_horizontal(self.tabs.len() as u32)?
-            .iter()
-            .enumerate()
-        {
+            .view_rect_local()
+            .split_horizontal(self.tabs.len() as u32)?;
+        for (i, rect) in rects.iter().enumerate() {
             let styl = if i == self.active {
                 "tab/active"
             } else {

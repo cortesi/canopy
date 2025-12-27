@@ -1,8 +1,12 @@
 use std::time::Duration;
 
 use canopy::{
-    Canopy, Context, Loader, ViewContext, command, derive_commands, error::Result, geom::Rect,
-    layout::Dimension, render::Render, widget::Widget, widgets::Text,
+    Canopy, Context, Loader, ViewContext, command, derive_commands,
+    error::Result,
+    layout::{Layout, Sizing},
+    render::Render,
+    widget::Widget,
+    widgets::Text,
 };
 
 /// Placeholder paragraph text for the demo.
@@ -57,11 +61,12 @@ impl TextDisplay {
             .expect("Failed to mount text");
 
         c.with_layout(&mut |layout| {
-            layout.flex_col();
+            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })
         .expect("Failed to configure layout");
         c.with_layout_of(text_id, &mut |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            layout.width = Sizing::Flex(1);
+            layout.height = Sizing::Flex(1);
         })
         .expect("Failed to configure text layout");
     }
@@ -72,7 +77,7 @@ impl Widget for TextDisplay {
         true
     }
 
-    fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 

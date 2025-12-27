@@ -1,16 +1,46 @@
 use crate::{
-    Context, NodeId, ViewContext, derive_commands,
-    error::Result,
-    geom::Rect,
-    layout::{Display, FromFlex, GridPlacement, Line, TrackSizingFunction, line},
+    Context, NodeId, ViewContext,
+    commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
+    derive_commands,
+    error::{Error, Result},
+    layout::Layout,
     state::NodeName,
     widget::Widget,
 };
+
+/// Internal column container for panes.
+struct PaneColumn;
+
+impl CommandNode for PaneColumn {
+    fn commands() -> Vec<CommandSpec> {
+        Vec::new()
+    }
+
+    fn dispatch(&mut self, _c: &mut dyn Context, cmd: &CommandInvocation) -> Result<ReturnValue> {
+        Err(Error::UnknownCommand(cmd.command.clone()))
+    }
+}
+
+impl Widget for PaneColumn {
+    fn layout(&self) -> Layout {
+        Layout::column().flex_horizontal(1).flex_vertical(1)
+    }
+
+    fn render(&mut self, _rndr: &mut crate::render::Render, _ctx: &dyn ViewContext) -> Result<()> {
+        Ok(())
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("pane_column")
+    }
+}
 
 /// Panes manages a set of child nodes arranged in a 2d grid.
 pub struct Panes {
     /// Child nodes arranged by column.
     columns: Vec<Vec<NodeId>>,
+    /// Column container nodes.
+    column_nodes: Vec<NodeId>,
 }
 
 #[derive_commands]
@@ -19,6 +49,7 @@ impl Panes {
     pub fn new() -> Self {
         Self {
             columns: Vec::new(),
+            column_nodes: Vec::new(),
         }
     }
 
@@ -26,6 +57,7 @@ impl Panes {
     pub fn with_child(child: NodeId) -> Self {
         Self {
             columns: vec![vec![child]],
+            column_nodes: Vec::new(),
         }
     }
 
@@ -48,6 +80,9 @@ impl Panes {
             self.columns[x].remove(y);
             if self.columns[x].is_empty() {
                 self.columns.remove(x);
+                if x < self.column_nodes.len() {
+                    self.column_nodes.remove(x);
+                }
             }
             self.sync_layout(c)?;
         }
@@ -68,7 +103,13 @@ impl Panes {
     pub fn insert_col(&mut self, c: &mut dyn Context, n: NodeId) -> Result<()> {
         let coords = self.focus_coords(c);
         if let Some((x, _)) = coords {
+            while self.column_nodes.len() < self.columns.len() {
+                let column_node = c.add(Box::new(PaneColumn));
+                self.column_nodes.push(column_node);
+            }
             self.columns.insert(x + 1, vec![n]);
+            let column_node = c.add(Box::new(PaneColumn));
+            self.column_nodes.insert(x + 1, column_node);
         } else {
             self.columns.push(vec![n]);
         }
@@ -76,42 +117,34 @@ impl Panes {
     }
 
     /// Sync child layout and grid placement styles.
-    fn sync_layout(&self, c: &mut dyn Context) -> Result<()> {
-        let mut children = Vec::new();
-        let mut rows = 0usize;
-        for col in &self.columns {
-            rows = rows.max(col.len());
-            children.extend(col.iter().copied());
+    fn sync_layout(&mut self, c: &mut dyn Context) -> Result<()> {
+        while self.column_nodes.len() < self.columns.len() {
+            let column_node = c.add(Box::new(PaneColumn));
+            self.column_nodes.push(column_node);
         }
 
-        c.set_children(children)?;
+        let active_columns: Vec<NodeId> = self
+            .column_nodes
+            .iter()
+            .copied()
+            .take(self.columns.len())
+            .collect();
 
-        let cols = self.columns.len().max(1);
-        let rows = rows.max(1);
-
-        let mut col_tracks = Vec::new();
-        for _ in 0..cols {
-            col_tracks.push(TrackSizingFunction::from_flex(1.0));
-        }
-
-        let mut row_tracks = Vec::new();
-        for _ in 0..rows {
-            row_tracks.push(TrackSizingFunction::from_flex(1.0));
-        }
+        c.set_children(active_columns.clone())?;
 
         c.with_layout(&mut |layout| {
-            let inner = layout.as_taffy_mut();
-            inner.display = Display::Grid.into();
-            inner.grid_template_columns = col_tracks.clone();
-            inner.grid_template_rows = row_tracks.clone();
+            *layout = Layout::row().flex_horizontal(1).flex_vertical(1);
         })?;
 
-        for (col_idx, col) in self.columns.iter().enumerate() {
-            for (row_idx, child) in col.iter().enumerate() {
-                c.with_layout_of(*child, &mut |layout| {
-                    let inner = layout.as_taffy_mut();
-                    inner.grid_column = line::<Line<GridPlacement>>((col_idx + 1) as i16);
-                    inner.grid_row = line::<Line<GridPlacement>>((row_idx + 1) as i16);
+        for (idx, column_node) in active_columns.iter().enumerate() {
+            let pane_nodes = self.columns.get(idx).cloned().unwrap_or_default();
+            c.set_children_of(*column_node, pane_nodes.clone())?;
+            c.with_layout_of(*column_node, &mut |layout| {
+                *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
+            })?;
+            for pane in pane_nodes {
+                c.with_layout_of(pane, &mut |layout| {
+                    *layout = Layout::fill();
                 })?;
             }
         }
@@ -127,12 +160,7 @@ impl Default for Panes {
 }
 
 impl Widget for Panes {
-    fn render(
-        &mut self,
-        _rndr: &mut crate::render::Render,
-        _area: Rect,
-        _ctx: &dyn ViewContext,
-    ) -> Result<()> {
+    fn render(&mut self, _rndr: &mut crate::render::Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 

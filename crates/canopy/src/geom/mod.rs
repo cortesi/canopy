@@ -12,8 +12,12 @@ mod line;
 mod linesegment;
 /// Point helpers.
 mod point;
+/// Signed point helpers.
+mod point_i32;
 /// Rectangle operations.
 mod rect;
+/// Signed rectangle operations.
+mod rect_i32;
 
 pub use error::{Error, Result};
 pub use expanse::Expanse;
@@ -21,7 +25,9 @@ pub use frame::Frame;
 pub use line::Line;
 pub use linesegment::LineSegment;
 pub use point::Point;
+pub use point_i32::PointI32;
 pub use rect::Rect;
+pub use rect_i32::RectI32;
 
 /// Cardinal directions.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]

@@ -1,8 +1,8 @@
-use taffy::node::Node as TaffyNode;
+use std::cell::Cell;
 
 use crate::{
-    core::{id::NodeId, viewport::ViewPort},
-    geom::Rect,
+    core::{id::NodeId, view::View},
+    geom::{Expanse, Point, Rect},
     layout::Layout,
     state::NodeName,
     widget::Widget,
@@ -18,15 +18,19 @@ pub struct Node {
     /// Children in the arena tree.
     pub children: Vec<NodeId>,
 
-    /// Associated Taffy node.
-    pub taffy_id: TaffyNode,
     /// Cached layout configuration for quick access.
     pub layout: Layout,
 
-    /// Screen-space rectangle for the visible view.
-    pub viewport: Rect,
-    /// Viewport state for scrolling and clipping.
-    pub vp: ViewPort,
+    /// Outer rect relative to the parent content origin.
+    pub rect: Rect,
+    /// Content size (outer minus padding).
+    pub content_size: Expanse,
+    /// Canvas size in content coordinates.
+    pub canvas: Expanse,
+    /// Scroll offset in content coordinates.
+    pub scroll: Point,
+    /// View information in screen coordinates.
+    pub view: View,
 
     /// Node visibility.
     pub hidden: bool,
@@ -36,4 +40,6 @@ pub struct Node {
     pub initialized: bool,
     /// Whether the widget mount hook has run.
     pub mounted: bool,
+    /// Whether layout configuration should be refreshed from the widget.
+    pub layout_dirty: Cell<bool>,
 }

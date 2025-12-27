@@ -5,8 +5,8 @@ use crate::{
     Context, ViewContext, command, cursor, derive_commands,
     error::Result,
     event::{Event, key},
-    geom::{LineSegment, Point, Rect},
-    layout::{AvailableSpace, Size},
+    geom::{Line, LineSegment, Point},
+    layout::{MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
     widget::{EventOutcome, Widget},
@@ -295,9 +295,13 @@ impl Widget for Input {
         })
     }
 
-    fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
-        self.textbuf.set_display_width(ctx.view().w as usize);
-        r.text("text", ctx.view().line(0), self.textbuf.text())
+    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        let view = ctx.view();
+        let view_rect = view.view_rect();
+        let content_origin = view.content_origin();
+        self.textbuf.set_display_width(view_rect.w as usize);
+        let line = Line::new(content_origin.x, content_origin.y, view_rect.w);
+        r.text("text", line, self.textbuf.text())
     }
 
     fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
@@ -313,20 +317,9 @@ impl Widget for Input {
         }
     }
 
-    fn view_size(
-        &self,
-        known_dimensions: Size<Option<f32>>,
-        available_space: Size<AvailableSpace>,
-    ) -> Size<f32> {
-        let text_len = self.textbuf.display_width() as f32;
-        let width = known_dimensions
-            .width
-            .or_else(|| available_space.width.into_option())
-            .unwrap_or(text_len);
-        Size {
-            width: width.max(text_len),
-            height: 1.0,
-        }
+    fn measure(&self, c: MeasureConstraints) -> Measurement {
+        let text_len = self.textbuf.display_width().max(1);
+        c.clamp(Size::new(text_len, 1))
     }
 
     fn name(&self) -> NodeName {

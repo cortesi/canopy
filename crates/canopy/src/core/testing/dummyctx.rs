@@ -4,12 +4,28 @@ use slotmap::Key;
 
 use crate::{
     Context, ViewContext,
-    core::{NodeId, viewport::ViewPort},
+    core::{NodeId, view::View},
     error::Result,
-    geom::{Direction, Expanse, Rect},
+    geom::{Direction, Expanse, Point, PointI32, RectI32},
     layout::Layout,
     path::Path,
     widget::Widget,
+};
+
+/// Default view used by DummyContext.
+const DUMMY_VIEW: View = View {
+    outer: RectI32 {
+        tl: PointI32 { x: 0, y: 0 },
+        w: 0,
+        h: 0,
+    },
+    content: RectI32 {
+        tl: PointI32 { x: 0, y: 0 },
+        w: 0,
+        h: 0,
+    },
+    tl: Point { x: 0, y: 0 },
+    canvas: Expanse { w: 0, h: 0 },
 };
 
 /// Dummy context for tests.
@@ -38,37 +54,19 @@ impl ViewContext for DummyContext {
         self.root_id
     }
 
-    fn viewport(&self) -> Rect {
-        Rect::zero()
-    }
-
-    fn view(&self) -> Rect {
-        Rect::zero()
-    }
-
-    fn canvas(&self) -> Expanse {
-        Expanse::new(0, 0)
+    fn view(&self) -> &View {
+        &DUMMY_VIEW
     }
 
     fn layout(&self) -> Layout {
         Layout::default()
     }
 
-    fn node_viewport(&self, _node: NodeId) -> Option<Rect> {
+    fn node_view(&self, _node: NodeId) -> Option<View> {
         None
     }
 
-    fn node_view(&self, _node: NodeId) -> Option<Rect> {
-        None
-    }
-
-    fn node_canvas(&self, _node: NodeId) -> Option<Expanse> {
-        None
-    }
-
-    fn node_vp(&self, _node: NodeId) -> Option<ViewPort> {
-        None
-    }
+    fn taint(&self) {}
 
     fn children_of(&self, _node: NodeId) -> Vec<NodeId> {
         Vec::new()

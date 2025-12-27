@@ -9,8 +9,8 @@ use tracing_subscriber::fmt;
 use crate::{
     Canopy, Context, Loader, ViewContext, command, derive_commands,
     error::Result,
-    geom::{Expanse, Rect},
-    layout::{AvailableSpace, Size},
+    geom::{Expanse, Point, Rect},
+    layout::{CanvasContext, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
     widget::Widget,
@@ -39,26 +39,75 @@ impl ListItem for LogItem {
         Expanse::new(available_width.max(1), lines.len() as u32)
     }
 
-    fn render(&mut self, rndr: &mut Render, area: Rect, selected: bool) -> Result<()> {
-        let status = Rect::new(area.tl.x, area.tl.y, 1, area.h);
-        if selected {
-            rndr.fill("blue", status, '\u{2588}')?;
-        } else {
-            rndr.fill("", status, ' ')?;
-        }
-
-        if area.w < 2 {
+    fn render(
+        &mut self,
+        rndr: &mut Render,
+        area: Rect,
+        selected: bool,
+        offset: Point,
+        full_size: Expanse,
+    ) -> Result<()> {
+        if area.w == 0 || area.h == 0 {
             return Ok(());
         }
 
-        let spacer = Rect::new(area.tl.x + 1, area.tl.y, 1, area.h);
-        rndr.fill("", spacer, ' ')?;
-
-        let text_rect = Rect::new(area.tl.x + 2, area.tl.y, area.w - 2, area.h);
-        let text_width = text_rect.w.max(1) as usize;
+        let offset_x = offset.x;
+        let offset_y = offset.y as usize;
+        let text_width = full_size.w.saturating_sub(2).max(1) as usize;
         let lines = textwrap::wrap(&self.text, text_width);
-        for (idx, line) in lines.iter().enumerate().take(text_rect.h as usize) {
-            rndr.text("text", text_rect.line(idx as u32), line)?;
+
+        if offset_x == 0 && area.w >= 1 {
+            let status = Rect::new(area.tl.x, area.tl.y, 1, area.h);
+            if selected {
+                rndr.fill("blue", status, '\u{2588}')?;
+            } else {
+                rndr.fill("", status, ' ')?;
+            }
+        }
+
+        if offset_x <= 1 {
+            let spacer_x = area.tl.x.saturating_add(1u32.saturating_sub(offset_x));
+            if spacer_x < area.tl.x.saturating_add(area.w) {
+                let spacer = Rect::new(spacer_x, area.tl.y, 1, area.h);
+                rndr.fill("", spacer, ' ')?;
+            }
+        }
+
+        let text_offset_x = offset_x.saturating_sub(2);
+        let text_start_x = if offset_x >= 2 {
+            area.tl.x
+        } else {
+            area.tl.x.saturating_add(2u32.saturating_sub(offset_x))
+        };
+        let text_visible_width = area
+            .w
+            .saturating_sub(text_start_x.saturating_sub(area.tl.x))
+            .max(1);
+
+        if text_visible_width == 0 {
+            return Ok(());
+        }
+
+        for (idx, line) in lines
+            .iter()
+            .enumerate()
+            .skip(offset_y)
+            .take(area.h as usize)
+        {
+            let start_char = text_offset_x as usize;
+            let start_byte = line
+                .char_indices()
+                .nth(start_char)
+                .map(|(i, _)| i)
+                .unwrap_or(line.len());
+            let out = &line[start_byte..];
+            let line_rect = Rect::new(
+                text_start_x,
+                area.tl.y.saturating_add((idx - offset_y) as u32),
+                text_visible_width,
+                1,
+            );
+            rndr.text("text", line_rect.line(0), out)?;
         }
 
         Ok(())
@@ -95,16 +144,16 @@ pub struct Logs {
 }
 
 impl Widget for Logs {
-    fn render(&mut self, rndr: &mut Render, area: Rect, ctx: &dyn ViewContext) -> Result<()> {
-        self.list.render(rndr, area, ctx)
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        self.list.render(rndr, ctx)
     }
 
-    fn view_size(
-        &self,
-        known_dimensions: Size<Option<f32>>,
-        available_space: Size<AvailableSpace>,
-    ) -> Size<f32> {
-        self.list.view_size(known_dimensions, available_space)
+    fn measure(&self, c: MeasureConstraints) -> Measurement {
+        self.list.measure(c)
+    }
+
+    fn canvas(&self, view: Size<u32>, ctx: &CanvasContext) -> Size<u32> {
+        self.list.canvas(view, ctx)
     }
 
     fn poll(&mut self, _c: &mut dyn Context) -> Option<Duration> {
@@ -191,37 +240,37 @@ impl Logs {
     }
 
     #[command]
-    /// Scroll the viewport down by one line.
+    /// Scroll the view down by one line.
     pub fn scroll_down(&mut self, c: &mut dyn Context) {
         self.list.scroll_down(c);
     }
 
     #[command]
-    /// Scroll the viewport up by one line.
+    /// Scroll the view up by one line.
     pub fn scroll_up(&mut self, c: &mut dyn Context) {
         self.list.scroll_up(c);
     }
 
     #[command]
-    /// Scroll the viewport left by one line.
+    /// Scroll the view left by one line.
     pub fn scroll_left(&mut self, c: &mut dyn Context) {
         self.list.scroll_left(c);
     }
 
     #[command]
-    /// Scroll the viewport right by one line.
+    /// Scroll the view right by one line.
     pub fn scroll_right(&mut self, c: &mut dyn Context) {
         self.list.scroll_right(c);
     }
 
     #[command]
-    /// Scroll the viewport down by one page.
+    /// Scroll the view down by one page.
     pub fn page_down(&mut self, c: &mut dyn Context) {
         self.list.page_down(c);
     }
 
     #[command]
-    /// Scroll the viewport up by one page.
+    /// Scroll the view up by one page.
     pub fn page_up(&mut self, c: &mut dyn Context) {
         self.list.page_up(c);
     }

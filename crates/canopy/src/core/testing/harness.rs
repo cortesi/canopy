@@ -22,7 +22,7 @@ pub struct Harness {
 pub struct HarnessBuilder<W> {
     /// Root widget under test.
     root: W,
-    /// Viewport size for the harness.
+    /// View size for the harness.
     size: Expanse,
 }
 
@@ -35,7 +35,7 @@ impl<W: Widget + Loader + 'static> HarnessBuilder<W> {
         }
     }
 
-    /// Set the size of the harness viewport.
+    /// Set the size of the harness view.
     pub fn size(mut self, width: u32, height: u32) -> Self {
         self.size = Expanse::new(width, height);
         self
@@ -48,6 +48,9 @@ impl<W: Widget + Loader + 'static> HarnessBuilder<W> {
 
         <W as Loader>::load(&mut canopy);
         canopy.core.set_widget(canopy.core.root, self.root);
+        canopy.core.with_layout_of(canopy.core.root, |layout| {
+            *layout = (*layout).flex_horizontal(1).flex_vertical(1);
+        })?;
         canopy.set_root_size(self.size)?;
 
         Ok(Harness {
@@ -140,12 +143,8 @@ impl Harness {
 mod tests {
     use super::*;
     use crate::{
-        ViewContext, derive_commands,
-        error::Result,
-        geom::{Line, Rect},
-        render::Render,
-        state::NodeName,
-        widget::Widget,
+        ViewContext, derive_commands, error::Result, geom::Line, layout::Layout, render::Render,
+        state::NodeName, widget::Widget,
     };
 
     struct TestNode;
@@ -158,7 +157,11 @@ mod tests {
     }
 
     impl Widget for TestNode {
-        fn render(&mut self, r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
+        fn layout(&self) -> Layout {
+            Layout::fill()
+        }
+
+        fn render(&mut self, r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             r.text("base", Line::new(0, 0, 5), "test")?;
             Ok(())
         }

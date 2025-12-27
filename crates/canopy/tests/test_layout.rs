@@ -6,8 +6,8 @@ mod tests {
         Canopy, Context, Loader, ViewContext,
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
         error::Result,
-        geom::{Expanse, Rect},
-        layout::{AvailableSpace, Dimension, Edges, Length, Size},
+        geom::Expanse,
+        layout::{Edges, Layout, MeasureConstraints, Measurement, Size},
         render::Render,
         state::NodeName,
         testing::harness::Harness,
@@ -37,8 +37,8 @@ mod tests {
     }
 
     impl Widget for Container {
-        fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
-            r.fill("", ctx.view(), ' ')
+        fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+            r.fill("", ctx.view().outer_rect_local(), ' ')
         }
 
         fn name(&self) -> NodeName {
@@ -69,19 +69,12 @@ mod tests {
     }
 
     impl Widget for Huge {
-        fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
-            r.fill("", ctx.view(), 'x')
+        fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+            r.fill("", ctx.view().outer_rect_local(), 'x')
         }
 
-        fn view_size(
-            &self,
-            _known_dimensions: Size<Option<f32>>,
-            _available_space: Size<AvailableSpace>,
-        ) -> Size<f32> {
-            Size {
-                width: 500.0,
-                height: 500.0,
-            }
+        fn measure(&self, c: MeasureConstraints) -> Measurement {
+            c.clamp(Size::new(500, 500))
         }
 
         fn name(&self) -> NodeName {
@@ -112,8 +105,8 @@ mod tests {
     }
 
     impl Widget for Root {
-        fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
-            r.fill("", ctx.view(), ' ')
+        fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+            r.fill("", ctx.view().outer_rect_local(), ' ')
         }
 
         fn name(&self) -> NodeName {
@@ -134,29 +127,29 @@ mod tests {
         h.canopy.core.set_children(container, vec![child])?;
 
         h.canopy.core.with_layout_of(h.root, |layout| {
-            layout.flex_col();
+            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })?;
 
         h.canopy.core.with_layout_of(container, |layout| {
-            layout
-                .flex_col()
-                .flex_item(1.0, 1.0, Dimension::Auto)
-                .padding(Edges::all(Length::Points(1.0)));
+            *layout = Layout::column()
+                .flex_horizontal(1)
+                .flex_vertical(1)
+                .padding(Edges::all(1));
         })?;
 
         h.canopy.core.with_layout_of(child, |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            *layout = Layout::fill();
         })?;
 
         h.canopy.set_root_size(Expanse::new(20, 20))?;
         h.render()?;
 
-        let container_view = h.canopy.core.nodes[container].vp.view();
-        let child_vp = h.canopy.core.nodes[child].vp;
-        assert_eq!(child_vp.position().x, container_view.tl.x + 1);
-        assert_eq!(child_vp.position().y, container_view.tl.y + 1);
-        assert_eq!(child_vp.view().w + 2, container_view.w);
-        assert_eq!(child_vp.view().h + 2, container_view.h);
+        let container_view = h.canopy.core.nodes[container].view;
+        let child_view = h.canopy.core.nodes[child].view;
+        assert_eq!(child_view.outer.tl.x, container_view.content.tl.x);
+        assert_eq!(child_view.outer.tl.y, container_view.content.tl.y);
+        assert_eq!(child_view.outer.w + 2, container_view.outer.w);
+        assert_eq!(child_view.outer.h + 2, container_view.outer.h);
 
         Ok(())
     }

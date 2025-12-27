@@ -1,5 +1,5 @@
 use crate::{
-    NodeId, ViewContext, core::Core, derive_commands, error::Result, geom::Rect, layout::Dimension,
+    NodeId, ViewContext, core::Core, derive_commands, error::Result, layout::Layout,
     state::NodeName, widget::Widget, widgets::tabs::Tabs,
 };
 
@@ -7,12 +7,7 @@ use crate::{
 pub struct View;
 
 impl Widget for View {
-    fn render(
-        &mut self,
-        _rndr: &mut crate::render::Render,
-        _area: Rect,
-        _ctx: &dyn ViewContext,
-    ) -> Result<()> {
+    fn render(&mut self, _rndr: &mut crate::render::Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 
@@ -35,13 +30,13 @@ impl View {
         let view_id = core.add(Self::new());
         core.set_children(view_id, vec![tabs, logs])?;
         core.with_layout_of(view_id, |layout| {
-            layout.flex_col();
+            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })?;
         core.with_layout_of(tabs, |layout| {
-            layout.height(Dimension::Points(1.0)).flex_shrink(0.0);
+            *layout = Layout::column().flex_horizontal(1).fixed_height(1);
         })?;
         core.with_layout_of(logs, |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            *layout = Layout::fill();
         })?;
         Ok((view_id, tabs, logs))
     }

@@ -6,7 +6,6 @@ mod tests {
         Context, Loader, NodeId, ViewContext,
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
         error::Result,
-        geom::Rect,
         render::Render,
         state::NodeName,
         testing::harness::Harness,
@@ -46,7 +45,7 @@ mod tests {
     }
 
     impl Widget for MountProbe {
-        fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
 
@@ -96,7 +95,7 @@ mod tests {
     }
 
     impl Widget for ChildProbe {
-        fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
 

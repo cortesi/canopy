@@ -2,15 +2,16 @@ use std::{io::Write, sync::mpsc};
 
 use comfy_table::{ContentArrangement, Table, presets::UTF8_FULL};
 
-use super::{inputmap, poll::Poller, termbuf::TermBuf, viewport::ViewPort, viewstack::ViewStack};
+use super::{inputmap, poll::Poller, termbuf::TermBuf};
 use crate::{
     backend::BackendControl,
     commands,
-    core::{Core, NodeId, context::CoreViewContext},
+    core::{Core, NodeId, context::CoreViewContext, view::View},
     cursor,
     error::{self, Result},
     event::{Event, key, mouse},
-    geom::{Expanse, Point, Rect},
+    geom::{Expanse, Point, Rect, RectI32},
+    layout::Display,
     path::Path,
     render::{Render, RenderBackend},
     script,
@@ -305,62 +306,43 @@ impl Canopy {
         &mut self,
         dest_buf: &mut TermBuf,
         styl: &mut StyleManager,
-        view_stack: &mut ViewStack,
         node_id: NodeId,
+        parent_clip: Rect,
     ) -> Result<()> {
-        let (hidden, vp, viewport, children) = {
+        let (hidden, layout, view, children) = {
             let node = &self.core.nodes[node_id];
-            (node.hidden, node.vp, node.viewport, node.children.clone())
+            (node.hidden, node.layout, node.view, node.children.clone())
         };
 
-        if hidden {
+        if hidden || layout.display == Display::None {
             return Ok(());
         }
 
+        let Some(screen_clip) = view.outer.intersect_rect(parent_clip) else {
+            return Ok(());
+        };
+
         styl.push();
 
-        let mut pushed_viewport = false;
-        if !vp.view().is_zero() {
-            view_stack.push(vp);
-            pushed_viewport = true;
+        {
+            let local_clip = Self::outer_clip_to_local(view.outer, screen_clip);
+            let screen_origin = screen_clip.tl;
+            let mut rndr =
+                Render::new_shared(&self.style, styl, dest_buf, local_clip, screen_origin);
+
+            let render_result = self.core.with_widget_view(node_id, |widget, core| {
+                let ctx = CoreViewContext::new(core, node_id);
+                widget.render(&mut rndr, &ctx)
+            });
+            render_result?;
         }
 
-        if pushed_viewport {
-            let (clip, screen_origin) = match view_stack.projection() {
-                Some((canvas_rect, screen_rect)) => (canvas_rect, screen_rect.tl),
-                None => (Rect::zero(), Point::zero()),
-            };
-            {
-                let mut rndr = Render::new_shared(&self.style, styl, dest_buf, clip, screen_origin);
-
-                let render_result = self.core.with_widget_view(node_id, |widget, core| {
-                    let ctx = CoreViewContext::new(core, node_id);
-                    widget.render(&mut rndr, viewport, &ctx)
-                });
-                render_result?;
-            }
-
-            let canvas = vp.canvas().rect();
+        if let Some(children_clip) = view.content.intersect_rect(parent_clip) {
             for child in children {
-                let (hidden, child_vp) = {
-                    let node = &self.core.nodes[child];
-                    (node.hidden, node.vp)
-                };
-                if !hidden && !position_within_canvas(canvas, child_vp.view(), child_vp.position())
-                {
-                    return Err(error::Error::Render(format!(
-                        "Child node '{child:?}' has position {:?} outside parent canvas {:?}",
-                        child_vp.position(),
-                        canvas
-                    )));
-                }
-                self.render_traversal(dest_buf, styl, view_stack, child)?;
+                self.render_traversal(dest_buf, styl, child, children_clip)?;
             }
         }
 
-        if pushed_viewport {
-            view_stack.pop()?;
-        }
         styl.pop();
 
         Ok(())
@@ -369,26 +351,30 @@ impl Canopy {
     /// Post-render sweep of the tree.
     pub(crate) fn post_render(&mut self, buf: &mut TermBuf) -> Result<()> {
         let mut current = self.core.focus;
-        let mut cursor_spec: Option<(NodeId, Rect, cursor::Cursor)> = None;
+        let mut cursor_spec: Option<(NodeId, View, cursor::Cursor)> = None;
         while let Some(id) = current {
             let cursor = self.core.with_widget_view(id, |w, _| w.cursor());
             if let Some(node_cursor) = cursor
                 && let Some(node) = self.core.nodes.get(id)
             {
-                cursor_spec = Some((id, node.viewport, node_cursor));
+                cursor_spec = Some((id, node.view, node_cursor));
                 break;
             }
             current = self.core.nodes.get(id).and_then(|n| n.parent);
         }
 
-        if let Some((_nid, viewport, c)) = cursor_spec {
-            let view_rect = Rect::new(0, 0, viewport.w, viewport.h);
+        if let Some((_nid, view, c)) = cursor_spec {
+            let view_rect = Rect::new(0, 0, view.content.w, view.content.h);
             if view_rect.contains_point(c.location) {
-                let screen_pos = Point {
-                    x: viewport.tl.x.saturating_add(c.location.x),
-                    y: viewport.tl.y.saturating_add(c.location.y),
-                };
-                buf.overlay_cursor(screen_pos, c.shape);
+                let screen_x = view.content.tl.x + c.location.x as i32;
+                let screen_y = view.content.tl.y + c.location.y as i32;
+                if screen_x >= 0 && screen_y >= 0 {
+                    let screen_pos = Point {
+                        x: screen_x as u32,
+                        y: screen_y as u32,
+                    };
+                    buf.overlay_cursor(screen_pos, c.shape);
+                }
             }
         }
 
@@ -412,10 +398,8 @@ impl Canopy {
                 self.core.update_layout(root_size)?;
             }
 
-            let screen_vp = ViewPort::new(root_size, root_size.rect(), (0, 0))?;
-            let mut view_stack = ViewStack::new(screen_vp);
-
-            self.render_traversal(&mut next, &mut styl, &mut view_stack, self.core.root)?;
+            let screen_clip = Rect::new(0, 0, root_size.w, root_size.h);
+            self.render_traversal(&mut next, &mut styl, self.core.root, screen_clip)?;
             self.post_render(&mut next)?;
 
             if let Some(prev) = &self.termbuf {
@@ -435,6 +419,13 @@ impl Canopy {
         Ok(())
     }
 
+    /// Convert a screen-space clip rect into local outer coordinates.
+    fn outer_clip_to_local(outer: RectI32, clip: Rect) -> Rect {
+        let dx = (clip.tl.x as i64 - outer.tl.x as i64).max(0) as u32;
+        let dy = (clip.tl.y as i64 - outer.tl.y as i64).max(0) as u32;
+        Rect::new(dx, dy, clip.w, clip.h)
+    }
+
     /// Return the path for the uppermost node at a specific location.
     fn location_path(&self, location: Point) -> Result<Path> {
         if let Some(id) = self.core.locate_node(self.core.root, location)? {
@@ -452,18 +443,24 @@ impl Canopy {
         if let Some(nid) = self.core.locate_node(self.core.root, m.location)? {
             let mut target = Some(nid);
             while let Some(id) = target {
-                let screen_rect = self
-                    .core
-                    .nodes
-                    .get(id)
-                    .map(|n| n.viewport)
-                    .unwrap_or_default();
-                let local_location = if screen_rect.contains_point(m.location) {
-                    screen_rect.rebase_point(m.location)?
+                let view = self.core.nodes.get(id).map(|n| n.view).unwrap_or_default();
+                let content = view.content;
+                let px = m.location.x as i64;
+                let py = m.location.y as i64;
+                let left = content.tl.x as i64;
+                let top = content.tl.y as i64;
+                let right = left + content.w as i64;
+                let bottom = top + content.h as i64;
+                let inside = px >= left && px < right && py >= top && py < bottom;
+                let local_location = if inside {
+                    Point {
+                        x: (px - left) as u32,
+                        y: (py - top) as u32,
+                    }
                 } else {
                     Point {
-                        x: m.location.x.saturating_sub(screen_rect.tl.x),
-                        y: m.location.y.saturating_sub(screen_rect.tl.y),
+                        x: (px - left).max(0) as u32,
+                        y: (py - top).max(0) as u32,
                     }
                 };
 
@@ -587,25 +584,7 @@ impl Canopy {
     }
 }
 
-/// Validate a child viewport position against the parent canvas bounds.
-fn position_within_canvas(canvas: Rect, view: Rect, position: Point) -> bool {
-    let max_x = canvas.tl.x.saturating_add(canvas.w);
-    let max_y = canvas.tl.y.saturating_add(canvas.h);
-
-    let x_ok = if view.w == 0 {
-        position.x >= canvas.tl.x && position.x <= max_x
-    } else {
-        position.x >= canvas.tl.x && position.x < max_x
-    };
-    let y_ok = if view.h == 0 {
-        position.y >= canvas.tl.y && position.y <= max_y
-    } else {
-        position.y >= canvas.tl.y && position.y < max_y
-    };
-
-    x_ok && y_ok
-}
-
+/// Validate a child view position against the parent canvas bounds.
 /// A trait that allows widgets to perform recursive initialization of themselves and their children.
 pub trait Loader {
     /// Load commands or resources into the canopy instance.
@@ -622,8 +601,8 @@ mod tests {
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
         derive_commands,
         error::{Error, Result},
-        geom::{Direction, Rect},
-        layout::Dimension,
+        geom::{Direction, Point, RectI32},
+        layout::Layout,
         path::Path,
         state::NodeName,
         testing::{
@@ -646,7 +625,13 @@ mod tests {
         let loc = core
             .nodes
             .get(node_id)
-            .map(|n| n.viewport.tl)
+            .map(|n| {
+                let tl = n.view.outer.tl;
+                Point {
+                    x: tl.x.max(0) as u32,
+                    y: tl.y.max(0) as u32,
+                }
+            })
             .unwrap_or_default();
         mouse::MouseEvent {
             action: mouse::Action::Down,
@@ -886,24 +871,25 @@ mod tests {
     #[test]
     fn tresize() -> Result<()> {
         run_ttree(|c, mut tr, tree| {
-            let size = 100;
+            let size: u32 = 100;
+            let half = i32::try_from(size / 2).expect("size fits i32");
             tr.render(c)?;
             assert_eq!(
-                c.core.nodes[tree.root].viewport,
-                Rect::new(0, 0, size, size)
+                c.core.nodes[tree.root].view.outer,
+                RectI32::new(0, 0, size, size)
             );
             assert_eq!(
-                c.core.nodes[tree.a].viewport,
-                Rect::new(0, 0, size / 2, size)
+                c.core.nodes[tree.a].view.outer,
+                RectI32::new(0, 0, size / 2, size)
             );
             assert_eq!(
-                c.core.nodes[tree.b].viewport,
-                Rect::new(size / 2, 0, size / 2, size)
+                c.core.nodes[tree.b].view.outer,
+                RectI32::new(half, 0, size / 2, size)
             );
 
             c.set_root_size(Expanse::new(50, 50))?;
             tr.render(c)?;
-            assert_eq!(c.core.nodes[tree.b].viewport, Rect::new(25, 0, 25, 50));
+            assert_eq!(c.core.nodes[tree.b].view.outer, RectI32::new(25, 0, 25, 50));
             Ok(())
         })?;
         Ok(())
@@ -1088,12 +1074,16 @@ mod tests {
         }
 
         impl Widget for N {
+            fn layout(&self) -> Layout {
+                Layout::fill()
+            }
+
             fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
                 true
             }
 
-            fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
-                r.text("any", ctx.view().line(0), "<n>")
+            fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+                r.text("any", ctx.view().outer_rect_local().line(0), "<n>")
             }
 
             fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
@@ -1135,12 +1125,7 @@ mod tests {
         impl Child {}
 
         impl Widget for Child {
-            fn render(
-                &mut self,
-                _r: &mut Render,
-                _area: Rect,
-                _ctx: &dyn ViewContext,
-            ) -> Result<()> {
+            fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
                 Ok(())
             }
 
@@ -1159,12 +1144,7 @@ mod tests {
         }
 
         impl Widget for Parent {
-            fn render(
-                &mut self,
-                _r: &mut Render,
-                _area: Rect,
-                _ctx: &dyn ViewContext,
-            ) -> Result<()> {
+            fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
                 Ok(())
             }
 
@@ -1180,7 +1160,7 @@ mod tests {
         let child = canopy.core.add(Child);
         canopy.core.set_children(canopy.core.root, vec![child])?;
         canopy.core.with_layout_of(child, |layout| {
-            layout.size(Dimension::Points(0.0), Dimension::Points(0.0));
+            *layout = Layout::column().fixed_width(0).fixed_height(0);
         })?;
 
         canopy.set_root_size(size)?;

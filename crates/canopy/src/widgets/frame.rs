@@ -2,7 +2,7 @@ use crate::{
     ViewContext, derive_commands,
     error::Result,
     geom,
-    layout::{Edges, Layout, Length},
+    layout::{Edges, Layout},
     render::Render,
     state::NodeName,
     widget::Widget,
@@ -136,8 +136,9 @@ impl Default for Frame {
 }
 
 impl Widget for Frame {
-    fn render(&mut self, rndr: &mut Render, area: geom::Rect, ctx: &dyn ViewContext) -> Result<()> {
-        let f = geom::Frame::new(area, 1);
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        let outer = ctx.view().outer_rect_local();
+        let f = geom::Frame::new(outer, 1);
         let style = if ctx.is_on_focus_path() {
             "frame/focused"
         } else {
@@ -170,8 +171,8 @@ impl Widget for Frame {
 
         let child = ctx.children().into_iter().next();
         if let Some(child_id) = child {
-            if let Some(child_vp) = ctx.node_vp(child_id) {
-                if let Some((pre, active, post)) = child_vp.vactive(f.right)? {
+            if let Some(child_view) = ctx.node_view(child_id) {
+                if let Some((pre, active, post)) = child_view.vactive(f.right)? {
                     rndr.fill(style, pre, self.glyphs.vertical)?;
                     rndr.fill(style, post, self.glyphs.vertical)?;
                     rndr.fill("frame/active", active, self.glyphs.vertical_active)?;
@@ -179,7 +180,7 @@ impl Widget for Frame {
                     rndr.fill(style, f.right, self.glyphs.vertical)?;
                 }
 
-                if let Some((pre, active, post)) = child_vp.hactive(f.bottom)? {
+                if let Some((pre, active, post)) = child_view.hactive(f.bottom)? {
                     rndr.fill(style, pre, self.glyphs.horizontal)?;
                     rndr.fill(style, post, self.glyphs.horizontal)?;
                     rndr.fill("frame/active", active, self.glyphs.horizontal_active)?;
@@ -195,8 +196,8 @@ impl Widget for Frame {
         Ok(())
     }
 
-    fn layout(&self, layout: &mut Layout) {
-        layout.padding(Edges::all(Length::Points(1.0)));
+    fn layout(&self) -> Layout {
+        Layout::fill().padding(Edges::all(1))
     }
 
     fn name(&self) -> NodeName {

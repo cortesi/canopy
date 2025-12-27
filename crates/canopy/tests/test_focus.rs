@@ -6,8 +6,8 @@ mod tests {
         Canopy, Core, NodeId, ViewContext,
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
         error::{Error, Result},
-        geom::{Direction, Expanse, Rect},
-        layout::Dimension,
+        geom::{Direction, Expanse},
+        layout::{Layout, Sizing},
         render::Render,
         state::NodeName,
         testing::grid::Grid,
@@ -43,7 +43,7 @@ mod tests {
             true
         }
 
-        fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
 
@@ -55,10 +55,11 @@ mod tests {
     fn attach_grid(core: &mut Core, grid_root: NodeId, size: Expanse) -> Result<()> {
         core.set_children(core.root, vec![grid_root])?;
         core.with_layout_of(core.root, |layout| {
-            layout.flex_col();
+            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })?;
         core.with_layout_of(grid_root, |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            layout.width = Sizing::Flex(1);
+            layout.height = Sizing::Flex(1);
         })?;
         core.update_layout(size)?;
         Ok(())
@@ -242,20 +243,20 @@ mod tests {
             .core
             .set_children(canopy.core.root, vec![first, second])?;
         canopy.core.with_layout_of(canopy.core.root, |layout| {
-            layout.flex_col();
+            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })?;
         canopy.core.with_layout_of(first, |layout| {
-            layout.size(Dimension::Points(10.0), Dimension::Points(5.0));
+            *layout = Layout::column().fixed_width(10).fixed_height(5);
         })?;
         canopy.core.with_layout_of(second, |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            *layout = Layout::fill();
         })?;
 
         canopy.core.update_layout(Expanse::new(10, 10))?;
         canopy.core.set_focus(first);
 
         canopy.core.with_layout_of(first, |layout| {
-            layout.height(Dimension::Points(0.0));
+            *layout = layout.fixed_height(0);
         })?;
         canopy.core.update_layout(Expanse::new(10, 10))?;
 

@@ -1,8 +1,10 @@
+use unicode_width::UnicodeWidthStr;
+
 use crate::{
     Context, ViewContext, command, derive_commands,
     error::Result,
-    geom::Rect,
-    layout::{AvailableSpace, Size},
+    geom::Line,
+    layout::{Constraint, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
     widget::Widget,
@@ -73,13 +75,13 @@ impl Text {
     }
 
     #[command]
-    /// Page down in the viewport.
+    /// Page down in the view.
     pub fn page_down(&mut self, c: &mut dyn Context) {
         c.page_down();
     }
 
     #[command]
-    /// Page up in the viewport.
+    /// Page up in the view.
     pub fn page_up(&mut self, c: &mut dyn Context) {
         c.page_up();
     }
@@ -100,45 +102,66 @@ impl Text {
 }
 
 impl Widget for Text {
-    fn render(&mut self, rndr: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
-        let width = self.wrap_width(ctx.canvas().w);
+        let view_rect = view.view_rect();
+        let content_origin = view.content_origin();
+        let width = self.wrap_width(view_rect.w);
         let lines = self.lines_for_width(width);
 
-        for i in 0..view.h {
-            let line_idx = (view.tl.y + i) as usize;
+        for i in 0..view_rect.h {
+            let line_idx = (view_rect.tl.y + i) as usize;
             if line_idx < lines.len() {
                 let line = &lines[line_idx];
-                let start_char = view.tl.x as usize;
+                let start_char = view_rect.tl.x as usize;
                 let start_byte = line
                     .char_indices()
                     .nth(start_char)
                     .map(|(i, _)| i)
                     .unwrap_or(line.len());
                 let out = &line[start_byte..];
-                rndr.text("text", view.line(i), out)?;
+                let line_rect = Line::new(
+                    content_origin.x,
+                    content_origin.y.saturating_add(i),
+                    view_rect.w,
+                );
+                rndr.text("text", line_rect, out)?;
             }
         }
         Ok(())
     }
 
-    fn view_size(
-        &self,
-        known_dimensions: Size<Option<f32>>,
-        available_space: Size<AvailableSpace>,
-    ) -> Size<f32> {
-        let width = self
-            .fixed_width
-            .map(|w| w as f32)
-            .or(known_dimensions.width)
-            .or_else(|| available_space.width.into_option())
-            .unwrap_or(0.0);
+    fn measure(&self, c: MeasureConstraints) -> Measurement {
+        let raw_width = self
+            .raw
+            .lines()
+            .map(UnicodeWidthStr::width)
+            .max()
+            .unwrap_or(0) as u32;
 
-        let wrap_width = width.max(1.0) as usize;
-        let lines = textwrap::wrap(&self.raw, wrap_width);
-        let height = lines.len() as f32;
+        let max_width = match c.width {
+            Constraint::Exact(n) | Constraint::AtMost(n) => n,
+            Constraint::Unbounded => self.fixed_width.unwrap_or(raw_width),
+        };
 
-        Size { width, height }
+        let wrap_width = match c.width {
+            Constraint::Unbounded => self.fixed_width.unwrap_or(raw_width),
+            _ => self
+                .fixed_width
+                .map(|w| w.min(max_width))
+                .unwrap_or(max_width),
+        }
+        .max(1);
+
+        let lines = textwrap::wrap(&self.raw, wrap_width as usize);
+        let height = lines.len() as u32;
+        c.clamp(Size::new(wrap_width, height))
+    }
+
+    fn canvas(&self, view: Size<u32>, _ctx: &crate::layout::CanvasContext) -> Size<u32> {
+        let wrap_width = view.width.max(1);
+        let lines = textwrap::wrap(&self.raw, wrap_width as usize);
+        Size::new(wrap_width, lines.len() as u32)
     }
 
     fn name(&self) -> NodeName {

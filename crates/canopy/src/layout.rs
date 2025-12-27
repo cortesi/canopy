@@ -1,169 +1,60 @@
 //! Layout types for configuring node positioning and sizing.
-//!
-//! This module provides a clean abstraction over the underlying layout engine,
-//! hiding implementation details while exposing a fluent API for flexbox layouts.
 
-use style::LengthPercentage;
-use taffy::{geometry, style};
+use crate::geom::{Expanse, Rect};
 
-/// Display mode for layout.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// Stack direction for children.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Direction {
+    /// Stack children vertically (column).
+    Column,
+    /// Stack children horizontally (row).
+    Row,
+}
+
+/// Display mode for layout participation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Display {
-    /// Flexbox layout.
-    #[default]
-    Flex,
-    /// CSS Grid layout.
-    Grid,
-    /// Element is hidden from layout.
+    /// Node participates in layout and rendering.
+    Block,
+    /// Node is removed from layout and not rendered.
     None,
 }
 
-impl From<Display> for style::Display {
-    fn from(d: Display) -> Self {
-        match d {
-            Display::Flex => Self::Flex,
-            Display::Grid => Self::Grid,
-            Display::None => Self::None,
-        }
-    }
+/// Sizing strategy for a single axis.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Sizing {
+    /// Size derives from `measure()` or wrapping children.
+    Measure,
+    /// Weighted share of remaining space along the axis.
+    Flex(u32),
 }
 
-impl From<style::Display> for Display {
-    fn from(d: style::Display) -> Self {
-        match d {
-            style::Display::Flex => Self::Flex,
-            style::Display::Grid => Self::Grid,
-            style::Display::None => Self::None,
-        }
-    }
-}
-
-/// Flex direction for flexbox layout.
+/// Edge insets for padding.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum FlexDirection {
-    /// Items laid out in a row (left to right).
-    #[default]
-    Row,
-    /// Items laid out in a column (top to bottom).
-    Column,
-    /// Items laid out in a reversed row (right to left).
-    RowReverse,
-    /// Items laid out in a reversed column (bottom to top).
-    ColumnReverse,
+pub struct Edges<T> {
+    /// Top edge.
+    pub top: T,
+    /// Right edge.
+    pub right: T,
+    /// Bottom edge.
+    pub bottom: T,
+    /// Left edge.
+    pub left: T,
 }
 
-impl From<FlexDirection> for style::FlexDirection {
-    fn from(d: FlexDirection) -> Self {
-        match d {
-            FlexDirection::Row => Self::Row,
-            FlexDirection::Column => Self::Column,
-            FlexDirection::RowReverse => Self::RowReverse,
-            FlexDirection::ColumnReverse => Self::ColumnReverse,
-        }
-    }
-}
-
-impl From<style::FlexDirection> for FlexDirection {
-    fn from(d: style::FlexDirection) -> Self {
-        match d {
-            style::FlexDirection::Row => Self::Row,
-            style::FlexDirection::Column => Self::Column,
-            style::FlexDirection::RowReverse => Self::RowReverse,
-            style::FlexDirection::ColumnReverse => Self::ColumnReverse,
-        }
-    }
-}
-
-/// A dimension value for width/height sizing.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub enum Dimension {
-    /// Automatic sizing based on content.
-    #[default]
-    Auto,
-    /// Fixed size in terminal cells.
-    Points(f32),
-    /// Percentage of parent size.
-    Percent(f32),
-}
-
-impl From<Dimension> for style::Dimension {
-    fn from(d: Dimension) -> Self {
-        match d {
-            Dimension::Auto => Self::Auto,
-            Dimension::Points(p) => Self::Points(p),
-            Dimension::Percent(p) => Self::Percent(p),
-        }
-    }
-}
-
-impl From<style::Dimension> for Dimension {
-    fn from(d: style::Dimension) -> Self {
-        match d {
-            style::Dimension::Auto => Self::Auto,
-            style::Dimension::Points(p) => Self::Points(p),
-            style::Dimension::Percent(p) => Self::Percent(p),
-        }
-    }
-}
-
-/// A length value for edges (padding, margin).
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub enum Length {
-    /// Zero length.
-    #[default]
-    Zero,
-    /// Fixed length in terminal cells.
-    Points(f32),
-    /// Percentage of parent size.
-    Percent(f32),
-}
-
-impl From<Length> for LengthPercentage {
-    fn from(l: Length) -> Self {
-        match l {
-            Length::Zero => Self::Points(0.0),
-            Length::Points(p) => Self::Points(p),
-            Length::Percent(p) => Self::Percent(p),
-        }
-    }
-}
-
-impl From<LengthPercentage> for Length {
-    fn from(l: LengthPercentage) -> Self {
-        match l {
-            LengthPercentage::Points(0.0) => Self::Zero,
-            LengthPercentage::Points(p) => Self::Points(p),
-            LengthPercentage::Percent(p) => Self::Percent(p),
-        }
-    }
-}
-
-/// Edge insets for padding and margin.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct Edges {
-    /// Top edge length.
-    pub top: Length,
-    /// Right edge length.
-    pub right: Length,
-    /// Bottom edge length.
-    pub bottom: Length,
-    /// Left edge length.
-    pub left: Length,
-}
-
-impl Edges {
+impl<T: Copy> Edges<T> {
     /// Create edges with uniform length on all sides.
-    pub fn all(l: Length) -> Self {
+    pub fn all(v: T) -> Self {
         Self {
-            top: l,
-            right: l,
-            bottom: l,
-            left: l,
+            top: v,
+            right: v,
+            bottom: v,
+            left: v,
         }
     }
 
     /// Create edges with symmetric vertical and horizontal lengths.
-    pub fn symmetric(vertical: Length, horizontal: Length) -> Self {
+    pub fn symmetric(vertical: T, horizontal: T) -> Self {
         Self {
             top: vertical,
             right: horizontal,
@@ -172,8 +63,8 @@ impl Edges {
         }
     }
 
-    /// Create edges from individual lengths.
-    pub fn new(top: Length, right: Length, bottom: Length, left: Length) -> Self {
+    /// Create edges from individual values.
+    pub fn new(top: T, right: T, bottom: T, left: T) -> Self {
         Self {
             top,
             right,
@@ -183,30 +74,20 @@ impl Edges {
     }
 }
 
-impl From<Edges> for geometry::Rect<LengthPercentage> {
-    fn from(e: Edges) -> Self {
-        Self {
-            top: e.top.into(),
-            right: e.right.into(),
-            bottom: e.bottom.into(),
-            left: e.left.into(),
-        }
+impl Edges<u32> {
+    /// Total horizontal padding.
+    pub fn horizontal(&self) -> u32 {
+        self.left.saturating_add(self.right)
     }
-}
 
-impl From<geometry::Rect<LengthPercentage>> for Edges {
-    fn from(r: geometry::Rect<LengthPercentage>) -> Self {
-        Self {
-            top: r.top.into(),
-            right: r.right.into(),
-            bottom: r.bottom.into(),
-            left: r.left.into(),
-        }
+    /// Total vertical padding.
+    pub fn vertical(&self) -> u32 {
+        self.top.saturating_add(self.bottom)
     }
 }
 
 /// Size with width and height.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Size<T> {
     /// Width component.
     pub width: T,
@@ -221,321 +102,409 @@ impl<T> Size<T> {
     }
 }
 
-impl<T, U> From<Size<T>> for geometry::Size<U>
-where
-    T: Into<U>,
-{
-    fn from(s: Size<T>) -> Self {
+impl Size<u32> {
+    /// Zero size.
+    pub const ZERO: Self = Self {
+        width: 0,
+        height: 0,
+    };
+
+    /// Size along the main axis.
+    pub fn main(self, direction: Direction) -> u32 {
+        match direction {
+            Direction::Column => self.height,
+            Direction::Row => self.width,
+        }
+    }
+
+    /// Size along the cross axis.
+    pub fn cross(self, direction: Direction) -> u32 {
+        match direction {
+            Direction::Column => self.width,
+            Direction::Row => self.height,
+        }
+    }
+
+    /// Construct a size from main and cross axis values.
+    pub fn from_main_cross(direction: Direction, main: u32, cross: u32) -> Self {
+        match direction {
+            Direction::Column => Self::new(cross, main),
+            Direction::Row => Self::new(main, cross),
+        }
+    }
+}
+
+impl From<Expanse> for Size<u32> {
+    fn from(v: Expanse) -> Self {
         Self {
-            width: s.width.into(),
-            height: s.height.into(),
+            width: v.w,
+            height: v.h,
         }
     }
 }
 
-impl<T, U> From<geometry::Size<T>> for Size<U>
-where
-    T: Into<U>,
-{
-    fn from(s: geometry::Size<T>) -> Self {
-        Self {
-            width: s.width.into(),
-            height: s.height.into(),
-        }
-    }
-}
-
-/// Available space constraint for measuring.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum AvailableSpace {
-    /// Known definite size.
-    Definite(f32),
-    /// Size based on minimum content.
-    MinContent,
-    /// Size based on maximum content.
-    MaxContent,
-}
-
-impl AvailableSpace {
-    /// Convert to an optional definite value.
-    pub fn into_option(self) -> Option<f32> {
-        match self {
-            Self::Definite(v) => Some(v),
-            _ => None,
-        }
-    }
-}
-
-impl From<AvailableSpace> for style::AvailableSpace {
-    fn from(a: AvailableSpace) -> Self {
-        match a {
-            AvailableSpace::Definite(v) => Self::Definite(v),
-            AvailableSpace::MinContent => Self::MinContent,
-            AvailableSpace::MaxContent => Self::MaxContent,
-        }
-    }
-}
-
-impl From<style::AvailableSpace> for AvailableSpace {
-    fn from(a: style::AvailableSpace) -> Self {
-        match a {
-            style::AvailableSpace::Definite(v) => Self::Definite(v),
-            style::AvailableSpace::MinContent => Self::MinContent,
-            style::AvailableSpace::MaxContent => Self::MaxContent,
-        }
+impl From<Size<u32>> for Expanse {
+    fn from(v: Size<u32>) -> Self {
+        Self::new(v.width, v.height)
     }
 }
 
 /// Layout configuration for a node.
-///
-/// Wraps the underlying layout engine, providing a clean API
-/// for configuring flexbox and grid layouts.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Layout {
-    /// Underlying taffy style used to compute layout.
-    pub(crate) inner: style::Style,
+    /// Whether this node participates in layout/render.
+    pub display: Display,
+
+    /// Stack direction for children.
+    pub direction: Direction,
+
+    /// Width sizing strategy (outer size).
+    pub width: Sizing,
+    /// Height sizing strategy (outer size).
+    pub height: Sizing,
+
+    /// Minimum outer width constraint (cells).
+    pub min_width: Option<u32>,
+    /// Maximum outer width constraint (cells).
+    pub max_width: Option<u32>,
+
+    /// Minimum outer height constraint (cells).
+    pub min_height: Option<u32>,
+    /// Maximum outer height constraint (cells).
+    pub max_height: Option<u32>,
+
+    /// Structural padding inside the widget (cells).
+    pub padding: Edges<u32>,
+
+    /// Gap between children along the main axis (cells).
+    pub gap: u32,
+}
+
+impl Default for Layout {
+    fn default() -> Self {
+        Self::column()
+    }
 }
 
 impl Layout {
-    /// Create a new layout with default settings.
-    pub fn new() -> Self {
-        Self::default()
+    /// Column layout with measured sizing on both axes.
+    pub fn column() -> Self {
+        Self {
+            display: Display::Block,
+            direction: Direction::Column,
+            width: Sizing::Measure,
+            height: Sizing::Measure,
+            min_width: None,
+            max_width: None,
+            min_height: None,
+            max_height: None,
+            padding: Edges::all(0),
+            gap: 0,
+        }
     }
 
-    /// Create a layout from a taffy style (internal use).
-    pub(crate) fn from_taffy(style: style::Style) -> Self {
-        Self { inner: style }
+    /// Row layout with measured sizing on both axes.
+    pub fn row() -> Self {
+        Self {
+            direction: Direction::Row,
+            ..Self::column()
+        }
     }
 
-    /// Get a mutable reference to the inner taffy style.
-    ///
-    /// Use this for advanced layout features not yet exposed through
-    /// the Layout wrapper API (e.g., absolute positioning, grid layout).
-    pub fn as_taffy_mut(&mut self) -> &mut style::Style {
-        &mut self.inner
+    /// Fill available space with flex sizing on both axes.
+    pub fn fill() -> Self {
+        Self {
+            width: Sizing::Flex(1),
+            height: Sizing::Flex(1),
+            ..Self::column()
+        }
     }
 
-    // === Display Mode ===
-
-    /// Set the display mode.
-    pub fn display(&mut self, d: Display) -> &mut Self {
-        self.inner.display = d.into();
+    /// Remove this node from layout and rendering.
+    pub fn none(mut self) -> Self {
+        self.display = Display::None;
         self
     }
 
-    /// Set display to flex with column direction.
-    pub fn flex_col(&mut self) -> &mut Self {
-        self.inner.display = style::Display::Flex;
-        self.inner.flex_direction = style::FlexDirection::Column;
+    /// Set width to flex with the provided weight (clamped to at least 1).
+    pub fn flex_horizontal(mut self, weight: u32) -> Self {
+        self.width = Sizing::Flex(weight.max(1));
         self
     }
 
-    /// Set display to flex with row direction.
-    pub fn flex_row(&mut self) -> &mut Self {
-        self.inner.display = style::Display::Flex;
-        self.inner.flex_direction = style::FlexDirection::Row;
+    /// Set height to flex with the provided weight (clamped to at least 1).
+    pub fn flex_vertical(mut self, weight: u32) -> Self {
+        self.height = Sizing::Flex(weight.max(1));
         self
     }
 
-    /// Set the flex direction.
-    pub fn flex_direction(&mut self, d: FlexDirection) -> &mut Self {
-        self.inner.flex_direction = d.into();
+    /// Set the minimum outer width.
+    pub fn min_width(mut self, n: u32) -> Self {
+        self.min_width = Some(n);
         self
     }
 
-    // === Flex Item Properties ===
-
-    /// Configure as a flex item with grow, shrink, and basis.
-    pub fn flex_item(&mut self, grow: f32, shrink: f32, basis: Dimension) -> &mut Self {
-        self.inner.flex_grow = grow;
-        self.inner.flex_shrink = shrink;
-        self.inner.flex_basis = basis.into();
+    /// Set the maximum outer width.
+    pub fn max_width(mut self, n: u32) -> Self {
+        self.max_width = Some(n);
         self
     }
 
-    /// Set the flex grow factor.
-    pub fn flex_grow(&mut self, v: f32) -> &mut Self {
-        self.inner.flex_grow = v;
+    /// Set the minimum outer height.
+    pub fn min_height(mut self, n: u32) -> Self {
+        self.min_height = Some(n);
         self
     }
 
-    /// Set the flex shrink factor.
-    pub fn flex_shrink(&mut self, v: f32) -> &mut Self {
-        self.inner.flex_shrink = v;
+    /// Set the maximum outer height.
+    pub fn max_height(mut self, n: u32) -> Self {
+        self.max_height = Some(n);
         self
     }
 
-    /// Set the flex basis.
-    pub fn flex_basis(&mut self, d: Dimension) -> &mut Self {
-        self.inner.flex_basis = d.into();
+    /// Convenience: fixed outer width without a `Fixed` enum.
+    pub fn fixed_width(self, n: u32) -> Self {
+        self.min_width(n).max_width(n)
+    }
+
+    /// Convenience: fixed outer height without a `Fixed` enum.
+    pub fn fixed_height(self, n: u32) -> Self {
+        self.min_height(n).max_height(n)
+    }
+
+    /// Set padding edges.
+    pub fn padding(mut self, edges: Edges<u32>) -> Self {
+        self.padding = edges;
         self
     }
 
-    // === Sizing ===
-
-    /// Set the width.
-    pub fn width(&mut self, d: Dimension) -> &mut Self {
-        self.inner.size.width = d.into();
+    /// Set the main-axis gap between children.
+    pub fn gap(mut self, n: u32) -> Self {
+        self.gap = n;
         self
     }
+}
 
-    /// Set the height.
-    pub fn height(&mut self, d: Dimension) -> &mut Self {
-        self.inner.size.height = d.into();
-        self
+/// Content-box measurement constraints.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Constraint {
+    /// No constraint on this axis.
+    Unbounded,
+    /// The engine guarantees at most n cells on this axis.
+    AtMost(u32),
+    /// The engine guarantees exactly n cells on this axis.
+    Exact(u32),
+}
+
+impl Constraint {
+    /// Clamp a value to this constraint.
+    fn clamp(self, value: u32) -> u32 {
+        match self {
+            Self::Unbounded => value,
+            Self::AtMost(n) => value.min(n),
+            Self::Exact(n) => n,
+        }
     }
 
-    /// Set both width and height.
-    pub fn size(&mut self, width: Dimension, height: Dimension) -> &mut Self {
-        self.inner.size.width = width.into();
-        self.inner.size.height = height.into();
-        self
+    /// Return true if the constraint is exact.
+    fn is_exact(self) -> bool {
+        matches!(self, Self::Exact(_))
     }
 
-    /// Set width to 100%.
-    pub fn w_full(&mut self) -> &mut Self {
-        self.inner.size.width = style::Dimension::Percent(1.0);
-        self
+    /// Return the maximum bound implied by the constraint.
+    fn max_bound(self) -> u32 {
+        match self {
+            Self::Unbounded => u32::MAX,
+            Self::AtMost(n) | Self::Exact(n) => n,
+        }
+    }
+}
+
+/// Constraints for measuring a widget's content box.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct MeasureConstraints {
+    /// Width constraint.
+    pub width: Constraint,
+    /// Height constraint.
+    pub height: Constraint,
+}
+
+impl MeasureConstraints {
+    /// Leaf widgets: clamp a content size to these constraints and return Fixed.
+    pub fn clamp(&self, content: Size<u32>) -> Measurement {
+        Measurement::Fixed(self.clamp_size(content))
     }
 
-    /// Set height to 100%.
-    pub fn h_full(&mut self) -> &mut Self {
-        self.inner.size.height = style::Dimension::Percent(1.0);
-        self
+    /// Containers: request wrapping.
+    pub fn wrap(&self) -> Measurement {
+        Measurement::Wrap
     }
 
-    /// Set both width and height to 100%.
-    pub fn fill(&mut self) -> &mut Self {
-        self.w_full().h_full()
+    /// Clamp a size to these constraints.
+    pub fn clamp_size(&self, content: Size<u32>) -> Size<u32> {
+        Size::new(
+            self.width.clamp(content.width),
+            self.height.clamp(content.height),
+        )
     }
 
-    /// Set the minimum width.
-    pub fn min_width(&mut self, d: Dimension) -> &mut Self {
-        self.inner.min_size.width = d.into();
-        self
+    /// True if the main axis is exact.
+    pub fn main_is_exact(&self, direction: Direction) -> bool {
+        match direction {
+            Direction::Column => self.height.is_exact(),
+            Direction::Row => self.width.is_exact(),
+        }
     }
 
-    /// Set the minimum height.
-    pub fn min_height(&mut self, d: Dimension) -> &mut Self {
-        self.inner.min_size.height = d.into();
-        self
+    /// True if the cross axis is exact.
+    pub fn cross_is_exact(&self, direction: Direction) -> bool {
+        match direction {
+            Direction::Column => self.width.is_exact(),
+            Direction::Row => self.height.is_exact(),
+        }
     }
 
-    /// Set both minimum width and height.
-    pub fn min_size(&mut self, width: Dimension, height: Dimension) -> &mut Self {
-        self.inner.min_size.width = width.into();
-        self.inner.min_size.height = height.into();
-        self
+    /// Return the main axis constraint.
+    pub fn main(&self, direction: Direction) -> Constraint {
+        match direction {
+            Direction::Column => self.height,
+            Direction::Row => self.width,
+        }
     }
 
-    /// Set the maximum width.
-    pub fn max_width(&mut self, d: Dimension) -> &mut Self {
-        self.inner.max_size.width = d.into();
-        self
+    /// Return the cross axis constraint.
+    pub fn cross(&self, direction: Direction) -> Constraint {
+        match direction {
+            Direction::Column => self.width,
+            Direction::Row => self.height,
+        }
+    }
+}
+
+/// Result of measuring a widget's content box.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Measurement {
+    /// Fixed content size for leaf widgets.
+    Fixed(Size<u32>),
+    /// Wrap children: engine computes content size from children.
+    Wrap,
+}
+
+/// Canvas context for computing scrollable extents.
+pub struct CanvasContext<'a> {
+    /// Child layout results in this node's content coordinate space.
+    children: &'a [CanvasChild],
+}
+
+impl<'a> CanvasContext<'a> {
+    /// Construct a canvas context from a child slice.
+    pub fn new(children: &'a [CanvasChild]) -> Self {
+        Self { children }
     }
 
-    /// Set the maximum height.
-    pub fn max_height(&mut self, d: Dimension) -> &mut Self {
-        self.inner.max_size.height = d.into();
-        self
+    /// Child layout results in this node's content coordinate space.
+    pub fn children(&self) -> &[CanvasChild] {
+        self.children
     }
 
-    // === Spacing ===
-
-    /// Set padding on all edges.
-    pub fn padding(&mut self, edges: Edges) -> &mut Self {
-        self.inner.padding = edges.into();
-        self
+    /// Extent of children outer rects.
+    pub fn children_extent(&self) -> Size<u32> {
+        let mut max_x = 0u32;
+        let mut max_y = 0u32;
+        for child in self.children {
+            max_x = max_x.max(child.rect.tl.x.saturating_add(child.rect.w));
+            max_y = max_y.max(child.rect.tl.y.saturating_add(child.rect.h));
+        }
+        Size::new(max_x, max_y)
     }
+}
 
-    /// Set uniform padding on all edges.
-    pub fn padding_all(&mut self, l: Length) -> &mut Self {
-        self.padding(Edges::all(l))
+/// Child layout results for canvas computations.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CanvasChild {
+    /// Child outer rect relative to this node's content origin.
+    pub rect: Rect,
+    /// Child canvas size in the child's content coordinates.
+    pub canvas: Size<u32>,
+}
+
+impl CanvasChild {
+    /// Construct a new canvas child.
+    pub fn new(rect: Rect, canvas: Size<u32>) -> Self {
+        Self { rect, canvas }
     }
+}
 
-    /// Set margin on all edges.
-    pub fn margin(&mut self, edges: Edges) -> &mut Self {
-        let rect = geometry::Rect {
-            top: length_to_auto(edges.top),
-            right: length_to_auto(edges.right),
-            bottom: length_to_auto(edges.bottom),
-            left: length_to_auto(edges.left),
+/// Clamp a flex weight to at least 1.
+pub fn clamp_weight(weight: u32) -> u32 {
+    weight.max(1)
+}
+
+/// Return true if a constraint is exact.
+pub fn is_exact(c: Constraint) -> bool {
+    c.is_exact()
+}
+
+/// Return the maximum bound for a constraint.
+pub fn max_bound(c: Constraint) -> u32 {
+    c.max_bound()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::geom::Rect;
+
+    #[test]
+    fn clamp_size_unbounded() {
+        let c = MeasureConstraints {
+            width: Constraint::Unbounded,
+            height: Constraint::Unbounded,
         };
-        self.inner.margin = rect;
-        self
+        let size = Size::new(12, 7);
+        assert_eq!(c.clamp_size(size), size);
     }
 
-    /// Set uniform margin on all edges.
-    pub fn margin_all(&mut self, l: Length) -> &mut Self {
-        self.margin(Edges::all(l))
+    #[test]
+    fn clamp_size_at_most() {
+        let c = MeasureConstraints {
+            width: Constraint::AtMost(3),
+            height: Constraint::AtMost(0),
+        };
+        let size = Size::new(10, 4);
+        assert_eq!(c.clamp_size(size), Size::new(3, 0));
     }
 
-    // === Getters ===
-
-    /// Get the current display mode.
-    pub fn get_display(&self) -> Display {
-        self.inner.display.into()
+    #[test]
+    fn clamp_size_exact() {
+        let c = MeasureConstraints {
+            width: Constraint::Exact(0),
+            height: Constraint::Exact(5),
+        };
+        let size = Size::new(3, 3);
+        assert_eq!(c.clamp_size(size), Size::new(0, 5));
     }
 
-    /// Get the current flex direction.
-    pub fn get_flex_direction(&self) -> FlexDirection {
-        self.inner.flex_direction.into()
+    #[test]
+    fn edges_saturating_add() {
+        let edges = Edges::new(u32::MAX, u32::MAX, 1, 1);
+        assert_eq!(edges.horizontal(), u32::MAX);
+        assert_eq!(edges.vertical(), u32::MAX);
     }
 
-    /// Get the current flex grow factor.
-    pub fn get_flex_grow(&self) -> f32 {
-        self.inner.flex_grow
+    #[test]
+    fn children_extent_empty() {
+        let ctx = CanvasContext::new(&[]);
+        assert_eq!(ctx.children_extent(), Size::ZERO);
     }
 
-    /// Get the current flex shrink factor.
-    pub fn get_flex_shrink(&self) -> f32 {
-        self.inner.flex_shrink
-    }
-
-    /// Get the current flex basis.
-    pub fn get_flex_basis(&self) -> Dimension {
-        self.inner.flex_basis.into()
-    }
-
-    /// Get the current width.
-    pub fn get_width(&self) -> Dimension {
-        self.inner.size.width.into()
-    }
-
-    /// Get the current height.
-    pub fn get_height(&self) -> Dimension {
-        self.inner.size.height.into()
-    }
-
-    /// Get the current padding.
-    pub fn get_padding(&self) -> Edges {
-        self.inner.padding.into()
-    }
-
-    /// Get the current minimum width.
-    pub fn get_min_width(&self) -> Dimension {
-        self.inner.min_size.width.into()
-    }
-
-    /// Get the current minimum height.
-    pub fn get_min_height(&self) -> Dimension {
-        self.inner.min_size.height.into()
+    #[test]
+    fn children_extent_max_corner() {
+        let children = [
+            CanvasChild::new(Rect::new(0, 0, 5, 3), Size::new(1, 1)),
+            CanvasChild::new(Rect::new(6, 2, 4, 2), Size::new(100, 100)),
+        ];
+        let ctx = CanvasContext::new(&children);
+        assert_eq!(ctx.children_extent(), Size::new(10, 4));
     }
 }
-
-/// Convert a Length to a LengthPercentageAuto for margin.
-fn length_to_auto(l: Length) -> style::LengthPercentageAuto {
-    match l {
-        Length::Zero => style::LengthPercentageAuto::Points(0.0),
-        Length::Points(p) => style::LengthPercentageAuto::Points(p),
-        Length::Percent(p) => style::LengthPercentageAuto::Percent(p),
-    }
-}
-
-// Re-export taffy types that are used internally but not in public API
-pub(crate) use taffy::style_helpers::{FromFlex, line};
-// Re-export grid-related types for internal use (panes widget)
-pub(crate) use taffy::{
-    geometry::Line,
-    style::{GridPlacement, TrackSizingFunction},
-};

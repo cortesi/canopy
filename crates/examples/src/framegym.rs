@@ -4,8 +4,8 @@ use canopy::{
     Binder, Canopy, Context, Loader, ViewContext, command, derive_commands,
     error::Result,
     event::key,
-    geom::{Expanse, Rect},
-    layout::{AvailableSpace, Dimension, Size},
+    geom::{Expanse, Line},
+    layout::{CanvasContext, Layout, MeasureConstraints, Measurement, Size, Sizing},
     render::Render,
     widget::Widget,
     widgets::{Root, frame},
@@ -66,13 +66,13 @@ impl TestPattern {
     }
 
     #[command]
-    /// Page down in the viewport.
+    /// Page down in the view.
     pub fn page_down(&mut self, c: &mut dyn Context) {
         c.page_down();
     }
 
     #[command]
-    /// Page up in the viewport.
+    /// Page up in the view.
     pub fn page_up(&mut self, c: &mut dyn Context) {
         c.page_up();
     }
@@ -89,19 +89,34 @@ impl Widget for TestPattern {
         true
     }
 
-    fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
-        let view = ctx.view();
+    fn layout(&self) -> Layout {
+        Layout::fill()
+    }
 
-        // The viewport automatically handles the visible window for us
+    fn measure(&self, c: MeasureConstraints) -> Measurement {
+        c.clamp(Size::new(self.size.w, self.size.h))
+    }
+
+    fn canvas(&self, _view: Size<u32>, _ctx: &CanvasContext) -> Size<u32> {
+        Size::new(self.size.w, self.size.h)
+    }
+
+    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        let view = ctx.view();
+        let origin = view.content_origin();
+        let view_width = view.content.w;
+        let view_height = view.content.h;
+
+        // The view automatically handles the visible window for us
         // We just need to render the content that's visible
-        for y in 0..view.h {
+        for y in 0..view_height {
             let absolute_y = view.tl.y + y;
             if absolute_y >= self.size.h {
                 break;
             }
 
-            let mut line = String::with_capacity(view.w as usize);
-            for x in 0..view.w {
+            let mut line = String::with_capacity(view_width as usize);
+            for x in 0..view_width {
                 let absolute_x = view.tl.x + x;
                 if absolute_x >= self.size.w {
                     break;
@@ -117,21 +132,10 @@ impl Widget for TestPattern {
                 _ => "yellow",
             };
 
-            r.text(color, view.line(y), &line)?;
+            r.text(color, Line::new(origin.x, origin.y + y, view_width), &line)?;
         }
 
         Ok(())
-    }
-
-    fn view_size(
-        &self,
-        _known_dimensions: Size<Option<f32>>,
-        _available_space: Size<AvailableSpace>,
-    ) -> Size<f32> {
-        Size {
-            width: self.size.w as f32,
-            height: self.size.h as f32,
-        }
     }
 }
 
@@ -165,22 +169,23 @@ impl FrameGym {
             .expect("Failed to mount pattern");
 
         c.with_layout(&mut |layout| {
-            layout.flex_col();
+            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })
         .expect("Failed to configure layout");
         c.with_layout_of(frame_id, &mut |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            layout.width = Sizing::Flex(1);
+            layout.height = Sizing::Flex(1);
         })
         .expect("Failed to configure frame layout");
         c.with_layout_of(pattern_id, &mut |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            *layout = Layout::fill();
         })
         .expect("Failed to configure pattern layout");
     }
 }
 
 impl Widget for FrameGym {
-    fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 
@@ -225,11 +230,7 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
 
 #[cfg(test)]
 mod tests {
-    use canopy::{
-        NodeId,
-        layout::{Edges, Length},
-        testing::harness::Harness,
-    };
+    use canopy::{NodeId, layout::Edges, testing::harness::Harness};
 
     use super::*;
 
@@ -250,21 +251,17 @@ mod tests {
 
         let frame_id = find_node_id(&harness, "frame");
         let pattern_id = find_node_id(&harness, "test_pattern");
-        let frame_vp = harness.canopy.core.nodes[frame_id].vp;
-        let pattern_vp = harness.canopy.core.nodes[pattern_id].vp;
-        let frame_view = frame_vp.view();
-        let pattern_view = pattern_vp.view();
-        let pattern_pos = pattern_vp.position();
-        let frame_canvas = frame_vp.canvas();
+        let frame_view = harness.canopy.core.nodes[frame_id].view;
+        let pattern_view = harness.canopy.core.nodes[pattern_id].view;
         let frame_layout = &harness.canopy.core.nodes[frame_id].layout;
 
-        assert_eq!(pattern_pos.x, frame_view.tl.x + 1);
-        assert_eq!(pattern_pos.y, frame_view.tl.y + 1);
-        assert_eq!(frame_canvas.w, frame_view.w);
-        assert_eq!(frame_canvas.h, frame_view.h);
-        assert_eq!(frame_layout.get_padding(), Edges::all(Length::Points(1.0)));
-        assert_eq!(pattern_view.w + 2, frame_view.w);
-        assert_eq!(pattern_view.h + 2, frame_view.h);
+        assert_eq!(pattern_view.outer.tl.x, frame_view.content.tl.x);
+        assert_eq!(pattern_view.outer.tl.y, frame_view.content.tl.y);
+        assert_eq!(frame_view.canvas.w, frame_view.content.w);
+        assert_eq!(frame_view.canvas.h, frame_view.content.h);
+        assert_eq!(frame_layout.padding, Edges::all(1));
+        assert_eq!(pattern_view.outer.w + 2, frame_view.outer.w);
+        assert_eq!(pattern_view.outer.h + 2, frame_view.outer.h);
 
         let lines = harness.tbuf().lines();
         let last_col = lines[0].chars().count() - 1;

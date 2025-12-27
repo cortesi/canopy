@@ -9,7 +9,7 @@ use crate::{
 };
 
 /// Traverses a tree of nodes and returns a string showing the node names and
-/// viewports for each node for visual display. This is a debug function.
+/// views for each node for visual display. This is a debug function.
 pub fn dump(core: &Core, root: NodeId) -> Result<String> {
     let mut buffer = Buffer::ansi();
     dump_node(&mut buffer, core, root, 0, None)?;
@@ -17,7 +17,7 @@ pub fn dump(core: &Core, root: NodeId) -> Result<String> {
 }
 
 /// Traverses a tree of nodes and returns a string showing the node names and
-/// viewports for each node for visual display, with focus information.
+/// views for each node for visual display, with focus information.
 /// This is a debug function.
 pub fn dump_with_focus(core: &Core, root: NodeId, focus: Option<NodeId>) -> Result<String> {
     let mut buffer = Buffer::ansi();
@@ -54,7 +54,6 @@ fn dump_node(
 
     // Get node information
     let id = node_id;
-    let viewport = node.vp;
     let is_hidden = node.hidden;
     let is_focused = focus.map(|fg| fg == node_id).unwrap_or(false);
 
@@ -100,7 +99,7 @@ fn dump_node(
     writeln!(buffer).unwrap();
 
     // Format position
-    let pos = viewport.position();
+    let pos = node.rect.tl;
     write_field(
         buffer,
         &indent,
@@ -109,7 +108,7 @@ fn dump_node(
     );
 
     // Format view rectangle
-    let view = viewport.view();
+    let view = node.view.view_rect();
     write_field(
         buffer,
         &indent,
@@ -121,7 +120,7 @@ fn dump_node(
     );
 
     // Format canvas size
-    let canvas = viewport.canvas();
+    let canvas = node.canvas;
     write_field(
         buffer,
         &indent,

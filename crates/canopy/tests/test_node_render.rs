@@ -5,8 +5,8 @@ mod tests {
     use canopy::{
         Canopy, Core, Loader, NodeId, ViewContext, buf, derive_commands,
         error::Result,
-        geom::{Expanse, Rect},
-        layout::Dimension,
+        geom::Expanse,
+        layout::{Layout, Sizing},
         render::Render,
         state::NodeName,
         testing::harness::Harness,
@@ -23,8 +23,8 @@ mod tests {
     }
 
     impl Widget for NodeB {
-        fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
-            r.fill("", ctx.view(), 'B')?;
+        fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+            r.fill("", ctx.view().outer_rect_local(), 'B')?;
             Ok(())
         }
 
@@ -43,7 +43,7 @@ mod tests {
     }
 
     impl Widget for NodeA {
-        fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
 
@@ -62,7 +62,7 @@ mod tests {
     }
 
     impl Widget for Root {
-        fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
 
@@ -81,14 +81,20 @@ mod tests {
 
     fn style_flex_child(core: &mut Core, id: NodeId) -> Result<()> {
         core.with_layout_of(id, |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            layout.width = Sizing::Flex(1);
+            layout.height = Sizing::Flex(1);
         })
     }
 
     fn build_split_tree(core: &mut Core, depth: usize, horizontal: bool) -> Result<NodeId> {
         let node = core.add(NodeA::new());
         core.with_layout_of(node, |layout| {
-            layout.min_size(Dimension::Points(1.0), Dimension::Points(1.0));
+            let base = if horizontal {
+                Layout::row()
+            } else {
+                Layout::column()
+            };
+            *layout = base.min_width(1).min_height(1);
         })?;
         if depth == 0 {
             return Ok(node);
@@ -97,13 +103,6 @@ mod tests {
         let left = build_split_tree(core, depth - 1, !horizontal)?;
         let right = build_split_tree(core, depth - 1, !horizontal)?;
         core.set_children(node, vec![left, right])?;
-        core.with_layout_of(node, |layout| {
-            if horizontal {
-                layout.flex_row();
-            } else {
-                layout.flex_col();
-            }
-        })?;
         style_flex_child(core, left)?;
         style_flex_child(core, right)?;
         Ok(node)
@@ -119,17 +118,15 @@ mod tests {
         h.canopy.core.set_children(node_a, vec![node_b])?;
 
         h.canopy.core.with_layout_of(h.root, |layout| {
-            layout.flex_col();
+            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })?;
 
         h.canopy.core.with_layout_of(node_a, |layout| {
-            layout
-                .flex_col()
-                .size(Dimension::Points(10.0), Dimension::Points(5.0));
+            *layout = Layout::column().fixed_width(10).fixed_height(5);
         })?;
 
         h.canopy.core.with_layout_of(node_b, |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            *layout = Layout::fill();
         })?;
 
         h.canopy.set_root_size(Expanse::new(30, 10))?;
@@ -161,27 +158,27 @@ mod tests {
         h.canopy.core.set_children(container, vec![top, bottom])?;
 
         h.canopy.core.with_layout_of(h.root, |layout| {
-            layout.flex_col();
+            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })?;
 
         h.canopy.core.with_layout_of(container, |layout| {
-            layout.flex_col().flex_item(1.0, 1.0, Dimension::Auto);
+            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })?;
 
         h.canopy.core.with_layout_of(top, |layout| {
-            layout.size(Dimension::Points(10.0), Dimension::Points(10.0));
+            *layout = Layout::column().fixed_width(10).fixed_height(10);
         })?;
 
         h.canopy.core.with_layout_of(bottom, |layout| {
-            layout.size(Dimension::Points(10.0), Dimension::Points(0.0));
+            *layout = Layout::column().fixed_width(10).fixed_height(0);
         })?;
 
         h.canopy.set_root_size(Expanse::new(10, 10))?;
         h.render()?;
 
-        let bottom_vp = h.canopy.core.nodes[bottom].vp;
-        assert!(bottom_vp.view().is_zero());
-        assert_eq!(bottom_vp.position().y, 10);
+        let bottom_view = h.canopy.core.nodes[bottom].view;
+        assert!(bottom_view.outer.is_zero());
+        assert_eq!(h.canopy.core.nodes[bottom].rect.tl.y, 10);
 
         Ok(())
     }
@@ -193,7 +190,7 @@ mod tests {
         let tree = build_split_tree(&mut h.canopy.core, 5, true)?;
         h.canopy.core.set_children(h.root, vec![tree])?;
         h.canopy.core.with_layout_of(h.root, |layout| {
-            layout.flex_col();
+            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })?;
         style_flex_child(&mut h.canopy.core, tree)?;
 
@@ -204,18 +201,20 @@ mod tests {
         h.render()?;
 
         for node in h.canopy.core.nodes.values() {
-            let min_width = node.layout.get_min_width();
-            let min_height = node.layout.get_min_height();
-            if matches!(min_width, Dimension::Points(width) if width >= 1.0) {
+            if let Some(min_width) = node.layout.min_width
+                && min_width >= 1
+            {
                 assert!(
-                    node.vp.view().w >= 1,
+                    node.view.outer.w >= 1,
                     "node {:?} width unexpectedly below min size",
                     node.name
                 );
             }
-            if matches!(min_height, Dimension::Points(height) if height >= 1.0) {
+            if let Some(min_height) = node.layout.min_height
+                && min_height >= 1
+            {
                 assert!(
-                    node.vp.view().h >= 1,
+                    node.view.outer.h >= 1,
                     "node {:?} height unexpectedly below min size",
                     node.name
                 );

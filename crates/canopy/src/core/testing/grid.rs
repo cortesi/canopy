@@ -5,39 +5,68 @@ use crate::{
     core::Core,
     derive_commands,
     error::Result,
-    geom::{Expanse, Point, Rect},
-    layout::{Display, FromFlex, GridPlacement, Line, TrackSizingFunction, line},
+    geom::{Expanse, Point},
+    layout::Layout,
     state::NodeName,
     widget::Widget,
 };
 
+/// Grid node kind used for layout selection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GridKind {
+    /// Leaf cell with fixed size.
+    Cell,
+    /// Row container.
+    Row,
+    /// Column container.
+    Column,
+}
+
 /// A grid node widget used for testing.
-struct GridWidget {
+struct GridNode {
     /// Node name for identification.
     name: String,
-    /// Whether this node is a focusable leaf.
-    leaf: bool,
+    /// Layout role for this node.
+    kind: GridKind,
 }
 
 #[derive_commands]
-impl GridWidget {
-    /// Construct a test grid widget.
-    fn new(name: String, leaf: bool) -> Self {
-        Self { name, leaf }
+impl GridNode {
+    /// Construct a new grid node.
+    fn new(name: String, kind: GridKind) -> Self {
+        Self { name, kind }
+    }
+
+    /// Construct a leaf cell.
+    fn cell(name: String) -> Self {
+        Self::new(name, GridKind::Cell)
+    }
+
+    /// Construct a row container.
+    fn row(name: String) -> Self {
+        Self::new(name, GridKind::Row)
+    }
+
+    /// Construct a column container.
+    fn column(name: String) -> Self {
+        Self::new(name, GridKind::Column)
     }
 }
 
-impl Widget for GridWidget {
+impl Widget for GridNode {
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
-        self.leaf
+        matches!(self.kind, GridKind::Cell)
     }
 
-    fn render(
-        &mut self,
-        _r: &mut crate::render::Render,
-        _area: Rect,
-        _ctx: &dyn ViewContext,
-    ) -> Result<()> {
+    fn layout(&self) -> Layout {
+        match self.kind {
+            GridKind::Cell => Layout::column().fixed_width(10).fixed_height(10),
+            GridKind::Row => Layout::row(),
+            GridKind::Column => Layout::column(),
+        }
+    }
+
+    fn render(&mut self, _r: &mut crate::render::Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 
@@ -67,7 +96,7 @@ impl Grid {
         })
     }
 
-    /// Get the expected grid size in pixels.
+    /// Get the expected grid size in cells.
     pub fn expected_size(&self) -> Expanse {
         let cells_per_side = if self.recursion == 0 {
             1
@@ -115,40 +144,30 @@ fn build_node(
         format!("container_{x}_{y}")
     };
 
-    let node_id = core.add(GridWidget::new(name, recursion == 0));
-
     if recursion == 0 {
-        return Ok(node_id);
+        return Ok(core.add(GridNode::cell(name)));
     }
+
+    let node_id = core.add(GridNode::column(name));
 
     let mut children = Vec::new();
     let child_scale = divisions.pow((recursion - 1) as u32);
 
     for row in 0..divisions {
+        let row_name = format!("row_{x}_{y}_{row}");
+        let row_node = core.add(GridNode::row(row_name));
+        let mut row_children = Vec::new();
         for col in 0..divisions {
             let child_x = x + col * child_scale;
             let child_y = y + row * child_scale;
             let child = build_node(core, child_x, child_y, recursion - 1, divisions)?;
-            children.push((row, col, child));
+            row_children.push(child);
         }
+        core.set_children(row_node, row_children)?;
+        children.push(row_node);
     }
 
-    core.set_children(node_id, children.iter().map(|(_, _, id)| *id).collect())?;
-
-    core.with_layout_of(node_id, |layout| {
-        let inner = layout.as_taffy_mut();
-        inner.display = Display::Grid.into();
-        inner.grid_template_columns = vec![TrackSizingFunction::from_flex(1.0); divisions];
-        inner.grid_template_rows = vec![TrackSizingFunction::from_flex(1.0); divisions];
-    })?;
-
-    for (row, col, child) in children {
-        core.with_layout_of(child, |layout| {
-            let inner = layout.as_taffy_mut();
-            inner.grid_row = line::<Line<GridPlacement>>((row + 1) as i16);
-            inner.grid_column = line::<Line<GridPlacement>>((col + 1) as i16);
-        })?;
-    }
+    core.set_children(node_id, children)?;
 
     Ok(node_id)
 }

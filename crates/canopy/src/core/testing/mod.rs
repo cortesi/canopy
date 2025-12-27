@@ -17,13 +17,8 @@ pub mod ttree;
 mod tests {
     use super::backend::TestRender;
     use crate::{
-        Canopy, ViewContext, derive_commands,
-        error::Result,
-        geom::{Expanse, Rect},
-        layout::{Dimension, Layout},
-        render::Render,
-        state::NodeName,
-        widget::Widget,
+        Canopy, ViewContext, derive_commands, error::Result, geom::Expanse, layout::Layout,
+        render::Render, state::NodeName, widget::Widget,
     };
 
     struct Block {
@@ -38,18 +33,18 @@ mod tests {
     }
 
     impl Widget for Block {
-        fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
             if ctx.children().is_empty() {
-                r.fill("blue", ctx.view(), 'x')?;
+                r.fill("blue", ctx.view().outer_rect_local(), 'x')?;
             }
             Ok(())
         }
 
-        fn layout(&self, layout: &mut Layout) {
+        fn layout(&self) -> Layout {
             if self.horizontal {
-                layout.flex_row();
+                Layout::row().flex_horizontal(1).flex_vertical(1)
             } else {
-                layout.flex_col();
+                Layout::column().flex_horizontal(1).flex_vertical(1)
             }
         }
 
@@ -71,10 +66,10 @@ mod tests {
             .set_children(canopy.core.root, vec![left, right])?;
 
         canopy.core.with_layout_of(left, |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            *layout = Layout::fill();
         })?;
         canopy.core.with_layout_of(right, |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            *layout = Layout::fill();
         })?;
 
         canopy.set_root_size(Expanse::new(20, 10))?;
@@ -96,10 +91,10 @@ mod tests {
             .set_children(canopy.core.root, vec![left, right])?;
 
         canopy.core.with_layout_of(left, |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            *layout = Layout::fill();
         })?;
         canopy.core.with_layout_of(right, |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            *layout = Layout::fill();
         })?;
 
         canopy.set_root_size(Expanse::new(20, 10))?;

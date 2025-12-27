@@ -11,8 +11,7 @@ use crate::{
     derive_commands,
     error::Result,
     event::key::*,
-    geom::Rect,
-    layout::Dimension,
+    layout::Layout,
     render::Render,
     state::NodeName,
     widget::Widget,
@@ -35,13 +34,13 @@ impl Inspector {
         let frame_id = core.add(frame::Frame::new());
         core.set_children(frame_id, vec![view_id])?;
         core.with_layout_of(frame_id, |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            *layout = Layout::fill();
         })?;
 
         let inspector_id = core.add(Self::new());
         core.set_children(inspector_id, vec![frame_id])?;
         core.with_layout_of(inspector_id, |layout| {
-            layout.flex_col();
+            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })?;
 
         Ok(inspector_id)
@@ -55,7 +54,7 @@ impl Default for Inspector {
 }
 
 impl Widget for Inspector {
-    fn render(&mut self, r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         r.push_layer("inspector");
         Ok(())
     }

@@ -4,8 +4,8 @@ use canopy::{
     Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
     error::Result,
     event::{key, mouse},
-    geom::{Expanse, Rect},
-    layout::Dimension,
+    geom::{Expanse, Line, Point, Rect},
+    layout::{Layout, Sizing},
     render::Render,
     style::{AttrSet, solarized},
     widget::Widget,
@@ -58,23 +58,54 @@ impl ListItem for Block {
         Expanse::new(self.width.saturating_add(2), height)
     }
 
-    fn render(&mut self, rndr: &mut Render, area: Rect, selected: bool) -> Result<()> {
-        if selected {
+    fn render(
+        &mut self,
+        rndr: &mut Render,
+        area: Rect,
+        selected: bool,
+        offset: Point,
+        _full_size: Expanse,
+    ) -> Result<()> {
+        if area.w == 0 || area.h == 0 {
+            return Ok(());
+        }
+
+        let visible_start = offset.x;
+        let visible_end = visible_start.saturating_add(area.w);
+
+        if selected && visible_start == 0 {
             let (active, _) = area.carve_hstart(1);
             rndr.fill("blue", active, '\u{2588}')?;
         }
 
-        let text_area = Rect::new(
-            area.tl.x.saturating_add(2),
-            area.tl.y,
-            area.w.saturating_sub(2),
-            area.h,
-        );
         let lines = self.lines();
         let style = format!("{}/text", self.color);
+        let text_start = 2u32;
+        let text_end = text_start.saturating_add(self.width);
+        let start_line = offset.y as usize;
 
-        for (row, line) in lines.iter().take(text_area.h as usize).enumerate() {
-            rndr.text(&style, text_area.line(row as u32), line)?;
+        for (row, line) in lines
+            .iter()
+            .skip(start_line)
+            .take(area.h as usize)
+            .enumerate()
+        {
+            let row_y = area.tl.y.saturating_add(row as u32);
+            let vis_text_start = text_start.max(visible_start);
+            let vis_text_end = text_end.min(visible_end);
+            if vis_text_start >= vis_text_end {
+                continue;
+            }
+
+            let slice_start = (vis_text_start - text_start) as usize;
+            let slice_len = (vis_text_end - vis_text_start) as usize;
+            let text: String = line.chars().skip(slice_start).take(slice_len).collect();
+            let screen_x = area.tl.x.saturating_add(vis_text_start - visible_start);
+            rndr.text(
+                &style,
+                Line::new(screen_x, row_y, vis_text_end - vis_text_start),
+                &text,
+            )?;
         }
         Ok(())
     }
@@ -87,9 +118,9 @@ pub struct StatusBar;
 impl StatusBar {}
 
 impl Widget for StatusBar {
-    fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         r.push_layer("statusbar");
-        r.text("text", ctx.view().line(0), "listgym")?;
+        r.text("text", ctx.view().outer_rect_local().line(0), "listgym")?;
         Ok(())
     }
 }
@@ -126,19 +157,20 @@ impl ListGym {
         let status_id = c.add_child(StatusBar).expect("Failed to mount statusbar");
 
         c.with_layout(&mut |layout| {
-            layout.flex_col();
+            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })
         .expect("Failed to configure layout");
         c.with_layout_of(content_id, &mut |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            layout.width = Sizing::Flex(1);
+            layout.height = Sizing::Flex(1);
         })
         .expect("Failed to configure content layout");
         c.with_layout_of(list_id, &mut |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            *layout = Layout::fill();
         })
         .expect("Failed to configure list layout");
         c.with_layout_of(status_id, &mut |layout| {
-            layout.height(Dimension::Points(1.0)).flex_shrink(0.0);
+            *layout = Layout::row().flex_horizontal(1).fixed_height(1);
         })
         .expect("Failed to configure status layout");
     }
@@ -204,7 +236,7 @@ impl Widget for ListGym {
         true
     }
 
-    fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 

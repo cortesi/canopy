@@ -9,7 +9,6 @@ mod tests {
         commands::{CommandInvocation, CommandNode, dispatch},
         derive_commands,
         error::Result,
-        geom::Rect,
         render::Render,
         widget::Widget,
     };
@@ -40,7 +39,7 @@ mod tests {
     }
 
     impl Widget for TestLeaf {
-        fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
     }
@@ -51,7 +50,7 @@ mod tests {
     impl TestBranch {}
 
     impl Widget for TestBranch {
-        fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
     }
@@ -107,12 +106,7 @@ mod tests {
         }
 
         impl Widget for Foo {
-            fn render(
-                &mut self,
-                _r: &mut Render,
-                _area: Rect,
-                _ctx: &dyn ViewContext,
-            ) -> Result<()> {
+            fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
                 Ok(())
             }
         }

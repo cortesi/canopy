@@ -10,7 +10,6 @@ mod tests {
             ArgTypes, Args, CommandInvocation, CommandNode, CommandSpec, ReturnSpec, ReturnTypes,
         },
         error::{Error, Result},
-        geom::Rect,
         render::Render,
         testing::dummyctx::DummyContext,
         widget::Widget,
@@ -94,7 +93,7 @@ mod tests {
     }
 
     impl Widget for Foo {
-        fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
     }
@@ -123,7 +122,7 @@ mod tests {
     where
         N: Widget,
     {
-        fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
     }

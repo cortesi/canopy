@@ -1,14 +1,20 @@
-//! Integration tests for viewport scrolling.
+//! Integration tests for view scrolling.
 
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Context, Loader, ViewContext, command, derive_commands, error::Result, event::key,
-        geom::Rect, layout::Size, render::Render, state::NodeName, testing::harness::Harness,
+        Canopy, Context, Loader, ViewContext, command, derive_commands,
+        error::Result,
+        event::key,
+        geom::Line,
+        layout::{CanvasContext, Size},
+        render::Render,
+        state::NodeName,
+        testing::harness::Harness,
         widget::Widget,
     };
 
-    /// Simple test widget to demonstrate viewport scrolling behavior.
+    /// Simple test widget to demonstrate view scrolling behavior.
     struct ScrollTest;
 
     #[derive_commands]
@@ -28,26 +34,30 @@ mod tests {
             true
         }
 
-        fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
             let view = ctx.view();
+            let origin = view.content_origin();
+            let view_height = view.content.h;
+            let view_width = view.content.w;
 
             let line1 = format!("Scroll position: ({}, {})", view.tl.x, view.tl.y);
-            r.text("text", view.line(0), &line1)?;
+            r.text("text", Line::new(origin.x, origin.y, view_width), &line1)?;
 
-            for y in 1..view.h.min(5) {
+            for y in 1..view_height.min(5) {
                 let content = format!("Line {}", view.tl.y + y);
-                r.text("text", view.line(y), &content)?;
+                r.text(
+                    "text",
+                    Line::new(origin.x, origin.y + y, view_width),
+                    &content,
+                )?;
             }
 
             Ok(())
         }
 
         /// Canvas is larger than view to enable scrolling.
-        fn canvas_size(&self, _view: Size<f32>) -> Size<f32> {
-            Size {
-                width: 100.0,
-                height: 100.0,
-            }
+        fn canvas(&self, _view: Size<u32>, _ctx: &CanvasContext) -> Size<u32> {
+            Size::new(100, 100)
         }
 
         fn name(&self) -> NodeName {

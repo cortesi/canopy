@@ -3,8 +3,13 @@
 use std::{hint::black_box, time::Duration};
 
 use canopy::{
-    Context, Loader, NodeId, ViewContext, derive_commands, error::Result, geom::Rect,
-    layout::Dimension, render::Render, testing::harness::Harness, widget::Widget, widgets::Text,
+    Context, Loader, NodeId, ViewContext, derive_commands,
+    error::Result,
+    layout::{Layout, Sizing},
+    render::Render,
+    testing::harness::Harness,
+    widget::Widget,
+    widgets::Text,
 };
 use criterion::{Criterion, criterion_group, criterion_main};
 
@@ -37,12 +42,13 @@ impl BenchmarkTextWrapper {
             .expect("Failed to attach text");
 
         c.with_layout(&mut |layout| {
-            layout.flex_col();
+            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })
         .expect("Failed to style root");
 
         c.with_layout_of(text_id, &mut |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            layout.width = Sizing::Flex(1);
+            layout.height = Sizing::Flex(1);
         })
         .expect("Failed to style text");
 
@@ -51,7 +57,7 @@ impl BenchmarkTextWrapper {
 }
 
 impl Widget for BenchmarkTextWrapper {
-    fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 

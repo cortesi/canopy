@@ -5,16 +5,12 @@ use canopy::{
     Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
     error::Result,
     event::{key, mouse},
-    geom::{Expanse, Rect},
-    layout::{Dimension, Edges, Length},
+    geom::{Expanse, Point, Rect},
+    layout::{Edges, Layout, Sizing},
     render::Render,
     style::solarized,
     widget::Widget,
     widgets::{Input, frame, list::*},
-};
-use taffy::{
-    geometry::Rect as TaffyRect,
-    style::{AlignItems, JustifyContent, LengthPercentage, Position},
 };
 
 pub mod store;
@@ -39,7 +35,14 @@ impl ListItem for TodoItem {
         Expanse::new(available_width.max(1), height)
     }
 
-    fn render(&mut self, rndr: &mut Render, area: Rect, selected: bool) -> Result<()> {
+    fn render(
+        &mut self,
+        rndr: &mut Render,
+        area: Rect,
+        selected: bool,
+        _offset: Point,
+        _full_size: Expanse,
+    ) -> Result<()> {
         let width = area.w.max(1) as usize;
         let lines = textwrap::wrap(&self.todo.item, width);
         let style = if selected { "blue/text" } else { "text" };
@@ -61,14 +64,13 @@ pub struct StatusBar;
 impl StatusBar {}
 
 impl Widget for StatusBar {
-    fn render(
-        &mut self,
-        r: &mut Render,
-        _area: canopy::geom::Rect,
-        ctx: &dyn canopy::ViewContext,
-    ) -> Result<()> {
+    fn render(&mut self, r: &mut Render, ctx: &dyn canopy::ViewContext) -> Result<()> {
         r.push_layer("statusbar");
-        r.text("statusbar/text", ctx.view().line(0), "todo")?;
+        r.text(
+            "statusbar/text",
+            ctx.view().outer_rect_local().line(0),
+            "todo",
+        )?;
         Ok(())
     }
 }
@@ -80,13 +82,31 @@ pub struct Overlay;
 impl Overlay {}
 
 impl Widget for Overlay {
-    fn render(
-        &mut self,
-        _r: &mut Render,
-        _area: canopy::geom::Rect,
-        _ctx: &dyn canopy::ViewContext,
-    ) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn canopy::ViewContext) -> Result<()> {
         Ok(())
+    }
+
+    fn layout(&self) -> Layout {
+        Layout::column()
+            .flex_horizontal(1)
+            .flex_vertical(1)
+            .padding(Edges::symmetric(0, 2))
+    }
+}
+
+/// Flexible spacer used for overlay layout.
+pub struct Spacer;
+
+#[derive_commands]
+impl Spacer {}
+
+impl Widget for Spacer {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+        Ok(())
+    }
+
+    fn layout(&self) -> Layout {
+        Layout::fill()
     }
 }
 
@@ -129,18 +149,19 @@ impl Todo {
         c.set_children(vec![content_id, status_id])?;
 
         c.with_layout(&mut |layout| {
-            layout.flex_col();
+            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })?;
 
         c.with_layout_of(content_id, &mut |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            layout.width = Sizing::Flex(1);
+            layout.height = Sizing::Flex(1);
         })?;
         c.with_layout_of(list_id, &mut |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            *layout = Layout::fill();
         })?;
 
         c.with_layout_of(status_id, &mut |layout| {
-            layout.height(Dimension::Points(1.0)).flex_shrink(0.0);
+            *layout = Layout::row().flex_horizontal(1).fixed_height(1);
         })?;
 
         self.content_id = Some(content_id);
@@ -166,35 +187,24 @@ impl Todo {
         }
 
         let overlay_id = c.add_orphan(Overlay);
+        let top_spacer_id = c.add_orphan(Spacer);
+        let bottom_spacer_id = c.add_orphan(Spacer);
         let input_id = c.add_orphan(Input::new(""));
         let adder_frame_id = c.add_orphan(frame::Frame::new());
         c.mount_child_to(adder_frame_id, input_id)?;
-        c.set_children_of(overlay_id, vec![adder_frame_id])?;
-
-        // Overlay uses advanced positioning features via taffy directly
-        c.with_layout_of(overlay_id, &mut |layout| {
-            let style = layout.as_taffy_mut();
-            style.position = Position::Absolute;
-            style.inset = TaffyRect {
-                left: LengthPercentage::Points(0.0).into(),
-                right: LengthPercentage::Points(0.0).into(),
-                top: LengthPercentage::Points(0.0).into(),
-                bottom: LengthPercentage::Points(0.0).into(),
-            };
-            style.display = taffy::style::Display::Flex;
-            style.justify_content = Some(JustifyContent::Center);
-            style.align_items = Some(AlignItems::Center);
-        })?;
+        c.set_children_of(
+            overlay_id,
+            vec![top_spacer_id, adder_frame_id, bottom_spacer_id],
+        )?;
 
         c.with_layout_of(adder_frame_id, &mut |layout| {
-            layout
-                .width(Dimension::Percent(1.0))
-                .height(Dimension::Points(3.0))
-                .margin(Edges::symmetric(Length::Zero, Length::Points(2.0)));
+            layout.width = Sizing::Flex(1);
+            layout.min_height = Some(3);
+            layout.max_height = Some(3);
         })?;
 
         c.with_layout_of(input_id, &mut |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            *layout = Layout::fill();
         })?;
 
         self.overlay_id = Some(overlay_id);
@@ -350,12 +360,7 @@ impl Widget for Todo {
         true
     }
 
-    fn render(
-        &mut self,
-        _r: &mut Render,
-        _area: canopy::geom::Rect,
-        _ctx: &dyn canopy::ViewContext,
-    ) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn canopy::ViewContext) -> Result<()> {
         Ok(())
     }
 

@@ -1,13 +1,6 @@
 use crate::{
-    Binder, Canopy, Context, DefaultBindings, Loader, NodeId, ViewContext, command,
-    core::Core,
-    derive_commands,
-    error::Result,
-    event::key::*,
-    geom::Rect,
-    layout::{Dimension, Layout},
-    state::NodeName,
-    widget::Widget,
+    Binder, Canopy, Context, DefaultBindings, Loader, NodeId, ViewContext, command, core::Core,
+    derive_commands, error::Result, event::key::*, layout::Layout, state::NodeName, widget::Widget,
     widgets::inspector::Inspector,
 };
 
@@ -47,15 +40,15 @@ impl Root {
         }
 
         c.with_layout(&mut |layout| {
-            layout.flex_row();
+            *layout = Layout::row().flex_horizontal(1).flex_vertical(1);
         })?;
 
         c.with_layout_of(self.app, &mut |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            *layout = Layout::fill();
         })?;
         if self.inspector_active {
             c.with_layout_of(self.inspector, &mut |layout| {
-                layout.flex_item(1.0, 1.0, Dimension::Auto);
+                *layout = Layout::fill();
             })?;
         }
 
@@ -173,14 +166,14 @@ impl Root {
             core.set_children(core.root, vec![app])?;
         }
         core.with_layout_of(core.root, |layout| {
-            layout.flex_row().w_full();
+            *layout = Layout::row().flex_horizontal(1).flex_vertical(1);
         })?;
         core.with_layout_of(app, |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            *layout = (*layout).flex_horizontal(1).flex_vertical(1);
         })?;
         if inspector_active {
             core.with_layout_of(inspector, |layout| {
-                layout.flex_item(1.0, 1.0, Dimension::Auto);
+                *layout = (*layout).flex_horizontal(1).flex_vertical(1);
             })?;
         }
         Ok(core.root)
@@ -188,17 +181,12 @@ impl Root {
 }
 
 impl Widget for Root {
-    fn render(
-        &mut self,
-        _rndr: &mut crate::render::Render,
-        _area: Rect,
-        _ctx: &dyn ViewContext,
-    ) -> Result<()> {
+    fn render(&mut self, _rndr: &mut crate::render::Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 
-    fn layout(&self, layout: &mut Layout) {
-        layout.fill();
+    fn layout(&self) -> Layout {
+        Layout::fill()
     }
 
     fn name(&self) -> NodeName {
@@ -232,6 +220,7 @@ mod tests {
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
         error::{Error, Result},
         geom::Expanse,
+        layout::Layout,
         render::Render,
         state::NodeName,
         testing::render::NopBackend,
@@ -255,12 +244,7 @@ mod tests {
     }
 
     impl Widget for App {
-        fn render(
-            &mut self,
-            _rndr: &mut Render,
-            _area: Rect,
-            _ctx: &dyn ViewContext,
-        ) -> Result<()> {
+        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
 
@@ -298,12 +282,7 @@ mod tests {
             true
         }
 
-        fn render(
-            &mut self,
-            _rndr: &mut Render,
-            _area: Rect,
-            _ctx: &dyn ViewContext,
-        ) -> Result<()> {
+        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
 
@@ -322,14 +301,14 @@ mod tests {
         canopy.core.set_children(app_id, vec![left, right])?;
 
         canopy.core.with_layout_of(app_id, |layout| {
-            layout.flex_row();
+            *layout = Layout::row().flex_horizontal(1).flex_vertical(1);
         })?;
 
         canopy.core.with_layout_of(left, |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            *layout = Layout::fill();
         })?;
         canopy.core.with_layout_of(right, |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            *layout = Layout::fill();
         })?;
 
         Root::install(&mut canopy.core, app_id)?;

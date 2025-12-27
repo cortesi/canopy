@@ -4,8 +4,7 @@ use canopy::{
     Binder, Canopy, Context, Loader, ViewContext, derive_commands,
     error::Result,
     event::{key, mouse},
-    geom::Rect,
-    layout::Dimension,
+    layout::{Layout, Sizing},
     render::Render,
     widget::Widget,
     widgets::{Root, Text, frame},
@@ -40,15 +39,16 @@ impl Pager {
             .expect("Failed to mount text");
 
         c.with_layout(&mut |layout| {
-            layout.flex_col();
+            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })
         .expect("Failed to configure layout");
         c.with_layout_of(frame_id, &mut |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            layout.width = Sizing::Flex(1);
+            layout.height = Sizing::Flex(1);
         })
         .expect("Failed to configure frame layout");
         c.with_layout_of(text_id, &mut |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            *layout = Layout::fill();
         })
         .expect("Failed to configure text layout");
     }
@@ -59,7 +59,7 @@ impl Widget for Pager {
         true
     }
 
-    fn render(&mut self, _rndr: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 

@@ -4,8 +4,8 @@ use canopy::{
     Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
     error::Result,
     event::{key, mouse},
-    geom::{Expanse, Rect},
-    layout::Dimension,
+    geom::{Expanse, Point, Rect},
+    layout::{Layout, Sizing},
     render::Render,
     style::solarized,
     widget::Widget,
@@ -41,7 +41,14 @@ impl ListItem for IntervalItem {
         Expanse::new(available_width.max(1), 1)
     }
 
-    fn render(&mut self, rndr: &mut Render, area: Rect, selected: bool) -> Result<()> {
+    fn render(
+        &mut self,
+        rndr: &mut Render,
+        area: Rect,
+        selected: bool,
+        _offset: Point,
+        _full_size: Expanse,
+    ) -> Result<()> {
         let style = if selected { "blue/text" } else { "text" };
         let text = self.value.to_string();
         rndr.text(style, area.line(0), &text)?;
@@ -56,9 +63,13 @@ pub struct StatusBar;
 impl StatusBar {}
 
 impl Widget for StatusBar {
-    fn render(&mut self, r: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         r.push_layer("statusbar");
-        r.text("statusbar/text", ctx.view().line(0), "intervals")?;
+        r.text(
+            "statusbar/text",
+            ctx.view().outer_rect_local().line(0),
+            "intervals",
+        )?;
         Ok(())
     }
 }
@@ -94,19 +105,20 @@ impl Intervals {
         let status_id = c.add_child(StatusBar).expect("Failed to mount statusbar");
 
         c.with_layout(&mut |layout| {
-            layout.flex_col();
+            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })
         .expect("Failed to configure layout");
         c.with_layout_of(content_id, &mut |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            layout.width = Sizing::Flex(1);
+            layout.height = Sizing::Flex(1);
         })
         .expect("Failed to configure content layout");
         c.with_layout_of(list_id, &mut |layout| {
-            layout.flex_item(1.0, 1.0, Dimension::Auto);
+            *layout = Layout::fill();
         })
         .expect("Failed to configure list layout");
         c.with_layout_of(status_id, &mut |layout| {
-            layout.height(Dimension::Points(1.0)).flex_shrink(0.0);
+            *layout = Layout::row().flex_horizontal(1).fixed_height(1);
         })
         .expect("Failed to configure status layout");
     }
@@ -152,7 +164,7 @@ impl Widget for Intervals {
         true
     }
 
-    fn render(&mut self, _r: &mut Render, _area: Rect, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 

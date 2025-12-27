@@ -1,8 +1,8 @@
 use crate::{
     Context, ViewContext, command, derive_commands,
     error::Result,
-    geom::{Expanse, Rect},
-    layout::Size,
+    geom::{Expanse, Point, Rect},
+    layout::{Constraint, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
     widget::Widget,
@@ -17,7 +17,14 @@ pub trait ListItem {
     fn measure(&self, available_width: u32) -> Expanse;
 
     /// Render the item into the list's render buffer.
-    fn render(&mut self, rndr: &mut Render, area: Rect, selected: bool) -> Result<()>;
+    fn render(
+        &mut self,
+        rndr: &mut Render,
+        area: Rect,
+        selected: bool,
+        offset: Point,
+        full_size: Expanse,
+    ) -> Result<()>;
 }
 
 /// Manage and display a list of items.
@@ -219,60 +226,60 @@ where
         }
     }
 
-    /// Scroll the viewport down by one line.
+    /// Scroll the view down by one line.
     #[command]
     pub fn scroll_down(&mut self, c: &mut dyn Context) {
         c.scroll_down();
     }
 
-    /// Scroll the viewport up by one line.
+    /// Scroll the view up by one line.
     #[command]
     pub fn scroll_up(&mut self, c: &mut dyn Context) {
         c.scroll_up();
     }
 
-    /// Scroll the viewport left by one line.
+    /// Scroll the view left by one line.
     #[command]
     pub fn scroll_left(&mut self, c: &mut dyn Context) {
         c.scroll_left();
     }
 
-    /// Scroll the viewport right by one line.
+    /// Scroll the view right by one line.
     #[command]
     pub fn scroll_right(&mut self, c: &mut dyn Context) {
         c.scroll_right();
     }
 
-    /// Scroll the viewport down by one page.
+    /// Scroll the view down by one page.
     #[command]
     pub fn page_down(&mut self, c: &mut dyn Context) {
         c.page_down();
     }
 
-    /// Scroll the viewport up by one page.
+    /// Scroll the view up by one page.
     #[command]
     pub fn page_up(&mut self, c: &mut dyn Context) {
         c.page_up();
     }
 
-    /// Ensure the selected item is visible in the viewport.
+    /// Ensure the selected item is visible in the view.
     fn ensure_selected_visible(&self, c: &mut dyn Context) {
         let selected_idx = match self.selected {
             Some(idx) => idx,
             None => return,
         };
 
-        let view = c.view();
+        let view_rect = c.view().view_rect();
         let mut y_offset = 0u32;
 
         for (idx, item) in self.items.iter().enumerate() {
-            let size = item.measure(view.w);
+            let size = item.measure(view_rect.w);
             if idx == selected_idx {
-                if y_offset < view.tl.y {
-                    let delta = view.tl.y - y_offset;
+                if y_offset < view_rect.tl.y {
+                    let delta = view_rect.tl.y - y_offset;
                     let _ = c.scroll_by(0, -(delta as i32));
-                } else if y_offset + size.h > view.tl.y + view.h {
-                    let delta = (y_offset + size.h) - (view.tl.y + view.h);
+                } else if y_offset + size.h > view_rect.tl.y + view_rect.h {
+                    let delta = (y_offset + size.h) - (view_rect.tl.y + view_rect.h);
                     let _ = c.scroll_by(0, delta as i32);
                 }
                 break;
@@ -286,25 +293,45 @@ impl<N> Widget for List<N>
 where
     N: ListItem + Send + 'static,
 {
-    fn render(&mut self, rndr: &mut Render, _area: Rect, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
-        rndr.fill("", ctx.canvas().rect(), ' ')?;
+        let view_rect = view.view_rect();
+        let content_origin = view.content_origin();
+        let scroll = view.tl;
+        rndr.fill("", view.view_rect_local(), ' ')?;
 
         let mut y_offset = 0u32;
         for (idx, item) in self.items.iter_mut().enumerate() {
-            let size = item.measure(view.w);
+            let size = item.measure(view_rect.w.max(1));
             let item_rect = Rect::new(0, y_offset, size.w, size.h);
             let selected = self.selected == Some(idx);
-            if item_rect.intersect(&view).is_some() {
-                item.render(rndr, item_rect, selected)?;
+            if let Some(visible) = item_rect.intersect(&view_rect) {
+                let offset = Point {
+                    x: visible.tl.x.saturating_sub(item_rect.tl.x),
+                    y: visible.tl.y.saturating_sub(item_rect.tl.y),
+                };
+                let local_rect = Rect::new(
+                    content_origin
+                        .x
+                        .saturating_add(visible.tl.x.saturating_sub(scroll.x)),
+                    content_origin
+                        .y
+                        .saturating_add(visible.tl.y.saturating_sub(scroll.y)),
+                    visible.w,
+                    visible.h,
+                );
+                item.render(rndr, local_rect, selected, offset, size)?;
             }
             y_offset = y_offset.saturating_add(size.h);
         }
         Ok(())
     }
 
-    fn canvas_size(&self, view: Size<f32>) -> Size<f32> {
-        let available_width = view.width.max(1.0) as u32;
+    fn measure(&self, c: MeasureConstraints) -> Measurement {
+        let available_width = match c.width {
+            Constraint::Exact(n) | Constraint::AtMost(n) => n.max(1),
+            Constraint::Unbounded => u32::MAX,
+        };
 
         let mut height = 0u32;
         let mut max_width = 0u32;
@@ -314,10 +341,21 @@ where
             max_width = max_width.max(size.w);
         }
 
-        Size {
-            width: max_width.max(available_width) as f32,
-            height: height as f32,
+        c.clamp(Size::new(max_width, height))
+    }
+
+    fn canvas(&self, view: Size<u32>, _ctx: &crate::layout::CanvasContext) -> Size<u32> {
+        let available_width = view.width.max(1);
+
+        let mut height = 0u32;
+        let mut max_width = 0u32;
+        for item in &self.items {
+            let size = item.measure(available_width);
+            height = height.saturating_add(size.h);
+            max_width = max_width.max(size.w);
         }
+
+        Size::new(max_width, height)
     }
 
     fn name(&self) -> NodeName {
