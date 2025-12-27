@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Constraint","Direction","Display","Measurement","Sizing"],"fn":["clamp_weight","is_exact","max_bound"],"struct":["CanvasChild","CanvasContext","Edges","Layout","MeasureConstraints","Size"]};

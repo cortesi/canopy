@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Direction","Error"],"struct":["Expanse","Frame","Line","LineSegment","Point","Rect"],"type":["Result"]};
+window.SIDEBAR_ITEMS = {"enum":["Direction","Error"],"struct":["Expanse","Frame","Line","LineSegment","Point","PointI32","Rect","RectI32"],"type":["Result"]};

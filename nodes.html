@@ -179,10 +179,13 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="nodes"><a class="header" href="#nodes">Nodes</a></h1>
-<p>Each node in a Canopy application tree implements three important traits:
-<a href="doc/canopy/trait.StatefulNode.html">StatefulNode</a>, <a href="doc/canopy/commands/trait.CommandNode.html">CommandNode</a> and
-<a href="doc/canopy/trait.Node.html">Node</a>. In the sections ahead we'll take a closer look at each of these traits and their
-functions.</p>
+<p>Each node in a Canopy application tree is a data container managed by the
+<a href="doc/canopy/struct.Core.html"><code>Core</code></a>. Nodes are identified by <code>NodeId</code> handles
+and store a <a href="doc/canopy/trait.Widget.html"><code>Widget</code></a> implementation that
+provides behavior.</p>
+<p>Widgets are also <a href="doc/canopy/commands/trait.CommandNode.html"><code>CommandNode</code></a>s,
+so they can expose commands and handle dispatch. Finally, every node has a
+name used for paths and bindings; see <a href="./state.html">Node names</a>.</p>
 
                     </main>
 

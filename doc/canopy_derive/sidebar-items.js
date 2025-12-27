@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"attr":["command","derive_commands"],"derive":["StatefulNode"]};
+window.SIDEBAR_ITEMS = {"attr":["command","derive_commands"]};

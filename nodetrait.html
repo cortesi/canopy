@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>trait Node - Canopy Manual</title>
+        <title>Widget - Canopy Manual</title>
 
 
         <!-- Custom HTML head -->
@@ -178,7 +178,21 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="node"><a class="header" href="#node">Node</a></h1>
+                        <h1 id="widget"><a class="header" href="#widget">Widget</a></h1>
+<p>Widgets provide the behavior attached to nodes in the Core arena. Every widget
+implements the <code>Widget</code> trait, which includes:</p>
+<ul>
+<li><code>layout</code> to describe layout configuration for this widget</li>
+<li><code>render</code> to draw the widget into a buffer</li>
+<li><code>measure</code> to report intrinsic size (used by layout)</li>
+<li><code>canvas</code> to report content size for scrolling/clipping (defaults to the view size)</li>
+<li><code>on_event</code> to handle input events</li>
+<li><code>poll</code> for scheduled updates</li>
+<li><code>accept_focus</code> and <code>cursor</code> for focus handling</li>
+</ul>
+<p>Widgets are also <code>CommandNode</code>s, so they can expose commands used by the
+scripting and binding system. By default, a widget's node name is derived from
+its type name; see <a href="./state.html">Node names</a>.</p>
 
                     </main>
 

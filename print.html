@@ -203,50 +203,41 @@ system used to draw to screen is relative to the node's own area.</p>
     <img width=500px style="padding: 20px;" src="assets/rendering.svg">
 </center>
 <p>Rendering is done with a pre-order traversal of the tree. Since Rust is fast and terminals are slow, the key to
-performance is to send as few operations to the terminal as possible. Canopy uses a mark-and-sweep mechanism to redraw
-only what's needed. Nodes that need rendering are tainted using the
-<a href="doc/canopy/trait.Core.html#tymethod.taint">Core.taint</a> or
-<a href="doc/canopy/trait.Core.html#tymethod.taint_tree">Core.taint_tree</a> functions. Nodes are automatically tainted if they
-handle an event or if their focus status changes. During the render sweep, we call the
-<a href="doc/canopy/trait.Node.html#method.render">Node.render</a> method on each tainted node.</p>
+performance is to send as few operations to the terminal as possible. Canopy
+renders all visible widgets into an off-screen buffer and diffs against the
+previous frame to minimize terminal updates. During the traversal, each node's
+<a href="doc/canopy/trait.Widget.html#tymethod.render"><code>Widget::render</code></a> method is
+invoked in pre-order so children draw on top of parents.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="nodes"><a class="header" href="#nodes">Nodes</a></h1>
-<p>Each node in a Canopy application tree implements three important traits:
-<a href="doc/canopy/trait.StatefulNode.html">StatefulNode</a>, <a href="doc/canopy/commands/trait.CommandNode.html">CommandNode</a> and
-<a href="doc/canopy/trait.Node.html">Node</a>. In the sections ahead we'll take a closer look at each of these traits and their
-functions.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="trait-statefulnode"><a class="header" href="#trait-statefulnode">trait StatefulNode</a></h1>
-<p>Canopy tracks housekeeping data for each node - this includes whether the node has focus, the size and location of the
-node, whether the node has been tainted, and so on. This data is tracked in an opaque structure called <code>NodeState</code>, and
-each node is responsible for keeping its own state and returning it back to Canopy on request. The mechanism for doing
-this is the <a href="doc/canopy/trait.StatefulNode.html">StatefulNode</a> trait. There are three functions that need to be implemented to support this trait:</p>
+<p>Each node in a Canopy application tree is a data container managed by the
+<a href="doc/canopy/struct.Core.html"><code>Core</code></a>. Nodes are identified by <code>NodeId</code> handles
+and store a <a href="doc/canopy/trait.Widget.html"><code>Widget</code></a> implementation that
+provides behavior.</p>
+<p>Widgets are also <a href="doc/canopy/commands/trait.CommandNode.html"><code>CommandNode</code></a>s,
+so they can expose commands and handle dispatch. Finally, every node has a
+name used for paths and bindings; see <a href="./state.html">Node names</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="node-names"><a class="header" href="#node-names">Node names</a></h1>
+<p>Every node in the tree has a <strong>node name</strong>, which is used for command dispatch
+and path matching in input bindings. Names are stored as a <code>NodeName</code>, which is
+validated to contain only lowercase ASCII letters, digits, and underscores.</p>
+<h2 id="default-naming"><a class="header" href="#default-naming">Default naming</a></h2>
+<p>Widgets can override <code>Widget::name</code> to control the node name, but if they
+don't, the default implementation converts the Rust type name to snake case and
+removes invalid characters. This means a widget named <code>FocusGym</code> becomes the
+node name <code>focus_gym</code>.</p>
+<h2 id="manual-conversion"><a class="header" href="#manual-conversion">Manual conversion</a></h2>
+<p>If you need to construct a node name yourself, use:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>/// The name of this node, used for debugging and command dispatch.
-fn name(&amp;self) -&gt; NodeName;
+</span>use canopy::state::NodeName;
 
-/// Get a reference to the node's state object.
-fn state(&amp;self) -&gt; &amp;NodeState;
-
-/// Get a mutable reference to the node's state object.
-fn state_mut(&amp;mut self) -&gt; &amp;mut NodeState;
+let name = NodeName::convert("MyWidget");
 <span class="boring">}</span></code></pre></pre>
-<p>These are simple enough to implement by hand, but it's such common boilerplate that Canopy provides a macro to do this
-for you. All you need to do is make sure that the struct for your node has an attribute called <code>state</code> of type
-<code>NodeState</code>.</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>#[derive(canopy::StatefulNode)]
-struct MyNode {
-    state: NodeState,
-    // ...
-}
-<span class="boring">}</span></code></pre></pre>
-<p>The derive macro takes the name of the struct converted to snake case as the node name - in this case it would be
-<code>my_node</code>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="trait-commandnode"><a class="header" href="#trait-commandnode">trait CommandNode</a></h1>
-<p>Commands are at the driver for much of Canopy's flexibility, and are the core mechanism for interacting with nodes. To
-support commands, nodes implement the deceptively simple <a href="doc/canopy/commands/trait.CommandNode.html">CommandNode</a>
-trait. There are only two methods that need to be implemented to satisfy it:</p>
+<p>Commands drive much of Canopy's flexibility and are the core mechanism for
+interacting with widgets. Widgets implement the
+<a href="doc/canopy/commands/trait.CommandNode.html">CommandNode</a> trait, which has two
+methods:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>fn commands() -&gt; Vec&lt;CommandSpec&gt;
@@ -254,50 +245,49 @@ trait. There are only two methods that need to be implemented to satisfy it:</p>
 
 fn dispatch(
     &amp;mut self,
-    c: &amp;mut dyn Core,
+    c: &amp;mut dyn Context,
     cmd: &amp;CommandInvocation
 ) -&gt; Result&lt;ReturnValue&gt;;
 <span class="boring">}</span></code></pre></pre>
-<p>The <code>commands</code> function returns a list of command specifications - that is commands that are supported by this node.
-Each <code>CommandSpec</code> has a name, a description, and a type command signature. The converse of this is the <code>dispatch</code>
-function, which takes a <code>CommandInvocation</code> specifcation, and runs the command on the node. Although these functions are
-simple, implementing them by hand would be tedious, so Canopy has derive helpers to do this for you. We use the
-<code>#[derive_commands]</code> attribute on the node impl block, then annotate each individual command with the <code>#[command]</code>
-attribute. For example:</p>
+<p>The <code>commands</code> function returns a list of command specifications supported by
+this widget. Each <code>CommandSpec</code> includes a name, description, and signature.
+The <code>dispatch</code> function takes a <code>CommandInvocation</code> and runs the command.</p>
+<p>Implementing these functions by hand is tedious, so Canopy provides derive
+helpers. Use <code>#[derive_commands]</code> on the widget's impl block and annotate each
+command with <code>#[command]</code>. For example:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>#[derive(canopy::StatefulNode)]
-struct MyNode {
-    state: NodeState,
+</span>struct MyWidget {
     value: u64,
 }
 
 #[derive_commands]
-impl MyNode {
+impl MyWidget {
     /// Increment our value.
     #[command]
-    fn inc(&amp;mut self) -&gt; Result&lt;()&gt; {
-        self.value.saturating_add(1);
+    fn inc(&amp;mut self, _ctx: &amp;mut dyn Context) -&gt; Result&lt;()&gt; {
+        self.value = self.value.saturating_add(1);
         Ok(())
     }
 
     /// Decrement our value.
     #[command]
-    fn dec(&amp;mut self) -&gt; Result&lt;()&gt; {
-        self.value.saturating_sub(1);
+    fn dec(&amp;mut self, _ctx: &amp;mut dyn Context) -&gt; Result&lt;()&gt; {
+        self.value = self.value.saturating_sub(1);
         Ok(())
     }
 }
 <span class="boring">}</span></code></pre></pre>
 <h1 id="arguments"><a class="header" href="#arguments">Arguments</a></h1>
-<p>Command functions can take an arbitrary number of arguments. The following types are supported:</p>
+<p>Command functions can take an arbitrary number of arguments. The following
+types are supported:</p>
 <ul>
-<li><code>&amp;mut dyn Core</code>. This type is handled specially - if the first argument is of type <code>&amp;mut dyn Core</code>, the <code>Core</code> object
-is automatically passed in to each invocation. That is, it does not have to be (and cannot be) specified in a script
-when a command is invoked.</li>
+<li><code>&amp;mut dyn Context</code>. This is handled specially: if the first argument is of
+type <code>&amp;mut dyn Context</code>, it is automatically supplied during dispatch and
+cannot be specified in a script.</li>
 <li><code>isize</code></li>
 </ul>
-<p>The list of supported types are extended as needed. If you need a type that isn't supported, please open an issue.</p>
+<p>The list of supported types can be extended as needed.</p>
 <h1 id="return-values"><a class="header" href="#return-values">Return values</a></h1>
 <p>The following return value variants are supported:</p>
 <ul>
@@ -309,45 +299,48 @@ when a command is invoked.</li>
 <li><code>Result&lt;()&gt;</code></li>
 <li><code>Result&lt;T&gt;</code> where <code>T</code> is any supported type.</li>
 </ul>
-<p>Sometimes we want to write functions that can be used from Rust or from a script, with slightly different semantics. It's useful to be able to ignore the return value for script commands in some cases, where those values are not representable in the script language. For example, consider the following function:</p>
+<p>Sometimes we want to expose a command that returns a value in Rust but has no
+equivalent in the scripting layer. In those cases use
+<code>#[command(ignore_result)]</code>. For example:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>/// Delete the currently selected item.
 #[command(ignore_result)]
-pub fn delete_selected(&amp;mut self, core: &amp;mut dyn Core) -&gt; Option&lt;N&gt; {
-    self.delete_item(core, self.offset)
+pub fn delete_selected(&amp;mut self, ctx: &amp;mut dyn Context) -&gt; Option&lt;N&gt; {
+    self.delete_item(ctx, self.offset)
 }
 <span class="boring">}</span></code></pre></pre>
-<p>Here, we have a node that manages a list. The Rust variant of the item delete function returns the item if it exists - N
-here is a generic type variable on the node. In scripts we would still like <code>delte_selected</code> to be available, but we
-would like to discard the un-representalbe return value. This is what the <code>ignore_result</code> argument to the <code>command</code>
-attribute does.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="node"><a class="header" href="#node">Node</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="widget"><a class="header" href="#widget">Widget</a></h1>
+<p>Widgets provide the behavior attached to nodes in the Core arena. Every widget
+implements the <code>Widget</code> trait, which includes:</p>
+<ul>
+<li><code>layout</code> to describe layout configuration for this widget</li>
+<li><code>render</code> to draw the widget into a buffer</li>
+<li><code>measure</code> to report intrinsic size (used by layout)</li>
+<li><code>canvas</code> to report content size for scrolling/clipping (defaults to the view size)</li>
+<li><code>on_event</code> to handle input events</li>
+<li><code>poll</code> for scheduled updates</li>
+<li><code>accept_focus</code> and <code>cursor</code> for focus handling</li>
+</ul>
+<p>Widgets are also <code>CommandNode</code>s, so they can expose commands used by the
+scripting and binding system. By default, a widget's node name is derived from
+its type name; see <a href="./state.html">Node names</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="layout"><a class="header" href="#layout">Layout</a></h1>
 <p>Layout is probably the most complex part of Canopy, and understanding the
 principles behind it will make writing powerful widgets much easier.</p>
-<h2 id="viewport"><a class="header" href="#viewport">Viewport</a></h2>
-<p>The core structure managing layout in Canopy is the
-<a href="doc/canopy/viewport/struct.Viewport.html">ViewPort</a>. Each node has one, kept
-in the assocaited node state.</p>
-<center>
-    <img width=100% style="padding: 20px;" src="assets/viewport.svg">
-</center>
-<p>The <strong>ViewPort</strong> co-ordinates 3 different values - the virtual <strong>size</strong> of the
-node, a <strong>view</strong> into the content of the node, and a <strong>projection</strong> of the view
-onto the screen. To make this concrete, let's imagine a text widget. We
-calculate the <strong>size</strong> of the widget by wrapping the text to a given width -
-the height of the node is then the number of resulting lines. The resulting
-size might not all fit on screen. The <strong>view</strong> is a window onto the widget that
-does fit on screen, constrained to fall within the node's total <strong>size</strong>.</p>
-<p>The final value we need to understand is the <strong>projection</strong> - this is the
-location on the screen where the <strong>view</strong> is drawn. The tricky thing to
-understand is that the projection value is an offset within the <strong>view</strong> of the
-parent node.</p>
-<p>Finally, location on the physical screen to which the view is painted is the
-<strong>projection</strong>, represented by the top left point of the projection rectangle.</p>
-<p>The <strong>size</strong> and <strong>view</strong> are controlled by the node itself, while the
-<strong>projection</strong> is controlled by the parent node.</p>
+<h2 id="view"><a class="header" href="#view">View</a></h2>
+<p>Layout computes a <code>View</code> for every node. A view captures:</p>
+<ul>
+<li><strong>Outer rect</strong>: the node's allocated rectangle in screen coordinates.</li>
+<li><strong>Content rect</strong>: the inner rectangle after subtracting padding (also in screen
+coordinates). Children are laid out and clipped to this area.</li>
+<li><strong>Scroll offset</strong>: the top-left of the visible window in content coordinates.</li>
+<li><strong>Canvas size</strong>: the total scrollable extent in content coordinates.</li>
+</ul>
+<p>Children are positioned in the parent's content coordinate space. During render,
+the engine translates child positions by the parent's scroll offset and clips
+children to the parent's content rect. Widgets can query the current view to draw
+scrollbars or react to available content space.</p>
 <h2 id="fit"><a class="header" href="#fit">Fit</a></h2>
 <h2 id="rendering-1"><a class="header" href="#rendering-1">Rendering</a></h2>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="polling"><a class="header" href="#polling">Polling</a></h1>
