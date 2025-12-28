@@ -39,6 +39,10 @@ name = "listgym"
 path = "examples/listgym.rs"
 
 [[example]]
+name = "termgym"
+path = "examples/termgym.rs"
+
+[[example]]
 name = "pager"
 path = "examples/pager.rs"
 

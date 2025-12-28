@@ -197,6 +197,16 @@ impl<'a> Render<'a> {
         Ok(())
     }
 
+    /// Write a single cell with a resolved style.
+    pub fn put_cell(&mut self, style: Style, p: geom::Point, ch: char) -> Result<()> {
+        if self.clip.contains_point(p) {
+            let style = self.apply_effects(style);
+            let adjusted = self.translate_point(p);
+            self.buffer_mut().put(adjusted, ch, style);
+        }
+        Ok(())
+    }
+
     /// Get a reference to the internal buffer
     pub fn get_buffer(&self) -> &TermBuf {
         self.buffer()

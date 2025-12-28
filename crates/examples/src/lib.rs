@@ -14,5 +14,7 @@ pub mod listgym;
 pub mod pager;
 /// Stylegym example nodes.
 pub mod stylegym;
+/// Terminal gym example nodes.
+pub mod termgym;
 /// Text display example nodes.
 pub mod test_text;

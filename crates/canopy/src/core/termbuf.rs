@@ -127,7 +127,7 @@ impl TermBuf {
     }
 
     /// Write a cell at a specific point.
-    fn put(&mut self, p: Point, ch: char, style: Style) {
+    pub(crate) fn put(&mut self, p: Point, ch: char, style: Style) {
         if let Some(i) = self.idx(p) {
             self.cells[i] = Cell { ch, style };
         }

@@ -28,6 +28,8 @@ pub mod list;
 pub(crate) mod root;
 /// Tabs widget.
 pub mod tabs;
+/// Terminal widget.
+pub mod terminal;
 
 pub use center::Center;
 pub use dropdown::{Dropdown, DropdownItem};
@@ -36,4 +38,5 @@ pub use modal::Modal;
 pub use panes::Panes;
 pub use root::Root;
 pub use selector::{Selector, SelectorItem};
+pub use terminal::{Terminal, TerminalColors, TerminalConfig};
 pub use text::Text;

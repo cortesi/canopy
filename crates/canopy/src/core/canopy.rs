@@ -586,6 +586,17 @@ impl Canopy {
         Ok(())
     }
 
+    /// Dispatch a focus-related event to the focused node, bubbling as needed.
+    fn dispatch_focus_event(&mut self, event: &Event) -> Result<()> {
+        if self.core.focus.is_none() {
+            self.core.focus_first(self.core.root);
+        }
+
+        let start = self.core.focus.unwrap_or(self.core.root);
+        let _ = self.core.dispatch_event(start, event);
+        Ok(())
+    }
+
     /// Handle poll events by executing callbacks on each node in the list.
     fn poll(&mut self, ids: &[NodeId]) -> Result<()> {
         for id in ids {
@@ -617,7 +628,16 @@ impl Canopy {
             Event::Poll(ids) => {
                 self.poll(&ids)?;
             }
-            _ => {}
+            Event::Paste(content) => {
+                let event = Event::Paste(content);
+                self.dispatch_focus_event(&event)?;
+            }
+            Event::FocusGained => {
+                self.dispatch_focus_event(&Event::FocusGained)?;
+            }
+            Event::FocusLost => {
+                self.dispatch_focus_event(&Event::FocusLost)?;
+            }
         };
         Ok(())
     }
