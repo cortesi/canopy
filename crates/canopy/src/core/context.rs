@@ -14,6 +14,7 @@ use crate::{
     geom::{Direction, Expanse, Point, PointI32, Rect, RectI32},
     layout::Layout,
     path::Path,
+    style::StyleMap,
     widget::Widget,
 };
 
@@ -357,6 +358,10 @@ pub trait Context: ViewContext {
 
     /// Set whether a node should clear inherited effects before applying local ones.
     fn set_clear_inherited_effects(&mut self, node: NodeId, clear: bool) -> Result<()>;
+
+    /// Set the style map to be used for rendering.
+    /// The style change will be applied before the next render.
+    fn set_style(&mut self, style: StyleMap);
 }
 
 impl dyn Context + '_ {
@@ -878,6 +883,10 @@ impl<'a> Context for CoreContext<'a> {
             .ok_or(Error::NodeNotFound(node))?;
         node.clear_inherited_effects = clear;
         Ok(())
+    }
+
+    fn set_style(&mut self, style: StyleMap) {
+        self.core.pending_style = Some(style);
     }
 }
 

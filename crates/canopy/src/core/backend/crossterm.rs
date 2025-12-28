@@ -133,39 +133,38 @@ impl CrosstermRender {
 
     /// Apply a style to subsequent output.
     fn apply_style(&mut self, s: &Style) -> io::Result<()> {
-        // Order is important here - if we reset after setting foreground and
-        // background colors they are lost.
-        if s.attrs.is_empty() {
-            self.fp
-                .queue(style::SetAttribute(style::Attribute::Reset))?;
-        } else {
-            if s.attrs.bold {
-                self.fp.queue(style::SetAttribute(style::Attribute::Bold))?;
-            }
-            if s.attrs.crossedout {
-                self.fp
-                    .queue(style::SetAttribute(style::Attribute::CrossedOut))?;
-            }
-            if s.attrs.dim {
-                self.fp.queue(style::SetAttribute(style::Attribute::Dim))?;
-            }
-            if s.attrs.italic {
-                self.fp
-                    .queue(style::SetAttribute(style::Attribute::Italic))?;
-            }
-            if s.attrs.overline {
-                self.fp
-                    .queue(style::SetAttribute(style::Attribute::OverLined))?;
-            }
-            if s.attrs.underline {
-                self.fp
-                    .queue(style::SetAttribute(style::Attribute::Underlined))?;
-            }
-        }
+        // Always reset first to clear any previous attributes, then set colors and attrs.
+        // Order is important: reset clears everything, so we must set colors after.
+        self.fp
+            .queue(style::SetAttribute(style::Attribute::Reset))?;
         self.fp
             .queue(style::SetForegroundColor(translate_color(s.fg)))?;
         self.fp
             .queue(style::SetBackgroundColor(translate_color(s.bg)))?;
+
+        // Now add the desired attributes
+        if s.attrs.bold {
+            self.fp.queue(style::SetAttribute(style::Attribute::Bold))?;
+        }
+        if s.attrs.crossedout {
+            self.fp
+                .queue(style::SetAttribute(style::Attribute::CrossedOut))?;
+        }
+        if s.attrs.dim {
+            self.fp.queue(style::SetAttribute(style::Attribute::Dim))?;
+        }
+        if s.attrs.italic {
+            self.fp
+                .queue(style::SetAttribute(style::Attribute::Italic))?;
+        }
+        if s.attrs.overline {
+            self.fp
+                .queue(style::SetAttribute(style::Attribute::OverLined))?;
+        }
+        if s.attrs.underline {
+            self.fp
+                .queue(style::SetAttribute(style::Attribute::Underlined))?;
+        }
         Ok(())
     }
 

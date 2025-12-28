@@ -1,4 +1,4 @@
-use super::{Color, StyleMap};
+use super::{Attr, Color, StyleMap};
 use crate::{rgb, style::AttrSet};
 
 // Solarized color constants using the new hex constructor.
@@ -60,6 +60,76 @@ pub fn solarized_dark() -> StyleMap {
     c.add_fg("/yellow", YELLOW);
     c.add_fg("/orange", ORANGE);
     c.add_fg("/black", BLACK);
+
+    // Text style variants
+    c.add("/text/bold", None, None, Some(AttrSet::new(Attr::Bold)));
+    c.add("/text/italic", None, None, Some(AttrSet::new(Attr::Italic)));
+    c.add(
+        "/text/underline",
+        None,
+        None,
+        Some(AttrSet::new(Attr::Underline)),
+    );
+
+    // Selector widget styles
+    c.add_fg("/selector", BASE0);
+    c.add_fg("/selector/selected", BLUE);
+    c.add("/selector/focus", Some(BASE03), Some(BLUE), None);
+    c.add("/selector/focus/selected", Some(BASE03), Some(CYAN), None);
+
+    // Dropdown widget styles
+    c.add_fg("/dropdown", BASE0);
+    c.add_fg("/dropdown/selected", BLUE);
+    c.add("/dropdown/highlight", Some(BASE03), Some(BLUE), None);
+
+    c
+}
+
+/// Build a light solarized style map.
+pub fn solarized_light() -> StyleMap {
+    let mut c = StyleMap::new();
+    // Light mode: swap base colors (BASE00 fg on BASE3 bg)
+    c.add("/", Some(BASE00), Some(BASE3), Some(AttrSet::default()));
+    c.add_fg("/frame", BASE1);
+    c.add_fg("/frame/focused", BLUE);
+    c.add_fg("/frame/active", BASE01);
+    c.add_fg("/frame/title", BASE03);
+    c.add_fg("/tab", BASE1);
+    c.add_fg("/tab/inactive", BASE01);
+    c.add_bg("/tab/inactive", BASE2);
+    c.add_fg("/tab/active", BASE3);
+    c.add_bg("/tab/active", BLUE);
+
+    c.add_fg("/blue", BLUE);
+    c.add_fg("/red", RED);
+    c.add_fg("/magenta", MAGENTA);
+    c.add_fg("/violet", VIOLET);
+    c.add_fg("/cyan", CYAN);
+    c.add_fg("/green", GREEN);
+    c.add_fg("/yellow", YELLOW);
+    c.add_fg("/orange", ORANGE);
+    c.add_fg("/black", BLACK);
+
+    // Text style variants
+    c.add("/text/bold", None, None, Some(AttrSet::new(Attr::Bold)));
+    c.add("/text/italic", None, None, Some(AttrSet::new(Attr::Italic)));
+    c.add(
+        "/text/underline",
+        None,
+        None,
+        Some(AttrSet::new(Attr::Underline)),
+    );
+
+    // Selector widget styles
+    c.add_fg("/selector", BASE00);
+    c.add_fg("/selector/selected", BLUE);
+    c.add("/selector/focus", Some(BASE3), Some(BLUE), None);
+    c.add("/selector/focus/selected", Some(BASE3), Some(CYAN), None);
+
+    // Dropdown widget styles
+    c.add_fg("/dropdown", BASE00);
+    c.add_fg("/dropdown/selected", BLUE);
+    c.add("/dropdown/highlight", Some(BASE3), Some(BLUE), None);
 
     c
 }

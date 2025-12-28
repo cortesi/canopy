@@ -43,5 +43,9 @@ name = "pager"
 path = "examples/pager.rs"
 
 [[example]]
+name = "stylegym"
+path = "examples/stylegym.rs"
+
+[[example]]
 name = "test_text"
 path = "examples/test_text.rs"

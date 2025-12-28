@@ -417,6 +417,11 @@ impl Canopy {
 
     /// Render the widget tree. All visible nodes are rendered.
     pub(crate) fn render<R: RenderBackend>(&mut self, be: &mut R) -> Result<()> {
+        // Apply pending style change from Context::set_style
+        if let Some(new_style) = self.core.pending_style.take() {
+            self.style = new_style;
+        }
+
         if let Some(root_size) = self.root_size {
             self.core.update_layout(root_size)?;
 

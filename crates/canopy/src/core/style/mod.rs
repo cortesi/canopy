@@ -1,8 +1,12 @@
 /// Color helpers.
 mod color;
+/// Dracula theme.
+pub mod dracula;
 /// Style effects system.
 pub mod effects;
-/// Solarized theme helpers.
+/// Gruvbox theme.
+pub mod gruvbox;
+/// Solarized theme.
 pub mod solarized;
 
 use std::collections::HashMap;

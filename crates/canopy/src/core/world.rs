@@ -22,6 +22,7 @@ use crate::{
     path::Path,
     render::Render,
     state::NodeName,
+    style::StyleMap,
     widget::{EventOutcome, Widget},
 };
 
@@ -37,6 +38,8 @@ pub struct Core {
     pub focus_gen: u64,
     /// Active backend controller.
     pub backend: Option<Box<dyn BackendControl>>,
+    /// Pending style map to be applied before next render.
+    pub pending_style: Option<StyleMap>,
 }
 
 impl Core {
@@ -71,6 +74,7 @@ impl Core {
             focus: None,
             focus_gen: 1,
             backend: None,
+            pending_style: None,
         }
     }
 

@@ -3,6 +3,8 @@
 // Re-export the trait for derive macros
 /// Center widget.
 pub mod center;
+/// Dropdown widget.
+pub mod dropdown;
 /// Editor widget.
 pub mod editor;
 /// Input helpers.
@@ -11,6 +13,8 @@ pub(crate) mod input;
 pub mod modal;
 /// Pane grid layout widget.
 pub(crate) mod panes;
+/// Selector widget.
+pub mod selector;
 /// Text widget.
 pub(crate) mod text;
 
@@ -26,8 +30,10 @@ pub(crate) mod root;
 pub mod tabs;
 
 pub use center::Center;
+pub use dropdown::{Dropdown, DropdownItem};
 pub use input::{Input, TextBuf};
 pub use modal::Modal;
 pub use panes::Panes;
 pub use root::Root;
+pub use selector::{Selector, SelectorItem};
 pub use text::Text;

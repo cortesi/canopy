@@ -9,6 +9,7 @@ use crate::{
     geom::{Direction, Expanse, Point, PointI32, RectI32},
     layout::Layout,
     path::Path,
+    style::StyleMap,
     widget::Widget,
 };
 
@@ -204,5 +205,9 @@ impl Context for DummyContext {
 
     fn set_clear_inherited_effects(&mut self, _node: NodeId, _clear: bool) -> Result<()> {
         Ok(())
+    }
+
+    fn set_style(&mut self, _style: StyleMap) {
+        // DummyContext does not track styles
     }
 }

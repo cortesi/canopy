@@ -12,5 +12,7 @@ pub mod intervals;
 pub mod listgym;
 /// Pager example nodes.
 pub mod pager;
+/// Stylegym example nodes.
+pub mod stylegym;
 /// Text display example nodes.
 pub mod test_text;
