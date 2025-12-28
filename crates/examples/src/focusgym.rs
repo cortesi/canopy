@@ -49,7 +49,7 @@ impl Block {
         let adjust_horizontal = match parent_dir {
             Some(Direction::Row) => true,
             Some(Direction::Column) => false,
-            None => self.horizontal,
+            Some(Direction::Stack) | None => self.horizontal,
         };
 
         let layout = c.layout();

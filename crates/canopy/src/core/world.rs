@@ -16,8 +16,8 @@ use crate::{
     event::Event,
     geom::{Direction, Expanse, Point, Rect, RectI32},
     layout::{
-        CanvasChild, CanvasContext, Constraint, Direction as LayoutDirection, Display, Layout,
-        MeasureConstraints, Measurement, Size, Sizing, max_bound,
+        Align, CanvasChild, CanvasContext, Constraint, Direction as LayoutDirection, Display,
+        Layout, MeasureConstraints, Measurement, Size, Sizing, max_bound,
     },
     path::Path,
     render::Render,
@@ -61,6 +61,8 @@ impl Core {
             initialized: false,
             mounted: false,
             layout_dirty: Cell::new(false),
+            effects: None,
+            clear_inherited_effects: false,
         });
 
         Self {
@@ -100,6 +102,8 @@ impl Core {
             initialized: false,
             mounted: false,
             layout_dirty: Cell::new(false),
+            effects: None,
+            clear_inherited_effects: false,
         })
     }
 
@@ -909,6 +913,11 @@ impl<'a> LayoutPass<'a> {
             return Size::ZERO;
         }
 
+        // For Stack direction, content size is the max of all children
+        if layout.direction == LayoutDirection::Stack {
+            return self.measure_wrap_content_stack(layout, constraints, &children);
+        }
+
         let main_fixed = constraints.main_is_exact(layout.direction);
         let cross_fixed = constraints.cross_is_exact(layout.direction);
         let avail_main = max_bound(constraints.main(layout.direction));
@@ -982,6 +991,45 @@ impl<'a> LayoutPass<'a> {
         constraints.clamp_size(content)
     }
 
+    /// Measure content size for Stack direction - max of all children sizes.
+    fn measure_wrap_content_stack(
+        &mut self,
+        _layout: Layout,
+        constraints: MeasureConstraints,
+        children: &[NodeId],
+    ) -> Size<u32> {
+        let avail_w = max_bound(constraints.width);
+        let avail_h = max_bound(constraints.height);
+        let avail = Size::new(avail_w, avail_h);
+
+        let mut max_w = 0u32;
+        let mut max_h = 0u32;
+
+        for child in children {
+            let child_layout = self.node_layout_snapshot(*child).0;
+            let mut effective = child_layout;
+
+            // Treat flex as measure when parent is not exact
+            if !matches!(constraints.width, Constraint::Exact(_))
+                && matches!(child_layout.width, Sizing::Flex(_))
+            {
+                effective.width = Sizing::Measure;
+            }
+            if !matches!(constraints.height, Constraint::Exact(_))
+                && matches!(child_layout.height, Sizing::Flex(_))
+            {
+                effective.height = Sizing::Measure;
+            }
+
+            let size = self.resolve_outer_size_with_layout(*child, effective, avail.into());
+            max_w = max_w.max(size.width);
+            max_h = max_h.max(size.height);
+        }
+
+        let content = Size::new(max_w, max_h);
+        constraints.clamp_size(content)
+    }
+
     /// Lay out visible children inside the provided content box.
     fn layout_children(&mut self, node_id: NodeId, layout: Layout, content: Size<u32>) {
         let children = self.visible_children(node_id);
@@ -989,6 +1037,41 @@ impl<'a> LayoutPass<'a> {
             return;
         }
 
+        match layout.direction {
+            LayoutDirection::Stack => {
+                // Stack: all children get full content area, positioned according to alignment
+                for child in &children {
+                    // First, layout the child to determine its size
+                    self.layout_node(*child, content.into(), Point::zero());
+
+                    // Then apply alignment to position the child within content area
+                    let child_size = self.node_size(*child);
+                    let offset_x =
+                        align_offset(child_size.width, content.width, layout.align_horizontal);
+                    let offset_y =
+                        align_offset(child_size.height, content.height, layout.align_vertical);
+                    self.set_node_position(
+                        *child,
+                        Point {
+                            x: offset_x,
+                            y: offset_y,
+                        },
+                    );
+                }
+            }
+            LayoutDirection::Row | LayoutDirection::Column => {
+                self.layout_children_sequential(layout, content, &children);
+            }
+        }
+    }
+
+    /// Layout children sequentially (Row or Column direction).
+    fn layout_children_sequential(
+        &mut self,
+        layout: Layout,
+        content: Size<u32>,
+        children: &[NodeId],
+    ) {
         let mut fixed_main_total = 0u32;
         let mut flex_children: Vec<(usize, u32)> = Vec::new();
         let mut pre_sizes = vec![Size::ZERO; children.len()];
@@ -1036,12 +1119,29 @@ impl<'a> LayoutPass<'a> {
             let child_pos = match layout.direction {
                 LayoutDirection::Row => Point { x: pos_main, y: 0 },
                 LayoutDirection::Column => Point { x: 0, y: pos_main },
+                LayoutDirection::Stack => unreachable!(),
             };
 
             let actual = self.layout_node(*child, child_available.into(), child_pos);
             pos_main = pos_main
                 .saturating_add(actual.main(layout.direction))
                 .saturating_add(layout.gap);
+        }
+    }
+
+    /// Get a node's outer size.
+    fn node_size(&self, node_id: NodeId) -> Size<u32> {
+        self.core
+            .nodes
+            .get(node_id)
+            .map(|n| Size::new(n.rect.w, n.rect.h))
+            .unwrap_or(Size::ZERO)
+    }
+
+    /// Set a node's position within its parent's content area.
+    fn set_node_position(&mut self, node_id: NodeId, position: Point) {
+        if let Some(node) = self.core.nodes.get_mut(node_id) {
+            node.rect.tl = position;
         }
     }
 
@@ -1250,7 +1350,7 @@ fn allocate_flex_shares(remaining: u32, weights: &[u32]) -> Vec<u32> {
 fn main_sizing(layout: Layout, direction: LayoutDirection) -> Sizing {
     match direction {
         LayoutDirection::Row => layout.width,
-        LayoutDirection::Column => layout.height,
+        LayoutDirection::Column | LayoutDirection::Stack => layout.height,
     }
 }
 
@@ -1258,7 +1358,7 @@ fn main_sizing(layout: Layout, direction: LayoutDirection) -> Sizing {
 fn cross_sizing(layout: Layout, direction: LayoutDirection) -> Sizing {
     match direction {
         LayoutDirection::Row => layout.height,
-        LayoutDirection::Column => layout.width,
+        LayoutDirection::Column | LayoutDirection::Stack => layout.width,
     }
 }
 
@@ -1266,7 +1366,7 @@ fn cross_sizing(layout: Layout, direction: LayoutDirection) -> Sizing {
 fn set_main_sizing(layout: &mut Layout, direction: LayoutDirection, sizing: Sizing) {
     match direction {
         LayoutDirection::Row => layout.width = sizing,
-        LayoutDirection::Column => layout.height = sizing,
+        LayoutDirection::Column | LayoutDirection::Stack => layout.height = sizing,
     }
 }
 
@@ -1274,7 +1374,16 @@ fn set_main_sizing(layout: &mut Layout, direction: LayoutDirection, sizing: Sizi
 fn set_cross_sizing(layout: &mut Layout, direction: LayoutDirection, sizing: Sizing) {
     match direction {
         LayoutDirection::Row => layout.height = sizing,
-        LayoutDirection::Column => layout.width = sizing,
+        LayoutDirection::Column | LayoutDirection::Stack => layout.width = sizing,
+    }
+}
+
+/// Calculate the offset for aligning a child within available space.
+fn align_offset(child_size: u32, available: u32, align: Align) -> u32 {
+    match align {
+        Align::Start => 0,
+        Align::Center => available.saturating_sub(child_size) / 2,
+        Align::End => available.saturating_sub(child_size),
     }
 }
 
@@ -1396,7 +1505,8 @@ mod tests {
         error::Result,
         geom::{Expanse, Point},
         layout::{
-            CanvasContext, Constraint, Edges, Layout, MeasureConstraints, Measurement, Size, Sizing,
+            Align, CanvasContext, Constraint, Edges, Layout, MeasureConstraints, Measurement, Size,
+            Sizing,
         },
         widget::Widget,
     };
@@ -2041,6 +2151,10 @@ mod tests {
         }
 
         for node in core.nodes.values() {
+            // For Stack direction, children can overlap, so skip position ordering check
+            if node.layout.direction == LayoutDirection::Stack {
+                continue;
+            }
             let mut last = 0u32;
             for child in &node.children {
                 let child = &core.nodes[*child];
@@ -2050,6 +2164,7 @@ mod tests {
                 let pos = match node.layout.direction {
                     LayoutDirection::Row => child.rect.tl.x,
                     LayoutDirection::Column => child.rect.tl.y,
+                    LayoutDirection::Stack => continue,
                 };
                 assert!(pos >= last);
                 last = pos;
@@ -2108,5 +2223,111 @@ mod tests {
         }
 
         Ok(node)
+    }
+
+    #[test]
+    fn stack_children_overlap() -> Result<()> {
+        let mut core = Core::new();
+        let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+        let parent = core.add_boxed(Box::new(parent_widget));
+        let (c1, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(10, 10)));
+        let (c2, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(5, 5)));
+        let child1 = core.add_boxed(Box::new(c1));
+        let child2 = core.add_boxed(Box::new(c2));
+        core.set_children(parent, vec![child1, child2])?;
+        attach_root_child(&mut core, parent)?;
+        core.with_layout_of(parent, |layout| {
+            *layout = Layout::stack();
+        })?;
+        core.update_layout(Expanse::new(50, 50))?;
+
+        // Both children should be at the same position (0, 0) by default
+        assert_eq!(core.nodes[child1].rect.tl.x, 0);
+        assert_eq!(core.nodes[child1].rect.tl.y, 0);
+        assert_eq!(core.nodes[child2].rect.tl.x, 0);
+        assert_eq!(core.nodes[child2].rect.tl.y, 0);
+
+        // Parent content size should be the max of children
+        let parent_node = &core.nodes[parent];
+        assert_eq!(parent_node.content_size, Expanse::new(10, 10));
+        Ok(())
+    }
+
+    #[test]
+    fn stack_with_center_alignment() -> Result<()> {
+        let mut core = Core::new();
+        let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+        let parent = core.add_boxed(Box::new(parent_widget));
+        let (child_widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(10, 10)));
+        let child = core.add_boxed(Box::new(child_widget));
+        core.set_children(parent, vec![child])?;
+        attach_root_child(&mut core, parent)?;
+        core.with_layout_of(parent, |layout| {
+            *layout = Layout::stack()
+                .flex_horizontal(1)
+                .flex_vertical(1)
+                .align_center();
+        })?;
+        core.update_layout(Expanse::new(50, 50))?;
+
+        // Child should be centered in the 50x50 parent
+        let child_node = &core.nodes[child];
+        assert_eq!(child_node.rect.tl.x, 20); // (50 - 10) / 2
+        assert_eq!(child_node.rect.tl.y, 20); // (50 - 10) / 2
+        Ok(())
+    }
+
+    #[test]
+    fn stack_with_end_alignment() -> Result<()> {
+        let mut core = Core::new();
+        let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+        let parent = core.add_boxed(Box::new(parent_widget));
+        let (child_widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(10, 10)));
+        let child = core.add_boxed(Box::new(child_widget));
+        core.set_children(parent, vec![child])?;
+        attach_root_child(&mut core, parent)?;
+        core.with_layout_of(parent, |layout| {
+            *layout = Layout::stack()
+                .flex_horizontal(1)
+                .flex_vertical(1)
+                .align_horizontal(Align::End)
+                .align_vertical(Align::End);
+        })?;
+        core.update_layout(Expanse::new(50, 50))?;
+
+        // Child should be at the end (bottom-right)
+        let child_node = &core.nodes[child];
+        assert_eq!(child_node.rect.tl.x, 40); // 50 - 10
+        assert_eq!(child_node.rect.tl.y, 40); // 50 - 10
+        Ok(())
+    }
+
+    #[test]
+    fn stack_multiple_children_centered() -> Result<()> {
+        let mut core = Core::new();
+        let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+        let parent = core.add_boxed(Box::new(parent_widget));
+        let (c1, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(20, 20)));
+        let (c2, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(10, 10)));
+        let child1 = core.add_boxed(Box::new(c1));
+        let child2 = core.add_boxed(Box::new(c2));
+        core.set_children(parent, vec![child1, child2])?;
+        attach_root_child(&mut core, parent)?;
+        core.with_layout_of(parent, |layout| {
+            *layout = Layout::stack()
+                .flex_horizontal(1)
+                .flex_vertical(1)
+                .align_center();
+        })?;
+        core.update_layout(Expanse::new(50, 50))?;
+
+        // Both children should be centered independently
+        let c1_node = &core.nodes[child1];
+        let c2_node = &core.nodes[child2];
+        assert_eq!(c1_node.rect.tl.x, 15); // (50 - 20) / 2
+        assert_eq!(c1_node.rect.tl.y, 15);
+        assert_eq!(c2_node.rect.tl.x, 20); // (50 - 10) / 2
+        assert_eq!(c2_node.rect.tl.y, 20);
+        Ok(())
     }
 }

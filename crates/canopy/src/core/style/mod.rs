@@ -1,11 +1,14 @@
 /// Color helpers.
 mod color;
+/// Style effects system.
+pub mod effects;
 /// Solarized theme helpers.
 pub mod solarized;
 
 use std::collections::HashMap;
 
 pub use color::Color;
+pub use effects::StyleEffect;
 
 /// A text attribute.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]

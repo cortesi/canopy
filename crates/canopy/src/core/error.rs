@@ -2,7 +2,7 @@ use std::{result::Result as StdResult, sync::mpsc};
 
 use thiserror::Error;
 
-use crate::geom;
+use crate::{core::id::NodeId, geom};
 
 /// Result type for canopy-core operations.
 pub type Result<T> = StdResult<T, Error>;
@@ -76,9 +76,13 @@ pub enum Error {
     /// Script execution failure.
     Script(String),
 
-    /// No result was generated on node traversal
+    /// No result was generated on node traversal.
     #[error("no result")]
     NoResult,
+
+    /// Node not found in the arena.
+    #[error("node not found: {0:?}")]
+    NodeNotFound(NodeId),
 }
 
 impl From<mpsc::RecvError> for Error {

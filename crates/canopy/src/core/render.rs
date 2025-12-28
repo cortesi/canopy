@@ -2,7 +2,7 @@ use super::termbuf::TermBuf;
 use crate::{
     error::Result,
     geom,
-    style::{AttrSet, Color, Style, StyleManager, StyleMap},
+    style::{AttrSet, Color, Style, StyleEffect, StyleManager, StyleMap},
 };
 
 /// The trait implemented by renderers.
@@ -58,6 +58,8 @@ pub struct Render<'a> {
     clip: geom::Rect,
     /// Translation offset from canvas coordinates to buffer coordinates.
     origin: Offset,
+    /// Current effect stack, applied in order to resolved styles.
+    effects: Vec<&'a dyn StyleEffect>,
 }
 
 impl<'a> Render<'a> {
@@ -78,6 +80,7 @@ impl<'a> Render<'a> {
             stylemap,
             clip: rect,
             origin: Offset::between(geom::Point::zero(), rect.tl),
+            effects: Vec::new(),
         }
     }
 
@@ -95,7 +98,30 @@ impl<'a> Render<'a> {
             stylemap,
             clip,
             origin: Offset::between(screen_origin, clip.tl),
+            effects: Vec::new(),
         }
+    }
+
+    /// Set the effect stack for this renderer.
+    pub fn with_effects(mut self, effects: &[&'a dyn StyleEffect]) -> Self {
+        self.effects = effects.to_vec();
+        self
+    }
+
+    /// Apply the current effect stack to a style.
+    /// Use this when you have a Style from a source other than the style manager.
+    pub fn apply_effects(&self, style: Style) -> Style {
+        let mut result = style;
+        for effect in &self.effects {
+            result = effect.apply(result);
+        }
+        result
+    }
+
+    /// Resolve a style by name and apply the current effect stack.
+    fn resolve_style(&self, name: &str) -> Style {
+        let base = self.style.get(self.stylemap, name);
+        self.apply_effects(base)
     }
 
     /// Push a style layer.
@@ -106,7 +132,7 @@ impl<'a> Render<'a> {
     /// Fill a rectangle with a specified character. Writes out of bounds will be clipped.
     pub fn fill(&mut self, style: &str, r: geom::Rect, c: char) -> Result<()> {
         if let Some(intersection) = r.intersect(&self.clip) {
-            let style = self.style.get(self.stylemap, style);
+            let style = self.resolve_style(style);
             let adjusted = self.translate_rect(intersection);
             self.buffer_mut().fill(&style, adjusted, c);
         }
@@ -131,7 +157,7 @@ impl<'a> Render<'a> {
     pub fn text(&mut self, style: &str, l: geom::Line, txt: &str) -> Result<()> {
         let line_rect = geom::Rect::new(l.tl.x, l.tl.y, l.w, 1);
         if let Some(intersection) = line_rect.intersect(&self.clip) {
-            let style_res = self.style.get(self.stylemap, style);
+            let style_res = self.resolve_style(style);
 
             // Calculate how much of the text to skip and take
             let skip_amount = intersection.tl.x.saturating_sub(l.tl.x) as usize;

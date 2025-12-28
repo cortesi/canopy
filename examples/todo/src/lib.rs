@@ -6,11 +6,11 @@ use canopy::{
     error::Result,
     event::{key, mouse},
     geom::{Expanse, Point, Rect},
-    layout::{Edges, Layout, Sizing},
+    layout::{Direction, Layout, Sizing},
     render::Render,
-    style::solarized,
+    style::{effects, solarized},
     widget::Widget,
-    widgets::{Input, frame, list::*},
+    widgets::{Input, Modal, frame, list::*},
 };
 
 pub mod store;
@@ -75,48 +75,27 @@ impl Widget for StatusBar {
     }
 }
 
-/// Overlay container for the add dialog.
-pub struct Overlay;
+/// Container for main content (list frame + status bar).
+struct MainContent;
 
 #[derive_commands]
-impl Overlay {}
+impl MainContent {}
 
-impl Widget for Overlay {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn canopy::ViewContext) -> Result<()> {
-        Ok(())
-    }
-
-    fn layout(&self) -> Layout {
-        Layout::column()
-            .flex_horizontal(1)
-            .flex_vertical(1)
-            .padding(Edges::symmetric(0, 2))
-    }
-}
-
-/// Flexible spacer used for overlay layout.
-pub struct Spacer;
-
-#[derive_commands]
-impl Spacer {}
-
-impl Widget for Spacer {
+impl Widget for MainContent {
     fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
-    }
-
-    fn layout(&self) -> Layout {
-        Layout::fill()
     }
 }
 
 /// Root node for the todo demo.
 pub struct Todo {
     pending: Vec<store::Todo>,
-    content_id: Option<NodeId>,
+    /// Container holding the main content (list + status).
+    main_content_id: Option<NodeId>,
     list_id: Option<NodeId>,
     status_id: Option<NodeId>,
-    overlay_id: Option<NodeId>,
+    /// Modal widget for the add dialog.
+    modal_id: Option<NodeId>,
     input_id: Option<NodeId>,
     adder_active: bool,
 }
@@ -127,32 +106,40 @@ impl Todo {
         let pending = store::get().todos()?;
         Ok(Self {
             pending,
-            content_id: None,
+            main_content_id: None,
             list_id: None,
             status_id: None,
-            overlay_id: None,
+            modal_id: None,
             input_id: None,
             adder_active: false,
         })
     }
 
     fn ensure_tree(&mut self, c: &mut dyn Context) -> Result<()> {
-        if self.content_id.is_some() {
+        if self.main_content_id.is_some() {
             return Ok(());
         }
 
+        // Create the main content container (list + status bar in column layout)
+        let main_content_id = c.add_orphan(MainContent);
         let list_id = c.add_orphan(List::new(Vec::<TodoItem>::new()));
-        let content_id = c.add_orphan(frame::Frame::new());
-        c.mount_child_to(content_id, list_id)?;
+        let frame_id = c.add_orphan(frame::Frame::new());
+        c.mount_child_to(frame_id, list_id)?;
 
         let status_id = c.add_orphan(StatusBar);
-        c.set_children(vec![content_id, status_id])?;
+        c.set_children_of(main_content_id, vec![frame_id, status_id])?;
 
+        // Set Todo (self) to use Stack direction for modal overlay support
         c.with_layout(&mut |layout| {
+            *layout = Layout::fill().direction(Direction::Stack);
+        })?;
+
+        // Main content fills the space
+        c.with_layout_of(main_content_id, &mut |layout| {
             *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })?;
 
-        c.with_layout_of(content_id, &mut |layout| {
+        c.with_layout_of(frame_id, &mut |layout| {
             layout.width = Sizing::Flex(1);
             layout.height = Sizing::Flex(1);
         })?;
@@ -164,7 +151,10 @@ impl Todo {
             *layout = Layout::row().flex_horizontal(1).fixed_height(1);
         })?;
 
-        self.content_id = Some(content_id);
+        // Initially only show main content
+        c.set_children(vec![main_content_id])?;
+
+        self.main_content_id = Some(main_content_id);
         self.list_id = Some(list_id);
         self.status_id = Some(status_id);
 
@@ -181,47 +171,51 @@ impl Todo {
         Ok(())
     }
 
-    fn ensure_overlay(&mut self, c: &mut dyn Context) -> Result<()> {
-        if self.overlay_id.is_some() {
+    fn ensure_modal(&mut self, c: &mut dyn Context) -> Result<()> {
+        if self.modal_id.is_some() {
             return Ok(());
         }
 
-        let overlay_id = c.add_orphan(Overlay);
-        let top_spacer_id = c.add_orphan(Spacer);
-        let bottom_spacer_id = c.add_orphan(Spacer);
+        // Create the modal with an input frame
+        let modal_id = c.add_orphan(Modal::new());
         let input_id = c.add_orphan(Input::new(""));
         let adder_frame_id = c.add_orphan(frame::Frame::new());
         c.mount_child_to(adder_frame_id, input_id)?;
-        c.set_children_of(
-            overlay_id,
-            vec![top_spacer_id, adder_frame_id, bottom_spacer_id],
-        )?;
+        c.mount_child_to(modal_id, adder_frame_id)?;
 
         c.with_layout_of(adder_frame_id, &mut |layout| {
             layout.width = Sizing::Flex(1);
             layout.min_height = Some(3);
             layout.max_height = Some(3);
+            layout.min_width = Some(30);
+            layout.max_width = Some(50);
         })?;
 
         c.with_layout_of(input_id, &mut |layout| {
             *layout = Layout::fill();
         })?;
 
-        self.overlay_id = Some(overlay_id);
+        self.modal_id = Some(modal_id);
         self.input_id = Some(input_id);
 
         Ok(())
     }
 
     fn sync_children(&mut self, c: &mut dyn Context) -> Result<()> {
-        let content_id = self.content_id.expect("content not initialized");
-        let status_id = self.status_id.expect("status not initialized");
-        let mut children = vec![content_id, status_id];
+        let main_content_id = self.main_content_id.expect("main content not initialized");
+
+        // With Stack layout: main content is always first, modal overlays on top when active
+        let mut children = vec![main_content_id];
         if self.adder_active {
-            self.ensure_overlay(c)?;
-            if let Some(overlay_id) = self.overlay_id {
-                children.push(overlay_id);
+            self.ensure_modal(c)?;
+            if let Some(modal_id) = self.modal_id {
+                children.push(modal_id);
+                // Dim the background content
+                c.push_effect(main_content_id, effects::dim(0.5))?;
             }
+        } else {
+            // Clear dimming when modal is not active
+            c.clear_effects(main_content_id)?;
         }
         c.set_children(children)?;
         Ok(())
@@ -256,7 +250,7 @@ impl Todo {
     #[command]
     pub fn enter_item(&mut self, c: &mut dyn Context) -> Result<()> {
         self.ensure_tree(c)?;
-        self.ensure_overlay(c)?;
+        self.ensure_modal(c)?;
         self.adder_active = true;
         self.sync_children(c)?;
         self.with_input(c, |input| {

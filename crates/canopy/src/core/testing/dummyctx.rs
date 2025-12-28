@@ -4,7 +4,7 @@ use slotmap::Key;
 
 use crate::{
     Context, ViewContext,
-    core::{NodeId, view::View},
+    core::{NodeId, style::StyleEffect, view::View},
     error::Result,
     geom::{Direction, Expanse, Point, PointI32, RectI32},
     layout::Layout,
@@ -192,5 +192,17 @@ impl Context for DummyContext {
 
     fn exit(&mut self, code: i32) -> ! {
         process::exit(code)
+    }
+
+    fn push_effect(&mut self, _node: NodeId, _effect: Box<dyn StyleEffect>) -> Result<()> {
+        Ok(())
+    }
+
+    fn clear_effects(&mut self, _node: NodeId) -> Result<()> {
+        Ok(())
+    }
+
+    fn set_clear_inherited_effects(&mut self, _node: NodeId, _clear: bool) -> Result<()> {
+        Ok(())
     }
 }

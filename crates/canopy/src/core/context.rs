@@ -5,6 +5,7 @@ use std::{
 
 use super::{
     id::{NodeId, TypedId},
+    style::StyleEffect,
     view::View,
     world::Core,
 };
@@ -346,6 +347,16 @@ pub trait Context: ViewContext {
     fn current_focus_gen(&self) -> u64 {
         0
     }
+
+    /// Add an effect to a node that will be applied during rendering.
+    /// Effects stack and inherit through the tree.
+    fn push_effect(&mut self, node: NodeId, effect: Box<dyn StyleEffect>) -> Result<()>;
+
+    /// Clear all effects on a node.
+    fn clear_effects(&mut self, node: NodeId) -> Result<()>;
+
+    /// Set whether a node should clear inherited effects before applying local ones.
+    fn set_clear_inherited_effects(&mut self, node: NodeId, clear: bool) -> Result<()>;
 }
 
 impl dyn Context + '_ {
@@ -833,6 +844,40 @@ impl<'a> Context for CoreContext<'a> {
 
     fn current_focus_gen(&self) -> u64 {
         self.core.focus_gen
+    }
+
+    fn push_effect(&mut self, node: NodeId, effect: Box<dyn StyleEffect>) -> Result<()> {
+        let node = self
+            .core
+            .nodes
+            .get_mut(node)
+            .ok_or(Error::NodeNotFound(node))?;
+        if let Some(ref mut effects) = node.effects {
+            effects.push(effect);
+        } else {
+            node.effects = Some(vec![effect]);
+        }
+        Ok(())
+    }
+
+    fn clear_effects(&mut self, node: NodeId) -> Result<()> {
+        let node = self
+            .core
+            .nodes
+            .get_mut(node)
+            .ok_or(Error::NodeNotFound(node))?;
+        node.effects = None;
+        Ok(())
+    }
+
+    fn set_clear_inherited_effects(&mut self, node: NodeId, clear: bool) -> Result<()> {
+        let node = self
+            .core
+            .nodes
+            .get_mut(node)
+            .ok_or(Error::NodeNotFound(node))?;
+        node.clear_inherited_effects = clear;
+        Ok(())
     }
 }
 

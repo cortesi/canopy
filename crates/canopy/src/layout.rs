@@ -3,12 +3,27 @@
 use crate::geom::{Expanse, Rect};
 
 /// Stack direction for children.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Direction {
     /// Stack children vertically (column).
+    #[default]
     Column,
     /// Stack children horizontally (row).
     Row,
+    /// Children overlap in the same space (painter's algorithm - last child on top).
+    Stack,
+}
+
+/// Alignment along an axis.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Align {
+    /// Align to the start of the axis.
+    #[default]
+    Start,
+    /// Align to the center of the axis.
+    Center,
+    /// Align to the end of the axis.
+    End,
 }
 
 /// Display mode for layout participation.
@@ -112,7 +127,7 @@ impl Size<u32> {
     /// Size along the main axis.
     pub fn main(self, direction: Direction) -> u32 {
         match direction {
-            Direction::Column => self.height,
+            Direction::Column | Direction::Stack => self.height,
             Direction::Row => self.width,
         }
     }
@@ -120,7 +135,7 @@ impl Size<u32> {
     /// Size along the cross axis.
     pub fn cross(self, direction: Direction) -> u32 {
         match direction {
-            Direction::Column => self.width,
+            Direction::Column | Direction::Stack => self.width,
             Direction::Row => self.height,
         }
     }
@@ -128,7 +143,7 @@ impl Size<u32> {
     /// Construct a size from main and cross axis values.
     pub fn from_main_cross(direction: Direction, main: u32, cross: u32) -> Self {
         match direction {
-            Direction::Column => Self::new(cross, main),
+            Direction::Column | Direction::Stack => Self::new(cross, main),
             Direction::Row => Self::new(main, cross),
         }
     }
@@ -178,6 +193,12 @@ pub struct Layout {
 
     /// Gap between children along the main axis (cells).
     pub gap: u32,
+
+    /// Horizontal alignment of children within content area.
+    pub align_horizontal: Align,
+
+    /// Vertical alignment of children within content area.
+    pub align_vertical: Align,
 }
 
 impl Default for Layout {
@@ -200,6 +221,8 @@ impl Layout {
             max_height: None,
             padding: Edges::all(0),
             gap: 0,
+            align_horizontal: Align::Start,
+            align_vertical: Align::Start,
         }
     }
 
@@ -207,6 +230,14 @@ impl Layout {
     pub fn row() -> Self {
         Self {
             direction: Direction::Row,
+            ..Self::column()
+        }
+    }
+
+    /// Stack layout where children overlap in the same space.
+    pub fn stack() -> Self {
+        Self {
+            direction: Direction::Stack,
             ..Self::column()
         }
     }
@@ -283,6 +314,30 @@ impl Layout {
         self.gap = n;
         self
     }
+
+    /// Set horizontal alignment of children within content area.
+    pub fn align_horizontal(mut self, align: Align) -> Self {
+        self.align_horizontal = align;
+        self
+    }
+
+    /// Set vertical alignment of children within content area.
+    pub fn align_vertical(mut self, align: Align) -> Self {
+        self.align_vertical = align;
+        self
+    }
+
+    /// Center children both horizontally and vertically.
+    pub fn align_center(self) -> Self {
+        self.align_horizontal(Align::Center)
+            .align_vertical(Align::Center)
+    }
+
+    /// Set the layout direction.
+    pub fn direction(mut self, direction: Direction) -> Self {
+        self.direction = direction;
+        self
+    }
 }
 
 /// Content-box measurement constraints.
@@ -351,7 +406,7 @@ impl MeasureConstraints {
     /// True if the main axis is exact.
     pub fn main_is_exact(&self, direction: Direction) -> bool {
         match direction {
-            Direction::Column => self.height.is_exact(),
+            Direction::Column | Direction::Stack => self.height.is_exact(),
             Direction::Row => self.width.is_exact(),
         }
     }
@@ -359,7 +414,7 @@ impl MeasureConstraints {
     /// True if the cross axis is exact.
     pub fn cross_is_exact(&self, direction: Direction) -> bool {
         match direction {
-            Direction::Column => self.width.is_exact(),
+            Direction::Column | Direction::Stack => self.width.is_exact(),
             Direction::Row => self.height.is_exact(),
         }
     }
@@ -367,7 +422,7 @@ impl MeasureConstraints {
     /// Return the main axis constraint.
     pub fn main(&self, direction: Direction) -> Constraint {
         match direction {
-            Direction::Column => self.height,
+            Direction::Column | Direction::Stack => self.height,
             Direction::Row => self.width,
         }
     }
@@ -375,7 +430,7 @@ impl MeasureConstraints {
     /// Return the cross axis constraint.
     pub fn cross(&self, direction: Direction) -> Constraint {
         match direction {
-            Direction::Column => self.width,
+            Direction::Column | Direction::Stack => self.width,
             Direction::Row => self.height,
         }
     }

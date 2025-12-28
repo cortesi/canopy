@@ -1,7 +1,7 @@
 use std::cell::Cell;
 
 use crate::{
-    core::{id::NodeId, view::View},
+    core::{id::NodeId, style::StyleEffect, view::View},
     geom::{Expanse, Point, Rect},
     layout::Layout,
     state::NodeName,
@@ -42,4 +42,10 @@ pub struct Node {
     pub mounted: bool,
     /// Whether layout configuration should be refreshed from the widget.
     pub layout_dirty: Cell<bool>,
+
+    /// Effects to apply to this node and descendants during rendering.
+    /// None for the common case of no effects (avoids per-node Vec allocation).
+    pub effects: Option<Vec<Box<dyn StyleEffect>>>,
+    /// If true, clear inherited effects before applying local effects.
+    pub clear_inherited_effects: bool,
 }

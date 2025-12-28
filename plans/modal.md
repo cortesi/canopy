@@ -772,122 +772,122 @@ c.push_effect(dragged_id, Box::new(GhostEffect))?;
 
 Add the Stack direction to the layout system.
 
-1. [ ] Add `Stack` variant to `Direction` enum in `layout.rs`
-2. [ ] Add `direction()` builder method to `Layout` if not present
-3. [ ] Modify `layout_children` in `world.rs` to handle Stack direction
-4. [ ] Modify `measure_wrap_content` in `world.rs` to handle Stack direction (max of children sizes)
-5. [ ] Add unit tests for Stack layout behavior
-6. [ ] Run all tests, lint, and format
+1. [x] Add `Stack` variant to `Direction` enum in `layout.rs`
+2. [x] Add `direction()` builder method to `Layout` if not present
+3. [x] Modify `layout_children` in `world.rs` to handle Stack direction
+4. [x] Modify `measure_wrap_content` in `world.rs` to handle Stack direction (max of children sizes)
+5. [x] Add unit tests for Stack layout behavior
+6. [x] Run all tests, lint, and format
 
 ### Stage 2: Layout Extension - Alignment
 
 Add alignment properties to the layout system.
 
-1. [ ] Add `Align` enum to `layout.rs`
-2. [ ] Add `align_horizontal` and `align_vertical` fields to `Layout`
-3. [ ] Add builder methods: `align_horizontal()`, `align_vertical()`, `align_center()`
-4. [ ] Implement `align_offset()` helper function in `world.rs`
-5. [ ] Modify `layout_children` to apply alignment when positioning children
-6. [ ] Ensure alignment works for Stack direction (primary use case)
-7. [ ] Add unit tests for alignment behavior
-8. [ ] Run all tests, lint, and format
+1. [x] Add `Align` enum to `layout.rs`
+2. [x] Add `align_horizontal` and `align_vertical` fields to `Layout`
+3. [x] Add builder methods: `align_horizontal()`, `align_vertical()`, `align_center()`
+4. [x] Implement `align_offset()` helper function in `world.rs`
+5. [x] Modify `layout_children` to apply alignment when positioning children
+6. [x] Ensure alignment works for Stack direction (primary use case)
+7. [x] Add unit tests for alignment behavior
+8. [x] Run all tests, lint, and format
 
 ### Stage 3: Color Primitive Transformations
 
 Add transformation methods to Color for the effects system.
 
-1. [ ] Add `to_rgb()` method to convert any Color variant to RGB
-2. [ ] Add helper to convert ANSI 256-color indices to RGB
-3. [ ] Add helper to convert named colors to RGB
-4. [ ] Add `scale_brightness(factor: f32)` method
-5. [ ] Add `scale_saturation(factor: f32)` method
-6. [ ] Add `blend(other: Color, amount: f32)` method
-7. [ ] Add `invert_rgb()` method
-8. [ ] Add `shift_hue(degrees: f32)` method (if included)
-9. [ ] Add unit tests for all color transformations
-10. [ ] Run all tests, lint, and format
+1. [x] Add `to_rgb()` method to convert any Color variant to RGB
+2. [x] Add helper to convert ANSI 256-color indices to RGB
+3. [x] Add helper to convert named colors to RGB
+4. [x] Add `scale_brightness(factor: f32)` method
+5. [x] Add `scale_saturation(factor: f32)` method
+6. [x] Add `blend(other: Color, amount: f32)` method
+7. [x] Add `invert_rgb()` method
+8. [x] Add `shift_hue(degrees: f32)` method (if included)
+9. [x] Add unit tests for all color transformations
+10. [x] Run all tests, lint, and format
 
 ### Stage 4: StyleEffect Trait and Built-in Effects
 
 Implement the core effects system.
 
-1. [ ] Define `StyleEffect` trait in `style/effects.rs`
-2. [ ] Add `effects` module to `style/mod.rs`
-3. [ ] Implement `effects::dim(factor)`
-4. [ ] Implement `effects::brighten(factor)`
-5. [ ] Implement `effects::saturation(factor)`
-6. [ ] Implement `effects::swap_fg_bg()`
-7. [ ] Implement `effects::invert_rgb()`
-8. [ ] Implement `effects::tint(color, amount)`
-9. [ ] Implement attribute effects: `effects::bold()`, `effects::italic()`, `effects::plain()`
-10. [ ] Add unit tests for all built-in effects
-11. [ ] Run all tests, lint, and format
+1. [x] Define `StyleEffect` trait in `style/effects.rs`
+2. [x] Add `effects` module to `style/mod.rs`
+3. [x] Implement `effects::dim(factor)`
+4. [x] Implement `effects::brighten(factor)`
+5. [x] Implement `effects::saturation(factor)`
+6. [x] Implement `effects::swap_fg_bg()`
+7. [x] Implement `effects::invert_rgb()`
+8. [x] Implement `effects::tint(color, amount)`
+9. [x] Implement attribute effects: `effects::bold()`, `effects::italic()`, `effects::plain()`
+10. [x] Add unit tests for all built-in effects
+11. [x] Run all tests, lint, and format
 
 ### Stage 5: Node Effect Storage and Context API
 
 Integrate effects into the node/context system.
 
-1. [ ] Add `effects: Vec<Box<dyn StyleEffect>>` field to `Node`
-2. [ ] Add `clear_inherited_effects: bool` field to `Node`
-3. [ ] Add `push_effect()` method to `Context` trait
-4. [ ] Add `clear_effects()` method to `Context` trait
-5. [ ] Add `set_clear_inherited_effects()` method to `Context` trait
-6. [ ] Implement all Context methods in `CoreContext`
-7. [ ] Add unit tests for effect storage and retrieval
-8. [ ] Run all tests, lint, and format
+1. [x] Add `effects: Vec<Box<dyn StyleEffect>>` field to `Node`
+2. [x] Add `clear_inherited_effects: bool` field to `Node`
+3. [x] Add `push_effect()` method to `Context` trait
+4. [x] Add `clear_effects()` method to `Context` trait
+5. [x] Add `set_clear_inherited_effects()` method to `Context` trait
+6. [x] Implement all Context methods in `CoreContext`
+7. [x] Add unit tests for effect storage and retrieval
+8. [x] Run all tests, lint, and format
 
 ### Stage 6: Render Integration
 
 Wire effects into the rendering pipeline.
 
-1. [ ] Add `effects: Vec<&dyn StyleEffect>` field to `Render`
-2. [ ] Add `with_effects()` builder method to `Render`
-3. [ ] Modify `resolve_style()` to apply effect stack
-4. [ ] Modify `render_traversal` in `canopy.rs` to accumulate and pass effects
-5. [ ] Handle `clear_inherited_effects` flag in traversal
-6. [ ] Add integration tests for effect rendering
-7. [ ] Run all tests, lint, and format
+1. [x] Add `effects: Vec<&dyn StyleEffect>` field to `Render`
+2. [x] Add `with_effects()` builder method to `Render`
+3. [x] Modify `resolve_style()` to apply effect stack
+4. [x] Modify `render_traversal` in `canopy.rs` to accumulate and pass effects
+5. [x] Handle `clear_inherited_effects` flag in traversal
+6. [x] Add integration tests for effect rendering
+7. [x] Run all tests, lint, and format
 
 ### Stage 7: Stack and Center Widgets
 
 Implement the container widgets.
 
-1. [ ] Create `widgets/stack.rs` with `Stack` widget
-2. [ ] Create `widgets/center.rs` with `Center` widget
-3. [ ] Add modules to `widgets/mod.rs` and export widgets
-4. [ ] Add derive_commands to both widgets
-5. [ ] Add unit tests for Stack and Center widgets
-6. [ ] Run all tests, lint, and format
+1. [x] Create `widgets/stack.rs` with `Stack` widget
+2. [x] Create `widgets/center.rs` with `Center` widget
+3. [x] Add modules to `widgets/mod.rs` and export widgets
+4. [x] Add derive_commands to both widgets
+5. [x] Add unit tests for Stack and Center widgets
+6. [x] Run all tests, lint, and format
 
 ### Stage 8: Modal Widget
 
 Implement the Modal convenience widget.
 
-1. [ ] Create `widgets/modal.rs` with `Modal` widget
-2. [ ] Add module to `widgets/mod.rs` and export
-3. [ ] Add derive_commands
-4. [ ] Add unit tests
-5. [ ] Run all tests, lint, and format
+1. [x] Create `widgets/modal.rs` with `Modal` widget
+2. [x] Add module to `widgets/mod.rs` and export
+3. [x] Add derive_commands
+4. [x] Add unit tests
+5. [x] Run all tests, lint, and format
 
 ### Stage 9: Todo Example Refactor
 
 Update the todo example to use the new modal system.
 
-1. [ ] Change `Todo` widget layout to use `Direction::Stack`
-2. [ ] Remove ad-hoc `Overlay` and `Spacer` widgets
-3. [ ] Create modal using new `Modal` widget
-4. [ ] Add `c.push_effect(content_id, effects::dim(0.5))` for background dimming
-5. [ ] Simplify `ensure_overlay` and `sync_children` methods
-6. [ ] Update layout configuration for the input frame
-7. [ ] Test visually to ensure proper centering and dimming
-8. [ ] Run all tests, lint, and format
+1. [x] Change `Todo` widget layout to use `Direction::Stack`
+2. [x] Remove ad-hoc `Overlay` and `Spacer` widgets
+3. [x] Create modal using new `Modal` widget
+4. [x] Add `c.push_effect(content_id, effects::dim(0.5))` for background dimming
+5. [x] Simplify `ensure_overlay` and `sync_children` methods
+6. [x] Update layout configuration for the input frame
+7. [x] Test visually to ensure proper centering and dimming
+8. [x] Run all tests, lint, and format
 
 ### Stage 10: Documentation and Polish
 
-1. [ ] Add doc comments to all new public types and methods
-2. [ ] Update any relevant documentation
-3. [ ] Consider adding a modal example demonstrating the new widgets
-4. [ ] Final review of API surface for ergonomics
+1. [x] Add doc comments to all new public types and methods
+2. [x] Update any relevant documentation
+3. [x] Consider adding a modal example demonstrating the new widgets
+4. [x] Final review of API surface for ergonomics
 
 ---
 

@@ -6,7 +6,7 @@ use super::{inputmap, poll::Poller, termbuf::TermBuf};
 use crate::{
     backend::BackendControl,
     commands,
-    core::{Core, NodeId, context::CoreViewContext, view::View},
+    core::{Core, NodeId, context::CoreViewContext, style::StyleEffect, view::View},
     cursor,
     error::{self, Result},
     event::{Event, key, mouse},
@@ -308,10 +308,39 @@ impl Canopy {
         styl: &mut StyleManager,
         node_id: NodeId,
         parent_clip: Rect,
+        inherited_effects: &[Box<dyn StyleEffect>],
     ) -> Result<()> {
-        let (hidden, layout, view, children) = {
+        // Extract node data and build effective effects
+        let (hidden, layout, view, children, effective_effects) = {
             let node = &self.core.nodes[node_id];
-            (node.hidden, node.layout, node.view, node.children.clone())
+
+            // Build effective effects: combine inherited with local
+            let effective = if node.clear_inherited_effects {
+                // Start fresh with only local effects (cloned)
+                node.effects
+                    .as_ref()
+                    .map(|v| v.iter().map(|e| e.box_clone()).collect())
+                    .unwrap_or_default()
+            } else if node.effects.is_some() {
+                // Inherit and extend
+                let mut effects: Vec<Box<dyn StyleEffect>> =
+                    inherited_effects.iter().map(|e| e.box_clone()).collect();
+                if let Some(local) = &node.effects {
+                    effects.extend(local.iter().map(|e| e.box_clone()));
+                }
+                effects
+            } else {
+                // No local effects - just reuse inherited (cloned to own)
+                inherited_effects.iter().map(|e| e.box_clone()).collect()
+            };
+
+            (
+                node.hidden,
+                node.layout,
+                node.view,
+                node.children.clone(),
+                effective,
+            )
         };
 
         if hidden || layout.display == Display::None {
@@ -327,8 +356,13 @@ impl Canopy {
         {
             let local_clip = Self::outer_clip_to_local(view.outer, screen_clip);
             let screen_origin = screen_clip.tl;
+
+            // Build effect references for the Render
+            let effect_refs: Vec<&dyn StyleEffect> =
+                effective_effects.iter().map(|e| e.as_ref()).collect();
             let mut rndr =
-                Render::new_shared(&self.style, styl, dest_buf, local_clip, screen_origin);
+                Render::new_shared(&self.style, styl, dest_buf, local_clip, screen_origin)
+                    .with_effects(&effect_refs);
 
             let render_result = self.core.with_widget_view(node_id, |widget, core| {
                 let ctx = CoreViewContext::new(core, node_id);
@@ -339,7 +373,7 @@ impl Canopy {
 
         if let Some(children_clip) = view.content.intersect_rect(parent_clip) {
             for child in children {
-                self.render_traversal(dest_buf, styl, child, children_clip)?;
+                self.render_traversal(dest_buf, styl, child, children_clip, &effective_effects)?;
             }
         }
 
@@ -399,7 +433,14 @@ impl Canopy {
             }
 
             let screen_clip = Rect::new(0, 0, root_size.w, root_size.h);
-            self.render_traversal(&mut next, &mut styl, self.core.root, screen_clip)?;
+            let empty_effects: Vec<Box<dyn StyleEffect>> = Vec::new();
+            self.render_traversal(
+                &mut next,
+                &mut styl,
+                self.core.root,
+                screen_clip,
+                &empty_effects,
+            )?;
             self.post_render(&mut next)?;
 
             if let Some(prev) = &self.termbuf {
