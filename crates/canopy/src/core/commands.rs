@@ -161,6 +161,27 @@ pub struct CommandCall<T> {
     args: Vec<isize>,
 }
 
+impl<T> CommandCall<T> {
+    /// Build a command invocation for direct dispatch.
+    pub fn invocation(self) -> CommandInvocation {
+        let mut args = Vec::new();
+        let mut arg_types = self.command.arg_types;
+        if !arg_types.is_empty() && arg_types[0] == ArgTypes::Context {
+            args.push(Args::Context);
+            arg_types = &arg_types[1..];
+        }
+        debug_assert_eq!(arg_types.len(), self.args.len());
+        for arg in self.args {
+            args.push(Args::ISize(arg));
+        }
+        CommandInvocation {
+            node: self.command.node,
+            command: self.command.command.to_string(),
+            args,
+        }
+    }
+}
+
 /// Render a command binding into a script string.
 pub trait CommandBinding {
     /// Build the script source for this command binding.

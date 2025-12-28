@@ -1,6 +1,8 @@
 //! Built-in widgets for canopy applications.
 
 // Re-export the trait for derive macros
+/// Button widget.
+pub mod button;
 /// Center widget.
 pub mod center;
 /// Dropdown widget.
@@ -18,6 +20,8 @@ pub mod selector;
 /// Text widget.
 pub(crate) mod text;
 
+/// Box widget.
+pub mod boxed;
 /// Frame widget.
 pub mod frame;
 /// Inspector widget.
@@ -31,6 +35,8 @@ pub mod tabs;
 /// Terminal widget.
 pub mod terminal;
 
+pub use boxed::{Box, BoxGlyphs};
+pub use button::Button;
 pub use center::Center;
 pub use dropdown::{Dropdown, DropdownItem};
 pub use input::{Input, TextBuf};

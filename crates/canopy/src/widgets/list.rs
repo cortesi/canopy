@@ -352,6 +352,7 @@ where
         let content_origin = view.content_origin();
         let scroll = view.tl;
         let view_bottom = view_rect.tl.y.saturating_add(view_rect.h);
+        rndr.push_layer("list");
         rndr.fill("", view.view_rect_local(), ' ')?;
 
         let mut y_offset = 0u32;

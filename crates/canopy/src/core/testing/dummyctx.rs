@@ -4,6 +4,7 @@ use slotmap::Key;
 
 use crate::{
     Context, ViewContext,
+    commands::{CommandInvocation, ReturnValue},
     core::{NodeId, style::StyleEffect, view::View},
     error::Result,
     geom::{Direction, Expanse, Point, PointI32, RectI32},
@@ -165,6 +166,10 @@ impl Context for DummyContext {
         _f: &mut dyn FnMut(&mut dyn Widget, &mut dyn Context) -> Result<()>,
     ) -> Result<()> {
         Ok(())
+    }
+
+    fn dispatch_command(&mut self, _cmd: &CommandInvocation) -> Result<Option<ReturnValue>> {
+        Ok(None)
     }
 
     fn mount_child_to(&mut self, _parent: NodeId, _child: NodeId) -> Result<()> {

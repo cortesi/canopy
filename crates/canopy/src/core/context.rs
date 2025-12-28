@@ -4,6 +4,7 @@ use std::{
 };
 
 use super::{
+    commands,
     id::{NodeId, TypedId},
     style::StyleEffect,
     view::View,
@@ -282,6 +283,12 @@ pub trait Context: ViewContext {
         node: NodeId,
         f: &mut dyn FnMut(&mut dyn Widget, &mut dyn Context) -> Result<()>,
     ) -> Result<()>;
+
+    /// Dispatch a command relative to this node.
+    fn dispatch_command(
+        &mut self,
+        cmd: &commands::CommandInvocation,
+    ) -> Result<Option<commands::ReturnValue>>;
 
     /// Attach a child to the current node.
     fn mount_child(&mut self, child: NodeId) -> Result<()> {
@@ -808,6 +815,13 @@ impl<'a> Context for CoreContext<'a> {
             let mut ctx = CoreContext::new(core, node);
             f(widget, &mut ctx)
         })
+    }
+
+    fn dispatch_command(
+        &mut self,
+        cmd: &commands::CommandInvocation,
+    ) -> Result<Option<commands::ReturnValue>> {
+        commands::dispatch(self.core, self.node_id, cmd)
     }
 
     fn mount_child_to(&mut self, parent: NodeId, child: NodeId) -> Result<()> {

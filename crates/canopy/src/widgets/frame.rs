@@ -1,3 +1,4 @@
+use super::boxed::{BoxGlyphs, ROUND};
 use crate::{
     ViewContext, derive_commands,
     error::Result,
@@ -8,90 +9,26 @@ use crate::{
     widget::Widget,
 };
 
-/// Defines the set of glyphs used to draw the frame.
-pub struct FrameGlyphs {
-    /// Top-left corner glyph.
-    pub topleft: char,
-    /// Top-right corner glyph.
-    pub topright: char,
-    /// Bottom-left corner glyph.
-    pub bottomleft: char,
-    /// Bottom-right corner glyph.
-    pub bottomright: char,
-    /// Horizontal border glyph.
-    pub horizontal: char,
-    /// Vertical border glyph.
-    pub vertical: char,
+/// Defines the set of glyphs used to draw active scroll indicators.
+pub struct ScrollGlyphs {
     /// Active vertical indicator glyph.
     pub vertical_active: char,
     /// Active horizontal indicator glyph.
     pub horizontal_active: char,
 }
 
-/// Single line thin Unicode box drawing frame set.
-pub const SINGLE: FrameGlyphs = FrameGlyphs {
-    topleft: '┌',
-    topright: '┐',
-    bottomleft: '└',
-    bottomright: '┘',
-    horizontal: '─',
-    vertical: '│',
-    horizontal_active: '▄',
-    vertical_active: '█',
-};
-
-/// Double line Unicode box drawing frame set.
-pub const DOUBLE: FrameGlyphs = FrameGlyphs {
-    topleft: '╔',
-    topright: '╗',
-    bottomleft: '╚',
-    bottomright: '╝',
-    horizontal: '═',
-    vertical: '║',
-    horizontal_active: '▄',
-    vertical_active: '█',
-};
-
-/// Single line thick Unicode box drawing frame set.
-pub const SINGLE_THICK: FrameGlyphs = FrameGlyphs {
-    topleft: '┏',
-    topright: '┓',
-    bottomleft: '┗',
-    bottomright: '┛',
-    horizontal: '━',
-    vertical: '┃',
-    horizontal_active: '▄',
-    vertical_active: '█',
-};
-
-/// Round corner thin Unicode box drawing frame set.
-pub const ROUND: FrameGlyphs = FrameGlyphs {
-    topleft: '╭',
-    topright: '╮',
-    bottomleft: '╰',
-    bottomright: '╯',
-    horizontal: '─',
-    vertical: '│',
-    horizontal_active: '▄',
-    vertical_active: '█',
-};
-
-/// Round corner thick Unicode box drawing frame set.
-pub const ROUND_THICK: FrameGlyphs = FrameGlyphs {
-    topleft: '╭',
-    topright: '╮',
-    bottomleft: '╰',
-    bottomright: '╯',
-    horizontal: '━',
-    vertical: '┃',
+/// Active scroll indicator glyph set.
+pub const SCROLL: ScrollGlyphs = ScrollGlyphs {
     horizontal_active: '▄',
     vertical_active: '█',
 };
 
 /// A frame around an element with optional title and indicators.
 pub struct Frame {
-    /// Glyph set for rendering.
-    glyphs: FrameGlyphs,
+    /// Glyph set for rendering the box border.
+    box_glyphs: BoxGlyphs,
+    /// Glyph set for rendering scroll indicators.
+    scroll_glyphs: ScrollGlyphs,
     /// Optional title string.
     title: Option<String>,
 }
@@ -101,14 +38,21 @@ impl Frame {
     /// Construct a frame.
     pub fn new() -> Self {
         Self {
-            glyphs: ROUND,
+            box_glyphs: ROUND,
+            scroll_glyphs: SCROLL,
             title: None,
         }
     }
 
     /// Build a frame with a specified glyph set.
-    pub fn with_glyphs(mut self, glyphs: FrameGlyphs) -> Self {
-        self.glyphs = glyphs;
+    pub fn with_glyphs(mut self, glyphs: BoxGlyphs) -> Self {
+        self.box_glyphs = glyphs;
+        self
+    }
+
+    /// Build a frame with a specified scroll glyph set.
+    pub fn with_scroll_glyphs(mut self, glyphs: ScrollGlyphs) -> Self {
+        self.scroll_glyphs = glyphs;
         self
     }
 
@@ -119,8 +63,8 @@ impl Frame {
     }
 
     /// Return the glyph set used by the frame.
-    pub fn glyphs(&self) -> &FrameGlyphs {
-        &self.glyphs
+    pub fn glyphs(&self) -> &BoxGlyphs {
+        &self.box_glyphs
     }
 
     /// Return the optional title string.
@@ -145,17 +89,11 @@ impl Widget for Frame {
             "frame"
         };
 
-        rndr.fill(style, f.topleft, self.glyphs.topleft)?;
-        rndr.fill(style, f.topright, self.glyphs.topright)?;
-        rndr.fill(style, f.bottomleft, self.glyphs.bottomleft)?;
-        rndr.fill(style, f.bottomright, self.glyphs.bottomright)?;
-        rndr.fill(style, f.left, self.glyphs.vertical)?;
+        self.box_glyphs.draw(rndr, style, f)?;
 
         if let Some(title) = &self.title {
             let title_with_spaces = format!(" {title} ");
             let title_len = title_with_spaces.len();
-
-            rndr.fill(style, f.top, self.glyphs.horizontal)?;
 
             let title_line = f.top.line(0);
             let title_rect = geom::Rect::new(
@@ -165,32 +103,19 @@ impl Widget for Frame {
                 1,
             );
             rndr.text("frame/title", title_rect.line(0), &title_with_spaces)?;
-        } else {
-            rndr.fill(style, f.top, self.glyphs.horizontal)?;
         }
 
         let child = ctx.children().into_iter().next();
-        if let Some(child_id) = child {
-            if let Some(child_view) = ctx.node_view(child_id) {
-                if let Some((pre, active, post)) = child_view.vactive(f.right)? {
-                    rndr.fill(style, pre, self.glyphs.vertical)?;
-                    rndr.fill(style, post, self.glyphs.vertical)?;
-                    rndr.fill("frame/active", active, self.glyphs.vertical_active)?;
-                } else {
-                    rndr.fill(style, f.right, self.glyphs.vertical)?;
-                }
-
-                if let Some((pre, active, post)) = child_view.hactive(f.bottom)? {
-                    rndr.fill(style, pre, self.glyphs.horizontal)?;
-                    rndr.fill(style, post, self.glyphs.horizontal)?;
-                    rndr.fill("frame/active", active, self.glyphs.horizontal_active)?;
-                } else {
-                    rndr.fill(style, f.bottom, self.glyphs.horizontal)?;
-                }
+        if let Some(child_id) = child
+            && let Some(child_view) = ctx.node_view(child_id)
+        {
+            if let Some((_, active, _)) = child_view.vactive(f.right)? {
+                rndr.fill("frame/active", active, self.scroll_glyphs.vertical_active)?;
             }
-        } else {
-            rndr.fill(style, f.right, self.glyphs.vertical)?;
-            rndr.fill(style, f.bottom, self.glyphs.horizontal)?;
+
+            if let Some((_, active, _)) = child_view.hactive(f.bottom)? {
+                rndr.fill("frame/active", active, self.scroll_glyphs.horizontal_active)?;
+            }
         }
 
         Ok(())
