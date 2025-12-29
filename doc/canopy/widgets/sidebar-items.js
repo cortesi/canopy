@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["boxed","button","center","dropdown","editor","frame","inspector","list","modal","selector","tabs","terminal"],"struct":["Input","Panes","Root","Text","TextBuf"]};
+window.SIDEBAR_ITEMS = {"enum":["CanvasWidth"],"mod":["boxed","button","center","dropdown","editor","frame","inspector","list","modal","selector","tabs","terminal"],"struct":["Input","Panes","Root","Text","TextBuf","VStack"]};
