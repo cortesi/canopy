@@ -11,6 +11,11 @@ pub trait RenderBackend {
     fn style(&mut self, style: &Style) -> Result<()>;
     /// Output text to screen. This method is used for all text output.
     fn text(&mut self, loc: geom::Point, txt: &str) -> Result<()>;
+    /// Return true if the backend can shift characters within a line.
+    fn supports_char_shift(&self) -> bool;
+    /// Shift characters within a line starting at the location.
+    /// Positive counts insert blanks and shift right, negative counts delete and shift left.
+    fn shift_chars(&mut self, loc: geom::Point, count: i32) -> Result<()>;
     /// Flush output to the terminal.
     fn flush(&mut self) -> Result<()>;
     /// Exit the process, relinquishing screen control.

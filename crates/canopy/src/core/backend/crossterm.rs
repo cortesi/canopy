@@ -195,6 +195,26 @@ impl RenderBackend for CrosstermRender {
         translate_result(self.text(loc, txt))
     }
 
+    fn supports_char_shift(&self) -> bool {
+        true
+    }
+
+    fn shift_chars(&mut self, loc: Point, count: i32) -> Result<()> {
+        if count == 0 {
+            return Ok(());
+        }
+
+        let count_abs = count.unsigned_abs();
+        translate_result(self.fp.queue(ccursor::MoveTo(loc.x as u16, loc.y as u16)))?;
+        let seq = if count > 0 {
+            format!("\x1b[{count_abs}@")
+        } else {
+            format!("\x1b[{count_abs}P")
+        };
+        translate_result(self.fp.queue(style::Print(seq)))?;
+        Ok(())
+    }
+
     #[allow(unused_must_use)]
     fn exit(&mut self, code: i32) -> ! {
         self.fp.execute(terminal::LeaveAlternateScreen);

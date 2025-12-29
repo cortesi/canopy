@@ -11,6 +11,9 @@ use crate::{
 /// NULL character constant.
 const NULL: char = '\0';
 
+/// Maximum per-line shift to consider when diffing.
+const MAX_LINE_SHIFT: usize = 8;
+
 /// A terminal cell with glyph and style.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Cell {
@@ -233,43 +236,65 @@ impl TermBuf {
         if self.size != prev.size {
             return self.render(backend);
         }
+        let width = self.size.w as usize;
+        let can_shift = backend.supports_char_shift();
         for y in 0..self.size.h {
-            let mut x = 0;
-            while x < self.size.w {
-                let idx = y as usize * self.size.w as usize + x as usize;
-                let cell = &self.cells[idx];
-                let same = if y < prev.size.h && x < prev.size.w {
-                    let pidx = y as usize * prev.size.w as usize + x as usize;
-                    prev.cells[pidx] == *cell
+            let row_start = y as usize * width;
+            let row_end = row_start + width;
+            let current_row = &self.cells[row_start..row_end];
+            let prev_row = &prev.cells[row_start..row_end];
+
+            if current_row == prev_row {
+                continue;
+            }
+
+            if can_shift
+                && let Some(shift) = detect_line_shift(current_row, prev_row, MAX_LINE_SHIFT)
+            {
+                let gap = if shift > 0 {
+                    shift as usize
                 } else {
-                    false
+                    (-shift) as usize
                 };
-                if same {
+                if gap > 0 && gap < width {
+                    backend.shift_chars(Point { x: 0, y }, shift)?;
+                    if shift > 0 {
+                        render_line_range(backend, current_row, y, 0, gap)?;
+                    } else {
+                        let start = width.saturating_sub(gap);
+                        render_line_range(backend, current_row, y, start, gap)?;
+                    }
+                    wrote = true;
+                    continue;
+                }
+            }
+
+            let mut x = 0usize;
+            while x < width {
+                if current_row[x] == prev_row[x] {
                     x += 1;
                     continue;
                 }
 
-                let style = cell.style.clone();
+                let style = &current_row[x].style;
                 let start_x = x;
                 let mut text = String::new();
-                while x < self.size.w {
-                    let idx2 = y as usize * self.size.w as usize + x as usize;
-                    let ccell = &self.cells[idx2];
-                    let same = if y < prev.size.h && x < prev.size.w {
-                        let pidx2 = y as usize * prev.size.w as usize + x as usize;
-                        prev.cells[pidx2] == *ccell
-                    } else {
-                        false
-                    };
-                    if !same && ccell.style == style {
-                        text.push(ccell.ch);
-                        x += 1;
-                    } else {
+                while x < width {
+                    let cell = &current_row[x];
+                    if cell == &prev_row[x] || cell.style != *style {
                         break;
                     }
+                    text.push(cell.ch);
+                    x += 1;
                 }
-                backend.style(&style)?;
-                backend.text(Point { x: start_x, y }, &text)?;
+                backend.style(style)?;
+                backend.text(
+                    Point {
+                        x: start_x as u32,
+                        y,
+                    },
+                    &text,
+                )?;
                 wrote = true;
             }
         }
@@ -311,6 +336,85 @@ impl TermBuf {
         }
         Ok(())
     }
+}
+
+/// Check whether two lines are identical up to a horizontal shift.
+fn detect_line_shift(current: &[Cell], prev: &[Cell], max_shift: usize) -> Option<i32> {
+    let width = current.len();
+    if width == 0 || width != prev.len() {
+        return None;
+    }
+
+    let max = max_shift.min(width.saturating_sub(1));
+    if max == 0 {
+        return None;
+    }
+
+    for shift in 1..=max {
+        if line_matches_shift(current, prev, shift as i32) {
+            return Some(shift as i32);
+        }
+        if line_matches_shift(current, prev, -(shift as i32)) {
+            return Some(-(shift as i32));
+        }
+    }
+    None
+}
+
+/// Determine whether the current line matches the previous line shifted by `shift`.
+fn line_matches_shift(current: &[Cell], prev: &[Cell], shift: i32) -> bool {
+    let width = current.len();
+    if width == 0 || width != prev.len() || shift == 0 {
+        return false;
+    }
+
+    if shift > 0 {
+        let shift = shift as usize;
+        if shift >= width {
+            return false;
+        }
+        current[shift..] == prev[..width - shift]
+    } else {
+        let shift = (-shift) as usize;
+        if shift >= width {
+            return false;
+        }
+        current[..width - shift] == prev[shift..]
+    }
+}
+
+/// Render a slice of a single line using style runs from the current buffer.
+fn render_line_range<R: RenderBackend>(
+    backend: &mut R,
+    row: &[Cell],
+    y: u32,
+    start: usize,
+    len: usize,
+) -> Result<()> {
+    if len == 0 || start >= row.len() {
+        return Ok(());
+    }
+
+    let end = start.saturating_add(len).min(row.len());
+    let mut x = start;
+    while x < end {
+        let style = &row[x].style;
+        let run_start = x;
+        let mut text = String::with_capacity(end - x);
+        while x < end && row[x].style == *style {
+            text.push(row[x].ch);
+            x += 1;
+        }
+        backend.style(style)?;
+        backend.text(
+            Point {
+                x: run_start as u32,
+                y,
+            },
+            &text,
+        )?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -381,6 +485,14 @@ mod tests {
 
         fn text(&mut self, loc: Point, txt: &str) -> Result<()> {
             self.ops.push(format!("text {} {} {}", loc.x, loc.y, txt));
+            Ok(())
+        }
+
+        fn supports_char_shift(&self) -> bool {
+            false
+        }
+
+        fn shift_chars(&mut self, _loc: Point, _count: i32) -> Result<()> {
             Ok(())
         }
 

@@ -22,6 +22,14 @@ impl RenderBackend for NopBackend {
         Ok(())
     }
 
+    fn supports_char_shift(&self) -> bool {
+        false
+    }
+
+    fn shift_chars(&mut self, _loc: Point, _count: i32) -> Result<()> {
+        Ok(())
+    }
+
     fn flush(&mut self) -> Result<()> {
         Ok(())
     }

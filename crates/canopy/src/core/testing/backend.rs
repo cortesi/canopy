@@ -92,6 +92,14 @@ impl RenderBackend for TestRender {
         Ok(())
     }
 
+    fn supports_char_shift(&self) -> bool {
+        false
+    }
+
+    fn shift_chars(&mut self, _loc: Point, _count: i32) -> Result<()> {
+        Ok(())
+    }
+
     fn exit(&mut self, _code: i32) -> ! {
         unreachable!()
     }
@@ -172,6 +180,14 @@ impl RenderBackend for CanvasRender {
                 buf.painted[y][x] = true;
             }
         }
+        Ok(())
+    }
+
+    fn supports_char_shift(&self) -> bool {
+        false
+    }
+
+    fn shift_chars(&mut self, _loc: Point, _count: i32) -> Result<()> {
         Ok(())
     }
 
