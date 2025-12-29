@@ -1,5 +1,5 @@
 use crate::{
-    Context, NodeId, ViewContext,
+    Context, NodeId, ViewContext, command,
     commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
     derive_commands,
     error::{Error, Result},
@@ -59,6 +59,60 @@ impl Panes {
             columns: vec![vec![child]],
             column_nodes: Vec::new(),
         }
+    }
+
+    /// Return the active column container node IDs in order.
+    pub fn column_nodes(&self) -> Vec<NodeId> {
+        self.column_nodes
+            .iter()
+            .copied()
+            .take(self.columns.len())
+            .collect()
+    }
+
+    /// Return the focused column index, if any.
+    pub fn focused_column_index(&self, c: &dyn Context) -> Option<usize> {
+        self.focus_coords(c).map(|(x, _)| x)
+    }
+
+    /// Move focus to the next column.
+    pub fn focus_next_column(&self, c: &mut dyn Context) {
+        let columns = self.column_nodes();
+        if columns.is_empty() {
+            return;
+        }
+        let next_idx = match self.focused_column_index(c) {
+            Some(idx) => (idx + 1) % columns.len(),
+            None => 0,
+        };
+        focus_column_node(c, columns[next_idx]);
+    }
+
+    /// Move focus to the previous column.
+    pub fn focus_prev_column(&self, c: &mut dyn Context) {
+        let columns = self.column_nodes();
+        if columns.is_empty() {
+            return;
+        }
+        let next_idx = match self.focused_column_index(c) {
+            Some(idx) => (idx + columns.len() - 1) % columns.len(),
+            None => columns.len() - 1,
+        };
+        focus_column_node(c, columns[next_idx]);
+    }
+
+    #[command]
+    /// Move focus to the next column.
+    pub fn next_column(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.focus_next_column(c);
+        Ok(())
+    }
+
+    #[command]
+    /// Move focus to the previous column.
+    pub fn prev_column(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.focus_prev_column(c);
+        Ok(())
     }
 
     /// Get the offset of the current focus in the children vector.
@@ -154,6 +208,33 @@ impl Panes {
     }
 }
 
+/// Focus the first focusable leaf under a column, falling back to the first leaf.
+fn focus_column_node(c: &mut dyn Context, column_node: NodeId) {
+    let focusables = c.focusable_leaves(column_node);
+    if let Some(target) = focusables
+        .first()
+        .copied()
+        .or_else(|| first_leaf(c, column_node))
+    {
+        c.set_focus(target);
+    }
+}
+
+/// Return the first leaf node under a root using pre-order traversal.
+fn first_leaf(ctx: &dyn Context, root: NodeId) -> Option<NodeId> {
+    let mut stack = vec![root];
+    while let Some(id) = stack.pop() {
+        let children = ctx.children_of(id);
+        if children.is_empty() {
+            return Some(id);
+        }
+        for child in children.into_iter().rev() {
+            stack.push(child);
+        }
+    }
+    None
+}
+
 impl Default for Panes {
     fn default() -> Self {
         Self::new()
@@ -163,6 +244,10 @@ impl Default for Panes {
 impl Widget for Panes {
     fn render(&mut self, _rndr: &mut crate::render::Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
+    }
+
+    fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.sync_layout(c)
     }
 
     fn name(&self) -> NodeName {

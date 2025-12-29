@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
@@ -11,14 +13,33 @@ use crate::{
     widgets::list::Selectable,
 };
 
+/// Canvas width behavior for text widgets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CanvasWidth {
+    /// Match the view width.
+    View,
+    /// Use the maximum wrapped line width.
+    Intrinsic,
+    /// Use a fixed canvas width.
+    Fixed(u32),
+}
+
 /// Multiline text widget with wrapping and scrolling.
 pub struct Text {
     /// Raw text content.
     raw: String,
     /// Optional fixed width for wrapping.
-    fixed_width: Option<u32>,
+    wrap_width: Option<u32>,
+    /// Canvas width behavior.
+    canvas_width: CanvasWidth,
+    /// Style path for text rendering.
+    style: String,
+    /// Optional style path for selected text rendering.
+    selected_style: Option<String>,
     /// Selection state for use in lists.
     selected: bool,
+    /// Cached wrapped text for the last wrap width.
+    wrap_cache: RefCell<Option<WrapCache>>,
 }
 
 impl Selectable for Text {
@@ -33,14 +54,37 @@ impl Text {
     pub fn new(raw: impl Into<String>) -> Self {
         Self {
             raw: raw.into(),
-            fixed_width: None,
+            wrap_width: None,
+            canvas_width: CanvasWidth::View,
+            style: String::from("text"),
+            selected_style: None,
             selected: false,
+            wrap_cache: RefCell::new(None),
         }
     }
 
-    /// Add a fixed width, ignoring fit parameters.
-    pub fn with_fixed_width(mut self, width: u32) -> Self {
-        self.fixed_width = Some(width);
+    /// Add a fixed width for wrapping.
+    pub fn with_wrap_width(mut self, width: u32) -> Self {
+        self.wrap_width = Some(width);
+        self.wrap_cache.borrow_mut().take();
+        self
+    }
+
+    /// Configure the canvas width behavior.
+    pub fn with_canvas_width(mut self, width: CanvasWidth) -> Self {
+        self.canvas_width = width;
+        self
+    }
+
+    /// Set the text rendering style.
+    pub fn with_style(mut self, style: impl Into<String>) -> Self {
+        self.style = style.into();
+        self
+    }
+
+    /// Set the text rendering style when selected.
+    pub fn with_selected_style(mut self, style: impl Into<String>) -> Self {
+        self.selected_style = Some(style.into());
         self
     }
 
@@ -52,6 +96,7 @@ impl Text {
     /// Replace the raw text content.
     pub fn set_raw(&mut self, raw: impl Into<String>) {
         self.raw = raw.into();
+        self.wrap_cache.borrow_mut().take();
     }
 
     #[command]
@@ -97,18 +142,43 @@ impl Text {
     }
 
     /// Determine the wrapping width for the given available space.
-    fn wrap_width(&self, available_width: u32) -> usize {
-        let width = self.fixed_width.unwrap_or(available_width).max(1);
+    fn wrap_width_for(&self, available_width: u32) -> usize {
+        let width = self.wrap_width.unwrap_or(available_width).max(1);
         width as usize
     }
 
-    /// Wrap and pad lines to the provided width.
-    fn lines_for_width(&self, width: usize) -> Vec<String> {
-        textwrap::wrap(&self.raw, width)
-            .into_iter()
-            .map(|line| format!("{:width$}", line, width = width))
-            .collect()
+    /// Access cached wrapped lines for the provided width.
+    fn with_wrap_cache<R>(&self, width: usize, f: impl FnOnce(&WrapCache) -> R) -> R {
+        let mut cache = self.wrap_cache.borrow_mut();
+        let rebuild = cache.as_ref().is_none_or(|cached| cached.width != width);
+        if rebuild {
+            let lines = textwrap::wrap(&self.raw, width)
+                .into_iter()
+                .map(|line| line.to_string())
+                .collect::<Vec<_>>();
+            let max_width = lines
+                .iter()
+                .map(|line| UnicodeWidthStr::width(line.as_str()))
+                .max()
+                .unwrap_or(0) as u32;
+            *cache = Some(WrapCache {
+                width,
+                lines,
+                max_width,
+            });
+        }
+        f(cache.as_ref().expect("wrap cache initialized"))
     }
+}
+
+/// Cached wrapped lines for a specific width.
+struct WrapCache {
+    /// Width used for wrapping.
+    width: usize,
+    /// Wrapped lines at the width.
+    lines: Vec<String>,
+    /// Maximum wrapped line width.
+    max_width: u32,
 }
 
 impl Widget for Text {
@@ -116,28 +186,34 @@ impl Widget for Text {
         let view = ctx.view();
         let view_rect = view.view_rect();
         let content_origin = view.content_origin();
-        let width = self.wrap_width(view_rect.w);
-        let lines = self.lines_for_width(width);
+        let width = self.wrap_width_for(view_rect.w);
+        let style = if self.selected {
+            self.selected_style.as_deref().unwrap_or(&self.style)
+        } else {
+            &self.style
+        };
 
-        for i in 0..view_rect.h {
-            let line_idx = (view_rect.tl.y + i) as usize;
-            if line_idx < lines.len() {
-                let line = &lines[line_idx];
-                let start_char = view_rect.tl.x as usize;
-                let start_byte = line
-                    .char_indices()
-                    .nth(start_char)
-                    .map(|(i, _)| i)
-                    .unwrap_or(line.len());
-                let out = &line[start_byte..];
-                let line_rect = Line::new(
-                    content_origin.x,
-                    content_origin.y.saturating_add(i),
-                    view_rect.w,
-                );
-                rndr.text("text", line_rect, out)?;
+        self.with_wrap_cache(width, |cache| -> Result<()> {
+            for i in 0..view_rect.h {
+                let line_idx = (view_rect.tl.y + i) as usize;
+                if let Some(line) = cache.lines.get(line_idx) {
+                    let start_char = view_rect.tl.x as usize;
+                    let start_byte = line
+                        .char_indices()
+                        .nth(start_char)
+                        .map(|(i, _)| i)
+                        .unwrap_or(line.len());
+                    let out = &line[start_byte..];
+                    let line_rect = Line::new(
+                        content_origin.x,
+                        content_origin.y.saturating_add(i),
+                        view_rect.w,
+                    );
+                    rndr.text(style, line_rect, out)?;
+                }
             }
-        }
+            Ok(())
+        })?;
         Ok(())
     }
 
@@ -151,27 +227,34 @@ impl Widget for Text {
 
         let max_width = match c.width {
             Constraint::Exact(n) | Constraint::AtMost(n) => n,
-            Constraint::Unbounded => self.fixed_width.unwrap_or(raw_width),
+            Constraint::Unbounded => self.wrap_width.unwrap_or(raw_width),
         };
 
         let wrap_width = match c.width {
-            Constraint::Unbounded => self.fixed_width.unwrap_or(raw_width),
+            Constraint::Unbounded => self.wrap_width.unwrap_or(raw_width),
             _ => self
-                .fixed_width
+                .wrap_width
                 .map(|w| w.min(max_width))
                 .unwrap_or(max_width),
         }
         .max(1);
 
-        let lines = textwrap::wrap(&self.raw, wrap_width as usize);
-        let height = lines.len() as u32;
+        let height = self.with_wrap_cache(wrap_width as usize, |cache| cache.lines.len() as u32);
         c.clamp(Size::new(wrap_width, height))
     }
 
     fn canvas(&self, view: Size<u32>, _ctx: &crate::layout::CanvasContext) -> Size<u32> {
-        let wrap_width = view.width.max(1);
-        let lines = textwrap::wrap(&self.raw, wrap_width as usize);
-        Size::new(wrap_width, lines.len() as u32)
+        let wrap_width = self.wrap_width_for(view.width.max(1));
+        let wrapped_width = self
+            .with_wrap_cache(wrap_width, |cache| cache.max_width)
+            .max(1);
+        let canvas_width = match self.canvas_width {
+            CanvasWidth::View => view.width.max(1),
+            CanvasWidth::Intrinsic => wrapped_width,
+            CanvasWidth::Fixed(width) => width.max(1),
+        };
+        let height = self.with_wrap_cache(wrap_width, |cache| cache.lines.len() as u32);
+        Size::new(canvas_width, height)
     }
 
     fn name(&self) -> NodeName {

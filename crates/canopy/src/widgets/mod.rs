@@ -19,6 +19,8 @@ pub(crate) mod panes;
 pub mod selector;
 /// Text widget.
 pub(crate) mod text;
+/// Vertical stack widget.
+pub(crate) mod vstack;
 
 /// Box widget.
 pub mod boxed;
@@ -46,4 +48,5 @@ pub use panes::Panes;
 pub use root::Root;
 pub use selector::{Selector, SelectorItem};
 pub use terminal::{Terminal, TerminalColors, TerminalConfig};
-pub use text::Text;
+pub use text::{CanvasWidth, Text};
+pub use vstack::VStack;

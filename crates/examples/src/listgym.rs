@@ -4,16 +4,10 @@ use canopy::{
     Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
     error::{Error, Result},
     event::{key, mouse},
-    geom::Rect,
-    layout::{CanvasContext, Constraint, Layout, MeasureConstraints, Measurement, Size},
     render::Render,
-    state::NodeName,
     style::{AttrSet, solarized},
     widget::Widget,
-    widgets::{
-        Panes, Root, frame,
-        list::{List, Selectable},
-    },
+    widgets::{CanvasWidth, List, Panes, Root, Text, VStack, frame},
 };
 use rand::Rng;
 
@@ -23,125 +17,34 @@ const TEXT: &str = "What a struggle must have gone on during long centuries betw
 /// Alternating color names for list items.
 const COLORS: &[&str] = &["red", "blue"];
 
-/// Text block widget for the list gym demo.
-pub struct TextBlock {
-    /// Color layer name.
-    color: String,
-    /// Maximum line width (for horizontal scrolling).
-    max_line_width: u32,
-    /// Cached wrapped lines.
-    lines: Vec<String>,
-    /// Selection state.
-    selected: bool,
-}
+/// Build a text item for the list.
+fn list_item(index: usize) -> Text {
+    let mut rng = rand::rng();
+    let wrap_width = rng.random_range(10..150);
+    let color = COLORS[index % COLORS.len()];
 
-impl Selectable for TextBlock {
-    fn set_selected(&mut self, selected: bool) {
-        self.selected = selected;
-    }
-}
-
-#[derive_commands]
-impl TextBlock {
-    /// Construct a text block for the given index.
-    pub fn new(index: usize) -> Self {
-        let mut rng = rand::rng();
-        let wrap_width = rng.random_range(10..150);
-        let lines = Self::wrap_lines(TEXT, wrap_width);
-        let max_line_width = lines.iter().map(|l| l.len()).max().unwrap_or(0) as u32;
-        Self {
-            color: String::from(COLORS[index % 2]),
-            max_line_width,
-            lines,
-            selected: false,
-        }
-    }
-
-    /// Wrap text to the given width.
-    fn wrap_lines(text: &str, width: u32) -> Vec<String> {
-        let wrap_width = width.max(1) as usize;
-        textwrap::wrap(text, wrap_width)
-            .into_iter()
-            .map(|line| line.to_string())
-            .collect()
-    }
-}
-
-impl Widget for TextBlock {
-    fn layout(&self) -> Layout {
-        // Use intrinsic width for horizontal scrolling support.
-        // Items size to their content width, allowing parent scroll to reveal off-screen text.
-        Layout::column()
-    }
-
-    fn measure(&self, c: MeasureConstraints) -> Measurement {
-        let intrinsic_height = self.lines.len().max(1) as u32;
-        // Use intrinsic width for horizontal scrolling (bypass width constraint)
-        let width = self.max_line_width.saturating_add(2);
-        // Clamp height to constraint
-        let height = match c.height {
-            Constraint::Unbounded => intrinsic_height,
-            Constraint::AtMost(n) => intrinsic_height.min(n),
-            Constraint::Exact(n) => n,
-        };
-        Measurement::Fixed(Size::new(width, height))
-    }
-
-    fn canvas(&self, _view: Size<u32>, _ctx: &CanvasContext) -> Size<u32> {
-        // Canvas matches measurement for consistent sizing
-        let height = self.lines.len().max(1) as u32;
-        Size::new(self.max_line_width.saturating_add(2), height)
-    }
-
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
-        let view = ctx.view();
-        let area = view.view_rect_local();
-
-        if area.w == 0 || area.h == 0 {
-            return Ok(());
-        }
-
-        // Column 0: Selection indicator (when selected)
-        if self.selected {
-            let indicator_rect = Rect::new(0, 0, 1, self.lines.len().max(1) as u32);
-            rndr.fill("list/selected", indicator_rect, '\u{2588}')?;
-        }
-
-        // Column 1: Spacer
-        let spacer = Rect::new(1, 0, 1, self.lines.len().max(1) as u32);
-        rndr.fill("", spacer, ' ')?;
-
-        // Text content starts at column 2
-        // Render full content at local coordinates; the clip handles visibility
-        let style = format!("{}/text", self.color);
-
-        for (idx, line) in self.lines.iter().enumerate() {
-            if !line.is_empty() {
-                let line_rect = Rect::new(2, idx as u32, line.len() as u32, 1);
-                rndr.text(&style, line_rect.line(0), line)?;
-            }
-        }
-
-        Ok(())
-    }
-
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
-        true
-    }
-
-    fn name(&self) -> NodeName {
-        NodeName::convert("text_block")
-    }
+    Text::new(TEXT)
+        .with_wrap_width(wrap_width)
+        .with_canvas_width(CanvasWidth::Intrinsic)
+        .with_style(format!("{color}/text"))
 }
 
 /// Status bar widget for the list gym demo.
-pub struct StatusBar;
+pub struct StatusBar {
+    /// Panes node used to count columns and focus.
+    panes_id: NodeId,
+}
 
 #[derive_commands]
 impl StatusBar {
+    /// Construct a status bar tied to the panes node.
+    pub fn new(panes_id: NodeId) -> Self {
+        Self { panes_id }
+    }
+
     /// Build the status text based on the focused column.
     fn label(&self, ctx: &dyn ViewContext) -> String {
-        let columns = Self::column_nodes(ctx);
+        let columns = ctx.children_of(self.panes_id);
         let total = columns.len();
         let focused = columns
             .iter()
@@ -153,15 +56,6 @@ impl StatusBar {
             }
             _ => "listgym".to_string(),
         }
-    }
-
-    /// Collect column container node ids from the panes widget.
-    fn column_nodes(ctx: &dyn ViewContext) -> Vec<NodeId> {
-        let root_children = ctx.children_of(ctx.root_id());
-        let Some(panes_id) = root_children.first().copied() else {
-            return Vec::new();
-        };
-        ctx.children_of(panes_id)
     }
 }
 
@@ -196,70 +90,56 @@ impl ListGym {
             return Ok(());
         }
 
-        let panes_id = c.add_child(Panes::new()).expect("Failed to mount panes");
-        let status_id = c.add_child(StatusBar).expect("Failed to mount statusbar");
+        let panes_id = c.add_orphan(Panes::new());
+        let status_id = c.add_orphan(StatusBar::new(panes_id));
+        c.add_child(
+            VStack::new()
+                .push_flex(panes_id, 1)
+                .push_fixed(status_id, 1),
+        )?;
 
-        c.with_layout(&mut |layout| {
-            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
-        })
-        .expect("Failed to configure layout");
-        c.with_layout_of(panes_id, &mut |layout| {
-            *layout = Layout::fill();
-        })
-        .expect("Failed to configure panes layout");
-        c.with_layout_of(status_id, &mut |layout| {
-            *layout = Layout::row().flex_horizontal(1).fixed_height(1);
-        })
-        .expect("Failed to configure status layout");
-
-        let (frame_id, list_id) = Self::create_column(c)?;
+        let frame_id = Self::create_column(c)?;
         c.with_widget(panes_id, |panes: &mut Panes, ctx| {
             panes.insert_col(ctx, frame_id)
         })?;
-        // Focus the first focusable item in the list (List itself doesn't accept focus)
-        c.focus_first_in(list_id);
 
         Ok(())
     }
 
-    /// Create a framed list column and return (frame, list) node ids.
-    fn create_column(c: &mut dyn Context) -> Result<(NodeId, NodeId)> {
-        let list_id = c.add_orphan(List::<TextBlock>::new());
-        let frame_id = c.add_orphan(frame::Frame::new());
-        c.mount_child_to(frame_id, list_id)?;
-        c.with_layout_of(list_id, &mut |layout| {
-            *layout = Layout::fill().overflow_x();
-        })?;
+    /// Create a framed list column and return the frame node id.
+    fn create_column(c: &mut dyn Context) -> Result<NodeId> {
+        let list_id =
+            c.add_orphan(List::<Text>::new().with_selection_indicator("list/selected", "█ ", true));
+        let frame_id = frame::Frame::wrap(c, list_id)?;
         // Add initial items
-        c.with_widget(list_id, |list: &mut List<TextBlock>, ctx| {
+        c.with_widget(list_id, |list: &mut List<Text>, ctx| {
             for i in 0..10 {
-                list.append(ctx, TextBlock::new(i))?;
+                list.append(ctx, list_item(i))?;
             }
             Ok(())
         })?;
-        Ok((frame_id, list_id))
+        Ok(frame_id)
     }
 
     /// Execute a closure with mutable access to the list widget.
     fn with_list<F, R>(&self, c: &mut dyn Context, mut f: F) -> Result<R>
     where
-        F: FnMut(&mut List<TextBlock>, &mut dyn Context) -> Result<R>,
+        F: FnMut(&mut List<Text>, &mut dyn Context) -> Result<R>,
     {
         self.ensure_tree(c)?;
         let list_id = Self::list_id(c)?;
-        c.with_widget(list_id, |list: &mut List<TextBlock>, ctx| f(list, ctx))
+        c.with_widget(list_id, |list: &mut List<Text>, ctx| f(list, ctx))
     }
 
     /// Panes node id, if initialized.
-    fn panes_id(c: &dyn Context) -> Option<NodeId> {
-        c.children().first().copied()
+    fn panes_id(c: &dyn Context) -> Result<NodeId> {
+        c.find_node("*/panes")
+            .ok_or_else(|| Error::Invalid("panes not initialized".into()))
     }
 
     /// Find the list to target for list commands.
     fn list_id(c: &dyn Context) -> Result<NodeId> {
-        let panes_id =
-            Self::panes_id(c).ok_or_else(|| Error::Invalid("list not initialized".into()))?;
-        let lists = Self::column_lists(c, panes_id);
+        let lists = c.find_nodes("*/frame/list");
         if lists.is_empty() {
             return Err(Error::Invalid("list not initialized".into()));
         }
@@ -273,47 +153,12 @@ impl ListGym {
         Ok(lists[0])
     }
 
-    /// Move focus between columns.
-    fn shift_column(&self, c: &mut dyn Context, forward: bool) -> Result<()> {
-        self.ensure_tree(c)?;
-        let panes_id = Self::panes_id(c).expect("panes not initialized");
-        let columns = Self::column_lists(c, panes_id);
-        if columns.is_empty() {
-            return Ok(());
-        }
-
-        let current = columns.iter().position(|id| c.node_is_on_focus_path(*id));
-        let next_idx = match (current, forward) {
-            (Some(idx), true) => (idx + 1) % columns.len(),
-            (Some(idx), false) => (idx + columns.len() - 1) % columns.len(),
-            (None, true) => 0,
-            (None, false) => columns.len() - 1,
-        };
-        c.set_focus(columns[next_idx]);
-        Ok(())
-    }
-
-    /// Collect the list nodes for each column, in column order.
-    fn column_lists(c: &dyn Context, panes_id: NodeId) -> Vec<NodeId> {
-        let mut lists = Vec::new();
-        for column_id in c.children_of(panes_id) {
-            let Some(frame_id) = c.children_of(column_id).first().copied() else {
-                continue;
-            };
-            let Some(list_id) = c.children_of(frame_id).first().copied() else {
-                continue;
-            };
-            lists.push(list_id);
-        }
-        lists
-    }
-
     #[command]
     /// Add an item after the current focus.
     pub fn add_item(&mut self, c: &mut dyn Context) -> Result<()> {
         self.with_list(c, |list, ctx| {
             let index = list.selected_index().unwrap_or(0) + 1;
-            list.insert(ctx, index, TextBlock::new(index))?;
+            list.insert(ctx, index, list_item(index))?;
             Ok(())
         })
     }
@@ -323,7 +168,7 @@ impl ListGym {
     pub fn append_item(&mut self, c: &mut dyn Context) -> Result<()> {
         self.with_list(c, |list, ctx| {
             let index = list.len();
-            list.append(ctx, TextBlock::new(index))?;
+            list.append(ctx, list_item(index))?;
             Ok(())
         })
     }
@@ -341,13 +186,11 @@ impl ListGym {
     /// Add a new column containing a list.
     pub fn add_column(&mut self, c: &mut dyn Context) -> Result<()> {
         self.ensure_tree(c)?;
-        let panes_id = Self::panes_id(c).expect("panes not initialized");
-        let (frame_id, list_id) = Self::create_column(c)?;
+        let panes_id = Self::panes_id(c)?;
+        let frame_id = Self::create_column(c)?;
         c.with_widget(panes_id, |panes: &mut Panes, ctx| {
             panes.insert_col(ctx, frame_id)
         })?;
-        // Focus the first focusable item in the new list
-        c.focus_first_in(list_id);
         Ok(())
     }
 
@@ -355,7 +198,7 @@ impl ListGym {
     /// Delete the focused column.
     pub fn delete_column(&mut self, c: &mut dyn Context) -> Result<()> {
         self.ensure_tree(c)?;
-        let panes_id = Self::panes_id(c).expect("panes not initialized");
+        let panes_id = Self::panes_id(c)?;
         c.with_widget(panes_id, |panes: &mut Panes, ctx| panes.delete_focus(ctx))?;
         Ok(())
     }
@@ -363,13 +206,25 @@ impl ListGym {
     #[command]
     /// Move focus to the next column.
     pub fn next_column(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.shift_column(c, true)
+        self.ensure_tree(c)?;
+        let panes_id = Self::panes_id(c)?;
+        c.with_widget(panes_id, |panes: &mut Panes, ctx| {
+            panes.focus_next_column(ctx);
+            Ok(())
+        })?;
+        Ok(())
     }
 
     #[command]
     /// Move focus to the previous column.
     pub fn prev_column(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.shift_column(c, false)
+        self.ensure_tree(c)?;
+        let panes_id = Self::panes_id(c)?;
+        c.with_widget(panes_id, |panes: &mut Panes, ctx| {
+            panes.focus_prev_column(ctx);
+            Ok(())
+        })?;
+        Ok(())
     }
 }
 
@@ -390,7 +245,8 @@ impl Widget for ListGym {
 
 impl Loader for ListGym {
     fn load(c: &mut Canopy) {
-        c.add_commands::<List<TextBlock>>();
+        c.add_commands::<List<Text>>();
+        c.add_commands::<Panes>();
         c.add_commands::<Self>();
     }
 }
@@ -406,12 +262,6 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
     cnpy.style.add(
         "blue/text",
         Some(solarized::BLUE),
-        None,
-        Some(AttrSet::default()),
-    );
-    cnpy.style.add(
-        "green/text",
-        Some(solarized::GREEN),
         None,
         Some(AttrSet::default()),
     );
@@ -463,79 +313,19 @@ mod tests {
     use super::*;
 
     fn panes_id(harness: &Harness) -> NodeId {
-        let root_children = &harness
-            .canopy
-            .core
-            .nodes
-            .get(harness.root)
-            .expect("root node missing")
-            .children;
-        *root_children.first().expect("list not initialized")
+        harness
+            .find_node("list_gym/*/panes")
+            .expect("panes not initialized")
     }
 
     fn list_id(harness: &Harness) -> NodeId {
-        let panes_id = panes_id(harness);
-        let panes_children = &harness
-            .canopy
-            .core
-            .nodes
-            .get(panes_id)
-            .expect("panes node missing")
-            .children;
-        let column_id = *panes_children.first().expect("pane column not initialized");
-        let column_children = &harness
-            .canopy
-            .core
-            .nodes
-            .get(column_id)
-            .expect("column node missing")
-            .children;
-        let frame_id = *column_children.first().expect("frame not initialized");
-        let frame_children = &harness
-            .canopy
-            .core
-            .nodes
-            .get(frame_id)
-            .expect("frame node missing")
-            .children;
-        *frame_children.first().expect("list not initialized")
+        harness
+            .find_node("list_gym/*/frame/list")
+            .expect("list not initialized")
     }
 
     fn column_list_ids(harness: &Harness) -> Vec<NodeId> {
-        let panes_id = panes_id(harness);
-        let panes_children = &harness
-            .canopy
-            .core
-            .nodes
-            .get(panes_id)
-            .expect("panes node missing")
-            .children;
-
-        let mut lists = Vec::new();
-        for column_id in panes_children {
-            let column_children = &harness
-                .canopy
-                .core
-                .nodes
-                .get(*column_id)
-                .expect("column node missing")
-                .children;
-            let Some(frame_id) = column_children.first().copied() else {
-                continue;
-            };
-            let frame_children = &harness
-                .canopy
-                .core
-                .nodes
-                .get(frame_id)
-                .expect("frame node missing")
-                .children;
-            let Some(list_id) = frame_children.first().copied() else {
-                continue;
-            };
-            lists.push(list_id);
-        }
-        lists
+        harness.find_nodes("list_gym/*/frame/list")
     }
 
     fn create_test_harness() -> Result<Harness> {
@@ -567,7 +357,7 @@ mod tests {
 
         let list_node = list_id(&harness);
         let mut len = 0;
-        harness.with_widget(list_node, |list: &mut List<TextBlock>| {
+        harness.with_widget(list_node, |list: &mut List<Text>| {
             len = list.len();
         });
 
@@ -607,7 +397,7 @@ mod tests {
 
         let list_node = list_id(&harness);
         let mut initial_selected = None;
-        harness.with_widget(list_node, |list: &mut List<TextBlock>| {
+        harness.with_widget(list_node, |list: &mut List<Text>| {
             initial_selected = list.selected_index();
         });
 
@@ -615,7 +405,7 @@ mod tests {
         harness.script("list::select_last()")?;
 
         let mut selected = None;
-        harness.with_widget(list_node, |list: &mut List<TextBlock>| {
+        harness.with_widget(list_node, |list: &mut List<Text>| {
             selected = list.selected_index();
         });
 

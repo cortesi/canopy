@@ -2,8 +2,11 @@ use std::any::Any;
 
 use super::{buf::BufTest, render::NopBackend};
 use crate::{
-    Canopy, Context, Loader, NodeId,
-    core::{context::CoreContext, termbuf::TermBuf},
+    Canopy, Context, Loader, NodeId, ViewContext,
+    core::{
+        context::{CoreContext, CoreViewContext},
+        termbuf::TermBuf,
+    },
     error::Result,
     event::key,
     geom::Expanse,
@@ -159,6 +162,18 @@ impl Harness {
     /// Get a BufTest instance that references the current buffer.
     pub fn tbuf(&self) -> BufTest<'_> {
         BufTest::new(self.buf())
+    }
+
+    /// Find the first node whose path matches the filter, relative to the root.
+    pub fn find_node(&self, path_filter: &str) -> Option<NodeId> {
+        let ctx = CoreViewContext::new(&self.canopy.core, self.root);
+        ctx.find_node(path_filter)
+    }
+
+    /// Find all nodes whose paths match the filter, relative to the root.
+    pub fn find_nodes(&self, path_filter: &str) -> Vec<NodeId> {
+        let ctx = CoreViewContext::new(&self.canopy.core, self.root);
+        ctx.find_nodes(path_filter)
     }
 }
 

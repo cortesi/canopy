@@ -5,14 +5,29 @@
 
 use std::marker::PhantomData;
 
+use unicode_width::UnicodeWidthStr;
+
 use crate::{
     Context, NodeId, TypedId, ViewContext, command, derive_commands,
     error::Result,
-    layout::{CanvasContext, Constraint, Layout, MeasureConstraints, Measurement, Size},
+    geom::Line,
+    layout::{CanvasContext, Constraint, Edges, Layout, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
     widget::Widget,
 };
+
+/// List selection indicator configuration.
+struct SelectionIndicator {
+    /// Style path for the indicator.
+    style: String,
+    /// Indicator text.
+    text: String,
+    /// Indicator width in cells.
+    width: u32,
+    /// Indicator repeat behavior.
+    repeat: bool,
+}
 
 /// Trait for widgets that can be selected in a list.
 ///
@@ -36,6 +51,8 @@ pub struct List<W: Selectable> {
     items: Vec<TypedId<W>>,
     /// Currently selected item index.
     selected: Option<usize>,
+    /// Optional list-level selection indicator.
+    selection_indicator: Option<SelectionIndicator>,
     /// Marker for the widget type.
     _marker: PhantomData<W>,
 }
@@ -53,8 +70,44 @@ impl<W: Selectable> List<W> {
         Self {
             items: Vec::new(),
             selected: None,
+            selection_indicator: None,
             _marker: PhantomData,
         }
+    }
+
+    /// Build a list with a list-level selection indicator.
+    /// Repeat controls whether the indicator renders on every visible line.
+    pub fn with_selection_indicator(
+        mut self,
+        style: impl Into<String>,
+        text: impl Into<String>,
+        repeat: bool,
+    ) -> Self {
+        self.set_selection_indicator(style, text, repeat);
+        self
+    }
+
+    /// Set a list-level selection indicator.
+    /// Repeat controls whether the indicator renders on every visible line.
+    pub fn set_selection_indicator(
+        &mut self,
+        style: impl Into<String>,
+        text: impl Into<String>,
+        repeat: bool,
+    ) {
+        let text = text.into();
+        let width = indicator_width(&text);
+        self.selection_indicator = Some(SelectionIndicator {
+            style: style.into(),
+            text,
+            width,
+            repeat,
+        });
+    }
+
+    /// Clear the list-level selection indicator.
+    pub fn clear_selection_indicator(&mut self) {
+        self.selection_indicator = None;
     }
 
     /// Returns true if the list is empty.
@@ -406,22 +459,58 @@ impl<W: Selectable> List<W> {
 
 impl<W: Selectable + Send + 'static> Widget for List<W> {
     fn layout(&self) -> Layout {
-        Layout::column()
+        let mut layout = Layout::column()
             .flex_vertical(1)
             .flex_horizontal(1)
-            .overflow_x()
+            .overflow_x();
+        if let Some(indicator) = &self.selection_indicator
+            && indicator.width > 0
+        {
+            layout = layout.padding(Edges::new(0, 0, 0, indicator.width));
+        }
+        layout
     }
 
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
-        let area = view.view_rect_local();
+        let area = view.outer_rect_local();
 
         // Fill background using list style.
         rndr.fill("list", area, ' ')?;
 
-        // Note: Selection indicator is rendered by item widgets themselves.
-        // Items implement Selectable to update their selection state.
-        // Selection state is managed by the List and persists when focus moves away.
+        if let Some(indicator) = &self.selection_indicator
+            && let Some(selected_idx) = self.selected
+            && indicator.width > 0
+        {
+            let metrics = self.item_metrics(ctx, view.view_rect().w.max(1));
+            if let Some((start, height)) = metrics.get(selected_idx).copied() {
+                let view_rect = view.view_rect();
+                let visible_start = start.max(view_rect.tl.y);
+                let visible_end = start
+                    .saturating_add(height)
+                    .min(view_rect.tl.y.saturating_add(view_rect.h));
+
+                if visible_start < visible_end {
+                    let content_origin = view.content_origin();
+                    let local_y = content_origin
+                        .y
+                        .saturating_add(visible_start - view_rect.tl.y);
+                    let width = indicator.width.min(area.w);
+
+                    if width > 0 {
+                        if indicator.repeat {
+                            for offset in 0..(visible_end - visible_start) {
+                                let line = Line::new(0, local_y.saturating_add(offset), width);
+                                rndr.text(&indicator.style, line, &indicator.text)?;
+                            }
+                        } else {
+                            let line = Line::new(0, local_y, width);
+                            rndr.text(&indicator.style, line, &indicator.text)?;
+                        }
+                    }
+                }
+            }
+        }
 
         Ok(())
     }
@@ -461,6 +550,16 @@ impl<W: Selectable + Send + 'static> Widget for List<W> {
     fn name(&self) -> NodeName {
         NodeName::convert("list")
     }
+}
+
+/// Compute the indicator width in cells from a multi-line string.
+fn indicator_width(text: &str) -> u32 {
+    text.lines()
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0)
+        .try_into()
+        .unwrap_or(0)
 }
 
 #[cfg(test)]

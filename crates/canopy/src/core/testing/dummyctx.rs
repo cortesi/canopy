@@ -105,6 +105,10 @@ impl ViewContext for DummyContext {
     fn parent_of(&self, _node: NodeId) -> Option<NodeId> {
         None
     }
+
+    fn node_path(&self, _root: NodeId, _node: NodeId) -> Path {
+        Path::empty()
+    }
 }
 
 impl Context for DummyContext {

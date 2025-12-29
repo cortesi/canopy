@@ -58,7 +58,7 @@ impl TermEntry {
         let box_id = ctx.add_orphan(Box::new().with_glyphs(boxed::SINGLE).with_fill());
         let center_id = ctx.add_orphan(Center::new());
         let text_id =
-            ctx.add_orphan(Text::new(self.label.clone()).with_fixed_width(self.label_width()));
+            ctx.add_orphan(Text::new(self.label.clone()).with_wrap_width(self.label_width()));
 
         ctx.mount_child_to(center_id, text_id)?;
         ctx.mount_child_to(box_id, center_id)?;

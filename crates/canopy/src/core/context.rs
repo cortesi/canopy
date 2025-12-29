@@ -14,7 +14,7 @@ use crate::{
     error::{Error, Result},
     geom::{Direction, Expanse, Point, PointI32, Rect, RectI32},
     layout::Layout,
-    path::Path,
+    path::{Path, PathMatcher},
     style::StyleMap,
     widget::Widget,
 };
@@ -90,6 +90,60 @@ pub trait ViewContext {
 
     /// Return the parent of a node, or `None` if it is the root or not found.
     fn parent_of(&self, node: NodeId) -> Option<NodeId>;
+
+    /// Return the path for a node relative to a root.
+    fn node_path(&self, root: NodeId, node: NodeId) -> Path;
+
+    /// Find the first node whose path matches the filter, relative to the current node.
+    ///
+    /// The filter is normalized to match full paths.
+    fn find_node(&self, path_filter: &str) -> Option<NodeId> {
+        let filter = normalize_path_filter(path_filter);
+        let matcher = PathMatcher::new(&filter).ok()?;
+        let root = self.node_id();
+        let mut stack = vec![root];
+
+        while let Some(id) = stack.pop() {
+            let path = self.node_path(root, id);
+            if matcher.check(&path).is_some() {
+                return Some(id);
+            }
+
+            let children = self.children_of(id);
+            for child in children.into_iter().rev() {
+                stack.push(child);
+            }
+        }
+
+        None
+    }
+
+    /// Find all nodes whose paths match the filter, relative to the current node.
+    ///
+    /// The filter is normalized to match full paths.
+    fn find_nodes(&self, path_filter: &str) -> Vec<NodeId> {
+        let filter = normalize_path_filter(path_filter);
+        let Ok(matcher) = PathMatcher::new(&filter) else {
+            return Vec::new();
+        };
+        let root = self.node_id();
+        let mut out = Vec::new();
+        let mut stack = vec![root];
+
+        while let Some(id) = stack.pop() {
+            let path = self.node_path(root, id);
+            if matcher.check(&path).is_some() {
+                out.push(id);
+            }
+
+            let children = self.children_of(id);
+            for child in children.into_iter().rev() {
+                stack.push(child);
+            }
+        }
+
+        out
+    }
 }
 
 /// Default zero-sized view used when a node lacks layout data.
@@ -122,6 +176,16 @@ fn clamp_scroll_offset(scroll: &mut Point, view: Expanse, canvas: Expanse) {
     };
     scroll.x = scroll.x.min(max_x);
     scroll.y = scroll.y.min(max_y);
+}
+
+/// Normalize a path filter to match a full path.
+fn normalize_path_filter(path_filter: &str) -> String {
+    let trimmed = path_filter.trim_matches('/');
+    if trimmed.is_empty() {
+        String::new()
+    } else {
+        format!("/{trimmed}/")
+    }
 }
 
 /// Mutable context available to widgets during event handling.
@@ -679,6 +743,10 @@ impl<'a> ViewContext for CoreContext<'a> {
     fn parent_of(&self, node: NodeId) -> Option<NodeId> {
         self.core.nodes.get(node).and_then(|n| n.parent)
     }
+
+    fn node_path(&self, root: NodeId, node: NodeId) -> Path {
+        self.core.node_path(root, node)
+    }
 }
 
 impl<'a> Context for CoreContext<'a> {
@@ -992,5 +1060,9 @@ impl<'a> ViewContext for CoreViewContext<'a> {
 
     fn parent_of(&self, node: NodeId) -> Option<NodeId> {
         self.core.nodes.get(node).and_then(|n| n.parent)
+    }
+
+    fn node_path(&self, root: NodeId, node: NodeId) -> Path {
+        self.core.node_path(root, node)
     }
 }

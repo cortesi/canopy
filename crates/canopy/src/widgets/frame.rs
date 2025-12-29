@@ -1,6 +1,6 @@
 use super::boxed::{BoxGlyphs, ROUND};
 use crate::{
-    ViewContext, derive_commands,
+    Context, NodeId, ViewContext, derive_commands,
     error::Result,
     geom,
     layout::{Edges, Layout},
@@ -70,6 +70,13 @@ impl Frame {
     /// Return the optional title string.
     pub fn title(&self) -> Option<&str> {
         self.title.as_deref()
+    }
+
+    /// Wrap an existing child node in a new frame and return the frame node ID.
+    pub fn wrap(c: &mut dyn Context, child: NodeId) -> Result<NodeId> {
+        let frame_id = c.add_orphan(Self::new());
+        c.mount_child_to(frame_id, child)?;
+        Ok(frame_id)
     }
 }
 
