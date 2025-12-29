@@ -263,7 +263,7 @@ impl Core {
         refresh_layouts(self);
         let root = self.root;
         let mut pass = LayoutPass::new(self);
-        pass.layout_node(root, screen_size, Point::zero());
+        pass.layout_node(root, screen_size, Point::zero(), Overflow::none());
         let screen_view = View::new(
             RectI32::new(0, 0, screen_size.w, screen_size.h),
             RectI32::new(0, 0, screen_size.w, screen_size.h),
@@ -698,6 +698,30 @@ struct LayoutPass<'a> {
     measure_cache: HashMap<MeasureKey, Measurement>,
 }
 
+#[derive(Clone, Copy)]
+/// Overflow flags propagated from parent layouts.
+struct Overflow {
+    /// Allow horizontal overflow during measurement.
+    x: bool,
+    /// Allow vertical overflow during measurement.
+    y: bool,
+}
+
+impl Overflow {
+    /// Return a zero-overflow configuration.
+    fn none() -> Self {
+        Self { x: false, y: false }
+    }
+
+    /// Build overflow flags from a layout.
+    fn from_layout(layout: Layout) -> Self {
+        Self {
+            x: layout.overflow_x,
+            y: layout.overflow_y,
+        }
+    }
+}
+
 impl<'a> LayoutPass<'a> {
     /// Create a new layout pass with a fresh measurement cache.
     fn new(core: &'a mut Core) -> Self {
@@ -713,6 +737,7 @@ impl<'a> LayoutPass<'a> {
         node_id: NodeId,
         available_outer: Expanse,
         position: Point,
+        parent_overflow: Overflow,
     ) -> Size<u32> {
         let (layout, hidden) = self.node_layout_snapshot(node_id);
         if hidden || layout.display == Display::None {
@@ -720,7 +745,15 @@ impl<'a> LayoutPass<'a> {
             return Size::ZERO;
         }
 
-        let outer = self.resolve_outer_size(node_id, layout, available_outer);
+        let mut effective_layout = layout;
+        if parent_overflow.x {
+            effective_layout.overflow_x = true;
+        }
+        if parent_overflow.y {
+            effective_layout.overflow_y = true;
+        }
+
+        let outer = self.resolve_outer_size(node_id, effective_layout, available_outer);
         let pad_x = layout.padding.horizontal();
         let pad_y = layout.padding.vertical();
         let content_size = Size::new(
@@ -734,7 +767,7 @@ impl<'a> LayoutPass<'a> {
             node.content_size = content_size.into();
         }
 
-        self.layout_children(node_id, layout, content_size);
+        self.layout_children(node_id, effective_layout, content_size);
 
         let canvas = self.compute_canvas(node_id, content_size);
         self.update_canvas(node_id, content_size, canvas);
@@ -826,6 +859,7 @@ impl<'a> LayoutPass<'a> {
                 layout.min_width,
                 layout.max_width,
                 pad_x,
+                layout.overflow_x,
             ),
             height: constraint_for_axis(
                 layout.height,
@@ -833,6 +867,7 @@ impl<'a> LayoutPass<'a> {
                 layout.min_height,
                 layout.max_height,
                 pad_y,
+                layout.overflow_y,
             ),
         };
 
@@ -946,6 +981,13 @@ impl<'a> LayoutPass<'a> {
                 set_cross_sizing(&mut effective, layout.direction, Sizing::Measure);
             }
 
+            if layout.overflow_x {
+                effective.overflow_x = true;
+            }
+            if layout.overflow_y {
+                effective.overflow_y = true;
+            }
+
             let eff_main = main_sizing(effective, layout.direction);
             if let Sizing::Flex(w) = eff_main {
                 flex_children.push((i, w.max(1)));
@@ -971,6 +1013,12 @@ impl<'a> LayoutPass<'a> {
                 let child_cross = cross_sizing(child_layout, layout.direction);
                 if !cross_fixed && matches!(child_cross, Sizing::Flex(_)) {
                     set_cross_sizing(&mut effective, layout.direction, Sizing::Measure);
+                }
+                if layout.overflow_x {
+                    effective.overflow_x = true;
+                }
+                if layout.overflow_y {
+                    effective.overflow_y = true;
                 }
                 let child_available =
                     Size::from_main_cross(layout.direction, shares[idx], avail_cross);
@@ -998,7 +1046,7 @@ impl<'a> LayoutPass<'a> {
     /// Measure content size for Stack direction - max of all children sizes.
     fn measure_wrap_content_stack(
         &mut self,
-        _layout: Layout,
+        layout: Layout,
         constraints: MeasureConstraints,
         children: &[NodeId],
     ) -> Size<u32> {
@@ -1025,6 +1073,13 @@ impl<'a> LayoutPass<'a> {
                 effective.height = Sizing::Measure;
             }
 
+            if layout.overflow_x {
+                effective.overflow_x = true;
+            }
+            if layout.overflow_y {
+                effective.overflow_y = true;
+            }
+
             let size = self.resolve_outer_size_with_layout(*child, effective, avail.into());
             max_w = max_w.max(size.width);
             max_h = max_h.max(size.height);
@@ -1041,12 +1096,13 @@ impl<'a> LayoutPass<'a> {
             return;
         }
 
+        let parent_overflow = Overflow::from_layout(layout);
         match layout.direction {
             LayoutDirection::Stack => {
                 // Stack: all children get full content area, positioned according to alignment
                 for child in &children {
                     // First, layout the child to determine its size
-                    self.layout_node(*child, content.into(), Point::zero());
+                    self.layout_node(*child, content.into(), Point::zero(), parent_overflow);
 
                     // Then apply alignment to position the child within content area
                     let child_size = self.node_size(*child);
@@ -1064,7 +1120,7 @@ impl<'a> LayoutPass<'a> {
                 }
             }
             LayoutDirection::Row | LayoutDirection::Column => {
-                self.layout_children_sequential(layout, content, &children);
+                self.layout_children_sequential(layout, content, &children, parent_overflow);
             }
         }
     }
@@ -1075,6 +1131,7 @@ impl<'a> LayoutPass<'a> {
         layout: Layout,
         content: Size<u32>,
         children: &[NodeId],
+        parent_overflow: Overflow,
     ) {
         let mut fixed_main_total = 0u32;
         let mut flex_children: Vec<(usize, u32)> = Vec::new();
@@ -1088,9 +1145,17 @@ impl<'a> LayoutPass<'a> {
                 continue;
             }
 
+            let mut effective = child_layout;
+            if parent_overflow.x {
+                effective.overflow_x = true;
+            }
+            if parent_overflow.y {
+                effective.overflow_y = true;
+            }
+
             let child_available = content;
             let size =
-                self.resolve_outer_size_with_layout(*child, child_layout, child_available.into());
+                self.resolve_outer_size_with_layout(*child, effective, child_available.into());
             pre_sizes[i] = size;
             fixed_main_total = fixed_main_total.saturating_add(size.main(layout.direction));
         }
@@ -1109,7 +1174,15 @@ impl<'a> LayoutPass<'a> {
         let mut flex_idx = 0usize;
         for (i, child) in children.iter().enumerate() {
             let child_layout = self.node_layout_snapshot(*child).0;
-            let main = match main_sizing(child_layout, layout.direction) {
+            let mut effective = child_layout;
+            if parent_overflow.x {
+                effective.overflow_x = true;
+            }
+            if parent_overflow.y {
+                effective.overflow_y = true;
+            }
+
+            let main = match main_sizing(effective, layout.direction) {
                 Sizing::Flex(_) => {
                     let share = shares[flex_idx];
                     flex_idx += 1;
@@ -1126,7 +1199,8 @@ impl<'a> LayoutPass<'a> {
                 LayoutDirection::Stack => unreachable!(),
             };
 
-            let actual = self.layout_node(*child, child_available.into(), child_pos);
+            let actual =
+                self.layout_node(*child, child_available.into(), child_pos, parent_overflow);
             pos_main = pos_main
                 .saturating_add(actual.main(layout.direction))
                 .saturating_add(layout.gap);
@@ -1277,10 +1351,14 @@ fn constraint_for_axis(
     min_outer: Option<u32>,
     max_outer: Option<u32>,
     pad_axis: u32,
+    overflow: bool,
 ) -> Constraint {
     match sizing {
         Sizing::Flex(_) => Constraint::Exact(available_content),
         Sizing::Measure => {
+            if overflow && max_outer.is_none() {
+                return Constraint::Unbounded;
+            }
             let effective_max_outer = match max_outer {
                 Some(m) => m.min(available_content.saturating_add(pad_axis)),
                 None => available_content.saturating_add(pad_axis),
@@ -1620,19 +1698,19 @@ mod tests {
 
     #[test]
     fn constraint_for_axis_flex_is_exact() {
-        let c = constraint_for_axis(Sizing::Flex(1), 10, None, None, 0);
+        let c = constraint_for_axis(Sizing::Flex(1), 10, None, None, 0, false);
         assert_eq!(c, Constraint::Exact(10));
     }
 
     #[test]
     fn constraint_for_axis_min_equals_max_is_exact() {
-        let c = constraint_for_axis(Sizing::Measure, 10, Some(6), Some(6), 2);
+        let c = constraint_for_axis(Sizing::Measure, 10, Some(6), Some(6), 2, false);
         assert_eq!(c, Constraint::Exact(4));
     }
 
     #[test]
     fn constraint_for_axis_max_caps_available() {
-        let c = constraint_for_axis(Sizing::Measure, 10, None, Some(6), 2);
+        let c = constraint_for_axis(Sizing::Measure, 10, None, Some(6), 2, false);
         assert_eq!(c, Constraint::AtMost(4));
     }
 

@@ -5,7 +5,7 @@ use canopy::{
     error::Result as CanopyResult, event::key::KeyCode, testing::harness::Harness,
     widgets::list::List,
 };
-use todo::{Todo, TodoItem, open_store, setup_app};
+use todo::{Todo, TodoEntry, open_store, setup_app};
 
 fn db_path(tag: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!(
@@ -54,7 +54,7 @@ fn list_len(h: &mut Harness) -> usize {
         .find(|(_, node)| node.name == "list")
         .map(|(id, _)| id)
         .expect("list node not found");
-    h.with_widget(list_id, |list: &mut List<TodoItem>| list.len())
+    h.with_widget(list_id, |list: &mut List<TodoEntry>| list.len())
 }
 
 fn app(path: &str) -> Result<Harness> {

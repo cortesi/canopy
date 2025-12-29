@@ -11,6 +11,7 @@ rand = "0.9.1"
 textwrap = "0.16.2"
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
+unicode-width = "0.2.2"
 
 [dev-dependencies]
 canopy = { path = "../canopy", features = ["testing"] }

@@ -188,6 +188,11 @@ pub struct Layout {
     /// Maximum outer height constraint (cells).
     pub max_height: Option<u32>,
 
+    /// Allow horizontal overflow during measurement.
+    pub overflow_x: bool,
+    /// Allow vertical overflow during measurement.
+    pub overflow_y: bool,
+
     /// Structural padding inside the widget (cells).
     pub padding: Edges<u32>,
 
@@ -219,6 +224,8 @@ impl Layout {
             max_width: None,
             min_height: None,
             max_height: None,
+            overflow_x: false,
+            overflow_y: false,
             padding: Edges::all(0),
             gap: 0,
             align_horizontal: Align::Start,
@@ -290,6 +297,18 @@ impl Layout {
     /// Set the maximum outer height.
     pub fn max_height(mut self, n: u32) -> Self {
         self.max_height = Some(n);
+        self
+    }
+
+    /// Allow horizontal overflow during measurement.
+    pub fn overflow_x(mut self) -> Self {
+        self.overflow_x = true;
+        self
+    }
+
+    /// Allow vertical overflow during measurement.
+    pub fn overflow_y(mut self) -> Self {
+        self.overflow_y = true;
         self
     }
 

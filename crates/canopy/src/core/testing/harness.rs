@@ -2,7 +2,11 @@ use std::any::Any;
 
 use super::{buf::BufTest, render::NopBackend};
 use crate::{
-    Canopy, Loader, NodeId, core::termbuf::TermBuf, error::Result, event::key, geom::Expanse,
+    Canopy, Context, Loader, NodeId,
+    core::{context::CoreContext, termbuf::TermBuf},
+    error::Result,
+    event::key,
+    geom::Expanse,
     widget::Widget,
 };
 
@@ -131,6 +135,25 @@ impl Harness {
     {
         let root = self.root;
         self.with_widget(root, f)
+    }
+
+    /// Execute a closure with mutable access to the root widget and a context.
+    pub fn with_root_context<W, R>(
+        &mut self,
+        mut f: impl FnMut(&mut W, &mut dyn Context) -> Result<R>,
+    ) -> Result<R>
+    where
+        W: Widget + 'static,
+    {
+        let root = self.root;
+        self.canopy.core.with_widget_mut(root, |widget, core| {
+            let mut ctx = CoreContext::new(core, root);
+            let any = widget as &mut dyn Any;
+            let widget = any
+                .downcast_mut::<W>()
+                .expect("with_root_context: widget type mismatch");
+            f(widget, &mut ctx)
+        })
     }
 
     /// Get a BufTest instance that references the current buffer.

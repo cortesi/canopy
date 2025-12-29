@@ -551,51 +551,52 @@ This plan uses the typed `List<W: Widget>` approach with `TypedId<W>` for compil
 
 Implement the new typed List widget with basic functionality. Tests should pass after this stage.
 
-1. [ ] Delete the existing `ListItem` trait and `List<T: ListItem>` from `widgets/list.rs`
-2. [ ] Define new `List<W: Widget>` struct with `items: Vec<TypedId<W>>` and `selected: Option<usize>`
-3. [ ] Implement `append()` returning `TypedId<W>` and `insert()` that mount widgets as children
-4. [ ] Implement `remove()` that unmounts and removes from the items vec
-5. [ ] Implement `item(index) -> Option<TypedId<W>>` for typed item access
-6. [ ] Implement `Widget` trait with column layout for children
-7. [ ] Implement `measure()` and `canvas()` that sum child heights
-8. [ ] Add basic scrolling support (the List acts as a scrollable viewport)
-9. [ ] Write unit tests for add/remove/measure with typed access
+1. [x] Delete the existing `ListItem` trait and `List<T: ListItem>` from `widgets/list.rs`
+2. [x] Define new `List<W: Widget>` struct with `items: Vec<TypedId<W>>` and `selected: Option<usize>`
+3. [x] Implement `append()` returning `TypedId<W>` and `insert()` that mount widgets as children
+4. [x] Implement `remove()` that unmounts and removes from the items vec
+5. [x] Implement `item(index) -> Option<TypedId<W>>` for typed item access
+6. [x] Implement `Widget` trait with column layout for children
+7. [x] Implement `measure()` and `canvas()` that sum child heights
+8. [x] Add basic scrolling support (the List acts as a scrollable viewport)
+9. [x] Write unit tests for add/remove/measure with typed access
 
 
 ### Stage 2: Selection and Focus
 
 Add selection tracking and focus integration.
 
-1. [ ] Track `selected: Option<usize>` that follows focus
-2. [ ] Detect focus changes within subtree (check focus path in render or poll)
-3. [ ] Push "selected" style layer for the selected item during render
-4. [ ] Implement `select()` method to programmatically select an item
-5. [ ] Implement `ensure_selected_visible()` to scroll selected item into view
-6. [ ] Add `select_next()`, `select_prev()`, `select_first()`, `select_last()` commands
-7. [ ] Add `page_up()`, `page_down()` commands
-8. [ ] Register commands via `Loader` and `derive_commands`
+1. [x] Track `selected: Option<usize>` that follows focus
+2. [x] Detect focus changes within subtree (check focus path in render or poll)
+3. [x] Push "selected" style layer for the selected item during render
+4. [x] Implement `select()` method to programmatically select an item
+5. [x] Implement `ensure_selected_visible()` to scroll selected item into view
+6. [x] Add `select_next()`, `select_prev()`, `select_first()`, `select_last()` commands
+7. [x] Add `page_up()`, `page_down()` commands
+8. [x] Register commands via `Loader` and `derive_commands`
 
 
 ### Stage 3: Migrate Examples
 
 Update all examples to use the new typed List. Each example should work after its migration.
 
-1. [ ] **termgym**: Remove `TermItem` and `entry_lines()`. Use `List<Button>` directly.
+1. [x] **termgym**: Remove `TermItem` and `entry_lines()`. Use `List<Button>` directly.
        Update `setup_bindings()` styles.
-2. [ ] **listgym**: Remove `Block` struct. Create a simple `TextBlock` widget. Use `List<TextBlock>`.
+2. [x] **listgym**: Remove `Block` struct. Create a simple `TextBlock` widget. Use `List<TextBlock>`.
        Update `create_column()` and related functions.
-3. [ ] **intervals**: Remove `IntervalItem`. Create a simple `CounterWidget`. Use `List<CounterWidget>`.
+3. [x] **intervals**: Remove `IntervalItem`. Create a simple `CounterWidget`. Use `List<CounterWidget>`.
        Update `with_list()` calls.
-4. [ ] Verify all three examples run correctly with `cargo run --example <name>`
+4. [x] **todo**: Remove `TodoItem`. Create `TodoEntry` widget. Use `List<TodoEntry>`.
+5. [x] Verify all examples run correctly with `cargo nextest run --all`
 
 
 ### Stage 4: Cleanup and Polish
 
 Final cleanup and documentation.
 
-1. [ ] Remove any dead code from the old ListItem implementation
-2. [ ] Update module documentation in `widgets/list.rs`
-3. [ ] Ensure all public items have doc comments
-4. [ ] Run clippy and fix any warnings
-5. [ ] Run `cargo fmt`
-6. [ ] Final test run: `cargo nextest run --all --all-features`
+1. [x] Remove any dead code from the old ListItem implementation
+2. [x] Update module documentation in `widgets/list.rs`
+3. [x] Ensure all public items have doc comments
+4. [x] Run clippy and fix any warnings
+5. [x] Run `cargo fmt`
+6. [x] Final test run: `cargo nextest run --all --all-features`

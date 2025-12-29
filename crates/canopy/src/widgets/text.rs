@@ -8,6 +8,7 @@ use crate::{
     render::Render,
     state::NodeName,
     widget::Widget,
+    widgets::list::Selectable,
 };
 
 /// Multiline text widget with wrapping and scrolling.
@@ -16,6 +17,14 @@ pub struct Text {
     raw: String,
     /// Optional fixed width for wrapping.
     fixed_width: Option<u32>,
+    /// Selection state for use in lists.
+    selected: bool,
+}
+
+impl Selectable for Text {
+    fn set_selected(&mut self, selected: bool) {
+        self.selected = selected;
+    }
 }
 
 #[derive_commands]
@@ -25,6 +34,7 @@ impl Text {
         Self {
             raw: raw.into(),
             fixed_width: None,
+            selected: false,
         }
     }
 

@@ -4,95 +4,112 @@ use canopy::{
     Binder, Canopy, Context, Loader, NodeId, ViewContext, command, cursor, derive_commands,
     error::{Error, Result},
     event::{Event, key, mouse},
-    geom::{Expanse, Point, Rect},
-    layout::Layout,
+    geom::Point,
+    layout::{Constraint, Layout, MeasureConstraints, Measurement, Size},
     render::Render,
+    state::NodeName,
     style::{AttrSet, solarized},
     widget::{EventOutcome, Widget},
     widgets::{
-        Button, Root, Terminal, TerminalConfig, boxed, frame,
-        list::{List, ListItem},
+        Box, Button, Center, Root, Terminal, TerminalConfig, Text, boxed, frame,
+        list::{List, Selectable},
     },
 };
+use unicode_width::UnicodeWidthStr;
 
 /// Height for each terminal entry row, including borders.
 const ENTRY_HEIGHT: u32 = 3;
-/// Minimum width for a boxed entry.
-const ENTRY_MIN_WIDTH: u32 = 3;
 
-/// Build box-drawing lines for a centered label.
-fn entry_lines(width: usize, label: &str) -> (String, String, String) {
-    let glyphs = boxed::SINGLE;
-    let full_width = width.max(ENTRY_MIN_WIDTH as usize);
-    let inner_width = full_width.saturating_sub(2).max(1);
-    let horiz = glyphs.horizontal.to_string().repeat(inner_width);
-    let top = format!("{}{}{}", glyphs.topleft, horiz, glyphs.topright);
-    let middle = format!(
-        "{}{:^inner_width$}{}",
-        glyphs.vertical,
-        label,
-        glyphs.vertical,
-        inner_width = inner_width
-    );
-    let bottom = format!("{}{}{}", glyphs.bottomleft, horiz, glyphs.bottomright);
-    (top, middle, bottom)
+/// List item widget for the terminal sidebar.
+struct TermEntry {
+    /// Label text.
+    label: String,
+    /// Selection state.
+    selected: bool,
+    /// Mounted box node ID.
+    box_id: Option<NodeId>,
+    /// Mounted text node ID.
+    text_id: Option<NodeId>,
 }
 
-/// List item representing a terminal instance.
-struct TermItem {
-    /// One-based terminal index.
-    index: usize,
-}
-
-impl TermItem {
-    /// Construct a list item for a terminal.
-    fn new(index: usize) -> Self {
-        Self { index }
+#[derive_commands]
+impl TermEntry {
+    /// Construct a new terminal entry.
+    fn new(label: impl Into<String>) -> Self {
+        Self {
+            label: label.into(),
+            selected: false,
+            box_id: None,
+            text_id: None,
+        }
     }
 
-    /// Render the label for this terminal.
-    fn label(&self) -> String {
-        self.index.to_string()
-    }
-}
-
-impl ListItem for TermItem {
-    fn measure(&self, available_width: u32) -> Expanse {
-        Expanse::new(available_width.max(ENTRY_MIN_WIDTH), ENTRY_HEIGHT)
+    /// Compute the display width of the label text.
+    fn label_width(&self) -> u32 {
+        UnicodeWidthStr::width(self.label.as_str()).max(1) as u32
     }
 
-    fn render(
-        &mut self,
-        rndr: &mut Render,
-        area: Rect,
-        selected: bool,
-        offset: Point,
-        full_size: Expanse,
-    ) -> Result<()> {
-        if area.w == 0 || area.h == 0 {
+    /// Ensure the child widget tree is mounted.
+    fn ensure_tree(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        if self.box_id.is_some() && self.text_id.is_some() {
             return Ok(());
         }
 
-        let style = if selected { "entry/selected" } else { "entry" };
+        let box_id = ctx.add_orphan(Box::new().with_glyphs(boxed::SINGLE).with_fill());
+        let center_id = ctx.add_orphan(Center::new());
+        let text_id =
+            ctx.add_orphan(Text::new(self.label.clone()).with_fixed_width(self.label_width()));
 
-        let label = self.label();
-        let (top, middle, bottom) = entry_lines(full_size.w as usize, &label);
+        ctx.mount_child_to(center_id, text_id)?;
+        ctx.mount_child_to(box_id, center_id)?;
+        ctx.mount_child_to(ctx.node_id(), box_id)?;
 
-        for row in 0..area.h {
-            let local_y = offset.y.saturating_add(row);
-            let line = match local_y {
-                0 => &top,
-                1 => &middle,
-                2 => &bottom,
-                _ => continue,
-            };
-            let skip = offset.x as usize;
-            let visible = area.w as usize;
-            let text: String = line.chars().skip(skip).take(visible).collect();
-            rndr.text(style, area.line(row), &text)?;
-        }
+        self.box_id = Some(box_id);
+        self.text_id = Some(text_id);
 
         Ok(())
+    }
+}
+
+impl Selectable for TermEntry {
+    fn set_selected(&mut self, selected: bool) {
+        self.selected = selected;
+    }
+}
+
+impl Widget for TermEntry {
+    fn layout(&self) -> Layout {
+        Layout::column()
+            .flex_horizontal(1)
+            .fixed_height(ENTRY_HEIGHT)
+    }
+
+    fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        self.ensure_tree(ctx)
+    }
+
+    fn render(&mut self, rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+        rndr.push_layer("entry");
+        if self.selected {
+            rndr.push_layer("selected");
+        }
+        Ok(())
+    }
+
+    fn measure(&self, c: MeasureConstraints) -> Measurement {
+        let width = match c.width {
+            Constraint::Exact(n) | Constraint::AtMost(n) => n.max(1),
+            Constraint::Unbounded => self.label_width().saturating_add(2),
+        };
+        c.clamp(Size::new(width, ENTRY_HEIGHT))
+    }
+
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        true
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("term_entry")
     }
 }
 
@@ -174,7 +191,7 @@ impl TermGym {
             return Ok(());
         }
 
-        let list_id = c.add_orphan(List::new(Vec::<TermItem>::new()));
+        let list_id = c.add_orphan(List::<TermEntry>::new());
         let button_id = c.add_orphan(
             Button::new("+ New terminal").with_command(Self::cmd_new_terminal().call()),
         );
@@ -216,15 +233,15 @@ impl TermGym {
     }
 
     /// Execute a closure with the terminal list widget.
-    fn with_list<F>(&mut self, c: &mut dyn Context, mut f: F) -> Result<()>
+    fn with_list<F, R>(&mut self, c: &mut dyn Context, mut f: F) -> Result<R>
     where
-        F: FnMut(&mut List<TermItem>) -> Result<()>,
+        F: FnMut(&mut List<TermEntry>, &mut dyn Context) -> Result<R>,
     {
         self.ensure_tree(c)?;
         let list_id = self
             .list_id
             .ok_or_else(|| Error::Internal("list not initialized".into()))?;
-        c.with_widget(list_id, |list: &mut List<TermItem>, _| f(list))
+        c.with_widget(list_id, |list: &mut List<TermEntry>, ctx| f(list, ctx))
     }
 
     /// Create and mount a new terminal instance.
@@ -244,8 +261,9 @@ impl TermGym {
 
         self.terminals.push(terminal_id);
         let index = self.terminals.len();
-        self.with_list(c, |list| {
-            list.append(TermItem::new(index));
+        self.with_list(c, |list, ctx| {
+            let entry = TermEntry::new(index.to_string());
+            list.append(ctx, entry)?;
             Ok(())
         })?;
 
@@ -273,8 +291,8 @@ impl TermGym {
         }
 
         let active = self.active;
-        self.with_list(c, |list| {
-            list.select(active);
+        self.with_list(c, |list, ctx| {
+            list.select(ctx, active);
             Ok(())
         })?;
 
@@ -301,10 +319,11 @@ impl TermGym {
     /// Rebuild the sidebar list to match the current terminal set.
     fn rebuild_list(&mut self, c: &mut dyn Context) -> Result<()> {
         let count = self.terminals.len();
-        self.with_list(c, |list| {
-            list.clear();
+        self.with_list(c, |list, ctx| {
+            list.clear(ctx)?;
             for index in 1..=count {
-                list.append(TermItem::new(index));
+                let entry = TermEntry::new(index.to_string());
+                list.append(ctx, entry)?;
             }
             Ok(())
         })
@@ -341,17 +360,22 @@ impl TermGym {
         Ok(())
     }
 
-    /// Ensure focus returns to the sidebar list if it exists.
-    fn focus_sidebar_list(&self, c: &mut dyn Context) {
-        if let Some(list_id) = self.list_id {
-            c.set_focus(list_id);
-        }
+    /// Focus the selected sidebar entry if the list exists.
+    fn focus_sidebar_list(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.with_list(c, |list, ctx| {
+            if let Some(selected) = list.selected_item() {
+                ctx.set_focus(selected.into());
+            } else {
+                ctx.focus_first_in(ctx.node_id());
+            }
+            Ok(())
+        })
     }
 
     /// Shift terminal selection and keep focus on the sidebar list.
     fn shift_terminal_in_sidebar(&mut self, c: &mut dyn Context, forward: bool) -> Result<()> {
         self.shift_terminal(c, forward)?;
-        self.focus_sidebar_list(c);
+        self.focus_sidebar_list(c)?;
         Ok(())
     }
 
@@ -365,7 +389,7 @@ impl TermGym {
     /// Create a new terminal instance while keeping focus on the sidebar.
     pub fn new_terminal_sidebar(&mut self, c: &mut dyn Context) -> Result<()> {
         self.add_terminal(c)?;
-        self.focus_sidebar_list(c);
+        self.focus_sidebar_list(c)?;
         Ok(())
     }
 
@@ -402,7 +426,7 @@ impl TermGym {
 
         let target = self.active.min(self.terminals.len() - 1);
         self.remove_terminal(c, target)?;
-        self.focus_sidebar_list(c);
+        self.focus_sidebar_list(c)?;
         Ok(())
     }
 
@@ -410,9 +434,7 @@ impl TermGym {
     /// Focus the terminal list sidebar.
     pub fn focus_sidebar(&mut self, c: &mut dyn Context) -> Result<()> {
         self.ensure_tree(c)?;
-        if let Some(list_id) = self.list_id {
-            c.set_focus(list_id);
-        }
+        self.focus_sidebar_list(c)?;
         Ok(())
     }
 
@@ -452,7 +474,9 @@ impl TermGym {
         if index < self.terminals.len() && self.set_active(c, index).is_err() {
             return false;
         }
-        c.set_focus(list_id);
+        if self.focus_sidebar_list(c).is_err() {
+            return false;
+        }
         true
     }
 }
@@ -494,6 +518,7 @@ impl Widget for TermGym {
 impl Loader for TermGym {
     fn load(c: &mut Canopy) {
         c.add_commands::<Self>();
+        c.add_commands::<List<TermEntry>>();
     }
 }
 
@@ -505,13 +530,37 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
     };
 
     cnpy.style.add(
-        "termgym/list/entry",
+        "termgym/entry/border",
         Some(solarized::BASE0),
         Some(solarized::BASE03),
         Some(AttrSet::default()),
     );
     cnpy.style.add(
-        "termgym/list/entry/selected",
+        "termgym/entry/fill",
+        Some(solarized::BASE0),
+        Some(solarized::BASE03),
+        Some(AttrSet::default()),
+    );
+    cnpy.style.add(
+        "termgym/entry/text",
+        Some(solarized::BASE0),
+        Some(solarized::BASE03),
+        Some(AttrSet::default()),
+    );
+    cnpy.style.add(
+        "termgym/entry/selected/border",
+        Some(solarized::BASE3),
+        Some(solarized::BLUE),
+        Some(selected_attrs),
+    );
+    cnpy.style.add(
+        "termgym/entry/selected/fill",
+        Some(solarized::BASE3),
+        Some(solarized::BLUE),
+        Some(selected_attrs),
+    );
+    cnpy.style.add(
+        "termgym/entry/selected/text",
         Some(solarized::BASE3),
         Some(solarized::BLUE),
         Some(selected_attrs),
@@ -523,16 +572,34 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
         Some(AttrSet::default()),
     );
     cnpy.style.add(
+        "termgym/button/selected/border",
+        Some(solarized::BASE3),
+        Some(solarized::BLUE),
+        Some(selected_attrs),
+    );
+    cnpy.style.add(
         "termgym/button/fill",
         Some(solarized::BASE3),
         Some(solarized::BASE02),
         Some(AttrSet::default()),
     );
     cnpy.style.add(
+        "termgym/button/selected/fill",
+        Some(solarized::BASE3),
+        Some(solarized::BLUE),
+        Some(selected_attrs),
+    );
+    cnpy.style.add(
         "termgym/button/text",
         Some(solarized::BASE3),
         Some(solarized::BASE02),
         Some(AttrSet::default()),
+    );
+    cnpy.style.add(
+        "termgym/button/selected/text",
+        Some(solarized::BASE3),
+        Some(solarized::BLUE),
+        Some(selected_attrs),
     );
     cnpy.style.add(
         "termgym/frame",

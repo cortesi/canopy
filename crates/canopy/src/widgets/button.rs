@@ -13,6 +13,7 @@ use crate::{
     widgets::{
         Box, Center, Text,
         boxed::{BoxGlyphs, SINGLE},
+        list::Selectable,
     },
 };
 
@@ -28,6 +29,14 @@ pub struct Button {
     box_id: Option<NodeId>,
     /// Mounted label node ID.
     text_id: Option<NodeId>,
+    /// Selection state for use in lists.
+    selected: bool,
+}
+
+impl Selectable for Button {
+    fn set_selected(&mut self, selected: bool) {
+        self.selected = selected;
+    }
 }
 
 #[derive_commands]
@@ -40,6 +49,7 @@ impl Button {
             glyphs: SINGLE,
             box_id: None,
             text_id: None,
+            selected: false,
         }
     }
 
@@ -125,6 +135,9 @@ impl Widget for Button {
 
     fn render(&mut self, rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         rndr.push_layer("button");
+        if self.selected {
+            rndr.push_layer("selected");
+        }
         Ok(())
     }
 

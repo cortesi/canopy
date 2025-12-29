@@ -1,3 +1,5 @@
+//! Log panel for the inspector widget.
+
 use std::{
     io::{Result as IoResult, Write},
     sync::{Arc, Mutex},
@@ -7,110 +9,94 @@ use std::{
 use tracing_subscriber::fmt;
 
 use crate::{
-    Canopy, Context, Loader, ViewContext, command, derive_commands,
-    error::Result,
-    geom::{Expanse, Point, Rect},
-    layout::{CanvasContext, MeasureConstraints, Measurement, Size},
+    Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
+    error::{Error, Result},
+    geom::Rect,
+    layout::{CanvasContext, Constraint, Layout, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
     widget::Widget,
-    widgets::list::{List, ListItem},
+    widgets::list::{List, Selectable},
 };
 
-/// List item for a single log entry.
-pub(super) struct LogItem {
-    /// Text display.
+/// Widget for displaying a single log entry.
+pub struct LogEntry {
+    /// Text content.
     text: String,
+    /// Selection state.
+    selected: bool,
 }
 
-impl LogItem {
-    /// Construct a log item from text.
-    fn new(txt: &str) -> Self {
+impl Selectable for LogEntry {
+    fn set_selected(&mut self, selected: bool) {
+        self.selected = selected;
+    }
+}
+
+#[derive_commands]
+impl LogEntry {
+    /// Construct a log entry from text.
+    pub fn new(text: impl Into<String>) -> Self {
         Self {
-            text: txt.to_string(),
+            text: text.into(),
+            selected: false,
         }
     }
 }
 
-impl ListItem for LogItem {
-    fn measure(&self, available_width: u32) -> Expanse {
+impl Widget for LogEntry {
+    fn layout(&self) -> Layout {
+        Layout::fill().flex_horizontal(1)
+    }
+
+    fn measure(&self, c: MeasureConstraints) -> Measurement {
+        let available_width = match c.width {
+            Constraint::Exact(n) | Constraint::AtMost(n) => n,
+            Constraint::Unbounded => 80,
+        };
         let text_width = available_width.saturating_sub(2).max(1) as usize;
         let lines = textwrap::wrap(&self.text, text_width);
-        Expanse::new(available_width.max(1), lines.len() as u32)
+        c.clamp(Size::new(available_width, lines.len() as u32))
     }
 
-    fn render(
-        &mut self,
-        rndr: &mut Render,
-        area: Rect,
-        selected: bool,
-        offset: Point,
-        full_size: Expanse,
-    ) -> Result<()> {
-        if area.w == 0 || area.h == 0 {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        let view = ctx.view();
+
+        if view.is_zero() {
             return Ok(());
         }
 
-        let offset_x = offset.x;
-        let offset_y = offset.y as usize;
-        let text_width = full_size.w.saturating_sub(2).max(1) as usize;
-        let lines = textwrap::wrap(&self.text, text_width);
+        // Wrap text based on view width, then render at canvas coordinates
+        let text_width = view.content.w.saturating_sub(2).max(1) as usize;
+        let lines: Vec<_> = textwrap::wrap(&self.text, text_width).into_iter().collect();
+        let height = lines.len().max(1) as u32;
 
-        if offset_x == 0 && area.w >= 1 {
-            let status = Rect::new(area.tl.x, area.tl.y, 1, area.h);
-            if selected {
-                rndr.fill("blue", status, '\u{2588}')?;
-            } else {
-                rndr.fill("", status, ' ')?;
-            }
+        // Render in canvas coordinates (0,0 is top-left of content).
+        // Column 0: Selection indicator (when selected)
+        if self.selected {
+            let indicator_rect = Rect::new(0, 0, 1, height);
+            rndr.fill("list/selected", indicator_rect, '\u{2588}')?;
         }
 
-        if offset_x <= 1 {
-            let spacer_x = area.tl.x.saturating_add(1u32.saturating_sub(offset_x));
-            if spacer_x < area.tl.x.saturating_add(area.w) {
-                let spacer = Rect::new(spacer_x, area.tl.y, 1, area.h);
-                rndr.fill("", spacer, ' ')?;
-            }
-        }
+        // Column 1: Spacer
+        let spacer = Rect::new(1, 0, 1, height);
+        rndr.fill("", spacer, ' ')?;
 
-        let text_offset_x = offset_x.saturating_sub(2);
-        let text_start_x = if offset_x >= 2 {
-            area.tl.x
-        } else {
-            area.tl.x.saturating_add(2u32.saturating_sub(offset_x))
-        };
-        let text_visible_width = area
-            .w
-            .saturating_sub(text_start_x.saturating_sub(area.tl.x))
-            .max(1);
-
-        if text_visible_width == 0 {
-            return Ok(());
-        }
-
-        for (idx, line) in lines
-            .iter()
-            .enumerate()
-            .skip(offset_y)
-            .take(area.h as usize)
-        {
-            let start_char = text_offset_x as usize;
-            let start_byte = line
-                .char_indices()
-                .nth(start_char)
-                .map(|(i, _)| i)
-                .unwrap_or(line.len());
-            let out = &line[start_byte..];
-            let line_rect = Rect::new(
-                text_start_x,
-                area.tl.y.saturating_add((idx - offset_y) as u32),
-                text_visible_width,
-                1,
-            );
-            rndr.text("text", line_rect.line(0), out)?;
+        // Text content starts at column 2
+        for (idx, line) in lines.iter().enumerate() {
+            let line_rect = Rect::new(2, idx as u32, line.len() as u32, 1);
+            rndr.text("text", line_rect.line(0), line)?;
         }
 
         Ok(())
+    }
+
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        true
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("log_entry")
     }
 }
 
@@ -128,6 +114,7 @@ impl Write for LogWriter {
             .push(String::from_utf8_lossy(buf).to_string().trim().to_string());
         Ok(buf.len())
     }
+
     fn flush(&mut self) -> IoResult<()> {
         Ok(())
     }
@@ -135,8 +122,8 @@ impl Write for LogWriter {
 
 /// Inspector log panel.
 pub struct Logs {
-    /// List of log items.
-    list: List<LogItem>,
+    /// Node ID for the list widget.
+    list_id: Option<NodeId>,
     /// Whether logging is initialized.
     started: bool,
     /// Shared log buffer.
@@ -144,19 +131,30 @@ pub struct Logs {
 }
 
 impl Widget for Logs {
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
-        self.list.render(rndr, ctx)
+    fn layout(&self) -> Layout {
+        Layout::fill()
+    }
+
+    fn render(&mut self, rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+        rndr.push_layer("logs");
+        Ok(())
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
-        self.list.measure(c)
+        let available_width = match c.width {
+            Constraint::Exact(n) | Constraint::AtMost(n) => n,
+            Constraint::Unbounded => 80,
+        };
+        c.clamp(Size::new(available_width, 10))
     }
 
-    fn canvas(&self, view: Size<u32>, ctx: &CanvasContext) -> Size<u32> {
-        self.list.canvas(view, ctx)
+    fn canvas(&self, view: Size<u32>, _ctx: &CanvasContext) -> Size<u32> {
+        view
     }
 
-    fn poll(&mut self, _c: &mut dyn Context) -> Option<Duration> {
+    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
+        self.ensure_tree(c).ok()?;
+
         if !self.started {
             let format = fmt::format()
                 .with_level(true)
@@ -173,7 +171,7 @@ impl Widget for Logs {
             self.started = true;
         }
 
-        self.flush_buffer();
+        self.flush_buffer(c).ok();
         Some(Duration::from_millis(100))
     }
 
@@ -187,92 +185,173 @@ impl Logs {
     /// Construct a log panel.
     pub fn new() -> Self {
         Self {
-            list: List::new(vec![]),
+            list_id: None,
             started: false,
             buf: Arc::new(Mutex::new(vec![])),
         }
     }
 
+    /// Ensure the list widget is mounted.
+    fn ensure_tree(&mut self, c: &mut dyn Context) -> Result<()> {
+        if self.list_id.is_some() {
+            return Ok(());
+        }
+
+        let list_id = c.add_child(List::<LogEntry>::new())?;
+        c.with_layout_of(list_id, &mut |layout| {
+            *layout = Layout::fill();
+        })?;
+        self.list_id = Some(list_id);
+        Ok(())
+    }
+
+    /// Execute a closure with the list widget.
+    fn with_list<F, R>(&self, c: &mut dyn Context, f: F) -> Result<R>
+    where
+        F: FnMut(&mut List<LogEntry>, &mut dyn Context) -> Result<R>,
+    {
+        let list_id = self
+            .list_id
+            .ok_or_else(|| Error::Internal("logs list not initialized".into()))?;
+        c.with_widget(list_id, f)
+    }
+
     /// Drain buffered log lines into the list.
-    fn flush_buffer(&mut self) {
+    fn flush_buffer(&self, c: &mut dyn Context) -> Result<()> {
         let buf = self.buf.clone();
         let mut b = buf.lock().unwrap();
-        let vals = b.drain(..);
-        for i in vals {
-            self.list.append(LogItem::new(&i));
+        let vals: Vec<String> = b.drain(..).collect();
+        drop(b);
+
+        let list_id = match self.list_id {
+            Some(id) => id,
+            None => return Ok(()),
+        };
+
+        for line in vals {
+            let mut entry = Some(LogEntry::new(line));
+            c.with_widget(list_id, |list: &mut List<LogEntry>, ctx| {
+                if let Some(e) = entry.take() {
+                    list.append(ctx, e)?;
+                }
+                Ok(())
+            })?;
         }
+        Ok(())
     }
 
-    #[command(ignore_result)]
+    #[command]
     /// Clear all items.
-    pub fn clear(&mut self) -> Vec<LogItem> {
-        self.list.clear()
+    pub fn clear(&self, c: &mut dyn Context) -> Result<()> {
+        self.with_list(c, |list, ctx| {
+            list.clear(ctx)?;
+            Ok(())
+        })
     }
 
-    #[command(ignore_result)]
+    #[command]
     /// Delete the currently selected item.
-    pub fn delete_selected(&mut self, c: &mut dyn Context) -> Option<LogItem> {
-        self.list.delete_selected(c)
+    pub fn delete_selected(&self, c: &mut dyn Context) -> Result<()> {
+        self.with_list(c, |list, ctx| {
+            list.delete_selected(ctx)?;
+            Ok(())
+        })
     }
 
     #[command]
     /// Move selection to the first item.
-    pub fn select_first(&mut self, c: &mut dyn Context) {
-        self.list.select_first(c);
+    pub fn select_first(&self, c: &mut dyn Context) {
+        drop(self.with_list(c, |list, ctx| {
+            list.select_first(ctx);
+            Ok(())
+        }));
     }
 
     #[command]
     /// Move selection to the last item.
-    pub fn select_last(&mut self, c: &mut dyn Context) {
-        self.list.select_last(c);
+    pub fn select_last(&self, c: &mut dyn Context) {
+        drop(self.with_list(c, |list, ctx| {
+            list.select_last(ctx);
+            Ok(())
+        }));
     }
 
     #[command]
     /// Move selection to the next item.
-    pub fn select_next(&mut self, c: &mut dyn Context) {
-        self.list.select_next(c);
+    pub fn select_next(&self, c: &mut dyn Context) {
+        drop(self.with_list(c, |list, ctx| {
+            list.select_next(ctx);
+            Ok(())
+        }));
     }
 
     #[command]
     /// Move selection to the previous item.
-    pub fn select_prev(&mut self, c: &mut dyn Context) {
-        self.list.select_prev(c);
+    pub fn select_prev(&self, c: &mut dyn Context) {
+        drop(self.with_list(c, |list, ctx| {
+            list.select_prev(ctx);
+            Ok(())
+        }));
     }
 
     #[command]
     /// Scroll the view down by one line.
-    pub fn scroll_down(&mut self, c: &mut dyn Context) {
-        self.list.scroll_down(c);
+    pub fn scroll_down(&self, c: &mut dyn Context) {
+        drop(self.with_list(c, |list, ctx| {
+            list.scroll_down(ctx);
+            Ok(())
+        }));
     }
 
     #[command]
     /// Scroll the view up by one line.
-    pub fn scroll_up(&mut self, c: &mut dyn Context) {
-        self.list.scroll_up(c);
+    pub fn scroll_up(&self, c: &mut dyn Context) {
+        drop(self.with_list(c, |list, ctx| {
+            list.scroll_up(ctx);
+            Ok(())
+        }));
     }
 
     #[command]
     /// Scroll the view left by one line.
-    pub fn scroll_left(&mut self, c: &mut dyn Context) {
-        self.list.scroll_left(c);
+    pub fn scroll_left(&self, c: &mut dyn Context) {
+        drop(self.with_list(c, |list, ctx| {
+            list.scroll_left(ctx);
+            Ok(())
+        }));
     }
 
     #[command]
     /// Scroll the view right by one line.
-    pub fn scroll_right(&mut self, c: &mut dyn Context) {
-        self.list.scroll_right(c);
+    pub fn scroll_right(&self, c: &mut dyn Context) {
+        drop(self.with_list(c, |list, ctx| {
+            list.scroll_right(ctx);
+            Ok(())
+        }));
     }
 
     #[command]
     /// Scroll the view down by one page.
-    pub fn page_down(&mut self, c: &mut dyn Context) {
-        self.list.page_down(c);
+    pub fn page_down(&self, c: &mut dyn Context) {
+        drop(self.with_list(c, |list, ctx| {
+            list.page_down(ctx);
+            Ok(())
+        }));
     }
 
     #[command]
     /// Scroll the view up by one page.
-    pub fn page_up(&mut self, c: &mut dyn Context) {
-        self.list.page_up(c);
+    pub fn page_up(&self, c: &mut dyn Context) {
+        drop(self.with_list(c, |list, ctx| {
+            list.page_up(ctx);
+            Ok(())
+        }));
+    }
+}
+
+impl Default for Logs {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

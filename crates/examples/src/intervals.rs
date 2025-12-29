@@ -4,55 +4,165 @@ use canopy::{
     Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
     error::Result,
     event::{key, mouse},
-    geom::{Expanse, Point, Rect},
-    layout::{Layout, Sizing},
+    layout::{Edges, Layout, MeasureConstraints, Measurement, Size, Sizing},
     render::Render,
-    style::solarized,
+    state::NodeName,
+    style::{AttrSet, solarized},
     widget::Widget,
-    widgets::{frame, list::*},
+    widgets::{
+        Box, Center, Text, boxed, frame,
+        list::{List, Selectable},
+    },
 };
+use unicode_width::UnicodeWidthStr;
 
-/// List item that increments on a timer.
-pub struct IntervalItem {
+/// Padding inside each counter entry box.
+const ENTRY_PADDING: u32 = 2;
+/// Height for each counter entry row, including borders.
+const ENTRY_HEIGHT: u32 = 1 + ENTRY_PADDING * 2;
+
+/// Counter widget that increments on a timer.
+pub struct CounterItem {
     /// Current counter value.
     value: u64,
+    /// Selection state.
+    selected: bool,
+    /// Mounted box node ID.
+    box_id: Option<NodeId>,
+    /// Mounted center node ID.
+    center_id: Option<NodeId>,
+    /// Mounted text node ID.
+    text_id: Option<NodeId>,
 }
 
-impl Default for IntervalItem {
+impl Selectable for CounterItem {
+    fn set_selected(&mut self, selected: bool) {
+        self.selected = selected;
+    }
+}
+
+impl Default for CounterItem {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl IntervalItem {
-    /// Construct a new interval item.
+#[derive_commands]
+impl CounterItem {
+    /// Construct a new counter item.
     pub fn new() -> Self {
-        Self { value: 0 }
+        Self {
+            value: 0,
+            selected: false,
+            box_id: None,
+            center_id: None,
+            text_id: None,
+        }
     }
 
     /// Increment the counter.
-    fn tick(&mut self) {
+    pub fn tick(&mut self, ctx: &mut dyn Context) -> Result<()> {
         self.value = self.value.saturating_add(1);
+        self.sync_label(ctx)?;
+        ctx.taint();
+        Ok(())
+    }
+
+    /// Current label string.
+    fn label(&self) -> String {
+        self.value.to_string()
+    }
+
+    /// Label display width in cells.
+    fn label_width(&self) -> u32 {
+        let label = self.label();
+        UnicodeWidthStr::width(label.as_str()).max(1) as u32
+    }
+
+    /// Update the box layout based on the current label width.
+    fn update_box_layout(&self, ctx: &mut dyn Context) -> Result<()> {
+        let Some(box_id) = self.box_id else {
+            return Ok(());
+        };
+
+        let desired_width = self.label_width().saturating_add(ENTRY_PADDING * 2).max(3);
+        let desired_height = ENTRY_HEIGHT;
+
+        ctx.with_layout_of(box_id, &mut |layout| {
+            *layout = Layout::column()
+                .fixed_width(desired_width)
+                .fixed_height(desired_height)
+                .padding(Edges::all(ENTRY_PADDING));
+        })?;
+
+        Ok(())
+    }
+
+    /// Ensure the child widget tree is mounted.
+    fn ensure_tree(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        if self.box_id.is_some() && self.center_id.is_some() && self.text_id.is_some() {
+            return Ok(());
+        }
+
+        let box_id = ctx.add_orphan(Box::new().with_glyphs(boxed::SINGLE).with_fill());
+        let center_id = ctx.add_orphan(Center::new());
+        let text_id = ctx.add_orphan(Text::new(self.label()));
+
+        ctx.mount_child_to(box_id, text_id)?;
+        ctx.mount_child_to(center_id, box_id)?;
+        ctx.mount_child_to(ctx.node_id(), center_id)?;
+
+        self.box_id = Some(box_id);
+        self.center_id = Some(center_id);
+        self.text_id = Some(text_id);
+        self.update_box_layout(ctx)?;
+
+        Ok(())
+    }
+
+    /// Sync the text label to the current value.
+    fn sync_label(&self, ctx: &mut dyn Context) -> Result<()> {
+        let Some(text_id) = self.text_id else {
+            return Ok(());
+        };
+        let label = self.label();
+        ctx.with_widget(text_id, |text: &mut Text, _ctx| {
+            text.set_raw(label.clone());
+            Ok(())
+        })?;
+        self.update_box_layout(ctx)?;
+        Ok(())
     }
 }
 
-impl ListItem for IntervalItem {
-    fn measure(&self, available_width: u32) -> Expanse {
-        Expanse::new(available_width.max(1), 1)
+impl Widget for CounterItem {
+    fn layout(&self) -> Layout {
+        Layout::fill().fixed_height(ENTRY_HEIGHT)
     }
 
-    fn render(
-        &mut self,
-        rndr: &mut Render,
-        area: Rect,
-        selected: bool,
-        _offset: Point,
-        _full_size: Expanse,
-    ) -> Result<()> {
-        let style = if selected { "blue/text" } else { "text" };
-        let text = self.value.to_string();
-        rndr.text(style, area.line(0), &text)?;
+    fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        self.ensure_tree(ctx)
+    }
+
+    fn measure(&self, c: MeasureConstraints) -> Measurement {
+        let desired_width = self.label_width().saturating_add(ENTRY_PADDING * 2).max(3);
+        c.clamp(Size::new(desired_width, ENTRY_HEIGHT))
+    }
+
+    fn render(&mut self, rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+        rndr.push_layer("entry");
+        if self.selected {
+            rndr.push_layer("selected");
+        }
         Ok(())
+    }
+
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        true
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("counter_item")
     }
 }
 
@@ -100,7 +210,7 @@ impl Intervals {
             .add_child(frame::Frame::new())
             .expect("Failed to mount content frame");
         let list_id = c
-            .add_child_to(content_id, List::new(Vec::<IntervalItem>::new()))
+            .add_child_to(content_id, List::<CounterItem>::new())
             .expect("Failed to mount list");
         let status_id = c.add_child(StatusBar).expect("Failed to mount statusbar");
 
@@ -140,20 +250,20 @@ impl Intervals {
     }
 
     /// Execute a closure with mutable access to the list widget.
-    fn with_list<F>(&self, c: &mut dyn Context, mut f: F) -> Result<()>
+    fn with_list<F, R>(&self, c: &mut dyn Context, mut f: F) -> Result<R>
     where
-        F: FnMut(&mut List<IntervalItem>) -> Result<()>,
+        F: FnMut(&mut List<CounterItem>, &mut dyn Context) -> Result<R>,
     {
         self.ensure_tree(c);
         let list_id = Self::list_id(c).expect("list not initialized");
-        c.with_widget(list_id, |list: &mut List<IntervalItem>, _ctx| f(list))
+        c.with_widget(list_id, |list: &mut List<CounterItem>, ctx| f(list, ctx))
     }
 
     #[command]
     /// Append a new list item.
     pub fn add_item(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.with_list(c, |list| {
-            list.append(IntervalItem::new());
+        self.with_list(c, |list, ctx| {
+            list.append(ctx, CounterItem::new())?;
             Ok(())
         })
     }
@@ -164,16 +274,30 @@ impl Widget for Intervals {
         true
     }
 
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+        r.push_layer("intervals");
         Ok(())
     }
 
     fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
-        self.with_list(c, |list| {
-            list.for_each_mut(|item| item.tick());
-            Ok(())
-        })
-        .ok();
+        self.ensure_tree(c);
+        let list_id = Self::list_id(c)?;
+
+        // Tick each counter item
+        let len = c
+            .with_widget(list_id, |list: &mut List<CounterItem>, _ctx| Ok(list.len()))
+            .ok()?;
+
+        for i in 0..len {
+            let item_id = c
+                .with_widget(list_id, |list: &mut List<CounterItem>, _ctx| {
+                    Ok(list.item(i).map(|id| id.into()))
+                })
+                .ok()??;
+
+            c.with_widget(item_id, |item: &mut CounterItem, ctx| item.tick(ctx))
+                .ok();
+        }
 
         Some(Duration::from_secs(1))
     }
@@ -182,12 +306,53 @@ impl Widget for Intervals {
 impl Loader for Intervals {
     fn load(c: &mut Canopy) {
         c.add_commands::<Self>();
-        c.add_commands::<List<IntervalItem>>();
+        c.add_commands::<List<CounterItem>>();
     }
 }
 
 /// Install key bindings for the intervals demo.
 pub fn setup_bindings(cnpy: &mut Canopy) {
+    let selected_attrs = AttrSet {
+        bold: true,
+        ..AttrSet::default()
+    };
+
+    cnpy.style.add(
+        "intervals/entry/border",
+        Some(solarized::BASE0),
+        Some(solarized::BASE03),
+        Some(AttrSet::default()),
+    );
+    cnpy.style.add(
+        "intervals/entry/fill",
+        Some(solarized::BASE0),
+        Some(solarized::BASE03),
+        Some(AttrSet::default()),
+    );
+    cnpy.style.add(
+        "intervals/entry/text",
+        Some(solarized::BASE0),
+        Some(solarized::BASE03),
+        Some(AttrSet::default()),
+    );
+    cnpy.style.add(
+        "intervals/entry/selected/border",
+        Some(solarized::BASE3),
+        Some(solarized::BLUE),
+        Some(selected_attrs),
+    );
+    cnpy.style.add(
+        "intervals/entry/selected/fill",
+        Some(solarized::BASE3),
+        Some(solarized::BLUE),
+        Some(selected_attrs),
+    );
+    cnpy.style.add(
+        "intervals/entry/selected/text",
+        Some(solarized::BASE3),
+        Some(solarized::BLUE),
+        Some(selected_attrs),
+    );
     cnpy.style.add(
         "statusbar/text",
         Some(solarized::BASE02),

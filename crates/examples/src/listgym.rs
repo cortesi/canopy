@@ -4,12 +4,16 @@ use canopy::{
     Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
     error::{Error, Result},
     event::{key, mouse},
-    geom::{Expanse, Line, Point, Rect},
-    layout::Layout,
+    geom::Rect,
+    layout::{CanvasContext, Constraint, Layout, MeasureConstraints, Measurement, Size},
     render::Render,
+    state::NodeName,
     style::{AttrSet, solarized},
     widget::Widget,
-    widgets::{Panes, Root, frame, list::*},
+    widgets::{
+        Panes, Root, frame,
+        list::{List, Selectable},
+    },
 };
 use rand::Rng;
 
@@ -19,95 +23,114 @@ const TEXT: &str = "What a struggle must have gone on during long centuries betw
 /// Alternating color names for list items.
 const COLORS: &[&str] = &["red", "blue"];
 
-/// List item block for the list gym demo.
-pub struct Block {
+/// Text block widget for the list gym demo.
+pub struct TextBlock {
     /// Color layer name.
     color: String,
-    /// Fixed wrapping width.
-    width: u32,
+    /// Maximum line width (for horizontal scrolling).
+    max_line_width: u32,
     /// Cached wrapped lines.
     lines: Vec<String>,
+    /// Selection state.
+    selected: bool,
 }
 
-impl Block {
-    /// Construct a block for the given index.
+impl Selectable for TextBlock {
+    fn set_selected(&mut self, selected: bool) {
+        self.selected = selected;
+    }
+}
+
+#[derive_commands]
+impl TextBlock {
+    /// Construct a text block for the given index.
     pub fn new(index: usize) -> Self {
         let mut rng = rand::rng();
-        let width = rng.random_range(10..150);
-        let lines = Self::wrap_lines(TEXT, width);
+        let wrap_width = rng.random_range(10..150);
+        let lines = Self::wrap_lines(TEXT, wrap_width);
+        let max_line_width = lines.iter().map(|l| l.len()).max().unwrap_or(0) as u32;
         Self {
             color: String::from(COLORS[index % 2]),
-            width,
+            max_line_width,
             lines,
+            selected: false,
         }
     }
 
-    /// Wrap and pad the block text for the configured width.
+    /// Wrap text to the given width.
     fn wrap_lines(text: &str, width: u32) -> Vec<String> {
         let wrap_width = width.max(1) as usize;
         textwrap::wrap(text, wrap_width)
             .into_iter()
-            .map(|line| format!("{:width$}", line, width = wrap_width))
+            .map(|line| line.to_string())
             .collect()
     }
 }
 
-impl ListItem for Block {
-    fn measure(&self, _available_width: u32) -> Expanse {
-        let height = self.lines.len().max(1) as u32;
-        Expanse::new(self.width.saturating_add(2), height)
+impl Widget for TextBlock {
+    fn layout(&self) -> Layout {
+        // Use intrinsic width for horizontal scrolling support.
+        // Items size to their content width, allowing parent scroll to reveal off-screen text.
+        Layout::column()
     }
 
-    fn render(
-        &mut self,
-        rndr: &mut Render,
-        area: Rect,
-        selected: bool,
-        offset: Point,
-        _full_size: Expanse,
-    ) -> Result<()> {
+    fn measure(&self, c: MeasureConstraints) -> Measurement {
+        let intrinsic_height = self.lines.len().max(1) as u32;
+        // Use intrinsic width for horizontal scrolling (bypass width constraint)
+        let width = self.max_line_width.saturating_add(2);
+        // Clamp height to constraint
+        let height = match c.height {
+            Constraint::Unbounded => intrinsic_height,
+            Constraint::AtMost(n) => intrinsic_height.min(n),
+            Constraint::Exact(n) => n,
+        };
+        Measurement::Fixed(Size::new(width, height))
+    }
+
+    fn canvas(&self, _view: Size<u32>, _ctx: &CanvasContext) -> Size<u32> {
+        // Canvas matches measurement for consistent sizing
+        let height = self.lines.len().max(1) as u32;
+        Size::new(self.max_line_width.saturating_add(2), height)
+    }
+
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        let view = ctx.view();
+        let area = view.view_rect_local();
+
         if area.w == 0 || area.h == 0 {
             return Ok(());
         }
 
-        let visible_start = offset.x;
-        let visible_end = visible_start.saturating_add(area.w);
-
-        if selected && visible_start == 0 {
-            let (active, _) = area.carve_hstart(1);
-            rndr.fill("blue", active, '\u{2588}')?;
+        // Column 0: Selection indicator (when selected)
+        if self.selected {
+            let indicator_rect = Rect::new(0, 0, 1, self.lines.len().max(1) as u32);
+            rndr.fill("list/selected", indicator_rect, '\u{2588}')?;
         }
 
-        let lines = &self.lines;
+        // Column 1: Spacer
+        let spacer = Rect::new(1, 0, 1, self.lines.len().max(1) as u32);
+        rndr.fill("", spacer, ' ')?;
+
+        // Text content starts at column 2
+        // Render full content at local coordinates; the clip handles visibility
         let style = format!("{}/text", self.color);
-        let text_start = 2u32;
-        let text_end = text_start.saturating_add(self.width);
-        let start_line = offset.y as usize;
 
-        for (row, line) in lines
-            .iter()
-            .skip(start_line)
-            .take(area.h as usize)
-            .enumerate()
-        {
-            let row_y = area.tl.y.saturating_add(row as u32);
-            let vis_text_start = text_start.max(visible_start);
-            let vis_text_end = text_end.min(visible_end);
-            if vis_text_start >= vis_text_end {
-                continue;
+        for (idx, line) in self.lines.iter().enumerate() {
+            if !line.is_empty() {
+                let line_rect = Rect::new(2, idx as u32, line.len() as u32, 1);
+                rndr.text(&style, line_rect.line(0), line)?;
             }
-
-            let slice_start = (vis_text_start - text_start) as usize;
-            let slice_len = (vis_text_end - vis_text_start) as usize;
-            let text: String = line.chars().skip(slice_start).take(slice_len).collect();
-            let screen_x = area.tl.x.saturating_add(vis_text_start - visible_start);
-            rndr.text(
-                &style,
-                Line::new(screen_x, row_y, vis_text_end - vis_text_start),
-                &text,
-            )?;
         }
+
         Ok(())
+    }
+
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        true
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("text_block")
     }
 }
 
@@ -193,31 +216,38 @@ impl ListGym {
         c.with_widget(panes_id, |panes: &mut Panes, ctx| {
             panes.insert_col(ctx, frame_id)
         })?;
-        c.set_focus(list_id);
+        // Focus the first focusable item in the list (List itself doesn't accept focus)
+        c.focus_first_in(list_id);
 
         Ok(())
     }
 
     /// Create a framed list column and return (frame, list) node ids.
     fn create_column(c: &mut dyn Context) -> Result<(NodeId, NodeId)> {
-        let nodes: Vec<Block> = (0..10).map(Block::new).collect();
-        let list_id = c.add_orphan(List::new(nodes));
+        let list_id = c.add_orphan(List::<TextBlock>::new());
         let frame_id = c.add_orphan(frame::Frame::new());
         c.mount_child_to(frame_id, list_id)?;
         c.with_layout_of(list_id, &mut |layout| {
-            *layout = Layout::fill();
+            *layout = Layout::fill().overflow_x();
+        })?;
+        // Add initial items
+        c.with_widget(list_id, |list: &mut List<TextBlock>, ctx| {
+            for i in 0..10 {
+                list.append(ctx, TextBlock::new(i))?;
+            }
+            Ok(())
         })?;
         Ok((frame_id, list_id))
     }
 
     /// Execute a closure with mutable access to the list widget.
-    fn with_list<F>(&self, c: &mut dyn Context, mut f: F) -> Result<()>
+    fn with_list<F, R>(&self, c: &mut dyn Context, mut f: F) -> Result<R>
     where
-        F: FnMut(&mut List<Block>) -> Result<()>,
+        F: FnMut(&mut List<TextBlock>, &mut dyn Context) -> Result<R>,
     {
         self.ensure_tree(c)?;
         let list_id = Self::list_id(c)?;
-        c.with_widget(list_id, |list: &mut List<Block>, _ctx| f(list))
+        c.with_widget(list_id, |list: &mut List<TextBlock>, ctx| f(list, ctx))
     }
 
     /// Panes node id, if initialized.
@@ -281,9 +311,9 @@ impl ListGym {
     #[command]
     /// Add an item after the current focus.
     pub fn add_item(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.with_list(c, |list| {
+        self.with_list(c, |list, ctx| {
             let index = list.selected_index().unwrap_or(0) + 1;
-            list.insert_after(Block::new(index));
+            list.insert(ctx, index, TextBlock::new(index))?;
             Ok(())
         })
     }
@@ -291,9 +321,9 @@ impl ListGym {
     #[command]
     /// Add an item at the end of the list.
     pub fn append_item(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.with_list(c, |list| {
+        self.with_list(c, |list, ctx| {
             let index = list.len();
-            list.append(Block::new(index));
+            list.append(ctx, TextBlock::new(index))?;
             Ok(())
         })
     }
@@ -301,8 +331,8 @@ impl ListGym {
     #[command]
     /// Clear all items from the list.
     pub fn clear(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.with_list(c, |list| {
-            list.clear();
+        self.with_list(c, |list, ctx| {
+            list.clear(ctx)?;
             Ok(())
         })
     }
@@ -316,7 +346,8 @@ impl ListGym {
         c.with_widget(panes_id, |panes: &mut Panes, ctx| {
             panes.insert_col(ctx, frame_id)
         })?;
-        c.set_focus(list_id);
+        // Focus the first focusable item in the new list
+        c.focus_first_in(list_id);
         Ok(())
     }
 
@@ -359,7 +390,7 @@ impl Widget for ListGym {
 
 impl Loader for ListGym {
     fn load(c: &mut Canopy) {
-        c.add_commands::<List<Block>>();
+        c.add_commands::<List<TextBlock>>();
         c.add_commands::<Self>();
     }
 }
@@ -390,6 +421,8 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
         None,
         Some(AttrSet::default()),
     );
+    // Selection indicator style for list items
+    cnpy.style.add_fg("list/selected", solarized::BLUE);
 
     Binder::new(cnpy)
         .defaults::<Root>()
@@ -534,7 +567,7 @@ mod tests {
 
         let list_node = list_id(&harness);
         let mut len = 0;
-        harness.with_widget(list_node, |list: &mut List<Block>| {
+        harness.with_widget(list_node, |list: &mut List<TextBlock>| {
             len = list.len();
         });
 
@@ -574,7 +607,7 @@ mod tests {
 
         let list_node = list_id(&harness);
         let mut initial_selected = None;
-        harness.with_widget(list_node, |list: &mut List<Block>| {
+        harness.with_widget(list_node, |list: &mut List<TextBlock>| {
             initial_selected = list.selected_index();
         });
 
@@ -582,7 +615,7 @@ mod tests {
         harness.script("list::select_last()")?;
 
         let mut selected = None;
-        harness.with_widget(list_node, |list: &mut List<Block>| {
+        harness.with_widget(list_node, |list: &mut List<TextBlock>| {
             selected = list.selected_index();
         });
 

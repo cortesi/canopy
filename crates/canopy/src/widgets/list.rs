@@ -1,206 +1,238 @@
+//! Widget-based list container.
+//!
+//! A typed list container where items are actual widgets in the tree.
+//! Items participate in focus management and can be composed from other widgets.
+
+use std::marker::PhantomData;
+
 use crate::{
-    Context, ViewContext, command, derive_commands,
+    Context, NodeId, TypedId, ViewContext, command, derive_commands,
     error::Result,
-    geom::{Expanse, Point, Rect},
-    layout::{Constraint, MeasureConstraints, Measurement, Size},
+    layout::{CanvasContext, Constraint, Layout, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
     widget::Widget,
 };
 
-/// ListItem must be implemented by items displayed in a `List`.
-pub trait ListItem {
-    /// Update selection state for the item.
-    fn set_selected(&mut self, _state: bool) {}
-
-    /// Measure the item given an available width.
-    fn measure(&self, available_width: u32) -> Expanse;
-
-    /// Render the item into the list's render buffer.
-    fn render(
-        &mut self,
-        rndr: &mut Render,
-        area: Rect,
-        selected: bool,
-        offset: Point,
-        full_size: Expanse,
-    ) -> Result<()>;
+/// Trait for widgets that can be selected in a list.
+///
+/// Items in a `List` must implement this trait so the list can manage
+/// their selection state. Selection is independent of focus - an item
+/// remains selected even when the list loses focus.
+pub trait Selectable: Widget {
+    /// Set the selection state of this item.
+    fn set_selected(&mut self, selected: bool);
 }
 
-/// Manage and display a list of items.
-pub struct List<N>
-where
-    N: ListItem,
-{
-    /// Stored list items.
-    items: Vec<N>,
-
-    /// The offset of the currently selected item in the list.
+/// A typed list container for widget items.
+///
+/// List items are actual widgets in the tree, enabling composition and focus management.
+/// The list arranges items vertically and supports scrolling.
+///
+/// Items must implement the [`Selectable`] trait so the list can manage their
+/// selection state independently of focus.
+pub struct List<W: Selectable> {
+    /// Item widget node IDs in order.
+    items: Vec<TypedId<W>>,
+    /// Currently selected item index.
     selected: Option<usize>,
+    /// Marker for the widget type.
+    _marker: PhantomData<W>,
+}
+
+impl<W: Selectable> Default for List<W> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive_commands]
-impl<N> List<N>
-where
-    N: ListItem,
-{
-    /// Construct a list from the provided items.
-    pub fn new(items: Vec<N>) -> Self {
-        let mut l = Self {
-            items,
+impl<W: Selectable> List<W> {
+    /// Construct an empty list.
+    pub fn new() -> Self {
+        Self {
+            items: Vec::new(),
             selected: None,
-        };
-        if !l.is_empty() {
-            l.select(0);
+            _marker: PhantomData,
         }
-        l
     }
 
-    /// The number of items in the list.
+    /// Returns true if the list is empty.
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
     }
 
-    /// The number of items in the list.
+    /// Returns the number of items in the list.
     pub fn len(&self) -> usize {
         self.items.len()
     }
 
-    /// Insert an item at the given index.
-    pub fn insert(&mut self, index: usize, mut itm: N) {
-        let clamped_index = index.min(self.len());
-
-        if let Some(sel) = self.selected
-            && clamped_index <= sel
-        {
-            self.selected = Some(sel + 1);
-        }
-
-        itm.set_selected(false);
-        self.items.insert(clamped_index, itm);
-
-        if self.selected.is_none() && !self.is_empty() {
-            self.select(0);
-        }
+    /// Returns the typed ID of the item at the given index.
+    pub fn item(&self, index: usize) -> Option<TypedId<W>> {
+        self.items.get(index).copied()
     }
 
-    /// Insert an item after the current selection.
-    pub fn insert_after(&mut self, itm: N) {
-        if let Some(sel) = self.selected {
-            self.insert(sel + 1, itm);
-        } else {
-            self.insert(0, itm);
-        }
-    }
-
-    /// Append an item to the end of the list.
-    pub fn append(&mut self, itm: N) {
-        self.insert(self.len(), itm);
-    }
-
-    /// Apply a closure to every item in the list.
-    pub fn for_each_mut<F>(&mut self, mut f: F)
-    where
-        F: FnMut(&mut N),
-    {
-        for item in &mut self.items {
-            f(item);
-        }
-    }
-
-    /// The current selected item, if any.
-    pub fn selected(&self) -> Option<&N> {
-        self.selected.and_then(|idx| self.items.get(idx))
-    }
-
-    /// The current selected index, if any.
+    /// Returns the currently selected index.
     pub fn selected_index(&self) -> Option<usize> {
         self.selected
     }
 
-    /// Select an item at a specified offset.
-    pub fn select(&mut self, offset: usize) -> bool {
-        if self.is_empty() {
-            return false;
-        }
-
-        let new_index = offset.min(self.len() - 1);
-
-        if let Some(current) = self.selected
-            && let Some(item) = self.items.get_mut(current)
-        {
-            item.set_selected(false);
-        }
-
-        if let Some(item) = self.items.get_mut(new_index) {
-            item.set_selected(true);
-        }
-        self.selected = Some(new_index);
-
-        true
+    /// Returns the typed ID of the currently selected item.
+    pub fn selected_item(&self) -> Option<TypedId<W>> {
+        self.selected.and_then(|idx| self.items.get(idx).copied())
     }
 
-    /// Delete an item at the specified offset.
-    pub fn delete_item(&mut self, _core: &mut dyn Context, offset: usize) -> Option<N> {
-        if offset >= self.len() {
-            return None;
+    /// Append an item widget to the end of the list.
+    pub fn append(&mut self, ctx: &mut dyn Context, widget: W) -> Result<TypedId<W>>
+    where
+        W: 'static,
+    {
+        let id = ctx.add_orphan_typed(widget);
+        ctx.mount_child(id.into())?;
+        self.items.push(id);
+
+        // Auto-select and focus if this is the first item
+        if self.selected.is_none() {
+            self.update_selection(ctx, Some(self.items.len() - 1));
+            ctx.set_focus(id.into());
         }
 
-        let removed = self.items.remove(offset);
+        Ok(id)
+    }
 
+    /// Insert an item widget at the specified index.
+    pub fn insert(&mut self, ctx: &mut dyn Context, index: usize, widget: W) -> Result<TypedId<W>>
+    where
+        W: 'static,
+    {
+        let clamped = index.min(self.items.len());
+        let was_empty = self.selected.is_none();
+        let id = ctx.add_orphan_typed(widget);
+        ctx.mount_child(id.into())?;
+        self.items.insert(clamped, id);
+
+        // Adjust selection if inserting before current selection
         if let Some(sel) = self.selected {
-            if offset < sel {
+            if clamped <= sel {
+                // Just update index, don't change which item is selected
+                self.selected = Some(sel + 1);
+            }
+        } else if !self.items.is_empty() {
+            self.update_selection(ctx, Some(0));
+        }
+
+        // Focus first item if this was an empty list
+        if was_empty && let Some(first_id) = self.items.first() {
+            ctx.set_focus((*first_id).into());
+        }
+
+        // Sync children order with the arena
+        self.sync_children(ctx)?;
+
+        Ok(id)
+    }
+
+    /// Remove the item at the specified index.
+    pub fn remove(&mut self, ctx: &mut dyn Context, index: usize) -> Result<Option<TypedId<W>>> {
+        if index >= self.items.len() {
+            return Ok(None);
+        }
+
+        let id = self.items.remove(index);
+        ctx.detach_child(id.into())?;
+
+        // Adjust selection
+        if let Some(sel) = self.selected {
+            if index < sel {
                 self.selected = Some(sel - 1);
-            } else if offset == sel {
-                if self.is_empty() {
-                    self.selected = None;
+            } else if index == sel {
+                // The selected item was removed, select the next valid item
+                let new_sel = if self.items.is_empty() {
+                    None
                 } else {
-                    let new_sel = offset.min(self.len() - 1);
-                    self.selected = Some(new_sel);
-                    if let Some(item) = self.items.get_mut(new_sel) {
-                        item.set_selected(true);
-                    }
-                }
+                    Some(sel.min(self.items.len() - 1))
+                };
+                self.update_selection(ctx, new_sel);
             }
         }
 
-        Some(removed)
+        Ok(Some(id))
     }
 
-    /// Clear all items.
+    /// Clear all items from the list.
     #[command(ignore_result)]
-    pub fn clear(&mut self) -> Vec<N> {
+    pub fn clear(&mut self, ctx: &mut dyn Context) -> Result<Vec<TypedId<W>>> {
+        let ids: Vec<_> = self.items.drain(..).collect();
+        for id in &ids {
+            ctx.detach_child((*id).into())?;
+        }
         self.selected = None;
-        self.items.drain(..).collect()
+        Ok(ids)
     }
 
     /// Delete the currently selected item.
     #[command(ignore_result)]
-    pub fn delete_selected(&mut self, core: &mut dyn Context) -> Option<N> {
-        if let Some(sel) = self.selected {
-            self.delete_item(core, sel)
-        } else {
-            None
+    pub fn delete_selected(&mut self, ctx: &mut dyn Context) -> Result<Option<TypedId<W>>> {
+        match self.selected {
+            Some(sel) => self.remove(ctx, sel),
+            None => Ok(None),
         }
+    }
+
+    /// Select an item at the given index.
+    pub fn select(&mut self, ctx: &mut dyn Context, index: usize) {
+        if self.items.is_empty() {
+            return;
+        }
+        self.update_selection(ctx, Some(index.min(self.items.len() - 1)));
+    }
+
+    /// Update selection to a new index, managing item selection states.
+    fn update_selection(&mut self, ctx: &mut dyn Context, new_selected: Option<usize>) {
+        // Clear old selection
+        if let Some(old_idx) = self.selected
+            && let Some(old_id) = self.items.get(old_idx).copied()
+        {
+            ctx.with_widget(old_id.into(), |w: &mut W, _| {
+                w.set_selected(false);
+                Ok(())
+            })
+            .ok();
+        }
+
+        // Set new selection
+        if let Some(new_idx) = new_selected
+            && let Some(new_id) = self.items.get(new_idx).copied()
+        {
+            ctx.with_widget(new_id.into(), |w: &mut W, _| {
+                w.set_selected(true);
+                Ok(())
+            })
+            .ok();
+        }
+
+        self.selected = new_selected;
     }
 
     /// Move selection to the first item.
     #[command]
     pub fn select_first(&mut self, c: &mut dyn Context) {
-        if self.is_empty() {
+        if self.items.is_empty() {
             return;
         }
-        self.select(0);
+        self.update_selection(c, Some(0));
+        self.focus_selected(c);
         self.ensure_selected_visible(c);
     }
 
     /// Move selection to the last item.
     #[command]
     pub fn select_last(&mut self, c: &mut dyn Context) {
-        if self.is_empty() {
+        if self.items.is_empty() {
             return;
         }
-        self.select(self.len());
+        self.update_selection(c, Some(self.items.len() - 1));
+        self.focus_selected(c);
         self.ensure_selected_visible(c);
     }
 
@@ -208,9 +240,10 @@ where
     #[command]
     pub fn select_next(&mut self, c: &mut dyn Context) {
         if let Some(sel) = self.selected
-            && sel + 1 < self.len()
+            && sel + 1 < self.items.len()
         {
-            self.select(sel + 1);
+            self.update_selection(c, Some(sel + 1));
+            self.focus_selected(c);
             self.ensure_selected_visible(c);
         }
     }
@@ -221,8 +254,16 @@ where
         if let Some(sel) = self.selected
             && sel > 0
         {
-            self.select(sel - 1);
+            self.update_selection(c, Some(sel - 1));
+            self.focus_selected(c);
             self.ensure_selected_visible(c);
+        }
+    }
+
+    /// Set focus on the currently selected item.
+    fn focus_selected(&self, c: &mut dyn Context) {
+        if let Some(id) = self.selected_item() {
+            c.set_focus(id.into());
         }
     }
 
@@ -262,15 +303,23 @@ where
         self.page_shift(c, false);
     }
 
+    /// Sync children order with the items vec.
+    fn sync_children(&self, ctx: &mut dyn Context) -> Result<()> {
+        let children: Vec<NodeId> = self.items.iter().map(|id| (*id).into()).collect();
+        ctx.set_children(children)
+    }
+
     /// Ensure the selected item is visible in the view.
     fn ensure_selected_visible(&self, c: &mut dyn Context) {
-        let selected_idx = match self.selected {
-            Some(idx) => idx,
-            None => return,
+        let Some(selected_idx) = self.selected else {
+            return;
         };
 
-        let view_rect = c.view().view_rect();
-        let metrics = self.item_metrics(view_rect.w.max(1));
+        let view = c.view();
+        let view_rect = view.view_rect();
+
+        // Compute item positions by measuring each child
+        let metrics = self.item_metrics(c, view_rect.w.max(1));
         let Some((start, height)) = metrics.get(selected_idx).copied() else {
             return;
         };
@@ -286,17 +335,18 @@ where
 
     /// Move selection by one page and keep it visible.
     fn page_shift(&mut self, c: &mut dyn Context, forward: bool) {
-        if self.is_empty() {
+        if self.items.is_empty() {
             return;
         }
 
-        let view_rect = c.view().view_rect();
+        let view = c.view();
+        let view_rect = view.view_rect();
         if view_rect.h == 0 {
             return;
         }
 
-        let metrics = self.item_metrics(view_rect.w.max(1));
-        let selected_idx = self.selected.unwrap_or(0).min(self.len() - 1);
+        let metrics = self.item_metrics(c, view_rect.w.max(1));
+        let selected_idx = self.selected.unwrap_or(0).min(self.items.len() - 1);
         let Some((start, _height)) = metrics.get(selected_idx).copied() else {
             return;
         };
@@ -309,31 +359,43 @@ where
         };
 
         if let Some(target_idx) = Self::index_at_y(&metrics, target_y) {
-            self.select(target_idx);
+            self.select(c, target_idx);
+            self.focus_selected(c);
             self.ensure_selected_visible(c);
         }
     }
 
-    /// Build (start, height) tuples for each item.
-    fn item_metrics(&self, available_width: u32) -> Vec<(u32, u32)> {
+    /// Build (start_y, height) tuples for each item.
+    fn item_metrics(&self, c: &dyn ViewContext, available_width: u32) -> Vec<(u32, u32)> {
         let mut metrics = Vec::with_capacity(self.items.len());
         let mut y_offset = 0u32;
-        for item in &self.items {
-            let size = item.measure(available_width);
-            metrics.push((y_offset, size.h));
-            y_offset = y_offset.saturating_add(size.h);
+
+        for id in &self.items {
+            // Get the child's layout and compute its height
+            let height = c.node_view((*id).into()).map(|v| v.outer.h).unwrap_or(1);
+
+            metrics.push((y_offset, height));
+            y_offset = y_offset.saturating_add(height);
         }
+
+        // If no layout data yet, estimate with 1-height items
+        if metrics.is_empty() && !self.items.is_empty() {
+            for (i, _) in self.items.iter().enumerate() {
+                metrics.push((i as u32, 1));
+            }
+        }
+
+        let _ = available_width; // Future: could use for responsive layouts
         metrics
     }
 
-    /// Find the item index covering a y coordinate; fallback to last item.
+    /// Find the item index covering a y coordinate.
     fn index_at_y(metrics: &[(u32, u32)], y: u32) -> Option<usize> {
         for (idx, (start, height)) in metrics.iter().enumerate() {
             if y < start.saturating_add(*height) {
                 return Some(idx);
             }
         }
-
         if metrics.is_empty() {
             None
         } else {
@@ -342,78 +404,58 @@ where
     }
 }
 
-impl<N> Widget for List<N>
-where
-    N: ListItem + Send + 'static,
-{
+impl<W: Selectable + Send + 'static> Widget for List<W> {
+    fn layout(&self) -> Layout {
+        Layout::column()
+            .flex_vertical(1)
+            .flex_horizontal(1)
+            .overflow_x()
+    }
+
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
-        let view_rect = view.view_rect();
-        let content_origin = view.content_origin();
-        let scroll = view.tl;
-        let view_bottom = view_rect.tl.y.saturating_add(view_rect.h);
-        rndr.push_layer("list");
-        rndr.fill("", view.view_rect_local(), ' ')?;
+        let area = view.view_rect_local();
 
-        let mut y_offset = 0u32;
-        for (idx, item) in self.items.iter_mut().enumerate() {
-            if y_offset >= view_bottom {
-                break;
-            }
-            let size = item.measure(view_rect.w.max(1));
-            let item_rect = Rect::new(0, y_offset, size.w, size.h);
-            let selected = self.selected == Some(idx);
-            if let Some(visible) = item_rect.intersect(&view_rect) {
-                let offset = Point {
-                    x: visible.tl.x.saturating_sub(item_rect.tl.x),
-                    y: visible.tl.y.saturating_sub(item_rect.tl.y),
-                };
-                let local_rect = Rect::new(
-                    content_origin
-                        .x
-                        .saturating_add(visible.tl.x.saturating_sub(scroll.x)),
-                    content_origin
-                        .y
-                        .saturating_add(visible.tl.y.saturating_sub(scroll.y)),
-                    visible.w,
-                    visible.h,
-                );
-                item.render(rndr, local_rect, selected, offset, size)?;
-            }
-            y_offset = y_offset.saturating_add(size.h);
-        }
+        // Fill background using list style.
+        rndr.fill("list", area, ' ')?;
+
+        // Note: Selection indicator is rendered by item widgets themselves.
+        // Items implement Selectable to update their selection state.
+        // Selection state is managed by the List and persists when focus moves away.
+
         Ok(())
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
+        // For now, defer to intrinsic content sizing
+        // The actual layout will be handled by the column layout
         let available_width = match c.width {
             Constraint::Exact(n) | Constraint::AtMost(n) => n.max(1),
-            Constraint::Unbounded => u32::MAX,
+            Constraint::Unbounded => 100,
         };
 
-        let mut height = 0u32;
-        let mut max_width = 0u32;
-        for item in &self.items {
-            let size = item.measure(available_width);
-            height = height.saturating_add(size.h);
-            max_width = max_width.max(size.w);
-        }
-
-        c.clamp(Size::new(max_width, height))
+        // Estimate based on item count (items will self-measure)
+        let height = self.items.len() as u32;
+        c.clamp(Size::new(available_width, height.max(1)))
     }
 
-    fn canvas(&self, view: Size<u32>, _ctx: &crate::layout::CanvasContext) -> Size<u32> {
-        let available_width = view.width.max(1);
+    fn canvas(&self, view: Size<u32>, ctx: &CanvasContext<'_>) -> Size<u32> {
+        // Sum child canvas heights and find max canvas width for scrolling
+        let mut total_height = 0u32;
+        let mut max_width = view.width;
 
-        let mut height = 0u32;
-        let mut max_width = 0u32;
-        for item in &self.items {
-            let size = item.measure(available_width);
-            height = height.saturating_add(size.h);
-            max_width = max_width.max(size.w);
+        for child in ctx.children() {
+            // Use canvas dimensions for proper scroll support
+            total_height = total_height.saturating_add(child.canvas.height);
+            max_width = max_width.max(child.canvas.width);
         }
 
-        Size::new(max_width, height)
+        Size::new(max_width, total_height.max(1))
+    }
+
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        // List itself doesn't accept focus; items do
+        false
     }
 
     fn name(&self) -> NodeName {
@@ -424,68 +466,128 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Canopy, Loader, testing::harness::Harness};
+    use crate::{Canopy, Loader, testing::harness::Harness, widgets::Text};
 
-    struct TestItem {
-        height: u32,
-    }
-
-    impl ListItem for TestItem {
-        fn measure(&self, _available_width: u32) -> Expanse {
-            Expanse::new(10, self.height)
-        }
-
-        fn render(
-            &mut self,
-            _rndr: &mut Render,
-            _area: Rect,
-            _selected: bool,
-            _offset: Point,
-            _full_size: Expanse,
-        ) -> Result<()> {
-            Ok(())
-        }
-    }
-
-    impl Loader for List<TestItem> {
+    impl Loader for List<Text> {
         fn load(c: &mut Canopy) {
             c.add_commands::<Self>();
         }
     }
 
     #[test]
-    fn test_page_down_moves_selection_and_allows_prev() -> Result<()> {
-        let items = (0..20).map(|_| TestItem { height: 1 }).collect();
-        let root = List::new(items);
-        let mut harness = Harness::builder(root).size(20, 5).build()?;
+    fn test_list_append_and_select() -> Result<()> {
+        let root = List::<Text>::new();
+        let mut harness = Harness::builder(root).size(20, 10).build()?;
+
+        // Add items
+        harness.with_root_widget::<List<Text>, _>(|list| {
+            assert!(list.is_empty());
+            assert_eq!(list.len(), 0);
+        });
+
+        harness.with_root_context(|list: &mut List<Text>, ctx| {
+            list.append(ctx, Text::new("Item 1"))?;
+            list.append(ctx, Text::new("Item 2"))?;
+            list.append(ctx, Text::new("Item 3"))?;
+            Ok(())
+        })?;
+
+        harness.with_root_widget::<List<Text>, _>(|list| {
+            assert_eq!(list.len(), 3);
+            assert_eq!(list.selected_index(), Some(0)); // First item auto-selected
+        });
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_list_navigation() -> Result<()> {
+        let root = List::<Text>::new();
+        let mut harness = Harness::builder(root).size(20, 10).build()?;
+        List::<Text>::load(&mut harness.canopy);
+
+        harness.with_root_context(|list: &mut List<Text>, ctx| {
+            list.append(ctx, Text::new("Item 1"))?;
+            list.append(ctx, Text::new("Item 2"))?;
+            list.append(ctx, Text::new("Item 3"))?;
+            Ok(())
+        })?;
+
         harness.render()?;
 
-        let mut initial = None;
-        harness.with_root_widget::<List<TestItem>, _>(|list| {
-            initial = list.selected_index();
+        // Navigate down
+        harness.script("list::select_next()")?;
+        harness.with_root_widget::<List<Text>, _>(|list| {
+            assert_eq!(list.selected_index(), Some(1));
         });
 
-        for _ in 0..3 {
-            harness.script("list::page_down()")?;
-        }
-
-        let mut after = None;
-        harness.with_root_widget::<List<TestItem>, _>(|list| {
-            after = list.selected_index();
+        // Navigate to last
+        harness.script("list::select_last()")?;
+        harness.with_root_widget::<List<Text>, _>(|list| {
+            assert_eq!(list.selected_index(), Some(2));
         });
 
-        let after_idx = after.expect("selection missing");
-        let initial_idx = initial.unwrap_or(0);
-        assert!(after_idx > initial_idx);
-
+        // Navigate up
         harness.script("list::select_prev()")?;
-
-        let mut final_sel = None;
-        harness.with_root_widget::<List<TestItem>, _>(|list| {
-            final_sel = list.selected_index();
+        harness.with_root_widget::<List<Text>, _>(|list| {
+            assert_eq!(list.selected_index(), Some(1));
         });
 
-        assert_eq!(final_sel, Some(after_idx.saturating_sub(1)));
+        // Navigate to first
+        harness.script("list::select_first()")?;
+        harness.with_root_widget::<List<Text>, _>(|list| {
+            assert_eq!(list.selected_index(), Some(0));
+        });
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_list_remove() -> Result<()> {
+        let root = List::<Text>::new();
+        let mut harness = Harness::builder(root).size(20, 10).build()?;
+
+        harness.with_root_context(|list: &mut List<Text>, ctx| {
+            list.append(ctx, Text::new("Item 1"))?;
+            list.append(ctx, Text::new("Item 2"))?;
+            list.append(ctx, Text::new("Item 3"))?;
+            list.select(ctx, 1); // Select middle item
+            Ok(())
+        })?;
+
+        // Remove selected
+        harness.with_root_context(|list: &mut List<Text>, ctx| {
+            list.remove(ctx, 1)?;
+            Ok(())
+        })?;
+
+        harness.with_root_widget::<List<Text>, _>(|list| {
+            assert_eq!(list.len(), 2);
+            assert_eq!(list.selected_index(), Some(1)); // Selection stays at index 1 (now last item)
+        });
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_list_clear() -> Result<()> {
+        let root = List::<Text>::new();
+        let mut harness = Harness::builder(root).size(20, 10).build()?;
+        List::<Text>::load(&mut harness.canopy);
+
+        harness.with_root_context(|list: &mut List<Text>, ctx| {
+            list.append(ctx, Text::new("Item 1"))?;
+            list.append(ctx, Text::new("Item 2"))?;
+            Ok(())
+        })?;
+
+        harness.render()?;
+        harness.script("list::clear()")?;
+
+        harness.with_root_widget::<List<Text>, _>(|list| {
+            assert!(list.is_empty());
+            assert_eq!(list.selected_index(), None);
+        });
 
         Ok(())
     }

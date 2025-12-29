@@ -5,55 +5,105 @@ use canopy::{
     Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
     error::Result,
     event::{key, mouse},
-    geom::{Expanse, Point, Rect},
-    layout::{Direction, Layout, Sizing},
+    geom::Rect,
+    layout::{Constraint, Direction, Layout, MeasureConstraints, Measurement, Size, Sizing},
     render::Render,
+    state::NodeName,
     style::{effects, solarized},
     widget::Widget,
-    widgets::{Input, Modal, frame, list::*},
+    widgets::{
+        Input, Modal, frame,
+        list::{List, Selectable},
+    },
 };
 
 pub mod store;
 
-/// List item for a todo entry.
-pub struct TodoItem {
+/// Widget for a todo entry.
+pub struct TodoEntry {
     /// Stored todo.
-    todo: store::Todo,
+    pub todo: store::Todo,
+    /// Selection state.
+    selected: bool,
 }
 
-impl TodoItem {
-    pub fn new(t: store::Todo) -> Self {
-        Self { todo: t }
+impl Selectable for TodoEntry {
+    fn set_selected(&mut self, selected: bool) {
+        self.selected = selected;
     }
 }
 
-impl ListItem for TodoItem {
-    fn measure(&self, available_width: u32) -> Expanse {
-        let width = available_width.max(1) as usize;
+#[derive_commands]
+impl TodoEntry {
+    /// Create a new todo entry widget.
+    pub fn new(t: store::Todo) -> Self {
+        Self {
+            todo: t,
+            selected: false,
+        }
+    }
+}
+
+impl Widget for TodoEntry {
+    fn layout(&self) -> Layout {
+        // Flex horizontally but use Measure for height so scrolling works
+        Layout::column().flex_horizontal(1)
+    }
+
+    fn measure(&self, c: MeasureConstraints) -> Measurement {
+        let available_width = match c.width {
+            Constraint::Exact(n) | Constraint::AtMost(n) => n.max(1),
+            Constraint::Unbounded => 80,
+        };
+        let width = available_width as usize;
         let lines = textwrap::wrap(&self.todo.item, width);
         let height = lines.len().max(1) as u32;
-        Expanse::new(available_width.max(1), height)
+        c.clamp(Size::new(available_width, height))
     }
 
-    fn render(
-        &mut self,
-        rndr: &mut Render,
-        area: Rect,
-        selected: bool,
-        _offset: Point,
-        _full_size: Expanse,
-    ) -> Result<()> {
-        let width = area.w.max(1) as usize;
-        let lines = textwrap::wrap(&self.todo.item, width);
-        let style = if selected { "blue/text" } else { "text" };
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        let view = ctx.view();
+        let area = view.view_rect_local();
 
-        for (i, line) in lines.iter().enumerate() {
-            if i as u32 >= area.h {
-                break;
-            }
-            rndr.text(style, area.line(i as u32), line)?;
+        if area.w == 0 || area.h == 0 {
+            return Ok(());
         }
+
+        // Column 0: Selection indicator (when selected)
+        if self.selected && area.w >= 1 {
+            let indicator_rect = Rect::new(area.tl.x, area.tl.y, 1, area.h);
+            rndr.fill("list/selected", indicator_rect, '\u{2588}')?;
+        }
+
+        // Column 1: Spacer
+        if area.w >= 2 {
+            let spacer = Rect::new(area.tl.x + 1, area.tl.y, 1, area.h);
+            rndr.fill("", spacer, ' ')?;
+        }
+
+        // Text content starts at column 2
+        let text_start_x = area.tl.x + 2;
+        let text_visible_width = area.w.saturating_sub(2);
+
+        if text_visible_width > 0 {
+            let width = text_visible_width as usize;
+            let lines = textwrap::wrap(&self.todo.item, width);
+            for (i, line) in lines.iter().enumerate().take(area.h as usize) {
+                let line_rect =
+                    Rect::new(text_start_x, area.tl.y + i as u32, text_visible_width, 1);
+                rndr.text("text", line_rect.line(0), line)?;
+            }
+        }
+
         Ok(())
+    }
+
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        true
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("todo_entry")
     }
 }
 
@@ -122,7 +172,7 @@ impl Todo {
 
         // Create the main content container (list + status bar in column layout)
         let main_content_id = c.add_orphan(MainContent);
-        let list_id = c.add_orphan(List::new(Vec::<TodoItem>::new()));
+        let list_id = c.add_orphan(List::<TodoEntry>::new());
         let frame_id = c.add_orphan(frame::Frame::new());
         c.mount_child_to(frame_id, list_id)?;
 
@@ -160,9 +210,9 @@ impl Todo {
 
         if !self.pending.is_empty() {
             let pending = std::mem::take(&mut self.pending);
-            self.with_list(c, |list, _ctx| {
+            self.with_list(c, |list, ctx| {
                 for item in pending.iter().cloned() {
-                    list.append(TodoItem::new(item));
+                    list.append(ctx, TodoEntry::new(item))?;
                 }
                 Ok(())
             })?;
@@ -223,16 +273,10 @@ impl Todo {
 
     fn with_list<F>(&mut self, c: &mut dyn Context, mut f: F) -> Result<()>
     where
-        F: FnMut(&mut List<TodoItem>, &mut dyn Context) -> Result<()>,
+        F: FnMut(&mut List<TodoEntry>, &mut dyn Context) -> Result<()>,
     {
         let list_id = self.list_id.expect("list not initialized");
-        c.with_widget_mut(list_id, &mut |widget, ctx| {
-            let any = widget as &mut dyn Any;
-            let list = any
-                .downcast_mut::<List<TodoItem>>()
-                .expect("list type mismatch");
-            f(list, ctx)
-        })
+        c.with_widget(list_id, |list: &mut List<TodoEntry>, ctx| f(list, ctx))
     }
 
     fn with_input<F>(&mut self, c: &mut dyn Context, mut f: F) -> Result<()>
@@ -265,12 +309,20 @@ impl Todo {
 
     #[command]
     pub fn delete_item(&mut self, c: &mut dyn Context) -> Result<()> {
+        // Get the selected item's todo id before deleting
         let mut to_delete = None;
+
         self.with_list(c, |list, ctx| {
-            to_delete = list.selected().map(|item| item.todo.id);
-            let _ = list.delete_selected(ctx);
+            if let Some(item_id) = list.selected_item() {
+                ctx.with_widget(item_id.into(), |entry: &mut TodoEntry, _| {
+                    to_delete = Some(entry.todo.id);
+                    Ok(())
+                })?;
+            }
+            list.delete_selected(ctx)?;
             Ok(())
         })?;
+
         if let Some(id) = to_delete {
             store::get().delete_todo(id).unwrap();
         }
@@ -288,7 +340,7 @@ impl Todo {
         if !value.is_empty() {
             let item = store::get().add_todo(&value).unwrap();
             self.with_list(c, |list, ctx| {
-                list.append(TodoItem::new(item.clone()));
+                list.append(ctx, TodoEntry::new(item.clone()))?;
                 list.select_last(ctx);
                 Ok(())
             })?;
@@ -367,7 +419,7 @@ impl Widget for Todo {
 impl Loader for Todo {
     fn load(c: &mut Canopy) {
         c.add_commands::<Todo>();
-        c.add_commands::<List<TodoItem>>();
+        c.add_commands::<List<TodoEntry>>();
         c.add_commands::<Input>();
     }
 }
@@ -379,8 +431,8 @@ pub fn style(cnpy: &mut Canopy) {
         Some(solarized::BASE1),
         None,
     );
-    // Ensure text under blue layer gets blue foreground
-    cnpy.style.add_fg("blue/text", solarized::BLUE);
+    // Selection indicator style for list items
+    cnpy.style.add_fg("list/selected", solarized::BLUE);
 }
 
 pub fn bind_keys(cnpy: &mut Canopy) {
