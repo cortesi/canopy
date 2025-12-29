@@ -16,6 +16,15 @@ pub trait RenderBackend {
     /// Shift characters within a line starting at the location.
     /// Positive counts insert blanks and shift right, negative counts delete and shift left.
     fn shift_chars(&mut self, loc: geom::Point, count: i32) -> Result<()>;
+    /// Return true if the backend can shift lines within a region.
+    fn supports_line_shift(&self) -> bool {
+        false
+    }
+    /// Shift lines within a region by the provided count.
+    /// Positive counts shift content down, negative counts shift content up.
+    fn shift_lines(&mut self, _top: u32, _bottom: u32, _count: i32) -> Result<()> {
+        Ok(())
+    }
     /// Flush output to the terminal.
     fn flush(&mut self) -> Result<()>;
     /// Exit the process, relinquishing screen control.

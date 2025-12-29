@@ -13,6 +13,8 @@ const NULL: char = '\0';
 
 /// Maximum per-line shift to consider when diffing.
 const MAX_LINE_SHIFT: usize = 8;
+/// Maximum per-row shift to consider when diffing.
+const MAX_ROW_SHIFT: usize = 4;
 
 /// A terminal cell with glyph and style.
 #[derive(Clone, Debug, PartialEq)]
@@ -236,6 +238,32 @@ impl TermBuf {
         if self.size != prev.size {
             return self.render(backend);
         }
+        if backend.supports_line_shift()
+            && let Some(shift) = detect_row_shift(self, prev, MAX_ROW_SHIFT)
+        {
+            let last_row = self.size.h.saturating_sub(1);
+            backend.shift_lines(0, last_row, shift)?;
+            let width = self.size.w as usize;
+            let count = shift.unsigned_abs();
+            if shift > 0 {
+                for y in 0..count {
+                    let row_start = y as usize * width;
+                    let row_end = row_start + width;
+                    let row = &self.cells[row_start..row_end];
+                    render_line_range(backend, row, y, 0, width)?;
+                }
+            } else if shift < 0 {
+                let start = self.size.h.saturating_sub(count);
+                for y in start..self.size.h {
+                    let row_start = y as usize * width;
+                    let row_end = row_start + width;
+                    let row = &self.cells[row_start..row_end];
+                    render_line_range(backend, row, y, 0, width)?;
+                }
+            }
+            backend.flush()?;
+            return Ok(());
+        }
         let width = self.size.w as usize;
         let can_shift = backend.supports_char_shift();
         for y in 0..self.size.h {
@@ -361,6 +389,59 @@ fn detect_line_shift(current: &[Cell], prev: &[Cell], max_shift: usize) -> Optio
     None
 }
 
+/// Check whether two buffers are identical up to a vertical shift.
+fn detect_row_shift(current: &TermBuf, prev: &TermBuf, max_shift: usize) -> Option<i32> {
+    let height = current.size.h as i32;
+    if height == 0 || height != prev.size.h as i32 {
+        return None;
+    }
+
+    let max = max_shift.min(height.saturating_sub(1) as usize);
+    if max == 0 {
+        return None;
+    }
+
+    for shift in 1..=max {
+        let shift = shift as i32;
+        if buffer_matches_shift(current, prev, shift) {
+            return Some(shift);
+        }
+        if buffer_matches_shift(current, prev, -shift) {
+            return Some(-shift);
+        }
+    }
+    None
+}
+
+/// Determine whether two buffers match for a given vertical shift.
+fn buffer_matches_shift(current: &TermBuf, prev: &TermBuf, shift: i32) -> bool {
+    let height = current.size.h as i32;
+    let width = current.size.w as usize;
+    if shift == 0 || shift.unsigned_abs() as i32 >= height {
+        return false;
+    }
+
+    if shift > 0 {
+        for y in shift..height {
+            let row = y as usize * width;
+            let prev_row = (y - shift) as usize * width;
+            if current.cells[row..row + width] != prev.cells[prev_row..prev_row + width] {
+                return false;
+            }
+        }
+    } else {
+        let limit = height + shift;
+        for y in 0..limit {
+            let row = y as usize * width;
+            let prev_row = (y - shift) as usize * width;
+            if current.cells[row..row + width] != prev.cells[prev_row..prev_row + width] {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 /// Determine whether the current line matches the previous line shifted by `shift`.
 fn line_matches_shift(current: &[Cell], prev: &[Cell], shift: i32) -> bool {
     let width = current.len();
@@ -422,6 +503,7 @@ mod tests {
     use super::*;
     use crate::{
         buf,
+        geom::Line,
         style::{AttrSet, Color, PartialStyle},
         testing::buf::BufTest,
     };
@@ -432,6 +514,17 @@ mod tests {
             bg: Color::Black,
             attrs: AttrSet::default(),
         }
+    }
+
+    fn buf_from_rows(rows: &[&str]) -> TermBuf {
+        let height = rows.len() as u32;
+        let width = rows.first().map(|row| row.len()).unwrap_or(0) as u32;
+        let style = def_style();
+        let mut tb = TermBuf::new(Expanse::new(width, height), ' ', style.clone());
+        for (y, row) in rows.iter().enumerate() {
+            tb.text(&style, Line::new(0, y as u32, width), row);
+        }
+        tb
     }
 
     #[test]
@@ -509,6 +602,60 @@ mod tests {
         }
     }
 
+    struct ShiftBackend {
+        shift: Option<i32>,
+        text_ops: usize,
+    }
+
+    impl ShiftBackend {
+        fn new() -> Self {
+            Self {
+                shift: None,
+                text_ops: 0,
+            }
+        }
+    }
+
+    impl RenderBackend for ShiftBackend {
+        fn style(&mut self, _s: &Style) -> Result<()> {
+            Ok(())
+        }
+
+        fn text(&mut self, _loc: Point, _txt: &str) -> Result<()> {
+            self.text_ops += 1;
+            Ok(())
+        }
+
+        fn supports_char_shift(&self) -> bool {
+            false
+        }
+
+        fn shift_chars(&mut self, _loc: Point, _count: i32) -> Result<()> {
+            Ok(())
+        }
+
+        fn supports_line_shift(&self) -> bool {
+            true
+        }
+
+        fn shift_lines(&mut self, _top: u32, _bottom: u32, count: i32) -> Result<()> {
+            self.shift = Some(count);
+            Ok(())
+        }
+
+        fn flush(&mut self) -> Result<()> {
+            Ok(())
+        }
+
+        fn exit(&mut self, _code: i32) -> ! {
+            unreachable!()
+        }
+
+        fn reset(&mut self) -> Result<()> {
+            Ok(())
+        }
+    }
+
     #[test]
     fn diff_no_change() {
         let style = def_style();
@@ -517,6 +664,16 @@ mod tests {
         let mut be = RecBackend::new();
         tb2.diff(&tb1, &mut be).unwrap();
         assert!(be.ops.is_empty());
+    }
+
+    #[test]
+    fn diff_vertical_shift_uses_scroll() {
+        let prev = buf_from_rows(&["aaa", "bbb", "ccc"]);
+        let cur = buf_from_rows(&["xxx", "aaa", "bbb"]);
+        let mut be = ShiftBackend::new();
+        cur.diff(&prev, &mut be).unwrap();
+        assert_eq!(be.shift, Some(1));
+        assert_eq!(be.text_ops, 1);
     }
 
     #[test]

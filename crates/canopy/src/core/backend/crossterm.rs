@@ -199,12 +199,16 @@ impl RenderBackend for CrosstermRender {
         true
     }
 
+    fn supports_line_shift(&self) -> bool {
+        true
+    }
+
     fn shift_chars(&mut self, loc: Point, count: i32) -> Result<()> {
         if count == 0 {
             return Ok(());
         }
 
-        let count_abs = count.unsigned_abs();
+        let count_abs = count.unsigned_abs().min(u16::MAX as u32) as u16;
         translate_result(self.fp.queue(ccursor::MoveTo(loc.x as u16, loc.y as u16)))?;
         let seq = if count > 0 {
             format!("\x1b[{count_abs}@")
@@ -212,6 +216,19 @@ impl RenderBackend for CrosstermRender {
             format!("\x1b[{count_abs}P")
         };
         translate_result(self.fp.queue(style::Print(seq)))?;
+        Ok(())
+    }
+
+    fn shift_lines(&mut self, _top: u32, _bottom: u32, count: i32) -> Result<()> {
+        if count == 0 {
+            return Ok(());
+        }
+        let count_abs = count.unsigned_abs().min(u16::MAX as u32) as u16;
+        if count > 0 {
+            translate_result(self.fp.queue(terminal::ScrollDown(count_abs)))?;
+        } else {
+            translate_result(self.fp.queue(terminal::ScrollUp(count_abs)))?;
+        }
         Ok(())
     }
 
