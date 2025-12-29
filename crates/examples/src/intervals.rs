@@ -4,13 +4,13 @@ use canopy::{
     Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
     error::Result,
     event::{key, mouse},
-    layout::{Edges, Layout, MeasureConstraints, Measurement, Size, Sizing},
+    layout::{Edges, Layout, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
     style::{AttrSet, solarized},
     widget::Widget,
     widgets::{
-        Box, Center, Text, boxed, frame,
+        Box, Center, Text, VStack, boxed, frame,
         list::{List, Selectable},
     },
 };
@@ -206,47 +206,20 @@ impl Intervals {
             return;
         }
 
-        let content_id = c
-            .add_child(frame::Frame::new())
-            .expect("Failed to mount content frame");
-        let list_id = c
-            .add_child_to(content_id, List::<CounterItem>::new())
-            .expect("Failed to mount list");
-        let status_id = c.add_child(StatusBar).expect("Failed to mount statusbar");
-
-        c.with_layout(&mut |layout| {
-            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
-        })
-        .expect("Failed to configure layout");
-        c.with_layout_of(content_id, &mut |layout| {
-            layout.width = Sizing::Flex(1);
-            layout.height = Sizing::Flex(1);
-        })
-        .expect("Failed to configure content layout");
-        c.with_layout_of(list_id, &mut |layout| {
-            *layout = Layout::fill();
-        })
-        .expect("Failed to configure list layout");
-        c.with_layout_of(status_id, &mut |layout| {
-            *layout = Layout::row().flex_horizontal(1).fixed_height(1);
-        })
-        .expect("Failed to configure status layout");
-    }
-
-    /// Content frame node id.
-    fn content_id(c: &dyn Context) -> Option<NodeId> {
-        c.children().first().copied()
+        let list_id = c.add_orphan(List::<CounterItem>::new());
+        let frame_id = frame::Frame::wrap(c, list_id).expect("Failed to wrap frame");
+        let status_id = c.add_orphan(StatusBar);
+        c.add_child(
+            VStack::new()
+                .push_flex(frame_id, 1)
+                .push_fixed(status_id, 1),
+        )
+        .expect("Failed to mount layout");
     }
 
     /// List node id inside the content frame.
     fn list_id(c: &dyn Context) -> Option<NodeId> {
-        let content_id = Self::content_id(c)?;
-        let children = c.children_of(content_id);
-        match children.as_slice() {
-            [] => None,
-            [list_id] => Some(*list_id),
-            _ => panic!("expected a single list child"),
-        }
+        c.find_node("*/frame/list")
     }
 
     /// Execute a closure with mutable access to the list widget.

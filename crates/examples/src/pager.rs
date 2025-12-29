@@ -4,7 +4,7 @@ use canopy::{
     Binder, Canopy, Context, Loader, ViewContext, derive_commands,
     error::Result,
     event::{key, mouse},
-    layout::{Layout, Sizing},
+    layout::Layout,
     render::Render,
     widget::Widget,
     widgets::{Root, Text, frame},
@@ -31,26 +31,14 @@ impl Pager {
             return;
         }
 
-        let frame_id = c
-            .add_child(frame::Frame::new())
-            .expect("Failed to mount frame");
-        let text_id = c
-            .add_child_to(frame_id, Text::new(self.contents.clone()))
-            .expect("Failed to mount text");
+        let text_id = c.add_orphan(Text::new(self.contents.clone()));
+        let frame_id = frame::Frame::wrap(c, text_id).expect("Failed to wrap frame");
+        c.mount_child(frame_id).expect("Failed to mount frame");
 
         c.with_layout(&mut |layout| {
-            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
-        })
-        .expect("Failed to configure layout");
-        c.with_layout_of(frame_id, &mut |layout| {
-            layout.width = Sizing::Flex(1);
-            layout.height = Sizing::Flex(1);
-        })
-        .expect("Failed to configure frame layout");
-        c.with_layout_of(text_id, &mut |layout| {
             *layout = Layout::fill();
         })
-        .expect("Failed to configure text layout");
+        .expect("Failed to configure layout");
     }
 }
 

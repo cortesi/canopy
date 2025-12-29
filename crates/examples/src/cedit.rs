@@ -4,7 +4,7 @@ use canopy::{
     Binder, Canopy, Context, Loader, ViewContext, derive_commands,
     error::Result,
     event::key,
-    layout::{Layout, Sizing},
+    layout::Layout,
     render::Render,
     widget::Widget,
     widgets::{Root, editor::Editor, frame},
@@ -31,26 +31,14 @@ impl Ed {
             return;
         }
 
-        let frame_id = c
-            .add_child(frame::Frame::new())
-            .expect("Failed to mount frame");
-        let editor = c
-            .add_child_to(frame_id, Editor::new(&self.contents))
-            .expect("Failed to mount editor");
+        let editor_id = c.add_orphan(Editor::new(&self.contents));
+        let frame_id = frame::Frame::wrap(c, editor_id).expect("Failed to wrap frame");
+        c.mount_child(frame_id).expect("Failed to mount frame");
 
         c.with_layout(&mut |layout| {
-            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
-        })
-        .expect("Failed to configure layout");
-        c.with_layout_of(frame_id, &mut |layout| {
-            layout.width = Sizing::Flex(1);
-            layout.height = Sizing::Flex(1);
-        })
-        .expect("Failed to configure frame layout");
-        c.with_layout_of(editor, &mut |layout| {
             *layout = Layout::fill();
         })
-        .expect("Failed to configure editor layout");
+        .expect("Failed to configure layout");
     }
 }
 

@@ -18,3 +18,6 @@ pub mod stylegym;
 pub mod termgym;
 /// Text display example nodes.
 pub mod test_text;
+
+#[cfg(test)]
+mod tests;

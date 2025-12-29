@@ -230,9 +230,9 @@ impl Stylegym {
         // Create modal if needed
         if self.modal_id.is_none() {
             let modal_id = c.add_orphan(Modal::new());
-            let frame_id = c.add_orphan(frame::Frame::new().with_title("Demo Modal"));
             let text_id = c.add_orphan(ModalContent);
-            c.mount_child_to(frame_id, text_id)?;
+            let frame_id =
+                frame::Frame::wrap_with(c, text_id, frame::Frame::new().with_title("Demo Modal"))?;
             c.mount_child_to(modal_id, frame_id)?;
 
             c.with_layout_of(frame_id, &mut |layout| {
@@ -395,23 +395,29 @@ impl Widget for Stylegym {
         })?;
 
         // Create theme dropdown with its own frame - no fixed height so it can expand
-        let theme_frame_id = c.add_orphan(frame::Frame::new().with_title("Theme"));
+        let theme_dropdown_id = c.add_orphan(Dropdown::new(available_themes()));
+        let theme_frame_id = frame::Frame::wrap_with(
+            c,
+            theme_dropdown_id,
+            frame::Frame::new().with_title("Theme"),
+        )?;
         c.with_layout_of(theme_frame_id, &mut |layout| {
             *layout = Layout::column().flex_horizontal(1).padding(Edges::all(1));
         })?;
-        let theme_dropdown_id = c.add_orphan(Dropdown::new(available_themes()));
-        c.mount_child_to(theme_frame_id, theme_dropdown_id)?;
 
         // Create effects selector with its own frame
-        let effects_frame_id = c.add_orphan(frame::Frame::new().with_title("Effects"));
+        let effects_selector_id = c.add_orphan(Selector::new(available_effects()));
+        let effects_frame_id = frame::Frame::wrap_with(
+            c,
+            effects_selector_id,
+            frame::Frame::new().with_title("Effects"),
+        )?;
         c.with_layout_of(effects_frame_id, &mut |layout| {
             *layout = Layout::column()
                 .flex_horizontal(1)
                 .flex_vertical(1)
                 .padding(Edges::all(1));
         })?;
-        let effects_selector_id = c.add_orphan(Selector::new(available_effects()));
-        c.mount_child_to(effects_frame_id, effects_selector_id)?;
 
         // Mount theme and effects frames to left frame
         c.set_children_of(left_frame_id, vec![theme_frame_id, effects_frame_id])?;
@@ -423,14 +429,12 @@ impl Widget for Stylegym {
         })?;
 
         // Create right frame (demo content)
-        let right_frame_id = c.add_orphan(frame::Frame::new().with_title("Demo"));
+        let demo_content_id = c.add_orphan(DemoContent);
+        let right_frame_id =
+            frame::Frame::wrap_with(c, demo_content_id, frame::Frame::new().with_title("Demo"))?;
         c.with_layout_of(right_frame_id, &mut |layout| {
             *layout = Layout::fill().padding(Edges::all(1));
         })?;
-
-        // Create demo content and mount to right frame
-        let demo_content_id = c.add_orphan(DemoContent);
-        c.mount_child_to(right_frame_id, demo_content_id)?;
 
         // Mount right frame to right container
         c.set_children_of(right_container_id, vec![right_frame_id])?;
@@ -501,34 +505,4 @@ pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
             "stylegym::apply_effects()",
         );
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use canopy::{geom::Expanse, testing::harness::Harness};
-
-    use super::*;
-
-    fn setup_harness(size: Expanse) -> Result<Harness> {
-        let mut harness = Harness::builder(Stylegym::new())
-            .size(size.w, size.h)
-            .build()?;
-        setup_bindings(&mut harness.canopy)?;
-        harness.render()?;
-        Ok(harness)
-    }
-
-    #[test]
-    fn test_stylegym_creates() -> Result<()> {
-        let _harness = setup_harness(Expanse::new(80, 24))?;
-        Ok(())
-    }
-
-    #[test]
-    fn test_stylegym_renders() -> Result<()> {
-        let harness = setup_harness(Expanse::new(80, 24))?;
-        // Just check it rendered without panicking
-        let _buf = harness.buf();
-        Ok(())
-    }
 }

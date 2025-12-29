@@ -11,7 +11,7 @@ use canopy::{
     style::{AttrSet, solarized},
     widget::{EventOutcome, Widget},
     widgets::{
-        Box, Button, Center, Root, Terminal, TerminalConfig, Text, boxed, frame,
+        Box, Button, Center, Root, Terminal, TerminalConfig, Text, VStack, boxed, frame,
         list::{List, Selectable},
     },
 };
@@ -134,27 +134,6 @@ impl Widget for TerminalStack {
     }
 }
 
-/// Sidebar container that owns the button and terminal list.
-struct Sidebar;
-
-#[derive_commands]
-impl Sidebar {
-    /// Construct a sidebar container.
-    fn new() -> Self {
-        Self
-    }
-}
-
-impl Widget for Sidebar {
-    fn layout(&self) -> Layout {
-        Layout::column().flex_vertical(1)
-    }
-
-    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
-        Ok(())
-    }
-}
-
 /// Multi-terminal demo widget.
 pub struct TermGym {
     /// Node ID for the terminal list widget.
@@ -195,17 +174,20 @@ impl TermGym {
         let button_id = c.add_orphan(
             Button::new("+ New terminal").with_command(Self::cmd_new_terminal().call()),
         );
-        let sidebar_id = c.add_orphan(Sidebar::new());
-        c.mount_child_to(sidebar_id, button_id)?;
-        c.mount_child_to(sidebar_id, list_id)?;
+        let sidebar_id = c.add_orphan(
+            VStack::new()
+                .push_fixed(button_id, ENTRY_HEIGHT)
+                .push_flex(list_id, 1),
+        );
 
         let stack_id = c.add_orphan(TerminalStack::new());
-        let term_frame_id = c.add_orphan(
+        let term_frame_id = frame::Frame::wrap_with(
+            c,
+            stack_id,
             frame::Frame::new()
                 .with_glyphs(boxed::ROUND_THICK)
                 .with_title("terminal"),
-        );
-        c.mount_child_to(term_frame_id, stack_id)?;
+        )?;
 
         c.set_children(vec![sidebar_id, term_frame_id])?;
 
@@ -214,15 +196,6 @@ impl TermGym {
         })?;
         c.with_layout_of(sidebar_id, &mut |layout| {
             *layout = Layout::column().fixed_width(24).flex_vertical(1);
-        })?;
-        c.with_layout_of(button_id, &mut |layout| {
-            *layout = Layout::fill().fixed_height(ENTRY_HEIGHT);
-        })?;
-        c.with_layout_of(list_id, &mut |layout| {
-            *layout = Layout::fill();
-        })?;
-        c.with_layout_of(stack_id, &mut |layout| {
-            *layout = Layout::stack().flex_horizontal(1).flex_vertical(1);
         })?;
 
         self.list_id = Some(list_id);
