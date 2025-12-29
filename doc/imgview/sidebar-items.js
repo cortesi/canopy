@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Error"],"fn":["bind_keys","create_app","setup_app"],"struct":["ImageView"],"type":["Result"]};
