@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["setup_bindings"],"struct":["IntervalItem","Intervals","StatusBar"]};
+window.SIDEBAR_ITEMS = {"fn":["setup_bindings"],"struct":["CounterItem","Intervals","StatusBar"]};

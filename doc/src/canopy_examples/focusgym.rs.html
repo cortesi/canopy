@@ -49,7 +49,7 @@
 <a href=#49 id=49 data-nosnippet>49</a>        <span class="kw">let </span>adjust_horizontal = <span class="kw">match </span>parent_dir {
 <a href=#50 id=50 data-nosnippet>50</a>            <span class="prelude-val">Some</span>(Direction::Row) =&gt; <span class="bool-val">true</span>,
 <a href=#51 id=51 data-nosnippet>51</a>            <span class="prelude-val">Some</span>(Direction::Column) =&gt; <span class="bool-val">false</span>,
-<a href=#52 id=52 data-nosnippet>52</a>            <span class="prelude-val">None </span>=&gt; <span class="self">self</span>.horizontal,
+<a href=#52 id=52 data-nosnippet>52</a>            <span class="prelude-val">Some</span>(Direction::Stack) | <span class="prelude-val">None </span>=&gt; <span class="self">self</span>.horizontal,
 <a href=#53 id=53 data-nosnippet>53</a>        };
 <a href=#54 id=54 data-nosnippet>54</a>
 <a href=#55 id=55 data-nosnippet>55</a>        <span class="kw">let </span>layout = c.layout();

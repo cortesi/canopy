@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["editor","frame","inspector","list","tabs"],"struct":["Input","Panes","Root","Text","TextBuf"]};
+window.SIDEBAR_ITEMS = {"mod":["boxed","button","center","dropdown","editor","frame","inspector","list","modal","selector","tabs","terminal"],"struct":["Input","Panes","Root","Text","TextBuf"]};

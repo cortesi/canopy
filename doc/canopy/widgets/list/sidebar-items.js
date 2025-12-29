@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["List"],"trait":["ListItem"]};
+window.SIDEBAR_ITEMS = {"struct":["List"],"trait":["Selectable"]};

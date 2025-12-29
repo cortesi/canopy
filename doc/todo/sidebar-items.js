@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["bind_keys","create_app","open_store","setup_app","style"],"mod":["store"],"struct":["Overlay","Spacer","StatusBar","Todo","TodoItem"]};
+window.SIDEBAR_ITEMS = {"fn":["bind_keys","create_app","open_store","setup_app","style"],"mod":["store"],"struct":["StatusBar","Todo","TodoEntry"]};
