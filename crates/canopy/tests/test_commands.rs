@@ -63,7 +63,7 @@ mod tests {
         let leaf_id = core.add(TestLeaf);
         let branch_id = core.add(TestBranch);
         core.set_children(branch_id, vec![leaf_id])?;
-        core.set_children(core.root, vec![branch_id])?;
+        core.set_children(core.root_id(), vec![branch_id])?;
 
         let result = dispatch(
             &mut core,

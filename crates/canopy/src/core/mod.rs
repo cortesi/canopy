@@ -47,6 +47,8 @@ pub mod inputmap;
 pub mod poll;
 /// Terminal buffer types.
 pub mod termbuf;
+/// Text utilities.
+pub mod text;
 /// World state and layout integration.
 pub mod world;
 
@@ -55,6 +57,6 @@ pub use binder::{Binder, DefaultBindings};
 pub use canopy::{Canopy, Loader};
 pub use context::{Context, ViewContext};
 pub use id::{NodeId, TypedId};
-pub use inputmap::{InputMap, InputMode, InputSpec};
+pub use inputmap::{BindingTarget, InputMap, InputMode, InputSpec};
 pub use poll::Poller;
 pub use world::Core;

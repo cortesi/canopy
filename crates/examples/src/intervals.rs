@@ -64,7 +64,7 @@ impl CounterItem {
     pub fn tick(&mut self, ctx: &mut dyn Context) -> Result<()> {
         self.value = self.value.saturating_add(1);
         self.sync_label(ctx)?;
-        ctx.taint();
+        ctx.invalidate_layout();
         Ok(())
     }
 

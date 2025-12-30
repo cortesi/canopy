@@ -176,9 +176,18 @@ mod tests {
         h.canopy.set_root_size(Expanse::new(10, 10))?;
         h.render()?;
 
-        let bottom_view = h.canopy.core.nodes[bottom].view;
+        let bottom_view = h.canopy.core.node(bottom).expect("node missing").view();
         assert!(bottom_view.outer.is_zero());
-        assert_eq!(h.canopy.core.nodes[bottom].rect.tl.y, 10);
+        assert_eq!(
+            h.canopy
+                .core
+                .node(bottom)
+                .expect("node missing")
+                .rect()
+                .tl
+                .y,
+            10
+        );
 
         Ok(())
     }
@@ -200,23 +209,30 @@ mod tests {
         h.canopy.set_root_size(Expanse::new(123, 31))?;
         h.render()?;
 
-        for node in h.canopy.core.nodes.values() {
-            if let Some(min_width) = node.layout.min_width
+        let mut stack = vec![h.root];
+        while let Some(node_id) = stack.pop() {
+            let node = h.canopy.core.node(node_id).expect("node missing");
+            for child in node.children().iter().rev() {
+                stack.push(*child);
+            }
+            let layout = node.layout();
+            let view = node.view();
+            if let Some(min_width) = layout.min_width
                 && min_width >= 1
             {
                 assert!(
-                    node.view.outer.w >= 1,
+                    view.outer.w >= 1,
                     "node {:?} width unexpectedly below min size",
-                    node.name
+                    node.name()
                 );
             }
-            if let Some(min_height) = node.layout.min_height
+            if let Some(min_height) = layout.min_height
                 && min_height >= 1
             {
                 assert!(
-                    node.view.outer.h >= 1,
+                    view.outer.h >= 1,
                     "node {:?} height unexpectedly below min size",
-                    node.name
+                    node.name()
                 );
             }
         }

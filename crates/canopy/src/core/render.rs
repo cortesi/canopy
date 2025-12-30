@@ -1,5 +1,6 @@
 use super::termbuf::TermBuf;
 use crate::{
+    core::text,
     error::Result,
     geom,
     style::{AttrSet, Color, Style, StyleEffect, StyleManager, StyleMap},
@@ -73,7 +74,7 @@ pub struct Render<'a> {
     /// Translation offset from canvas coordinates to buffer coordinates.
     origin: Offset,
     /// Current effect stack, applied in order to resolved styles.
-    effects: Vec<&'a dyn StyleEffect>,
+    effects: &'a [Box<dyn StyleEffect>],
 }
 
 impl<'a> Render<'a> {
@@ -94,7 +95,7 @@ impl<'a> Render<'a> {
             stylemap,
             clip: rect,
             origin: Offset::between(geom::Point::zero(), rect.tl),
-            effects: Vec::new(),
+            effects: &[],
         }
     }
 
@@ -112,13 +113,13 @@ impl<'a> Render<'a> {
             stylemap,
             clip,
             origin: Offset::between(screen_origin, clip.tl),
-            effects: Vec::new(),
+            effects: &[],
         }
     }
 
     /// Set the effect stack for this renderer.
-    pub fn with_effects(mut self, effects: &[&'a dyn StyleEffect]) -> Self {
-        self.effects = effects.to_vec();
+    pub fn with_effects(mut self, effects: &'a [Box<dyn StyleEffect>]) -> Self {
+        self.effects = effects;
         self
     }
 
@@ -126,7 +127,7 @@ impl<'a> Render<'a> {
     /// Use this when you have a Style from a source other than the style manager.
     pub fn apply_effects(&self, style: Style) -> Style {
         let mut result = style;
-        for effect in &self.effects {
+        for effect in self.effects {
             result = effect.apply(result);
         }
         result
@@ -177,17 +178,7 @@ impl<'a> Render<'a> {
             let skip_amount = intersection.tl.x.saturating_sub(l.tl.x) as usize;
             let take_amount = intersection.w as usize;
 
-            let start_byte = txt
-                .char_indices()
-                .nth(skip_amount)
-                .map(|(i, _)| i)
-                .unwrap_or(txt.len());
-            let end_byte = txt
-                .char_indices()
-                .nth(skip_amount + take_amount)
-                .map(|(i, _)| i)
-                .unwrap_or(txt.len());
-            let out = &txt[start_byte..end_byte];
+            let (out, out_width) = text::slice_by_columns(txt, skip_amount, take_amount);
 
             let adjusted_line = geom::Line {
                 tl: self.translate_point(intersection.tl),
@@ -197,7 +188,6 @@ impl<'a> Render<'a> {
             self.buffer_mut().text(&style_res, adjusted_line, out);
 
             // Pad with spaces if needed
-            let out_width = out.chars().count();
             if out_width < adjusted_line.w as usize {
                 let pad_rect = geom::Rect::new(
                     adjusted_line.tl.x + out_width as u32,

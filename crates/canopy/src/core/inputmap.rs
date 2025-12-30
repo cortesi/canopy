@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    error::{self, Result},
+    commands::CommandInvocation,
+    error::Result,
     event::{key::Key, mouse::Mouse},
     path::*,
     script,
@@ -15,8 +16,17 @@ const DEFAULT_MODE: &str = "";
 struct BoundAction {
     /// Path matcher for the binding.
     pathmatch: PathMatcher,
+    /// Action to execute.
+    action: BindingTarget,
+}
+
+/// A resolved input binding target.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BindingTarget {
     /// Script identifier to execute.
-    script: script::ScriptId,
+    Script(script::ScriptId),
+    /// Direct command invocation.
+    Command(CommandInvocation),
 }
 
 /// Input event used for bindings.
@@ -54,25 +64,32 @@ impl InputMode {
     }
 
     /// Insert a key binding into this mode
-    fn insert(&mut self, path_filter: PathMatcher, input: InputSpec, script: script::ScriptId) {
+    fn insert(&mut self, path_filter: PathMatcher, input: InputSpec, action: BindingTarget) {
         self.inputs.entry(input).or_default().push(BoundAction {
             pathmatch: path_filter,
-            script,
+            action,
         });
     }
 
-    /// Resolve a key with a given path filter to a script.
-    pub fn resolve(&self, path: &Path, input: &InputSpec) -> Option<script::ScriptId> {
+    /// Resolve a key with a given path filter to a binding target.
+    pub fn resolve(&self, path: &Path, input: &InputSpec) -> Option<BindingTarget> {
         let input = input.normalize();
-        let mut ret = (0, None);
-        for k in self.inputs.get(&input)? {
-            if let Some(p) = k.pathmatch.check(path)
-                && (ret.1.is_none() || p > ret.0)
-            {
-                ret = (p, Some(k.script));
+        let mut best: Option<(usize, usize, usize, BindingTarget)> = None;
+        for (idx, k) in self.inputs.get(&input)?.iter().enumerate() {
+            if let Some(m) = k.pathmatch.check_match(path) {
+                let score = (m.end, m.len, idx);
+                let replace = match best {
+                    Some((best_end, best_len, best_idx, _)) => {
+                        score > (best_end, best_len, best_idx)
+                    }
+                    None => true,
+                };
+                if replace {
+                    best = Some((score.0, score.1, score.2, k.action.clone()));
+                }
             }
         }
-        ret.1
+        best.map(|(_, _, _, action)| action)
     }
 }
 
@@ -112,20 +129,29 @@ impl InputMap {
     #[allow(dead_code)]
     /// Set the current input mode.
     pub fn set_mode(&mut self, mode: &str) -> Result<()> {
-        if !mode.is_empty() && !self.modes.contains_key(mode) {
-            Err(error::Error::Invalid(format!("Unknown mode: {mode}")))
-        } else {
-            self.current_mode = mode.to_string();
-            Ok(())
+        if mode.is_empty() {
+            self.current_mode = DEFAULT_MODE.into();
+            return Ok(());
         }
+        self.modes
+            .entry(mode.to_string())
+            .or_insert_with(InputMode::new);
+        self.current_mode = mode.to_string();
+        Ok(())
     }
 
     /// Resolve a binding in the current mode.
-    pub fn resolve(&self, path: &Path, input: &InputSpec) -> Option<script::ScriptId> {
+    pub fn resolve(&self, path: &Path, input: &InputSpec) -> Option<BindingTarget> {
         // Unwrap is safe, because we make it impossible for our current mode to
         // be non-existent.
         let m = self.modes.get(&self.current_mode).unwrap();
-        m.resolve(path, input)
+        if let Some(action) = m.resolve(path, input) {
+            return Some(action);
+        }
+        if self.current_mode != DEFAULT_MODE {
+            return self.modes.get(DEFAULT_MODE)?.resolve(path, input);
+        }
+        None
     }
 
     /// Bind a key, within a given mode, with a given context to a list of commands.
@@ -136,10 +162,32 @@ impl InputMap {
         path_filter: &str,
         script: script::ScriptId,
     ) -> Result<()> {
+        self.bind_action(mode, input, path_filter, BindingTarget::Script(script))
+    }
+
+    /// Bind a key, within a given mode, with a given context to a direct command invocation.
+    pub fn bind_command(
+        &mut self,
+        mode: &str,
+        input: InputSpec,
+        path_filter: &str,
+        command: CommandInvocation,
+    ) -> Result<()> {
+        self.bind_action(mode, input, path_filter, BindingTarget::Command(command))
+    }
+
+    /// Store a key binding action for a mode and path filter.
+    fn bind_action(
+        &mut self,
+        mode: &str,
+        input: InputSpec,
+        path_filter: &str,
+        action: BindingTarget,
+    ) -> Result<()> {
         self.modes
             .entry(mode.to_string())
             .or_insert_with(InputMode::new)
-            .insert(PathMatcher::new(path_filter)?, input, script);
+            .insert(PathMatcher::new(path_filter)?, input, action);
         Ok(())
     }
 }
@@ -155,17 +203,21 @@ mod tests {
         let mut m = InputMode::new();
         let a_foo = e.compile("x()")?;
 
-        m.insert(PathMatcher::new("foo")?, InputSpec::Key('A'.into()), a_foo);
+        m.insert(
+            PathMatcher::new("foo")?,
+            InputSpec::Key('A'.into()),
+            BindingTarget::Script(a_foo),
+        );
 
         assert_eq!(
             m.resolve(&"foo".into(), &InputSpec::Key(key::Shift + 'A'))
                 .unwrap(),
-            a_foo
+            BindingTarget::Script(a_foo)
         );
         assert_eq!(
             m.resolve(&"foo".into(), &InputSpec::Key(key::Shift + 'a'))
                 .unwrap(),
-            a_foo
+            BindingTarget::Script(a_foo)
         );
 
         Ok(())
@@ -179,29 +231,41 @@ mod tests {
         let a_foo = e.compile("x()")?;
         let a_bar = e.compile("x()")?;
         let b = e.compile("x()")?;
-        m.insert(PathMatcher::new("foo")?, InputSpec::Key('a'.into()), a_foo);
-        m.insert(PathMatcher::new("bar")?, InputSpec::Key('a'.into()), a_bar);
-        m.insert(PathMatcher::new("")?, InputSpec::Key('b'.into()), b);
+        m.insert(
+            PathMatcher::new("foo")?,
+            InputSpec::Key('a'.into()),
+            BindingTarget::Script(a_foo),
+        );
+        m.insert(
+            PathMatcher::new("bar")?,
+            InputSpec::Key('a'.into()),
+            BindingTarget::Script(a_bar),
+        );
+        m.insert(
+            PathMatcher::new("")?,
+            InputSpec::Key('b'.into()),
+            BindingTarget::Script(b),
+        );
 
         assert_eq!(
             m.resolve(&"foo".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
-            a_foo
+            BindingTarget::Script(a_foo)
         );
         assert_eq!(
             m.resolve(&"bar".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
-            a_bar,
+            BindingTarget::Script(a_bar),
         );
         assert_eq!(
             m.resolve(&"bar/foo".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
-            a_foo,
+            BindingTarget::Script(a_foo),
         );
         assert_eq!(
             m.resolve(&"foo/bar".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
-            a_bar
+            BindingTarget::Script(a_bar)
         );
         assert!(
             m.resolve(&"foo/bar".into(), &InputSpec::Key('x'.into()))
@@ -229,15 +293,62 @@ mod tests {
         assert_eq!(
             m.resolve(&"foo/bar".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
-            a_default
+            BindingTarget::Script(a_default)
         );
         m.set_mode("m")?;
         assert_eq!(
             m.resolve(&"foo/bar".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
-            a_m
+            BindingTarget::Script(a_m)
         );
 
+        Ok(())
+    }
+
+    #[test]
+    fn layered_modes_fall_back_to_default() -> Result<()> {
+        let mut m = InputMap::new();
+        let mut e = script::ScriptHost::new();
+        let a_default = e.compile("x()")?;
+        m.bind("", InputSpec::Key('b'.into()), "", a_default)?;
+        m.set_mode("m")?;
+        assert_eq!(
+            m.resolve(&"foo".into(), &InputSpec::Key('b'.into()))
+                .unwrap(),
+            BindingTarget::Script(a_default)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn binding_precedence_uses_match_length_then_order() -> Result<()> {
+        let mut m = InputMode::new();
+        let mut e = script::ScriptHost::new();
+        let a_short = e.compile("x()")?;
+        let a_long = e.compile("x()")?;
+        let a_last = e.compile("x()")?;
+
+        m.insert(
+            PathMatcher::new("foo")?,
+            InputSpec::Key('a'.into()),
+            BindingTarget::Script(a_short),
+        );
+        m.insert(
+            PathMatcher::new("bar/foo")?,
+            InputSpec::Key('a'.into()),
+            BindingTarget::Script(a_long),
+        );
+        m.insert(
+            PathMatcher::new("bar/foo")?,
+            InputSpec::Key('a'.into()),
+            BindingTarget::Script(a_last),
+        );
+
+        assert_eq!(
+            m.resolve(&"/root/bar/foo".into(), &InputSpec::Key('a'.into()))
+                .unwrap(),
+            BindingTarget::Script(a_last)
+        );
         Ok(())
     }
 }

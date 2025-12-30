@@ -274,7 +274,7 @@ fn parse_path(path: &str) -> Vec<String> {
 }
 
 /// Map of style paths to partial styles.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct StyleMap {
     /// Path-to-style map.
     styles: HashMap<Vec<String>, PartialStyle>,
@@ -333,6 +333,12 @@ impl StyleMap {
     /// Insert a partial style at a path.
     fn insert_style(&mut self, path: &str, style: PartialStyle) {
         self.styles.insert(parse_path(path), style);
+    }
+}
+
+impl Default for StyleMap {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -852,6 +858,17 @@ mod tests {
 
         assert_eq!(resolved.fg, Color::Green);
 
+        Ok(())
+    }
+
+    #[test]
+    fn stylemap_default_is_complete() -> Result<()> {
+        let smap = StyleMap::default();
+        let c = StyleManager::new();
+        let resolved = c.get(&smap, "");
+        assert_eq!(resolved.fg, Color::White);
+        assert_eq!(resolved.bg, Color::Black);
+        assert_eq!(resolved.attrs, AttrSet::default());
         Ok(())
     }
 }

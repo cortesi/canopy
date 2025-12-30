@@ -2,7 +2,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use canopy::{
-    error::Result as CanopyResult, event::key::KeyCode, testing::harness::Harness,
+    NodeId, error::Result as CanopyResult, event::key::KeyCode, testing::harness::Harness,
     widgets::list::List,
 };
 use todo::{Todo, TodoEntry, open_store, setup_app};
@@ -45,15 +45,23 @@ fn del_no_nav(h: &mut Harness, _next: Option<&str>) -> CanopyResult<()> {
     Ok(())
 }
 
+fn find_list_id(h: &Harness) -> NodeId {
+    let core = &h.canopy.core;
+    let mut stack = vec![core.root_id()];
+    while let Some(node_id) = stack.pop() {
+        let node = core.node(node_id).expect("missing node");
+        if *node.name() == "list" {
+            return node_id;
+        }
+        for child in node.children().iter().rev() {
+            stack.push(*child);
+        }
+    }
+    panic!("list node not found");
+}
+
 fn list_len(h: &mut Harness) -> usize {
-    let list_id = h
-        .canopy
-        .core
-        .nodes
-        .iter()
-        .find(|(_, node)| node.name == "list")
-        .map(|(id, _)| id)
-        .expect("list node not found");
+    let list_id = find_list_id(h);
     h.with_widget(list_id, |list: &mut List<TodoEntry>| list.len())
 }
 

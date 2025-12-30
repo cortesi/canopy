@@ -94,6 +94,15 @@ pub struct PathMatcher {
     expr: regex::Regex,
 }
 
+/// Path match metadata used for input precedence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PathMatch {
+    /// End byte index of the match in the path string.
+    pub end: usize,
+    /// Match length in bytes.
+    pub len: usize,
+}
+
 impl PathMatcher {
     /// Compile a path matcher from a filter string.
     pub fn new(path: &str) -> Result<Self> {
@@ -126,7 +135,17 @@ impl PathMatcher {
     /// value to disambiguate when mulitple matches are active for a key - the
     /// path with the largest match position wins.
     pub fn check(&self, path: &Path) -> Option<usize> {
-        Some(self.expr.find(&path.to_string())?.end())
+        self.check_match(path).map(|m| m.end)
+    }
+
+    /// Check whether the path filter matches a given path, returning match metadata.
+    pub fn check_match(&self, path: &Path) -> Option<PathMatch> {
+        let haystack = path.to_string();
+        let mat = self.expr.find(&haystack)?;
+        Some(PathMatch {
+            end: mat.end(),
+            len: mat.end() - mat.start(),
+        })
     }
 }
 

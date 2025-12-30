@@ -11,41 +11,103 @@ use crate::{
 /// Core node data stored in the arena.
 pub struct Node {
     /// Widget behavior and state.
-    pub widget: Option<Box<dyn Widget>>,
+    pub(crate) widget: Option<Box<dyn Widget>>,
 
     /// Parent in the arena tree.
-    pub parent: Option<NodeId>,
+    pub(crate) parent: Option<NodeId>,
     /// Children in the arena tree.
-    pub children: Vec<NodeId>,
+    pub(crate) children: Vec<NodeId>,
 
     /// Cached layout configuration for quick access.
-    pub layout: Layout,
+    pub(crate) layout: Layout,
 
     /// Outer rect relative to the parent content origin.
-    pub rect: Rect,
+    pub(crate) rect: Rect,
     /// Content size (outer minus padding).
-    pub content_size: Expanse,
+    pub(crate) content_size: Expanse,
     /// Canvas size in content coordinates.
-    pub canvas: Expanse,
+    pub(crate) canvas: Expanse,
     /// Scroll offset in content coordinates.
-    pub scroll: Point,
+    pub(crate) scroll: Point,
     /// View information in screen coordinates.
-    pub view: View,
+    pub(crate) view: View,
 
     /// Node visibility.
-    pub hidden: bool,
+    pub(crate) hidden: bool,
     /// Node name for commands and paths.
-    pub name: NodeName,
+    pub(crate) name: NodeName,
     /// Whether polling has been initialized.
-    pub initialized: bool,
+    pub(crate) initialized: bool,
     /// Whether the widget mount hook has run.
-    pub mounted: bool,
+    pub(crate) mounted: bool,
     /// Whether layout configuration should be refreshed from the widget.
-    pub layout_dirty: Cell<bool>,
+    pub(crate) layout_dirty: Cell<bool>,
 
     /// Effects to apply to this node and descendants during rendering.
     /// None for the common case of no effects (avoids per-node Vec allocation).
-    pub effects: Option<Vec<Box<dyn StyleEffect>>>,
+    pub(crate) effects: Option<Vec<Box<dyn StyleEffect>>>,
     /// If true, clear inherited effects before applying local effects.
-    pub clear_inherited_effects: bool,
+    pub(crate) clear_inherited_effects: bool,
+}
+
+impl Node {
+    /// Return the node's widget name.
+    pub fn name(&self) -> &NodeName {
+        &self.name
+    }
+
+    /// Return the node's parent, if any.
+    pub fn parent(&self) -> Option<NodeId> {
+        self.parent
+    }
+
+    /// Return the node's children.
+    pub fn children(&self) -> &[NodeId] {
+        &self.children
+    }
+
+    /// Return the cached layout configuration.
+    pub fn layout(&self) -> Layout {
+        self.layout
+    }
+
+    /// Return the outer rectangle relative to the parent content origin.
+    pub fn rect(&self) -> Rect {
+        self.rect
+    }
+
+    /// Return the content size.
+    pub fn content_size(&self) -> Expanse {
+        self.content_size
+    }
+
+    /// Return the canvas size.
+    pub fn canvas(&self) -> Expanse {
+        self.canvas
+    }
+
+    /// Return the scroll offset.
+    pub fn scroll(&self) -> Point {
+        self.scroll
+    }
+
+    /// Return the view data.
+    pub fn view(&self) -> View {
+        self.view
+    }
+
+    /// Return true if the node is hidden.
+    pub fn hidden(&self) -> bool {
+        self.hidden
+    }
+
+    /// Return true if polling has been initialized.
+    pub fn initialized(&self) -> bool {
+        self.initialized
+    }
+
+    /// Return true if the widget mount hook has run.
+    pub fn mounted(&self) -> bool {
+        self.mounted
+    }
 }

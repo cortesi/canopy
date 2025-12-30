@@ -53,8 +53,9 @@ mod tests {
     }
 
     fn attach_grid(core: &mut Core, grid_root: NodeId, size: Expanse) -> Result<()> {
-        core.set_children(core.root, vec![grid_root])?;
-        core.with_layout_of(core.root, |layout| {
+        let root = core.root_id();
+        core.set_children(root, vec![grid_root])?;
+        core.with_layout_of(root, |layout| {
             *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })?;
         core.with_layout_of(grid_root, |layout| {
@@ -66,8 +67,8 @@ mod tests {
     }
 
     fn get_focused_cell(core: &Core) -> Option<String> {
-        core.focus
-            .and_then(|id| core.nodes.get(id).map(|n| n.name.to_string()))
+        core.focus_id()
+            .and_then(|id| core.node(id).map(|n| n.name().to_string()))
             .filter(|name| name.starts_with("cell_"))
     }
 
@@ -239,10 +240,9 @@ mod tests {
         let first = canopy.core.add(FocusLeaf::new("first"));
         let second = canopy.core.add(FocusLeaf::new("second"));
 
-        canopy
-            .core
-            .set_children(canopy.core.root, vec![first, second])?;
-        canopy.core.with_layout_of(canopy.core.root, |layout| {
+        let root = canopy.core.root_id();
+        canopy.core.set_children(root, vec![first, second])?;
+        canopy.core.with_layout_of(root, |layout| {
             *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })?;
         canopy.core.with_layout_of(first, |layout| {
@@ -260,7 +260,7 @@ mod tests {
         })?;
         canopy.core.update_layout(Expanse::new(10, 10))?;
 
-        assert_eq!(canopy.core.focus, Some(second));
+        assert_eq!(canopy.core.focus_id(), Some(second));
         Ok(())
     }
 }

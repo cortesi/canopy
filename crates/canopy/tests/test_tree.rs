@@ -47,17 +47,18 @@ mod tests {
     fn build_tree(
         core: &mut Core,
     ) -> Result<(NodeId, NodeId, NodeId, NodeId, NodeId, NodeId, NodeId)> {
-        core.set_widget(core.root, TreeWidget::new("r"));
+        let root = core.root_id();
+        core.set_widget(root, TreeWidget::new("r"));
         let ba = core.add(TreeWidget::new("ba"));
         let bb = core.add(TreeWidget::new("bb"));
         let ba_la = core.add(TreeWidget::new("ba_la"));
         let ba_lb = core.add(TreeWidget::new("ba_lb"));
         let bb_la = core.add(TreeWidget::new("bb_la"));
         let bb_lb = core.add(TreeWidget::new("bb_lb"));
-        core.set_children(core.root, vec![ba, bb])?;
+        core.set_children(root, vec![ba, bb])?;
         core.set_children(ba, vec![ba_la, ba_lb])?;
         core.set_children(bb, vec![bb_la, bb_lb])?;
-        Ok((core.root, ba, bb, ba_la, ba_lb, bb_la, bb_lb))
+        Ok((root, ba, bb, ba_la, ba_lb, bb_la, bb_lb))
     }
 
     fn preorder<T>(
@@ -72,8 +73,8 @@ mod tests {
                 Walk::Skip => continue,
                 Walk::Continue => {}
             }
-            if let Some(node) = core.nodes.get(id) {
-                for child in node.children.iter().rev() {
+            if let Some(node) = core.node(id) {
+                for child in node.children().iter().rev() {
                     stack.push(*child);
                 }
             }
@@ -87,8 +88,8 @@ mod tests {
         f: &mut dyn FnMut(NodeId) -> Result<Walk<T>>,
     ) -> Result<Walk<T>> {
         let mut skip_branch = false;
-        if let Some(node) = core.nodes.get(node_id) {
-            for child in node.children.clone() {
+        if let Some(node) = core.node(node_id) {
+            for child in node.children().iter().copied() {
                 match postorder_visit(core, child, f)? {
                     Walk::Continue => {}
                     Walk::Handle(v) => return Ok(Walk::Handle(v)),
@@ -140,7 +141,12 @@ mod tests {
                 build_tree(&mut canopy.core).unwrap();
             let mut v = Vec::new();
             let res = preorder(&canopy.core, root, &mut |id| -> Result<Walk<()>> {
-                let name_str = canopy.core.nodes[id].name.to_string();
+                let name_str = canopy
+                    .core
+                    .node(id)
+                    .expect("node missing")
+                    .name()
+                    .to_string();
                 v.push(name_str.clone());
                 if name_str == name {
                     func.clone()
@@ -197,7 +203,12 @@ mod tests {
                 build_tree(&mut canopy.core).unwrap();
             let mut v = Vec::new();
             let res = postorder(&canopy.core, root, &mut |id| -> Result<Walk<()>> {
-                let name_str = canopy.core.nodes[id].name.to_string();
+                let name_str = canopy
+                    .core
+                    .node(id)
+                    .expect("node missing")
+                    .name()
+                    .to_string();
                 v.push(name_str.clone());
                 if name_str == name {
                     func.clone()
@@ -264,8 +275,9 @@ mod tests {
     }
 
     fn attach_grid(core: &mut Core, grid_root: NodeId, size: Expanse) -> Result<()> {
-        core.set_children(core.root, vec![grid_root])?;
-        core.with_layout_of(core.root, |layout| {
+        let root = core.root_id();
+        core.set_children(root, vec![grid_root])?;
+        core.with_layout_of(root, |layout| {
             *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
         })?;
         core.with_layout_of(grid_root, |layout| {
@@ -302,7 +314,7 @@ mod tests {
                         y: point.1,
                     },
                 )?
-                .and_then(|id| canopy.core.nodes.get(id).map(|n| n.name.to_string()));
+                .and_then(|id| canopy.core.node(id).map(|n| n.name().to_string()));
             assert_eq!(found, Some(expected.to_string()));
         }
 
@@ -334,7 +346,7 @@ mod tests {
                         y: point.1,
                     },
                 )?
-                .and_then(|id| canopy.core.nodes.get(id).map(|n| n.name.to_string()));
+                .and_then(|id| canopy.core.node(id).map(|n| n.name().to_string()));
             assert_eq!(found, Some(expected.to_string()));
         }
 
@@ -357,7 +369,7 @@ mod tests {
                 let found = canopy
                     .core
                     .locate_node(grid.root, Point { x, y })?
-                    .and_then(|id| canopy.core.nodes.get(id).map(|n| n.name.to_string()));
+                    .and_then(|id| canopy.core.node(id).map(|n| n.name().to_string()));
                 assert_eq!(found, Some(expected));
             }
         }
@@ -384,7 +396,7 @@ mod tests {
             let found = canopy
                 .core
                 .locate_node(grid.root, point)?
-                .and_then(|id| canopy.core.nodes.get(id).map(|n| n.name.to_string()));
+                .and_then(|id| canopy.core.node(id).map(|n| n.name().to_string()));
             assert_eq!(found, Some(expected.to_string()));
         }
 
@@ -416,8 +428,8 @@ mod tests {
         let get_focused_cell = |canopy: &Canopy| -> Option<String> {
             canopy
                 .core
-                .focus
-                .and_then(|id| canopy.core.nodes.get(id).map(|n| n.name.to_string()))
+                .focus_id()
+                .and_then(|id| canopy.core.node(id).map(|n| n.name().to_string()))
         };
 
         canopy.core.focus_first(grid.root);

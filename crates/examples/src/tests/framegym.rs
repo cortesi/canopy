@@ -11,9 +11,10 @@ fn test_framegym_basic() -> Result<()> {
     let pattern_id = harness
         .find_node("*/frame/test_pattern")
         .expect("missing pattern");
-    let frame_view = harness.canopy.core.nodes[frame_id].view;
-    let pattern_view = harness.canopy.core.nodes[pattern_id].view;
-    let frame_layout = &harness.canopy.core.nodes[frame_id].layout;
+    let core = &harness.canopy.core;
+    let frame_view = core.node(frame_id).expect("missing frame").view();
+    let pattern_view = core.node(pattern_id).expect("missing pattern").view();
+    let frame_layout = core.node(frame_id).expect("missing frame").layout();
 
     assert_eq!(pattern_view.outer.tl.x, frame_view.content.tl.x);
     assert_eq!(pattern_view.outer.tl.y, frame_view.content.tl.y);

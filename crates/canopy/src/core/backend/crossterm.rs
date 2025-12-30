@@ -297,7 +297,7 @@ fn translate_event(e: cevent::Event) -> Event {
                 cevent::KeyCode::KeypadBegin => key::KeyCode::KeypadBegin,
                 cevent::KeyCode::Media(k) => key::KeyCode::Media(match k {
                     cevent::MediaKeyCode::Play => key::MediaKeyCode::Play,
-                    cevent::MediaKeyCode::Pause => key::MediaKeyCode::Play,
+                    cevent::MediaKeyCode::Pause => key::MediaKeyCode::Pause,
                     cevent::MediaKeyCode::PlayPause => key::MediaKeyCode::PlayPause,
                     cevent::MediaKeyCode::Reverse => key::MediaKeyCode::Reverse,
                     cevent::MediaKeyCode::Stop => key::MediaKeyCode::Stop,

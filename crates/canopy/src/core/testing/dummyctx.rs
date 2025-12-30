@@ -68,7 +68,7 @@ impl ViewContext for DummyContext {
         None
     }
 
-    fn taint(&self) {}
+    fn invalidate_layout(&self) {}
 
     fn children_of(&self, _node: NodeId) -> Vec<NodeId> {
         Vec::new()

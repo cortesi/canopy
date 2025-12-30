@@ -1,6 +1,6 @@
 use crate::{
     Canopy,
-    commands::CommandBinding,
+    commands::CommandInvocationBuilder,
     error::Result,
     event::{key::Key, mouse::Mouse},
 };
@@ -70,17 +70,18 @@ impl<'a> Binder<'a> {
     pub fn try_key_command<K, C>(self, key: K, command: C) -> Result<Self>
     where
         Key: From<K>,
-        C: CommandBinding,
+        C: CommandInvocationBuilder,
     {
-        let script = command.script()?;
-        self.try_key(key, &script)
+        self.cnpy
+            .bind_mode_key_command(key, &self.mode, &self.path_filter, command)?;
+        Ok(self)
     }
 
     /// Bind a key to a typed command, panicking if there is any error.
     pub fn key_command<K, C>(self, key: K, command: C) -> Self
     where
         Key: From<K>,
-        C: CommandBinding,
+        C: CommandInvocationBuilder,
     {
         self.try_key_command(key, command).unwrap()
     }
@@ -109,17 +110,18 @@ impl<'a> Binder<'a> {
     pub fn try_mouse_command<K, C>(self, m: K, command: C) -> Result<Self>
     where
         Mouse: From<K>,
-        C: CommandBinding,
+        C: CommandInvocationBuilder,
     {
-        let script = command.script()?;
-        self.try_mouse(m, &script)
+        self.cnpy
+            .bind_mode_mouse_command(m, &self.mode, &self.path_filter, command)?;
+        Ok(self)
     }
 
     /// Bind a mouse action to a typed command, panicking if there is any error.
     pub fn mouse_command<K, C>(self, m: K, command: C) -> Self
     where
         Mouse: From<K>,
-        C: CommandBinding,
+        C: CommandInvocationBuilder,
     {
         self.try_mouse_command(m, command).unwrap()
     }

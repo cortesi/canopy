@@ -188,6 +188,12 @@ pub trait CommandBinding {
     fn script(self) -> Result<String>;
 }
 
+/// Build a command invocation for direct dispatch.
+pub trait CommandInvocationBuilder {
+    /// Build a command invocation from this binding.
+    fn invocation(self) -> Result<CommandInvocation>;
+}
+
 impl<T> CommandBinding for CommandRef<T> {
     fn script(self) -> Result<String> {
         let expected = self.expected_args();
@@ -198,6 +204,19 @@ impl<T> CommandBinding for CommandRef<T> {
             )));
         }
         Ok(format_command_call(&self.node, self.command, &[]))
+    }
+}
+
+impl<T> CommandInvocationBuilder for CommandRef<T> {
+    fn invocation(self) -> Result<CommandInvocation> {
+        let expected = self.expected_args();
+        if expected != 0 {
+            return Err(Error::Invalid(format!(
+                "command {}::{} expects {expected} arguments",
+                self.node, self.command
+            )));
+        }
+        Ok(self.call().invocation())
     }
 }
 
@@ -217,6 +236,21 @@ impl<T> CommandBinding for CommandCall<T> {
             self.command.command,
             &self.args,
         ))
+    }
+}
+
+impl<T> CommandInvocationBuilder for CommandCall<T> {
+    fn invocation(self) -> Result<CommandInvocation> {
+        let expected = self.command.expected_args();
+        if expected != self.args.len() {
+            return Err(Error::Invalid(format!(
+                "command {}::{} expects {expected} arguments, got {}",
+                self.command.node,
+                self.command.command,
+                self.args.len()
+            )));
+        }
+        Ok(Self::invocation(self))
     }
 }
 

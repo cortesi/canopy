@@ -118,20 +118,18 @@ fn test_listgym_adds_and_deletes_columns() -> Result<()> {
     let initial_cols = harness
         .canopy
         .core
-        .nodes
-        .get(panes_id)
+        .node(panes_id)
         .expect("panes node missing")
-        .children
+        .children()
         .len();
 
     harness.script("list_gym::add_column()")?;
     let after_add = harness
         .canopy
         .core
-        .nodes
-        .get(panes_id)
+        .node(panes_id)
         .expect("panes node missing")
-        .children
+        .children()
         .len();
     assert_eq!(after_add, initial_cols + 1);
 
@@ -139,10 +137,9 @@ fn test_listgym_adds_and_deletes_columns() -> Result<()> {
     let after_delete = harness
         .canopy
         .core
-        .nodes
-        .get(panes_id)
+        .node(panes_id)
         .expect("panes node missing")
-        .children
+        .children()
         .len();
     assert_eq!(after_delete, initial_cols);
 

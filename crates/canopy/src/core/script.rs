@@ -31,14 +31,14 @@ impl Script {
 }
 
 /// Script execution context shared via thread-local pointer.
-struct ScriptGlobal<'a> {
+struct ScriptGlobal {
     /// Core context handle.
-    core: &'a mut Core,
+    core: *mut Core,
     /// Node identifier for dispatch.
     node_id: NodeId,
 }
 
-scoped_thread_local!(static SCRIPT_GLOBAL: *const ());
+scoped_thread_local!(static SCRIPT_GLOBAL: ScriptGlobal);
 
 #[derive(Debug)]
 /// Script host that owns the Rhai engine and scripts.
@@ -123,11 +123,9 @@ impl ScriptHost {
             let func = move |context: Option<rhai::NativeCallContext>,
                              args: &mut FnCallArgs|
                   -> ScriptResult<rhai::Dynamic> {
-                SCRIPT_GLOBAL.with(|ptr| {
-                    // SAFETY: `ptr` was created from a pointer to `ScriptGlobal`
-                    // which lives for the duration of this closure.
-                    let sg = unsafe { &mut *(*ptr as *mut ScriptGlobal) };
-                    let core = &mut *sg.core;
+                SCRIPT_GLOBAL.with(|sg| {
+                    // SAFETY: `sg.core` is set from `&mut Core` for the duration of execute.
+                    let core = unsafe { &mut *sg.core };
                     let node_id = sg.node_id;
                     let command_label = format!("{node}::{command}");
                     let call_pos = context
@@ -229,20 +227,31 @@ impl ScriptHost {
 
     /// Execute a script by id for the given node.
     pub fn execute(&self, core: &mut Core, node_id: NodeId, sid: ScriptId) -> Result<()> {
+        self.execute_value(core, node_id, sid).map(|_| ())
+    }
+
+    /// Execute a script by id for the given node and return its value.
+    pub fn execute_value(
+        &self,
+        core: &mut Core,
+        node_id: NodeId,
+        sid: ScriptId,
+    ) -> Result<rhai::Dynamic> {
         let s = self.scripts.get(&sid).ok_or_else(|| {
             error::Error::Script(format!("script {sid} not found for node {node_id:?}"))
         })?;
-        let sg = ScriptGlobal { core, node_id };
-        let ptr = &sg as *const _ as *const ();
-        SCRIPT_GLOBAL.set(&ptr, || {
-            self.engine.run_ast(&s.ast).map_err(|e| {
+        let sg = ScriptGlobal {
+            core: core as *mut Core,
+            node_id,
+        };
+        SCRIPT_GLOBAL.set(&sg, || {
+            self.engine.eval_ast::<rhai::Dynamic>(&s.ast).map_err(|e| {
                 let location = format_position(e.position());
                 error::Error::Script(format!(
                     "script {sid} on node {node_id:?} failed{location}: {e}"
                 ))
             })
-        })?;
-        Ok(())
+        })
     }
 }
 

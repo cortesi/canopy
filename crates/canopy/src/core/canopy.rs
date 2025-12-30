@@ -55,6 +55,16 @@ pub struct Canopy {
     pub style: StyleMap,
 }
 
+/// Rendering traversal scratch state shared across recursion.
+struct RenderTraversal<'a> {
+    /// Destination buffer for draw operations.
+    dest_buf: &'a mut TermBuf,
+    /// Style manager stack.
+    styl: &'a mut StyleManager,
+    /// Accumulated style effects for the current subtree.
+    effect_stack: &'a mut Vec<Box<dyn StyleEffect>>,
+}
+
 impl Canopy {
     /// Construct a new Canopy instance.
     pub fn new() -> Self {
@@ -127,10 +137,9 @@ impl Canopy {
     ) -> Result<()>
     where
         mouse::Mouse: From<K>,
-        C: commands::CommandBinding,
+        C: commands::CommandInvocationBuilder,
     {
-        let script = command.script()?;
-        self.bind_mouse(mouse, path_filter, &script)
+        self.bind_mode_mouse_command(mouse, "", path_filter, command)
     }
 
     /// Bind a key in the global mode, with a given path filter to a script.
@@ -164,10 +173,9 @@ impl Canopy {
     pub fn bind_key_command<K, C>(&mut self, key: K, path_filter: &str, command: C) -> Result<()>
     where
         key::Key: From<K>,
-        C: commands::CommandBinding,
+        C: commands::CommandInvocationBuilder,
     {
-        let script = command.script()?;
-        self.bind_key(key, path_filter, &script)
+        self.bind_mode_key_command(key, "", path_filter, command)
     }
 
     /// Bind a key within a given mode, with a given path filter, to a typed command.
@@ -180,10 +188,15 @@ impl Canopy {
     ) -> Result<()>
     where
         key::Key: From<K>,
-        C: commands::CommandBinding,
+        C: commands::CommandInvocationBuilder,
     {
-        let script = command.script()?;
-        self.bind_mode_key(key, mode, path_filter, &script)
+        let invocation = command.invocation()?;
+        self.keymap.bind_command(
+            mode,
+            inputmap::InputSpec::Key(key.into()),
+            path_filter,
+            invocation,
+        )
     }
 
     /// Bind a mouse action in a specified mode with a given path filter to a typed command.
@@ -196,10 +209,15 @@ impl Canopy {
     ) -> Result<()>
     where
         mouse::Mouse: From<K>,
-        C: commands::CommandBinding,
+        C: commands::CommandInvocationBuilder,
     {
-        let script = command.script()?;
-        self.bind_mode_mouse(mouse, mode, path_filter, &script)
+        let invocation = command.invocation()?;
+        self.keymap.bind_command(
+            mode,
+            inputmap::InputSpec::Mouse(mouse.into()),
+            path_filter,
+            invocation,
+        )
     }
 
     /// Load the commands from a command node using the default node name.
@@ -304,42 +322,20 @@ impl Canopy {
     /// Render a node subtree into the destination buffer.
     fn render_traversal(
         &mut self,
-        dest_buf: &mut TermBuf,
-        styl: &mut StyleManager,
+        traversal: &mut RenderTraversal<'_>,
         node_id: NodeId,
         parent_clip: Rect,
-        inherited_effects: &[Box<dyn StyleEffect>],
+        active_start: usize,
+        active_len: usize,
     ) -> Result<()> {
-        // Extract node data and build effective effects
-        let (hidden, layout, view, children, effective_effects) = {
+        let (hidden, layout, view, children, clear_inherited) = {
             let node = &self.core.nodes[node_id];
-
-            // Build effective effects: combine inherited with local
-            let effective = if node.clear_inherited_effects {
-                // Start fresh with only local effects (cloned)
-                node.effects
-                    .as_ref()
-                    .map(|v| v.iter().map(|e| e.box_clone()).collect())
-                    .unwrap_or_default()
-            } else if node.effects.is_some() {
-                // Inherit and extend
-                let mut effects: Vec<Box<dyn StyleEffect>> =
-                    inherited_effects.iter().map(|e| e.box_clone()).collect();
-                if let Some(local) = &node.effects {
-                    effects.extend(local.iter().map(|e| e.box_clone()));
-                }
-                effects
-            } else {
-                // No local effects - just reuse inherited (cloned to own)
-                inherited_effects.iter().map(|e| e.box_clone()).collect()
-            };
-
             (
                 node.hidden,
                 node.layout,
                 node.view,
                 node.children.clone(),
-                effective,
+                node.clear_inherited_effects,
             )
         };
 
@@ -351,18 +347,36 @@ impl Canopy {
             return Ok(());
         };
 
-        styl.push();
+        let saved_len = traversal.effect_stack.len();
+        let (base_start, base_len) = if clear_inherited {
+            (saved_len, 0)
+        } else {
+            (active_start, active_len)
+        };
+
+        if let Some(local) = self.core.nodes[node_id].effects.as_ref() {
+            for effect in local {
+                traversal.effect_stack.push(effect.box_clone());
+            }
+        }
+
+        let current_len = base_len + traversal.effect_stack.len() - saved_len;
+        let effect_slice = &traversal.effect_stack[base_start..base_start + current_len];
+
+        traversal.styl.push();
 
         {
             let local_clip = Self::outer_clip_to_local(view.outer, screen_clip);
             let screen_origin = screen_clip.tl;
 
-            // Build effect references for the Render
-            let effect_refs: Vec<&dyn StyleEffect> =
-                effective_effects.iter().map(|e| e.as_ref()).collect();
-            let mut rndr =
-                Render::new_shared(&self.style, styl, dest_buf, local_clip, screen_origin)
-                    .with_effects(&effect_refs);
+            let mut rndr = Render::new_shared(
+                &self.style,
+                traversal.styl,
+                traversal.dest_buf,
+                local_clip,
+                screen_origin,
+            )
+            .with_effects(effect_slice);
 
             let render_result = self.core.with_widget_view(node_id, |widget, core| {
                 let ctx = CoreViewContext::new(core, node_id);
@@ -373,11 +387,12 @@ impl Canopy {
 
         if let Some(children_clip) = view.content.intersect_rect(parent_clip) {
             for child in children {
-                self.render_traversal(dest_buf, styl, child, children_clip, &effective_effects)?;
+                self.render_traversal(traversal, child, children_clip, base_start, current_len)?;
             }
         }
 
-        styl.pop();
+        traversal.styl.pop();
+        traversal.effect_stack.truncate(saved_len);
 
         Ok(())
     }
@@ -438,14 +453,13 @@ impl Canopy {
             }
 
             let screen_clip = Rect::new(0, 0, root_size.w, root_size.h);
-            let empty_effects: Vec<Box<dyn StyleEffect>> = Vec::new();
-            self.render_traversal(
-                &mut next,
-                &mut styl,
-                self.core.root,
-                screen_clip,
-                &empty_effects,
-            )?;
+            let mut effect_stack: Vec<Box<dyn StyleEffect>> = Vec::new();
+            let mut traversal = RenderTraversal {
+                dest_buf: &mut next,
+                styl: &mut styl,
+                effect_stack: &mut effect_stack,
+            };
+            self.render_traversal(&mut traversal, self.core.root, screen_clip, 0, 0)?;
             self.post_render(&mut next)?;
 
             if let Some(prev) = &self.termbuf {
@@ -484,7 +498,7 @@ impl Canopy {
     /// Propagate a mouse event through the node under the event and all its ancestors.
     pub(crate) fn mouse(&mut self, m: mouse::MouseEvent) -> Result<()> {
         let mut path = self.location_path(m.location)?;
-        let mut script = None;
+        let mut action = None;
 
         if let Some(nid) = self.core.locate_node(self.core.root, m.location)? {
             let mut target = Some(nid);
@@ -525,11 +539,11 @@ impl Canopy {
                         break;
                     }
                     EventOutcome::Ignore => {
-                        if let Some(s) = self
+                        if let Some(binding) = self
                             .keymap
                             .resolve(&path, &inputmap::InputSpec::Mouse(m.into()))
                         {
-                            script = Some((s, id));
+                            action = Some((binding, id));
                             break;
                         }
                         path.pop();
@@ -539,8 +553,15 @@ impl Canopy {
             }
         }
 
-        if let Some((sid, nid)) = script {
-            self.run_script(nid, sid)?;
+        if let Some((binding, nid)) = action {
+            match binding {
+                inputmap::BindingTarget::Script(sid) => {
+                    self.run_script(nid, sid)?;
+                }
+                inputmap::BindingTarget::Command(cmd) => {
+                    commands::dispatch(&mut self.core, nid, &cmd)?;
+                }
+            }
         }
 
         Ok(())
@@ -559,11 +580,11 @@ impl Canopy {
         let start = self.core.focus.unwrap_or(self.core.root);
         let mut path = self.core.node_path(self.core.root, start);
         let mut target = Some(start);
-        let mut script = None;
+        let mut action = None;
 
         while let Some(id) = target {
-            if let Some(s) = self.keymap.resolve(&path, &inputmap::InputSpec::Key(k)) {
-                script = Some((s, id));
+            if let Some(binding) = self.keymap.resolve(&path, &inputmap::InputSpec::Key(k)) {
+                action = Some((binding, id));
                 break;
             }
 
@@ -579,8 +600,15 @@ impl Canopy {
             }
         }
 
-        if let Some((sid, nid)) = script {
-            self.run_script(nid, sid)?;
+        if let Some((binding, nid)) = action {
+            match binding {
+                inputmap::BindingTarget::Script(sid) => {
+                    self.run_script(nid, sid)?;
+                }
+                inputmap::BindingTarget::Command(cmd) => {
+                    commands::dispatch(&mut self.core, nid, &cmd)?;
+                }
+            }
         }
 
         Ok(())
@@ -651,7 +679,8 @@ impl Canopy {
 }
 
 /// Validate a child view position against the parent canvas bounds.
-/// A trait that allows widgets to perform recursive initialization of themselves and their children.
+/// A trait that allows widgets to perform recursive initialization of themselves and their
+/// children.
 pub trait Loader {
     /// Load commands or resources into the canopy instance.
     fn load(_: &mut Canopy) {}
@@ -659,7 +688,11 @@ pub trait Loader {
 
 #[cfg(test)]
 mod tests {
-    use std::any::Any;
+    use std::{
+        any::Any,
+        sync::atomic::{AtomicUsize, Ordering},
+        time::Duration,
+    };
 
     use super::*;
     use crate::{
@@ -677,6 +710,24 @@ mod tests {
         },
         widget::{EventOutcome, Widget},
     };
+
+    static POLL_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+    pub struct PollWidget;
+
+    #[derive_commands]
+    impl PollWidget {
+        pub fn new() -> Self {
+            Self
+        }
+    }
+
+    impl Widget for PollWidget {
+        fn poll(&mut self, _ctx: &mut dyn Context) -> Option<Duration> {
+            POLL_COUNT.fetch_add(1, Ordering::SeqCst);
+            None
+        }
+    }
 
     fn set_outcome<T: Any + OutcomeTarget>(core: &mut Core, id: NodeId, outcome: EventOutcome) {
         core.with_widget_mut(id, |w, _| {
@@ -705,6 +756,24 @@ mod tests {
             modifiers: key::Empty,
             location: loc,
         }
+    }
+
+    #[test]
+    fn set_widget_resets_initialization() -> Result<()> {
+        POLL_COUNT.store(0, Ordering::SeqCst);
+        let mut canopy = Canopy::new();
+        let node_id = canopy.core.add(PollWidget::new());
+        canopy.core.mount_child(canopy.core.root, node_id)?;
+        canopy.set_root_size(Expanse::new(10, 10))?;
+
+        let (_, mut render) = TestRender::create();
+        render.render(&mut canopy)?;
+        assert_eq!(POLL_COUNT.load(Ordering::SeqCst), 1);
+
+        canopy.core.set_widget(node_id, PollWidget::new());
+        render.render(&mut canopy)?;
+        assert_eq!(POLL_COUNT.load(Ordering::SeqCst), 2);
+        Ok(())
     }
 
     #[test]

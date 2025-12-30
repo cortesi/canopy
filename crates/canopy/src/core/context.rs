@@ -37,7 +37,7 @@ pub trait ViewContext {
     fn node_view(&self, node: NodeId) -> Option<View>;
 
     /// Mark this node dirty so the next frame re-runs layout.
-    fn taint(&self);
+    fn invalidate_layout(&self);
 
     /// Canvas size for the current node.
     fn canvas(&self) -> Expanse {
@@ -698,7 +698,7 @@ impl<'a> ViewContext for CoreContext<'a> {
         self.core.nodes.get(node).map(|n| n.view)
     }
 
-    fn taint(&self) {
+    fn invalidate_layout(&self) {
         if let Some(node) = self.core.nodes.get(self.node_id) {
             node.layout_dirty.set(true);
         }
@@ -1016,7 +1016,7 @@ impl<'a> ViewContext for CoreViewContext<'a> {
         self.core.nodes.get(node).map(|n| n.view)
     }
 
-    fn taint(&self) {
+    fn invalidate_layout(&self) {
         if let Some(node) = self.core.nodes.get(self.node_id) {
             node.layout_dirty.set(true);
         }

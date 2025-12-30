@@ -128,7 +128,7 @@ mod tests {
 
         assert_eq!(mount_calls, 1);
         assert_eq!(mounted_id, Some(harness.root));
-        assert_eq!(mounted_root, Some(harness.canopy.core.root));
+        assert_eq!(mounted_root, Some(harness.canopy.core.root_id()));
         let child_id = child_id.expect("child id missing");
 
         let (child_calls, child_mounted_id) = harness

@@ -3,7 +3,9 @@ use std::cell::RefCell;
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
-    Context, ViewContext, command, derive_commands,
+    Context, ViewContext, command,
+    core::text,
+    derive_commands,
     error::Result,
     geom::Line,
     layout::{Constraint, MeasureConstraints, Measurement, Size},
@@ -197,13 +199,8 @@ impl Widget for Text {
             for i in 0..view_rect.h {
                 let line_idx = (view_rect.tl.y + i) as usize;
                 if let Some(line) = cache.lines.get(line_idx) {
-                    let start_char = view_rect.tl.x as usize;
-                    let start_byte = line
-                        .char_indices()
-                        .nth(start_char)
-                        .map(|(i, _)| i)
-                        .unwrap_or(line.len());
-                    let out = &line[start_byte..];
+                    let start_col = view_rect.tl.x as usize;
+                    let (out, _) = text::slice_by_columns(line, start_col, view_rect.w as usize);
                     let line_rect = Line::new(
                         content_origin.x,
                         content_origin.y.saturating_add(i),

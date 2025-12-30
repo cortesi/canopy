@@ -29,17 +29,17 @@ use crate::{
 /// Core state for the arena, layout engine, and focus.
 pub struct Core {
     /// Node storage arena.
-    pub nodes: SlotMap<NodeId, Node>,
+    pub(crate) nodes: SlotMap<NodeId, Node>,
     /// Root node ID.
-    pub root: NodeId,
+    pub(crate) root: NodeId,
     /// Currently focused node.
-    pub focus: Option<NodeId>,
+    pub(crate) focus: Option<NodeId>,
     /// Focus generation counter.
-    pub focus_gen: u64,
+    pub(crate) focus_gen: u64,
     /// Active backend controller.
-    pub backend: Option<Box<dyn BackendControl>>,
+    pub(crate) backend: Option<Box<dyn BackendControl>>,
     /// Pending style map to be applied before next render.
-    pub pending_style: Option<StyleMap>,
+    pub(crate) pending_style: Option<StyleMap>,
 }
 
 impl Core {
@@ -76,6 +76,26 @@ impl Core {
             backend: None,
             pending_style: None,
         }
+    }
+
+    /// Return the root node id.
+    pub fn root_id(&self) -> NodeId {
+        self.root
+    }
+
+    /// Return the currently focused node id, if any.
+    pub fn focus_id(&self) -> Option<NodeId> {
+        self.focus
+    }
+
+    /// Return the focus generation counter.
+    pub fn focus_generation(&self) -> u64 {
+        self.focus_gen
+    }
+
+    /// Return a reference to a node by id.
+    pub fn node(&self, node_id: NodeId) -> Option<&Node> {
+        self.nodes.get(node_id)
     }
 
     /// Add a widget to the arena and return its node ID.
@@ -137,6 +157,7 @@ impl Core {
         node.name = name;
         node.layout = layout;
         node.mounted = false;
+        node.initialized = false;
     }
 
     /// Run the mount hook for a node if it has not been mounted yet.
@@ -162,8 +183,26 @@ impl Core {
         Ok(())
     }
 
+    /// Return true if `ancestor` appears in the parent chain of `node`.
+    fn is_ancestor(&self, ancestor: NodeId, node: NodeId) -> bool {
+        let mut current = Some(node);
+        while let Some(id) = current {
+            if id == ancestor {
+                return true;
+            }
+            current = self.nodes.get(id).and_then(|n| n.parent);
+        }
+        false
+    }
+
     /// Mount a child under a parent in the arena tree.
     pub fn mount_child(&mut self, parent: NodeId, child: NodeId) -> Result<()> {
+        if parent == child || self.is_ancestor(child, parent) {
+            return Err(Error::Invalid(format!(
+                "cannot mount node {child:?} under {parent:?} due to cycle"
+            )));
+        }
+
         if let Some(old_parent) = self.nodes[child].parent {
             self.detach_child(old_parent, child)?;
         }
@@ -212,6 +251,26 @@ impl Core {
 
     /// Replace the children list for a parent in the arena tree.
     pub fn set_children(&mut self, parent: NodeId, children: Vec<NodeId>) -> Result<()> {
+        for child in &children {
+            if *child == parent || self.is_ancestor(*child, parent) {
+                return Err(Error::Invalid(format!(
+                    "cannot set children on {parent:?} with {child:?} due to cycle"
+                )));
+            }
+            if !self.nodes.contains_key(*child) {
+                return Err(Error::Internal(format!("Missing child node {child:?}")));
+            }
+        }
+
+        for child in &children {
+            let old_parent = self.nodes.get(*child).and_then(|n| n.parent);
+            if let Some(old_parent) = old_parent
+                && old_parent != parent
+            {
+                self.detach_child(old_parent, *child)?;
+            }
+        }
+
         let old_children = self.nodes[parent].children.clone();
         for child in old_children {
             if let Some(node) = self.nodes.get_mut(child) {
@@ -1584,7 +1643,7 @@ mod tests {
     use super::*;
     use crate::{
         commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
-        error::Result,
+        error::{Error, Result},
         geom::{Expanse, Point},
         layout::{
             Align, CanvasContext, Constraint, Edges, Layout, MeasureConstraints, Measurement, Size,
@@ -2410,6 +2469,53 @@ mod tests {
         assert_eq!(c1_node.rect.tl.y, 15);
         assert_eq!(c2_node.rect.tl.x, 20); // (50 - 10) / 2
         assert_eq!(c2_node.rect.tl.y, 20);
+        Ok(())
+    }
+
+    #[test]
+    fn set_children_detaches_from_previous_parent() -> Result<()> {
+        let mut core = Core::new();
+        let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+        let parent_a = core.add_boxed(Box::new(parent_widget));
+        let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+        let parent_b = core.add_boxed(Box::new(parent_widget));
+        let (child_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+        let child = core.add_boxed(Box::new(child_widget));
+
+        core.set_children(parent_a, vec![child])?;
+        core.set_children(parent_b, vec![child])?;
+
+        assert!(core.nodes[parent_a].children.is_empty());
+        assert_eq!(core.nodes[parent_b].children, vec![child]);
+        assert_eq!(core.nodes[child].parent, Some(parent_b));
+        Ok(())
+    }
+
+    #[test]
+    fn set_children_rejects_cycles() -> Result<()> {
+        let mut core = Core::new();
+        let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+        let parent = core.add_boxed(Box::new(parent_widget));
+        let (child_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+        let child = core.add_boxed(Box::new(child_widget));
+        core.set_children(parent, vec![child])?;
+
+        let err = core.set_children(child, vec![parent]).unwrap_err();
+        assert!(matches!(err, Error::Invalid(_)));
+        Ok(())
+    }
+
+    #[test]
+    fn mount_child_rejects_cycles() -> Result<()> {
+        let mut core = Core::new();
+        let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+        let parent = core.add_boxed(Box::new(parent_widget));
+        let (child_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+        let child = core.add_boxed(Box::new(child_widget));
+
+        core.mount_child(parent, child)?;
+        let err = core.mount_child(child, parent).unwrap_err();
+        assert!(matches!(err, Error::Invalid(_)));
         Ok(())
     }
 }

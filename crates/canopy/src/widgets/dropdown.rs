@@ -95,7 +95,7 @@ where
         self.expanded = !self.expanded;
         self.highlighted = self.selected;
         // Mark layout dirty so parent can resize
-        c.taint();
+        c.invalidate_layout();
         Ok(())
     }
 
@@ -123,7 +123,7 @@ where
         if self.expanded {
             self.selected = self.highlighted;
             self.expanded = false;
-            c.taint();
+            c.invalidate_layout();
         }
         Ok(())
     }
@@ -134,7 +134,7 @@ where
         if self.expanded {
             self.expanded = false;
             self.highlighted = self.selected;
-            c.taint();
+            c.invalidate_layout();
         }
         Ok(())
     }
@@ -166,13 +166,13 @@ where
                         self.highlighted = clicked_row;
                         self.selected = self.highlighted;
                         self.expanded = false;
-                        ctx.taint();
+                        ctx.invalidate_layout();
                     }
                 } else {
                     // When collapsed, click toggles expansion
                     self.expanded = true;
                     self.highlighted = self.selected;
-                    ctx.taint();
+                    ctx.invalidate_layout();
                 }
                 // Return Ignore so mouse bindings can also fire
                 return EventOutcome::Ignore;

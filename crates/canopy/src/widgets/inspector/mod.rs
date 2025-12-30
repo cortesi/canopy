@@ -79,7 +79,7 @@ impl DefaultBindings for Inspector {
             .key(KeyCode::PageDown, "logs::page_down()")
             .key(KeyCode::PageUp, "logs::page_up()")
             .key(KeyCode::Down, "logs::select_next()")
-            .key(KeyCode::Down, "logs::select_prev()")
+            .key(KeyCode::Up, "logs::select_prev()")
     }
 }
 

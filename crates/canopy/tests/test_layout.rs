@@ -144,8 +144,9 @@ mod tests {
         h.canopy.set_root_size(Expanse::new(20, 20))?;
         h.render()?;
 
-        let container_view = h.canopy.core.nodes[container].view;
-        let child_view = h.canopy.core.nodes[child].view;
+        let core = &h.canopy.core;
+        let container_view = core.node(container).expect("missing container").view();
+        let child_view = core.node(child).expect("missing child").view();
         assert_eq!(child_view.outer.tl.x, container_view.content.tl.x);
         assert_eq!(child_view.outer.tl.y, container_view.content.tl.y);
         assert_eq!(child_view.outer.w + 2, container_view.outer.w);

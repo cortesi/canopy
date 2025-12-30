@@ -425,12 +425,30 @@ fn wrap_offsets(s: &str, width: usize) -> Vec<(usize, usize)> {
     if words.is_empty() {
         return vec![(0, 0)];
     }
+    let mut word_offsets = Vec::with_capacity(words.len());
+    let mut cursor = 0usize;
+    for word in &words {
+        let word_len = word.word.len();
+        debug_assert!(
+            s.get(cursor..cursor + word_len) == Some(word.word),
+            "word offsets drifted while wrapping"
+        );
+        let start = cursor;
+        let end = start + word_len;
+        word_offsets.push((start, end));
+        cursor = end + word.whitespace.len();
+    }
     let lines = wrap_algorithms::wrap_first_fit(&words, &[width as f64]);
+    let mut word_idx = 0usize;
     for l in lines {
-        let start = unsafe { l[0].word.as_ptr().offset_from(s.as_ptr()) };
-        let last = l[l.len() - 1];
-        let end = unsafe { last.word.as_ptr().offset_from(s.as_ptr()) as usize + last.word.len() };
-        offsets.push((start as usize, end));
+        if l.is_empty() {
+            offsets.push((0, 0));
+            continue;
+        }
+        let start = word_offsets[word_idx].0;
+        let end = word_offsets[word_idx + l.len() - 1].1;
+        offsets.push((start, end));
+        word_idx += l.len();
     }
     offsets
 }

@@ -43,4 +43,4 @@ Canopy also has the spatial focus functions **focus::{up,down,left,right}**.
 These functions take the screen area of the currently focused node, then search
 for nodes that accept focus in the specified direction to choose the new focus.
 
-When a node's focus status changes, it is automatically tainted for rendering in the next sweep.
+When a node's focus status changes, it is automatically invalidated for the next render sweep.
