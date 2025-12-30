@@ -72,4 +72,4 @@ Issue summary: Project policy requires linting, tests, and formatting to pass be
 2. [x] Run cargo nextest run --all --all-features (or cargo test if nextest is unavailable).
 3. [x] Run cargo +nightly fmt --all -- --config-path ./rustfmt-nightly.toml (or cargo +nightly
        fmt --all if the config is not available).
-4. [ ] Pause for user review before any commit.
+4. [x] Pause for user review before any commit.

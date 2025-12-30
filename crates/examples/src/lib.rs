@@ -2,6 +2,8 @@
 
 /// Cedit example nodes.
 pub mod cedit;
+/// Char gym example nodes.
+pub mod chargym;
 /// Focus gym example nodes.
 pub mod focusgym;
 /// Frame gym example nodes.

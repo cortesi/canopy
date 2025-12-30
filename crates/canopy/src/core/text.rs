@@ -1,4 +1,5 @@
-use unicode_width::UnicodeWidthChar;
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 
 /// Slice a string by display columns, returning the substring and its width.
 pub fn slice_by_columns(s: &str, start: usize, max: usize) -> (&str, usize) {
@@ -12,16 +13,16 @@ pub fn slice_by_columns(s: &str, start: usize, max: usize) -> (&str, usize) {
     let mut start_byte = 0usize;
     let mut end_byte = 0usize;
 
-    for (idx, ch) in s.char_indices() {
-        let ch_width = UnicodeWidthChar::width(ch).unwrap_or(0);
+    for (idx, grapheme) in s.grapheme_indices(true) {
+        let g_width = grapheme_width(grapheme);
 
         if !started {
-            if col + ch_width <= start {
-                col += ch_width;
+            if col + g_width <= start {
+                col += g_width;
                 continue;
             }
-            if col < start && col + ch_width > start {
-                col += ch_width;
+            if col < start && col + g_width > start {
+                col += g_width;
                 continue;
             }
             started = true;
@@ -30,15 +31,15 @@ pub fn slice_by_columns(s: &str, start: usize, max: usize) -> (&str, usize) {
         }
 
         if started {
-            if ch_width == 0 || out_cols + ch_width <= max {
-                out_cols += ch_width;
-                end_byte = idx + ch.len_utf8();
+            if out_cols + g_width <= max {
+                out_cols += g_width;
+                end_byte = idx + grapheme.len();
             } else {
                 break;
             }
         }
 
-        col += ch_width;
+        col += g_width;
         if out_cols >= max {
             break;
         }
@@ -51,10 +52,22 @@ pub fn slice_by_columns(s: &str, start: usize, max: usize) -> (&str, usize) {
     (&s[start_byte..end_byte], out_cols)
 }
 
+/// Return the display width of a grapheme cluster, clamped to terminal cell widths.
+pub fn grapheme_width(grapheme: &str) -> usize {
+    if grapheme.is_empty() {
+        return 0;
+    }
+    UnicodeWidthStr::width(grapheme).clamp(1, 2)
+}
+
+/// Return the display width of a string in terminal cells.
+#[cfg(test)]
+pub fn display_width(s: &str) -> usize {
+    s.graphemes(true).map(grapheme_width).sum()
+}
+
 #[cfg(test)]
 mod tests {
-    use unicode_width::UnicodeWidthStr;
-
     use super::*;
 
     #[test]
@@ -62,14 +75,30 @@ mod tests {
         let s = "a界b";
         let (out, width) = slice_by_columns(s, 0, 3);
         assert_eq!(out, "a界");
-        assert_eq!(width, UnicodeWidthStr::width(out));
+        assert_eq!(width, display_width(out));
 
         let (out, width) = slice_by_columns(s, 1, 2);
         assert_eq!(out, "界");
-        assert_eq!(width, UnicodeWidthStr::width(out));
+        assert_eq!(width, display_width(out));
 
         let (out, width) = slice_by_columns(s, 3, 2);
         assert_eq!(out, "b");
-        assert_eq!(width, UnicodeWidthStr::width(out));
+        assert_eq!(width, display_width(out));
+    }
+
+    #[test]
+    fn slice_by_columns_handles_zwj_sequences() {
+        let s = "A👩‍💻B";
+        let (out, width) = slice_by_columns(s, 0, 3);
+        assert_eq!(out, "A👩‍💻");
+        assert_eq!(width, 3);
+
+        let (out, width) = slice_by_columns(s, 1, 2);
+        assert_eq!(out, "👩‍💻");
+        assert_eq!(width, 2);
+
+        let (out, width) = slice_by_columns(s, 2, 2);
+        assert_eq!(out, "B");
+        assert_eq!(width, 1);
     }
 }

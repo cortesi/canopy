@@ -1,6 +1,9 @@
 use std::mem;
 
+use unicode_segmentation::UnicodeSegmentation;
+
 use crate::{
+    core::text,
     cursor,
     error::Result,
     geom::{Expanse, Frame, Line, Point, Rect},
@@ -19,10 +22,74 @@ const MAX_ROW_SHIFT: usize = 4;
 /// A terminal cell with glyph and style.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Cell {
-    /// Character glyph.
+    /// Base glyph character.
     pub ch: char,
+    /// Additional grapheme characters stored with the base glyph.
+    pub suffix: String,
     /// Style applied to the cell.
     pub style: Style,
+    /// True when this cell continues a wide glyph from the previous column.
+    pub continuation: bool,
+}
+
+impl Cell {
+    /// Construct a cell containing a single glyph.
+    fn new(ch: char, style: Style) -> Self {
+        Self {
+            ch,
+            suffix: String::new(),
+            style,
+            continuation: false,
+        }
+    }
+
+    /// Construct an empty cell.
+    fn empty(style: Style) -> Self {
+        Self {
+            ch: NULL,
+            suffix: String::new(),
+            style,
+            continuation: false,
+        }
+    }
+
+    /// Construct a continuation cell for a wide glyph.
+    fn continuation(style: Style) -> Self {
+        Self {
+            ch: NULL,
+            suffix: String::new(),
+            style,
+            continuation: true,
+        }
+    }
+
+    /// Return true when the cell is empty.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.ch == NULL && self.suffix.is_empty() && !self.continuation
+    }
+
+    /// Return a display character for tests and debugging.
+    #[cfg(any(test, feature = "testing"))]
+    pub(crate) fn display_char(&self) -> char {
+        if self.is_empty() || self.continuation {
+            NULL
+        } else {
+            self.ch
+        }
+    }
+
+    /// Append this cell's renderable text to the output buffer.
+    fn push_text(&self, out: &mut String) {
+        if self.continuation {
+            return;
+        }
+        if self.is_empty() {
+            out.push(' ');
+            return;
+        }
+        out.push(self.ch);
+        out.push_str(&self.suffix);
+    }
 }
 
 /// A 2D terminal buffer of styled cells.
@@ -38,7 +105,7 @@ impl TermBuf {
     /// Construct a buffer filled with the given character and style.
     pub fn new(size: impl Into<Expanse>, ch: char, style: Style) -> Self {
         let size = size.into();
-        let cell = Cell { ch, style };
+        let cell = Cell::new(ch, style);
         Self {
             size,
             cells: vec![cell; size.area() as usize],
@@ -46,7 +113,12 @@ impl TermBuf {
     }
     /// Create an empty TermBuf filled with NULL characters.
     pub fn empty_with_style(size: impl Into<Expanse>, style: Style) -> Self {
-        Self::new(size, NULL, style)
+        let size = size.into();
+        let cell = Cell::empty(style);
+        Self {
+            size,
+            cells: vec![cell; size.area() as usize],
+        }
     }
 
     /// Create an empty TermBuf filled with NULL characters.
@@ -56,10 +128,10 @@ impl TermBuf {
             bg: Color::Black,
             attrs: AttrSet::default(),
         };
-        Self::new(size, NULL, default_style)
+        Self::empty_with_style(size, default_style)
     }
 
-    /// Copy non-NULL characters from a rectangle of another TermBuf into this one
+    /// Copy non-empty cells from a rectangle of another TermBuf into this one
     pub fn copy(&mut self, src: &Self, rect: Rect) {
         if src.size != self.size {
             return;
@@ -71,16 +143,17 @@ impl TermBuf {
                 for x in isec.tl.x..isec.tl.x + isec.w {
                     let p = Point { x, y };
                     if let Some(cell) = src.get(p)
-                        && cell.ch != NULL
+                        && !cell.is_empty()
+                        && let Some(i) = self.idx(p)
                     {
-                        self.put(p, cell.ch, cell.style.clone());
+                        self.cells[i] = cell.clone();
                     }
                 }
             }
         }
     }
 
-    /// Copy non-NULL characters from a source TermBuf into a destination rectangle
+    /// Copy non-empty cells from a source TermBuf into a destination rectangle
     pub fn copy_to_rect(&mut self, src: &Self, dest_rect: Rect) {
         // The source buffer represents content to be placed at dest_rect
         // We need to map from source coordinates to destination coordinates
@@ -99,13 +172,15 @@ impl TermBuf {
                     let src_p = Point { x: src_x, y: src_y };
 
                     if let Some(cell) = src.get(src_p)
-                        && cell.ch != NULL
+                        && !cell.is_empty()
                     {
                         let dest_p = Point {
                             x: clipped_dest.tl.x + dx,
                             y: clipped_dest.tl.y + dy,
                         };
-                        self.put(dest_p, cell.ch, cell.style.clone());
+                        if let Some(i) = self.idx(dest_p) {
+                            self.cells[i] = cell.clone();
+                        }
                     }
                 }
             }
@@ -134,7 +209,29 @@ impl TermBuf {
     /// Write a cell at a specific point.
     pub(crate) fn put(&mut self, p: Point, ch: char, style: Style) {
         if let Some(i) = self.idx(p) {
-            self.cells[i] = Cell { ch, style };
+            self.cells[i] = Cell::new(ch, style);
+        }
+    }
+
+    /// Write a grapheme cluster at a specific point.
+    fn put_grapheme(&mut self, p: Point, grapheme: &str, style: Style) {
+        if let Some(i) = self.idx(p) {
+            let mut chars = grapheme.chars();
+            let ch = chars.next().unwrap_or(' ');
+            let suffix: String = chars.collect();
+            self.cells[i] = Cell {
+                ch,
+                suffix,
+                style,
+                continuation: false,
+            };
+        }
+    }
+
+    /// Write a continuation cell for a wide glyph.
+    fn put_continuation(&mut self, p: Point, style: Style) {
+        if let Some(i) = self.idx(p) {
+            self.cells[i] = Cell::continuation(style);
         }
     }
 
@@ -149,14 +246,11 @@ impl TermBuf {
         }
     }
 
-    /// Fill all empty (NULL) cells with the given character and style.
+    /// Fill all empty cells with the given character and style.
     pub fn fill_empty(&mut self, ch: char, style: &Style) {
         for i in 0..self.cells.len() {
-            if self.cells[i].ch == NULL {
-                self.cells[i] = Cell {
-                    ch,
-                    style: style.clone(),
-                };
+            if self.cells[i].is_empty() {
+                self.cells[i] = Cell::new(ch, style.clone());
             }
         }
     }
@@ -175,8 +269,10 @@ impl TermBuf {
                 mem::swap(&mut cell.style.fg, &mut cell.style.bg);
             }
         }
-        if cell.ch == NULL {
+        if cell.is_empty() || cell.continuation {
             cell.ch = ' ';
+            cell.suffix.clear();
+            cell.continuation = false;
         }
         self.cells[idx] = cell;
     }
@@ -196,33 +292,44 @@ impl TermBuf {
     /// Draw text clipped to the given line.
     pub fn text(&mut self, style: &Style, l: Line, txt: &str) {
         if let Some(isec) = self.rect().intersect(&l.rect()) {
-            let offset = isec.tl.x - l.tl.x;
-            let out: String = txt
-                .chars()
-                .skip(offset as usize)
-                .take(l.w as usize)
-                .collect();
-            let mut chars = out.chars();
-            for x in 0..isec.w {
-                if let Some(ch) = chars.next() {
-                    self.put(
+            let offset = isec.tl.x.saturating_sub(l.tl.x) as usize;
+            let max = isec.w as usize;
+            let (out, _) = text::slice_by_columns(txt, offset, max);
+            let mut col = 0usize;
+            let mut x = isec.tl.x;
+
+            for grapheme in out.graphemes(true) {
+                let width = text::grapheme_width(grapheme);
+                if width == 0 {
+                    continue;
+                }
+                if col + width > max {
+                    break;
+                }
+
+                self.put_grapheme(Point { x, y: isec.tl.y }, grapheme, style.clone());
+                for i in 1..width {
+                    self.put_continuation(
                         Point {
-                            x: isec.tl.x + x,
+                            x: x + i as u32,
                             y: isec.tl.y,
                         },
-                        ch,
-                        style.clone(),
-                    );
-                } else {
-                    self.put(
-                        Point {
-                            x: isec.tl.x + x,
-                            y: isec.tl.y,
-                        },
-                        ' ',
                         style.clone(),
                     );
                 }
+                x += width as u32;
+                col += width;
+            }
+
+            for i in col..max {
+                self.put(
+                    Point {
+                        x: isec.tl.x + i as u32,
+                        y: isec.tl.y,
+                    },
+                    ' ',
+                    style.clone(),
+                );
             }
         }
     }
@@ -312,7 +419,7 @@ impl TermBuf {
                     if cell == &prev_row[x] || cell.style != *style {
                         break;
                     }
-                    text.push(cell.ch);
+                    cell.push_text(&mut text);
                     x += 1;
                 }
                 backend.style(style)?;
@@ -348,7 +455,7 @@ impl TermBuf {
                     let idx2 = y as usize * self.size.w as usize + x as usize;
                     let ccell = &self.cells[idx2];
                     if ccell.style == style {
-                        text.push(ccell.ch);
+                        ccell.push_text(&mut text);
                         x += 1;
                     } else {
                         break;
@@ -481,9 +588,9 @@ fn render_line_range<R: RenderBackend>(
     while x < end {
         let style = &row[x].style;
         let run_start = x;
-        let mut text = String::with_capacity(end - x);
+        let mut text = String::new();
         while x < end && row[x].style == *style {
-            text.push(row[x].ch);
+            row[x].push_text(&mut text);
             x += 1;
         }
         backend.style(style)?;
@@ -503,6 +610,7 @@ mod tests {
     use super::*;
     use crate::{
         buf,
+        core::text::grapheme_width,
         geom::Line,
         style::{AttrSet, Color, PartialStyle},
         testing::buf::BufTest,
@@ -544,6 +652,39 @@ mod tests {
         tb.text(&def_style(), Line::new(0, 0, 5), "hi");
 
         BufTest::new(&tb).assert_matches(buf!["hi   "]);
+    }
+
+    #[test]
+    fn text_handles_combining_and_wide_graphemes() {
+        let style = def_style();
+        let mut tb = TermBuf::new(Expanse::new(12, 1), ' ', style.clone());
+        tb.text(&style, Line::new(0, 0, 12), "A\u{0301}界👩‍💻B");
+
+        let first = tb.get(Point { x: 0, y: 0 }).expect("missing cell");
+        assert!(
+            first.suffix.contains('\u{0301}'),
+            "expected combining mark stored with base glyph"
+        );
+
+        for x in 0..tb.size().w {
+            let cell = tb.get(Point { x, y: 0 }).expect("missing cell");
+            if cell.continuation || cell.is_empty() {
+                continue;
+            }
+            let mut glyph = String::new();
+            glyph.push(cell.ch);
+            glyph.push_str(&cell.suffix);
+            let width = grapheme_width(&glyph);
+            if width == 2 {
+                let next = tb
+                    .get(Point { x: x + 1, y: 0 })
+                    .expect("missing continuation cell");
+                assert!(
+                    next.continuation,
+                    "expected continuation after wide glyph at column {x}"
+                );
+            }
+        }
     }
 
     #[test]

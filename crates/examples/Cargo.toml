@@ -24,6 +24,10 @@ name = "cedit"
 path = "examples/cedit.rs"
 
 [[example]]
+name = "chargym"
+path = "examples/chargym.rs"
+
+[[example]]
 name = "focusgym"
 path = "examples/focusgym.rs"
 

@@ -58,10 +58,11 @@ impl<'a> BufTest<'a> {
             let mut actual_chars = Vec::new();
             for x in 0..self.buf.size().w {
                 if let Some(cell) = self.buf.get(Point { x, y: y as u32 }) {
-                    if cell.ch == '\0' {
+                    let ch = cell.display_char();
+                    if ch == '\0' {
                         actual_chars.push(self.null_char);
                     } else {
-                        actual_chars.push(cell.ch);
+                        actual_chars.push(ch);
                     }
                 }
             }
@@ -146,7 +147,7 @@ impl<'a> BufTest<'a> {
                 let mut c = false;
                 for (i, ch) in txt.chars().enumerate() {
                     if let Some(cell) = self.buf.get(Point { x: x + i as u32, y }) {
-                        if cell.ch != ch {
+                        if cell.display_char() != ch {
                             m = false;
                             break;
                         }
@@ -185,10 +186,11 @@ impl<'a> BufTest<'a> {
             print!("│");
             for x in 0..self.buf.size().w {
                 if let Some(cell) = self.buf.get(Point { x, y }) {
-                    if cell.ch == '\0' {
+                    let ch = cell.display_char();
+                    if ch == '\0' {
                         print!("X");
                     } else {
-                        print!("{}", cell.ch);
+                        print!("{ch}");
                     }
                 }
             }
@@ -228,10 +230,11 @@ impl<'a> BufTest<'a> {
         print!("│");
         for x in 0..self.buf.size().w {
             if let Some(cell) = self.buf.get(Point { x, y: line_num }) {
-                if cell.ch == '\0' {
+                let ch = cell.display_char();
+                if ch == '\0' {
                     print!("X");
                 } else {
-                    print!("{}", cell.ch);
+                    print!("{ch}");
                 }
             }
         }
@@ -255,7 +258,7 @@ impl<'a> BufTest<'a> {
         let mut ret = String::new();
         for x in 0..self.buf.size().w {
             if let Some(c) = self.buf.get(Point { x, y }) {
-                ret.push(c.ch);
+                ret.push(c.display_char());
             }
         }
         Some(ret)
@@ -268,10 +271,11 @@ impl<'a> BufTest<'a> {
                 let mut chars = Vec::new();
                 for x in 0..self.buf.size().w {
                     if let Some(cell) = self.buf.get(Point { x, y }) {
-                        if cell.ch == '\0' {
+                        let ch = cell.display_char();
+                        if ch == '\0' {
                             chars.push('X');
                         } else {
-                            chars.push(cell.ch);
+                            chars.push(ch);
                         }
                     }
                 }
