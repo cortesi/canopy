@@ -1,25 +1,17 @@
-#![warn(missing_docs)]
-//! Display images in the terminal using Canopy.
+//! Image viewer widget with zoom and pan controls.
 
 use std::path::Path;
 
-use canopy::{
-    Binder, Canopy, Context, Loader, ViewContext, command, derive_commands, error as canopy_error,
-    event::key,
+use image::RgbaImage;
+
+use crate::{
+    Canopy, Context, Loader, ViewContext, command, derive_commands, error as canopy_error,
     geom::{Expanse, Point, Rect},
     layout::Layout,
     render::Render,
     style::{AttrSet, Color, Style},
     widget::Widget,
-    widgets::Root,
 };
-use image::RgbaImage;
-
-/// Error types for the imgview example.
-mod error;
-
-/// Error type for the imgview example.
-pub use error::{Error, Result};
 
 /// Character used to render two vertical pixels per terminal cell.
 const HALF_BLOCK: char = '\u{2580}';
@@ -285,6 +277,7 @@ impl ImageView {
 
         Ok(())
     }
+
     /// Create a new image view widget.
     pub fn new(image: RgbaImage) -> Self {
         let image_width = image.width();
@@ -297,6 +290,13 @@ impl ImageView {
             pan: Pan::default(),
             auto_fit: true,
         }
+    }
+
+    /// Create a new image view widget from a file path.
+    pub fn from_path(path: impl AsRef<Path>) -> canopy_error::Result<Self> {
+        let image = image::open(path.as_ref())
+            .map_err(|err| canopy_error::Error::Invalid(format!("image error: {err}")))?;
+        Ok(Self::new(image.to_rgba8()))
     }
 
     /// Zoom in around the view center.
@@ -386,42 +386,6 @@ impl Loader for ImageView {
     fn load(cnpy: &mut Canopy) {
         cnpy.add_commands::<Self>();
     }
-}
-
-/// Configure key bindings for the image viewer.
-pub fn bind_keys(cnpy: &mut Canopy) {
-    Binder::new(cnpy)
-        .key('q', "root::quit()")
-        .with_path("image_view/")
-        .key('i', "image_view::zoom_in()")
-        .key('o', "image_view::zoom_out()")
-        .key('h', "image_view::pan_left()")
-        .key('j', "image_view::pan_down()")
-        .key('k', "image_view::pan_up()")
-        .key('l', "image_view::pan_right()")
-        .key(key::KeyCode::Left, "image_view::pan_left()")
-        .key(key::KeyCode::Right, "image_view::pan_right()")
-        .key(key::KeyCode::Up, "image_view::pan_up()")
-        .key(key::KeyCode::Down, "image_view::pan_down()");
-}
-
-/// Set up the Canopy app with the imgview widgets and bindings.
-pub fn setup_app(cnpy: &mut Canopy) {
-    Root::load(cnpy);
-    <ImageView as Loader>::load(cnpy);
-    bind_keys(cnpy);
-}
-
-/// Create a Canopy application for viewing the specified image.
-pub fn create_app(image_path: &Path) -> Result<Canopy> {
-    let image = image::open(image_path)?.to_rgba8();
-
-    let mut cnpy = Canopy::new();
-    setup_app(&mut cnpy);
-
-    let app_id = cnpy.core.add(ImageView::new(image));
-    Root::install(&mut cnpy.core, app_id)?;
-    Ok(cnpy)
 }
 
 #[cfg(test)]

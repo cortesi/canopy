@@ -32,6 +32,7 @@ unicode-segmentation = "1.12.0"
 unicode-width = "0.2.2"
 alacritty_terminal = "0.25.1"
 portable-pty = "0.9.0"
+image = "0.25.9"
 
 [dev-dependencies]
 clap = { version = "4.5.40", features = ["derive"] }

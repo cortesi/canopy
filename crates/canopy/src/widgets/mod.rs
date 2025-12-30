@@ -9,6 +9,8 @@ pub mod center;
 pub mod dropdown;
 /// Editor widget.
 pub mod editor;
+/// Image view widget.
+pub mod image_view;
 /// Input helpers.
 pub(crate) mod input;
 /// Modal widget.
@@ -41,6 +43,7 @@ pub use boxed::{Box, BoxGlyphs};
 pub use button::Button;
 pub use center::Center;
 pub use dropdown::{Dropdown, DropdownItem};
+pub use image_view::ImageView;
 pub use input::{Input, TextBuf};
 pub use list::{List, Selectable};
 pub use modal::Modal;

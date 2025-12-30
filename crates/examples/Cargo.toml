@@ -36,6 +36,10 @@ name = "framegym"
 path = "examples/framegym.rs"
 
 [[example]]
+name = "imgview"
+path = "examples/imgview.rs"
+
+[[example]]
 name = "intervals"
 path = "examples/intervals.rs"
 

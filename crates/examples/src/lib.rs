@@ -8,6 +8,8 @@ pub mod chargym;
 pub mod focusgym;
 /// Frame gym example nodes.
 pub mod framegym;
+/// Image viewer example nodes.
+pub mod imgview;
 /// Intervals example nodes.
 pub mod intervals;
 /// List gym example nodes.
