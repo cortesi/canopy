@@ -20,9 +20,9 @@
 <a href=#20 id=20 data-nosnippet>20</a><span class="doccomment">/// The result of an event handler.
 <a href=#21 id=21 data-nosnippet>21</a></span><span class="attr">#[derive(Debug, PartialEq, Eq, Clone)]
 <a href=#22 id=22 data-nosnippet>22</a></span><span class="kw">pub enum </span>EventOutcome {
-<a href=#23 id=23 data-nosnippet>23</a>    <span class="doccomment">/// The event was processed and the node should be rendered.
+<a href=#23 id=23 data-nosnippet>23</a>    <span class="doccomment">/// The event was processed and propagation stops.
 <a href=#24 id=24 data-nosnippet>24</a>    </span>Handle,
-<a href=#25 id=25 data-nosnippet>25</a>    <span class="doccomment">/// The event was processed, but nothing changed so rendering is skipped and propagation stops.
+<a href=#25 id=25 data-nosnippet>25</a>    <span class="doccomment">/// The event was processed without a state change and propagation stops.
 <a href=#26 id=26 data-nosnippet>26</a>    </span>Consume,
 <a href=#27 id=27 data-nosnippet>27</a>    <span class="doccomment">/// The event was not handled and will bubble up the tree.
 <a href=#28 id=28 data-nosnippet>28</a>    </span>Ignore,

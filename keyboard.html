@@ -183,8 +183,8 @@
 <p>Key events are passed down from the current focus to the root, with the
 <strong>Node::handle_key</strong> method called on each node. Keys are only handled once - we
 stop passing the event along once the first node indicates that it's been
-handled. Handling a key event automatically taints the node, unless the
-<strong>EventOutcome::Consume</strong> value is returned.</p>
+handled. Rendering occurs after each event; <strong>EventOutcome</strong> only controls
+propagation.</p>
 
                     </main>
 

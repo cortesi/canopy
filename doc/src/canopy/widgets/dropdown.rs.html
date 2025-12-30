@@ -95,7 +95,7 @@
 <a href=#95 id=95 data-nosnippet>95</a>        <span class="self">self</span>.expanded = !<span class="self">self</span>.expanded;
 <a href=#96 id=96 data-nosnippet>96</a>        <span class="self">self</span>.highlighted = <span class="self">self</span>.selected;
 <a href=#97 id=97 data-nosnippet>97</a>        <span class="comment">// Mark layout dirty so parent can resize
-<a href=#98 id=98 data-nosnippet>98</a>        </span>c.taint();
+<a href=#98 id=98 data-nosnippet>98</a>        </span>c.invalidate_layout();
 <a href=#99 id=99 data-nosnippet>99</a>        <span class="prelude-val">Ok</span>(())
 <a href=#100 id=100 data-nosnippet>100</a>    }
 <a href=#101 id=101 data-nosnippet>101</a>
@@ -123,7 +123,7 @@
 <a href=#123 id=123 data-nosnippet>123</a>        <span class="kw">if </span><span class="self">self</span>.expanded {
 <a href=#124 id=124 data-nosnippet>124</a>            <span class="self">self</span>.selected = <span class="self">self</span>.highlighted;
 <a href=#125 id=125 data-nosnippet>125</a>            <span class="self">self</span>.expanded = <span class="bool-val">false</span>;
-<a href=#126 id=126 data-nosnippet>126</a>            c.taint();
+<a href=#126 id=126 data-nosnippet>126</a>            c.invalidate_layout();
 <a href=#127 id=127 data-nosnippet>127</a>        }
 <a href=#128 id=128 data-nosnippet>128</a>        <span class="prelude-val">Ok</span>(())
 <a href=#129 id=129 data-nosnippet>129</a>    }
@@ -134,7 +134,7 @@
 <a href=#134 id=134 data-nosnippet>134</a>        <span class="kw">if </span><span class="self">self</span>.expanded {
 <a href=#135 id=135 data-nosnippet>135</a>            <span class="self">self</span>.expanded = <span class="bool-val">false</span>;
 <a href=#136 id=136 data-nosnippet>136</a>            <span class="self">self</span>.highlighted = <span class="self">self</span>.selected;
-<a href=#137 id=137 data-nosnippet>137</a>            c.taint();
+<a href=#137 id=137 data-nosnippet>137</a>            c.invalidate_layout();
 <a href=#138 id=138 data-nosnippet>138</a>        }
 <a href=#139 id=139 data-nosnippet>139</a>        <span class="prelude-val">Ok</span>(())
 <a href=#140 id=140 data-nosnippet>140</a>    }
@@ -166,13 +166,13 @@
 <a href=#166 id=166 data-nosnippet>166</a>                        <span class="self">self</span>.highlighted = clicked_row;
 <a href=#167 id=167 data-nosnippet>167</a>                        <span class="self">self</span>.selected = <span class="self">self</span>.highlighted;
 <a href=#168 id=168 data-nosnippet>168</a>                        <span class="self">self</span>.expanded = <span class="bool-val">false</span>;
-<a href=#169 id=169 data-nosnippet>169</a>                        ctx.taint();
+<a href=#169 id=169 data-nosnippet>169</a>                        ctx.invalidate_layout();
 <a href=#170 id=170 data-nosnippet>170</a>                    }
 <a href=#171 id=171 data-nosnippet>171</a>                } <span class="kw">else </span>{
 <a href=#172 id=172 data-nosnippet>172</a>                    <span class="comment">// When collapsed, click toggles expansion
 <a href=#173 id=173 data-nosnippet>173</a>                    </span><span class="self">self</span>.expanded = <span class="bool-val">true</span>;
 <a href=#174 id=174 data-nosnippet>174</a>                    <span class="self">self</span>.highlighted = <span class="self">self</span>.selected;
-<a href=#175 id=175 data-nosnippet>175</a>                    ctx.taint();
+<a href=#175 id=175 data-nosnippet>175</a>                    ctx.invalidate_layout();
 <a href=#176 id=176 data-nosnippet>176</a>                }
 <a href=#177 id=177 data-nosnippet>177</a>                <span class="comment">// Return Ignore so mouse bindings can also fire
 <a href=#178 id=178 data-nosnippet>178</a>                </span><span class="kw">return </span>EventOutcome::Ignore;

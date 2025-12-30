@@ -183,8 +183,8 @@
 <p>Mouse events are independent of the focus - we locate the leaf node that is
 under the mouse cursor, then pass event through the path from the leaf to the
 root for handling. For each node on the path, the <strong>Node::handle_mouse</strong> method
-is called, and we stop after the first node handles the event. Handling a mouse
-event taints the node, unless <strong>EventOutcome::Consume</strong> is returned.</p>
+is called, and we stop after the first node handles the event. Rendering occurs
+after each event; <strong>EventOutcome</strong> only controls propagation.</p>
 
                     </main>
 

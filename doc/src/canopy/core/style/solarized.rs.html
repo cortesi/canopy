@@ -39,97 +39,98 @@
 <a href=#39 id=39 data-nosnippet>39</a>
 <a href=#40 id=40 data-nosnippet>40</a><span class="doccomment">/// Build a dark solarized style map.
 <a href=#41 id=41 data-nosnippet>41</a></span><span class="kw">pub fn </span>solarized_dark() -&gt; StyleMap {
-<a href=#42 id=42 data-nosnippet>42</a>    <span class="kw">let </span><span class="kw-2">mut </span>c = StyleMap::new();
-<a href=#43 id=43 data-nosnippet>43</a>    c.add(<span class="string">"/"</span>, <span class="prelude-val">Some</span>(BASE0), <span class="prelude-val">Some</span>(BASE03), <span class="prelude-val">Some</span>(AttrSet::default()));
-<a href=#44 id=44 data-nosnippet>44</a>    c.add_fg(<span class="string">"/frame"</span>, BASE01);
-<a href=#45 id=45 data-nosnippet>45</a>    c.add_fg(<span class="string">"/frame/focused"</span>, BLUE);
-<a href=#46 id=46 data-nosnippet>46</a>    c.add_fg(<span class="string">"/frame/active"</span>, BASE1);
-<a href=#47 id=47 data-nosnippet>47</a>    c.add_fg(<span class="string">"/frame/title"</span>, BASE3);
-<a href=#48 id=48 data-nosnippet>48</a>    c.add_fg(<span class="string">"/tab"</span>, BASE01);
-<a href=#49 id=49 data-nosnippet>49</a>    c.add_fg(<span class="string">"/tab/inactive"</span>, BASE1);
-<a href=#50 id=50 data-nosnippet>50</a>    c.add_bg(<span class="string">"/tab/inactive"</span>, BASE02);
-<a href=#51 id=51 data-nosnippet>51</a>    c.add_fg(<span class="string">"/tab/active"</span>, BASE3);
-<a href=#52 id=52 data-nosnippet>52</a>    c.add_bg(<span class="string">"/tab/active"</span>, BLUE);
-<a href=#53 id=53 data-nosnippet>53</a>
-<a href=#54 id=54 data-nosnippet>54</a>    c.add_fg(<span class="string">"/blue"</span>, BLUE);
-<a href=#55 id=55 data-nosnippet>55</a>    c.add_fg(<span class="string">"/red"</span>, RED);
-<a href=#56 id=56 data-nosnippet>56</a>    c.add_fg(<span class="string">"/magenta"</span>, MAGENTA);
-<a href=#57 id=57 data-nosnippet>57</a>    c.add_fg(<span class="string">"/violet"</span>, VIOLET);
-<a href=#58 id=58 data-nosnippet>58</a>    c.add_fg(<span class="string">"/cyan"</span>, CYAN);
-<a href=#59 id=59 data-nosnippet>59</a>    c.add_fg(<span class="string">"/green"</span>, GREEN);
-<a href=#60 id=60 data-nosnippet>60</a>    c.add_fg(<span class="string">"/yellow"</span>, YELLOW);
-<a href=#61 id=61 data-nosnippet>61</a>    c.add_fg(<span class="string">"/orange"</span>, ORANGE);
-<a href=#62 id=62 data-nosnippet>62</a>    c.add_fg(<span class="string">"/black"</span>, BLACK);
-<a href=#63 id=63 data-nosnippet>63</a>
-<a href=#64 id=64 data-nosnippet>64</a>    <span class="comment">// Text style variants
-<a href=#65 id=65 data-nosnippet>65</a>    </span>c.add(<span class="string">"/text/bold"</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(AttrSet::new(Attr::Bold)));
-<a href=#66 id=66 data-nosnippet>66</a>    c.add(<span class="string">"/text/italic"</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(AttrSet::new(Attr::Italic)));
-<a href=#67 id=67 data-nosnippet>67</a>    c.add(
-<a href=#68 id=68 data-nosnippet>68</a>        <span class="string">"/text/underline"</span>,
-<a href=#69 id=69 data-nosnippet>69</a>        <span class="prelude-val">None</span>,
-<a href=#70 id=70 data-nosnippet>70</a>        <span class="prelude-val">None</span>,
-<a href=#71 id=71 data-nosnippet>71</a>        <span class="prelude-val">Some</span>(AttrSet::new(Attr::Underline)),
-<a href=#72 id=72 data-nosnippet>72</a>    );
-<a href=#73 id=73 data-nosnippet>73</a>
-<a href=#74 id=74 data-nosnippet>74</a>    <span class="comment">// Selector widget styles
-<a href=#75 id=75 data-nosnippet>75</a>    </span>c.add_fg(<span class="string">"/selector"</span>, BASE0);
-<a href=#76 id=76 data-nosnippet>76</a>    c.add_fg(<span class="string">"/selector/selected"</span>, BLUE);
-<a href=#77 id=77 data-nosnippet>77</a>    c.add(<span class="string">"/selector/focus"</span>, <span class="prelude-val">Some</span>(BASE03), <span class="prelude-val">Some</span>(BLUE), <span class="prelude-val">None</span>);
-<a href=#78 id=78 data-nosnippet>78</a>    c.add(<span class="string">"/selector/focus/selected"</span>, <span class="prelude-val">Some</span>(BASE03), <span class="prelude-val">Some</span>(CYAN), <span class="prelude-val">None</span>);
-<a href=#79 id=79 data-nosnippet>79</a>
-<a href=#80 id=80 data-nosnippet>80</a>    <span class="comment">// Dropdown widget styles
-<a href=#81 id=81 data-nosnippet>81</a>    </span>c.add_fg(<span class="string">"/dropdown"</span>, BASE0);
-<a href=#82 id=82 data-nosnippet>82</a>    c.add_fg(<span class="string">"/dropdown/selected"</span>, BLUE);
-<a href=#83 id=83 data-nosnippet>83</a>    c.add(<span class="string">"/dropdown/highlight"</span>, <span class="prelude-val">Some</span>(BASE03), <span class="prelude-val">Some</span>(BLUE), <span class="prelude-val">None</span>);
-<a href=#84 id=84 data-nosnippet>84</a>
-<a href=#85 id=85 data-nosnippet>85</a>    c
-<a href=#86 id=86 data-nosnippet>86</a>}
-<a href=#87 id=87 data-nosnippet>87</a>
-<a href=#88 id=88 data-nosnippet>88</a><span class="doccomment">/// Build a light solarized style map.
-<a href=#89 id=89 data-nosnippet>89</a></span><span class="kw">pub fn </span>solarized_light() -&gt; StyleMap {
-<a href=#90 id=90 data-nosnippet>90</a>    <span class="kw">let </span><span class="kw-2">mut </span>c = StyleMap::new();
-<a href=#91 id=91 data-nosnippet>91</a>    <span class="comment">// Light mode: swap base colors (BASE00 fg on BASE3 bg)
-<a href=#92 id=92 data-nosnippet>92</a>    </span>c.add(<span class="string">"/"</span>, <span class="prelude-val">Some</span>(BASE00), <span class="prelude-val">Some</span>(BASE3), <span class="prelude-val">Some</span>(AttrSet::default()));
-<a href=#93 id=93 data-nosnippet>93</a>    c.add_fg(<span class="string">"/frame"</span>, BASE1);
-<a href=#94 id=94 data-nosnippet>94</a>    c.add_fg(<span class="string">"/frame/focused"</span>, BLUE);
-<a href=#95 id=95 data-nosnippet>95</a>    c.add_fg(<span class="string">"/frame/active"</span>, BASE01);
-<a href=#96 id=96 data-nosnippet>96</a>    c.add_fg(<span class="string">"/frame/title"</span>, BASE03);
-<a href=#97 id=97 data-nosnippet>97</a>    c.add_fg(<span class="string">"/tab"</span>, BASE1);
-<a href=#98 id=98 data-nosnippet>98</a>    c.add_fg(<span class="string">"/tab/inactive"</span>, BASE01);
-<a href=#99 id=99 data-nosnippet>99</a>    c.add_bg(<span class="string">"/tab/inactive"</span>, BASE2);
-<a href=#100 id=100 data-nosnippet>100</a>    c.add_fg(<span class="string">"/tab/active"</span>, BASE3);
-<a href=#101 id=101 data-nosnippet>101</a>    c.add_bg(<span class="string">"/tab/active"</span>, BLUE);
-<a href=#102 id=102 data-nosnippet>102</a>
-<a href=#103 id=103 data-nosnippet>103</a>    c.add_fg(<span class="string">"/blue"</span>, BLUE);
-<a href=#104 id=104 data-nosnippet>104</a>    c.add_fg(<span class="string">"/red"</span>, RED);
-<a href=#105 id=105 data-nosnippet>105</a>    c.add_fg(<span class="string">"/magenta"</span>, MAGENTA);
-<a href=#106 id=106 data-nosnippet>106</a>    c.add_fg(<span class="string">"/violet"</span>, VIOLET);
-<a href=#107 id=107 data-nosnippet>107</a>    c.add_fg(<span class="string">"/cyan"</span>, CYAN);
-<a href=#108 id=108 data-nosnippet>108</a>    c.add_fg(<span class="string">"/green"</span>, GREEN);
-<a href=#109 id=109 data-nosnippet>109</a>    c.add_fg(<span class="string">"/yellow"</span>, YELLOW);
-<a href=#110 id=110 data-nosnippet>110</a>    c.add_fg(<span class="string">"/orange"</span>, ORANGE);
-<a href=#111 id=111 data-nosnippet>111</a>    c.add_fg(<span class="string">"/black"</span>, BLACK);
-<a href=#112 id=112 data-nosnippet>112</a>
-<a href=#113 id=113 data-nosnippet>113</a>    <span class="comment">// Text style variants
-<a href=#114 id=114 data-nosnippet>114</a>    </span>c.add(<span class="string">"/text/bold"</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(AttrSet::new(Attr::Bold)));
-<a href=#115 id=115 data-nosnippet>115</a>    c.add(<span class="string">"/text/italic"</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(AttrSet::new(Attr::Italic)));
-<a href=#116 id=116 data-nosnippet>116</a>    c.add(
-<a href=#117 id=117 data-nosnippet>117</a>        <span class="string">"/text/underline"</span>,
-<a href=#118 id=118 data-nosnippet>118</a>        <span class="prelude-val">None</span>,
-<a href=#119 id=119 data-nosnippet>119</a>        <span class="prelude-val">None</span>,
-<a href=#120 id=120 data-nosnippet>120</a>        <span class="prelude-val">Some</span>(AttrSet::new(Attr::Underline)),
-<a href=#121 id=121 data-nosnippet>121</a>    );
-<a href=#122 id=122 data-nosnippet>122</a>
-<a href=#123 id=123 data-nosnippet>123</a>    <span class="comment">// Selector widget styles
-<a href=#124 id=124 data-nosnippet>124</a>    </span>c.add_fg(<span class="string">"/selector"</span>, BASE00);
-<a href=#125 id=125 data-nosnippet>125</a>    c.add_fg(<span class="string">"/selector/selected"</span>, BLUE);
-<a href=#126 id=126 data-nosnippet>126</a>    c.add(<span class="string">"/selector/focus"</span>, <span class="prelude-val">Some</span>(BASE3), <span class="prelude-val">Some</span>(BLUE), <span class="prelude-val">None</span>);
-<a href=#127 id=127 data-nosnippet>127</a>    c.add(<span class="string">"/selector/focus/selected"</span>, <span class="prelude-val">Some</span>(BASE3), <span class="prelude-val">Some</span>(CYAN), <span class="prelude-val">None</span>);
-<a href=#128 id=128 data-nosnippet>128</a>
-<a href=#129 id=129 data-nosnippet>129</a>    <span class="comment">// Dropdown widget styles
-<a href=#130 id=130 data-nosnippet>130</a>    </span>c.add_fg(<span class="string">"/dropdown"</span>, BASE00);
-<a href=#131 id=131 data-nosnippet>131</a>    c.add_fg(<span class="string">"/dropdown/selected"</span>, BLUE);
-<a href=#132 id=132 data-nosnippet>132</a>    c.add(<span class="string">"/dropdown/highlight"</span>, <span class="prelude-val">Some</span>(BASE3), <span class="prelude-val">Some</span>(BLUE), <span class="prelude-val">None</span>);
-<a href=#133 id=133 data-nosnippet>133</a>
-<a href=#134 id=134 data-nosnippet>134</a>    c
-<a href=#135 id=135 data-nosnippet>135</a>}</code></pre></div></section></main></body></html>
+<a href=#42 id=42 data-nosnippet>42</a>    <span class="kw">use </span><span class="kw">super</span>::StyleBuilder;
+<a href=#43 id=43 data-nosnippet>43</a>
+<a href=#44 id=44 data-nosnippet>44</a>    <span class="kw">let </span><span class="kw-2">mut </span>c = StyleMap::new();
+<a href=#45 id=45 data-nosnippet>45</a>    c.rules()
+<a href=#46 id=46 data-nosnippet>46</a>        .style(
+<a href=#47 id=47 data-nosnippet>47</a>            <span class="string">"/"</span>,
+<a href=#48 id=48 data-nosnippet>48</a>            StyleBuilder::new()
+<a href=#49 id=49 data-nosnippet>49</a>                .fg(BASE0)
+<a href=#50 id=50 data-nosnippet>50</a>                .bg(BASE03)
+<a href=#51 id=51 data-nosnippet>51</a>                .attrs(AttrSet::default()),
+<a href=#52 id=52 data-nosnippet>52</a>        )
+<a href=#53 id=53 data-nosnippet>53</a>        .fg(<span class="string">"/frame"</span>, BASE01)
+<a href=#54 id=54 data-nosnippet>54</a>        .fg(<span class="string">"/frame/focused"</span>, BLUE)
+<a href=#55 id=55 data-nosnippet>55</a>        .fg(<span class="string">"/frame/active"</span>, BASE1)
+<a href=#56 id=56 data-nosnippet>56</a>        .fg(<span class="string">"/frame/title"</span>, BASE3)
+<a href=#57 id=57 data-nosnippet>57</a>        .fg(<span class="string">"/tab"</span>, BASE01)
+<a href=#58 id=58 data-nosnippet>58</a>        .style(<span class="string">"/tab/inactive"</span>, StyleBuilder::new().fg(BASE1).bg(BASE02))
+<a href=#59 id=59 data-nosnippet>59</a>        .style(<span class="string">"/tab/active"</span>, StyleBuilder::new().fg(BASE3).bg(BLUE))
+<a href=#60 id=60 data-nosnippet>60</a>        .fg(<span class="string">"/blue"</span>, BLUE)
+<a href=#61 id=61 data-nosnippet>61</a>        .fg(<span class="string">"/red"</span>, RED)
+<a href=#62 id=62 data-nosnippet>62</a>        .fg(<span class="string">"/magenta"</span>, MAGENTA)
+<a href=#63 id=63 data-nosnippet>63</a>        .fg(<span class="string">"/violet"</span>, VIOLET)
+<a href=#64 id=64 data-nosnippet>64</a>        .fg(<span class="string">"/cyan"</span>, CYAN)
+<a href=#65 id=65 data-nosnippet>65</a>        .fg(<span class="string">"/green"</span>, GREEN)
+<a href=#66 id=66 data-nosnippet>66</a>        .fg(<span class="string">"/yellow"</span>, YELLOW)
+<a href=#67 id=67 data-nosnippet>67</a>        .fg(<span class="string">"/orange"</span>, ORANGE)
+<a href=#68 id=68 data-nosnippet>68</a>        .fg(<span class="string">"/black"</span>, BLACK)
+<a href=#69 id=69 data-nosnippet>69</a>        .attr(<span class="string">"/text/bold"</span>, Attr::Bold)
+<a href=#70 id=70 data-nosnippet>70</a>        .attr(<span class="string">"/text/italic"</span>, Attr::Italic)
+<a href=#71 id=71 data-nosnippet>71</a>        .attr(<span class="string">"/text/underline"</span>, Attr::Underline)
+<a href=#72 id=72 data-nosnippet>72</a>        .fg(<span class="string">"/selector"</span>, BASE0)
+<a href=#73 id=73 data-nosnippet>73</a>        .fg(<span class="string">"/selector/selected"</span>, BLUE)
+<a href=#74 id=74 data-nosnippet>74</a>        .style(<span class="string">"/selector/focus"</span>, StyleBuilder::new().fg(BASE03).bg(BLUE))
+<a href=#75 id=75 data-nosnippet>75</a>        .style(
+<a href=#76 id=76 data-nosnippet>76</a>            <span class="string">"/selector/focus/selected"</span>,
+<a href=#77 id=77 data-nosnippet>77</a>            StyleBuilder::new().fg(BASE03).bg(CYAN),
+<a href=#78 id=78 data-nosnippet>78</a>        )
+<a href=#79 id=79 data-nosnippet>79</a>        .fg(<span class="string">"/dropdown"</span>, BASE0)
+<a href=#80 id=80 data-nosnippet>80</a>        .fg(<span class="string">"/dropdown/selected"</span>, BLUE)
+<a href=#81 id=81 data-nosnippet>81</a>        .style(
+<a href=#82 id=82 data-nosnippet>82</a>            <span class="string">"/dropdown/highlight"</span>,
+<a href=#83 id=83 data-nosnippet>83</a>            StyleBuilder::new().fg(BASE03).bg(BLUE),
+<a href=#84 id=84 data-nosnippet>84</a>        )
+<a href=#85 id=85 data-nosnippet>85</a>        .apply();
+<a href=#86 id=86 data-nosnippet>86</a>    c
+<a href=#87 id=87 data-nosnippet>87</a>}
+<a href=#88 id=88 data-nosnippet>88</a>
+<a href=#89 id=89 data-nosnippet>89</a><span class="doccomment">/// Build a light solarized style map.
+<a href=#90 id=90 data-nosnippet>90</a></span><span class="kw">pub fn </span>solarized_light() -&gt; StyleMap {
+<a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">use </span><span class="kw">super</span>::StyleBuilder;
+<a href=#92 id=92 data-nosnippet>92</a>
+<a href=#93 id=93 data-nosnippet>93</a>    <span class="kw">let </span><span class="kw-2">mut </span>c = StyleMap::new();
+<a href=#94 id=94 data-nosnippet>94</a>    c.rules()
+<a href=#95 id=95 data-nosnippet>95</a>        .style(
+<a href=#96 id=96 data-nosnippet>96</a>            <span class="string">"/"</span>,
+<a href=#97 id=97 data-nosnippet>97</a>            StyleBuilder::new()
+<a href=#98 id=98 data-nosnippet>98</a>                .fg(BASE00)
+<a href=#99 id=99 data-nosnippet>99</a>                .bg(BASE3)
+<a href=#100 id=100 data-nosnippet>100</a>                .attrs(AttrSet::default()),
+<a href=#101 id=101 data-nosnippet>101</a>        )
+<a href=#102 id=102 data-nosnippet>102</a>        .fg(<span class="string">"/frame"</span>, BASE1)
+<a href=#103 id=103 data-nosnippet>103</a>        .fg(<span class="string">"/frame/focused"</span>, BLUE)
+<a href=#104 id=104 data-nosnippet>104</a>        .fg(<span class="string">"/frame/active"</span>, BASE01)
+<a href=#105 id=105 data-nosnippet>105</a>        .fg(<span class="string">"/frame/title"</span>, BASE03)
+<a href=#106 id=106 data-nosnippet>106</a>        .fg(<span class="string">"/tab"</span>, BASE1)
+<a href=#107 id=107 data-nosnippet>107</a>        .style(<span class="string">"/tab/inactive"</span>, StyleBuilder::new().fg(BASE01).bg(BASE2))
+<a href=#108 id=108 data-nosnippet>108</a>        .style(<span class="string">"/tab/active"</span>, StyleBuilder::new().fg(BASE3).bg(BLUE))
+<a href=#109 id=109 data-nosnippet>109</a>        .fg(<span class="string">"/blue"</span>, BLUE)
+<a href=#110 id=110 data-nosnippet>110</a>        .fg(<span class="string">"/red"</span>, RED)
+<a href=#111 id=111 data-nosnippet>111</a>        .fg(<span class="string">"/magenta"</span>, MAGENTA)
+<a href=#112 id=112 data-nosnippet>112</a>        .fg(<span class="string">"/violet"</span>, VIOLET)
+<a href=#113 id=113 data-nosnippet>113</a>        .fg(<span class="string">"/cyan"</span>, CYAN)
+<a href=#114 id=114 data-nosnippet>114</a>        .fg(<span class="string">"/green"</span>, GREEN)
+<a href=#115 id=115 data-nosnippet>115</a>        .fg(<span class="string">"/yellow"</span>, YELLOW)
+<a href=#116 id=116 data-nosnippet>116</a>        .fg(<span class="string">"/orange"</span>, ORANGE)
+<a href=#117 id=117 data-nosnippet>117</a>        .fg(<span class="string">"/black"</span>, BLACK)
+<a href=#118 id=118 data-nosnippet>118</a>        .attr(<span class="string">"/text/bold"</span>, Attr::Bold)
+<a href=#119 id=119 data-nosnippet>119</a>        .attr(<span class="string">"/text/italic"</span>, Attr::Italic)
+<a href=#120 id=120 data-nosnippet>120</a>        .attr(<span class="string">"/text/underline"</span>, Attr::Underline)
+<a href=#121 id=121 data-nosnippet>121</a>        .fg(<span class="string">"/selector"</span>, BASE00)
+<a href=#122 id=122 data-nosnippet>122</a>        .fg(<span class="string">"/selector/selected"</span>, BLUE)
+<a href=#123 id=123 data-nosnippet>123</a>        .style(<span class="string">"/selector/focus"</span>, StyleBuilder::new().fg(BASE3).bg(BLUE))
+<a href=#124 id=124 data-nosnippet>124</a>        .style(
+<a href=#125 id=125 data-nosnippet>125</a>            <span class="string">"/selector/focus/selected"</span>,
+<a href=#126 id=126 data-nosnippet>126</a>            StyleBuilder::new().fg(BASE3).bg(CYAN),
+<a href=#127 id=127 data-nosnippet>127</a>        )
+<a href=#128 id=128 data-nosnippet>128</a>        .fg(<span class="string">"/dropdown"</span>, BASE00)
+<a href=#129 id=129 data-nosnippet>129</a>        .fg(<span class="string">"/dropdown/selected"</span>, BLUE)
+<a href=#130 id=130 data-nosnippet>130</a>        .style(
+<a href=#131 id=131 data-nosnippet>131</a>            <span class="string">"/dropdown/highlight"</span>,
+<a href=#132 id=132 data-nosnippet>132</a>            StyleBuilder::new().fg(BASE3).bg(BLUE),
+<a href=#133 id=133 data-nosnippet>133</a>        )
+<a href=#134 id=134 data-nosnippet>134</a>        .apply();
+<a href=#135 id=135 data-nosnippet>135</a>    c
+<a href=#136 id=136 data-nosnippet>136</a>}</code></pre></div></section></main></body></html>

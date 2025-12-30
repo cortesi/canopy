@@ -357,15 +357,15 @@ the focus path the opportunity to define a cursor location and style using the
 <p>Key events are passed down from the current focus to the root, with the
 <strong>Node::handle_key</strong> method called on each node. Keys are only handled once - we
 stop passing the event along once the first node indicates that it's been
-handled. Handling a key event automatically taints the node, unless the
-<strong>EventOutcome::Consume</strong> value is returned.</p>
+handled. Rendering occurs after each event; <strong>EventOutcome</strong> only controls
+propagation.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="mouse"><a class="header" href="#mouse">Mouse</a></h1>
 <img width=300 style="padding: 20px;" src="assets/mouseevent.png">
 <p>Mouse events are independent of the focus - we locate the leaf node that is
 under the mouse cursor, then pass event through the path from the leaf to the
 root for handling. For each node on the path, the <strong>Node::handle_mouse</strong> method
-is called, and we stop after the first node handles the event. Handling a mouse
-event taints the node, unless <strong>EventOutcome::Consume</strong> is returned.</p>
+is called, and we stop after the first node handles the event. Rendering occurs
+after each event; <strong>EventOutcome</strong> only controls propagation.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="focus"><a class="header" href="#focus">Focus</a></h1>
 <img width=300 style="padding: 20px;" src="assets/focus.png">
 <p>Eactly one node has <strong>focus</strong> at any one time. If a node has focus, its
@@ -403,7 +403,7 @@ will move with respect to the pre-order traversal.</p>
 <p>Canopy also has the spatial focus functions <strong>focus::{up,down,left,right}</strong>.
 These functions take the screen area of the currently focused node, then search
 for nodes that accept focus in the specified direction to choose the new focus.</p>
-<p>When a node's focus status changes, it is automatically tainted for rendering in the next sweep.</p>
+<p>When a node's focus status changes, it is automatically invalidated for the next render sweep.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="binding-system"><a class="header" href="#binding-system">Binding system</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><h1 id="themes-and-styling"><a class="header" href="#themes-and-styling">Themes and Styling</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="widgets"><a class="header" href="#widgets">Widgets</a></h1>

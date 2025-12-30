@@ -37,7 +37,7 @@
 <a href=#37 id=37 data-nosnippet>37</a>    </span><span class="kw">fn </span>node_view(<span class="kw-2">&amp;</span><span class="self">self</span>, node: NodeId) -&gt; <span class="prelude-ty">Option</span>&lt;View&gt;;
 <a href=#38 id=38 data-nosnippet>38</a>
 <a href=#39 id=39 data-nosnippet>39</a>    <span class="doccomment">/// Mark this node dirty so the next frame re-runs layout.
-<a href=#40 id=40 data-nosnippet>40</a>    </span><span class="kw">fn </span>taint(<span class="kw-2">&amp;</span><span class="self">self</span>);
+<a href=#40 id=40 data-nosnippet>40</a>    </span><span class="kw">fn </span>invalidate_layout(<span class="kw-2">&amp;</span><span class="self">self</span>);
 <a href=#41 id=41 data-nosnippet>41</a>
 <a href=#42 id=42 data-nosnippet>42</a>    <span class="doccomment">/// Canvas size for the current node.
 <a href=#43 id=43 data-nosnippet>43</a>    </span><span class="kw">fn </span>canvas(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Expanse {
@@ -698,7 +698,7 @@
 <a href=#698 id=698 data-nosnippet>698</a>        <span class="self">self</span>.core.nodes.get(node).map(|n| n.view)
 <a href=#699 id=699 data-nosnippet>699</a>    }
 <a href=#700 id=700 data-nosnippet>700</a>
-<a href=#701 id=701 data-nosnippet>701</a>    <span class="kw">fn </span>taint(<span class="kw-2">&amp;</span><span class="self">self</span>) {
+<a href=#701 id=701 data-nosnippet>701</a>    <span class="kw">fn </span>invalidate_layout(<span class="kw-2">&amp;</span><span class="self">self</span>) {
 <a href=#702 id=702 data-nosnippet>702</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(node) = <span class="self">self</span>.core.nodes.get(<span class="self">self</span>.node_id) {
 <a href=#703 id=703 data-nosnippet>703</a>            node.layout_dirty.set(<span class="bool-val">true</span>);
 <a href=#704 id=704 data-nosnippet>704</a>        }
@@ -1016,7 +1016,7 @@
 <a href=#1016 id=1016 data-nosnippet>1016</a>        <span class="self">self</span>.core.nodes.get(node).map(|n| n.view)
 <a href=#1017 id=1017 data-nosnippet>1017</a>    }
 <a href=#1018 id=1018 data-nosnippet>1018</a>
-<a href=#1019 id=1019 data-nosnippet>1019</a>    <span class="kw">fn </span>taint(<span class="kw-2">&amp;</span><span class="self">self</span>) {
+<a href=#1019 id=1019 data-nosnippet>1019</a>    <span class="kw">fn </span>invalidate_layout(<span class="kw-2">&amp;</span><span class="self">self</span>) {
 <a href=#1020 id=1020 data-nosnippet>1020</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(node) = <span class="self">self</span>.core.nodes.get(<span class="self">self</span>.node_id) {
 <a href=#1021 id=1021 data-nosnippet>1021</a>            node.layout_dirty.set(<span class="bool-val">true</span>);
 <a href=#1022 id=1022 data-nosnippet>1022</a>        }

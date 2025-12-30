@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["ArgTypes","Args","ReturnTypes","ReturnValue"],"fn":["dispatch"],"struct":["CommandCall","CommandInvocation","CommandRef","CommandSet","CommandSpec","ReturnSpec"],"trait":["CommandBinding","CommandNode"]};
+window.SIDEBAR_ITEMS = {"enum":["ArgTypes","Args","ReturnTypes","ReturnValue"],"fn":["dispatch"],"struct":["CommandCall","CommandInvocation","CommandRef","CommandSet","CommandSpec","ReturnSpec"],"trait":["CommandBinding","CommandInvocationBuilder","CommandNode"]};

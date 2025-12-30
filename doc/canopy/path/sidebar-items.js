@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["Path","PathMatcher"]};
+window.SIDEBAR_ITEMS = {"struct":["Path","PathMatch","PathMatcher"]};
