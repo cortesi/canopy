@@ -139,6 +139,11 @@ impl<'a> Render<'a> {
         self.apply_effects(base)
     }
 
+    /// Resolve a style by name without applying effects.
+    pub(crate) fn resolve_style_name_raw(&self, name: &str) -> Style {
+        self.style.get(self.stylemap, name)
+    }
+
     /// Resolve a style by name and apply the current effect stack.
     pub(crate) fn resolve_style_name(&self, name: &str) -> Style {
         self.resolve_style(name)

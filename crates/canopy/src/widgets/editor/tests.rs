@@ -15,7 +15,7 @@ use crate::{
     layout::Layout,
     render::Render,
     state::NodeName,
-    style::{AttrSet, Color, PartialStyle, Style},
+    style::{AttrSet, Color, PartialStyle, Style, StyleManager},
     testing::harness::Harness,
     widget::Widget,
     widgets::editor::{
@@ -317,6 +317,32 @@ fn highlight_spans_apply_styles() {
     harness.render().unwrap();
     let partial = PartialStyle::fg(Color::Red);
     assert!(harness.tbuf().contains_text_style("hi", &partial));
+}
+
+#[test]
+fn highlight_spans_inherit_editor_background() {
+    let config = EditorConfig::new().with_wrap(WrapMode::None);
+    let mut harness = build_harness("hi\nok", config, 4, 2);
+    let highlight_style = Style {
+        fg: Color::Green,
+        bg: Color::Red,
+        attrs: AttrSet::default(),
+    };
+    with_editor(&mut harness, |editor| {
+        editor.set_highlighter(Some(Box::new(TestHighlighter {
+            style: highlight_style,
+        })));
+    });
+    harness.key(key::KeyCode::Down).unwrap();
+
+    let base_bg = StyleManager::default()
+        .get(&harness.canopy.style, "editor/text")
+        .bg;
+    let buf = harness.buf();
+    let first = buf.get(Point { x: 0, y: 0 }).expect("cell missing");
+    let second = buf.get(Point { x: 1, y: 0 }).expect("cell missing");
+    assert_eq!(first.style.bg, base_bg);
+    assert_eq!(second.style.bg, base_bg);
 }
 
 #[test]

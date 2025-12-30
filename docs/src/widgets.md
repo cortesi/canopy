@@ -40,6 +40,13 @@ let mut editor = Editor::with_config("", EditorConfig::new());
 editor.set_highlighter(Some(Box::new(SyntectHighlighter::plain())));
 ```
 
+Highlight spans inherit the editor background, so themes only influence foreground colors and
+attributes unless you supply a custom highlighter. The default syntect palette is
+`Solarized (dark)` to match the editor's dark background.
+
+`SyntectHighlighter::with_theme_name` selects a named theme from syntect's default theme set, and
+`SyntectHighlighter::with_theme` lets you pass a `Theme` directly for full palette control.
+
 ## Input
 
 The `Input` widget is a single-line text field that shares the editor's buffer and column mapping

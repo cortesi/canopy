@@ -2081,6 +2081,8 @@ impl Editor {
         let line_rect = Rect::new(ctx.origin.x, line_y, ctx.view_rect.w, 1);
         ctx.r.fill("editor/text", line_rect, ' ')?;
 
+        let base_text_style = ctx.r.resolve_style_name_raw("editor/text");
+
         if ctx.gutter_width > 0 {
             let gutter_line = Line::new(ctx.origin.x, line_y, ctx.gutter_width);
             let number_text = line_number_text(
@@ -2186,7 +2188,9 @@ impl Editor {
                         continue;
                     }
                     if span.range.start < g_end && span.range.end > g_start {
-                        style = Some(span.style.clone());
+                        let mut span_style = span.style.clone();
+                        span_style.bg = base_text_style.bg;
+                        style = Some(span_style);
                     }
                     break;
                 }

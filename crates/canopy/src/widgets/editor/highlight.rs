@@ -40,7 +40,33 @@ impl SyntectHighlighter {
     pub fn new(extension: impl Into<String>) -> Self {
         let syntax_set = SyntaxSet::load_defaults_newlines();
         let themes = ThemeSet::load_defaults();
-        let theme = themes.themes.values().next().cloned().unwrap_or_default();
+        let theme = default_theme(&themes);
+        Self {
+            syntax_set,
+            theme,
+            extension: extension.into(),
+        }
+    }
+
+    /// Construct a syntect highlighter with a named theme.
+    pub fn with_theme_name(extension: impl Into<String>, theme_name: impl AsRef<str>) -> Self {
+        let syntax_set = SyntaxSet::load_defaults_newlines();
+        let themes = ThemeSet::load_defaults();
+        let theme = themes
+            .themes
+            .get(theme_name.as_ref())
+            .cloned()
+            .unwrap_or_else(|| default_theme(&themes));
+        Self {
+            syntax_set,
+            theme,
+            extension: extension.into(),
+        }
+    }
+
+    /// Construct a syntect highlighter using a specific theme.
+    pub fn with_theme(extension: impl Into<String>, theme: Theme) -> Self {
+        let syntax_set = SyntaxSet::load_defaults_newlines();
         Self {
             syntax_set,
             theme,
@@ -88,6 +114,16 @@ impl Default for SyntectHighlighter {
     fn default() -> Self {
         Self::plain()
     }
+}
+
+/// Return the default theme from the provided theme set.
+fn default_theme(themes: &ThemeSet) -> Theme {
+    themes
+        .themes
+        .get("Solarized (dark)")
+        .cloned()
+        .or_else(|| themes.themes.values().next().cloned())
+        .unwrap_or_default()
 }
 
 /// Convert a syntect style to a canopy style.
