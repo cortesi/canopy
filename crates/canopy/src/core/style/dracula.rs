@@ -90,6 +90,28 @@ pub fn dracula() -> StyleMap {
             "/dropdown/highlight",
             StyleBuilder::new().fg(BACKGROUND).bg(PURPLE),
         )
+        .style(
+            "/editor/text",
+            StyleBuilder::new().fg(FOREGROUND).bg(BACKGROUND),
+        )
+        .style(
+            "/editor/selection",
+            StyleBuilder::new().fg(FOREGROUND).bg(SELECTION),
+        )
+        .style(
+            "/editor/search/match",
+            StyleBuilder::new().fg(BACKGROUND).bg(YELLOW),
+        )
+        .style(
+            "/editor/search/current",
+            StyleBuilder::new().fg(BACKGROUND).bg(ORANGE),
+        )
+        .fg("/editor/line-number", COMMENT)
+        .fg("/editor/line-number/current", PURPLE)
+        .style(
+            "/editor/prompt",
+            StyleBuilder::new().fg(FOREGROUND).bg(CURRENT_LINE),
+        )
         .apply();
     c
 }

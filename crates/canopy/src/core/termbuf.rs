@@ -214,7 +214,7 @@ impl TermBuf {
     }
 
     /// Write a grapheme cluster at a specific point.
-    fn put_grapheme(&mut self, p: Point, grapheme: &str, style: Style) {
+    pub(crate) fn put_grapheme(&mut self, p: Point, grapheme: &str, style: Style) {
         if let Some(i) = self.idx(p) {
             let mut chars = grapheme.chars();
             let ch = chars.next().unwrap_or(' ');
@@ -229,7 +229,7 @@ impl TermBuf {
     }
 
     /// Write a continuation cell for a wide glyph.
-    fn put_continuation(&mut self, p: Point, style: Style) {
+    pub(crate) fn put_continuation(&mut self, p: Point, style: Style) {
         if let Some(i) = self.idx(p) {
             self.cells[i] = Cell::continuation(style);
         }

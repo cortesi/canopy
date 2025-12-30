@@ -82,6 +82,22 @@ pub fn solarized_dark() -> StyleMap {
             "/dropdown/highlight",
             StyleBuilder::new().fg(BASE03).bg(BLUE),
         )
+        .style("/editor/text", StyleBuilder::new().fg(BASE0).bg(BASE03))
+        .style(
+            "/editor/selection",
+            StyleBuilder::new().fg(BASE0).bg(BASE02),
+        )
+        .style(
+            "/editor/search/match",
+            StyleBuilder::new().fg(BASE03).bg(YELLOW),
+        )
+        .style(
+            "/editor/search/current",
+            StyleBuilder::new().fg(BASE03).bg(ORANGE),
+        )
+        .fg("/editor/line-number", BASE01)
+        .fg("/editor/line-number/current", BLUE)
+        .style("/editor/prompt", StyleBuilder::new().fg(BASE0).bg(BASE02))
         .apply();
     c
 }
@@ -131,6 +147,22 @@ pub fn solarized_light() -> StyleMap {
             "/dropdown/highlight",
             StyleBuilder::new().fg(BASE3).bg(BLUE),
         )
+        .style("/editor/text", StyleBuilder::new().fg(BASE00).bg(BASE3))
+        .style(
+            "/editor/selection",
+            StyleBuilder::new().fg(BASE00).bg(BASE2),
+        )
+        .style(
+            "/editor/search/match",
+            StyleBuilder::new().fg(BASE3).bg(YELLOW),
+        )
+        .style(
+            "/editor/search/current",
+            StyleBuilder::new().fg(BASE3).bg(ORANGE),
+        )
+        .fg("/editor/line-number", BASE1)
+        .fg("/editor/line-number/current", BLUE)
+        .style("/editor/prompt", StyleBuilder::new().fg(BASE00).bg(BASE2))
         .apply();
     c
 }

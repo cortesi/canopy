@@ -4,6 +4,8 @@
 pub mod cedit;
 /// Char gym example nodes.
 pub mod chargym;
+/// Editor gym example nodes.
+pub mod editorgym;
 /// Focus gym example nodes.
 pub mod focusgym;
 /// Frame gym example nodes.

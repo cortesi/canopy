@@ -98,6 +98,22 @@ pub fn gruvbox_dark() -> StyleMap {
             "/dropdown/highlight",
             StyleBuilder::new().fg(DARK0).bg(BLUE),
         )
+        .style("/editor/text", StyleBuilder::new().fg(LIGHT1).bg(DARK0))
+        .style(
+            "/editor/selection",
+            StyleBuilder::new().fg(LIGHT1).bg(DARK2),
+        )
+        .style(
+            "/editor/search/match",
+            StyleBuilder::new().fg(DARK0).bg(YELLOW),
+        )
+        .style(
+            "/editor/search/current",
+            StyleBuilder::new().fg(DARK0).bg(ORANGE),
+        )
+        .fg("/editor/line-number", GRAY)
+        .fg("/editor/line-number/current", BLUE)
+        .style("/editor/prompt", StyleBuilder::new().fg(LIGHT1).bg(DARK1))
         .apply();
     c
 }

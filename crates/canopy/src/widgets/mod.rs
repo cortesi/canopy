@@ -44,7 +44,7 @@ pub use button::Button;
 pub use center::Center;
 pub use dropdown::{Dropdown, DropdownItem};
 pub use image_view::ImageView;
-pub use input::{Input, TextBuf};
+pub use input::Input;
 pub use list::{List, Selectable};
 pub use modal::Modal;
 pub use panes::Panes;

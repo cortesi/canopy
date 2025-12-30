@@ -1,240 +1,207 @@
+use std::iter::repeat_n;
+
 use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthStr;
 
 use crate::{
-    Context, ViewContext, command, cursor, derive_commands,
+    Context, ViewContext, command,
+    core::text,
+    cursor, derive_commands,
+    editor::{TextBuffer, TextPosition, tab_width},
     error::Result,
     event::{Event, key},
-    geom::{Line, LineSegment, Point},
+    geom::{Line, Point},
     layout::{MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
     widget::{EventOutcome, Widget},
 };
 
-/// A text buffer that exposes edit functionality for a single line. It also
-/// keeps track of a display window that slides within the line, responding
-/// naturally to cursor movements.
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct TextBuf {
-    /// Raw input text value.
+/// Default tab stop width for single-line inputs.
+const DEFAULT_TAB_STOP: usize = 4;
+
+/// A single-line text buffer with horizontal scrolling.
+#[derive(Debug, Clone)]
+struct InputBuffer {
+    /// Rope-backed text storage.
+    buffer: TextBuffer,
+    /// Cached buffer contents for easy slicing.
     value: String,
-
-    /// Cursor position in grapheme clusters.
-    cursor_pos: usize,
-    /// Visible window into the value, measured in display columns.
-    window: LineSegment,
+    /// Column offset of the visible window.
+    scroll: usize,
+    /// Visible window width in columns.
+    view_width: usize,
+    /// Tab stop width in columns.
+    tab_stop: usize,
 }
 
-/// Metadata describing a grapheme cluster in the buffer.
-#[derive(Debug, Clone, Copy)]
-struct GraphemeInfo {
-    /// Byte offset where the grapheme starts.
-    start: usize,
-    /// Byte offset where the grapheme ends.
-    end: usize,
-    /// Display width of the grapheme in columns.
-    width: u32,
-}
-
-impl TextBuf {
-    /// Construct a new text buffer with initial content.
+impl InputBuffer {
+    /// Construct a new input buffer with initial content.
     fn new(start: impl Into<String>) -> Self {
-        let value = start.into();
-        let cursor_pos = value.graphemes(true).count();
-        Self {
+        let raw = start.into();
+        let value = sanitize_single_line(&raw);
+        let buffer = TextBuffer::new(value.clone());
+        let mut out = Self {
+            buffer,
             value,
-            cursor_pos,
-            window: LineSegment { off: 0, len: 0 },
-        }
+            scroll: 0,
+            view_width: 0,
+            tab_stop: DEFAULT_TAB_STOP,
+        };
+        out.ensure_cursor_visible();
+        out
+    }
+
+    /// Set the visible window width.
+    fn set_display_width(&mut self, width: usize) {
+        self.view_width = width;
+        self.ensure_cursor_visible();
     }
 
     /// The location of the displayed cursor along the x axis.
     fn cursor_display(&self) -> u32 {
-        let info = self.grapheme_info();
-        let cursor_cols = self.cursor_columns(&info);
-        cursor_cols.saturating_sub(self.window.off)
+        let cursor_col = self.cursor_column();
+        cursor_col.saturating_sub(self.scroll) as u32
     }
 
     /// Return the visible text slice.
     fn text(&self) -> &str {
-        if self.window.len == 0 {
+        if self.view_width == 0 {
             return "";
         }
-        let info = self.grapheme_info();
-        let (start, end) = self.visible_range(&info);
+        let (start, end) = self.visible_range();
         &self.value[start..end]
     }
 
-    /// Clamp cursor and window state to valid bounds.
-    fn fix_window(&mut self) {
-        let info = self.grapheme_info();
-        if self.cursor_pos > info.len() {
-            self.cursor_pos = info.len();
-        }
-        if self.window.len == 0 {
-            self.window.off = 0;
-            return;
-        }
-        let cursor_cols = self.cursor_columns(&info);
-        let text_width = self.text_width(&info);
-        if cursor_cols < self.window.off {
-            self.window.off = cursor_cols;
-        } else {
-            let window_end = self.window.off.saturating_add(self.window.len);
-            if cursor_cols >= window_end {
-                let delta = cursor_cols.saturating_sub(window_end).saturating_add(1);
-                self.window.off = self.window.off.saturating_add(delta);
-            }
-        }
-
-        if text_width <= self.window.len {
-            self.window.off = 0;
-        } else if self.window.off > text_width.saturating_sub(1) {
-            self.window.off = text_width.saturating_sub(1);
-        }
+    /// Return the raw input value.
+    fn value(&self) -> &str {
+        &self.value
     }
 
-    /// Set the visible window width.
-    fn set_display_width(&mut self, val: usize) {
-        self.window = LineSegment {
-            off: self.window.off,
-            len: val as u32,
-        };
-        self.fix_window();
+    /// Return the visible text for rendering.
+    fn render_text(&self) -> String {
+        if self.view_width == 0 {
+            return String::new();
+        }
+        let expanded = expand_tabs(&self.value, self.tab_stop);
+        let (out, _) = text::slice_by_columns(&expanded, self.scroll, self.view_width);
+        out.to_string()
     }
 
     /// Insert a character at the cursor position.
-    pub fn insert(&mut self, c: char) -> bool {
-        let info = self.grapheme_info();
-        let byte_index = self.cursor_byte_index(&info);
-        self.value.insert(byte_index, c);
-        let info = self.grapheme_info();
-        self.cursor_pos = self.grapheme_index_for_byte(&info, byte_index + c.len_utf8());
-        self.fix_window();
+    fn insert(&mut self, c: char) -> bool {
+        let insert = match c {
+            '\n' | '\r' => ' ',
+            _ => c,
+        };
+        self.buffer.insert_text(&insert.to_string());
+        self.sync_value();
+        self.ensure_cursor_visible();
         true
     }
+
     /// Delete the character before the cursor.
-    pub fn backspace(&mut self) -> bool {
-        if !self.value.is_empty() && self.cursor_pos > 0 {
-            let info = self.grapheme_info();
-            let remove_index = self.cursor_pos.saturating_sub(1);
-            if let Some(g) = info.get(remove_index) {
-                let start = g.start;
-                self.value.replace_range(g.start..g.end, "");
-                let info = self.grapheme_info();
-                self.cursor_pos = self.grapheme_index_for_byte(&info, start);
-            } else {
-                self.cursor_pos = 0;
-            }
-            self.fix_window();
+    fn backspace(&mut self) -> bool {
+        if self.buffer.delete_backward(false) {
+            self.sync_value();
+            self.ensure_cursor_visible();
             true
         } else {
             false
         }
     }
+
     /// Move the cursor left by one character.
-    pub fn left(&mut self) -> bool {
-        if self.cursor_pos > 0 {
-            self.cursor_pos = self.cursor_pos.saturating_sub(1);
-            self.fix_window();
+    fn left(&mut self) -> bool {
+        if self.buffer.move_left(false) {
+            self.ensure_cursor_visible();
             true
         } else {
             false
         }
     }
+
     /// Move the cursor right by one character.
-    pub fn right(&mut self) -> bool {
-        let info = self.grapheme_info();
-        if self.cursor_pos < info.len() {
-            self.cursor_pos = self.cursor_pos.saturating_add(1);
-            self.fix_window();
+    fn right(&mut self) -> bool {
+        if self.buffer.move_right(false) {
+            self.ensure_cursor_visible();
             true
         } else {
             false
         }
     }
 
-    /// Collect grapheme metadata for the current buffer.
-    fn grapheme_info(&self) -> Vec<GraphemeInfo> {
-        self.value
-            .grapheme_indices(true)
-            .map(|(start, g)| GraphemeInfo {
-                start,
-                end: start + g.len(),
-                width: UnicodeWidthStr::width(g) as u32,
-            })
-            .collect()
+    /// Return the display width of the full buffer.
+    fn display_width(&self) -> u32 {
+        self.line_width() as u32
     }
 
-    /// Compute the display width of the buffer using grapheme metadata.
-    fn text_width(&self, info: &[GraphemeInfo]) -> u32 {
-        info.iter().map(|g| g.width).sum()
+    /// Update the cached value string from the rope.
+    fn sync_value(&mut self) {
+        self.value = self.buffer.line_text(0);
     }
 
-    /// Compute the cursor column position using grapheme metadata.
-    fn cursor_columns(&self, info: &[GraphemeInfo]) -> u32 {
-        info.iter().take(self.cursor_pos).map(|g| g.width).sum()
+    /// Compute the cursor column in display coordinates.
+    fn cursor_column(&self) -> usize {
+        self.buffer
+            .column_for_position(self.buffer.cursor(), self.tab_stop)
     }
 
-    /// Find the byte index for the cursor position.
-    fn cursor_byte_index(&self, info: &[GraphemeInfo]) -> usize {
-        if self.cursor_pos >= info.len() {
-            self.value.len()
-        } else {
-            info[self.cursor_pos].start
-        }
+    /// Compute the display width of the line.
+    fn line_width(&self) -> usize {
+        let len = self.buffer.line_char_len(0);
+        self.buffer
+            .column_for_position(TextPosition::new(0, len), self.tab_stop)
     }
 
-    /// Map a byte offset to a grapheme index.
-    fn grapheme_index_for_byte(&self, info: &[GraphemeInfo], byte: usize) -> usize {
-        info.iter().take_while(|g| g.start < byte).count()
-    }
-
-    /// Compute the byte range visible in the current window.
-    fn visible_range(&self, info: &[GraphemeInfo]) -> (usize, usize) {
-        if info.is_empty() {
+    /// Compute the visible byte range for the current scroll state.
+    fn visible_range(&self) -> (usize, usize) {
+        if self.value.is_empty() || self.view_width == 0 {
             return (0, 0);
         }
-        let window_start = self.window.off;
-        let window_end = self.window.off.saturating_add(self.window.len);
-        let mut col: u32 = 0;
-        let mut start = None;
-        let mut end = 0;
-        for g in info {
-            let g_start = col;
-            let g_end = col.saturating_add(g.width);
-            if start.is_none() && g_end > window_start {
-                start = Some(g.start);
-            }
-            if start.is_some() {
-                if g_start < window_end {
-                    end = g.end;
-                } else {
-                    break;
-                }
-            }
-            col = g_end;
-        }
-        let start = start.unwrap_or(self.value.len());
-        if start == self.value.len() {
+        let start_pos = self
+            .buffer
+            .position_for_column(0, self.scroll, self.tab_stop);
+        let end_col = self.scroll.saturating_add(self.view_width);
+        let end_pos = self.buffer.position_for_column(0, end_col, self.tab_stop);
+        let start = byte_index_for_char(&self.value, start_pos.column);
+        let end = byte_index_for_char(&self.value, end_pos.column);
+        if start >= end {
             (start, start)
         } else {
             (start, end)
         }
     }
 
-    /// Return the display width of the full buffer.
-    fn display_width(&self) -> u32 {
-        let info = self.grapheme_info();
-        self.text_width(&info)
+    /// Ensure the cursor stays within the visible window.
+    fn ensure_cursor_visible(&mut self) {
+        if self.view_width == 0 {
+            self.scroll = 0;
+            return;
+        }
+        let cursor_col = self.cursor_column();
+        if cursor_col < self.scroll {
+            self.scroll = cursor_col;
+        } else {
+            let window_end = self.scroll.saturating_add(self.view_width);
+            if cursor_col >= window_end {
+                let delta = cursor_col.saturating_sub(window_end).saturating_add(1);
+                self.scroll = self.scroll.saturating_add(delta);
+            }
+        }
+
+        let text_width = self.line_width();
+        if text_width <= self.view_width {
+            self.scroll = 0;
+        } else if self.scroll > text_width.saturating_sub(1) {
+            self.scroll = text_width.saturating_sub(1);
+        }
     }
 }
 
 /// Single-line text input widget.
 pub struct Input {
     /// Text buffer for the input.
-    textbuf: TextBuf,
+    buffer: InputBuffer,
 }
 
 #[derive_commands]
@@ -242,40 +209,41 @@ impl Input {
     /// Construct a new input with initial text.
     pub fn new(txt: impl Into<String>) -> Self {
         Self {
-            textbuf: TextBuf::new(txt),
+            buffer: InputBuffer::new(txt),
         }
     }
+
     /// Return the current input text.
     pub fn text(&self) -> &str {
-        self.textbuf.text()
+        self.buffer.text()
     }
 
     /// Return the raw input value without padding.
     pub fn value(&self) -> &str {
-        &self.textbuf.value
+        self.buffer.value()
     }
 
     /// Replace the input value and reset the cursor.
     pub fn set_value(&mut self, value: impl Into<String>) {
-        self.textbuf = TextBuf::new(value);
+        self.buffer = InputBuffer::new(value);
     }
 
     /// Move the cursor left.
     #[command]
     fn left(&mut self, _c: &mut dyn Context) {
-        let _ = self.textbuf.left();
+        let _ = self.buffer.left();
     }
 
     /// Move the cursor right.
     #[command]
     fn right(&mut self, _c: &mut dyn Context) {
-        let _ = self.textbuf.right();
+        let _ = self.buffer.right();
     }
 
     /// Delete a character at the input location.
     #[command]
     fn backspace(&mut self, _c: &mut dyn Context) {
-        let _ = self.textbuf.backspace();
+        let _ = self.buffer.backspace();
     }
 }
 
@@ -287,7 +255,7 @@ impl Widget for Input {
     fn cursor(&self) -> Option<cursor::Cursor> {
         Some(cursor::Cursor {
             location: Point {
-                x: self.textbuf.cursor_display(),
+                x: self.buffer.cursor_display(),
                 y: 0,
             },
             shape: cursor::CursorShape::Block,
@@ -299,9 +267,10 @@ impl Widget for Input {
         let view = ctx.view();
         let view_rect = view.view_rect();
         let content_origin = view.content_origin();
-        self.textbuf.set_display_width(view_rect.w as usize);
+        self.buffer.set_display_width(view_rect.w as usize);
         let line = Line::new(content_origin.x, content_origin.y, view_rect.w);
-        r.text("text", line, self.textbuf.text())
+        let content = self.buffer.render_text();
+        r.text("text", line, &content)
     }
 
     fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
@@ -310,7 +279,7 @@ impl Widget for Input {
                 key: key::KeyCode::Char(c),
                 ..
             }) => {
-                self.textbuf.insert(*c);
+                self.buffer.insert(*c);
                 EventOutcome::Handle
             }
             _ => EventOutcome::Ignore,
@@ -318,7 +287,7 @@ impl Widget for Input {
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
-        let text_len = self.textbuf.display_width().max(1);
+        let text_len = self.buffer.display_width().max(1);
         c.clamp(Size::new(text_len, 1))
     }
 
@@ -327,20 +296,56 @@ impl Widget for Input {
     }
 }
 
+/// Replace newlines in single-line input values.
+fn sanitize_single_line(value: &str) -> String {
+    value.replace(['\n', '\r'], " ")
+}
+
+/// Expand tabs into spaces using the configured tab stop.
+fn expand_tabs(text: &str, tab_stop: usize) -> String {
+    let mut out = String::new();
+    let mut col = 0usize;
+    for grapheme in text.graphemes(true) {
+        if grapheme == "\t" {
+            let width = tab_width(col, tab_stop);
+            out.extend(repeat_n(' ', width));
+            col = col.saturating_add(width);
+        } else {
+            out.push_str(grapheme);
+            col = col.saturating_add(text::grapheme_width(grapheme));
+        }
+    }
+    out
+}
+
+/// Convert a char index to a byte index in a string.
+fn byte_index_for_char(text: &str, char_index: usize) -> usize {
+    if char_index == 0 {
+        return 0;
+    }
+    if char_index >= text.chars().count() {
+        return text.len();
+    }
+    text.char_indices()
+        .nth(char_index)
+        .map(|(idx, _)| idx)
+        .unwrap_or(text.len())
+}
+
 #[cfg(test)]
 mod tests {
     use unicode_width::UnicodeWidthStr;
 
-    use super::TextBuf;
+    use super::InputBuffer;
 
     #[test]
-    fn textbuf_handles_multibyte_chars() {
-        let mut buf = TextBuf::new("a");
+    fn input_buffer_handles_multibyte_chars() {
+        let mut buf = InputBuffer::new("a");
         buf.set_display_width(10);
         let accent = '\u{00e9}';
         buf.insert(accent);
         let expected = format!("a{accent}");
-        assert_eq!(buf.value, expected);
+        assert_eq!(buf.value(), expected);
         assert_eq!(
             buf.cursor_display(),
             UnicodeWidthStr::width(expected.as_str()) as u32
@@ -348,13 +353,13 @@ mod tests {
         buf.left();
         assert_eq!(buf.cursor_display(), UnicodeWidthStr::width("a") as u32);
         buf.backspace();
-        assert_eq!(buf.value, accent.to_string());
+        assert_eq!(buf.value(), accent.to_string());
     }
 
     #[test]
-    fn textbuf_handles_grapheme_clusters() {
+    fn input_buffer_handles_grapheme_clusters() {
         let astronaut = "\u{1f469}\u{200d}\u{1f680}";
-        let mut buf = TextBuf::new(format!("a{astronaut}b"));
+        let mut buf = InputBuffer::new(format!("a{astronaut}b"));
         buf.set_display_width(10);
         let expected = format!("a{astronaut}b");
         assert_eq!(
@@ -368,6 +373,6 @@ mod tests {
             UnicodeWidthStr::width(expected.as_str()) as u32
         );
         buf.backspace();
-        assert_eq!(buf.value, "ab");
+        assert_eq!(buf.value(), "ab");
     }
 }

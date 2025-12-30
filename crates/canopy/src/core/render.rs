@@ -139,6 +139,11 @@ impl<'a> Render<'a> {
         self.apply_effects(base)
     }
 
+    /// Resolve a style by name and apply the current effect stack.
+    pub(crate) fn resolve_style_name(&self, name: &str) -> Style {
+        self.resolve_style(name)
+    }
+
     /// Push a style layer.
     pub fn push_layer(&mut self, name: &str) {
         self.style.push_layer(name);
@@ -207,6 +212,31 @@ impl<'a> Render<'a> {
             let style = self.apply_effects(style);
             let adjusted = self.translate_point(p);
             self.buffer_mut().put(adjusted, ch, style);
+        }
+        Ok(())
+    }
+
+    /// Write a grapheme with a resolved style, including continuation cells.
+    pub(crate) fn put_grapheme(
+        &mut self,
+        style: Style,
+        p: geom::Point,
+        grapheme: &str,
+    ) -> Result<()> {
+        if self.clip.contains_point(p) {
+            let style = self.apply_effects(style);
+            let adjusted = self.translate_point(p);
+            self.buffer_mut()
+                .put_grapheme(adjusted, grapheme, style.clone());
+            let width = text::grapheme_width(grapheme);
+            for i in 1..width {
+                let continuation = geom::Point {
+                    x: adjusted.x.saturating_add(i as u32),
+                    y: adjusted.y,
+                };
+                self.buffer_mut()
+                    .put_continuation(continuation, style.clone());
+            }
         }
         Ok(())
     }

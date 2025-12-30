@@ -8,7 +8,7 @@ use crate::{
         termbuf::TermBuf,
     },
     error::Result,
-    event::key,
+    event::{key, mouse},
     geom::Expanse,
     widget::Widget,
 };
@@ -107,9 +107,38 @@ impl Harness {
         self.canopy.render(&mut self.backend)
     }
 
+    /// Send a mouse event and render.
+    pub fn mouse(&mut self, m: mouse::MouseEvent) -> Result<()> {
+        self.canopy.mouse(m)?;
+        self.canopy.render(&mut self.backend)
+    }
+
+    /// Send a sequence of key events and render after each.
+    pub fn keys<I, K>(&mut self, keys: I) -> Result<()>
+    where
+        I: IntoIterator<Item = K>,
+        K: Into<key::Key>,
+    {
+        for key in keys {
+            self.key(key)?;
+        }
+        Ok(())
+    }
+
+    /// Type a string as a sequence of key events.
+    pub fn type_text(&mut self, text: &str) -> Result<()> {
+        self.keys(text.chars())
+    }
+
     /// Render the root node into the harness backend.
     pub fn render(&mut self) -> Result<()> {
         self.canopy.render(&mut self.backend)
+    }
+
+    /// Render and return a snapshot of the buffer contents.
+    pub fn render_snapshot(&mut self) -> Result<String> {
+        self.render()?;
+        Ok(self.tbuf().snapshot())
     }
 
     /// Execute a script on the app under test.

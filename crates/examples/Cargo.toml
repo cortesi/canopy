@@ -28,6 +28,10 @@ name = "chargym"
 path = "examples/chargym.rs"
 
 [[example]]
+name = "editorgym"
+path = "examples/editorgym.rs"
+
+[[example]]
 name = "focusgym"
 path = "examples/focusgym.rs"
 

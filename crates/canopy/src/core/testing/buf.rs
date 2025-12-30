@@ -283,6 +283,11 @@ impl<'a> BufTest<'a> {
             })
             .collect()
     }
+
+    /// Return a newline-joined snapshot of the buffer contents.
+    pub fn snapshot(&self) -> String {
+        self.lines().join("\n")
+    }
 }
 
 #[cfg(test)]

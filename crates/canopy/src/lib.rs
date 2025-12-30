@@ -23,6 +23,8 @@ extern crate self as canopy;
 
 // Internal core module - re-export specific items below
 mod core;
+/// Internal editor module shared by widgets.
+mod editor;
 
 // Public modules
 pub mod geom;
@@ -47,4 +49,3 @@ pub use core::{backend, commands, cursor, error, event, path, render, script, st
 pub use canopy_derive::{command, derive_commands};
 // Re-export widget trait and event outcome
 pub use widget::{EventOutcome, Widget};
-pub use widgets::input::TextBuf;
