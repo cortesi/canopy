@@ -1,10 +1,13 @@
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 use unicode_segmentation::UnicodeSegmentation;
 
 use super::{
     EditMode, EditorConfig, LineNumbers, WrapMode,
-    highlight::Highlighter,
+    highlight::{HighlightSpan, Highlighter},
     layout::{LayoutCache, WrapSegment, layout_line},
     search::{SearchDirection, SearchState, find_matches},
     vi::{PendingKey, RepeatableEdit, ViMode, ViState, VisualMode},
@@ -50,6 +53,8 @@ pub struct Editor {
     mouse: MouseState,
     /// Optional syntax highlighter.
     highlighter: Option<Box<dyn Highlighter>>,
+    /// Cached syntax highlight spans.
+    highlight_cache: HighlightCache,
     /// Cached cursor position in display coordinates.
     cursor_point: Option<Point>,
     /// Whether a text-entry transaction is active.
@@ -139,6 +144,52 @@ impl<'a, 'b> RenderLineContext<'a, 'b> {
     }
 }
 
+/// Cache of syntax highlight spans keyed by buffer revision and line index.
+#[derive(Debug, Clone)]
+struct HighlightCache {
+    /// Buffer revision the cache corresponds to.
+    revision: u64,
+    /// Cached spans per line.
+    lines: HashMap<usize, Vec<HighlightSpan>>,
+}
+
+impl HighlightCache {
+    /// Construct an empty highlight cache.
+    fn new() -> Self {
+        Self {
+            revision: 0,
+            lines: HashMap::new(),
+        }
+    }
+
+    /// Clear cached spans.
+    fn clear(&mut self) {
+        self.lines.clear();
+    }
+
+    /// Reset the cache when the buffer revision changes.
+    fn sync_revision(&mut self, revision: u64) {
+        if self.revision != revision {
+            self.revision = revision;
+            self.lines.clear();
+        }
+    }
+
+    /// Return cached spans for a line or compute and store them.
+    fn spans_for_line(
+        &mut self,
+        line: usize,
+        compute: impl FnOnce() -> Vec<HighlightSpan>,
+    ) -> Vec<HighlightSpan> {
+        if let Some(spans) = self.lines.get(&line) {
+            return spans.clone();
+        }
+        let spans = compute();
+        self.lines.insert(line, spans.clone());
+        spans
+    }
+}
+
 #[derive_commands]
 impl Editor {
     /// Construct an editor with default configuration.
@@ -163,6 +214,7 @@ impl Editor {
             prompt: None,
             mouse: MouseState::new(),
             highlighter: None,
+            highlight_cache: HighlightCache::new(),
             cursor_point: None,
             text_entry_transaction: false,
         }
@@ -193,6 +245,7 @@ impl Editor {
         self.preferred_column = self
             .buffer
             .column_for_position(self.buffer.cursor(), self.config.tab_stop);
+        self.highlight_cache.clear();
     }
 
     /// Return the current selection.
@@ -203,6 +256,7 @@ impl Editor {
     /// Install a syntax highlighter.
     pub fn set_highlighter(&mut self, highlighter: Option<Box<dyn Highlighter>>) {
         self.highlighter = highlighter;
+        self.highlight_cache.clear();
     }
 
     /// Return a reference to the internal buffer.
@@ -1933,7 +1987,7 @@ impl Editor {
     }
 
     /// Handle mouse interactions for selection and cursor movement.
-    fn handle_mouse_event(&mut self, event: &mouse::MouseEvent, ctx: &dyn Context) -> bool {
+    fn handle_mouse_event(&mut self, event: &mouse::MouseEvent, ctx: &mut dyn Context) -> bool {
         let view = ctx.view();
         let view_rect = view.view_rect();
         let origin = view.content_origin();
@@ -1962,6 +2016,7 @@ impl Editor {
 
         match event.action {
             mouse::Action::Down if event.button == mouse::Button::Left => {
+                ctx.set_focus(ctx.node_id());
                 let click_type = self.mouse.click_type(event.location);
                 match click_type {
                     ClickType::Single => {
@@ -2016,7 +2071,7 @@ impl Editor {
 
     /// Render a single display line of text and gutter content.
     fn render_line(
-        &self,
+        &mut self,
         ctx: &mut RenderLineContext<'_, '_>,
         y: u32,
         line_idx: usize,
@@ -2062,7 +2117,9 @@ impl Editor {
 
         let mut highlight_spans = Vec::new();
         if let Some(highlighter) = &self.highlighter {
-            highlight_spans = highlighter.highlight_line(line_idx, &line_text);
+            highlight_spans = self.highlight_cache.spans_for_line(line_idx, || {
+                highlighter.highlight_line(line_idx, &line_text)
+            });
         }
 
         let mut span_idx = 0usize;
@@ -2240,6 +2297,7 @@ impl Widget for Editor {
         let origin = view.content_origin();
         let gutter_width = self.gutter_width();
         self.update_layout(view_rect, gutter_width);
+        self.highlight_cache.sync_revision(self.buffer.revision());
 
         self.search.update(&self.buffer);
 
@@ -2251,11 +2309,14 @@ impl Widget for Editor {
                     continue;
                 }
                 let line_idx = self.layout.line_for_display(display_line);
-                let line_layout = self.layout.line(line_idx).expect("line layout present");
                 let line_start = self.layout.line_offset(line_idx);
                 let seg_idx = display_line.saturating_sub(line_start);
-                if let Some(segment) = line_layout.segment(seg_idx) {
-                    self.render_line(&mut line_ctx, row, line_idx, segment)?;
+                let segment = self
+                    .layout
+                    .line(line_idx)
+                    .and_then(|line| line.segment(seg_idx).cloned());
+                if let Some(segment) = segment {
+                    self.render_line(&mut line_ctx, row, line_idx, &segment)?;
                 }
             }
         }

@@ -45,6 +45,8 @@ pub struct Canopy {
 
     /// Cached terminal buffer.
     termbuf: Option<TermBuf>,
+    /// Whether a render is pending after the most recent event.
+    render_pending: bool,
 
     /// Event sender channel.
     pub(crate) event_tx: mpsc::Sender<Event>,
@@ -82,6 +84,7 @@ impl Canopy {
             style: solarized::solarized_dark(),
             root_size: None,
             termbuf: None,
+            render_pending: true,
             core,
         }
     }
@@ -248,6 +251,15 @@ impl Canopy {
     /// Has the focus changed since the last render sweep?
     pub(crate) fn focus_changed(&self) -> bool {
         self.core.focus_gen != self.last_render_focus_gen
+    }
+
+    /// Render the tree only if a render is pending.
+    pub(crate) fn render_if_pending<R: RenderBackend>(&mut self, be: &mut R) -> Result<bool> {
+        if !self.render_pending {
+            return Ok(false);
+        }
+        self.render(be)?;
+        Ok(true)
     }
 
     /// Has the focus path status of this node changed since the last render sweep?
@@ -474,6 +486,7 @@ impl Canopy {
 
             self.last_render_focus_gen = self.core.focus_gen;
             self.last_focus_path = self.core.focus_path_ids();
+            self.render_pending = false;
         }
 
         Ok(())
@@ -499,6 +512,7 @@ impl Canopy {
     pub(crate) fn mouse(&mut self, m: mouse::MouseEvent) -> Result<()> {
         let mut path = self.location_path(m.location)?;
         let mut action = None;
+        let mut changed = false;
 
         if let Some(nid) = self.core.locate_node(self.core.root, m.location)? {
             let mut target = Some(nid);
@@ -536,6 +550,7 @@ impl Canopy {
 
                 match outcome {
                     EventOutcome::Handle | EventOutcome::Consume => {
+                        changed = true;
                         break;
                     }
                     EventOutcome::Ignore => {
@@ -562,6 +577,11 @@ impl Canopy {
                     commands::dispatch(&mut self.core, nid, &cmd)?;
                 }
             }
+            changed = true;
+        }
+
+        if changed {
+            self.render_pending = true;
         }
 
         Ok(())
@@ -581,6 +601,7 @@ impl Canopy {
         let mut path = self.core.node_path(self.core.root, start);
         let mut target = Some(start);
         let mut action = None;
+        let mut changed = false;
 
         while let Some(id) = target {
             if let Some(binding) = self.keymap.resolve(&path, &inputmap::InputSpec::Key(k)) {
@@ -591,6 +612,7 @@ impl Canopy {
             let outcome = self.core.dispatch_event_on_node(id, &Event::Key(k));
             match outcome {
                 EventOutcome::Handle | EventOutcome::Consume => {
+                    changed = true;
                     break;
                 }
                 EventOutcome::Ignore => {
@@ -609,6 +631,11 @@ impl Canopy {
                     commands::dispatch(&mut self.core, nid, &cmd)?;
                 }
             }
+            changed = true;
+        }
+
+        if changed {
+            self.render_pending = true;
         }
 
         Ok(())
@@ -651,19 +678,24 @@ impl Canopy {
                 self.mouse(m)?;
             }
             Event::Resize(s) => {
+                self.render_pending = true;
                 self.set_root_size(s)?;
             }
             Event::Poll(ids) => {
+                self.render_pending = true;
                 self.poll(&ids)?;
             }
             Event::Paste(content) => {
+                self.render_pending = true;
                 let event = Event::Paste(content);
                 self.dispatch_focus_event(&event)?;
             }
             Event::FocusGained => {
+                self.render_pending = true;
                 self.dispatch_focus_event(&Event::FocusGained)?;
             }
             Event::FocusLost => {
+                self.render_pending = true;
                 self.dispatch_focus_event(&Event::FocusLost)?;
             }
         };
@@ -673,6 +705,7 @@ impl Canopy {
     /// Set the size on the root node.
     pub fn set_root_size(&mut self, size: Expanse) -> Result<()> {
         self.root_size = Some(size);
+        self.render_pending = true;
         self.core.update_layout(size)?;
         Ok(())
     }
@@ -729,6 +762,21 @@ mod tests {
         }
     }
 
+    pub struct StaticWidget;
+
+    #[derive_commands]
+    impl StaticWidget {
+        pub fn new() -> Self {
+            Self
+        }
+    }
+
+    impl Widget for StaticWidget {
+        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+            Ok(())
+        }
+    }
+
     fn set_outcome<T: Any + OutcomeTarget>(core: &mut Core, id: NodeId, outcome: EventOutcome) {
         core.with_widget_mut(id, |w, _| {
             let any = w as &mut dyn Any;
@@ -756,6 +804,31 @@ mod tests {
             modifiers: key::Empty,
             location: loc,
         }
+    }
+
+    #[test]
+    fn mouse_move_does_not_request_render() -> Result<()> {
+        let mut canopy = Canopy::new();
+        let app_id = canopy.core.add(StaticWidget::new());
+        canopy.core.set_children(canopy.core.root, vec![app_id])?;
+        canopy
+            .core
+            .with_layout_of(app_id, |layout| *layout = Layout::fill())?;
+        canopy.set_root_size(Expanse::new(10, 6))?;
+
+        let (_, mut render) = TestRender::create();
+        canopy.render(&mut render)?;
+        assert!(!canopy.render_if_pending(&mut render)?);
+
+        let event = mouse::MouseEvent {
+            action: mouse::Action::Moved,
+            button: mouse::Button::None,
+            modifiers: key::Empty,
+            location: Point { x: 1, y: 1 },
+        };
+        canopy.event(Event::Mouse(event))?;
+        assert!(!canopy.render_if_pending(&mut render)?);
+        Ok(())
     }
 
     #[test]

@@ -3,7 +3,7 @@ use std::{
     panic,
     process::exit,
     result::Result as StdResult,
-    sync::mpsc,
+    sync::mpsc::{self, TryRecvError},
     thread,
 };
 
@@ -24,20 +24,58 @@ use crate::{
     style::{Color, Style},
 };
 /// Simple event source wrapper for receiving events.
+///
+/// This coalesces consecutive mouse-move events so clicks are not delayed by move bursts.
 struct EventSource {
     /// Event receiver channel.
     rx: mpsc::Receiver<Event>,
+    /// Buffered non-move event encountered while coalescing.
+    pending: Option<Event>,
 }
 
 impl EventSource {
     /// Construct a new event source.
     fn new(rx: mpsc::Receiver<Event>) -> Self {
-        Self { rx }
+        Self { rx, pending: None }
     }
 
     /// Block until the next event arrives.
-    fn next(&self) -> StdResult<Event, mpsc::RecvError> {
-        self.rx.recv()
+    fn next(&mut self) -> StdResult<Event, mpsc::RecvError> {
+        if let Some(event) = self.pending.take() {
+            return Ok(event);
+        }
+
+        let mut event = self.rx.recv()?;
+        if matches!(
+            event,
+            Event::Mouse(mouse::MouseEvent {
+                action: mouse::Action::Moved,
+                ..
+            })
+        ) {
+            loop {
+                match self.rx.try_recv() {
+                    Ok(next) => {
+                        if matches!(
+                            next,
+                            Event::Mouse(mouse::MouseEvent {
+                                action: mouse::Action::Moved,
+                                ..
+                            })
+                        ) {
+                            event = next;
+                        } else {
+                            self.pending = Some(next);
+                            break;
+                        }
+                    }
+                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Disconnected) => break,
+                }
+            }
+        }
+
+        Ok(event)
     }
 }
 
@@ -471,7 +509,7 @@ pub fn runloop(mut cnpy: Canopy) -> Result<()> {
         panic!("core event loop already initialized")
     };
 
-    let events = EventSource::new(rx);
+    let mut events = EventSource::new(rx);
     event_emitter(cnpy.event_tx.clone());
     let size = translate_result(terminal::size())?;
     cnpy.register_backend(ctrl);
@@ -522,14 +560,25 @@ pub fn runloop(mut cnpy: Canopy) -> Result<()> {
         }
 
         cnpy.event(event)?;
-        if let Err(e) = cnpy.render(&mut be) {
-            return Err(handle_render_error(
-                e,
-                &cnpy.core,
-                cnpy.core.root,
-                cnpy.core.focus,
-            ));
+        match cnpy.render_if_pending(&mut be) {
+            Ok(rendered) => {
+                if rendered && let Err(e) = translate_result(be.flush()) {
+                    return Err(handle_render_error(
+                        e,
+                        &cnpy.core,
+                        cnpy.core.root,
+                        cnpy.core.focus,
+                    ));
+                }
+            }
+            Err(e) => {
+                return Err(handle_render_error(
+                    e,
+                    &cnpy.core,
+                    cnpy.core.root,
+                    cnpy.core.focus,
+                ));
+            }
         }
-        translate_result(be.flush())?;
     }
 }

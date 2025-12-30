@@ -1,4 +1,10 @@
-use std::time::Duration;
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::Duration,
+};
 
 use crate::{
     Binder, Canopy, Context, Loader, NodeId, ViewContext, buf, derive_commands,
@@ -313,6 +319,27 @@ fn highlight_spans_apply_styles() {
     assert!(harness.tbuf().contains_text_style("hi", &partial));
 }
 
+#[test]
+fn highlight_spans_cached_by_revision() {
+    let config = EditorConfig::new()
+        .with_mode(EditMode::Text)
+        .with_wrap(WrapMode::None);
+    let mut harness = build_harness("hi", config, 5, 1);
+    let counter = Arc::new(AtomicUsize::new(0));
+    let highlighter = CountingHighlighter {
+        count: counter.clone(),
+    };
+    with_editor(&mut harness, |editor| {
+        editor.set_highlighter(Some(Box::new(highlighter)));
+    });
+    harness.render().unwrap();
+    let first = counter.load(Ordering::SeqCst);
+    assert!(first > 0);
+    harness.render().unwrap();
+    let second = counter.load(Ordering::SeqCst);
+    assert_eq!(first, second);
+}
+
 #[derive(Clone)]
 struct TestHighlighter {
     style: Style,
@@ -328,5 +355,17 @@ impl Highlighter for TestHighlighter {
         } else {
             Vec::new()
         }
+    }
+}
+
+#[derive(Clone)]
+struct CountingHighlighter {
+    count: Arc<AtomicUsize>,
+}
+
+impl Highlighter for CountingHighlighter {
+    fn highlight_line(&self, _line: usize, _text: &str) -> Vec<HighlightSpan> {
+        self.count.fetch_add(1, Ordering::SeqCst);
+        Vec::new()
     }
 }
