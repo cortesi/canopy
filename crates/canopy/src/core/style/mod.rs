@@ -113,6 +113,69 @@ pub struct PartialStyle {
     pub attrs: Option<AttrSet>,
 }
 
+/// A builder for creating reusable style specifications.
+///
+/// Use this to define styles that can be applied to multiple paths.
+///
+/// # Example
+///
+/// ```ignore
+/// let selected = StyleBuilder::new()
+///     .fg(solarized::BASE3)
+///     .bg(solarized::BLUE)
+///     .attrs(selected_attrs);
+///
+/// style_map.rules()
+///     .rule("item/selected").style(selected)
+///     .apply();
+/// ```
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
+pub struct StyleBuilder {
+    /// The partial style being built.
+    inner: PartialStyle,
+}
+
+impl StyleBuilder {
+    /// Create a new empty style builder.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the foreground color.
+    pub fn fg(mut self, color: Color) -> Self {
+        self.inner.fg = Some(color);
+        self
+    }
+
+    /// Set the background color.
+    pub fn bg(mut self, color: Color) -> Self {
+        self.inner.bg = Some(color);
+        self
+    }
+
+    /// Add a single attribute.
+    pub fn attr(mut self, attr: Attr) -> Self {
+        if let Some(attrs) = self.inner.attrs {
+            self.inner.attrs = Some(attrs.with(attr));
+        } else {
+            self.inner.attrs = Some(AttrSet::new(attr));
+        }
+        self
+    }
+
+    /// Set all attributes.
+    pub fn attrs(mut self, attrs: AttrSet) -> Self {
+        self.inner.attrs = Some(attrs);
+        self
+    }
+}
+
+impl From<StyleBuilder> for PartialStyle {
+    fn from(s: StyleBuilder) -> Self {
+        s.inner
+    }
+}
+
 impl PartialStyle {
     /// Create a new PartialStyle with only a foreground color.
     pub fn fg(fg: Color) -> Self {
@@ -223,34 +286,32 @@ impl StyleMap {
         let mut cs = Self {
             styles: HashMap::new(),
         };
-        cs.add(
+        cs.insert_style(
             "/",
-            Some(Color::White),
-            Some(Color::Black),
-            Some(AttrSet::default()),
+            PartialStyle {
+                fg: Some(Color::White),
+                bg: Some(Color::Black),
+                attrs: Some(AttrSet::default()),
+            },
         );
         cs
     }
 
-    /// Insert a foreground color at a specified path.
-    pub fn add_fg(&mut self, path: &str, fg: Color) {
-        let parsed = parse_path(path);
-        if let Some(ps) = self.styles.get_mut(&parsed) {
-            ps.fg = Some(fg);
-        } else {
-            self.styles
-                .insert(parsed, PartialStyle::default().with_fg(fg));
-        }
-    }
-
-    /// Insert a background color at a specified path.
-    pub fn add_bg(&mut self, path: &str, bg: Color) {
-        let parsed = parse_path(path);
-        if let Some(ps) = self.styles.get_mut(&parsed) {
-            ps.bg = Some(bg);
-        } else {
-            self.styles
-                .insert(parsed, PartialStyle::default().with_bg(bg));
+    /// Begin a fluent rule-building chain.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// style_map.rules()
+    ///     .fg("red/text", solarized::RED)
+    ///     .fg("blue/text", solarized::BLUE)
+    ///     .apply();
+    /// ```
+    pub fn rules(&mut self) -> StyleRules<'_> {
+        StyleRules {
+            map: self,
+            prefix: None,
+            pending: Vec::new(),
         }
     }
 
@@ -269,16 +330,180 @@ impl StyleMap {
         }
     }
 
-    /// Add a style at a specified path.
-    pub fn add(
-        &mut self,
-        path: &str,
-        fg: Option<Color>,
-        bg: Option<Color>,
-        attrs: Option<AttrSet>,
-    ) {
-        self.styles
-            .insert(parse_path(path), PartialStyle { fg, bg, attrs });
+    /// Insert a partial style at a path.
+    fn insert_style(&mut self, path: &str, style: PartialStyle) {
+        self.styles.insert(parse_path(path), style);
+    }
+}
+
+/// A fluent builder for adding style rules to a StyleMap.
+///
+/// Created via [`StyleMap::rules()`]. Collects path/style pairs and commits
+/// them on [`.apply()`](StyleRules::apply).
+#[must_use = "call .apply() to commit rules"]
+pub struct StyleRules<'a> {
+    /// The target style map.
+    map: &'a mut StyleMap,
+    /// Optional path prefix for subsequent rules.
+    prefix: Option<String>,
+    /// Accumulated rules to be committed.
+    pending: Vec<(String, PartialStyle)>,
+}
+
+impl<'a> StyleRules<'a> {
+    /// Set the foreground color for a path.
+    ///
+    /// If a rule already exists for this path, the foreground color is merged
+    /// with the existing style.
+    pub fn fg(mut self, path: &str, color: Color) -> Self {
+        let full_path = self.make_path(path);
+        self.merge_pending(full_path, PartialStyle::fg(color));
+        self
+    }
+
+    /// Set the background color for a path.
+    ///
+    /// If a rule already exists for this path, the background color is merged
+    /// with the existing style.
+    pub fn bg(mut self, path: &str, color: Color) -> Self {
+        let full_path = self.make_path(path);
+        self.merge_pending(full_path, PartialStyle::bg(color));
+        self
+    }
+
+    /// Add a single attribute for a path.
+    ///
+    /// If a rule already exists for this path, the attribute is merged
+    /// with the existing style.
+    pub fn attr(mut self, path: &str, attr: Attr) -> Self {
+        let full_path = self.make_path(path);
+        self.merge_pending(full_path, PartialStyle::attrs(AttrSet::new(attr)));
+        self
+    }
+
+    /// Set all attributes for a path.
+    ///
+    /// If a rule already exists for this path, the attributes are merged
+    /// with the existing style.
+    pub fn attrs(mut self, path: &str, attrs: AttrSet) -> Self {
+        let full_path = self.make_path(path);
+        self.merge_pending(full_path, PartialStyle::attrs(attrs));
+        self
+    }
+
+    /// Apply a complete style to a path.
+    ///
+    /// If a rule already exists for this path, the style is merged
+    /// with the existing style (new values take precedence).
+    pub fn style(mut self, path: &str, style: impl Into<PartialStyle>) -> Self {
+        let full_path = self.make_path(path);
+        self.merge_pending(full_path, style.into());
+        self
+    }
+
+    /// Set the foreground color for multiple paths.
+    ///
+    /// If a rule already exists for any path, the foreground color is merged
+    /// with the existing style.
+    pub fn fg_all(mut self, paths: &[&str], color: Color) -> Self {
+        for path in paths {
+            let full_path = self.make_path(path);
+            self.merge_pending(full_path, PartialStyle::fg(color));
+        }
+        self
+    }
+
+    /// Set the background color for multiple paths.
+    ///
+    /// If a rule already exists for any path, the background color is merged
+    /// with the existing style.
+    pub fn bg_all(mut self, paths: &[&str], color: Color) -> Self {
+        for path in paths {
+            let full_path = self.make_path(path);
+            self.merge_pending(full_path, PartialStyle::bg(color));
+        }
+        self
+    }
+
+    /// Add a single attribute to multiple paths.
+    ///
+    /// If a rule already exists for any path, the attribute is merged
+    /// with the existing style.
+    pub fn attr_all(mut self, paths: &[&str], attr: Attr) -> Self {
+        for path in paths {
+            let full_path = self.make_path(path);
+            self.merge_pending(full_path, PartialStyle::attrs(AttrSet::new(attr)));
+        }
+        self
+    }
+
+    /// Set all attributes for multiple paths.
+    ///
+    /// If a rule already exists for any path, the attributes are merged
+    /// with the existing style.
+    pub fn attrs_all(mut self, paths: &[&str], attrs: AttrSet) -> Self {
+        for path in paths {
+            let full_path = self.make_path(path);
+            self.merge_pending(full_path, PartialStyle::attrs(attrs));
+        }
+        self
+    }
+
+    /// Apply a complete style to multiple paths.
+    ///
+    /// If a rule already exists for any path, the style is merged
+    /// with the existing style (new values take precedence).
+    pub fn style_all(mut self, paths: &[&str], style: impl Into<PartialStyle>) -> Self {
+        let partial = style.into();
+        for path in paths {
+            let full_path = self.make_path(path);
+            self.merge_pending(full_path, partial.clone());
+        }
+        self
+    }
+
+    /// Merge a style into the pending rules.
+    ///
+    /// If a rule with the same path exists, merge the new style into it.
+    /// Otherwise, add a new pending rule.
+    fn merge_pending(&mut self, path: String, style: PartialStyle) {
+        if let Some((_, existing)) = self.pending.iter_mut().find(|(p, _)| p == &path) {
+            *existing = style.join(existing);
+        } else {
+            self.pending.push((path, style));
+        }
+    }
+
+    /// Set a path prefix for all subsequent rules.
+    ///
+    /// Can be called multiple times; each call replaces the previous prefix.
+    pub fn prefix(mut self, prefix: &str) -> Self {
+        self.prefix = Some(prefix.to_string());
+        self
+    }
+
+    /// Clear the current prefix.
+    pub fn no_prefix(mut self) -> Self {
+        self.prefix = None;
+        self
+    }
+
+    /// Commit all pending rules to the StyleMap.
+    pub fn apply(self) {
+        for (path, style) in self.pending {
+            self.map.insert_style(&path, style);
+        }
+    }
+
+    /// Combine the current prefix with a path suffix.
+    fn make_path(&self, path: &str) -> String {
+        match &self.prefix {
+            Some(prefix) if !prefix.is_empty() && !path.is_empty() => {
+                format!("{}/{}", prefix, path)
+            }
+            Some(prefix) if !prefix.is_empty() => prefix.clone(),
+            _ => path.to_string(),
+        }
     }
 }
 
@@ -403,6 +628,7 @@ impl StyleManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[allow(unused_imports)]
     use crate::error::Result;
 
     #[test]
@@ -416,16 +642,19 @@ mod tests {
     #[test]
     fn style_resolve() -> Result<()> {
         let mut smap = StyleMap::new();
-        smap.add(
-            "",
-            Some(Color::White),
-            Some(Color::Black),
-            Some(AttrSet::default()),
-        );
-        smap.add_fg("one", Color::Red);
-        smap.add_fg("one/two", Color::Blue);
-        smap.add_fg("one/two/target", Color::Green);
-        smap.add_fg("frame/border", Color::Yellow);
+        smap.rules()
+            .style(
+                "",
+                StyleBuilder::new()
+                    .fg(Color::White)
+                    .bg(Color::Black)
+                    .attrs(AttrSet::default()),
+            )
+            .fg("one", Color::Red)
+            .fg("one/two", Color::Blue)
+            .fg("one/two/target", Color::Green)
+            .fg("frame/border", Color::Yellow)
+            .apply();
 
         let c = StyleManager::new();
 
@@ -585,6 +814,43 @@ mod tests {
         assert_eq!(c.level, 0);
         assert!(c.layers.is_empty());
         assert!(c.layer_levels.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn style_rules_merge_same_path() -> Result<()> {
+        let mut smap = StyleMap::new();
+
+        // Setting fg then bg on the same path should merge them
+        smap.rules()
+            .fg("test/path", Color::Red)
+            .bg("test/path", Color::Blue)
+            .apply();
+
+        let c = StyleManager::new();
+        let resolved = c.resolve(&smap, &[], &["test".to_string(), "path".to_string()]);
+
+        assert_eq!(resolved.fg, Color::Red);
+        assert_eq!(resolved.bg, Color::Blue);
+
+        Ok(())
+    }
+
+    #[test]
+    fn style_rules_later_overrides_earlier() -> Result<()> {
+        let mut smap = StyleMap::new();
+
+        // Later fg call should override earlier fg call
+        smap.rules()
+            .fg("test", Color::Red)
+            .fg("test", Color::Green)
+            .apply();
+
+        let c = StyleManager::new();
+        let resolved = c.resolve(&smap, &[], &["test".to_string()]);
+
+        assert_eq!(resolved.fg, Color::Green);
 
         Ok(())
     }

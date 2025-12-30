@@ -425,14 +425,18 @@ impl Loader for Todo {
 }
 
 pub fn style(cnpy: &mut Canopy) {
-    cnpy.style.add(
-        "statusbar/text",
-        Some(solarized::BASE02),
-        Some(solarized::BASE1),
-        None,
-    );
-    // Selection indicator style for list items
-    cnpy.style.add_fg("list/selected", solarized::BLUE);
+    use canopy::style::StyleBuilder;
+
+    cnpy.style
+        .rules()
+        .style(
+            "statusbar/text",
+            StyleBuilder::new()
+                .fg(solarized::BASE02)
+                .bg(solarized::BASE1),
+        )
+        .fg("list/selected", solarized::BLUE)
+        .apply();
 }
 
 pub fn bind_keys(cnpy: &mut Canopy) {

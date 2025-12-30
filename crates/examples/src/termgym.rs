@@ -8,7 +8,7 @@ use canopy::{
     layout::{Constraint, Layout, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
-    style::{AttrSet, solarized},
+    style::{Attr, AttrSet, solarized},
     widget::{EventOutcome, Widget},
     widgets::{
         Box, Button, Center, Root, Terminal, TerminalConfig, Text, VStack, boxed, frame,
@@ -497,113 +497,57 @@ impl Loader for TermGym {
 
 /// Install key bindings and styles for the terminal gym demo.
 pub fn setup_bindings(cnpy: &mut Canopy) {
+    use canopy::style::StyleBuilder;
+
     let selected_attrs = AttrSet {
         bold: true,
         ..AttrSet::default()
     };
 
-    cnpy.style.add(
-        "termgym/entry/border",
-        Some(solarized::BASE0),
-        Some(solarized::BASE03),
-        Some(AttrSet::default()),
-    );
-    cnpy.style.add(
-        "termgym/entry/fill",
-        Some(solarized::BASE0),
-        Some(solarized::BASE03),
-        Some(AttrSet::default()),
-    );
-    cnpy.style.add(
-        "termgym/entry/text",
-        Some(solarized::BASE0),
-        Some(solarized::BASE03),
-        Some(AttrSet::default()),
-    );
-    cnpy.style.add(
-        "termgym/entry/selected/border",
-        Some(solarized::BASE3),
-        Some(solarized::BLUE),
-        Some(selected_attrs),
-    );
-    cnpy.style.add(
-        "termgym/entry/selected/fill",
-        Some(solarized::BASE3),
-        Some(solarized::BLUE),
-        Some(selected_attrs),
-    );
-    cnpy.style.add(
-        "termgym/entry/selected/text",
-        Some(solarized::BASE3),
-        Some(solarized::BLUE),
-        Some(selected_attrs),
-    );
-    cnpy.style.add(
-        "termgym/button/border",
-        Some(solarized::BASE3),
-        Some(solarized::BASE02),
-        Some(AttrSet::default()),
-    );
-    cnpy.style.add(
-        "termgym/button/selected/border",
-        Some(solarized::BASE3),
-        Some(solarized::BLUE),
-        Some(selected_attrs),
-    );
-    cnpy.style.add(
-        "termgym/button/fill",
-        Some(solarized::BASE3),
-        Some(solarized::BASE02),
-        Some(AttrSet::default()),
-    );
-    cnpy.style.add(
-        "termgym/button/selected/fill",
-        Some(solarized::BASE3),
-        Some(solarized::BLUE),
-        Some(selected_attrs),
-    );
-    cnpy.style.add(
-        "termgym/button/text",
-        Some(solarized::BASE3),
-        Some(solarized::BASE02),
-        Some(AttrSet::default()),
-    );
-    cnpy.style.add(
-        "termgym/button/selected/text",
-        Some(solarized::BASE3),
-        Some(solarized::BLUE),
-        Some(selected_attrs),
-    );
-    cnpy.style.add(
-        "termgym/frame",
-        Some(solarized::BASE01),
-        None,
-        Some(AttrSet::default()),
-    );
-    cnpy.style.add(
-        "termgym/frame/focused",
-        Some(solarized::YELLOW),
-        None,
-        Some(AttrSet {
-            bold: true,
-            ..AttrSet::default()
-        }),
-    );
-    cnpy.style.add(
-        "termgym/frame/active",
-        Some(solarized::ORANGE),
-        None,
-        Some(AttrSet::default()),
-    );
-    cnpy.style.add(
-        "termgym/frame/title",
-        Some(solarized::BASE3),
-        None,
-        Some(AttrSet {
-            bold: true,
-            ..AttrSet::default()
-        }),
-    );
+    let entry_normal = StyleBuilder::new()
+        .fg(solarized::BASE0)
+        .bg(solarized::BASE03);
+
+    let entry_selected = StyleBuilder::new()
+        .fg(solarized::BASE3)
+        .bg(solarized::BLUE)
+        .attrs(selected_attrs);
+
+    let button_normal = StyleBuilder::new()
+        .fg(solarized::BASE3)
+        .bg(solarized::BASE02);
+
+    let button_selected = StyleBuilder::new()
+        .fg(solarized::BASE3)
+        .bg(solarized::BLUE)
+        .attrs(selected_attrs);
+
+    cnpy.style
+        .rules()
+        .prefix("termgym/entry")
+        .style_all(&["border", "fill", "text"], entry_normal)
+        .style_all(
+            &["selected/border", "selected/fill", "selected/text"],
+            entry_selected,
+        )
+        .prefix("termgym/button")
+        .style_all(&["border", "fill", "text"], button_normal)
+        .style_all(
+            &["selected/border", "selected/fill", "selected/text"],
+            button_selected,
+        )
+        .prefix("termgym/frame")
+        .fg("", solarized::BASE01)
+        .style(
+            "focused",
+            StyleBuilder::new().fg(solarized::YELLOW).attr(Attr::Bold),
+        )
+        .fg("active", solarized::ORANGE)
+        .style(
+            "title",
+            StyleBuilder::new().fg(solarized::BASE3).attr(Attr::Bold),
+        )
+        .apply();
 
     Binder::new(cnpy)
         .defaults::<Root>()

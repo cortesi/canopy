@@ -5,7 +5,7 @@ use canopy::{
     error::{Error, Result},
     event::{key, mouse},
     render::Render,
-    style::{AttrSet, solarized},
+    style::solarized,
     widget::Widget,
     widgets::{CanvasWidth, List, Panes, Root, Text, VStack, frame},
 };
@@ -253,26 +253,13 @@ impl Loader for ListGym {
 
 /// Install key bindings for the list gym demo.
 pub fn setup_bindings(cnpy: &mut Canopy) {
-    cnpy.style.add(
-        "red/text",
-        Some(solarized::RED),
-        None,
-        Some(AttrSet::default()),
-    );
-    cnpy.style.add(
-        "blue/text",
-        Some(solarized::BLUE),
-        None,
-        Some(AttrSet::default()),
-    );
-    cnpy.style.add(
-        "statusbar/text",
-        Some(solarized::BLUE),
-        None,
-        Some(AttrSet::default()),
-    );
-    // Selection indicator style for list items
-    cnpy.style.add_fg("list/selected", solarized::BLUE);
+    cnpy.style
+        .rules()
+        .fg("red/text", solarized::RED)
+        .fg("blue/text", solarized::BLUE)
+        .fg("statusbar/text", solarized::BLUE)
+        .fg("list/selected", solarized::BLUE)
+        .apply();
 
     Binder::new(cnpy)
         .defaults::<Root>()

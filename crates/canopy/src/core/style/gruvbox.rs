@@ -55,48 +55,49 @@ pub const ORANGE: Color = rgb!("#fe8019");
 
 /// Build a dark gruvbox style map.
 pub fn gruvbox_dark() -> StyleMap {
+    use super::StyleBuilder;
+
     let mut c = StyleMap::new();
-    c.add("/", Some(LIGHT1), Some(DARK0), Some(AttrSet::default()));
-    c.add_fg("/frame", DARK4);
-    c.add_fg("/frame/focused", BLUE);
-    c.add_fg("/frame/active", LIGHT3);
-    c.add_fg("/frame/title", LIGHT0);
-    c.add_fg("/tab", DARK4);
-    c.add_fg("/tab/inactive", LIGHT3);
-    c.add_bg("/tab/inactive", DARK1);
-    c.add_fg("/tab/active", LIGHT0);
-    c.add_bg("/tab/active", BLUE);
-
-    c.add_fg("/blue", BLUE);
-    c.add_fg("/red", RED);
-    c.add_fg("/magenta", PURPLE);
-    c.add_fg("/violet", PURPLE);
-    c.add_fg("/cyan", AQUA);
-    c.add_fg("/green", GREEN);
-    c.add_fg("/yellow", YELLOW);
-    c.add_fg("/orange", ORANGE);
-    c.add_fg("/black", DARK0);
-
-    // Text style variants
-    c.add("/text/bold", None, None, Some(AttrSet::new(Attr::Bold)));
-    c.add("/text/italic", None, None, Some(AttrSet::new(Attr::Italic)));
-    c.add(
-        "/text/underline",
-        None,
-        None,
-        Some(AttrSet::new(Attr::Underline)),
-    );
-
-    // Selector widget styles
-    c.add_fg("/selector", LIGHT1);
-    c.add_fg("/selector/selected", BLUE);
-    c.add("/selector/focus", Some(DARK0), Some(BLUE), None);
-    c.add("/selector/focus/selected", Some(DARK0), Some(AQUA), None);
-
-    // Dropdown widget styles
-    c.add_fg("/dropdown", LIGHT1);
-    c.add_fg("/dropdown/selected", BLUE);
-    c.add("/dropdown/highlight", Some(DARK0), Some(BLUE), None);
-
+    c.rules()
+        .style(
+            "/",
+            StyleBuilder::new()
+                .fg(LIGHT1)
+                .bg(DARK0)
+                .attrs(AttrSet::default()),
+        )
+        .fg("/frame", DARK4)
+        .fg("/frame/focused", BLUE)
+        .fg("/frame/active", LIGHT3)
+        .fg("/frame/title", LIGHT0)
+        .fg("/tab", DARK4)
+        .style("/tab/inactive", StyleBuilder::new().fg(LIGHT3).bg(DARK1))
+        .style("/tab/active", StyleBuilder::new().fg(LIGHT0).bg(BLUE))
+        .fg("/blue", BLUE)
+        .fg("/red", RED)
+        .fg("/magenta", PURPLE)
+        .fg("/violet", PURPLE)
+        .fg("/cyan", AQUA)
+        .fg("/green", GREEN)
+        .fg("/yellow", YELLOW)
+        .fg("/orange", ORANGE)
+        .fg("/black", DARK0)
+        .attr("/text/bold", Attr::Bold)
+        .attr("/text/italic", Attr::Italic)
+        .attr("/text/underline", Attr::Underline)
+        .fg("/selector", LIGHT1)
+        .fg("/selector/selected", BLUE)
+        .style("/selector/focus", StyleBuilder::new().fg(DARK0).bg(BLUE))
+        .style(
+            "/selector/focus/selected",
+            StyleBuilder::new().fg(DARK0).bg(AQUA),
+        )
+        .fg("/dropdown", LIGHT1)
+        .fg("/dropdown/selected", BLUE)
+        .style(
+            "/dropdown/highlight",
+            StyleBuilder::new().fg(DARK0).bg(BLUE),
+        )
+        .apply();
     c
 }

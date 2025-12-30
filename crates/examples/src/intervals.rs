@@ -285,53 +285,38 @@ impl Loader for Intervals {
 
 /// Install key bindings for the intervals demo.
 pub fn setup_bindings(cnpy: &mut Canopy) {
+    use canopy::style::StyleBuilder;
+
     let selected_attrs = AttrSet {
         bold: true,
         ..AttrSet::default()
     };
 
-    cnpy.style.add(
-        "intervals/entry/border",
-        Some(solarized::BASE0),
-        Some(solarized::BASE03),
-        Some(AttrSet::default()),
-    );
-    cnpy.style.add(
-        "intervals/entry/fill",
-        Some(solarized::BASE0),
-        Some(solarized::BASE03),
-        Some(AttrSet::default()),
-    );
-    cnpy.style.add(
-        "intervals/entry/text",
-        Some(solarized::BASE0),
-        Some(solarized::BASE03),
-        Some(AttrSet::default()),
-    );
-    cnpy.style.add(
-        "intervals/entry/selected/border",
-        Some(solarized::BASE3),
-        Some(solarized::BLUE),
-        Some(selected_attrs),
-    );
-    cnpy.style.add(
-        "intervals/entry/selected/fill",
-        Some(solarized::BASE3),
-        Some(solarized::BLUE),
-        Some(selected_attrs),
-    );
-    cnpy.style.add(
-        "intervals/entry/selected/text",
-        Some(solarized::BASE3),
-        Some(solarized::BLUE),
-        Some(selected_attrs),
-    );
-    cnpy.style.add(
-        "statusbar/text",
-        Some(solarized::BASE02),
-        Some(solarized::BASE1),
-        None,
-    );
+    let normal = StyleBuilder::new()
+        .fg(solarized::BASE0)
+        .bg(solarized::BASE03);
+
+    let selected = StyleBuilder::new()
+        .fg(solarized::BASE3)
+        .bg(solarized::BLUE)
+        .attrs(selected_attrs);
+
+    cnpy.style
+        .rules()
+        .prefix("intervals/entry")
+        .style_all(&["border", "fill", "text"], normal)
+        .style_all(
+            &["selected/border", "selected/fill", "selected/text"],
+            selected,
+        )
+        .no_prefix()
+        .style(
+            "statusbar/text",
+            StyleBuilder::new()
+                .fg(solarized::BASE02)
+                .bg(solarized::BASE1),
+        )
+        .apply();
 
     Binder::new(cnpy)
         .with_path("intervals")
