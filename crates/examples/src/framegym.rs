@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use canopy::{
     Binder, Canopy, Context, Loader, ViewContext, command, derive_commands,
     error::Result,
@@ -154,44 +152,28 @@ impl FrameGym {
     pub fn new() -> Self {
         Self
     }
-
-    /// Ensure the frame and pattern nodes are built.
-    fn ensure_tree(&self, c: &mut dyn Context) {
-        if !c.children().is_empty() {
-            return;
-        }
-
-        let frame_id = c
-            .add_child(frame::Frame::new().with_title("Frame Gym"))
-            .expect("Failed to mount frame");
-        let pattern_id = c
-            .add_child_to(frame_id, TestPattern::new())
-            .expect("Failed to mount pattern");
-
-        c.with_layout(&mut |layout| {
-            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
-        })
-        .expect("Failed to configure layout");
-        c.with_layout_of(frame_id, &mut |layout| {
-            layout.width = Sizing::Flex(1);
-            layout.height = Sizing::Flex(1);
-        })
-        .expect("Failed to configure frame layout");
-        c.with_layout_of(pattern_id, &mut |layout| {
-            *layout = Layout::fill();
-        })
-        .expect("Failed to configure pattern layout");
-    }
 }
 
 impl Widget for FrameGym {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
+        let frame_id = c.add_child(frame::Frame::new().with_title("Frame Gym"))?;
+        let pattern_id = c.add_child_to(frame_id, TestPattern::new())?;
+
+        c.with_layout(&mut |layout| {
+            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
+        })?;
+        c.with_layout_of(frame_id, &mut |layout| {
+            layout.width = Sizing::Flex(1);
+            layout.height = Sizing::Flex(1);
+        })?;
+        c.with_layout_of(pattern_id, &mut |layout| {
+            *layout = Layout::fill();
+        })?;
         Ok(())
     }
 
-    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
-        self.ensure_tree(c);
-        None
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+        Ok(())
     }
 }
 
@@ -207,6 +189,7 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
     Binder::new(cnpy)
         .defaults::<Root>()
         // Focus navigation
+        .with_path("frame_gym")
         .key_command(key::KeyCode::Tab, Root::cmd_focus_next())
         // Arrow keys for scrolling
         .key_command('g', TestPattern::cmd_scroll_to_top())

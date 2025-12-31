@@ -1,7 +1,5 @@
 //! Chargym: A Unicode width and wide character demo.
 
-use std::time::Duration;
-
 use canopy::{
     Binder, Canopy, Context, Loader, ViewContext, derive_commands,
     error::Result,
@@ -231,13 +229,14 @@ impl CharGym {
             content: build_content(),
         }
     }
+}
 
-    /// Ensure the frame and text subtree is mounted.
-    fn ensure_tree(&self, c: &mut dyn Context) -> Result<()> {
-        if !c.children().is_empty() {
-            return Ok(());
-        }
+impl Widget for CharGym {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        true
+    }
 
+    fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let text_id = c.add_orphan(
             Text::new(self.content.clone())
                 .with_wrap_width(WRAP_WIDTH)
@@ -250,23 +249,11 @@ impl CharGym {
         c.with_layout(&mut |layout| {
             *layout = Layout::fill();
         })?;
-
         Ok(())
-    }
-}
-
-impl Widget for CharGym {
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
-        true
     }
 
     fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
-    }
-
-    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
-        self.ensure_tree(c).ok()?;
-        None
     }
 }
 

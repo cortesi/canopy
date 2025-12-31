@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use canopy::{
     Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
-    error::Result,
+    error::{Error, Result},
     event::{key, mouse},
     layout::{Edges, Layout, MeasureConstraints, Measurement, Size},
     render::Render,
@@ -185,7 +185,10 @@ impl Widget for StatusBar {
 }
 
 /// Root node for the intervals demo.
-pub struct Intervals;
+pub struct Intervals {
+    /// List node id inside the content frame.
+    list_id: Option<NodeId>,
+}
 
 impl Default for Intervals {
     fn default() -> Self {
@@ -197,29 +200,13 @@ impl Default for Intervals {
 impl Intervals {
     /// Construct a new intervals demo.
     pub fn new() -> Self {
-        Self
-    }
-
-    /// Ensure the frame, list, and status bar are created.
-    fn ensure_tree(&self, c: &mut dyn Context) {
-        if !c.children().is_empty() {
-            return;
-        }
-
-        let list_id = c.add_orphan(List::<CounterItem>::new());
-        let frame_id = frame::Frame::wrap(c, list_id).expect("Failed to wrap frame");
-        let status_id = c.add_orphan(StatusBar);
-        c.add_child(
-            VStack::new()
-                .push_flex(frame_id, 1)
-                .push_fixed(status_id, 1),
-        )
-        .expect("Failed to mount layout");
+        Self { list_id: None }
     }
 
     /// List node id inside the content frame.
-    fn list_id(c: &dyn Context) -> Option<NodeId> {
-        c.find_node("*/frame/list")
+    fn list_id(&self) -> Result<NodeId> {
+        self.list_id
+            .ok_or_else(|| Error::Invalid("list not initialized".into()))
     }
 
     /// Execute a closure with mutable access to the list widget.
@@ -227,8 +214,7 @@ impl Intervals {
     where
         F: FnMut(&mut List<CounterItem>, &mut dyn Context) -> Result<R>,
     {
-        self.ensure_tree(c);
-        let list_id = Self::list_id(c).expect("list not initialized");
+        let list_id = self.list_id()?;
         c.with_widget(list_id, |list: &mut List<CounterItem>, ctx| f(list, ctx))
     }
 
@@ -247,14 +233,26 @@ impl Widget for Intervals {
         true
     }
 
+    fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
+        let list_id = c.add_orphan(List::<CounterItem>::new());
+        let frame_id = frame::Frame::wrap(c, list_id)?;
+        let status_id = c.add_orphan(StatusBar);
+        c.add_child(
+            VStack::new()
+                .push_flex(frame_id, 1)
+                .push_fixed(status_id, 1),
+        )?;
+        self.list_id = Some(list_id);
+        Ok(())
+    }
+
     fn render(&mut self, r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         r.push_layer("intervals");
         Ok(())
     }
 
     fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
-        self.ensure_tree(c);
-        let list_id = Self::list_id(c)?;
+        let list_id = self.list_id?;
 
         // Tick each counter item
         let len = c

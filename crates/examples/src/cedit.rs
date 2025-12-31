@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use canopy::{
     Binder, Canopy, Context, Loader, ViewContext, derive_commands,
     error::Result,
@@ -28,37 +26,27 @@ impl Ed {
             contents: contents.to_string(),
         }
     }
+}
 
-    /// Ensure the editor subtree is constructed and styled.
-    fn ensure_tree(&self, c: &mut dyn Context) {
-        if !c.children().is_empty() {
-            return;
-        }
-
+impl Widget for Ed {
+    fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let config = EditorConfig::new()
             .with_mode(EditMode::Vi)
             .with_line_numbers(LineNumbers::Relative);
         let mut editor = Editor::with_config(&self.contents, config);
         editor.set_highlighter(Some(Box::new(SyntectHighlighter::plain())));
         let editor_id = c.add_orphan(editor);
-        let frame_id = frame::Frame::wrap(c, editor_id).expect("Failed to wrap frame");
-        c.mount_child(frame_id).expect("Failed to mount frame");
+        let frame_id = frame::Frame::wrap(c, editor_id)?;
+        c.mount_child(frame_id)?;
 
         c.with_layout(&mut |layout| {
             *layout = Layout::fill();
-        })
-        .expect("Failed to configure layout");
-    }
-}
-
-impl Widget for Ed {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+        })?;
         Ok(())
     }
 
-    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
-        self.ensure_tree(c);
-        None
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+        Ok(())
     }
 }
 

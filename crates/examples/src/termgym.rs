@@ -1,4 +1,4 @@
-use std::{env, time::Duration};
+use std::env;
 
 use canopy::{
     Binder, Canopy, Context, Loader, NodeId, ViewContext, command, cursor, derive_commands,
@@ -164,64 +164,30 @@ impl TermGym {
         }
     }
 
-    /// Ensure the widget tree is mounted.
-    fn ensure_tree(&mut self, c: &mut dyn Context) -> Result<()> {
-        if self.list_id.is_some() && self.stack_id.is_some() {
-            return Ok(());
-        }
+    /// Terminal list node id, if initialized.
+    fn list_id(&self) -> Result<NodeId> {
+        self.list_id
+            .ok_or_else(|| Error::Internal("list not initialized".into()))
+    }
 
-        let list_id = c.add_orphan(List::<TermEntry>::new());
-        let button_id = c.add_orphan(
-            Button::new("+ New terminal").with_command(Self::cmd_new_terminal().call()),
-        );
-        let sidebar_id = c.add_orphan(
-            VStack::new()
-                .push_fixed(button_id, ENTRY_HEIGHT)
-                .push_flex(list_id, 1),
-        );
-
-        let stack_id = c.add_orphan(TerminalStack::new());
-        let term_frame_id = frame::Frame::wrap_with(
-            c,
-            stack_id,
-            frame::Frame::new()
-                .with_glyphs(boxed::ROUND_THICK)
-                .with_title("terminal"),
-        )?;
-
-        c.set_children(vec![sidebar_id, term_frame_id])?;
-
-        c.with_layout(&mut |layout| {
-            *layout = Layout::row().flex_horizontal(1).flex_vertical(1);
-        })?;
-        c.with_layout_of(sidebar_id, &mut |layout| {
-            *layout = Layout::column().fixed_width(24).flex_vertical(1);
-        })?;
-
-        self.list_id = Some(list_id);
-        self.stack_id = Some(stack_id);
-        self.add_terminal(c)?;
-
-        Ok(())
+    /// Terminal stack node id, if initialized.
+    fn stack_id(&self) -> Result<NodeId> {
+        self.stack_id
+            .ok_or_else(|| Error::Internal("stack not initialized".into()))
     }
 
     /// Execute a closure with the terminal list widget.
-    fn with_list<F, R>(&mut self, c: &mut dyn Context, mut f: F) -> Result<R>
+    fn with_list<F, R>(&self, c: &mut dyn Context, mut f: F) -> Result<R>
     where
         F: FnMut(&mut List<TermEntry>, &mut dyn Context) -> Result<R>,
     {
-        self.ensure_tree(c)?;
-        let list_id = self
-            .list_id
-            .ok_or_else(|| Error::Internal("list not initialized".into()))?;
+        let list_id = self.list_id()?;
         c.with_widget(list_id, |list: &mut List<TermEntry>, ctx| f(list, ctx))
     }
 
     /// Create and mount a new terminal instance.
     fn add_terminal(&mut self, c: &mut dyn Context) -> Result<()> {
-        let stack_id = self
-            .stack_id
-            .ok_or_else(|| Error::Internal("stack not initialized".into()))?;
+        let stack_id = self.stack_id()?;
         let cwd = env::current_dir().map_err(|err| Error::Internal(err.to_string()))?;
         let terminal_id = c.add_orphan(Terminal::new(TerminalConfig {
             cwd: Some(cwd),
@@ -290,7 +256,7 @@ impl TermGym {
     }
 
     /// Rebuild the sidebar list to match the current terminal set.
-    fn rebuild_list(&mut self, c: &mut dyn Context) -> Result<()> {
+    fn rebuild_list(&self, c: &mut dyn Context) -> Result<()> {
         let count = self.terminals.len();
         self.with_list(c, |list, ctx| {
             list.clear(ctx)?;
@@ -304,15 +270,11 @@ impl TermGym {
 
     /// Remove a terminal at a specific index.
     fn remove_terminal(&mut self, c: &mut dyn Context, index: usize) -> Result<()> {
-        self.ensure_tree(c)?;
-
         if index >= self.terminals.len() {
             return Ok(());
         }
 
-        let stack_id = self
-            .stack_id
-            .ok_or_else(|| Error::Internal("stack not initialized".into()))?;
+        let stack_id = self.stack_id()?;
         let removed_id = self.terminals.remove(index);
         c.detach_child_from(stack_id, removed_id)?;
 
@@ -334,7 +296,7 @@ impl TermGym {
     }
 
     /// Focus the selected sidebar entry if the list exists.
-    fn focus_sidebar_list(&mut self, c: &mut dyn Context) -> Result<()> {
+    fn focus_sidebar_list(&self, c: &mut dyn Context) -> Result<()> {
         self.with_list(c, |list, ctx| {
             if let Some(selected) = list.selected_item() {
                 ctx.set_focus(selected.into());
@@ -406,7 +368,6 @@ impl TermGym {
     #[command]
     /// Focus the terminal list sidebar.
     pub fn focus_sidebar(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.ensure_tree(c)?;
         self.focus_sidebar_list(c)?;
         Ok(())
     }
@@ -414,7 +375,7 @@ impl TermGym {
     #[command]
     /// Focus the active terminal instance.
     pub fn focus_active_terminal(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.ensure_tree(c)?;
+        let _ = self.stack_id()?;
         if let Some(active_id) = self.terminals.get(self.active).copied() {
             c.set_focus(active_id);
         }
@@ -459,6 +420,42 @@ impl Widget for TermGym {
         true
     }
 
+    fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
+        let list_id = c.add_orphan(List::<TermEntry>::new());
+        let button_id = c.add_orphan(
+            Button::new("+ New terminal").with_command(Self::cmd_new_terminal().call()),
+        );
+        let sidebar_id = c.add_orphan(
+            VStack::new()
+                .push_fixed(button_id, ENTRY_HEIGHT)
+                .push_flex(list_id, 1),
+        );
+
+        let stack_id = c.add_orphan(TerminalStack::new());
+        let term_frame_id = frame::Frame::wrap_with(
+            c,
+            stack_id,
+            frame::Frame::new()
+                .with_glyphs(boxed::ROUND_THICK)
+                .with_title("terminal"),
+        )?;
+
+        c.set_children(vec![sidebar_id, term_frame_id])?;
+
+        c.with_layout(&mut |layout| {
+            *layout = Layout::row().flex_horizontal(1).flex_vertical(1);
+        })?;
+        c.with_layout_of(sidebar_id, &mut |layout| {
+            *layout = Layout::column().fixed_width(24).flex_vertical(1);
+        })?;
+
+        self.list_id = Some(list_id);
+        self.stack_id = Some(stack_id);
+        self.add_terminal(c)?;
+
+        Ok(())
+    }
+
     fn render(&mut self, r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         r.push_layer("termgym");
         Ok(())
@@ -476,11 +473,6 @@ impl Widget for TermGym {
             _ => {}
         }
         EventOutcome::Ignore
-    }
-
-    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
-        self.ensure_tree(c).ok()?;
-        None
     }
 
     fn cursor(&self) -> Option<cursor::Cursor> {
@@ -551,11 +543,12 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
 
     Binder::new(cnpy)
         .defaults::<Root>()
-        .with_path("term_gym")
+        .with_path("term_gym/*/terminal/")
         .key(
             key::Ctrl + key::KeyCode::Char('a'),
             "term_gym::focus_sidebar()",
         )
+        .with_path("term_gym")
         .key(key::Ctrl + key::KeyCode::F(2), "term_gym::new_terminal()")
         .key(key::Ctrl + key::KeyCode::F(3), "term_gym::next_terminal()")
         .key(key::Ctrl + key::KeyCode::F(4), "term_gym::prev_terminal()")

@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use canopy::{
     Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
     error::{Error, Result},
@@ -69,7 +67,10 @@ impl Widget for StatusBar {
 }
 
 /// Root node for the list gym demo.
-pub struct ListGym;
+pub struct ListGym {
+    /// Panes node used to host list columns.
+    panes_id: Option<NodeId>,
+}
 
 impl Default for ListGym {
     fn default() -> Self {
@@ -81,29 +82,13 @@ impl Default for ListGym {
 impl ListGym {
     /// Construct a new list gym demo.
     pub fn new() -> Self {
-        Self
+        Self { panes_id: None }
     }
 
-    /// Ensure the list, panes, and status bar are created.
-    fn ensure_tree(&self, c: &mut dyn Context) -> Result<()> {
-        if !c.children().is_empty() {
-            return Ok(());
-        }
-
-        let panes_id = c.add_orphan(Panes::new());
-        let status_id = c.add_orphan(StatusBar::new(panes_id));
-        c.add_child(
-            VStack::new()
-                .push_flex(panes_id, 1)
-                .push_fixed(status_id, 1),
-        )?;
-
-        let frame_id = Self::create_column(c)?;
-        c.with_widget(panes_id, |panes: &mut Panes, ctx| {
-            panes.insert_col(ctx, frame_id)
-        })?;
-
-        Ok(())
+    /// Panes node id, if initialized.
+    fn panes_id(&self) -> Result<NodeId> {
+        self.panes_id
+            .ok_or_else(|| Error::Invalid("panes not initialized".into()))
     }
 
     /// Create a framed list column and return the frame node id.
@@ -126,19 +111,13 @@ impl ListGym {
     where
         F: FnMut(&mut List<Text>, &mut dyn Context) -> Result<R>,
     {
-        self.ensure_tree(c)?;
-        let list_id = Self::list_id(c)?;
+        let list_id = self.list_id(c)?;
         c.with_widget(list_id, |list: &mut List<Text>, ctx| f(list, ctx))
     }
 
-    /// Panes node id, if initialized.
-    fn panes_id(c: &dyn Context) -> Result<NodeId> {
-        c.find_node("*/panes")
-            .ok_or_else(|| Error::Invalid("panes not initialized".into()))
-    }
-
     /// Find the list to target for list commands.
-    fn list_id(c: &dyn Context) -> Result<NodeId> {
+    fn list_id(&self, c: &dyn Context) -> Result<NodeId> {
+        let _ = self.panes_id()?;
         let lists = c.find_nodes("*/frame/list");
         if lists.is_empty() {
             return Err(Error::Invalid("list not initialized".into()));
@@ -185,8 +164,7 @@ impl ListGym {
     #[command]
     /// Add a new column containing a list.
     pub fn add_column(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.ensure_tree(c)?;
-        let panes_id = Self::panes_id(c)?;
+        let panes_id = self.panes_id()?;
         let frame_id = Self::create_column(c)?;
         c.with_widget(panes_id, |panes: &mut Panes, ctx| {
             panes.insert_col(ctx, frame_id)
@@ -197,8 +175,7 @@ impl ListGym {
     #[command]
     /// Delete the focused column.
     pub fn delete_column(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.ensure_tree(c)?;
-        let panes_id = Self::panes_id(c)?;
+        let panes_id = self.panes_id()?;
         c.with_widget(panes_id, |panes: &mut Panes, ctx| panes.delete_focus(ctx))?;
         Ok(())
     }
@@ -206,8 +183,7 @@ impl ListGym {
     #[command]
     /// Move focus to the next column.
     pub fn next_column(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.ensure_tree(c)?;
-        let panes_id = Self::panes_id(c)?;
+        let panes_id = self.panes_id()?;
         c.with_widget(panes_id, |panes: &mut Panes, ctx| {
             panes.focus_next_column(ctx);
             Ok(())
@@ -218,8 +194,7 @@ impl ListGym {
     #[command]
     /// Move focus to the previous column.
     pub fn prev_column(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.ensure_tree(c)?;
-        let panes_id = Self::panes_id(c)?;
+        let panes_id = self.panes_id()?;
         c.with_widget(panes_id, |panes: &mut Panes, ctx| {
             panes.focus_prev_column(ctx);
             Ok(())
@@ -233,13 +208,26 @@ impl Widget for ListGym {
         true
     }
 
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
+        let panes_id = c.add_orphan(Panes::new());
+        let status_id = c.add_orphan(StatusBar::new(panes_id));
+        c.add_child(
+            VStack::new()
+                .push_flex(panes_id, 1)
+                .push_fixed(status_id, 1),
+        )?;
+
+        let frame_id = Self::create_column(c)?;
+        c.with_widget(panes_id, |panes: &mut Panes, ctx| {
+            panes.insert_col(ctx, frame_id)
+        })?;
+
+        self.panes_id = Some(panes_id);
         Ok(())
     }
 
-    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
-        self.ensure_tree(c).ok()?;
-        None
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+        Ok(())
     }
 }
 

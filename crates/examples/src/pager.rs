@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use canopy::{
     Binder, Canopy, Context, Loader, ViewContext, derive_commands,
     error::Result,
@@ -24,22 +22,6 @@ impl Pager {
             contents: contents.to_string(),
         }
     }
-
-    /// Ensure the frame and text subtree is built.
-    fn ensure_tree(&self, c: &mut dyn Context) {
-        if !c.children().is_empty() {
-            return;
-        }
-
-        let text_id = c.add_orphan(Text::new(self.contents.clone()));
-        let frame_id = frame::Frame::wrap(c, text_id).expect("Failed to wrap frame");
-        c.mount_child(frame_id).expect("Failed to mount frame");
-
-        c.with_layout(&mut |layout| {
-            *layout = Layout::fill();
-        })
-        .expect("Failed to configure layout");
-    }
 }
 
 impl Widget for Pager {
@@ -47,13 +29,19 @@ impl Widget for Pager {
         true
     }
 
-    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
+        let text_id = c.add_orphan(Text::new(self.contents.clone()));
+        let frame_id = frame::Frame::wrap(c, text_id)?;
+        c.mount_child(frame_id)?;
+
+        c.with_layout(&mut |layout| {
+            *layout = Layout::fill();
+        })?;
         Ok(())
     }
 
-    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
-        self.ensure_tree(c);
-        None
+    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+        Ok(())
     }
 }
 

@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use canopy::{
     Canopy, Context, Loader, ViewContext, command, derive_commands,
     error::Result,
@@ -49,27 +47,6 @@ impl TextDisplay {
     #[command]
     /// Trigger a redraw.
     pub fn redraw(&mut self, _ctx: &mut dyn Context) {}
-
-    /// Ensure the text node is created and attached.
-    fn ensure_tree(&self, c: &mut dyn Context) {
-        if !c.children().is_empty() {
-            return;
-        }
-
-        let text_id = c
-            .add_child(Text::new(self.paragraph.clone()))
-            .expect("Failed to mount text");
-
-        c.with_layout(&mut |layout| {
-            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
-        })
-        .expect("Failed to configure layout");
-        c.with_layout_of(text_id, &mut |layout| {
-            layout.width = Sizing::Flex(1);
-            layout.height = Sizing::Flex(1);
-        })
-        .expect("Failed to configure text layout");
-    }
 }
 
 impl Widget for TextDisplay {
@@ -77,13 +54,21 @@ impl Widget for TextDisplay {
         true
     }
 
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
+        let text_id = c.add_child(Text::new(self.paragraph.clone()))?;
+
+        c.with_layout(&mut |layout| {
+            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
+        })?;
+        c.with_layout_of(text_id, &mut |layout| {
+            layout.width = Sizing::Flex(1);
+            layout.height = Sizing::Flex(1);
+        })?;
         Ok(())
     }
 
-    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
-        self.ensure_tree(c);
-        None
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+        Ok(())
     }
 }
 
