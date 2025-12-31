@@ -1,7 +1,6 @@
 [book]
 authors = ["Aldo Cortesi"]
 language = "en"
-multilingual = false
 src = "src"
 title = "Canopy Manual"
 

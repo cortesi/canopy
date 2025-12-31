@@ -16,14 +16,17 @@ use canopy::{
 pub struct Ed {
     /// Initial contents for the editor.
     contents: String,
+    /// File extension hint for syntax highlighting.
+    extension: String,
 }
 
 #[derive_commands]
 impl Ed {
     /// Construct an editor with initial contents.
-    pub fn new(contents: &str) -> Self {
+    pub fn new(contents: &str, extension: &str) -> Self {
         Self {
             contents: contents.to_string(),
+            extension: extension.to_string(),
         }
     }
 }
@@ -34,7 +37,9 @@ impl Widget for Ed {
             .with_mode(EditMode::Vi)
             .with_wrap(WrapMode::None);
         let mut editor = Editor::with_config(&self.contents, config);
-        editor.set_highlighter(Some(Box::new(SyntectHighlighter::plain())));
+        editor.set_highlighter(Some(Box::new(SyntectHighlighter::new(
+            self.extension.as_str(),
+        ))));
         let editor_id = c.add_orphan(editor);
         let frame_id = frame::Frame::wrap(c, editor_id)?;
         c.mount_child(frame_id)?;

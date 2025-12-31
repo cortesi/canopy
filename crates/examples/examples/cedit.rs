@@ -1,6 +1,6 @@
 //! Launch the cedit example.
 
-use std::{env, error::Error, fs, result::Result};
+use std::{env, error::Error, fs, path::Path, result::Result};
 
 use canopy::{Canopy, Loader, backend::crossterm::runloop, widgets::Root};
 use canopy_examples::cedit::{Ed, setup_bindings};
@@ -20,9 +20,20 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ed::load(&mut cnpy);
     setup_bindings(&mut cnpy);
 
-    let contents = fs::read_to_string(filename)?;
-    let app_id = cnpy.core.add(Ed::new(&contents));
+    let contents = fs::read_to_string(&filename)?;
+    let extension = file_extension(&filename);
+    let app_id = cnpy.core.add(Ed::new(&contents, &extension));
     Root::install_with_inspector(&mut cnpy.core, app_id, false)?;
     runloop(cnpy)?;
     Ok(())
+}
+
+/// Return a lowercase file extension hint for syntax selection.
+fn file_extension(path: &str) -> String {
+    Path::new(path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| extension.to_ascii_lowercase())
+        .filter(|extension| !extension.is_empty())
+        .unwrap_or_else(|| "txt".to_string())
 }
