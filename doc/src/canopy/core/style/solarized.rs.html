@@ -82,55 +82,87 @@
 <a href=#82 id=82 data-nosnippet>82</a>            <span class="string">"/dropdown/highlight"</span>,
 <a href=#83 id=83 data-nosnippet>83</a>            StyleBuilder::new().fg(BASE03).bg(BLUE),
 <a href=#84 id=84 data-nosnippet>84</a>        )
-<a href=#85 id=85 data-nosnippet>85</a>        .apply();
-<a href=#86 id=86 data-nosnippet>86</a>    c
-<a href=#87 id=87 data-nosnippet>87</a>}
-<a href=#88 id=88 data-nosnippet>88</a>
-<a href=#89 id=89 data-nosnippet>89</a><span class="doccomment">/// Build a light solarized style map.
-<a href=#90 id=90 data-nosnippet>90</a></span><span class="kw">pub fn </span>solarized_light() -&gt; StyleMap {
-<a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">use </span><span class="kw">super</span>::StyleBuilder;
-<a href=#92 id=92 data-nosnippet>92</a>
-<a href=#93 id=93 data-nosnippet>93</a>    <span class="kw">let </span><span class="kw-2">mut </span>c = StyleMap::new();
-<a href=#94 id=94 data-nosnippet>94</a>    c.rules()
-<a href=#95 id=95 data-nosnippet>95</a>        .style(
-<a href=#96 id=96 data-nosnippet>96</a>            <span class="string">"/"</span>,
-<a href=#97 id=97 data-nosnippet>97</a>            StyleBuilder::new()
-<a href=#98 id=98 data-nosnippet>98</a>                .fg(BASE00)
-<a href=#99 id=99 data-nosnippet>99</a>                .bg(BASE3)
-<a href=#100 id=100 data-nosnippet>100</a>                .attrs(AttrSet::default()),
-<a href=#101 id=101 data-nosnippet>101</a>        )
-<a href=#102 id=102 data-nosnippet>102</a>        .fg(<span class="string">"/frame"</span>, BASE1)
-<a href=#103 id=103 data-nosnippet>103</a>        .fg(<span class="string">"/frame/focused"</span>, BLUE)
-<a href=#104 id=104 data-nosnippet>104</a>        .fg(<span class="string">"/frame/active"</span>, BASE01)
-<a href=#105 id=105 data-nosnippet>105</a>        .fg(<span class="string">"/frame/title"</span>, BASE03)
-<a href=#106 id=106 data-nosnippet>106</a>        .fg(<span class="string">"/tab"</span>, BASE1)
-<a href=#107 id=107 data-nosnippet>107</a>        .style(<span class="string">"/tab/inactive"</span>, StyleBuilder::new().fg(BASE01).bg(BASE2))
-<a href=#108 id=108 data-nosnippet>108</a>        .style(<span class="string">"/tab/active"</span>, StyleBuilder::new().fg(BASE3).bg(BLUE))
-<a href=#109 id=109 data-nosnippet>109</a>        .fg(<span class="string">"/blue"</span>, BLUE)
-<a href=#110 id=110 data-nosnippet>110</a>        .fg(<span class="string">"/red"</span>, RED)
-<a href=#111 id=111 data-nosnippet>111</a>        .fg(<span class="string">"/magenta"</span>, MAGENTA)
-<a href=#112 id=112 data-nosnippet>112</a>        .fg(<span class="string">"/violet"</span>, VIOLET)
-<a href=#113 id=113 data-nosnippet>113</a>        .fg(<span class="string">"/cyan"</span>, CYAN)
-<a href=#114 id=114 data-nosnippet>114</a>        .fg(<span class="string">"/green"</span>, GREEN)
-<a href=#115 id=115 data-nosnippet>115</a>        .fg(<span class="string">"/yellow"</span>, YELLOW)
-<a href=#116 id=116 data-nosnippet>116</a>        .fg(<span class="string">"/orange"</span>, ORANGE)
-<a href=#117 id=117 data-nosnippet>117</a>        .fg(<span class="string">"/black"</span>, BLACK)
-<a href=#118 id=118 data-nosnippet>118</a>        .attr(<span class="string">"/text/bold"</span>, Attr::Bold)
-<a href=#119 id=119 data-nosnippet>119</a>        .attr(<span class="string">"/text/italic"</span>, Attr::Italic)
-<a href=#120 id=120 data-nosnippet>120</a>        .attr(<span class="string">"/text/underline"</span>, Attr::Underline)
-<a href=#121 id=121 data-nosnippet>121</a>        .fg(<span class="string">"/selector"</span>, BASE00)
-<a href=#122 id=122 data-nosnippet>122</a>        .fg(<span class="string">"/selector/selected"</span>, BLUE)
-<a href=#123 id=123 data-nosnippet>123</a>        .style(<span class="string">"/selector/focus"</span>, StyleBuilder::new().fg(BASE3).bg(BLUE))
-<a href=#124 id=124 data-nosnippet>124</a>        .style(
-<a href=#125 id=125 data-nosnippet>125</a>            <span class="string">"/selector/focus/selected"</span>,
-<a href=#126 id=126 data-nosnippet>126</a>            StyleBuilder::new().fg(BASE3).bg(CYAN),
-<a href=#127 id=127 data-nosnippet>127</a>        )
-<a href=#128 id=128 data-nosnippet>128</a>        .fg(<span class="string">"/dropdown"</span>, BASE00)
-<a href=#129 id=129 data-nosnippet>129</a>        .fg(<span class="string">"/dropdown/selected"</span>, BLUE)
-<a href=#130 id=130 data-nosnippet>130</a>        .style(
-<a href=#131 id=131 data-nosnippet>131</a>            <span class="string">"/dropdown/highlight"</span>,
-<a href=#132 id=132 data-nosnippet>132</a>            StyleBuilder::new().fg(BASE3).bg(BLUE),
-<a href=#133 id=133 data-nosnippet>133</a>        )
-<a href=#134 id=134 data-nosnippet>134</a>        .apply();
-<a href=#135 id=135 data-nosnippet>135</a>    c
-<a href=#136 id=136 data-nosnippet>136</a>}</code></pre></div></section></main></body></html>
+<a href=#85 id=85 data-nosnippet>85</a>        .style(<span class="string">"/editor/text"</span>, StyleBuilder::new().fg(BASE0).bg(BASE03))
+<a href=#86 id=86 data-nosnippet>86</a>        .style(
+<a href=#87 id=87 data-nosnippet>87</a>            <span class="string">"/editor/selection"</span>,
+<a href=#88 id=88 data-nosnippet>88</a>            StyleBuilder::new().fg(BASE0).bg(BASE02),
+<a href=#89 id=89 data-nosnippet>89</a>        )
+<a href=#90 id=90 data-nosnippet>90</a>        .style(
+<a href=#91 id=91 data-nosnippet>91</a>            <span class="string">"/editor/search/match"</span>,
+<a href=#92 id=92 data-nosnippet>92</a>            StyleBuilder::new().fg(BASE03).bg(YELLOW),
+<a href=#93 id=93 data-nosnippet>93</a>        )
+<a href=#94 id=94 data-nosnippet>94</a>        .style(
+<a href=#95 id=95 data-nosnippet>95</a>            <span class="string">"/editor/search/current"</span>,
+<a href=#96 id=96 data-nosnippet>96</a>            StyleBuilder::new().fg(BASE03).bg(ORANGE),
+<a href=#97 id=97 data-nosnippet>97</a>        )
+<a href=#98 id=98 data-nosnippet>98</a>        .fg(<span class="string">"/editor/line-number"</span>, BASE01)
+<a href=#99 id=99 data-nosnippet>99</a>        .fg(<span class="string">"/editor/line-number/current"</span>, BLUE)
+<a href=#100 id=100 data-nosnippet>100</a>        .style(<span class="string">"/editor/prompt"</span>, StyleBuilder::new().fg(BASE0).bg(BASE02))
+<a href=#101 id=101 data-nosnippet>101</a>        .apply();
+<a href=#102 id=102 data-nosnippet>102</a>    c
+<a href=#103 id=103 data-nosnippet>103</a>}
+<a href=#104 id=104 data-nosnippet>104</a>
+<a href=#105 id=105 data-nosnippet>105</a><span class="doccomment">/// Build a light solarized style map.
+<a href=#106 id=106 data-nosnippet>106</a></span><span class="kw">pub fn </span>solarized_light() -&gt; StyleMap {
+<a href=#107 id=107 data-nosnippet>107</a>    <span class="kw">use </span><span class="kw">super</span>::StyleBuilder;
+<a href=#108 id=108 data-nosnippet>108</a>
+<a href=#109 id=109 data-nosnippet>109</a>    <span class="kw">let </span><span class="kw-2">mut </span>c = StyleMap::new();
+<a href=#110 id=110 data-nosnippet>110</a>    c.rules()
+<a href=#111 id=111 data-nosnippet>111</a>        .style(
+<a href=#112 id=112 data-nosnippet>112</a>            <span class="string">"/"</span>,
+<a href=#113 id=113 data-nosnippet>113</a>            StyleBuilder::new()
+<a href=#114 id=114 data-nosnippet>114</a>                .fg(BASE00)
+<a href=#115 id=115 data-nosnippet>115</a>                .bg(BASE3)
+<a href=#116 id=116 data-nosnippet>116</a>                .attrs(AttrSet::default()),
+<a href=#117 id=117 data-nosnippet>117</a>        )
+<a href=#118 id=118 data-nosnippet>118</a>        .fg(<span class="string">"/frame"</span>, BASE1)
+<a href=#119 id=119 data-nosnippet>119</a>        .fg(<span class="string">"/frame/focused"</span>, BLUE)
+<a href=#120 id=120 data-nosnippet>120</a>        .fg(<span class="string">"/frame/active"</span>, BASE01)
+<a href=#121 id=121 data-nosnippet>121</a>        .fg(<span class="string">"/frame/title"</span>, BASE03)
+<a href=#122 id=122 data-nosnippet>122</a>        .fg(<span class="string">"/tab"</span>, BASE1)
+<a href=#123 id=123 data-nosnippet>123</a>        .style(<span class="string">"/tab/inactive"</span>, StyleBuilder::new().fg(BASE01).bg(BASE2))
+<a href=#124 id=124 data-nosnippet>124</a>        .style(<span class="string">"/tab/active"</span>, StyleBuilder::new().fg(BASE3).bg(BLUE))
+<a href=#125 id=125 data-nosnippet>125</a>        .fg(<span class="string">"/blue"</span>, BLUE)
+<a href=#126 id=126 data-nosnippet>126</a>        .fg(<span class="string">"/red"</span>, RED)
+<a href=#127 id=127 data-nosnippet>127</a>        .fg(<span class="string">"/magenta"</span>, MAGENTA)
+<a href=#128 id=128 data-nosnippet>128</a>        .fg(<span class="string">"/violet"</span>, VIOLET)
+<a href=#129 id=129 data-nosnippet>129</a>        .fg(<span class="string">"/cyan"</span>, CYAN)
+<a href=#130 id=130 data-nosnippet>130</a>        .fg(<span class="string">"/green"</span>, GREEN)
+<a href=#131 id=131 data-nosnippet>131</a>        .fg(<span class="string">"/yellow"</span>, YELLOW)
+<a href=#132 id=132 data-nosnippet>132</a>        .fg(<span class="string">"/orange"</span>, ORANGE)
+<a href=#133 id=133 data-nosnippet>133</a>        .fg(<span class="string">"/black"</span>, BLACK)
+<a href=#134 id=134 data-nosnippet>134</a>        .attr(<span class="string">"/text/bold"</span>, Attr::Bold)
+<a href=#135 id=135 data-nosnippet>135</a>        .attr(<span class="string">"/text/italic"</span>, Attr::Italic)
+<a href=#136 id=136 data-nosnippet>136</a>        .attr(<span class="string">"/text/underline"</span>, Attr::Underline)
+<a href=#137 id=137 data-nosnippet>137</a>        .fg(<span class="string">"/selector"</span>, BASE00)
+<a href=#138 id=138 data-nosnippet>138</a>        .fg(<span class="string">"/selector/selected"</span>, BLUE)
+<a href=#139 id=139 data-nosnippet>139</a>        .style(<span class="string">"/selector/focus"</span>, StyleBuilder::new().fg(BASE3).bg(BLUE))
+<a href=#140 id=140 data-nosnippet>140</a>        .style(
+<a href=#141 id=141 data-nosnippet>141</a>            <span class="string">"/selector/focus/selected"</span>,
+<a href=#142 id=142 data-nosnippet>142</a>            StyleBuilder::new().fg(BASE3).bg(CYAN),
+<a href=#143 id=143 data-nosnippet>143</a>        )
+<a href=#144 id=144 data-nosnippet>144</a>        .fg(<span class="string">"/dropdown"</span>, BASE00)
+<a href=#145 id=145 data-nosnippet>145</a>        .fg(<span class="string">"/dropdown/selected"</span>, BLUE)
+<a href=#146 id=146 data-nosnippet>146</a>        .style(
+<a href=#147 id=147 data-nosnippet>147</a>            <span class="string">"/dropdown/highlight"</span>,
+<a href=#148 id=148 data-nosnippet>148</a>            StyleBuilder::new().fg(BASE3).bg(BLUE),
+<a href=#149 id=149 data-nosnippet>149</a>        )
+<a href=#150 id=150 data-nosnippet>150</a>        .style(<span class="string">"/editor/text"</span>, StyleBuilder::new().fg(BASE00).bg(BASE3))
+<a href=#151 id=151 data-nosnippet>151</a>        .style(
+<a href=#152 id=152 data-nosnippet>152</a>            <span class="string">"/editor/selection"</span>,
+<a href=#153 id=153 data-nosnippet>153</a>            StyleBuilder::new().fg(BASE00).bg(BASE2),
+<a href=#154 id=154 data-nosnippet>154</a>        )
+<a href=#155 id=155 data-nosnippet>155</a>        .style(
+<a href=#156 id=156 data-nosnippet>156</a>            <span class="string">"/editor/search/match"</span>,
+<a href=#157 id=157 data-nosnippet>157</a>            StyleBuilder::new().fg(BASE3).bg(YELLOW),
+<a href=#158 id=158 data-nosnippet>158</a>        )
+<a href=#159 id=159 data-nosnippet>159</a>        .style(
+<a href=#160 id=160 data-nosnippet>160</a>            <span class="string">"/editor/search/current"</span>,
+<a href=#161 id=161 data-nosnippet>161</a>            StyleBuilder::new().fg(BASE3).bg(ORANGE),
+<a href=#162 id=162 data-nosnippet>162</a>        )
+<a href=#163 id=163 data-nosnippet>163</a>        .fg(<span class="string">"/editor/line-number"</span>, BASE1)
+<a href=#164 id=164 data-nosnippet>164</a>        .fg(<span class="string">"/editor/line-number/current"</span>, BLUE)
+<a href=#165 id=165 data-nosnippet>165</a>        .style(<span class="string">"/editor/prompt"</span>, StyleBuilder::new().fg(BASE00).bg(BASE2))
+<a href=#166 id=166 data-nosnippet>166</a>        .apply();
+<a href=#167 id=167 data-nosnippet>167</a>    c
+<a href=#168 id=168 data-nosnippet>168</a>}</code></pre></div></section></main></body></html>

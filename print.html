@@ -407,6 +407,49 @@ for nodes that accept focus in the specified direction to choose the new focus.<
 <div style="break-before: page; page-break-before: always;"></div><h1 id="binding-system"><a class="header" href="#binding-system">Binding system</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><h1 id="themes-and-styling"><a class="header" href="#themes-and-styling">Themes and Styling</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="widgets"><a class="header" href="#widgets">Widgets</a></h1>
+<p>Canopy ships with a small widget library. This section highlights the editor and input widgets;
+the rest follow the core <code>Widget</code> trait and the event/lifecycle guidelines in this book.</p>
+<h2 id="editor"><a class="header" href="#editor">Editor</a></h2>
+<p>The <code>Editor</code> widget is a multi-line text editor that can also be configured for single-line input.
+It supports wrapping, vi-style modal editing, mouse selection, search and replace, and optional
+syntax highlighting.</p>
+<h3 id="configuration"><a class="header" href="#configuration">Configuration</a></h3>
+<p><code>EditorConfig</code> controls behavior:</p>
+<ul>
+<li><code>multiline</code>: Allow newlines. When false, Enter bubbles and newlines are normalized to spaces.</li>
+<li><code>wrap</code>: <code>WrapMode::None</code> for horizontal scrolling, <code>WrapMode::Soft</code> for soft wrap.</li>
+<li><code>auto_grow</code>, <code>min_height</code>, <code>max_height</code>: Size the editor to its content.</li>
+<li><code>mode</code>: <code>EditMode::Text</code> or <code>EditMode::Vi</code>.</li>
+<li><code>line_numbers</code>: <code>None</code>, <code>Absolute</code>, or <code>Relative</code>.</li>
+<li><code>tab_stop</code>, <code>read_only</code>.</li>
+</ul>
+<h3 id="vi-mode"><a class="header" href="#vi-mode">Vi mode</a></h3>
+<p>Normal/insert/visual with a focused subset:</p>
+<ul>
+<li>Motions: <code>h/j/k/l</code>, <code>w/b/e</code>, <code>0/$</code>, <code>^</code>, <code>gg/G</code>, <code>gj/gk</code>.</li>
+<li>Edits: <code>x</code>, <code>dd</code>, <code>cc</code>, <code>D</code>, <code>C</code>, visual <code>d/y/c</code>, <code>&gt;</code>/<code>&lt;</code>.</li>
+<li>Yank/put: <code>yy</code>, <code>p</code>, <code>P</code>.</li>
+<li>Search: <code>/</code>, <code>?</code>, <code>n</code>, <code>N</code>, replace with <code>R</code>.</li>
+<li>Undo/redo: <code>u</code>, <code>Ctrl+r</code>, repeat with <code>.</code>.</li>
+</ul>
+<h3 id="syntax-highlighting"><a class="header" href="#syntax-highlighting">Syntax highlighting</a></h3>
+<p>You can plug in a highlighter by implementing <code>Highlighter</code> or using <code>SyntectHighlighter</code>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use canopy::widgets::editor::{Editor, EditorConfig};
+use canopy::widgets::editor::highlight::SyntectHighlighter;
+
+let mut editor = Editor::with_config("", EditorConfig::new());
+editor.set_highlighter(Some(Box::new(SyntectHighlighter::plain())));
+<span class="boring">}</span></code></pre></pre>
+<p>Highlight spans inherit the editor background, so themes only influence foreground colors and
+attributes unless you supply a custom highlighter. The default syntect palette is
+<code>Solarized (dark)</code> to match the editor's dark background.</p>
+<p><code>SyntectHighlighter::with_theme_name</code> selects a named theme from syntect's default theme set, and
+<code>SyntectHighlighter::with_theme</code> lets you pass a <code>Theme</code> directly for full palette control.</p>
+<h2 id="input"><a class="header" href="#input">Input</a></h2>
+<p>The <code>Input</code> widget is a single-line text field that shares the editor's buffer and column mapping
+logic. It renders with horizontal scrolling to keep the cursor visible.</p>
 
                     </main>
 

@@ -214,7 +214,7 @@
 <a href=#214 id=214 data-nosnippet>214</a>    }
 <a href=#215 id=215 data-nosnippet>215</a>
 <a href=#216 id=216 data-nosnippet>216</a>    <span class="doccomment">/// Write a grapheme cluster at a specific point.
-<a href=#217 id=217 data-nosnippet>217</a>    </span><span class="kw">fn </span>put_grapheme(<span class="kw-2">&amp;mut </span><span class="self">self</span>, p: Point, grapheme: <span class="kw-2">&amp;</span>str, style: Style) {
+<a href=#217 id=217 data-nosnippet>217</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>put_grapheme(<span class="kw-2">&amp;mut </span><span class="self">self</span>, p: Point, grapheme: <span class="kw-2">&amp;</span>str, style: Style) {
 <a href=#218 id=218 data-nosnippet>218</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(i) = <span class="self">self</span>.idx(p) {
 <a href=#219 id=219 data-nosnippet>219</a>            <span class="kw">let </span><span class="kw-2">mut </span>chars = grapheme.chars();
 <a href=#220 id=220 data-nosnippet>220</a>            <span class="kw">let </span>ch = chars.next().unwrap_or(<span class="string">' '</span>);
@@ -229,7 +229,7 @@
 <a href=#229 id=229 data-nosnippet>229</a>    }
 <a href=#230 id=230 data-nosnippet>230</a>
 <a href=#231 id=231 data-nosnippet>231</a>    <span class="doccomment">/// Write a continuation cell for a wide glyph.
-<a href=#232 id=232 data-nosnippet>232</a>    </span><span class="kw">fn </span>put_continuation(<span class="kw-2">&amp;mut </span><span class="self">self</span>, p: Point, style: Style) {
+<a href=#232 id=232 data-nosnippet>232</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>put_continuation(<span class="kw-2">&amp;mut </span><span class="self">self</span>, p: Point, style: Style) {
 <a href=#233 id=233 data-nosnippet>233</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(i) = <span class="self">self</span>.idx(p) {
 <a href=#234 id=234 data-nosnippet>234</a>            <span class="self">self</span>.cells[i] = Cell::continuation(style);
 <a href=#235 id=235 data-nosnippet>235</a>        }
