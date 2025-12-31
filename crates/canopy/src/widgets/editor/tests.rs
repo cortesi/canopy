@@ -7,7 +7,9 @@ use std::{
 };
 
 use crate::{
-    Binder, Canopy, Context, Loader, NodeId, ViewContext, buf, command, derive_commands,
+    Binder, Canopy, Context, Loader, NodeId, ViewContext, buf, command,
+    core::context::{CoreContext, CoreViewContext},
+    derive_commands,
     editor::{Selection, TextPosition, TextRange},
     error::Result,
     event::{key, mouse},
@@ -147,6 +149,26 @@ fn editor_cursor(harness: &mut Harness) -> TextPosition {
 
 fn editor_selection(harness: &mut Harness) -> Selection {
     with_editor(harness, |editor| editor.buffer().selection())
+}
+
+fn editor_cursor_location(harness: &mut Harness) -> Point {
+    with_editor(harness, |editor| {
+        editor.cursor().expect("cursor missing").location
+    })
+}
+
+fn editor_view_scroll(harness: &mut Harness) -> Point {
+    let id = editor_id(harness);
+    let ctx = CoreViewContext::new(&harness.canopy.core, id);
+    ctx.view().tl
+}
+
+fn scroll_editor_to(harness: &mut Harness, x: u32, y: u32) {
+    let id = editor_id(harness);
+    harness.canopy.core.with_widget_mut(id, |_widget, core| {
+        let mut ctx = CoreContext::new(core, id);
+        ctx.scroll_to(x, y);
+    });
 }
 
 fn mouse_event(action: mouse::Action, x: u32, y: u32) -> mouse::MouseEvent {
@@ -304,6 +326,70 @@ fn mouse_triple_click_selects_line() {
         selection.range(),
         TextRange::new(TextPosition::new(0, 0), TextPosition::new(0, 5))
     );
+}
+
+#[test]
+fn cursor_location_tracks_vertical_scroll() {
+    let config = EditorConfig::new().with_wrap(WrapMode::None);
+    let text = (0..12)
+        .map(|idx| format!("line{idx}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut harness = build_harness(&text, config, 10, 4);
+    for _ in 0..5 {
+        harness.key(key::KeyCode::Down).unwrap();
+    }
+    harness.render().unwrap();
+
+    let cursor = editor_cursor(&mut harness);
+    let scroll = editor_view_scroll(&mut harness);
+    assert!(scroll.y > 0);
+    let location = editor_cursor_location(&mut harness);
+    assert_eq!(location.y, (cursor.line as u32).saturating_sub(scroll.y));
+    assert_eq!(location.x, (cursor.column as u32).saturating_sub(scroll.x));
+}
+
+#[test]
+fn cursor_location_updates_after_manual_scroll() {
+    let config = EditorConfig::new().with_wrap(WrapMode::None);
+    let text = (0..10)
+        .map(|idx| format!("row{idx}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut harness = build_harness(&text, config, 10, 4);
+    for _ in 0..3 {
+        harness.key(key::KeyCode::Down).unwrap();
+    }
+    let scroll_before = editor_view_scroll(&mut harness);
+    assert_eq!(scroll_before.y, 0);
+
+    scroll_editor_to(&mut harness, 0, 2);
+    harness.render().unwrap();
+
+    let cursor = editor_cursor(&mut harness);
+    let scroll = editor_view_scroll(&mut harness);
+    assert_eq!(scroll.y, 2);
+    let location = editor_cursor_location(&mut harness);
+    assert_eq!(location.y, (cursor.line as u32).saturating_sub(scroll.y));
+    assert_eq!(location.x, (cursor.column as u32).saturating_sub(scroll.x));
+}
+
+#[test]
+fn cursor_location_tracks_horizontal_scroll() {
+    let config = EditorConfig::new().with_wrap(WrapMode::None);
+    let text = "abcdefghijklmnopqrstuvwxyz";
+    let mut harness = build_harness(text, config, 6, 1);
+    for _ in 0..12 {
+        harness.key(key::KeyCode::Right).unwrap();
+    }
+    harness.render().unwrap();
+
+    let cursor = editor_cursor(&mut harness);
+    let scroll = editor_view_scroll(&mut harness);
+    assert!(scroll.x > 0);
+    let location = editor_cursor_location(&mut harness);
+    assert_eq!(location.x, (cursor.column as u32).saturating_sub(scroll.x));
+    assert_eq!(location.y, (cursor.line as u32).saturating_sub(scroll.y));
 }
 
 #[test]

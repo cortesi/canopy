@@ -55,8 +55,10 @@ pub struct Editor {
     highlighter: Option<Box<dyn Highlighter>>,
     /// Cached syntax highlight spans.
     highlight_cache: HighlightCache,
-    /// Cached cursor position in display coordinates.
+    /// Cached cursor position in content coordinates.
     cursor_point: Option<Point>,
+    /// Cached cursor position in view coordinates.
+    cursor_view_point: Option<Point>,
     /// Whether a text-entry transaction is active.
     text_entry_transaction: bool,
 }
@@ -216,6 +218,7 @@ impl Editor {
             highlighter: None,
             highlight_cache: HighlightCache::new(),
             cursor_point: None,
+            cursor_view_point: None,
             text_entry_transaction: false,
         }
     }
@@ -295,10 +298,19 @@ impl Editor {
         let point = self
             .layout
             .point_for_position(&self.buffer, cursor, self.config.tab_stop);
-        self.cursor_point = Some(Point {
+        let cursor_point = Point {
             x: point.x.saturating_add(gutter_width),
             y: point.y,
-        });
+        };
+        self.cursor_point = Some(cursor_point);
+        self.cursor_view_point = if view_rect.contains_point(cursor_point) {
+            Some(Point {
+                x: cursor_point.x - view_rect.tl.x,
+                y: cursor_point.y - view_rect.tl.y,
+            })
+        } else {
+            None
+        };
     }
 
     /// Ensure the cursor is visible within the current scroll view.
@@ -2280,7 +2292,7 @@ impl Widget for Editor {
     }
 
     fn cursor(&self) -> Option<cursor::Cursor> {
-        let location = self.cursor_point.unwrap_or(Point { x: 0, y: 0 });
+        let location = self.cursor_view_point?;
         let shape = match self.config.mode {
             EditMode::Text => cursor::CursorShape::Line,
             EditMode::Vi => match self.vi.mode() {
