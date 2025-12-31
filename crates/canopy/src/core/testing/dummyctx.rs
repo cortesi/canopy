@@ -124,6 +124,14 @@ impl Context for DummyContext {
 
     fn focus_prev_in(&mut self, _root: NodeId) {}
 
+    fn capture_mouse(&mut self) -> bool {
+        false
+    }
+
+    fn release_mouse(&mut self) -> bool {
+        false
+    }
+
     fn scroll_to(&mut self, _x: u32, _y: u32) -> bool {
         false
     }

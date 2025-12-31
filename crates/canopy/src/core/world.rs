@@ -40,6 +40,8 @@ pub struct Core {
     pub(crate) backend: Option<Box<dyn BackendControl>>,
     /// Pending style map to be applied before next render.
     pub(crate) pending_style: Option<StyleMap>,
+    /// Node that captures mouse events regardless of cursor position.
+    pub(crate) mouse_capture: Option<NodeId>,
 }
 
 impl Core {
@@ -75,6 +77,7 @@ impl Core {
             focus_gen: 1,
             backend: None,
             pending_style: None,
+            mouse_capture: None,
         }
     }
 

@@ -305,6 +305,12 @@ pub trait Context: ViewContext {
         self.focus_dir_global(Direction::Down)
     }
 
+    /// Capture mouse events for the current node. Returns `true` if capture changed.
+    fn capture_mouse(&mut self) -> bool;
+
+    /// Release mouse capture if held by the current node. Returns `true` if capture changed.
+    fn release_mouse(&mut self) -> bool;
+
     /// Scroll the view to the specified position. Returns `true` if movement occurred.
     fn scroll_to(&mut self, x: u32, y: u32) -> bool;
 
@@ -768,6 +774,24 @@ impl<'a> Context for CoreContext<'a> {
 
     fn focus_prev_in(&mut self, root: NodeId) {
         self.core.focus_prev(root);
+    }
+
+    fn capture_mouse(&mut self) -> bool {
+        if self.core.mouse_capture == Some(self.node_id) {
+            false
+        } else {
+            self.core.mouse_capture = Some(self.node_id);
+            true
+        }
+    }
+
+    fn release_mouse(&mut self) -> bool {
+        if self.core.mouse_capture == Some(self.node_id) {
+            self.core.mouse_capture = None;
+            true
+        } else {
+            false
+        }
     }
 
     fn scroll_to(&mut self, x: u32, y: u32) -> bool {

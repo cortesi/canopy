@@ -510,11 +510,26 @@ impl Canopy {
 
     /// Propagate a mouse event through the node under the event and all its ancestors.
     pub(crate) fn mouse(&mut self, m: mouse::MouseEvent) -> Result<()> {
-        let mut path = self.location_path(m.location)?;
         let mut action = None;
         let mut changed = false;
+        let mut target = None;
+        let mut path = Path::empty();
 
-        if let Some(nid) = self.core.locate_node(self.core.root, m.location)? {
+        if let Some(capture) = self.core.mouse_capture {
+            if self.core.nodes.contains_key(capture) {
+                path = self.core.node_path(self.core.root, capture);
+                target = Some(capture);
+            } else {
+                self.core.mouse_capture = None;
+            }
+        }
+
+        if target.is_none() {
+            path = self.location_path(m.location)?;
+            target = self.core.locate_node(self.core.root, m.location)?;
+        }
+
+        if let Some(nid) = target {
             let mut target = Some(nid);
             while let Some(id) = target {
                 let view = self.core.nodes.get(id).map(|n| n.view).unwrap_or_default();
@@ -789,6 +804,40 @@ mod tests {
         }
     }
 
+    pub struct CaptureWidget {
+        drags: usize,
+    }
+
+    #[derive_commands]
+    impl CaptureWidget {
+        pub fn new() -> Self {
+            Self { drags: 0 }
+        }
+    }
+
+    impl Widget for CaptureWidget {
+        fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> EventOutcome {
+            if let Event::Mouse(mouse_event) = event {
+                match mouse_event.action {
+                    mouse::Action::Down if mouse_event.button == mouse::Button::Left => {
+                        ctx.capture_mouse();
+                        return EventOutcome::Handle;
+                    }
+                    mouse::Action::Drag if mouse_event.button == mouse::Button::Left => {
+                        self.drags = self.drags.saturating_add(1);
+                        return EventOutcome::Handle;
+                    }
+                    mouse::Action::Up if mouse_event.button == mouse::Button::Left => {
+                        ctx.release_mouse();
+                        return EventOutcome::Handle;
+                    }
+                    _ => {}
+                }
+            }
+            EventOutcome::Ignore
+        }
+    }
+
     fn set_outcome<T: Any + OutcomeTarget>(core: &mut Core, id: NodeId, outcome: EventOutcome) {
         core.with_widget_mut(id, |w, _| {
             let any = w as &mut dyn Any;
@@ -796,6 +845,15 @@ mod tests {
                 node.set_outcome(outcome);
             }
         });
+    }
+
+    fn capture_drag_count(core: &mut Core, id: NodeId) -> usize {
+        core.with_widget_mut(id, |w, _| {
+            let any = w as &mut dyn Any;
+            any.downcast_mut::<CaptureWidget>()
+                .map(|widget| widget.drags)
+                .unwrap_or(0)
+        })
     }
 
     fn make_mouse_event(core: &Core, node_id: NodeId) -> mouse::MouseEvent {
@@ -840,6 +898,43 @@ mod tests {
         };
         canopy.event(Event::Mouse(event))?;
         assert!(!canopy.render_if_pending(&mut render)?);
+        Ok(())
+    }
+
+    #[test]
+    fn mouse_capture_routes_drag_outside() -> Result<()> {
+        let mut canopy = Canopy::new();
+        let app_id = canopy.core.add(CaptureWidget::new());
+        canopy.core.set_children(canopy.core.root, vec![app_id])?;
+        canopy
+            .core
+            .with_layout_of(app_id, |layout| *layout = Layout::fill())?;
+        canopy.set_root_size(Expanse::new(10, 6))?;
+
+        let (_, mut render) = TestRender::create();
+        canopy.render(&mut render)?;
+
+        let down = make_mouse_event(&canopy.core, app_id);
+        canopy.event(Event::Mouse(down))?;
+
+        let drag = mouse::MouseEvent {
+            action: mouse::Action::Drag,
+            button: mouse::Button::Left,
+            modifiers: key::Empty,
+            location: Point { x: 50, y: 50 },
+        };
+        canopy.event(Event::Mouse(drag))?;
+
+        assert_eq!(capture_drag_count(&mut canopy.core, app_id), 1);
+
+        let up = mouse::MouseEvent {
+            action: mouse::Action::Up,
+            button: mouse::Button::Left,
+            modifiers: key::Empty,
+            location: Point { x: 50, y: 50 },
+        };
+        canopy.event(Event::Mouse(up))?;
+
         Ok(())
     }
 

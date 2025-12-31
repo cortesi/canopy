@@ -344,6 +344,39 @@ fn mouse_triple_click_selects_line() {
 }
 
 #[test]
+fn mouse_wheel_scrolls_editor() {
+    let config = EditorConfig::new().with_wrap(WrapMode::None);
+    let text = (0..20)
+        .map(|idx| format!("line{idx}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut harness = build_harness(&text, config, 10, 3);
+    let start = editor_view_scroll(&mut harness);
+
+    harness
+        .mouse(mouse::MouseEvent {
+            action: mouse::Action::ScrollDown,
+            button: mouse::Button::None,
+            modifiers: key::Empty,
+            location: Point { x: 1, y: 1 },
+        })
+        .unwrap();
+    let after = editor_view_scroll(&mut harness);
+    assert!(after.y > start.y);
+
+    harness
+        .mouse(mouse::MouseEvent {
+            action: mouse::Action::ScrollUp,
+            button: mouse::Button::None,
+            modifiers: key::Empty,
+            location: Point { x: 1, y: 1 },
+        })
+        .unwrap();
+    let end = editor_view_scroll(&mut harness);
+    assert_eq!(end.y, start.y);
+}
+
+#[test]
 fn cursor_location_tracks_vertical_scroll() {
     let config = EditorConfig::new().with_wrap(WrapMode::None);
     let text = (0..12)
