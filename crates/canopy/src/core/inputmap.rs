@@ -73,23 +73,33 @@ impl InputMode {
 
     /// Resolve a key with a given path filter to a binding target.
     pub fn resolve(&self, path: &Path, input: &InputSpec) -> Option<BindingTarget> {
+        self.resolve_match(path, input)
+            .map(|(action, _match)| action)
+    }
+
+    /// Resolve a key with a given path filter, returning the match metadata.
+    pub fn resolve_match(
+        &self,
+        path: &Path,
+        input: &InputSpec,
+    ) -> Option<(BindingTarget, PathMatch)> {
         let input = input.normalize();
-        let mut best: Option<(usize, usize, usize, BindingTarget)> = None;
+        let mut best: Option<(usize, usize, usize, BindingTarget, PathMatch)> = None;
         for (idx, k) in self.inputs.get(&input)?.iter().enumerate() {
             if let Some(m) = k.pathmatch.check_match(path) {
                 let score = (m.end, m.len, idx);
                 let replace = match best {
-                    Some((best_end, best_len, best_idx, _)) => {
+                    Some((best_end, best_len, best_idx, _, _)) => {
                         score > (best_end, best_len, best_idx)
                     }
                     None => true,
                 };
                 if replace {
-                    best = Some((score.0, score.1, score.2, k.action.clone()));
+                    best = Some((score.0, score.1, score.2, k.action.clone(), m));
                 }
             }
         }
-        best.map(|(_, _, _, action)| action)
+        best.map(|(_, _, _, action, m)| (action, m))
     }
 }
 
@@ -150,6 +160,22 @@ impl InputMap {
         }
         if self.current_mode != DEFAULT_MODE {
             return self.modes.get(DEFAULT_MODE)?.resolve(path, input);
+        }
+        None
+    }
+
+    /// Resolve a binding in the current mode, returning match metadata.
+    pub fn resolve_match(
+        &self,
+        path: &Path,
+        input: &InputSpec,
+    ) -> Option<(BindingTarget, PathMatch)> {
+        let m = self.modes.get(&self.current_mode).unwrap();
+        if let Some(action) = m.resolve_match(path, input) {
+            return Some(action);
+        }
+        if self.current_mode != DEFAULT_MODE {
+            return self.modes.get(DEFAULT_MODE)?.resolve_match(path, input);
         }
         None
     }

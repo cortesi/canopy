@@ -141,7 +141,7 @@ impl PathMatcher {
     /// Check whether the path filter matches a given path, returning match metadata.
     pub fn check_match(&self, path: &Path) -> Option<PathMatch> {
         let haystack = path.to_string();
-        let mat = self.expr.find(&haystack)?;
+        let mat = self.expr.find_iter(&haystack).last()?;
         Some(PathMatch {
             end: mat.end(),
             len: mat.end() - mat.start(),
@@ -156,8 +156,8 @@ mod tests {
     #[test]
     fn pathfilter() -> Result<()> {
         let v = PathMatcher::new("")?;
-        assert_eq!(v.check(&"/any/thing".into()), Some(0));
-        assert_eq!(v.check(&"/".into()), Some(0));
+        assert_eq!(v.check(&"/any/thing".into()), Some(10));
+        assert_eq!(v.check(&"/".into()), Some(1));
 
         let v = PathMatcher::new("bar")?;
         assert_eq!(v.check(&"/foo/bar".into()), Some(8));

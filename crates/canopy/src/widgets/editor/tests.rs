@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    Binder, Canopy, Context, Loader, NodeId, ViewContext, buf, derive_commands,
+    Binder, Canopy, Context, Loader, NodeId, ViewContext, buf, command, derive_commands,
     editor::{Selection, TextPosition, TextRange},
     error::Result,
     event::{key, mouse},
@@ -32,6 +32,8 @@ struct EditorHost {
     config: EditorConfig,
     /// Cached editor node id.
     editor_id: Option<NodeId>,
+    /// Number of times the host command was triggered.
+    binding_hits: usize,
 }
 
 #[derive_commands]
@@ -42,7 +44,14 @@ impl EditorHost {
             text: text.to_string(),
             config,
             editor_id: None,
+            binding_hits: 0,
         }
+    }
+
+    /// Record a binding invocation on the host.
+    #[command]
+    fn record_binding(&mut self, _ctx: &mut dyn Context) {
+        self.binding_hits = self.binding_hits.saturating_add(1);
     }
 
     /// Ensure the editor node exists and is laid out.
@@ -69,6 +78,11 @@ impl EditorHost {
     fn editor_id(&self) -> NodeId {
         self.editor_id.expect("editor id missing")
     }
+
+    /// Return the number of binding hits recorded on the host.
+    fn binding_hits(&self) -> usize {
+        self.binding_hits
+    }
 }
 
 impl Widget for EditorHost {
@@ -89,6 +103,7 @@ impl Widget for EditorHost {
 impl Loader for EditorHost {
     fn load(c: &mut Canopy) {
         c.add_commands::<Editor>();
+        c.add_commands::<Self>();
     }
 }
 
@@ -116,6 +131,10 @@ fn editor_id(harness: &mut Harness) -> NodeId {
 fn with_editor<R>(harness: &mut Harness, f: impl FnOnce(&mut Editor) -> R) -> R {
     let id = editor_id(harness);
     harness.with_widget(id, f)
+}
+
+fn host_binding_hits(harness: &mut Harness) -> usize {
+    harness.with_root_widget(|root: &mut EditorHost| root.binding_hits())
 }
 
 fn editor_text(harness: &mut Harness) -> String {
@@ -364,6 +383,18 @@ fn highlight_spans_cached_by_revision() {
     harness.render().unwrap();
     let second = counter.load(Ordering::SeqCst);
     assert_eq!(first, second);
+}
+
+#[test]
+fn root_binding_does_not_override_text_entry() {
+    let config = EditorConfig::new().with_mode(EditMode::Text);
+    let mut harness = build_harness("", config, 6, 1);
+    Binder::new(&mut harness.canopy)
+        .with_path("editor_host")
+        .key('q', "editor_host::record_binding()");
+    harness.key('q').unwrap();
+    assert_eq!(editor_text(&mut harness), "q");
+    assert_eq!(host_binding_hits(&mut harness), 0);
 }
 
 #[derive(Clone)]

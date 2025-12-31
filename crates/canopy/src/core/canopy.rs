@@ -604,9 +604,17 @@ impl Canopy {
         let mut changed = false;
 
         while let Some(id) = target {
-            if let Some(binding) = self.keymap.resolve(&path, &inputmap::InputSpec::Key(k)) {
-                action = Some((binding, id));
-                break;
+            let mut fallback_binding = None;
+            if let Some((binding, m)) = self
+                .keymap
+                .resolve_match(&path, &inputmap::InputSpec::Key(k))
+            {
+                let path_len = path.to_string().len();
+                if m.end == path_len && m.len > 0 {
+                    action = Some((binding, id));
+                    break;
+                }
+                fallback_binding = Some(binding);
             }
 
             let outcome = self.core.dispatch_event_on_node(id, &Event::Key(k));
@@ -616,6 +624,10 @@ impl Canopy {
                     break;
                 }
                 EventOutcome::Ignore => {
+                    if let Some(binding) = fallback_binding {
+                        action = Some((binding, id));
+                        break;
+                    }
                     path.pop();
                     target = self.core.nodes[id].parent;
                 }
@@ -874,18 +886,18 @@ mod tests {
             c.core.set_focus(tree.a_a);
             c.key('a')?;
             let s = get_state();
-            assert_eq!(s.path, vec!["ba_la.c_leaf()"]);
+            assert_eq!(s.path, vec!["ba_la@key->ignore", "ba_la.c_leaf()"]);
 
             reset_state();
             c.key('r')?;
             let s = get_state();
-            assert_eq!(s.path, vec!["r.c_root()"]);
+            assert_eq!(s.path, vec!["ba_la@key->ignore", "r.c_root()"]);
 
             reset_state();
             c.core.set_focus(tree.a);
             c.key('a')?;
             let s = get_state();
-            assert_eq!(s.path, vec!["ba_la.c_leaf()"]);
+            assert_eq!(s.path, vec!["ba@key->ignore", "ba_la.c_leaf()"]);
 
             reset_state();
             c.core.set_focus(tree.a_a);
