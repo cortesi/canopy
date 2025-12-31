@@ -252,6 +252,21 @@ fn visual_line_delete_removes_lines() {
 }
 
 #[test]
+fn vi_delete_line_continues_at_eof_with_scroll() {
+    let config = EditorConfig::new().with_mode(EditMode::Vi);
+    let mut harness = build_harness("one\ntwo\nthree\n", config, 6, 2);
+    harness.key('G').unwrap();
+    harness.key('k').unwrap();
+    harness.keys(['d', 'd']).unwrap();
+    assert_eq!(editor_text(&mut harness), "one\ntwo\n");
+    harness.keys(['d', 'd']).unwrap();
+    assert_eq!(editor_text(&mut harness), "one\ntwo");
+    harness.keys(['d', 'd']).unwrap();
+    assert_eq!(editor_text(&mut harness), "one");
+    assert_eq!(editor_cursor(&mut harness), TextPosition::new(0, 0));
+}
+
+#[test]
 fn search_replace_all() {
     let config = EditorConfig::new().with_mode(EditMode::Vi);
     let mut harness = build_harness("foo bar foo", config, 20, 2);

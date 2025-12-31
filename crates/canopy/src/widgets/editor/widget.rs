@@ -1694,11 +1694,26 @@ impl Editor {
             return;
         }
         let cursor = self.buffer.cursor();
+        let line_count = self.buffer.line_count().max(1);
         let start = TextPosition::new(cursor.line, 0);
         let end = self.buffer.line_end_position(cursor.line, true);
-        let range = TextRange::new(start, end);
-        self.set_yank(range, true);
-        self.buffer.replace_range(range, "");
+        let yank_range = TextRange::new(start, end);
+        let delete_range = if cursor.line + 1 == line_count && cursor.line > 0 {
+            let prev_line = cursor.line.saturating_sub(1);
+            let prev_len = self.buffer.line_char_len(prev_line);
+            let start = TextPosition::new(prev_line, prev_len);
+            let end = TextPosition::new(cursor.line, self.buffer.line_char_len(cursor.line));
+            TextRange::new(start, end)
+        } else {
+            yank_range
+        };
+        self.set_yank(yank_range, true);
+        self.buffer.replace_range(delete_range, "");
+        if cursor.line + 1 == line_count && cursor.line > 0 {
+            let prev_line = cursor.line.saturating_sub(1);
+            self.buffer
+                .set_cursor(self.buffer.line_start_position(prev_line));
+        }
         self.update_preferred_column();
     }
 
