@@ -2,12 +2,12 @@ use canopy::{
     Binder, Canopy, Context, Loader, ViewContext, derive_commands,
     error::Result,
     event::key,
-    layout::Layout,
+    layout::{Edges, Layout},
     render::Render,
     widget::Widget,
     widgets::{
         Root,
-        editor::{EditMode, Editor, EditorConfig, LineNumbers, highlight::SyntectHighlighter},
+        editor::{EditMode, Editor, EditorConfig, WrapMode, highlight::SyntectHighlighter},
         frame,
     },
 };
@@ -32,12 +32,19 @@ impl Widget for Ed {
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let config = EditorConfig::new()
             .with_mode(EditMode::Vi)
-            .with_line_numbers(LineNumbers::Relative);
+            .with_wrap(WrapMode::None);
         let mut editor = Editor::with_config(&self.contents, config);
         editor.set_highlighter(Some(Box::new(SyntectHighlighter::plain())));
         let editor_id = c.add_orphan(editor);
         let frame_id = frame::Frame::wrap(c, editor_id)?;
         c.mount_child(frame_id)?;
+
+        c.with_layout_of(editor_id, &mut |layout| {
+            *layout = Layout::fill().padding(Edges::all(1));
+        })?;
+        c.with_layout_of(frame_id, &mut |layout| {
+            *layout = Layout::fill().padding(Edges::all(1));
+        })?;
 
         c.with_layout(&mut |layout| {
             *layout = Layout::fill();
