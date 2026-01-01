@@ -6,8 +6,8 @@ use canopy::{
     event::{key, mouse},
     layout::Layout,
     render::Render,
-    widgets::{CanvasWidth, Frame, Root, Text},
 };
+use canopy_widgets::{CanvasWidth, Frame, Root, Text};
 use unicode_width::UnicodeWidthStr;
 
 /// Wrap width used for the text widget.

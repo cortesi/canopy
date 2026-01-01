@@ -3,8 +3,8 @@ use canopy::{
     error::Result,
     layout::{Layout, Sizing},
     render::Render,
-    widgets::Text,
 };
+use canopy_widgets::Text;
 
 /// Placeholder paragraph text for the demo.
 const LOREM: &str = concat!(

@@ -6,7 +6,6 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-# From canopy-core
 crossterm = "0.29.0"
 thiserror = "2.0.12"
 bitvec = "1.0.1"
@@ -18,23 +17,13 @@ termcolor = "1.4.1"
 comfy-table = "7.1.4"
 color-backtrace = "0.7.0"
 scoped-tls = "1.0.1"
-
-# From canopy-widgets
-textwrap = "0.16.2"
-pad = "0.1.6"
-
-# Existing
 tracing-subscriber = "0.3.19"
 tracing = "0.1.41"
 canopy-derive = { path = "../canopy-derive" }
 slotmap = "1.1.1"
 unicode-segmentation = "1.12.0"
 unicode-width = "0.2.2"
-alacritty_terminal = "0.25.1"
-portable-pty = "0.9.0"
-image = "0.25.9"
 ropey = "1.6.1"
-syntect = "5.3.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.148"
 anyhow = "1.0.100"
@@ -47,16 +36,6 @@ proptest = "1.9.0"
 
 [features]
 testing = []
-
-[[bench]]
-name = "rendering"
-harness = false
-required-features = ["testing"]
-
-[[bench]]
-name = "editor"
-harness = false
-required-features = ["testing"]
 
 [lints]
 workspace = true

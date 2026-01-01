@@ -14,7 +14,6 @@
 //! # Module Organization
 //!
 //! - [`geom`] - Geometry primitives (Rect, Point, Expanse, etc.)
-//! - [`widgets`] - Built-in widget implementations
 
 #![warn(missing_docs)]
 
@@ -23,14 +22,11 @@ extern crate self as canopy;
 
 // Internal core module - re-export specific items below
 mod core;
-/// Internal editor module shared by widgets.
-mod editor;
 
 // Public modules
 pub mod geom;
 pub mod layout;
 pub(crate) mod widget;
-pub mod widgets;
 
 // Re-export submodules that users may need to access directly
 // Re-export terminal buffer and text buffer
@@ -43,7 +39,9 @@ pub use core::{
     InputMode, InputSpec, Loader, NodeId, Poller, TypedId, ViewContext,
 };
 // Re-export input mapping
-pub use core::{backend, commands, cursor, error, event, path, render, script, state, style};
+pub use core::{
+    backend, commands, cursor, error, event, path, render, script, state, style, text, view,
+};
 
 // Re-export derive macros
 pub use canopy_derive::{CommandArg, CommandEnum, command, derive_commands};

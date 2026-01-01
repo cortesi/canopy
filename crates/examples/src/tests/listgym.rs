@@ -1,9 +1,5 @@
-use canopy::{
-    Loader,
-    error::Result,
-    testing::harness::Harness,
-    widgets::{List, Panes},
-};
+use canopy::{Loader, error::Result, testing::harness::Harness};
+use canopy_widgets::{List, Panes};
 
 use crate::listgym::{ListEntry, ListGym};
 

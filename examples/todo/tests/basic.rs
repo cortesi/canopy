@@ -1,9 +1,8 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
-use canopy::{
-    error::Result as CanopyResult, event::key::KeyCode, testing::harness::Harness, widgets::List,
-};
+use canopy::{error::Result as CanopyResult, event::key::KeyCode, testing::harness::Harness};
+use canopy_widgets::List;
 use todo::{Todo, TodoEntry, open_store, setup_app};
 
 fn db_path(tag: &str) -> std::path::PathBuf {

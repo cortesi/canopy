@@ -140,12 +140,12 @@ impl<'a> Render<'a> {
     }
 
     /// Resolve a style by name without applying effects.
-    pub(crate) fn resolve_style_name_raw(&self, name: &str) -> Style {
+    pub fn resolve_style_name_raw(&self, name: &str) -> Style {
         self.style.get(self.stylemap, name)
     }
 
     /// Resolve a style by name and apply the current effect stack.
-    pub(crate) fn resolve_style_name(&self, name: &str) -> Style {
+    pub fn resolve_style_name(&self, name: &str) -> Style {
         self.resolve_style(name)
     }
 
@@ -222,12 +222,7 @@ impl<'a> Render<'a> {
     }
 
     /// Write a grapheme with a resolved style, including continuation cells.
-    pub(crate) fn put_grapheme(
-        &mut self,
-        style: Style,
-        p: geom::Point,
-        grapheme: &str,
-    ) -> Result<()> {
+    pub fn put_grapheme(&mut self, style: Style, p: geom::Point, grapheme: &str) -> Result<()> {
         if self.clip.contains_point(p) {
             let style = self.apply_effects(style);
             let adjusted = self.translate_point(p);

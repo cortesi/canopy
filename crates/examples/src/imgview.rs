@@ -1,11 +1,7 @@
 use std::path::Path;
 
-use canopy::{
-    Binder, Canopy, Loader,
-    error::Result,
-    event::key,
-    widgets::{ImageView, Root},
-};
+use canopy::{Binder, Canopy, Loader, error::Result, event::key};
+use canopy_widgets::{ImageView, Root};
 
 /// Configure key bindings for the image viewer.
 pub fn setup_bindings(cnpy: &mut Canopy) {

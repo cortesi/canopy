@@ -2,8 +2,9 @@
 
 use std::{error::Error, result::Result};
 
-use canopy::{Canopy, Loader, backend::crossterm::runloop, widgets::Root};
+use canopy::{Canopy, Loader, backend::crossterm::runloop};
 use canopy_examples::test_text::TextDisplay;
+use canopy_widgets::Root;
 
 /// Run the test_text example.
 fn main() -> Result<(), Box<dyn Error>> {

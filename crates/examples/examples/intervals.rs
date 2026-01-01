@@ -1,7 +1,8 @@
 //! Launch the intervals example.
 
-use canopy::{Canopy, Loader, backend::crossterm::runloop, error::Result, widgets::Root};
+use canopy::{Canopy, Loader, backend::crossterm::runloop, error::Result};
 use canopy_examples::intervals::{Intervals, setup_bindings};
+use canopy_widgets::Root;
 
 /// Run the intervals example.
 fn main() -> Result<()> {

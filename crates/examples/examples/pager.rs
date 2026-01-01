@@ -2,8 +2,9 @@
 
 use std::{env, error::Error, fs, result::Result};
 
-use canopy::{Canopy, Loader, backend::crossterm::runloop, widgets::Root};
+use canopy::{Canopy, Loader, backend::crossterm::runloop};
 use canopy_examples::pager::{Pager, setup_bindings};
+use canopy_widgets::Root;
 
 /// Run the pager example.
 fn main() -> Result<(), Box<dyn Error>> {

@@ -356,7 +356,6 @@ checksum = "8f1fe948ff07f4bd06c30984e69f5b4899c516a3ef74f34df92a2df2ab535495"
 name = "canopy"
 version = "0.0.1"
 dependencies = [
- "alacritty_terminal",
  "anyhow",
  "bitvec",
  "canopy-derive",
@@ -366,9 +365,6 @@ dependencies = [
  "convert_case",
  "criterion",
  "crossterm",
- "image",
- "pad",
- "portable-pty",
  "proptest",
  "rand",
  "regex",
@@ -379,9 +375,7 @@ dependencies = [
  "serde",
  "serde_json",
  "slotmap",
- "syntect",
  "termcolor",
- "textwrap",
  "thiserror 2.0.17",
  "tracing",
  "tracing-subscriber",
@@ -414,11 +408,34 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "canopy",
+ "canopy-widgets",
  "clap",
  "rand",
  "textwrap",
  "tracing",
  "tracing-subscriber",
+ "unicode-width 0.2.2",
+]
+
+[[package]]
+name = "canopy-widgets"
+version = "0.0.1"
+dependencies = [
+ "alacritty_terminal",
+ "anyhow",
+ "canopy",
+ "canopy-derive",
+ "criterion",
+ "image",
+ "pad",
+ "portable-pty",
+ "proptest",
+ "ropey",
+ "syntect",
+ "textwrap",
+ "tracing",
+ "tracing-subscriber",
+ "unicode-segmentation",
  "unicode-width 0.2.2",
 ]
 
@@ -2455,6 +2472,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "canopy",
+ "canopy-widgets",
  "clap",
  "rusqlite",
  "textwrap",

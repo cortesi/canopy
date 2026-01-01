@@ -7,8 +7,8 @@ use canopy::{
     geom::{Expanse, Line},
     layout::{CanvasContext, Layout, MeasureConstraints, Measurement, Size, Sizing},
     render::Render,
-    widgets::{Frame, Root},
 };
+use canopy_widgets::{Frame, Root};
 
 /// Base characters used to generate the test pattern.
 const PATTERN: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";

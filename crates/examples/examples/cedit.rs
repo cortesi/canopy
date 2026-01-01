@@ -2,8 +2,9 @@
 
 use std::{env, error::Error, fs, path::Path, result::Result};
 
-use canopy::{Canopy, Loader, backend::crossterm::runloop, widgets::Root};
+use canopy::{Canopy, Loader, backend::crossterm::runloop};
 use canopy_examples::cedit::{Ed, setup_bindings};
+use canopy_widgets::Root;
 
 /// Run the cedit example.
 fn main() -> Result<(), Box<dyn Error>> {

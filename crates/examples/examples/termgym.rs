@@ -2,8 +2,9 @@
 
 use std::io;
 
-use canopy::{Canopy, Loader, backend::crossterm::runloop, error::Result, widgets::Root};
+use canopy::{Canopy, Loader, backend::crossterm::runloop, error::Result};
 use canopy_examples::termgym::{TermGym, setup_bindings};
+use canopy_widgets::Root;
 use clap::Parser;
 
 /// CLI flags for the terminal gym example.

@@ -4,8 +4,8 @@ use canopy::{
     geom,
     layout::{Edges, Layout},
     testing::harness::Harness,
-    widgets::Frame,
 };
+use canopy_widgets::Frame;
 
 use crate::framegym::{FrameGym, KEY_FRAME, KEY_PATTERN, TestPattern};
 

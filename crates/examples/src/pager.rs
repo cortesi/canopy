@@ -4,8 +4,8 @@ use canopy::{
     event::{key, mouse},
     layout::Layout,
     render::Render,
-    widgets::{Frame, Root, Text},
 };
+use canopy_widgets::{Frame, Root, Text};
 
 /// Simple pager widget for file contents.
 pub struct Pager {

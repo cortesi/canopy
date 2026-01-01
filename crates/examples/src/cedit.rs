@@ -4,10 +4,10 @@ use canopy::{
     event::key,
     layout::{Edges, Layout},
     render::Render,
-    widgets::{
-        Frame, Root,
-        editor::{EditMode, Editor, EditorConfig, WrapMode, highlight::SyntectHighlighter},
-    },
+};
+use canopy_widgets::{
+    Frame, Root,
+    editor::{EditMode, Editor, EditorConfig, WrapMode, highlight::SyntectHighlighter},
 };
 
 /// Simple editor wrapper for the cedit demo.

@@ -9,8 +9,8 @@ use canopy::{
     layout::{Direction, Edges, Layout},
     render::Render,
     style::{StyleMap, dracula, effects, gruvbox, solarized},
-    widgets::{Dropdown, DropdownItem, Frame, Modal, Root, Selector, SelectorItem},
 };
+use canopy_widgets::{Dropdown, DropdownItem, Frame, Modal, Root, Selector, SelectorItem};
 
 /// Theme option for the dropdown.
 #[derive(Clone)]

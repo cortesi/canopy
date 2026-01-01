@@ -5,8 +5,8 @@ use canopy::{
     geom::Expanse,
     layout::{Direction, Layout, Sizing},
     render::Render,
-    widgets::Root,
 };
+use canopy_widgets::Root;
 
 /// A focusable block that can split into children.
 pub struct Block {

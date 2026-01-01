@@ -103,6 +103,11 @@ impl Canopy {
         self.script_host.execute(&mut self.core, node_id, sid)
     }
 
+    /// Compile a script and return its identifier.
+    pub fn compile_script(&mut self, source: &str) -> Result<script::ScriptId> {
+        self.script_host.compile(source)
+    }
+
     /// Bind a mouse action in the global mode with a given path filter to a script.
     pub fn bind_mouse<K>(&mut self, mouse: K, path_filter: &str, script: &str) -> Result<()>
     where
@@ -456,7 +461,7 @@ impl Canopy {
     }
 
     /// Render the widget tree. All visible nodes are rendered.
-    pub(crate) fn render<R: RenderBackend>(&mut self, be: &mut R) -> Result<()> {
+    pub fn render<R: RenderBackend>(&mut self, be: &mut R) -> Result<()> {
         // Apply pending style change from Context::set_style
         if let Some(new_style) = self.core.pending_style.take() {
             self.style = new_style;

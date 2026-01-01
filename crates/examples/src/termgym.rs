@@ -8,10 +8,10 @@ use canopy::{
     render::Render,
     state::NodeName,
     style::{Attr, AttrSet, solarized},
-    widgets::{
-        Box, Button, Center, Frame, List, ROUND_THICK, Root, SINGLE, Selectable, Terminal,
-        TerminalConfig, Text, VStack,
-    },
+};
+use canopy_widgets::{
+    Box, Button, Center, Frame, List, ROUND_THICK, Root, SINGLE, Selectable, Terminal,
+    TerminalConfig, Text, VStack,
 };
 use unicode_width::UnicodeWidthStr;
 

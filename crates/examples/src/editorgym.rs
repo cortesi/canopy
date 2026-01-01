@@ -5,11 +5,11 @@ use canopy::{
     error::Result,
     event::{key, mouse},
     layout::{CanvasContext, Edges, Layout, Size},
-    widgets::{
-        Frame, Root,
-        editor::{
-            EditMode, Editor, EditorConfig, LineNumbers, WrapMode, highlight::SyntectHighlighter,
-        },
+};
+use canopy_widgets::{
+    Frame, Root,
+    editor::{
+        EditMode, Editor, EditorConfig, LineNumbers, WrapMode, highlight::SyntectHighlighter,
     },
 };
 

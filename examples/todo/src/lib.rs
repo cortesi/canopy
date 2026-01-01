@@ -10,8 +10,8 @@ use canopy::{
     render::Render,
     state::NodeName,
     style::{effects, solarized},
-    widgets::{Frame, Input, List, Modal, Selectable},
 };
+use canopy_widgets::{Frame, Input, List, Modal, Root, Selectable};
 
 pub mod store;
 
@@ -423,7 +423,7 @@ pub fn open_store(path: &str) -> AnyResult<()> {
 }
 
 pub fn setup_app(cnpy: &mut Canopy) {
-    canopy::widgets::Root::load(cnpy);
+    Root::load(cnpy);
     <Todo as Loader>::load(cnpy);
     style(cnpy);
     bind_keys(cnpy);
@@ -437,6 +437,6 @@ pub fn create_app(db_path: &str) -> AnyResult<Canopy> {
 
     let todo = Todo::new()?;
     let app_id = cnpy.core.create_detached(todo);
-    canopy::widgets::Root::install(&mut cnpy.core, app_id)?;
+    Root::install(&mut cnpy.core, app_id)?;
     Ok(cnpy)
 }

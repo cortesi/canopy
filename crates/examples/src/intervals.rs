@@ -8,8 +8,8 @@ use canopy::{
     render::Render,
     state::NodeName,
     style::{AttrSet, solarized},
-    widgets::{Box, Center, Frame, List, SINGLE, Selectable, Text, VStack},
 };
+use canopy_widgets::{Box, Center, Frame, List, SINGLE, Selectable, Text, VStack};
 use unicode_width::UnicodeWidthStr;
 
 /// Padding inside each counter entry box.

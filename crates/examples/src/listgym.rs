@@ -6,8 +6,8 @@ use canopy::{
     render::Render,
     state::NodeName,
     style::solarized,
-    widgets::{CanvasWidth, Frame, List, Panes, Root, Selectable, Text, VStack},
 };
+use canopy_widgets::{CanvasWidth, Frame, List, Panes, Root, Selectable, Text, VStack};
 use rand::Rng;
 
 /// Sample text content for list items.

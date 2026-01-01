@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 anyhow = "1.0.100"
 canopy = { path = "../canopy" }
+canopy-widgets = { path = "../canopy-widgets" }
 clap = { version = "4.5.0", features = ["derive"] }
 rand = "0.9.1"
 textwrap = "0.16.2"
@@ -16,6 +17,7 @@ unicode-width = "0.2.2"
 
 [dev-dependencies]
 canopy = { path = "../canopy", features = ["testing"] }
+canopy-widgets = { path = "../canopy-widgets", features = ["testing"] }
 
 [lints]
 workspace = true
