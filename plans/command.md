@@ -1,14 +1,17 @@
-# Spec 1 — Typed Command System with Context Injection and Rhai Interop
+# Spec — Typed Command System with Extractor-Style Injection and Rhai Interop
 
 ## 1. Scope
 
 This specification defines a typed command system that:
 
 * Extracts parameter and return types from `#[command]` function definitions at compile time.
-* Supports **context injection** (e.g., current `Event`, `mouse::Event`, list row context) without bespoke per-command APIs.
-* Supports a **broad set of common argument/return types**.
-* Supports **user-defined types** via `serde` (map/array representations), interoperable with Rhai object maps.
-* Preserves existing idioms: `ctx.dispatch_command(&...invocation())`, `TermGym::cmd_*()` factory functions, and `call_with(...)` style invocation building.
+* Supports extractor-style injection (axum-inspired) from a command-scope stack without bespoke
+  per-command APIs.
+* Supports a broad set of common argument and return types.
+* Supports user-defined types via serde (map/array representations), interoperable with Rhai object
+  maps.
+* Preserves existing Rust call-site idioms: `ctx.dispatch_command(&invocation)`, `Type::cmd_*()`
+  factories, and `call_with(...)` invocation building.
 
 Commands are synchronous and execute immediately when dispatched.
 
@@ -16,49 +19,62 @@ Commands are synchronous and execute immediately when dispatched.
 
 ## 2. Terminology
 
-* **Command**: A registered callable unit generated from a Rust function/method annotated with `#[command]`.
-* **Invocation**: A runtime request to execute a command with a specific set of user-supplied arguments.
-* **Injected parameter**: A parameter populated from `Context` / ambient command scope, not from the invocation’s user arguments.
-* **User argument parameter**: A parameter populated from the invocation’s user arguments (positional or named).
-* **ArgValue**: The canonical dynamic value representation for command arguments and return values, with a lossless mapping to/from Rhai values.
-* **Command scope**: A stack-scoped set of ambient values (e.g., current event snapshot) available during command execution and nested dispatch.
+* **Command**: A callable unit generated from a Rust function/method annotated with `#[command]`.
+* **CommandSpec**: Static metadata for a command (id/name/params/return) and an erased invoke
+  entrypoint.
+* **Invocation**: A runtime request to execute a command with specific user-supplied arguments.
+* **Injected parameter**: A parameter populated from the current command scope rather than
+  invocation arguments.
+* **User argument parameter**: A parameter decoded from invocation arguments (positional or named).
+* **ArgValue**: Canonical dynamic representation for command arguments and return values with a Rhai
+  mapping.
+* **Command scope**: A stack-scoped set of ambient values available to injectors and commands
+  (e.g., current event snapshot, list row context).
 
 ---
 
-## 3. Execution invariants
+## 3. Execution model
 
 ### 3.1 Synchronous execution
 
-* `ctx.dispatch_command(&invocation)` executes the command **synchronously** on the current call stack.
-* Nested dispatch is supported; each dispatch pushes a new command scope frame.
+* `ctx.dispatch_command(&invocation)` executes synchronously on the current call stack.
+* Nested dispatch is supported; nested calls observe a new command-scope frame that inherits the
+  parent values by default.
 
-### 3.2 Scope stacking
+### 3.2 Scope stacking and explicit scoping
 
-* `Context` maintains a **stack** of command scope frames.
-* Reading injected data (`ctx.current_event()`, `ctx.current_list_row()`, etc.) always uses the **topmost** frame.
-* On nested dispatch, the new frame inherits the parent frame by default unless explicitly overridden.
+* The context maintains a stack of scope frames.
+* "Current" injected values are always resolved from the topmost frame.
+* The API supports explicit execution under an override frame:
 
-### 3.3 Deterministic binding
+```rust
+pub struct CommandScopeFrame {
+    pub event: Option<Event>,
+    pub mouse: Option<MouseEvent>,
+    pub list_row: Option<ListRowContext>,
+}
 
-* Parameters are bound left-to-right by the generated wrapper.
-* For each parameter:
+impl Default for CommandScopeFrame { /* all None */ }
 
-  1. If its type is injectable, it is injected.
-  2. Otherwise, it is a user argument.
-* A required injected parameter (non-`Option<_>`) **must** be present in scope, otherwise invocation fails with a structured error.
-* User argument arity must match, except for `Option<T>` user params (see 6.4).
+pub trait Context: ViewContext {
+    fn dispatch_command(&mut self, inv: &CommandInvocation) -> Result<ArgValue, CommandError>;
 
-### 3.4 No implicit ambient dependence requirement
+    fn dispatch_command_scoped(
+        &mut self,
+        frame: CommandScopeFrame,
+        inv: &CommandInvocation
+    ) -> Result<ArgValue, CommandError>;
+}
+```
 
-* Commands may use injected parameters, but must remain callable without them by using `Option<InjectedType>` when appropriate.
+`dispatch_command_scoped` pushes `frame` for the duration of the dispatch and then pops it, even if
+the command errors.
 
 ---
 
 ## 4. Canonical dynamic value type
 
 ### 4.1 `ArgValue`
-
-`ArgValue` is the command system’s canonical dynamic representation.
 
 ```rust
 #[derive(Clone, Debug, PartialEq)]
@@ -70,92 +86,118 @@ pub enum ArgValue {
     String(String),
     Array(Vec<ArgValue>),
     Map(std::collections::BTreeMap<String, ArgValue>),
-    Bytes(Vec<u8>), // optional; can be feature-gated if not needed
 }
 ```
 
-### 4.2 Mapping to/from Rhai
+---
 
-A Rhai bridge converts between `rhai::Dynamic` and `ArgValue`:
+## 5. Encoding and decoding traits
 
-* `()` / unit → `ArgValue::Null`
-* `bool` → `Bool`
-* `i64` → `Int`
-* `f64` → `Float`
-* `String` → `String`
-* `Array` → `Array` (recursive)
-* `Map` → `Map` (recursive)
-* Unsupported Rhai types (custom Rust types stored inside `Dynamic`) must error unless explicitly registered via the user-defined type pathway (Section 7).
+Rust orphan rules prohibit implementing `TryFrom<ArgValue>`/`Into<ArgValue>` for primitives and
+external types. This system uses crate-local traits.
+
+```rust
+pub trait ToArgValue {
+    fn to_arg_value(self) -> ArgValue;
+}
+
+pub trait FromArgValue: Sized {
+    fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError>;
+}
+```
+
+* The macro-generated command wrapper uses `FromArgValue` to decode user arguments.
+* `call_with([a, b, ...])` uses `ToArgValue` to encode typed values.
 
 ---
 
-## 5. Command declaration and registration
+## 6. Command IDs, descriptors, and registration
 
-### 5.1 `#[command]` macro responsibilities
+### 6.1 `CommandId`
 
-For each `#[command]` function/method, the macro generates:
-
-1. A **static descriptor** (`CommandSpec`) including:
-
-   * Command id
-   * Name
-   * Parameter list (names, kinds, expected types)
-   * Return type metadata (for scripting/introspection)
-2. An **invoke wrapper** that:
-
-   * Performs injection and argument decoding
-   * Calls the underlying Rust function
-   * Encodes the return value into `ArgValue`
-
-### 5.2 Descriptor types
+`CommandId` is a `'static` string in the format `"OwnerType::command_name"`.
 
 ```rust
-pub struct CommandSpec {
-    pub id: CommandId,
-    pub name: &'static str,
-    pub params: &'static [CommandParamSpec],
-    pub ret: CommandReturnSpec,
-    pub invoke: fn(target: &mut dyn std::any::Any, ctx: &mut dyn Context, inv: &CommandInvocation) -> Result<ArgValue>,
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct CommandId(pub &'static str);
+```
+
+### 6.2 Descriptor types
+
+```rust
+pub enum CommandParamKind { Injected, User }
+
+pub struct CommandTypeSpec {
+    pub rust: &'static str,            // e.g. "isize", "Injected<MouseEvent>"
+    pub doc: Option<&'static str>,     // optional
 }
 
 pub struct CommandParamSpec {
-    pub name: &'static str,
-    pub kind: CommandParamKind,      // Injected or User
-    pub ty: CommandTypeSpec,         // for introspection/help/errors
+    pub name: &'static str,            // binding name for named args
+    pub kind: CommandParamKind,
+    pub ty: CommandTypeSpec,
+    pub optional: bool,                // true for Option<T> user args or Option<Injected<_>>
+    pub default: Option<&'static str>, // stringified default value for diagnostics
 }
-
-pub enum CommandParamKind { Injected, User }
 
 pub enum CommandReturnSpec {
     Unit,
     Value(CommandTypeSpec),
 }
-
-pub struct CommandTypeSpec {
-    pub rust: &'static str,          // e.g. "isize", "Option<mouse::Event>"
-    pub doc: Option<&'static str>,   // optional
-}
 ```
 
-`CommandId` may be a stable string or a stable hash; the spec requires it be unique and deterministic within the program.
+### 6.3 Erased invoke entrypoint
 
-### 5.3 Existing factory pattern retained
-
-For a method `select_terminal`, the macro continues to generate:
+Command invocation is stored in the `CommandSpec` via an erased function pointer that supports both
+free functions and methods.
 
 ```rust
-impl TermGym {
-    pub fn cmd_select_terminal() -> &'static CommandSpec { /* ... */ }
+pub type InvokeFn = fn(
+    target: Option<&mut dyn std::any::Any>,
+    ctx: &mut dyn Context,
+    inv: &CommandInvocation,
+) -> Result<ArgValue, CommandError>;
+
+pub enum CommandDispatchKind {
+    /// Invoke with `target = None`.
+    Free,
+    /// Routed to a node/owner instance; invoked with `target = Some(&mut owner)`.
+    Node { owner: &'static str },
+}
+
+pub struct CommandSpec {
+    pub id: CommandId,
+    pub name: &'static str,
+    pub dispatch: CommandDispatchKind,
+    pub params: &'static [CommandParamSpec],
+    pub ret: CommandReturnSpec,
+    pub invoke: InvokeFn,
 }
 ```
+
+* For method commands, `invoke` downcasts the provided `target` and calls the method.
+* For free commands, `invoke` ignores `target` and executes directly.
+
+### 6.4 Registration
+
+Commands are registered into a `CommandSet`:
+
+```rust
+pub struct CommandSet { /* id -> spec */ }
+
+impl CommandSet {
+    pub fn add(&mut self, specs: &'static [&'static CommandSpec]);
+    pub fn get(&self, id: &str) -> Option<&'static CommandSpec>;
+}
+```
+
+`CommandSet::get` supports `&str` lookup from scripting without allocations.
 
 ---
 
-## 6. Invocation building and dispatch
+## 7. Invocation building and argument containers
 
-### 6.1 `CommandInvocation`
-
-An invocation may carry positional or named args.
+### 7.1 Invocation types
 
 ```rust
 pub struct CommandInvocation {
@@ -169,11 +211,13 @@ pub enum CommandArgs {
 }
 ```
 
-### 6.2 Builder API (Rust call sites)
+### 7.2 Builder API
 
 ```rust
 impl CommandSpec {
-    pub fn call_with(&'static self, args: impl Into<CommandArgs>) -> CommandCall { /* ... */ }
+    pub fn call_with(&'static self, args: impl Into<CommandArgs>) -> CommandCall {
+        CommandCall { spec: self, args: args.into() }
+    }
 }
 
 pub struct CommandCall {
@@ -182,234 +226,477 @@ pub struct CommandCall {
 }
 
 impl CommandCall {
-    pub fn invocation(self) -> CommandInvocation { /* ... */ }
+    pub fn invocation(self) -> CommandInvocation {
+        CommandInvocation { id: self.spec.id, args: self.args }
+    }
 }
 ```
 
-Compatibility: existing call sites like `cmd.call_with([index as isize])` remain supported by providing `Into<CommandArgs>` for arrays/slices of supported primitives (Section 7).
+### 7.3 `CommandArgs` conversions
 
-### 6.3 Dispatch API
+Implement `From<…> for CommandArgs` (enabling `Into<CommandArgs>` automatically):
 
-`Context` continues to expose:
+* `From<()>` → positional empty
+* `From<Vec<ArgValue>>` → positional
+* `From<BTreeMap<String, ArgValue>>` → named
+* `From<[T; N]>` where `T: ToArgValue` → positional (encode each element)
+* `From<Vec<T>>` where `T: ToArgValue` → positional
+
+### 7.4 Named args macro
+
+Provide a macro for ergonomic Rust named-arg calls:
 
 ```rust
-trait Context {
-    fn dispatch_command(&mut self, inv: &CommandInvocation) -> Result<ArgValue>;
-}
+named_args! { key1: value1, key2: value2, ... } -> CommandArgs::Named(...)
 ```
 
-If the existing system returns `Result<()>`, it is extended to return `Result<ArgValue>`; `ArgValue::Null` represents unit.
-
-### 6.4 Optional user arguments (`Option<T>`)
-
-For user argument parameters of type `Option<T>`:
-
-* Positional: if the argument is missing, bind `None`.
-* Named: if the name key is missing, bind `None`.
-* If an argument is present, it must decode as `T`.
-
-Non-`Option<_>` user arguments remain strict: missing → arity error.
+Keys are stringified identifiers (e.g., `index:` becomes `"index"`).
 
 ---
 
-## 7. Type support
+## 8. Binding semantics (positional and named)
 
-### 7.1 Built-in conversions (required)
+### 8.1 Parameter classification
 
-The system must support conversion between `ArgValue` and these Rust types:
+The macro classifies each parameter as injected or user argument using the rules in Section 10.4.
+
+`expected_user_arity` is the number of user parameters excluding injected parameters, with trailing
+`Option<_>` user parameters and parameters with defaults considered optional for positional binding.
+
+### 8.2 Positional binding
+
+* User parameters bind left-to-right from `args[0..]`.
+* For a user parameter of type `Option<T>`:
+
+  * missing arg → `None`
+  * `Null` → `None`
+  * otherwise decode as `T` → `Some(t)`
+* For a user parameter with a default:
+
+  * missing arg → use the default value
+  * otherwise decode as normal
+* For non-`Option` user parameters without defaults:
+
+  * missing arg → `CommandError::ArityMismatch`
+* Extra positional arguments beyond the last user parameter → `CommandError::ArityMismatch`
+
+### 8.3 Named binding
+
+* Each user parameter binds by its `CommandParamSpec.name`.
+* Key normalization: during matching, map keys are normalized by replacing `-` with `_` and matching
+  is case-insensitive (see Addendum B.3).
+* For user parameters of type `Option<T>`:
+
+  * missing key → `None`
+  * present `Null` → `None`
+  * otherwise decode `T`
+* For user parameters with defaults:
+
+  * missing key → use the default value
+  * otherwise decode as normal
+* Unknown named keys (after normalization) → `CommandError::UnknownNamedArg { name, allowed }`
+
+---
+
+## 9. Attribute-based defaults
+
+### 9.1 Syntax
+
+Parameters can specify default values using the `#[arg]` attribute:
+
+```rust
+#[command]
+fn scroll(
+    ctx: &mut dyn Context,
+    #[arg(default = 1)] count: isize,
+    #[arg(default = "down")] direction: Direction,
+) -> Result<()> { ... }
+```
+
+Two forms are supported:
+
+* `#[arg(default = expr)]` — use `expr` as the default value
+* `#[arg(default)]` — call `T::default()` for types implementing `Default`
+
+### 9.2 Evaluation semantics
+
+Default expressions are evaluated at compile time. Only literals and const expressions are
+supported. For non-const defaults, use `Option<T>` with `.unwrap_or_else(|| ...)` in the function
+body.
+
+### 9.3 Interaction with `Option<T>`
+
+`Option<T>` parameters already have an implicit default of `None` when the argument is missing.
+Using `#[arg(default = ...)]` on an `Option<T>` parameter is a compile-time error. If a non-`None`
+default is needed, use a non-`Option` type with an explicit default.
+
+### 9.4 Generated code behavior
+
+When a parameter has a default:
+
+1. The generated `CommandParamSpec` includes `optional: true` and `default: Some("expr_str")`.
+2. During binding, if the argument is missing (positional) or the key is absent (named), the
+   default expression is used instead of raising `ArityMismatch` or `MissingNamedArg`.
+3. If the argument is present but fails to decode, it is still an error (the default is not used as
+   a fallback for decode failures).
+
+### 9.5 Rhai and introspection
+
+* Default values are exposed in `CommandParamSpec::default` as a stringified representation for
+  introspection and tooling.
+* From Rhai, commands can be called with fewer arguments and defaults apply transparently.
+
+---
+
+## 10. Error model
+
+```rust
+#[derive(Debug, thiserror::Error)]
+pub enum CommandError {
+    #[error("unknown command: {id}")]
+    UnknownCommand { id: String },
+
+    #[error("arity mismatch: expected {expected}, got {got}")]
+    ArityMismatch { expected: usize, got: usize },
+
+    #[error("missing named argument: {name}")]
+    MissingNamedArg { name: String },
+
+    #[error("unknown named argument: {name}; allowed: {allowed:?}")]
+    UnknownNamedArg { name: String, allowed: Vec<&'static str> },
+
+    #[error("type mismatch for parameter `{param}`: expected {expected}, got {got}")]
+    TypeMismatch { param: String, expected: &'static str, got: String },
+
+    #[error("missing injected value for parameter `{param}`: expected {expected}")]
+    MissingInjected { param: String, expected: &'static str },
+
+    #[error("conversion error for parameter `{param}`: {message}")]
+    Conversion { param: String, message: String },
+
+    #[error("command execution failed: {0}")]
+    Exec(#[from] anyhow::Error),
+}
+```
+
+---
+
+## 11. Injection system (axum-inspired)
+
+### 11.1 `Inject` trait and error type
+
+Injection does not mention parameter names; the macro fills them in.
+
+```rust
+#[derive(Debug)]
+pub enum InjectError {
+    Missing { expected: &'static str },
+    Failed { expected: &'static str, message: String },
+}
+
+pub trait Inject: Sized {
+    fn inject(ctx: &dyn Context) -> Result<Self, InjectError>;
+}
+```
+
+### 11.2 Blanket implementation for `Option<T>`
+
+```rust
+impl<T: Inject> Inject for Option<T> {
+    fn inject(ctx: &dyn Context) -> Result<Self, InjectError> {
+        match T::inject(ctx) {
+            Ok(v) => Ok(Some(v)),
+            Err(InjectError::Missing { .. }) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+}
+```
+
+### 11.3 Explicit wrappers
+
+#### `Injected<T>`
+
+Explicitly marks a parameter as injectable (required for user-defined injectables; optional for
+built-ins).
+
+```rust
+#[derive(Debug, Clone, Copy)]
+pub struct Injected<T>(pub T);
+
+impl<T: Inject> Inject for Injected<T> {
+    fn inject(ctx: &dyn Context) -> Result<Self, InjectError> {
+        T::inject(ctx).map(Injected)
+    }
+}
+```
+
+#### `Arg<T>`
+
+Explicitly marks a parameter as a user argument even if its identifier collides with built-in
+injectable shorthand.
+
+```rust
+#[derive(Debug)]
+pub struct Arg<T>(pub T);
+```
+
+The macro treats `Arg<T>` as a user argument and decodes `T` from invocation arguments.
+
+### 11.4 Built-in injectable types
+
+The following types are injectable by shorthand (without `Injected<T>`) and by explicit wrapper:
+
+* `Event` (owned clone)
+* `MouseEvent` (Copy)
+* `ListRowContext` (Copy)
+
+Implementations:
+
+```rust
+impl Inject for MouseEvent {
+    fn inject(ctx: &dyn Context) -> Result<Self, InjectError> {
+        ctx.current_mouse_event().ok_or(InjectError::Missing { expected: "MouseEvent" })
+    }
+}
+
+impl Inject for ListRowContext {
+    fn inject(ctx: &dyn Context) -> Result<Self, InjectError> {
+        ctx.current_list_row().ok_or(InjectError::Missing { expected: "ListRowContext" })
+    }
+}
+
+impl Inject for Event {
+    fn inject(ctx: &dyn Context) -> Result<Self, InjectError> {
+        ctx.current_event()
+            .cloned()
+            .ok_or(InjectError::Missing { expected: "Event" })
+    }
+}
+```
+
+### 11.5 Required `Context` methods for injection
+
+```rust
+pub trait Context: ViewContext {
+    fn current_event(&self) -> Option<&Event>;
+    fn current_mouse_event(&self) -> Option<MouseEvent>;
+    fn current_list_row(&self) -> Option<ListRowContext>;
+
+    fn dispatch_command(&mut self, inv: &CommandInvocation) -> Result<ArgValue, CommandError>;
+    fn dispatch_command_scoped(
+        &mut self,
+        frame: CommandScopeFrame,
+        inv: &CommandInvocation
+    ) -> Result<ArgValue, CommandError>;
+}
+```
+
+### 11.6 Macro binding algorithm
+
+For each parameter, in order:
+
+1. If parameter type is `&mut dyn Context` or `&dyn Context` → pass directly.
+2. If parameter pattern/type is `Injected<T>` (or `Option<Injected<T>>`) → call
+   `Injected::<T>::inject(&*ctx)` and map `InjectError` to `CommandError` using the parameter name.
+3. If parameter type matches built-in injectable shorthand (`Event`, `MouseEvent`,
+   `ListRowContext`, including `Option<_>`) → call `T::inject(&*ctx)` and map errors using the
+   parameter name.
+4. If parameter type is `Arg<T>` → decode user arg as `T`.
+5. Otherwise → decode as a user arg (applying defaults if `#[arg(default = ...)]` is present and
+   the arg is missing).
+
+---
+
+## 12. Type support
+
+### 12.1 Built-in `ToArgValue` / `FromArgValue` (required)
 
 **Primitives**
 
 * `bool`
-* Signed ints: `i8`, `i16`, `i32`, `i64`, `isize`
-* Unsigned ints: `u8`, `u16`, `u32`, `u64`, `usize`
+* Signed integers: `i16`, `i32`, `i64`, `isize`
+* Unsigned integers: `u16`, `u32`, `u64`, `usize`
 * Floats: `f32`, `f64`
 * `String`
 
 **Containers**
 
-* `Option<T>`
-* `Vec<T>`
-* `std::collections::BTreeMap<String, T>`
-* `std::collections::HashMap<String, T>` (key must be `String`)
+* `Option<T>` (`Null` or missing ↔ `None`)
+* `Vec<T>` ↔ `Array`
+* `BTreeMap<String, T>` ↔ `Map`
+* `HashMap<String, T>` ↔ `Map`
 
-**Tuples (positional only)**
+**Tuples**
 
-* Up to arity 4: `(A,)`, `(A,B)`, `(A,B,C)`, `(A,B,C,D)`
-  (Tuple support is optional if not needed by current call sites; include if you want Rhai ergonomics.)
+* `(A,)`, `(A,B)`, `(A,B,C)`, `(A,B,C,D)` ↔ `Array` (positional)
 
-**Result types**
+### 12.2 Range and lossiness rules
 
-* Commands may return:
+* `Int(i64)` → narrower integer: range-check; overflow errors.
+* `Float(f64)` → `f32`: range-check.
+* No implicit float→int coercion.
 
-  * `()`
-  * `Result<()>`
-  * `T`
-  * `Result<T>`
-    Where `T` is convertible to `ArgValue`.
+### 12.3 Script-facing enums
 
-### 7.2 Range and lossiness rules
+`#[derive(CommandEnum)]` generates `ToArgValue`/`FromArgValue` using case-insensitive string
+matching on variant names.
 
-* Converting `ArgValue::Int(i64)` to narrower ints must range-check and error on overflow.
-* Converting `ArgValue::Float(f64)` to `f32` range-checks.
-* Converting float to int is **not implicit**; it must error unless explicitly requested by a future “coercions” feature (out of scope here).
+---
 
-### 7.3 String enums
+## 13. User-defined types via serde (`CommandArg`)
 
-For Rust enums intended to be script-facing, two options are supported:
-
-* **String mapping** via a derive macro (recommended):
-
-  * `#[derive(CommandEnum)]` generates string ↔ enum conversion
-* **Serde mapping** (Section 7.5) via `serde(rename = ...)`
-
-### 7.4 Injection types (required)
-
-The command wrapper must treat the following parameter types as injectable:
-
-* `&mut dyn Context`
-* `&dyn Context`
-* `Option<&Event>` and `&Event`
-* `Option<&mouse::Event>` and `&mouse::Event`
-* `Option<ListRowContext>` and `ListRowContext` (defined below)
-
-Injected parameters do **not** consume user arguments.
-
-### 7.5 User-defined types via serde (required)
-
-User-defined types are supported by converting between `ArgValue::{Map,Array,...}` and a serde representation.
-
-#### 7.5.1 Opt-in mechanism
-
-A type is eligible for serde-based conversion if it implements:
+### 13.1 Marker trait
 
 ```rust
-pub trait CommandSerde: serde::Serialize + serde::de::DeserializeOwned + 'static {}
+pub trait CommandArg: serde::Serialize + serde::de::DeserializeOwned + 'static {}
 ```
 
-Users opt in by either:
+### 13.2 Encoding/decoding rules
 
-* Implementing `CommandSerde` manually, or
-* Deriving it via a helper derive macro (recommended):
+User-defined types are encoded/decoded via `serde_json::Value` as an intermediate:
 
-  * `#[derive(CommandSerde)]` (or `#[derive(CommandArg)]`)
-    (The derive may be a no-op that just asserts bounds and implements the marker trait.)
+* Decode: `ArgValue` → `serde_json::Value` → `T`
+* Encode: `T` → `serde_json::Value` → `ArgValue`
 
-#### 7.5.2 Encoding/decoding rules
+### 13.3 Rhai compatibility
 
-* `ArgValue ↔ serde_json::Value` conversion is structural:
-
-  * `Null/Bool/Int/Float/String/Array/Map` map recursively.
-* Decoding:
-
-  * `ArgValue` → `serde_json::Value` → `serde_json::from_value::<T>()`
-* Encoding:
-
-  * `serde_json::to_value(&t)` → `ArgValue`
-
-#### 7.5.3 Rhai compatibility
-
-Because Rhai object maps naturally represent structured data, a Rhai `Map` converts to `ArgValue::Map`, enabling user-defined serde types to be passed as Rhai maps.
-
-Example Rhai call passing a user struct:
-
-```rhai
-cmd("open_terminal", #{ id: 3, title: "prod", pinned: true })
-```
+Rhai object maps become `ArgValue::Map`, enabling structs to be passed naturally as positional
+values.
 
 ---
 
-## 8. Context scope for injection
+## 14. Rhai integration
 
-### 8.1 Required Context accessors
+### 14.1 Value mapping
 
-`Context` must expose:
+Rhai `Dynamic` converts to/from `ArgValue` as:
 
-```rust
-trait Context {
-    fn current_event(&self) -> Option<&Event>;
-    fn current_list_row(&self) -> Option<ListRowContext>;
-}
-```
+* `()` ↔ `Null`
+* `bool` ↔ `Bool`
+* `i64` ↔ `Int`
+* `f64` ↔ `Float`
+* `String` ↔ `String`
+* `Array` ↔ `Array`
+* `Map` ↔ `Map`
 
-Both values are maintained in the command scope stack and may be `None`.
+### 14.2 Script entrypoints
 
-### 8.2 Scope lifetime rules
+Register the following Rhai functions:
 
-* During widget event dispatch, the dispatcher pushes a scope frame containing the current `Event` snapshot and (if applicable) current list row context.
-* During command execution, the same top scope frame is visible to commands.
-* Nested dispatch inherits the scope unless overridden.
+* `cmd(name)` → no-arg positional
+* `cmd(name, a1, a2, ...)` → positional (maps are treated as positional values)
+* `cmdv(name, array)` → positional from array
+* `cmd_named(name, map)` → named args from map
+* `cmd_pos(name, value)` → forces a single positional argument even when it is a map (escape hatch)
 
----
+### 14.3 Optional convenience behavior for `cmd(name, map)` (if enabled)
 
-## 9. Error model
+If you keep a single `cmd(name, map)` convenience overload, it must be signature-aware:
 
-Command binding/decoding errors are structured and machine-usable:
+* Look up the `CommandSpec` for `name`.
+* If the map's (normalized) keys are a subset of the command's user-parameter names and at least
+  one key matches, interpret as named args.
+* Otherwise interpret as a single positional map value.
 
-```rust
-pub enum CommandError {
-    UnknownCommand { id: CommandId },
-    ArityMismatch { expected: usize, got: usize },
-    MissingNamedArg { name: String },
-    TypeMismatch { param: String, expected: &'static str, got: &'static str },
-    MissingInjected { param: String, expected: &'static str },
-    Conversion { param: String, message: String },
-    Exec(anyhow::Error),
-}
-```
-
-Errors originating from command bodies propagate as `CommandError::Exec`.
+This preserves ergonomic named args while allowing serde-struct positional maps to work naturally.
 
 ---
 
-## Addendum A — Staged implementation plan (checklist)
+## Addendum A — Staged implementation plan
 
-### Stage 1 — Core `ArgValue` and conversion traits
+### Stage 1 — `ArgValue` and local encode/decode traits
 
-* [ ] Introduce `ArgValue` enum (Section 4.1).
-* [ ] Add `TryFrom<ArgValue>` / `Into<ArgValue>` implementations for required primitives.
-* [ ] Add container conversions: `Option<T>`, `Vec<T>`, `BTreeMap<String, T>`, `HashMap<String, T>`.
-* [ ] Add structured error type `CommandError` and plumb through `dispatch_command`.
+* [ ] Implement `ArgValue`.
+* [ ] Define `ToArgValue` / `FromArgValue`.
+* [ ] Implement both traits for primitives, containers, and tuples.
+* [ ] Implement and test range-checking and error reporting.
 
-### Stage 2 — Command scope + injection plumbing in `Context`
+### Stage 2 — Command scope stack + `dispatch_command_scoped`
 
-* [ ] Add scope stack to `Context` implementation.
-* [ ] Implement `ctx.current_event()` as scope-backed.
-* [ ] Implement `ctx.current_list_row()` as scope-backed (may return `None` until list work is implemented).
-* [ ] Add dispatcher plumbing to push/pop event scope frames around widget event dispatch.
+* [ ] Add command-scope stack and `CommandScopeFrame`.
+* [ ] Implement `current_event()`, `current_mouse_event()`, `current_list_row()` reads from the top
+      frame.
+* [ ] Implement `dispatch_command_scoped(frame, inv)` with push/pop.
+* [ ] Wire event dispatch to push a frame containing an event snapshot and derived mouse/list-row
+      context.
 
-### Stage 3 — `#[command]` macro: signature extraction + wrapper generation
+### Stage 3 — Injection system
 
-* [ ] Extend `#[command]` macro to emit `CommandSpec` with parameter metadata (names/types).
-* [ ] Implement wrapper binding algorithm: injected params vs user args.
-* [ ] Support `CommandArgs::Positional` and `CommandArgs::Named` binding.
-* [ ] Support return value normalization to `ArgValue` (`()`, `Result<()>`, `T`, `Result<T>`).
+* [ ] Define `InjectError`, `Inject`, and blanket `Inject for Option<T>`.
+* [ ] Define `Injected<T>` and (marker) `Arg<T>`.
+* [ ] Implement `Inject` for `Event`, `MouseEvent`, `ListRowContext`.
+* [ ] Ensure `InjectError` mapping to `CommandError::{MissingInjected,Conversion}` is performed by
+      generated wrappers (parameter name filled by macro).
 
-### Stage 4 — Injected parameter types
+### Stage 4 — `#[command]` macro: extraction + wrapper generation
 
-* [ ] Add injection support for `&mut dyn Context` / `&dyn Context`.
-* [ ] Add injection support for `&Event` / `Option<&Event>`.
-* [ ] Add injection support for `&mouse::Event` / `Option<&mouse::Event>`.
-* [ ] Add injection support for `ListRowContext` / `Option<ListRowContext>` (initially always `None`, list work will populate).
+* [ ] Generate `CommandSpec` with `'static` id and metadata including `optional` and `default`.
+* [ ] Generate erased `invoke(target: Option<&mut dyn Any>, ...)`.
+* [ ] Implement binding algorithm (Context refs, Injected<T>, built-in shorthand, Arg<T>, user
+      args).
+* [ ] Implement attribute-based defaults (`#[arg(default = ...)]`).
+* [ ] Normalize return values to `ArgValue` for `()`, `T`, `Result<()>`, `Result<T>`.
 
-### Stage 5 — Rhai bridge
+### Stage 5 — CommandSet and routing
 
-* [ ] Implement `rhai::Dynamic ↔ ArgValue` conversion layer.
-* [ ] Add script entrypoint to dispatch commands by name/id with Rhai args.
-* [ ] Convert command return `ArgValue` back to Rhai for scripts.
+* [ ] Implement `CommandSet::{add,get}`.
+* [ ] Define/confirm routing logic for `CommandDispatchKind::Node { owner }`.
+* [ ] Implement free-command dispatch path (invoke with `target = None`).
 
-### Stage 6 — User-defined types via serde
+### Stage 6 — Rhai bridge
 
-* [ ] Add `CommandSerde` marker trait + (optional) derive macro.
-* [ ] Implement `ArgValue ↔ serde_json::Value` converter.
-* [ ] Implement `ArgValue ↔ T` for `T: CommandSerde` (decode/encode).
-* [ ] Add tests: nested structs, enums, optional fields, vec/map fields.
+* [ ] Implement `Dynamic ↔ ArgValue` conversion.
+* [ ] Register `cmd`, `cmdv`, `cmd_named`, `cmd_pos`.
+* [ ] If enabling signature-aware `cmd(name, map)`, implement subset-of-param-names heuristic.
 
-### Stage 7 — Tooling and test coverage
+### Stage 7 — serde user types + enum derive
 
-* [ ] Introspection APIs: list commands, show signatures, show param names/types.
-* [ ] Golden tests for error messages: arity mismatch, type mismatch, missing injected.
-* [ ] Fuzz tests for `ArgValue` conversion correctness (optional but recommended).
+* [ ] Implement `CommandArg` derive and serde bridging (`ArgValue ↔ serde_json::Value`).
+* [ ] Implement `ToArgValue` / `FromArgValue` for `T: CommandArg`.
+* [ ] Implement `CommandEnum` derive generating `ToArgValue` / `FromArgValue`.
+* [ ] Add coverage tests: nested structs, enums, optional fields, collections.
+
+### Stage 8 — Tooling and diagnostics
+
+* [ ] Introspection APIs: list commands, show signature, show which params are
+      injected/user/optional/defaulted.
+* [ ] Golden tests for arity/type/injection errors (including unknown named args and normalized
+      keys).
+* [ ] Integration tests for scripting.
 
 ---
 
+## Addendum B — Design decisions
+
+### B.1 Command routing semantics
+
+When dispatching a command to a `Node { owner }`, the routing strategy is:
+
+1. **Subtree-first**: Starting from the focused node (or dispatch origin), search the subtree rooted
+   at that node in pre-order DFS. The first matching node by owner name receives the command.
+2. **Ancestor fallback**: If no match is found in the subtree, walk up the ancestor chain from the
+   origin. Each ancestor is checked (not its subtree). The first matching ancestor receives the
+   command.
+3. **Not found**: If no node matches after exhausting ancestors, return
+   `CommandError::UnknownCommand`.
+
+This matches the existing Canopy dispatch behavior and provides predictable, local-first semantics:
+commands naturally target the "nearest" matching widget in the focused region before falling back to
+ancestors.
+
+### B.2 Event injection
+
+Injecting `Event` clones the event. This is acceptable for the current use cases. If cloning
+becomes a performance concern, more fine-grained injectable types (`MouseEvent`, `KeyEvent`,
+`Modifiers`, `Point`) are already available and should be preferred for hot paths.
+
+### B.3 Named arg key normalization
+
+Named argument keys are normalized using both transformations:
+
+1. Replace `-` with `_` (kebab-case to snake_case)
+2. Case-insensitive matching
+
+This maximizes script ergonomics: `scroll-count`, `scroll_count`, `ScrollCount`, and `SCROLL_COUNT`
+all match a parameter named `scroll_count`.
