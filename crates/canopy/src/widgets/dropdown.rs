@@ -116,6 +116,18 @@ where
         Ok(())
     }
 
+    /// Move highlight to the next item.
+    #[command]
+    pub fn select_next(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.select_by(c, 1)
+    }
+
+    /// Move highlight to the previous item.
+    #[command]
+    pub fn select_prev(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.select_by(c, -1)
+    }
+
     /// Confirm the highlighted selection and collapse.
     #[command]
     pub fn confirm(&mut self, c: &mut dyn Context) -> Result<()> {

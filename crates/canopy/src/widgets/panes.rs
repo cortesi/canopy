@@ -85,6 +85,18 @@ impl Panes {
         Ok(())
     }
 
+    /// Move focus to the next column.
+    #[command]
+    pub fn next_column(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.focus_column(c, 1)
+    }
+
+    /// Move focus to the previous column.
+    #[command]
+    pub fn prev_column(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.focus_column(c, -1)
+    }
+
     /// Get the offset of the current focus in the children vector.
     pub fn focus_coords(&self, c: &dyn Context) -> Option<(usize, usize)> {
         for (x, col) in self.columns.iter().enumerate() {

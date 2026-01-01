@@ -116,6 +116,18 @@ where
         Ok(())
     }
 
+    /// Move focus to the next item.
+    #[command]
+    pub fn select_next(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.select_by(c, 1)
+    }
+
+    /// Move focus to the previous item.
+    #[command]
+    pub fn select_prev(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.select_by(c, -1)
+    }
+
     /// Move focus to the first item.
     #[command]
     pub fn select_first(&mut self, _c: &mut dyn Context) -> Result<()> {

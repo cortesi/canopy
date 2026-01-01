@@ -404,6 +404,18 @@ impl<W: Selectable> List<W> {
         self.ensure_selected_visible(c);
     }
 
+    /// Move selection to the next item.
+    #[command]
+    pub fn select_next(&mut self, c: &mut dyn Context) {
+        self.select_by(c, 1);
+    }
+
+    /// Move selection to the previous item.
+    #[command]
+    pub fn select_prev(&mut self, c: &mut dyn Context) {
+        self.select_by(c, -1);
+    }
+
     /// Handle a mouse click within the list.
     fn handle_click(&mut self, c: &mut dyn Context, event: mouse::MouseEvent) -> bool {
         match event.action {
@@ -820,7 +832,7 @@ mod tests {
         harness.render()?;
 
         // Navigate down
-        harness.script("list::select_by(1)")?;
+        harness.script("list::select_next()")?;
         harness.with_root_widget::<List<Text>, _>(|list| {
             assert_eq!(list.selected_index(), Some(1));
         });
@@ -832,7 +844,7 @@ mod tests {
         });
 
         // Navigate up
-        harness.script("list::select_by(-1)")?;
+        harness.script("list::select_prev()")?;
         harness.with_root_widget::<List<Text>, _>(|list| {
             assert_eq!(list.selected_index(), Some(1));
         });
