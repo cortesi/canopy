@@ -145,17 +145,17 @@ fn build_node(
     };
 
     if recursion == 0 {
-        return Ok(core.add(GridNode::cell(name)));
+        return Ok(core.create_detached(GridNode::cell(name)));
     }
 
-    let node_id = core.add(GridNode::column(name));
+    let node_id = core.create_detached(GridNode::column(name));
 
     let mut children = Vec::new();
     let child_scale = divisions.pow((recursion - 1) as u32);
 
     for row in 0..divisions {
         let row_name = format!("row_{x}_{y}_{row}");
-        let row_node = core.add(GridNode::row(row_name));
+        let row_node = core.create_detached(GridNode::row(row_name));
         let mut row_children = Vec::new();
         for col in 0..divisions {
             let child_x = x + col * child_scale;

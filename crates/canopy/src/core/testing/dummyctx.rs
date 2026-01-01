@@ -1,4 +1,4 @@
-use std::process;
+use std::{any::TypeId, process};
 
 use slotmap::Key;
 
@@ -65,6 +65,10 @@ impl ViewContext for DummyContext {
     }
 
     fn node_view(&self, _node: NodeId) -> Option<View> {
+        None
+    }
+
+    fn node_type_id(&self, _node: NodeId) -> Option<TypeId> {
         None
     }
 
@@ -168,7 +172,7 @@ impl Context for DummyContext {
         Ok(())
     }
 
-    fn add(&mut self, _widget: Box<dyn Widget>) -> NodeId {
+    fn create_detached_boxed(&mut self, _widget: Box<dyn Widget>) -> NodeId {
         NodeId::null()
     }
 
@@ -184,12 +188,37 @@ impl Context for DummyContext {
         Ok(None)
     }
 
-    fn mount_child_to(&mut self, _parent: NodeId, _child: NodeId) -> Result<()> {
+    fn add_child_to_boxed(&mut self, _parent: NodeId, _widget: Box<dyn Widget>) -> Result<NodeId> {
+        Ok(NodeId::null())
+    }
+
+    fn add_child_to_keyed_boxed(
+        &mut self,
+        _parent: NodeId,
+        _key: &str,
+        _widget: Box<dyn Widget>,
+    ) -> Result<NodeId> {
+        Ok(NodeId::null())
+    }
+
+    fn attach(&mut self, _parent: NodeId, _child: NodeId) -> Result<()> {
         Ok(())
     }
 
-    fn detach_child_from(&mut self, _parent: NodeId, _child: NodeId) -> Result<()> {
+    fn attach_keyed(&mut self, _parent: NodeId, _key: &str, _child: NodeId) -> Result<()> {
         Ok(())
+    }
+
+    fn detach(&mut self, _child: NodeId) -> Result<()> {
+        Ok(())
+    }
+
+    fn remove_subtree(&mut self, _node: NodeId) -> Result<()> {
+        Ok(())
+    }
+
+    fn child_keyed(&self, _key: &str) -> Option<NodeId> {
+        None
     }
 
     fn set_children_of(&mut self, _parent: NodeId, _children: Vec<NodeId>) -> Result<()> {

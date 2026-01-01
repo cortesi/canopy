@@ -60,8 +60,8 @@ mod tests {
         reset_state();
 
         let mut core = Core::new();
-        let leaf_id = core.add(TestLeaf);
-        let branch_id = core.add(TestBranch);
+        let leaf_id = core.create_detached(TestLeaf);
+        let branch_id = core.create_detached(TestBranch);
         core.set_children(branch_id, vec![leaf_id])?;
         core.set_children(core.root_id(), vec![branch_id])?;
 

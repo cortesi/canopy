@@ -27,12 +27,6 @@ pub struct CounterItem {
     value: u64,
     /// Selection state.
     selected: bool,
-    /// Mounted box node ID.
-    box_id: Option<NodeId>,
-    /// Mounted center node ID.
-    center_id: Option<NodeId>,
-    /// Mounted text node ID.
-    text_id: Option<NodeId>,
 }
 
 impl Selectable for CounterItem {
@@ -54,9 +48,6 @@ impl CounterItem {
         Self {
             value: 0,
             selected: false,
-            box_id: None,
-            center_id: None,
-            text_id: None,
         }
     }
 
@@ -81,14 +72,14 @@ impl CounterItem {
 
     /// Update the box layout based on the current label width.
     fn update_box_layout(&self, ctx: &mut dyn Context) -> Result<()> {
-        let Some(box_id) = self.box_id else {
+        let Some(box_id) = ctx.unique_descendant::<Box>()? else {
             return Ok(());
         };
 
         let desired_width = self.label_width().saturating_add(ENTRY_PADDING * 2).max(3);
         let desired_height = ENTRY_HEIGHT;
 
-        ctx.with_layout_of(box_id, &mut |layout| {
+        ctx.with_layout_of(box_id.into(), &mut |layout| {
             *layout = Layout::column()
                 .fixed_width(desired_width)
                 .fixed_height(desired_height)
@@ -98,35 +89,10 @@ impl CounterItem {
         Ok(())
     }
 
-    /// Ensure the child widget tree is mounted.
-    fn ensure_tree(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if self.box_id.is_some() && self.center_id.is_some() && self.text_id.is_some() {
-            return Ok(());
-        }
-
-        let box_id = ctx.add_orphan(Box::new().with_glyphs(boxed::SINGLE).with_fill());
-        let center_id = ctx.add_orphan(Center::new());
-        let text_id = ctx.add_orphan(Text::new(self.label()));
-
-        ctx.mount_child_to(box_id, text_id)?;
-        ctx.mount_child_to(center_id, box_id)?;
-        ctx.mount_child_to(ctx.node_id(), center_id)?;
-
-        self.box_id = Some(box_id);
-        self.center_id = Some(center_id);
-        self.text_id = Some(text_id);
-        self.update_box_layout(ctx)?;
-
-        Ok(())
-    }
-
     /// Sync the text label to the current value.
     fn sync_label(&self, ctx: &mut dyn Context) -> Result<()> {
-        let Some(text_id) = self.text_id else {
-            return Ok(());
-        };
         let label = self.label();
-        ctx.with_widget(text_id, |text: &mut Text, _ctx| {
+        let _ = ctx.try_with_unique_descendant::<Text, _>(|text, _ctx| {
             text.set_raw(label.clone());
             Ok(())
         })?;
@@ -141,7 +107,11 @@ impl Widget for CounterItem {
     }
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        self.ensure_tree(ctx)
+        let box_id = ctx.add_child(Box::new().with_glyphs(boxed::SINGLE).with_fill())?;
+        let center_id = ctx.add_child_to(box_id, Center::new())?;
+        ctx.add_child_to(center_id, Text::new(self.label()))?;
+        self.update_box_layout(ctx)?;
+        Ok(())
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
@@ -234,9 +204,9 @@ impl Widget for Intervals {
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        let list_id = c.add_orphan(List::<CounterItem>::new());
-        let frame_id = frame::Frame::wrap(c, list_id)?;
-        let status_id = c.add_orphan(StatusBar);
+        let frame_id = c.create_detached(frame::Frame::new());
+        let list_id = c.add_child_to(frame_id, List::<CounterItem>::new())?;
+        let status_id = c.create_detached(StatusBar);
         c.add_child(
             VStack::new()
                 .push_flex(frame_id, 1)

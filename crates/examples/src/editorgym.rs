@@ -65,8 +65,8 @@ fn add_editor_frame(
     if let Some(highlighter) = highlighter {
         editor.set_highlighter(Some(Box::new(highlighter)));
     }
-    let editor_id = c.add_orphan(editor);
-    let frame_id = frame::Frame::wrap_with(c, editor_id, frame::Frame::new().with_title(title))?;
+    let frame_id = c.create_detached(frame::Frame::new().with_title(title));
+    let editor_id = c.add_child_to(frame_id, editor)?;
 
     c.with_layout_of(editor_id, &mut |layout| {
         *layout = Layout::fill();
@@ -210,7 +210,7 @@ impl EditorGym {
             )?,
         ];
 
-        let column_id = c.add_orphan(EditorColumn::new());
+        let column_id = c.create_detached(EditorColumn::new());
         c.set_children_of(column_id, frames)?;
         Ok(column_id)
     }
@@ -268,7 +268,7 @@ impl EditorGym {
             )?,
         ];
 
-        let column_id = c.add_orphan(EditorColumn::new());
+        let column_id = c.create_detached(EditorColumn::new());
         c.set_children_of(column_id, frames)?;
         Ok(column_id)
     }

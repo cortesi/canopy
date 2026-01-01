@@ -1,5 +1,5 @@
 use std::{
-    any::{Any, type_name},
+    any::{Any, TypeId, type_name, type_name_of_val},
     process,
 };
 
@@ -35,6 +35,9 @@ pub trait ViewContext {
 
     /// View information for a specific node.
     fn node_view(&self, node: NodeId) -> Option<View>;
+
+    /// Widget type identifier for a specific node.
+    fn node_type_id(&self, node: NodeId) -> Option<TypeId>;
 
     /// Mark this node dirty so the next frame re-runs layout.
     fn invalidate_layout(&self);
@@ -344,8 +347,8 @@ pub trait Context: ViewContext {
     /// Update the layout for a specific node.
     fn with_layout_of(&mut self, node: NodeId, f: &mut dyn FnMut(&mut Layout)) -> Result<()>;
 
-    /// Add a new widget node to the core.
-    fn add(&mut self, widget: Box<dyn Widget>) -> NodeId;
+    /// Create a new widget node detached from the tree.
+    fn create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> NodeId;
 
     /// Execute a closure with mutable access to a widget and its node-bound context.
     fn with_widget_mut(
@@ -360,21 +363,31 @@ pub trait Context: ViewContext {
         cmd: &commands::CommandInvocation,
     ) -> Result<Option<commands::ReturnValue>>;
 
-    /// Attach a child to the current node.
-    fn mount_child(&mut self, child: NodeId) -> Result<()> {
-        self.mount_child_to(self.node_id(), child)
-    }
+    /// Add a boxed widget as a child of a specific parent and return the new node ID.
+    fn add_child_to_boxed(&mut self, parent: NodeId, widget: Box<dyn Widget>) -> Result<NodeId>;
 
-    /// Attach a child to a specific parent node.
-    fn mount_child_to(&mut self, parent: NodeId, child: NodeId) -> Result<()>;
+    /// Add a boxed widget as a keyed child of a specific parent and return the new node ID.
+    fn add_child_to_keyed_boxed(
+        &mut self,
+        parent: NodeId,
+        key: &str,
+        widget: Box<dyn Widget>,
+    ) -> Result<NodeId>;
 
-    /// Detach a child from the current node.
-    fn detach_child(&mut self, child: NodeId) -> Result<()> {
-        self.detach_child_from(self.node_id(), child)
-    }
+    /// Attach a detached child to a parent.
+    fn attach(&mut self, parent: NodeId, child: NodeId) -> Result<()>;
 
-    /// Detach a child from a specific parent node.
-    fn detach_child_from(&mut self, parent: NodeId, child: NodeId) -> Result<()>;
+    /// Attach a detached child to a parent using a unique key.
+    fn attach_keyed(&mut self, parent: NodeId, key: &str, child: NodeId) -> Result<()>;
+
+    /// Detach a child from its parent.
+    fn detach(&mut self, child: NodeId) -> Result<()>;
+
+    /// Remove a node and all descendants from the arena.
+    fn remove_subtree(&mut self, node: NodeId) -> Result<()>;
+
+    /// Return a keyed child relative to the current node.
+    fn child_keyed(&self, key: &str) -> Option<NodeId>;
 
     /// Replace the children list for the current node.
     fn set_children(&mut self, children: Vec<NodeId>) -> Result<()> {
@@ -446,17 +459,29 @@ impl dyn Context + '_ {
     pub fn with_widget<W, R>(
         &mut self,
         node: NodeId,
-        mut f: impl FnMut(&mut W, &mut dyn Context) -> Result<R>,
+        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<R>
     where
         W: Widget + 'static,
     {
         let mut output = None;
+        let mut f = Some(f);
+        let expected = TypeId::of::<W>();
         self.with_widget_mut(node, &mut |widget, ctx| {
+            let actual = ctx.node_type_id(node).ok_or(Error::NodeNotFound(node))?;
+            if actual != expected {
+                return Err(Error::TypeMismatch {
+                    expected: type_name::<W>().to_string(),
+                    actual: type_name_of_val(widget).to_string(),
+                });
+            }
             let any = widget as &mut dyn Any;
-            let widget = any.downcast_mut::<W>().ok_or_else(|| {
-                Error::Invalid(format!("expected widget type {}", type_name::<W>()))
-            })?;
+            let widget = any
+                .downcast_mut::<W>()
+                .ok_or_else(|| Error::Internal("widget type mismatch".into()))?;
+            let f = f
+                .take()
+                .ok_or_else(|| Error::Internal("missing widget closure".into()))?;
             output = Some(f(widget, ctx)?);
             Ok(())
         })?;
@@ -467,7 +492,7 @@ impl dyn Context + '_ {
     pub fn with_typed<W, R>(
         &mut self,
         node: TypedId<W>,
-        f: impl FnMut(&mut W, &mut dyn Context) -> Result<R>,
+        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<R>
     where
         W: Widget + 'static,
@@ -479,19 +504,29 @@ impl dyn Context + '_ {
     pub fn try_with_widget<W, R>(
         &mut self,
         node: NodeId,
-        mut f: impl FnMut(&mut W, &mut dyn Context) -> Result<R>,
+        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<Option<R>>
     where
         W: Widget + 'static,
     {
         let mut output = None;
         let mut matched = false;
+        let mut f = Some(f);
+        let expected = TypeId::of::<W>();
         self.with_widget_mut(node, &mut |widget, ctx| {
-            let any = widget as &mut dyn Any;
-            if let Some(widget) = any.downcast_mut::<W>() {
-                matched = true;
-                output = Some(f(widget, ctx)?);
+            let actual = ctx.node_type_id(node).ok_or(Error::NodeNotFound(node))?;
+            if actual != expected {
+                return Ok(());
             }
+            let any = widget as &mut dyn Any;
+            let widget = any
+                .downcast_mut::<W>()
+                .ok_or_else(|| Error::Internal("widget type mismatch".into()))?;
+            matched = true;
+            let f = f
+                .take()
+                .ok_or_else(|| Error::Internal("missing widget closure".into()))?;
+            output = Some(f(widget, ctx)?);
             Ok(())
         })?;
         if matched {
@@ -507,7 +542,7 @@ impl dyn Context + '_ {
     pub fn try_with_typed<W, R>(
         &mut self,
         node: TypedId<W>,
-        f: impl FnMut(&mut W, &mut dyn Context) -> Result<R>,
+        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<Option<R>>
     where
         W: Widget + 'static,
@@ -515,22 +550,14 @@ impl dyn Context + '_ {
         self.try_with_widget(node.into(), f)
     }
 
-    /// Add a widget to the core but do not attach it to any parent (orphan).
-    pub fn add_orphan<W: Widget + 'static>(&mut self, widget: W) -> NodeId {
-        self.add(widget.into())
-    }
-
-    /// Add a widget to the core and return a typed node identifier (orphan).
-    pub fn add_orphan_typed<W: Widget + 'static>(&mut self, widget: W) -> TypedId<W> {
-        let node = self.add_orphan(widget);
-        TypedId::new(node)
+    /// Create a widget node detached from the tree.
+    pub fn create_detached<W: Widget + 'static>(&mut self, widget: W) -> NodeId {
+        self.create_detached_boxed(widget.into())
     }
 
     /// Add a widget as a child of the current node and return the new node ID.
     pub fn add_child<W: Widget + 'static>(&mut self, widget: W) -> Result<NodeId> {
-        let child = self.add_orphan(widget);
-        self.mount_child(child)?;
-        Ok(child)
+        self.add_child_to(self.node_id(), widget)
     }
 
     /// Add a widget as a child of a specific parent and return the new node ID.
@@ -539,9 +566,22 @@ impl dyn Context + '_ {
         parent: NodeId,
         widget: W,
     ) -> Result<NodeId> {
-        let child = self.add_orphan(widget);
-        self.mount_child_to(parent, child)?;
-        Ok(child)
+        self.add_child_to_boxed(parent, widget.into())
+    }
+
+    /// Add a widget as a keyed child of the current node and return the new node ID.
+    pub fn add_child_keyed<W: Widget + 'static>(&mut self, key: &str, widget: W) -> Result<NodeId> {
+        self.add_child_to_keyed(self.node_id(), key, widget)
+    }
+
+    /// Add a widget as a keyed child of a specific parent and return the new node ID.
+    pub fn add_child_to_keyed<W: Widget + 'static>(
+        &mut self,
+        parent: NodeId,
+        key: &str,
+        widget: W,
+    ) -> Result<NodeId> {
+        self.add_child_to_keyed_boxed(parent, key, widget.into())
     }
 
     /// Add multiple boxed widgets as children of the current node and return their node IDs.
@@ -551,8 +591,7 @@ impl dyn Context + '_ {
     {
         let mut ids = Vec::new();
         for widget in widgets {
-            let child = self.add(widget);
-            self.mount_child(child)?;
+            let child = self.add_child_to_boxed(self.node_id(), widget)?;
             ids.push(child);
         }
         Ok(ids)
@@ -565,40 +604,206 @@ impl dyn Context + '_ {
     {
         let mut ids = Vec::new();
         for widget in widgets {
-            let child = self.add(widget);
-            self.mount_child_to(parent, child)?;
+            let child = self.add_child_to_boxed(parent, widget)?;
             ids.push(child);
         }
         Ok(ids)
     }
 
-    /// Return the only child of this node, or `None` if there are no children.
-    ///
-    /// # Panics
-    ///
-    /// Panics if there is more than one child.
-    pub fn only_child(&self) -> Option<NodeId> {
-        let children = self.children();
-        match children.len() {
-            0 => None,
-            1 => children.into_iter().next(),
-            _ => panic!("expected a single child for node {:?}", self.node_id()),
+    /// Find exactly one node matching a path filter.
+    pub fn find_one(&self, path: &str) -> Result<NodeId> {
+        let matches = self.find_nodes(path);
+        match matches.len() {
+            0 => Err(Error::NotFound(format!("path {path}"))),
+            1 => Ok(matches[0]),
+            _ => Err(Error::MultipleMatches),
         }
     }
 
-    /// Suggest a focus target after removing `removed` from the subtree rooted at `root`.
-    pub fn suggest_focus_after_remove(&mut self, root: NodeId, removed: NodeId) -> Option<NodeId> {
-        let focusables = self.focusable_leaves(root);
-        if let Some(index) = focusables.iter().position(|id| *id == removed) {
-            if let Some(next) = focusables.get(index + 1).copied() {
-                return Some(next);
-            }
-            if index > 0 {
-                return Some(focusables[index - 1]);
-            }
-            return None;
+    /// Try to find exactly one node matching a path filter.
+    pub fn try_find_one(&self, path: &str) -> Result<Option<NodeId>> {
+        let matches = self.find_nodes(path);
+        match matches.len() {
+            0 => Ok(None),
+            1 => Ok(Some(matches[0])),
+            _ => Err(Error::MultipleMatches),
         }
-        self.focused_leaf(root)
+    }
+
+    /// Execute a closure with a widget at a unique path match.
+    pub fn with_node_at<W: Widget + 'static, R>(
+        &mut self,
+        path: &str,
+        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
+    ) -> Result<R> {
+        let node = self.find_one(path)?;
+        self.with_widget(node, f)
+    }
+
+    /// Execute a closure with a widget at a unique path match if it exists.
+    pub fn try_with_node_at<W: Widget + 'static, R>(
+        &mut self,
+        path: &str,
+        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
+    ) -> Result<Option<R>> {
+        let node = self.try_find_one(path)?;
+        let Some(node) = node else {
+            return Ok(None);
+        };
+        self.with_widget(node, f).map(Some)
+    }
+
+    /// Execute a closure with a keyed child of type `W`.
+    pub fn with_keyed<W: Widget + 'static, R>(
+        &mut self,
+        key: &str,
+        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
+    ) -> Result<R> {
+        let node = self
+            .child_keyed(key)
+            .ok_or_else(|| Error::NotFound(format!("key {key}")))?;
+        self.with_widget(node, f)
+    }
+
+    /// Execute a closure with a keyed child of type `W` if it exists.
+    pub fn try_with_keyed<W: Widget + 'static, R>(
+        &mut self,
+        key: &str,
+        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
+    ) -> Result<Option<R>> {
+        let Some(node) = self.child_keyed(key) else {
+            return Ok(None);
+        };
+        self.with_widget(node, f).map(Some)
+    }
+
+    /// Return the first child of type `W`.
+    pub fn first_child<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
+        self.children()
+            .into_iter()
+            .find(|id| self.node_matches_type::<W>(*id))
+            .map(TypedId::new)
+    }
+
+    /// Return the unique child of type `W`, or error if more than one exists.
+    pub fn unique_child<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
+        let mut found = None;
+        for child in self.children() {
+            if !self.node_matches_type::<W>(child) {
+                continue;
+            }
+            if found.is_some() {
+                return Err(Error::MultipleMatches);
+            }
+            found = Some(TypedId::new(child));
+        }
+        Ok(found)
+    }
+
+    /// Return all direct children of type `W`.
+    pub fn children_of_type<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
+        self.children()
+            .into_iter()
+            .filter(|id| self.node_matches_type::<W>(*id))
+            .map(TypedId::new)
+            .collect()
+    }
+
+    /// Return the first descendant of type `W` (excluding self).
+    pub fn first_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
+        let mut stack = self.children();
+        while let Some(id) = stack.pop() {
+            if self.node_matches_type::<W>(id) {
+                return Some(TypedId::new(id));
+            }
+            for child in self.children_of(id).into_iter().rev() {
+                stack.push(child);
+            }
+        }
+        None
+    }
+
+    /// Return the unique descendant of type `W`, or error if more than one exists.
+    pub fn unique_descendant<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
+        let mut found = None;
+        let mut stack = self.children();
+        while let Some(id) = stack.pop() {
+            if self.node_matches_type::<W>(id) {
+                if found.is_some() {
+                    return Err(Error::MultipleMatches);
+                }
+                found = Some(TypedId::new(id));
+            }
+            for child in self.children_of(id).into_iter().rev() {
+                stack.push(child);
+            }
+        }
+        Ok(found)
+    }
+
+    /// Return all descendants of type `W` (excluding self).
+    pub fn descendants_of_type<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
+        let mut out = Vec::new();
+        let mut stack = self.children();
+        while let Some(id) = stack.pop() {
+            if self.node_matches_type::<W>(id) {
+                out.push(TypedId::new(id));
+            }
+            for child in self.children_of(id).into_iter().rev() {
+                stack.push(child);
+            }
+        }
+        out
+    }
+
+    /// Execute a closure with the first descendant of type `W`.
+    pub fn with_first_descendant<W: Widget + 'static, R>(
+        &mut self,
+        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
+    ) -> Result<R> {
+        let node = self
+            .first_descendant::<W>()
+            .ok_or_else(|| Error::NotFound(type_name::<W>().to_string()))?;
+        self.with_typed(node, f)
+    }
+
+    /// Execute a closure with the first descendant of type `W` if it exists.
+    pub fn try_with_first_descendant<W: Widget + 'static, R>(
+        &mut self,
+        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
+    ) -> Result<Option<R>> {
+        let Some(node) = self.first_descendant::<W>() else {
+            return Ok(None);
+        };
+        self.with_typed(node, f).map(Some)
+    }
+
+    /// Execute a closure with the unique descendant of type `W`.
+    pub fn with_unique_descendant<W: Widget + 'static, R>(
+        &mut self,
+        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
+    ) -> Result<R> {
+        let node = self
+            .unique_descendant::<W>()?
+            .ok_or_else(|| Error::NotFound(type_name::<W>().to_string()))?;
+        self.with_typed(node, f)
+    }
+
+    /// Execute a closure with the unique descendant of type `W` if it exists.
+    pub fn try_with_unique_descendant<W: Widget + 'static, R>(
+        &mut self,
+        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
+    ) -> Result<Option<R>> {
+        let node = self.unique_descendant::<W>()?;
+        let Some(node) = node else {
+            return Ok(None);
+        };
+        self.with_typed(node, f).map(Some)
+    }
+
+    /// Return true if the node's widget type matches `W`.
+    fn node_matches_type<W: Widget + 'static>(&self, node: NodeId) -> bool {
+        self.node_type_id(node) == Some(TypeId::of::<W>())
     }
 }
 
@@ -633,7 +838,7 @@ fn focusable_leaves_for(core: &Core, root: NodeId) -> Vec<NodeId> {
         let Some(node) = core.nodes.get(id) else {
             continue;
         };
-        if node.hidden {
+        if node.hidden || node.view.is_zero() {
             continue;
         }
         if node_accepts_focus(core, id) {
@@ -650,7 +855,7 @@ fn focusable_leaves_for(core: &Core, root: NodeId) -> Vec<NodeId> {
 fn focused_leaf_for(core: &Core, root: NodeId) -> Option<NodeId> {
     let focused = core.focus?;
     let node = core.nodes.get(focused)?;
-    if node.hidden || !is_descendant(core, root, focused) {
+    if node.hidden || node.view.is_zero() || !is_descendant(core, root, focused) {
         return None;
     }
     if node_accepts_focus(core, focused) {
@@ -702,6 +907,10 @@ impl<'a> ViewContext for CoreContext<'a> {
 
     fn node_view(&self, node: NodeId) -> Option<View> {
         self.core.nodes.get(node).map(|n| n.view)
+    }
+
+    fn node_type_id(&self, node: NodeId) -> Option<TypeId> {
+        self.core.nodes.get(node).map(|n| n.widget_type)
     }
 
     fn invalidate_layout(&self) {
@@ -894,8 +1103,8 @@ impl<'a> Context for CoreContext<'a> {
         self.core.with_layout_of(node, |layout| f(layout))
     }
 
-    fn add(&mut self, widget: Box<dyn Widget>) -> NodeId {
-        self.core.add_boxed(widget)
+    fn create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> NodeId {
+        self.core.create_detached_boxed(widget)
     }
 
     fn with_widget_mut(
@@ -916,12 +1125,37 @@ impl<'a> Context for CoreContext<'a> {
         commands::dispatch(self.core, self.node_id, cmd)
     }
 
-    fn mount_child_to(&mut self, parent: NodeId, child: NodeId) -> Result<()> {
-        self.core.mount_child(parent, child)
+    fn add_child_to_boxed(&mut self, parent: NodeId, widget: Box<dyn Widget>) -> Result<NodeId> {
+        self.core.add_child_to_boxed(parent, widget)
     }
 
-    fn detach_child_from(&mut self, parent: NodeId, child: NodeId) -> Result<()> {
-        self.core.detach_child(parent, child)
+    fn add_child_to_keyed_boxed(
+        &mut self,
+        parent: NodeId,
+        key: &str,
+        widget: Box<dyn Widget>,
+    ) -> Result<NodeId> {
+        self.core.add_child_to_keyed_boxed(parent, key, widget)
+    }
+
+    fn attach(&mut self, parent: NodeId, child: NodeId) -> Result<()> {
+        self.core.attach(parent, child)
+    }
+
+    fn attach_keyed(&mut self, parent: NodeId, key: &str, child: NodeId) -> Result<()> {
+        self.core.attach_keyed(parent, key, child)
+    }
+
+    fn detach(&mut self, child: NodeId) -> Result<()> {
+        self.core.detach(child)
+    }
+
+    fn remove_subtree(&mut self, node: NodeId) -> Result<()> {
+        self.core.remove_subtree(node)
+    }
+
+    fn child_keyed(&self, key: &str) -> Option<NodeId> {
+        self.core.child_keyed(self.node_id, key)
     }
 
     fn set_children_of(&mut self, parent: NodeId, children: Vec<NodeId>) -> Result<()> {
@@ -1038,6 +1272,10 @@ impl<'a> ViewContext for CoreViewContext<'a> {
 
     fn node_view(&self, node: NodeId) -> Option<View> {
         self.core.nodes.get(node).map(|n| n.view)
+    }
+
+    fn node_type_id(&self, node: NodeId) -> Option<TypeId> {
+        self.core.nodes.get(node).map(|n| n.widget_type)
     }
 
     fn invalidate_layout(&self) {

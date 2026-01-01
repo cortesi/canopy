@@ -5,6 +5,7 @@
     - [Node names](./state.md)
     - [trait CommandNode](./commands.md)
     - [Widget](./nodetrait.md)
+        - [Lifecycle](./lifecycle.md)
         - [Layout and Rendering](./layout.md)
         - [Polling](./polling.md)
         - [Cursor](./cursor.md)

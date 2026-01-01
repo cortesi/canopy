@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::{any::TypeId, cell::Cell, collections::HashMap};
 
 use crate::{
     core::{id::NodeId, style::StyleEffect, view::View},
@@ -13,10 +13,15 @@ pub struct Node {
     /// Widget behavior and state.
     pub(crate) widget: Option<Box<dyn Widget>>,
 
+    /// Widget type identifier for fast type checks.
+    pub(crate) widget_type: TypeId,
+
     /// Parent in the arena tree.
     pub(crate) parent: Option<NodeId>,
     /// Children in the arena tree.
     pub(crate) children: Vec<NodeId>,
+    /// Mapping of child role keys to node IDs.
+    pub(crate) child_keys: HashMap<String, NodeId>,
 
     /// Cached layout configuration for quick access.
     pub(crate) layout: Layout,

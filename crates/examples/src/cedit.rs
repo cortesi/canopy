@@ -40,9 +40,8 @@ impl Widget for Ed {
         editor.set_highlighter(Some(Box::new(SyntectHighlighter::new(
             self.extension.as_str(),
         ))));
-        let editor_id = c.add_orphan(editor);
-        let frame_id = frame::Frame::wrap(c, editor_id)?;
-        c.mount_child(frame_id)?;
+        let frame_id = c.add_child(frame::Frame::new())?;
+        let editor_id = c.add_child_to(frame_id, editor)?;
 
         c.with_layout_of(editor_id, &mut |layout| {
             *layout = Layout::fill().padding(Edges::all(1));

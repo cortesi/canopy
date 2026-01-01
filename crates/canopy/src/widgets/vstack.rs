@@ -67,9 +67,7 @@ impl VStack {
         let mut children = Vec::with_capacity(self.items.len());
         for item in &self.items {
             let node = item.node();
-            if let Some(parent) = ctx.parent_of(node) {
-                ctx.detach_child_from(parent, node)?;
-            }
+            ctx.detach(node)?;
             children.push(node);
         }
         ctx.set_children(children)?;

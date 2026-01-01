@@ -14,7 +14,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     cnpy.bind_key('q', "root", "root::quit()")?;
     cnpy.bind_key('r', "text_display", "text_display::redraw()")?;
 
-    let app_id = cnpy.core.add(TextDisplay::new());
+    let app_id = cnpy.core.create_detached(TextDisplay::new());
     Root::install(&mut cnpy.core, app_id)?;
     runloop(cnpy)?;
     Ok(())

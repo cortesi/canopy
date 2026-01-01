@@ -295,9 +295,9 @@ mod tests {
         let mut canopy = Canopy::new();
         Root::load(&mut canopy);
 
-        let app_id = canopy.core.add(App);
-        let left = canopy.core.add(FocusLeaf::new("left"));
-        let right = canopy.core.add(FocusLeaf::new("right"));
+        let app_id = canopy.core.create_detached(App);
+        let left = canopy.core.create_detached(FocusLeaf::new("left"));
+        let right = canopy.core.create_detached(FocusLeaf::new("right"));
         canopy.core.set_children(app_id, vec![left, right])?;
 
         canopy.core.with_layout_of(app_id, |layout| {

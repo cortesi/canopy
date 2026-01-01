@@ -879,8 +879,9 @@ mod tests {
     #[test]
     fn mouse_move_does_not_request_render() -> Result<()> {
         let mut canopy = Canopy::new();
-        let app_id = canopy.core.add(StaticWidget::new());
-        canopy.core.set_children(canopy.core.root, vec![app_id])?;
+        let app_id = canopy
+            .core
+            .add_child_to_boxed(canopy.core.root, Box::new(StaticWidget::new()))?;
         canopy
             .core
             .with_layout_of(app_id, |layout| *layout = Layout::fill())?;
@@ -904,8 +905,9 @@ mod tests {
     #[test]
     fn mouse_capture_routes_drag_outside() -> Result<()> {
         let mut canopy = Canopy::new();
-        let app_id = canopy.core.add(CaptureWidget::new());
-        canopy.core.set_children(canopy.core.root, vec![app_id])?;
+        let app_id = canopy
+            .core
+            .add_child_to_boxed(canopy.core.root, Box::new(CaptureWidget::new()))?;
         canopy
             .core
             .with_layout_of(app_id, |layout| *layout = Layout::fill())?;
@@ -942,8 +944,9 @@ mod tests {
     fn set_widget_resets_initialization() -> Result<()> {
         POLL_COUNT.store(0, Ordering::SeqCst);
         let mut canopy = Canopy::new();
-        let node_id = canopy.core.add(PollWidget::new());
-        canopy.core.mount_child(canopy.core.root, node_id)?;
+        let node_id = canopy
+            .core
+            .add_child_to_boxed(canopy.core.root, Box::new(PollWidget::new()))?;
         canopy.set_root_size(Expanse::new(10, 10))?;
 
         let (_, mut render) = TestRender::create();
@@ -1472,8 +1475,9 @@ mod tests {
         let (_, mut cr) = CanvasRender::create(size);
         let mut canopy = Canopy::new();
         canopy.core.set_widget(canopy.core.root, Parent::new());
-        let child = canopy.core.add(Child);
-        canopy.core.set_children(canopy.core.root, vec![child])?;
+        let child = canopy
+            .core
+            .add_child_to_boxed(canopy.core.root, Box::new(Child))?;
         canopy.core.with_layout_of(child, |layout| {
             *layout = Layout::column().fixed_width(0).fixed_height(0);
         })?;

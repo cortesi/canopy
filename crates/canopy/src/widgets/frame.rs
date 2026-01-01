@@ -124,8 +124,9 @@ impl Frame {
 
     /// Wrap an existing child node in a configured frame and return the frame node ID.
     pub fn wrap_with(c: &mut dyn Context, child: NodeId, frame: Self) -> Result<NodeId> {
-        let frame_id = c.add_orphan(frame);
-        c.mount_child_to(frame_id, child)?;
+        let frame_id = c.create_detached(frame);
+        c.detach(child)?;
+        c.attach(frame_id, child)?;
         Ok(frame_id)
     }
 }

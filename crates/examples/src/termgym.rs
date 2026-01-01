@@ -26,10 +26,6 @@ struct TermEntry {
     label: String,
     /// Selection state.
     selected: bool,
-    /// Mounted box node ID.
-    box_id: Option<NodeId>,
-    /// Mounted text node ID.
-    text_id: Option<NodeId>,
 }
 
 #[derive_commands]
@@ -39,35 +35,12 @@ impl TermEntry {
         Self {
             label: label.into(),
             selected: false,
-            box_id: None,
-            text_id: None,
         }
     }
 
     /// Compute the display width of the label text.
     fn label_width(&self) -> u32 {
         UnicodeWidthStr::width(self.label.as_str()).max(1) as u32
-    }
-
-    /// Ensure the child widget tree is mounted.
-    fn ensure_tree(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if self.box_id.is_some() && self.text_id.is_some() {
-            return Ok(());
-        }
-
-        let box_id = ctx.add_orphan(Box::new().with_glyphs(boxed::SINGLE).with_fill());
-        let center_id = ctx.add_orphan(Center::new());
-        let text_id =
-            ctx.add_orphan(Text::new(self.label.clone()).with_wrap_width(self.label_width()));
-
-        ctx.mount_child_to(center_id, text_id)?;
-        ctx.mount_child_to(box_id, center_id)?;
-        ctx.mount_child_to(ctx.node_id(), box_id)?;
-
-        self.box_id = Some(box_id);
-        self.text_id = Some(text_id);
-
-        Ok(())
     }
 }
 
@@ -85,7 +58,13 @@ impl Widget for TermEntry {
     }
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        self.ensure_tree(ctx)
+        let box_id = ctx.add_child(Box::new().with_glyphs(boxed::SINGLE).with_fill())?;
+        let center_id = ctx.add_child_to(box_id, Center::new())?;
+        ctx.add_child_to(
+            center_id,
+            Text::new(self.label.clone()).with_wrap_width(self.label_width()),
+        )?;
+        Ok(())
     }
 
     fn render(&mut self, rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
@@ -189,11 +168,13 @@ impl TermGym {
     fn add_terminal(&mut self, c: &mut dyn Context) -> Result<()> {
         let stack_id = self.stack_id()?;
         let cwd = env::current_dir().map_err(|err| Error::Internal(err.to_string()))?;
-        let terminal_id = c.add_orphan(Terminal::new(TerminalConfig {
-            cwd: Some(cwd),
-            ..TerminalConfig::default()
-        }));
-        c.mount_child_to(stack_id, terminal_id)?;
+        let terminal_id = c.add_child_to(
+            stack_id,
+            Terminal::new(TerminalConfig {
+                cwd: Some(cwd),
+                ..TerminalConfig::default()
+            }),
+        )?;
         c.with_layout_of(terminal_id, &mut |layout| {
             *layout = Layout::fill();
         })?;
@@ -274,9 +255,8 @@ impl TermGym {
             return Ok(());
         }
 
-        let stack_id = self.stack_id()?;
         let removed_id = self.terminals.remove(index);
-        c.detach_child_from(stack_id, removed_id)?;
+        c.remove_subtree(removed_id)?;
 
         self.rebuild_list(c)?;
 
@@ -421,26 +401,23 @@ impl Widget for TermGym {
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        let list_id = c.add_orphan(List::<TermEntry>::new());
-        let button_id = c.add_orphan(
+        let list_id = c.create_detached(List::<TermEntry>::new());
+        let button_id = c.create_detached(
             Button::new("+ New terminal").with_command(Self::cmd_new_terminal().call()),
         );
-        let sidebar_id = c.add_orphan(
+        let sidebar_id = c.add_child(
             VStack::new()
                 .push_fixed(button_id, ENTRY_HEIGHT)
                 .push_flex(list_id, 1),
-        );
+        )?;
 
-        let stack_id = c.add_orphan(TerminalStack::new());
-        let term_frame_id = frame::Frame::wrap_with(
-            c,
-            stack_id,
+        let stack_id = c.create_detached(TerminalStack::new());
+        let term_frame_id = c.add_child(
             frame::Frame::new()
                 .with_glyphs(boxed::ROUND_THICK)
                 .with_title("terminal"),
         )?;
-
-        c.set_children(vec![sidebar_id, term_frame_id])?;
+        c.attach(term_frame_id, stack_id)?;
 
         c.with_layout(&mut |layout| {
             *layout = Layout::row().flex_horizontal(1).flex_vertical(1);

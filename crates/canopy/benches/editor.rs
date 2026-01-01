@@ -42,9 +42,7 @@ impl BenchmarkEditorWrapper {
             .with_wrap(WrapMode::Soft)
             .with_line_numbers(LineNumbers::Absolute);
         let editor = Editor::with_config(self.text.clone(), config);
-        let editor_id = c.add_orphan(editor);
-        c.set_children(vec![editor_id])
-            .expect("Failed to attach editor");
+        let editor_id = c.add_child(editor).expect("Failed to attach editor");
 
         c.with_layout(&mut |layout| {
             *layout = Layout::fill();

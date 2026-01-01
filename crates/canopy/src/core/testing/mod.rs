@@ -59,8 +59,8 @@ mod tests {
         let mut canopy = Canopy::new();
 
         canopy.core.set_widget(canopy.core.root, Block::new(true));
-        let left = canopy.core.add(Block::new(false));
-        let right = canopy.core.add(Block::new(false));
+        let left = canopy.core.create_detached(Block::new(false));
+        let right = canopy.core.create_detached(Block::new(false));
         canopy
             .core
             .set_children(canopy.core.root, vec![left, right])?;
@@ -84,8 +84,8 @@ mod tests {
         let mut canopy = Canopy::new();
 
         canopy.core.set_widget(canopy.core.root, Block::new(true));
-        let left = canopy.core.add(Block::new(false));
-        let right = canopy.core.add(Block::new(false));
+        let left = canopy.core.create_detached(Block::new(false));
+        let right = canopy.core.create_detached(Block::new(false));
         canopy
             .core
             .set_children(canopy.core.root, vec![left, right])?;

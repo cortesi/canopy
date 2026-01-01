@@ -33,7 +33,7 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let app_id = cnpy.core.add(EditorGym::new());
+    let app_id = cnpy.core.create_detached(EditorGym::new());
     Root::install_with_inspector(&mut cnpy.core, app_id, args.inspector)?;
     runloop(cnpy)?;
     Ok(())

@@ -305,12 +305,12 @@ pub struct TestTree {
 fn build_tree(core: &mut Core) -> Result<TestTree> {
     core.set_widget(core.root, R::new());
 
-    let a = core.add(Ba::new());
-    let b = core.add(Bb::new());
-    let a_a = core.add(BaLa::new());
-    let a_b = core.add(BaLb::new());
-    let b_a = core.add(BbLa::new());
-    let b_b = core.add(BbLb::new());
+    let a = core.create_detached(Ba::new());
+    let b = core.create_detached(Bb::new());
+    let a_a = core.create_detached(BaLa::new());
+    let a_b = core.create_detached(BaLb::new());
+    let b_a = core.create_detached(BbLa::new());
+    let b_b = core.create_detached(BbLb::new());
 
     core.set_children(core.root, vec![a, b])?;
     core.set_children(a, vec![a_a, a_b])?;

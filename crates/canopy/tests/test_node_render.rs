@@ -87,7 +87,7 @@ mod tests {
     }
 
     fn build_split_tree(core: &mut Core, depth: usize, horizontal: bool) -> Result<NodeId> {
-        let node = core.add(NodeA::new());
+        let node = core.create_detached(NodeA::new());
         core.with_layout_of(node, |layout| {
             let base = if horizontal {
                 Layout::row()
@@ -112,8 +112,8 @@ mod tests {
     fn test_simple_node_fill() -> Result<()> {
         let mut h = Harness::builder(Root::new()).size(30, 10).build()?;
 
-        let node_a = h.canopy.core.add(NodeA::new());
-        let node_b = h.canopy.core.add(NodeB::new());
+        let node_a = h.canopy.core.create_detached(NodeA::new());
+        let node_b = h.canopy.core.create_detached(NodeB::new());
         h.canopy.core.set_children(h.root, vec![node_a])?;
         h.canopy.core.set_children(node_a, vec![node_b])?;
 
@@ -150,9 +150,9 @@ mod tests {
     fn test_zero_size_child_at_boundary_renders() -> Result<()> {
         let mut h = Harness::builder(Root::new()).size(10, 10).build()?;
 
-        let container = h.canopy.core.add(NodeA::new());
-        let top = h.canopy.core.add(NodeB::new());
-        let bottom = h.canopy.core.add(NodeA::new());
+        let container = h.canopy.core.create_detached(NodeA::new());
+        let top = h.canopy.core.create_detached(NodeB::new());
+        let bottom = h.canopy.core.create_detached(NodeA::new());
 
         h.canopy.core.set_children(h.root, vec![container])?;
         h.canopy.core.set_children(container, vec![top, bottom])?;

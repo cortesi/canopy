@@ -1,11 +1,6 @@
-use canopy::{
-    Loader, NodeId,
-    error::Result,
-    testing::harness::Harness,
-    widgets::{List, Text},
-};
+use canopy::{Loader, NodeId, error::Result, testing::harness::Harness, widgets::List};
 
-use crate::listgym::ListGym;
+use crate::listgym::{ListEntry, ListGym};
 
 fn panes_id(harness: &Harness) -> NodeId {
     harness
@@ -52,7 +47,7 @@ fn test_listgym_initial_state() -> Result<()> {
 
     let list_node = list_id(&harness);
     let mut len = 0;
-    harness.with_widget(list_node, |list: &mut List<Text>| {
+    harness.with_widget(list_node, |list: &mut List<ListEntry>| {
         len = list.len();
     });
 
@@ -92,7 +87,7 @@ fn test_harness_script_with_list_navigation() -> Result<()> {
 
     let list_node = list_id(&harness);
     let mut initial_selected = None;
-    harness.with_widget(list_node, |list: &mut List<Text>| {
+    harness.with_widget(list_node, |list: &mut List<ListEntry>| {
         initial_selected = list.selected_index();
     });
 
@@ -100,7 +95,7 @@ fn test_harness_script_with_list_navigation() -> Result<()> {
     harness.script("list::select_last()")?;
 
     let mut selected = None;
-    harness.with_widget(list_node, |list: &mut List<Text>| {
+    harness.with_widget(list_node, |list: &mut List<ListEntry>| {
         selected = list.selected_index();
     });
 

@@ -32,7 +32,7 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let app_id = cnpy.core.add(FocusGym::new());
+    let app_id = cnpy.core.create_detached(FocusGym::new());
     Root::install_with_inspector(&mut cnpy.core, app_id, args.inspector)?;
     runloop(cnpy)?;
     Ok(())

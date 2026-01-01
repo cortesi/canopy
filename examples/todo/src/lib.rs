@@ -1,8 +1,6 @@
-use std::any::Any;
-
 use anyhow::Result as AnyResult;
 use canopy::{
-    Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
+    Binder, Canopy, Context, Loader, ViewContext, command, derive_commands,
     error::Result,
     event::{key, mouse},
     geom::Rect,
@@ -140,13 +138,6 @@ impl Widget for MainContent {
 /// Root node for the todo demo.
 pub struct Todo {
     pending: Vec<store::Todo>,
-    /// Container holding the main content (list + status).
-    main_content_id: Option<NodeId>,
-    list_id: Option<NodeId>,
-    status_id: Option<NodeId>,
-    /// Modal widget for the add dialog.
-    modal_id: Option<NodeId>,
-    input_id: Option<NodeId>,
     adder_active: bool,
 }
 
@@ -156,28 +147,20 @@ impl Todo {
         let pending = store::get().todos()?;
         Ok(Self {
             pending,
-            main_content_id: None,
-            list_id: None,
-            status_id: None,
-            modal_id: None,
-            input_id: None,
             adder_active: false,
         })
     }
 
     fn ensure_tree(&mut self, c: &mut dyn Context) -> Result<()> {
-        if self.main_content_id.is_some() {
+        if c.child_keyed("main").is_some() {
             return Ok(());
         }
 
         // Create the main content container (list + status bar in column layout)
-        let main_content_id = c.add_orphan(MainContent);
-        let list_id = c.add_orphan(List::<TodoEntry>::new());
-        let frame_id = c.add_orphan(frame::Frame::new());
-        c.mount_child_to(frame_id, list_id)?;
-
-        let status_id = c.add_orphan(StatusBar);
-        c.set_children_of(main_content_id, vec![frame_id, status_id])?;
+        let main_content_id = c.add_child_keyed("main", MainContent)?;
+        let frame_id = c.add_child_to(main_content_id, frame::Frame::new())?;
+        let list_id = c.add_child_to(frame_id, List::<TodoEntry>::new())?;
+        let status_id = c.add_child_to(main_content_id, StatusBar)?;
 
         // Set Todo (self) to use Stack direction for modal overlay support
         c.with_layout(&mut |layout| {
@@ -204,13 +187,9 @@ impl Todo {
         // Initially only show main content
         c.set_children(vec![main_content_id])?;
 
-        self.main_content_id = Some(main_content_id);
-        self.list_id = Some(list_id);
-        self.status_id = Some(status_id);
-
         if !self.pending.is_empty() {
             let pending = std::mem::take(&mut self.pending);
-            self.with_list(c, |list, ctx| {
+            c.with_widget(list_id, |list: &mut List<TodoEntry>, ctx| {
                 for item in pending.iter().cloned() {
                     list.append(ctx, TodoEntry::new(item))?;
                 }
@@ -222,16 +201,14 @@ impl Todo {
     }
 
     fn ensure_modal(&mut self, c: &mut dyn Context) -> Result<()> {
-        if self.modal_id.is_some() {
+        if c.child_keyed("modal").is_some() {
             return Ok(());
         }
 
         // Create the modal with an input frame
-        let modal_id = c.add_orphan(Modal::new());
-        let input_id = c.add_orphan(Input::new(""));
-        let adder_frame_id = c.add_orphan(frame::Frame::new());
-        c.mount_child_to(adder_frame_id, input_id)?;
-        c.mount_child_to(modal_id, adder_frame_id)?;
+        let modal_id = c.add_child_keyed("modal", Modal::new())?;
+        let adder_frame_id = c.add_child_to(modal_id, frame::Frame::new())?;
+        let input_id = c.add_child_to(adder_frame_id, Input::new(""))?;
 
         c.with_layout_of(adder_frame_id, &mut |layout| {
             layout.width = Sizing::Flex(1);
@@ -245,29 +222,27 @@ impl Todo {
             *layout = Layout::fill();
         })?;
 
-        self.modal_id = Some(modal_id);
-        self.input_id = Some(input_id);
-
         Ok(())
     }
 
-    fn sync_children(&mut self, c: &mut dyn Context) -> Result<()> {
-        let main_content_id = self.main_content_id.expect("main content not initialized");
+    fn sync_modal_state(&mut self, c: &mut dyn Context) -> Result<()> {
+        let main_content_id = c.child_keyed("main").expect("main content not initialized");
 
-        // With Stack layout: main content is always first, modal overlays on top when active
-        let mut children = vec![main_content_id];
         if self.adder_active {
             self.ensure_modal(c)?;
-            if let Some(modal_id) = self.modal_id {
-                children.push(modal_id);
-                // Dim the background content
-                c.push_effect(main_content_id, effects::dim(0.5))?;
-            }
+            c.push_effect(main_content_id, effects::dim(0.5))?;
+            c.with_keyed::<Modal, _>("modal", |_, ctx| {
+                ctx.set_hidden(false);
+                Ok(())
+            })?;
         } else {
             // Clear dimming when modal is not active
             c.clear_effects(main_content_id)?;
+            let _ = c.try_with_keyed::<Modal, _>("modal", |_, ctx| {
+                ctx.set_hidden(true);
+                Ok(())
+            })?;
         }
-        c.set_children(children)?;
         Ok(())
     }
 
@@ -275,20 +250,18 @@ impl Todo {
     where
         F: FnMut(&mut List<TodoEntry>, &mut dyn Context) -> Result<()>,
     {
-        let list_id = self.list_id.expect("list not initialized");
-        c.with_widget(list_id, |list: &mut List<TodoEntry>, ctx| f(list, ctx))
+        c.with_unique_descendant::<List<TodoEntry>, _>(|list, ctx| f(list, ctx))?;
+        Ok(())
     }
 
     fn with_input<F>(&mut self, c: &mut dyn Context, mut f: F) -> Result<()>
     where
         F: FnMut(&mut Input) -> Result<()>,
     {
-        let input_id = self.input_id.expect("input not initialized");
-        c.with_widget_mut(input_id, &mut |widget, _ctx| {
-            let any = widget as &mut dyn Any;
-            let input = any.downcast_mut::<Input>().expect("input type mismatch");
-            f(input)
-        })
+        c.with_keyed::<Modal, _>("modal", |_, ctx| {
+            ctx.with_unique_descendant::<Input, _>(|input, _| f(input))
+        })?;
+        Ok(())
     }
 
     #[command]
@@ -296,13 +269,13 @@ impl Todo {
         self.ensure_tree(c)?;
         self.ensure_modal(c)?;
         self.adder_active = true;
-        self.sync_children(c)?;
+        self.sync_modal_state(c)?;
         self.with_input(c, |input| {
             input.set_value("");
             Ok(())
         })?;
-        if let Some(input_id) = self.input_id {
-            c.set_focus(input_id);
+        if let Some(input_id) = c.unique_descendant::<Input>()? {
+            c.set_focus(input_id.into());
         }
         Ok(())
     }
@@ -319,7 +292,7 @@ impl Todo {
                     Ok(())
                 })?;
             }
-            list.delete_selected(ctx)?;
+            let _ = list.delete_selected(ctx)?;
             Ok(())
         })?;
 
@@ -347,7 +320,7 @@ impl Todo {
         }
 
         self.adder_active = false;
-        self.sync_children(c)?;
+        self.sync_modal_state(c)?;
         c.set_focus(c.node_id());
         Ok(())
     }
@@ -355,7 +328,7 @@ impl Todo {
     #[command]
     pub fn cancel_add(&mut self, c: &mut dyn Context) -> Result<()> {
         self.adder_active = false;
-        self.sync_children(c)?;
+        self.sync_modal_state(c)?;
         c.set_focus(c.node_id());
         Ok(())
     }
@@ -481,7 +454,7 @@ pub fn create_app(db_path: &str) -> AnyResult<Canopy> {
     setup_app(&mut cnpy);
 
     let todo = Todo::new()?;
-    let app_id = cnpy.core.add(todo);
+    let app_id = cnpy.core.create_detached(todo);
     canopy::widgets::Root::install(&mut cnpy.core, app_id)?;
     Ok(cnpy)
 }

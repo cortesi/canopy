@@ -229,11 +229,10 @@ impl Stylegym {
 
         // Create modal if needed
         if self.modal_id.is_none() {
-            let modal_id = c.add_orphan(Modal::new());
-            let text_id = c.add_orphan(ModalContent);
+            let modal_id = c.create_detached(Modal::new());
             let frame_id =
-                frame::Frame::wrap_with(c, text_id, frame::Frame::new().with_title("Demo Modal"))?;
-            c.mount_child_to(modal_id, frame_id)?;
+                c.add_child_to(modal_id, frame::Frame::new().with_title("Demo Modal"))?;
+            c.add_child_to(frame_id, ModalContent)?;
 
             c.with_layout_of(frame_id, &mut |layout| {
                 layout.min_width = Some(35);
@@ -386,7 +385,7 @@ impl Widget for Stylegym {
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         // Create left frame (controls) - preserve Frame's padding for border
-        let left_frame_id = c.add_orphan(frame::Frame::new().with_title("Controls"));
+        let left_frame_id = c.create_detached(frame::Frame::new().with_title("Controls"));
         c.with_layout_of(left_frame_id, &mut |layout| {
             *layout = Layout::column()
                 .fixed_width(32)
@@ -395,23 +394,17 @@ impl Widget for Stylegym {
         })?;
 
         // Create theme dropdown with its own frame - no fixed height so it can expand
-        let theme_dropdown_id = c.add_orphan(Dropdown::new(available_themes()));
-        let theme_frame_id = frame::Frame::wrap_with(
-            c,
-            theme_dropdown_id,
-            frame::Frame::new().with_title("Theme"),
-        )?;
+        let theme_frame_id = c.create_detached(frame::Frame::new().with_title("Theme"));
+        let theme_dropdown_id =
+            c.add_child_to(theme_frame_id, Dropdown::new(available_themes()))?;
         c.with_layout_of(theme_frame_id, &mut |layout| {
             *layout = Layout::column().flex_horizontal(1).padding(Edges::all(1));
         })?;
 
         // Create effects selector with its own frame
-        let effects_selector_id = c.add_orphan(Selector::new(available_effects()));
-        let effects_frame_id = frame::Frame::wrap_with(
-            c,
-            effects_selector_id,
-            frame::Frame::new().with_title("Effects"),
-        )?;
+        let effects_frame_id = c.create_detached(frame::Frame::new().with_title("Effects"));
+        let effects_selector_id =
+            c.add_child_to(effects_frame_id, Selector::new(available_effects()))?;
         c.with_layout_of(effects_frame_id, &mut |layout| {
             *layout = Layout::column()
                 .flex_horizontal(1)
@@ -423,15 +416,14 @@ impl Widget for Stylegym {
         c.set_children_of(left_frame_id, vec![theme_frame_id, effects_frame_id])?;
 
         // Create right container with Stack layout for modal overlay
-        let right_container_id = c.add_orphan(Container);
+        let right_container_id = c.create_detached(Container);
         c.with_layout_of(right_container_id, &mut |layout| {
             *layout = Layout::fill().direction(Direction::Stack);
         })?;
 
         // Create right frame (demo content)
-        let demo_content_id = c.add_orphan(DemoContent);
-        let right_frame_id =
-            frame::Frame::wrap_with(c, demo_content_id, frame::Frame::new().with_title("Demo"))?;
+        let right_frame_id = c.create_detached(frame::Frame::new().with_title("Demo"));
+        let _demo_content_id = c.add_child_to(right_frame_id, DemoContent)?;
         c.with_layout_of(right_frame_id, &mut |layout| {
             *layout = Layout::fill().padding(Edges::all(1));
         })?;

@@ -1,7 +1,7 @@
 //! Button widget.
 
 use crate::{
-    Context, NodeId, ViewContext, command,
+    Context, ViewContext, command,
     commands::{CommandCall, CommandInvocation},
     derive_commands,
     error::Result,
@@ -25,10 +25,6 @@ pub struct Button {
     command: Option<CommandInvocation>,
     /// Glyph set for the button border.
     glyphs: BoxGlyphs,
-    /// Mounted box node ID.
-    box_id: Option<NodeId>,
-    /// Mounted label node ID.
-    text_id: Option<NodeId>,
     /// Selection state for use in lists.
     selected: bool,
 }
@@ -47,8 +43,6 @@ impl Button {
             label: label.into(),
             command: None,
             glyphs: SINGLE,
-            box_id: None,
-            text_id: None,
             selected: false,
         }
     }
@@ -85,32 +79,10 @@ impl Button {
         Ok(())
     }
 
-    /// Ensure the child widget tree is mounted.
-    fn ensure_tree(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        if self.box_id.is_some() && self.text_id.is_some() {
-            return Ok(());
-        }
-
-        let box_id = ctx.add_orphan(Box::new().with_glyphs(self.glyphs).with_fill());
-        let center_id = ctx.add_orphan(Center::new());
-        let text_id = ctx.add_orphan(Text::new(self.label.clone()));
-
-        ctx.mount_child_to(center_id, text_id)?;
-        ctx.mount_child_to(box_id, center_id)?;
-        ctx.mount_child_to(ctx.node_id(), box_id)?;
-
-        self.box_id = Some(box_id);
-        self.text_id = Some(text_id);
-        Ok(())
-    }
-
     /// Sync the label text widget to the current label.
     fn sync_label(&self, ctx: &mut dyn Context) -> Result<()> {
-        let Some(text_id) = self.text_id else {
-            return Ok(());
-        };
         let label = self.label.clone();
-        ctx.with_widget(text_id, |text: &mut Text, _ctx| {
+        let _ = ctx.try_with_unique_descendant::<Text, _>(|text, _ctx| {
             text.set_raw(label.clone());
             Ok(())
         })?;
@@ -130,7 +102,10 @@ impl Widget for Button {
     }
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        self.ensure_tree(ctx)
+        let box_id = ctx.add_child(Box::new().with_glyphs(self.glyphs).with_fill())?;
+        let center_id = ctx.add_child_to(box_id, Center::new())?;
+        ctx.add_child_to_keyed(center_id, "label", Text::new(self.label.clone()))?;
+        Ok(())
     }
 
     fn render(&mut self, rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {

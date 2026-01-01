@@ -83,6 +83,16 @@ pub trait Widget: Any + Send + CommandNode {
         Ok(())
     }
 
+    /// Validation hook before a node is removed from the arena.
+    ///
+    /// This hook must be side-effect free or safely repeatable.
+    fn pre_remove(&mut self, _ctx: &mut dyn Context) -> Result<()> {
+        Ok(())
+    }
+
+    /// Called exactly once immediately before the node is removed from the arena.
+    fn on_unmount(&mut self, _ctx: &mut dyn Context) {}
+
     /// Name used for commands and paths.
     fn name(&self) -> NodeName {
         let name = type_name::<Self>();

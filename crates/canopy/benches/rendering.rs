@@ -37,8 +37,8 @@ impl BenchmarkTextWrapper {
             return;
         }
 
-        let text_id = c.add_orphan(Text::new(self.content.clone()));
-        c.set_children(vec![text_id])
+        let text_id = c
+            .add_child(Text::new(self.content.clone()))
             .expect("Failed to attach text");
 
         c.with_layout(&mut |layout| {

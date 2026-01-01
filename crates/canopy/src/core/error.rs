@@ -64,6 +64,37 @@ pub enum Error {
     #[error("invalid: {0}")]
     /// Invalid input error.
     Invalid(String),
+    /// Requested item was not found.
+    #[error("not found: {0}")]
+    NotFound(String),
+    /// Widget type mismatch.
+    #[error("type mismatch: expected {expected}, got {actual}")]
+    TypeMismatch {
+        /// Expected widget type name.
+        expected: String,
+        /// Actual widget type name.
+        actual: String,
+    },
+    /// A query matched multiple nodes.
+    #[error("multiple matches")]
+    MultipleMatches,
+    /// Duplicate child key under the same parent.
+    #[error("duplicate child key: {0}")]
+    DuplicateChildKey(String),
+    /// Child is already attached to a parent.
+    #[error("already attached: {0:?}")]
+    AlreadyAttached(NodeId),
+    /// Attaching would create a parent/child cycle.
+    #[error("would create cycle: parent {parent:?}, child {child:?}")]
+    WouldCreateCycle {
+        /// Parent node involved in the cycle.
+        parent: NodeId,
+        /// Child node involved in the cycle.
+        child: NodeId,
+    },
+    /// Invalid structural operation.
+    #[error("invalid operation: {0}")]
+    InvalidOperation(String),
     #[error("unknown command: {0}")]
     /// Command not found.
     UnknownCommand(String),

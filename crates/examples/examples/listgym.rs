@@ -32,7 +32,7 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let app_id = cnpy.core.add(ListGym::new());
+    let app_id = cnpy.core.create_detached(ListGym::new());
     Root::install_with_inspector(&mut cnpy.core, app_id, args.inspector)?;
     runloop(cnpy)?;
     Ok(())

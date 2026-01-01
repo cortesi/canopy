@@ -62,9 +62,7 @@ impl EditorHost {
             return;
         }
         let editor = Editor::with_config(self.text.clone(), self.config.clone());
-        let editor_id = c.add_orphan(editor);
-        c.set_children(vec![editor_id])
-            .expect("Failed to mount editor");
+        let editor_id = c.add_child(editor).expect("Failed to mount editor");
         c.with_layout(&mut |layout| {
             *layout = Layout::fill();
         })

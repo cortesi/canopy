@@ -15,28 +15,8 @@ use crate::{
 /// using `c.push_effect(background_id, effects::dim(0.5))`. The Modal itself renders
 /// at full brightness since it's a sibling to the dimmed content, not a descendant.
 ///
-/// # Example
-///
-/// ```ignore
-/// // In your app widget with Stack layout
-/// fn show_modal(&mut self, c: &mut dyn Context) -> Result<()> {
-///     let modal_id = c.add(Modal::new());
-///     let frame_id = c.add(frame::Frame::new().with_title("Dialog"));
-///     let content_id = c.add(my_content);
-///
-///     c.mount_child_to(frame_id, content_id)?;
-///     c.mount_child_to(modal_id, frame_id)?;
-///
-///     // Dim the background content
-///     c.push_effect(self.content_id, effects::dim(0.5))?;
-///
-///     // Update children to include modal (Stack layout makes it overlay)
-///     self.modal_id = Some(modal_id);
-///     self.sync_children(c)?;
-///
-///     Ok(())
-/// }
-/// ```
+/// This widget is typically inserted as a sibling to the background content inside
+/// a parent configured with `Stack` layout so it can overlay the existing view.
 pub struct Modal;
 
 #[derive_commands]

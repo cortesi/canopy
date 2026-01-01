@@ -180,26 +180,14 @@ impl FocusGym {
     #[command]
     /// Delete the currently focused block.
     fn delete_focused(&self, c: &mut dyn Context) -> Result<()> {
-        let Some(root_block) = c.only_child() else {
+        let Some(root_block) = c.unique_child::<Block>()? else {
             return Ok(());
         };
-        let Some(focused) = c.focused_leaf(root_block) else {
+        let Some(focused) = c.focused_leaf(root_block.into()) else {
             return Ok(());
         };
-        let Some(parent_id) = c.parent_of(focused) else {
-            return Ok(());
-        };
-        let target = c.suggest_focus_after_remove(root_block, focused);
-
-        let mut children = c.children_of(parent_id);
-        children.retain(|id| *id != focused);
-        c.set_children_of(parent_id, children)?;
-
-        if let Some(target) = target {
-            c.set_focus(target);
-        } else {
-            c.focus_first_global();
-        }
+        c.remove_subtree(focused)?;
+        c.focus_first_in(root_block.into());
         Ok(())
     }
 }

@@ -121,8 +121,8 @@ mod tests {
     #[test]
     fn child_respects_parent_padding() -> Result<()> {
         let mut h = Harness::builder(Root::new()).size(20, 20).build()?;
-        let container = h.canopy.core.add(Container::new());
-        let child = h.canopy.core.add(Huge::new());
+        let container = h.canopy.core.create_detached(Container::new());
+        let child = h.canopy.core.create_detached(Huge::new());
         h.canopy.core.set_children(h.root, vec![container])?;
         h.canopy.core.set_children(container, vec![child])?;
 

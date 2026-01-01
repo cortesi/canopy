@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     setup_bindings(&mut cnpy);
 
     let contents = fs::read_to_string(filename)?;
-    let app_id = cnpy.core.add(Pager::new(&contents));
+    let app_id = cnpy.core.create_detached(Pager::new(&contents));
     Root::install(&mut cnpy.core, app_id)?;
     runloop(cnpy)?;
     Ok(())

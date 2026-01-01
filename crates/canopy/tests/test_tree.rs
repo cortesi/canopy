@@ -49,12 +49,12 @@ mod tests {
     ) -> Result<(NodeId, NodeId, NodeId, NodeId, NodeId, NodeId, NodeId)> {
         let root = core.root_id();
         core.set_widget(root, TreeWidget::new("r"));
-        let ba = core.add(TreeWidget::new("ba"));
-        let bb = core.add(TreeWidget::new("bb"));
-        let ba_la = core.add(TreeWidget::new("ba_la"));
-        let ba_lb = core.add(TreeWidget::new("ba_lb"));
-        let bb_la = core.add(TreeWidget::new("bb_la"));
-        let bb_lb = core.add(TreeWidget::new("bb_lb"));
+        let ba = core.create_detached(TreeWidget::new("ba"));
+        let bb = core.create_detached(TreeWidget::new("bb"));
+        let ba_la = core.create_detached(TreeWidget::new("ba_la"));
+        let ba_lb = core.create_detached(TreeWidget::new("ba_lb"));
+        let bb_la = core.create_detached(TreeWidget::new("bb_la"));
+        let bb_lb = core.create_detached(TreeWidget::new("bb_lb"));
         core.set_children(root, vec![ba, bb])?;
         core.set_children(ba, vec![ba_la, ba_lb])?;
         core.set_children(bb, vec![bb_la, bb_lb])?;

@@ -130,15 +130,21 @@ impl Panes {
     /// Delete the focus node. If a column ends up empty, it is removed.
     pub fn delete_focus(&mut self, c: &mut dyn Context) -> Result<()> {
         if let Some((x, y)) = self.focus_coords(c) {
-            c.focus_next_global();
             self.columns[x].remove(y);
+            let mut focus_idx = x;
             if self.columns[x].is_empty() {
                 self.columns.remove(x);
                 if x < self.column_nodes.len() {
                     self.column_nodes.remove(x);
                 }
+                if focus_idx >= self.columns.len() && !self.columns.is_empty() {
+                    focus_idx = self.columns.len() - 1;
+                }
             }
             self.sync_layout(c)?;
+            if let Some(column_node) = self.column_nodes.get(focus_idx).copied() {
+                focus_column_node(c, column_node);
+            }
         }
         Ok(())
     }
@@ -156,24 +162,30 @@ impl Panes {
     /// Insert a node in a new column.
     pub fn insert_col(&mut self, c: &mut dyn Context, n: NodeId) -> Result<()> {
         let coords = self.focus_coords(c);
-        if let Some((x, _)) = coords {
+        let target_idx = if let Some((x, _)) = coords {
             while self.column_nodes.len() < self.columns.len() {
-                let column_node = c.add(Box::new(PaneColumn));
+                let column_node = c.create_detached(PaneColumn);
                 self.column_nodes.push(column_node);
             }
             self.columns.insert(x + 1, vec![n]);
-            let column_node = c.add(Box::new(PaneColumn));
+            let column_node = c.create_detached(PaneColumn);
             self.column_nodes.insert(x + 1, column_node);
+            x + 1
         } else {
             self.columns.push(vec![n]);
+            self.columns.len() - 1
+        };
+        self.sync_layout(c)?;
+        if let Some(column_node) = self.column_nodes.get(target_idx).copied() {
+            focus_column_node(c, column_node);
         }
-        self.sync_layout(c)
+        Ok(())
     }
 
     /// Sync child layout and grid placement styles.
     fn sync_layout(&mut self, c: &mut dyn Context) -> Result<()> {
         while self.column_nodes.len() < self.columns.len() {
-            let column_node = c.add(Box::new(PaneColumn));
+            let column_node = c.create_detached(PaneColumn);
             self.column_nodes.push(column_node);
         }
 

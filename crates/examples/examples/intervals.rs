@@ -10,7 +10,7 @@ fn main() -> Result<()> {
     Intervals::load(&mut cnpy);
     setup_bindings(&mut cnpy);
 
-    let app_id = cnpy.core.add(Intervals::new());
+    let app_id = cnpy.core.create_detached(Intervals::new());
     Root::install(&mut cnpy.core, app_id)?;
     runloop(cnpy)?;
     Ok(())

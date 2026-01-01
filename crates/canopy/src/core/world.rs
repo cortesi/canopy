@@ -1,4 +1,8 @@
-use std::{cell::Cell, collections::HashMap};
+use std::{
+    any::TypeId,
+    cell::Cell,
+    collections::{HashMap, HashSet},
+};
 
 use slotmap::SlotMap;
 
@@ -42,6 +46,43 @@ pub struct Core {
     pub(crate) pending_style: Option<StyleMap>,
     /// Node that captures mouse events regardless of cursor position.
     pub(crate) mouse_capture: Option<NodeId>,
+    /// Focus recovery hint for the most recent structural removal.
+    focus_hint: Option<FocusRecoveryHint>,
+    /// Active structural transaction for rollback on failure.
+    transaction: Option<MountTransaction>,
+}
+
+#[derive(Default)]
+/// Transaction state used to roll back structural mutations.
+struct MountTransaction {
+    /// Nodes created during the transaction.
+    created: Vec<NodeId>,
+    /// Node structure snapshots captured for rollback.
+    snapshots: HashMap<NodeId, NodeStructureSnapshot>,
+    /// Nodes that were mounted during the transaction.
+    mounted: Vec<NodeId>,
+}
+
+#[derive(Clone)]
+/// Snapshot of a node's structural fields for rollback.
+struct NodeStructureSnapshot {
+    /// Stored parent pointer.
+    parent: Option<NodeId>,
+    /// Stored children list.
+    children: Vec<NodeId>,
+    /// Stored keyed child map.
+    child_keys: HashMap<String, NodeId>,
+}
+
+#[derive(Clone, Copy)]
+/// Preferred focus recovery candidates around a removed subtree.
+struct FocusRecoveryHint {
+    /// Next focusable node after the removed subtree.
+    next: Option<NodeId>,
+    /// Previous focusable node before the removed subtree.
+    prev: Option<NodeId>,
+    /// Focusable ancestor of the removed subtree.
+    ancestor: Option<NodeId>,
 }
 
 impl Core {
@@ -49,12 +90,15 @@ impl Core {
     pub fn new() -> Self {
         let mut nodes = SlotMap::with_key();
         let root_widget = RootContainer;
+        let root_type = TypeId::of::<RootContainer>();
         let layout = root_widget.layout();
         let root_name = root_widget.name();
         let root = nodes.insert(Node {
             widget: Some(Box::new(root_widget)),
+            widget_type: root_type,
             parent: None,
             children: Vec::new(),
+            child_keys: HashMap::new(),
             layout,
             rect: Rect::zero(),
             content_size: Expanse::default(),
@@ -78,6 +122,8 @@ impl Core {
             backend: None,
             pending_style: None,
             mouse_capture: None,
+            focus_hint: None,
+            transaction: None,
         }
     }
 
@@ -101,23 +147,18 @@ impl Core {
         self.nodes.get(node_id)
     }
 
-    /// Add a widget to the arena and return its node ID.
-    pub fn add<W>(&mut self, widget: W) -> NodeId
-    where
-        W: Widget + 'static,
-    {
-        self.add_boxed(Box::new(widget))
-    }
-
     /// Add a boxed widget to the arena and return its node ID.
-    pub fn add_boxed(&mut self, widget: Box<dyn Widget>) -> NodeId {
+    fn add_boxed(&mut self, widget: Box<dyn Widget>) -> NodeId {
         let layout = widget.layout();
         let name = widget.name();
+        let widget_type = widget.as_ref().type_id();
 
-        self.nodes.insert(Node {
+        let node_id = self.nodes.insert(Node {
             widget: Some(widget),
+            widget_type,
             parent: None,
             children: Vec::new(),
+            child_keys: HashMap::new(),
             layout,
             rect: Rect::zero(),
             content_size: Expanse::default(),
@@ -131,7 +172,9 @@ impl Core {
             layout_dirty: Cell::new(false),
             effects: None,
             clear_inherited_effects: false,
-        })
+        });
+        self.record_created(node_id);
+        node_id
     }
 
     /// Update the layout for a node.
@@ -155,10 +198,12 @@ impl Core {
     {
         let name = widget.name();
         let layout = widget.layout();
+        let widget_type = TypeId::of::<W>();
         let node = self.nodes.get_mut(node_id).expect("Unknown node id");
         node.widget = Some(Box::new(widget));
         node.name = name;
         node.layout = layout;
+        node.widget_type = widget_type;
         node.mounted = false;
         node.initialized = false;
     }
@@ -182,8 +227,151 @@ impl Core {
         if let Some(node) = self.nodes.get_mut(node_id) {
             node.mounted = true;
         }
+        if let Some(tx) = self.transaction.as_mut() {
+            tx.mounted.push(node_id);
+        }
 
         Ok(())
+    }
+
+    /// Run a structural mutation transaction, rolling back on error.
+    fn with_transaction<R>(&mut self, f: impl FnOnce(&mut Self) -> Result<R>) -> Result<R> {
+        if self.transaction.is_some() {
+            return f(self);
+        }
+
+        self.transaction = Some(MountTransaction::default());
+        let result = f(self);
+        let transaction = self.transaction.take().expect("transaction missing");
+
+        match result {
+            Ok(value) => Ok(value),
+            Err(err) => {
+                self.rollback_transaction(&transaction);
+                Err(err)
+            }
+        }
+    }
+
+    /// Record a node created during the active transaction.
+    fn record_created(&mut self, node_id: NodeId) {
+        if let Some(tx) = self.transaction.as_mut() {
+            tx.created.push(node_id);
+        }
+    }
+
+    /// Snapshot the structure of a node if it hasn't been recorded yet.
+    fn record_snapshot(&mut self, node_id: NodeId) {
+        let Some(tx) = self.transaction.as_mut() else {
+            return;
+        };
+        if tx.snapshots.contains_key(&node_id) {
+            return;
+        }
+        let Some(node) = self.nodes.get(node_id) else {
+            return;
+        };
+        tx.snapshots.insert(
+            node_id,
+            NodeStructureSnapshot {
+                parent: node.parent,
+                children: node.children.clone(),
+                child_keys: node.child_keys.clone(),
+            },
+        );
+    }
+
+    /// Restore node structure and cleanup after a failed transaction.
+    fn rollback_transaction(&mut self, tx: &MountTransaction) {
+        self.run_unmount_for_created(&tx.created);
+        self.restore_snapshots(&tx.snapshots);
+        self.restore_mount_flags(&tx.mounted, &tx.created);
+        self.remove_created_nodes(&tx.created);
+    }
+
+    /// Restore parent/child relationships from snapshots.
+    fn restore_snapshots(&mut self, snapshots: &HashMap<NodeId, NodeStructureSnapshot>) {
+        for (node_id, snapshot) in snapshots {
+            let Some(node) = self.nodes.get_mut(*node_id) else {
+                continue;
+            };
+            node.parent = snapshot.parent;
+            node.children = snapshot.children.clone();
+            node.child_keys = snapshot.child_keys.clone();
+        }
+    }
+
+    /// Reset mounted flags for nodes mounted during a failed transaction.
+    fn restore_mount_flags(&mut self, mounted: &[NodeId], created: &[NodeId]) {
+        for node_id in mounted {
+            if created.contains(node_id) {
+                continue;
+            }
+            if let Some(node) = self.nodes.get_mut(*node_id) {
+                node.mounted = false;
+            }
+        }
+    }
+
+    /// Remove nodes created during a failed transaction.
+    fn remove_created_nodes(&mut self, created: &[NodeId]) {
+        for node_id in created {
+            self.nodes.remove(*node_id);
+        }
+    }
+
+    /// Run unmount hooks for nodes created during a failed transaction.
+    fn run_unmount_for_created(&mut self, created: &[NodeId]) {
+        if created.is_empty() {
+            return;
+        }
+
+        let created_set: HashSet<NodeId> = created.iter().copied().collect();
+        let mut roots = Vec::new();
+        for node_id in created {
+            let parent = self.nodes.get(*node_id).and_then(|node| node.parent);
+            let parent_created = parent.is_some_and(|id| created_set.contains(&id));
+            if !parent_created {
+                roots.push(*node_id);
+            }
+        }
+
+        for root in roots {
+            let order = self.post_order_filtered(root, &created_set);
+            for node_id in order {
+                if !self.nodes.contains_key(node_id) {
+                    continue;
+                }
+                self.with_widget_mut(node_id, |widget, core| {
+                    let mut ctx = CoreContext::new(core, node_id);
+                    widget.on_unmount(&mut ctx);
+                });
+            }
+        }
+    }
+
+    /// Return a post-order traversal restricted to nodes in `allowed`.
+    fn post_order_filtered(&self, root: NodeId, filter: &HashSet<NodeId>) -> Vec<NodeId> {
+        let mut out = Vec::new();
+        let mut stack = vec![(root, false)];
+        while let Some((node_id, visited)) = stack.pop() {
+            if !filter.contains(&node_id) {
+                continue;
+            }
+            if visited {
+                out.push(node_id);
+                continue;
+            }
+            stack.push((node_id, true));
+            if let Some(node) = self.nodes.get(node_id) {
+                for child in node.children.iter().rev() {
+                    if filter.contains(child) {
+                        stack.push((*child, false));
+                    }
+                }
+            }
+        }
+        out
     }
 
     /// Return true if `ancestor` appears in the parent chain of `node`.
@@ -198,103 +386,340 @@ impl Core {
         false
     }
 
-    /// Mount a child under a parent in the arena tree.
-    pub fn mount_child(&mut self, parent: NodeId, child: NodeId) -> Result<()> {
+    /// Return true if `node_id` is attached to the root.
+    pub fn is_attached_to_root(&self, node_id: NodeId) -> bool {
+        let mut current = Some(node_id);
+        while let Some(id) = current {
+            if id == self.root {
+                return true;
+            }
+            current = self.nodes.get(id).and_then(|n| n.parent);
+        }
+        false
+    }
+
+    /// Create a node in the arena detached from the tree.
+    pub fn create_detached<W>(&mut self, widget: W) -> NodeId
+    where
+        W: Widget + 'static,
+    {
+        self.add_boxed(Box::new(widget))
+    }
+
+    /// Create a node in the arena detached from the tree using a boxed widget.
+    pub fn create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> NodeId {
+        self.add_boxed(widget)
+    }
+
+    /// Add a boxed widget as a child of a specific parent and return the new node ID.
+    pub fn add_child_to_boxed(
+        &mut self,
+        parent: NodeId,
+        widget: Box<dyn Widget>,
+    ) -> Result<NodeId> {
+        self.with_transaction(|core| {
+            let child = core.create_detached_boxed(widget);
+            core.attach(parent, child)?;
+            Ok(child)
+        })
+    }
+
+    /// Add a boxed widget as a keyed child of a specific parent and return the new node ID.
+    pub fn add_child_to_keyed_boxed(
+        &mut self,
+        parent: NodeId,
+        key: &str,
+        widget: Box<dyn Widget>,
+    ) -> Result<NodeId> {
+        self.with_transaction(|core| {
+            if core.child_keyed(parent, key).is_some() {
+                return Err(Error::DuplicateChildKey(key.to_string()));
+            }
+            let child = core.create_detached_boxed(widget);
+            core.attach_keyed(parent, key, child)?;
+            Ok(child)
+        })
+    }
+
+    /// Return the keyed child under a parent.
+    pub fn child_keyed(&self, parent: NodeId, key: &str) -> Option<NodeId> {
+        self.nodes
+            .get(parent)
+            .and_then(|node| node.child_keys.get(key).copied())
+    }
+
+    /// Attach a detached child under a parent.
+    pub fn attach(&mut self, parent: NodeId, child: NodeId) -> Result<()> {
+        self.with_transaction(|core| core.attach_inner(parent, child, None))
+    }
+
+    /// Attach a detached child under a parent with a unique key.
+    pub fn attach_keyed(&mut self, parent: NodeId, key: &str, child: NodeId) -> Result<()> {
+        self.with_transaction(|core| core.attach_inner(parent, child, Some(key)))
+    }
+
+    /// Attach a child under a parent, optionally tracking a keyed association.
+    fn attach_inner(&mut self, parent: NodeId, child: NodeId, key: Option<&str>) -> Result<()> {
+        if !self.nodes.contains_key(parent) {
+            return Err(Error::NodeNotFound(parent));
+        }
+        if !self.nodes.contains_key(child) {
+            return Err(Error::NodeNotFound(child));
+        }
+        let child_parent = self.nodes.get(child).and_then(|node| node.parent);
+        if child_parent.is_some() {
+            return Err(Error::AlreadyAttached(child));
+        }
         if parent == child || self.is_ancestor(child, parent) {
-            return Err(Error::Invalid(format!(
-                "cannot mount node {child:?} under {parent:?} due to cycle"
-            )));
+            return Err(Error::WouldCreateCycle { parent, child });
         }
-
-        if let Some(old_parent) = self.nodes[child].parent {
-            self.detach_child(old_parent, child)?;
-        }
-
-        {
-            let node = self
+        if let Some(key) = key
+            && self
                 .nodes
-                .get_mut(child)
-                .ok_or_else(|| Error::Internal("Missing child node".into()))?;
+                .get(parent)
+                .is_some_and(|node| node.child_keys.contains_key(key))
+        {
+            return Err(Error::DuplicateChildKey(key.to_string()));
+        }
+
+        self.record_snapshot(parent);
+        self.record_snapshot(child);
+
+        if let Some(key) = key
+            && let Some(node) = self.nodes.get_mut(parent)
+        {
+            node.child_keys.insert(key.to_string(), child);
+        }
+
+        if let Some(node) = self.nodes.get_mut(child) {
             node.parent = Some(parent);
         }
-
-        {
-            let node = self
-                .nodes
-                .get_mut(parent)
-                .ok_or_else(|| Error::Internal("Missing parent node".into()))?;
+        if let Some(node) = self.nodes.get_mut(parent) {
             node.children.push(child);
         }
 
-        self.mount_node(child)?;
+        if self.is_attached_to_root(parent) {
+            self.mount_subtree_pre_order(child)?;
+        }
 
+        self.ensure_invariants(None);
         Ok(())
     }
 
-    /// Remove a child from its parent in the arena tree.
-    pub fn detach_child(&mut self, parent: NodeId, child: NodeId) -> Result<()> {
-        {
-            let node = self
-                .nodes
-                .get_mut(parent)
-                .ok_or_else(|| Error::Internal("Missing parent node".into()))?;
-            node.children.retain(|id| *id != child);
+    /// Detach a child from its parent if attached.
+    pub fn detach(&mut self, child: NodeId) -> Result<()> {
+        if !self.nodes.contains_key(child) {
+            return Err(Error::NodeNotFound(child));
         }
 
-        {
-            let node = self
-                .nodes
-                .get_mut(child)
-                .ok_or_else(|| Error::Internal("Missing child node".into()))?;
-            node.parent = None;
-        }
+        let parent = self.nodes.get(child).and_then(|node| node.parent);
+        let hint = parent
+            .filter(|_| self.is_attached_to_root(child))
+            .map(|_| self.focus_recovery_hint(child));
 
+        self.with_transaction(|core| {
+            let Some(parent) = parent else {
+                return Ok(());
+            };
+            core.record_snapshot(parent);
+            core.record_snapshot(child);
+            if let Some(node) = core.nodes.get_mut(parent) {
+                node.children.retain(|id| *id != child);
+                node.child_keys.retain(|_, id| *id != child);
+            }
+            if let Some(node) = core.nodes.get_mut(child) {
+                node.parent = None;
+            }
+            Ok(())
+        })?;
+
+        self.focus_hint = hint;
+        self.ensure_invariants(Some(child));
         Ok(())
+    }
+
+    /// Mount unmounted nodes in a subtree using pre-order traversal.
+    fn mount_subtree_pre_order(&mut self, root: NodeId) -> Result<()> {
+        let mut stack = vec![root];
+        while let Some(node_id) = stack.pop() {
+            if !self.nodes.contains_key(node_id) {
+                continue;
+            }
+            let should_mount = self.nodes.get(node_id).is_some_and(|node| !node.mounted);
+            if should_mount {
+                self.mount_node(node_id)?;
+            }
+            let children = self
+                .nodes
+                .get(node_id)
+                .map(|node| node.children.clone())
+                .unwrap_or_default();
+            for child in children.into_iter().rev() {
+                stack.push(child);
+            }
+        }
+        Ok(())
+    }
+
+    /// Retain only keyed mappings that still point to direct children.
+    fn retain_child_keys(&mut self, parent: NodeId) {
+        let Some(node) = self.nodes.get_mut(parent) else {
+            return;
+        };
+        let keep: HashSet<NodeId> = node.children.iter().copied().collect();
+        node.child_keys.retain(|_, id| keep.contains(id));
     }
 
     /// Replace the children list for a parent in the arena tree.
     pub fn set_children(&mut self, parent: NodeId, children: Vec<NodeId>) -> Result<()> {
+        if !self.nodes.contains_key(parent) {
+            return Err(Error::NodeNotFound(parent));
+        }
+
         for child in &children {
             if *child == parent || self.is_ancestor(*child, parent) {
-                return Err(Error::Invalid(format!(
-                    "cannot set children on {parent:?} with {child:?} due to cycle"
-                )));
+                return Err(Error::WouldCreateCycle {
+                    parent,
+                    child: *child,
+                });
             }
             if !self.nodes.contains_key(*child) {
-                return Err(Error::Internal(format!("Missing child node {child:?}")));
+                return Err(Error::NodeNotFound(*child));
             }
         }
+
+        let parent_attached = self.is_attached_to_root(parent);
+        self.record_snapshot(parent);
 
         for child in &children {
             let old_parent = self.nodes.get(*child).and_then(|n| n.parent);
             if let Some(old_parent) = old_parent
                 && old_parent != parent
             {
-                self.detach_child(old_parent, *child)?;
+                self.record_snapshot(old_parent);
+                self.record_snapshot(*child);
+                if let Some(node) = self.nodes.get_mut(old_parent) {
+                    node.children.retain(|id| *id != *child);
+                    node.child_keys.retain(|_, id| *id != *child);
+                }
+                if let Some(node) = self.nodes.get_mut(*child) {
+                    node.parent = None;
+                }
             }
         }
 
         let old_children = self.nodes[parent].children.clone();
         for child in old_children {
+            self.record_snapshot(child);
             if let Some(node) = self.nodes.get_mut(child) {
                 node.parent = None;
             }
         }
 
         for child in &children {
+            self.record_snapshot(*child);
             if let Some(node) = self.nodes.get_mut(*child) {
                 node.parent = Some(parent);
             }
         }
 
         self.nodes[parent].children = children;
+        self.retain_child_keys(parent);
 
         let new_children = self.nodes[parent].children.clone();
-        for child in new_children {
-            self.mount_node(child)?;
+        if parent_attached {
+            for child in new_children {
+                self.mount_subtree_pre_order(child)?;
+            }
         }
 
+        self.ensure_invariants(None);
         Ok(())
+    }
+
+    /// Remove a node and all descendants from the arena.
+    pub fn remove_subtree(&mut self, root_id: NodeId) -> Result<()> {
+        if root_id == self.root {
+            return Err(Error::InvalidOperation("cannot remove root".into()));
+        }
+        if !self.nodes.contains_key(root_id) {
+            return Err(Error::NodeNotFound(root_id));
+        }
+
+        let hint = if self.is_attached_to_root(root_id) {
+            Some(self.focus_recovery_hint(root_id))
+        } else {
+            None
+        };
+
+        let pre_order = self.subtree_pre_order(root_id);
+        for node_id in &pre_order {
+            let result = self.with_widget_mut(*node_id, |widget, core| {
+                let mut ctx = CoreContext::new(core, *node_id);
+                widget.pre_remove(&mut ctx)
+            });
+            result?
+        }
+
+        let post_order = self.subtree_post_order(root_id);
+        for node_id in &post_order {
+            self.with_widget_mut(*node_id, |widget, core| {
+                let mut ctx = CoreContext::new(core, *node_id);
+                widget.on_unmount(&mut ctx);
+            });
+        }
+
+        let parent = self.nodes.get(root_id).and_then(|node| node.parent);
+        if let Some(parent) = parent
+            && let Some(node) = self.nodes.get_mut(parent)
+        {
+            node.children.retain(|id| *id != root_id);
+            node.child_keys.retain(|_, id| *id != root_id);
+        }
+
+        for node_id in &post_order {
+            self.nodes.remove(*node_id);
+        }
+
+        self.focus_hint = hint;
+        self.ensure_invariants(Some(root_id));
+        Ok(())
+    }
+
+    /// Collect a subtree in pre-order, including the root.
+    fn subtree_pre_order(&self, root: NodeId) -> Vec<NodeId> {
+        let mut out = Vec::new();
+        let mut stack = vec![root];
+        while let Some(node_id) = stack.pop() {
+            let Some(node) = self.nodes.get(node_id) else {
+                continue;
+            };
+            out.push(node_id);
+            for child in node.children.iter().rev() {
+                stack.push(*child);
+            }
+        }
+        out
+    }
+
+    /// Collect a subtree in post-order, including the root.
+    fn subtree_post_order(&self, root: NodeId) -> Vec<NodeId> {
+        let mut out = Vec::new();
+        let mut stack = vec![(root, false)];
+        while let Some((node_id, visited)) = stack.pop() {
+            let Some(node) = self.nodes.get(node_id) else {
+                continue;
+            };
+            if visited {
+                out.push(node_id);
+                continue;
+            }
+            stack.push((node_id, true));
+            for child in node.children.iter().rev() {
+                stack.push((*child, false));
+            }
+        }
+        out
     }
 
     /// Set a node's hidden flag. Returns `true` if visibility changed.
@@ -305,7 +730,7 @@ impl Core {
         let changed = node.hidden != hidden;
         node.hidden = hidden;
         if changed {
-            self.ensure_focus_visible();
+            self.ensure_invariants(None);
         }
         changed
     }
@@ -334,7 +759,7 @@ impl Core {
         );
         pass.update_views(root, screen_view);
 
-        self.ensure_focus_visible();
+        self.ensure_focus_valid(None);
 
         Ok(())
     }
@@ -431,89 +856,79 @@ impl Core {
         let mut focus_seen = false;
         let mut stack = vec![root];
         while let Some(id) = stack.pop() {
-            let (hidden, children, view_zero) = {
-                let node = &self.nodes[id];
-                (node.hidden, node.children.clone(), node.view.is_zero())
+            let Some(node) = self.nodes.get(id) else {
+                continue;
             };
-            if hidden {
+            if node.hidden {
                 continue;
             }
             if focus_seen {
-                if self.node_accepts_focus(id) && !view_zero {
+                if self.is_focus_candidate(id) {
                     self.set_focus(id);
                     return;
                 }
             } else if self.is_focused(id) {
                 focus_seen = true;
             }
-            for child in children.iter().rev() {
+            for child in node.children.iter().rev() {
                 stack.push(*child);
             }
         }
-        self.focus_first(root);
+        if let Some(target) = self.first_focusable(root) {
+            self.set_focus(target);
+        } else {
+            self.focus = None;
+        }
     }
 
     /// Focus the previous node in the pre-order traversal of `root`.
     pub fn focus_prev(&mut self, root: NodeId) {
-        let mut prev_visible = None;
-        let mut prev_any = None;
+        let mut prev = None;
         let mut stack = vec![root];
         while let Some(id) = stack.pop() {
-            let (hidden, children, view_zero) = {
-                let node = &self.nodes[id];
-                (node.hidden, node.children.clone(), node.view.is_zero())
+            let Some(node) = self.nodes.get(id) else {
+                continue;
             };
-            if hidden {
+            if node.hidden {
                 continue;
             }
             if self.is_focused(id)
-                && let Some(target) = prev_visible
+                && let Some(target) = prev
             {
                 self.set_focus(target);
                 return;
             }
-            if self.node_accepts_focus(id) {
-                prev_any = Some(id);
-                if !view_zero {
-                    prev_visible = Some(id);
-                }
+            if self.is_focus_candidate(id) {
+                prev = Some(id);
             }
-            for child in children.iter().rev() {
+            for child in node.children.iter().rev() {
                 stack.push(*child);
             }
         }
-        if let Some(last) = prev_visible.or(prev_any) {
+        if let Some(last) = prev {
             self.set_focus(last);
+        } else {
+            self.focus = None;
         }
     }
 
     /// Move focus in a specified direction within the subtree at root.
     pub fn focus_dir(&mut self, root: NodeId, dir: Direction) {
         let mut focusables = Vec::new();
-        let mut fallback = Vec::new();
         let mut stack = vec![root];
         while let Some(id) = stack.pop() {
-            let (hidden, children, view_zero) = {
-                let node = &self.nodes[id];
-                (node.hidden, node.children.clone(), node.view.is_zero())
+            let Some(node) = self.nodes.get(id) else {
+                continue;
             };
-            if hidden {
+            if node.hidden {
                 continue;
             }
-            if self.node_accepts_focus(id) {
-                if view_zero {
-                    fallback.push(id);
-                } else {
-                    focusables.push(id);
-                }
+            if self.is_focus_candidate(id) {
+                focusables.push(id);
             }
-            for child in children.iter().rev() {
+            for child in node.children.iter().rev() {
                 stack.push(*child);
             }
-        }
-
-        if focusables.is_empty() {
-            focusables = fallback;
         }
 
         let current = match self.focus {
@@ -606,50 +1021,230 @@ impl Core {
             })
     }
 
-    /// Find the first focusable node, preferring nodes with non-zero view size.
-    fn first_focusable(&self, root: NodeId) -> Option<NodeId> {
-        let mut fallback = None;
+    /// Find the first focusable node in pre-order.
+    pub(crate) fn first_focusable(&self, root: NodeId) -> Option<NodeId> {
+        self.first_focusable_with(root, true)
+            .or_else(|| self.first_focusable_with(root, false))
+    }
+
+    /// Find the first focusable node in pre-order with optional view requirements.
+    fn first_focusable_with(&self, root: NodeId, require_view: bool) -> Option<NodeId> {
         let mut stack = vec![root];
         while let Some(id) = stack.pop() {
-            let (hidden, children, view_zero) = match self.nodes.get(id) {
-                Some(node) => (node.hidden, node.children.clone(), node.view.is_zero()),
-                None => continue,
-            };
-            if hidden {
+            let Some(node) = self.nodes.get(id) else {
                 continue;
+            };
+            if self.is_focus_candidate_with(id, require_view) {
+                return Some(id);
             }
-            if self.node_accepts_focus(id) {
-                if !view_zero {
-                    return Some(id);
-                }
-                if fallback.is_none() {
-                    fallback = Some(id);
-                }
-            }
-            for child in children.iter().rev() {
+            for child in node.children.iter().rev() {
                 stack.push(*child);
             }
         }
-        fallback
+        None
     }
 
-    /// Ensure focus is not parked on a hidden or zero-sized node.
-    fn ensure_focus_visible(&mut self) {
+    /// Return the next focusable node after the subtree rooted at `removed_root`.
+    pub(crate) fn next_focusable_after_subtree(&self, removed_root: NodeId) -> Option<NodeId> {
+        self.next_focusable_after_subtree_with(removed_root, true)
+            .or_else(|| self.next_focusable_after_subtree_with(removed_root, false))
+    }
+
+    /// Return the next focusable node after a subtree with optional view requirements.
+    fn next_focusable_after_subtree_with(
+        &self,
+        removed_root: NodeId,
+        require_view: bool,
+    ) -> Option<NodeId> {
+        if !self.is_attached_to_root(removed_root) {
+            return None;
+        }
+        let mut stack = vec![self.root];
+        let mut past_removed = false;
+        while let Some(id) = stack.pop() {
+            if id == removed_root {
+                past_removed = true;
+                continue;
+            }
+            if past_removed && self.is_focus_candidate_with(id, require_view) {
+                return Some(id);
+            }
+            if let Some(node) = self.nodes.get(id) {
+                for child in node.children.iter().rev() {
+                    stack.push(*child);
+                }
+            }
+        }
+        None
+    }
+
+    /// Return the previous focusable node before the subtree rooted at `removed_root`.
+    pub(crate) fn prev_focusable_before_subtree(&self, removed_root: NodeId) -> Option<NodeId> {
+        self.prev_focusable_before_subtree_with(removed_root, true)
+            .or_else(|| self.prev_focusable_before_subtree_with(removed_root, false))
+    }
+
+    /// Return the previous focusable node before a subtree with optional view requirements.
+    fn prev_focusable_before_subtree_with(
+        &self,
+        removed_root: NodeId,
+        require_view: bool,
+    ) -> Option<NodeId> {
+        if !self.is_attached_to_root(removed_root) {
+            return None;
+        }
+        let mut prev = None;
+        let mut stack = vec![self.root];
+        while let Some(id) = stack.pop() {
+            if id == removed_root {
+                break;
+            }
+            if self.is_focus_candidate_with(id, require_view) {
+                prev = Some(id);
+            }
+            if let Some(node) = self.nodes.get(id) {
+                for child in node.children.iter().rev() {
+                    stack.push(*child);
+                }
+            }
+        }
+        prev
+    }
+
+    /// Return the nearest focusable ancestor of `start`.
+    pub(crate) fn nearest_focusable_ancestor(&self, start: NodeId) -> Option<NodeId> {
+        self.nearest_focusable_ancestor_with(start, true)
+            .or_else(|| self.nearest_focusable_ancestor_with(start, false))
+    }
+
+    /// Return the nearest focusable ancestor with optional view requirements.
+    fn nearest_focusable_ancestor_with(&self, start: NodeId, require_view: bool) -> Option<NodeId> {
+        let mut current = self.nodes.get(start).and_then(|node| node.parent);
+        while let Some(id) = current {
+            if self.is_focus_candidate_with(id, require_view) {
+                return Some(id);
+            }
+            current = self.nodes.get(id).and_then(|node| node.parent);
+        }
+        None
+    }
+
+    /// Ensure the focus invariant is satisfied.
+    pub fn ensure_focus_valid(&mut self, removed_root: Option<NodeId>) {
         let Some(focus) = self.focus else {
+            self.focus_hint = None;
             return;
         };
 
-        let focus_visible = self
-            .nodes
-            .get(focus)
-            .is_some_and(|node| !node.hidden && !node.view.is_zero());
-
-        if focus_visible {
+        if self.is_focus_target(focus) {
+            self.focus_hint = None;
             return;
         }
 
-        if let Some(target) = self.first_focusable(self.root) {
+        let hint = self.focus_hint.take();
+        if let Some(removed_root) = removed_root {
+            let candidate = if let Some(hint) = hint {
+                hint.next.or(hint.prev).or(hint.ancestor)
+            } else {
+                self.next_focusable_after_subtree(removed_root)
+                    .or_else(|| self.prev_focusable_before_subtree(removed_root))
+                    .or_else(|| self.nearest_focusable_ancestor(removed_root))
+            };
+            if let Some(target) = candidate {
+                self.set_focus(target);
+            } else {
+                self.focus = None;
+            }
+            return;
+        }
+
+        let candidate = self
+            .next_focusable_after_node(focus)
+            .or_else(|| self.first_focusable(self.root));
+        if let Some(target) = candidate {
             self.set_focus(target);
+        } else {
+            self.focus = None;
+        }
+    }
+
+    /// Ensure mouse capture only points at attached nodes.
+    pub fn ensure_mouse_capture_valid(&mut self) {
+        if let Some(capture) = self.mouse_capture
+            && (!self.nodes.contains_key(capture) || !self.is_attached_to_root(capture))
+        {
+            self.mouse_capture = None;
+        }
+    }
+
+    /// Ensure focus and mouse capture invariants after structural changes.
+    pub fn ensure_invariants(&mut self, removed_root: Option<NodeId>) {
+        self.ensure_focus_valid(removed_root);
+        self.ensure_mouse_capture_valid();
+    }
+
+    /// Return true if a node is a valid focus candidate.
+    fn is_focus_candidate(&self, node_id: NodeId) -> bool {
+        self.is_focus_candidate_with(node_id, true)
+    }
+
+    /// Return true if a node is a valid focus candidate with optional view requirements.
+    fn is_focus_candidate_with(&self, node_id: NodeId, require_view: bool) -> bool {
+        let Some(node) = self.nodes.get(node_id) else {
+            return false;
+        };
+        if node.hidden {
+            return false;
+        }
+        if require_view && node.view.is_zero() {
+            return false;
+        }
+        self.node_accepts_focus(node_id)
+    }
+
+    /// Return true if a node satisfies the focus invariant.
+    fn is_focus_target(&self, node_id: NodeId) -> bool {
+        self.is_attached_to_root(node_id) && self.is_focus_candidate(node_id)
+    }
+
+    /// Return the next focusable node after a node in pre-order.
+    fn next_focusable_after_node(&self, node_id: NodeId) -> Option<NodeId> {
+        self.next_focusable_after_node_with(node_id, true)
+            .or_else(|| self.next_focusable_after_node_with(node_id, false))
+    }
+
+    /// Return the next focusable node after a node with optional view requirements.
+    fn next_focusable_after_node_with(
+        &self,
+        node_id: NodeId,
+        require_view: bool,
+    ) -> Option<NodeId> {
+        if !self.is_attached_to_root(node_id) {
+            return None;
+        }
+        let mut stack = vec![self.root];
+        let mut seen = false;
+        while let Some(id) = stack.pop() {
+            if id == node_id {
+                seen = true;
+            } else if seen && self.is_focus_candidate_with(id, require_view) {
+                return Some(id);
+            }
+            if let Some(node) = self.nodes.get(id) {
+                for child in node.children.iter().rev() {
+                    stack.push(*child);
+                }
+            }
+        }
+        None
+    }
+
+    /// Precompute focus recovery candidates for a removed subtree.
+    fn focus_recovery_hint(&self, removed_root: NodeId) -> FocusRecoveryHint {
+        FocusRecoveryHint {
+            next: self.next_focusable_after_subtree(removed_root),
+            prev: self.prev_focusable_before_subtree(removed_root),
+            ancestor: self.nearest_focusable_ancestor(removed_root),
         }
     }
 
@@ -1723,6 +2318,56 @@ mod tests {
         }
     }
 
+    struct FocusableWidget;
+
+    impl CommandNode for FocusableWidget {
+        fn commands() -> Vec<CommandSpec>
+        where
+            Self: Sized,
+        {
+            Vec::new()
+        }
+
+        fn dispatch(
+            &mut self,
+            _c: &mut dyn Context,
+            _cmd: &CommandInvocation,
+        ) -> Result<ReturnValue> {
+            Ok(ReturnValue::Void)
+        }
+    }
+
+    impl Widget for FocusableWidget {
+        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+            true
+        }
+    }
+
+    struct MountFailWidget;
+
+    impl CommandNode for MountFailWidget {
+        fn commands() -> Vec<CommandSpec>
+        where
+            Self: Sized,
+        {
+            Vec::new()
+        }
+
+        fn dispatch(
+            &mut self,
+            _c: &mut dyn Context,
+            _cmd: &CommandInvocation,
+        ) -> Result<ReturnValue> {
+            Ok(ReturnValue::Void)
+        }
+    }
+
+    impl Widget for MountFailWidget {
+        fn on_mount(&mut self, _ctx: &mut dyn Context) -> Result<()> {
+            Err(Error::Invalid("mount failed".into()))
+        }
+    }
+
     fn attach_root_child(core: &mut Core, child: NodeId) -> Result<()> {
         core.set_children(core.root, vec![child])
     }
@@ -2504,21 +3149,153 @@ mod tests {
         core.set_children(parent, vec![child])?;
 
         let err = core.set_children(child, vec![parent]).unwrap_err();
-        assert!(matches!(err, Error::Invalid(_)));
+        assert!(matches!(err, Error::WouldCreateCycle { .. }));
         Ok(())
     }
 
     #[test]
-    fn mount_child_rejects_cycles() -> Result<()> {
+    fn attach_rejects_cycles() -> Result<()> {
         let mut core = Core::new();
         let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-        let parent = core.add_boxed(Box::new(parent_widget));
+        let parent = core.create_detached(parent_widget);
         let (child_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-        let child = core.add_boxed(Box::new(child_widget));
+        let child = core.create_detached(child_widget);
 
-        core.mount_child(parent, child)?;
-        let err = core.mount_child(child, parent).unwrap_err();
+        core.attach(parent, child)?;
+        let err = core.attach(child, parent).unwrap_err();
+        assert!(matches!(err, Error::WouldCreateCycle { .. }));
+        Ok(())
+    }
+
+    #[test]
+    fn remove_subtree_recovers_focus_to_next() -> Result<()> {
+        let mut core = Core::new();
+        let first = core.create_detached(FocusableWidget);
+        let second = core.create_detached(FocusableWidget);
+        core.set_children(core.root, vec![first, second])?;
+        core.with_layout_of(core.root, |layout| {
+            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
+        })?;
+        core.with_layout_of(first, |layout| {
+            *layout = Layout::fill();
+        })?;
+        core.with_layout_of(second, |layout| {
+            *layout = Layout::fill();
+        })?;
+        core.update_layout(Expanse::new(10, 10))?;
+
+        core.set_focus(first);
+        core.remove_subtree(first)?;
+
+        assert_eq!(core.focus, Some(second));
+        Ok(())
+    }
+
+    #[test]
+    fn remove_subtree_recovers_focus_to_prev() -> Result<()> {
+        let mut core = Core::new();
+        let first = core.create_detached(FocusableWidget);
+        let second = core.create_detached(FocusableWidget);
+        core.set_children(core.root, vec![first, second])?;
+        core.with_layout_of(core.root, |layout| {
+            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
+        })?;
+        core.with_layout_of(first, |layout| {
+            *layout = Layout::fill();
+        })?;
+        core.with_layout_of(second, |layout| {
+            *layout = Layout::fill();
+        })?;
+        core.update_layout(Expanse::new(10, 10))?;
+
+        core.set_focus(second);
+        core.remove_subtree(second)?;
+
+        assert_eq!(core.focus, Some(first));
+        Ok(())
+    }
+
+    #[test]
+    fn detach_clears_mouse_capture() -> Result<()> {
+        let mut core = Core::new();
+        let child = core.create_detached(FocusableWidget);
+        core.attach(core.root, child)?;
+        core.mouse_capture = Some(child);
+
+        core.detach(child)?;
+
+        assert!(core.mouse_capture.is_none());
+        assert!(core.nodes.get(child).is_some());
+        assert!(core.nodes[child].parent.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn remove_subtree_clears_mouse_capture() -> Result<()> {
+        let mut core = Core::new();
+        let child = core.create_detached(FocusableWidget);
+        core.attach(core.root, child)?;
+        core.mouse_capture = Some(child);
+
+        core.remove_subtree(child)?;
+
+        assert!(core.mouse_capture.is_none());
+        assert!(core.nodes.get(child).is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn keyed_children_require_unique_keys() -> Result<()> {
+        let mut core = Core::new();
+        let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+        let parent = core.create_detached(parent_widget);
+        core.attach(core.root, parent)?;
+        let (child_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+        let child = core.add_child_to_keyed_boxed(parent, "slot", Box::new(child_widget))?;
+        let node_count = core.nodes.len();
+
+        let (other_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+        let err = core
+            .add_child_to_keyed_boxed(parent, "slot", Box::new(other_widget))
+            .unwrap_err();
+
+        assert!(matches!(err, Error::DuplicateChildKey(_)));
+        assert_eq!(core.nodes.len(), node_count);
+        assert_eq!(core.child_keyed(parent, "slot"), Some(child));
+        Ok(())
+    }
+
+    #[test]
+    fn detach_clears_keyed_mapping() -> Result<()> {
+        let mut core = Core::new();
+        let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+        let parent = core.create_detached(parent_widget);
+        core.attach(core.root, parent)?;
+        let (child_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+        let child = core.add_child_to_keyed_boxed(parent, "slot", Box::new(child_widget))?;
+
+        core.detach(child)?;
+
+        assert!(core.child_keyed(parent, "slot").is_none());
+        assert!(core.nodes[child].parent.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn add_child_rolls_back_on_mount_failure() -> Result<()> {
+        let mut core = Core::new();
+        let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+        let parent = core.create_detached(parent_widget);
+        core.attach(core.root, parent)?;
+        let node_count = core.nodes.len();
+
+        let err = core
+            .add_child_to_boxed(parent, Box::new(MountFailWidget))
+            .unwrap_err();
+
         assert!(matches!(err, Error::Invalid(_)));
+        assert_eq!(core.nodes.len(), node_count);
+        assert!(core.nodes[parent].children.is_empty());
         Ok(())
     }
 }

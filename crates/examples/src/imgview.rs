@@ -33,7 +33,7 @@ pub fn create_app(image_path: &Path) -> Result<Canopy> {
     setup_bindings(&mut cnpy);
 
     let view = ImageView::from_path(image_path)?;
-    let app_id = cnpy.core.add(view);
+    let app_id = cnpy.core.create_detached(view);
     Root::install(&mut cnpy.core, app_id)?;
     Ok(cnpy)
 }

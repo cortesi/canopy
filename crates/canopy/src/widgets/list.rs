@@ -140,8 +140,7 @@ impl<W: Selectable> List<W> {
     where
         W: 'static,
     {
-        let id = ctx.add_orphan_typed(widget);
-        ctx.mount_child(id.into())?;
+        let id = TypedId::new(ctx.add_child(widget)?);
         self.items.push(id);
 
         // Auto-select and focus if this is the first item
@@ -160,8 +159,7 @@ impl<W: Selectable> List<W> {
     {
         let clamped = index.min(self.items.len());
         let was_empty = self.selected.is_none();
-        let id = ctx.add_orphan_typed(widget);
-        ctx.mount_child(id.into())?;
+        let id = TypedId::new(ctx.add_child(widget)?);
         self.items.insert(clamped, id);
 
         // Adjust selection if inserting before current selection
@@ -186,49 +184,46 @@ impl<W: Selectable> List<W> {
     }
 
     /// Remove the item at the specified index.
-    pub fn remove(&mut self, ctx: &mut dyn Context, index: usize) -> Result<Option<TypedId<W>>> {
+    pub fn remove(&mut self, ctx: &mut dyn Context, index: usize) -> Result<bool> {
+        if index >= self.items.len() {
+            return Ok(false);
+        }
+
+        let id = self.items.remove(index);
+        ctx.remove_subtree(id.into())?;
+        self.repair_selection_after_remove(ctx, index);
+        Ok(true)
+    }
+
+    /// Detach the item at the specified index.
+    pub fn take(&mut self, ctx: &mut dyn Context, index: usize) -> Result<Option<TypedId<W>>> {
         if index >= self.items.len() {
             return Ok(None);
         }
 
         let id = self.items.remove(index);
-        ctx.detach_child(id.into())?;
-
-        // Adjust selection
-        if let Some(sel) = self.selected {
-            if index < sel {
-                self.selected = Some(sel - 1);
-            } else if index == sel {
-                // The selected item was removed, select the next valid item
-                let new_sel = if self.items.is_empty() {
-                    None
-                } else {
-                    Some(sel.min(self.items.len() - 1))
-                };
-                self.update_selection(ctx, new_sel);
-            }
-        }
-
+        ctx.detach(id.into())?;
+        self.repair_selection_after_remove(ctx, index);
         Ok(Some(id))
     }
 
     /// Clear all items from the list.
     #[command(ignore_result)]
-    pub fn clear(&mut self, ctx: &mut dyn Context) -> Result<Vec<TypedId<W>>> {
+    pub fn clear(&mut self, ctx: &mut dyn Context) -> Result<()> {
         let ids: Vec<_> = self.items.drain(..).collect();
-        for id in &ids {
-            ctx.detach_child((*id).into())?;
+        for id in ids {
+            ctx.remove_subtree(id.into())?;
         }
         self.selected = None;
-        Ok(ids)
+        Ok(())
     }
 
     /// Delete the currently selected item.
     #[command(ignore_result)]
-    pub fn delete_selected(&mut self, ctx: &mut dyn Context) -> Result<Option<TypedId<W>>> {
+    pub fn delete_selected(&mut self, ctx: &mut dyn Context) -> Result<bool> {
         match self.selected {
             Some(sel) => self.remove(ctx, sel),
-            None => Ok(None),
+            None => Ok(false),
         }
     }
 
@@ -265,6 +260,27 @@ impl<W: Selectable> List<W> {
         }
 
         self.selected = new_selected;
+    }
+
+    /// Repair selection and focus after removing an item.
+    fn repair_selection_after_remove(&mut self, ctx: &mut dyn Context, index: usize) {
+        if let Some(sel) = self.selected {
+            if index < sel {
+                self.selected = Some(sel - 1);
+                return;
+            }
+            if index == sel {
+                let new_sel = if self.items.is_empty() {
+                    None
+                } else {
+                    Some(sel.min(self.items.len() - 1))
+                };
+                self.update_selection(ctx, new_sel);
+                if new_sel.is_some() {
+                    self.focus_selected(ctx);
+                }
+            }
+        }
     }
 
     /// Move selection to the first item.

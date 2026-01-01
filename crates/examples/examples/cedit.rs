@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let contents = fs::read_to_string(&filename)?;
     let extension = file_extension(&filename);
-    let app_id = cnpy.core.add(Ed::new(&contents, &extension));
+    let app_id = cnpy.core.create_detached(Ed::new(&contents, &extension));
     Root::install_with_inspector(&mut cnpy.core, app_id, false)?;
     runloop(cnpy)?;
     Ok(())

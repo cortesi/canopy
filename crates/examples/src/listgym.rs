@@ -2,10 +2,12 @@ use canopy::{
     Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
     error::{Error, Result},
     event::{key, mouse},
+    layout::{CanvasContext, MeasureConstraints, Measurement, Size},
     render::Render,
+    state::NodeName,
     style::solarized,
     widget::Widget,
-    widgets::{CanvasWidth, List, Panes, Root, Text, VStack, frame},
+    widgets::{CanvasWidth, List, Panes, Root, Text, VStack, frame, list::Selectable},
 };
 use rand::Rng;
 
@@ -15,16 +17,60 @@ const TEXT: &str = "What a struggle must have gone on during long centuries betw
 /// Alternating color names for list items.
 const COLORS: &[&str] = &["red", "blue"];
 
+/// Focusable list entry that renders text content.
+pub struct ListEntry {
+    /// Text content for the entry.
+    text: Text,
+}
+
+#[derive_commands]
+impl ListEntry {
+    /// Construct a new list entry from a text widget.
+    pub fn new(text: Text) -> Self {
+        Self { text }
+    }
+}
+
+impl Selectable for ListEntry {
+    fn set_selected(&mut self, selected: bool) {
+        self.text.set_selected(selected);
+    }
+}
+
+impl Widget for ListEntry {
+    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        self.text.render(r, ctx)
+    }
+
+    fn measure(&self, c: MeasureConstraints) -> Measurement {
+        self.text.measure(c)
+    }
+
+    fn canvas(&self, view: Size<u32>, ctx: &CanvasContext<'_>) -> Size<u32> {
+        self.text.canvas(view, ctx)
+    }
+
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        true
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("list_entry")
+    }
+}
+
 /// Build a text item for the list.
-fn list_item(index: usize) -> Text {
+fn list_item(index: usize) -> ListEntry {
     let mut rng = rand::rng();
     let wrap_width = rng.random_range(10..150);
     let color = COLORS[index % COLORS.len()];
 
-    Text::new(TEXT)
+    let text = Text::new(TEXT)
         .with_wrap_width(wrap_width)
         .with_canvas_width(CanvasWidth::Intrinsic)
-        .with_style(format!("{color}/text"))
+        .with_style(format!("{color}/text"));
+
+    ListEntry::new(text)
 }
 
 /// Status bar widget for the list gym demo.
@@ -93,11 +139,13 @@ impl ListGym {
 
     /// Create a framed list column and return the frame node id.
     fn create_column(c: &mut dyn Context) -> Result<NodeId> {
-        let list_id =
-            c.add_orphan(List::<Text>::new().with_selection_indicator("list/selected", "█ ", true));
-        let frame_id = frame::Frame::wrap(c, list_id)?;
+        let frame_id = c.create_detached(frame::Frame::new());
+        let list_id = c.add_child_to(
+            frame_id,
+            List::<ListEntry>::new().with_selection_indicator("list/selected", "█ ", true),
+        )?;
         // Add initial items
-        c.with_widget(list_id, |list: &mut List<Text>, ctx| {
+        c.with_widget(list_id, |list: &mut List<ListEntry>, ctx| {
             for i in 0..10 {
                 list.append(ctx, list_item(i))?;
             }
@@ -109,10 +157,10 @@ impl ListGym {
     /// Execute a closure with mutable access to the list widget.
     fn with_list<F, R>(&self, c: &mut dyn Context, mut f: F) -> Result<R>
     where
-        F: FnMut(&mut List<Text>, &mut dyn Context) -> Result<R>,
+        F: FnMut(&mut List<ListEntry>, &mut dyn Context) -> Result<R>,
     {
         let list_id = self.list_id(c)?;
-        c.with_widget(list_id, |list: &mut List<Text>, ctx| f(list, ctx))
+        c.with_widget(list_id, |list: &mut List<ListEntry>, ctx| f(list, ctx))
     }
 
     /// Find the list to target for list commands.
@@ -209,8 +257,8 @@ impl Widget for ListGym {
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        let panes_id = c.add_orphan(Panes::new());
-        let status_id = c.add_orphan(StatusBar::new(panes_id));
+        let panes_id = c.create_detached(Panes::new());
+        let status_id = c.create_detached(StatusBar::new(panes_id));
         c.add_child(
             VStack::new()
                 .push_flex(panes_id, 1)
@@ -233,7 +281,7 @@ impl Widget for ListGym {
 
 impl Loader for ListGym {
     fn load(c: &mut Canopy) {
-        c.add_commands::<List<Text>>();
+        c.add_commands::<List<ListEntry>>();
         c.add_commands::<Panes>();
         c.add_commands::<Self>();
     }
