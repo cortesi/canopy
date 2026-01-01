@@ -11,7 +11,7 @@ mod tests {
     };
 
     fn assert_buffer_matches(render: &Render, expected: &[&str]) {
-        TBufTest::new(render.get_buffer()).assert_matches(expected);
+        TBufTest::new(render.buffer()).assert_matches(expected);
     }
 
     fn setup_render_test(
@@ -124,7 +124,7 @@ mod tests {
                 render_rect.w,
                 render_rect.h
             );
-            TBufTest::new(render.get_buffer())
+            TBufTest::new(render.buffer())
                 .assert_matches_with_context(self.expected, Some(&context));
         }
     }
@@ -374,7 +374,7 @@ mod tests {
         let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
 
         // Create a frame around a 6x6 area starting at (2,2)
-        let frame = geom::Frame::new(geom::Rect::new(2, 2, 6, 6), 1);
+        let frame = geom::FrameRects::new(geom::Rect::new(2, 2, 6, 6), 1);
         render.solid_frame("default", frame, '*').unwrap();
 
         // Check the frame is drawn correctly
@@ -403,7 +403,7 @@ mod tests {
         let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
 
         // Create a minimal frame
-        let frame = geom::Frame::new(geom::Rect::new(1, 1, 3, 3), 1);
+        let frame = geom::FrameRects::new(geom::Rect::new(1, 1, 3, 3), 1);
         render.solid_frame("default", frame, '#').unwrap();
 
         // Check that frame is drawn correctly
@@ -418,7 +418,7 @@ mod tests {
         let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
 
         // Create a frame that partially overlaps the render rect
-        let frame = geom::Frame::new(geom::Rect::new(3, 3, 10, 8), 1);
+        let frame = geom::FrameRects::new(geom::Rect::new(3, 3, 10, 8), 1);
         render.solid_frame("default", frame, '#').unwrap();
 
         // The render rect starts at (5,5) and is 10x5
@@ -474,8 +474,7 @@ mod tests {
             ];
 
             let context = format!("Testing render rect at position: {position}");
-            TBufTest::new(render.get_buffer())
-                .assert_matches_with_context(expected, Some(&context));
+            TBufTest::new(render.buffer()).assert_matches_with_context(expected, Some(&context));
         }
     }
 

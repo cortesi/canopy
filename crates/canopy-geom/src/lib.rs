@@ -23,7 +23,7 @@ mod rect_i32;
 
 pub use error::{Error, Result};
 pub use expanse::Expanse;
-pub use frame::Frame;
+pub use frame::FrameRects;
 pub use line::Line;
 pub use linesegment::LineSegment;
 pub use point::Point;

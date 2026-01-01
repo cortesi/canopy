@@ -349,7 +349,7 @@ fn build_tree(core: &mut Core) -> Result<TestTree> {
     })
 }
 
-/// Run a function on our standard dummy app built from [`ttree`].
+/// Run a function on our standard dummy app built from [`TestTree`].
 pub fn run_ttree(func: impl FnOnce(&mut Canopy, TestRender, TestTree) -> Result<()>) -> Result<()> {
     let (_, tr) = TestRender::create();
     let mut c = Canopy::new();

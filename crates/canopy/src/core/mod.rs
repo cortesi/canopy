@@ -60,6 +60,5 @@ pub use canopy::{Canopy, Loader};
 pub use context::{Context, ViewContext};
 pub use focus::FocusManager;
 pub use id::{NodeId, TypedId};
-pub use inputmap::{BindingTarget, InputMap, InputMode, InputSpec};
-pub use poll::Poller;
+pub use inputmap::{InputMap, InputSpec};
 pub use world::Core;

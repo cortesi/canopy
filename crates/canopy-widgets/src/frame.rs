@@ -139,7 +139,7 @@ impl Default for Frame {
 impl Widget for Frame {
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let outer = ctx.view().outer_rect_local();
-        let f = geom::Frame::new(outer, 1);
+        let f = geom::FrameRects::new(outer, 1);
         let style = if ctx.is_on_focus_path() {
             "frame/focused"
         } else {
@@ -193,7 +193,7 @@ impl Widget for Frame {
         let view_size = child_view.content_size();
         let canvas_size = child_view.canvas;
         let outer = ctx.view().outer_rect_local();
-        let frame = geom::Frame::new(outer, 1);
+        let frame = geom::FrameRects::new(outer, 1);
         let outer_location = m.location + ctx.view().content_origin();
 
         if let Some(drag) = self.scroll_drag {
@@ -403,7 +403,7 @@ fn handle_scroll_drag(
     ctx: &mut dyn Context,
     child_id: NodeId,
     child_view: &View,
-    frame: &geom::Frame,
+    frame: &geom::FrameRects,
     outer_location: geom::Point,
     drag: ScrollDrag,
 ) -> Option<EventOutcome> {

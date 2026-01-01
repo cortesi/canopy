@@ -1,8 +1,12 @@
 use super::Rect;
 
-/// A frame extracted from a rectangle
+/// A frame's border regions extracted from a rectangle.
+///
+/// This struct represents the decomposition of a rectangle into its border
+/// regions: top, bottom, left, right, and corner rectangles. It's useful for
+/// drawing box borders or frame decorations.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub struct Frame {
+pub struct FrameRects {
     /// The top of the frame, not including corners
     pub top: Rect,
     /// The bottom of the frame, not including corners
@@ -25,9 +29,9 @@ pub struct Frame {
     border: u32,
 }
 
-impl Frame {
+impl FrameRects {
     /// Construct a new frame. If the rect is too small to fit the specified
-    /// frame, we return a zero Frame.
+    /// frame, we return a zero FrameRects.
     pub fn new(rect: Rect, border: u32) -> Self {
         if rect.w <= (border * 2) || rect.h <= (border * 2) {
             let mut f = Self::zero();
@@ -79,7 +83,7 @@ impl Frame {
         }
     }
 
-    /// Get the outer rect of the frame (the original rect passed to Frame::new())
+    /// Get the outer rect of the frame (the original rect passed to FrameRects::new())
     pub fn outer(&self) -> Rect {
         self.outer_rect
     }
@@ -109,8 +113,8 @@ mod tests {
     fn tframe() -> Result<()> {
         let r = Rect::new(10, 10, 10, 10);
         assert_eq!(
-            Frame::new(r, 1),
-            Frame {
+            FrameRects::new(r, 1),
+            FrameRects {
                 top: Rect::new(11, 10, 8, 1),
                 bottom: Rect::new(11, 19, 8, 1),
                 left: Rect::new(10, 11, 1, 8),
@@ -129,7 +133,7 @@ mod tests {
     #[test]
     fn test_inner_outer() -> Result<()> {
         let r = Rect::new(10, 10, 10, 10);
-        let frame = Frame::new(r, 1);
+        let frame = FrameRects::new(r, 1);
 
         // Test outer rect
         assert_eq!(frame.outer(), r);
@@ -138,17 +142,17 @@ mod tests {
         assert_eq!(frame.inner(), Rect::new(11, 11, 8, 8));
 
         // Test with larger border
-        let frame2 = Frame::new(r, 2);
+        let frame2 = FrameRects::new(r, 2);
         assert_eq!(frame2.outer(), r);
         assert_eq!(frame2.inner(), Rect::new(12, 12, 6, 6));
 
         // Test with border too large (zero frame)
-        let frame3 = Frame::new(r, 5);
+        let frame3 = FrameRects::new(r, 5);
         assert_eq!(frame3.outer(), r); // outer rect is preserved
         assert_eq!(frame3.inner(), Rect::zero());
 
         // Test with exact fit (border * 2 == dimensions)
-        let frame4 = Frame::new(r, 5);
+        let frame4 = FrameRects::new(r, 5);
         assert_eq!(frame4.outer(), r); // outer rect is preserved
         assert_eq!(frame4.inner(), Rect::zero());
 

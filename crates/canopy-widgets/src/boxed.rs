@@ -26,7 +26,12 @@ pub struct BoxGlyphs {
 
 impl BoxGlyphs {
     /// Draw a box border using these glyphs.
-    pub(crate) fn draw(&self, rndr: &mut Render, style: &str, frame: geom::Frame) -> Result<()> {
+    pub(crate) fn draw(
+        &self,
+        rndr: &mut Render,
+        style: &str,
+        frame: geom::FrameRects,
+    ) -> Result<()> {
         rndr.fill(style, frame.topleft, self.topleft)?;
         rndr.fill(style, frame.topright, self.topright)?;
         rndr.fill(style, frame.bottomleft, self.bottomleft)?;
@@ -144,7 +149,7 @@ impl Default for Box {
 impl Widget for Box {
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let outer = ctx.view().outer_rect_local();
-        let frame = geom::Frame::new(outer, 1);
+        let frame = geom::FrameRects::new(outer, 1);
         if let Some(style) = &self.fill_style {
             let inner = frame.inner();
             if inner.w > 0 && inner.h > 0 {

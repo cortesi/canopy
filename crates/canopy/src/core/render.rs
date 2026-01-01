@@ -165,7 +165,7 @@ impl<'a> Render<'a> {
     }
 
     /// Draw a solid frame
-    pub fn solid_frame(&mut self, style: &str, f: geom::Frame, c: char) -> Result<()> {
+    pub fn solid_frame(&mut self, style: &str, f: geom::FrameRects, c: char) -> Result<()> {
         self.fill(style, f.top, c)?;
         self.fill(style, f.left, c)?;
         self.fill(style, f.right, c)?;
@@ -241,13 +241,8 @@ impl<'a> Render<'a> {
         Ok(())
     }
 
-    /// Get a reference to the internal buffer
-    pub fn get_buffer(&self) -> &TermBuf {
-        self.buffer()
-    }
-
     /// Access the underlying buffer.
-    fn buffer(&self) -> &TermBuf {
+    pub fn buffer(&self) -> &TermBuf {
         match &self.target {
             RenderTarget::Owned(buf) => buf,
             RenderTarget::Shared(buf) => buf,
@@ -298,7 +293,7 @@ mod tests {
     };
 
     fn assert_buffer_matches(render: &Render, expected: &[&str]) {
-        BufTest::new(render.get_buffer()).assert_matches(expected);
+        BufTest::new(render.buffer()).assert_matches(expected);
     }
 
     #[test]
@@ -675,7 +670,7 @@ mod tests {
         let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect);
 
         // Frame within bounds
-        let frame = geom::Frame::new(geom::Rect::new(6, 6, 8, 8), 1);
+        let frame = geom::FrameRects::new(geom::Rect::new(6, 6, 8, 8), 1);
         let result = part_render.solid_frame("default", frame, '#');
         assert!(result.is_ok());
 
@@ -696,7 +691,7 @@ mod tests {
         );
 
         // Frame that extends outside canvas should fail
-        let frame = geom::Frame::new(geom::Rect::new(15, 15, 10, 10), 1);
+        let frame = geom::FrameRects::new(geom::Rect::new(15, 15, 10, 10), 1);
         part_render.solid_frame("default", frame, '#').unwrap();
     }
 

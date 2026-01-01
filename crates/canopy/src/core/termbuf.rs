@@ -6,7 +6,7 @@ use crate::{
     core::text,
     cursor,
     error::Result,
-    geom::{Expanse, Frame, Line, Point, Rect},
+    geom::{Expanse, FrameRects, Line, Point, Rect},
     render::RenderBackend,
     style::{Attr, AttrSet, Color, Style},
 };
@@ -278,7 +278,7 @@ impl TermBuf {
     }
 
     /// Fill the frame outline with a glyph and style.
-    pub fn solid_frame(&mut self, style: &Style, f: Frame, ch: char) {
+    pub fn solid_frame(&mut self, style: &Style, f: FrameRects, ch: char) {
         self.fill(style, f.top, ch);
         self.fill(style, f.left, ch);
         self.fill(style, f.right, ch);
@@ -690,7 +690,7 @@ mod tests {
     #[test]
     fn solid_frame_draw() {
         let mut tb = TermBuf::new(Expanse::new(4, 4), ' ', def_style());
-        let f = Frame::new(Rect::new(0, 0, 4, 4), 1);
+        let f = FrameRects::new(Rect::new(0, 0, 4, 4), 1);
         tb.solid_frame(&def_style(), f, '#');
 
         BufTest::new(&tb).assert_matches(buf![
