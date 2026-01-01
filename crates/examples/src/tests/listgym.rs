@@ -27,16 +27,21 @@ fn panes_column_count(harness: &mut Harness) -> Result<usize> {
 
 fn list_count(harness: &mut Harness) -> Result<usize> {
     harness.with_root_context(|_root: &mut ListGym, ctx| {
-        Ok(ctx.descendants_of_type::<List<ListEntry>>().len())
+        let view = ctx as &dyn canopy::ViewContext;
+        Ok(view.all_in_tree::<List<ListEntry>>().len())
     })
 }
 
 fn focused_list_index(harness: &mut Harness) -> Result<Option<usize>> {
     harness.with_root_context(|_root: &mut ListGym, ctx| {
+        let focused = ctx.focused_descendant::<List<ListEntry>>();
         let lists = ctx.descendants_of_type::<List<ListEntry>>();
-        Ok(lists
-            .iter()
-            .position(|id| ctx.node_is_on_focus_path((*id).into())))
+        Ok(focused.and_then(|focused_id| {
+            let focused_id: canopy::NodeId = focused_id.into();
+            lists
+                .iter()
+                .position(|id| canopy::NodeId::from(*id) == focused_id)
+        }))
     })
 }
 

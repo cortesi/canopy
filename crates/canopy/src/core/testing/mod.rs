@@ -17,8 +17,8 @@ pub mod ttree;
 mod tests {
     use super::backend::TestRender;
     use crate::{
-        Canopy, FocusManager, ViewContext, derive_commands, error::Result, geom::Expanse, layout::Layout,
-        render::Render, state::NodeName, widget::Widget,
+        Canopy, FocusManager, ViewContext, derive_commands, error::Result, geom::Expanse,
+        layout::Layout, render::Render, state::NodeName, widget::Widget,
     };
 
     struct Block {

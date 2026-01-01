@@ -6,16 +6,12 @@ use std::{
 
 use slotmap::SlotMap;
 
+use super::focus::{FocusManager, FocusRecoveryHint};
 use crate::{
     ViewContext,
     backend::BackendControl,
     commands::{CommandNode, CommandScopeFrame, CommandSet, CommandSpec},
-    core::{
-        context::CoreContext,
-        id::NodeId,
-        node::Node,
-        view::View,
-    },
+    core::{context::CoreContext, id::NodeId, node::Node, view::View},
     error::{Error, Result},
     event::Event,
     geom::{Expanse, Point, Rect, RectI32},
@@ -29,8 +25,6 @@ use crate::{
     style::StyleMap,
     widget::{EventOutcome, Widget},
 };
-
-use super::focus::{FocusManager, FocusRecoveryHint};
 
 /// Core state for the arena, layout engine, and focus.
 pub struct Core {
@@ -812,10 +806,6 @@ impl Core {
         result
     }
 
-
-
-
-
     /// Build a command-scope frame for a specific event.
     pub(crate) fn command_scope_for_event(&self, event: &Event) -> CommandScopeFrame {
         let mut frame = self.current_command_scope().cloned().unwrap_or_default();
@@ -885,8 +875,6 @@ impl Core {
         parts.reverse();
         Path::new(parts)
     }
-
-
 
     /// Locate the deepest node under a screen-space point.
     pub fn locate_node(&self, root: NodeId, point: Point) -> Result<Option<NodeId>> {

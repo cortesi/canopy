@@ -1,9 +1,5 @@
 use crate::{
-    core::{
-        context::CoreViewContext,
-        id::NodeId,
-        world::Core,
-    },
+    core::{context::CoreViewContext, id::NodeId, world::Core},
     geom::{Direction, RectI32},
     path::Path,
 };
@@ -120,11 +116,11 @@ impl FocusManager for Core {
     }
 
     fn focus_next(&mut self, root: NodeId) {
-        if let Some(current) = self.focus {
-            if let Some(target) = find_next_focus(self, root, current, false) {
-                self.set_focus(target);
-                return;
-            }
+        if let Some(current) = self.focus
+            && let Some(target) = find_next_focus(self, root, current, false)
+        {
+            self.set_focus(target);
+            return;
         }
         if let Some(target) = first_focusable(self, root) {
             self.set_focus(target);
@@ -134,13 +130,13 @@ impl FocusManager for Core {
     }
 
     fn focus_prev(&mut self, root: NodeId) {
-        if let Some(current) = self.focus {
-            if let Some(target) = find_prev_focus(self, root, current) {
-                self.set_focus(target);
-                return;
-            }
+        if let Some(current) = self.focus
+            && let Some(target) = find_prev_focus(self, root, current)
+        {
+            self.set_focus(target);
+            return;
         }
-        
+
         if let Some(last) = find_last_focusable(self, root) {
             self.set_focus(last);
         } else {
@@ -220,22 +216,22 @@ impl FocusManager for Core {
         candidates.sort_by_key(|(_, rect)| match dir {
             Direction::Right => {
                 let edge_dist = (rect.left() - current_rect.right()).max(0) as u64;
-                let vert_center_dist = current_center.1.abs_diff(rect.center().1) as u64;
+                let vert_center_dist = current_center.1.abs_diff(rect.center().1);
                 edge_dist * 10000 + vert_center_dist
             }
             Direction::Left => {
                 let edge_dist = (current_rect.left() - rect.right()).max(0) as u64;
-                let vert_center_dist = current_center.1.abs_diff(rect.center().1) as u64;
+                let vert_center_dist = current_center.1.abs_diff(rect.center().1);
                 edge_dist * 10000 + vert_center_dist
             }
             Direction::Down => {
                 let edge_dist = (rect.top() - current_rect.bottom()).max(0) as u64;
-                let horiz_center_dist = current_center.0.abs_diff(rect.center().0) as u64;
+                let horiz_center_dist = current_center.0.abs_diff(rect.center().0);
                 edge_dist * 10000 + horiz_center_dist
             }
             Direction::Up => {
                 let edge_dist = (current_rect.top() - rect.bottom()).max(0) as u64;
-                let horiz_center_dist = current_center.0.abs_diff(rect.center().0) as u64;
+                let horiz_center_dist = current_center.0.abs_diff(rect.center().0);
                 edge_dist * 10000 + horiz_center_dist
             }
         });
@@ -283,7 +279,7 @@ impl FocusManager for Core {
     }
 
     fn ensure_mouse_capture_valid(&mut self) {
-       if let Some(capture) = self.mouse_capture
+        if let Some(capture) = self.mouse_capture
             && (!self.nodes.contains_key(capture) || !self.is_attached_to_root(capture))
         {
             self.mouse_capture = None;
@@ -336,11 +332,12 @@ impl FocusManager for Core {
 
 // Private helper functions
 
+/// Return the first focusable node under `root`, preferring nodes with views.
 fn first_focusable(core: &Core, root: NodeId) -> Option<NodeId> {
-    first_focusable_with(core, root, true)
-        .or_else(|| first_focusable_with(core, root, false))
+    first_focusable_with(core, root, true).or_else(|| first_focusable_with(core, root, false))
 }
 
+/// Return the first focusable node under `root` with view requirement control.
 fn first_focusable_with(core: &Core, root: NodeId, require_view: bool) -> Option<NodeId> {
     let mut stack = vec![root];
     while let Some(id) = stack.pop() {
@@ -357,19 +354,25 @@ fn first_focusable_with(core: &Core, root: NodeId, require_view: bool) -> Option
     None
 }
 
-/// Find next focusable node after `target`. 
+/// Find next focusable node after `target`.
 /// If `skip_subtree` is true, traversal skips `target`'s children.
-fn find_next_focus(core: &Core, root: NodeId, target: NodeId, skip_subtree: bool) -> Option<NodeId> {
+fn find_next_focus(
+    core: &Core,
+    root: NodeId,
+    target: NodeId,
+    skip_subtree: bool,
+) -> Option<NodeId> {
     find_next_focus_with(core, root, target, skip_subtree, true)
         .or_else(|| find_next_focus_with(core, root, target, skip_subtree, false))
 }
 
+/// Find the next focusable node with optional view requirement.
 fn find_next_focus_with(
-    core: &Core, 
-    root: NodeId, 
-    target: NodeId, 
-    skip_subtree: bool, 
-    require_view: bool
+    core: &Core,
+    root: NodeId,
+    target: NodeId,
+    skip_subtree: bool,
+    require_view: bool,
 ) -> Option<NodeId> {
     let mut stack = vec![root];
     let mut past_target = false;
@@ -382,7 +385,7 @@ fn find_next_focus_with(
         } else if past_target && is_focus_candidate(core, id, require_view) {
             return Some(id);
         }
-        
+
         if let Some(node) = core.nodes.get(id) {
             for child in node.children.iter().rev() {
                 stack.push(*child);
@@ -398,24 +401,26 @@ fn find_prev_focus(core: &Core, root: NodeId, target: NodeId) -> Option<NodeId> 
         .or_else(|| find_prev_focus_with(core, root, Some(target), false))
 }
 
+/// Find the last focusable node under `root`, preferring nodes with views.
 fn find_last_focusable(core: &Core, root: NodeId) -> Option<NodeId> {
     find_prev_focus_with(core, root, None, true)
         .or_else(|| find_prev_focus_with(core, root, None, false))
 }
 
+/// Find the previous focusable node with optional view requirement.
 fn find_prev_focus_with(
     core: &Core,
     root: NodeId,
     target: Option<NodeId>,
-    require_view: bool
+    require_view: bool,
 ) -> Option<NodeId> {
     let mut prev = None;
     let mut stack = vec![root];
     while let Some(id) = stack.pop() {
-        if let Some(t) = target {
-            if id == t {
-                break;
-            }
+        if let Some(t) = target
+            && id == t
+        {
+            break;
         }
         if is_focus_candidate(core, id, require_view) {
             prev = Some(id);
@@ -429,7 +434,12 @@ fn find_prev_focus_with(
     prev
 }
 
-fn nearest_focusable_ancestor_with(core: &Core, start: NodeId, require_view: bool) -> Option<NodeId> {
+/// Return the nearest focusable ancestor of `start` with optional view requirement.
+fn nearest_focusable_ancestor_with(
+    core: &Core,
+    start: NodeId,
+    require_view: bool,
+) -> Option<NodeId> {
     let mut current = core.nodes.get(start).and_then(|node| node.parent);
     while let Some(id) = current {
         if is_focus_candidate(core, id, require_view) {
@@ -440,6 +450,7 @@ fn nearest_focusable_ancestor_with(core: &Core, start: NodeId, require_view: boo
     None
 }
 
+/// Return whether the node is focusable, respecting hidden and view requirements.
 fn is_focus_candidate(core: &Core, node_id: NodeId, require_view: bool) -> bool {
     let Some(node) = core.nodes.get(node_id) else {
         return false;

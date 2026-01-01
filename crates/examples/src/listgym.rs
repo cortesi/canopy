@@ -1,5 +1,3 @@
-use std::any::TypeId;
-
 use canopy::{
     Binder, Canopy, Context, Loader, NodeId, ViewContext, Widget, command, derive_commands,
     error::{Error, Result},
@@ -86,17 +84,7 @@ impl StatusBar {
 
     /// Locate the panes node in the tree.
     fn panes_id(ctx: &dyn ViewContext) -> Option<NodeId> {
-        let panes_type = TypeId::of::<Panes>();
-        let mut stack = vec![ctx.root_id()];
-        while let Some(id) = stack.pop() {
-            if ctx.node_type_id(id) == Some(panes_type) {
-                return Some(id);
-            }
-            for child in ctx.children_of(id).into_iter().rev() {
-                stack.push(child);
-            }
-        }
-        None
+        ctx.first_in_tree::<Panes>().map(Into::into)
     }
 
     /// Build the status text based on the focused column.
@@ -178,18 +166,9 @@ impl ListGym {
 
     /// Find the list to target for list commands.
     fn list_id(&self, c: &dyn Context) -> Result<NodeId> {
-        let lists = c.descendants_of_type::<List<ListEntry>>();
-        if lists.is_empty() {
-            return Err(Error::Invalid("list not initialized".into()));
-        }
-        if let Some(id) = lists
-            .iter()
-            .copied()
-            .find(|id| c.node_is_on_focus_path((*id).into()))
-        {
-            return Ok(id.into());
-        }
-        Ok(lists[0].into())
+        c.focused_or_first_descendant::<List<ListEntry>>()
+            .map(Into::into)
+            .ok_or_else(|| Error::Invalid("list not initialized".into()))
     }
 
     #[command]

@@ -113,12 +113,12 @@ impl RectI32 {
     }
 
     /// Return true if this rect overlaps another vertically.
-    pub fn overlaps_vertical(&self, other: RectI32) -> bool {
+    pub fn overlaps_vertical(&self, other: Self) -> bool {
         self.top() < other.bottom() && self.bottom() > other.top()
     }
 
     /// Return true if this rect overlaps another horizontally.
-    pub fn overlaps_horizontal(&self, other: RectI32) -> bool {
+    pub fn overlaps_horizontal(&self, other: Self) -> bool {
         self.left() < other.right() && self.right() > other.left()
     }
 }

@@ -11,9 +11,9 @@ use super::{
     view::View,
     world::Core,
 };
-use crate::core::focus::FocusManager;
 use crate::{
     commands::{ArgValue, CommandError, CommandInvocation, CommandScopeFrame, ListRowContext},
+    core::focus::FocusManager,
     error::{Error, Result},
     event::{Event, mouse::MouseEvent},
     geom::{Direction, Expanse, Point, PointI32, Rect, RectI32},
@@ -150,6 +150,47 @@ pub trait ViewContext {
         }
 
         out
+    }
+}
+
+impl dyn ViewContext + '_ {
+    /// Return the first node of type `W` within `root` and its descendants.
+    pub fn first_from<W: Widget + 'static>(&self, root: NodeId) -> Option<TypedId<W>> {
+        let mut stack = vec![root];
+        while let Some(id) = stack.pop() {
+            if self.node_type_id(id) == Some(TypeId::of::<W>()) {
+                return Some(TypedId::new(id));
+            }
+            for child in self.children_of(id).into_iter().rev() {
+                stack.push(child);
+            }
+        }
+        None
+    }
+
+    /// Return all nodes of type `W` within `root` and its descendants.
+    pub fn all_from<W: Widget + 'static>(&self, root: NodeId) -> Vec<TypedId<W>> {
+        let mut out = Vec::new();
+        let mut stack = vec![root];
+        while let Some(id) = stack.pop() {
+            if self.node_type_id(id) == Some(TypeId::of::<W>()) {
+                out.push(TypedId::new(id));
+            }
+            for child in self.children_of(id).into_iter().rev() {
+                stack.push(child);
+            }
+        }
+        out
+    }
+
+    /// Return the first widget of type `W` anywhere in the tree, including the root.
+    pub fn first_in_tree<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
+        self.first_from::<W>(self.root_id())
+    }
+
+    /// Return all widgets of type `W` anywhere in the tree, including the root.
+    pub fn all_in_tree<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
+        self.all_from::<W>(self.root_id())
     }
 }
 
@@ -771,6 +812,37 @@ impl dyn Context + '_ {
             }
         }
         out
+    }
+
+    /// Return the descendant of type `W` that is on the focus path, if any.
+    pub fn focused_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
+        self.descendants_of_type::<W>()
+            .into_iter()
+            .find(|id| self.node_is_on_focus_path((*id).into()))
+    }
+
+    /// Return the descendant of type `W` on the focus path, or the first if none focused.
+    ///
+    /// This searches only within the current node's subtree. Use the tree-wide helpers on
+    /// `ViewContext` if you need to search from an arbitrary root.
+    pub fn focused_or_first_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
+        let descendants = self.descendants_of_type::<W>();
+        let focused = descendants
+            .iter()
+            .copied()
+            .find(|id| self.node_is_on_focus_path((*id).into()));
+        focused.or_else(|| descendants.into_iter().next())
+    }
+
+    /// Execute a closure with the focused descendant of type `W`, or the first if none focused.
+    pub fn with_focused_or_first_descendant<W: Widget + 'static, R>(
+        &mut self,
+        f: impl FnMut(&mut W, &mut dyn Context) -> Result<R>,
+    ) -> Result<R> {
+        let node = self
+            .focused_or_first_descendant::<W>()
+            .ok_or_else(|| Error::NotFound(type_name::<W>().to_string()))?;
+        self.with_typed(node, f)
     }
 
     /// Execute a closure with the first descendant of type `W`.

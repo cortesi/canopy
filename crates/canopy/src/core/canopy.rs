@@ -6,7 +6,9 @@ use super::{inputmap, poll::Poller, termbuf::TermBuf};
 use crate::{
     backend::BackendControl,
     commands,
-    core::{Core, NodeId, context::CoreViewContext, focus::FocusManager, style::StyleEffect, view::View},
+    core::{
+        Core, NodeId, context::CoreViewContext, focus::FocusManager, style::StyleEffect, view::View,
+    },
     cursor,
     error::{self, Result},
     event::{Event, key, mouse},
@@ -342,14 +344,8 @@ impl Canopy {
         let local_clip = Self::outer_clip_to_local(view.outer, screen_clip);
         let screen_origin = screen_clip.tl;
 
-        let mut rndr = Render::new_shared(
-            &self.style,
-            styl,
-            dest_buf,
-            local_clip,
-            screen_origin,
-        )
-        .with_effects(effect_slice);
+        let mut rndr = Render::new_shared(&self.style, styl, dest_buf, local_clip, screen_origin)
+            .with_effects(effect_slice);
 
         self.core.with_widget_view(node_id, |widget, core| {
             let ctx = CoreViewContext::new(core, node_id);
