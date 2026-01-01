@@ -189,10 +189,14 @@ implements the <code>Widget</code> trait, which includes:</p>
 <li><code>on_event</code> to handle input events</li>
 <li><code>poll</code> for scheduled updates</li>
 <li><code>accept_focus</code> and <code>cursor</code> for focus handling</li>
+<li><code>on_mount</code> for one-time initialization after first attachment</li>
+<li><code>pre_remove</code> to validate or veto removal</li>
+<li><code>on_unmount</code> for best-effort teardown before deletion</li>
 </ul>
 <p>Widgets are also <code>CommandNode</code>s, so they can expose commands used by the
 scripting and binding system. By default, a widget's node name is derived from
 its type name; see <a href="./state.html">Node names</a>.</p>
+<p>The lifecycle hooks are described in more detail in <a href="./lifecycle.html">Lifecycle</a>.</p>
 
                     </main>
 
@@ -202,7 +206,7 @@ its type name; see <a href="./state.html">Node names</a>.</p>
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="layout.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="lifecycle.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -216,7 +220,7 @@ its type name; see <a href="./state.html">Node names</a>.</p>
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="layout.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="lifecycle.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

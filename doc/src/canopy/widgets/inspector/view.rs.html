@@ -25,9 +25,9 @@
 <a href=#25 id=25 data-nosnippet>25</a>
 <a href=#26 id=26 data-nosnippet>26</a>    <span class="doccomment">/// Construct a new inspector view.
 <a href=#27 id=27 data-nosnippet>27</a>    </span><span class="kw">pub fn </span>install(core: <span class="kw-2">&amp;mut </span>Core) -&gt; <span class="prelude-ty">Result</span>&lt;(NodeId, NodeId, NodeId)&gt; {
-<a href=#28 id=28 data-nosnippet>28</a>        <span class="kw">let </span>tabs = core.add(Tabs::new(<span class="macro">vec!</span>[<span class="string">"Stats"</span>, <span class="string">"Logs"</span>]));
-<a href=#29 id=29 data-nosnippet>29</a>        <span class="kw">let </span>logs = core.add(<span class="kw">super</span>::logs::Logs::new());
-<a href=#30 id=30 data-nosnippet>30</a>        <span class="kw">let </span>view_id = core.add(<span class="self">Self</span>::new());
+<a href=#28 id=28 data-nosnippet>28</a>        <span class="kw">let </span>tabs = core.create_detached(Tabs::new(<span class="macro">vec!</span>[<span class="string">"Stats"</span>, <span class="string">"Logs"</span>]));
+<a href=#29 id=29 data-nosnippet>29</a>        <span class="kw">let </span>logs = core.create_detached(<span class="kw">super</span>::logs::Logs::new());
+<a href=#30 id=30 data-nosnippet>30</a>        <span class="kw">let </span>view_id = core.create_detached(<span class="self">Self</span>::new());
 <a href=#31 id=31 data-nosnippet>31</a>        core.set_children(view_id, <span class="macro">vec!</span>[tabs, logs])<span class="question-mark">?</span>;
 <a href=#32 id=32 data-nosnippet>32</a>        core.with_layout_of(view_id, |layout| {
 <a href=#33 id=33 data-nosnippet>33</a>            <span class="kw-2">*</span>layout = Layout::column().flex_horizontal(<span class="number">1</span>).flex_vertical(<span class="number">1</span>);

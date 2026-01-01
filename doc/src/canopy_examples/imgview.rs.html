@@ -33,7 +33,7 @@
 <a href=#33 id=33 data-nosnippet>33</a>    setup_bindings(<span class="kw-2">&amp;mut </span>cnpy);
 <a href=#34 id=34 data-nosnippet>34</a>
 <a href=#35 id=35 data-nosnippet>35</a>    <span class="kw">let </span>view = ImageView::from_path(image_path)<span class="question-mark">?</span>;
-<a href=#36 id=36 data-nosnippet>36</a>    <span class="kw">let </span>app_id = cnpy.core.add(view);
+<a href=#36 id=36 data-nosnippet>36</a>    <span class="kw">let </span>app_id = cnpy.core.create_detached(view);
 <a href=#37 id=37 data-nosnippet>37</a>    Root::install(<span class="kw-2">&amp;mut </span>cnpy.core, app_id)<span class="question-mark">?</span>;
 <a href=#38 id=38 data-nosnippet>38</a>    <span class="prelude-val">Ok</span>(cnpy)
 <a href=#39 id=39 data-nosnippet>39</a>}</code></pre></div></section></main></body></html>

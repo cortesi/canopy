@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["setup_bindings"],"struct":["ListGym","StatusBar"]};
+window.SIDEBAR_ITEMS = {"fn":["setup_bindings"],"struct":["ListEntry","ListGym","StatusBar"]};

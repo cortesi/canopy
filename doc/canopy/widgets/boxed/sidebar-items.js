@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["DOUBLE","ROUND","ROUND_THICK","SINGLE","SINGLE_THICK"],"struct":["Box","BoxGlyphs"]};

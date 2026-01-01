@@ -216,6 +216,37 @@ provides behavior.</p>
 <p>Widgets are also <a href="doc/canopy/commands/trait.CommandNode.html"><code>CommandNode</code></a>s,
 so they can expose commands and handle dispatch. Finally, every node has a
 name used for paths and bindings; see <a href="./state.html">Node names</a>.</p>
+<h2 id="tree-structure"><a class="header" href="#tree-structure">Tree structure</a></h2>
+<p>Nodes live in the core arena and are either attached to the root or detached. A node is attached
+when it is reachable from <code>Core.root</code> by following <code>children</code>. Detached nodes are in the arena but
+not in the active tree.</p>
+<h2 id="creating-and-attaching-nodes"><a class="header" href="#creating-and-attaching-nodes">Creating and attaching nodes</a></h2>
+<p>Use the create-and-attach APIs when possible. <code>Context::add_child</code> and
+<code>Context::add_child_to</code> create a widget and attach it in one step, with
+transactional behavior: on error, the tree and arena are unchanged.</p>
+<p><code>Context::create_detached</code> allocates a node without attaching it; pair it with <code>attach</code> when you
+need to reparent or build a subtree off-screen. <code>detach</code> removes a node from its parent but leaves
+it in the arena. <code>remove_subtree</code> deletes a node and its descendants; see
+<a href="./lifecycle.html">Lifecycle</a> for ordering and teardown.</p>
+<h2 id="keyed-children"><a class="header" href="#keyed-children">Keyed children</a></h2>
+<p>Keyed children provide stable names for direct child roles such as <code>"label"</code> or <code>"status"</code>. Keys
+are unique per parent, and the association is removed when a child is detached. Use
+<code>add_child_keyed</code>/<code>add_child_to_keyed</code> to create keyed children, <code>child_keyed</code> to look them up, and
+<code>with_keyed</code>/<code>try_with_keyed</code> for typed access.</p>
+<h2 id="typed-and-path-lookups"><a class="header" href="#typed-and-path-lookups">Typed and path lookups</a></h2>
+<p>Type-based queries traverse in pre-order. Use <code>unique_child</code>/<code>unique_descendant</code> (and their
+<code>with_*</code> variants) when you expect exactly one match; they surface ambiguity instead of silently
+choosing the first match. Path helpers <code>find_one</code> and <code>try_find_one</code> enforce the same uniqueness
+guarantee for path queries.</p>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best practices</a></h2>
+<ul>
+<li>Prefer keyed children for stable internal roles.</li>
+<li>Use <code>unique_*</code> lookups when the structure guarantees a single match; avoid <code>first_*</code> in complex
+widgets.</li>
+<li>Store <code>NodeId</code>s or keys for hot paths; avoid repeated deep traversal in per-frame loops.</li>
+<li>Use <code>create_detached</code> + <code>attach</code> only when you need to reparent or stage a subtree.</li>
+<li>Use <code>remove_subtree</code> for deletion so lifecycle hooks run and invariants are enforced.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="node-names"><a class="header" href="#node-names">Node names</a></h1>
 <p>Every node in the tree has a <strong>node name</strong>, which is used for command dispatch
 and path matching in input bindings. Names are stored as a <code>NodeName</code>, which is
@@ -321,10 +352,32 @@ implements the <code>Widget</code> trait, which includes:</p>
 <li><code>on_event</code> to handle input events</li>
 <li><code>poll</code> for scheduled updates</li>
 <li><code>accept_focus</code> and <code>cursor</code> for focus handling</li>
+<li><code>on_mount</code> for one-time initialization after first attachment</li>
+<li><code>pre_remove</code> to validate or veto removal</li>
+<li><code>on_unmount</code> for best-effort teardown before deletion</li>
 </ul>
 <p>Widgets are also <code>CommandNode</code>s, so they can expose commands used by the
 scripting and binding system. By default, a widget's node name is derived from
 its type name; see <a href="./state.html">Node names</a>.</p>
+<p>The lifecycle hooks are described in more detail in <a href="./lifecycle.html">Lifecycle</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="lifecycle"><a class="header" href="#lifecycle">Lifecycle</a></h1>
+<p>Widgets move through a simple lifecycle driven by attachment and removal.</p>
+<h2 id="mounting"><a class="header" href="#mounting">Mounting</a></h2>
+<p><code>Widget::on_mount</code> runs exactly once, the first time a node becomes attached to the root. Nodes are
+mounted in pre-order (parent before children). Detaching and re-attaching a mounted node does not
+re-run <code>on_mount</code>.</p>
+<h2 id="detaching"><a class="header" href="#detaching">Detaching</a></h2>
+<p><code>detach</code> removes a node from its parent without deleting it. The node remains in the arena and
+keeps its mounted state.</p>
+<h2 id="removal"><a class="header" href="#removal">Removal</a></h2>
+<p><code>remove_subtree</code> deletes a node and its descendants. It runs in three phases:</p>
+<ul>
+<li><code>pre_remove</code> top-down to validate or veto removal.</li>
+<li><code>on_unmount</code> bottom-up while the nodes are still attached.</li>
+<li>Detach and delete the subtree, then enforce focus and mouse capture invariants.</li>
+</ul>
+<p><code>pre_remove</code> should be side-effect free or safe to repeat. <code>on_unmount</code> is best-effort and must
+not fail.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="layout"><a class="header" href="#layout">Layout</a></h1>
 <p>Layout is probably the most complex part of Canopy, and understanding the
 principles behind it will make writing powerful widgets much easier.</p>
