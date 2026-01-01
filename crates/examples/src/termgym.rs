@@ -115,12 +115,6 @@ impl Widget for TerminalStack {
 
 /// Multi-terminal demo widget.
 pub struct TermGym {
-    /// Node ID for the terminal list widget.
-    list_id: Option<NodeId>,
-    /// Node ID for the terminal stack container.
-    stack_id: Option<NodeId>,
-    /// Node IDs for each terminal instance.
-    terminals: Vec<NodeId>,
     /// Index of the active terminal.
     active: usize,
 }
@@ -135,24 +129,7 @@ impl Default for TermGym {
 impl TermGym {
     /// Construct the terminal gym demo.
     pub fn new() -> Self {
-        Self {
-            list_id: None,
-            stack_id: None,
-            terminals: Vec::new(),
-            active: 0,
-        }
-    }
-
-    /// Terminal list node id, if initialized.
-    fn list_id(&self) -> Result<NodeId> {
-        self.list_id
-            .ok_or_else(|| Error::Internal("list not initialized".into()))
-    }
-
-    /// Terminal stack node id, if initialized.
-    fn stack_id(&self) -> Result<NodeId> {
-        self.stack_id
-            .ok_or_else(|| Error::Internal("stack not initialized".into()))
+        Self { active: 0 }
     }
 
     /// Execute a closure with the terminal list widget.
@@ -160,46 +137,67 @@ impl TermGym {
     where
         F: FnMut(&mut List<TermEntry>, &mut dyn Context) -> Result<R>,
     {
-        let list_id = self.list_id()?;
-        c.with_widget(list_id, |list: &mut List<TermEntry>, ctx| f(list, ctx))
+        c.with_unique_descendant::<List<TermEntry>, _>(|list, ctx| f(list, ctx))
+    }
+
+    /// Return the terminal list node id.
+    fn list_id(&self, c: &dyn Context) -> Result<NodeId> {
+        c.unique_descendant::<List<TermEntry>>()?
+            .map(|id| id.into())
+            .ok_or_else(|| Error::Internal("list not initialized".into()))
+    }
+
+    /// Execute a closure with the terminal stack widget.
+    fn with_stack<F, R>(&self, c: &mut dyn Context, f: F) -> Result<R>
+    where
+        F: FnOnce(&mut TerminalStack, &mut dyn Context) -> Result<R>,
+    {
+        c.with_unique_descendant::<TerminalStack, _>(f)
+    }
+
+    /// Return terminal stack children in order.
+    fn terminal_ids(&self, c: &dyn Context) -> Result<Vec<NodeId>> {
+        let stack_id = c
+            .unique_descendant::<TerminalStack>()?
+            .ok_or_else(|| Error::Internal("stack not initialized".into()))?;
+        Ok(c.children_of(stack_id.into()))
     }
 
     /// Create and mount a new terminal instance.
     fn add_terminal(&mut self, c: &mut dyn Context) -> Result<()> {
-        let stack_id = self.stack_id()?;
         let cwd = env::current_dir().map_err(|err| Error::Internal(err.to_string()))?;
-        let terminal_id = c.add_child_to(
-            stack_id,
-            Terminal::new(TerminalConfig {
+        self.with_stack(c, |_, ctx| {
+            let terminal_id = ctx.add_child(Terminal::new(TerminalConfig {
                 cwd: Some(cwd),
                 ..TerminalConfig::default()
-            }),
-        )?;
-        c.with_layout_of(terminal_id, &mut |layout| {
-            *layout = Layout::fill();
+            }))?;
+            ctx.with_layout_of(terminal_id, &mut |layout| {
+                *layout = Layout::fill();
+            })?;
+            Ok(())
         })?;
 
-        self.terminals.push(terminal_id);
-        let index = self.terminals.len();
+        let index = self.terminal_ids(c)?.len();
         self.with_list(c, |list, ctx| {
             let entry = TermEntry::new(index.to_string());
             list.append(ctx, entry)?;
             Ok(())
         })?;
 
-        self.set_active(c, self.terminals.len().saturating_sub(1))?;
+        self.set_active(c, index.saturating_sub(1))?;
         Ok(())
     }
 
     /// Activate a specific terminal by index.
     fn set_active(&mut self, c: &mut dyn Context, index: usize) -> Result<()> {
-        if self.terminals.is_empty() {
+        let terminals = self.terminal_ids(c)?;
+        if terminals.is_empty() {
             return Ok(());
         }
-        let target = index.min(self.terminals.len() - 1);
+        let target = index.min(terminals.len() - 1);
         self.active = target;
 
-        for (idx, terminal_id) in self.terminals.iter().enumerate() {
+        for (idx, terminal_id) in terminals.iter().enumerate() {
             let active = self.active;
             c.with_layout_of(*terminal_id, &mut |node_layout| {
                 *node_layout = if idx == active {
@@ -216,7 +214,7 @@ impl TermGym {
             Ok(())
         })?;
 
-        if let Some(active_id) = self.terminals.get(self.active).copied() {
+        if let Some(active_id) = terminals.get(self.active).copied() {
             c.set_focus(active_id);
         }
 
@@ -225,20 +223,21 @@ impl TermGym {
 
     /// Move the active terminal selection forward or backward.
     fn shift_terminal(&mut self, c: &mut dyn Context, forward: bool) -> Result<()> {
-        if self.terminals.is_empty() {
+        let terminals = self.terminal_ids(c)?;
+        if terminals.is_empty() {
             return Ok(());
         }
         let next = if forward {
-            (self.active + 1) % self.terminals.len()
+            (self.active + 1) % terminals.len()
         } else {
-            (self.active + self.terminals.len() - 1) % self.terminals.len()
+            (self.active + terminals.len() - 1) % terminals.len()
         };
         self.set_active(c, next)
     }
 
     /// Rebuild the sidebar list to match the current terminal set.
     fn rebuild_list(&self, c: &mut dyn Context) -> Result<()> {
-        let count = self.terminals.len();
+        let count = self.terminal_ids(c)?.len();
         self.with_list(c, |list, ctx| {
             list.clear(ctx)?;
             for index in 1..=count {
@@ -251,16 +250,18 @@ impl TermGym {
 
     /// Remove a terminal at a specific index.
     fn remove_terminal(&mut self, c: &mut dyn Context, index: usize) -> Result<()> {
-        if index >= self.terminals.len() {
+        let terminals = self.terminal_ids(c)?;
+        if index >= terminals.len() {
             return Ok(());
         }
 
-        let removed_id = self.terminals.remove(index);
+        let removed_id = terminals[index];
         c.remove_subtree(removed_id)?;
 
         self.rebuild_list(c)?;
 
-        if self.terminals.is_empty() {
+        let remaining = self.terminal_ids(c)?;
+        if remaining.is_empty() {
             self.active = 0;
             return Ok(());
         }
@@ -268,7 +269,7 @@ impl TermGym {
         let next_active = if index < self.active {
             self.active.saturating_sub(1)
         } else {
-            self.active.min(self.terminals.len() - 1)
+            self.active.min(remaining.len() - 1)
         };
 
         self.set_active(c, next_active)?;
@@ -335,11 +336,12 @@ impl TermGym {
     #[command]
     /// Delete the active terminal and keep focus on the sidebar.
     pub fn delete_terminal(&mut self, c: &mut dyn Context) -> Result<()> {
-        if self.terminals.is_empty() {
+        if self.terminal_ids(c)?.is_empty() {
             return Ok(());
         }
 
-        let target = self.active.min(self.terminals.len() - 1);
+        let terminals = self.terminal_ids(c)?;
+        let target = self.active.min(terminals.len() - 1);
         self.remove_terminal(c, target)?;
         self.focus_sidebar_list(c)?;
         Ok(())
@@ -355,8 +357,8 @@ impl TermGym {
     #[command]
     /// Focus the active terminal instance.
     pub fn focus_active_terminal(&mut self, c: &mut dyn Context) -> Result<()> {
-        let _ = self.stack_id()?;
-        if let Some(active_id) = self.terminals.get(self.active).copied() {
+        let terminals = self.terminal_ids(c)?;
+        if let Some(active_id) = terminals.get(self.active).copied() {
             c.set_focus(active_id);
         }
         Ok(())
@@ -364,8 +366,9 @@ impl TermGym {
 
     /// Handle a mouse click within the sidebar list.
     fn handle_list_click(&mut self, c: &mut dyn Context, location: Point) -> bool {
-        let Some(list_id) = self.list_id else {
-            return false;
+        let list_id = match self.list_id(c) {
+            Ok(id) => id,
+            Err(_) => return false,
         };
         let Some(list_view) = c.node_view(list_id) else {
             return false;
@@ -385,7 +388,11 @@ impl TermGym {
         let local_y = (screen_y - top).max(0) as u32;
         let content_y = local_y.saturating_add(list_view.tl.y);
         let index = (content_y / ENTRY_HEIGHT) as usize;
-        if index < self.terminals.len() && self.set_active(c, index).is_err() {
+        let terminals = match self.terminal_ids(c) {
+            Ok(ids) => ids,
+            Err(_) => return false,
+        };
+        if index < terminals.len() && self.set_active(c, index).is_err() {
             return false;
         }
         if self.focus_sidebar_list(c).is_err() {
@@ -426,8 +433,6 @@ impl Widget for TermGym {
             *layout = Layout::column().fixed_width(24).flex_vertical(1);
         })?;
 
-        self.list_id = Some(list_id);
-        self.stack_id = Some(stack_id);
         self.add_terminal(c)?;
 
         Ok(())

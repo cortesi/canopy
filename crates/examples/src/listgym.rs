@@ -1,3 +1,5 @@
+use std::any::TypeId;
+
 use canopy::{
     Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
     error::{Error, Result},
@@ -74,21 +76,36 @@ fn list_item(index: usize) -> ListEntry {
 }
 
 /// Status bar widget for the list gym demo.
-pub struct StatusBar {
-    /// Panes node used to count columns and focus.
-    panes_id: NodeId,
-}
+pub struct StatusBar;
 
 #[derive_commands]
 impl StatusBar {
-    /// Construct a status bar tied to the panes node.
-    pub fn new(panes_id: NodeId) -> Self {
-        Self { panes_id }
+    /// Construct a status bar.
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Locate the panes node in the tree.
+    fn panes_id(ctx: &dyn ViewContext) -> Option<NodeId> {
+        let panes_type = TypeId::of::<Panes>();
+        let mut stack = vec![ctx.root_id()];
+        while let Some(id) = stack.pop() {
+            if ctx.node_type_id(id) == Some(panes_type) {
+                return Some(id);
+            }
+            for child in ctx.children_of(id).into_iter().rev() {
+                stack.push(child);
+            }
+        }
+        None
     }
 
     /// Build the status text based on the focused column.
     fn label(&self, ctx: &dyn ViewContext) -> String {
-        let columns = ctx.children_of(self.panes_id);
+        let Some(panes_id) = Self::panes_id(ctx) else {
+            return "listgym".to_string();
+        };
+        let columns = ctx.children_of(panes_id);
         let total = columns.len();
         let focused = columns
             .iter()
@@ -112,11 +129,14 @@ impl Widget for StatusBar {
     }
 }
 
-/// Root node for the list gym demo.
-pub struct ListGym {
-    /// Panes node used to host list columns.
-    panes_id: Option<NodeId>,
+impl Default for StatusBar {
+    fn default() -> Self {
+        Self::new()
+    }
 }
+
+/// Root node for the list gym demo.
+pub struct ListGym;
 
 impl Default for ListGym {
     fn default() -> Self {
@@ -128,13 +148,7 @@ impl Default for ListGym {
 impl ListGym {
     /// Construct a new list gym demo.
     pub fn new() -> Self {
-        Self { panes_id: None }
-    }
-
-    /// Panes node id, if initialized.
-    fn panes_id(&self) -> Result<NodeId> {
-        self.panes_id
-            .ok_or_else(|| Error::Invalid("panes not initialized".into()))
+        Self
     }
 
     /// Create a framed list column and return the frame node id.
@@ -165,7 +179,6 @@ impl ListGym {
 
     /// Find the list to target for list commands.
     fn list_id(&self, c: &dyn Context) -> Result<NodeId> {
-        let _ = self.panes_id()?;
         let lists = c.find_nodes("*/frame/list");
         if lists.is_empty() {
             return Err(Error::Invalid("list not initialized".into()));
@@ -212,42 +225,33 @@ impl ListGym {
     #[command]
     /// Add a new column containing a list.
     pub fn add_column(&mut self, c: &mut dyn Context) -> Result<()> {
-        let panes_id = self.panes_id()?;
         let frame_id = Self::create_column(c)?;
-        c.with_widget(panes_id, |panes: &mut Panes, ctx| {
-            panes.insert_col(ctx, frame_id)
-        })?;
-        Ok(())
+        c.with_unique_descendant::<Panes, _>(|panes, ctx| panes.insert_col(ctx, frame_id))
     }
 
     #[command]
     /// Delete the focused column.
     pub fn delete_column(&mut self, c: &mut dyn Context) -> Result<()> {
-        let panes_id = self.panes_id()?;
-        c.with_widget(panes_id, |panes: &mut Panes, ctx| panes.delete_focus(ctx))?;
+        c.with_unique_descendant::<Panes, _>(|panes, ctx| panes.delete_focus(ctx))?;
         Ok(())
     }
 
     #[command]
     /// Move focus to the next column.
     pub fn next_column(&mut self, c: &mut dyn Context) -> Result<()> {
-        let panes_id = self.panes_id()?;
-        c.with_widget(panes_id, |panes: &mut Panes, ctx| {
+        c.with_unique_descendant::<Panes, _>(|panes, ctx| {
             panes.focus_next_column(ctx);
             Ok(())
-        })?;
-        Ok(())
+        })
     }
 
     #[command]
     /// Move focus to the previous column.
     pub fn prev_column(&mut self, c: &mut dyn Context) -> Result<()> {
-        let panes_id = self.panes_id()?;
-        c.with_widget(panes_id, |panes: &mut Panes, ctx| {
+        c.with_unique_descendant::<Panes, _>(|panes, ctx| {
             panes.focus_prev_column(ctx);
             Ok(())
-        })?;
-        Ok(())
+        })
     }
 }
 
@@ -258,7 +262,7 @@ impl Widget for ListGym {
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let panes_id = c.create_detached(Panes::new());
-        let status_id = c.create_detached(StatusBar::new(panes_id));
+        let status_id = c.create_detached(StatusBar::new());
         c.add_child(
             VStack::new()
                 .push_flex(panes_id, 1)
@@ -269,8 +273,6 @@ impl Widget for ListGym {
         c.with_widget(panes_id, |panes: &mut Panes, ctx| {
             panes.insert_col(ctx, frame_id)
         })?;
-
-        self.panes_id = Some(panes_id);
         Ok(())
     }
 

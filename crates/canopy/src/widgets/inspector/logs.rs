@@ -9,7 +9,7 @@ use std::{
 use tracing_subscriber::fmt;
 
 use crate::{
-    Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
+    Canopy, Context, Loader, ViewContext, command, derive_commands,
     error::{Error, Result},
     geom::Rect,
     layout::{CanvasContext, Constraint, Layout, MeasureConstraints, Measurement, Size},
@@ -18,6 +18,9 @@ use crate::{
     widget::Widget,
     widgets::list::{List, Selectable},
 };
+
+/// Key for the logs list node.
+const KEY_LIST: &str = "list";
 
 /// Widget for displaying a single log entry.
 pub struct LogEntry {
@@ -122,8 +125,6 @@ impl Write for LogWriter {
 
 /// Inspector log panel.
 pub struct Logs {
-    /// Node ID for the list widget.
-    list_id: Option<NodeId>,
     /// Whether logging is initialized.
     started: bool,
     /// Shared log buffer.
@@ -185,23 +186,21 @@ impl Logs {
     /// Construct a log panel.
     pub fn new() -> Self {
         Self {
-            list_id: None,
             started: false,
             buf: Arc::new(Mutex::new(vec![])),
         }
     }
 
     /// Ensure the list widget is mounted.
-    fn ensure_tree(&mut self, c: &mut dyn Context) -> Result<()> {
-        if self.list_id.is_some() {
+    fn ensure_tree(&self, c: &mut dyn Context) -> Result<()> {
+        if c.child_keyed(KEY_LIST).is_some() {
             return Ok(());
         }
 
-        let list_id = c.add_child(List::<LogEntry>::new())?;
+        let list_id = c.add_child_keyed(KEY_LIST, List::<LogEntry>::new())?;
         c.with_layout_of(list_id, &mut |layout| {
             *layout = Layout::fill();
         })?;
-        self.list_id = Some(list_id);
         Ok(())
     }
 
@@ -210,10 +209,10 @@ impl Logs {
     where
         F: FnMut(&mut List<LogEntry>, &mut dyn Context) -> Result<R>,
     {
-        let list_id = self
-            .list_id
-            .ok_or_else(|| Error::Internal("logs list not initialized".into()))?;
-        c.with_widget(list_id, f)
+        let Some(_list_id) = c.child_keyed(KEY_LIST) else {
+            return Err(Error::Internal("logs list not initialized".into()));
+        };
+        c.with_keyed(KEY_LIST, f)
     }
 
     /// Drain buffered log lines into the list.
@@ -223,14 +222,13 @@ impl Logs {
         let vals: Vec<String> = b.drain(..).collect();
         drop(b);
 
-        let list_id = match self.list_id {
-            Some(id) => id,
-            None => return Ok(()),
-        };
+        if c.child_keyed(KEY_LIST).is_none() {
+            return Ok(());
+        }
 
         for line in vals {
             let mut entry = Some(LogEntry::new(line));
-            c.with_widget(list_id, |list: &mut List<LogEntry>, ctx| {
+            c.with_keyed(KEY_LIST, |list: &mut List<LogEntry>, ctx| {
                 if let Some(e) = entry.take() {
                     list.append(ctx, e)?;
                 }

@@ -1,15 +1,22 @@
 use crate::{
-    Binder, Canopy, Context, DefaultBindings, Loader, NodeId, ViewContext, command, core::Core,
-    derive_commands, error::Result, event::key::*, layout::Layout, state::NodeName, widget::Widget,
+    Binder, Canopy, Context, DefaultBindings, Loader, NodeId, ViewContext, command,
+    core::Core,
+    derive_commands,
+    error::{Error, Result},
+    event::key::*,
+    layout::Layout,
+    state::NodeName,
+    widget::Widget,
     widgets::inspector::Inspector,
 };
 
+/// Key for the application subtree under root.
+const KEY_APP: &str = "app";
+/// Key for the inspector subtree under root.
+const KEY_INSPECTOR: &str = "inspector";
+
 /// A Root widget that lives at the base of a Canopy app.
 pub struct Root {
-    /// Application root node.
-    app: NodeId,
-    /// Inspector overlay node.
-    inspector: NodeId,
     /// Whether the inspector is visible.
     inspector_active: bool,
 }
@@ -17,10 +24,8 @@ pub struct Root {
 #[derive_commands]
 impl Root {
     /// Construct a root widget wrapping the application and inspector nodes.
-    pub fn new(app: NodeId, inspector: NodeId) -> Self {
+    pub fn new() -> Self {
         Self {
-            app,
-            inspector,
             inspector_active: false,
         }
     }
@@ -33,26 +38,35 @@ impl Root {
 
     /// Synchronize the root layout based on inspector visibility.
     fn sync_layout(&self, c: &mut dyn Context) -> Result<()> {
-        if self.inspector_active {
-            c.set_children(vec![self.inspector, self.app])?;
-        } else {
-            c.set_children(vec![self.app])?;
-        }
+        let app = self.app_id(c)?;
+        let inspector = self.inspector_id(c)?;
+
+        c.set_hidden_of(inspector, !self.inspector_active);
 
         c.with_layout(&mut |layout| {
             *layout = Layout::row().flex_horizontal(1).flex_vertical(1);
         })?;
 
-        c.with_layout_of(self.app, &mut |layout| {
+        c.with_layout_of(app, &mut |layout| {
             *layout = Layout::fill();
         })?;
-        if self.inspector_active {
-            c.with_layout_of(self.inspector, &mut |layout| {
-                *layout = Layout::fill();
-            })?;
-        }
+        c.with_layout_of(inspector, &mut |layout| {
+            *layout = Layout::fill();
+        })?;
 
         Ok(())
+    }
+
+    /// Application node id.
+    fn app_id(&self, c: &dyn Context) -> Result<NodeId> {
+        c.child_keyed(KEY_APP)
+            .ok_or_else(|| Error::NotFound("app".into()))
+    }
+
+    /// Inspector node id.
+    fn inspector_id(&self, c: &dyn Context) -> Result<NodeId> {
+        c.child_keyed(KEY_INSPECTOR)
+            .ok_or_else(|| Error::NotFound("inspector".into()))
     }
 
     #[command]
@@ -114,7 +128,8 @@ impl Root {
     pub fn hide_inspector(&mut self, c: &mut dyn Context) -> Result<()> {
         self.inspector_active = false;
         self.sync_layout(c)?;
-        c.focus_first_in(self.app);
+        let app = self.app_id(c)?;
+        c.focus_first_in(app);
         Ok(())
     }
 
@@ -123,7 +138,8 @@ impl Root {
     pub fn activate_inspector(&mut self, c: &mut dyn Context) -> Result<()> {
         self.inspector_active = true;
         self.sync_layout(c)?;
-        c.focus_first_in(self.inspector);
+        let inspector = self.inspector_id(c)?;
+        c.focus_first_in(inspector);
         Ok(())
     }
 
@@ -140,8 +156,10 @@ impl Root {
     #[command]
     /// If we're currently focused in the inspector, shift focus into the app pane instead.
     pub fn focus_app(&mut self, c: &mut dyn Context) -> Result<()> {
-        if c.node_is_on_focus_path(self.inspector) {
-            c.focus_first_in(self.app);
+        let inspector = self.inspector_id(c)?;
+        let app = self.app_id(c)?;
+        if c.node_is_on_focus_path(inspector) {
+            c.focus_first_in(app);
         }
         Ok(())
     }
@@ -158,24 +176,20 @@ impl Root {
         inspector_active: bool,
     ) -> Result<NodeId> {
         let inspector = Inspector::install(core)?;
-        let root = Self::new(app, inspector).with_inspector(inspector_active);
+        let root = Self::new().with_inspector(inspector_active);
         core.set_widget(core.root, root);
-        if inspector_active {
-            core.set_children(core.root, vec![inspector, app])?;
-        } else {
-            core.set_children(core.root, vec![app])?;
-        }
+        core.attach_keyed(core.root, KEY_INSPECTOR, inspector)?;
+        core.attach_keyed(core.root, KEY_APP, app)?;
+        core.set_hidden(inspector, !inspector_active);
         core.with_layout_of(core.root, |layout| {
             *layout = Layout::row().flex_horizontal(1).flex_vertical(1);
         })?;
         core.with_layout_of(app, |layout| {
             *layout = (*layout).flex_horizontal(1).flex_vertical(1);
         })?;
-        if inspector_active {
-            core.with_layout_of(inspector, |layout| {
-                *layout = (*layout).flex_horizontal(1).flex_vertical(1);
-            })?;
-        }
+        core.with_layout_of(inspector, |layout| {
+            *layout = (*layout).flex_horizontal(1).flex_vertical(1);
+        })?;
         Ok(core.root)
     }
 }
@@ -191,6 +205,12 @@ impl Widget for Root {
 
     fn name(&self) -> NodeName {
         NodeName::convert("root")
+    }
+}
+
+impl Default for Root {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

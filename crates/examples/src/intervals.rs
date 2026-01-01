@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use canopy::{
-    Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
-    error::{Error, Result},
+    Binder, Canopy, Context, Loader, ViewContext, command, derive_commands,
+    error::Result,
     event::{key, mouse},
     layout::{Edges, Layout, MeasureConstraints, Measurement, Size},
     render::Render,
@@ -155,10 +155,7 @@ impl Widget for StatusBar {
 }
 
 /// Root node for the intervals demo.
-pub struct Intervals {
-    /// List node id inside the content frame.
-    list_id: Option<NodeId>,
-}
+pub struct Intervals;
 
 impl Default for Intervals {
     fn default() -> Self {
@@ -170,13 +167,7 @@ impl Default for Intervals {
 impl Intervals {
     /// Construct a new intervals demo.
     pub fn new() -> Self {
-        Self { list_id: None }
-    }
-
-    /// List node id inside the content frame.
-    fn list_id(&self) -> Result<NodeId> {
-        self.list_id
-            .ok_or_else(|| Error::Invalid("list not initialized".into()))
+        Self
     }
 
     /// Execute a closure with mutable access to the list widget.
@@ -184,8 +175,7 @@ impl Intervals {
     where
         F: FnMut(&mut List<CounterItem>, &mut dyn Context) -> Result<R>,
     {
-        let list_id = self.list_id()?;
-        c.with_widget(list_id, |list: &mut List<CounterItem>, ctx| f(list, ctx))
+        c.with_unique_descendant::<List<CounterItem>, _>(|list, ctx| f(list, ctx))
     }
 
     #[command]
@@ -205,14 +195,13 @@ impl Widget for Intervals {
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let frame_id = c.create_detached(frame::Frame::new());
-        let list_id = c.add_child_to(frame_id, List::<CounterItem>::new())?;
+        c.add_child_to(frame_id, List::<CounterItem>::new())?;
         let status_id = c.create_detached(StatusBar);
         c.add_child(
             VStack::new()
                 .push_flex(frame_id, 1)
                 .push_fixed(status_id, 1),
         )?;
-        self.list_id = Some(list_id);
         Ok(())
     }
 
@@ -222,20 +211,19 @@ impl Widget for Intervals {
     }
 
     fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
-        let list_id = self.list_id?;
-
-        // Tick each counter item
-        let len = c
-            .with_widget(list_id, |list: &mut List<CounterItem>, _ctx| Ok(list.len()))
+        let item_ids = self
+            .with_list(c, |list, _ctx| {
+                let mut ids = Vec::with_capacity(list.len());
+                for i in 0..list.len() {
+                    if let Some(id) = list.item(i) {
+                        ids.push(id.into());
+                    }
+                }
+                Ok(ids)
+            })
             .ok()?;
 
-        for i in 0..len {
-            let item_id = c
-                .with_widget(list_id, |list: &mut List<CounterItem>, _ctx| {
-                    Ok(list.item(i).map(|id| id.into()))
-                })
-                .ok()??;
-
+        for item_id in item_ids {
             c.with_widget(item_id, |item: &mut CounterItem, ctx| item.tick(ctx))
                 .ok();
         }

@@ -26,14 +26,14 @@ use crate::{
     },
 };
 
+const KEY_EDITOR: &str = "editor";
+
 /// Host widget that mounts an editor as its only child.
 struct EditorHost {
     /// Initial text contents.
     text: String,
     /// Editor configuration.
     config: EditorConfig,
-    /// Cached editor node id.
-    editor_id: Option<NodeId>,
     /// Number of times the host command was triggered.
     binding_hits: usize,
 }
@@ -45,7 +45,6 @@ impl EditorHost {
         Self {
             text: text.to_string(),
             config,
-            editor_id: None,
             binding_hits: 0,
         }
     }
@@ -57,12 +56,14 @@ impl EditorHost {
     }
 
     /// Ensure the editor node exists and is laid out.
-    fn ensure_tree(&mut self, c: &mut dyn Context) {
-        if self.editor_id.is_some() {
+    fn ensure_tree(&self, c: &mut dyn Context) {
+        if c.child_keyed(KEY_EDITOR).is_some() {
             return;
         }
         let editor = Editor::with_config(self.text.clone(), self.config.clone());
-        let editor_id = c.add_child(editor).expect("Failed to mount editor");
+        let editor_id = c
+            .add_child_keyed(KEY_EDITOR, editor)
+            .expect("Failed to mount editor");
         c.with_layout(&mut |layout| {
             *layout = Layout::fill();
         })
@@ -71,12 +72,6 @@ impl EditorHost {
             *layout = Layout::fill();
         })
         .expect("Failed to layout editor");
-        self.editor_id = Some(editor_id);
-    }
-
-    /// Return the editor node id.
-    fn editor_id(&self) -> NodeId {
-        self.editor_id.expect("editor id missing")
     }
 
     /// Return the number of binding hits recorded on the host.
@@ -125,7 +120,12 @@ fn build_harness(text: &str, config: EditorConfig, width: u32, height: u32) -> H
 }
 
 fn editor_id(harness: &mut Harness) -> NodeId {
-    harness.with_root_widget(|root: &mut EditorHost| root.editor_id())
+    harness
+        .with_root_context(|_root: &mut EditorHost, ctx| {
+            let id = ctx.child_keyed(KEY_EDITOR).expect("editor id missing");
+            Ok(id)
+        })
+        .expect("editor id missing")
 }
 
 fn with_editor<R>(harness: &mut Harness, f: impl FnOnce(&mut Editor) -> R) -> R {
