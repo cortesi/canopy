@@ -3,13 +3,12 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Context, Loader, NodeId, ViewContext,
+        Context, Loader, NodeId, ViewContext, Widget,
         commands::{CommandNode, CommandSpec},
         error::Result,
         render::Render,
         state::NodeName,
         testing::harness::Harness,
-        widget::Widget,
     };
 
     struct MountProbe {

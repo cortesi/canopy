@@ -3,12 +3,11 @@
 use std::hint::black_box;
 
 use canopy::{
-    Context, Loader, ViewContext, derive_commands,
+    Context, Loader, ViewContext, Widget, derive_commands,
     error::Result,
     layout::{Layout, Sizing},
     render::Render,
     testing::harness::Harness,
-    widget::Widget,
     widgets::Text,
 };
 use criterion::{Criterion, criterion_group, criterion_main};

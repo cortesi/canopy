@@ -1,6 +1,6 @@
 use anyhow::Result as AnyResult;
 use canopy::{
-    Binder, Canopy, Context, Loader, ViewContext, command,
+    Binder, Canopy, Context, Loader, ViewContext, Widget, command,
     commands::VerticalDirection,
     derive_commands,
     error::Result,
@@ -10,11 +10,7 @@ use canopy::{
     render::Render,
     state::NodeName,
     style::{effects, solarized},
-    widget::Widget,
-    widgets::{
-        Input, Modal, frame,
-        list::{List, Selectable},
-    },
+    widgets::{Frame, Input, List, Modal, Selectable},
 };
 
 pub mod store;
@@ -160,7 +156,7 @@ impl Todo {
 
         // Create the main content container (list + status bar in column layout)
         let main_content_id = c.add_child_keyed("main", MainContent)?;
-        let frame_id = c.add_child_to(main_content_id, frame::Frame::new())?;
+        let frame_id = c.add_child_to(main_content_id, Frame::new())?;
         let list_id = c.add_child_to(frame_id, List::<TodoEntry>::new())?;
         let status_id = c.add_child_to(main_content_id, StatusBar)?;
 
@@ -209,7 +205,7 @@ impl Todo {
 
         // Create the modal with an input frame
         let modal_id = c.add_child_keyed("modal", Modal::new())?;
-        let adder_frame_id = c.add_child_to(modal_id, frame::Frame::new())?;
+        let adder_frame_id = c.add_child_to(modal_id, Frame::new())?;
         let input_id = c.add_child_to(adder_frame_id, Input::new(""))?;
 
         c.with_layout_of(adder_frame_id, &mut |layout| {

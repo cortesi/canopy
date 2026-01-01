@@ -2,8 +2,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use canopy::{
-    error::Result as CanopyResult, event::key::KeyCode, testing::harness::Harness,
-    widgets::list::List,
+    error::Result as CanopyResult, event::key::KeyCode, testing::harness::Harness, widgets::List,
 };
 use todo::{Todo, TodoEntry, open_store, setup_app};
 

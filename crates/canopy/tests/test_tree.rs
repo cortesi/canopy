@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Core, NodeId, ViewContext, derive_commands,
+        Canopy, Core, NodeId, ViewContext, Widget, derive_commands,
         error::{Error, Result},
         geom::{Direction, Expanse, Point},
         layout::{Layout, Sizing},
@@ -11,7 +11,6 @@ mod tests {
         render::Render,
         state::NodeName,
         testing::grid::Grid,
-        widget::Widget,
     };
 
     #[derive(Debug, Clone, PartialEq)]

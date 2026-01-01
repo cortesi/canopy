@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Loader, ViewContext,
+        Canopy, Loader, ViewContext, Widget,
         commands::{CommandNode, CommandSpec},
         error::Result,
         geom::Expanse,
@@ -11,7 +11,6 @@ mod tests {
         render::Render,
         state::NodeName,
         testing::harness::Harness,
-        widget::Widget,
     };
 
     struct Container;

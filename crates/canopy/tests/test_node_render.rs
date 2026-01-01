@@ -3,14 +3,13 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Core, Loader, NodeId, ViewContext, buf, derive_commands,
+        Canopy, Core, Loader, NodeId, ViewContext, Widget, buf, derive_commands,
         error::Result,
         geom::Expanse,
         layout::{Layout, Sizing},
         render::Render,
         state::NodeName,
         testing::harness::Harness,
-        widget::Widget,
     };
 
     struct NodeB;

@@ -1,17 +1,16 @@
 use std::env;
 
 use canopy::{
-    Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
+    Binder, Canopy, Context, Loader, NodeId, ViewContext, Widget, command, derive_commands,
     error::{Error, Result},
     event::key,
     layout::{Constraint, Layout, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
     style::{Attr, AttrSet, solarized},
-    widget::Widget,
     widgets::{
-        Box, Button, Center, Root, Terminal, TerminalConfig, Text, VStack, boxed, frame,
-        list::{List, Selectable},
+        Box, Button, Center, Frame, List, ROUND_THICK, Root, SINGLE, Selectable, Terminal,
+        TerminalConfig, Text, VStack,
     },
 };
 use unicode_width::UnicodeWidthStr;
@@ -57,7 +56,7 @@ impl Widget for TermEntry {
     }
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        let box_id = ctx.add_child(Box::new().with_glyphs(boxed::SINGLE).with_fill())?;
+        let box_id = ctx.add_child(Box::new().with_glyphs(SINGLE).with_fill())?;
         let center_id = ctx.add_child_to(box_id, Center::new())?;
         ctx.add_child_to(
             center_id,
@@ -387,11 +386,8 @@ impl Widget for TermGym {
         )?;
 
         let stack_id = c.create_detached(TerminalStack::new());
-        let term_frame_id = c.add_child(
-            frame::Frame::new()
-                .with_glyphs(boxed::ROUND_THICK)
-                .with_title("terminal"),
-        )?;
+        let term_frame_id =
+            c.add_child(Frame::new().with_glyphs(ROUND_THICK).with_title("terminal"))?;
         c.attach(term_frame_id, stack_id)?;
 
         c.with_layout(&mut |layout| {

@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Core, NodeId, ViewContext,
+        Canopy, Core, NodeId, ViewContext, Widget,
         commands::{CommandNode, CommandSpec},
         error::{Error, Result},
         geom::{Direction, Expanse},
@@ -11,7 +11,6 @@ mod tests {
         render::Render,
         state::NodeName,
         testing::grid::Grid,
-        widget::Widget,
     };
 
     struct FocusLeaf {

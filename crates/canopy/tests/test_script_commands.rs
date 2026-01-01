@@ -3,11 +3,10 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, CommandArg, Context, Loader, ViewContext, command, derive_commands,
+        Canopy, CommandArg, Context, Loader, ViewContext, Widget, command, derive_commands,
         error::{Error, Result},
         render::Render,
         testing::harness::Harness,
-        widget::Widget,
     };
     use serde::{Deserialize, Serialize};
 

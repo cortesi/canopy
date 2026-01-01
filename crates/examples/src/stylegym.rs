@@ -3,14 +3,13 @@
 //! This example showcases themes, effects, and modal overlays in a two-pane layout.
 
 use canopy::{
-    Binder, Canopy, Context, Loader, ViewContext, command, derive_commands,
+    Binder, Canopy, Context, Loader, ViewContext, Widget, command, derive_commands,
     error::Result,
     event::{key, mouse},
     layout::{Direction, Edges, Layout},
     render::Render,
     style::{StyleMap, dracula, effects, gruvbox, solarized},
-    widget::Widget,
-    widgets::{Dropdown, DropdownItem, Modal, Root, Selector, SelectorItem, frame},
+    widgets::{Dropdown, DropdownItem, Frame, Modal, Root, Selector, SelectorItem},
 };
 
 /// Theme option for the dropdown.
@@ -221,7 +220,7 @@ impl Stylegym {
     /// Execute a closure with the demo frame widget.
     fn with_demo_frame<F, R>(&self, c: &mut dyn Context, f: F) -> Result<R>
     where
-        F: FnOnce(&mut frame::Frame, &mut dyn Context) -> Result<R>,
+        F: FnOnce(&mut Frame, &mut dyn Context) -> Result<R>,
     {
         self.with_right_container(c, |_, ctx| ctx.with_keyed(KEY_DEMO_FRAME, f))
     }
@@ -239,8 +238,7 @@ impl Stylegym {
                 return Ok(());
             }
             let modal_id = ctx.add_child_keyed(KEY_MODAL, Modal::new())?;
-            let frame_id =
-                ctx.add_child_to(modal_id, frame::Frame::new().with_title("Demo Modal"))?;
+            let frame_id = ctx.add_child_to(modal_id, Frame::new().with_title("Demo Modal"))?;
             ctx.add_child_to(frame_id, ModalContent)?;
 
             ctx.with_layout_of(frame_id, &mut |layout| {
@@ -364,8 +362,7 @@ impl Widget for Stylegym {
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         // Create left frame (controls) - preserve Frame's padding for border
-        let left_frame_id =
-            c.add_child_keyed(KEY_CONTROLS, frame::Frame::new().with_title("Controls"))?;
+        let left_frame_id = c.add_child_keyed(KEY_CONTROLS, Frame::new().with_title("Controls"))?;
         c.with_layout_of(left_frame_id, &mut |layout| {
             *layout = Layout::column()
                 .fixed_width(32)
@@ -377,7 +374,7 @@ impl Widget for Stylegym {
         let theme_frame_id = c.add_child_to_keyed(
             left_frame_id,
             KEY_THEME_FRAME,
-            frame::Frame::new().with_title("Theme"),
+            Frame::new().with_title("Theme"),
         )?;
         c.add_child_to_keyed(
             theme_frame_id,
@@ -392,7 +389,7 @@ impl Widget for Stylegym {
         let effects_frame_id = c.add_child_to_keyed(
             left_frame_id,
             KEY_EFFECTS_FRAME,
-            frame::Frame::new().with_title("Effects"),
+            Frame::new().with_title("Effects"),
         )?;
         c.add_child_to_keyed(
             effects_frame_id,
@@ -416,7 +413,7 @@ impl Widget for Stylegym {
         let right_frame_id = c.add_child_to_keyed(
             right_container_id,
             KEY_DEMO_FRAME,
-            frame::Frame::new().with_title("Demo"),
+            Frame::new().with_title("Demo"),
         )?;
         c.add_child_to(right_frame_id, DemoContent)?;
         c.with_layout_of(right_frame_id, &mut |layout| {

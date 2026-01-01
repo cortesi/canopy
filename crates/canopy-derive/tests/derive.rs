@@ -5,7 +5,7 @@ mod tests {
     use std::{any::Any, marker::PhantomData};
 
     use canopy::{
-        self, ViewContext,
+        self, ViewContext, Widget,
         commands::{
             ArgValue, CommandDispatchKind, CommandError, CommandNode, CommandParamKind,
             CommandReturnSpec,
@@ -13,7 +13,6 @@ mod tests {
         error::{Error, Result},
         render::Render,
         testing::dummyctx::DummyContext,
-        widget::Widget,
     };
     use canopy_derive::{command, derive_commands};
     #[cfg(test)]

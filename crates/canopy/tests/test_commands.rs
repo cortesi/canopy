@@ -5,12 +5,11 @@ mod tests {
     use std::cell::RefCell;
 
     use canopy::{
-        Canopy, Context, ViewContext, command,
+        Canopy, Context, ViewContext, Widget, command,
         commands::{ArgValue, CommandNode, dispatch},
         derive_commands,
         error::Result,
         render::Render,
-        widget::Widget,
     };
 
     // Test helper to record command calls

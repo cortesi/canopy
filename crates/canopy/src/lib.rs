@@ -29,7 +29,7 @@ mod editor;
 // Public modules
 pub mod geom;
 pub mod layout;
-pub mod widget;
+pub(crate) mod widget;
 pub mod widgets;
 
 // Re-export submodules that users may need to access directly

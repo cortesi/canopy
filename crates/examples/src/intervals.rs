@@ -1,18 +1,14 @@
 use std::time::Duration;
 
 use canopy::{
-    Binder, Canopy, Context, Loader, ViewContext, command, derive_commands,
+    Binder, Canopy, Context, Loader, ViewContext, Widget, command, derive_commands,
     error::Result,
     event::{key, mouse},
     layout::{Edges, Layout, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
     style::{AttrSet, solarized},
-    widget::Widget,
-    widgets::{
-        Box, Center, Text, VStack, boxed, frame,
-        list::{List, Selectable},
-    },
+    widgets::{Box, Center, Frame, List, SINGLE, Selectable, Text, VStack},
 };
 use unicode_width::UnicodeWidthStr;
 
@@ -107,7 +103,7 @@ impl Widget for CounterItem {
     }
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        let box_id = ctx.add_child(Box::new().with_glyphs(boxed::SINGLE).with_fill())?;
+        let box_id = ctx.add_child(Box::new().with_glyphs(SINGLE).with_fill())?;
         let center_id = ctx.add_child_to(box_id, Center::new())?;
         ctx.add_child_to(center_id, Text::new(self.label()))?;
         self.update_box_layout(ctx)?;
@@ -194,7 +190,7 @@ impl Widget for Intervals {
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        let frame_id = c.create_detached(frame::Frame::new());
+        let frame_id = c.create_detached(Frame::new());
         c.add_child_to(frame_id, List::<CounterItem>::new())?;
         let status_id = c.create_detached(StatusBar);
         c.add_child(

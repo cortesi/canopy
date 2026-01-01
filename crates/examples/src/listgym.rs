@@ -1,15 +1,14 @@
 use std::any::TypeId;
 
 use canopy::{
-    Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
+    Binder, Canopy, Context, Loader, NodeId, ViewContext, Widget, command, derive_commands,
     error::{Error, Result},
     event::{key, mouse},
     layout::{CanvasContext, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
     style::solarized,
-    widget::Widget,
-    widgets::{CanvasWidth, List, Panes, Root, Text, VStack, frame, list::Selectable},
+    widgets::{CanvasWidth, Frame, List, Panes, Root, Selectable, Text, VStack},
 };
 use rand::Rng;
 
@@ -153,7 +152,7 @@ impl ListGym {
 
     /// Create a framed list column and return the frame node id.
     fn create_column(c: &mut dyn Context) -> Result<NodeId> {
-        let frame_id = c.create_detached(frame::Frame::new());
+        let frame_id = c.create_detached(Frame::new());
         let list_id = c.add_child_to(
             frame_id,
             List::<ListEntry>::new().with_selection_indicator("list/selected", "█ ", true),

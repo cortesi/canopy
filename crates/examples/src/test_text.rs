@@ -1,9 +1,8 @@
 use canopy::{
-    Canopy, Context, Loader, ViewContext, command, derive_commands,
+    Canopy, Context, Loader, ViewContext, Widget, command, derive_commands,
     error::Result,
     layout::{Layout, Sizing},
     render::Render,
-    widget::Widget,
     widgets::Text,
 };
 

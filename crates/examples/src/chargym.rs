@@ -1,13 +1,12 @@
 //! Chargym: A Unicode width and wide character demo.
 
 use canopy::{
-    Binder, Canopy, Context, Loader, ViewContext, derive_commands,
+    Binder, Canopy, Context, Loader, ViewContext, Widget, derive_commands,
     error::Result,
     event::{key, mouse},
     layout::Layout,
     render::Render,
-    widget::Widget,
-    widgets::{CanvasWidth, Root, Text, frame},
+    widgets::{CanvasWidth, Frame, Root, Text},
 };
 use unicode_width::UnicodeWidthStr;
 
@@ -237,7 +236,7 @@ impl Widget for CharGym {
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        let frame_id = c.add_child(frame::Frame::new().with_title("chargym"))?;
+        let frame_id = c.add_child(Frame::new().with_title("chargym"))?;
         c.add_child_to(
             frame_id,
             Text::new(self.content.clone())

@@ -2,50 +2,51 @@
 
 // Re-export the trait for derive macros
 /// Button widget.
-pub mod button;
+pub(crate) mod button;
 /// Center widget.
-pub mod center;
+pub(crate) mod center;
 /// Dropdown widget.
-pub mod dropdown;
+pub(crate) mod dropdown;
 /// Editor widget.
 pub mod editor;
 /// Image view widget.
-pub mod image_view;
+pub(crate) mod image_view;
 /// Input helpers.
 pub(crate) mod input;
 /// Modal widget.
-pub mod modal;
+pub(crate) mod modal;
 /// Pane grid layout widget.
 pub(crate) mod panes;
 /// Selector widget.
-pub mod selector;
+pub(crate) mod selector;
 /// Text widget.
 pub(crate) mod text;
 /// Vertical stack widget.
 pub(crate) mod vstack;
 
 /// Box widget.
-pub mod boxed;
+pub(crate) mod boxed;
 /// Frame widget.
-pub mod frame;
+pub(crate) mod frame;
 /// Inspector widget.
 pub mod inspector;
 /// List widget.
-pub mod list;
+pub(crate) mod list;
 /// Root widget.
 pub(crate) mod root;
 /// Tabs widget.
 pub mod tabs;
 /// Terminal widget.
-pub mod terminal;
+pub(crate) mod terminal;
 
-pub use boxed::{Box, BoxGlyphs};
+pub use boxed::{Box, BoxGlyphs, DOUBLE, ROUND, ROUND_THICK, SINGLE, SINGLE_THICK};
 pub use button::Button;
 pub use center::Center;
 pub use dropdown::{Dropdown, DropdownItem};
+pub use frame::{Frame, SCROLL, ScrollGlyphs};
 pub use image_view::ImageView;
 pub use input::Input;
-pub use list::{List, Selectable};
+pub use list::{List, ListActivateConfig, Selectable};
 pub use modal::Modal;
 pub use panes::Panes;
 pub use root::Root;

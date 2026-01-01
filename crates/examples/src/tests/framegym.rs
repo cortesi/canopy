@@ -4,7 +4,7 @@ use canopy::{
     geom,
     layout::{Edges, Layout},
     testing::harness::Harness,
-    widgets::frame,
+    widgets::Frame,
 };
 
 use crate::framegym::{FrameGym, KEY_FRAME, KEY_PATTERN, TestPattern};
@@ -26,7 +26,7 @@ fn metrics(ctx: &dyn ViewContext) -> ViewMetrics {
 
 fn frame_views(harness: &mut Harness) -> Result<(ViewMetrics, ViewMetrics, Layout)> {
     harness.with_root_context(|_root: &mut FrameGym, ctx| {
-        ctx.with_keyed::<frame::Frame, _>(KEY_FRAME, |_frame, frame_ctx| {
+        ctx.with_keyed::<Frame, _>(KEY_FRAME, |_frame, frame_ctx| {
             let frame_view = metrics(frame_ctx);
             let frame_layout = frame_ctx.layout();
             let pattern_view = frame_ctx
@@ -40,7 +40,7 @@ fn frame_views(harness: &mut Harness) -> Result<(ViewMetrics, ViewMetrics, Layou
 
 fn pattern_scroll(harness: &mut Harness) -> Result<geom::Point> {
     harness.with_root_context(|_root: &mut FrameGym, ctx| {
-        ctx.with_keyed::<frame::Frame, _>(KEY_FRAME, |_frame, frame_ctx| {
+        ctx.with_keyed::<Frame, _>(KEY_FRAME, |_frame, frame_ctx| {
             frame_ctx.with_keyed::<TestPattern, _>(KEY_PATTERN, |_pattern, pattern_ctx| {
                 Ok(pattern_ctx.view().tl)
             })

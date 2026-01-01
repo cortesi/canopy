@@ -1,14 +1,12 @@
 use canopy::{
-    Binder, Canopy, Context, Loader, ViewContext, derive_commands,
+    Binder, Canopy, Context, Loader, ViewContext, Widget, derive_commands,
     error::Result,
     event::key,
     layout::{Edges, Layout},
     render::Render,
-    widget::Widget,
     widgets::{
-        Root,
+        Frame, Root,
         editor::{EditMode, Editor, EditorConfig, WrapMode, highlight::SyntectHighlighter},
-        frame,
     },
 };
 
@@ -40,7 +38,7 @@ impl Widget for Ed {
         editor.set_highlighter(Some(Box::new(SyntectHighlighter::new(
             self.extension.as_str(),
         ))));
-        let frame_id = c.add_child(frame::Frame::new())?;
+        let frame_id = c.add_child(Frame::new())?;
         let editor_id = c.add_child_to(frame_id, editor)?;
 
         c.with_layout_of(editor_id, &mut |layout| {

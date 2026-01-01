@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Context, Loader, ViewContext, command, derive_commands,
+        Canopy, Context, Loader, ViewContext, Widget, command, derive_commands,
         error::Result,
         event::key,
         geom::Line,
@@ -11,7 +11,6 @@ mod tests {
         render::Render,
         state::NodeName,
         testing::harness::Harness,
-        widget::Widget,
     };
 
     /// Simple test widget to demonstrate view scrolling behavior.

@@ -1,5 +1,5 @@
 use canopy::{
-    Binder, Canopy, Context, Loader, ViewContext, command,
+    Binder, Canopy, Context, Loader, ViewContext, Widget, command,
     commands::{ScrollDirection, VerticalDirection},
     derive_commands,
     error::Result,
@@ -7,8 +7,7 @@ use canopy::{
     geom::{Expanse, Line},
     layout::{CanvasContext, Layout, MeasureConstraints, Measurement, Size, Sizing},
     render::Render,
-    widget::Widget,
-    widgets::{Root, frame},
+    widgets::{Frame, Root},
 };
 
 /// Base characters used to generate the test pattern.
@@ -180,7 +179,7 @@ impl FrameGym {
 
 impl Widget for FrameGym {
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        let frame_id = c.add_child_keyed(KEY_FRAME, frame::Frame::new().with_title("Frame Gym"))?;
+        let frame_id = c.add_child_keyed(KEY_FRAME, Frame::new().with_title("Frame Gym"))?;
         let pattern_id = c.add_child_to_keyed(frame_id, KEY_PATTERN, TestPattern::new())?;
 
         c.with_layout(&mut |layout| {

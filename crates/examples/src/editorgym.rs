@@ -1,17 +1,15 @@
 use canopy::{
-    Binder, Canopy, Context, Loader, NodeId, command,
+    Binder, Canopy, Context, Loader, NodeId, Widget, command,
     commands::{ScrollDirection, VerticalDirection},
     derive_commands,
     error::Result,
     event::{key, mouse},
     layout::{CanvasContext, Edges, Layout, Size},
-    widget::Widget,
     widgets::{
-        Root,
+        Frame, Root,
         editor::{
             EditMode, Editor, EditorConfig, LineNumbers, WrapMode, highlight::SyntectHighlighter,
         },
-        frame,
     },
 };
 
@@ -67,7 +65,7 @@ fn add_editor_frame(
     if let Some(highlighter) = highlighter {
         editor.set_highlighter(Some(Box::new(highlighter)));
     }
-    let frame_id = c.create_detached(frame::Frame::new().with_title(title));
+    let frame_id = c.create_detached(Frame::new().with_title(title));
     let editor_id = c.add_child_to(frame_id, editor)?;
 
     c.with_layout_of(editor_id, &mut |layout| {

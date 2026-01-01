@@ -1,11 +1,10 @@
 use canopy::{
-    Binder, Canopy, Context, Loader, ViewContext, command, derive_commands,
+    Binder, Canopy, Context, Loader, ViewContext, Widget, command, derive_commands,
     error::Result,
     event::{key, mouse},
     geom::Expanse,
     layout::{Direction, Layout, Sizing},
     render::Render,
-    widget::Widget,
     widgets::Root,
 };
 
