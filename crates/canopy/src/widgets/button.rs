@@ -92,7 +92,7 @@ impl Button {
     fn sync_label(&self, ctx: &mut dyn Context) -> Result<()> {
         let label = self.label.clone();
         let _ = ctx.try_with_unique_descendant::<Text, _>(|text, _ctx| {
-            text.set_raw(label.clone());
+            text.set_raw(label);
             Ok(())
         })?;
         Ok(())

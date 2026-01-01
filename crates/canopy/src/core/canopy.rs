@@ -6,7 +6,7 @@ use super::{inputmap, poll::Poller, termbuf::TermBuf};
 use crate::{
     backend::BackendControl,
     commands,
-    core::{Core, NodeId, context::CoreViewContext, style::StyleEffect, view::View},
+    core::{Core, NodeId, context::CoreViewContext, focus::FocusManager, style::StyleEffect, view::View},
     cursor,
     error::{self, Result},
     event::{Event, key, mouse},
@@ -329,8 +329,36 @@ impl Canopy {
         Ok(layout_dirty)
     }
 
-    /// Render a node subtree into the destination buffer.
-    fn render_traversal(
+    /// Render a single node (without children).
+    fn render_node(
+        &mut self,
+        dest_buf: &mut TermBuf,
+        styl: &mut StyleManager,
+        node_id: NodeId,
+        view: View,
+        screen_clip: Rect,
+        effect_slice: &[Box<dyn StyleEffect>],
+    ) -> Result<()> {
+        let local_clip = Self::outer_clip_to_local(view.outer, screen_clip);
+        let screen_origin = screen_clip.tl;
+
+        let mut rndr = Render::new_shared(
+            &self.style,
+            styl,
+            dest_buf,
+            local_clip,
+            screen_origin,
+        )
+        .with_effects(effect_slice);
+
+        self.core.with_widget_view(node_id, |widget, core| {
+            let ctx = CoreViewContext::new(core, node_id);
+            widget.render(&mut rndr, &ctx)
+        })
+    }
+
+    /// Recursively render a node subtree.
+    fn render_recursive(
         &mut self,
         traversal: &mut RenderTraversal<'_>,
         node_id: NodeId,
@@ -371,33 +399,24 @@ impl Canopy {
         }
 
         let current_len = base_len + traversal.effect_stack.len() - saved_len;
-        let effect_slice = &traversal.effect_stack[base_start..base_start + current_len];
 
         traversal.styl.push();
 
         {
-            let local_clip = Self::outer_clip_to_local(view.outer, screen_clip);
-            let screen_origin = screen_clip.tl;
-
-            let mut rndr = Render::new_shared(
-                &self.style,
-                traversal.styl,
+            let effect_slice = &traversal.effect_stack[base_start..base_start + current_len];
+            self.render_node(
                 traversal.dest_buf,
-                local_clip,
-                screen_origin,
-            )
-            .with_effects(effect_slice);
-
-            let render_result = self.core.with_widget_view(node_id, |widget, core| {
-                let ctx = CoreViewContext::new(core, node_id);
-                widget.render(&mut rndr, &ctx)
-            });
-            render_result?;
+                traversal.styl,
+                node_id,
+                view,
+                screen_clip,
+                effect_slice,
+            )?;
         }
 
         if let Some(children_clip) = view.content.intersect_rect(parent_clip) {
             for child in children {
-                self.render_traversal(traversal, child, children_clip, base_start, current_len)?;
+                self.render_recursive(traversal, child, children_clip, base_start, current_len)?;
             }
         }
 
@@ -469,7 +488,7 @@ impl Canopy {
                 styl: &mut styl,
                 effect_stack: &mut effect_stack,
             };
-            self.render_traversal(&mut traversal, self.core.root, screen_clip, 0, 0)?;
+            self.render_recursive(&mut traversal, self.core.root, screen_clip, 0, 0)?;
             self.post_render(&mut next)?;
 
             if let Some(prev) = &self.termbuf {
@@ -532,24 +551,7 @@ impl Canopy {
             while let Some(id) = target {
                 let view = self.core.nodes.get(id).map(|n| n.view).unwrap_or_default();
                 let content = view.content;
-                let px = m.location.x as i64;
-                let py = m.location.y as i64;
-                let left = content.tl.x as i64;
-                let top = content.tl.y as i64;
-                let right = left + content.w as i64;
-                let bottom = top + content.h as i64;
-                let inside = px >= left && px < right && py >= top && py < bottom;
-                let local_location = if inside {
-                    Point {
-                        x: (px - left) as u32,
-                        y: (py - top) as u32,
-                    }
-                } else {
-                    Point {
-                        x: (px - left).max(0) as u32,
-                        y: (py - top).max(0) as u32,
-                    }
-                };
+                let local_location = content.to_local_point(m.location);
 
                 let outcome = self.core.dispatch_event_on_node(
                     id,

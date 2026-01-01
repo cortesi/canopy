@@ -11,14 +11,14 @@ use crate::{
     backend::BackendControl,
     commands::{CommandNode, CommandScopeFrame, CommandSet, CommandSpec},
     core::{
-        context::{CoreContext, CoreViewContext},
+        context::CoreContext,
         id::NodeId,
         node::Node,
         view::View,
     },
     error::{Error, Result},
     event::Event,
-    geom::{Direction, Expanse, Point, Rect, RectI32},
+    geom::{Expanse, Point, Rect, RectI32},
     layout::{
         Align, CanvasChild, CanvasContext, Constraint, Direction as LayoutDirection, Display,
         Layout, MeasureConstraints, Measurement, Size, Sizing, max_bound,
@@ -29,6 +29,8 @@ use crate::{
     style::StyleMap,
     widget::{EventOutcome, Widget},
 };
+
+use super::focus::{FocusManager, FocusRecoveryHint};
 
 /// Core state for the arena, layout engine, and focus.
 pub struct Core {
@@ -47,7 +49,7 @@ pub struct Core {
     /// Node that captures mouse events regardless of cursor position.
     pub(crate) mouse_capture: Option<NodeId>,
     /// Focus recovery hint for the most recent structural removal.
-    focus_hint: Option<FocusRecoveryHint>,
+    pub(crate) focus_hint: Option<FocusRecoveryHint>,
     /// Active structural transaction for rollback on failure.
     transaction: Option<MountTransaction>,
     /// Registered command specs.
@@ -76,17 +78,6 @@ struct NodeStructureSnapshot {
     children: Vec<NodeId>,
     /// Stored keyed child map.
     child_keys: HashMap<String, NodeId>,
-}
-
-#[derive(Clone, Copy)]
-/// Preferred focus recovery candidates around a removed subtree.
-struct FocusRecoveryHint {
-    /// Next focusable node after the removed subtree.
-    next: Option<NodeId>,
-    /// Previous focusable node before the removed subtree.
-    prev: Option<NodeId>,
-    /// Focusable ancestor of the removed subtree.
-    ancestor: Option<NodeId>,
 }
 
 impl Core {
@@ -821,455 +812,9 @@ impl Core {
         result
     }
 
-    /// Check whether a node is on the focus path.
-    pub fn is_on_focus_path(&self, node: NodeId) -> bool {
-        let mut current = self.focus;
-        while let Some(id) = current {
-            if id == node {
-                return true;
-            }
-            current = self.nodes[id].parent;
-        }
-        false
-    }
 
-    /// Does the node have terminal focus?
-    pub fn is_focused(&self, node: NodeId) -> bool {
-        self.focus == Some(node)
-    }
 
-    /// Focus a node. Returns `true` if focus changed.
-    pub fn set_focus(&mut self, node: NodeId) -> bool {
-        if self.is_focused(node) {
-            false
-        } else {
-            self.focus_gen = self.focus_gen.saturating_add(1);
-            self.focus = Some(node);
-            true
-        }
-    }
 
-    /// Return the focus path for the subtree under `root`.
-    pub fn focus_path(&self, root: NodeId) -> Path {
-        let mut parts = Vec::new();
-        let mut current = self.focus;
-        while let Some(id) = current {
-            parts.push(self.nodes[id].name.to_string());
-            if id == root {
-                break;
-            }
-            current = self.nodes[id].parent;
-        }
-        if current != Some(root) {
-            return Path::empty();
-        }
-        parts.reverse();
-        Path::new(parts)
-    }
-
-    /// Focus the first node that accepts focus in the pre-order traversal of the subtree at root.
-    pub fn focus_first(&mut self, root: NodeId) {
-        if let Some(target) = self.first_focusable(root) {
-            self.set_focus(target);
-        }
-    }
-
-    /// Focus the next node in the pre-order traversal of root.
-    pub fn focus_next(&mut self, root: NodeId) {
-        let mut focus_seen = false;
-        let mut stack = vec![root];
-        while let Some(id) = stack.pop() {
-            let Some(node) = self.nodes.get(id) else {
-                continue;
-            };
-            if node.hidden {
-                continue;
-            }
-            if focus_seen {
-                if self.is_focus_candidate(id) {
-                    self.set_focus(id);
-                    return;
-                }
-            } else if self.is_focused(id) {
-                focus_seen = true;
-            }
-            for child in node.children.iter().rev() {
-                stack.push(*child);
-            }
-        }
-        if let Some(target) = self.first_focusable(root) {
-            self.set_focus(target);
-        } else {
-            self.focus = None;
-        }
-    }
-
-    /// Focus the previous node in the pre-order traversal of `root`.
-    pub fn focus_prev(&mut self, root: NodeId) {
-        let mut prev = None;
-        let mut stack = vec![root];
-        while let Some(id) = stack.pop() {
-            let Some(node) = self.nodes.get(id) else {
-                continue;
-            };
-            if node.hidden {
-                continue;
-            }
-            if self.is_focused(id)
-                && let Some(target) = prev
-            {
-                self.set_focus(target);
-                return;
-            }
-            if self.is_focus_candidate(id) {
-                prev = Some(id);
-            }
-            for child in node.children.iter().rev() {
-                stack.push(*child);
-            }
-        }
-        if let Some(last) = prev {
-            self.set_focus(last);
-        } else {
-            self.focus = None;
-        }
-    }
-
-    /// Move focus in a specified direction within the subtree at root.
-    pub fn focus_dir(&mut self, root: NodeId, dir: Direction) {
-        let mut focusables = Vec::new();
-        let mut stack = vec![root];
-        while let Some(id) = stack.pop() {
-            let Some(node) = self.nodes.get(id) else {
-                continue;
-            };
-            if node.hidden {
-                continue;
-            }
-            if self.is_focus_candidate(id) {
-                focusables.push(id);
-            }
-            for child in node.children.iter().rev() {
-                stack.push(*child);
-            }
-        }
-
-        let current = match self.focus {
-            Some(id) => id,
-            None => {
-                if let Some(first) = focusables.first().copied() {
-                    self.set_focus(first);
-                }
-                return;
-            }
-        };
-
-        let current_rect = match self.nodes.get(current).map(|n| n.view.outer) {
-            Some(r) => r,
-            None => return,
-        };
-
-        let mut candidates: Vec<(NodeId, RectI32)> = focusables
-            .into_iter()
-            .filter(|id| *id != current)
-            .filter_map(|id| self.nodes.get(id).map(|n| (id, n.view.outer)))
-            .collect();
-
-        let current_center = rect_center(current_rect);
-
-        candidates.retain(|(_, rect)| {
-            let center = rect_center(*rect);
-            match dir {
-                Direction::Right | Direction::Left => {
-                    let center_ok = match dir {
-                        Direction::Right => center.0 > current_center.0,
-                        Direction::Left => center.0 < current_center.0,
-                        _ => false,
-                    };
-                    let vertical_overlap = rect_overlap_vertical(*rect, current_rect);
-                    center_ok && vertical_overlap
-                }
-                Direction::Down | Direction::Up => {
-                    let center_ok = match dir {
-                        Direction::Down => center.1 > current_center.1,
-                        Direction::Up => center.1 < current_center.1,
-                        _ => false,
-                    };
-                    let horizontal_overlap = rect_overlap_horizontal(*rect, current_rect);
-                    center_ok && horizontal_overlap
-                }
-            }
-        });
-
-        if candidates.is_empty() {
-            return;
-        }
-
-        candidates.sort_by_key(|(_, rect)| match dir {
-            Direction::Right => {
-                let edge_dist = (rect_left(*rect) - rect_right(current_rect)).max(0) as u64;
-                let vert_center_dist = current_center.1.abs_diff(rect_center(*rect).1) as u64;
-                edge_dist * 10000 + vert_center_dist
-            }
-            Direction::Left => {
-                let edge_dist = (rect_left(current_rect) - rect_right(*rect)).max(0) as u64;
-                let vert_center_dist = current_center.1.abs_diff(rect_center(*rect).1) as u64;
-                edge_dist * 10000 + vert_center_dist
-            }
-            Direction::Down => {
-                let edge_dist = (rect_top(*rect) - rect_bottom(current_rect)).max(0) as u64;
-                let horiz_center_dist = current_center.0.abs_diff(rect_center(*rect).0) as u64;
-                edge_dist * 10000 + horiz_center_dist
-            }
-            Direction::Up => {
-                let edge_dist = (rect_top(current_rect) - rect_bottom(*rect)).max(0) as u64;
-                let horiz_center_dist = current_center.0.abs_diff(rect_center(*rect).0) as u64;
-                edge_dist * 10000 + horiz_center_dist
-            }
-        });
-
-        if let Some((target, _)) = candidates.first().copied() {
-            self.set_focus(target);
-        }
-    }
-
-    /// Check whether a node reports it can accept focus.
-    fn node_accepts_focus(&self, node_id: NodeId) -> bool {
-        self.nodes
-            .get(node_id)
-            .and_then(|node| node.widget.as_ref())
-            .is_some_and(|widget| {
-                let ctx = CoreViewContext::new(self, node_id);
-                widget.accept_focus(&ctx)
-            })
-    }
-
-    /// Find the first focusable node in pre-order.
-    pub(crate) fn first_focusable(&self, root: NodeId) -> Option<NodeId> {
-        self.first_focusable_with(root, true)
-            .or_else(|| self.first_focusable_with(root, false))
-    }
-
-    /// Find the first focusable node in pre-order with optional view requirements.
-    fn first_focusable_with(&self, root: NodeId, require_view: bool) -> Option<NodeId> {
-        let mut stack = vec![root];
-        while let Some(id) = stack.pop() {
-            let Some(node) = self.nodes.get(id) else {
-                continue;
-            };
-            if self.is_focus_candidate_with(id, require_view) {
-                return Some(id);
-            }
-            for child in node.children.iter().rev() {
-                stack.push(*child);
-            }
-        }
-        None
-    }
-
-    /// Return the next focusable node after the subtree rooted at `removed_root`.
-    pub(crate) fn next_focusable_after_subtree(&self, removed_root: NodeId) -> Option<NodeId> {
-        self.next_focusable_after_subtree_with(removed_root, true)
-            .or_else(|| self.next_focusable_after_subtree_with(removed_root, false))
-    }
-
-    /// Return the next focusable node after a subtree with optional view requirements.
-    fn next_focusable_after_subtree_with(
-        &self,
-        removed_root: NodeId,
-        require_view: bool,
-    ) -> Option<NodeId> {
-        if !self.is_attached_to_root(removed_root) {
-            return None;
-        }
-        let mut stack = vec![self.root];
-        let mut past_removed = false;
-        while let Some(id) = stack.pop() {
-            if id == removed_root {
-                past_removed = true;
-                continue;
-            }
-            if past_removed && self.is_focus_candidate_with(id, require_view) {
-                return Some(id);
-            }
-            if let Some(node) = self.nodes.get(id) {
-                for child in node.children.iter().rev() {
-                    stack.push(*child);
-                }
-            }
-        }
-        None
-    }
-
-    /// Return the previous focusable node before the subtree rooted at `removed_root`.
-    pub(crate) fn prev_focusable_before_subtree(&self, removed_root: NodeId) -> Option<NodeId> {
-        self.prev_focusable_before_subtree_with(removed_root, true)
-            .or_else(|| self.prev_focusable_before_subtree_with(removed_root, false))
-    }
-
-    /// Return the previous focusable node before a subtree with optional view requirements.
-    fn prev_focusable_before_subtree_with(
-        &self,
-        removed_root: NodeId,
-        require_view: bool,
-    ) -> Option<NodeId> {
-        if !self.is_attached_to_root(removed_root) {
-            return None;
-        }
-        let mut prev = None;
-        let mut stack = vec![self.root];
-        while let Some(id) = stack.pop() {
-            if id == removed_root {
-                break;
-            }
-            if self.is_focus_candidate_with(id, require_view) {
-                prev = Some(id);
-            }
-            if let Some(node) = self.nodes.get(id) {
-                for child in node.children.iter().rev() {
-                    stack.push(*child);
-                }
-            }
-        }
-        prev
-    }
-
-    /// Return the nearest focusable ancestor of `start`.
-    pub(crate) fn nearest_focusable_ancestor(&self, start: NodeId) -> Option<NodeId> {
-        self.nearest_focusable_ancestor_with(start, true)
-            .or_else(|| self.nearest_focusable_ancestor_with(start, false))
-    }
-
-    /// Return the nearest focusable ancestor with optional view requirements.
-    fn nearest_focusable_ancestor_with(&self, start: NodeId, require_view: bool) -> Option<NodeId> {
-        let mut current = self.nodes.get(start).and_then(|node| node.parent);
-        while let Some(id) = current {
-            if self.is_focus_candidate_with(id, require_view) {
-                return Some(id);
-            }
-            current = self.nodes.get(id).and_then(|node| node.parent);
-        }
-        None
-    }
-
-    /// Ensure the focus invariant is satisfied.
-    pub fn ensure_focus_valid(&mut self, removed_root: Option<NodeId>) {
-        let Some(focus) = self.focus else {
-            self.focus_hint = None;
-            return;
-        };
-
-        if self.is_focus_target(focus) {
-            self.focus_hint = None;
-            return;
-        }
-
-        let hint = self.focus_hint.take();
-        if let Some(removed_root) = removed_root {
-            let candidate = if let Some(hint) = hint {
-                hint.next.or(hint.prev).or(hint.ancestor)
-            } else {
-                self.next_focusable_after_subtree(removed_root)
-                    .or_else(|| self.prev_focusable_before_subtree(removed_root))
-                    .or_else(|| self.nearest_focusable_ancestor(removed_root))
-            };
-            if let Some(target) = candidate {
-                self.set_focus(target);
-            } else {
-                self.focus = None;
-            }
-            return;
-        }
-
-        let candidate = self
-            .next_focusable_after_node(focus)
-            .or_else(|| self.first_focusable(self.root));
-        if let Some(target) = candidate {
-            self.set_focus(target);
-        } else {
-            self.focus = None;
-        }
-    }
-
-    /// Ensure mouse capture only points at attached nodes.
-    pub fn ensure_mouse_capture_valid(&mut self) {
-        if let Some(capture) = self.mouse_capture
-            && (!self.nodes.contains_key(capture) || !self.is_attached_to_root(capture))
-        {
-            self.mouse_capture = None;
-        }
-    }
-
-    /// Ensure focus and mouse capture invariants after structural changes.
-    pub fn ensure_invariants(&mut self, removed_root: Option<NodeId>) {
-        self.ensure_focus_valid(removed_root);
-        self.ensure_mouse_capture_valid();
-    }
-
-    /// Return true if a node is a valid focus candidate.
-    fn is_focus_candidate(&self, node_id: NodeId) -> bool {
-        self.is_focus_candidate_with(node_id, true)
-    }
-
-    /// Return true if a node is a valid focus candidate with optional view requirements.
-    fn is_focus_candidate_with(&self, node_id: NodeId, require_view: bool) -> bool {
-        let Some(node) = self.nodes.get(node_id) else {
-            return false;
-        };
-        if node.hidden {
-            return false;
-        }
-        if require_view && node.view.is_zero() {
-            return false;
-        }
-        self.node_accepts_focus(node_id)
-    }
-
-    /// Return true if a node satisfies the focus invariant.
-    fn is_focus_target(&self, node_id: NodeId) -> bool {
-        self.is_attached_to_root(node_id) && self.is_focus_candidate(node_id)
-    }
-
-    /// Return the next focusable node after a node in pre-order.
-    fn next_focusable_after_node(&self, node_id: NodeId) -> Option<NodeId> {
-        self.next_focusable_after_node_with(node_id, true)
-            .or_else(|| self.next_focusable_after_node_with(node_id, false))
-    }
-
-    /// Return the next focusable node after a node with optional view requirements.
-    fn next_focusable_after_node_with(
-        &self,
-        node_id: NodeId,
-        require_view: bool,
-    ) -> Option<NodeId> {
-        if !self.is_attached_to_root(node_id) {
-            return None;
-        }
-        let mut stack = vec![self.root];
-        let mut seen = false;
-        while let Some(id) = stack.pop() {
-            if id == node_id {
-                seen = true;
-            } else if seen && self.is_focus_candidate_with(id, require_view) {
-                return Some(id);
-            }
-            if let Some(node) = self.nodes.get(id) {
-                for child in node.children.iter().rev() {
-                    stack.push(*child);
-                }
-            }
-        }
-        None
-    }
-
-    /// Precompute focus recovery candidates for a removed subtree.
-    fn focus_recovery_hint(&self, removed_root: NodeId) -> FocusRecoveryHint {
-        FocusRecoveryHint {
-            next: self.next_focusable_after_subtree(removed_root),
-            prev: self.prev_focusable_before_subtree(removed_root),
-            ancestor: self.nearest_focusable_ancestor(removed_root),
-        }
-    }
 
     /// Build a command-scope frame for a specific event.
     pub(crate) fn command_scope_for_event(&self, event: &Event) -> CommandScopeFrame {
@@ -1341,17 +886,7 @@ impl Core {
         Path::new(parts)
     }
 
-    /// Return the focus path as node IDs from root to focus.
-    pub fn focus_path_ids(&self) -> Vec<NodeId> {
-        let mut ids = Vec::new();
-        let mut current = self.focus;
-        while let Some(id) = current {
-            ids.push(id);
-            current = self.nodes.get(id).and_then(|n| n.parent);
-        }
-        ids.reverse();
-        ids
-    }
+
 
     /// Locate the deepest node under a screen-space point.
     pub fn locate_node(&self, root: NodeId, point: Point) -> Result<Option<NodeId>> {
@@ -2206,44 +1741,6 @@ fn locate_recursive(
     }
 
     Ok(())
-}
-
-/// Left edge of a signed rect.
-fn rect_left(rect: RectI32) -> i64 {
-    rect.tl.x as i64
-}
-
-/// Top edge of a signed rect.
-fn rect_top(rect: RectI32) -> i64 {
-    rect.tl.y as i64
-}
-
-/// Right edge of a signed rect.
-fn rect_right(rect: RectI32) -> i64 {
-    rect.tl.x as i64 + rect.w as i64
-}
-
-/// Bottom edge of a signed rect.
-fn rect_bottom(rect: RectI32) -> i64 {
-    rect.tl.y as i64 + rect.h as i64
-}
-
-/// Center point of a signed rect.
-fn rect_center(rect: RectI32) -> (i64, i64) {
-    (
-        rect_left(rect) + rect.w as i64 / 2,
-        rect_top(rect) + rect.h as i64 / 2,
-    )
-}
-
-/// Return true if two rects overlap vertically.
-fn rect_overlap_vertical(a: RectI32, b: RectI32) -> bool {
-    rect_top(a) < rect_bottom(b) && rect_bottom(a) > rect_top(b)
-}
-
-/// Return true if two rects overlap horizontally.
-fn rect_overlap_horizontal(a: RectI32, b: RectI32) -> bool {
-    rect_left(a) < rect_right(b) && rect_right(a) > rect_left(b)
 }
 
 #[derive(Default)]

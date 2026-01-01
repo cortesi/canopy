@@ -26,6 +26,31 @@ impl RectI32 {
         self.w == 0 || self.h == 0
     }
 
+    /// Check if the rectangle contains a point.
+    pub fn contains_point(&self, p: super::Point) -> bool {
+        let px = p.x as i64;
+        let py = p.y as i64;
+        let left = self.tl.x as i64;
+        let top = self.tl.y as i64;
+        let right = left + self.w as i64;
+        let bottom = top + self.h as i64;
+
+        px >= left && px < right && py >= top && py < bottom
+    }
+
+    /// Convert a screen point to local coordinates relative to this rect.
+    /// If the point is to the left/top of the rect, the result clamps to 0.
+    pub fn to_local_point(&self, p: super::Point) -> super::Point {
+        let px = p.x as i64;
+        let py = p.y as i64;
+        let left = self.tl.x as i64;
+        let top = self.tl.y as i64;
+        super::Point {
+            x: (px - left).max(0) as u32,
+            y: (py - top).max(0) as u32,
+        }
+    }
+
     /// Intersect this signed rect with an unsigned rect in the same coordinate space.
     pub fn intersect_rect(&self, other: Rect) -> Option<Rect> {
         let left = self.tl.x;
@@ -57,6 +82,44 @@ impl RectI32 {
             (inter_right - inter_left) as u32,
             (inter_bottom - inter_top) as u32,
         ))
+    }
+
+    /// Left edge of the rect.
+    pub fn left(&self) -> i64 {
+        self.tl.x as i64
+    }
+
+    /// Top edge of the rect.
+    pub fn top(&self) -> i64 {
+        self.tl.y as i64
+    }
+
+    /// Right edge of the rect.
+    pub fn right(&self) -> i64 {
+        self.tl.x as i64 + self.w as i64
+    }
+
+    /// Bottom edge of the rect.
+    pub fn bottom(&self) -> i64 {
+        self.tl.y as i64 + self.h as i64
+    }
+
+    /// Center point of the rect.
+    pub fn center(&self) -> (i64, i64) {
+        (
+            self.left() + self.w as i64 / 2,
+            self.top() + self.h as i64 / 2,
+        )
+    }
+
+    /// Return true if this rect overlaps another vertically.
+    pub fn overlaps_vertical(&self, other: RectI32) -> bool {
+        self.top() < other.bottom() && self.bottom() > other.top()
+    }
+
+    /// Return true if this rect overlaps another horizontally.
+    pub fn overlaps_horizontal(&self, other: RectI32) -> bool {
+        self.left() < other.right() && self.right() > other.left()
     }
 }
 

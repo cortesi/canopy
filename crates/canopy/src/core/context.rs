@@ -11,6 +11,7 @@ use super::{
     view::View,
     world::Core,
 };
+use crate::core::focus::FocusManager;
 use crate::{
     commands::{ArgValue, CommandError, CommandInvocation, CommandScopeFrame, ListRowContext},
     error::{Error, Result},

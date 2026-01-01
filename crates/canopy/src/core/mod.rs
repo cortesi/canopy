@@ -51,6 +51,8 @@ pub mod termbuf;
 pub mod text;
 /// World state and layout integration.
 pub mod world;
+/// Focus management.
+pub mod focus;
 
 // Public exports from internal modules
 pub use binder::{Binder, DefaultBindings};
@@ -60,3 +62,4 @@ pub use id::{NodeId, TypedId};
 pub use inputmap::{BindingTarget, InputMap, InputMode, InputSpec};
 pub use poll::Poller;
 pub use world::Core;
+pub use focus::FocusManager;
