@@ -103,7 +103,7 @@ impl Frame {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::geom::Result;
+    use crate::Result;
 
     #[test]
     fn tframe() -> Result<()> {

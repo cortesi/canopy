@@ -23,8 +23,8 @@ extern crate self as canopy;
 // Internal core module - re-export specific items below
 mod core;
 
-// Public modules
-pub mod geom;
+// Public modules - re-export canopy-geom as geom for backwards compatibility
+pub use canopy_geom as geom;
 pub mod layout;
 pub(crate) mod widget;
 

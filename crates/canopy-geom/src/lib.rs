@@ -1,5 +1,7 @@
 //! Geometry primitives used across canopy.
 
+#![warn(missing_docs)]
+
 /// Error types for geometry operations.
 mod error;
 /// Width/height size type.

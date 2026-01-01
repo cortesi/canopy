@@ -359,6 +359,7 @@ dependencies = [
  "anyhow",
  "bitvec",
  "canopy-derive",
+ "canopy-geom",
  "clap",
  "color-backtrace",
  "comfy-table",
@@ -415,6 +416,13 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "unicode-width 0.2.2",
+]
+
+[[package]]
+name = "canopy-geom"
+version = "0.0.1"
+dependencies = [
+ "thiserror 2.0.17",
 ]
 
 [[package]]
