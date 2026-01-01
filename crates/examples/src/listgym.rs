@@ -179,18 +179,18 @@ impl ListGym {
 
     /// Find the list to target for list commands.
     fn list_id(&self, c: &dyn Context) -> Result<NodeId> {
-        let lists = c.find_nodes("*/frame/list");
+        let lists = c.descendants_of_type::<List<ListEntry>>();
         if lists.is_empty() {
             return Err(Error::Invalid("list not initialized".into()));
         }
         if let Some(id) = lists
             .iter()
             .copied()
-            .find(|id| c.node_is_on_focus_path(*id))
+            .find(|id| c.node_is_on_focus_path((*id).into()))
         {
-            return Ok(id);
+            return Ok(id.into());
         }
-        Ok(lists[0])
+        Ok(lists[0].into())
     }
 
     #[command]

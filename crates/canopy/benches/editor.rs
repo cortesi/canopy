@@ -1,9 +1,9 @@
 //! Editor rendering benchmarks for canopy.
 
-use std::{hint::black_box, time::Duration};
+use std::hint::black_box;
 
 use canopy::{
-    Canopy, Context, Loader, NodeId, ViewContext, derive_commands,
+    Canopy, Context, Loader, ViewContext, derive_commands,
     error::Result,
     layout::Layout,
     render::Render,
@@ -13,12 +13,13 @@ use canopy::{
 };
 use criterion::{Criterion, criterion_group, criterion_main};
 
+/// Key for the editor child node.
+const KEY_EDITOR: &str = "editor";
+
 /// Wrapper node used for editor render benchmarks.
 struct BenchmarkEditorWrapper {
     /// Text content to render.
     text: String,
-    /// Editor node id.
-    editor_id: Option<NodeId>,
 }
 
 #[derive_commands]
@@ -27,22 +28,24 @@ impl BenchmarkEditorWrapper {
     fn new(text: &str) -> Self {
         Self {
             text: text.to_string(),
-            editor_id: None,
         }
     }
+}
 
-    /// Ensure the editor child node is created and laid out.
-    fn ensure_tree(&mut self, c: &mut dyn Context) {
-        if self.editor_id.is_some() {
-            return;
-        }
+impl Widget for BenchmarkEditorWrapper {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+        Ok(())
+    }
 
+    fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let config = EditorConfig::new()
             .with_mode(EditMode::Text)
             .with_wrap(WrapMode::Soft)
             .with_line_numbers(LineNumbers::Absolute);
         let editor = Editor::with_config(self.text.clone(), config);
-        let editor_id = c.add_child(editor).expect("Failed to attach editor");
+        let editor_id = c
+            .add_child_keyed(KEY_EDITOR, editor)
+            .expect("Failed to attach editor");
 
         c.with_layout(&mut |layout| {
             *layout = Layout::fill();
@@ -53,19 +56,7 @@ impl BenchmarkEditorWrapper {
             *layout = Layout::fill();
         })
         .expect("Failed to style editor");
-
-        self.editor_id = Some(editor_id);
-    }
-}
-
-impl Widget for BenchmarkEditorWrapper {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
-    }
-
-    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
-        self.ensure_tree(c);
-        None
     }
 }
 

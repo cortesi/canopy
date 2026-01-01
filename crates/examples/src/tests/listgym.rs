@@ -1,21 +1,43 @@
-use canopy::{Loader, NodeId, error::Result, testing::harness::Harness, widgets::List};
+use canopy::{
+    Loader,
+    error::Result,
+    testing::harness::Harness,
+    widgets::{List, Panes},
+};
 
 use crate::listgym::{ListEntry, ListGym};
 
-fn panes_id(harness: &Harness) -> NodeId {
-    harness
-        .find_node("list_gym/*/panes")
-        .expect("panes not initialized")
+fn list_len(harness: &mut Harness) -> Result<usize> {
+    harness.with_root_context(|_root: &mut ListGym, ctx| {
+        ctx.with_unique_descendant::<List<ListEntry>, _>(|list, _| Ok(list.len()))
+    })
 }
 
-fn list_id(harness: &Harness) -> NodeId {
-    harness
-        .find_node("list_gym/*/frame/list")
-        .expect("list not initialized")
+fn list_selected_index(harness: &mut Harness) -> Result<Option<usize>> {
+    harness.with_root_context(|_root: &mut ListGym, ctx| {
+        ctx.with_unique_descendant::<List<ListEntry>, _>(|list, _| Ok(list.selected_index()))
+    })
 }
 
-fn column_list_ids(harness: &Harness) -> Vec<NodeId> {
-    harness.find_nodes("list_gym/*/frame/list")
+fn panes_column_count(harness: &mut Harness) -> Result<usize> {
+    harness.with_root_context(|_root: &mut ListGym, ctx| {
+        ctx.with_unique_descendant::<Panes, _>(|_panes, ctx| Ok(ctx.children().len()))
+    })
+}
+
+fn list_count(harness: &mut Harness) -> Result<usize> {
+    harness.with_root_context(|_root: &mut ListGym, ctx| {
+        Ok(ctx.descendants_of_type::<List<ListEntry>>().len())
+    })
+}
+
+fn focused_list_index(harness: &mut Harness) -> Result<Option<usize>> {
+    harness.with_root_context(|_root: &mut ListGym, ctx| {
+        let lists = ctx.descendants_of_type::<List<ListEntry>>();
+        Ok(lists
+            .iter()
+            .position(|id| ctx.node_is_on_focus_path((*id).into())))
+    })
 }
 
 fn create_test_harness() -> Result<Harness> {
@@ -45,12 +67,7 @@ fn test_listgym_initial_state() -> Result<()> {
     let mut harness = Harness::new(root)?;
     harness.render()?;
 
-    let list_node = list_id(&harness);
-    let mut len = 0;
-    harness.with_widget(list_node, |list: &mut List<ListEntry>| {
-        len = list.len();
-    });
-
+    let len = list_len(&mut harness)?;
     assert_eq!(len, 10);
 
     Ok(())
@@ -85,19 +102,12 @@ fn test_harness_script_with_list_navigation() -> Result<()> {
     let mut harness = create_test_harness()?;
     harness.render()?;
 
-    let list_node = list_id(&harness);
-    let mut initial_selected = None;
-    harness.with_widget(list_node, |list: &mut List<ListEntry>| {
-        initial_selected = list.selected_index();
-    });
+    let initial_selected = list_selected_index(&mut harness)?;
 
     // Navigate using list commands (these are loaded by the List type).
     harness.script("list::select_last()")?;
 
-    let mut selected = None;
-    harness.with_widget(list_node, |list: &mut List<ListEntry>| {
-        selected = list.selected_index();
-    });
+    let selected = list_selected_index(&mut harness)?;
 
     assert!(selected > initial_selected);
 
@@ -109,33 +119,14 @@ fn test_listgym_adds_and_deletes_columns() -> Result<()> {
     let mut harness = create_test_harness()?;
     harness.render()?;
 
-    let panes_id = panes_id(&harness);
-    let initial_cols = harness
-        .canopy
-        .core
-        .node(panes_id)
-        .expect("panes node missing")
-        .children()
-        .len();
+    let initial_cols = panes_column_count(&mut harness)?;
 
     harness.script("list_gym::add_column()")?;
-    let after_add = harness
-        .canopy
-        .core
-        .node(panes_id)
-        .expect("panes node missing")
-        .children()
-        .len();
+    let after_add = panes_column_count(&mut harness)?;
     assert_eq!(after_add, initial_cols + 1);
 
     harness.script("list_gym::delete_column()")?;
-    let after_delete = harness
-        .canopy
-        .core
-        .node(panes_id)
-        .expect("panes node missing")
-        .children()
-        .len();
+    let after_delete = panes_column_count(&mut harness)?;
     assert_eq!(after_delete, initial_cols);
 
     Ok(())
@@ -159,15 +150,15 @@ fn test_listgym_tabs_between_columns() -> Result<()> {
     harness.render()?;
 
     harness.script("list_gym::add_column()")?;
-    let lists = column_list_ids(&harness);
-    assert_eq!(lists.len(), 2);
-    assert!(harness.canopy.core.is_on_focus_path(lists[1]));
+    let lists = list_count(&mut harness)?;
+    assert_eq!(lists, 2);
+    assert_eq!(focused_list_index(&mut harness)?, Some(1));
 
     harness.script("list_gym::next_column()")?;
-    assert!(harness.canopy.core.is_on_focus_path(lists[0]));
+    assert_eq!(focused_list_index(&mut harness)?, Some(0));
 
     harness.script("list_gym::prev_column()")?;
-    assert!(harness.canopy.core.is_on_focus_path(lists[1]));
+    assert_eq!(focused_list_index(&mut harness)?, Some(1));
 
     Ok(())
 }

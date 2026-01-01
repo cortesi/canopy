@@ -1,9 +1,9 @@
 //! Rendering benchmarks for canopy.
 
-use std::{hint::black_box, time::Duration};
+use std::hint::black_box;
 
 use canopy::{
-    Context, Loader, NodeId, ViewContext, derive_commands,
+    Context, Loader, ViewContext, derive_commands,
     error::Result,
     layout::{Layout, Sizing},
     render::Render,
@@ -13,12 +13,13 @@ use canopy::{
 };
 use criterion::{Criterion, criterion_group, criterion_main};
 
+/// Key for the text child node.
+const KEY_TEXT: &str = "text";
+
 /// Wrapper node used for text render benchmarks.
 struct BenchmarkTextWrapper {
     /// Text content to render.
     content: String,
-    /// Text node id.
-    text_id: Option<NodeId>,
 }
 
 #[derive_commands]
@@ -27,18 +28,18 @@ impl BenchmarkTextWrapper {
     fn new(content: &str) -> Self {
         Self {
             content: content.to_string(),
-            text_id: None,
         }
     }
+}
 
-    /// Ensure the text child node is created and styled.
-    fn ensure_tree(&mut self, c: &mut dyn Context) {
-        if self.text_id.is_some() {
-            return;
-        }
+impl Widget for BenchmarkTextWrapper {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+        Ok(())
+    }
 
+    fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let text_id = c
-            .add_child(Text::new(self.content.clone()))
+            .add_child_keyed(KEY_TEXT, Text::new(self.content.clone()))
             .expect("Failed to attach text");
 
         c.with_layout(&mut |layout| {
@@ -51,19 +52,7 @@ impl BenchmarkTextWrapper {
             layout.height = Sizing::Flex(1);
         })
         .expect("Failed to style text");
-
-        self.text_id = Some(text_id);
-    }
-}
-
-impl Widget for BenchmarkTextWrapper {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
-    }
-
-    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
-        self.ensure_tree(c);
-        None
     }
 }
 
