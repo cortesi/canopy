@@ -3,8 +3,8 @@
 //! This example showcases themes, effects, and modal overlays in a two-pane layout.
 
 use canopy::{
-    Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
-    error::{Error, Result},
+    Binder, Canopy, Context, Loader, ViewContext, command, derive_commands,
+    error::Result,
     event::{key, mouse},
     layout::{Direction, Edges, Layout},
     render::Render,
@@ -218,17 +218,12 @@ impl Stylegym {
         c.with_keyed(KEY_RIGHT_CONTAINER, f)
     }
 
-    /// Execute a closure with the demo frame node id.
-    fn with_demo_frame_id<F, R>(&self, c: &mut dyn Context, f: F) -> Result<R>
+    /// Execute a closure with the demo frame widget.
+    fn with_demo_frame<F, R>(&self, c: &mut dyn Context, f: F) -> Result<R>
     where
-        F: FnOnce(NodeId, &mut dyn Context) -> Result<R>,
+        F: FnOnce(&mut frame::Frame, &mut dyn Context) -> Result<R>,
     {
-        self.with_right_container(c, |_, ctx| {
-            let demo_id = ctx
-                .child_keyed(KEY_DEMO_FRAME)
-                .ok_or_else(|| Error::NotFound("demo frame".into()))?;
-            f(demo_id, ctx)
-        })
+        self.with_right_container(c, |_, ctx| ctx.with_keyed(KEY_DEMO_FRAME, f))
     }
 
     /// Show the modal overlay.
@@ -258,8 +253,8 @@ impl Stylegym {
         })?;
 
         // Dim the demo content frame
-        self.with_demo_frame_id(c, |right_id, ctx| {
-            ctx.push_effect(right_id, effects::dim(0.5))
+        self.with_demo_frame(c, |_frame, ctx| {
+            ctx.push_effect(ctx.node_id(), effects::dim(0.5))
         })?;
 
         Ok(())
@@ -315,9 +310,9 @@ impl Stylegym {
             })?
             .unwrap_or_default();
 
-        self.with_demo_frame_id(c, |right_id, ctx| {
+        self.with_demo_frame(c, |_frame, ctx| {
             // Clear all existing effects on demo pane
-            ctx.clear_effects(right_id)?;
+            ctx.clear_effects(ctx.node_id())?;
 
             // Apply effects in selection order
             let effect_list = available_effects();
@@ -333,7 +328,7 @@ impl Stylegym {
                         "Italic" => effects::italic(),
                         _ => continue,
                     };
-                    ctx.push_effect(right_id, effect)?;
+                    ctx.push_effect(ctx.node_id(), effect)?;
                 }
             }
             Ok(())

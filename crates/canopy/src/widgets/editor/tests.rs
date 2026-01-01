@@ -1,15 +1,10 @@
-use std::{
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
-    time::Duration,
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
 };
 
 use crate::{
-    Binder, Canopy, Context, Loader, NodeId, ViewContext, buf, command,
-    core::context::{CoreContext, CoreViewContext},
-    derive_commands,
+    Binder, Canopy, Context, Loader, ViewContext, buf, command, derive_commands,
     editor::{Selection, TextPosition, TextRange},
     error::Result,
     event::{key, mouse},
@@ -55,25 +50,6 @@ impl EditorHost {
         self.binding_hits = self.binding_hits.saturating_add(1);
     }
 
-    /// Ensure the editor node exists and is laid out.
-    fn ensure_tree(&self, c: &mut dyn Context) {
-        if c.child_keyed(KEY_EDITOR).is_some() {
-            return;
-        }
-        let editor = Editor::with_config(self.text.clone(), self.config.clone());
-        let editor_id = c
-            .add_child_keyed(KEY_EDITOR, editor)
-            .expect("Failed to mount editor");
-        c.with_layout(&mut |layout| {
-            *layout = Layout::fill();
-        })
-        .expect("Failed to layout host");
-        c.with_layout_of(editor_id, &mut |layout| {
-            *layout = Layout::fill();
-        })
-        .expect("Failed to layout editor");
-    }
-
     /// Return the number of binding hits recorded on the host.
     fn binding_hits(&self) -> usize {
         self.binding_hits
@@ -85,9 +61,16 @@ impl Widget for EditorHost {
         Ok(())
     }
 
-    fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {
-        self.ensure_tree(c);
-        None
+    fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
+        let editor = Editor::with_config(self.text.clone(), self.config.clone());
+        let editor_id = c.add_child_keyed(KEY_EDITOR, editor)?;
+        c.with_layout(&mut |layout| {
+            *layout = Layout::fill();
+        })?;
+        c.with_layout_of(editor_id, &mut |layout| {
+            *layout = Layout::fill();
+        })?;
+        Ok(())
     }
 
     fn name(&self) -> NodeName {
@@ -119,18 +102,14 @@ fn build_harness(text: &str, config: EditorConfig, width: u32, height: u32) -> H
     harness
 }
 
-fn editor_id(harness: &mut Harness) -> NodeId {
+fn with_editor<R>(harness: &mut Harness, f: impl FnOnce(&mut Editor) -> R) -> R {
+    let mut f = Some(f);
     harness
         .with_root_context(|_root: &mut EditorHost, ctx| {
-            let id = ctx.child_keyed(KEY_EDITOR).expect("editor id missing");
-            Ok(id)
+            let f = f.take().expect("editor closure already consumed");
+            ctx.with_keyed(KEY_EDITOR, |editor: &mut Editor, _| Ok(f(editor)))
         })
-        .expect("editor id missing")
-}
-
-fn with_editor<R>(harness: &mut Harness, f: impl FnOnce(&mut Editor) -> R) -> R {
-    let id = editor_id(harness);
-    harness.with_widget(id, f)
+        .expect("editor missing")
 }
 
 fn host_binding_hits(harness: &mut Harness) -> usize {
@@ -156,17 +135,22 @@ fn editor_cursor_location(harness: &mut Harness) -> Point {
 }
 
 fn editor_view_scroll(harness: &mut Harness) -> Point {
-    let id = editor_id(harness);
-    let ctx = CoreViewContext::new(&harness.canopy.core, id);
-    ctx.view().tl
+    harness
+        .with_root_context(|_root: &mut EditorHost, ctx| {
+            ctx.with_keyed(KEY_EDITOR, |_editor: &mut Editor, ctx| Ok(ctx.view().tl))
+        })
+        .expect("editor missing")
 }
 
 fn scroll_editor_to(harness: &mut Harness, x: u32, y: u32) {
-    let id = editor_id(harness);
-    harness.canopy.core.with_widget_mut(id, |_widget, core| {
-        let mut ctx = CoreContext::new(core, id);
-        ctx.scroll_to(x, y);
-    });
+    harness
+        .with_root_context(|_root: &mut EditorHost, ctx| {
+            ctx.with_keyed(KEY_EDITOR, |_editor: &mut Editor, ctx| {
+                ctx.scroll_to(x, y);
+                Ok(())
+            })
+        })
+        .expect("editor missing");
 }
 
 fn mouse_event(action: mouse::Action, x: u32, y: u32) -> mouse::MouseEvent {

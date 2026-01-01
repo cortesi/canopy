@@ -140,13 +140,6 @@ impl TermGym {
         c.with_unique_descendant::<List<TermEntry>, _>(|list, ctx| f(list, ctx))
     }
 
-    /// Return the terminal list node id.
-    fn list_id(&self, c: &dyn Context) -> Result<NodeId> {
-        c.unique_descendant::<List<TermEntry>>()?
-            .map(|id| id.into())
-            .ok_or_else(|| Error::Internal("list not initialized".into()))
-    }
-
     /// Execute a closure with the terminal stack widget.
     fn with_stack<F, R>(&self, c: &mut dyn Context, f: F) -> Result<R>
     where
@@ -156,11 +149,14 @@ impl TermGym {
     }
 
     /// Return terminal stack children in order.
-    fn terminal_ids(&self, c: &dyn Context) -> Result<Vec<NodeId>> {
-        let stack_id = c
-            .unique_descendant::<TerminalStack>()?
-            .ok_or_else(|| Error::Internal("stack not initialized".into()))?;
-        Ok(c.children_of(stack_id.into()))
+    fn terminal_ids(&self, c: &mut dyn Context) -> Result<Vec<NodeId>> {
+        self.with_stack(c, |_stack, ctx| {
+            Ok(ctx
+                .children_of_type::<Terminal>()
+                .into_iter()
+                .map(|id| id.into())
+                .collect())
+        })
     }
 
     /// Create and mount a new terminal instance.
@@ -366,33 +362,34 @@ impl TermGym {
 
     /// Handle a mouse click within the sidebar list.
     fn handle_list_click(&mut self, c: &mut dyn Context, location: Point) -> bool {
-        let list_id = match self.list_id(c) {
-            Ok(id) => id,
-            Err(_) => return false,
-        };
-        let Some(list_view) = c.node_view(list_id) else {
-            return false;
-        };
         let view = c.view();
         let screen_x = view.content.tl.x as i64 + location.x as i64;
         let screen_y = view.content.tl.y as i64 + location.y as i64;
-        let left = list_view.content.tl.x as i64;
-        let top = list_view.content.tl.y as i64;
-        let right = left + list_view.content.w as i64;
-        let bottom = top + list_view.content.h as i64;
 
-        if screen_x < left || screen_x >= right || screen_y < top || screen_y >= bottom {
-            return false;
-        }
+        let click_index = match self.with_list(c, |_list, ctx| {
+            let list_view = ctx.view();
+            let left = list_view.content.tl.x as i64;
+            let top = list_view.content.tl.y as i64;
+            let right = left + list_view.content.w as i64;
+            let bottom = top + list_view.content.h as i64;
 
-        let local_y = (screen_y - top).max(0) as u32;
-        let content_y = local_y.saturating_add(list_view.tl.y);
-        let index = (content_y / ENTRY_HEIGHT) as usize;
+            if screen_x < left || screen_x >= right || screen_y < top || screen_y >= bottom {
+                return Ok(None);
+            }
+
+            let local_y = (screen_y - top).max(0) as u32;
+            let content_y = local_y.saturating_add(list_view.tl.y);
+            Ok(Some((content_y / ENTRY_HEIGHT) as usize))
+        }) {
+            Ok(Some(index)) => index,
+            _ => return false,
+        };
+
         let terminals = match self.terminal_ids(c) {
             Ok(ids) => ids,
             Err(_) => return false,
         };
-        if index < terminals.len() && self.set_active(c, index).is_err() {
+        if click_index < terminals.len() && self.set_active(c, click_index).is_err() {
             return false;
         }
         if self.focus_sidebar_list(c).is_err() {

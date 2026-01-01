@@ -11,6 +11,10 @@ use canopy::{
 
 /// Base characters used to generate the test pattern.
 const PATTERN: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+/// Key for the frame node.
+pub(crate) const KEY_FRAME: &str = "frame";
+/// Key for the test pattern node.
+pub(crate) const KEY_PATTERN: &str = "test_pattern";
 
 /// A widget that renders a test pattern.
 pub struct TestPattern {
@@ -156,8 +160,8 @@ impl FrameGym {
 
 impl Widget for FrameGym {
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        let frame_id = c.add_child(frame::Frame::new().with_title("Frame Gym"))?;
-        let pattern_id = c.add_child_to(frame_id, TestPattern::new())?;
+        let frame_id = c.add_child_keyed(KEY_FRAME, frame::Frame::new().with_title("Frame Gym"))?;
+        let pattern_id = c.add_child_to_keyed(frame_id, KEY_PATTERN, TestPattern::new())?;
 
         c.with_layout(&mut |layout| {
             *layout = Layout::column().flex_horizontal(1).flex_vertical(1);

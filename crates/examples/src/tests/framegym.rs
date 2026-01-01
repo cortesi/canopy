@@ -1,26 +1,59 @@
 use canopy::{
+    ViewContext,
     error::Result,
-    event::{key, mouse},
     geom,
-    layout::Edges,
+    layout::{Edges, Layout},
     testing::harness::Harness,
+    widgets::frame,
 };
 
-use crate::framegym::FrameGym;
+use crate::framegym::{FrameGym, KEY_FRAME, KEY_PATTERN, TestPattern};
+
+struct ViewMetrics {
+    outer: geom::RectI32,
+    content: geom::RectI32,
+    canvas: geom::Expanse,
+}
+
+fn metrics(ctx: &dyn ViewContext) -> ViewMetrics {
+    let view = ctx.view();
+    ViewMetrics {
+        outer: view.outer,
+        content: view.content,
+        canvas: view.canvas,
+    }
+}
+
+fn frame_views(harness: &mut Harness) -> Result<(ViewMetrics, ViewMetrics, Layout)> {
+    harness.with_root_context(|_root: &mut FrameGym, ctx| {
+        ctx.with_keyed::<frame::Frame, _>(KEY_FRAME, |_frame, frame_ctx| {
+            let frame_view = metrics(frame_ctx);
+            let frame_layout = frame_ctx.layout();
+            let pattern_view = frame_ctx
+                .with_keyed::<TestPattern, _>(KEY_PATTERN, |_pattern, pattern_ctx| {
+                    Ok(metrics(pattern_ctx))
+                })?;
+            Ok((frame_view, pattern_view, frame_layout))
+        })
+    })
+}
+
+fn pattern_scroll(harness: &mut Harness) -> Result<geom::Point> {
+    harness.with_root_context(|_root: &mut FrameGym, ctx| {
+        ctx.with_keyed::<frame::Frame, _>(KEY_FRAME, |_frame, frame_ctx| {
+            frame_ctx.with_keyed::<TestPattern, _>(KEY_PATTERN, |_pattern, pattern_ctx| {
+                Ok(pattern_ctx.view().tl)
+            })
+        })
+    })
+}
 
 #[test]
 fn test_framegym_basic() -> Result<()> {
     let mut harness = Harness::builder(FrameGym::new()).size(20, 20).build()?;
     harness.render()?;
 
-    let frame_id = harness.find_node("*/frame").expect("missing frame");
-    let pattern_id = harness
-        .find_node("*/frame/test_pattern")
-        .expect("missing pattern");
-    let core = &harness.canopy.core;
-    let frame_view = core.node(frame_id).expect("missing frame").view();
-    let pattern_view = core.node(pattern_id).expect("missing pattern").view();
-    let frame_layout = core.node(frame_id).expect("missing frame").layout();
+    let (frame_view, pattern_view, frame_layout) = frame_views(&mut harness)?;
 
     assert_eq!(pattern_view.outer.tl.x, frame_view.content.tl.x);
     assert_eq!(pattern_view.outer.tl.y, frame_view.content.tl.y);
@@ -46,137 +79,27 @@ fn test_framegym_basic() -> Result<()> {
 }
 
 #[test]
-fn framegym_scrollbar_drag_updates_scroll() -> Result<()> {
+fn framegym_scroll_commands_update_vertical_scroll() -> Result<()> {
     let mut harness = Harness::builder(FrameGym::new()).size(20, 20).build()?;
     harness.render()?;
 
-    let frame_id = harness.find_node("*/frame").expect("missing frame");
-    let pattern_id = harness
-        .find_node("*/frame/test_pattern")
-        .expect("missing pattern");
-    let core = &harness.canopy.core;
-    let frame_view = core.node(frame_id).expect("missing frame").view();
-    let pattern_view = core.node(pattern_id).expect("missing pattern").view();
-
-    let outer_local = frame_view.outer_rect_local();
-    let frame_geom = geom::Frame::new(outer_local, 1);
-    let active = pattern_view
-        .vactive(frame_geom.right)?
-        .expect("missing active scrollbar")
-        .1;
-    let start_local = geom::Point {
-        x: active.tl.x,
-        y: active.tl.y.saturating_add(active.h / 2),
-    };
-    let start_screen = geom::Point {
-        x: (frame_view.outer.tl.x + start_local.x as i32).max(0) as u32,
-        y: (frame_view.outer.tl.y + start_local.y as i32).max(0) as u32,
-    };
-
-    let initial_scroll = pattern_view.tl.y;
-    harness.mouse(mouse::MouseEvent {
-        action: mouse::Action::Down,
-        button: mouse::Button::Left,
-        modifiers: key::Empty,
-        location: start_screen,
-    })?;
-    harness.mouse(mouse::MouseEvent {
-        action: mouse::Action::Drag,
-        button: mouse::Button::Left,
-        modifiers: key::Empty,
-        location: geom::Point {
-            x: start_screen.x,
-            y: start_screen.y.saturating_add(3),
-        },
-    })?;
-
-    let updated_scroll = harness
-        .canopy
-        .core
-        .node(pattern_id)
-        .expect("missing pattern")
-        .view()
-        .tl
-        .y;
+    let initial_scroll = pattern_scroll(&mut harness)?.y;
+    harness.script("test_pattern::scroll_down()")?;
+    let updated_scroll = pattern_scroll(&mut harness)?.y;
     assert!(updated_scroll > initial_scroll);
-
-    harness.mouse(mouse::MouseEvent {
-        action: mouse::Action::Up,
-        button: mouse::Button::Left,
-        modifiers: key::Empty,
-        location: geom::Point {
-            x: start_screen.x,
-            y: start_screen.y.saturating_add(3),
-        },
-    })?;
 
     Ok(())
 }
 
 #[test]
-fn framegym_horizontal_scrollbar_drag_updates_scroll() -> Result<()> {
+fn framegym_scroll_commands_update_horizontal_scroll() -> Result<()> {
     let mut harness = Harness::builder(FrameGym::new()).size(20, 20).build()?;
     harness.render()?;
 
-    let frame_id = harness.find_node("*/frame").expect("missing frame");
-    let pattern_id = harness
-        .find_node("*/frame/test_pattern")
-        .expect("missing pattern");
-    let core = &harness.canopy.core;
-    let frame_view = core.node(frame_id).expect("missing frame").view();
-    let pattern_view = core.node(pattern_id).expect("missing pattern").view();
-
-    let outer_local = frame_view.outer_rect_local();
-    let frame_geom = geom::Frame::new(outer_local, 1);
-    let active = pattern_view
-        .hactive(frame_geom.bottom)?
-        .expect("missing active scrollbar")
-        .1;
-    let start_local = geom::Point {
-        x: active.tl.x.saturating_add(active.w / 2),
-        y: active.tl.y,
-    };
-    let start_screen = geom::Point {
-        x: (frame_view.outer.tl.x + start_local.x as i32).max(0) as u32,
-        y: (frame_view.outer.tl.y + start_local.y as i32).max(0) as u32,
-    };
-
-    let initial_scroll = pattern_view.tl.x;
-    harness.mouse(mouse::MouseEvent {
-        action: mouse::Action::Down,
-        button: mouse::Button::Left,
-        modifiers: key::Empty,
-        location: start_screen,
-    })?;
-    harness.mouse(mouse::MouseEvent {
-        action: mouse::Action::Drag,
-        button: mouse::Button::Left,
-        modifiers: key::Empty,
-        location: geom::Point {
-            x: start_screen.x.saturating_add(3),
-            y: start_screen.y,
-        },
-    })?;
-
-    let updated_scroll = harness
-        .canopy
-        .core
-        .node(pattern_id)
-        .expect("missing pattern")
-        .view()
-        .tl
-        .x;
+    let initial_scroll = pattern_scroll(&mut harness)?.x;
+    harness.script("test_pattern::scroll_right()")?;
+    let updated_scroll = pattern_scroll(&mut harness)?.x;
     assert!(updated_scroll > initial_scroll);
-
-    harness.mouse(mouse::MouseEvent {
-        action: mouse::Action::Up,
-        button: mouse::Button::Left,
-        modifiers: key::Empty,
-        location: geom::Point {
-            x: start_screen.x.saturating_add(3),
-            y: start_screen.y,
-        },
-    })?;
 
     Ok(())
 }
