@@ -1,8 +1,8 @@
 use crate::{
     Context, NodeId, ViewContext, command,
-    commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
+    commands::{CommandNode, CommandSpec},
     derive_commands,
-    error::{Error, Result},
+    error::Result,
     layout::{Layout, Sizing},
     state::NodeName,
     widget::Widget,
@@ -12,12 +12,8 @@ use crate::{
 struct PaneColumn;
 
 impl CommandNode for PaneColumn {
-    fn commands() -> Vec<CommandSpec> {
-        Vec::new()
-    }
-
-    fn dispatch(&mut self, _c: &mut dyn Context, cmd: &CommandInvocation) -> Result<ReturnValue> {
-        Err(Error::UnknownCommand(cmd.command.clone()))
+    fn commands() -> &'static [&'static CommandSpec] {
+        &[]
     }
 }
 
@@ -75,43 +71,17 @@ impl Panes {
         self.focus_coords(c).map(|(x, _)| x)
     }
 
-    /// Move focus to the next column.
-    pub fn focus_next_column(&self, c: &mut dyn Context) {
+    /// Move focus by a signed column offset (wraps around).
+    #[command]
+    pub fn focus_column(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
         let columns = self.column_nodes();
         if columns.is_empty() {
-            return;
+            return Ok(());
         }
-        let next_idx = match self.focused_column_index(c) {
-            Some(idx) => (idx + 1) % columns.len(),
-            None => 0,
-        };
-        focus_column_node(c, columns[next_idx]);
-    }
-
-    /// Move focus to the previous column.
-    pub fn focus_prev_column(&self, c: &mut dyn Context) {
-        let columns = self.column_nodes();
-        if columns.is_empty() {
-            return;
-        }
-        let next_idx = match self.focused_column_index(c) {
-            Some(idx) => (idx + columns.len() - 1) % columns.len(),
-            None => columns.len() - 1,
-        };
-        focus_column_node(c, columns[next_idx]);
-    }
-
-    #[command]
-    /// Move focus to the next column.
-    pub fn next_column(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.focus_next_column(c);
-        Ok(())
-    }
-
-    #[command]
-    /// Move focus to the previous column.
-    pub fn prev_column(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.focus_prev_column(c);
+        let current = self.focused_column_index(c).unwrap_or(0);
+        let len = columns.len() as i32;
+        let next = ((current as i32 + delta).rem_euclid(len)) as usize;
+        focus_column_node(c, columns[next]);
         Ok(())
     }
 

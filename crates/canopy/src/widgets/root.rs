@@ -1,5 +1,6 @@
 use crate::{
     Binder, Canopy, Context, DefaultBindings, Loader, NodeId, ViewContext, command,
+    commands::FocusDirection,
     core::Core,
     derive_commands,
     error::{Error, Result},
@@ -81,46 +82,53 @@ impl Root {
         Ok(())
     }
 
+    /// Move focus in the specified direction.
+    pub fn focus(&mut self, c: &mut dyn Context, direction: FocusDirection) -> Result<()> {
+        match direction {
+            FocusDirection::Next => c.focus_next_global(),
+            FocusDirection::Prev => c.focus_prev_global(),
+            FocusDirection::Up => c.focus_up_global(),
+            FocusDirection::Down => c.focus_down_global(),
+            FocusDirection::Left => c.focus_left_global(),
+            FocusDirection::Right => c.focus_right_global(),
+        }
+        Ok(())
+    }
+
     #[command]
-    /// Focus the next node in a pre-order traversal of the app.
+    /// Move focus to the next node.
     pub fn focus_next(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.focus_next_global();
-        Ok(())
+        self.focus(c, FocusDirection::Next)
     }
 
     #[command]
-    /// Focus the previous node in a pre-order traversal of the app.
+    /// Move focus to the previous node.
     pub fn focus_prev(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.focus_prev_global();
-        Ok(())
+        self.focus(c, FocusDirection::Prev)
     }
 
     #[command]
-    /// Shift focus right.
-    pub fn focus_right(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.focus_right_global();
-        Ok(())
-    }
-
-    #[command]
-    /// Shift focus left.
-    pub fn focus_left(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.focus_left_global();
-        Ok(())
-    }
-
-    #[command]
-    /// Shift focus up.
+    /// Move focus up.
     pub fn focus_up(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.focus_up_global();
-        Ok(())
+        self.focus(c, FocusDirection::Up)
     }
 
     #[command]
-    /// Shift focus down.
+    /// Move focus down.
     pub fn focus_down(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.focus_down_global();
-        Ok(())
+        self.focus(c, FocusDirection::Down)
+    }
+
+    #[command]
+    /// Move focus left.
+    pub fn focus_left(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.focus(c, FocusDirection::Left)
+    }
+
+    #[command]
+    /// Move focus right.
+    pub fn focus_right(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.focus(c, FocusDirection::Right)
     }
 
     #[command]
@@ -236,9 +244,9 @@ impl Loader for Root {
 mod tests {
     use super::*;
     use crate::{
-        Context, ViewContext,
-        commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
-        error::{Error, Result},
+        ViewContext,
+        commands::{CommandNode, CommandSpec},
+        error::Result,
         geom::Expanse,
         layout::Layout,
         render::Render,
@@ -250,16 +258,8 @@ mod tests {
     struct App;
 
     impl CommandNode for App {
-        fn commands() -> Vec<CommandSpec> {
-            Vec::new()
-        }
-
-        fn dispatch(
-            &mut self,
-            _c: &mut dyn Context,
-            cmd: &CommandInvocation,
-        ) -> Result<ReturnValue> {
-            Err(Error::UnknownCommand(cmd.command.clone()))
+        fn commands() -> &'static [&'static CommandSpec] {
+            &[]
         }
     }
 
@@ -284,16 +284,8 @@ mod tests {
     }
 
     impl CommandNode for FocusLeaf {
-        fn commands() -> Vec<CommandSpec> {
-            Vec::new()
-        }
-
-        fn dispatch(
-            &mut self,
-            _c: &mut dyn Context,
-            cmd: &CommandInvocation,
-        ) -> Result<ReturnValue> {
-            Err(Error::UnknownCommand(cmd.command.clone()))
+        fn commands() -> &'static [&'static CommandSpec] {
+            &[]
         }
     }
 

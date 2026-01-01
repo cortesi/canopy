@@ -607,63 +607,63 @@ This preserves ergonomic named args while allowing serde-struct positional maps 
 
 ### Stage 1 — `ArgValue` and local encode/decode traits
 
-* [ ] Implement `ArgValue`.
-* [ ] Define `ToArgValue` / `FromArgValue`.
-* [ ] Implement both traits for primitives, containers, and tuples.
-* [ ] Implement and test range-checking and error reporting.
+* [x] Implement `ArgValue`.
+* [x] Define `ToArgValue` / `FromArgValue`.
+* [x] Implement both traits for primitives, containers, and tuples.
+* [x] Implement and test range-checking and error reporting.
 
 ### Stage 2 — Command scope stack + `dispatch_command_scoped`
 
-* [ ] Add command-scope stack and `CommandScopeFrame`.
-* [ ] Implement `current_event()`, `current_mouse_event()`, `current_list_row()` reads from the top
+* [x] Add command-scope stack and `CommandScopeFrame`.
+* [x] Implement `current_event()`, `current_mouse_event()`, `current_list_row()` reads from the top
       frame.
-* [ ] Implement `dispatch_command_scoped(frame, inv)` with push/pop.
-* [ ] Wire event dispatch to push a frame containing an event snapshot and derived mouse/list-row
+* [x] Implement `dispatch_command_scoped(frame, inv)` with push/pop.
+* [x] Wire event dispatch to push a frame containing an event snapshot and derived mouse/list-row
       context.
 
 ### Stage 3 — Injection system
 
-* [ ] Define `InjectError`, `Inject`, and blanket `Inject for Option<T>`.
-* [ ] Define `Injected<T>` and (marker) `Arg<T>`.
-* [ ] Implement `Inject` for `Event`, `MouseEvent`, `ListRowContext`.
-* [ ] Ensure `InjectError` mapping to `CommandError::{MissingInjected,Conversion}` is performed by
+* [x] Define `InjectError`, `Inject`, and blanket `Inject for Option<T>`.
+* [x] Define `Injected<T>` and (marker) `Arg<T>`.
+* [x] Implement `Inject` for `Event`, `MouseEvent`, `ListRowContext`.
+* [x] Ensure `InjectError` mapping to `CommandError::{MissingInjected,Conversion}` is performed by
       generated wrappers (parameter name filled by macro).
 
 ### Stage 4 — `#[command]` macro: extraction + wrapper generation
 
-* [ ] Generate `CommandSpec` with `'static` id and metadata including `optional` and `default`.
-* [ ] Generate erased `invoke(target: Option<&mut dyn Any>, ...)`.
-* [ ] Implement binding algorithm (Context refs, Injected<T>, built-in shorthand, Arg<T>, user
+* [x] Generate `CommandSpec` with `'static` id and metadata including `optional` and `default`.
+* [x] Generate erased `invoke(target: Option<&mut dyn Any>, ...)`.
+* [x] Implement binding algorithm (Context refs, Injected<T>, built-in shorthand, Arg<T>, user
       args).
-* [ ] Implement attribute-based defaults (`#[arg(default = ...)]`).
-* [ ] Normalize return values to `ArgValue` for `()`, `T`, `Result<()>`, `Result<T>`.
+* [x] Implement attribute-based defaults (`#[arg(default = ...)]`).
+* [x] Normalize return values to `ArgValue` for `()`, `T`, `Result<()>`, `Result<T>`.
 
 ### Stage 5 — CommandSet and routing
 
-* [ ] Implement `CommandSet::{add,get}`.
-* [ ] Define/confirm routing logic for `CommandDispatchKind::Node { owner }`.
-* [ ] Implement free-command dispatch path (invoke with `target = None`).
+* [x] Implement `CommandSet::{add,get}`.
+* [x] Define/confirm routing logic for `CommandDispatchKind::Node { owner }`.
+* [x] Implement free-command dispatch path (invoke with `target = None`).
 
 ### Stage 6 — Rhai bridge
 
-* [ ] Implement `Dynamic ↔ ArgValue` conversion.
-* [ ] Register `cmd`, `cmdv`, `cmd_named`, `cmd_pos`.
-* [ ] If enabling signature-aware `cmd(name, map)`, implement subset-of-param-names heuristic.
+* [x] Implement `Dynamic ↔ ArgValue` conversion.
+* [x] Register `cmd`, `cmdv`, `cmd_named`, `cmd_pos`.
+* [x] If enabling signature-aware `cmd(name, map)`, implement subset-of-param-names heuristic.
 
 ### Stage 7 — serde user types + enum derive
 
-* [ ] Implement `CommandArg` derive and serde bridging (`ArgValue ↔ serde_json::Value`).
-* [ ] Implement `ToArgValue` / `FromArgValue` for `T: CommandArg`.
-* [ ] Implement `CommandEnum` derive generating `ToArgValue` / `FromArgValue`.
-* [ ] Add coverage tests: nested structs, enums, optional fields, collections.
+* [x] Implement `CommandArg` derive and serde bridging (`ArgValue ↔ serde_json::Value`).
+* [x] Implement `ToArgValue` / `FromArgValue` for `T: CommandArg`.
+* [x] Implement `CommandEnum` derive generating `ToArgValue` / `FromArgValue`.
+* [x] Add coverage tests: nested structs, enums, optional fields, collections.
 
 ### Stage 8 — Tooling and diagnostics
 
-* [ ] Introspection APIs: list commands, show signature, show which params are
+* [x] Introspection APIs: list commands, show signature, show which params are
       injected/user/optional/defaulted.
-* [ ] Golden tests for arity/type/injection errors (including unknown named args and normalized
+* [x] Golden tests for arity/type/injection errors (including unknown named args and normalized
       keys).
-* [ ] Integration tests for scripting.
+* [x] Integration tests for scripting.
 
 ---
 

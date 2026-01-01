@@ -1,6 +1,7 @@
 use std::{
     any::{Any, TypeId, type_name, type_name_of_val},
     process,
+    result::Result as StdResult,
 };
 
 use super::{
@@ -11,7 +12,9 @@ use super::{
     world::Core,
 };
 use crate::{
+    commands::{ArgValue, CommandError, CommandInvocation, CommandScopeFrame, ListRowContext},
     error::{Error, Result},
+    event::{Event, mouse::MouseEvent},
     geom::{Direction, Expanse, Point, PointI32, Rect, RectI32},
     layout::Layout,
     path::{Path, PathMatcher},
@@ -358,10 +361,23 @@ pub trait Context: ViewContext {
     ) -> Result<()>;
 
     /// Dispatch a command relative to this node.
-    fn dispatch_command(
+    fn dispatch_command(&mut self, cmd: &CommandInvocation) -> StdResult<ArgValue, CommandError>;
+
+    /// Dispatch a command with an explicit command-scope frame.
+    fn dispatch_command_scoped(
         &mut self,
-        cmd: &commands::CommandInvocation,
-    ) -> Result<Option<commands::ReturnValue>>;
+        frame: CommandScopeFrame,
+        cmd: &CommandInvocation,
+    ) -> StdResult<ArgValue, CommandError>;
+
+    /// Return the current event snapshot for injection.
+    fn current_event(&self) -> Option<&Event>;
+
+    /// Return the current mouse event for injection.
+    fn current_mouse_event(&self) -> Option<MouseEvent>;
+
+    /// Return the current list-row context for injection.
+    fn current_list_row(&self) -> Option<ListRowContext>;
 
     /// Add a boxed widget as a child of a specific parent and return the new node ID.
     fn add_child_to_boxed(&mut self, parent: NodeId, widget: Box<dyn Widget>) -> Result<NodeId>;
@@ -1118,11 +1134,42 @@ impl<'a> Context for CoreContext<'a> {
         })
     }
 
-    fn dispatch_command(
+    fn dispatch_command(&mut self, cmd: &CommandInvocation) -> StdResult<ArgValue, CommandError> {
+        let frame = self
+            .core
+            .current_command_scope()
+            .cloned()
+            .unwrap_or_default();
+        self.dispatch_command_scoped(frame, cmd)
+    }
+
+    fn dispatch_command_scoped(
         &mut self,
-        cmd: &commands::CommandInvocation,
-    ) -> Result<Option<commands::ReturnValue>> {
-        commands::dispatch(self.core, self.node_id, cmd)
+        frame: CommandScopeFrame,
+        cmd: &CommandInvocation,
+    ) -> StdResult<ArgValue, CommandError> {
+        let guard = self.core.push_command_scope(frame);
+        let result = commands::dispatch(self.core, self.node_id, cmd);
+        self.core.pop_command_scope(guard);
+        result
+    }
+
+    fn current_event(&self) -> Option<&Event> {
+        self.core
+            .current_command_scope()
+            .and_then(|frame| frame.event.as_ref())
+    }
+
+    fn current_mouse_event(&self) -> Option<MouseEvent> {
+        self.core
+            .current_command_scope()
+            .and_then(|frame| frame.mouse)
+    }
+
+    fn current_list_row(&self) -> Option<ListRowContext> {
+        self.core
+            .current_command_scope()
+            .and_then(|frame| frame.list_row)
     }
 
     fn add_child_to_boxed(&mut self, parent: NodeId, widget: Box<dyn Widget>) -> Result<NodeId> {

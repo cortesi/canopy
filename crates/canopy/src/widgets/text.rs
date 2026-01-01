@@ -4,6 +4,7 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::{
     Context, ViewContext, command,
+    commands::{ScrollDirection, VerticalDirection},
     core::text,
     derive_commands,
     error::Result,
@@ -102,45 +103,63 @@ impl Text {
     }
 
     #[command]
-    /// Scroll to the top-left corner.
-    pub fn scroll_to_top(&mut self, c: &mut dyn Context) {
-        c.scroll_to(0, 0);
+    /// Scroll to an absolute content position.
+    pub fn scroll_to(&mut self, c: &mut dyn Context, x: u32, y: u32) {
+        c.scroll_to(x, y);
     }
 
-    #[command]
-    /// Scroll down by one line.
-    pub fn scroll_down(&mut self, c: &mut dyn Context) {
-        c.scroll_down();
+    /// Scroll by one line in the specified direction.
+    pub fn scroll(&mut self, c: &mut dyn Context, dir: ScrollDirection) {
+        match dir {
+            ScrollDirection::Up => c.scroll_up(),
+            ScrollDirection::Down => c.scroll_down(),
+            ScrollDirection::Left => c.scroll_left(),
+            ScrollDirection::Right => c.scroll_right(),
+        };
+    }
+
+    /// Page in the specified direction.
+    pub fn page(&mut self, c: &mut dyn Context, dir: VerticalDirection) {
+        match dir {
+            VerticalDirection::Up => c.page_up(),
+            VerticalDirection::Down => c.page_down(),
+        };
     }
 
     #[command]
     /// Scroll up by one line.
     pub fn scroll_up(&mut self, c: &mut dyn Context) {
-        c.scroll_up();
+        self.scroll(c, ScrollDirection::Up);
+    }
+
+    #[command]
+    /// Scroll down by one line.
+    pub fn scroll_down(&mut self, c: &mut dyn Context) {
+        self.scroll(c, ScrollDirection::Down);
     }
 
     #[command]
     /// Scroll left by one column.
     pub fn scroll_left(&mut self, c: &mut dyn Context) {
-        c.scroll_left();
+        self.scroll(c, ScrollDirection::Left);
     }
 
     #[command]
     /// Scroll right by one column.
     pub fn scroll_right(&mut self, c: &mut dyn Context) {
-        c.scroll_right();
+        self.scroll(c, ScrollDirection::Right);
     }
 
     #[command]
-    /// Page down in the view.
-    pub fn page_down(&mut self, c: &mut dyn Context) {
-        c.page_down();
-    }
-
-    #[command]
-    /// Page up in the view.
+    /// Page up by one screen.
     pub fn page_up(&mut self, c: &mut dyn Context) {
-        c.page_up();
+        self.page(c, VerticalDirection::Up);
+    }
+
+    #[command]
+    /// Page down by one screen.
+    pub fn page_down(&mut self, c: &mut dyn Context) {
+        self.page(c, VerticalDirection::Down);
     }
 
     /// Determine the wrapping width for the given available space.

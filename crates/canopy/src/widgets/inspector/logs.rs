@@ -9,7 +9,9 @@ use std::{
 use tracing_subscriber::fmt;
 
 use crate::{
-    Canopy, Context, Loader, ViewContext, command, derive_commands,
+    Canopy, Context, Loader, ViewContext, command,
+    commands::{ScrollDirection, VerticalDirection},
+    derive_commands,
     error::{Error, Result},
     geom::Rect,
     layout::{CanvasContext, Constraint, Layout, MeasureConstraints, Measurement, Size},
@@ -275,75 +277,64 @@ impl Logs {
     }
 
     #[command]
-    /// Move selection to the next item.
-    pub fn select_next(&self, c: &mut dyn Context) {
+    /// Move selection by a signed offset.
+    pub fn select_by(&self, c: &mut dyn Context, delta: i32) {
         drop(self.with_list(c, |list, ctx| {
-            list.select_next(ctx);
+            list.select_by(ctx, delta);
+            Ok(())
+        }));
+    }
+
+    /// Scroll the view by one line in the specified direction.
+    pub fn scroll(&self, c: &mut dyn Context, dir: ScrollDirection) {
+        drop(self.with_list(c, |list, ctx| {
+            list.scroll(ctx, dir);
+            Ok(())
+        }));
+    }
+
+    /// Move selection by one page in the specified direction.
+    pub fn page(&self, c: &mut dyn Context, dir: VerticalDirection) {
+        drop(self.with_list(c, |list, ctx| {
+            list.page(ctx, dir);
             Ok(())
         }));
     }
 
     #[command]
-    /// Move selection to the previous item.
-    pub fn select_prev(&self, c: &mut dyn Context) {
-        drop(self.with_list(c, |list, ctx| {
-            list.select_prev(ctx);
-            Ok(())
-        }));
-    }
-
-    #[command]
-    /// Scroll the view down by one line.
-    pub fn scroll_down(&self, c: &mut dyn Context) {
-        drop(self.with_list(c, |list, ctx| {
-            list.scroll_down(ctx);
-            Ok(())
-        }));
-    }
-
-    #[command]
-    /// Scroll the view up by one line.
+    /// Scroll up by one line.
     pub fn scroll_up(&self, c: &mut dyn Context) {
-        drop(self.with_list(c, |list, ctx| {
-            list.scroll_up(ctx);
-            Ok(())
-        }));
+        self.scroll(c, ScrollDirection::Up);
     }
 
     #[command]
-    /// Scroll the view left by one line.
+    /// Scroll down by one line.
+    pub fn scroll_down(&self, c: &mut dyn Context) {
+        self.scroll(c, ScrollDirection::Down);
+    }
+
+    #[command]
+    /// Scroll left by one column.
     pub fn scroll_left(&self, c: &mut dyn Context) {
-        drop(self.with_list(c, |list, ctx| {
-            list.scroll_left(ctx);
-            Ok(())
-        }));
+        self.scroll(c, ScrollDirection::Left);
     }
 
     #[command]
-    /// Scroll the view right by one line.
+    /// Scroll right by one column.
     pub fn scroll_right(&self, c: &mut dyn Context) {
-        drop(self.with_list(c, |list, ctx| {
-            list.scroll_right(ctx);
-            Ok(())
-        }));
+        self.scroll(c, ScrollDirection::Right);
     }
 
     #[command]
-    /// Scroll the view down by one page.
-    pub fn page_down(&self, c: &mut dyn Context) {
-        drop(self.with_list(c, |list, ctx| {
-            list.page_down(ctx);
-            Ok(())
-        }));
-    }
-
-    #[command]
-    /// Scroll the view up by one page.
+    /// Page up by one screen.
     pub fn page_up(&self, c: &mut dyn Context) {
-        drop(self.with_list(c, |list, ctx| {
-            list.page_up(ctx);
-            Ok(())
-        }));
+        self.page(c, VerticalDirection::Up);
+    }
+
+    #[command]
+    /// Page down by one screen.
+    pub fn page_down(&self, c: &mut dyn Context) {
+        self.page(c, VerticalDirection::Down);
     }
 }
 

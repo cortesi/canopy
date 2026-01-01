@@ -21,6 +21,37 @@ mod tests {
         Continue,
     }
 
+    #[derive(Clone, Copy)]
+    enum TriggerOutcome {
+        Skip,
+        Handle,
+        NoResult,
+    }
+
+    fn outcome_result(outcome: TriggerOutcome) -> Result<Walk<()>> {
+        match outcome {
+            TriggerOutcome::Skip => Ok(Walk::Skip),
+            TriggerOutcome::Handle => Ok(Walk::Handle(())),
+            TriggerOutcome::NoResult => Err(Error::NoResult),
+        }
+    }
+
+    fn assert_walk_result(actual: Result<Walk<()>>, expected: Result<Walk<()>>) {
+        match (actual, expected) {
+            (Ok(actual), Ok(expected)) => assert_eq!(actual, expected),
+            (Err(Error::NoResult), Err(Error::NoResult)) => {}
+            (Err(actual), Err(expected)) => {
+                panic!("expected Err({expected}), got Err({actual})");
+            }
+            (Ok(actual), Err(expected)) => {
+                panic!("expected Err({expected}), got Ok({actual:?})");
+            }
+            (Err(actual), Ok(expected)) => {
+                panic!("expected Ok({expected:?}), got Err({actual})");
+            }
+        }
+    }
+
     struct TreeWidget {
         name: String,
     }
@@ -135,7 +166,7 @@ mod tests {
 
     #[test]
     fn test_preorder() -> Result<()> {
-        fn trigger(name: &str, func: &Result<Walk<()>>) -> (Vec<String>, Result<Walk<()>>) {
+        fn trigger(name: &str, outcome: TriggerOutcome) -> (Vec<String>, Result<Walk<()>>) {
             let mut canopy = Canopy::new();
             let (root, _ba, _bb, _ba_la, _ba_lb, _bb_la, _bb_lb) =
                 build_tree(&mut canopy.core).unwrap();
@@ -149,7 +180,7 @@ mod tests {
                     .to_string();
                 v.push(name_str.clone());
                 if name_str == name {
-                    func.clone()
+                    outcome_result(outcome)
                 } else {
                     Ok(Walk::Continue)
                 }
@@ -157,47 +188,43 @@ mod tests {
             (v, res)
         }
 
+        let (visited, result) = trigger("never", TriggerOutcome::Skip);
         assert_eq!(
-            trigger("never", &Ok(Walk::Skip)),
-            (
-                vc(&["r", "ba", "ba_la", "ba_lb", "bb", "bb_la", "bb_lb"]),
-                Ok(Walk::Continue)
-            )
+            visited,
+            vc(&["r", "ba", "ba_la", "ba_lb", "bb", "bb_la", "bb_lb"])
         );
+        assert_walk_result(result, Ok(Walk::Continue));
 
-        assert_eq!(
-            trigger("ba", &Ok(Walk::Skip)),
-            (vc(&["r", "ba", "bb", "bb_la", "bb_lb"]), Ok(Walk::Continue))
-        );
-        assert_eq!(
-            trigger("r", &Ok(Walk::Skip)),
-            (vc(&["r"]), Ok(Walk::Continue))
-        );
+        let (visited, result) = trigger("ba", TriggerOutcome::Skip);
+        assert_eq!(visited, vc(&["r", "ba", "bb", "bb_la", "bb_lb"]));
+        assert_walk_result(result, Ok(Walk::Continue));
 
-        assert_eq!(
-            trigger("ba", &Ok(Walk::Handle(()))),
-            (vc(&["r", "ba"]), Ok(Walk::Handle(())))
-        );
-        assert_eq!(
-            trigger("ba_la", &Ok(Walk::Handle(()))),
-            (vc(&["r", "ba", "ba_la"]), Ok(Walk::Handle(())))
-        );
+        let (visited, result) = trigger("r", TriggerOutcome::Skip);
+        assert_eq!(visited, vc(&["r"]));
+        assert_walk_result(result, Ok(Walk::Continue));
 
-        assert_eq!(
-            trigger("ba_la", &Err(Error::NoResult)),
-            (vc(&["r", "ba", "ba_la"]), Err(Error::NoResult))
-        );
-        assert_eq!(
-            trigger("r", &Err(Error::NoResult)),
-            (vc(&["r"]), Err(Error::NoResult))
-        );
+        let (visited, result) = trigger("ba", TriggerOutcome::Handle);
+        assert_eq!(visited, vc(&["r", "ba"]));
+        assert_walk_result(result, Ok(Walk::Handle(())));
+
+        let (visited, result) = trigger("ba_la", TriggerOutcome::Handle);
+        assert_eq!(visited, vc(&["r", "ba", "ba_la"]));
+        assert_walk_result(result, Ok(Walk::Handle(())));
+
+        let (visited, result) = trigger("ba_la", TriggerOutcome::NoResult);
+        assert_eq!(visited, vc(&["r", "ba", "ba_la"]));
+        assert_walk_result(result, Err(Error::NoResult));
+
+        let (visited, result) = trigger("r", TriggerOutcome::NoResult);
+        assert_eq!(visited, vc(&["r"]));
+        assert_walk_result(result, Err(Error::NoResult));
 
         Ok(())
     }
 
     #[test]
     fn test_postorder() -> Result<()> {
-        fn trigger(name: &str, func: &Result<Walk<()>>) -> (Vec<String>, Result<Walk<()>>) {
+        fn trigger(name: &str, outcome: TriggerOutcome) -> (Vec<String>, Result<Walk<()>>) {
             let mut canopy = Canopy::new();
             let (root, _ba, _bb, _ba_la, _ba_lb, _bb_la, _bb_lb) =
                 build_tree(&mut canopy.core).unwrap();
@@ -211,7 +238,7 @@ mod tests {
                     .to_string();
                 v.push(name_str.clone());
                 if name_str == name {
-                    func.clone()
+                    outcome_result(outcome)
                 } else {
                     Ok(Walk::Continue)
                 }
@@ -219,57 +246,53 @@ mod tests {
             (v, res)
         }
 
-        assert_eq!(
-            trigger("ba_la", &Ok(Walk::Skip)),
-            (vc(&["ba_la", "ba", "r"]), Ok(Walk::Skip))
-        );
+        let (visited, result) = trigger("ba_la", TriggerOutcome::Skip);
+        assert_eq!(visited, vc(&["ba_la", "ba", "r"]));
+        assert_walk_result(result, Ok(Walk::Skip));
 
-        assert_eq!(
-            trigger("ba_lb", &Ok(Walk::Skip)),
-            (vc(&["ba_la", "ba_lb", "ba", "r"]), Ok(Walk::Skip))
-        );
-        assert_eq!(
-            trigger("r", &Ok(Walk::Skip)),
-            (
-                vc(&["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb", "r"]),
-                Ok(Walk::Skip)
-            )
-        );
-        assert_eq!(
-            trigger("bb", &Ok(Walk::Skip)),
-            (
-                vc(&["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb", "r"]),
-                Ok(Walk::Skip)
-            )
-        );
-        assert_eq!(
-            trigger("ba", &Ok(Walk::Skip)),
-            (vc(&["ba_la", "ba_lb", "ba", "r"]), Ok(Walk::Skip))
-        );
+        let (visited, result) = trigger("ba_lb", TriggerOutcome::Skip);
+        assert_eq!(visited, vc(&["ba_la", "ba_lb", "ba", "r"]));
+        assert_walk_result(result, Ok(Walk::Skip));
 
+        let (visited, result) = trigger("r", TriggerOutcome::Skip);
         assert_eq!(
-            trigger("ba_la", &Ok(Walk::Handle(()))),
-            (vc(&["ba_la"]), Ok(Walk::Handle(())))
+            visited,
+            vc(&["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb", "r"])
         );
-        assert_eq!(
-            trigger("bb", &Ok(Walk::Handle(()))),
-            (
-                vc(&["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb"]),
-                Ok(Walk::Handle(()))
-            )
-        );
+        assert_walk_result(result, Ok(Walk::Skip));
 
+        let (visited, result) = trigger("bb", TriggerOutcome::Skip);
         assert_eq!(
-            trigger("ba_la", &Err(Error::NoResult)),
-            (vc(&["ba_la"]), Err(Error::NoResult))
+            visited,
+            vc(&["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb", "r"])
         );
+        assert_walk_result(result, Ok(Walk::Skip));
+
+        let (visited, result) = trigger("ba", TriggerOutcome::Skip);
+        assert_eq!(visited, vc(&["ba_la", "ba_lb", "ba", "r"]));
+        assert_walk_result(result, Ok(Walk::Skip));
+
+        let (visited, result) = trigger("ba_la", TriggerOutcome::Handle);
+        assert_eq!(visited, vc(&["ba_la"]));
+        assert_walk_result(result, Ok(Walk::Handle(())));
+
+        let (visited, result) = trigger("bb", TriggerOutcome::Handle);
         assert_eq!(
-            trigger("bb", &Err(Error::NoResult)),
-            (
-                vc(&["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb"]),
-                Err(Error::NoResult)
-            )
+            visited,
+            vc(&["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb"])
         );
+        assert_walk_result(result, Ok(Walk::Handle(())));
+
+        let (visited, result) = trigger("ba_la", TriggerOutcome::NoResult);
+        assert_eq!(visited, vc(&["ba_la"]));
+        assert_walk_result(result, Err(Error::NoResult));
+
+        let (visited, result) = trigger("bb", TriggerOutcome::NoResult);
+        assert_eq!(
+            visited,
+            vc(&["ba_la", "ba_lb", "ba", "bb_la", "bb_lb", "bb"])
+        );
+        assert_walk_result(result, Err(Error::NoResult));
 
         Ok(())
     }

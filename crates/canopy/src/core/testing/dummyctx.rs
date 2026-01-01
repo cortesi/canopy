@@ -1,12 +1,13 @@
-use std::{any::TypeId, process};
+use std::{any::TypeId, process, result::Result as StdResult};
 
 use slotmap::Key;
 
 use crate::{
     Context, ViewContext,
-    commands::{CommandInvocation, ReturnValue},
+    commands::{ArgValue, CommandError, CommandInvocation, CommandScopeFrame, ListRowContext},
     core::{NodeId, style::StyleEffect, view::View},
     error::Result,
+    event::{Event, mouse::MouseEvent},
     geom::{Direction, Expanse, Point, PointI32, RectI32},
     layout::Layout,
     path::Path,
@@ -184,8 +185,28 @@ impl Context for DummyContext {
         Ok(())
     }
 
-    fn dispatch_command(&mut self, _cmd: &CommandInvocation) -> Result<Option<ReturnValue>> {
-        Ok(None)
+    fn dispatch_command(&mut self, _cmd: &CommandInvocation) -> StdResult<ArgValue, CommandError> {
+        Ok(ArgValue::Null)
+    }
+
+    fn dispatch_command_scoped(
+        &mut self,
+        _frame: CommandScopeFrame,
+        _cmd: &CommandInvocation,
+    ) -> StdResult<ArgValue, CommandError> {
+        Ok(ArgValue::Null)
+    }
+
+    fn current_event(&self) -> Option<&Event> {
+        None
+    }
+
+    fn current_mouse_event(&self) -> Option<MouseEvent> {
+        None
+    }
+
+    fn current_list_row(&self) -> Option<ListRowContext> {
+        None
     }
 
     fn add_child_to_boxed(&mut self, _parent: NodeId, _widget: Box<dyn Widget>) -> Result<NodeId> {

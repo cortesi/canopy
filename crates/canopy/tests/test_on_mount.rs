@@ -4,7 +4,7 @@
 mod tests {
     use canopy::{
         Context, Loader, NodeId, ViewContext,
-        commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
+        commands::{CommandNode, CommandSpec},
         error::Result,
         render::Render,
         state::NodeName,
@@ -31,16 +31,8 @@ mod tests {
     }
 
     impl CommandNode for MountProbe {
-        fn commands() -> Vec<CommandSpec> {
-            Vec::new()
-        }
-
-        fn dispatch(
-            &mut self,
-            _c: &mut dyn Context,
-            _cmd: &CommandInvocation,
-        ) -> Result<ReturnValue> {
-            Ok(ReturnValue::Void)
+        fn commands() -> &'static [&'static CommandSpec] {
+            &[]
         }
     }
 
@@ -80,16 +72,8 @@ mod tests {
     }
 
     impl CommandNode for ChildProbe {
-        fn commands() -> Vec<CommandSpec> {
-            Vec::new()
-        }
-
-        fn dispatch(
-            &mut self,
-            _c: &mut dyn Context,
-            _cmd: &CommandInvocation,
-        ) -> Result<ReturnValue> {
-            Ok(ReturnValue::Void)
+        fn commands() -> &'static [&'static CommandSpec] {
+            &[]
         }
     }
 

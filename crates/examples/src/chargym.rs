@@ -266,7 +266,7 @@ impl Loader for CharGym {
 pub fn setup_bindings(cnpy: &mut Canopy) {
     Binder::new(cnpy)
         .with_path("char_gym")
-        .key_command('g', Text::cmd_scroll_to_top())
+        .key_command('g', Text::cmd_scroll_to().call_with([0u32, 0u32]))
         .key_command('j', Text::cmd_scroll_down())
         .key_command(key::KeyCode::Down, Text::cmd_scroll_down())
         .mouse_command(mouse::Action::ScrollDown, Text::cmd_scroll_down())

@@ -46,6 +46,6 @@ pub use core::{
 pub use core::{backend, commands, cursor, error, event, path, render, script, state, style};
 
 // Re-export derive macros
-pub use canopy_derive::{command, derive_commands};
+pub use canopy_derive::{CommandArg, CommandEnum, command, derive_commands};
 // Re-export widget trait and event outcome
 pub use widget::{EventOutcome, Widget};

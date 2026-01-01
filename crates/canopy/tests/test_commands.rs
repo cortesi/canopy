@@ -5,8 +5,8 @@ mod tests {
     use std::cell::RefCell;
 
     use canopy::{
-        Context, Core, ViewContext, command,
-        commands::{CommandInvocation, CommandNode, dispatch},
+        Canopy, Context, ViewContext, command,
+        commands::{ArgValue, CommandNode, dispatch},
         derive_commands,
         error::Result,
         render::Render,
@@ -59,23 +59,19 @@ mod tests {
     fn test_command_dispatch() -> Result<()> {
         reset_state();
 
-        let mut core = Core::new();
-        let leaf_id = core.create_detached(TestLeaf);
-        let branch_id = core.create_detached(TestBranch);
-        core.set_children(branch_id, vec![leaf_id])?;
-        core.set_children(core.root_id(), vec![branch_id])?;
+        let mut canopy = Canopy::new();
+        canopy.add_commands::<TestLeaf>();
+        let leaf_id = canopy.core.create_detached(TestLeaf);
+        let branch_id = canopy.core.create_detached(TestBranch);
+        canopy.core.set_children(branch_id, vec![leaf_id])?;
+        canopy
+            .core
+            .set_children(canopy.core.root_id(), vec![branch_id])?;
 
-        let result = dispatch(
-            &mut core,
-            branch_id,
-            &CommandInvocation {
-                node: "test_leaf".try_into()?,
-                command: "c_leaf".into(),
-                args: vec![],
-            },
-        )?;
+        let inv = TestLeaf::cmd_c_leaf().call_with(()).invocation();
+        let result = dispatch(&mut canopy.core, branch_id, &inv)?;
 
-        assert!(result.is_some());
+        assert_eq!(result, ArgValue::Null);
         assert_eq!(state_path(), vec!["test_leaf.c_leaf()"]);
 
         Ok(())
@@ -115,13 +111,12 @@ mod tests {
         assert_eq!(commands.len(), 2);
 
         // Check that commands are properly loaded
-        assert!(commands.iter().any(|c| c.command == "a"));
-        assert!(commands.iter().any(|c| c.command == "b"));
+        assert!(commands.iter().any(|c| c.name == "a"));
+        assert!(commands.iter().any(|c| c.name == "b"));
 
-        // Check that the documentation is preserved
-        let cmd_a = commands.iter().find(|c| c.command == "a").unwrap();
-        assert!(cmd_a.docs.contains("This is a comment"));
-        assert!(cmd_a.docs.contains("Multiline too!"));
+        let cmd_a = Foo::cmd_a();
+        assert_eq!(cmd_a.id.0, "foo::a");
+        assert_eq!(cmd_a.signature(), "foo::a() -> ()");
 
         Ok(())
     }

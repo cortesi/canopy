@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+anyhow = "1.0.100"
 canopy = { path = "../canopy" }
 clap = { version = "4.5.0", features = ["derive"] }
 rand = "0.9.1"

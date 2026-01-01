@@ -5,7 +5,9 @@ use std::path::Path;
 use image::RgbaImage;
 
 use crate::{
-    Canopy, Context, Loader, ViewContext, command, derive_commands, error as canopy_error,
+    Canopy, Context, Loader, ViewContext, command,
+    commands::{ScrollDirection, ZoomDirection},
+    derive_commands, error as canopy_error,
     geom::{Expanse, Point, Rect},
     layout::Layout,
     render::Render,
@@ -299,58 +301,73 @@ impl ImageView {
         Ok(Self::new(image.to_rgba8()))
     }
 
+    /// Zoom around the view center.
+    pub fn zoom(&mut self, ctx: &mut dyn Context, dir: ZoomDirection) -> canopy_error::Result<()> {
+        let view_size = ctx.view().content_size();
+        self.auto_fit = false;
+        let factor = match dir {
+            ZoomDirection::In => ZOOM_STEP,
+            ZoomDirection::Out => 1.0 / ZOOM_STEP,
+        };
+        self.zoom_by(view_size, factor);
+        Ok(())
+    }
+
+    /// Pan by one step in the specified direction.
+    pub fn pan(&mut self, ctx: &mut dyn Context, dir: ScrollDirection) -> canopy_error::Result<()> {
+        let view_size = ctx.view().content_size();
+        self.auto_fit = false;
+        match dir {
+            ScrollDirection::Left => {
+                self.pan_by_cells(view_size, -PAN_STEP_COLUMNS, 0);
+            }
+            ScrollDirection::Right => {
+                self.pan_by_cells(view_size, PAN_STEP_COLUMNS, 0);
+            }
+            ScrollDirection::Up => {
+                self.pan_by_cells(view_size, 0, -PAN_STEP_ROWS);
+            }
+            ScrollDirection::Down => {
+                self.pan_by_cells(view_size, 0, PAN_STEP_ROWS);
+            }
+        }
+        Ok(())
+    }
+
+    #[command]
     /// Zoom in around the view center.
-    #[command]
     pub fn zoom_in(&mut self, ctx: &mut dyn Context) -> canopy_error::Result<()> {
-        let view_size = ctx.view().content_size();
-        self.auto_fit = false;
-        self.zoom_by(view_size, ZOOM_STEP);
-        Ok(())
+        self.zoom(ctx, ZoomDirection::In)
     }
 
+    #[command]
     /// Zoom out around the view center.
-    #[command]
     pub fn zoom_out(&mut self, ctx: &mut dyn Context) -> canopy_error::Result<()> {
-        let view_size = ctx.view().content_size();
-        self.auto_fit = false;
-        self.zoom_by(view_size, 1.0 / ZOOM_STEP);
-        Ok(())
+        self.zoom(ctx, ZoomDirection::Out)
     }
 
-    /// Pan left by one terminal column.
     #[command]
-    pub fn pan_left(&mut self, ctx: &mut dyn Context) -> canopy_error::Result<()> {
-        let view_size = ctx.view().content_size();
-        self.auto_fit = false;
-        self.pan_by_cells(view_size, -PAN_STEP_COLUMNS, 0);
-        Ok(())
-    }
-
-    /// Pan right by one terminal column.
-    #[command]
-    pub fn pan_right(&mut self, ctx: &mut dyn Context) -> canopy_error::Result<()> {
-        let view_size = ctx.view().content_size();
-        self.auto_fit = false;
-        self.pan_by_cells(view_size, PAN_STEP_COLUMNS, 0);
-        Ok(())
-    }
-
-    /// Pan up by one terminal row.
-    #[command]
+    /// Pan up by one step.
     pub fn pan_up(&mut self, ctx: &mut dyn Context) -> canopy_error::Result<()> {
-        let view_size = ctx.view().content_size();
-        self.auto_fit = false;
-        self.pan_by_cells(view_size, 0, -PAN_STEP_ROWS);
-        Ok(())
+        self.pan(ctx, ScrollDirection::Up)
     }
 
-    /// Pan down by one terminal row.
     #[command]
+    /// Pan down by one step.
     pub fn pan_down(&mut self, ctx: &mut dyn Context) -> canopy_error::Result<()> {
-        let view_size = ctx.view().content_size();
-        self.auto_fit = false;
-        self.pan_by_cells(view_size, 0, PAN_STEP_ROWS);
-        Ok(())
+        self.pan(ctx, ScrollDirection::Down)
+    }
+
+    #[command]
+    /// Pan left by one step.
+    pub fn pan_left(&mut self, ctx: &mut dyn Context) -> canopy_error::Result<()> {
+        self.pan(ctx, ScrollDirection::Left)
+    }
+
+    #[command]
+    /// Pan right by one step.
+    pub fn pan_right(&mut self, ctx: &mut dyn Context) -> canopy_error::Result<()> {
+        self.pan(ctx, ScrollDirection::Right)
     }
 }
 

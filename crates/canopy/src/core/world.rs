@@ -7,9 +7,9 @@ use std::{
 use slotmap::SlotMap;
 
 use crate::{
-    Context, ViewContext,
+    ViewContext,
     backend::BackendControl,
-    commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
+    commands::{CommandNode, CommandScopeFrame, CommandSet, CommandSpec},
     core::{
         context::{CoreContext, CoreViewContext},
         id::NodeId,
@@ -50,6 +50,10 @@ pub struct Core {
     focus_hint: Option<FocusRecoveryHint>,
     /// Active structural transaction for rollback on failure.
     transaction: Option<MountTransaction>,
+    /// Registered command specs.
+    pub(crate) commands: CommandSet,
+    /// Command scope stack for injection.
+    command_scope: Vec<CommandScopeFrame>,
 }
 
 #[derive(Default)]
@@ -124,7 +128,26 @@ impl Core {
             mouse_capture: None,
             focus_hint: None,
             transaction: None,
+            commands: CommandSet::new(),
+            command_scope: Vec::new(),
         }
+    }
+
+    /// Return the current command-scope frame, if any.
+    pub(crate) fn current_command_scope(&self) -> Option<&CommandScopeFrame> {
+        self.command_scope.last()
+    }
+
+    /// Push a command-scope frame and return the previous depth.
+    pub(crate) fn push_command_scope(&mut self, frame: CommandScopeFrame) -> usize {
+        let depth = self.command_scope.len();
+        self.command_scope.push(frame);
+        depth
+    }
+
+    /// Restore the command-scope stack to a previous depth.
+    pub(crate) fn pop_command_scope(&mut self, depth: usize) {
+        self.command_scope.truncate(depth);
     }
 
     /// Return the root node id.
@@ -1248,8 +1271,27 @@ impl Core {
         }
     }
 
+    /// Build a command-scope frame for a specific event.
+    pub(crate) fn command_scope_for_event(&self, event: &Event) -> CommandScopeFrame {
+        let mut frame = self.current_command_scope().cloned().unwrap_or_default();
+        frame.event = Some(event.clone());
+        frame.mouse = match event {
+            Event::Mouse(mouse) => Some(*mouse),
+            _ => None,
+        };
+        frame
+    }
+
     /// Dispatch an event to a node, bubbling to parents if unhandled.
     pub fn dispatch_event(&mut self, start: NodeId, event: &Event) -> EventOutcome {
+        let depth = self.push_command_scope(self.command_scope_for_event(event));
+        let outcome = self.dispatch_event_inner(start, event);
+        self.pop_command_scope(depth);
+        outcome
+    }
+
+    /// Dispatch an event to a node and bubble until handled.
+    fn dispatch_event_inner(&mut self, start: NodeId, event: &Event) -> EventOutcome {
         let mut target = Some(start);
         while let Some(id) = target {
             let outcome = self.with_widget_mut(id, |w, core| {
@@ -1268,10 +1310,13 @@ impl Core {
 
     /// Dispatch an event to a single node without bubbling.
     pub fn dispatch_event_on_node(&mut self, node_id: NodeId, event: &Event) -> EventOutcome {
-        self.with_widget_mut(node_id, |w, core| {
+        let depth = self.push_command_scope(self.command_scope_for_event(event));
+        let outcome = self.with_widget_mut(node_id, |w, core| {
             let mut ctx = CoreContext::new(core, node_id);
             w.on_event(event, &mut ctx)
-        })
+        });
+        self.pop_command_scope(depth);
+        outcome
     }
 
     /// Return the path for a node relative to a root.
@@ -2220,15 +2265,11 @@ impl Widget for RootContainer {
 }
 
 impl CommandNode for RootContainer {
-    fn commands() -> Vec<CommandSpec>
+    fn commands() -> &'static [&'static CommandSpec]
     where
         Self: Sized,
     {
-        Vec::new()
-    }
-
-    fn dispatch(&mut self, _c: &mut dyn Context, cmd: &CommandInvocation) -> Result<ReturnValue> {
-        Err(Error::UnknownCommand(cmd.command.clone()))
+        &[]
     }
 }
 
@@ -2240,7 +2281,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
+        Context,
+        commands::CommandNode,
         error::{Error, Result},
         geom::{Expanse, Point},
         layout::{
@@ -2292,19 +2334,11 @@ mod tests {
     }
 
     impl CommandNode for TestWidget {
-        fn commands() -> Vec<CommandSpec>
+        fn commands() -> &'static [&'static CommandSpec]
         where
             Self: Sized,
         {
-            Vec::new()
-        }
-
-        fn dispatch(
-            &mut self,
-            _c: &mut dyn Context,
-            _cmd: &CommandInvocation,
-        ) -> Result<ReturnValue> {
-            Ok(ReturnValue::Void)
+            &[]
         }
     }
 
@@ -2321,19 +2355,11 @@ mod tests {
     struct FocusableWidget;
 
     impl CommandNode for FocusableWidget {
-        fn commands() -> Vec<CommandSpec>
+        fn commands() -> &'static [&'static CommandSpec]
         where
             Self: Sized,
         {
-            Vec::new()
-        }
-
-        fn dispatch(
-            &mut self,
-            _c: &mut dyn Context,
-            _cmd: &CommandInvocation,
-        ) -> Result<ReturnValue> {
-            Ok(ReturnValue::Void)
+            &[]
         }
     }
 
@@ -2346,19 +2372,11 @@ mod tests {
     struct MountFailWidget;
 
     impl CommandNode for MountFailWidget {
-        fn commands() -> Vec<CommandSpec>
+        fn commands() -> &'static [&'static CommandSpec]
         where
             Self: Sized,
         {
-            Vec::new()
-        }
-
-        fn dispatch(
-            &mut self,
-            _c: &mut dyn Context,
-            _cmd: &CommandInvocation,
-        ) -> Result<ReturnValue> {
-            Ok(ReturnValue::Void)
+            &[]
         }
     }
 

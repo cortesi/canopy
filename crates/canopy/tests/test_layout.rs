@@ -3,8 +3,8 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Context, Loader, ViewContext,
-        commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
+        Canopy, Loader, ViewContext,
+        commands::{CommandNode, CommandSpec},
         error::Result,
         geom::Expanse,
         layout::{Edges, Layout, MeasureConstraints, Measurement, Size},
@@ -23,16 +23,8 @@ mod tests {
     }
 
     impl CommandNode for Container {
-        fn commands() -> Vec<CommandSpec> {
-            vec![]
-        }
-
-        fn dispatch(
-            &mut self,
-            _c: &mut dyn Context,
-            _cmd: &CommandInvocation,
-        ) -> Result<ReturnValue> {
-            Ok(ReturnValue::Void)
+        fn commands() -> &'static [&'static CommandSpec] {
+            &[]
         }
     }
 
@@ -55,16 +47,8 @@ mod tests {
     }
 
     impl CommandNode for Huge {
-        fn commands() -> Vec<CommandSpec> {
-            vec![]
-        }
-
-        fn dispatch(
-            &mut self,
-            _c: &mut dyn Context,
-            _cmd: &CommandInvocation,
-        ) -> Result<ReturnValue> {
-            Ok(ReturnValue::Void)
+        fn commands() -> &'static [&'static CommandSpec] {
+            &[]
         }
     }
 
@@ -91,16 +75,8 @@ mod tests {
     }
 
     impl CommandNode for Root {
-        fn commands() -> Vec<CommandSpec> {
-            vec![]
-        }
-
-        fn dispatch(
-            &mut self,
-            _c: &mut dyn Context,
-            _cmd: &CommandInvocation,
-        ) -> Result<ReturnValue> {
-            Ok(ReturnValue::Void)
+        fn commands() -> &'static [&'static CommandSpec] {
+            &[]
         }
     }
 

@@ -54,7 +54,7 @@ impl Button {
     }
 
     /// Build a button that dispatches a command when clicked.
-    pub fn with_command<T>(mut self, command: CommandCall<T>) -> Self {
+    pub fn with_command(mut self, command: CommandCall) -> Self {
         self.command = Some(command.invocation());
         self
     }
@@ -77,6 +77,15 @@ impl Button {
             ctx.dispatch_command(command)?;
         }
         Ok(())
+    }
+
+    /// Handle a mouse click event.
+    fn handle_click(&mut self, ctx: &mut dyn Context, event: mouse::MouseEvent) -> Result<bool> {
+        if event.button == mouse::Button::Left && event.action == mouse::Action::Down {
+            self.press(ctx)?;
+            return Ok(true);
+        }
+        Ok(false)
     }
 
     /// Sync the label text widget to the current label.
@@ -117,15 +126,10 @@ impl Widget for Button {
     }
 
     fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> EventOutcome {
-        match event {
-            Event::Mouse(m)
-                if m.button == mouse::Button::Left && m.action == mouse::Action::Down =>
-            {
-                if self.press(ctx).is_ok() {
-                    return EventOutcome::Handle;
-                }
-            }
-            _ => {}
+        if let Event::Mouse(mouse_event) = event
+            && matches!(self.handle_click(ctx, *mouse_event), Ok(true))
+        {
+            return EventOutcome::Handle;
         }
         EventOutcome::Ignore
     }

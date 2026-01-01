@@ -1,15 +1,14 @@
 use std::env;
 
 use canopy::{
-    Binder, Canopy, Context, Loader, NodeId, ViewContext, command, cursor, derive_commands,
+    Binder, Canopy, Context, Loader, NodeId, ViewContext, command, derive_commands,
     error::{Error, Result},
-    event::{Event, key, mouse},
-    geom::Point,
+    event::key,
     layout::{Constraint, Layout, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
     style::{Attr, AttrSet, solarized},
-    widget::{EventOutcome, Widget},
+    widget::Widget,
     widgets::{
         Box, Button, Center, Root, Terminal, TerminalConfig, Text, VStack, boxed, frame,
         list::{List, Selectable},
@@ -360,42 +359,12 @@ impl TermGym {
         Ok(())
     }
 
-    /// Handle a mouse click within the sidebar list.
-    fn handle_list_click(&mut self, c: &mut dyn Context, location: Point) -> bool {
-        let view = c.view();
-        let screen_x = view.content.tl.x as i64 + location.x as i64;
-        let screen_y = view.content.tl.y as i64 + location.y as i64;
-
-        let click_index = match self.with_list(c, |_list, ctx| {
-            let list_view = ctx.view();
-            let left = list_view.content.tl.x as i64;
-            let top = list_view.content.tl.y as i64;
-            let right = left + list_view.content.w as i64;
-            let bottom = top + list_view.content.h as i64;
-
-            if screen_x < left || screen_x >= right || screen_y < top || screen_y >= bottom {
-                return Ok(None);
-            }
-
-            let local_y = (screen_y - top).max(0) as u32;
-            let content_y = local_y.saturating_add(list_view.tl.y);
-            Ok(Some((content_y / ENTRY_HEIGHT) as usize))
-        }) {
-            Ok(Some(index)) => index,
-            _ => return false,
-        };
-
-        let terminals = match self.terminal_ids(c) {
-            Ok(ids) => ids,
-            Err(_) => return false,
-        };
-        if click_index < terminals.len() && self.set_active(c, click_index).is_err() {
-            return false;
-        }
-        if self.focus_sidebar_list(c).is_err() {
-            return false;
-        }
-        true
+    #[command]
+    /// Activate a terminal from a sidebar row selection.
+    pub fn activate_terminal(&mut self, c: &mut dyn Context, index: usize) -> Result<()> {
+        self.set_active(c, index)?;
+        self.focus_sidebar_list(c)?;
+        Ok(())
     }
 }
 
@@ -405,7 +374,9 @@ impl Widget for TermGym {
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        let list_id = c.create_detached(List::<TermEntry>::new());
+        let list_id = c.create_detached(
+            List::<TermEntry>::new().with_on_activate(Self::cmd_activate_terminal().call()),
+        );
         let button_id = c.create_detached(
             Button::new("+ New terminal").with_command(Self::cmd_new_terminal().call()),
         );
@@ -438,24 +409,6 @@ impl Widget for TermGym {
     fn render(&mut self, r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         r.push_layer("termgym");
         Ok(())
-    }
-
-    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> EventOutcome {
-        match event {
-            Event::Mouse(m)
-                if m.button == mouse::Button::Left && m.action == mouse::Action::Down =>
-            {
-                if self.handle_list_click(ctx, m.location) {
-                    return EventOutcome::Handle;
-                }
-            }
-            _ => {}
-        }
-        EventOutcome::Ignore
-    }
-
-    fn cursor(&self) -> Option<cursor::Cursor> {
-        None
     }
 }
 

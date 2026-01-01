@@ -1,5 +1,7 @@
 use canopy::{
-    Binder, Canopy, Context, Loader, NodeId, command, derive_commands,
+    Binder, Canopy, Context, Loader, NodeId, command,
+    commands::{ScrollDirection, VerticalDirection},
+    derive_commands,
     error::Result,
     event::{key, mouse},
     layout::{CanvasContext, Edges, Layout, Size},
@@ -116,34 +118,64 @@ impl EditorGym {
         Self
     }
 
-    #[command]
-    /// Scroll the outer pane down by one line.
-    pub fn scroll_down(&mut self, c: &mut dyn Context) {
-        c.scroll_down();
+    /// Scroll the outer pane by one line in the specified direction.
+    pub fn scroll(&mut self, c: &mut dyn Context, dir: ScrollDirection) {
+        match dir {
+            ScrollDirection::Up => c.scroll_up(),
+            ScrollDirection::Down => c.scroll_down(),
+            ScrollDirection::Left => c.scroll_left(),
+            ScrollDirection::Right => c.scroll_right(),
+        };
+    }
+
+    /// Page in the outer pane.
+    pub fn page(&mut self, c: &mut dyn Context, dir: VerticalDirection) {
+        match dir {
+            VerticalDirection::Up => c.page_up(),
+            VerticalDirection::Down => c.page_down(),
+        };
     }
 
     #[command]
     /// Scroll the outer pane up by one line.
     pub fn scroll_up(&mut self, c: &mut dyn Context) {
-        c.scroll_up();
+        self.scroll(c, ScrollDirection::Up);
     }
 
     #[command]
-    /// Page down in the outer pane.
-    pub fn page_down(&mut self, c: &mut dyn Context) {
-        c.page_down();
+    /// Scroll the outer pane down by one line.
+    pub fn scroll_down(&mut self, c: &mut dyn Context) {
+        self.scroll(c, ScrollDirection::Down);
+    }
+
+    #[command]
+    /// Scroll the outer pane left by one column.
+    pub fn scroll_left(&mut self, c: &mut dyn Context) {
+        self.scroll(c, ScrollDirection::Left);
+    }
+
+    #[command]
+    /// Scroll the outer pane right by one column.
+    pub fn scroll_right(&mut self, c: &mut dyn Context) {
+        self.scroll(c, ScrollDirection::Right);
     }
 
     #[command]
     /// Page up in the outer pane.
     pub fn page_up(&mut self, c: &mut dyn Context) {
-        c.page_up();
+        self.page(c, VerticalDirection::Up);
     }
 
     #[command]
-    /// Scroll the outer pane to the top.
-    pub fn scroll_to_top(&mut self, c: &mut dyn Context) {
-        c.scroll_to(0, 0);
+    /// Page down in the outer pane.
+    pub fn page_down(&mut self, c: &mut dyn Context) {
+        self.page(c, VerticalDirection::Down);
+    }
+
+    #[command]
+    /// Scroll the outer pane to an absolute content position.
+    pub fn scroll_to(&mut self, c: &mut dyn Context, x: u32, y: u32) {
+        c.scroll_to(x, y);
     }
 
     /// Build the left column of editor samples.
@@ -313,7 +345,7 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
         .key(key::KeyCode::BackTab, "root::focus_prev()")
         .key(key::KeyCode::PageDown, "editor_gym::page_down()")
         .key(key::KeyCode::PageUp, "editor_gym::page_up()")
-        .key(key::KeyCode::Home, "editor_gym::scroll_to_top()")
+        .key(key::KeyCode::Home, "editor_gym::scroll_to(0, 0)")
         .mouse(mouse::Action::ScrollDown, "editor_gym::scroll_down()")
         .mouse(mouse::Action::ScrollUp, "editor_gym::scroll_up()")
         .with_path("root")

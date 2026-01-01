@@ -40,8 +40,6 @@ pub struct Canopy {
     pub(crate) script_host: script::ScriptHost,
     /// Input mapping table.
     pub(crate) keymap: inputmap::InputMap,
-    /// Registered command set.
-    pub(crate) commands: commands::CommandSet,
 
     /// Cached terminal buffer.
     termbuf: Option<TermBuf>,
@@ -79,7 +77,6 @@ impl Canopy {
             event_tx: tx,
             event_rx: Some(rx),
             keymap: inputmap::InputMap::new(),
-            commands: commands::CommandSet::new(),
             script_host: script::ScriptHost::new(),
             style: solarized::solarized_dark(),
             root_size: None,
@@ -140,7 +137,7 @@ impl Canopy {
     ) -> Result<()>
     where
         mouse::Mouse: From<K>,
-        C: commands::CommandInvocationBuilder,
+        C: Into<commands::CommandInvocation>,
     {
         self.bind_mode_mouse_command(mouse, "", path_filter, command)
     }
@@ -176,7 +173,7 @@ impl Canopy {
     pub fn bind_key_command<K, C>(&mut self, key: K, path_filter: &str, command: C) -> Result<()>
     where
         key::Key: From<K>,
-        C: commands::CommandInvocationBuilder,
+        C: Into<commands::CommandInvocation>,
     {
         self.bind_mode_key_command(key, "", path_filter, command)
     }
@@ -191,9 +188,9 @@ impl Canopy {
     ) -> Result<()>
     where
         key::Key: From<K>,
-        C: commands::CommandInvocationBuilder,
+        C: Into<commands::CommandInvocation>,
     {
-        let invocation = command.invocation()?;
+        let invocation = command.into();
         self.keymap.bind_command(
             mode,
             inputmap::InputSpec::Key(key.into()),
@@ -212,9 +209,9 @@ impl Canopy {
     ) -> Result<()>
     where
         mouse::Mouse: From<K>,
-        C: commands::CommandInvocationBuilder,
+        C: Into<commands::CommandInvocation>,
     {
-        let invocation = command.invocation()?;
+        let invocation = command.into();
         self.keymap.bind_command(
             mode,
             inputmap::InputSpec::Mouse(mouse.into()),
@@ -226,23 +223,24 @@ impl Canopy {
     /// Load the commands from a command node using the default node name.
     pub fn add_commands<T: commands::CommandNode>(&mut self) {
         let cmds = <T>::commands();
-        self.script_host.load_commands(&cmds);
-        self.commands.add(&cmds);
+        self.core.commands.add(cmds);
+        self.script_host.register_commands(cmds);
     }
 
     /// Output a formatted table of commands to a writer.
     pub fn print_command_table(&self, w: &mut dyn Write) -> Result<()> {
-        let mut cmds: Vec<&commands::CommandSpec> = self.commands.iter().map(|(_, v)| v).collect();
+        let mut cmds: Vec<&commands::CommandSpec> =
+            self.core.commands.iter().map(|(_, v)| v).collect();
 
-        cmds.sort_by_key(|a| a.fullname());
+        cmds.sort_by_key(|a| a.id.0);
 
         let mut table = Table::new();
         table.set_content_arrangement(ContentArrangement::Dynamic);
         table.load_preset(UTF8_FULL);
         for i in cmds {
             table.add_row(vec![
-                comfy_table::Cell::new(i.fullname()).fg(comfy_table::Color::Green),
-                comfy_table::Cell::new(i.docs.clone()),
+                comfy_table::Cell::new(i.id.0).fg(comfy_table::Color::Green),
+                comfy_table::Cell::new(i.signature()),
             ]);
         }
         writeln!(w, "{table}").map_err(|x| error::Error::Internal(x.to_string()))
@@ -698,35 +696,30 @@ impl Canopy {
     /// Propagate an event through the tree.
     pub(crate) fn event(&mut self, e: Event) -> Result<()> {
         match e {
-            Event::Key(k) => {
-                self.key(k)?;
-            }
-            Event::Mouse(m) => {
-                self.mouse(m)?;
-            }
+            Event::Key(k) => self.key(k),
+            Event::Mouse(m) => self.mouse(m),
             Event::Resize(s) => {
                 self.render_pending = true;
-                self.set_root_size(s)?;
+                self.set_root_size(s)
             }
             Event::Poll(ids) => {
                 self.render_pending = true;
-                self.poll(&ids)?;
+                self.poll(&ids)
             }
             Event::Paste(content) => {
                 self.render_pending = true;
                 let event = Event::Paste(content);
-                self.dispatch_focus_event(&event)?;
+                self.dispatch_focus_event(&event)
             }
             Event::FocusGained => {
                 self.render_pending = true;
-                self.dispatch_focus_event(&Event::FocusGained)?;
+                self.dispatch_focus_event(&Event::FocusGained)
             }
             Event::FocusLost => {
                 self.render_pending = true;
-                self.dispatch_focus_event(&Event::FocusLost)?;
+                self.dispatch_focus_event(&Event::FocusLost)
             }
-        };
-        Ok(())
+        }
     }
 
     /// Set the size on the root node.
@@ -757,9 +750,9 @@ mod tests {
     use super::*;
     use crate::{
         Context, ViewContext,
-        commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
+        commands::{CommandNode, CommandSpec},
         derive_commands,
-        error::{Error, Result},
+        error::Result,
         geom::{Direction, Point, RectI32},
         layout::Layout,
         path::Path,
@@ -966,19 +959,19 @@ mod tests {
                 "",
                 inputmap::InputSpec::Key('a'.into()),
                 "",
-                c.script_host.compile("ba_la::c_leaf()")?,
+                c.script_host.compile(r#"ba_la::c_leaf()"#)?,
             )?;
             c.keymap.bind(
                 "",
                 inputmap::InputSpec::Key('r'.into()),
                 "",
-                c.script_host.compile("r::c_root()")?,
+                c.script_host.compile(r#"r::c_root()"#)?,
             )?;
             c.keymap.bind(
                 "",
                 inputmap::InputSpec::Key('x'.into()),
                 "ba/",
-                c.script_host.compile("r::c_root()")?,
+                c.script_host.compile(r#"r::c_root()"#)?,
             )?;
 
             c.core.set_focus(tree.a_a);
@@ -1378,16 +1371,8 @@ mod tests {
         struct N;
 
         impl CommandNode for N {
-            fn commands() -> Vec<CommandSpec> {
-                vec![]
-            }
-
-            fn dispatch(
-                &mut self,
-                _c: &mut dyn Context,
-                _cmd: &CommandInvocation,
-            ) -> Result<ReturnValue> {
-                Err(Error::UnknownCommand("".into()))
+            fn commands() -> &'static [&'static CommandSpec] {
+                &[]
             }
         }
 

@@ -51,7 +51,7 @@ where
 #[derive_commands]
 impl<T> Dropdown<T>
 where
-    T: DropdownItem,
+    T: DropdownItem + 'static,
 {
     /// Create a new dropdown with the given items.
     ///
@@ -99,21 +99,20 @@ where
         Ok(())
     }
 
-    /// Move highlight to the next item (when expanded).
+    /// Move highlight by a signed offset (when expanded).
     #[command]
-    pub fn select_next(&mut self, _c: &mut dyn Context) -> Result<()> {
-        if self.expanded && self.highlighted + 1 < self.items.len() {
-            self.highlighted += 1;
+    pub fn select_by(&mut self, _c: &mut dyn Context, delta: i32) -> Result<()> {
+        if !self.expanded || self.items.is_empty() {
+            return Ok(());
         }
-        Ok(())
-    }
 
-    /// Move highlight to the previous item (when expanded).
-    #[command]
-    pub fn select_prev(&mut self, _c: &mut dyn Context) -> Result<()> {
-        if self.expanded && self.highlighted > 0 {
-            self.highlighted -= 1;
-        }
+        let next = if delta.is_negative() {
+            self.highlighted
+                .saturating_sub(delta.unsigned_abs() as usize)
+        } else {
+            self.highlighted.saturating_add(delta as usize)
+        };
+        self.highlighted = next.min(self.items.len() - 1);
         Ok(())
     }
 
@@ -126,6 +125,30 @@ where
             c.invalidate_layout();
         }
         Ok(())
+    }
+
+    /// Handle a click inside the dropdown.
+    fn handle_click(&mut self, c: &dyn Context, event: mouse::MouseEvent) -> Result<bool> {
+        if event.action != mouse::Action::Down || event.button != mouse::Button::Left {
+            return Ok(false);
+        }
+        let clicked_row = event.location.y as usize;
+        if self.expanded {
+            // When expanded, click selects and confirms.
+            if clicked_row < self.items.len() {
+                self.highlighted = clicked_row;
+                self.selected = self.highlighted;
+                self.expanded = false;
+                c.invalidate_layout();
+                return Ok(true);
+            }
+            return Ok(false);
+        }
+        // When collapsed, click toggles expansion.
+        self.expanded = true;
+        self.highlighted = self.selected;
+        c.invalidate_layout();
+        Ok(true)
     }
 
     /// Collapse without changing selection.
@@ -155,29 +178,11 @@ where
     T: DropdownItem + Send + 'static,
 {
     fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> EventOutcome {
-        match event {
-            Event::Mouse(m)
-                if m.action == mouse::Action::Down && m.button == mouse::Button::Left =>
-            {
-                let clicked_row = m.location.y as usize;
-                if self.expanded {
-                    // When expanded, click selects and confirms
-                    if clicked_row < self.items.len() {
-                        self.highlighted = clicked_row;
-                        self.selected = self.highlighted;
-                        self.expanded = false;
-                        ctx.invalidate_layout();
-                    }
-                } else {
-                    // When collapsed, click toggles expansion
-                    self.expanded = true;
-                    self.highlighted = self.selected;
-                    ctx.invalidate_layout();
-                }
-                // Return Ignore so mouse bindings can also fire
-                return EventOutcome::Ignore;
-            }
-            _ => {}
+        if let Event::Mouse(mouse_event) = event
+            && matches!(self.handle_click(ctx, *mouse_event), Ok(true))
+        {
+            // Return Ignore so mouse bindings can also fire.
+            return EventOutcome::Ignore;
         }
         EventOutcome::Ignore
     }

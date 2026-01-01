@@ -457,8 +457,8 @@ pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
             "dropdown::confirm(); stylegym::apply_theme()",
         )
         .key(' ', "dropdown::toggle()")
-        .key(key::KeyCode::Down, "dropdown::select_next()")
-        .key(key::KeyCode::Up, "dropdown::select_prev()")
+        .key(key::KeyCode::Down, "dropdown::select_by(1)")
+        .key(key::KeyCode::Up, "dropdown::select_by(-1)")
         // Mouse click on dropdown triggers theme application
         .mouse(
             mouse::Button::Left + mouse::Action::Down,
@@ -470,8 +470,8 @@ pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
             key::KeyCode::Enter,
             "selector::toggle(); stylegym::apply_effects()",
         )
-        .key(key::KeyCode::Down, "selector::select_next()")
-        .key(key::KeyCode::Up, "selector::select_prev()")
+        .key(key::KeyCode::Down, "selector::select_by(1)")
+        .key(key::KeyCode::Up, "selector::select_by(-1)")
         // Mouse click on selector triggers effect application
         .mouse(
             mouse::Button::Left + mouse::Action::Down,

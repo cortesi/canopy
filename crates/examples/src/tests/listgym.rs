@@ -154,10 +154,10 @@ fn test_listgym_tabs_between_columns() -> Result<()> {
     assert_eq!(lists, 2);
     assert_eq!(focused_list_index(&mut harness)?, Some(1));
 
-    harness.script("list_gym::next_column()")?;
+    harness.script("panes::focus_column(1)")?;
     assert_eq!(focused_list_index(&mut harness)?, Some(0));
 
-    harness.script("list_gym::prev_column()")?;
+    harness.script("panes::focus_column(-1)")?;
     assert_eq!(focused_list_index(&mut harness)?, Some(1));
 
     Ok(())

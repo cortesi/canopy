@@ -49,7 +49,7 @@ where
 #[derive_commands]
 impl<T> Selector<T>
 where
-    T: SelectorItem,
+    T: SelectorItem + 'static,
 {
     /// Create a new selector with the given items.
     pub fn new(items: Vec<T>) -> Self {
@@ -100,21 +100,19 @@ where
         Ok(())
     }
 
-    /// Move focus to the next item.
+    /// Move focus by a signed offset.
     #[command]
-    pub fn select_next(&mut self, _c: &mut dyn Context) -> Result<()> {
-        if !self.items.is_empty() && self.focused + 1 < self.items.len() {
-            self.focused += 1;
+    pub fn select_by(&mut self, _c: &mut dyn Context, delta: i32) -> Result<()> {
+        if self.items.is_empty() {
+            return Ok(());
         }
-        Ok(())
-    }
 
-    /// Move focus to the previous item.
-    #[command]
-    pub fn select_prev(&mut self, _c: &mut dyn Context) -> Result<()> {
-        if self.focused > 0 {
-            self.focused -= 1;
-        }
+        let next = if delta.is_negative() {
+            self.focused.saturating_sub(delta.unsigned_abs() as usize)
+        } else {
+            self.focused.saturating_add(delta as usize)
+        };
+        self.focused = next.min(self.items.len() - 1);
         Ok(())
     }
 
@@ -141,6 +139,26 @@ where
     pub fn clear(&mut self, _c: &mut dyn Context) -> Result<()> {
         self.selected.clear();
         Ok(())
+    }
+
+    /// Handle a click inside the selector.
+    fn handle_click(&mut self, _c: &mut dyn Context, event: mouse::MouseEvent) -> Result<bool> {
+        if event.action != mouse::Action::Down || event.button != mouse::Button::Left {
+            return Ok(false);
+        }
+        let clicked_row = event.location.y as usize;
+        if clicked_row < self.items.len() {
+            // Move focus to clicked row.
+            self.focused = clicked_row;
+            // Toggle selection.
+            if let Some(pos) = self.selected.iter().position(|&idx| idx == self.focused) {
+                self.selected.remove(pos);
+            } else {
+                self.selected.push(self.focused);
+            }
+            return Ok(true);
+        }
+        Ok(false)
     }
 
     /// Select all items.
@@ -170,26 +188,12 @@ impl<T> Widget for Selector<T>
 where
     T: SelectorItem + Send + 'static,
 {
-    fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        match event {
-            Event::Mouse(m)
-                if m.action == mouse::Action::Down && m.button == mouse::Button::Left =>
-            {
-                let clicked_row = m.location.y as usize;
-                if clicked_row < self.items.len() {
-                    // Move focus to clicked row
-                    self.focused = clicked_row;
-                    // Toggle selection
-                    if let Some(pos) = self.selected.iter().position(|&idx| idx == self.focused) {
-                        self.selected.remove(pos);
-                    } else {
-                        self.selected.push(self.focused);
-                    }
-                    // Return Ignore so mouse bindings can also fire (e.g., to trigger effects)
-                    return EventOutcome::Ignore;
-                }
-            }
-            _ => {}
+    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> EventOutcome {
+        if let Event::Mouse(mouse_event) = event
+            && matches!(self.handle_click(ctx, *mouse_event), Ok(true))
+        {
+            // Return Ignore so mouse bindings can also fire (e.g., to trigger effects).
+            return EventOutcome::Ignore;
         }
         EventOutcome::Ignore
     }

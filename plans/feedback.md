@@ -648,7 +648,7 @@ Then execute recursively in `Canopy::key` / `Canopy::mouse`.
 **Before (needs Rhai):**
 
 ```rust
-Binder::new(c).key(Key::Char('j'), "list::select_next(); editor::cursor_down()");
+Binder::new(c).key(Key::Char('j'), "list::select_by(1); editor::cursor_down()");
 ```
 
 **After (typed, refactorable):**
@@ -659,7 +659,7 @@ use canopy::BindingTarget;
 Binder::new(c).key(
     Key::Char('j'),
     BindingTarget::Sequence(vec![
-        BindingTarget::Command(List::<Text>::cmd_select_next()),
+        BindingTarget::Command(List::<Text>::cmd_select_by().call_with([1]).invocation()),
         BindingTarget::Command(Editor::cmd_cursor_down()),
     ]),
 );

@@ -2,7 +2,7 @@ use std::{result::Result as StdResult, sync::mpsc};
 
 use thiserror::Error;
 
-use crate::{core::id::NodeId, geom};
+use crate::{commands::CommandError, core::id::NodeId, geom};
 
 /// Result type for canopy-core operations.
 pub type Result<T> = StdResult<T, Error>;
@@ -41,7 +41,7 @@ impl ParseError {
 }
 
 /// Core error type.
-#[derive(PartialEq, Eq, Error, Debug, Clone)]
+#[derive(Error, Debug)]
 pub enum Error {
     #[error("focus: {0}")]
     /// Focus-related failure.
@@ -95,9 +95,9 @@ pub enum Error {
     /// Invalid structural operation.
     #[error("invalid operation: {0}")]
     InvalidOperation(String),
-    #[error("unknown command: {0}")]
-    /// Command not found.
-    UnknownCommand(String),
+    /// Command dispatch failure.
+    #[error(transparent)]
+    Command(#[from] CommandError),
 
     #[error("parse error: {0}")]
     /// Parsing failure.

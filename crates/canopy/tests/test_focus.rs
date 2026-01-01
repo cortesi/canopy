@@ -4,7 +4,7 @@
 mod tests {
     use canopy::{
         Canopy, Core, NodeId, ViewContext,
-        commands::{CommandInvocation, CommandNode, CommandSpec, ReturnValue},
+        commands::{CommandNode, CommandSpec},
         error::{Error, Result},
         geom::{Direction, Expanse},
         layout::{Layout, Sizing},
@@ -25,16 +25,8 @@ mod tests {
     }
 
     impl CommandNode for FocusLeaf {
-        fn commands() -> Vec<CommandSpec> {
-            Vec::new()
-        }
-
-        fn dispatch(
-            &mut self,
-            _c: &mut dyn canopy::Context,
-            _cmd: &CommandInvocation,
-        ) -> Result<ReturnValue> {
-            Ok(ReturnValue::Void)
+        fn commands() -> &'static [&'static CommandSpec] {
+            &[]
         }
     }
 

@@ -235,24 +235,6 @@ impl ListGym {
         c.with_unique_descendant::<Panes, _>(|panes, ctx| panes.delete_focus(ctx))?;
         Ok(())
     }
-
-    #[command]
-    /// Move focus to the next column.
-    pub fn next_column(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.with_unique_descendant::<Panes, _>(|panes, ctx| {
-            panes.focus_next_column(ctx);
-            Ok(())
-        })
-    }
-
-    #[command]
-    /// Move focus to the previous column.
-    pub fn prev_column(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.with_unique_descendant::<Panes, _>(|panes, ctx| {
-            panes.focus_prev_column(ctx);
-            Ok(())
-        })
-    }
 }
 
 impl Widget for ListGym {
@@ -310,12 +292,12 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
         .key('g', "list::select_first()")
         .key('G', "list::select_last()")
         .key('d', "list::delete_selected()")
-        .key('j', "list::select_next()")
-        .mouse(mouse::Action::ScrollDown, "list::select_next()")
-        .key('k', "list::select_prev()")
-        .mouse(mouse::Action::ScrollUp, "list::select_prev()")
-        .key(key::KeyCode::Down, "list::select_next()")
-        .key(key::KeyCode::Up, "list::select_prev()")
+        .key('j', "list::select_by(1)")
+        .mouse(mouse::Action::ScrollDown, "list::select_by(1)")
+        .key('k', "list::select_by(-1)")
+        .mouse(mouse::Action::ScrollUp, "list::select_by(-1)")
+        .key(key::KeyCode::Down, "list::select_by(1)")
+        .key(key::KeyCode::Up, "list::select_by(-1)")
         .key('J', "list::scroll_down()")
         .key('K', "list::scroll_up()")
         .key('h', "list::scroll_left()")
@@ -324,8 +306,8 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
         .key(key::KeyCode::Right, "list::scroll_right()")
         .key('s', "list_gym::add_column()")
         .key('x', "list_gym::delete_column()")
-        .key(key::KeyCode::Tab, "list_gym::next_column()")
-        .key(key::KeyCode::BackTab, "list_gym::prev_column()")
+        .key(key::KeyCode::Tab, "panes::focus_column(1)")
+        .key(key::KeyCode::BackTab, "panes::focus_column(-1)")
         .key(key::KeyCode::PageDown, "list::page_down()")
         .key(' ', "list::page_down()")
         .key(key::KeyCode::PageUp, "list::page_up()");

@@ -1,6 +1,6 @@
 use crate::{
     Canopy,
-    commands::CommandInvocationBuilder,
+    commands::CommandInvocation,
     error::Result,
     event::{key::Key, mouse::Mouse},
 };
@@ -70,7 +70,7 @@ impl<'a> Binder<'a> {
     pub fn try_key_command<K, C>(self, key: K, command: C) -> Result<Self>
     where
         Key: From<K>,
-        C: CommandInvocationBuilder,
+        C: Into<CommandInvocation>,
     {
         self.cnpy
             .bind_mode_key_command(key, &self.mode, &self.path_filter, command)?;
@@ -81,7 +81,7 @@ impl<'a> Binder<'a> {
     pub fn key_command<K, C>(self, key: K, command: C) -> Self
     where
         Key: From<K>,
-        C: CommandInvocationBuilder,
+        C: Into<CommandInvocation>,
     {
         self.try_key_command(key, command).unwrap()
     }
@@ -110,7 +110,7 @@ impl<'a> Binder<'a> {
     pub fn try_mouse_command<K, C>(self, m: K, command: C) -> Result<Self>
     where
         Mouse: From<K>,
-        C: CommandInvocationBuilder,
+        C: Into<CommandInvocation>,
     {
         self.cnpy
             .bind_mode_mouse_command(m, &self.mode, &self.path_filter, command)?;
@@ -121,7 +121,7 @@ impl<'a> Binder<'a> {
     pub fn mouse_command<K, C>(self, m: K, command: C) -> Self
     where
         Mouse: From<K>,
-        C: CommandInvocationBuilder,
+        C: Into<CommandInvocation>,
     {
         self.try_mouse_command(m, command).unwrap()
     }

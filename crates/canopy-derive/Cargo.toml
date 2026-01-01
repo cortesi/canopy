@@ -18,6 +18,7 @@ thiserror = "2.0.12"
 anyhow = "1.0.98"
 regex = "1.11.1"
 lazy_static = "1.5.0"
+convert_case = "0.10.0"
 
 [dev-dependencies]
 canopy = { path = "../canopy" }

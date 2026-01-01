@@ -8,13 +8,19 @@ use std::marker::PhantomData;
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
-    Context, NodeId, TypedId, ViewContext, command, derive_commands,
+    Context, NodeId, TypedId, ViewContext, command,
+    commands::{
+        CommandArgs, CommandCall, CommandInvocation, CommandScopeFrame, ListRowContext,
+        ScrollDirection, ToArgValue, VerticalDirection,
+    },
+    derive_commands,
     error::Result,
-    geom::Line,
+    event::{Event, mouse},
+    geom::{Line, Point},
     layout::{CanvasContext, Constraint, Edges, Layout, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
-    widget::Widget,
+    widget::{EventOutcome, Widget},
 };
 
 /// List selection indicator configuration.
@@ -27,6 +33,65 @@ struct SelectionIndicator {
     width: u32,
     /// Indicator repeat behavior.
     repeat: bool,
+}
+
+/// Default drag threshold in cells before cancelling activation.
+const DEFAULT_ACTIVATE_DRAG_THRESHOLD: u32 = 4;
+
+/// Activation configuration for list row clicks.
+#[derive(Debug, Clone)]
+pub struct ListActivateConfig {
+    /// Command invocation to dispatch on activation.
+    command: CommandInvocation,
+    /// Drag threshold in cells before cancelling activation.
+    drag_threshold: u32,
+}
+
+impl ListActivateConfig {
+    /// Build a new activation config using the default drag threshold.
+    pub fn new(command: CommandCall) -> Self {
+        Self {
+            command: command.invocation(),
+            drag_threshold: DEFAULT_ACTIVATE_DRAG_THRESHOLD,
+        }
+    }
+
+    /// Set the drag threshold in cells.
+    pub fn with_drag_threshold(mut self, drag_threshold: u32) -> Self {
+        self.drag_threshold = drag_threshold;
+        self
+    }
+
+    /// Build an activation invocation that includes the row index.
+    fn invocation_with_index(&self, index: usize) -> CommandInvocation {
+        let args = match &self.command.args {
+            CommandArgs::Positional(values) => {
+                let mut out = values.clone();
+                out.push(index.to_arg_value());
+                CommandArgs::Positional(out)
+            }
+            CommandArgs::Named(values) => {
+                let mut out = values.clone();
+                out.insert("index".to_string(), index.to_arg_value());
+                CommandArgs::Named(out)
+            }
+        };
+        CommandInvocation {
+            id: self.command.id,
+            args,
+        }
+    }
+}
+
+/// Pending activation state for list row clicks.
+#[derive(Debug, Clone, Copy)]
+struct PendingActivate {
+    /// Selected row index.
+    index: usize,
+    /// Pointer origin when the press began.
+    origin: Point,
+    /// Whether the drag threshold was exceeded.
+    dragged: bool,
 }
 
 /// Trait for widgets that can be selected in a list.
@@ -53,6 +118,10 @@ pub struct List<W: Selectable> {
     selected: Option<usize>,
     /// Optional list-level selection indicator.
     selection_indicator: Option<SelectionIndicator>,
+    /// Optional activation command configuration.
+    on_activate: Option<ListActivateConfig>,
+    /// Pending activation state while handling clicks.
+    pending_activate: Option<PendingActivate>,
     /// Marker for the widget type.
     _marker: PhantomData<W>,
 }
@@ -71,6 +140,8 @@ impl<W: Selectable> List<W> {
             items: Vec::new(),
             selected: None,
             selection_indicator: None,
+            on_activate: None,
+            pending_activate: None,
             _marker: PhantomData,
         }
     }
@@ -108,6 +179,17 @@ impl<W: Selectable> List<W> {
     /// Clear the list-level selection indicator.
     pub fn clear_selection_indicator(&mut self) {
         self.selection_indicator = None;
+    }
+
+    /// Build a list that dispatches a command when a row is activated.
+    pub fn with_on_activate(mut self, command: CommandCall) -> Self {
+        self.set_on_activate(Some(ListActivateConfig::new(command)));
+        self
+    }
+
+    /// Configure an activation command for row clicks.
+    pub fn set_on_activate(&mut self, config: Option<ListActivateConfig>) {
+        self.on_activate = config;
     }
 
     /// Returns true if the list is empty.
@@ -305,27 +387,69 @@ impl<W: Selectable> List<W> {
         self.ensure_selected_visible(c);
     }
 
-    /// Move selection to the next item.
+    /// Move selection by a signed offset.
     #[command]
-    pub fn select_next(&mut self, c: &mut dyn Context) {
-        if let Some(sel) = self.selected
-            && sel + 1 < self.items.len()
-        {
-            self.update_selection(c, Some(sel + 1));
-            self.focus_selected(c);
-            self.ensure_selected_visible(c);
+    pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) {
+        if self.items.is_empty() {
+            return;
         }
+        let current = self.selected.unwrap_or(0);
+        let next = if delta.is_negative() {
+            current.saturating_sub(delta.unsigned_abs() as usize)
+        } else {
+            current.saturating_add(delta as usize)
+        };
+        self.update_selection(c, Some(next.min(self.items.len() - 1)));
+        self.focus_selected(c);
+        self.ensure_selected_visible(c);
     }
 
-    /// Move selection to the previous item.
-    #[command]
-    pub fn select_prev(&mut self, c: &mut dyn Context) {
-        if let Some(sel) = self.selected
-            && sel > 0
-        {
-            self.update_selection(c, Some(sel - 1));
-            self.focus_selected(c);
-            self.ensure_selected_visible(c);
+    /// Handle a mouse click within the list.
+    fn handle_click(&mut self, c: &mut dyn Context, event: mouse::MouseEvent) -> bool {
+        match event.action {
+            mouse::Action::Down if event.button == mouse::Button::Left => {
+                let Some(index) = self.index_at_location(c, event.location) else {
+                    return false;
+                };
+                self.select(c, index);
+                self.focus_selected(c);
+                self.ensure_selected_visible(c);
+                if self.on_activate.is_some() {
+                    self.pending_activate = Some(PendingActivate {
+                        index,
+                        origin: event.location,
+                        dragged: false,
+                    });
+                    c.capture_mouse();
+                }
+                true
+            }
+            mouse::Action::Drag if event.button == mouse::Button::Left => {
+                if let Some(pending) = self.pending_activate.as_mut()
+                    && let Some(config) = self.on_activate.as_ref()
+                {
+                    if drag_exceeded(pending.origin, event.location, config.drag_threshold) {
+                        pending.dragged = true;
+                    }
+                    return true;
+                }
+                false
+            }
+            mouse::Action::Up if event.button == mouse::Button::Left => {
+                let pending = self.pending_activate.take();
+                if let Some(pending) = pending {
+                    c.release_mouse();
+                    if !pending.dragged {
+                        let index = self.index_at_location(c, event.location);
+                        if index == Some(pending.index) {
+                            self.dispatch_activate(c, pending.index);
+                        }
+                    }
+                    return true;
+                }
+                false
+            }
+            _ => false,
         }
     }
 
@@ -336,40 +460,80 @@ impl<W: Selectable> List<W> {
         }
     }
 
-    /// Scroll the view down by one line.
-    #[command]
-    pub fn scroll_down(&mut self, c: &mut dyn Context) {
-        c.scroll_down();
+    /// Dispatch the activation command for a selected row.
+    fn dispatch_activate(&self, c: &mut dyn Context, index: usize) -> bool {
+        let Some(config) = self.on_activate.as_ref() else {
+            return false;
+        };
+        let frame = CommandScopeFrame {
+            event: c.current_event().cloned(),
+            mouse: c.current_mouse_event(),
+            list_row: Some(ListRowContext {
+                list: c.node_id(),
+                index,
+            }),
+        };
+        let invocation = config.invocation_with_index(index);
+        c.dispatch_command_scoped(frame, &invocation).is_ok()
     }
 
-    /// Scroll the view up by one line.
+    /// Scroll the view by one line in the specified direction.
+    pub fn scroll(&mut self, c: &mut dyn Context, dir: ScrollDirection) {
+        match dir {
+            ScrollDirection::Up => {
+                c.scroll_up();
+            }
+            ScrollDirection::Down => {
+                c.scroll_down();
+            }
+            ScrollDirection::Left => {
+                c.scroll_left();
+            }
+            ScrollDirection::Right => {
+                c.scroll_right();
+            }
+        }
+    }
+
+    /// Move selection by one page in the specified direction.
+    pub fn page(&mut self, c: &mut dyn Context, dir: VerticalDirection) {
+        self.page_shift(c, matches!(dir, VerticalDirection::Down));
+    }
+
     #[command]
+    /// Scroll up by one line.
     pub fn scroll_up(&mut self, c: &mut dyn Context) {
-        c.scroll_up();
+        self.scroll(c, ScrollDirection::Up);
     }
 
-    /// Scroll the view left by one line.
     #[command]
+    /// Scroll down by one line.
+    pub fn scroll_down(&mut self, c: &mut dyn Context) {
+        self.scroll(c, ScrollDirection::Down);
+    }
+
+    #[command]
+    /// Scroll left by one column.
     pub fn scroll_left(&mut self, c: &mut dyn Context) {
-        c.scroll_left();
+        self.scroll(c, ScrollDirection::Left);
     }
 
-    /// Scroll the view right by one line.
     #[command]
+    /// Scroll right by one column.
     pub fn scroll_right(&mut self, c: &mut dyn Context) {
-        c.scroll_right();
+        self.scroll(c, ScrollDirection::Right);
     }
 
-    /// Scroll the view down by one page.
     #[command]
-    pub fn page_down(&mut self, c: &mut dyn Context) {
-        self.page_shift(c, true);
-    }
-
-    /// Scroll the view up by one page.
-    #[command]
+    /// Page up by one screen.
     pub fn page_up(&mut self, c: &mut dyn Context) {
-        self.page_shift(c, false);
+        self.page(c, VerticalDirection::Up);
+    }
+
+    #[command]
+    /// Page down by one screen.
+    pub fn page_down(&mut self, c: &mut dyn Context) {
+        self.page(c, VerticalDirection::Down);
     }
 
     /// Sync children order with the items vec.
@@ -434,6 +598,15 @@ impl<W: Selectable> List<W> {
         }
     }
 
+    /// Find the item index at a local content-space location.
+    fn index_at_location(&self, c: &dyn Context, location: Point) -> Option<usize> {
+        let view = c.view();
+        let view_rect = view.view_rect();
+        let content_y = view_rect.tl.y.saturating_add(location.y);
+        let metrics = self.item_metrics(c, view_rect.w.max(1));
+        Self::index_at_y(&metrics, content_y)
+    }
+
     /// Build (start_y, height) tuples for each item.
     fn item_metrics(&self, c: &dyn ViewContext, available_width: u32) -> Vec<(u32, u32)> {
         let mut metrics = Vec::with_capacity(self.items.len());
@@ -485,6 +658,15 @@ impl<W: Selectable + Send + 'static> Widget for List<W> {
             layout = layout.padding(Edges::new(0, 0, 0, indicator.width));
         }
         layout
+    }
+
+    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> EventOutcome {
+        if let Event::Mouse(mouse_event) = event
+            && self.handle_click(ctx, *mouse_event)
+        {
+            return EventOutcome::Handle;
+        }
+        EventOutcome::Ignore
     }
 
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
@@ -578,6 +760,13 @@ fn indicator_width(text: &str) -> u32 {
         .unwrap_or(0)
 }
 
+/// Return true when drag distance exceeds the configured threshold.
+fn drag_exceeded(origin: Point, current: Point, threshold: u32) -> bool {
+    let dx = origin.x.abs_diff(current.x);
+    let dy = origin.y.abs_diff(current.y);
+    dx.max(dy) > threshold
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -631,7 +820,7 @@ mod tests {
         harness.render()?;
 
         // Navigate down
-        harness.script("list::select_next()")?;
+        harness.script("list::select_by(1)")?;
         harness.with_root_widget::<List<Text>, _>(|list| {
             assert_eq!(list.selected_index(), Some(1));
         });
@@ -643,7 +832,7 @@ mod tests {
         });
 
         // Navigate up
-        harness.script("list::select_prev()")?;
+        harness.script("list::select_by(-1)")?;
         harness.with_root_widget::<List<Text>, _>(|list| {
             assert_eq!(list.selected_index(), Some(1));
         });

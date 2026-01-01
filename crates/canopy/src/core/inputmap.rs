@@ -21,7 +21,7 @@ struct BoundAction {
 }
 
 /// A resolved input binding target.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BindingTarget {
     /// Script identifier to execute.
     Script(script::ScriptId),

@@ -1,6 +1,8 @@
 use anyhow::Result as AnyResult;
 use canopy::{
-    Binder, Canopy, Context, Loader, ViewContext, command, derive_commands,
+    Binder, Canopy, Context, Loader, ViewContext, command,
+    commands::VerticalDirection,
+    derive_commands,
     error::Result,
     event::{key, mouse},
     geom::Rect,
@@ -342,33 +344,17 @@ impl Todo {
     }
 
     #[command]
-    pub fn select_next(&mut self, c: &mut dyn Context) -> Result<()> {
+    pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
         self.with_list(c, |list, ctx| {
-            list.select_next(ctx);
+            list.select_by(ctx, delta);
             Ok(())
         })
     }
 
     #[command]
-    pub fn select_prev(&mut self, c: &mut dyn Context) -> Result<()> {
+    pub fn page(&mut self, c: &mut dyn Context, dir: VerticalDirection) -> Result<()> {
         self.with_list(c, |list, ctx| {
-            list.select_prev(ctx);
-            Ok(())
-        })
-    }
-
-    #[command]
-    pub fn page_down(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.with_list(c, |list, ctx| {
-            list.page_down(ctx);
-            Ok(())
-        })
-    }
-
-    #[command]
-    pub fn page_up(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.with_list(c, |list, ctx| {
-            list.page_up(ctx);
+            list.page(ctx, dir);
             Ok(())
         })
     }
@@ -419,15 +405,15 @@ pub fn bind_keys(cnpy: &mut Canopy) {
         .key('d', "todo::delete_item()")
         .key('a', "todo::enter_item()")
         .key('g', "todo::select_first()")
-        .key('j', "todo::select_next()")
-        .key(key::KeyCode::Down, "todo::select_next()")
-        .key('k', "todo::select_prev()")
-        .key(key::KeyCode::Up, "todo::select_prev()")
-        .key(' ', "todo::page_down()")
-        .key(key::KeyCode::PageDown, "todo::page_down()")
-        .key(key::KeyCode::PageUp, "todo::page_up()")
-        .mouse(mouse::Action::ScrollUp, "todo::select_prev()")
-        .mouse(mouse::Action::ScrollDown, "todo::select_next()")
+        .key('j', "todo::select_by(1)")
+        .key(key::KeyCode::Down, "todo::select_by(1)")
+        .key('k', "todo::select_by(-1)")
+        .key(key::KeyCode::Up, "todo::select_by(-1)")
+        .key(' ', "todo::page(\\\"down\\\")")
+        .key(key::KeyCode::PageDown, "todo::page(\\\"down\\\")")
+        .key(key::KeyCode::PageUp, "todo::page(\\\"up\\\")")
+        .mouse(mouse::Action::ScrollUp, "todo::select_by(-1)")
+        .mouse(mouse::Action::ScrollDown, "todo::select_by(1)")
         .with_path("input")
         .key(key::KeyCode::Left, "input::left()")
         .key(key::KeyCode::Right, "input::right()")
