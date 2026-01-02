@@ -8,7 +8,7 @@ use crate::{
     error::Result,
     event::Event,
     geom::Expanse,
-    layout::Layout,
+    layout::{Direction, Layout},
     render::Render,
     state::NodeName,
     testing::backend::TestRender,
@@ -316,9 +316,9 @@ fn build_tree(core: &mut Core) -> Result<TestTree> {
     core.set_children(a, vec![a_a, a_b])?;
     core.set_children(b, vec![b_a, b_b])?;
 
-    core.set_layout_of(core.root, Layout::row().flex_horizontal(1).flex_vertical(1))?;
-    core.set_layout_of(a, Layout::column().flex_horizontal(1).flex_vertical(1))?;
-    core.set_layout_of(b, Layout::column().flex_horizontal(1).flex_vertical(1))?;
+    core.set_layout_of(core.root, Layout::fill().direction(Direction::Row))?;
+    core.set_layout_of(a, Layout::fill())?;
+    core.set_layout_of(b, Layout::fill())?;
     core.set_layout_of(a_a, Layout::fill())?;
     core.set_layout_of(a_b, Layout::fill())?;
     core.set_layout_of(b_a, Layout::fill())?;

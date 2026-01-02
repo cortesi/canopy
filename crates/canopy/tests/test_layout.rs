@@ -101,17 +101,11 @@ mod tests {
         h.canopy.core.set_children(h.root, vec![container])?;
         h.canopy.core.set_children(container, vec![child])?;
 
+        h.canopy.core.set_layout_of(h.root, Layout::fill())?;
+
         h.canopy
             .core
-            .set_layout_of(h.root, Layout::column().flex_horizontal(1).flex_vertical(1))?;
-
-        h.canopy.core.set_layout_of(
-            container,
-            Layout::column()
-                .flex_horizontal(1)
-                .flex_vertical(1)
-                .padding(Edges::all(1)),
-        )?;
+            .set_layout_of(container, Layout::fill().padding(Edges::all(1)))?;
 
         h.canopy.core.set_layout_of(child, Layout::fill())?;
 

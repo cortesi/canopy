@@ -4,7 +4,7 @@ use canopy::{
     Binder, Canopy, Context, Loader, NodeId, ReadContext, Widget, command, derive_commands,
     error::{Error, Result},
     event::key,
-    layout::{Constraint, Layout, MeasureConstraints, Measurement, Size},
+    layout::{Constraint, Direction, Layout, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
     style::{Attr, AttrSet, solarized},
@@ -103,7 +103,7 @@ impl TerminalStack {
 
 impl Widget for TerminalStack {
     fn layout(&self) -> Layout {
-        Layout::stack().flex_horizontal(1).flex_vertical(1)
+        Layout::fill().direction(Direction::Stack)
     }
 
     fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
@@ -390,7 +390,7 @@ impl Widget for TermGym {
             c.add_child(Frame::new().with_glyphs(ROUND_THICK).with_title("terminal"))?;
         c.attach(term_frame_id, stack_id)?;
 
-        c.set_layout(Layout::row().flex_horizontal(1).flex_vertical(1))?;
+        c.set_layout(Layout::fill().direction(Direction::Row))?;
         c.set_layout_of(
             sidebar_id,
             Layout::column().fixed_width(24).flex_vertical(1),

@@ -183,7 +183,7 @@ impl Widget for FrameGym {
         let frame_id = c.add_keyed::<FrameSlot>(Frame::new().with_title("Frame Gym"))?;
         let pattern_id = c.add_keyed_to::<PatternSlot>(frame_id, TestPattern::new())?;
 
-        c.set_layout(Layout::column().flex_horizontal(1).flex_vertical(1))?;
+        c.set_layout(Layout::fill())?;
         c.with_layout_of(frame_id, &mut |layout| {
             layout.width = Sizing::Flex(1);
             layout.height = Sizing::Flex(1);

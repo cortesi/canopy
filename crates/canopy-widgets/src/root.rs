@@ -6,7 +6,7 @@ use canopy::{
     error::{Error, Result},
     event::key::*,
     key,
-    layout::Layout,
+    layout::{Direction, Layout, Sizing},
     state::NodeName,
 };
 
@@ -46,7 +46,7 @@ impl Root {
 
         c.set_hidden_of(inspector, !self.inspector_active);
 
-        c.set_layout(Layout::row().flex_horizontal(1).flex_vertical(1))?;
+        c.set_layout(Layout::fill().direction(Direction::Row))?;
 
         c.set_layout_of(app, Layout::fill())?;
         c.set_layout_of(inspector, Layout::fill())?;
@@ -185,14 +185,12 @@ impl Root {
         core.attach_keyed(core.root_id(), InspectorSlot::KEY, inspector)?;
         core.attach_keyed(core.root_id(), KEY_APP, app)?;
         core.set_hidden(inspector, !inspector_active);
-        core.with_layout_of(core.root_id(), |layout| {
-            *layout = Layout::row().flex_horizontal(1).flex_vertical(1);
-        })?;
+        core.set_layout_of(core.root_id(), Layout::fill().direction(Direction::Row))?;
         core.with_layout_of(app, |layout| {
-            *layout = (*layout).flex_horizontal(1).flex_vertical(1);
+            *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
         })?;
         core.with_layout_of(inspector, |layout| {
-            *layout = (*layout).flex_horizontal(1).flex_vertical(1);
+            *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
         })?;
         Ok(core.root_id())
     }
@@ -310,7 +308,7 @@ mod tests {
 
         canopy
             .core
-            .set_layout_of(app_id, Layout::row().flex_horizontal(1).flex_vertical(1))?;
+            .set_layout_of(app_id, Layout::fill().direction(Direction::Row))?;
 
         canopy.core.set_layout_of(left, Layout::fill())?;
         canopy.core.set_layout_of(right, Layout::fill())?;

@@ -3,7 +3,7 @@ use canopy::{
     commands::{CommandNode, CommandSpec},
     derive_commands,
     error::Result,
-    layout::{Layout, Sizing},
+    layout::{Direction, Layout, Sizing},
     state::NodeName,
 };
 
@@ -18,7 +18,7 @@ impl CommandNode for PaneColumn {
 
 impl Widget for PaneColumn {
     fn layout(&self) -> Layout {
-        Layout::column().flex_horizontal(1).flex_vertical(1)
+        Layout::fill()
     }
 
     fn render(&mut self, _rndr: &mut canopy::render::Render, _ctx: &dyn ReadContext) -> Result<()> {
@@ -179,15 +179,12 @@ impl Panes {
 
         c.set_children(active_columns.clone())?;
 
-        c.set_layout(Layout::row().flex_horizontal(1).flex_vertical(1))?;
+        c.set_layout(Layout::fill().direction(Direction::Row))?;
 
         for (idx, column_node) in active_columns.iter().enumerate() {
             let pane_nodes = self.columns.get(idx).cloned().unwrap_or_default();
             c.set_children_of(*column_node, pane_nodes.clone())?;
-            c.set_layout_of(
-                *column_node,
-                Layout::column().flex_horizontal(1).flex_vertical(1),
-            )?;
+            c.set_layout_of(*column_node, Layout::fill())?;
             for pane in pane_nodes {
                 c.with_layout_of(pane, &mut |layout| {
                     layout.width = Sizing::Flex(1);

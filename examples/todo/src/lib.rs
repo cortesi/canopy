@@ -169,10 +169,7 @@ impl Todo {
         c.set_layout(Layout::fill().direction(Direction::Stack))?;
 
         // Main content fills the space
-        c.set_layout_of(
-            main_content_id,
-            Layout::column().flex_horizontal(1).flex_vertical(1),
-        )?;
+        c.set_layout_of(main_content_id, Layout::fill())?;
 
         c.with_layout_of(frame_id, &mut |layout| {
             layout.width = Sizing::Flex(1);

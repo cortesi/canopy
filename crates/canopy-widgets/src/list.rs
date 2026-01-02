@@ -658,10 +658,7 @@ impl<W: Selectable> List<W> {
 
 impl<W: Selectable + Send + 'static> Widget for List<W> {
     fn layout(&self) -> Layout {
-        let mut layout = Layout::column()
-            .flex_vertical(1)
-            .flex_horizontal(1)
-            .overflow_x();
+        let mut layout = Layout::fill().overflow_x();
         if let Some(indicator) = &self.selection_indicator
             && indicator.width > 0
         {

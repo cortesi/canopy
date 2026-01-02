@@ -299,7 +299,7 @@ mod tests {
     fn attach_grid(core: &mut Core, grid_root: NodeId, size: Expanse) -> Result<()> {
         let root = core.root_id();
         core.set_children(root, vec![grid_root])?;
-        core.set_layout_of(root, Layout::column().flex_horizontal(1).flex_vertical(1))?;
+        core.set_layout_of(root, Layout::fill())?;
         core.with_layout_of(grid_root, |layout| {
             layout.width = Sizing::Flex(1);
             layout.height = Sizing::Flex(1);

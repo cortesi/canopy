@@ -17,8 +17,13 @@ pub mod ttree;
 mod tests {
     use super::backend::TestRender;
     use crate::{
-        Canopy, FocusManager, ReadContext, derive_commands, error::Result, geom::Expanse,
-        layout::Layout, render::Render, state::NodeName, widget::Widget,
+        Canopy, FocusManager, ReadContext, derive_commands,
+        error::Result,
+        geom::Expanse,
+        layout::{Direction, Layout},
+        render::Render,
+        state::NodeName,
+        widget::Widget,
     };
 
     struct Block {
@@ -42,9 +47,9 @@ mod tests {
 
         fn layout(&self) -> Layout {
             if self.horizontal {
-                Layout::row().flex_horizontal(1).flex_vertical(1)
+                Layout::fill().direction(Direction::Row)
             } else {
-                Layout::column().flex_horizontal(1).flex_vertical(1)
+                Layout::fill()
             }
         }
 

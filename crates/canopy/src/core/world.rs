@@ -1776,8 +1776,8 @@ mod tests {
         error::{Error, Result},
         geom::{Expanse, Point},
         layout::{
-            Align, CanvasContext, Constraint, Edges, Layout, MeasureConstraints, Measurement, Size,
-            Sizing,
+            Align, CanvasContext, Constraint, Direction, Edges, Layout, MeasureConstraints,
+            Measurement, Size, Sizing,
         },
         widget::Widget,
     };
@@ -1953,10 +1953,7 @@ mod tests {
         let child = core.add_boxed(Box::new(widget));
         attach_root_child(&mut core, child)?;
         core.with_layout_of(child, |layout| {
-            *layout = Layout::column()
-                .flex_horizontal(1)
-                .flex_vertical(1)
-                .padding(Edges::all(1));
+            *layout = Layout::fill().padding(Edges::all(1));
         })?;
         core.update_layout(Expanse::new(1, 1))?;
         let node = &core.nodes[child];
@@ -2394,7 +2391,7 @@ mod tests {
         core.set_children(parent, vec![child])?;
         attach_root_child(&mut core, parent)?;
         core.with_layout_of(parent, |layout| {
-            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
+            *layout = Layout::fill();
         })?;
         core.with_layout_of(child, |layout| {
             *layout = Layout::column().fixed_width(2).fixed_height(2);
@@ -2560,10 +2557,7 @@ mod tests {
         core.set_children(parent, vec![child])?;
         attach_root_child(&mut core, parent)?;
         core.with_layout_of(parent, |layout| {
-            *layout = Layout::stack()
-                .flex_horizontal(1)
-                .flex_vertical(1)
-                .align_center();
+            *layout = Layout::fill().direction(Direction::Stack).align_center();
         })?;
         core.update_layout(Expanse::new(50, 50))?;
 
@@ -2584,9 +2578,8 @@ mod tests {
         core.set_children(parent, vec![child])?;
         attach_root_child(&mut core, parent)?;
         core.with_layout_of(parent, |layout| {
-            *layout = Layout::stack()
-                .flex_horizontal(1)
-                .flex_vertical(1)
+            *layout = Layout::fill()
+                .direction(Direction::Stack)
                 .align_horizontal(Align::End)
                 .align_vertical(Align::End);
         })?;
@@ -2611,10 +2604,7 @@ mod tests {
         core.set_children(parent, vec![child1, child2])?;
         attach_root_child(&mut core, parent)?;
         core.with_layout_of(parent, |layout| {
-            *layout = Layout::stack()
-                .flex_horizontal(1)
-                .flex_vertical(1)
-                .align_center();
+            *layout = Layout::fill().direction(Direction::Stack).align_center();
         })?;
         core.update_layout(Expanse::new(50, 50))?;
 
@@ -2682,7 +2672,7 @@ mod tests {
         let second = core.create_detached(FocusableWidget);
         core.set_children(core.root, vec![first, second])?;
         core.with_layout_of(core.root, |layout| {
-            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
+            *layout = Layout::fill();
         })?;
         core.with_layout_of(first, |layout| {
             *layout = Layout::fill();
@@ -2706,7 +2696,7 @@ mod tests {
         let second = core.create_detached(FocusableWidget);
         core.set_children(core.root, vec![first, second])?;
         core.with_layout_of(core.root, |layout| {
-            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
+            *layout = Layout::fill();
         })?;
         core.with_layout_of(first, |layout| {
             *layout = Layout::fill();

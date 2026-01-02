@@ -357,6 +357,23 @@ impl Layout {
         self.direction = direction;
         self
     }
+
+    /// Set width sizing strategy directly.
+    pub fn width(mut self, sizing: Sizing) -> Self {
+        self.width = sizing;
+        self
+    }
+
+    /// Set height sizing strategy directly.
+    pub fn height(mut self, sizing: Sizing) -> Self {
+        self.height = sizing;
+        self
+    }
+
+    /// Set both axes to Measure sizing.
+    pub fn measured(self) -> Self {
+        self.width(Sizing::Measure).height(Sizing::Measure)
+    }
 }
 
 /// Content-box measurement constraints.
@@ -580,5 +597,25 @@ mod tests {
         ];
         let ctx = CanvasContext::new(&children);
         assert_eq!(ctx.children_extent(), Size::new(10, 4));
+    }
+
+    #[test]
+    fn layout_width_height_methods() {
+        let layout = Layout::column()
+            .width(Sizing::Flex(2))
+            .height(Sizing::Flex(3));
+        assert_eq!(layout.width, Sizing::Flex(2));
+        assert_eq!(layout.height, Sizing::Flex(3));
+
+        let layout = Layout::fill().width(Sizing::Measure);
+        assert_eq!(layout.width, Sizing::Measure);
+        assert_eq!(layout.height, Sizing::Flex(1));
+    }
+
+    #[test]
+    fn layout_measured_resets_both_axes() {
+        let layout = Layout::fill().measured();
+        assert_eq!(layout.width, Sizing::Measure);
+        assert_eq!(layout.height, Sizing::Measure);
     }
 }

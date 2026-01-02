@@ -41,8 +41,7 @@ impl Widget for BenchmarkTextWrapper {
             .add_keyed::<TextSlot>(Text::new(self.content.clone()))
             .expect("Failed to attach text");
 
-        c.set_layout(Layout::column().flex_horizontal(1).flex_vertical(1))
-            .expect("Failed to style root");
+        c.set_layout(Layout::fill()).expect("Failed to style root");
 
         c.with_layout_of(text_id, &mut |layout| {
             layout.width = Sizing::Flex(1);

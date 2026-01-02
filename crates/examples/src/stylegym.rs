@@ -351,7 +351,7 @@ impl Widget for Stylegym {
     }
 
     fn layout(&self) -> Layout {
-        Layout::row().flex_horizontal(1).flex_vertical(1)
+        Layout::fill().direction(Direction::Row)
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
@@ -381,13 +381,7 @@ impl Widget for Stylegym {
             effects_frame_id,
             Selector::new(available_effects()),
         )?;
-        c.set_layout_of(
-            effects_frame_id,
-            Layout::column()
-                .flex_horizontal(1)
-                .flex_vertical(1)
-                .padding(Edges::all(1)),
-        )?;
+        c.set_layout_of(effects_frame_id, Layout::fill().padding(Edges::all(1)))?;
 
         // Create right container with Stack layout for modal overlay
         let right_container_id = c.add_keyed::<RightContainerSlot>(Container)?;

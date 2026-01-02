@@ -50,7 +50,7 @@ impl LogEntry {
 
 impl Widget for LogEntry {
     fn layout(&self) -> Layout {
-        Layout::fill().flex_horizontal(1)
+        Layout::fill()
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {

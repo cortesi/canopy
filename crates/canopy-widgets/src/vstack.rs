@@ -102,7 +102,7 @@ impl Default for VStack {
 
 impl Widget for VStack {
     fn layout(&self) -> Layout {
-        Layout::column().flex_horizontal(1).flex_vertical(1)
+        Layout::fill()
     }
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {

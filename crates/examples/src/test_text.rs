@@ -56,7 +56,7 @@ impl Widget for TextDisplay {
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let text_id = c.add_child(Text::new(self.paragraph.clone()))?;
 
-        c.set_layout(Layout::column().flex_horizontal(1).flex_vertical(1))?;
+        c.set_layout(Layout::fill())?;
         c.with_layout_of(text_id, &mut |layout| {
             layout.width = Sizing::Flex(1);
             layout.height = Sizing::Flex(1);

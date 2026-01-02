@@ -4,7 +4,7 @@ use canopy::{
     derive_commands,
     error::Result,
     event::{key, mouse},
-    layout::{CanvasContext, Edges, Layout, Size},
+    layout::{CanvasContext, Direction, Edges, Layout, Size},
 };
 use canopy_widgets::{
     Frame, Root,
@@ -302,11 +302,7 @@ impl EditorGym {
 
 impl Widget for EditorGym {
     fn layout(&self) -> Layout {
-        Layout::row()
-            .flex_horizontal(1)
-            .flex_vertical(1)
-            .gap(1)
-            .overflow_y()
+        Layout::fill().direction(Direction::Row).gap(1).overflow_y()
     }
 
     fn canvas(&self, view: Size<u32>, ctx: &CanvasContext) -> Size<u32> {

@@ -197,7 +197,7 @@ impl Widget for FocusGym {
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        c.set_layout(Layout::column().flex_horizontal(1).flex_vertical(1))?;
+        c.set_layout(Layout::fill())?;
         let root_block = c.add_child(Block::new(true))?;
         c.add_child_to(root_block, Block::new(false))?;
         c.add_child_to(root_block, Block::new(false))?;

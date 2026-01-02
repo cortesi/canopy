@@ -116,9 +116,7 @@ mod tests {
         h.canopy.core.set_children(h.root, vec![node_a])?;
         h.canopy.core.set_children(node_a, vec![node_b])?;
 
-        h.canopy
-            .core
-            .set_layout_of(h.root, Layout::column().flex_horizontal(1).flex_vertical(1))?;
+        h.canopy.core.set_layout_of(h.root, Layout::fill())?;
 
         h.canopy
             .core
@@ -154,14 +152,9 @@ mod tests {
         h.canopy.core.set_children(h.root, vec![container])?;
         h.canopy.core.set_children(container, vec![top, bottom])?;
 
-        h.canopy
-            .core
-            .set_layout_of(h.root, Layout::column().flex_horizontal(1).flex_vertical(1))?;
+        h.canopy.core.set_layout_of(h.root, Layout::fill())?;
 
-        h.canopy.core.set_layout_of(
-            container,
-            Layout::column().flex_horizontal(1).flex_vertical(1),
-        )?;
+        h.canopy.core.set_layout_of(container, Layout::fill())?;
 
         h.canopy
             .core
@@ -196,9 +189,7 @@ mod tests {
 
         let tree = build_split_tree(&mut h.canopy.core, 5, true)?;
         h.canopy.core.set_children(h.root, vec![tree])?;
-        h.canopy
-            .core
-            .set_layout_of(h.root, Layout::column().flex_horizontal(1).flex_vertical(1))?;
+        h.canopy.core.set_layout_of(h.root, Layout::fill())?;
         style_flex_child(&mut h.canopy.core, tree)?;
 
         h.render()?;

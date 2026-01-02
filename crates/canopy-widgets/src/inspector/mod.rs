@@ -30,10 +30,7 @@ impl Inspector {
 
         let inspector_id = core.create_detached(Self::new());
         core.set_children(inspector_id, vec![frame_id])?;
-        core.set_layout_of(
-            inspector_id,
-            Layout::column().flex_horizontal(1).flex_vertical(1),
-        )?;
+        core.set_layout_of(inspector_id, Layout::fill())?;
 
         Ok(inspector_id)
     }

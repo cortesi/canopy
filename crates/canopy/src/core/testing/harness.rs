@@ -10,6 +10,7 @@ use crate::{
     error::Result,
     event::{key, mouse},
     geom::Expanse,
+    layout::Sizing,
     widget::Widget,
 };
 
@@ -56,7 +57,7 @@ impl<W: Widget + Loader + 'static> HarnessBuilder<W> {
         <W as Loader>::load(&mut canopy);
         canopy.core.set_widget(canopy.core.root, self.root);
         canopy.core.with_layout_of(canopy.core.root, |layout| {
-            *layout = (*layout).flex_horizontal(1).flex_vertical(1);
+            *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
         })?;
         canopy.set_root_size(self.size)?;
 
