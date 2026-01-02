@@ -324,6 +324,23 @@ impl dyn ReadContext + '_ {
     fn node_matches_type<W: Widget + 'static>(&self, node: NodeId) -> bool {
         self.node_type_id(node) == Some(TypeId::of::<W>())
     }
+
+    /// Return the first leaf node under `root` using pre-order traversal.
+    ///
+    /// A leaf is a node with no children.
+    pub fn first_leaf(&self, root: NodeId) -> Option<NodeId> {
+        let mut stack = vec![root];
+        while let Some(id) = stack.pop() {
+            let children = self.children_of(id);
+            if children.is_empty() {
+                return Some(id);
+            }
+            for child in children.into_iter().rev() {
+                stack.push(child);
+            }
+        }
+        None
+    }
 }
 
 /// Default zero-sized view used when a node lacks layout data.
@@ -693,6 +710,11 @@ impl dyn Context + '_ {
     /// Return the descendant of type `W` on the focus path, or the first if none focused.
     pub fn focused_or_first_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
         self.read().focused_or_first_descendant()
+    }
+
+    /// Return the first leaf node under `root` using pre-order traversal.
+    pub fn first_leaf(&self, root: NodeId) -> Option<NodeId> {
+        self.read().first_leaf(root)
     }
 
     /// Execute a closure with mutable access to a widget of type `W`.

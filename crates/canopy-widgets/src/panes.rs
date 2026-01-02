@@ -207,25 +207,10 @@ fn focus_column_node(c: &mut dyn Context, column_node: NodeId) {
     if let Some(target) = focusables
         .first()
         .copied()
-        .or_else(|| first_leaf(c, column_node))
+        .or_else(|| c.first_leaf(column_node))
     {
         c.set_focus(target);
     }
-}
-
-/// Return the first leaf node under a root using pre-order traversal.
-fn first_leaf(ctx: &dyn Context, root: NodeId) -> Option<NodeId> {
-    let mut stack = vec![root];
-    while let Some(id) = stack.pop() {
-        let children = ctx.children_of(id);
-        if children.is_empty() {
-            return Some(id);
-        }
-        for child in children.into_iter().rev() {
-            stack.push(child);
-        }
-    }
-    None
 }
 
 impl Default for Panes {
