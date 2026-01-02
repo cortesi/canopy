@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["EditMode","LineNumbers","WrapMode"],"mod":["highlight"],"struct":["Editor","EditorConfig"]};

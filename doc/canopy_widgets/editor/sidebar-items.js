@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["EditMode","LineNumbers","WrapMode"],"fn":["tab_width"],"mod":["highlight"],"struct":["Editor","EditorConfig","LineChange","Selection","TextBuffer","TextPosition","TextRange"]};

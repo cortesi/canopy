@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Direction","Error"],"struct":["Expanse","FrameRects","Line","LineSegment","Point","PointI32","Rect","RectI32"],"type":["Result"]};

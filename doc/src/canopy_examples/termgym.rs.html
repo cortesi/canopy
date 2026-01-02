@@ -1,17 +1,17 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/examples/src/termgym.rs`."><title>termgym.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="canopy_examples" data-themes="" data-resource-suffix="" data-rustdoc-version="1.92.0 (ded5c06cf 2025-12-08)" data-channel="1.92.0" data-search-js="search-d69d8955.js" data-stringdex-js="stringdex-c3e638e9.js" data-settings-js="settings-c38705f0.js" ><script src="../../static.files/storage-e2aeef58.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-ce535bd0.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">canopy_examples/</div>termgym.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>std::env;
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>canopy::{
-<a href=#4 id=4 data-nosnippet>4</a>    Binder, Canopy, Context, Loader, NodeId, ViewContext, Widget, command, derive_commands,
+<a href=#4 id=4 data-nosnippet>4</a>    Binder, Canopy, Context, Loader, NodeId, ReadContext, Widget, command, derive_commands,
 <a href=#5 id=5 data-nosnippet>5</a>    error::{Error, <span class="prelude-ty">Result</span>},
 <a href=#6 id=6 data-nosnippet>6</a>    event::key,
-<a href=#7 id=7 data-nosnippet>7</a>    layout::{Constraint, Layout, MeasureConstraints, Measurement, Size},
+<a href=#7 id=7 data-nosnippet>7</a>    layout::{Constraint, Direction, Layout, MeasureConstraints, Measurement, Size},
 <a href=#8 id=8 data-nosnippet>8</a>    render::Render,
 <a href=#9 id=9 data-nosnippet>9</a>    state::NodeName,
 <a href=#10 id=10 data-nosnippet>10</a>    style::{Attr, AttrSet, solarized},
-<a href=#11 id=11 data-nosnippet>11</a>    widgets::{
-<a href=#12 id=12 data-nosnippet>12</a>        Box, Button, Center, Frame, List, ROUND_THICK, Root, SINGLE, Selectable, Terminal,
-<a href=#13 id=13 data-nosnippet>13</a>        TerminalConfig, Text, VStack,
-<a href=#14 id=14 data-nosnippet>14</a>    },
+<a href=#11 id=11 data-nosnippet>11</a>};
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>canopy_widgets::{
+<a href=#13 id=13 data-nosnippet>13</a>    Box, Button, Center, Frame, List, ROUND_THICK, Root, SINGLE, Selectable, Terminal,
+<a href=#14 id=14 data-nosnippet>14</a>    TerminalConfig, Text, VStack,
 <a href=#15 id=15 data-nosnippet>15</a>};
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>unicode_width::UnicodeWidthStr;
 <a href=#17 id=17 data-nosnippet>17</a>
@@ -65,7 +65,7 @@
 <a href=#65 id=65 data-nosnippet>65</a>        <span class="prelude-val">Ok</span>(())
 <a href=#66 id=66 data-nosnippet>66</a>    }
 <a href=#67 id=67 data-nosnippet>67</a>
-<a href=#68 id=68 data-nosnippet>68</a>    <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, rndr: <span class="kw-2">&amp;mut </span>Render, _ctx: <span class="kw-2">&amp;</span><span class="kw">dyn </span>ViewContext) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#68 id=68 data-nosnippet>68</a>    <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, rndr: <span class="kw-2">&amp;mut </span>Render, _ctx: <span class="kw-2">&amp;</span><span class="kw">dyn </span>ReadContext) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
 <a href=#69 id=69 data-nosnippet>69</a>        rndr.push_layer(<span class="string">"entry"</span>);
 <a href=#70 id=70 data-nosnippet>70</a>        <span class="kw">if </span><span class="self">self</span>.selected {
 <a href=#71 id=71 data-nosnippet>71</a>            rndr.push_layer(<span class="string">"selected"</span>);
@@ -81,7 +81,7 @@
 <a href=#81 id=81 data-nosnippet>81</a>        c.clamp(Size::new(width, ENTRY_HEIGHT))
 <a href=#82 id=82 data-nosnippet>82</a>    }
 <a href=#83 id=83 data-nosnippet>83</a>
-<a href=#84 id=84 data-nosnippet>84</a>    <span class="kw">fn </span>accept_focus(<span class="kw-2">&amp;</span><span class="self">self</span>, _ctx: <span class="kw-2">&amp;</span><span class="kw">dyn </span>ViewContext) -&gt; bool {
+<a href=#84 id=84 data-nosnippet>84</a>    <span class="kw">fn </span>accept_focus(<span class="kw-2">&amp;</span><span class="self">self</span>, _ctx: <span class="kw-2">&amp;</span><span class="kw">dyn </span>ReadContext) -&gt; bool {
 <a href=#85 id=85 data-nosnippet>85</a>        <span class="bool-val">true
 <a href=#86 id=86 data-nosnippet>86</a>    </span>}
 <a href=#87 id=87 data-nosnippet>87</a>
@@ -103,10 +103,10 @@
 <a href=#103 id=103 data-nosnippet>103</a>
 <a href=#104 id=104 data-nosnippet>104</a><span class="kw">impl </span>Widget <span class="kw">for </span>TerminalStack {
 <a href=#105 id=105 data-nosnippet>105</a>    <span class="kw">fn </span>layout(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Layout {
-<a href=#106 id=106 data-nosnippet>106</a>        Layout::stack().flex_horizontal(<span class="number">1</span>).flex_vertical(<span class="number">1</span>)
+<a href=#106 id=106 data-nosnippet>106</a>        Layout::fill().direction(Direction::Stack)
 <a href=#107 id=107 data-nosnippet>107</a>    }
 <a href=#108 id=108 data-nosnippet>108</a>
-<a href=#109 id=109 data-nosnippet>109</a>    <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _rndr: <span class="kw-2">&amp;mut </span>Render, _ctx: <span class="kw-2">&amp;</span><span class="kw">dyn </span>ViewContext) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#109 id=109 data-nosnippet>109</a>    <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _rndr: <span class="kw-2">&amp;mut </span>Render, _ctx: <span class="kw-2">&amp;</span><span class="kw">dyn </span>ReadContext) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
 <a href=#110 id=110 data-nosnippet>110</a>        <span class="prelude-val">Ok</span>(())
 <a href=#111 id=111 data-nosnippet>111</a>    }
 <a href=#112 id=112 data-nosnippet>112</a>}
@@ -368,7 +368,7 @@
 <a href=#368 id=368 data-nosnippet>368</a>}
 <a href=#369 id=369 data-nosnippet>369</a>
 <a href=#370 id=370 data-nosnippet>370</a><span class="kw">impl </span>Widget <span class="kw">for </span>TermGym {
-<a href=#371 id=371 data-nosnippet>371</a>    <span class="kw">fn </span>accept_focus(<span class="kw-2">&amp;</span><span class="self">self</span>, _ctx: <span class="kw-2">&amp;</span><span class="kw">dyn </span>ViewContext) -&gt; bool {
+<a href=#371 id=371 data-nosnippet>371</a>    <span class="kw">fn </span>accept_focus(<span class="kw-2">&amp;</span><span class="self">self</span>, _ctx: <span class="kw-2">&amp;</span><span class="kw">dyn </span>ReadContext) -&gt; bool {
 <a href=#372 id=372 data-nosnippet>372</a>        <span class="bool-val">true
 <a href=#373 id=373 data-nosnippet>373</a>    </span>}
 <a href=#374 id=374 data-nosnippet>374</a>
@@ -390,100 +390,99 @@
 <a href=#390 id=390 data-nosnippet>390</a>            c.add_child(Frame::new().with_glyphs(ROUND_THICK).with_title(<span class="string">"terminal"</span>))<span class="question-mark">?</span>;
 <a href=#391 id=391 data-nosnippet>391</a>        c.attach(term_frame_id, stack_id)<span class="question-mark">?</span>;
 <a href=#392 id=392 data-nosnippet>392</a>
-<a href=#393 id=393 data-nosnippet>393</a>        c.with_layout(<span class="kw-2">&amp;mut </span>|layout| {
-<a href=#394 id=394 data-nosnippet>394</a>            <span class="kw-2">*</span>layout = Layout::row().flex_horizontal(<span class="number">1</span>).flex_vertical(<span class="number">1</span>);
-<a href=#395 id=395 data-nosnippet>395</a>        })<span class="question-mark">?</span>;
-<a href=#396 id=396 data-nosnippet>396</a>        c.with_layout_of(sidebar_id, <span class="kw-2">&amp;mut </span>|layout| {
-<a href=#397 id=397 data-nosnippet>397</a>            <span class="kw-2">*</span>layout = Layout::column().fixed_width(<span class="number">24</span>).flex_vertical(<span class="number">1</span>);
-<a href=#398 id=398 data-nosnippet>398</a>        })<span class="question-mark">?</span>;
-<a href=#399 id=399 data-nosnippet>399</a>
-<a href=#400 id=400 data-nosnippet>400</a>        <span class="self">self</span>.add_terminal(c)<span class="question-mark">?</span>;
-<a href=#401 id=401 data-nosnippet>401</a>
-<a href=#402 id=402 data-nosnippet>402</a>        <span class="prelude-val">Ok</span>(())
-<a href=#403 id=403 data-nosnippet>403</a>    }
-<a href=#404 id=404 data-nosnippet>404</a>
-<a href=#405 id=405 data-nosnippet>405</a>    <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, r: <span class="kw-2">&amp;mut </span>Render, _ctx: <span class="kw-2">&amp;</span><span class="kw">dyn </span>ViewContext) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#406 id=406 data-nosnippet>406</a>        r.push_layer(<span class="string">"termgym"</span>);
-<a href=#407 id=407 data-nosnippet>407</a>        <span class="prelude-val">Ok</span>(())
-<a href=#408 id=408 data-nosnippet>408</a>    }
-<a href=#409 id=409 data-nosnippet>409</a>}
-<a href=#410 id=410 data-nosnippet>410</a>
-<a href=#411 id=411 data-nosnippet>411</a><span class="kw">impl </span>Loader <span class="kw">for </span>TermGym {
-<a href=#412 id=412 data-nosnippet>412</a>    <span class="kw">fn </span>load(c: <span class="kw-2">&amp;mut </span>Canopy) {
-<a href=#413 id=413 data-nosnippet>413</a>        c.add_commands::&lt;<span class="self">Self</span>&gt;();
-<a href=#414 id=414 data-nosnippet>414</a>        c.add_commands::&lt;List&lt;TermEntry&gt;&gt;();
-<a href=#415 id=415 data-nosnippet>415</a>    }
-<a href=#416 id=416 data-nosnippet>416</a>}
-<a href=#417 id=417 data-nosnippet>417</a>
-<a href=#418 id=418 data-nosnippet>418</a><span class="doccomment">/// Install key bindings and styles for the terminal gym demo.
-<a href=#419 id=419 data-nosnippet>419</a></span><span class="kw">pub fn </span>setup_bindings(cnpy: <span class="kw-2">&amp;mut </span>Canopy) {
-<a href=#420 id=420 data-nosnippet>420</a>    <span class="kw">use </span>canopy::style::StyleBuilder;
-<a href=#421 id=421 data-nosnippet>421</a>
-<a href=#422 id=422 data-nosnippet>422</a>    <span class="kw">let </span>selected_attrs = AttrSet {
-<a href=#423 id=423 data-nosnippet>423</a>        bold: <span class="bool-val">true</span>,
-<a href=#424 id=424 data-nosnippet>424</a>        ..AttrSet::default()
-<a href=#425 id=425 data-nosnippet>425</a>    };
-<a href=#426 id=426 data-nosnippet>426</a>
-<a href=#427 id=427 data-nosnippet>427</a>    <span class="kw">let </span>entry_normal = StyleBuilder::new()
-<a href=#428 id=428 data-nosnippet>428</a>        .fg(solarized::BASE0)
-<a href=#429 id=429 data-nosnippet>429</a>        .bg(solarized::BASE03);
-<a href=#430 id=430 data-nosnippet>430</a>
-<a href=#431 id=431 data-nosnippet>431</a>    <span class="kw">let </span>entry_selected = StyleBuilder::new()
-<a href=#432 id=432 data-nosnippet>432</a>        .fg(solarized::BASE3)
-<a href=#433 id=433 data-nosnippet>433</a>        .bg(solarized::BLUE)
-<a href=#434 id=434 data-nosnippet>434</a>        .attrs(selected_attrs);
-<a href=#435 id=435 data-nosnippet>435</a>
-<a href=#436 id=436 data-nosnippet>436</a>    <span class="kw">let </span>button_normal = StyleBuilder::new()
-<a href=#437 id=437 data-nosnippet>437</a>        .fg(solarized::BASE3)
-<a href=#438 id=438 data-nosnippet>438</a>        .bg(solarized::BASE02);
-<a href=#439 id=439 data-nosnippet>439</a>
-<a href=#440 id=440 data-nosnippet>440</a>    <span class="kw">let </span>button_selected = StyleBuilder::new()
-<a href=#441 id=441 data-nosnippet>441</a>        .fg(solarized::BASE3)
-<a href=#442 id=442 data-nosnippet>442</a>        .bg(solarized::BLUE)
-<a href=#443 id=443 data-nosnippet>443</a>        .attrs(selected_attrs);
-<a href=#444 id=444 data-nosnippet>444</a>
-<a href=#445 id=445 data-nosnippet>445</a>    cnpy.style
-<a href=#446 id=446 data-nosnippet>446</a>        .rules()
-<a href=#447 id=447 data-nosnippet>447</a>        .prefix(<span class="string">"termgym/entry"</span>)
-<a href=#448 id=448 data-nosnippet>448</a>        .style_all(<span class="kw-2">&amp;</span>[<span class="string">"border"</span>, <span class="string">"fill"</span>, <span class="string">"text"</span>], entry_normal)
-<a href=#449 id=449 data-nosnippet>449</a>        .style_all(
-<a href=#450 id=450 data-nosnippet>450</a>            <span class="kw-2">&amp;</span>[<span class="string">"selected/border"</span>, <span class="string">"selected/fill"</span>, <span class="string">"selected/text"</span>],
-<a href=#451 id=451 data-nosnippet>451</a>            entry_selected,
-<a href=#452 id=452 data-nosnippet>452</a>        )
-<a href=#453 id=453 data-nosnippet>453</a>        .prefix(<span class="string">"termgym/button"</span>)
-<a href=#454 id=454 data-nosnippet>454</a>        .style_all(<span class="kw-2">&amp;</span>[<span class="string">"border"</span>, <span class="string">"fill"</span>, <span class="string">"text"</span>], button_normal)
-<a href=#455 id=455 data-nosnippet>455</a>        .style_all(
-<a href=#456 id=456 data-nosnippet>456</a>            <span class="kw-2">&amp;</span>[<span class="string">"selected/border"</span>, <span class="string">"selected/fill"</span>, <span class="string">"selected/text"</span>],
-<a href=#457 id=457 data-nosnippet>457</a>            button_selected,
-<a href=#458 id=458 data-nosnippet>458</a>        )
-<a href=#459 id=459 data-nosnippet>459</a>        .prefix(<span class="string">"termgym/frame"</span>)
-<a href=#460 id=460 data-nosnippet>460</a>        .fg(<span class="string">""</span>, solarized::BASE01)
-<a href=#461 id=461 data-nosnippet>461</a>        .style(
-<a href=#462 id=462 data-nosnippet>462</a>            <span class="string">"focused"</span>,
-<a href=#463 id=463 data-nosnippet>463</a>            StyleBuilder::new().fg(solarized::YELLOW).attr(Attr::Bold),
-<a href=#464 id=464 data-nosnippet>464</a>        )
-<a href=#465 id=465 data-nosnippet>465</a>        .fg(<span class="string">"active"</span>, solarized::ORANGE)
-<a href=#466 id=466 data-nosnippet>466</a>        .style(
-<a href=#467 id=467 data-nosnippet>467</a>            <span class="string">"title"</span>,
-<a href=#468 id=468 data-nosnippet>468</a>            StyleBuilder::new().fg(solarized::BASE3).attr(Attr::Bold),
-<a href=#469 id=469 data-nosnippet>469</a>        )
-<a href=#470 id=470 data-nosnippet>470</a>        .apply();
-<a href=#471 id=471 data-nosnippet>471</a>
-<a href=#472 id=472 data-nosnippet>472</a>    Binder::new(cnpy)
-<a href=#473 id=473 data-nosnippet>473</a>        .defaults::&lt;Root&gt;()
-<a href=#474 id=474 data-nosnippet>474</a>        .with_path(<span class="string">"term_gym/*/terminal/"</span>)
-<a href=#475 id=475 data-nosnippet>475</a>        .key(
-<a href=#476 id=476 data-nosnippet>476</a>            key::Ctrl + key::KeyCode::Char(<span class="string">'a'</span>),
-<a href=#477 id=477 data-nosnippet>477</a>            <span class="string">"term_gym::focus_sidebar()"</span>,
-<a href=#478 id=478 data-nosnippet>478</a>        )
-<a href=#479 id=479 data-nosnippet>479</a>        .with_path(<span class="string">"term_gym"</span>)
-<a href=#480 id=480 data-nosnippet>480</a>        .key(key::Ctrl + key::KeyCode::F(<span class="number">2</span>), <span class="string">"term_gym::new_terminal()"</span>)
-<a href=#481 id=481 data-nosnippet>481</a>        .key(key::Ctrl + key::KeyCode::F(<span class="number">3</span>), <span class="string">"term_gym::next_terminal()"</span>)
-<a href=#482 id=482 data-nosnippet>482</a>        .key(key::Ctrl + key::KeyCode::F(<span class="number">4</span>), <span class="string">"term_gym::prev_terminal()"</span>)
-<a href=#483 id=483 data-nosnippet>483</a>        .with_path(<span class="string">"term_gym/*/list"</span>)
-<a href=#484 id=484 data-nosnippet>484</a>        .key(<span class="string">'n'</span>, <span class="string">"term_gym::new_terminal_sidebar()"</span>)
-<a href=#485 id=485 data-nosnippet>485</a>        .key(<span class="string">'j'</span>, <span class="string">"term_gym::next_terminal_sidebar()"</span>)
-<a href=#486 id=486 data-nosnippet>486</a>        .key(<span class="string">'k'</span>, <span class="string">"term_gym::prev_terminal_sidebar()"</span>)
-<a href=#487 id=487 data-nosnippet>487</a>        .key(key::KeyCode::Enter, <span class="string">"term_gym::focus_active_terminal()"</span>)
-<a href=#488 id=488 data-nosnippet>488</a>        .key(<span class="string">'d'</span>, <span class="string">"term_gym::delete_terminal()"</span>);
-<a href=#489 id=489 data-nosnippet>489</a>}</code></pre></div></section></main></body></html>
+<a href=#393 id=393 data-nosnippet>393</a>        c.set_layout(Layout::fill().direction(Direction::Row))<span class="question-mark">?</span>;
+<a href=#394 id=394 data-nosnippet>394</a>        c.set_layout_of(
+<a href=#395 id=395 data-nosnippet>395</a>            sidebar_id,
+<a href=#396 id=396 data-nosnippet>396</a>            Layout::column().fixed_width(<span class="number">24</span>).flex_vertical(<span class="number">1</span>),
+<a href=#397 id=397 data-nosnippet>397</a>        )<span class="question-mark">?</span>;
+<a href=#398 id=398 data-nosnippet>398</a>
+<a href=#399 id=399 data-nosnippet>399</a>        <span class="self">self</span>.add_terminal(c)<span class="question-mark">?</span>;
+<a href=#400 id=400 data-nosnippet>400</a>
+<a href=#401 id=401 data-nosnippet>401</a>        <span class="prelude-val">Ok</span>(())
+<a href=#402 id=402 data-nosnippet>402</a>    }
+<a href=#403 id=403 data-nosnippet>403</a>
+<a href=#404 id=404 data-nosnippet>404</a>    <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, r: <span class="kw-2">&amp;mut </span>Render, _ctx: <span class="kw-2">&amp;</span><span class="kw">dyn </span>ReadContext) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#405 id=405 data-nosnippet>405</a>        r.push_layer(<span class="string">"termgym"</span>);
+<a href=#406 id=406 data-nosnippet>406</a>        <span class="prelude-val">Ok</span>(())
+<a href=#407 id=407 data-nosnippet>407</a>    }
+<a href=#408 id=408 data-nosnippet>408</a>}
+<a href=#409 id=409 data-nosnippet>409</a>
+<a href=#410 id=410 data-nosnippet>410</a><span class="kw">impl </span>Loader <span class="kw">for </span>TermGym {
+<a href=#411 id=411 data-nosnippet>411</a>    <span class="kw">fn </span>load(c: <span class="kw-2">&amp;mut </span>Canopy) {
+<a href=#412 id=412 data-nosnippet>412</a>        c.add_commands::&lt;<span class="self">Self</span>&gt;();
+<a href=#413 id=413 data-nosnippet>413</a>        c.add_commands::&lt;List&lt;TermEntry&gt;&gt;();
+<a href=#414 id=414 data-nosnippet>414</a>    }
+<a href=#415 id=415 data-nosnippet>415</a>}
+<a href=#416 id=416 data-nosnippet>416</a>
+<a href=#417 id=417 data-nosnippet>417</a><span class="doccomment">/// Install key bindings and styles for the terminal gym demo.
+<a href=#418 id=418 data-nosnippet>418</a></span><span class="kw">pub fn </span>setup_bindings(cnpy: <span class="kw-2">&amp;mut </span>Canopy) {
+<a href=#419 id=419 data-nosnippet>419</a>    <span class="kw">use </span>canopy::style::StyleBuilder;
+<a href=#420 id=420 data-nosnippet>420</a>
+<a href=#421 id=421 data-nosnippet>421</a>    <span class="kw">let </span>selected_attrs = AttrSet {
+<a href=#422 id=422 data-nosnippet>422</a>        bold: <span class="bool-val">true</span>,
+<a href=#423 id=423 data-nosnippet>423</a>        ..AttrSet::default()
+<a href=#424 id=424 data-nosnippet>424</a>    };
+<a href=#425 id=425 data-nosnippet>425</a>
+<a href=#426 id=426 data-nosnippet>426</a>    <span class="kw">let </span>entry_normal = StyleBuilder::new()
+<a href=#427 id=427 data-nosnippet>427</a>        .fg(solarized::BASE0)
+<a href=#428 id=428 data-nosnippet>428</a>        .bg(solarized::BASE03);
+<a href=#429 id=429 data-nosnippet>429</a>
+<a href=#430 id=430 data-nosnippet>430</a>    <span class="kw">let </span>entry_selected = StyleBuilder::new()
+<a href=#431 id=431 data-nosnippet>431</a>        .fg(solarized::BASE3)
+<a href=#432 id=432 data-nosnippet>432</a>        .bg(solarized::BLUE)
+<a href=#433 id=433 data-nosnippet>433</a>        .attrs(selected_attrs);
+<a href=#434 id=434 data-nosnippet>434</a>
+<a href=#435 id=435 data-nosnippet>435</a>    <span class="kw">let </span>button_normal = StyleBuilder::new()
+<a href=#436 id=436 data-nosnippet>436</a>        .fg(solarized::BASE3)
+<a href=#437 id=437 data-nosnippet>437</a>        .bg(solarized::BASE02);
+<a href=#438 id=438 data-nosnippet>438</a>
+<a href=#439 id=439 data-nosnippet>439</a>    <span class="kw">let </span>button_selected = StyleBuilder::new()
+<a href=#440 id=440 data-nosnippet>440</a>        .fg(solarized::BASE3)
+<a href=#441 id=441 data-nosnippet>441</a>        .bg(solarized::BLUE)
+<a href=#442 id=442 data-nosnippet>442</a>        .attrs(selected_attrs);
+<a href=#443 id=443 data-nosnippet>443</a>
+<a href=#444 id=444 data-nosnippet>444</a>    cnpy.style
+<a href=#445 id=445 data-nosnippet>445</a>        .rules()
+<a href=#446 id=446 data-nosnippet>446</a>        .prefix(<span class="string">"termgym/entry"</span>)
+<a href=#447 id=447 data-nosnippet>447</a>        .style_all(<span class="kw-2">&amp;</span>[<span class="string">"border"</span>, <span class="string">"fill"</span>, <span class="string">"text"</span>], entry_normal)
+<a href=#448 id=448 data-nosnippet>448</a>        .style_all(
+<a href=#449 id=449 data-nosnippet>449</a>            <span class="kw-2">&amp;</span>[<span class="string">"selected/border"</span>, <span class="string">"selected/fill"</span>, <span class="string">"selected/text"</span>],
+<a href=#450 id=450 data-nosnippet>450</a>            entry_selected,
+<a href=#451 id=451 data-nosnippet>451</a>        )
+<a href=#452 id=452 data-nosnippet>452</a>        .prefix(<span class="string">"termgym/button"</span>)
+<a href=#453 id=453 data-nosnippet>453</a>        .style_all(<span class="kw-2">&amp;</span>[<span class="string">"border"</span>, <span class="string">"fill"</span>, <span class="string">"text"</span>], button_normal)
+<a href=#454 id=454 data-nosnippet>454</a>        .style_all(
+<a href=#455 id=455 data-nosnippet>455</a>            <span class="kw-2">&amp;</span>[<span class="string">"selected/border"</span>, <span class="string">"selected/fill"</span>, <span class="string">"selected/text"</span>],
+<a href=#456 id=456 data-nosnippet>456</a>            button_selected,
+<a href=#457 id=457 data-nosnippet>457</a>        )
+<a href=#458 id=458 data-nosnippet>458</a>        .prefix(<span class="string">"termgym/frame"</span>)
+<a href=#459 id=459 data-nosnippet>459</a>        .fg(<span class="string">""</span>, solarized::BASE01)
+<a href=#460 id=460 data-nosnippet>460</a>        .style(
+<a href=#461 id=461 data-nosnippet>461</a>            <span class="string">"focused"</span>,
+<a href=#462 id=462 data-nosnippet>462</a>            StyleBuilder::new().fg(solarized::YELLOW).attr(Attr::Bold),
+<a href=#463 id=463 data-nosnippet>463</a>        )
+<a href=#464 id=464 data-nosnippet>464</a>        .fg(<span class="string">"active"</span>, solarized::ORANGE)
+<a href=#465 id=465 data-nosnippet>465</a>        .style(
+<a href=#466 id=466 data-nosnippet>466</a>            <span class="string">"title"</span>,
+<a href=#467 id=467 data-nosnippet>467</a>            StyleBuilder::new().fg(solarized::BASE3).attr(Attr::Bold),
+<a href=#468 id=468 data-nosnippet>468</a>        )
+<a href=#469 id=469 data-nosnippet>469</a>        .apply();
+<a href=#470 id=470 data-nosnippet>470</a>
+<a href=#471 id=471 data-nosnippet>471</a>    Binder::new(cnpy)
+<a href=#472 id=472 data-nosnippet>472</a>        .defaults::&lt;Root&gt;()
+<a href=#473 id=473 data-nosnippet>473</a>        .with_path(<span class="string">"term_gym/*/terminal/"</span>)
+<a href=#474 id=474 data-nosnippet>474</a>        .key(
+<a href=#475 id=475 data-nosnippet>475</a>            key::Ctrl + key::KeyCode::Char(<span class="string">'a'</span>),
+<a href=#476 id=476 data-nosnippet>476</a>            <span class="string">"term_gym::focus_sidebar()"</span>,
+<a href=#477 id=477 data-nosnippet>477</a>        )
+<a href=#478 id=478 data-nosnippet>478</a>        .with_path(<span class="string">"term_gym"</span>)
+<a href=#479 id=479 data-nosnippet>479</a>        .key(key::Ctrl + key::KeyCode::F(<span class="number">2</span>), <span class="string">"term_gym::new_terminal()"</span>)
+<a href=#480 id=480 data-nosnippet>480</a>        .key(key::Ctrl + key::KeyCode::F(<span class="number">3</span>), <span class="string">"term_gym::next_terminal()"</span>)
+<a href=#481 id=481 data-nosnippet>481</a>        .key(key::Ctrl + key::KeyCode::F(<span class="number">4</span>), <span class="string">"term_gym::prev_terminal()"</span>)
+<a href=#482 id=482 data-nosnippet>482</a>        .with_path(<span class="string">"term_gym/*/list"</span>)
+<a href=#483 id=483 data-nosnippet>483</a>        .key(<span class="string">'n'</span>, <span class="string">"term_gym::new_terminal_sidebar()"</span>)
+<a href=#484 id=484 data-nosnippet>484</a>        .key(<span class="string">'j'</span>, <span class="string">"term_gym::next_terminal_sidebar()"</span>)
+<a href=#485 id=485 data-nosnippet>485</a>        .key(<span class="string">'k'</span>, <span class="string">"term_gym::prev_terminal_sidebar()"</span>)
+<a href=#486 id=486 data-nosnippet>486</a>        .key(key::KeyCode::Enter, <span class="string">"term_gym::focus_active_terminal()"</span>)
+<a href=#487 id=487 data-nosnippet>487</a>        .key(<span class="string">'d'</span>, <span class="string">"term_gym::delete_terminal()"</span>);
+<a href=#488 id=488 data-nosnippet>488</a>}</code></pre></div></section></main></body></html>

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["grapheme_width","slice_by_columns"]};
