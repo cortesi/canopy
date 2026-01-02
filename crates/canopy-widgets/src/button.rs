@@ -6,6 +6,7 @@ use canopy::{
     derive_commands,
     error::Result,
     event::{Event, mouse},
+    key,
     layout::Layout,
     render::Render,
     state::NodeName,
@@ -15,6 +16,8 @@ use crate::{
     Box, Center, Selectable, Text,
     boxed::{BoxGlyphs, SINGLE},
 };
+
+key!(LabelSlot: Text);
 
 /// Button widget that triggers a command when clicked.
 pub struct Button {
@@ -112,7 +115,7 @@ impl Widget for Button {
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
         let box_id = ctx.add_child(Box::new().with_glyphs(self.glyphs).with_fill())?;
         let center_id = ctx.add_child_to(box_id, Center::new())?;
-        ctx.add_child_to_keyed(center_id, "label", Text::new(self.label.clone()))?;
+        ctx.add_keyed_to::<LabelSlot>(center_id, Text::new(self.label.clone()))?;
         Ok(())
     }
 

@@ -5,6 +5,7 @@ use std::hint::black_box;
 use canopy::{
     Context, Loader, ReadContext, Widget, derive_commands,
     error::Result,
+    key,
     layout::{Layout, Sizing},
     render::Render,
     testing::harness::Harness,
@@ -12,8 +13,7 @@ use canopy::{
 use canopy_widgets::Text;
 use criterion::{Criterion, criterion_group, criterion_main};
 
-/// Key for the text child node.
-const KEY_TEXT: &str = "text";
+key!(TextSlot: Text);
 
 /// Wrapper node used for text render benchmarks.
 struct BenchmarkTextWrapper {
@@ -38,7 +38,7 @@ impl Widget for BenchmarkTextWrapper {
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let text_id = c
-            .add_child_keyed(KEY_TEXT, Text::new(self.content.clone()))
+            .add_keyed::<TextSlot>(Text::new(self.content.clone()))
             .expect("Failed to attach text");
 
         c.set_layout(Layout::column().flex_horizontal(1).flex_vertical(1))

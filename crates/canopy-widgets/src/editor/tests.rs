@@ -8,6 +8,7 @@ use canopy::{
     error::Result,
     event::{key, mouse},
     geom::Point,
+    key,
     layout::Layout,
     render::Render,
     state::NodeName,
@@ -21,7 +22,7 @@ use crate::editor::{
     highlight::{HighlightSpan, Highlighter},
 };
 
-const KEY_EDITOR: &str = "editor";
+key!(EditorSlot: Editor);
 
 /// Host widget that mounts an editor as its only child.
 struct EditorHost {
@@ -63,7 +64,7 @@ impl Widget for EditorHost {
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let editor = Editor::with_config(self.text.clone(), self.config.clone());
-        let editor_id = c.add_child_keyed(KEY_EDITOR, editor)?;
+        let editor_id = c.add_keyed::<EditorSlot>(editor)?;
         c.set_layout(Layout::fill())?;
         c.set_layout_of(editor_id, Layout::fill())?;
         Ok(())
@@ -103,7 +104,7 @@ fn with_editor<R>(harness: &mut Harness, f: impl FnOnce(&mut Editor) -> R) -> R 
     harness
         .with_root_context(|_root: &mut EditorHost, ctx| {
             let f = f.take().expect("editor closure already consumed");
-            ctx.with_keyed(KEY_EDITOR, |editor: &mut Editor, _| Ok(f(editor)))
+            ctx.with_child::<EditorSlot, _>(|editor, _| Ok(f(editor)))
         })
         .expect("editor missing")
 }
@@ -133,7 +134,7 @@ fn editor_cursor_location(harness: &mut Harness) -> Point {
 fn editor_view_scroll(harness: &mut Harness) -> Point {
     harness
         .with_root_context(|_root: &mut EditorHost, ctx| {
-            ctx.with_keyed(KEY_EDITOR, |_editor: &mut Editor, ctx| Ok(ctx.view().tl))
+            ctx.with_child::<EditorSlot, _>(|_editor, ctx| Ok(ctx.view().tl))
         })
         .expect("editor missing")
 }
@@ -141,7 +142,7 @@ fn editor_view_scroll(harness: &mut Harness) -> Point {
 fn scroll_editor_to(harness: &mut Harness, x: u32, y: u32) {
     harness
         .with_root_context(|_root: &mut EditorHost, ctx| {
-            ctx.with_keyed(KEY_EDITOR, |_editor: &mut Editor, ctx| {
+            ctx.with_child::<EditorSlot, _>(|_editor, ctx| {
                 ctx.scroll_to(x, y);
                 Ok(())
             })

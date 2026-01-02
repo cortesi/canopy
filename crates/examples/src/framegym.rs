@@ -5,6 +5,7 @@ use canopy::{
     error::Result,
     event::key,
     geom::{Expanse, Line},
+    key,
     layout::{CanvasContext, Layout, MeasureConstraints, Measurement, Size, Sizing},
     render::Render,
 };
@@ -12,10 +13,10 @@ use canopy_widgets::{Frame, Root};
 
 /// Base characters used to generate the test pattern.
 const PATTERN: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
-/// Key for the frame node.
-pub(crate) const KEY_FRAME: &str = "frame";
-/// Key for the test pattern node.
-pub(crate) const KEY_PATTERN: &str = "test_pattern";
+
+// Typed keys for keyed children
+key!(pub(crate) FrameSlot: Frame);
+key!(pub(crate) PatternSlot: TestPattern);
 
 /// A widget that renders a test pattern.
 pub struct TestPattern {
@@ -179,8 +180,8 @@ impl FrameGym {
 
 impl Widget for FrameGym {
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        let frame_id = c.add_child_keyed(KEY_FRAME, Frame::new().with_title("Frame Gym"))?;
-        let pattern_id = c.add_child_to_keyed(frame_id, KEY_PATTERN, TestPattern::new())?;
+        let frame_id = c.add_keyed::<FrameSlot>(Frame::new().with_title("Frame Gym"))?;
+        let pattern_id = c.add_keyed_to::<PatternSlot>(frame_id, TestPattern::new())?;
 
         c.set_layout(Layout::column().flex_horizontal(1).flex_vertical(1))?;
         c.with_layout_of(frame_id, &mut |layout| {

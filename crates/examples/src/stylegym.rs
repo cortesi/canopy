@@ -6,6 +6,7 @@ use canopy::{
     Binder, Canopy, Context, Loader, ReadContext, Widget, command, derive_commands,
     error::Result,
     event::{key, mouse},
+    key,
     layout::{Direction, Edges, Layout},
     render::Render,
     style::{StyleMap, dracula, effects, gruvbox, solarized},
@@ -75,22 +76,15 @@ fn available_effects() -> Vec<EffectOption> {
     ]
 }
 
-/// Key for the controls frame.
-const KEY_CONTROLS: &str = "controls";
-/// Key for the theme frame.
-const KEY_THEME_FRAME: &str = "theme_frame";
-/// Key for the theme dropdown.
-const KEY_THEME_DROPDOWN: &str = "theme_dropdown";
-/// Key for the effects frame.
-const KEY_EFFECTS_FRAME: &str = "effects_frame";
-/// Key for the effects selector.
-const KEY_EFFECTS_SELECTOR: &str = "effects_selector";
-/// Key for the right container stack.
-const KEY_RIGHT_CONTAINER: &str = "right_container";
-/// Key for the demo frame.
-const KEY_DEMO_FRAME: &str = "demo_frame";
-/// Key for the modal overlay.
-const KEY_MODAL: &str = "modal";
+// Typed keys for keyed children
+key!(ControlsSlot: Frame);
+key!(ThemeFrameSlot: Frame);
+key!(ThemeDropdownSlot: Dropdown<ThemeOption>);
+key!(EffectsFrameSlot: Frame);
+key!(EffectsSelectorSlot: Selector<EffectOption>);
+key!(RightContainerSlot: Container);
+key!(DemoFrameSlot: Frame);
+key!(ModalSlot: Modal);
 
 /// The demo content pane showing styled samples.
 pub struct DemoContent;
@@ -214,7 +208,7 @@ impl Stylegym {
     where
         F: FnOnce(&mut Container, &mut dyn Context) -> Result<R>,
     {
-        c.with_keyed(KEY_RIGHT_CONTAINER, f)
+        c.with_child::<RightContainerSlot, _>(f)
     }
 
     /// Execute a closure with the demo frame widget.
@@ -222,7 +216,7 @@ impl Stylegym {
     where
         F: FnOnce(&mut Frame, &mut dyn Context) -> Result<R>,
     {
-        self.with_right_container(c, |_, ctx| ctx.with_keyed(KEY_DEMO_FRAME, f))
+        self.with_right_container(c, |_, ctx| ctx.with_child::<DemoFrameSlot, _>(f))
     }
 
     /// Show the modal overlay.
@@ -234,10 +228,10 @@ impl Stylegym {
         self.modal_visible = true;
 
         self.with_right_container(c, |_, ctx| {
-            if ctx.child_keyed(KEY_MODAL).is_some() {
+            if ctx.has_child::<ModalSlot>() {
                 return Ok(());
             }
-            let modal_id = ctx.add_child_keyed(KEY_MODAL, Modal::new())?;
+            let modal_id = ctx.add_keyed::<ModalSlot>(Modal::new())?;
             let frame_id = ctx.add_child_to(modal_id, Frame::new().with_title("Demo Modal"))?;
             ctx.add_child_to(frame_id, ModalContent)?;
 
@@ -267,7 +261,7 @@ impl Stylegym {
         self.modal_visible = false;
 
         self.with_right_container(c, |_, ctx| {
-            if let Some(modal_id) = ctx.child_keyed(KEY_MODAL) {
+            if let Some(modal_id) = ctx.get_child::<ModalSlot>() {
                 ctx.remove_subtree(modal_id)?;
             }
             Ok(())
@@ -362,7 +356,7 @@ impl Widget for Stylegym {
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         // Create left frame (controls) - preserve Frame's padding for border
-        let left_frame_id = c.add_child_keyed(KEY_CONTROLS, Frame::new().with_title("Controls"))?;
+        let left_frame_id = c.add_keyed::<ControlsSlot>(Frame::new().with_title("Controls"))?;
         c.set_layout_of(
             left_frame_id,
             Layout::column()
@@ -372,30 +366,19 @@ impl Widget for Stylegym {
         )?;
 
         // Create theme dropdown with its own frame - no fixed height so it can expand
-        let theme_frame_id = c.add_child_to_keyed(
-            left_frame_id,
-            KEY_THEME_FRAME,
-            Frame::new().with_title("Theme"),
-        )?;
-        c.add_child_to_keyed(
-            theme_frame_id,
-            KEY_THEME_DROPDOWN,
-            Dropdown::new(available_themes()),
-        )?;
+        let theme_frame_id =
+            c.add_keyed_to::<ThemeFrameSlot>(left_frame_id, Frame::new().with_title("Theme"))?;
+        c.add_keyed_to::<ThemeDropdownSlot>(theme_frame_id, Dropdown::new(available_themes()))?;
         c.set_layout_of(
             theme_frame_id,
             Layout::column().flex_horizontal(1).padding(Edges::all(1)),
         )?;
 
         // Create effects selector with its own frame
-        let effects_frame_id = c.add_child_to_keyed(
-            left_frame_id,
-            KEY_EFFECTS_FRAME,
-            Frame::new().with_title("Effects"),
-        )?;
-        c.add_child_to_keyed(
+        let effects_frame_id =
+            c.add_keyed_to::<EffectsFrameSlot>(left_frame_id, Frame::new().with_title("Effects"))?;
+        c.add_keyed_to::<EffectsSelectorSlot>(
             effects_frame_id,
-            KEY_EFFECTS_SELECTOR,
             Selector::new(available_effects()),
         )?;
         c.set_layout_of(
@@ -407,18 +390,15 @@ impl Widget for Stylegym {
         )?;
 
         // Create right container with Stack layout for modal overlay
-        let right_container_id = c.add_child_keyed(KEY_RIGHT_CONTAINER, Container)?;
+        let right_container_id = c.add_keyed::<RightContainerSlot>(Container)?;
         c.set_layout_of(
             right_container_id,
             Layout::fill().direction(Direction::Stack),
         )?;
 
         // Create right frame (demo content)
-        let right_frame_id = c.add_child_to_keyed(
-            right_container_id,
-            KEY_DEMO_FRAME,
-            Frame::new().with_title("Demo"),
-        )?;
+        let right_frame_id =
+            c.add_keyed_to::<DemoFrameSlot>(right_container_id, Frame::new().with_title("Demo"))?;
         c.add_child_to(right_frame_id, DemoContent)?;
         c.set_layout_of(right_frame_id, Layout::fill().padding(Edges::all(1)))?;
 

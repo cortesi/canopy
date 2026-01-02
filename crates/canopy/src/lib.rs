@@ -35,8 +35,8 @@ pub use core::termbuf::TermBuf;
 pub use core::testing;
 // Re-export core application types
 pub use core::{
-    Binder, Canopy, Context, Core, DefaultBindings, FocusManager, InputMap, InputSpec, Loader,
-    NodeId, ReadContext, TypedId,
+    Binder, Canopy, ChildKey, Context, Core, DefaultBindings, FocusManager, InputMap, InputSpec,
+    Loader, NodeId, ReadContext, TypedId,
 };
 // Re-export input mapping
 pub use core::{

@@ -6,12 +6,17 @@ use canopy::{
     error::Result,
     event::{key, mouse},
     geom::Rect,
+    key,
     layout::{Constraint, Direction, Layout, MeasureConstraints, Measurement, Size, Sizing},
     render::Render,
     state::NodeName,
     style::{effects, solarized},
 };
 use canopy_widgets::{Frame, Input, List, Modal, Root, Selectable};
+
+// Typed keys for keyed children
+key!(MainSlot: MainContent);
+key!(ModalSlot: Modal);
 
 pub mod store;
 
@@ -150,12 +155,12 @@ impl Todo {
     }
 
     fn ensure_tree(&mut self, c: &mut dyn Context) -> Result<()> {
-        if c.child_keyed("main").is_some() {
+        if c.has_child::<MainSlot>() {
             return Ok(());
         }
 
         // Create the main content container (list + status bar in column layout)
-        let main_content_id = c.add_child_keyed("main", MainContent)?;
+        let main_content_id = c.add_keyed::<MainSlot>(MainContent)?;
         let frame_id = c.add_child_to(main_content_id, Frame::new())?;
         let list_id = c.add_child_to(frame_id, List::<TodoEntry>::new())?;
         let status_id = c.add_child_to(main_content_id, StatusBar)?;
@@ -194,12 +199,12 @@ impl Todo {
     }
 
     fn ensure_modal(&mut self, c: &mut dyn Context) -> Result<()> {
-        if c.child_keyed("modal").is_some() {
+        if c.has_child::<ModalSlot>() {
             return Ok(());
         }
 
         // Create the modal with an input frame
-        let modal_id = c.add_child_keyed("modal", Modal::new())?;
+        let modal_id = c.add_keyed::<ModalSlot>(Modal::new())?;
         let adder_frame_id = c.add_child_to(modal_id, Frame::new())?;
         let input_id = c.add_child_to(adder_frame_id, Input::new(""))?;
 
@@ -217,19 +222,21 @@ impl Todo {
     }
 
     fn sync_modal_state(&mut self, c: &mut dyn Context) -> Result<()> {
-        let main_content_id = c.child_keyed("main").expect("main content not initialized");
+        let main_content_id = c
+            .get_child::<MainSlot>()
+            .expect("main content not initialized");
 
         if self.adder_active {
             self.ensure_modal(c)?;
             c.push_effect(main_content_id, effects::dim(0.5))?;
-            c.with_keyed::<Modal, _>("modal", |_, ctx| {
+            c.with_child::<ModalSlot, _>(|_, ctx| {
                 ctx.set_hidden(false);
                 Ok(())
             })?;
         } else {
             // Clear dimming when modal is not active
             c.clear_effects(main_content_id)?;
-            let _ = c.try_with_keyed::<Modal, _>("modal", |_, ctx| {
+            let _ = c.try_with_child::<ModalSlot, _>(|_, ctx| {
                 ctx.set_hidden(true);
                 Ok(())
             })?;
@@ -249,7 +256,7 @@ impl Todo {
     where
         F: FnMut(&mut Input) -> Result<()>,
     {
-        c.with_keyed::<Modal, _>("modal", |_, ctx| {
+        c.with_child::<ModalSlot, _>(|_, ctx| {
             ctx.with_unique_descendant::<Input, _>(|input, _| f(input))
         })?;
         Ok(())

@@ -57,7 +57,7 @@ pub mod world;
 // Public exports from internal modules
 pub use binder::{Binder, DefaultBindings};
 pub use canopy::{Canopy, Loader};
-pub use context::{Context, ReadContext};
+pub use context::{ChildKey, Context, ReadContext};
 pub use focus::FocusManager;
 pub use id::{NodeId, TypedId};
 pub use inputmap::{InputMap, InputSpec};

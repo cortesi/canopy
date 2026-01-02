@@ -5,9 +5,8 @@ use canopy::{
     layout::{Edges, Layout},
     testing::harness::Harness,
 };
-use canopy_widgets::Frame;
 
-use crate::framegym::{FrameGym, KEY_FRAME, KEY_PATTERN, TestPattern};
+use crate::framegym::{FrameGym, FrameSlot, PatternSlot};
 
 struct ViewMetrics {
     outer: geom::RectI32,
@@ -26,13 +25,11 @@ fn metrics(ctx: &dyn ReadContext) -> ViewMetrics {
 
 fn frame_views(harness: &mut Harness) -> Result<(ViewMetrics, ViewMetrics, Layout)> {
     harness.with_root_context(|_root: &mut FrameGym, ctx| {
-        ctx.with_keyed::<Frame, _>(KEY_FRAME, |_frame, frame_ctx| {
+        ctx.with_child::<FrameSlot, _>(|_frame, frame_ctx| {
             let frame_view = metrics(frame_ctx);
             let frame_layout = frame_ctx.layout();
             let pattern_view = frame_ctx
-                .with_keyed::<TestPattern, _>(KEY_PATTERN, |_pattern, pattern_ctx| {
-                    Ok(metrics(pattern_ctx))
-                })?;
+                .with_child::<PatternSlot, _>(|_pattern, pattern_ctx| Ok(metrics(pattern_ctx)))?;
             Ok((frame_view, pattern_view, frame_layout))
         })
     })
@@ -40,10 +37,9 @@ fn frame_views(harness: &mut Harness) -> Result<(ViewMetrics, ViewMetrics, Layou
 
 fn pattern_scroll(harness: &mut Harness) -> Result<geom::Point> {
     harness.with_root_context(|_root: &mut FrameGym, ctx| {
-        ctx.with_keyed::<Frame, _>(KEY_FRAME, |_frame, frame_ctx| {
-            frame_ctx.with_keyed::<TestPattern, _>(KEY_PATTERN, |_pattern, pattern_ctx| {
-                Ok(pattern_ctx.view().tl)
-            })
+        ctx.with_child::<FrameSlot, _>(|_frame, frame_ctx| {
+            frame_ctx
+                .with_child::<PatternSlot, _>(|_pattern, pattern_ctx| Ok(pattern_ctx.view().tl))
         })
     })
 }

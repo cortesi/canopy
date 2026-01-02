@@ -3,14 +3,13 @@
 use std::hint::black_box;
 
 use canopy::{
-    Canopy, Context, Loader, ReadContext, Widget, derive_commands, error::Result, layout::Layout,
-    render::Render, testing::harness::Harness,
+    Canopy, Context, Loader, ReadContext, Widget, derive_commands, error::Result, key,
+    layout::Layout, render::Render, testing::harness::Harness,
 };
 use canopy_widgets::editor::{EditMode, Editor, EditorConfig, LineNumbers, WrapMode};
 use criterion::{Criterion, criterion_group, criterion_main};
 
-/// Key for the editor child node.
-const KEY_EDITOR: &str = "editor";
+key!(EditorSlot: Editor);
 
 /// Wrapper node used for editor render benchmarks.
 struct BenchmarkEditorWrapper {
@@ -40,7 +39,7 @@ impl Widget for BenchmarkEditorWrapper {
             .with_line_numbers(LineNumbers::Absolute);
         let editor = Editor::with_config(self.text.clone(), config);
         let editor_id = c
-            .add_child_keyed(KEY_EDITOR, editor)
+            .add_keyed::<EditorSlot>(editor)
             .expect("Failed to attach editor");
 
         c.set_layout(Layout::fill()).expect("Failed to style root");

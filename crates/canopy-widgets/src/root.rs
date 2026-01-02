@@ -1,19 +1,22 @@
 use canopy::{
-    Binder, Canopy, Context, Core, DefaultBindings, Loader, NodeId, ReadContext, Widget, command,
+    Binder, Canopy, ChildKey, Context, Core, DefaultBindings, Loader, NodeId, ReadContext, Widget,
+    command,
     commands::FocusDirection,
     derive_commands,
     error::{Error, Result},
     event::key::*,
+    key,
     layout::Layout,
     state::NodeName,
 };
 
 use crate::inspector::Inspector;
 
-/// Key for the application subtree under root.
-const KEY_APP: &str = "app";
-/// Key for the inspector subtree under root.
-const KEY_INSPECTOR: &str = "inspector";
+// Typed key for the inspector slot
+key!(InspectorSlot: Inspector);
+
+/// Key for the application subtree under root (widget type varies).
+const KEY_APP: &str = "AppSlot";
 
 /// A Root widget that lives at the base of a Canopy app.
 pub struct Root {
@@ -59,7 +62,7 @@ impl Root {
 
     /// Inspector node id.
     fn inspector_id(&self, c: &dyn Context) -> Result<NodeId> {
-        c.child_keyed(KEY_INSPECTOR)
+        c.get_child::<InspectorSlot>()
             .ok_or_else(|| Error::NotFound("inspector".into()))
     }
 
@@ -179,7 +182,7 @@ impl Root {
         let inspector = Inspector::install(core)?;
         let root = Self::new().with_inspector(inspector_active);
         core.set_widget(core.root_id(), root);
-        core.attach_keyed(core.root_id(), KEY_INSPECTOR, inspector)?;
+        core.attach_keyed(core.root_id(), InspectorSlot::KEY, inspector)?;
         core.attach_keyed(core.root_id(), KEY_APP, app)?;
         core.set_hidden(inspector, !inspector_active);
         core.with_layout_of(core.root_id(), |layout| {

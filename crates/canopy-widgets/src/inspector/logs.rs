@@ -12,6 +12,7 @@ use canopy::{
     derive_commands,
     error::{Error, Result},
     geom::Rect,
+    key,
     layout::{CanvasContext, Constraint, Layout, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
@@ -20,8 +21,7 @@ use tracing_subscriber::fmt;
 
 use crate::{List, Selectable};
 
-/// Key for the logs list node.
-const KEY_LIST: &str = "list";
+key!(ListSlot: List<LogEntry>);
 
 /// Widget for displaying a single log entry.
 pub struct LogEntry {
@@ -194,11 +194,11 @@ impl Logs {
 
     /// Ensure the list widget is mounted.
     fn ensure_tree(&self, c: &mut dyn Context) -> Result<()> {
-        if c.child_keyed(KEY_LIST).is_some() {
+        if c.has_child::<ListSlot>() {
             return Ok(());
         }
 
-        let list_id = c.add_child_keyed(KEY_LIST, List::<LogEntry>::new())?;
+        let list_id = c.add_keyed::<ListSlot>(List::<LogEntry>::new())?;
         c.set_layout_of(list_id, Layout::fill())?;
         Ok(())
     }
@@ -208,10 +208,10 @@ impl Logs {
     where
         F: FnMut(&mut List<LogEntry>, &mut dyn Context) -> Result<R>,
     {
-        let Some(_list_id) = c.child_keyed(KEY_LIST) else {
+        if !c.has_child::<ListSlot>() {
             return Err(Error::Internal("logs list not initialized".into()));
-        };
-        c.with_keyed(KEY_LIST, f)
+        }
+        c.with_child::<ListSlot, _>(f)
     }
 
     /// Drain buffered log lines into the list.
@@ -221,13 +221,13 @@ impl Logs {
         let vals: Vec<String> = b.drain(..).collect();
         drop(b);
 
-        if c.child_keyed(KEY_LIST).is_none() {
+        if !c.has_child::<ListSlot>() {
             return Ok(());
         }
 
         for line in vals {
             let mut entry = Some(LogEntry::new(line));
-            c.with_keyed(KEY_LIST, |list: &mut List<LogEntry>, ctx| {
+            c.with_child::<ListSlot, _>(|list, ctx| {
                 if let Some(e) = entry.take() {
                     list.append(ctx, e)?;
                 }

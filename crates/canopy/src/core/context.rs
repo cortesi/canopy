@@ -23,6 +23,64 @@ use crate::{
     widget::Widget,
 };
 
+/// A typed key for keyed children.
+///
+/// This trait associates a string key with a specific widget type, providing
+/// compile-time type safety for keyed child access.
+///
+/// Use the [`key!`] macro to define keys:
+///
+/// ```ignore
+/// // Key with same name as widget type
+/// key!(Editor);
+///
+/// // Key with custom name
+/// key!(ModalSlot: Modal);
+/// ```
+pub trait ChildKey {
+    /// The widget type associated with this key.
+    type Widget: Widget + 'static;
+    /// The string key used for storage.
+    const KEY: &'static str;
+}
+
+/// Define a typed key for keyed children.
+///
+/// # Examples
+///
+/// ```ignore
+/// // Simple form: key name matches widget type, string key is snake_case
+/// key!(Editor);  // KEY = "Editor", Widget = Editor (private)
+/// key!(pub Editor);  // same, but public
+///
+/// // Custom name form: specify the widget type explicitly
+/// key!(ModalSlot: Modal);  // KEY = "ModalSlot", Widget = Modal (private)
+/// key!(pub ModalSlot: Modal);  // same, but public
+/// ```
+#[macro_export]
+macro_rules! key {
+    ($vis:vis $name:ident) => {
+        /// Typed key for a keyed child slot.
+        #[derive(Debug, Clone, Copy)]
+        $vis struct $name;
+
+        impl $crate::ChildKey for $name {
+            type Widget = $name;
+            const KEY: &'static str = ::std::stringify!($name);
+        }
+    };
+    ($vis:vis $name:ident : $widget:ty) => {
+        /// Typed key for a keyed child slot.
+        #[derive(Debug, Clone, Copy)]
+        $vis struct $name;
+
+        impl $crate::ChildKey for $name {
+            type Widget = $widget;
+            const KEY: &'static str = ::std::stringify!($name);
+        }
+    };
+}
+
 /// Read-only context available to widgets during render and measure.
 pub trait ReadContext {
     /// The node currently being rendered.
@@ -927,6 +985,46 @@ impl dyn Context + '_ {
             return Ok(None);
         };
         self.with_widget(node, f).map(Some)
+    }
+
+    /// Check if a typed keyed child exists.
+    pub fn has_child<K: ChildKey>(&self) -> bool {
+        self.child_keyed(K::KEY).is_some()
+    }
+
+    /// Get a typed keyed child's node ID.
+    pub fn get_child<K: ChildKey>(&self) -> Option<NodeId> {
+        self.child_keyed(K::KEY)
+    }
+
+    /// Add a typed keyed child to the current node.
+    pub fn add_keyed<K: ChildKey>(&mut self, widget: K::Widget) -> Result<NodeId> {
+        self.add_child_keyed(K::KEY, widget)
+    }
+
+    /// Add a typed keyed child to a specific parent.
+    pub fn add_keyed_to<K: ChildKey>(
+        &mut self,
+        parent: NodeId,
+        widget: K::Widget,
+    ) -> Result<NodeId> {
+        self.add_child_to_keyed(parent, K::KEY, widget)
+    }
+
+    /// Execute a closure with a typed keyed child.
+    pub fn with_child<K: ChildKey, R>(
+        &mut self,
+        f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
+    ) -> Result<R> {
+        self.with_keyed(K::KEY, f)
+    }
+
+    /// Execute a closure with a typed keyed child if it exists.
+    pub fn try_with_child<K: ChildKey, R>(
+        &mut self,
+        f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
+    ) -> Result<Option<R>> {
+        self.try_with_keyed(K::KEY, f)
     }
 
     /// Execute a closure with the focused descendant of type `W`, or the first if none focused.
