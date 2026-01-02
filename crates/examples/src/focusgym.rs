@@ -1,5 +1,5 @@
 use canopy::{
-    Binder, Canopy, Context, Loader, ViewContext, Widget, command, derive_commands,
+    Binder, Canopy, Context, Loader, ReadContext, Widget, command, derive_commands,
     error::Result,
     event::{key, mouse},
     geom::Expanse,
@@ -134,11 +134,11 @@ impl Block {
 }
 
 impl Widget for Block {
-    fn accept_focus(&self, ctx: &dyn ViewContext) -> bool {
+    fn accept_focus(&self, ctx: &dyn ReadContext) -> bool {
         ctx.children().is_empty()
     }
 
-    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
         // Only render leaf blocks (those without children)
         if ctx.children().is_empty() {
             let bc = if ctx.is_focused() { "violet" } else { "blue" };
@@ -192,7 +192,7 @@ impl FocusGym {
 }
 
 impl Widget for FocusGym {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         Ok(())
     }
 

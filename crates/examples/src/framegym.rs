@@ -1,5 +1,5 @@
 use canopy::{
-    Binder, Canopy, Context, Loader, ViewContext, Widget, command,
+    Binder, Canopy, Context, Loader, ReadContext, Widget, command,
     commands::{ScrollDirection, VerticalDirection},
     derive_commands,
     error::Result,
@@ -106,7 +106,7 @@ impl TestPattern {
 }
 
 impl Widget for TestPattern {
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
         true
     }
 
@@ -122,7 +122,7 @@ impl Widget for TestPattern {
         Size::new(self.size.w, self.size.h)
     }
 
-    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
         let view = ctx.view();
         let origin = view.content_origin();
         let view_width = view.content.w;
@@ -195,7 +195,7 @@ impl Widget for FrameGym {
         Ok(())
     }
 
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         Ok(())
     }
 }

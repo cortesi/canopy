@@ -17,7 +17,7 @@ pub mod ttree;
 mod tests {
     use super::backend::TestRender;
     use crate::{
-        Canopy, FocusManager, ViewContext, derive_commands, error::Result, geom::Expanse,
+        Canopy, FocusManager, ReadContext, derive_commands, error::Result, geom::Expanse,
         layout::Layout, render::Render, state::NodeName, widget::Widget,
     };
 
@@ -33,7 +33,7 @@ mod tests {
     }
 
     impl Widget for Block {
-        fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
             if ctx.children().is_empty() {
                 r.fill("blue", ctx.view().outer_rect_local(), 'x')?;
             }

@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Core, FocusManager, NodeId, ViewContext, Widget, derive_commands,
+        Canopy, Core, FocusManager, NodeId, ReadContext, Widget, derive_commands,
         error::{Error, Result},
         geom::{Direction, Expanse, Point},
         layout::{Layout, Sizing},
@@ -65,7 +65,7 @@ mod tests {
     }
 
     impl Widget for TreeWidget {
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
             Ok(())
         }
 

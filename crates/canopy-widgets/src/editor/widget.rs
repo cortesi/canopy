@@ -4,7 +4,7 @@ use std::{
 };
 
 use canopy::{
-    Context, EventOutcome, ViewContext, Widget, command, cursor, derive_commands,
+    Context, EventOutcome, ReadContext, Widget, command, cursor, derive_commands,
     error::Result,
     event::{Event, key, mouse},
     geom::{Line, Point, Rect},
@@ -2302,7 +2302,7 @@ impl Editor {
 }
 
 impl Widget for Editor {
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
         true
     }
 
@@ -2322,7 +2322,7 @@ impl Widget for Editor {
         })
     }
 
-    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
         let view = ctx.view();
         let view_rect = view.view_rect();
         let origin = view.content_origin();

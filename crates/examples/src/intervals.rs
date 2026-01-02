@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use canopy::{
-    Binder, Canopy, Context, Loader, ViewContext, Widget, command, derive_commands,
+    Binder, Canopy, Context, Loader, ReadContext, Widget, command, derive_commands,
     error::Result,
     event::{key, mouse},
     layout::{Edges, Layout, MeasureConstraints, Measurement, Size},
@@ -115,7 +115,7 @@ impl Widget for CounterItem {
         c.clamp(Size::new(desired_width, ENTRY_HEIGHT))
     }
 
-    fn render(&mut self, rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         rndr.push_layer("entry");
         if self.selected {
             rndr.push_layer("selected");
@@ -123,7 +123,7 @@ impl Widget for CounterItem {
         Ok(())
     }
 
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
         true
     }
 
@@ -139,7 +139,7 @@ pub struct StatusBar;
 impl StatusBar {}
 
 impl Widget for StatusBar {
-    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
         r.push_layer("statusbar");
         r.text(
             "statusbar/text",
@@ -185,7 +185,7 @@ impl Intervals {
 }
 
 impl Widget for Intervals {
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
         true
     }
 
@@ -201,7 +201,7 @@ impl Widget for Intervals {
         Ok(())
     }
 
-    fn render(&mut self, r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         r.push_layer("intervals");
         Ok(())
     }

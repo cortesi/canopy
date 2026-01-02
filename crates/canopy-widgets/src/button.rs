@@ -1,7 +1,7 @@
 //! Button widget.
 
 use canopy::{
-    Context, EventOutcome, ViewContext, Widget, command,
+    Context, EventOutcome, ReadContext, Widget, command,
     commands::{CommandCall, CommandInvocation},
     derive_commands,
     error::Result,
@@ -116,7 +116,7 @@ impl Widget for Button {
         Ok(())
     }
 
-    fn render(&mut self, rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         rndr.push_layer("button");
         if self.selected {
             rndr.push_layer("selected");

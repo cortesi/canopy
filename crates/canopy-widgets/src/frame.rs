@@ -1,5 +1,5 @@
 use canopy::{
-    Context, EventOutcome, NodeId, ViewContext, Widget, derive_commands,
+    Context, EventOutcome, NodeId, ReadContext, Widget, derive_commands,
     error::Result,
     event::{Event, mouse},
     geom,
@@ -137,7 +137,7 @@ impl Default for Frame {
 }
 
 impl Widget for Frame {
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
         let outer = ctx.view().outer_rect_local();
         let f = geom::FrameRects::new(outer, 1);
         let style = if ctx.is_on_focus_path() {

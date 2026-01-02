@@ -21,7 +21,7 @@ use alacritty_terminal::{
     vte::ansi,
 };
 use canopy::{
-    Context, EventOutcome, ViewContext, Widget, cursor, derive_commands,
+    Context, EventOutcome, ReadContext, Widget, cursor, derive_commands,
     error::{Error, Result},
     event::{self, key, mouse},
     geom,
@@ -676,12 +676,12 @@ impl Terminal {
     }
 
     /// Return whether the terminal should be considered focused.
-    fn focus_state(&self, ctx: &dyn ViewContext) -> bool {
+    fn focus_state(&self, ctx: &dyn ReadContext) -> bool {
         ctx.is_focused() && self.app_focused
     }
 
     /// Sync focus state with the terminal and emit focus events.
-    fn update_focus(&mut self, ctx: &dyn ViewContext) {
+    fn update_focus(&mut self, ctx: &dyn ReadContext) {
         let focused = self.focus_state(ctx);
         if focused == self.focused {
             self.term.is_focused = focused;
@@ -968,7 +968,7 @@ impl Terminal {
 }
 
 impl Widget for Terminal {
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
         let view = ctx.view();
         let content_size = view.content_size();
         if content_size.w == 0 || content_size.h == 0 {
@@ -1217,7 +1217,7 @@ impl Widget for Terminal {
         view
     }
 
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
         true
     }
 

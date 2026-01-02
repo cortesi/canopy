@@ -8,7 +8,7 @@ use std::{
 use crate::{
     Context,
     commands::CommandNode,
-    core::context::ViewContext,
+    core::context::ReadContext,
     cursor,
     error::Result,
     event::Event,
@@ -48,7 +48,7 @@ pub trait Widget: Any + Send + CommandNode {
     }
 
     /// Render this widget's own content. Does not render children.
-    fn render(&mut self, _frame: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _frame: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         Ok(())
     }
 
@@ -61,7 +61,7 @@ pub trait Widget: Any + Send + CommandNode {
     ///
     /// Widgets can use the provided context to query their tree state (e.g., whether they have
     /// children) when deciding whether to accept focus.
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
         false
     }
 

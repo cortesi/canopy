@@ -1,5 +1,5 @@
 use canopy::{
-    Binder, Canopy, Context, Loader, ViewContext, Widget, derive_commands,
+    Binder, Canopy, Context, Loader, ReadContext, Widget, derive_commands,
     error::Result,
     event::{key, mouse},
     layout::Layout,
@@ -24,7 +24,7 @@ impl Pager {
 }
 
 impl Widget for Pager {
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
         true
     }
 
@@ -38,7 +38,7 @@ impl Widget for Pager {
         Ok(())
     }
 
-    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         Ok(())
     }
 }

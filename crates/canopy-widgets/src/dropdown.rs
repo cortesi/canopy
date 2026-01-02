@@ -1,7 +1,7 @@
 //! Dropdown widget for single-value selection with expand/collapse behavior.
 
 use canopy::{
-    Context, EventOutcome, ViewContext, Widget, command, derive_commands,
+    Context, EventOutcome, ReadContext, Widget, command, derive_commands,
     error::Result,
     event::{Event, mouse},
     layout::{MeasureConstraints, Measurement, Size},
@@ -198,7 +198,7 @@ where
         EventOutcome::Ignore
     }
 
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
         let view = ctx.view();
         let rect = view.view_rect_local();
 
@@ -272,7 +272,7 @@ where
         Size::new(width, height)
     }
 
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
         true
     }
 

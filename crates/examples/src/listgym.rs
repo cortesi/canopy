@@ -1,5 +1,5 @@
 use canopy::{
-    Binder, Canopy, Context, Loader, NodeId, ViewContext, Widget, command, derive_commands,
+    Binder, Canopy, Context, Loader, NodeId, ReadContext, Widget, command, derive_commands,
     error::{Error, Result},
     event::{key, mouse},
     layout::{CanvasContext, MeasureConstraints, Measurement, Size},
@@ -37,7 +37,7 @@ impl Selectable for ListEntry {
 }
 
 impl Widget for ListEntry {
-    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
         self.text.render(r, ctx)
     }
 
@@ -49,7 +49,7 @@ impl Widget for ListEntry {
         self.text.canvas(view, ctx)
     }
 
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
         true
     }
 
@@ -83,12 +83,12 @@ impl StatusBar {
     }
 
     /// Locate the panes node in the tree.
-    fn panes_id(ctx: &dyn ViewContext) -> Option<NodeId> {
+    fn panes_id(ctx: &dyn ReadContext) -> Option<NodeId> {
         ctx.first_in_tree::<Panes>().map(Into::into)
     }
 
     /// Build the status text based on the focused column.
-    fn label(&self, ctx: &dyn ViewContext) -> String {
+    fn label(&self, ctx: &dyn ReadContext) -> String {
         let Some(panes_id) = Self::panes_id(ctx) else {
             return "listgym".to_string();
         };
@@ -108,7 +108,7 @@ impl StatusBar {
 }
 
 impl Widget for StatusBar {
-    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
         r.push_layer("statusbar");
         let label = self.label(ctx);
         r.text("text", ctx.view().outer_rect_local().line(0), &label)?;
@@ -216,7 +216,7 @@ impl ListGym {
 }
 
 impl Widget for ListGym {
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
         true
     }
 
@@ -236,7 +236,7 @@ impl Widget for ListGym {
         Ok(())
     }
 
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         Ok(())
     }
 }

@@ -3,7 +3,7 @@
 //! This example showcases themes, effects, and modal overlays in a two-pane layout.
 
 use canopy::{
-    Binder, Canopy, Context, Loader, ViewContext, Widget, command, derive_commands,
+    Binder, Canopy, Context, Loader, ReadContext, Widget, command, derive_commands,
     error::Result,
     event::{key, mouse},
     layout::{Direction, Edges, Layout},
@@ -99,7 +99,7 @@ pub struct DemoContent;
 impl DemoContent {}
 
 impl Widget for DemoContent {
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
         let view = ctx.view();
         let rect = view.view_rect_local();
 
@@ -164,7 +164,7 @@ struct ModalContent;
 impl ModalContent {}
 
 impl Widget for ModalContent {
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
         let view = ctx.view();
         let rect = view.view_rect_local();
 
@@ -342,7 +342,7 @@ struct Container;
 impl Container {}
 
 impl Widget for Container {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         Ok(())
     }
 
@@ -352,7 +352,7 @@ impl Widget for Container {
 }
 
 impl Widget for Stylegym {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         Ok(())
     }
 

@@ -3,7 +3,7 @@
 use std::hint::black_box;
 
 use canopy::{
-    Context, Loader, ViewContext, Widget, derive_commands,
+    Context, Loader, ReadContext, Widget, derive_commands,
     error::Result,
     layout::{Layout, Sizing},
     render::Render,
@@ -32,7 +32,7 @@ impl BenchmarkTextWrapper {
 }
 
 impl Widget for BenchmarkTextWrapper {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         Ok(())
     }
 

@@ -1,7 +1,7 @@
 //! Chargym: A Unicode width and wide character demo.
 
 use canopy::{
-    Binder, Canopy, Context, Loader, ViewContext, Widget, derive_commands,
+    Binder, Canopy, Context, Loader, ReadContext, Widget, derive_commands,
     error::Result,
     event::{key, mouse},
     layout::Layout,
@@ -231,7 +231,7 @@ impl CharGym {
 }
 
 impl Widget for CharGym {
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
         true
     }
 
@@ -250,7 +250,7 @@ impl Widget for CharGym {
         Ok(())
     }
 
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         Ok(())
     }
 }

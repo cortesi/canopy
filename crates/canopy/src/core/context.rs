@@ -24,7 +24,7 @@ use crate::{
 };
 
 /// Read-only context available to widgets during render and measure.
-pub trait ViewContext {
+pub trait ReadContext {
     /// The node currently being rendered.
     fn node_id(&self) -> NodeId;
 
@@ -101,6 +101,14 @@ pub trait ViewContext {
     /// Return the path for a node relative to a root.
     fn node_path(&self, root: NodeId, node: NodeId) -> Path;
 
+    /// Return a keyed child relative to the current node.
+    fn child_keyed(&self, key: &str) -> Option<NodeId>;
+
+    /// Current focus generation counter.
+    fn current_focus_gen(&self) -> u64 {
+        0
+    }
+
     /// Find the first node whose path matches the filter, relative to the current node.
     ///
     /// The filter is normalized to match full paths.
@@ -153,7 +161,7 @@ pub trait ViewContext {
     }
 }
 
-impl dyn ViewContext + '_ {
+impl dyn ReadContext + '_ {
     /// Return the first node of type `W` within `root` and its descendants.
     pub fn first_from<W: Widget + 'static>(&self, root: NodeId) -> Option<TypedId<W>> {
         let mut stack = vec![root];
@@ -191,6 +199,130 @@ impl dyn ViewContext + '_ {
     /// Return all widgets of type `W` anywhere in the tree, including the root.
     pub fn all_in_tree<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
         self.all_from::<W>(self.root_id())
+    }
+
+    /// Find exactly one node matching a path filter.
+    pub fn find_one(&self, path: &str) -> Result<NodeId> {
+        let matches = self.find_nodes(path);
+        match matches.len() {
+            0 => Err(Error::NotFound(format!("path {path}"))),
+            1 => Ok(matches[0]),
+            _ => Err(Error::MultipleMatches),
+        }
+    }
+
+    /// Try to find exactly one node matching a path filter.
+    pub fn try_find_one(&self, path: &str) -> Result<Option<NodeId>> {
+        let matches = self.find_nodes(path);
+        match matches.len() {
+            0 => Ok(None),
+            1 => Ok(Some(matches[0])),
+            _ => Err(Error::MultipleMatches),
+        }
+    }
+
+    /// Return the first child of type `W`.
+    pub fn first_child<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
+        self.children()
+            .into_iter()
+            .find(|id| self.node_matches_type::<W>(*id))
+            .map(TypedId::new)
+    }
+
+    /// Return the unique child of type `W`, or error if more than one exists.
+    pub fn unique_child<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
+        let mut found = None;
+        for child in self.children() {
+            if !self.node_matches_type::<W>(child) {
+                continue;
+            }
+            if found.is_some() {
+                return Err(Error::MultipleMatches);
+            }
+            found = Some(TypedId::new(child));
+        }
+        Ok(found)
+    }
+
+    /// Return all direct children of type `W`.
+    pub fn children_of_type<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
+        self.children()
+            .into_iter()
+            .filter(|id| self.node_matches_type::<W>(*id))
+            .map(TypedId::new)
+            .collect()
+    }
+
+    /// Return the first descendant of type `W` (excluding self).
+    pub fn first_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
+        let mut stack = self.children();
+        while let Some(id) = stack.pop() {
+            if self.node_matches_type::<W>(id) {
+                return Some(TypedId::new(id));
+            }
+            for child in self.children_of(id).into_iter().rev() {
+                stack.push(child);
+            }
+        }
+        None
+    }
+
+    /// Return the unique descendant of type `W`, or error if more than one exists.
+    pub fn unique_descendant<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
+        let mut found = None;
+        let mut stack = self.children();
+        while let Some(id) = stack.pop() {
+            if self.node_matches_type::<W>(id) {
+                if found.is_some() {
+                    return Err(Error::MultipleMatches);
+                }
+                found = Some(TypedId::new(id));
+            }
+            for child in self.children_of(id).into_iter().rev() {
+                stack.push(child);
+            }
+        }
+        Ok(found)
+    }
+
+    /// Return all descendants of type `W` (excluding self).
+    pub fn descendants_of_type<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
+        let mut out = Vec::new();
+        let mut stack = self.children();
+        while let Some(id) = stack.pop() {
+            if self.node_matches_type::<W>(id) {
+                out.push(TypedId::new(id));
+            }
+            for child in self.children_of(id).into_iter().rev() {
+                stack.push(child);
+            }
+        }
+        out
+    }
+
+    /// Return the descendant of type `W` that is on the focus path, if any.
+    pub fn focused_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
+        self.descendants_of_type::<W>()
+            .into_iter()
+            .find(|id| self.node_is_on_focus_path((*id).into()))
+    }
+
+    /// Return the descendant of type `W` on the focus path, or the first if none focused.
+    ///
+    /// This searches only within the current node's subtree. Use the tree-wide helpers on
+    /// `ReadContext` if you need to search from an arbitrary root.
+    pub fn focused_or_first_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
+        let descendants = self.descendants_of_type::<W>();
+        let focused = descendants
+            .iter()
+            .copied()
+            .find(|id| self.node_is_on_focus_path((*id).into()));
+        focused.or_else(|| descendants.into_iter().next())
+    }
+
+    /// Return true if the node's widget type matches `W`.
+    fn node_matches_type<W: Widget + 'static>(&self, node: NodeId) -> bool {
+        self.node_type_id(node) == Some(TypeId::of::<W>())
     }
 }
 
@@ -237,7 +369,7 @@ fn normalize_path_filter(path_filter: &str) -> String {
 }
 
 /// Mutable context available to widgets during event handling.
-pub trait Context: ViewContext {
+pub trait Context: ReadContext {
     /// Focus a node. Returns `true` if focus changed.
     fn set_focus(&mut self, node: NodeId) -> bool;
 
@@ -444,9 +576,6 @@ pub trait Context: ViewContext {
     /// Remove a node and all descendants from the arena.
     fn remove_subtree(&mut self, node: NodeId) -> Result<()>;
 
-    /// Return a keyed child relative to the current node.
-    fn child_keyed(&self, key: &str) -> Option<NodeId>;
-
     /// Replace the children list for the current node.
     fn set_children(&mut self, children: Vec<NodeId>) -> Result<()> {
         self.set_children_of(self.node_id(), children)
@@ -492,11 +621,6 @@ pub trait Context: ViewContext {
     /// Stop the render backend and exit the process.
     fn exit(&mut self, code: i32) -> !;
 
-    /// Current focus generation counter.
-    fn current_focus_gen(&self) -> u64 {
-        0
-    }
-
     /// Add an effect to a node that will be applied during rendering.
     /// Effects stack and inherit through the tree.
     fn push_effect(&mut self, node: NodeId, effect: Box<dyn StyleEffect>) -> Result<()>;
@@ -513,6 +637,64 @@ pub trait Context: ViewContext {
 }
 
 impl dyn Context + '_ {
+    /// Get a read-only view of this context.
+    ///
+    /// This is useful for calling methods defined on `ReadContext` that are not
+    /// directly available on `Context`.
+    pub fn read(&self) -> &dyn ReadContext {
+        self
+    }
+
+    /// Find exactly one node matching a path filter.
+    pub fn find_one(&self, path: &str) -> Result<NodeId> {
+        self.read().find_one(path)
+    }
+
+    /// Try to find exactly one node matching a path filter.
+    pub fn try_find_one(&self, path: &str) -> Result<Option<NodeId>> {
+        self.read().try_find_one(path)
+    }
+
+    /// Return the first child of type `W`.
+    pub fn first_child<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
+        self.read().first_child()
+    }
+
+    /// Return the unique child of type `W`, or error if more than one exists.
+    pub fn unique_child<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
+        self.read().unique_child()
+    }
+
+    /// Return all direct children of type `W`.
+    pub fn children_of_type<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
+        self.read().children_of_type()
+    }
+
+    /// Return the first descendant of type `W` (excluding self).
+    pub fn first_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
+        self.read().first_descendant()
+    }
+
+    /// Return the unique descendant of type `W`, or error if more than one exists.
+    pub fn unique_descendant<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
+        self.read().unique_descendant()
+    }
+
+    /// Return all descendants of type `W` (excluding self).
+    pub fn descendants_of_type<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
+        self.read().descendants_of_type()
+    }
+
+    /// Return the descendant of type `W` that is on the focus path, if any.
+    pub fn focused_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
+        self.read().focused_descendant()
+    }
+
+    /// Return the descendant of type `W` on the focus path, or the first if none focused.
+    pub fn focused_or_first_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
+        self.read().focused_or_first_descendant()
+    }
+
     /// Execute a closure with mutable access to a widget of type `W`.
     pub fn with_widget<W, R>(
         &mut self,
@@ -668,33 +850,13 @@ impl dyn Context + '_ {
         Ok(ids)
     }
 
-    /// Find exactly one node matching a path filter.
-    pub fn find_one(&self, path: &str) -> Result<NodeId> {
-        let matches = self.find_nodes(path);
-        match matches.len() {
-            0 => Err(Error::NotFound(format!("path {path}"))),
-            1 => Ok(matches[0]),
-            _ => Err(Error::MultipleMatches),
-        }
-    }
-
-    /// Try to find exactly one node matching a path filter.
-    pub fn try_find_one(&self, path: &str) -> Result<Option<NodeId>> {
-        let matches = self.find_nodes(path);
-        match matches.len() {
-            0 => Ok(None),
-            1 => Ok(Some(matches[0])),
-            _ => Err(Error::MultipleMatches),
-        }
-    }
-
     /// Execute a closure with a widget at a unique path match.
     pub fn with_node_at<W: Widget + 'static, R>(
         &mut self,
         path: &str,
         f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<R> {
-        let node = self.find_one(path)?;
+        let node = (self as &dyn ReadContext).find_one(path)?;
         self.with_widget(node, f)
     }
 
@@ -704,7 +866,7 @@ impl dyn Context + '_ {
         path: &str,
         f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<Option<R>> {
-        let node = self.try_find_one(path)?;
+        let node = (self as &dyn ReadContext).try_find_one(path)?;
         let Some(node) = node else {
             return Ok(None);
         };
@@ -735,111 +897,12 @@ impl dyn Context + '_ {
         self.with_widget(node, f).map(Some)
     }
 
-    /// Return the first child of type `W`.
-    pub fn first_child<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
-        self.children()
-            .into_iter()
-            .find(|id| self.node_matches_type::<W>(*id))
-            .map(TypedId::new)
-    }
-
-    /// Return the unique child of type `W`, or error if more than one exists.
-    pub fn unique_child<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
-        let mut found = None;
-        for child in self.children() {
-            if !self.node_matches_type::<W>(child) {
-                continue;
-            }
-            if found.is_some() {
-                return Err(Error::MultipleMatches);
-            }
-            found = Some(TypedId::new(child));
-        }
-        Ok(found)
-    }
-
-    /// Return all direct children of type `W`.
-    pub fn children_of_type<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
-        self.children()
-            .into_iter()
-            .filter(|id| self.node_matches_type::<W>(*id))
-            .map(TypedId::new)
-            .collect()
-    }
-
-    /// Return the first descendant of type `W` (excluding self).
-    pub fn first_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
-        let mut stack = self.children();
-        while let Some(id) = stack.pop() {
-            if self.node_matches_type::<W>(id) {
-                return Some(TypedId::new(id));
-            }
-            for child in self.children_of(id).into_iter().rev() {
-                stack.push(child);
-            }
-        }
-        None
-    }
-
-    /// Return the unique descendant of type `W`, or error if more than one exists.
-    pub fn unique_descendant<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
-        let mut found = None;
-        let mut stack = self.children();
-        while let Some(id) = stack.pop() {
-            if self.node_matches_type::<W>(id) {
-                if found.is_some() {
-                    return Err(Error::MultipleMatches);
-                }
-                found = Some(TypedId::new(id));
-            }
-            for child in self.children_of(id).into_iter().rev() {
-                stack.push(child);
-            }
-        }
-        Ok(found)
-    }
-
-    /// Return all descendants of type `W` (excluding self).
-    pub fn descendants_of_type<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
-        let mut out = Vec::new();
-        let mut stack = self.children();
-        while let Some(id) = stack.pop() {
-            if self.node_matches_type::<W>(id) {
-                out.push(TypedId::new(id));
-            }
-            for child in self.children_of(id).into_iter().rev() {
-                stack.push(child);
-            }
-        }
-        out
-    }
-
-    /// Return the descendant of type `W` that is on the focus path, if any.
-    pub fn focused_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
-        self.descendants_of_type::<W>()
-            .into_iter()
-            .find(|id| self.node_is_on_focus_path((*id).into()))
-    }
-
-    /// Return the descendant of type `W` on the focus path, or the first if none focused.
-    ///
-    /// This searches only within the current node's subtree. Use the tree-wide helpers on
-    /// `ViewContext` if you need to search from an arbitrary root.
-    pub fn focused_or_first_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
-        let descendants = self.descendants_of_type::<W>();
-        let focused = descendants
-            .iter()
-            .copied()
-            .find(|id| self.node_is_on_focus_path((*id).into()));
-        focused.or_else(|| descendants.into_iter().next())
-    }
-
     /// Execute a closure with the focused descendant of type `W`, or the first if none focused.
     pub fn with_focused_or_first_descendant<W: Widget + 'static, R>(
         &mut self,
         f: impl FnMut(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<R> {
-        let node = self
+        let node = (self as &dyn ReadContext)
             .focused_or_first_descendant::<W>()
             .ok_or_else(|| Error::NotFound(type_name::<W>().to_string()))?;
         self.with_typed(node, f)
@@ -850,7 +913,7 @@ impl dyn Context + '_ {
         &mut self,
         f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<R> {
-        let node = self
+        let node = (self as &dyn ReadContext)
             .first_descendant::<W>()
             .ok_or_else(|| Error::NotFound(type_name::<W>().to_string()))?;
         self.with_typed(node, f)
@@ -861,7 +924,7 @@ impl dyn Context + '_ {
         &mut self,
         f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<Option<R>> {
-        let Some(node) = self.first_descendant::<W>() else {
+        let Some(node) = (self as &dyn ReadContext).first_descendant::<W>() else {
             return Ok(None);
         };
         self.with_typed(node, f).map(Some)
@@ -872,7 +935,7 @@ impl dyn Context + '_ {
         &mut self,
         f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<R> {
-        let node = self
+        let node = (self as &dyn ReadContext)
             .unique_descendant::<W>()?
             .ok_or_else(|| Error::NotFound(type_name::<W>().to_string()))?;
         self.with_typed(node, f)
@@ -883,16 +946,11 @@ impl dyn Context + '_ {
         &mut self,
         f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<Option<R>> {
-        let node = self.unique_descendant::<W>()?;
+        let node = (self as &dyn ReadContext).unique_descendant::<W>()?;
         let Some(node) = node else {
             return Ok(None);
         };
         self.with_typed(node, f).map(Some)
-    }
-
-    /// Return true if the node's widget type matches `W`.
-    fn node_matches_type<W: Widget + 'static>(&self, node: NodeId) -> bool {
-        self.node_type_id(node) == Some(TypeId::of::<W>())
     }
 }
 
@@ -969,7 +1027,7 @@ impl<'a> CoreContext<'a> {
     }
 }
 
-impl<'a> ViewContext for CoreContext<'a> {
+impl<'a> ReadContext for CoreContext<'a> {
     fn node_id(&self) -> NodeId {
         self.node_id
     }
@@ -1050,6 +1108,14 @@ impl<'a> ViewContext for CoreContext<'a> {
 
     fn node_path(&self, root: NodeId, node: NodeId) -> Path {
         self.core.node_path(root, node)
+    }
+
+    fn child_keyed(&self, key: &str) -> Option<NodeId> {
+        self.core.child_keyed(self.node_id, key)
+    }
+
+    fn current_focus_gen(&self) -> u64 {
+        self.core.focus_gen
     }
 }
 
@@ -1274,10 +1340,6 @@ impl<'a> Context for CoreContext<'a> {
         self.core.remove_subtree(node)
     }
 
-    fn child_keyed(&self, key: &str) -> Option<NodeId> {
-        self.core.child_keyed(self.node_id, key)
-    }
-
     fn set_children_of(&mut self, parent: NodeId, children: Vec<NodeId>) -> Result<()> {
         self.core.set_children(parent, children)
     }
@@ -1305,10 +1367,6 @@ impl<'a> Context for CoreContext<'a> {
     fn exit(&mut self, code: i32) -> ! {
         let _ = self.stop().ok();
         process::exit(code)
-    }
-
-    fn current_focus_gen(&self) -> u64 {
-        self.core.focus_gen
     }
 
     fn push_effect(&mut self, node: NodeId, effect: Box<dyn StyleEffect>) -> Result<()> {
@@ -1365,7 +1423,7 @@ impl<'a> CoreViewContext<'a> {
     }
 }
 
-impl<'a> ViewContext for CoreViewContext<'a> {
+impl<'a> ReadContext for CoreViewContext<'a> {
     fn node_id(&self) -> NodeId {
         self.node_id
     }
@@ -1446,5 +1504,13 @@ impl<'a> ViewContext for CoreViewContext<'a> {
 
     fn node_path(&self, root: NodeId, node: NodeId) -> Path {
         self.core.node_path(root, node)
+    }
+
+    fn child_keyed(&self, key: &str) -> Option<NodeId> {
+        self.core.child_keyed(self.node_id, key)
+    }
+
+    fn current_focus_gen(&self) -> u64 {
+        self.core.focus_gen
     }
 }

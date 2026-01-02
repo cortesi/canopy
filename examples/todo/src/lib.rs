@@ -1,6 +1,6 @@
 use anyhow::Result as AnyResult;
 use canopy::{
-    Binder, Canopy, Context, Loader, ViewContext, Widget, command,
+    Binder, Canopy, Context, Loader, ReadContext, Widget, command,
     commands::VerticalDirection,
     derive_commands,
     error::Result,
@@ -57,7 +57,7 @@ impl Widget for TodoEntry {
         c.clamp(Size::new(available_width, height))
     }
 
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
         let view = ctx.view();
         let area = view.view_rect_local();
 
@@ -94,7 +94,7 @@ impl Widget for TodoEntry {
         Ok(())
     }
 
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
         true
     }
 
@@ -110,7 +110,7 @@ pub struct StatusBar;
 impl StatusBar {}
 
 impl Widget for StatusBar {
-    fn render(&mut self, r: &mut Render, ctx: &dyn canopy::ViewContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, ctx: &dyn canopy::ReadContext) -> Result<()> {
         r.push_layer("statusbar");
         r.text(
             "statusbar/text",
@@ -128,7 +128,7 @@ struct MainContent;
 impl MainContent {}
 
 impl Widget for MainContent {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         Ok(())
     }
 }
@@ -357,11 +357,11 @@ impl Todo {
 }
 
 impl Widget for Todo {
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
         true
     }
 
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn canopy::ViewContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn canopy::ReadContext) -> Result<()> {
         Ok(())
     }
 

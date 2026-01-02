@@ -3,7 +3,7 @@ use std::{any::TypeId, process, result::Result as StdResult};
 use slotmap::Key;
 
 use crate::{
-    Context, ViewContext,
+    Context, ReadContext,
     commands::{ArgValue, CommandError, CommandInvocation, CommandScopeFrame, ListRowContext},
     core::{NodeId, style::StyleEffect, view::View},
     error::Result,
@@ -48,7 +48,7 @@ impl Default for DummyContext {
     }
 }
 
-impl ViewContext for DummyContext {
+impl ReadContext for DummyContext {
     fn node_id(&self) -> NodeId {
         self.node_id
     }
@@ -113,6 +113,10 @@ impl ViewContext for DummyContext {
 
     fn node_path(&self, _root: NodeId, _node: NodeId) -> Path {
         Path::empty()
+    }
+
+    fn child_keyed(&self, _key: &str) -> Option<NodeId> {
+        None
     }
 }
 
@@ -236,10 +240,6 @@ impl Context for DummyContext {
 
     fn remove_subtree(&mut self, _node: NodeId) -> Result<()> {
         Ok(())
-    }
-
-    fn child_keyed(&self, _key: &str) -> Option<NodeId> {
-        None
     }
 
     fn set_children_of(&mut self, _parent: NodeId, _children: Vec<NodeId>) -> Result<()> {

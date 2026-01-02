@@ -2,7 +2,7 @@ use std::any::Any;
 
 use super::{buf::BufTest, render::NopBackend};
 use crate::{
-    Canopy, Context, Loader, NodeId, ViewContext,
+    Canopy, Context, Loader, NodeId, ReadContext,
     core::{
         context::{CoreContext, CoreViewContext},
         termbuf::TermBuf,
@@ -210,7 +210,7 @@ impl Harness {
 mod tests {
     use super::*;
     use crate::{
-        ViewContext, derive_commands, error::Result, geom::Line, layout::Layout, render::Render,
+        ReadContext, derive_commands, error::Result, geom::Line, layout::Layout, render::Render,
         state::NodeName, widget::Widget,
     };
 
@@ -228,7 +228,7 @@ mod tests {
             Layout::fill()
         }
 
-        fn render(&mut self, r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
             r.text("base", Line::new(0, 0, 5), "test")?;
             Ok(())
         }

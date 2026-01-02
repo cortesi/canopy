@@ -1,5 +1,5 @@
 use canopy::{
-    ViewContext,
+    ReadContext,
     error::Result,
     geom,
     layout::{Edges, Layout},
@@ -15,7 +15,7 @@ struct ViewMetrics {
     canvas: geom::Expanse,
 }
 
-fn metrics(ctx: &dyn ViewContext) -> ViewMetrics {
+fn metrics(ctx: &dyn ReadContext) -> ViewMetrics {
     let view = ctx.view();
     ViewMetrics {
         outer: view.outer,

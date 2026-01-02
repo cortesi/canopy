@@ -4,7 +4,7 @@ use std::sync::{
 };
 
 use canopy::{
-    Binder, Canopy, Context, Loader, ViewContext, Widget, buf, command, derive_commands,
+    Binder, Canopy, Context, Loader, ReadContext, Widget, buf, command, derive_commands,
     error::Result,
     event::{key, mouse},
     geom::Point,
@@ -57,7 +57,7 @@ impl EditorHost {
 }
 
 impl Widget for EditorHost {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         Ok(())
     }
 

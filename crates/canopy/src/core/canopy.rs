@@ -752,7 +752,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        Context, ViewContext,
+        Context, ReadContext,
         commands::{CommandNode, CommandSpec},
         derive_commands,
         error::Result,
@@ -795,7 +795,7 @@ mod tests {
     }
 
     impl Widget for StaticWidget {
-        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
             Ok(())
         }
     }
@@ -1384,11 +1384,11 @@ mod tests {
                 Layout::fill()
             }
 
-            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+            fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
                 true
             }
 
-            fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+            fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
                 r.text("any", ctx.view().outer_rect_local().line(0), "<n>")
             }
 
@@ -1431,7 +1431,7 @@ mod tests {
         impl Child {}
 
         impl Widget for Child {
-            fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+            fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
                 Ok(())
             }
 
@@ -1450,7 +1450,7 @@ mod tests {
         }
 
         impl Widget for Parent {
-            fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+            fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
                 Ok(())
             }
 

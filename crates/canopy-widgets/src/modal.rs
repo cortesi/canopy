@@ -1,7 +1,7 @@
 //! Modal widget for centered overlay content.
 
 use canopy::{
-    ViewContext, Widget, derive_commands,
+    ReadContext, Widget, derive_commands,
     error::Result,
     layout::{Align, Direction, Layout},
     render::Render,
@@ -40,7 +40,7 @@ impl Widget for Modal {
             .align_vertical(Align::Center)
     }
 
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         Ok(())
     }
 

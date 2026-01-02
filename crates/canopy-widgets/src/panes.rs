@@ -1,5 +1,5 @@
 use canopy::{
-    Context, NodeId, ViewContext, Widget, command,
+    Context, NodeId, ReadContext, Widget, command,
     commands::{CommandNode, CommandSpec},
     derive_commands,
     error::Result,
@@ -21,7 +21,7 @@ impl Widget for PaneColumn {
         Layout::column().flex_horizontal(1).flex_vertical(1)
     }
 
-    fn render(&mut self, _rndr: &mut canopy::render::Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _rndr: &mut canopy::render::Render, _ctx: &dyn ReadContext) -> Result<()> {
         Ok(())
     }
 
@@ -235,7 +235,7 @@ impl Default for Panes {
 }
 
 impl Widget for Panes {
-    fn render(&mut self, _rndr: &mut canopy::render::Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _rndr: &mut canopy::render::Render, _ctx: &dyn ReadContext) -> Result<()> {
         Ok(())
     }
 

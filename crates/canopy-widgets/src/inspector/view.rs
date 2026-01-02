@@ -1,5 +1,5 @@
 use canopy::{
-    Core, NodeId, ViewContext, Widget, derive_commands, error::Result, layout::Layout,
+    Core, NodeId, ReadContext, Widget, derive_commands, error::Result, layout::Layout,
     state::NodeName,
 };
 
@@ -9,7 +9,7 @@ use crate::tabs::Tabs;
 pub struct View;
 
 impl Widget for View {
-    fn render(&mut self, _rndr: &mut canopy::render::Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _rndr: &mut canopy::render::Render, _ctx: &dyn ReadContext) -> Result<()> {
         Ok(())
     }
 

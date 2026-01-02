@@ -7,7 +7,7 @@ use std::{
 };
 
 use canopy::{
-    Canopy, Context, Loader, ViewContext, Widget, command,
+    Canopy, Context, Loader, ReadContext, Widget, command,
     commands::{ScrollDirection, VerticalDirection},
     derive_commands,
     error::{Error, Result},
@@ -63,7 +63,7 @@ impl Widget for LogEntry {
         c.clamp(Size::new(available_width, lines.len() as u32))
     }
 
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
         let view = ctx.view();
 
         if view.is_zero() {
@@ -95,7 +95,7 @@ impl Widget for LogEntry {
         Ok(())
     }
 
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
         true
     }
 
@@ -137,7 +137,7 @@ impl Widget for Logs {
         Layout::fill()
     }
 
-    fn render(&mut self, rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         rndr.push_layer("logs");
         Ok(())
     }

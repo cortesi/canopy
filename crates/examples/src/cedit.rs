@@ -1,5 +1,5 @@
 use canopy::{
-    Binder, Canopy, Context, Loader, ViewContext, Widget, derive_commands,
+    Binder, Canopy, Context, Loader, ReadContext, Widget, derive_commands,
     error::Result,
     event::key,
     layout::{Edges, Layout},
@@ -54,7 +54,7 @@ impl Widget for Ed {
         Ok(())
     }
 
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         Ok(())
     }
 }

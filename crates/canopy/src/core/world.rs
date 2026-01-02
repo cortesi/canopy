@@ -8,7 +8,7 @@ use slotmap::SlotMap;
 
 use super::focus::{FocusManager, FocusRecoveryHint};
 use crate::{
-    ViewContext,
+    ReadContext,
     backend::BackendControl,
     commands::{CommandNode, CommandScopeFrame, CommandSet, CommandSpec},
     core::{context::CoreContext, id::NodeId, node::Node, view::View},
@@ -1740,7 +1740,7 @@ impl Widget for RootContainer {
         Layout::fill()
     }
 
-    fn render(&mut self, _frame: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _frame: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         Ok(())
     }
 
@@ -1849,7 +1849,7 @@ mod tests {
     }
 
     impl Widget for FocusableWidget {
-        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
             true
         }
     }

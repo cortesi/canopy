@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Context, Loader, NodeId, ViewContext, Widget,
+        Context, Loader, NodeId, ReadContext, Widget,
         commands::{CommandNode, CommandSpec},
         error::Result,
         render::Render,
@@ -36,7 +36,7 @@ mod tests {
     }
 
     impl Widget for MountProbe {
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
             Ok(())
         }
 
@@ -77,7 +77,7 @@ mod tests {
     }
 
     impl Widget for ChildProbe {
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
             Ok(())
         }
 

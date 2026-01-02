@@ -1,5 +1,5 @@
 use canopy::{
-    Canopy, Context, Loader, ViewContext, Widget, command, derive_commands,
+    Canopy, Context, Loader, ReadContext, Widget, command, derive_commands,
     error::Result,
     layout::{Layout, Sizing},
     render::Render,
@@ -49,7 +49,7 @@ impl TextDisplay {
 }
 
 impl Widget for TextDisplay {
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
         true
     }
 
@@ -66,7 +66,7 @@ impl Widget for TextDisplay {
         Ok(())
     }
 
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         Ok(())
     }
 }

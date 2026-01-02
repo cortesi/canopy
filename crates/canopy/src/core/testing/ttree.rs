@@ -2,7 +2,7 @@
 use std::cell::RefCell;
 
 use crate::{
-    Canopy, Context, NodeId, ViewContext, command,
+    Canopy, Context, NodeId, ReadContext, command,
     core::Core,
     derive_commands,
     error::Result,
@@ -109,11 +109,11 @@ macro_rules! leaf {
         }
 
         impl Widget for $a {
-            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+            fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
                 true
             }
 
-            fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+            fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
                 r.text(
                     "any",
                     ctx.view().outer_rect_local().line(0),
@@ -174,11 +174,11 @@ macro_rules! branch {
         }
 
         impl Widget for $name {
-            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+            fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
                 true
             }
 
-            fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+            fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
                 r.text(
                     "any",
                     ctx.view().outer_rect_local().line(0),
@@ -257,11 +257,11 @@ impl OutcomeTarget for R {
 }
 
 impl Widget for R {
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
         true
     }
 
-    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
         r.text(
             "any",
             ctx.view().outer_rect_local().line(0),

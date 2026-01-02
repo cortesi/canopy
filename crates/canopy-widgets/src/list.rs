@@ -6,7 +6,7 @@
 use std::marker::PhantomData;
 
 use canopy::{
-    Context, EventOutcome, NodeId, TypedId, ViewContext, Widget, command,
+    Context, EventOutcome, NodeId, ReadContext, TypedId, Widget, command,
     commands::{
         CommandArgs, CommandCall, CommandInvocation, CommandScopeFrame, ListRowContext,
         ScrollDirection, ToArgValue, VerticalDirection,
@@ -618,7 +618,7 @@ impl<W: Selectable> List<W> {
     }
 
     /// Build (start_y, height) tuples for each item.
-    fn item_metrics(&self, c: &dyn ViewContext, available_width: u32) -> Vec<(u32, u32)> {
+    fn item_metrics(&self, c: &dyn ReadContext, available_width: u32) -> Vec<(u32, u32)> {
         let mut metrics = Vec::with_capacity(self.items.len());
         let mut y_offset = 0u32;
 
@@ -679,7 +679,7 @@ impl<W: Selectable + Send + 'static> Widget for List<W> {
         EventOutcome::Ignore
     }
 
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
         let view = ctx.view();
         let area = view.outer_rect_local();
 
@@ -750,7 +750,7 @@ impl<W: Selectable + Send + 'static> Widget for List<W> {
         Size::new(max_width, total_height.max(1))
     }
 
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
         // List itself doesn't accept focus; items do
         false
     }

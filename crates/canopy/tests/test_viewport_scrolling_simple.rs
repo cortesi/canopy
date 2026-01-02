@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Context, Loader, ViewContext, Widget, command, derive_commands,
+        Canopy, Context, Loader, ReadContext, Widget, command, derive_commands,
         error::Result,
         event::key,
         geom::Line,
@@ -29,11 +29,11 @@ mod tests {
     }
 
     impl Widget for ScrollTest {
-        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
             true
         }
 
-        fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
             let view = ctx.view();
             let origin = view.content_origin();
             let view_height = view.content.h;

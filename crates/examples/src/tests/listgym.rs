@@ -23,7 +23,7 @@ fn panes_column_count(harness: &mut Harness) -> Result<usize> {
 
 fn list_count(harness: &mut Harness) -> Result<usize> {
     harness.with_root_context(|_root: &mut ListGym, ctx| {
-        let view = ctx as &dyn canopy::ViewContext;
+        let view = ctx as &dyn canopy::ReadContext;
         Ok(view.all_in_tree::<List<ListEntry>>().len())
     })
 }

@@ -1,7 +1,7 @@
 use std::env;
 
 use canopy::{
-    Binder, Canopy, Context, Loader, NodeId, ViewContext, Widget, command, derive_commands,
+    Binder, Canopy, Context, Loader, NodeId, ReadContext, Widget, command, derive_commands,
     error::{Error, Result},
     event::key,
     layout::{Constraint, Layout, MeasureConstraints, Measurement, Size},
@@ -65,7 +65,7 @@ impl Widget for TermEntry {
         Ok(())
     }
 
-    fn render(&mut self, rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         rndr.push_layer("entry");
         if self.selected {
             rndr.push_layer("selected");
@@ -81,7 +81,7 @@ impl Widget for TermEntry {
         c.clamp(Size::new(width, ENTRY_HEIGHT))
     }
 
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
         true
     }
 
@@ -106,7 +106,7 @@ impl Widget for TerminalStack {
         Layout::stack().flex_horizontal(1).flex_vertical(1)
     }
 
-    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         Ok(())
     }
 }
@@ -368,7 +368,7 @@ impl TermGym {
 }
 
 impl Widget for TermGym {
-    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
         true
     }
 
@@ -402,7 +402,7 @@ impl Widget for TermGym {
         Ok(())
     }
 
-    fn render(&mut self, r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         r.push_layer("termgym");
         Ok(())
     }

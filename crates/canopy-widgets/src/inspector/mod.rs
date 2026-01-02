@@ -4,7 +4,7 @@ mod logs;
 mod view;
 
 use canopy::{
-    Binder, Canopy, Core, DefaultBindings, Loader, NodeId, ViewContext, Widget, derive_commands,
+    Binder, Canopy, Core, DefaultBindings, Loader, NodeId, ReadContext, Widget, derive_commands,
     error::Result, event::key::*, layout::Layout, render::Render, state::NodeName,
 };
 use logs::Logs;
@@ -47,7 +47,7 @@ impl Default for Inspector {
 }
 
 impl Widget for Inspector {
-    fn render(&mut self, r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         r.push_layer("inspector");
         Ok(())
     }

@@ -1,5 +1,5 @@
 use canopy::{
-    Binder, Canopy, Context, Core, DefaultBindings, Loader, NodeId, ViewContext, Widget, command,
+    Binder, Canopy, Context, Core, DefaultBindings, Loader, NodeId, ReadContext, Widget, command,
     commands::FocusDirection,
     derive_commands,
     error::{Error, Result},
@@ -202,7 +202,7 @@ impl Root {
 }
 
 impl Widget for Root {
-    fn render(&mut self, _rndr: &mut canopy::render::Render, _ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, _rndr: &mut canopy::render::Render, _ctx: &dyn ReadContext) -> Result<()> {
         Ok(())
     }
 
@@ -242,7 +242,7 @@ impl Loader for Root {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        ViewContext, Widget,
+        ReadContext, Widget,
         commands::{CommandNode, CommandSpec},
         error::Result,
         geom::Expanse,
@@ -263,7 +263,7 @@ mod tests {
     }
 
     impl Widget for App {
-        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
             Ok(())
         }
 
@@ -289,11 +289,11 @@ mod tests {
     }
 
     impl Widget for FocusLeaf {
-        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
+        fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
             true
         }
 
-        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
             Ok(())
         }
 

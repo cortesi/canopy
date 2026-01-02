@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Loader, ViewContext, Widget,
+        Canopy, Loader, ReadContext, Widget,
         commands::{CommandNode, CommandSpec},
         error::Result,
         geom::Expanse,
@@ -28,7 +28,7 @@ mod tests {
     }
 
     impl Widget for Container {
-        fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
             r.fill("", ctx.view().outer_rect_local(), ' ')
         }
 
@@ -52,7 +52,7 @@ mod tests {
     }
 
     impl Widget for Huge {
-        fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
             r.fill("", ctx.view().outer_rect_local(), 'x')
         }
 
@@ -80,7 +80,7 @@ mod tests {
     }
 
     impl Widget for Root {
-        fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+        fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
             r.fill("", ctx.view().outer_rect_local(), ' ')
         }
 

@@ -1,5 +1,5 @@
 use canopy::{
-    ViewContext, Widget, derive_commands,
+    ReadContext, Widget, derive_commands,
     error::Result,
     geom,
     layout::{Edges, Layout},
@@ -147,7 +147,7 @@ impl Default for Box {
 }
 
 impl Widget for Box {
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
         let outer = ctx.view().outer_rect_local();
         let frame = geom::FrameRects::new(outer, 1);
         if let Some(style) = &self.fill_style {
