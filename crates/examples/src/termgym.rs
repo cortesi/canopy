@@ -390,12 +390,11 @@ impl Widget for TermGym {
             c.add_child(Frame::new().with_glyphs(ROUND_THICK).with_title("terminal"))?;
         c.attach(term_frame_id, stack_id)?;
 
-        c.with_layout(&mut |layout| {
-            *layout = Layout::row().flex_horizontal(1).flex_vertical(1);
-        })?;
-        c.with_layout_of(sidebar_id, &mut |layout| {
-            *layout = Layout::column().fixed_width(24).flex_vertical(1);
-        })?;
+        c.set_layout(Layout::row().flex_horizontal(1).flex_vertical(1))?;
+        c.set_layout_of(
+            sidebar_id,
+            Layout::column().fixed_width(24).flex_vertical(1),
+        )?;
 
         self.add_terminal(c)?;
 

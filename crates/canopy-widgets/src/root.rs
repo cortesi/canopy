@@ -43,16 +43,10 @@ impl Root {
 
         c.set_hidden_of(inspector, !self.inspector_active);
 
-        c.with_layout(&mut |layout| {
-            *layout = Layout::row().flex_horizontal(1).flex_vertical(1);
-        })?;
+        c.set_layout(Layout::row().flex_horizontal(1).flex_vertical(1))?;
 
-        c.with_layout_of(app, &mut |layout| {
-            *layout = Layout::fill();
-        })?;
-        c.with_layout_of(inspector, &mut |layout| {
-            *layout = Layout::fill();
-        })?;
+        c.set_layout_of(app, Layout::fill())?;
+        c.set_layout_of(inspector, Layout::fill())?;
 
         Ok(())
     }
@@ -311,16 +305,12 @@ mod tests {
         let right = canopy.core.create_detached(FocusLeaf::new("right"));
         canopy.core.set_children(app_id, vec![left, right])?;
 
-        canopy.core.with_layout_of(app_id, |layout| {
-            *layout = Layout::row().flex_horizontal(1).flex_vertical(1);
-        })?;
+        canopy
+            .core
+            .set_layout_of(app_id, Layout::row().flex_horizontal(1).flex_vertical(1))?;
 
-        canopy.core.with_layout_of(left, |layout| {
-            *layout = Layout::fill();
-        })?;
-        canopy.core.with_layout_of(right, |layout| {
-            *layout = Layout::fill();
-        })?;
+        canopy.core.set_layout_of(left, Layout::fill())?;
+        canopy.core.set_layout_of(right, Layout::fill())?;
 
         Root::install(&mut canopy.core, app_id)?;
         canopy.set_root_size(Expanse::new(20, 6))?;

@@ -46,9 +46,7 @@ mod tests {
     fn attach_grid(core: &mut Core, grid_root: NodeId, size: Expanse) -> Result<()> {
         let root = core.root_id();
         core.set_children(root, vec![grid_root])?;
-        core.with_layout_of(root, |layout| {
-            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
-        })?;
+        core.set_layout_of(root, Layout::column().flex_horizontal(1).flex_vertical(1))?;
         core.with_layout_of(grid_root, |layout| {
             layout.width = Sizing::Flex(1);
             layout.height = Sizing::Flex(1);
@@ -233,15 +231,13 @@ mod tests {
 
         let root = canopy.core.root_id();
         canopy.core.set_children(root, vec![first, second])?;
-        canopy.core.with_layout_of(root, |layout| {
-            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
-        })?;
-        canopy.core.with_layout_of(first, |layout| {
-            *layout = Layout::column().fixed_width(10).fixed_height(5);
-        })?;
-        canopy.core.with_layout_of(second, |layout| {
-            *layout = Layout::fill();
-        })?;
+        canopy
+            .core
+            .set_layout_of(root, Layout::column().flex_horizontal(1).flex_vertical(1))?;
+        canopy
+            .core
+            .set_layout_of(first, Layout::column().fixed_width(10).fixed_height(5))?;
+        canopy.core.set_layout_of(second, Layout::fill())?;
 
         canopy.core.update_layout(Expanse::new(10, 10))?;
         canopy.core.set_focus(first);

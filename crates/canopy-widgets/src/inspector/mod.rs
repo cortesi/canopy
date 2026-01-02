@@ -26,15 +26,14 @@ impl Inspector {
         let (view_id, _tabs, _logs) = view::View::install(core)?;
         let frame_id = core.create_detached(frame::Frame::new());
         core.set_children(frame_id, vec![view_id])?;
-        core.with_layout_of(frame_id, |layout| {
-            *layout = Layout::fill();
-        })?;
+        core.set_layout_of(frame_id, Layout::fill())?;
 
         let inspector_id = core.create_detached(Self::new());
         core.set_children(inspector_id, vec![frame_id])?;
-        core.with_layout_of(inspector_id, |layout| {
-            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
-        })?;
+        core.set_layout_of(
+            inspector_id,
+            Layout::column().flex_horizontal(1).flex_vertical(1),
+        )?;
 
         Ok(inspector_id)
     }

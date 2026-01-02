@@ -199,9 +199,7 @@ impl Logs {
         }
 
         let list_id = c.add_child_keyed(KEY_LIST, List::<LogEntry>::new())?;
-        c.with_layout_of(list_id, &mut |layout| {
-            *layout = Layout::fill();
-        })?;
+        c.set_layout_of(list_id, Layout::fill())?;
         Ok(())
     }
 

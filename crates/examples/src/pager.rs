@@ -32,9 +32,7 @@ impl Widget for Pager {
         let frame_id = c.add_child(Frame::new())?;
         c.add_child_to(frame_id, Text::new(self.contents.clone()))?;
 
-        c.with_layout(&mut |layout| {
-            *layout = Layout::fill();
-        })?;
+        c.set_layout(Layout::fill())?;
         Ok(())
     }
 

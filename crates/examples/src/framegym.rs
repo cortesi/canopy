@@ -182,16 +182,12 @@ impl Widget for FrameGym {
         let frame_id = c.add_child_keyed(KEY_FRAME, Frame::new().with_title("Frame Gym"))?;
         let pattern_id = c.add_child_to_keyed(frame_id, KEY_PATTERN, TestPattern::new())?;
 
-        c.with_layout(&mut |layout| {
-            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
-        })?;
+        c.set_layout(Layout::column().flex_horizontal(1).flex_vertical(1))?;
         c.with_layout_of(frame_id, &mut |layout| {
             layout.width = Sizing::Flex(1);
             layout.height = Sizing::Flex(1);
         })?;
-        c.with_layout_of(pattern_id, &mut |layout| {
-            *layout = Layout::fill();
-        })?;
+        c.set_layout_of(pattern_id, Layout::fill())?;
         Ok(())
     }
 

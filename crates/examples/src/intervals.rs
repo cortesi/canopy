@@ -75,12 +75,13 @@ impl CounterItem {
         let desired_width = self.label_width().saturating_add(ENTRY_PADDING * 2).max(3);
         let desired_height = ENTRY_HEIGHT;
 
-        ctx.with_layout_of(box_id.into(), &mut |layout| {
-            *layout = Layout::column()
+        ctx.set_layout_of(
+            box_id.into(),
+            Layout::column()
                 .fixed_width(desired_width)
                 .fixed_height(desired_height)
-                .padding(Edges::all(ENTRY_PADDING));
-        })?;
+                .padding(Edges::all(ENTRY_PADDING)),
+        )?;
 
         Ok(())
     }

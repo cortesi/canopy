@@ -41,16 +41,10 @@ impl Widget for Ed {
         let frame_id = c.add_child(Frame::new())?;
         let editor_id = c.add_child_to(frame_id, editor)?;
 
-        c.with_layout_of(editor_id, &mut |layout| {
-            *layout = Layout::fill().padding(Edges::all(1));
-        })?;
-        c.with_layout_of(frame_id, &mut |layout| {
-            *layout = Layout::fill().padding(Edges::all(1));
-        })?;
+        c.set_layout_of(editor_id, Layout::fill().padding(Edges::all(1)))?;
+        c.set_layout_of(frame_id, Layout::fill().padding(Edges::all(1)))?;
 
-        c.with_layout(&mut |layout| {
-            *layout = Layout::fill();
-        })?;
+        c.set_layout(Layout::fill())?;
         Ok(())
     }
 

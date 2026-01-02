@@ -161,26 +161,21 @@ impl Todo {
         let status_id = c.add_child_to(main_content_id, StatusBar)?;
 
         // Set Todo (self) to use Stack direction for modal overlay support
-        c.with_layout(&mut |layout| {
-            *layout = Layout::fill().direction(Direction::Stack);
-        })?;
+        c.set_layout(Layout::fill().direction(Direction::Stack))?;
 
         // Main content fills the space
-        c.with_layout_of(main_content_id, &mut |layout| {
-            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
-        })?;
+        c.set_layout_of(
+            main_content_id,
+            Layout::column().flex_horizontal(1).flex_vertical(1),
+        )?;
 
         c.with_layout_of(frame_id, &mut |layout| {
             layout.width = Sizing::Flex(1);
             layout.height = Sizing::Flex(1);
         })?;
-        c.with_layout_of(list_id, &mut |layout| {
-            *layout = Layout::fill();
-        })?;
+        c.set_layout_of(list_id, Layout::fill())?;
 
-        c.with_layout_of(status_id, &mut |layout| {
-            *layout = Layout::row().flex_horizontal(1).fixed_height(1);
-        })?;
+        c.set_layout_of(status_id, Layout::row().flex_horizontal(1).fixed_height(1))?;
 
         // Initially only show main content
         c.set_children(vec![main_content_id])?;
@@ -216,9 +211,7 @@ impl Todo {
             layout.max_width = Some(50);
         })?;
 
-        c.with_layout_of(input_id, &mut |layout| {
-            *layout = Layout::fill();
-        })?;
+        c.set_layout_of(input_id, Layout::fill())?;
 
         Ok(())
     }

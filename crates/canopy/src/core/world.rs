@@ -199,6 +199,11 @@ impl Core {
         Ok(())
     }
 
+    /// Set the layout for a node.
+    pub fn set_layout_of(&mut self, node: NodeId, layout: Layout) -> Result<()> {
+        self.with_layout_of(node, |l| *l = layout)
+    }
+
     /// Replace the widget stored at a node.
     pub fn set_widget<W>(&mut self, node_id: NodeId, widget: W)
     where

@@ -717,6 +717,16 @@ impl dyn Context + '_ {
         self.read().first_leaf(root)
     }
 
+    /// Set the layout for the current node.
+    pub fn set_layout(&mut self, layout: Layout) -> Result<()> {
+        self.with_layout(&mut |l| *l = layout)
+    }
+
+    /// Set the layout for a specific node.
+    pub fn set_layout_of(&mut self, node: NodeId, layout: Layout) -> Result<()> {
+        self.with_layout_of(node, &mut |l| *l = layout)
+    }
+
     /// Execute a closure with mutable access to a widget of type `W`.
     pub fn with_widget<W, R>(
         &mut self,
@@ -922,7 +932,7 @@ impl dyn Context + '_ {
     /// Execute a closure with the focused descendant of type `W`, or the first if none focused.
     pub fn with_focused_or_first_descendant<W: Widget + 'static, R>(
         &mut self,
-        f: impl FnMut(&mut W, &mut dyn Context) -> Result<R>,
+        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<R> {
         let node = (self as &dyn ReadContext)
             .focused_or_first_descendant::<W>()

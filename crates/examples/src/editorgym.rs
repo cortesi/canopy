@@ -68,17 +68,13 @@ fn add_editor_frame(
     let frame_id = c.create_detached(Frame::new().with_title(title));
     let editor_id = c.add_child_to(frame_id, editor)?;
 
-    c.with_layout_of(editor_id, &mut |layout| {
-        *layout = Layout::fill();
-    })?;
+    c.set_layout_of(editor_id, Layout::fill())?;
 
     let mut frame_layout = Layout::column().padding(Edges::all(1)).flex_horizontal(1);
     if let Some(height) = height {
         frame_layout = frame_layout.fixed_height(height);
     }
-    c.with_layout_of(frame_id, &mut |layout| {
-        *layout = frame_layout;
-    })?;
+    c.set_layout_of(frame_id, frame_layout)?;
 
     Ok(frame_id)
 }

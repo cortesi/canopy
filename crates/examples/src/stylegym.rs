@@ -363,12 +363,13 @@ impl Widget for Stylegym {
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         // Create left frame (controls) - preserve Frame's padding for border
         let left_frame_id = c.add_child_keyed(KEY_CONTROLS, Frame::new().with_title("Controls"))?;
-        c.with_layout_of(left_frame_id, &mut |layout| {
-            *layout = Layout::column()
+        c.set_layout_of(
+            left_frame_id,
+            Layout::column()
                 .fixed_width(32)
                 .flex_vertical(1)
-                .padding(Edges::all(1));
-        })?;
+                .padding(Edges::all(1)),
+        )?;
 
         // Create theme dropdown with its own frame - no fixed height so it can expand
         let theme_frame_id = c.add_child_to_keyed(
@@ -381,9 +382,10 @@ impl Widget for Stylegym {
             KEY_THEME_DROPDOWN,
             Dropdown::new(available_themes()),
         )?;
-        c.with_layout_of(theme_frame_id, &mut |layout| {
-            *layout = Layout::column().flex_horizontal(1).padding(Edges::all(1));
-        })?;
+        c.set_layout_of(
+            theme_frame_id,
+            Layout::column().flex_horizontal(1).padding(Edges::all(1)),
+        )?;
 
         // Create effects selector with its own frame
         let effects_frame_id = c.add_child_to_keyed(
@@ -396,18 +398,20 @@ impl Widget for Stylegym {
             KEY_EFFECTS_SELECTOR,
             Selector::new(available_effects()),
         )?;
-        c.with_layout_of(effects_frame_id, &mut |layout| {
-            *layout = Layout::column()
+        c.set_layout_of(
+            effects_frame_id,
+            Layout::column()
                 .flex_horizontal(1)
                 .flex_vertical(1)
-                .padding(Edges::all(1));
-        })?;
+                .padding(Edges::all(1)),
+        )?;
 
         // Create right container with Stack layout for modal overlay
         let right_container_id = c.add_child_keyed(KEY_RIGHT_CONTAINER, Container)?;
-        c.with_layout_of(right_container_id, &mut |layout| {
-            *layout = Layout::fill().direction(Direction::Stack);
-        })?;
+        c.set_layout_of(
+            right_container_id,
+            Layout::fill().direction(Direction::Stack),
+        )?;
 
         // Create right frame (demo content)
         let right_frame_id = c.add_child_to_keyed(
@@ -416,9 +420,7 @@ impl Widget for Stylegym {
             Frame::new().with_title("Demo"),
         )?;
         c.add_child_to(right_frame_id, DemoContent)?;
-        c.with_layout_of(right_frame_id, &mut |layout| {
-            *layout = Layout::fill().padding(Edges::all(1));
-        })?;
+        c.set_layout_of(right_frame_id, Layout::fill().padding(Edges::all(1)))?;
 
         Ok(())
     }

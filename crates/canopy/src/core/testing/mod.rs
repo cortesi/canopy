@@ -65,12 +65,8 @@ mod tests {
             .core
             .set_children(canopy.core.root, vec![left, right])?;
 
-        canopy.core.with_layout_of(left, |layout| {
-            *layout = Layout::fill();
-        })?;
-        canopy.core.with_layout_of(right, |layout| {
-            *layout = Layout::fill();
-        })?;
+        canopy.core.set_layout_of(left, Layout::fill())?;
+        canopy.core.set_layout_of(right, Layout::fill())?;
 
         canopy.set_root_size(Expanse::new(20, 10))?;
         canopy.render(&mut tr)?;
@@ -90,12 +86,8 @@ mod tests {
             .core
             .set_children(canopy.core.root, vec![left, right])?;
 
-        canopy.core.with_layout_of(left, |layout| {
-            *layout = Layout::fill();
-        })?;
-        canopy.core.with_layout_of(right, |layout| {
-            *layout = Layout::fill();
-        })?;
+        canopy.core.set_layout_of(left, Layout::fill())?;
+        canopy.core.set_layout_of(right, Layout::fill())?;
 
         canopy.set_root_size(Expanse::new(20, 10))?;
         canopy.render(&mut tr)?;

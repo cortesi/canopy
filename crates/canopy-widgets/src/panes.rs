@@ -179,16 +179,15 @@ impl Panes {
 
         c.set_children(active_columns.clone())?;
 
-        c.with_layout(&mut |layout| {
-            *layout = Layout::row().flex_horizontal(1).flex_vertical(1);
-        })?;
+        c.set_layout(Layout::row().flex_horizontal(1).flex_vertical(1))?;
 
         for (idx, column_node) in active_columns.iter().enumerate() {
             let pane_nodes = self.columns.get(idx).cloned().unwrap_or_default();
             c.set_children_of(*column_node, pane_nodes.clone())?;
-            c.with_layout_of(*column_node, &mut |layout| {
-                *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
-            })?;
+            c.set_layout_of(
+                *column_node,
+                Layout::column().flex_horizontal(1).flex_vertical(1),
+            )?;
             for pane in pane_nodes {
                 c.with_layout_of(pane, &mut |layout| {
                     layout.width = Sizing::Flex(1);

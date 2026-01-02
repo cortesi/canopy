@@ -43,15 +43,10 @@ impl Widget for BenchmarkEditorWrapper {
             .add_child_keyed(KEY_EDITOR, editor)
             .expect("Failed to attach editor");
 
-        c.with_layout(&mut |layout| {
-            *layout = Layout::fill();
-        })
-        .expect("Failed to style root");
+        c.set_layout(Layout::fill()).expect("Failed to style root");
 
-        c.with_layout_of(editor_id, &mut |layout| {
-            *layout = Layout::fill();
-        })
-        .expect("Failed to style editor");
+        c.set_layout_of(editor_id, Layout::fill())
+            .expect("Failed to style editor");
         Ok(())
     }
 }

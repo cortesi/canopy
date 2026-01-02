@@ -316,27 +316,13 @@ fn build_tree(core: &mut Core) -> Result<TestTree> {
     core.set_children(a, vec![a_a, a_b])?;
     core.set_children(b, vec![b_a, b_b])?;
 
-    core.with_layout_of(core.root, |layout| {
-        *layout = Layout::row().flex_horizontal(1).flex_vertical(1);
-    })?;
-    core.with_layout_of(a, |layout| {
-        *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
-    })?;
-    core.with_layout_of(b, |layout| {
-        *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
-    })?;
-    core.with_layout_of(a_a, |layout| {
-        *layout = Layout::fill();
-    })?;
-    core.with_layout_of(a_b, |layout| {
-        *layout = Layout::fill();
-    })?;
-    core.with_layout_of(b_a, |layout| {
-        *layout = Layout::fill();
-    })?;
-    core.with_layout_of(b_b, |layout| {
-        *layout = Layout::fill();
-    })?;
+    core.set_layout_of(core.root, Layout::row().flex_horizontal(1).flex_vertical(1))?;
+    core.set_layout_of(a, Layout::column().flex_horizontal(1).flex_vertical(1))?;
+    core.set_layout_of(b, Layout::column().flex_horizontal(1).flex_vertical(1))?;
+    core.set_layout_of(a_a, Layout::fill())?;
+    core.set_layout_of(a_b, Layout::fill())?;
+    core.set_layout_of(b_a, Layout::fill())?;
+    core.set_layout_of(b_b, Layout::fill())?;
 
     Ok(TestTree {
         root: core.root,

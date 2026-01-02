@@ -64,12 +64,8 @@ impl Widget for EditorHost {
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let editor = Editor::with_config(self.text.clone(), self.config.clone());
         let editor_id = c.add_child_keyed(KEY_EDITOR, editor)?;
-        c.with_layout(&mut |layout| {
-            *layout = Layout::fill();
-        })?;
-        c.with_layout_of(editor_id, &mut |layout| {
-            *layout = Layout::fill();
-        })?;
+        c.set_layout(Layout::fill())?;
+        c.set_layout_of(editor_id, Layout::fill())?;
         Ok(())
     }
 

@@ -244,9 +244,7 @@ impl Widget for CharGym {
                 .with_canvas_width(CanvasWidth::Intrinsic),
         )?;
 
-        c.with_layout(&mut |layout| {
-            *layout = Layout::fill();
-        })?;
+        c.set_layout(Layout::fill())?;
         Ok(())
     }
 

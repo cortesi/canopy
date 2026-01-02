@@ -31,15 +31,12 @@ impl View {
         let logs = core.create_detached(super::logs::Logs::new());
         let view_id = core.create_detached(Self::new());
         core.set_children(view_id, vec![tabs, logs])?;
-        core.with_layout_of(view_id, |layout| {
-            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
-        })?;
-        core.with_layout_of(tabs, |layout| {
-            *layout = Layout::column().flex_horizontal(1).fixed_height(1);
-        })?;
-        core.with_layout_of(logs, |layout| {
-            *layout = Layout::fill();
-        })?;
+        core.set_layout_of(
+            view_id,
+            Layout::column().flex_horizontal(1).flex_vertical(1),
+        )?;
+        core.set_layout_of(tabs, Layout::column().flex_horizontal(1).fixed_height(1))?;
+        core.set_layout_of(logs, Layout::fill())?;
         Ok((view_id, tabs, logs))
     }
 }

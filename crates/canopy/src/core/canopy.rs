@@ -878,9 +878,7 @@ mod tests {
         let app_id = canopy
             .core
             .add_child_to_boxed(canopy.core.root, Box::new(StaticWidget::new()))?;
-        canopy
-            .core
-            .with_layout_of(app_id, |layout| *layout = Layout::fill())?;
+        canopy.core.set_layout_of(app_id, Layout::fill())?;
         canopy.set_root_size(Expanse::new(10, 6))?;
 
         let (_, mut render) = TestRender::create();
@@ -904,9 +902,7 @@ mod tests {
         let app_id = canopy
             .core
             .add_child_to_boxed(canopy.core.root, Box::new(CaptureWidget::new()))?;
-        canopy
-            .core
-            .with_layout_of(app_id, |layout| *layout = Layout::fill())?;
+        canopy.core.set_layout_of(app_id, Layout::fill())?;
         canopy.set_root_size(Expanse::new(10, 6))?;
 
         let (_, mut render) = TestRender::create();
@@ -1466,9 +1462,9 @@ mod tests {
         let child = canopy
             .core
             .add_child_to_boxed(canopy.core.root, Box::new(Child))?;
-        canopy.core.with_layout_of(child, |layout| {
-            *layout = Layout::column().fixed_width(0).fixed_height(0);
-        })?;
+        canopy
+            .core
+            .set_layout_of(child, Layout::column().fixed_width(0).fixed_height(0))?;
 
         canopy.set_root_size(size)?;
         canopy.render(&mut cr)?;

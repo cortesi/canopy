@@ -116,17 +116,15 @@ mod tests {
         h.canopy.core.set_children(h.root, vec![node_a])?;
         h.canopy.core.set_children(node_a, vec![node_b])?;
 
-        h.canopy.core.with_layout_of(h.root, |layout| {
-            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
-        })?;
+        h.canopy
+            .core
+            .set_layout_of(h.root, Layout::column().flex_horizontal(1).flex_vertical(1))?;
 
-        h.canopy.core.with_layout_of(node_a, |layout| {
-            *layout = Layout::column().fixed_width(10).fixed_height(5);
-        })?;
+        h.canopy
+            .core
+            .set_layout_of(node_a, Layout::column().fixed_width(10).fixed_height(5))?;
 
-        h.canopy.core.with_layout_of(node_b, |layout| {
-            *layout = Layout::fill();
-        })?;
+        h.canopy.core.set_layout_of(node_b, Layout::fill())?;
 
         h.canopy.set_root_size(Expanse::new(30, 10))?;
         h.render()?;
@@ -156,21 +154,22 @@ mod tests {
         h.canopy.core.set_children(h.root, vec![container])?;
         h.canopy.core.set_children(container, vec![top, bottom])?;
 
-        h.canopy.core.with_layout_of(h.root, |layout| {
-            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
-        })?;
+        h.canopy
+            .core
+            .set_layout_of(h.root, Layout::column().flex_horizontal(1).flex_vertical(1))?;
 
-        h.canopy.core.with_layout_of(container, |layout| {
-            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
-        })?;
+        h.canopy.core.set_layout_of(
+            container,
+            Layout::column().flex_horizontal(1).flex_vertical(1),
+        )?;
 
-        h.canopy.core.with_layout_of(top, |layout| {
-            *layout = Layout::column().fixed_width(10).fixed_height(10);
-        })?;
+        h.canopy
+            .core
+            .set_layout_of(top, Layout::column().fixed_width(10).fixed_height(10))?;
 
-        h.canopy.core.with_layout_of(bottom, |layout| {
-            *layout = Layout::column().fixed_width(10).fixed_height(0);
-        })?;
+        h.canopy
+            .core
+            .set_layout_of(bottom, Layout::column().fixed_width(10).fixed_height(0))?;
 
         h.canopy.set_root_size(Expanse::new(10, 10))?;
         h.render()?;
@@ -197,9 +196,9 @@ mod tests {
 
         let tree = build_split_tree(&mut h.canopy.core, 5, true)?;
         h.canopy.core.set_children(h.root, vec![tree])?;
-        h.canopy.core.with_layout_of(h.root, |layout| {
-            *layout = Layout::column().flex_horizontal(1).flex_vertical(1);
-        })?;
+        h.canopy
+            .core
+            .set_layout_of(h.root, Layout::column().flex_horizontal(1).flex_vertical(1))?;
         style_flex_child(&mut h.canopy.core, tree)?;
 
         h.render()?;
