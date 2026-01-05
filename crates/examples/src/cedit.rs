@@ -6,7 +6,7 @@ use canopy::{
     render::Render,
 };
 use canopy_widgets::{
-    Frame, Root,
+    Frame, Pad, Root,
     editor::{EditMode, Editor, EditorConfig, WrapMode, highlight::SyntectHighlighter},
 };
 
@@ -38,11 +38,11 @@ impl Widget for Ed {
         editor.set_highlighter(Some(Box::new(SyntectHighlighter::new(
             self.extension.as_str(),
         ))));
-        let frame_id = c.add_child(Frame::new())?;
+        let pad_id = c.add_child(Pad::uniform(1))?;
+        let frame_id = c.add_child_to(pad_id, Frame::new())?;
         let editor_id = c.add_child_to(frame_id, editor)?;
 
         c.set_layout_of(editor_id, Layout::fill().padding(Edges::all(1)))?;
-        c.set_layout_of(frame_id, Layout::fill().padding(Edges::all(1)))?;
 
         c.set_layout(Layout::fill())?;
         Ok(())

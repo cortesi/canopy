@@ -22,8 +22,8 @@ pub mod pager;
 pub mod stylegym;
 /// Terminal gym example nodes.
 pub mod termgym;
-/// Text display example nodes.
-pub mod test_text;
+/// Text gym example nodes.
+pub mod textgym;
 
 #[cfg(test)]
 mod tests;

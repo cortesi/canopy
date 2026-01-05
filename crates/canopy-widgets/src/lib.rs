@@ -27,6 +27,8 @@ pub mod inspector;
 mod list;
 /// Modal overlay container.
 mod modal;
+/// Padding container widget.
+mod pad;
 /// 2D grid layout of panes.
 mod panes;
 /// Application root widget.
@@ -51,6 +53,7 @@ pub use image_view::ImageView;
 pub use input::Input;
 pub use list::{List, ListActivateConfig, Selectable};
 pub use modal::Modal;
+pub use pad::Pad;
 pub use panes::Panes;
 pub use root::Root;
 pub use selector::{Selector, SelectorItem};

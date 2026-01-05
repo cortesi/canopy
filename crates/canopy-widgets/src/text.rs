@@ -40,6 +40,8 @@ pub struct Text {
     selected_style: Option<String>,
     /// Selection state for use in lists.
     selected: bool,
+    /// Tab stop width in columns.
+    tab_stop: usize,
     /// Cached wrapped text for the last wrap width.
     wrap_cache: RefCell<Option<WrapCache>>,
 }
@@ -61,6 +63,7 @@ impl Text {
             style: String::from("text"),
             selected_style: None,
             selected: false,
+            tab_stop: 4,
             wrap_cache: RefCell::new(None),
         }
     }
@@ -87,6 +90,13 @@ impl Text {
     /// Set the text rendering style when selected.
     pub fn with_selected_style(mut self, style: impl Into<String>) -> Self {
         self.selected_style = Some(style.into());
+        self
+    }
+
+    /// Set the tab stop width for tab expansion.
+    pub fn with_tab_stop(mut self, tab_stop: usize) -> Self {
+        self.tab_stop = tab_stop.max(1);
+        self.wrap_cache.borrow_mut().take();
         self
     }
 
@@ -172,7 +182,8 @@ impl Text {
         let mut cache = self.wrap_cache.borrow_mut();
         let rebuild = cache.as_ref().is_none_or(|cached| cached.width != width);
         if rebuild {
-            let lines = textwrap::wrap(&self.raw, width)
+            let expanded = text::expand_tabs(&self.raw, self.tab_stop);
+            let lines = textwrap::wrap(&expanded, width)
                 .into_iter()
                 .map(|line| line.to_string())
                 .collect::<Vec<_>>();
@@ -233,8 +244,8 @@ impl Widget for Text {
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
-        let raw_width = self
-            .raw
+        let expanded = text::expand_tabs(&self.raw, self.tab_stop);
+        let raw_width = expanded
             .lines()
             .map(UnicodeWidthStr::width)
             .max()

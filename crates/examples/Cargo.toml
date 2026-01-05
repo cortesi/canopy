@@ -67,5 +67,5 @@ name = "stylegym"
 path = "examples/stylegym.rs"
 
 [[example]]
-name = "test_text"
-path = "examples/test_text.rs"
+name = "textgym"
+path = "examples/textgym.rs"

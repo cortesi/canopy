@@ -1,5 +1,3 @@
-use std::iter::repeat_n;
-
 use canopy::{
     Context, EventOutcome, ReadContext, Widget, command, cursor, derive_commands,
     error::Result,
@@ -10,9 +8,8 @@ use canopy::{
     state::NodeName,
     text,
 };
-use unicode_segmentation::UnicodeSegmentation;
 
-use crate::editor::{TextBuffer, TextPosition, tab_width};
+use crate::editor::{TextBuffer, TextPosition};
 
 /// Default tab stop width for single-line inputs.
 const DEFAULT_TAB_STOP: usize = 4;
@@ -80,7 +77,7 @@ impl InputBuffer {
         if self.view_width == 0 {
             return String::new();
         }
-        let expanded = expand_tabs(&self.value, self.tab_stop);
+        let expanded = text::expand_tabs(&self.value, self.tab_stop);
         let (out, _) = text::slice_by_columns(&expanded, self.scroll, self.view_width);
         out.to_string()
     }
@@ -297,23 +294,6 @@ impl Widget for Input {
 /// Replace newlines in single-line input values.
 fn sanitize_single_line(value: &str) -> String {
     value.replace(['\n', '\r'], " ")
-}
-
-/// Expand tabs into spaces using the configured tab stop.
-fn expand_tabs(text: &str, tab_stop: usize) -> String {
-    let mut out = String::new();
-    let mut col = 0usize;
-    for grapheme in text.graphemes(true) {
-        if grapheme == "\t" {
-            let width = tab_width(col, tab_stop);
-            out.extend(repeat_n(' ', width));
-            col = col.saturating_add(width);
-        } else {
-            out.push_str(grapheme);
-            col = col.saturating_add(text::grapheme_width(grapheme));
-        }
-    }
-    out
 }
 
 /// Convert a char index to a byte index in a string.
