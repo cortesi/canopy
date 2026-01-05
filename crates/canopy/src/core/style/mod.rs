@@ -581,11 +581,11 @@ impl StyleManager {
     /// Decrement the render level and pop any layers at this level.
     pub fn pop(&mut self) {
         if self.level != 0 {
-            if self.layer_levels.last() == Some(&self.level) {
+            while self.layer_levels.last() == Some(&self.level) {
                 self.layers.pop();
                 self.layer_levels.pop();
             }
-            self.level -= 1
+            self.level -= 1;
         }
     }
 
@@ -841,6 +841,21 @@ mod tests {
         assert_eq!(resolved.bg, Color::Blue);
 
         Ok(())
+    }
+
+    #[test]
+    fn pop_pops_all_layers_at_level() {
+        let mut sm = StyleManager::default();
+        sm.reset();
+        sm.push();
+
+        sm.push_layer("button");
+        sm.push_layer("selected");
+
+        sm.pop();
+
+        assert!(sm.layers.is_empty());
+        assert_eq!(sm.layer_levels, vec![0]);
     }
 
     #[test]
