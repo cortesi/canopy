@@ -20,8 +20,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let mut cnpy = Canopy::new();
-    Root::load(&mut cnpy);
-    Pager::load(&mut cnpy);
+    Root::load(&mut cnpy)?;
+    Pager::load(&mut cnpy)?;
     setup_bindings(&mut cnpy);
 
     let contents = fs::read_to_string(filename)?;

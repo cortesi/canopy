@@ -28,8 +28,8 @@ struct Args {
 fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
 
-    Root::load(&mut cnpy);
-    EditorGym::load(&mut cnpy);
+    Root::load(&mut cnpy)?;
+    EditorGym::load(&mut cnpy)?;
     setup_bindings(&mut cnpy);
 
     let args = Args::parse();

@@ -51,8 +51,9 @@ impl Widget for BenchmarkEditorWrapper {
 }
 
 impl Loader for BenchmarkEditorWrapper {
-    fn load(c: &mut Canopy) {
-        c.add_commands::<Editor>();
+    fn load(c: &mut Canopy) -> Result<()> {
+        c.add_commands::<Editor>()?;
+        Ok(())
     }
 }
 

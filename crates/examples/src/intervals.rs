@@ -230,9 +230,10 @@ impl Widget for Intervals {
 }
 
 impl Loader for Intervals {
-    fn load(c: &mut Canopy) {
-        c.add_commands::<Self>();
-        c.add_commands::<List<CounterItem>>();
+    fn load(c: &mut Canopy) -> Result<()> {
+        c.add_commands::<Self>()?;
+        c.add_commands::<List<CounterItem>>()?;
+        Ok(())
     }
 }
 

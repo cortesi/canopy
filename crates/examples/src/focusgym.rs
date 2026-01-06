@@ -206,9 +206,10 @@ impl Widget for FocusGym {
 }
 
 impl Loader for FocusGym {
-    fn load(c: &mut Canopy) {
-        c.add_commands::<Self>();
-        c.add_commands::<Block>();
+    fn load(c: &mut Canopy) -> Result<()> {
+        c.add_commands::<Self>()?;
+        c.add_commands::<Block>()?;
+        Ok(())
     }
 }
 

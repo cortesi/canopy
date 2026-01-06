@@ -27,8 +27,8 @@ struct Args {
 /// Run the stylegym example.
 fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
-    Root::load(&mut cnpy);
-    Stylegym::load(&mut cnpy);
+    Root::load(&mut cnpy)?;
+    Stylegym::load(&mut cnpy)?;
     setup_bindings(&mut cnpy)?;
 
     let args = Args::parse();

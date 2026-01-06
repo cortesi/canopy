@@ -76,9 +76,10 @@ impl Widget for EditorHost {
 }
 
 impl Loader for EditorHost {
-    fn load(c: &mut Canopy) {
-        c.add_commands::<Editor>();
-        c.add_commands::<Self>();
+    fn load(c: &mut Canopy) -> Result<()> {
+        c.add_commands::<Editor>()?;
+        c.add_commands::<Self>()?;
+        Ok(())
     }
 }
 

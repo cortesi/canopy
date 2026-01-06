@@ -27,8 +27,8 @@ struct Args {
 /// Run the terminal gym example.
 fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
-    Root::load(&mut cnpy);
-    TermGym::load(&mut cnpy);
+    Root::load(&mut cnpy)?;
+    TermGym::load(&mut cnpy)?;
     setup_bindings(&mut cnpy);
 
     let args = Args::parse();

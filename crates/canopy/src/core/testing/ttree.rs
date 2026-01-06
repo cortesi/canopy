@@ -342,13 +342,13 @@ pub fn run_ttree(func: impl FnOnce(&mut Canopy, TestRender, TestTree) -> Result<
 
     let tree = build_tree(&mut c.core)?;
 
-    c.add_commands::<R>();
-    c.add_commands::<BaLa>();
-    c.add_commands::<BaLb>();
-    c.add_commands::<BbLa>();
-    c.add_commands::<BbLb>();
-    c.add_commands::<Ba>();
-    c.add_commands::<Bb>();
+    c.add_commands::<R>()?;
+    c.add_commands::<BaLa>()?;
+    c.add_commands::<BaLb>()?;
+    c.add_commands::<BbLa>()?;
+    c.add_commands::<BbLb>()?;
+    c.add_commands::<Ba>()?;
+    c.add_commands::<Bb>()?;
 
     c.set_root_size(Expanse::new(100, 100))?;
     reset_state();

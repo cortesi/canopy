@@ -1,4 +1,4 @@
-use canopy::{Loader, error::Result, testing::harness::Harness};
+use canopy::{error::Result, testing::harness::Harness};
 use canopy_widgets::{List, Panes};
 
 use crate::listgym::{ListEntry, ListGym};
@@ -43,10 +43,7 @@ fn focused_list_index(harness: &mut Harness) -> Result<Option<usize>> {
 
 fn create_test_harness() -> Result<Harness> {
     let root = ListGym::new();
-    let mut harness = Harness::new(root)?;
-
-    // Load the commands so scripts can find them.
-    ListGym::load(&mut harness.canopy);
+    let harness = Harness::new(root)?;
 
     Ok(harness)
 }

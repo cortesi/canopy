@@ -42,8 +42,9 @@ impl Widget for Pager {
 }
 
 impl Loader for Pager {
-    fn load(c: &mut Canopy) {
-        c.add_commands::<Text>();
+    fn load(c: &mut Canopy) -> Result<()> {
+        c.add_commands::<Text>()?;
+        Ok(())
     }
 }
 

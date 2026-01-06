@@ -198,9 +198,10 @@ impl Widget for FrameGym {
 }
 
 impl Loader for FrameGym {
-    fn load(c: &mut Canopy) {
-        c.add_commands::<Self>();
-        c.add_commands::<TestPattern>();
+    fn load(c: &mut Canopy) -> Result<()> {
+        c.add_commands::<Self>()?;
+        c.add_commands::<TestPattern>()?;
+        Ok(())
     }
 }
 

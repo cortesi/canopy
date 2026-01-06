@@ -71,10 +71,11 @@ mod tests {
     }
 
     impl Loader for Root {
-        fn load(c: &mut Canopy) {
-            c.add_commands::<Self>();
-            c.add_commands::<NodeA>();
-            c.add_commands::<NodeB>();
+        fn load(c: &mut Canopy) -> Result<()> {
+            c.add_commands::<Self>()?;
+            c.add_commands::<NodeA>()?;
+            c.add_commands::<NodeB>()?;
+            Ok(())
         }
     }
 

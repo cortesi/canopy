@@ -73,9 +73,10 @@ impl DefaultBindings for Inspector {
 }
 
 impl Loader for Inspector {
-    fn load(c: &mut Canopy) {
-        c.add_commands::<Self>();
-        c.add_commands::<tabs::Tabs>();
-        Logs::load(c);
+    fn load(c: &mut Canopy) -> Result<()> {
+        c.add_commands::<Self>()?;
+        c.add_commands::<tabs::Tabs>()?;
+        Logs::load(c)?;
+        Ok(())
     }
 }

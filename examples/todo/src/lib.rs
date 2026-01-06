@@ -369,10 +369,11 @@ impl Widget for Todo {
 }
 
 impl Loader for Todo {
-    fn load(c: &mut Canopy) {
-        c.add_commands::<Todo>();
-        c.add_commands::<List<TodoEntry>>();
-        c.add_commands::<Input>();
+    fn load(c: &mut Canopy) -> Result<()> {
+        c.add_commands::<Todo>()?;
+        c.add_commands::<List<TodoEntry>>()?;
+        c.add_commands::<Input>()?;
+        Ok(())
     }
 }
 
@@ -419,18 +420,19 @@ pub fn open_store(path: &str) -> AnyResult<()> {
     store::open(path)
 }
 
-pub fn setup_app(cnpy: &mut Canopy) {
-    Root::load(cnpy);
-    <Todo as Loader>::load(cnpy);
+pub fn setup_app(cnpy: &mut Canopy) -> Result<()> {
+    Root::load(cnpy)?;
+    <Todo as Loader>::load(cnpy)?;
     style(cnpy);
     bind_keys(cnpy);
+    Ok(())
 }
 
 pub fn create_app(db_path: &str) -> AnyResult<Canopy> {
     open_store(db_path)?;
 
     let mut cnpy = Canopy::new();
-    setup_app(&mut cnpy);
+    setup_app(&mut cnpy)?;
 
     let todo = Todo::new()?;
     let app_id = cnpy.core.create_detached(todo);

@@ -53,7 +53,7 @@ fn list_len(h: &mut Harness) -> usize {
 fn app(path: &str) -> Result<Harness> {
     open_store(db_path(path).to_str().unwrap())?;
     let mut h = Harness::new(Todo::new()?)?;
-    setup_app(&mut h.canopy);
+    setup_app(&mut h.canopy)?;
     h.render()?;
     Ok(h)
 }

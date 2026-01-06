@@ -54,9 +54,10 @@ impl Widget for Ed {
 }
 
 impl Loader for Ed {
-    fn load(c: &mut Canopy) {
-        c.add_commands::<Self>();
-        c.add_commands::<Editor>();
+    fn load(c: &mut Canopy) -> Result<()> {
+        c.add_commands::<Self>()?;
+        c.add_commands::<Editor>()?;
+        Ok(())
     }
 }
 

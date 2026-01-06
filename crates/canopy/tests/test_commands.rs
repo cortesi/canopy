@@ -6,9 +6,9 @@ mod tests {
 
     use canopy::{
         Canopy, Context, ReadContext, Widget, command,
-        commands::{ArgValue, CommandNode, dispatch},
+        commands::{ArgValue, CommandDispatchKind, CommandError, CommandNode, dispatch},
         derive_commands,
-        error::Result,
+        error::{Error, Result},
         render::Render,
     };
 
@@ -59,7 +59,7 @@ mod tests {
         reset_state();
 
         let mut canopy = Canopy::new();
-        canopy.add_commands::<TestLeaf>();
+        canopy.add_commands::<TestLeaf>()?;
         let leaf_id = canopy.core.create_detached(TestLeaf);
         let branch_id = canopy.core.create_detached(TestBranch);
         canopy.core.set_children(branch_id, vec![leaf_id])?;
@@ -72,6 +72,45 @@ mod tests {
 
         assert_eq!(result, ArgValue::Null);
         assert_eq!(state_path(), vec!["test_leaf.c_leaf()"]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn duplicate_command_ids_error() -> Result<()> {
+        let mut canopy = Canopy::new();
+        canopy.add_commands::<TestLeaf>()?;
+
+        let err = canopy.add_commands::<TestLeaf>().unwrap_err();
+        let id = TestLeaf::cmd_c_leaf().id.0.to_string();
+
+        assert!(matches!(
+            err,
+            Error::Command(CommandError::DuplicateCommand { id: ref dup_id })
+                if dup_id == &id
+        ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn node_dispatch_reports_no_target() -> Result<()> {
+        let mut canopy = Canopy::new();
+        canopy.add_commands::<TestLeaf>()?;
+        let inv = TestLeaf::cmd_c_leaf().call_with(()).invocation();
+
+        let root_id = canopy.core.root_id();
+        let err = dispatch(&mut canopy.core, root_id, &inv).unwrap_err();
+        let owner_name = match TestLeaf::cmd_c_leaf().dispatch {
+            CommandDispatchKind::Node { owner } => owner,
+            CommandDispatchKind::Free => "free",
+        };
+
+        assert!(matches!(
+            err,
+            CommandError::NoTarget { ref id, ref owner }
+                if id == inv.id.0 && owner == owner_name
+        ));
 
         Ok(())
     }

@@ -254,8 +254,9 @@ impl Widget for CharGym {
 }
 
 impl Loader for CharGym {
-    fn load(c: &mut Canopy) {
-        c.add_commands::<Text>();
+    fn load(c: &mut Canopy) -> Result<()> {
+        c.add_commands::<Text>()?;
+        Ok(())
     }
 }
 

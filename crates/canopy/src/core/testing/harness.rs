@@ -54,7 +54,7 @@ impl<W: Widget + Loader + 'static> HarnessBuilder<W> {
         let render = NopBackend::new();
         let mut canopy = Canopy::new();
 
-        <W as Loader>::load(&mut canopy);
+        <W as Loader>::load(&mut canopy)?;
         canopy.core.set_widget(canopy.core.root, self.root);
         canopy.core.with_layout_of(canopy.core.root, |layout| {
             *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
@@ -79,7 +79,7 @@ impl Harness {
     pub fn with_size<W: Widget + Loader + 'static>(root: W, size: Expanse) -> Result<Self> {
         let render = NopBackend::new();
         let mut canopy = Canopy::new();
-        <W as Loader>::load(&mut canopy);
+        <W as Loader>::load(&mut canopy)?;
         canopy.core.set_widget(canopy.core.root, root);
         canopy.set_root_size(size)?;
         Ok(Self {

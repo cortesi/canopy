@@ -782,8 +782,9 @@ mod tests {
     use crate::Text;
 
     impl Loader for List<Text> {
-        fn load(c: &mut Canopy) {
-            c.add_commands::<Self>();
+        fn load(c: &mut Canopy) -> Result<()> {
+            c.add_commands::<Self>()?;
+            Ok(())
         }
     }
 
@@ -817,7 +818,6 @@ mod tests {
     fn test_list_navigation() -> Result<()> {
         let root = List::<Text>::new();
         let mut harness = Harness::builder(root).size(20, 10).build()?;
-        List::<Text>::load(&mut harness.canopy);
 
         harness.with_root_context(|list: &mut List<Text>, ctx| {
             list.append(ctx, Text::new("Item 1"))?;
@@ -886,7 +886,6 @@ mod tests {
     fn test_list_clear() -> Result<()> {
         let root = List::<Text>::new();
         let mut harness = Harness::builder(root).size(20, 10).build()?;
-        List::<Text>::load(&mut harness.canopy);
 
         harness.with_root_context(|list: &mut List<Text>, ctx| {
             list.append(ctx, Text::new("Item 1"))?;

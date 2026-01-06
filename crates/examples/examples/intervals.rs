@@ -11,8 +11,8 @@ use canopy_widgets::Root;
 /// Run the intervals example.
 fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
-    Root::load(&mut cnpy);
-    Intervals::load(&mut cnpy);
+    Root::load(&mut cnpy)?;
+    Intervals::load(&mut cnpy)?;
     setup_bindings(&mut cnpy);
 
     let app_id = cnpy.core.create_detached(Intervals::new());

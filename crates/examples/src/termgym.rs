@@ -408,9 +408,10 @@ impl Widget for TermGym {
 }
 
 impl Loader for TermGym {
-    fn load(c: &mut Canopy) {
-        c.add_commands::<Self>();
-        c.add_commands::<List<TermEntry>>();
+    fn load(c: &mut Canopy) -> Result<()> {
+        c.add_commands::<Self>()?;
+        c.add_commands::<List<TermEntry>>()?;
+        Ok(())
     }
 }
 

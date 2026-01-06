@@ -242,10 +242,11 @@ impl Widget for ListGym {
 }
 
 impl Loader for ListGym {
-    fn load(c: &mut Canopy) {
-        c.add_commands::<List<ListEntry>>();
-        c.add_commands::<Panes>();
-        c.add_commands::<Self>();
+    fn load(c: &mut Canopy) -> Result<()> {
+        c.add_commands::<List<ListEntry>>()?;
+        c.add_commands::<Panes>()?;
+        c.add_commands::<Self>()?;
+        Ok(())
     }
 }
 

@@ -228,10 +228,12 @@ impl Canopy {
     }
 
     /// Load the commands from a command node using the default node name.
-    pub fn add_commands<T: commands::CommandNode>(&mut self) {
+    /// Returns an error if any command id is already registered.
+    pub fn add_commands<T: commands::CommandNode>(&mut self) -> Result<()> {
         let cmds = <T>::commands();
-        self.core.commands.add(cmds);
+        self.core.commands.add(cmds)?;
         self.script_host.register_commands(cmds);
+        Ok(())
     }
 
     /// Output a formatted table of commands to a writer.
@@ -739,7 +741,10 @@ impl Canopy {
 /// children.
 pub trait Loader {
     /// Load commands or resources into the canopy instance.
-    fn load(_: &mut Canopy) {}
+    /// Returns an error if loading fails.
+    fn load(_: &mut Canopy) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -1402,7 +1407,7 @@ mod tests {
 
         let (_, mut tr) = TestRender::create();
         let mut canopy = Canopy::new();
-        canopy.add_commands::<N>();
+        canopy.add_commands::<N>()?;
         canopy.core.set_widget(canopy.core.root, N);
 
         canopy.set_root_size(Expanse::new(10, 1))?;

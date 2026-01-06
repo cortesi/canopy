@@ -146,7 +146,8 @@ fn outer_layout(layout: Layout, padding: u32) -> Layout {
 }
 
 impl Loader for TextGym {
-    fn load(c: &mut Canopy) {
-        c.add_commands::<Self>();
+    fn load(c: &mut Canopy) -> Result<()> {
+        c.add_commands::<Self>()?;
+        Ok(())
     }
 }

@@ -228,9 +228,10 @@ impl DefaultBindings for Root {
 }
 
 impl Loader for Root {
-    fn load(c: &mut Canopy) {
-        c.add_commands::<Self>();
-        Inspector::load(c);
+    fn load(c: &mut Canopy) -> Result<()> {
+        c.add_commands::<Self>()?;
+        Inspector::load(c)?;
+        Ok(())
     }
 }
 
@@ -299,7 +300,7 @@ mod tests {
 
     fn setup_root_tree() -> Result<(Canopy, NopBackend, NodeId, NodeId)> {
         let mut canopy = Canopy::new();
-        Root::load(&mut canopy);
+        Root::load(&mut canopy)?;
 
         let app_id = canopy.core.create_detached(App);
         let left = canopy.core.create_detached(FocusLeaf::new("left"));

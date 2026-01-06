@@ -24,8 +24,8 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
 pub fn create_app(image_path: &Path) -> Result<Canopy> {
     let mut cnpy = Canopy::new();
 
-    Root::load(&mut cnpy);
-    ImageView::load(&mut cnpy);
+    Root::load(&mut cnpy)?;
+    ImageView::load(&mut cnpy)?;
     setup_bindings(&mut cnpy);
 
     let view = ImageView::from_path(image_path)?;

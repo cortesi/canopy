@@ -846,10 +846,17 @@ impl CommandSet {
     }
 
     /// Add command specs to the set.
-    pub fn add(&mut self, specs: &'static [&'static CommandSpec]) {
+    /// Returns an error if any command id is already registered.
+    pub fn add(&mut self, specs: &'static [&'static CommandSpec]) -> Result<(), CommandError> {
         for spec in specs {
+            if self.commands.contains_key(spec.id.0) {
+                return Err(CommandError::DuplicateCommand {
+                    id: spec.id.0.to_string(),
+                });
+            }
             self.commands.insert(spec.id.0, spec);
         }
+        Ok(())
     }
 
     /// Get a command by id.
@@ -871,6 +878,22 @@ pub enum CommandError {
     UnknownCommand {
         /// Requested command id.
         id: String,
+    },
+
+    /// Duplicate command identifier.
+    #[error("duplicate command id: {id}")]
+    DuplicateCommand {
+        /// Duplicate command id.
+        id: String,
+    },
+
+    /// No matching target found for a node-routed command.
+    #[error("no target node found for command {id} (owner {owner})")]
+    NoTarget {
+        /// Requested command id.
+        id: String,
+        /// Expected owner node name.
+        owner: String,
     },
 
     /// Incorrect number of arguments.
@@ -1149,8 +1172,9 @@ pub fn dispatch(
                 current = core.nodes[node_id].parent;
             }
 
-            Err(CommandError::UnknownCommand {
+            Err(CommandError::NoTarget {
                 id: inv.id.0.to_string(),
+                owner: owner.to_string(),
             })
         }
     }

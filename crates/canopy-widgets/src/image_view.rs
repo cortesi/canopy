@@ -398,8 +398,9 @@ impl Widget for ImageView {
 
 impl Loader for ImageView {
     /// Register commands for the image viewer widget.
-    fn load(cnpy: &mut Canopy) {
-        cnpy.add_commands::<Self>();
+    fn load(cnpy: &mut Canopy) -> canopy_error::Result<()> {
+        cnpy.add_commands::<Self>()?;
+        Ok(())
     }
 }
 

@@ -12,8 +12,8 @@ use canopy_widgets::Root;
 /// Run the textgym example.
 fn main() -> Result<(), Box<dyn Error>> {
     let mut cnpy = Canopy::new();
-    Root::load(&mut cnpy);
-    TextGym::load(&mut cnpy);
+    Root::load(&mut cnpy)?;
+    TextGym::load(&mut cnpy)?;
 
     cnpy.bind_key('q', "root", "root::quit()")?;
     cnpy.bind_key('r', "text_gym", "text_gym::redraw()")?;

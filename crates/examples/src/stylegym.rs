@@ -401,13 +401,14 @@ impl Widget for Stylegym {
 }
 
 impl Loader for Stylegym {
-    fn load(c: &mut Canopy) {
-        c.add_commands::<Self>();
-        c.add_commands::<DemoContent>();
-        c.add_commands::<ModalContent>();
-        c.add_commands::<Container>();
-        c.add_commands::<Dropdown<ThemeOption>>();
-        c.add_commands::<Selector<EffectOption>>();
+    fn load(c: &mut Canopy) -> Result<()> {
+        c.add_commands::<Self>()?;
+        c.add_commands::<DemoContent>()?;
+        c.add_commands::<ModalContent>()?;
+        c.add_commands::<Container>()?;
+        c.add_commands::<Dropdown<ThemeOption>>()?;
+        c.add_commands::<Selector<EffectOption>>()?;
+        Ok(())
     }
 }
 

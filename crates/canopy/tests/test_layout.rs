@@ -90,7 +90,9 @@ mod tests {
     }
 
     impl Loader for Root {
-        fn load(_c: &mut Canopy) {}
+        fn load(_c: &mut Canopy) -> Result<()> {
+            Ok(())
+        }
     }
 
     #[test]
