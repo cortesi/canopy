@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["grapheme_width","slice_by_columns"]};
+window.SIDEBAR_ITEMS = {"fn":["expand_tabs","grapheme_width","slice_by_columns"]};

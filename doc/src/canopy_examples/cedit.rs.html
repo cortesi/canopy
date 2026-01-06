@@ -6,7 +6,7 @@
 <a href=#6 id=6 data-nosnippet>6</a>    render::Render,
 <a href=#7 id=7 data-nosnippet>7</a>};
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>canopy_widgets::{
-<a href=#9 id=9 data-nosnippet>9</a>    Frame, Root,
+<a href=#9 id=9 data-nosnippet>9</a>    Frame, Pad, Root,
 <a href=#10 id=10 data-nosnippet>10</a>    editor::{EditMode, Editor, EditorConfig, WrapMode, highlight::SyntectHighlighter},
 <a href=#11 id=11 data-nosnippet>11</a>};
 <a href=#12 id=12 data-nosnippet>12</a>
@@ -38,11 +38,11 @@
 <a href=#38 id=38 data-nosnippet>38</a>        editor.set_highlighter(<span class="prelude-val">Some</span>(Box::new(SyntectHighlighter::new(
 <a href=#39 id=39 data-nosnippet>39</a>            <span class="self">self</span>.extension.as_str(),
 <a href=#40 id=40 data-nosnippet>40</a>        ))));
-<a href=#41 id=41 data-nosnippet>41</a>        <span class="kw">let </span>frame_id = c.add_child(Frame::new())<span class="question-mark">?</span>;
-<a href=#42 id=42 data-nosnippet>42</a>        <span class="kw">let </span>editor_id = c.add_child_to(frame_id, editor)<span class="question-mark">?</span>;
-<a href=#43 id=43 data-nosnippet>43</a>
-<a href=#44 id=44 data-nosnippet>44</a>        c.set_layout_of(editor_id, Layout::fill().padding(Edges::all(<span class="number">1</span>)))<span class="question-mark">?</span>;
-<a href=#45 id=45 data-nosnippet>45</a>        c.set_layout_of(frame_id, Layout::fill().padding(Edges::all(<span class="number">1</span>)))<span class="question-mark">?</span>;
+<a href=#41 id=41 data-nosnippet>41</a>        <span class="kw">let </span>pad_id = c.add_child(Pad::uniform(<span class="number">1</span>))<span class="question-mark">?</span>;
+<a href=#42 id=42 data-nosnippet>42</a>        <span class="kw">let </span>frame_id = c.add_child_to(pad_id, Frame::new())<span class="question-mark">?</span>;
+<a href=#43 id=43 data-nosnippet>43</a>        <span class="kw">let </span>editor_id = c.add_child_to(frame_id, editor)<span class="question-mark">?</span>;
+<a href=#44 id=44 data-nosnippet>44</a>
+<a href=#45 id=45 data-nosnippet>45</a>        c.set_layout_of(editor_id, Layout::fill().padding(Edges::all(<span class="number">1</span>)))<span class="question-mark">?</span>;
 <a href=#46 id=46 data-nosnippet>46</a>
 <a href=#47 id=47 data-nosnippet>47</a>        c.set_layout(Layout::fill())<span class="question-mark">?</span>;
 <a href=#48 id=48 data-nosnippet>48</a>        <span class="prelude-val">Ok</span>(())
