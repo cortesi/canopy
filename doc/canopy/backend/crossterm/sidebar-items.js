@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["runloop"],"struct":["CrosstermControl","CrosstermRender"]};
+window.SIDEBAR_ITEMS = {"enum":["CtrlCBehavior"],"fn":["runloop","runloop_with_options"],"struct":["CrosstermControl","CrosstermRender","RunloopOptions"]};
