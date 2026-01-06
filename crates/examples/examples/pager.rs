@@ -2,7 +2,10 @@
 
 use std::{env, error::Error, fs, result::Result};
 
-use canopy::{Canopy, Loader, backend::crossterm::runloop};
+use canopy::{
+    Canopy, Loader,
+    backend::crossterm::{RunloopOptions, runloop_with_options},
+};
 use canopy_examples::pager::{Pager, setup_bindings};
 use canopy_widgets::Root;
 
@@ -24,6 +27,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let contents = fs::read_to_string(filename)?;
     let app_id = cnpy.core.create_detached(Pager::new(&contents));
     Root::install(&mut cnpy.core, app_id)?;
-    runloop(cnpy)?;
+    runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
     Ok(())
 }

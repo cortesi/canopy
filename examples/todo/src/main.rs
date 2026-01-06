@@ -1,5 +1,5 @@
 use anyhow::Result;
-use canopy::backend::crossterm::runloop;
+use canopy::backend::crossterm::{RunloopOptions, runloop_with_options};
 use clap::Parser;
 use todo::create_app;
 
@@ -24,7 +24,7 @@ pub fn main() -> Result<()> {
             return Ok(());
         }
 
-        runloop(cnpy)?;
+        runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
     } else {
         println!("Specify a file path");
     }

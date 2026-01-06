@@ -1,18 +1,17 @@
 use std::{
     io::{self, Stderr, Write},
-    panic,
-    process::exit,
+    panic, process,
     result::Result as StdResult,
     sync::mpsc::{self, TryRecvError},
     thread,
 };
 
 use color_backtrace::{BacktracePrinter, default_output_stream};
-use scopeguard::defer;
+use scopeguard::guard;
 
 use crate::{
     Canopy, NodeId,
-    backend::BackendControl,
+    backend::{BackendControl, TerminalSession},
     core::{
         Core,
         dump::{dump, dump_with_focus},
@@ -276,7 +275,7 @@ impl RenderBackend for CrosstermRender {
         self.fp.execute(cevent::DisableMouseCapture);
         self.fp.execute(ccursor::Show);
         terminal::disable_raw_mode();
-        exit(code)
+        process::exit(code)
     }
 
     fn reset(&mut self) -> Result<()> {
@@ -434,19 +433,9 @@ fn handle_render_error(
     core: &Core,
     root: NodeId,
     focus: Option<NodeId>,
+    session: &mut TerminalSession,
 ) -> error::Error {
-    // Exit alternate screen mode to display error
-    let mut stderr = io::stderr();
-    #[allow(unused_must_use)]
-    {
-        crossterm::execute!(
-            stderr,
-            terminal::LeaveAlternateScreen,
-            cevent::DisableMouseCapture,
-            ccursor::Show
-        );
-        terminal::disable_raw_mode();
-    }
+    drop(session.stop());
 
     // Print error and node dump
     eprintln!("Render error: {error}");
@@ -464,78 +453,64 @@ fn handle_render_error(
     error
 }
 
-/// Run the main render/event loop using the crossterm backend.
-pub fn runloop(mut cnpy: Canopy) -> Result<()> {
-    let mut be = CrosstermRender::default();
-    let ctrl = CrosstermControl::default();
+/// Ctrl+C handling policy for the crossterm runloop.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CtrlCBehavior {
+    /// Exit the process with status 130.
+    Exit,
+    /// Dump the node tree and exit with status 130.
+    DumpTreeAndExit,
+}
 
-    translate_result(terminal::enable_raw_mode())?;
-    let mut w = io::stderr();
+/// Options for configuring the crossterm runloop behavior.
+#[derive(Debug, Clone, Copy)]
+pub struct RunloopOptions {
+    /// Install a panic hook that restores the terminal before printing a backtrace.
+    pub install_panic_hook: bool,
+    /// Configure how Ctrl+C is handled.
+    pub ctrl_c: CtrlCBehavior,
+}
 
-    translate_result(crossterm::execute!(
-        w,
-        terminal::EnterAlternateScreen,
-        cevent::EnableMouseCapture,
-        ccursor::Hide
-    ))?;
-
-    defer! {
-        let mut stderr = io::stderr();
-        #[allow(unused_must_use)]
-        {
-            crossterm::execute!(stderr, terminal::LeaveAlternateScreen, cevent::DisableMouseCapture, ccursor::Show);
-            terminal::disable_raw_mode();
+impl RunloopOptions {
+    /// Construct options that dump the node tree before exiting on Ctrl+C.
+    pub fn ctrlc_dump() -> Self {
+        Self {
+            ctrl_c: CtrlCBehavior::DumpTreeAndExit,
+            ..Self::default()
         }
     }
+}
 
-    panic::set_hook(Box::new(|pi| {
-        let mut stderr = io::stderr();
-        #[allow(unused_must_use)]
-        {
-            crossterm::execute!(
-                stderr,
-                terminal::LeaveAlternateScreen,
-                cevent::DisableMouseCapture,
-                ccursor::Show
-            );
-            terminal::disable_raw_mode();
-            BacktracePrinter::new().print_panic_info(pi, &mut default_output_stream());
+impl Default for RunloopOptions {
+    fn default() -> Self {
+        Self {
+            install_panic_hook: false,
+            ctrl_c: CtrlCBehavior::Exit,
         }
-    }));
+    }
+}
 
-    let rx = if let Some(x) = cnpy.event_rx.take() {
-        x
-    } else {
-        panic!("core event loop already initialized")
+/// Run the main render/event loop using the crossterm backend.
+pub fn runloop(cnpy: Canopy) -> Result<()> {
+    runloop_with_options(cnpy, RunloopOptions::default())
+}
+
+/// Run the main render/event loop using the crossterm backend with custom options.
+pub fn runloop_with_options(mut cnpy: Canopy, options: RunloopOptions) -> Result<()> {
+    let mut be = CrosstermRender::default();
+    cnpy.register_backend(CrosstermControl::default());
+    let mut session = {
+        let backend = cnpy
+            .core
+            .backend
+            .as_mut()
+            .ok_or_else(|| error::Error::Internal("backend not set".into()))?;
+        TerminalSession::new(backend)?
     };
 
-    let mut events = EventSource::new(rx);
-    event_emitter(cnpy.event_tx.clone());
-    let size = translate_result(terminal::size())?;
-    cnpy.register_backend(ctrl);
-    cnpy.set_root_size(Expanse::new(size.0.into(), size.1.into()))?;
-    cnpy.start_poller(cnpy.event_tx.clone());
-
-    if let Err(e) = cnpy.render(&mut be) {
-        return Err(handle_render_error(
-            e,
-            &cnpy.core,
-            cnpy.core.root,
-            cnpy.core.focus,
-        ));
-    }
-    translate_result(be.flush())?;
-
-    loop {
-        let event = events.next()?;
-
-        // Check for Ctrl+C
-        if let Event::Key(key::Key {
-            key: key::KeyCode::Char('c'),
-            mods: key::Mods { ctrl: true, .. },
-        }) = &event
-        {
-            // Exit alternate screen mode
+    let _panic_hook = if options.install_panic_hook {
+        let previous = panic::take_hook();
+        panic::set_hook(Box::new(|pi| {
             let mut stderr = io::stderr();
             #[allow(unused_must_use)]
             {
@@ -546,17 +521,59 @@ pub fn runloop(mut cnpy: Canopy) -> Result<()> {
                     ccursor::Show
                 );
                 terminal::disable_raw_mode();
+                BacktracePrinter::new().print_panic_info(pi, &mut default_output_stream());
+            }
+        }));
+        Some(guard(previous, |hook| {
+            panic::set_hook(hook);
+        }))
+    } else {
+        None
+    };
+
+    let rx = if let Some(x) = cnpy.event_rx.take() {
+        x
+    } else {
+        panic!("core event loop already initialized")
+    };
+
+    let mut events = EventSource::new(rx);
+    event_emitter(cnpy.event_tx.clone());
+    let size = translate_result(terminal::size())?;
+    cnpy.set_root_size(Expanse::new(size.0.into(), size.1.into()))?;
+    cnpy.start_poller(cnpy.event_tx.clone());
+
+    if let Err(e) = cnpy.render(&mut be) {
+        return Err(handle_render_error(
+            e,
+            &cnpy.core,
+            cnpy.core.root,
+            cnpy.core.focus,
+            &mut session,
+        ));
+    }
+    translate_result(be.flush())?;
+
+    loop {
+        let event = events.next()?;
+
+        if matches!(
+            &event,
+            Event::Key(key::Key {
+                key: key::KeyCode::Char('c'),
+                mods: key::Mods { ctrl: true, .. },
+            })
+        ) {
+            drop(session.stop());
+            if options.ctrl_c == CtrlCBehavior::DumpTreeAndExit {
+                eprintln!("\nCtrl+C pressed - Node tree dump:");
+                match dump_with_focus(&cnpy.core, cnpy.core.root, cnpy.core.focus) {
+                    Ok(dump_str) => eprintln!("{dump_str}"),
+                    Err(dump_err) => eprintln!("Failed to dump node tree: {dump_err}"),
+                }
             }
 
-            // Print node tree dump
-            eprintln!("\nCtrl+C pressed - Node tree dump:");
-            match dump_with_focus(&cnpy.core, cnpy.core.root, cnpy.core.focus) {
-                Ok(dump_str) => eprintln!("{dump_str}"),
-                Err(dump_err) => eprintln!("Failed to dump node tree: {dump_err}"),
-            }
-
-            // Exit the program
-            exit(130); // 130 is the standard exit code for SIGINT
+            process::exit(130);
         }
 
         cnpy.event(event)?;
@@ -568,6 +585,7 @@ pub fn runloop(mut cnpy: Canopy) -> Result<()> {
                         &cnpy.core,
                         cnpy.core.root,
                         cnpy.core.focus,
+                        &mut session,
                     ));
                 }
             }
@@ -577,6 +595,7 @@ pub fn runloop(mut cnpy: Canopy) -> Result<()> {
                     &cnpy.core,
                     cnpy.core.root,
                     cnpy.core.focus,
+                    &mut session,
                 ));
             }
         }

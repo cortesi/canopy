@@ -2,7 +2,10 @@
 
 use std::path::PathBuf;
 
-use canopy::{backend::crossterm::runloop, error::Result};
+use canopy::{
+    backend::crossterm::{RunloopOptions, runloop_with_options},
+    error::Result,
+};
 use canopy_examples::imgview::create_app;
 use clap::Parser;
 
@@ -18,6 +21,6 @@ struct Args {
 fn main() -> Result<()> {
     let args = Args::parse();
     let cnpy = create_app(&args.path)?;
-    runloop(cnpy)?;
+    runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
     Ok(())
 }

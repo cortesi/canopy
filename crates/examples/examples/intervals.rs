@@ -1,6 +1,10 @@
 //! Launch the intervals example.
 
-use canopy::{Canopy, Loader, backend::crossterm::runloop, error::Result};
+use canopy::{
+    Canopy, Loader,
+    backend::crossterm::{RunloopOptions, runloop_with_options},
+    error::Result,
+};
 use canopy_examples::intervals::{Intervals, setup_bindings};
 use canopy_widgets::Root;
 
@@ -13,6 +17,6 @@ fn main() -> Result<()> {
 
     let app_id = cnpy.core.create_detached(Intervals::new());
     Root::install(&mut cnpy.core, app_id)?;
-    runloop(cnpy)?;
+    runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
     Ok(())
 }

@@ -2,7 +2,10 @@
 
 use std::{error::Error, result::Result};
 
-use canopy::{Canopy, Loader, backend::crossterm::runloop};
+use canopy::{
+    Canopy, Loader,
+    backend::crossterm::{RunloopOptions, runloop_with_options},
+};
 use canopy_examples::textgym::TextGym;
 use canopy_widgets::Root;
 
@@ -17,6 +20,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let app_id = cnpy.core.create_detached(TextGym::new());
     Root::install(&mut cnpy.core, app_id)?;
-    runloop(cnpy)?;
+    runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
     Ok(())
 }

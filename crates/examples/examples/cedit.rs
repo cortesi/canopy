@@ -2,7 +2,10 @@
 
 use std::{env, error::Error, fs, path::Path, result::Result};
 
-use canopy::{Canopy, Loader, backend::crossterm::runloop};
+use canopy::{
+    Canopy, Loader,
+    backend::crossterm::{RunloopOptions, runloop_with_options},
+};
 use canopy_examples::cedit::{Ed, setup_bindings};
 use canopy_widgets::Root;
 
@@ -25,7 +28,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let extension = file_extension(&filename);
     let app_id = cnpy.core.create_detached(Ed::new(&contents, &extension));
     Root::install_with_inspector(&mut cnpy.core, app_id, false)?;
-    runloop(cnpy)?;
+    runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
     Ok(())
 }
 

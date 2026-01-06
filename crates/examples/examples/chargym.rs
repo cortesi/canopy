@@ -2,7 +2,11 @@
 
 use std::io;
 
-use canopy::{Canopy, Loader, backend::crossterm::runloop, error::Result};
+use canopy::{
+    Canopy, Loader,
+    backend::crossterm::{RunloopOptions, runloop_with_options},
+    error::Result,
+};
 use canopy_examples::chargym::{CharGym, setup_bindings};
 use canopy_widgets::Root;
 use clap::Parser;
@@ -35,6 +39,6 @@ fn main() -> Result<()> {
 
     let app_id = cnpy.core.create_detached(CharGym::new());
     Root::install_with_inspector(&mut cnpy.core, app_id, args.inspector)?;
-    runloop(cnpy)?;
+    runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
     Ok(())
 }
