@@ -90,6 +90,8 @@ impl From<&str> for Path {
 /// The matcher supports `*` wildcards and optional leading or trailing slashes.
 #[derive(Debug, Clone)]
 pub struct PathMatcher {
+    /// Original filter string used to construct the matcher.
+    filter: Box<str>,
     /// Compiled regular expression.
     expr: regex::Regex,
 }
@@ -127,7 +129,15 @@ impl PathMatcher {
             pattern += "$";
         }
         let expr = regex::Regex::new(&pattern).map_err(|e| error::Error::Invalid(e.to_string()))?;
-        Ok(Self { expr })
+        Ok(Self {
+            filter: path.into(),
+            expr,
+        })
+    }
+
+    /// Return the original filter string used to construct this matcher.
+    pub fn filter(&self) -> &str {
+        &self.filter
     }
 
     /// Check whether the path filter matches a given path. Returns the position

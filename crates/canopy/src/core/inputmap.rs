@@ -14,7 +14,7 @@ const DEFAULT_MODE: &str = "";
 /// An action to be taken in response to an event, if the path matches.
 #[derive(Debug)]
 struct BoundAction {
-    /// Path matcher for the binding.
+    /// Compiled path matcher (includes original filter string).
     pathmatch: PathMatcher,
     /// Action to execute.
     action: BindingTarget,
@@ -30,7 +30,7 @@ pub enum BindingTarget {
 }
 
 /// Input event used for bindings.
-#[derive(Debug, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum InputSpec {
     /// Mouse input.
     Mouse(Mouse),
@@ -63,12 +63,15 @@ impl InputMode {
         }
     }
 
-    /// Insert a key binding into this mode
-    fn insert(&mut self, path_filter: PathMatcher, input: InputSpec, action: BindingTarget) {
-        self.inputs.entry(input).or_default().push(BoundAction {
-            pathmatch: path_filter,
-            action,
-        });
+    /// Insert a key binding into this mode.
+    ///
+    /// The input is normalized before storing.
+    fn insert(&mut self, pathmatch: PathMatcher, input: InputSpec, action: BindingTarget) {
+        let input = input.normalize();
+        self.inputs
+            .entry(input)
+            .or_default()
+            .push(BoundAction { pathmatch, action });
     }
 
     /// Resolve a key with a given path filter to a binding target.
@@ -100,6 +103,41 @@ impl InputMode {
             }
         }
         best.map(|(_, _, _, action, m)| (action, m))
+    }
+
+    /// Return all bindings in this mode.
+    fn bindings(&self) -> Vec<BindingInfo<'_>> {
+        let mut out = Vec::new();
+        for (input, actions) in &self.inputs {
+            for a in actions {
+                out.push(BindingInfo {
+                    input: *input,
+                    path_filter: a.pathmatch.filter(),
+                    target: &a.action,
+                });
+            }
+        }
+        out
+    }
+
+    /// Return bindings that match a specific path.
+    fn bindings_for_path(&self, path: &Path) -> Vec<MatchedBindingInfo<'_>> {
+        let mut out = Vec::new();
+        for (input, actions) in &self.inputs {
+            for a in actions {
+                if let Some(m) = a.pathmatch.check_match(path) {
+                    out.push(MatchedBindingInfo {
+                        info: BindingInfo {
+                            input: *input,
+                            path_filter: a.pathmatch.filter(),
+                            target: &a.action,
+                        },
+                        m,
+                    });
+                }
+            }
+        }
+        out
     }
 }
 
@@ -210,12 +248,54 @@ impl InputMap {
         path_filter: &str,
         action: BindingTarget,
     ) -> Result<()> {
+        let pathmatch = PathMatcher::new(path_filter)?;
         self.modes
             .entry(mode.to_string())
             .or_insert_with(InputMode::new)
-            .insert(PathMatcher::new(path_filter)?, input, action);
+            .insert(pathmatch, input, action);
         Ok(())
     }
+
+    /// Return the name of the current input mode.
+    pub fn current_mode(&self) -> &str {
+        &self.current_mode
+    }
+
+    /// Return all bindings defined for a mode.
+    pub fn bindings_for_mode(&self, mode: &str) -> Vec<BindingInfo<'_>> {
+        self.modes
+            .get(mode)
+            .map(|m| m.bindings())
+            .unwrap_or_default()
+    }
+
+    /// Return bindings in a mode that match a specific path.
+    pub fn bindings_matching_path(&self, mode: &str, path: &Path) -> Vec<MatchedBindingInfo<'_>> {
+        self.modes
+            .get(mode)
+            .map(|m| m.bindings_for_path(path))
+            .unwrap_or_default()
+    }
+}
+
+/// Metadata about a single input binding.
+#[derive(Debug, Clone)]
+pub struct BindingInfo<'a> {
+    /// Input that triggers this binding.
+    pub input: InputSpec,
+    /// Original path filter string (e.g., "editor/*").
+    pub path_filter: &'a str,
+    /// Target action (script or command).
+    pub target: &'a BindingTarget,
+}
+
+/// Binding info with match metadata.
+#[derive(Debug, Clone)]
+pub struct MatchedBindingInfo<'a> {
+    /// The binding info.
+    pub info: BindingInfo<'a>,
+    /// Match metadata from the path matcher.
+    pub m: PathMatch,
 }
 
 #[cfg(test)]

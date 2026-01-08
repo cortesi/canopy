@@ -727,6 +727,17 @@ pub enum CommandDispatchKind {
     },
 }
 
+/// Documentation metadata for a command.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CommandDocSpec {
+    /// Short, single-line description for tables/tooltips.
+    pub short: Option<&'static str>,
+    /// Full description (future: rich help/palette).
+    pub long: Option<&'static str>,
+    /// Hide from interactive help unless explicitly requested.
+    pub hidden: bool,
+}
+
 /// Static metadata for a command.
 #[derive(Clone, Copy, Debug)]
 pub struct CommandSpec {
@@ -740,8 +751,36 @@ pub struct CommandSpec {
     pub params: &'static [CommandParamSpec],
     /// Return spec.
     pub ret: CommandReturnSpec,
+    /// Documentation metadata.
+    pub doc: CommandDocSpec,
     /// Erased invoke entrypoint.
     pub invoke: InvokeFn,
+}
+
+/// Resolution of a command dispatch target.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CommandResolution {
+    /// Command is free (no target).
+    Free,
+    /// Command would dispatch to a node in the focus subtree.
+    Subtree {
+        /// Target node ID.
+        target: NodeId,
+    },
+    /// Command would dispatch to an ancestor of focus.
+    Ancestor {
+        /// Target node ID.
+        target: NodeId,
+    },
+}
+
+/// Command availability from a given focus context.
+#[derive(Clone, Copy, Debug)]
+pub struct CommandAvailability<'a> {
+    /// Command specification.
+    pub spec: &'a CommandSpec,
+    /// Resolution if the command has a target, or `None` if no target exists.
+    pub resolution: Option<CommandResolution>,
 }
 
 /// The CommandNode trait is implemented by widgets to expose commands.

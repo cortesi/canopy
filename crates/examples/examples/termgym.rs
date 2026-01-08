@@ -33,7 +33,7 @@ fn main() -> Result<()> {
 
     let args = Args::parse();
     if args.commands {
-        cnpy.print_command_table(&mut io::stdout())?;
+        cnpy.print_command_table(&mut io::stdout(), false)?;
         return Ok(());
     }
 

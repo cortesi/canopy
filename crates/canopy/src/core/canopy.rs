@@ -1,4 +1,4 @@
-use std::{io::Write, sync::mpsc};
+use std::{collections::HashMap, io::Write, sync::mpsc};
 
 use comfy_table::{ContentArrangement, Table, presets::UTF8_FULL};
 
@@ -237,9 +237,16 @@ impl Canopy {
     }
 
     /// Output a formatted table of commands to a writer.
-    pub fn print_command_table(&self, w: &mut dyn Write) -> Result<()> {
-        let mut cmds: Vec<&commands::CommandSpec> =
-            self.core.commands.iter().map(|(_, v)| v).collect();
+    ///
+    /// If `include_hidden` is false, commands with `doc.hidden = true` are excluded.
+    pub fn print_command_table(&self, w: &mut dyn Write, include_hidden: bool) -> Result<()> {
+        let mut cmds: Vec<&commands::CommandSpec> = self
+            .core
+            .commands
+            .iter()
+            .map(|(_, v)| v)
+            .filter(|c| include_hidden || !c.doc.hidden)
+            .collect();
 
         cmds.sort_by_key(|a| a.id.0);
 
@@ -247,12 +254,155 @@ impl Canopy {
         table.set_content_arrangement(ContentArrangement::Dynamic);
         table.load_preset(UTF8_FULL);
         for i in cmds {
+            let desc = i.doc.short.unwrap_or("");
             table.add_row(vec![
                 comfy_table::Cell::new(i.id.0).fg(comfy_table::Color::Green),
                 comfy_table::Cell::new(i.signature()),
+                comfy_table::Cell::new(desc).fg(comfy_table::Color::Cyan),
             ]);
         }
         writeln!(w, "{table}").map_err(|x| error::Error::Internal(x.to_string()))
+    }
+
+    /// Return command availability from the current focus position.
+    ///
+    /// This computes which commands would resolve to a target if dispatched from the current
+    /// focus. For each command:
+    /// - Free commands always have `resolution = Some(Free)`
+    /// - Node-routed commands have `resolution = Some(Subtree{..})` or `Some(Ancestor{..})`
+    ///   if a matching node exists, `None` otherwise
+    pub fn command_availability_from_focus(&self) -> Vec<commands::CommandAvailability<'_>> {
+        let start = self.core.focus.unwrap_or(self.core.root);
+        self.command_availability_from_node(start)
+    }
+
+    /// Return command availability from a specific node.
+    ///
+    /// Computes which commands would dispatch to a target, using the same resolution logic
+    /// as `commands::dispatch`:
+    /// 1. First search the subtree rooted at `start` in pre-order
+    /// 2. Then walk ancestors
+    pub fn command_availability_from_node(
+        &self,
+        start: NodeId,
+    ) -> Vec<commands::CommandAvailability<'_>> {
+        // Build owner-to-target index once
+        let owner_index = self.build_owner_target_index(start);
+
+        self.core
+            .commands
+            .iter()
+            .map(|(_, spec)| {
+                let resolution = match spec.dispatch {
+                    commands::CommandDispatchKind::Free => Some(commands::CommandResolution::Free),
+                    commands::CommandDispatchKind::Node { owner } => {
+                        owner_index.get(owner).copied()
+                    }
+                };
+                commands::CommandAvailability { spec, resolution }
+            })
+            .collect()
+    }
+
+    /// Build an index mapping owner names to their dispatch targets.
+    ///
+    /// Uses the same resolution order as `commands::dispatch`:
+    /// 1. Subtree (pre-order) takes precedence
+    /// 2. Then ancestors
+    fn build_owner_target_index(
+        &self,
+        start: NodeId,
+    ) -> HashMap<String, commands::CommandResolution> {
+        let mut map: HashMap<String, commands::CommandResolution> = HashMap::new();
+
+        // 1) Walk subtree in pre-order
+        let mut stack = vec![start];
+        while let Some(id) = stack.pop() {
+            if let Some(node) = self.core.nodes.get(id) {
+                let name = node.name.to_string();
+                map.entry(name)
+                    .or_insert(commands::CommandResolution::Subtree { target: id });
+
+                // Push children in reverse order for correct pre-order traversal
+                for child in node.children.iter().rev() {
+                    stack.push(*child);
+                }
+            }
+        }
+
+        // 2) Walk ancestors (only if not already found in subtree)
+        let mut cur = self.core.nodes.get(start).and_then(|n| n.parent);
+        while let Some(id) = cur {
+            if let Some(node) = self.core.nodes.get(id) {
+                let name = node.name.to_string();
+                map.entry(name)
+                    .or_insert(commands::CommandResolution::Ancestor { target: id });
+                cur = node.parent;
+            } else {
+                break;
+            }
+        }
+
+        map
+    }
+
+    /// Generate a contextual help snapshot for the current focus.
+    ///
+    /// The snapshot includes:
+    /// - Bindings that would match from the focus path
+    /// - Commands with their availability status
+    pub fn help_snapshot(&self) -> super::help::HelpSnapshot<'_> {
+        let focus = self.core.focus.unwrap_or(self.core.root);
+        let focus_path = self.core.node_path(self.core.root, focus);
+        let input_mode = self.keymap.current_mode();
+
+        // Get command availability
+        let command_avail = self.command_availability_from_node(focus);
+        let help_commands: Vec<super::help::HelpCommand<'_>> = command_avail
+            .into_iter()
+            .map(|avail| super::help::HelpCommand {
+                owner: match avail.spec.dispatch {
+                    commands::CommandDispatchKind::Free => None,
+                    commands::CommandDispatchKind::Node { owner } => Some(owner),
+                },
+                spec: avail.spec,
+                resolution: avail.resolution,
+            })
+            .collect();
+
+        // Get bindings for the current mode that match the focus path
+        let matched_bindings = self.keymap.bindings_matching_path(input_mode, &focus_path);
+        let help_bindings: Vec<super::help::HelpBinding<'_>> = matched_bindings
+            .into_iter()
+            .map(|mb| {
+                // Determine binding kind based on match position
+                let path_len = focus_path.to_string().len();
+                let kind = if mb.m.end == path_len && mb.m.len > 0 {
+                    super::help::BindingKind::PreEventOverride
+                } else {
+                    super::help::BindingKind::PostEventFallback
+                };
+
+                let label = super::help::binding_label(mb.info.target, &self.core.commands);
+
+                super::help::HelpBinding {
+                    input: mb.info.input,
+                    mode: input_mode,
+                    path_filter: mb.info.path_filter,
+                    target: mb.info.target,
+                    kind,
+                    label,
+                }
+            })
+            .collect();
+
+        super::help::HelpSnapshot {
+            focus,
+            focus_path,
+            input_mode,
+            bindings: help_bindings,
+            commands: help_commands,
+        }
     }
 
     /// Has the focus changed since the last render sweep?
@@ -587,14 +737,33 @@ impl Canopy {
         }
 
         if let Some((binding, nid)) = action {
-            match binding {
-                inputmap::BindingTarget::Script(sid) => {
-                    self.run_script(nid, sid)?;
-                }
+            // Build a local mouse event for the target node.
+            let view = self.core.nodes.get(nid).map(|n| n.view).unwrap_or_default();
+            let local_location = view.content.to_local_point(m.location);
+            let local_mouse = mouse::MouseEvent {
+                action: m.action,
+                button: m.button,
+                modifiers: m.modifiers,
+                location: local_location,
+            };
+
+            // Push a command-scope frame with the triggering mouse event so injected params work.
+            let frame = self
+                .core
+                .command_scope_for_event(&Event::Mouse(local_mouse));
+            let depth = self.core.push_command_scope(frame);
+
+            let result: Result<()> = match binding {
+                inputmap::BindingTarget::Script(sid) => self.run_script(nid, sid),
                 inputmap::BindingTarget::Command(cmd) => {
-                    commands::dispatch(&mut self.core, nid, &cmd)?;
+                    commands::dispatch(&mut self.core, nid, &cmd)
+                        .map(|_| ())
+                        .map_err(|e| e.into())
                 }
-            }
+            };
+
+            self.core.pop_command_scope(depth);
+            result?;
             changed = true;
         }
 
@@ -653,14 +822,21 @@ impl Canopy {
         }
 
         if let Some((binding, nid)) = action {
-            match binding {
-                inputmap::BindingTarget::Script(sid) => {
-                    self.run_script(nid, sid)?;
-                }
+            // Push a command-scope frame with the triggering key event so injected params work.
+            let frame = self.core.command_scope_for_event(&Event::Key(k));
+            let depth = self.core.push_command_scope(frame);
+
+            let result: Result<()> = match binding {
+                inputmap::BindingTarget::Script(sid) => self.run_script(nid, sid),
                 inputmap::BindingTarget::Command(cmd) => {
-                    commands::dispatch(&mut self.core, nid, &cmd)?;
+                    commands::dispatch(&mut self.core, nid, &cmd)
+                        .map(|_| ())
+                        .map_err(|e| e.into())
                 }
-            }
+            };
+
+            self.core.pop_command_scope(depth);
+            result?;
             changed = true;
         }
 

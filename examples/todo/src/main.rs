@@ -20,7 +20,7 @@ pub fn main() -> Result<()> {
         let cnpy = create_app(&path)?;
 
         if args.commands {
-            cnpy.print_command_table(&mut std::io::stdout())?;
+            cnpy.print_command_table(&mut std::io::stdout(), false)?;
             return Ok(());
         }
 

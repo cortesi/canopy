@@ -41,6 +41,8 @@ pub mod canopy;
 pub mod context;
 /// Focus management.
 pub mod focus;
+/// Help snapshot API.
+pub mod help;
 /// Node ID types.
 pub mod id;
 /// Input mapping.

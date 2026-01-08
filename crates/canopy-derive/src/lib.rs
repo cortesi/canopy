@@ -5,7 +5,6 @@ use std::result::Result as StdResult;
 use convert_case::{Case, Casing};
 use proc_macro_error::*;
 use quote::{ToTokens, quote};
-use structmeta::StructMeta;
 use syn::{
     Attribute, GenericArgument, ImplItem, ImplItemFn, ItemImpl, Meta, Pat, PathArguments,
     ReturnType, Type, TypeParamBound, parse_macro_input,
@@ -32,10 +31,14 @@ impl From<Error> for Diagnostic {
 }
 
 /// Arguments to the "command" derive macro.
-#[derive(Debug, Default, StructMeta)]
+#[derive(Debug, Default)]
 struct MacroArgs {
     /// Ignore command return value when dispatching.
     ignore_result: bool,
+    /// Override short description.
+    desc: Option<syn::LitStr>,
+    /// Mark command as hidden from help.
+    hidden: bool,
 }
 
 /// Parsed default argument value.
@@ -101,6 +104,61 @@ struct ReturnMeta {
     kind: ReturnKind,
 }
 
+/// Extracted documentation from a method.
+#[derive(Debug, Clone, Default)]
+struct DocMeta {
+    /// Short description (first sentence or explicit override).
+    short: Option<String>,
+    /// Full description (all doc comments joined).
+    long: Option<String>,
+    /// Whether this command is hidden from help.
+    hidden: bool,
+}
+
+/// Extract documentation from `#[doc = "..."]` attributes.
+fn extract_doc_comments(attrs: &[syn::Attribute]) -> (Option<String>, Option<String>) {
+    let mut lines = Vec::new();
+    for attr in attrs {
+        if !attr.path().is_ident("doc") {
+            continue;
+        }
+        if let syn::Meta::NameValue(nv) = &attr.meta
+            && let syn::Expr::Lit(expr_lit) = &nv.value
+            && let syn::Lit::Str(s) = &expr_lit.lit
+        {
+            let text = s.value();
+            // Preserve empty lines as paragraph breaks
+            if text.trim().is_empty() {
+                if !lines.is_empty() {
+                    lines.push(String::new());
+                }
+            } else {
+                lines.push(text.trim().to_string());
+            }
+        }
+    }
+
+    if lines.is_empty() {
+        return (None, None);
+    }
+
+    // Join all lines for the long description
+    let long = Some(lines.join("\n").trim().to_string()).filter(|s| !s.is_empty());
+
+    // Extract short description: first sentence (up to ". " or end of first line)
+    let first_line = lines.iter().find(|l| !l.is_empty()).cloned();
+    let short = first_line.map(|line| {
+        // Find first sentence boundary - if ". " found, truncate there; otherwise use whole line
+        if let Some(idx) = line.find(". ") {
+            format!("{}.", &line[..idx])
+        } else {
+            line
+        }
+    });
+
+    (short, long)
+}
+
 /// Parsed metadata describing a command.
 #[derive(Debug, Clone)]
 struct CommandMeta {
@@ -114,6 +172,8 @@ struct CommandMeta {
     ignore_result: bool,
     /// Return type metadata.
     ret: ReturnMeta,
+    /// Documentation metadata.
+    doc: DocMeta,
 }
 
 /// Parse generated tokens into an impl item with context on failure.
@@ -280,6 +340,11 @@ fn parse_command_method(owner: &str, method: &mut ImplItemFn) -> Result<Option<C
                     attr.parse_nested_meta(|meta| {
                         if meta.path.is_ident("ignore_result") {
                             args.ignore_result = true;
+                        } else if meta.path.is_ident("hidden") {
+                            args.hidden = true;
+                        } else if meta.path.is_ident("desc") {
+                            let value = meta.value()?;
+                            args.desc = Some(value.parse()?);
                         } else {
                             return Err(syn::Error::new_spanned(
                                 meta.path,
@@ -300,6 +365,16 @@ fn parse_command_method(owner: &str, method: &mut ImplItemFn) -> Result<Option<C
 
     let Some(macro_args) = macro_args else {
         return Ok(None);
+    };
+
+    // Extract doc comments from method attributes
+    let (doc_short, doc_long) = extract_doc_comments(&method.attrs);
+
+    // Build DocMeta: explicit desc overrides extracted short
+    let doc = DocMeta {
+        short: macro_args.desc.as_ref().map(|s| s.value()).or(doc_short),
+        long: doc_long,
+        hidden: macro_args.hidden,
     };
 
     let mut params = Vec::new();
@@ -409,6 +484,7 @@ fn parse_command_method(owner: &str, method: &mut ImplItemFn) -> Result<Option<C
         params,
         ignore_result: macro_args.ignore_result,
         ret,
+        doc,
     }))
 }
 
@@ -772,6 +848,23 @@ pub fn derive_commands(
             }
         };
 
+        // Generate doc tokens
+        let doc_short_tokens = match &cmd.doc.short {
+            Some(s) => {
+                let lit = syn::LitStr::new(s, proc_macro2::Span::call_site());
+                quote! { Some(#lit) }
+            }
+            None => quote! { None },
+        };
+        let doc_long_tokens = match &cmd.doc.long {
+            Some(s) => {
+                let lit = syn::LitStr::new(s, proc_macro2::Span::call_site());
+                quote! { Some(#lit) }
+            }
+            None => quote! { None },
+        };
+        let doc_hidden = cmd.doc.hidden;
+
         let spec_const = quote! {
             const #spec_const_ident: canopy::commands::CommandSpec = canopy::commands::CommandSpec {
                 id: canopy::commands::CommandId(#id_str),
@@ -779,6 +872,11 @@ pub fn derive_commands(
                 dispatch: canopy::commands::CommandDispatchKind::Node { owner: #owner_str },
                 params: Self::#params_const_ident,
                 ret: #ret_tokens,
+                doc: canopy::commands::CommandDocSpec {
+                    short: #doc_short_tokens,
+                    long: #doc_long_tokens,
+                    hidden: #doc_hidden,
+                },
                 invoke: Self::#invoke_ident,
             };
         };
