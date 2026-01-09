@@ -222,6 +222,18 @@ pub struct Key {
 }
 
 impl Key {
+    /// Normalize key inputs for binding and matching.
+    ///
+    /// Normalization handles two common sources of divergence across terminals:
+    ///
+    /// - **Ctrl-modified ASCII control codes** (0x00–0x1F and 0x7F) are mapped to
+    ///   canonical printable equivalents (e.g. 0x01 → `A`, 0x1B → `[`, 0x7F → `?`).
+    ///   Some terminals emit control codes without setting the Ctrl modifier, so
+    ///   these codes are treated as Ctrl-combinations even if Ctrl isn't reported.
+    ///   We also map Ctrl+`_`, Ctrl+`?`, and Ctrl+`7` to `/` to align with common
+    ///   `Ctrl+/` help bindings across keyboard layouts and terminal encodings.
+    /// - **Shift handling** is applied after Ctrl canonicalization.
+    ///
     /// Handling of the shift key is the most intricate part of this module.
     /// When we receive an event, it includes the shift modifier and also the
     /// modified character - e.g. "shift + A" or "shift + (". However, when
@@ -256,35 +268,77 @@ impl Key {
     /// conversion methods are literal and stright-forward, and don't perform
     /// normalization automatically.
     pub fn normalize(&self) -> Self {
-        if self.mods.shift {
-            if let KeyCode::Char(c) = self.key {
+        let mut normalized = *self;
+        if let KeyCode::Char(c) = normalized.key {
+            if let Some(mapped) = ctrl_control_code(c) {
+                normalized.key = KeyCode::Char(mapped);
+                normalized.mods.ctrl = true;
+            }
+            if normalized.mods.ctrl
+                && let KeyCode::Char(c) = normalized.key
+                && let Some(mapped) = ctrl_alias_char(c)
+            {
+                normalized.key = KeyCode::Char(mapped);
+            }
+        }
+
+        if normalized.mods.shift {
+            if let KeyCode::Char(c) = normalized.key {
                 if c.is_ascii_lowercase() {
                     Self {
                         mods: Mods {
                             shift: false,
-                            alt: self.mods.alt,
-                            ctrl: self.mods.ctrl,
+                            alt: normalized.mods.alt,
+                            ctrl: normalized.mods.ctrl,
                         },
                         key: KeyCode::Char(c.to_ascii_uppercase()),
                     }
-                } else if LEAVE_INTACT.contains(&self.key) {
-                    *self
+                } else if LEAVE_INTACT.contains(&normalized.key) {
+                    normalized
                 } else {
                     Self {
                         mods: Mods {
                             shift: false,
-                            alt: self.mods.alt,
-                            ctrl: self.mods.ctrl,
+                            alt: normalized.mods.alt,
+                            ctrl: normalized.mods.ctrl,
                         },
-                        key: self.key,
+                        key: normalized.key,
                     }
                 }
             } else {
-                *self
+                normalized
             }
         } else {
-            *self
+            normalized
         }
+    }
+}
+
+/// Map ASCII control codes to canonical printable characters.
+fn ctrl_control_code(c: char) -> Option<char> {
+    match c {
+        '\u{0}' => Some('@'),
+        '\u{1}'..='\u{1A}' => Some((c as u8 + b'@') as char),
+        '\u{1B}' => Some('['),
+        '\u{1C}' => Some('\\'),
+        '\u{1D}' => Some(']'),
+        '\u{1E}' => Some('^'),
+        '\u{1F}' => Some('/'),
+        '\u{7F}' => Some('?'),
+        _ => None,
+    }
+}
+
+/// Map Ctrl-modified printable aliases to canonical equivalents.
+fn ctrl_alias_char(c: char) -> Option<char> {
+    match c {
+        '_' => Some('/'),
+        '?' => Some('/'),
+        '4' => Some('\\'),
+        '5' => Some(']'),
+        '6' => Some('^'),
+        '7' => Some('/'),
+        _ => None,
     }
 }
 
@@ -396,6 +450,23 @@ mod tests {
         assert_eq!((Shift + KeyCode::Enter).normalize(), Shift + KeyCode::Enter);
 
         assert_eq!((Shift + Alt + 'A').normalize(), Alt + 'A',);
+        assert_eq!((Ctrl + '\u{1}').normalize(), Ctrl + 'A');
+        assert_eq!((Ctrl + '\u{1A}').normalize(), Ctrl + 'Z');
+        assert_eq!((Ctrl + '\u{1B}').normalize(), Ctrl + '[');
+        assert_eq!((Ctrl + '\u{1C}').normalize(), Ctrl + '\\');
+        assert_eq!((Ctrl + '\u{1D}').normalize(), Ctrl + ']');
+        assert_eq!((Ctrl + '\u{1E}').normalize(), Ctrl + '^');
+        assert_eq!((Ctrl + '\u{1F}').normalize(), Ctrl + '/');
+        assert_eq!((Ctrl + '_').normalize(), Ctrl + '/');
+        assert_eq!((Ctrl + '?').normalize(), Ctrl + '/');
+        assert_eq!((Ctrl + '\u{7F}').normalize(), Ctrl + '/');
+        assert_eq!((Ctrl + '4').normalize(), Ctrl + '\\');
+        assert_eq!((Ctrl + '5').normalize(), Ctrl + ']');
+        assert_eq!((Ctrl + '6').normalize(), Ctrl + '^');
+        assert_eq!((Ctrl + '7').normalize(), Ctrl + '/');
+        assert_eq!(Key::from('\u{1}').normalize(), Ctrl + 'A');
+        assert_eq!(Key::from('\u{1F}').normalize(), Ctrl + '/');
+        assert_eq!(Key::from('\u{7F}').normalize(), Ctrl + '/');
         assert_eq!(
             Key {
                 mods: Mods {

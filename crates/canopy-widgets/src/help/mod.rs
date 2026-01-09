@@ -12,6 +12,7 @@ use canopy::{
     error::Result,
     event::{Event, key::*},
     geom::Line,
+    inputmap::InputSpec,
     layout::{CanvasContext, Edges, Layout, Size},
     render::Render,
     state::NodeName,
@@ -224,14 +225,15 @@ impl HelpContent {
             };
         };
 
-        // Sort bindings: pre-event overrides first, then by input display
+        // Sort bindings by key groups with stable alphabetical ordering.
         let mut bindings: Vec<_> = snapshot.bindings.iter().collect();
         bindings.sort_by(|a, b| {
-            let a_pre = matches!(a.kind, BindingKind::PreEventOverride);
-            let b_pre = matches!(b.kind, BindingKind::PreEventOverride);
-            b_pre
-                .cmp(&a_pre)
-                .then_with(|| a.input.to_string().cmp(&b.input.to_string()))
+            let (a_group, a_key) = binding_sort_key(&a.input);
+            let (b_group, b_key) = binding_sort_key(&b.input);
+            a_group
+                .cmp(&b_group)
+                .then_with(|| a_key.cmp(&b_key))
+                .then_with(|| binding_kind_rank(a.kind).cmp(&binding_kind_rank(b.kind)))
         });
 
         // Find the widest key for alignment
@@ -267,6 +269,88 @@ impl HelpContent {
             entries,
             total_lines,
             wrap_width,
+        }
+    }
+}
+
+/// Sort groups for help bindings.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum BindingGroup {
+    /// Lowercase letter keys.
+    Lowercase,
+    /// Uppercase letter keys.
+    Uppercase,
+    /// Digit keys.
+    Number,
+    /// Arrow keys.
+    Arrow,
+    /// Unmodified special keys and mouse inputs.
+    Special,
+    /// Modifier chords and modified mouse inputs.
+    Chord,
+}
+
+/// Rank binding kinds for deterministic ordering.
+fn binding_kind_rank(kind: BindingKind) -> u8 {
+    match kind {
+        BindingKind::PreEventOverride => 0,
+        BindingKind::PostEventFallback => 1,
+    }
+}
+
+/// Build the grouping and alphabetic sort key for a binding input.
+fn binding_sort_key(input: &InputSpec) -> (BindingGroup, String) {
+    use canopy::event::mouse;
+
+    match input {
+        InputSpec::Key(key) => {
+            if key.mods != Empty {
+                return (BindingGroup::Chord, key.to_string());
+            }
+            match key.key {
+                KeyCode::Char(c) if c.is_ascii_lowercase() => {
+                    (BindingGroup::Lowercase, c.to_string())
+                }
+                KeyCode::Char(c) if c.is_ascii_uppercase() => {
+                    (BindingGroup::Uppercase, c.to_string())
+                }
+                KeyCode::Char(c) if c.is_ascii_digit() => (BindingGroup::Number, c.to_string()),
+                KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down => {
+                    (BindingGroup::Arrow, key.key.to_string())
+                }
+                _ => (BindingGroup::Special, key.key.to_string()),
+            }
+        }
+        InputSpec::Mouse(m) => {
+            let has_mods = m.modifiers.ctrl || m.modifiers.alt || m.modifiers.shift;
+            let group = if has_mods {
+                BindingGroup::Chord
+            } else {
+                BindingGroup::Special
+            };
+            let action = format!("{:?}", m.action);
+            let key_label = if matches!(m.button, mouse::Button::None) {
+                action
+            } else {
+                let button = format!("{:?}", m.button);
+                format!("{button} {action}")
+            };
+            let mut key = String::new();
+            if has_mods {
+                let mut parts = Vec::new();
+                if m.modifiers.ctrl {
+                    parts.push("Ctrl");
+                }
+                if m.modifiers.alt {
+                    parts.push("Alt");
+                }
+                if m.modifiers.shift {
+                    parts.push("Shift");
+                }
+                key.push_str(&format!("{}+", parts.join("+")));
+            }
+            key.push_str(&key_label);
+            (group, key)
         }
     }
 }

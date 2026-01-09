@@ -3,7 +3,10 @@ use std::{collections::HashMap, fmt};
 use crate::{
     commands::CommandInvocation,
     error::Result,
-    event::{key::Key, mouse::Mouse},
+    event::{
+        key::Key,
+        mouse::{self, Mouse},
+    },
     path::*,
     script,
 };
@@ -30,6 +33,9 @@ pub enum BindingTarget {
 }
 
 /// Input event used for bindings.
+///
+/// Key inputs are normalized when stored or matched so bindings are resilient
+/// to terminal differences in Ctrl/Shift representations.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum InputSpec {
     /// Mouse input.
@@ -64,11 +70,16 @@ impl fmt::Display for InputSpec {
                     parts.push("Shift");
                 }
                 let action = format!("{:?}", m.action);
-                let button = format!("{:?}", m.button);
-                if parts.is_empty() {
-                    write!(f, "{button} {action}")
+                let key_label = if matches!(m.button, mouse::Button::None) {
+                    action
                 } else {
-                    write!(f, "{}+{button} {action}", parts.join("+"))
+                    let button = format!("{:?}", m.button);
+                    format!("{button} {action}")
+                };
+                if parts.is_empty() {
+                    write!(f, "{key_label}")
+                } else {
+                    write!(f, "{}+{key_label}", parts.join("+"))
                 }
             }
         }
@@ -102,12 +113,16 @@ impl InputMode {
     }
 
     /// Resolve a key with a given path filter to a binding target.
+    ///
+    /// The input is normalized before matching.
     pub fn resolve(&self, path: &Path, input: &InputSpec) -> Option<BindingTarget> {
         self.resolve_match(path, input)
             .map(|(action, _match)| action)
     }
 
     /// Resolve a key with a given path filter, returning the match metadata.
+    ///
+    /// The input is normalized before matching.
     pub fn resolve_match(
         &self,
         path: &Path,
@@ -216,6 +231,8 @@ impl InputMap {
     }
 
     /// Resolve a binding in the current mode.
+    ///
+    /// The input is normalized before matching.
     pub fn resolve(&self, path: &Path, input: &InputSpec) -> Option<BindingTarget> {
         // Unwrap is safe, because we make it impossible for our current mode to
         // be non-existent.
@@ -230,6 +247,8 @@ impl InputMap {
     }
 
     /// Resolve a binding in the current mode, returning match metadata.
+    ///
+    /// The input is normalized before matching.
     pub fn resolve_match(
         &self,
         path: &Path,
@@ -246,6 +265,8 @@ impl InputMap {
     }
 
     /// Bind a key, within a given mode, with a given context to a list of commands.
+    ///
+    /// The input is normalized before storing.
     pub fn bind(
         &mut self,
         mode: &str,
@@ -257,6 +278,8 @@ impl InputMap {
     }
 
     /// Bind a key, within a given mode, with a given context to a direct command invocation.
+    ///
+    /// The input is normalized before storing.
     pub fn bind_command(
         &mut self,
         mode: &str,
