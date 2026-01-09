@@ -383,7 +383,10 @@ impl Canopy {
                     super::help::BindingKind::PostEventFallback
                 };
 
-                let label = super::help::binding_label(mb.info.target, &self.core.commands);
+                let label =
+                    super::help::binding_label(mb.info.target, &self.core.commands, |sid| {
+                        self.script_host.script_source(sid).map(|s| s.to_string())
+                    });
 
                 super::help::HelpBinding {
                     input: mb.info.input,
@@ -408,6 +411,77 @@ impl Canopy {
     /// Has the focus changed since the last render sweep?
     pub(crate) fn focus_changed(&self) -> bool {
         self.core.focus_gen != self.last_render_focus_gen
+    }
+
+    /// Fulfill any pending help snapshot request.
+    ///
+    /// If `pending_help_request` is set, capture the help snapshot using the
+    /// pre-request focus and store it in `pending_help_snapshot`.
+    fn fulfill_pending_help_request(&mut self) {
+        if let Some((_target, pre_focus)) = self.core.pending_help_request.take() {
+            let snapshot = self.help_snapshot_for_focus(pre_focus).to_owned();
+            self.core.pending_help_snapshot = Some(snapshot);
+        }
+    }
+
+    /// Generate a help snapshot for a specific focus node.
+    ///
+    /// This is like `help_snapshot` but uses the specified focus instead of
+    /// the current focus. Used to capture pre-help context.
+    fn help_snapshot_for_focus(&self, focus: Option<NodeId>) -> super::help::HelpSnapshot<'_> {
+        let focus = focus.unwrap_or(self.core.root);
+        let focus_path = self.core.node_path(self.core.root, focus);
+        let input_mode = self.keymap.current_mode();
+
+        // Get command availability from the specified focus
+        let command_avail = self.command_availability_from_node(focus);
+        let help_commands: Vec<super::help::HelpCommand<'_>> = command_avail
+            .into_iter()
+            .map(|avail| super::help::HelpCommand {
+                owner: match avail.spec.dispatch {
+                    commands::CommandDispatchKind::Free => None,
+                    commands::CommandDispatchKind::Node { owner } => Some(owner),
+                },
+                spec: avail.spec,
+                resolution: avail.resolution,
+            })
+            .collect();
+
+        // Get bindings for the current mode that match the focus path
+        let matched_bindings = self.keymap.bindings_matching_path(input_mode, &focus_path);
+        let help_bindings: Vec<super::help::HelpBinding<'_>> = matched_bindings
+            .into_iter()
+            .map(|mb| {
+                let path_len = focus_path.to_string().len();
+                let kind = if mb.m.end == path_len && mb.m.len > 0 {
+                    super::help::BindingKind::PreEventOverride
+                } else {
+                    super::help::BindingKind::PostEventFallback
+                };
+
+                let label =
+                    super::help::binding_label(mb.info.target, &self.core.commands, |sid| {
+                        self.script_host.script_source(sid).map(|s| s.to_string())
+                    });
+
+                super::help::HelpBinding {
+                    input: mb.info.input,
+                    mode: input_mode,
+                    path_filter: mb.info.path_filter,
+                    target: mb.info.target,
+                    kind,
+                    label,
+                }
+            })
+            .collect();
+
+        super::help::HelpSnapshot {
+            focus,
+            focus_path,
+            input_mode,
+            bindings: help_bindings,
+            commands: help_commands,
+        }
     }
 
     /// Render the tree only if a render is pending.
@@ -579,6 +653,27 @@ impl Canopy {
         Ok(())
     }
 
+    /// Render the tree into an offscreen buffer.
+    fn render_pass(&mut self, root_size: Expanse) -> Result<TermBuf> {
+        let mut styl = StyleManager::default();
+        styl.reset();
+
+        let def_style = styl.get(&self.style, "");
+        let mut next = TermBuf::new(root_size, ' ', def_style);
+
+        let screen_clip = Rect::new(0, 0, root_size.w, root_size.h);
+        let mut effect_stack: Vec<Box<dyn StyleEffect>> = Vec::new();
+        let mut traversal = RenderTraversal {
+            dest_buf: &mut next,
+            styl: &mut styl,
+            effect_stack: &mut effect_stack,
+        };
+        self.render_recursive(&mut traversal, self.core.root, screen_clip, 0, 0)?;
+        self.post_render(&mut next)?;
+
+        Ok(next)
+    }
+
     /// Post-render sweep of the tree.
     pub(crate) fn post_render(&mut self, buf: &mut TermBuf) -> Result<()> {
         let mut current = self.core.focus;
@@ -622,27 +717,23 @@ impl Canopy {
         if let Some(root_size) = self.root_size {
             self.core.update_layout(root_size)?;
 
-            let mut styl = StyleManager::default();
-            be.reset()?;
-            styl.reset();
-
-            let def_style = styl.get(&self.style, "");
-            let mut next = TermBuf::new(root_size, ' ', def_style);
-
             let layout_dirty = self.pre_render()?;
             if layout_dirty {
                 self.core.update_layout(root_size)?;
             }
 
-            let screen_clip = Rect::new(0, 0, root_size.w, root_size.h);
-            let mut effect_stack: Vec<Box<dyn StyleEffect>> = Vec::new();
-            let mut traversal = RenderTraversal {
-                dest_buf: &mut next,
-                styl: &mut styl,
-                effect_stack: &mut effect_stack,
-            };
-            self.render_recursive(&mut traversal, self.core.root, screen_clip, 0, 0)?;
-            self.post_render(&mut next)?;
+            let _ = self.core.take_help_snapshot_observed();
+            let mut next = self.render_pass(root_size)?;
+            if self.core.take_help_snapshot_observed() {
+                self.core.pending_help_snapshot = None;
+                self.core.update_layout(root_size)?;
+                if layout_dirty {
+                    self.core.update_layout(root_size)?;
+                }
+                next = self.render_pass(root_size)?;
+            }
+
+            be.reset()?;
 
             if let Some(prev) = &self.termbuf {
                 let mut screen_buf = prev.clone();
@@ -763,6 +854,10 @@ impl Canopy {
             };
 
             self.core.pop_command_scope(depth);
+
+            // Fulfill any pending help snapshot request before returning
+            self.fulfill_pending_help_request();
+
             result?;
             changed = true;
         }
@@ -836,6 +931,10 @@ impl Canopy {
             };
 
             self.core.pop_command_scope(depth);
+
+            // Fulfill any pending help snapshot request before returning
+            self.fulfill_pending_help_request();
+
             result?;
             changed = true;
         }

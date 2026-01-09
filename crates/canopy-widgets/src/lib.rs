@@ -17,6 +17,8 @@ mod dropdown;
 pub mod editor;
 /// Scrollable frame container.
 mod frame;
+/// Contextual help modal.
+pub mod help;
 /// Image rendering widget.
 mod image_view;
 /// Text input widget.

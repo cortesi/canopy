@@ -40,7 +40,8 @@ pub use core::{
 };
 // Re-export input mapping
 pub use core::{
-    backend, commands, cursor, error, event, path, render, script, state, style, text, view,
+    backend, commands, cursor, error, event, help, inputmap, path, render, script, state, style,
+    text, view,
 };
 
 // Re-export derive macros

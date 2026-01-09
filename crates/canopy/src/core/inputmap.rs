@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
 use crate::{
     commands::CommandInvocation,
@@ -44,6 +44,33 @@ impl InputSpec {
         match *self {
             Self::Mouse(m) => Self::Mouse(m),
             Self::Key(k) => Self::Key(k.normalize()),
+        }
+    }
+}
+
+impl fmt::Display for InputSpec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Key(k) => write!(f, "{k}"),
+            Self::Mouse(m) => {
+                let mut parts = Vec::new();
+                if m.modifiers.ctrl {
+                    parts.push("Ctrl");
+                }
+                if m.modifiers.alt {
+                    parts.push("Alt");
+                }
+                if m.modifiers.shift {
+                    parts.push("Shift");
+                }
+                let action = format!("{:?}", m.action);
+                let button = format!("{:?}", m.button);
+                if parts.is_empty() {
+                    write!(f, "{button} {action}")
+                } else {
+                    write!(f, "{}+{button} {action}", parts.join("+"))
+                }
+            }
         }
     }
 }

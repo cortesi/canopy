@@ -98,6 +98,19 @@ pub fn solarized_dark() -> StyleMap {
         .fg("/editor/line-number", BASE01)
         .fg("/editor/line-number/current", BLUE)
         .style("/editor/prompt", StyleBuilder::new().fg(BASE0).bg(BASE02))
+        .style("/help/content", StyleBuilder::new().fg(BASE0).bg(BASE02))
+        .style("/help/frame", StyleBuilder::new().bg(BASE02))
+        .style("/help/frame/focused", StyleBuilder::new().bg(BASE02))
+        .style("/help/frame/active", StyleBuilder::new().bg(BASE02))
+        .style("/help/frame/title", StyleBuilder::new().bg(BASE02))
+        .style(
+            "/help/key",
+            StyleBuilder::new()
+                .fg(CYAN)
+                .bg(BASE02)
+                .attrs(AttrSet::new(Attr::Bold)),
+        )
+        .style("/help/label", StyleBuilder::new().fg(BASE1).bg(BASE02))
         .apply();
     c
 }
@@ -163,6 +176,19 @@ pub fn solarized_light() -> StyleMap {
         .fg("/editor/line-number", BASE1)
         .fg("/editor/line-number/current", BLUE)
         .style("/editor/prompt", StyleBuilder::new().fg(BASE00).bg(BASE2))
+        .style("/help/content", StyleBuilder::new().fg(BASE00).bg(BASE2))
+        .style("/help/frame", StyleBuilder::new().bg(BASE2))
+        .style("/help/frame/focused", StyleBuilder::new().bg(BASE2))
+        .style("/help/frame/active", StyleBuilder::new().bg(BASE2))
+        .style("/help/frame/title", StyleBuilder::new().bg(BASE2))
+        .style(
+            "/help/key",
+            StyleBuilder::new()
+                .fg(CYAN)
+                .bg(BASE2)
+                .attrs(AttrSet::new(Attr::Bold)),
+        )
+        .style("/help/label", StyleBuilder::new().fg(BASE01).bg(BASE2))
         .apply();
     c
 }

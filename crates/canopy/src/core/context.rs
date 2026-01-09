@@ -6,6 +6,7 @@ use std::{
 
 use super::{
     commands,
+    help::OwnedHelpSnapshot,
     id::{NodeId, TypedId},
     style::StyleEffect,
     view::View,
@@ -162,6 +163,9 @@ pub trait ReadContext {
     /// Return a keyed child relative to the current node.
     fn child_keyed(&self, key: &str) -> Option<NodeId>;
 
+    /// Return a keyed child relative to a specific parent node.
+    fn child_keyed_in(&self, parent: NodeId, key: &str) -> Option<NodeId>;
+
     /// Current focus generation counter.
     fn current_focus_gen(&self) -> u64 {
         0
@@ -217,6 +221,12 @@ pub trait ReadContext {
 
         out
     }
+
+    /// Peek at the pending help snapshot, if any.
+    ///
+    /// This is used by help widgets to check if a snapshot is available
+    /// during render, without consuming it.
+    fn pending_help_snapshot(&self) -> Option<&OwnedHelpSnapshot>;
 }
 
 impl dyn ReadContext + '_ {
@@ -709,6 +719,20 @@ pub trait Context: ReadContext {
     /// Set the style map to be used for rendering.
     /// The style change will be applied before the next render.
     fn set_style(&mut self, style: StyleMap);
+
+    /// Request a help snapshot to be injected into the specified target node.
+    ///
+    /// This should be called before changing focus or layout, so the snapshot
+    /// captures the pre-help context. After the current command returns, Canopy
+    /// will capture the snapshot and inject it into the target widget.
+    fn request_help_snapshot(&mut self, target: NodeId);
+
+    /// Take the pending help snapshot, if any.
+    ///
+    /// This is called by help widgets to retrieve the snapshot that was
+    /// captured when `request_help_snapshot` was called. Returns `None` if
+    /// no snapshot is pending.
+    fn take_help_snapshot(&mut self) -> Option<OwnedHelpSnapshot>;
 }
 
 impl dyn Context + '_ {
@@ -997,6 +1021,11 @@ impl dyn Context + '_ {
         self.child_keyed(K::KEY)
     }
 
+    /// Get a typed keyed child's node ID from a specific parent.
+    pub fn get_child_in<K: ChildKey>(&self, parent: NodeId) -> Option<NodeId> {
+        self.child_keyed_in(parent, K::KEY)
+    }
+
     /// Add a typed keyed child to the current node.
     pub fn add_keyed<K: ChildKey>(&mut self, widget: K::Widget) -> Result<NodeId> {
         self.add_child_keyed(K::KEY, widget)
@@ -1244,8 +1273,20 @@ impl<'a> ReadContext for CoreContext<'a> {
         self.core.child_keyed(self.node_id, key)
     }
 
+    fn child_keyed_in(&self, parent: NodeId, key: &str) -> Option<NodeId> {
+        self.core.child_keyed(parent, key)
+    }
+
     fn current_focus_gen(&self) -> u64 {
         self.core.focus_gen
+    }
+
+    fn pending_help_snapshot(&self) -> Option<&OwnedHelpSnapshot> {
+        let snapshot = self.core.pending_help_snapshot.as_ref();
+        if snapshot.is_some() {
+            self.core.mark_help_snapshot_observed();
+        }
+        snapshot
     }
 }
 
@@ -1536,6 +1577,15 @@ impl<'a> Context for CoreContext<'a> {
     fn set_style(&mut self, style: StyleMap) {
         self.core.pending_style = Some(style);
     }
+
+    fn request_help_snapshot(&mut self, target: NodeId) {
+        // Store both the target and the current focus (before any changes)
+        self.core.pending_help_request = Some((target, self.core.focus));
+    }
+
+    fn take_help_snapshot(&mut self) -> Option<OwnedHelpSnapshot> {
+        self.core.pending_help_snapshot.take()
+    }
 }
 
 /// Read-only context bound to a specific node.
@@ -1640,7 +1690,19 @@ impl<'a> ReadContext for CoreViewContext<'a> {
         self.core.child_keyed(self.node_id, key)
     }
 
+    fn child_keyed_in(&self, parent: NodeId, key: &str) -> Option<NodeId> {
+        self.core.child_keyed(parent, key)
+    }
+
     fn current_focus_gen(&self) -> u64 {
         self.core.focus_gen
+    }
+
+    fn pending_help_snapshot(&self) -> Option<&OwnedHelpSnapshot> {
+        let snapshot = self.core.pending_help_snapshot.as_ref();
+        if snapshot.is_some() {
+            self.core.mark_help_snapshot_observed();
+        }
+        snapshot
     }
 }

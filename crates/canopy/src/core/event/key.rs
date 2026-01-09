@@ -1,5 +1,5 @@
 //! This module contains the core primitives to represent keyboard input.
-use std::ops::Add;
+use std::{fmt, ops::Add};
 
 /// Modifier key state.
 #[derive(Default, Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -324,6 +324,61 @@ impl From<KeyCode> for Key {
         Self {
             mods: Empty,
             key: c,
+        }
+    }
+}
+
+impl fmt::Display for KeyCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Backspace => write!(f, "Backspace"),
+            Self::Enter => write!(f, "Enter"),
+            Self::Left => write!(f, "Left"),
+            Self::Right => write!(f, "Right"),
+            Self::Up => write!(f, "Up"),
+            Self::Down => write!(f, "Down"),
+            Self::Home => write!(f, "Home"),
+            Self::End => write!(f, "End"),
+            Self::PageUp => write!(f, "PageUp"),
+            Self::PageDown => write!(f, "PageDown"),
+            Self::Tab => write!(f, "Tab"),
+            Self::BackTab => write!(f, "BackTab"),
+            Self::Delete => write!(f, "Delete"),
+            Self::Insert => write!(f, "Insert"),
+            Self::Null => write!(f, "Null"),
+            Self::Esc => write!(f, "Esc"),
+            Self::CapsLock => write!(f, "CapsLock"),
+            Self::ScrollLock => write!(f, "ScrollLock"),
+            Self::NumLock => write!(f, "NumLock"),
+            Self::PrintScreen => write!(f, "PrintScreen"),
+            Self::Pause => write!(f, "Pause"),
+            Self::Menu => write!(f, "Menu"),
+            Self::KeypadBegin => write!(f, "KeypadBegin"),
+            Self::F(n) => write!(f, "F{n}"),
+            Self::Char(' ') => write!(f, "Space"),
+            Self::Char(c) => write!(f, "{c}"),
+            Self::Media(m) => write!(f, "Media({m:?})"),
+            Self::Modifier(m) => write!(f, "Mod({m:?})"),
+        }
+    }
+}
+
+impl fmt::Display for Key {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut parts = Vec::new();
+        if self.mods.ctrl {
+            parts.push("Ctrl");
+        }
+        if self.mods.alt {
+            parts.push("Alt");
+        }
+        if self.mods.shift {
+            parts.push("Shift");
+        }
+        if parts.is_empty() {
+            write!(f, "{}", self.key)
+        } else {
+            write!(f, "{}+{}", parts.join("+"), self.key)
         }
     }
 }

@@ -6,7 +6,10 @@ use std::{
 
 use slotmap::SlotMap;
 
-use super::focus::{FocusManager, FocusRecoveryHint};
+use super::{
+    focus::{FocusManager, FocusRecoveryHint},
+    help::OwnedHelpSnapshot,
+};
 use crate::{
     ReadContext,
     backend::BackendControl,
@@ -50,6 +53,12 @@ pub struct Core {
     pub(crate) commands: CommandSet,
     /// Command scope stack for injection.
     command_scope: Vec<CommandScopeFrame>,
+    /// Pending help snapshot request - (target node, pre-request focus node).
+    pub(crate) pending_help_request: Option<(NodeId, Option<NodeId>)>,
+    /// Ready help snapshot for widgets to retrieve.
+    pub(crate) pending_help_snapshot: Option<OwnedHelpSnapshot>,
+    /// Tracks whether a pending help snapshot was observed during render.
+    pending_help_snapshot_observed: Cell<bool>,
 }
 
 #[derive(Default)]
@@ -115,7 +124,20 @@ impl Core {
             transaction: None,
             commands: CommandSet::new(),
             command_scope: Vec::new(),
+            pending_help_request: None,
+            pending_help_snapshot: None,
+            pending_help_snapshot_observed: Cell::new(false),
         }
+    }
+
+    /// Mark the pending help snapshot as observed during render.
+    pub(crate) fn mark_help_snapshot_observed(&self) {
+        self.pending_help_snapshot_observed.set(true);
+    }
+
+    /// Take and clear the observed flag for a pending help snapshot.
+    pub(crate) fn take_help_snapshot_observed(&self) -> bool {
+        self.pending_help_snapshot_observed.replace(false)
     }
 
     /// Return the current command-scope frame, if any.

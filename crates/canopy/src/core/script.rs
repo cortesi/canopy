@@ -459,6 +459,11 @@ impl ScriptHost {
             })
         })
     }
+
+    /// Get the source text for a script by its id.
+    pub fn script_source(&self, sid: ScriptId) -> Option<&str> {
+        self.scripts.get(&sid).map(|s| s.source())
+    }
 }
 
 #[cfg(test)]

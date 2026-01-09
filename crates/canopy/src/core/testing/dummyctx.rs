@@ -5,7 +5,7 @@ use slotmap::Key;
 use crate::{
     Context, ReadContext,
     commands::{ArgValue, CommandError, CommandInvocation, CommandScopeFrame, ListRowContext},
-    core::{NodeId, style::StyleEffect, view::View},
+    core::{NodeId, help::OwnedHelpSnapshot, style::StyleEffect, view::View},
     error::Result,
     event::{Event, mouse::MouseEvent},
     geom::{Direction, Expanse, Point, PointI32, RectI32},
@@ -116,6 +116,14 @@ impl ReadContext for DummyContext {
     }
 
     fn child_keyed(&self, _key: &str) -> Option<NodeId> {
+        None
+    }
+
+    fn child_keyed_in(&self, _parent: NodeId, _key: &str) -> Option<NodeId> {
+        None
+    }
+
+    fn pending_help_snapshot(&self) -> Option<&OwnedHelpSnapshot> {
         None
     }
 }
@@ -276,5 +284,14 @@ impl Context for DummyContext {
 
     fn set_style(&mut self, _style: StyleMap) {
         // DummyContext does not track styles
+    }
+
+    fn request_help_snapshot(&mut self, _target: NodeId) {
+        // DummyContext does not track help requests
+    }
+
+    fn take_help_snapshot(&mut self) -> Option<OwnedHelpSnapshot> {
+        // DummyContext does not track help snapshots
+        None
     }
 }

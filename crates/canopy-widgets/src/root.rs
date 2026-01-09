@@ -1,27 +1,37 @@
 use canopy::{
     Binder, Canopy, ChildKey, Context, Core, DefaultBindings, Loader, NodeId, ReadContext, Widget,
     command,
-    commands::FocusDirection,
+    commands::{CommandNode, CommandSpec, FocusDirection},
     derive_commands,
     error::{Error, Result},
     event::key::*,
     key,
     layout::{Direction, Layout, Sizing},
+    render::Render,
     state::NodeName,
+    style::effects,
 };
 
-use crate::inspector::Inspector;
+use crate::{help::Help, inspector::Inspector};
 
 // Typed key for the inspector slot
 key!(InspectorSlot: Inspector);
 
+// Typed key for the help slot
+key!(HelpSlot: Help);
+
 /// Key for the application subtree under root (widget type varies).
 const KEY_APP: &str = "AppSlot";
+
+/// Key for the main pane container (app + inspector).
+const KEY_MAIN_PANE: &str = "MainPane";
 
 /// A Root widget that lives at the base of a Canopy app.
 pub struct Root {
     /// Whether the inspector is visible.
     inspector_active: bool,
+    /// Whether the help modal is visible.
+    help_active: bool,
 }
 
 #[derive_commands]
@@ -30,6 +40,7 @@ impl Root {
     pub fn new() -> Self {
         Self {
             inspector_active: false,
+            help_active: false,
         }
     }
 
@@ -39,38 +50,69 @@ impl Root {
         self
     }
 
-    /// Synchronize the root layout based on inspector visibility.
+    /// Synchronize the root layout based on inspector and help visibility.
     fn sync_layout(&self, c: &mut dyn Context) -> Result<()> {
+        let main_pane = self.main_pane_id(c)?;
         let app = self.app_id(c)?;
         let inspector = self.inspector_id(c)?;
+        let help = self.help_id(c)?;
 
+        // Main pane uses Row for app + inspector
         c.set_hidden_of(inspector, !self.inspector_active);
-
-        c.set_layout(Layout::fill().direction(Direction::Row))?;
-
+        c.set_layout_of(main_pane, Layout::fill().direction(Direction::Row))?;
         c.set_layout_of(app, Layout::fill())?;
         c.set_layout_of(inspector, Layout::fill())?;
+
+        // Help overlay
+        c.set_hidden_of(help, !self.help_active);
+        c.set_layout_of(help, Layout::fill())?;
+
+        // Dim effect on main pane when help is visible
+        if self.help_active {
+            c.push_effect(main_pane, effects::dim(0.5))?;
+        } else {
+            c.clear_effects(main_pane)?;
+        }
+
+        // Root uses Stack layout so help overlays main pane
+        c.set_layout(Layout::fill().direction(Direction::Stack))?;
 
         Ok(())
     }
 
-    /// Application node id.
+    /// Main pane (app + inspector container) node id.
+    fn main_pane_id(&self, c: &dyn Context) -> Result<NodeId> {
+        c.child_keyed(KEY_MAIN_PANE)
+            .ok_or_else(|| Error::NotFound("main_pane".into()))
+    }
+
+    /// Application node id (inside main pane).
     fn app_id(&self, c: &dyn Context) -> Result<NodeId> {
-        c.child_keyed(KEY_APP)
+        let main_pane = self.main_pane_id(c)?;
+        c.child_keyed_in(main_pane, KEY_APP)
             .ok_or_else(|| Error::NotFound("app".into()))
     }
 
-    /// Inspector node id.
+    /// Inspector node id (inside main pane).
     fn inspector_id(&self, c: &dyn Context) -> Result<NodeId> {
-        c.get_child::<InspectorSlot>()
+        let main_pane = self.main_pane_id(c)?;
+        c.get_child_in::<InspectorSlot>(main_pane)
             .ok_or_else(|| Error::NotFound("inspector".into()))
     }
 
+    /// Help node id.
+    fn help_id(&self, c: &dyn Context) -> Result<NodeId> {
+        c.get_child::<HelpSlot>()
+            .ok_or_else(|| Error::NotFound("help".into()))
+    }
+
     #[command]
-    /// Exit from the program, restoring terminal state. If the inspector is
-    /// open, exit the inspector instead.
+    /// Exit from the program, restoring terminal state. If help or inspector is
+    /// open, close them first.
     pub fn quit(&mut self, c: &mut dyn Context) -> Result<()> {
-        if self.inspector_active {
+        if self.help_active {
+            self.hide_help(c)?;
+        } else if self.inspector_active {
             self.hide_inspector(c)?;
         } else {
             c.exit(0)
@@ -168,6 +210,39 @@ impl Root {
         Ok(())
     }
 
+    #[command]
+    /// Show the help modal with contextual bindings and commands.
+    pub fn show_help(&mut self, c: &mut dyn Context) -> Result<()> {
+        // Request snapshot BEFORE changing focus, so we capture the pre-help context
+        let help = self.help_id(c)?;
+        c.request_help_snapshot(help);
+
+        self.help_active = true;
+        self.sync_layout(c)?;
+        c.focus_first_in(help);
+        Ok(())
+    }
+
+    #[command]
+    /// Hide the help modal.
+    pub fn hide_help(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.help_active = false;
+        self.sync_layout(c)?;
+        let app = self.app_id(c)?;
+        c.focus_first_in(app);
+        Ok(())
+    }
+
+    #[command]
+    /// Toggle help modal visibility.
+    pub fn toggle_help(&mut self, c: &mut dyn Context) -> Result<()> {
+        if self.help_active {
+            self.hide_help(c)
+        } else {
+            self.show_help(c)
+        }
+    }
+
     /// Helper to install a root widget into the core and configure children.
     pub fn install(core: &mut Core, app: NodeId) -> Result<NodeId> {
         Self::install_with_inspector(core, app, false)
@@ -179,20 +254,56 @@ impl Root {
         app: NodeId,
         inspector_active: bool,
     ) -> Result<NodeId> {
+        // Create main pane container for app + inspector
+        let main_pane = core.create_detached(MainPane);
         let inspector = Inspector::install(core)?;
+
+        // Attach app and inspector to main pane
+        core.attach_keyed(main_pane, KEY_APP, app)?;
+        core.attach_keyed(main_pane, InspectorSlot::KEY, inspector)?;
+        core.set_layout_of(main_pane, Layout::fill().direction(Direction::Row))?;
+
+        // Create help modal (hidden by default)
+        let help = Help::install(core)?;
+        core.set_hidden(help, true);
+
+        // Set up root with main pane and help as children
         let root = Self::new().with_inspector(inspector_active);
         core.set_widget(core.root_id(), root);
-        core.attach_keyed(core.root_id(), InspectorSlot::KEY, inspector)?;
-        core.attach_keyed(core.root_id(), KEY_APP, app)?;
+        core.attach_keyed(core.root_id(), KEY_MAIN_PANE, main_pane)?;
+        core.attach_keyed(core.root_id(), HelpSlot::KEY, help)?;
+
+        // Configure layout
         core.set_hidden(inspector, !inspector_active);
-        core.set_layout_of(core.root_id(), Layout::fill().direction(Direction::Row))?;
+        core.set_layout_of(core.root_id(), Layout::fill().direction(Direction::Stack))?;
         core.with_layout_of(app, |layout| {
             *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
         })?;
         core.with_layout_of(inspector, |layout| {
             *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
         })?;
+        core.set_layout_of(help, Layout::fill())?;
+
         Ok(core.root_id())
+    }
+}
+
+/// Simple container widget for the main pane (app + inspector).
+struct MainPane;
+
+impl Widget for MainPane {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+        Ok(())
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("main_pane")
+    }
+}
+
+impl CommandNode for MainPane {
+    fn commands() -> &'static [&'static CommandSpec] {
+        &[]
     }
 }
 
@@ -219,8 +330,10 @@ impl Default for Root {
 impl DefaultBindings for Root {
     fn defaults(b: Binder) -> Binder {
         b.defaults::<Inspector>()
+            .defaults::<Help>()
             .with_path("root")
             .key(Ctrl + KeyCode::Right, "root::toggle_inspector()")
+            .key(Ctrl + Shift + '/', "root::toggle_help()")
             .key('q', "root::quit()")
             .with_path("inspector")
             .key('a', "root::focus_app()")
@@ -231,6 +344,7 @@ impl Loader for Root {
     fn load(c: &mut Canopy) -> Result<()> {
         c.add_commands::<Self>()?;
         Inspector::load(c)?;
+        Help::load(c)?;
         Ok(())
     }
 }

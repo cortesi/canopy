@@ -217,8 +217,10 @@ impl Loader for FocusGym {
 pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
     Binder::new(cnpy)
         .defaults::<Root>()
+        .with_path("") // Reset path filter after defaults
         .key('p', "print(\"focus gym\")")
-        .with_path("focus_gym/")
+        .key('?', "root::toggle_help()")
+        .with_path("focus_gym")
         .key(key::KeyCode::Tab, "root::focus_next()")
         .mouse(mouse::Action::ScrollDown, "root::focus_next()")
         .mouse(mouse::Action::ScrollUp, "root::focus_prev()")
