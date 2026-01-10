@@ -52,20 +52,21 @@ fn numbered_lines(prefix: &str, count: usize) -> String {
     lines.join("\n")
 }
 
-/// Create a framed editor node and return the frame node id.
+/// Create a framed editor node and attach it to the parent.
 fn add_editor_frame(
     c: &mut dyn Context,
+    parent: impl Into<NodeId>,
     title: &str,
     text: impl Into<String>,
     config: EditorConfig,
     height: Option<u32>,
     highlighter: Option<SyntectHighlighter>,
-) -> Result<NodeId> {
+) -> Result<()> {
     let mut editor = Editor::with_config(text, config);
     if let Some(highlighter) = highlighter {
         editor.set_highlighter(Some(Box::new(highlighter)));
     }
-    let frame_id = c.create_detached(Frame::new().with_title(title));
+    let frame_id = c.add_child_to(parent, Frame::new().with_title(title))?;
     let editor_id = c.add_child_to(frame_id, editor)?;
 
     c.set_layout_of(editor_id, Layout::fill())?;
@@ -76,7 +77,7 @@ fn add_editor_frame(
     }
     c.set_layout_of(frame_id, frame_layout)?;
 
-    Ok(frame_id)
+    Ok(())
 }
 
 /// Column container for editor frames.
@@ -173,130 +174,133 @@ impl EditorGym {
     }
 
     /// Build the left column of editor samples.
-    fn build_left_column(&self, c: &mut dyn Context) -> Result<NodeId> {
+    fn build_left_column(&self, c: &mut dyn Context) -> Result<()> {
         let single_line = repeated_line(SINGLE_LINE_SEED, 2);
         let soft_wrap = wrap_text();
         let no_wrap = no_wrap_text();
         let line_numbers = numbered_lines("Line", 30);
         let auto_grow = numbered_lines("Auto", 4);
 
-        let frames = vec![
-            add_editor_frame(
-                c,
-                "Single line (text)",
-                single_line,
-                EditorConfig::new()
-                    .with_multiline(false)
-                    .with_wrap(WrapMode::None),
-                Some(3),
-                None,
-            )?,
-            add_editor_frame(
-                c,
-                "Soft wrap (multiline)",
-                soft_wrap,
-                EditorConfig::new().with_wrap(WrapMode::Soft),
-                Some(8),
-                None,
-            )?,
-            add_editor_frame(
-                c,
-                "No wrap (multiline)",
-                no_wrap,
-                EditorConfig::new().with_wrap(WrapMode::None),
-                Some(6),
-                None,
-            )?,
-            add_editor_frame(
-                c,
-                "Line numbers (absolute)",
-                line_numbers,
-                EditorConfig::new().with_line_numbers(LineNumbers::Absolute),
-                Some(8),
-                None,
-            )?,
-            add_editor_frame(
-                c,
-                "Auto grow (min 2 max 6)",
-                auto_grow,
-                EditorConfig::new()
-                    .with_auto_grow(true)
-                    .with_min_height(2)
-                    .with_max_height(Some(6)),
-                None,
-                None,
-            )?,
-            add_editor_frame(
-                c,
-                "Read only",
-                READ_ONLY_TEXT,
-                EditorConfig::new().with_read_only(true),
-                Some(6),
-                None,
-            )?,
-        ];
-
-        let column_id = c.create_detached(EditorColumn::new());
-        c.set_children_of(column_id, frames)?;
-        Ok(column_id)
+        let column_id = c.add_child(EditorColumn::new())?;
+        add_editor_frame(
+            c,
+            column_id,
+            "Single line (text)",
+            single_line,
+            EditorConfig::new()
+                .with_multiline(false)
+                .with_wrap(WrapMode::None),
+            Some(3),
+            None,
+        )?;
+        add_editor_frame(
+            c,
+            column_id,
+            "Soft wrap (multiline)",
+            soft_wrap,
+            EditorConfig::new().with_wrap(WrapMode::Soft),
+            Some(8),
+            None,
+        )?;
+        add_editor_frame(
+            c,
+            column_id,
+            "No wrap (multiline)",
+            no_wrap,
+            EditorConfig::new().with_wrap(WrapMode::None),
+            Some(6),
+            None,
+        )?;
+        add_editor_frame(
+            c,
+            column_id,
+            "Line numbers (absolute)",
+            line_numbers,
+            EditorConfig::new().with_line_numbers(LineNumbers::Absolute),
+            Some(8),
+            None,
+        )?;
+        add_editor_frame(
+            c,
+            column_id,
+            "Auto grow (min 2 max 6)",
+            auto_grow,
+            EditorConfig::new()
+                .with_auto_grow(true)
+                .with_min_height(2)
+                .with_max_height(Some(6)),
+            None,
+            None,
+        )?;
+        add_editor_frame(
+            c,
+            column_id,
+            "Read only",
+            READ_ONLY_TEXT,
+            EditorConfig::new().with_read_only(true),
+            Some(6),
+            None,
+        )?;
+        Ok(())
     }
 
     /// Build the right column of editor samples.
-    fn build_right_column(&self, c: &mut dyn Context) -> Result<NodeId> {
+    fn build_right_column(&self, c: &mut dyn Context) -> Result<()> {
         let vi_text = numbered_lines("Vi", 24);
 
-        let frames = vec![
-            add_editor_frame(
-                c,
-                "Vi mode (relative numbers)",
-                vi_text,
-                EditorConfig::new()
-                    .with_mode(EditMode::Vi)
-                    .with_line_numbers(LineNumbers::Relative),
-                Some(8),
-                None,
-            )?,
-            add_editor_frame(
-                c,
-                "Syntax highlight (rust)",
-                RUST_SAMPLE,
-                EditorConfig::new().with_line_numbers(LineNumbers::Absolute),
-                Some(10),
-                Some(SyntectHighlighter::new("rs")),
-            )?,
-            add_editor_frame(
-                c,
-                "Tab stop 2",
-                TAB_SAMPLE,
-                EditorConfig::new()
-                    .with_tab_stop(2)
-                    .with_wrap(WrapMode::None),
-                Some(6),
-                None,
-            )?,
-            add_editor_frame(
-                c,
-                "Text mode (no numbers)",
-                wrap_text(),
-                EditorConfig::new().with_wrap(WrapMode::Soft),
-                Some(7),
-                None,
-            )?,
-            add_editor_frame(
-                c,
-                "Vi mode (no wrap)",
-                no_wrap_text(),
-                EditorConfig::new()
-                    .with_mode(EditMode::Vi)
-                    .with_wrap(WrapMode::None),
-                Some(6),
-                None,
-            )?,
-        ];
-
-        let column_id = c.create_detached(EditorColumn::new());
-        c.set_children_of(column_id, frames)?;
-        Ok(column_id)
+        let column_id = c.add_child(EditorColumn::new())?;
+        add_editor_frame(
+            c,
+            column_id,
+            "Vi mode (relative numbers)",
+            vi_text,
+            EditorConfig::new()
+                .with_mode(EditMode::Vi)
+                .with_line_numbers(LineNumbers::Relative),
+            Some(8),
+            None,
+        )?;
+        add_editor_frame(
+            c,
+            column_id,
+            "Syntax highlight (rust)",
+            RUST_SAMPLE,
+            EditorConfig::new().with_line_numbers(LineNumbers::Absolute),
+            Some(10),
+            Some(SyntectHighlighter::new("rs")),
+        )?;
+        add_editor_frame(
+            c,
+            column_id,
+            "Tab stop 2",
+            TAB_SAMPLE,
+            EditorConfig::new()
+                .with_tab_stop(2)
+                .with_wrap(WrapMode::None),
+            Some(6),
+            None,
+        )?;
+        add_editor_frame(
+            c,
+            column_id,
+            "Text mode (no numbers)",
+            wrap_text(),
+            EditorConfig::new().with_wrap(WrapMode::Soft),
+            Some(7),
+            None,
+        )?;
+        add_editor_frame(
+            c,
+            column_id,
+            "Vi mode (no wrap)",
+            no_wrap_text(),
+            EditorConfig::new()
+                .with_mode(EditMode::Vi)
+                .with_wrap(WrapMode::None),
+            Some(6),
+            None,
+        )?;
+        Ok(())
     }
 }
 
@@ -311,9 +315,8 @@ impl Widget for EditorGym {
     }
 
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
-        let left = self.build_left_column(c)?;
-        let right = self.build_right_column(c)?;
-        c.set_children(vec![left, right])?;
+        self.build_left_column(c)?;
+        self.build_right_column(c)?;
         Ok(())
     }
 }

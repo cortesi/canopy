@@ -55,7 +55,10 @@ impl<W: Widget + Loader + 'static> HarnessBuilder<W> {
         let mut canopy = Canopy::new();
 
         <W as Loader>::load(&mut canopy)?;
-        canopy.core.set_widget(canopy.core.root, self.root);
+        canopy
+            .core
+            .replace_subtree(canopy.core.root, self.root)
+            .expect("replace root widget");
         canopy.core.with_layout_of(canopy.core.root, |layout| {
             *layout = layout.width(Sizing::Flex(1)).height(Sizing::Flex(1));
         })?;
@@ -80,7 +83,10 @@ impl Harness {
         let render = NopBackend::new();
         let mut canopy = Canopy::new();
         <W as Loader>::load(&mut canopy)?;
-        canopy.core.set_widget(canopy.core.root, root);
+        canopy
+            .core
+            .replace_subtree(canopy.core.root, root)
+            .expect("replace root widget");
         canopy.set_root_size(size)?;
         Ok(Self {
             root: canopy.core.root,
@@ -150,10 +156,15 @@ impl Harness {
     }
 
     /// Execute a closure with mutable access to a widget by node id.
-    pub fn with_widget<W, R>(&mut self, node_id: NodeId, f: impl FnOnce(&mut W) -> R) -> R
+    pub fn with_widget<W, R>(
+        &mut self,
+        node_id: impl Into<NodeId>,
+        f: impl FnOnce(&mut W) -> R,
+    ) -> R
     where
         W: Widget + 'static,
     {
+        let node_id = node_id.into();
         self.canopy.core.with_widget_mut(node_id, |widget, _| {
             let any = widget as &mut dyn Any;
             let widget = any.downcast_mut::<W>().expect("widget type mismatch");

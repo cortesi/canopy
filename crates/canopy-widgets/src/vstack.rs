@@ -47,17 +47,20 @@ impl VStack {
     }
 
     /// Add a flex row with a weight.
-    pub fn push_flex(mut self, node: NodeId, weight: u32) -> Self {
+    pub fn push_flex(mut self, node: impl Into<NodeId>, weight: u32) -> Self {
         self.items.push(StackItem::Flex {
-            node,
+            node: node.into(),
             weight: weight.max(1),
         });
         self
     }
 
     /// Add a fixed-height row.
-    pub fn push_fixed(mut self, node: NodeId, height: u32) -> Self {
-        self.items.push(StackItem::Fixed { node, height });
+    pub fn push_fixed(mut self, node: impl Into<NodeId>, height: u32) -> Self {
+        self.items.push(StackItem::Fixed {
+            node: node.into(),
+            height,
+        });
         self
     }
 

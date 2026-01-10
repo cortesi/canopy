@@ -1,5 +1,6 @@
 use canopy::{
-    Binder, Canopy, Context, Loader, NodeId, ReadContext, Widget, command, derive_commands,
+    Binder, Canopy, Context, Loader, NodeId, ReadContext, TypedId, Widget, command,
+    derive_commands,
     error::{Error, Result},
     event::{key, mouse},
     layout::{CanvasContext, MeasureConstraints, Measurement, Size},
@@ -139,14 +140,14 @@ impl ListGym {
     }
 
     /// Create a framed list column and return the frame node id.
-    fn create_column(c: &mut dyn Context) -> Result<NodeId> {
+    fn create_column(c: &mut dyn Context) -> Result<TypedId<Frame>> {
         let frame_id = c.create_detached(Frame::new());
         let list_id = c.add_child_to(
             frame_id,
             List::<ListEntry>::new().with_selection_indicator("list/selected", "█ ", true),
         )?;
         // Add initial items
-        c.with_widget(list_id, |list: &mut List<ListEntry>, ctx| {
+        c.with_typed(list_id, |list: &mut List<ListEntry>, ctx| {
             for i in 0..10 {
                 list.append(ctx, list_item(i))?;
             }
@@ -165,9 +166,8 @@ impl ListGym {
     }
 
     /// Find the list to target for list commands.
-    fn list_id(&self, c: &dyn Context) -> Result<NodeId> {
+    fn list_id(&self, c: &dyn Context) -> Result<TypedId<List<ListEntry>>> {
         c.focused_or_first_descendant::<List<ListEntry>>()
-            .map(Into::into)
             .ok_or_else(|| Error::Invalid("list not initialized".into()))
     }
 
@@ -230,7 +230,7 @@ impl Widget for ListGym {
         )?;
 
         let frame_id = Self::create_column(c)?;
-        c.with_widget(panes_id, |panes: &mut Panes, ctx| {
+        c.with_typed(panes_id, |panes: &mut Panes, ctx| {
             panes.insert_col(ctx, frame_id)
         })?;
         Ok(())

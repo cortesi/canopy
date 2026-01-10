@@ -78,7 +78,7 @@ mod tests {
         core: &mut Core,
     ) -> Result<(NodeId, NodeId, NodeId, NodeId, NodeId, NodeId, NodeId)> {
         let root = core.root_id();
-        core.set_widget(root, TreeWidget::new("r"));
+        core.replace_subtree(root, TreeWidget::new("r"))?;
         let ba = core.create_detached(TreeWidget::new("ba"));
         let bb = core.create_detached(TreeWidget::new("bb"));
         let ba_la = core.create_detached(TreeWidget::new("ba_la"));

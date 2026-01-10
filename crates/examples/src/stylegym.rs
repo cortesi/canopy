@@ -3,7 +3,7 @@
 //! This example showcases themes, effects, and modal overlays in a two-pane layout.
 
 use canopy::{
-    Binder, Canopy, Context, Loader, ReadContext, Widget, command, derive_commands,
+    Binder, Canopy, ChildKey, Context, Loader, ReadContext, Widget, command, derive_commands,
     error::Result,
     event::{key, mouse},
     key,
@@ -235,12 +235,12 @@ impl Stylegym {
             let frame_id = ctx.add_child_to(modal_id, Frame::new().with_title("Demo Modal"))?;
             ctx.add_child_to(frame_id, ModalContent)?;
 
-            ctx.with_layout_of(frame_id, &mut |layout| {
-                layout.min_width = Some(35);
-                layout.max_width = Some(40);
-                layout.min_height = Some(5);
-                layout.max_height = Some(7);
-            })?;
+            let mut layout = Layout::fill().padding(Edges::all(1));
+            layout.min_width = Some(35);
+            layout.max_width = Some(40);
+            layout.min_height = Some(5);
+            layout.max_height = Some(7);
+            ctx.set_layout_of(frame_id, layout)?;
             Ok(())
         })?;
 
@@ -261,7 +261,7 @@ impl Stylegym {
         self.modal_visible = false;
 
         self.with_right_container(c, |_, ctx| {
-            if let Some(modal_id) = ctx.get_child::<ModalSlot>() {
+            if let Some(modal_id) = ctx.child_keyed(ModalSlot::KEY) {
                 ctx.remove_subtree(modal_id)?;
             }
             Ok(())

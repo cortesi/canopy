@@ -99,8 +99,9 @@ impl Canopy {
     }
 
     /// Run a compiled script by id on the target node.
-    pub fn run_script(&mut self, node_id: NodeId, sid: script::ScriptId) -> Result<()> {
-        self.script_host.execute(&mut self.core, node_id, sid)
+    pub fn run_script(&mut self, node_id: impl Into<NodeId>, sid: script::ScriptId) -> Result<()> {
+        self.script_host
+            .execute(&mut self.core, node_id.into(), sid)
     }
 
     /// Compile a script and return its identifier.
@@ -494,7 +495,8 @@ impl Canopy {
     }
 
     /// Has the focus path status of this node changed since the last render sweep?
-    pub fn node_focus_path_changed(&self, node_id: NodeId) -> bool {
+    pub fn node_focus_path_changed(&self, node_id: impl Into<NodeId>) -> bool {
+        let node_id = node_id.into();
         if self.focus_changed() {
             self.core.is_on_focus_path(node_id) || self.last_focus_path.contains(&node_id)
         } else {
@@ -736,14 +738,11 @@ impl Canopy {
             be.reset()?;
 
             if let Some(prev) = &self.termbuf {
-                let mut screen_buf = prev.clone();
-                screen_buf.copy(&next, root_size.rect());
-                screen_buf.diff(prev, be)?;
-                self.termbuf = Some(screen_buf);
+                next.diff(prev, be)?;
             } else {
                 next.render(be)?;
-                self.termbuf = Some(next);
             }
+            self.termbuf = Some(next);
 
             self.last_render_focus_gen = self.core.focus_gen;
             self.last_focus_path = self.core.focus_path_ids();
@@ -1225,7 +1224,9 @@ mod tests {
         render.render(&mut canopy)?;
         assert_eq!(POLL_COUNT.load(Ordering::SeqCst), 1);
 
-        canopy.core.set_widget(node_id, PollWidget::new());
+        canopy
+            .core
+            .replace_widget_keep_children(node_id, PollWidget::new())?;
         render.render(&mut canopy)?;
         assert_eq!(POLL_COUNT.load(Ordering::SeqCst), 2);
         Ok(())
@@ -1683,7 +1684,7 @@ mod tests {
         let (_, mut tr) = TestRender::create();
         let mut canopy = Canopy::new();
         canopy.add_commands::<N>()?;
-        canopy.core.set_widget(canopy.core.root, N);
+        canopy.core.replace_subtree(canopy.core.root, N)?;
 
         canopy.set_root_size(Expanse::new(10, 1))?;
         canopy.core.set_focus(canopy.core.root);
@@ -1738,7 +1739,9 @@ mod tests {
         let size = Expanse::new(5, 1);
         let (_, mut cr) = CanvasRender::create(size);
         let mut canopy = Canopy::new();
-        canopy.core.set_widget(canopy.core.root, Parent::new());
+        canopy
+            .core
+            .replace_subtree(canopy.core.root, Parent::new())?;
         let child = canopy
             .core
             .add_child_to_boxed(canopy.core.root, Box::new(Child))?;

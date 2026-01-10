@@ -1,13 +1,13 @@
 use anyhow::Result as AnyResult;
 use canopy::{
-    Binder, Canopy, Context, Loader, ReadContext, Widget, command,
+    Binder, Canopy, Context, Loader, NodeId, ReadContext, Widget, command,
     commands::VerticalDirection,
     derive_commands,
     error::Result,
     event::{key, mouse},
     geom::Rect,
     key,
-    layout::{Constraint, Direction, Layout, MeasureConstraints, Measurement, Size, Sizing},
+    layout::{Constraint, Direction, Layout, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
     style::{effects, solarized},
@@ -164,6 +164,7 @@ impl Todo {
         let frame_id = c.add_child_to(main_content_id, Frame::new())?;
         let list_id = c.add_child_to(frame_id, List::<TodoEntry>::new())?;
         let status_id = c.add_child_to(main_content_id, StatusBar)?;
+        let main_content_node = NodeId::from(main_content_id);
 
         // Set Todo (self) to use Stack direction for modal overlay support
         c.set_layout(Layout::fill().direction(Direction::Stack))?;
@@ -171,20 +172,16 @@ impl Todo {
         // Main content fills the space
         c.set_layout_of(main_content_id, Layout::fill())?;
 
-        c.with_layout_of(frame_id, &mut |layout| {
-            layout.width = Sizing::Flex(1);
-            layout.height = Sizing::Flex(1);
-        })?;
         c.set_layout_of(list_id, Layout::fill())?;
 
         c.set_layout_of(status_id, Layout::row().flex_horizontal(1).fixed_height(1))?;
 
         // Initially only show main content
-        c.set_children(vec![main_content_id])?;
+        c.set_children(vec![main_content_node])?;
 
         if !self.pending.is_empty() {
             let pending = std::mem::take(&mut self.pending);
-            c.with_widget(list_id, |list: &mut List<TodoEntry>, ctx| {
+            c.with_typed(list_id, |list: &mut List<TodoEntry>, ctx| {
                 for item in pending.iter().cloned() {
                     list.append(ctx, TodoEntry::new(item))?;
                 }
@@ -205,13 +202,12 @@ impl Todo {
         let adder_frame_id = c.add_child_to(modal_id, Frame::new())?;
         let input_id = c.add_child_to(adder_frame_id, Input::new(""))?;
 
-        c.with_layout_of(adder_frame_id, &mut |layout| {
-            layout.width = Sizing::Flex(1);
-            layout.min_height = Some(3);
-            layout.max_height = Some(3);
-            layout.min_width = Some(30);
-            layout.max_width = Some(50);
-        })?;
+        let mut layout = Frame::new().layout();
+        layout.min_height = Some(3);
+        layout.max_height = Some(3);
+        layout.min_width = Some(30);
+        layout.max_width = Some(50);
+        c.set_layout_of(adder_frame_id, layout)?;
 
         c.set_layout_of(input_id, Layout::fill())?;
 
@@ -222,17 +218,18 @@ impl Todo {
         let main_content_id = c
             .get_child::<MainSlot>()
             .expect("main content not initialized");
+        let main_content_node = NodeId::from(main_content_id);
 
         if self.adder_active {
             self.ensure_modal(c)?;
-            c.push_effect(main_content_id, effects::dim(0.5))?;
+            c.push_effect(main_content_node, effects::dim(0.5))?;
             c.with_child::<ModalSlot, _>(|_, ctx| {
                 ctx.set_hidden(false);
                 Ok(())
             })?;
         } else {
             // Clear dimming when modal is not active
-            c.clear_effects(main_content_id)?;
+            c.clear_effects(main_content_node)?;
             let _ = c.try_with_child::<ModalSlot, _>(|_, ctx| {
                 ctx.set_hidden(true);
                 Ok(())
@@ -270,7 +267,7 @@ impl Todo {
             Ok(())
         })?;
         if let Some(input_id) = c.unique_descendant::<Input>()? {
-            c.set_focus(input_id.into());
+            c.set_focus(NodeId::from(input_id));
         }
         Ok(())
     }
@@ -282,7 +279,7 @@ impl Todo {
 
         self.with_list(c, |list, ctx| {
             if let Some(item_id) = list.selected_item() {
-                ctx.with_widget(item_id.into(), |entry: &mut TodoEntry, _| {
+                ctx.with_widget(item_id, |entry: &mut TodoEntry, _| {
                     to_delete = Some(entry.todo.id);
                     Ok(())
                 })?;

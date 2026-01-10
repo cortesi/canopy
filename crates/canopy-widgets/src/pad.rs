@@ -27,13 +27,18 @@ impl Pad {
     }
 
     /// Wrap an existing child node in a new pad and return the pad node ID.
-    pub fn wrap(c: &mut dyn Context, child: NodeId, padding: Edges<u32>) -> Result<NodeId> {
+    pub fn wrap(
+        c: &mut dyn Context,
+        child: impl Into<NodeId>,
+        padding: Edges<u32>,
+    ) -> Result<NodeId> {
         Self::wrap_with(c, child, Self::new(padding))
     }
 
     /// Wrap an existing child node in a configured pad and return the pad node ID.
-    pub fn wrap_with(c: &mut dyn Context, child: NodeId, pad: Self) -> Result<NodeId> {
-        let pad_id = c.create_detached(pad);
+    pub fn wrap_with(c: &mut dyn Context, child: impl Into<NodeId>, pad: Self) -> Result<NodeId> {
+        let child = child.into();
+        let pad_id = NodeId::from(c.create_detached(pad));
         c.detach(child)?;
         c.attach(pad_id, child)?;
         Ok(pad_id)

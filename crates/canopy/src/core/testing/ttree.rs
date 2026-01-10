@@ -303,7 +303,7 @@ pub struct TestTree {
 
 /// Build the standard test tree and attach layout styles.
 fn build_tree(core: &mut Core) -> Result<TestTree> {
-    core.set_widget(core.root, R::new());
+    core.replace_subtree(core.root, R::new())?;
 
     let a = core.create_detached(Ba::new());
     let b = core.create_detached(Bb::new());

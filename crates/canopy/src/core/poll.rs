@@ -3,7 +3,7 @@ use std::{
     collections::binary_heap::BinaryHeap,
     sync::{Arc, Mutex, mpsc},
     thread,
-    time::{Duration, SystemTime},
+    time::{Duration, Instant},
 };
 
 use crate::{NodeId, event::Event};
@@ -12,7 +12,7 @@ use crate::{NodeId, event::Event};
 #[derive(Debug)]
 struct PendingNode {
     /// Scheduled time for the callback.
-    time: SystemTime,
+    time: Instant,
     /// Node identifier to poll.
     node_id: NodeId,
 }
@@ -48,7 +48,7 @@ struct PendingHeap {
 
 impl PendingHeap {
     /// Add a node with an explicit time base.
-    fn _add(&mut self, now: SystemTime, node_id: NodeId, duration: Duration) {
+    fn _add(&mut self, now: Instant, node_id: NodeId, duration: Duration) {
         self.nodes.push(PendingNode {
             time: now + duration,
             node_id,
@@ -57,25 +57,27 @@ impl PendingHeap {
 
     /// Add a node with a callback duration to the heap.
     fn add(&mut self, node_id: NodeId, duration: Duration) {
-        self._add(SystemTime::now(), node_id, duration);
+        self._add(Instant::now(), node_id, duration);
     }
 
     /// Calculate the wait time relative to a given timestamp.
-    fn _current_wait(&self, now: SystemTime) -> Option<Duration> {
-        self.nodes
-            .peek()
-            .map(|top| top.time.duration_since(now).unwrap_or(Duration::new(0, 0)))
+    fn _current_wait(&self, now: Instant) -> Option<Duration> {
+        self.nodes.peek().map(|top| {
+            top.time
+                .checked_duration_since(now)
+                .unwrap_or(Duration::ZERO)
+        })
     }
 
     /// Retrieve the current shortest wait time. We return None if no nodes are
     /// waiting, and a duration of 0 if the current top-most node has a
     /// scheduled time in the past.
     fn current_wait(&self) -> Option<Duration> {
-        self._current_wait(SystemTime::now())
+        self._current_wait(Instant::now())
     }
 
     /// Collect due node IDs relative to a given timestamp.
-    fn _collect(&mut self, now: SystemTime) -> Vec<NodeId> {
+    fn _collect(&mut self, now: Instant) -> Vec<NodeId> {
         let mut v = vec![];
         while let Some(n) = self.nodes.pop() {
             if n.time <= now {
@@ -91,7 +93,7 @@ impl PendingHeap {
 
     /// Remove and return all the pending operations .
     pub fn collect(&mut self) -> Vec<NodeId> {
-        self._collect(SystemTime::now())
+        self._collect(Instant::now())
     }
 }
 
@@ -119,9 +121,9 @@ impl Poller {
     /// Schedule a node to be polled. This function requires us to pass in the
     /// tx channel, which means that a lock over the global state must already
     /// be in place.
-    pub fn schedule(&mut self, node_id: NodeId, duration: Duration) {
+    pub fn schedule(&mut self, node_id: impl Into<NodeId>, duration: Duration) {
         let mut l = self.pending.lock().unwrap();
-        l.add(node_id, duration);
+        l.add(node_id.into(), duration);
         if let Some(h) = self.handle.as_mut() {
             // The thread is running, let's wake it up.
             h.thread().unpark();
@@ -157,7 +159,7 @@ mod tests {
     use crate::error::Result;
     #[test]
     fn pendingheap() -> Result<()> {
-        let now = SystemTime::now();
+        let now = Instant::now();
 
         let mut ph = PendingHeap::default();
         let mut map: SlotMap<NodeId, ()> = SlotMap::with_key();
@@ -169,10 +171,7 @@ mod tests {
         assert_eq!(ph._current_wait(now).unwrap(), Duration::from_secs(10));
         ph._add(now, n2, Duration::from_secs(100));
         assert!(ph._current_wait(now).unwrap() <= Duration::from_secs(10));
-        assert_eq!(
-            ph._collect(SystemTime::now() + Duration::from_secs(11)),
-            vec![n1]
-        );
+        assert_eq!(ph._collect(now + Duration::from_secs(11)), vec![n1]);
         assert!(ph._current_wait(now).unwrap() <= Duration::from_secs(100));
 
         Ok(())

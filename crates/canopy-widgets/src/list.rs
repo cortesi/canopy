@@ -220,7 +220,7 @@ impl<W: Selectable> List<W> {
     where
         W: 'static,
     {
-        let id = TypedId::new(ctx.add_child(widget)?);
+        let id = ctx.add_child(widget)?;
         self.items.push(id);
 
         // Auto-select and focus if this is the first item
@@ -239,7 +239,7 @@ impl<W: Selectable> List<W> {
     {
         let clamped = index.min(self.items.len());
         let was_empty = self.selected.is_none();
-        let id = TypedId::new(ctx.add_child(widget)?);
+        let id = ctx.add_child(widget)?;
         self.items.insert(clamped, id);
 
         // Adjust selection if inserting before current selection
@@ -321,7 +321,7 @@ impl<W: Selectable> List<W> {
         if let Some(old_idx) = self.selected
             && let Some(old_id) = self.items.get(old_idx).copied()
         {
-            ctx.with_widget(old_id.into(), |w: &mut W, _| {
+            ctx.with_widget(old_id, |w: &mut W, _| {
                 w.set_selected(false);
                 Ok(())
             })
@@ -332,7 +332,7 @@ impl<W: Selectable> List<W> {
         if let Some(new_idx) = new_selected
             && let Some(new_id) = self.items.get(new_idx).copied()
         {
-            ctx.with_widget(new_id.into(), |w: &mut W, _| {
+            ctx.with_widget(new_id, |w: &mut W, _| {
                 w.set_selected(true);
                 Ok(())
             })

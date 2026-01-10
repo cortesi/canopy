@@ -6,7 +6,7 @@ use canopy::{
     event::key,
     geom::{Expanse, Line},
     key,
-    layout::{CanvasContext, Layout, MeasureConstraints, Measurement, Size, Sizing},
+    layout::{CanvasContext, Layout, MeasureConstraints, Measurement, Size},
     render::Render,
 };
 use canopy_widgets::{Frame, Root};
@@ -184,10 +184,6 @@ impl Widget for FrameGym {
         let pattern_id = c.add_keyed_to::<PatternSlot>(frame_id, TestPattern::new())?;
 
         c.set_layout(Layout::fill())?;
-        c.with_layout_of(frame_id, &mut |layout| {
-            layout.width = Sizing::Flex(1);
-            layout.height = Sizing::Flex(1);
-        })?;
         c.set_layout_of(pattern_id, Layout::fill())?;
         Ok(())
     }

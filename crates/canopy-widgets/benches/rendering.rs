@@ -3,12 +3,8 @@
 use std::hint::black_box;
 
 use canopy::{
-    Context, Loader, ReadContext, Widget, derive_commands,
-    error::Result,
-    key,
-    layout::{Layout, Sizing},
-    render::Render,
-    testing::harness::Harness,
+    Context, Loader, ReadContext, Widget, derive_commands, error::Result, key, layout::Layout,
+    render::Render, testing::harness::Harness,
 };
 use canopy_widgets::Text;
 use criterion::{Criterion, criterion_group, criterion_main};
@@ -43,11 +39,8 @@ impl Widget for BenchmarkTextWrapper {
 
         c.set_layout(Layout::fill()).expect("Failed to style root");
 
-        c.with_layout_of(text_id, &mut |layout| {
-            layout.width = Sizing::Flex(1);
-            layout.height = Sizing::Flex(1);
-        })
-        .expect("Failed to style text");
+        c.set_layout_of(text_id, Layout::fill())
+            .expect("Failed to style text");
         Ok(())
     }
 }

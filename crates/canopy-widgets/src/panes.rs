@@ -49,9 +49,9 @@ impl Panes {
     }
 
     /// Construct panes with a single child.
-    pub fn with_child(child: NodeId) -> Self {
+    pub fn with_child(child: impl Into<NodeId>) -> Self {
         Self {
-            columns: vec![vec![child]],
+            columns: vec![vec![child.into()]],
             column_nodes: Vec::new(),
         }
     }
@@ -131,7 +131,8 @@ impl Panes {
     }
 
     /// Insert a node, splitting vertically.
-    pub fn insert_row(&mut self, c: &mut dyn Context, n: NodeId) -> Result<()> {
+    pub fn insert_row(&mut self, c: &mut dyn Context, n: impl Into<NodeId>) -> Result<()> {
+        let n = n.into();
         if let Some((x, y)) = self.focus_coords(c) {
             self.columns[x].insert(y, n);
         } else {
@@ -141,15 +142,16 @@ impl Panes {
     }
 
     /// Insert a node in a new column.
-    pub fn insert_col(&mut self, c: &mut dyn Context, n: NodeId) -> Result<()> {
+    pub fn insert_col(&mut self, c: &mut dyn Context, n: impl Into<NodeId>) -> Result<()> {
+        let n = n.into();
         let coords = self.focus_coords(c);
         let target_idx = if let Some((x, _)) = coords {
             while self.column_nodes.len() < self.columns.len() {
-                let column_node = c.create_detached(PaneColumn);
+                let column_node = NodeId::from(c.create_detached(PaneColumn));
                 self.column_nodes.push(column_node);
             }
             self.columns.insert(x + 1, vec![n]);
-            let column_node = c.create_detached(PaneColumn);
+            let column_node = NodeId::from(c.create_detached(PaneColumn));
             self.column_nodes.insert(x + 1, column_node);
             x + 1
         } else {
@@ -166,7 +168,7 @@ impl Panes {
     /// Sync child layout and grid placement styles.
     fn sync_layout(&mut self, c: &mut dyn Context) -> Result<()> {
         while self.column_nodes.len() < self.columns.len() {
-            let column_node = c.create_detached(PaneColumn);
+            let column_node = NodeId::from(c.create_detached(PaneColumn));
             self.column_nodes.push(column_node);
         }
 

@@ -97,12 +97,14 @@ impl Root {
     fn inspector_id(&self, c: &dyn Context) -> Result<NodeId> {
         let main_pane = self.main_pane_id(c)?;
         c.get_child_in::<InspectorSlot>(main_pane)
+            .map(Into::into)
             .ok_or_else(|| Error::NotFound("inspector".into()))
     }
 
     /// Help node id.
     fn help_id(&self, c: &dyn Context) -> Result<NodeId> {
         c.get_child::<HelpSlot>()
+            .map(Into::into)
             .ok_or_else(|| Error::NotFound("help".into()))
     }
 
@@ -244,16 +246,17 @@ impl Root {
     }
 
     /// Helper to install a root widget into the core and configure children.
-    pub fn install(core: &mut Core, app: NodeId) -> Result<NodeId> {
+    pub fn install(core: &mut Core, app: impl Into<NodeId>) -> Result<NodeId> {
         Self::install_with_inspector(core, app, false)
     }
 
     /// Helper to install a root widget into the core with an optional inspector pane.
     pub fn install_with_inspector(
         core: &mut Core,
-        app: NodeId,
+        app: impl Into<NodeId>,
         inspector_active: bool,
     ) -> Result<NodeId> {
+        let app = app.into();
         // Create main pane container for app + inspector
         let main_pane = core.create_detached(MainPane);
         let inspector = Inspector::install(core)?;
@@ -269,7 +272,7 @@ impl Root {
 
         // Set up root with main pane and help as children
         let root = Self::new().with_inspector(inspector_active);
-        core.set_widget(core.root_id(), root);
+        core.replace_subtree(core.root_id(), root)?;
         core.attach_keyed(core.root_id(), KEY_MAIN_PANE, main_pane)?;
         core.attach_keyed(core.root_id(), HelpSlot::KEY, help)?;
 

@@ -432,7 +432,12 @@ impl ScriptHost {
     }
 
     /// Execute a script by id for the given node.
-    pub fn execute(&self, core: &mut Core, node_id: NodeId, sid: ScriptId) -> Result<()> {
+    pub fn execute(
+        &self,
+        core: &mut Core,
+        node_id: impl Into<NodeId>,
+        sid: ScriptId,
+    ) -> Result<()> {
         self.execute_value(core, node_id, sid).map(|_| ())
     }
 
@@ -440,9 +445,10 @@ impl ScriptHost {
     pub fn execute_value(
         &self,
         core: &mut Core,
-        node_id: NodeId,
+        node_id: impl Into<NodeId>,
         sid: ScriptId,
     ) -> Result<rhai::Dynamic> {
+        let node_id = node_id.into();
         let s = self.scripts.get(&sid).ok_or_else(|| {
             error::Error::Script(format!("script {sid} not found for node {node_id:?}"))
         })?;

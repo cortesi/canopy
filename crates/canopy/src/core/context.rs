@@ -186,7 +186,7 @@ pub trait ReadContext {
                 return Some(id);
             }
 
-            let children = self.children_of(id);
+            let children = ReadContext::children_of(self, id);
             for child in children.into_iter().rev() {
                 stack.push(child);
             }
@@ -213,7 +213,7 @@ pub trait ReadContext {
                 out.push(id);
             }
 
-            let children = self.children_of(id);
+            let children = ReadContext::children_of(self, id);
             for child in children.into_iter().rev() {
                 stack.push(child);
             }
@@ -231,13 +231,14 @@ pub trait ReadContext {
 
 impl dyn ReadContext + '_ {
     /// Return the first node of type `W` within `root` and its descendants.
-    pub fn first_from<W: Widget + 'static>(&self, root: NodeId) -> Option<TypedId<W>> {
+    pub fn first_from<W: Widget + 'static>(&self, root: impl Into<NodeId>) -> Option<TypedId<W>> {
+        let root = root.into();
         let mut stack = vec![root];
         while let Some(id) = stack.pop() {
-            if self.node_type_id(id) == Some(TypeId::of::<W>()) {
+            if ReadContext::node_type_id(self, id) == Some(TypeId::of::<W>()) {
                 return Some(TypedId::new(id));
             }
-            for child in self.children_of(id).into_iter().rev() {
+            for child in ReadContext::children_of(self, id).into_iter().rev() {
                 stack.push(child);
             }
         }
@@ -245,14 +246,15 @@ impl dyn ReadContext + '_ {
     }
 
     /// Return all nodes of type `W` within `root` and its descendants.
-    pub fn all_from<W: Widget + 'static>(&self, root: NodeId) -> Vec<TypedId<W>> {
+    pub fn all_from<W: Widget + 'static>(&self, root: impl Into<NodeId>) -> Vec<TypedId<W>> {
+        let root = root.into();
         let mut out = Vec::new();
         let mut stack = vec![root];
         while let Some(id) = stack.pop() {
-            if self.node_type_id(id) == Some(TypeId::of::<W>()) {
+            if ReadContext::node_type_id(self, id) == Some(TypeId::of::<W>()) {
                 out.push(TypedId::new(id));
             }
-            for child in self.children_of(id).into_iter().rev() {
+            for child in ReadContext::children_of(self, id).into_iter().rev() {
                 stack.push(child);
             }
         }
@@ -328,7 +330,7 @@ impl dyn ReadContext + '_ {
             if self.node_matches_type::<W>(id) {
                 return Some(TypedId::new(id));
             }
-            for child in self.children_of(id).into_iter().rev() {
+            for child in ReadContext::children_of(self, id).into_iter().rev() {
                 stack.push(child);
             }
         }
@@ -346,7 +348,7 @@ impl dyn ReadContext + '_ {
                 }
                 found = Some(TypedId::new(id));
             }
-            for child in self.children_of(id).into_iter().rev() {
+            for child in ReadContext::children_of(self, id).into_iter().rev() {
                 stack.push(child);
             }
         }
@@ -361,7 +363,7 @@ impl dyn ReadContext + '_ {
             if self.node_matches_type::<W>(id) {
                 out.push(TypedId::new(id));
             }
-            for child in self.children_of(id).into_iter().rev() {
+            for child in ReadContext::children_of(self, id).into_iter().rev() {
                 stack.push(child);
             }
         }
@@ -372,7 +374,7 @@ impl dyn ReadContext + '_ {
     pub fn focused_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
         self.descendants_of_type::<W>()
             .into_iter()
-            .find(|id| self.node_is_on_focus_path((*id).into()))
+            .find(|id| ReadContext::node_is_on_focus_path(self, (*id).into()))
     }
 
     /// Return the descendant of type `W` on the focus path, or the first if none focused.
@@ -384,22 +386,23 @@ impl dyn ReadContext + '_ {
         let focused = descendants
             .iter()
             .copied()
-            .find(|id| self.node_is_on_focus_path((*id).into()));
+            .find(|id| ReadContext::node_is_on_focus_path(self, (*id).into()));
         focused.or_else(|| descendants.into_iter().next())
     }
 
     /// Return true if the node's widget type matches `W`.
     fn node_matches_type<W: Widget + 'static>(&self, node: NodeId) -> bool {
-        self.node_type_id(node) == Some(TypeId::of::<W>())
+        ReadContext::node_type_id(self, node) == Some(TypeId::of::<W>())
     }
 
     /// Return the first leaf node under `root` using pre-order traversal.
     ///
     /// A leaf is a node with no children.
-    pub fn first_leaf(&self, root: NodeId) -> Option<NodeId> {
+    pub fn first_leaf(&self, root: impl Into<NodeId>) -> Option<NodeId> {
+        let root = root.into();
         let mut stack = vec![root];
         while let Some(id) = stack.pop() {
-            let children = self.children_of(id);
+            let children = ReadContext::children_of(self, id);
             if children.is_empty() {
                 return Some(id);
             }
@@ -795,8 +798,8 @@ impl dyn Context + '_ {
     }
 
     /// Return the first leaf node under `root` using pre-order traversal.
-    pub fn first_leaf(&self, root: NodeId) -> Option<NodeId> {
-        self.read().first_leaf(root)
+    pub fn first_leaf(&self, root: impl Into<NodeId>) -> Option<NodeId> {
+        self.read().first_leaf(root.into())
     }
 
     /// Set the layout for the current node.
@@ -805,24 +808,25 @@ impl dyn Context + '_ {
     }
 
     /// Set the layout for a specific node.
-    pub fn set_layout_of(&mut self, node: NodeId, layout: Layout) -> Result<()> {
-        self.with_layout_of(node, &mut |l| *l = layout)
+    pub fn set_layout_of(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {
+        Context::with_layout_of(self, node.into(), &mut |l| *l = layout)
     }
 
     /// Execute a closure with mutable access to a widget of type `W`.
     pub fn with_widget<W, R>(
         &mut self,
-        node: NodeId,
+        node: impl Into<NodeId>,
         f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<R>
     where
         W: Widget + 'static,
     {
+        let node = node.into();
         let mut output = None;
         let mut f = Some(f);
         let expected = TypeId::of::<W>();
         self.with_widget_mut(node, &mut |widget, ctx| {
-            let actual = ctx.node_type_id(node).ok_or(Error::NodeNotFound(node))?;
+            let actual = ReadContext::node_type_id(ctx, node).ok_or(Error::NodeNotFound(node))?;
             if actual != expected {
                 return Err(Error::TypeMismatch {
                     expected: type_name::<W>().to_string(),
@@ -851,24 +855,25 @@ impl dyn Context + '_ {
     where
         W: Widget + 'static,
     {
-        self.with_widget(node.into(), f)
+        self.with_widget(node, f)
     }
 
     /// Execute a closure with mutable access to a widget of type `W` if it matches.
     pub fn try_with_widget<W, R>(
         &mut self,
-        node: NodeId,
+        node: impl Into<NodeId>,
         f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<Option<R>>
     where
         W: Widget + 'static,
     {
+        let node = node.into();
         let mut output = None;
         let mut matched = false;
         let mut f = Some(f);
         let expected = TypeId::of::<W>();
         self.with_widget_mut(node, &mut |widget, ctx| {
-            let actual = ctx.node_type_id(node).ok_or(Error::NodeNotFound(node))?;
+            let actual = ReadContext::node_type_id(ctx, node).ok_or(Error::NodeNotFound(node))?;
             if actual != expected {
                 return Ok(());
             }
@@ -901,45 +906,85 @@ impl dyn Context + '_ {
     where
         W: Widget + 'static,
     {
-        self.try_with_widget(node.into(), f)
+        self.try_with_widget(node, f)
     }
 
     /// Create a widget node detached from the tree.
-    pub fn create_detached<W: Widget + 'static>(&mut self, widget: W) -> NodeId {
-        self.create_detached_boxed(widget.into())
+    pub fn create_detached<W: Widget + 'static>(&mut self, widget: W) -> TypedId<W> {
+        let id = self.create_detached_boxed(widget.into());
+        TypedId::new(id)
     }
 
-    /// Add a widget as a child of the current node and return the new node ID.
-    pub fn add_child<W: Widget + 'static>(&mut self, widget: W) -> Result<NodeId> {
+    /// Add a widget as a child of the current node and return the new typed node ID.
+    pub fn add_child<W: Widget + 'static>(&mut self, widget: W) -> Result<TypedId<W>> {
         self.add_child_to(self.node_id(), widget)
     }
 
-    /// Add a widget as a child of a specific parent and return the new node ID.
+    /// Add a widget as a child of a specific parent and return the new typed node ID.
     pub fn add_child_to<W: Widget + 'static>(
         &mut self,
-        parent: NodeId,
+        parent: impl Into<NodeId>,
         widget: W,
-    ) -> Result<NodeId> {
-        self.add_child_to_boxed(parent, widget.into())
+    ) -> Result<TypedId<W>> {
+        let id = self.add_child_to_boxed(parent.into(), widget.into())?;
+        Ok(TypedId::new(id))
     }
 
-    /// Add a widget as a keyed child of the current node and return the new node ID.
-    pub fn add_child_keyed<W: Widget + 'static>(&mut self, key: &str, widget: W) -> Result<NodeId> {
+    /// Add a widget as a keyed child of the current node and return the new typed node ID.
+    pub fn add_child_keyed<W: Widget + 'static>(
+        &mut self,
+        key: &str,
+        widget: W,
+    ) -> Result<TypedId<W>> {
         self.add_child_to_keyed(self.node_id(), key, widget)
     }
 
-    /// Add a widget as a keyed child of a specific parent and return the new node ID.
+    /// Add a widget as a keyed child of a specific parent and return the new typed node ID.
     pub fn add_child_to_keyed<W: Widget + 'static>(
         &mut self,
-        parent: NodeId,
+        parent: impl Into<NodeId>,
         key: &str,
         widget: W,
-    ) -> Result<NodeId> {
-        self.add_child_to_keyed_boxed(parent, key, widget.into())
+    ) -> Result<TypedId<W>> {
+        let id = self.add_child_to_keyed_boxed(parent.into(), key, widget.into())?;
+        Ok(TypedId::new(id))
+    }
+
+    /// Add multiple typed widgets as children of the current node and return their typed node IDs.
+    pub fn add_children<W, I>(&mut self, widgets: I) -> Result<Vec<TypedId<W>>>
+    where
+        W: Widget + 'static,
+        I: IntoIterator<Item = W>,
+    {
+        let mut ids = Vec::new();
+        for widget in widgets {
+            let child = self.add_child_to(self.node_id(), widget)?;
+            ids.push(child);
+        }
+        Ok(ids)
+    }
+
+    /// Add multiple typed widgets as children of a specific parent and return their typed node IDs.
+    pub fn add_children_to<W, I>(
+        &mut self,
+        parent: impl Into<NodeId>,
+        widgets: I,
+    ) -> Result<Vec<TypedId<W>>>
+    where
+        W: Widget + 'static,
+        I: IntoIterator<Item = W>,
+    {
+        let parent = parent.into();
+        let mut ids = Vec::new();
+        for widget in widgets {
+            let child = self.add_child_to(parent, widget)?;
+            ids.push(child);
+        }
+        Ok(ids)
     }
 
     /// Add multiple boxed widgets as children of the current node and return their node IDs.
-    pub fn add_children<I>(&mut self, widgets: I) -> Result<Vec<NodeId>>
+    pub fn add_children_boxed<I>(&mut self, widgets: I) -> Result<Vec<NodeId>>
     where
         I: IntoIterator<Item = Box<dyn Widget>>,
     {
@@ -952,10 +997,15 @@ impl dyn Context + '_ {
     }
 
     /// Add multiple boxed widgets as children of a specific parent and return their node IDs.
-    pub fn add_children_to<I>(&mut self, parent: NodeId, widgets: I) -> Result<Vec<NodeId>>
+    pub fn add_children_to_boxed<I>(
+        &mut self,
+        parent: impl Into<NodeId>,
+        widgets: I,
+    ) -> Result<Vec<NodeId>>
     where
         I: IntoIterator<Item = Box<dyn Widget>>,
     {
+        let parent = parent.into();
         let mut ids = Vec::new();
         for widget in widgets {
             let child = self.add_child_to_boxed(parent, widget)?;
@@ -1017,26 +1067,29 @@ impl dyn Context + '_ {
     }
 
     /// Get a typed keyed child's node ID.
-    pub fn get_child<K: ChildKey>(&self) -> Option<NodeId> {
-        self.child_keyed(K::KEY)
+    pub fn get_child<K: ChildKey>(&self) -> Option<TypedId<K::Widget>> {
+        self.child_keyed(K::KEY).map(TypedId::new)
     }
 
     /// Get a typed keyed child's node ID from a specific parent.
-    pub fn get_child_in<K: ChildKey>(&self, parent: NodeId) -> Option<NodeId> {
-        self.child_keyed_in(parent, K::KEY)
+    pub fn get_child_in<K: ChildKey>(
+        &self,
+        parent: impl Into<NodeId>,
+    ) -> Option<TypedId<K::Widget>> {
+        ReadContext::child_keyed_in(self, parent.into(), K::KEY).map(TypedId::new)
     }
 
-    /// Add a typed keyed child to the current node.
-    pub fn add_keyed<K: ChildKey>(&mut self, widget: K::Widget) -> Result<NodeId> {
+    /// Add a typed keyed child to the current node and return its typed node ID.
+    pub fn add_keyed<K: ChildKey>(&mut self, widget: K::Widget) -> Result<TypedId<K::Widget>> {
         self.add_child_keyed(K::KEY, widget)
     }
 
-    /// Add a typed keyed child to a specific parent.
+    /// Add a typed keyed child to a specific parent and return its typed node ID.
     pub fn add_keyed_to<K: ChildKey>(
         &mut self,
-        parent: NodeId,
+        parent: impl Into<NodeId>,
         widget: K::Widget,
-    ) -> Result<NodeId> {
+    ) -> Result<TypedId<K::Widget>> {
         self.add_child_to_keyed(parent, K::KEY, widget)
     }
 

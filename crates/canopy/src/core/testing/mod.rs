@@ -63,7 +63,9 @@ mod tests {
         let (_, mut tr) = TestRender::create();
         let mut canopy = Canopy::new();
 
-        canopy.core.set_widget(canopy.core.root, Block::new(true));
+        canopy
+            .core
+            .replace_subtree(canopy.core.root, Block::new(true))?;
         let left = canopy.core.create_detached(Block::new(false));
         let right = canopy.core.create_detached(Block::new(false));
         canopy
@@ -84,7 +86,9 @@ mod tests {
         let (_, mut tr) = TestRender::create();
         let mut canopy = Canopy::new();
 
-        canopy.core.set_widget(canopy.core.root, Block::new(true));
+        canopy
+            .core
+            .replace_subtree(canopy.core.root, Block::new(true))?;
         let left = canopy.core.create_detached(Block::new(false));
         let right = canopy.core.create_detached(Block::new(false));
         canopy

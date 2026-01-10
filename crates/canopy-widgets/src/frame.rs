@@ -117,13 +117,14 @@ impl Frame {
     }
 
     /// Wrap an existing child node in a new frame and return the frame node ID.
-    pub fn wrap(c: &mut dyn Context, child: NodeId) -> Result<NodeId> {
+    pub fn wrap(c: &mut dyn Context, child: impl Into<NodeId>) -> Result<NodeId> {
         Self::wrap_with(c, child, Self::new())
     }
 
     /// Wrap an existing child node in a configured frame and return the frame node ID.
-    pub fn wrap_with(c: &mut dyn Context, child: NodeId, frame: Self) -> Result<NodeId> {
-        let frame_id = c.create_detached(frame);
+    pub fn wrap_with(c: &mut dyn Context, child: impl Into<NodeId>, frame: Self) -> Result<NodeId> {
+        let child = child.into();
+        let frame_id = NodeId::from(c.create_detached(frame));
         c.detach(child)?;
         c.attach(frame_id, child)?;
         Ok(frame_id)

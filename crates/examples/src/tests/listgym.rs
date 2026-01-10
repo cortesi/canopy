@@ -33,7 +33,7 @@ fn focused_list_index(harness: &mut Harness) -> Result<Option<usize>> {
         let focused = ctx.focused_descendant::<List<ListEntry>>();
         let lists = ctx.descendants_of_type::<List<ListEntry>>();
         Ok(focused.and_then(|focused_id| {
-            let focused_id: canopy::NodeId = focused_id.into();
+            let focused_id = canopy::NodeId::from(focused_id);
             lists
                 .iter()
                 .position(|id| canopy::NodeId::from(*id) == focused_id)

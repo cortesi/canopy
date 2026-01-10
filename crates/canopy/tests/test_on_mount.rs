@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Context, Loader, NodeId, ReadContext, Widget,
+        Context, Loader, NodeId, ReadContext, TypedId, Widget,
         commands::{CommandNode, CommandSpec},
         error::Result,
         render::Render,
@@ -15,7 +15,7 @@ mod tests {
         mount_calls: usize,
         mounted_id: Option<NodeId>,
         mounted_root: Option<NodeId>,
-        child_id: Option<NodeId>,
+        child_id: Option<TypedId<ChildProbe>>,
     }
 
     impl MountProbe {
@@ -112,6 +112,7 @@ mod tests {
         assert_eq!(mounted_id, Some(harness.root));
         assert_eq!(mounted_root, Some(harness.canopy.core.root_id()));
         let child_id = child_id.expect("child id missing");
+        let child_id = NodeId::from(child_id);
 
         let (child_calls, child_mounted_id) = harness
             .with_widget(child_id, |probe: &mut ChildProbe| {

@@ -1,5 +1,5 @@
 use canopy::{
-    Binder, Canopy, Context, Loader, ReadContext, Widget, command, derive_commands,
+    Binder, Canopy, Context, Loader, NodeId, ReadContext, Widget, command, derive_commands,
     error::Result,
     event::{key, mouse},
     geom::Expanse,
@@ -182,11 +182,12 @@ impl FocusGym {
         let Some(root_block) = c.unique_child::<Block>()? else {
             return Ok(());
         };
-        let Some(focused) = c.focused_leaf(root_block.into()) else {
+        let root_block = NodeId::from(root_block);
+        let Some(focused) = c.focused_leaf(root_block) else {
             return Ok(());
         };
         c.remove_subtree(focused)?;
-        c.focus_first_in(root_block.into());
+        c.focus_first_in(root_block);
         Ok(())
     }
 }

@@ -1,84 +1,113 @@
-# trait CommandNode
+# Commands
 
-Commands drive much of Canopy's flexibility and are the core mechanism for
-interacting with widgets. Widgets implement the
-[CommandNode](doc/canopy/commands/trait.CommandNode.html) trait, which has two
-methods:
+Commands provide a uniform way to invoke widget behavior from Rust and from scripts. Each widget
+exposes a static list of `CommandSpec` values, and the runtime routes invocations to the correct
+node based on command metadata and focus context.
 
-```rust
-fn commands() -> Vec<CommandSpec>
-    where Self: Sized;
+## Defining commands
 
-fn dispatch(
-    &mut self,
-    c: &mut dyn Context,
-    cmd: &CommandInvocation
-) -> Result<ReturnValue>;
-```
-
-The `commands` function returns a list of command specifications supported by
-this widget. Each `CommandSpec` includes a name, description, and signature.
-The `dispatch` function takes a `CommandInvocation` and runs the command.
-
-Implementing these functions by hand is tedious, so Canopy provides derive
-helpers. Use `#[derive_commands]` on the widget's impl block and annotate each
-command with `#[command]`. For example:
+Widgets implement the `CommandNode` trait. You almost never write it by hand; instead, use the
+`#[derive_commands]` macro on an impl block and tag command methods with `#[command]`.
 
 ```rust
-struct MyWidget {
-    value: u64,
+use canopy::{Context, ReadContext, Widget, derive_commands, command, error::Result, render::Render, state::NodeName};
+
+struct Counter {
+    value: i64,
 }
 
 #[derive_commands]
-impl MyWidget {
-    /// Increment our value.
+impl Counter {
+    pub fn new() -> Self {
+        Self { value: 0 }
+    }
+
     #[command]
-    fn inc(&mut self, _ctx: &mut dyn Context) -> Result<()> {
+    fn inc(&mut self, _ctx: &mut dyn Context) {
         self.value = self.value.saturating_add(1);
+    }
+
+    #[command]
+    fn add(&mut self, _ctx: &mut dyn Context, delta: i64) {
+        self.value = self.value.saturating_add(delta);
+    }
+}
+
+impl Widget for Counter {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         Ok(())
     }
 
-    /// Decrement our value.
-    #[command]
-    fn dec(&mut self, _ctx: &mut dyn Context) -> Result<()> {
-        self.value = self.value.saturating_sub(1);
-        Ok(())
+    fn name(&self) -> NodeName {
+        NodeName::convert("counter")
     }
 }
 ```
 
-# Arguments
-
-Command functions can take an arbitrary number of arguments. The following
-types are supported:
-
-- `&mut dyn Context`. This is handled specially: if the first argument is of
-  type `&mut dyn Context`, it is automatically supplied during dispatch and
-  cannot be specified in a script.
-- `isize`
-
-The list of supported types can be extended as needed.
-
-# Return values
-
-The following return value variants are supported:
-
-- No return value.
-- `String`
-
-We also support `Result` variants of the above:
-
-- `Result<()>`
-- `Result<T>` where `T` is any supported type.
-
-Sometimes we want to expose a command that returns a value in Rust but has no
-equivalent in the scripting layer. In those cases use
-`#[command(ignore_result)]`. For example:
+The derive also generates `cmd_*()` helpers for building typed calls:
 
 ```rust
-/// Delete the currently selected item.
-#[command(ignore_result)]
-pub fn delete_selected(&mut self, ctx: &mut dyn Context) -> Option<N> {
-    self.delete_item(ctx, self.offset)
+let call = Counter::cmd_add().call_with((5,));
+ctx.dispatch_command(&call.invocation())?;
+```
+
+## Command registration
+
+Commands must be registered on the `Canopy` instance to be available for dispatch or scripting.
+Register widget command sets once during initialization:
+
+```rust
+canopy.add_commands::<Counter>()?;
+```
+
+## Arguments and conversions
+
+Command parameters use `ArgValue` conversions. Built-in conversions include:
+
+- `bool`, `String`, `&str`
+- integers and floats
+- `Option<T>`, `Vec<T>`, maps (`BTreeMap`/`HashMap`) where `T: ToArgValue`
+
+For custom types, derive `CommandArg` (serde-backed):
+
+```rust
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, canopy::CommandArg)]
+struct MyArgs {
+    name: String,
+    count: u32,
 }
 ```
+
+## Injection
+
+Some parameter types are injected by the runtime rather than supplied by the caller:
+
+- `Event`
+- `MouseEvent`
+- `ListRowContext`
+- `Option<T>` for optional injection
+- `Injected<T>` to explicitly request injection
+- `Arg<T>` to force a caller-supplied argument even if `T` is injectable
+
+Injected values are sourced from the current command scope (event, mouse, list row).
+
+## Return values
+
+Commands can return:
+
+- `()` or `Result<()>`
+- any type that implements `FromArgValue`
+- `Result<T>` where `T: FromArgValue`
+
+Use `#[command(ignore_result)]` when the result should be available in Rust but not surfaced in
+scripting.
+
+## Dispatch and invocation
+
+`CommandCall` and `CommandInvocation` are the portable representations of a command call:
+
+- `CommandSpec::call()` builds a call with no args
+- `CommandSpec::call_with(...)` builds with positional or named args
+- `CommandCall::invocation()` produces the concrete `CommandInvocation`
+
+Bindings (key/mouse) can target either scripts or typed command invocations.

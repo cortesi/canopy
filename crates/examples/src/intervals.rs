@@ -76,7 +76,7 @@ impl CounterItem {
         let desired_height = ENTRY_HEIGHT;
 
         ctx.set_layout_of(
-            box_id.into(),
+            box_id,
             Layout::column()
                 .fixed_width(desired_width)
                 .fixed_height(desired_height)
@@ -213,7 +213,7 @@ impl Widget for Intervals {
                 let mut ids = Vec::with_capacity(list.len());
                 for i in 0..list.len() {
                     if let Some(id) = list.item(i) {
-                        ids.push(id.into());
+                        ids.push(id);
                     }
                 }
                 Ok(ids)

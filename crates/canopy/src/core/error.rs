@@ -81,6 +81,14 @@ pub enum Error {
     /// Duplicate child key under the same parent.
     #[error("duplicate child key: {0}")]
     DuplicateChildKey(String),
+    /// Duplicate child under the same parent.
+    #[error("duplicate child {child:?} under parent {parent:?}")]
+    DuplicateChild {
+        /// Parent node.
+        parent: NodeId,
+        /// Child node.
+        child: NodeId,
+    },
     /// Child is already attached to a parent.
     #[error("already attached: {0:?}")]
     AlreadyAttached(NodeId),

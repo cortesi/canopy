@@ -1,6 +1,7 @@
 # Summary
 
 - [Overview](./overview.md)
+- [End-to-end example](./end-to-end.md)
 - [Nodes](./nodes.md)
     - [Node names](./state.md)
     - [trait CommandNode](./commands.md)
@@ -15,4 +16,5 @@
 - [Binding system](./bindings.md)
 - [Scripting](./scripting.md)
 - [Themes and Styling](./styling.md)
+- [Patterns](./patterns.md)
 - [Widget Library](./widgets.md)

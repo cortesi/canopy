@@ -2,6 +2,7 @@ use std::{
     any::TypeId,
     cell::Cell,
     collections::{HashMap, HashSet},
+    ptr::NonNull,
 };
 
 use slotmap::SlotMap;
@@ -81,6 +82,49 @@ struct NodeStructureSnapshot {
     children: Vec<NodeId>,
     /// Stored keyed child map.
     child_keys: HashMap<String, NodeId>,
+}
+
+/// Guard that restores a widget slot on drop.
+struct WidgetSlotGuard {
+    /// Core pointer used for restoration.
+    core: NonNull<Core>,
+    /// Node that owns the widget slot.
+    node_id: NodeId,
+    /// Temporarily held widget.
+    widget: Option<Box<dyn Widget>>,
+}
+
+impl WidgetSlotGuard {
+    /// Take ownership of the widget from its slot.
+    fn new(core: &mut Core, node_id: NodeId) -> Self {
+        let widget = core.nodes[node_id].widget.take();
+        Self {
+            core: NonNull::from(core),
+            node_id,
+            widget,
+        }
+    }
+
+    /// Borrow the widget mutably for the call.
+    fn widget_mut(&mut self) -> &mut dyn Widget {
+        self.widget
+            .as_deref_mut()
+            .expect("Widget missing from node")
+    }
+}
+
+impl Drop for WidgetSlotGuard {
+    fn drop(&mut self) {
+        // SAFETY: core pointer remains valid for the lifetime of the guard.
+        unsafe {
+            let core = self.core.as_mut();
+            if let Some(node) = core.nodes.get_mut(self.node_id)
+                && node.widget.is_none()
+            {
+                node.widget = self.widget.take();
+            }
+        }
+    }
 }
 
 impl Core {
@@ -173,8 +217,8 @@ impl Core {
     }
 
     /// Return a reference to a node by id.
-    pub fn node(&self, node_id: NodeId) -> Option<&Node> {
-        self.nodes.get(node_id)
+    pub fn node(&self, node_id: impl Into<NodeId>) -> Option<&Node> {
+        self.nodes.get(node_id.into())
     }
 
     /// Add a boxed widget to the arena and return its node ID.
@@ -208,7 +252,12 @@ impl Core {
     }
 
     /// Update the layout for a node.
-    pub fn with_layout_of(&mut self, node: NodeId, f: impl FnOnce(&mut Layout)) -> Result<()> {
+    pub fn with_layout_of(
+        &mut self,
+        node: impl Into<NodeId>,
+        f: impl FnOnce(&mut Layout),
+    ) -> Result<()> {
+        let node = node.into();
         let node_ref = self
             .nodes
             .get(node)
@@ -222,25 +271,52 @@ impl Core {
     }
 
     /// Set the layout for a node.
-    pub fn set_layout_of(&mut self, node: NodeId, layout: Layout) -> Result<()> {
+    pub fn set_layout_of(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {
         self.with_layout_of(node, |l| *l = layout)
     }
 
     /// Replace the widget stored at a node.
-    pub fn set_widget<W>(&mut self, node_id: NodeId, widget: W)
+    pub fn replace_widget_keep_children<W>(
+        &mut self,
+        node_id: impl Into<NodeId>,
+        widget: W,
+    ) -> Result<()>
     where
         W: Widget + 'static,
     {
+        let node_id = node_id.into();
         let name = widget.name();
         let layout = widget.layout();
         let widget_type = TypeId::of::<W>();
-        let node = self.nodes.get_mut(node_id).expect("Unknown node id");
+        let node = self
+            .nodes
+            .get_mut(node_id)
+            .ok_or(Error::NodeNotFound(node_id))?;
         node.widget = Some(Box::new(widget));
         node.name = name;
         node.layout = layout;
         node.widget_type = widget_type;
         node.mounted = false;
         node.initialized = false;
+        Ok(())
+    }
+
+    /// Replace a widget and remove all descendant nodes.
+    pub fn replace_subtree<W>(&mut self, node_id: impl Into<NodeId>, widget: W) -> Result<()>
+    where
+        W: Widget + 'static,
+    {
+        let node_id = node_id.into();
+        let children = self
+            .nodes
+            .get(node_id)
+            .ok_or(Error::NodeNotFound(node_id))?
+            .children
+            .clone();
+        for child in children {
+            self.remove_subtree(child)?;
+        }
+        self.replace_widget_keep_children(node_id, widget)
     }
 
     /// Run the mount hook for a node if it has not been mounted yet.
@@ -422,8 +498,8 @@ impl Core {
     }
 
     /// Return true if `node_id` is attached to the root.
-    pub fn is_attached_to_root(&self, node_id: NodeId) -> bool {
-        let mut current = Some(node_id);
+    pub fn is_attached_to_root(&self, node_id: impl Into<NodeId>) -> bool {
+        let mut current = Some(node_id.into());
         while let Some(id) = current {
             if id == self.root {
                 return true;
@@ -449,9 +525,10 @@ impl Core {
     /// Add a boxed widget as a child of a specific parent and return the new node ID.
     pub fn add_child_to_boxed(
         &mut self,
-        parent: NodeId,
+        parent: impl Into<NodeId>,
         widget: Box<dyn Widget>,
     ) -> Result<NodeId> {
+        let parent = parent.into();
         self.with_transaction(|core| {
             let child = core.create_detached_boxed(widget);
             core.attach(parent, child)?;
@@ -462,10 +539,11 @@ impl Core {
     /// Add a boxed widget as a keyed child of a specific parent and return the new node ID.
     pub fn add_child_to_keyed_boxed(
         &mut self,
-        parent: NodeId,
+        parent: impl Into<NodeId>,
         key: &str,
         widget: Box<dyn Widget>,
     ) -> Result<NodeId> {
+        let parent = parent.into();
         self.with_transaction(|core| {
             if core.child_keyed(parent, key).is_some() {
                 return Err(Error::DuplicateChildKey(key.to_string()));
@@ -477,19 +555,28 @@ impl Core {
     }
 
     /// Return the keyed child under a parent.
-    pub fn child_keyed(&self, parent: NodeId, key: &str) -> Option<NodeId> {
+    pub fn child_keyed(&self, parent: impl Into<NodeId>, key: &str) -> Option<NodeId> {
         self.nodes
-            .get(parent)
+            .get(parent.into())
             .and_then(|node| node.child_keys.get(key).copied())
     }
 
     /// Attach a detached child under a parent.
-    pub fn attach(&mut self, parent: NodeId, child: NodeId) -> Result<()> {
+    pub fn attach(&mut self, parent: impl Into<NodeId>, child: impl Into<NodeId>) -> Result<()> {
+        let parent = parent.into();
+        let child = child.into();
         self.with_transaction(|core| core.attach_inner(parent, child, None))
     }
 
     /// Attach a detached child under a parent with a unique key.
-    pub fn attach_keyed(&mut self, parent: NodeId, key: &str, child: NodeId) -> Result<()> {
+    pub fn attach_keyed(
+        &mut self,
+        parent: impl Into<NodeId>,
+        key: &str,
+        child: impl Into<NodeId>,
+    ) -> Result<()> {
+        let parent = parent.into();
+        let child = child.into();
         self.with_transaction(|core| core.attach_inner(parent, child, Some(key)))
     }
 
@@ -542,7 +629,8 @@ impl Core {
     }
 
     /// Detach a child from its parent if attached.
-    pub fn detach(&mut self, child: NodeId) -> Result<()> {
+    pub fn detach(&mut self, child: impl Into<NodeId>) -> Result<()> {
+        let child = child.into();
         if !self.nodes.contains_key(child) {
             return Err(Error::NodeNotFound(child));
         }
@@ -606,9 +694,20 @@ impl Core {
     }
 
     /// Replace the children list for a parent in the arena tree.
-    pub fn set_children(&mut self, parent: NodeId, children: Vec<NodeId>) -> Result<()> {
+    pub fn set_children(&mut self, parent: impl Into<NodeId>, children: Vec<NodeId>) -> Result<()> {
+        let parent = parent.into();
         if !self.nodes.contains_key(parent) {
             return Err(Error::NodeNotFound(parent));
+        }
+
+        let mut seen = HashSet::with_capacity(children.len());
+        for child in &children {
+            if !seen.insert(*child) {
+                return Err(Error::DuplicateChild {
+                    parent,
+                    child: *child,
+                });
+            }
         }
 
         for child in &children {
@@ -673,7 +772,8 @@ impl Core {
     }
 
     /// Remove a node and all descendants from the arena.
-    pub fn remove_subtree(&mut self, root_id: NodeId) -> Result<()> {
+    pub fn remove_subtree(&mut self, root_id: impl Into<NodeId>) -> Result<()> {
+        let root_id = root_id.into();
         if root_id == self.root {
             return Err(Error::InvalidOperation("cannot remove root".into()));
         }
@@ -758,7 +858,8 @@ impl Core {
     }
 
     /// Set a node's hidden flag. Returns `true` if visibility changed.
-    pub fn set_hidden(&mut self, node_id: NodeId, hidden: bool) -> bool {
+    pub fn set_hidden(&mut self, node_id: impl Into<NodeId>, hidden: bool) -> bool {
+        let node_id = node_id.into();
         let Some(node) = self.nodes.get_mut(node_id) else {
             return false;
         };
@@ -771,12 +872,12 @@ impl Core {
     }
 
     /// Hide a node. Returns `true` if visibility changed.
-    pub fn hide(&mut self, node_id: NodeId) -> bool {
+    pub fn hide(&mut self, node_id: impl Into<NodeId>) -> bool {
         self.set_hidden(node_id, true)
     }
 
     /// Show a node. Returns `true` if visibility changed.
-    pub fn show(&mut self, node_id: NodeId) -> bool {
+    pub fn show(&mut self, node_id: impl Into<NodeId>) -> bool {
         self.set_hidden(node_id, false)
     }
 
@@ -805,14 +906,8 @@ impl Core {
         node_id: NodeId,
         f: impl FnOnce(&mut dyn Widget, &mut Self) -> R,
     ) -> R {
-        let widget = self.nodes[node_id]
-            .widget
-            .take()
-            .expect("Widget missing from node");
-        let mut widget = widget;
-        let result = f(&mut *widget, self);
-        self.nodes[node_id].widget = Some(widget);
-        result
+        let mut guard = WidgetSlotGuard::new(self, node_id);
+        f(guard.widget_mut(), self)
     }
 
     /// Take a mutable reference to a widget for rendering with a shared Core context.
@@ -821,16 +916,10 @@ impl Core {
         node_id: NodeId,
         f: impl FnOnce(&mut dyn Widget, &Self) -> R,
     ) -> R {
-        let widget = self.nodes[node_id]
-            .widget
-            .take()
-            .expect("Widget missing from node");
-        let mut widget = widget;
+        let mut guard = WidgetSlotGuard::new(self, node_id);
         let core_ptr: *const Self = self;
         // SAFETY: we only provide shared access during the closure and do not mutate Core there.
-        let result = f(&mut *widget, unsafe { &*core_ptr });
-        self.nodes[node_id].widget = Some(widget);
-        result
+        f(guard.widget_mut(), unsafe { &*core_ptr })
     }
 
     /// Build a command-scope frame for a specific event.
@@ -845,7 +934,8 @@ impl Core {
     }
 
     /// Dispatch an event to a node, bubbling to parents if unhandled.
-    pub fn dispatch_event(&mut self, start: NodeId, event: &Event) -> EventOutcome {
+    pub fn dispatch_event(&mut self, start: impl Into<NodeId>, event: &Event) -> EventOutcome {
+        let start = start.into();
         let depth = self.push_command_scope(self.command_scope_for_event(event));
         let outcome = self.dispatch_event_inner(start, event);
         self.pop_command_scope(depth);
@@ -871,7 +961,12 @@ impl Core {
     }
 
     /// Dispatch an event to a single node without bubbling.
-    pub fn dispatch_event_on_node(&mut self, node_id: NodeId, event: &Event) -> EventOutcome {
+    pub fn dispatch_event_on_node(
+        &mut self,
+        node_id: impl Into<NodeId>,
+        event: &Event,
+    ) -> EventOutcome {
+        let node_id = node_id.into();
         let depth = self.push_command_scope(self.command_scope_for_event(event));
         let outcome = self.with_widget_mut(node_id, |w, core| {
             let mut ctx = CoreContext::new(core, node_id);
@@ -882,7 +977,9 @@ impl Core {
     }
 
     /// Return the path for a node relative to a root.
-    pub fn node_path(&self, root: NodeId, node_id: NodeId) -> Path {
+    pub fn node_path(&self, root: impl Into<NodeId>, node_id: impl Into<NodeId>) -> Path {
+        let root = root.into();
+        let node_id = node_id.into();
         let mut parts = Vec::new();
         let mut current = Some(node_id);
         while let Some(id) = current {
@@ -904,7 +1001,8 @@ impl Core {
     }
 
     /// Locate the deepest node under a screen-space point.
-    pub fn locate_node(&self, root: NodeId, point: Point) -> Result<Option<NodeId>> {
+    pub fn locate_node(&self, root: impl Into<NodeId>, point: Point) -> Result<Option<NodeId>> {
+        let root = root.into();
         let root_view = self
             .nodes
             .get(root)
@@ -2670,6 +2768,27 @@ mod tests {
 
         let err = core.set_children(child, vec![parent]).unwrap_err();
         assert!(matches!(err, Error::WouldCreateCycle { .. }));
+        Ok(())
+    }
+
+    #[test]
+    fn set_children_rejects_duplicates() -> Result<()> {
+        let mut core = Core::new();
+        let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+        let parent = core.add_boxed(Box::new(parent_widget));
+        let (child_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+        let child = core.add_boxed(Box::new(child_widget));
+
+        let err = core
+            .set_children(parent, vec![child, child])
+            .expect_err("expected duplicate child error");
+        assert!(matches!(
+            err,
+            Error::DuplicateChild {
+                parent: err_parent,
+                child: err_child,
+            } if err_parent == parent && err_child == child
+        ));
         Ok(())
     }
 

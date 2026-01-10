@@ -27,7 +27,7 @@ fn with_root_block<R>(
             .unique_child::<Block>()?
             .ok_or_else(|| Error::NotFound("root block".into()))?;
         let f = f.take().expect("root block closure already consumed");
-        f(ctx, root_block.into())
+        f(ctx, NodeId::from(root_block))
     })
 }
 

@@ -152,7 +152,7 @@ impl TermGym {
             Ok(ctx
                 .children_of_type::<Terminal>()
                 .into_iter()
-                .map(|id| id.into())
+                .map(NodeId::from)
                 .collect())
         })
     }
@@ -165,9 +165,7 @@ impl TermGym {
                 cwd: Some(cwd),
                 ..TerminalConfig::default()
             }))?;
-            ctx.with_layout_of(terminal_id, &mut |layout| {
-                *layout = Layout::fill();
-            })?;
+            ctx.set_layout_of(terminal_id, Layout::fill())?;
             Ok(())
         })?;
 
@@ -274,7 +272,7 @@ impl TermGym {
     fn focus_sidebar_list(&self, c: &mut dyn Context) -> Result<()> {
         self.with_list(c, |list, ctx| {
             if let Some(selected) = list.selected_item() {
-                ctx.set_focus(selected.into());
+                ctx.set_focus(NodeId::from(selected));
             } else {
                 ctx.focus_first_in(ctx.node_id());
             }
@@ -385,10 +383,9 @@ impl Widget for TermGym {
                 .push_flex(list_id, 1),
         )?;
 
-        let stack_id = c.create_detached(TerminalStack::new());
         let term_frame_id =
             c.add_child(Frame::new().with_glyphs(ROUND_THICK).with_title("terminal"))?;
-        c.attach(term_frame_id, stack_id)?;
+        c.add_child_to(term_frame_id, TerminalStack::new())?;
 
         c.set_layout(Layout::fill().direction(Direction::Row))?;
         c.set_layout_of(
