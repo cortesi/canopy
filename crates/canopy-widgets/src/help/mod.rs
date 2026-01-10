@@ -382,13 +382,13 @@ impl Widget for HelpContent {
         Size::new(view.width, total_lines as u32)
     }
 
-    fn on_event(&mut self, _event: &Event, ctx: &mut dyn Context) -> EventOutcome {
+    fn on_event(&mut self, _event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
         // Always check for pending snapshot (overwrites old if present)
         if let Some(snapshot) = ctx.take_help_snapshot() {
             self.snapshot = Some(snapshot);
             self.layout_cache.borrow_mut().take();
         }
-        EventOutcome::Ignore
+        Ok(EventOutcome::Ignore)
     }
 
     fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {

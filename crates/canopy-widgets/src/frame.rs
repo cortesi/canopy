@@ -179,16 +179,16 @@ impl Widget for Frame {
         Ok(())
     }
 
-    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> EventOutcome {
+    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
         let Event::Mouse(m) = event else {
-            return EventOutcome::Ignore;
+            return Ok(EventOutcome::Ignore);
         };
 
         let Some(child_id) = ctx.children().into_iter().next() else {
-            return EventOutcome::Ignore;
+            return Ok(EventOutcome::Ignore);
         };
         let Some(child_view) = ctx.node_view(child_id) else {
-            return EventOutcome::Ignore;
+            return Ok(EventOutcome::Ignore);
         };
 
         let view_size = child_view.content_size();
@@ -203,16 +203,16 @@ impl Widget for Frame {
                     if let Some(outcome) =
                         handle_scroll_drag(ctx, child_id, &child_view, &frame, outer_location, drag)
                     {
-                        return outcome;
+                        return Ok(outcome);
                     }
                     self.scroll_drag = None;
                     ctx.release_mouse();
-                    return EventOutcome::Consume;
+                    return Ok(EventOutcome::Consume);
                 }
                 mouse::Action::Up if m.button == mouse::Button::Left => {
                     self.scroll_drag = None;
                     ctx.release_mouse();
-                    return EventOutcome::Handle;
+                    return Ok(EventOutcome::Handle);
                 }
                 _ => {}
             }
@@ -223,28 +223,28 @@ impl Widget for Frame {
                 if scrollable(view_size.h, canvas_size.h)
                     && scroll_child_by(ctx, child_id, 0, -WHEEL_SCROLL_LINES)
                 {
-                    return EventOutcome::Handle;
+                    return Ok(EventOutcome::Handle);
                 }
             }
             mouse::Action::ScrollDown => {
                 if scrollable(view_size.h, canvas_size.h)
                     && scroll_child_by(ctx, child_id, 0, WHEEL_SCROLL_LINES)
                 {
-                    return EventOutcome::Handle;
+                    return Ok(EventOutcome::Handle);
                 }
             }
             mouse::Action::ScrollLeft => {
                 if scrollable(view_size.w, canvas_size.w)
                     && scroll_child_by(ctx, child_id, -WHEEL_SCROLL_LINES, 0)
                 {
-                    return EventOutcome::Handle;
+                    return Ok(EventOutcome::Handle);
                 }
             }
             mouse::Action::ScrollRight => {
                 if scrollable(view_size.w, canvas_size.w)
                     && scroll_child_by(ctx, child_id, WHEEL_SCROLL_LINES, 0)
                 {
-                    return EventOutcome::Handle;
+                    return Ok(EventOutcome::Handle);
                 }
             }
             mouse::Action::Down if m.button == mouse::Button::Left => {
@@ -260,14 +260,14 @@ impl Widget for Frame {
                         let grab_offset = outer_location.y.saturating_sub(active.tl.y);
                         self.scroll_drag = Some(ScrollDrag::vertical(grab_offset));
                         ctx.capture_mouse();
-                        return EventOutcome::Handle;
+                        return Ok(EventOutcome::Handle);
                     }
 
                     let pos = outer_location.y.saturating_sub(frame.right.tl.y);
                     let target_y =
                         scroll_offset_for_click(pos, frame.right.h, canvas_size.h, view_size.h);
                     if scroll_child_to(ctx, child_id, child_view.tl.x, target_y) {
-                        return EventOutcome::Handle;
+                        return Ok(EventOutcome::Handle);
                     }
                     consumed = true;
                 }
@@ -282,26 +282,26 @@ impl Widget for Frame {
                         let grab_offset = outer_location.x.saturating_sub(active.tl.x);
                         self.scroll_drag = Some(ScrollDrag::horizontal(grab_offset));
                         ctx.capture_mouse();
-                        return EventOutcome::Handle;
+                        return Ok(EventOutcome::Handle);
                     }
 
                     let pos = outer_location.x.saturating_sub(frame.bottom.tl.x);
                     let target_x =
                         scroll_offset_for_click(pos, frame.bottom.w, canvas_size.w, view_size.w);
                     if scroll_child_to(ctx, child_id, target_x, child_view.tl.y) {
-                        return EventOutcome::Handle;
+                        return Ok(EventOutcome::Handle);
                     }
                     consumed = true;
                 }
 
                 if consumed {
-                    return EventOutcome::Consume;
+                    return Ok(EventOutcome::Consume);
                 }
             }
             _ => {}
         }
 
-        EventOutcome::Ignore
+        Ok(EventOutcome::Ignore)
     }
 
     fn layout(&self) -> Layout {

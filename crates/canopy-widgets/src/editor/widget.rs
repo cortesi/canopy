@@ -2402,27 +2402,27 @@ impl Widget for Editor {
         Size::new(width.max(1), height.max(1))
     }
 
-    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> EventOutcome {
+    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
         if let Event::Mouse(mouse_event) = event {
             match mouse_event.action {
                 mouse::Action::ScrollUp => {
                     if ctx.scroll_by(0, -WHEEL_SCROLL_LINES) {
-                        return EventOutcome::Handle;
+                        return Ok(EventOutcome::Handle);
                     }
                 }
                 mouse::Action::ScrollDown => {
                     if ctx.scroll_by(0, WHEEL_SCROLL_LINES) {
-                        return EventOutcome::Handle;
+                        return Ok(EventOutcome::Handle);
                     }
                 }
                 mouse::Action::ScrollLeft => {
                     if ctx.scroll_by(-WHEEL_SCROLL_LINES, 0) {
-                        return EventOutcome::Handle;
+                        return Ok(EventOutcome::Handle);
                     }
                 }
                 mouse::Action::ScrollRight => {
                     if ctx.scroll_by(WHEEL_SCROLL_LINES, 0) {
-                        return EventOutcome::Handle;
+                        return Ok(EventOutcome::Handle);
                     }
                 }
                 _ => {}
@@ -2431,14 +2431,14 @@ impl Widget for Editor {
             let handled = self.handle_mouse_event(mouse_event, ctx);
             if handled {
                 self.ensure_cursor_visible(ctx);
-                return EventOutcome::Handle;
+                return Ok(EventOutcome::Handle);
             }
         }
 
-        match self.config.mode {
+        Ok(match self.config.mode {
             EditMode::Text => self.handle_text_entry_event(event, ctx),
             EditMode::Vi => self.handle_vi_event(event, ctx),
-        }
+        })
     }
 
     fn name(&self) -> NodeName {

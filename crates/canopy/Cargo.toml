@@ -12,7 +12,6 @@ thiserror = "2.0.12"
 scopeguard = "1.2.0"
 convert_case = "0.10"
 rhai = { version = "1.22.2", features = ["internals"] }
-regex = "1.11.1"
 termcolor = "1.4.1"
 comfy-table = "7.1.4"
 color-backtrace = "0.7.0"

@@ -151,13 +151,13 @@ impl Widget for Button {
         Ok(())
     }
 
-    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> EventOutcome {
+    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
         if let Event::Mouse(mouse_event) = event
-            && matches!(self.handle_click(ctx, *mouse_event), Ok(true))
+            && self.handle_click(ctx, *mouse_event)?
         {
-            return EventOutcome::Handle;
+            return Ok(EventOutcome::Handle);
         }
-        EventOutcome::Ignore
+        Ok(EventOutcome::Ignore)
     }
 
     fn name(&self) -> NodeName {

@@ -1,3 +1,5 @@
+use std::process;
+
 use anyhow::Result;
 use canopy::backend::crossterm::{RunloopOptions, runloop_with_options};
 use clap::Parser;
@@ -24,7 +26,10 @@ pub fn main() -> Result<()> {
             return Ok(());
         }
 
-        runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
+        let exit_code = runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
+        if exit_code != 0 {
+            process::exit(exit_code);
+        }
     } else {
         println!("Specify a file path");
     }

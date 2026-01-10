@@ -168,7 +168,7 @@ where
 // Owned types for storage
 // ============================================================================
 
-use crate::path::PathMatch;
+use crate::path::{PathMatch, PathMatcher};
 
 /// Owned version of [`HelpBinding`] for storage without lifetimes.
 #[derive(Debug, Clone)]
@@ -228,16 +228,23 @@ impl<'a> HelpSnapshot<'a> {
         let bindings = self
             .bindings
             .iter()
-            .map(|b| OwnedHelpBinding {
-                input: b.input,
-                mode: b.mode.to_string(),
-                path_filter: b.path_filter.to_string(),
-                kind: b.kind,
-                label: b.label.clone(),
-                path_match: PathMatch {
-                    end: 0,
-                    len: b.path_filter.len(),
-                },
+            .map(|b| {
+                let path_match = PathMatcher::new(b.path_filter)
+                    .ok()
+                    .and_then(|matcher| matcher.check_match(&self.focus_path))
+                    .unwrap_or(PathMatch {
+                        literals: 0,
+                        depth: 0,
+                        anchored_end: false,
+                    });
+                OwnedHelpBinding {
+                    input: b.input,
+                    mode: b.mode.to_string(),
+                    path_filter: b.path_filter.to_string(),
+                    kind: b.kind,
+                    label: b.label.clone(),
+                    path_match,
+                }
             })
             .collect();
 

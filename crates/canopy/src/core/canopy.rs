@@ -427,8 +427,7 @@ impl Canopy {
             .into_iter()
             .map(|mb| {
                 // Determine binding kind based on match position
-                let path_len = focus_path.to_string().len();
-                let kind = if mb.m.end == path_len && mb.m.len > 0 {
+                let kind = if mb.m.anchored_end && mb.m.depth > 0 {
                     super::help::BindingKind::PreEventOverride
                 } else {
                     super::help::BindingKind::PostEventFallback
@@ -503,8 +502,7 @@ impl Canopy {
         let help_bindings: Vec<super::help::HelpBinding<'_>> = matched_bindings
             .into_iter()
             .map(|mb| {
-                let path_len = focus_path.to_string().len();
-                let kind = if mb.m.end == path_len && mb.m.len > 0 {
+                let kind = if mb.m.anchored_end && mb.m.depth > 0 {
                     super::help::BindingKind::PreEventOverride
                 } else {
                     super::help::BindingKind::PostEventFallback
@@ -854,7 +852,7 @@ impl Canopy {
                         modifiers: m.modifiers,
                         location: local_location,
                     }),
-                );
+                )?;
 
                 match outcome {
                     EventOutcome::Handle | EventOutcome::Consume => {
@@ -940,15 +938,14 @@ impl Canopy {
                 .keymap
                 .resolve_match(&path, &inputmap::InputSpec::Key(k))
             {
-                let path_len = path.to_string().len();
-                if m.end == path_len && m.len > 0 {
+                if m.anchored_end && m.depth > 0 {
                     action = Some((binding, id));
                     break;
                 }
                 fallback_binding = Some(binding);
             }
 
-            let outcome = self.core.dispatch_event_on_node(id, &Event::Key(k));
+            let outcome = self.core.dispatch_event_on_node(id, &Event::Key(k))?;
             match outcome {
                 EventOutcome::Handle | EventOutcome::Consume => {
                     changed = true;
@@ -1002,7 +999,7 @@ impl Canopy {
         }
 
         let start = self.core.focus.unwrap_or(self.core.root);
-        let _ = self.core.dispatch_event(start, event);
+        self.core.dispatch_event(start, event)?;
         Ok(())
     }
 
@@ -1141,25 +1138,25 @@ mod tests {
     }
 
     impl Widget for CaptureWidget {
-        fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> EventOutcome {
+        fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
             if let Event::Mouse(mouse_event) = event {
                 match mouse_event.action {
                     mouse::Action::Down if mouse_event.button == mouse::Button::Left => {
                         ctx.capture_mouse();
-                        return EventOutcome::Handle;
+                        return Ok(EventOutcome::Handle);
                     }
                     mouse::Action::Drag if mouse_event.button == mouse::Button::Left => {
                         self.drags = self.drags.saturating_add(1);
-                        return EventOutcome::Handle;
+                        return Ok(EventOutcome::Handle);
                     }
                     mouse::Action::Up if mouse_event.button == mouse::Button::Left => {
                         ctx.release_mouse();
-                        return EventOutcome::Handle;
+                        return Ok(EventOutcome::Handle);
                     }
                     _ => {}
                 }
             }
-            EventOutcome::Ignore
+            Ok(EventOutcome::Ignore)
         }
     }
 
@@ -1719,11 +1716,12 @@ mod tests {
                 r.text("any", ctx.view().outer_rect_local().line(0), "<n>")
             }
 
-            fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-                match event {
+            fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
+                let outcome = match event {
                     Event::Key(_) => EventOutcome::Consume,
                     _ => EventOutcome::Ignore,
-                }
+                };
+                Ok(outcome)
             }
 
             fn name(&self) -> NodeName {

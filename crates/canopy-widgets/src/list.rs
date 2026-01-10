@@ -682,13 +682,13 @@ impl<W: Selectable + Send + 'static> Widget for List<W> {
         layout
     }
 
-    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> EventOutcome {
+    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
         if let Event::Mouse(mouse_event) = event
             && self.handle_click(ctx, *mouse_event)
         {
-            return EventOutcome::Handle;
+            return Ok(EventOutcome::Handle);
         }
-        EventOutcome::Ignore
+        Ok(EventOutcome::Ignore)
     }
 
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {

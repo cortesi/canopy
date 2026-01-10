@@ -28,8 +28,6 @@ pub trait RenderBackend {
     }
     /// Flush output to the terminal.
     fn flush(&mut self) -> Result<()>;
-    /// Exit the process, relinquishing screen control.
-    fn exit(&mut self, code: i32) -> !;
     /// Reset the backend to a clean state.
     fn reset(&mut self) -> Result<()>;
 }

@@ -355,7 +355,6 @@ dependencies = [
  "crossterm",
  "proptest",
  "rand",
- "regex",
  "rhai",
  "scoped-tls",
  "scopeguard",

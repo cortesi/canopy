@@ -22,6 +22,8 @@ pub enum ArgValue {
     Bool(bool),
     /// Integer value.
     Int(i64),
+    /// Unsigned integer value.
+    UInt(u64),
     /// Float value.
     Float(f64),
     /// String value.
@@ -87,6 +89,7 @@ impl ArgValue {
             Self::Null => "Null",
             Self::Bool(_) => "Bool",
             Self::Int(_) => "Int",
+            Self::UInt(_) => "UInt",
             Self::Float(_) => "Float",
             Self::String(_) => "String",
             Self::Array(_) => "Array",
@@ -181,15 +184,13 @@ impl_uint_to_arg_value!(u8, u16, u32);
 
 impl ToArgValue for u64 {
     fn to_arg_value(self) -> ArgValue {
-        let value = i64::try_from(self).expect("u64 command argument does not fit in i64");
-        ArgValue::Int(value)
+        ArgValue::UInt(self)
     }
 }
 
 impl ToArgValue for usize {
     fn to_arg_value(self) -> ArgValue {
-        let value = i64::try_from(self).expect("usize command argument does not fit in i64");
-        ArgValue::Int(value)
+        ArgValue::UInt(self as u64)
     }
 }
 
@@ -299,6 +300,14 @@ fn int_out_of_range<T>(value: i64) -> CommandError {
     ))
 }
 
+/// Build a conversion error for out-of-range unsigned integers.
+fn uint_out_of_range<T>(value: u64) -> CommandError {
+    CommandError::conversion(format!(
+        "value {value} out of range for {}",
+        type_name::<T>()
+    ))
+}
+
 /// Build a conversion error for out-of-range floats.
 fn float_out_of_range<T>(value: f64) -> CommandError {
     CommandError::conversion(format!(
@@ -316,6 +325,8 @@ macro_rules! impl_int_from_arg_value {
                     match v {
                         ArgValue::Int(value) => <$ty>::try_from(*value)
                             .map_err(|_| int_out_of_range::<$ty>(*value)),
+                        ArgValue::UInt(value) => <$ty>::try_from(*value)
+                            .map_err(|_| uint_out_of_range::<$ty>(*value)),
                         other => Err(CommandError::type_mismatch(stringify!($ty), other)),
                     }
                 }
@@ -332,6 +343,9 @@ impl FromArgValue for isize {
             ArgValue::Int(value) => {
                 Self::try_from(*value).map_err(|_| int_out_of_range::<Self>(*value))
             }
+            ArgValue::UInt(value) => {
+                Self::try_from(*value).map_err(|_| uint_out_of_range::<Self>(*value))
+            }
             other => Err(CommandError::type_mismatch("isize", other)),
         }
     }
@@ -346,6 +360,8 @@ macro_rules! impl_uint_from_arg_value {
                     match v {
                         ArgValue::Int(value) => <$ty>::try_from(*value)
                             .map_err(|_| int_out_of_range::<$ty>(*value)),
+                        ArgValue::UInt(value) => <$ty>::try_from(*value)
+                            .map_err(|_| uint_out_of_range::<$ty>(*value)),
                         other => Err(CommandError::type_mismatch(stringify!($ty), other)),
                     }
                 }
@@ -362,6 +378,9 @@ impl FromArgValue for usize {
             ArgValue::Int(value) => {
                 Self::try_from(*value).map_err(|_| int_out_of_range::<Self>(*value))
             }
+            ArgValue::UInt(value) => {
+                Self::try_from(*value).map_err(|_| uint_out_of_range::<Self>(*value))
+            }
             other => Err(CommandError::type_mismatch("usize", other)),
         }
     }
@@ -372,6 +391,7 @@ impl FromArgValue for f32 {
         let value = match v {
             ArgValue::Float(value) => *value,
             ArgValue::Int(value) => *value as f64,
+            ArgValue::UInt(value) => *value as f64,
             other => return Err(CommandError::type_mismatch("f32", other)),
         };
         if value.is_finite() && value >= f64::from(Self::MIN) && value <= f64::from(Self::MAX) {
@@ -387,6 +407,7 @@ impl FromArgValue for f64 {
         match v {
             ArgValue::Float(value) => Ok(*value),
             ArgValue::Int(value) => Ok(*value as Self),
+            ArgValue::UInt(value) => Ok(*value as Self),
             other => Err(CommandError::type_mismatch("f64", other)),
         }
     }
@@ -514,12 +535,16 @@ impl FromArgValue for () {
 /// Marker trait for serde-backed command arguments.
 pub trait CommandArg: Serialize + DeserializeOwned + 'static {}
 
+/// Wrapper for fallible serde argument conversion.
+pub struct SerdeArg<T>(pub T);
+
 /// Convert ArgValue into a JSON value for serde interop.
 fn arg_value_to_json(value: ArgValue) -> Result<JsonValue, CommandError> {
     Ok(match value {
         ArgValue::Null => JsonValue::Null,
         ArgValue::Bool(value) => JsonValue::Bool(value),
         ArgValue::Int(value) => JsonValue::Number(JsonNumber::from(value)),
+        ArgValue::UInt(value) => JsonValue::Number(JsonNumber::from(value)),
         ArgValue::Float(value) => {
             let Some(num) = serde_json::Number::from_f64(value) else {
                 return Err(CommandError::conversion("float value is not finite"));
@@ -551,6 +576,8 @@ fn json_to_arg_value(value: JsonValue) -> Result<ArgValue, CommandError> {
         JsonValue::Number(value) => {
             if let Some(int_value) = value.as_i64() {
                 Ok(ArgValue::Int(int_value))
+            } else if let Some(uint_value) = value.as_u64() {
+                Ok(ArgValue::UInt(uint_value))
             } else if let Some(float_value) = value.as_f64() {
                 Ok(ArgValue::Float(float_value))
             } else {
@@ -574,13 +601,39 @@ fn json_to_arg_value(value: JsonValue) -> Result<ArgValue, CommandError> {
     }
 }
 
-impl<T> ToArgValue for T
+/// Convert a typed value into an ArgValue with fallible encoding.
+pub trait TryToArgValue {
+    /// Encode the value as an ArgValue.
+    fn try_to_arg_value(self) -> Result<ArgValue, CommandError>;
+}
+
+impl<T> TryToArgValue for T
 where
-    T: CommandArg,
+    T: ToArgValue,
 {
-    fn to_arg_value(self) -> ArgValue {
-        let value = serde_json::to_value(self).expect("CommandArg serialization failed");
-        json_to_arg_value(value).expect("CommandArg conversion failed")
+    fn try_to_arg_value(self) -> Result<ArgValue, CommandError> {
+        Ok(self.to_arg_value())
+    }
+}
+
+impl<T> SerdeArg<T>
+where
+    T: Serialize,
+{
+    /// Encode a serde argument into ArgValue, returning conversion errors.
+    pub fn try_to_arg_value(self) -> Result<ArgValue, CommandError> {
+        let value = serde_json::to_value(self.0)
+            .map_err(|err| CommandError::conversion(err.to_string()))?;
+        json_to_arg_value(value)
+    }
+}
+
+impl<T> TryToArgValue for SerdeArg<T>
+where
+    T: Serialize,
+{
+    fn try_to_arg_value(self) -> Result<ArgValue, CommandError> {
+        Self::try_to_arg_value(self)
     }
 }
 
@@ -654,6 +707,70 @@ where
                 .map(|(k, v)| (k, v.to_arg_value()))
                 .collect(),
         )
+    }
+}
+
+impl CommandArgs {
+    /// Build command arguments with fallible conversions.
+    pub fn try_from_args(args: impl TryIntoCommandArgs) -> Result<Self, CommandError> {
+        args.try_into_command_args()
+    }
+}
+
+/// Fallible conversion into command arguments.
+pub trait TryIntoCommandArgs {
+    /// Convert into command arguments.
+    fn try_into_command_args(self) -> Result<CommandArgs, CommandError>;
+}
+
+impl TryIntoCommandArgs for CommandArgs {
+    fn try_into_command_args(self) -> Result<CommandArgs, CommandError> {
+        Ok(self)
+    }
+}
+
+impl TryIntoCommandArgs for () {
+    fn try_into_command_args(self) -> Result<CommandArgs, CommandError> {
+        Ok(CommandArgs::Positional(Vec::new()))
+    }
+}
+
+impl<T, const N: usize> TryIntoCommandArgs for [T; N]
+where
+    T: TryToArgValue,
+{
+    fn try_into_command_args(self) -> Result<CommandArgs, CommandError> {
+        let mut out = Vec::with_capacity(N);
+        for value in self {
+            out.push(value.try_to_arg_value()?);
+        }
+        Ok(CommandArgs::Positional(out))
+    }
+}
+
+impl<T> TryIntoCommandArgs for Vec<T>
+where
+    T: TryToArgValue,
+{
+    fn try_into_command_args(self) -> Result<CommandArgs, CommandError> {
+        let mut out = Vec::with_capacity(self.len());
+        for value in self {
+            out.push(value.try_to_arg_value()?);
+        }
+        Ok(CommandArgs::Positional(out))
+    }
+}
+
+impl<T> TryIntoCommandArgs for BTreeMap<String, T>
+where
+    T: TryToArgValue,
+{
+    fn try_into_command_args(self) -> Result<CommandArgs, CommandError> {
+        let mut out = BTreeMap::new();
+        for (key, value) in self {
+            out.insert(key, value.try_to_arg_value()?);
+        }
+        Ok(CommandArgs::Named(out))
     }
 }
 
@@ -803,6 +920,17 @@ impl CommandSpec {
             spec: self,
             args: args.into(),
         }
+    }
+
+    /// Build a call to this command with fallible argument conversion.
+    pub fn try_call_with(
+        &'static self,
+        args: impl TryIntoCommandArgs,
+    ) -> Result<CommandCall, CommandError> {
+        Ok(CommandCall {
+            spec: self,
+            args: args.try_into_command_args()?,
+        })
     }
 
     /// Render a signature string for this command.
@@ -1277,6 +1405,8 @@ macro_rules! named_args {
 
 #[cfg(test)]
 mod tests {
+    use serde::{Serialize, ser};
+
     use super::*;
 
     #[test]
@@ -1311,5 +1441,37 @@ mod tests {
         assert_eq!(out, (1, 2));
         let err: Result<(i32, i32), _> = FromArgValue::from_arg_value(&ArgValue::Array(vec![]));
         assert!(err.is_err());
+    }
+
+    #[test]
+    fn serde_arg_reports_errors() {
+        struct BadSerde;
+
+        impl Serialize for BadSerde {
+            fn serialize<S>(&self, _: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                Err(ser::Error::custom("nope"))
+            }
+        }
+
+        let err = SerdeArg(BadSerde).try_to_arg_value().unwrap_err();
+        assert!(matches!(err, CommandError::Conversion { .. }));
+    }
+
+    #[test]
+    fn uint_arg_round_trip() {
+        let value = ArgValue::UInt(u64::MAX);
+        let json = arg_value_to_json(value.clone()).unwrap();
+        let out = json_to_arg_value(json).unwrap();
+        assert_eq!(out, value);
+    }
+
+    #[test]
+    fn try_args_accepts_serde_arg() {
+        let value = (i64::MAX as u64) + 1;
+        let args = CommandArgs::try_from_args([SerdeArg(value)]).unwrap();
+        assert_eq!(args, CommandArgs::Positional(vec![ArgValue::UInt(value)]));
     }
 }

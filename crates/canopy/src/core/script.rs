@@ -134,6 +134,13 @@ fn arg_value_to_dynamic(value: ArgValue) -> rhai::Dynamic {
         ArgValue::Null => rhai::Dynamic::UNIT,
         ArgValue::Bool(value) => rhai::Dynamic::from(value),
         ArgValue::Int(value) => rhai::Dynamic::from(value),
+        ArgValue::UInt(value) => {
+            if let Ok(int_value) = rhai::INT::try_from(value) {
+                rhai::Dynamic::from(int_value)
+            } else {
+                rhai::Dynamic::from(value as rhai::FLOAT)
+            }
+        }
         ArgValue::Float(value) => rhai::Dynamic::from(value),
         ArgValue::String(value) => rhai::Dynamic::from(value),
         ArgValue::Array(values) => {

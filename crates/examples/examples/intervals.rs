@@ -1,5 +1,7 @@
 //! Launch the intervals example.
 
+use std::process;
+
 use canopy::{
     Canopy, Loader,
     backend::crossterm::{RunloopOptions, runloop_with_options},
@@ -17,6 +19,9 @@ fn main() -> Result<()> {
 
     let app_id = cnpy.core.create_detached(Intervals::new());
     Root::install(&mut cnpy.core, app_id)?;
-    runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
+    let exit_code = runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
+    if exit_code != 0 {
+        process::exit(exit_code);
+    }
     Ok(())
 }

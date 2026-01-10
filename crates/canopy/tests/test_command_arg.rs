@@ -6,7 +6,7 @@ mod tests {
 
     use canopy::{
         CommandArg, CommandEnum,
-        commands::{ArgValue, CommandError, FromArgValue, ToArgValue},
+        commands::{ArgValue, CommandError, FromArgValue, SerdeArg, ToArgValue},
     };
     use serde::{Deserialize, Serialize};
 
@@ -47,7 +47,7 @@ mod tests {
             map,
         };
 
-        let encoded = value.clone().to_arg_value();
+        let encoded = SerdeArg(value.clone()).try_to_arg_value().unwrap();
         let decoded = Outer::from_arg_value(&encoded).unwrap();
         assert_eq!(decoded, value);
     }

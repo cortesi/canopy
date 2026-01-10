@@ -268,8 +268,8 @@ impl Widget for Input {
         r.text("text", line, &content)
     }
 
-    fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        match event {
+    fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
+        let outcome = match event {
             Event::Key(key::Key {
                 key: key::KeyCode::Char(c),
                 ..
@@ -278,7 +278,8 @@ impl Widget for Input {
                 EventOutcome::Handle
             }
             _ => EventOutcome::Ignore,
-        }
+        };
+        Ok(outcome)
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {

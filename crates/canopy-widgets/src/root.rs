@@ -117,7 +117,7 @@ impl Root {
         } else if self.inspector_active {
             self.hide_inspector(c)?;
         } else {
-            c.exit(0)
+            c.exit(0);
         }
         Ok(())
     }

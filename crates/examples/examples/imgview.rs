@@ -1,6 +1,6 @@
 //! Launch the imgview example.
 
-use std::path::PathBuf;
+use std::{path::PathBuf, process};
 
 use canopy::{
     backend::crossterm::{RunloopOptions, runloop_with_options},
@@ -21,6 +21,9 @@ struct Args {
 fn main() -> Result<()> {
     let args = Args::parse();
     let cnpy = create_app(&args.path)?;
-    runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
+    let exit_code = runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
+    if exit_code != 0 {
+        process::exit(exit_code);
+    }
     Ok(())
 }

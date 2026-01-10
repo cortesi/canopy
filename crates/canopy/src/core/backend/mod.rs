@@ -1,6 +1,6 @@
 /// Crossterm backend implementation.
 pub mod crossterm;
-use std::{fmt::Debug, process, ptr::NonNull};
+use std::{fmt::Debug, ptr::NonNull};
 
 use crate::error::Result;
 
@@ -15,10 +15,9 @@ pub trait BackendControl: Debug {
     /// Stop the backend renderer, releasing control of the terminal.
     fn stop(&mut self) -> Result<()>;
 
-    /// Stop the render backend and exit the process.
-    fn exit(&mut self, code: i32) -> ! {
+    /// Stop the render backend.
+    fn exit(&mut self, _code: i32) {
         let _ = self.stop().ok();
-        process::exit(code)
     }
 }
 

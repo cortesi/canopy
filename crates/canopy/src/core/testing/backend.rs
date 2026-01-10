@@ -99,10 +99,6 @@ impl RenderBackend for TestRender {
     fn shift_chars(&mut self, _loc: Point, _count: i32) -> Result<()> {
         Ok(())
     }
-
-    fn exit(&mut self, _code: i32) -> ! {
-        unreachable!()
-    }
 }
 
 /// A simple in-memory canvas for verifying render placement in tests.
@@ -189,9 +185,5 @@ impl RenderBackend for CanvasRender {
 
     fn shift_chars(&mut self, _loc: Point, _count: i32) -> Result<()> {
         Ok(())
-    }
-
-    fn exit(&mut self, _code: i32) -> ! {
-        unreachable!()
     }
 }

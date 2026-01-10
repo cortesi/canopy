@@ -38,6 +38,12 @@ struct BoundAction {
     action: BindingTarget,
 }
 
+/// Score tuple used to compare binding matches.
+type BindingScore = (usize, usize, usize, usize);
+
+/// Tuple storing a binding match and its score.
+type BindingCandidate = (BindingScore, BindingTarget, PathMatch);
+
 /// A resolved input binding target.
 #[derive(Debug, Clone, PartialEq)]
 pub enum BindingTarget {
@@ -151,22 +157,21 @@ impl InputMode {
         input: &InputSpec,
     ) -> Option<(BindingTarget, PathMatch)> {
         let input = input.normalize();
-        let mut best: Option<(usize, usize, usize, BindingTarget, PathMatch)> = None;
+        let mut best: Option<BindingCandidate> = None;
         for (idx, k) in self.inputs.get(&input)?.iter().enumerate() {
             if let Some(m) = k.pathmatch.check_match(path) {
-                let score = (m.end, m.len, idx);
+                let (literals, anchored_end, depth) = m.score();
+                let score: BindingScore = (literals, anchored_end, depth, idx);
                 let replace = match best {
-                    Some((best_end, best_len, best_idx, _, _)) => {
-                        score > (best_end, best_len, best_idx)
-                    }
+                    Some((best_score, _, _)) => score > best_score,
                     None => true,
                 };
                 if replace {
-                    best = Some((score.0, score.1, score.2, k.action.clone(), m));
+                    best = Some((score, k.action.clone(), m));
                 }
             }
         }
-        best.map(|(_, _, _, action, m)| (action, m))
+        best.map(|(_, action, m)| (action, m))
     }
 
     /// Return all bindings in this mode.
@@ -558,27 +563,76 @@ mod tests {
     }
 
     #[test]
-    fn binding_precedence_uses_match_length_then_order() -> Result<()> {
+    fn binding_precedence_prefers_anchored_end() -> Result<()> {
         let mut m = InputMode::new();
         let mut e = script::ScriptHost::new();
-        let a_short = e.compile("x()")?;
-        let a_long = e.compile("x()")?;
-        let a_last = e.compile("x()")?;
+        let a_loose = e.compile("x()")?;
+        let a_anchor = e.compile("x()")?;
 
         m.insert(
             BindingId(1),
             PathMatcher::new("foo")?,
             InputSpec::Key('a'.into()),
-            BindingTarget::Script(a_short),
+            BindingTarget::Script(a_loose),
         );
         m.insert(
             BindingId(2),
-            PathMatcher::new("bar/foo")?,
+            PathMatcher::new("bar")?,
             InputSpec::Key('a'.into()),
-            BindingTarget::Script(a_long),
+            BindingTarget::Script(a_anchor),
+        );
+
+        assert_eq!(
+            m.resolve(&"/foo/bar".into(), &InputSpec::Key('a'.into()))
+                .unwrap(),
+            BindingTarget::Script(a_anchor)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn binding_precedence_prefers_depth_when_literals_equal() -> Result<()> {
+        let mut m = InputMode::new();
+        let mut e = script::ScriptHost::new();
+        let a_shallow = e.compile("x()")?;
+        let a_deep = e.compile("x()")?;
+
+        m.insert(
+            BindingId(1),
+            PathMatcher::new("bar/**")?,
+            InputSpec::Key('a'.into()),
+            BindingTarget::Script(a_shallow),
         );
         m.insert(
-            BindingId(3),
+            BindingId(2),
+            PathMatcher::new("foo/**")?,
+            InputSpec::Key('a'.into()),
+            BindingTarget::Script(a_deep),
+        );
+
+        assert_eq!(
+            m.resolve(&"/foo/bar/baz".into(), &InputSpec::Key('a'.into()))
+                .unwrap(),
+            BindingTarget::Script(a_deep)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn binding_precedence_prefers_insertion_order_on_tie() -> Result<()> {
+        let mut m = InputMode::new();
+        let mut e = script::ScriptHost::new();
+        let a_first = e.compile("x()")?;
+        let a_last = e.compile("x()")?;
+
+        m.insert(
+            BindingId(1),
+            PathMatcher::new("bar/foo")?,
+            InputSpec::Key('a'.into()),
+            BindingTarget::Script(a_first),
+        );
+        m.insert(
+            BindingId(2),
             PathMatcher::new("bar/foo")?,
             InputSpec::Key('a'.into()),
             BindingTarget::Script(a_last),

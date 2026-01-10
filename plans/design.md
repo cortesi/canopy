@@ -53,32 +53,32 @@ execution checklist. Update the checklist as work proceeds.
 6. [x] Run tests via `cargo nextest run --all --all-features` (fallback: `cargo test`).
 7. [x] Format with `cargo +nightly fmt --all -- --config-path ./rustfmt-nightly.toml` (fallback:
     `cargo +nightly fmt --all`).
-8. [ ] Review checkpoint: share the diff for approval before starting Phase 3.
+8. [x] Review checkpoint: share the diff for approval before starting Phase 3.
 
 3. Phase 3: Larger design unlocks and refactors
 
-1. [ ] Replace internal `process::exit` usage with cooperative shutdown: add an exit request flag
+1. [x] Replace internal `process::exit` usage with cooperative shutdown: add an exit request flag
     on `Canopy`/`Core`, change `Context::exit` and `BackendControl::exit` signatures to return
     `()`, and make the runloop return an exit code (current exits in
     `crates/canopy/src/core/backend/mod.rs`, `core/context.rs`, and crossterm backend).
-2. [ ] Make `Widget::on_event` fallible (`Result<EventOutcome>`) in
+2. [x] Make `Widget::on_event` fallible (`Result<EventOutcome>`) in
     `crates/canopy/src/widget/mod.rs`, bubble errors through core dispatch (`core/world.rs`) and
     public event entry points (`core/canopy.rs`), returning errors to the caller immediately.
-3. [ ] Remove panicking command-arg conversions in `crates/canopy/src/core/commands.rs` (u64/usize
+3. [x] Remove panicking command-arg conversions in `crates/canopy/src/core/commands.rs` (u64/usize
     `expect` and `Serialize` blanket `expect`) by introducing a fallible `SerdeArg` wrapper and
     updating call builders/tests.
-4. [ ] Replace regex-based path matching in `crates/canopy/src/core/path.rs` with a custom
+4. [x] Replace regex-based path matching in `crates/canopy/src/core/path.rs` with a custom
     component-glob matcher (`*` and `**`) plus explicit match scoring; update matcher tests
     accordingly.
 5. [ ] Optional refactor (if approved, otherwise defer): move widget storage into a separate arena
     (node stores a widget key) to eliminate `unsafe` in `with_widget_view` and reduce borrow
     workarounds.
-6. [ ] Run `ruskel` for the modified APIs (`canopy::widget`, `canopy::core::world`,
+6. [x] Run `ruskel` for the modified APIs (`canopy::widget`, `canopy::core::world`,
     `canopy::core::commands`, `canopy::core::path`).
-7. [ ] Run `cargo clippy -q --fix --all --all-targets --all-features --allow-dirty --tests \
+7. [x] Run `cargo clippy -q --fix --all --all-targets --all-features --allow-dirty --tests \
     --examples 2>&1` and resolve any warnings.
-8. [ ] Run tests via `cargo nextest run --all --all-features` (fallback: `cargo test`).
-9. [ ] Format with `cargo +nightly fmt --all -- --config-path ./rustfmt-nightly.toml` (fallback:
+8. [x] Run tests via `cargo nextest run --all --all-features` (fallback: `cargo test`).
+9. [x] Format with `cargo +nightly fmt --all -- --config-path ./rustfmt-nightly.toml` (fallback:
     `cargo +nightly fmt --all`).
 10. [ ] Review checkpoint: share the diff for approval before starting Phase 4.
 

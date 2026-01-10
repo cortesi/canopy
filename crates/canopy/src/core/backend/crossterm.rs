@@ -1,6 +1,6 @@
 use std::{
     io::{self, Stderr, Write},
-    panic, process,
+    panic,
     result::Result as StdResult,
     sync::mpsc::{self, TryRecvError},
     thread,
@@ -269,15 +269,6 @@ impl RenderBackend for CrosstermRender {
         Ok(())
     }
 
-    #[allow(unused_must_use)]
-    fn exit(&mut self, code: i32) -> ! {
-        self.fp.execute(terminal::LeaveAlternateScreen);
-        self.fp.execute(cevent::DisableMouseCapture);
-        self.fp.execute(ccursor::Show);
-        terminal::disable_raw_mode();
-        process::exit(code)
-    }
-
     fn reset(&mut self) -> Result<()> {
         Ok(())
     }
@@ -456,9 +447,9 @@ fn handle_render_error(
 /// Ctrl+C handling policy for the crossterm runloop.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CtrlCBehavior {
-    /// Exit the process with status 130.
+    /// Stop the runloop with status 130.
     Exit,
-    /// Dump the node tree and exit with status 130.
+    /// Dump the node tree and stop the runloop with status 130.
     DumpTreeAndExit,
 }
 
@@ -491,12 +482,12 @@ impl Default for RunloopOptions {
 }
 
 /// Run the main render/event loop using the crossterm backend.
-pub fn runloop(cnpy: Canopy) -> Result<()> {
+pub fn runloop(cnpy: Canopy) -> Result<i32> {
     runloop_with_options(cnpy, RunloopOptions::default())
 }
 
 /// Run the main render/event loop using the crossterm backend with custom options.
-pub fn runloop_with_options(mut cnpy: Canopy, options: RunloopOptions) -> Result<()> {
+pub fn runloop_with_options(mut cnpy: Canopy, options: RunloopOptions) -> Result<i32> {
     let mut be = CrosstermRender::default();
     cnpy.register_backend(CrosstermControl::default());
     let mut session = {
@@ -553,6 +544,9 @@ pub fn runloop_with_options(mut cnpy: Canopy, options: RunloopOptions) -> Result
         ));
     }
     translate_result(be.flush())?;
+    if let Some(code) = cnpy.core.take_exit_request() {
+        return Ok(code);
+    }
 
     loop {
         let event = events.next()?;
@@ -573,10 +567,13 @@ pub fn runloop_with_options(mut cnpy: Canopy, options: RunloopOptions) -> Result
                 }
             }
 
-            process::exit(130);
+            return Ok(130);
         }
 
         cnpy.event(event)?;
+        if let Some(code) = cnpy.core.take_exit_request() {
+            return Ok(code);
+        }
         match cnpy.render_if_pending(&mut be) {
             Ok(rendered) => {
                 if rendered && let Err(e) = translate_result(be.flush()) {

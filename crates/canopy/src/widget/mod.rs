@@ -53,8 +53,8 @@ pub trait Widget: Any + Send + CommandNode {
     }
 
     /// Handle events.
-    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        EventOutcome::Ignore
+    fn on_event(&mut self, _event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
+        Ok(EventOutcome::Ignore)
     }
 
     /// Attempt to focus this widget.

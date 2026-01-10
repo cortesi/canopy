@@ -87,51 +87,86 @@ impl From<&str> for Path {
 }
 
 /// A match expression that can be applied to paths.
-/// The matcher supports `*` wildcards and optional leading or trailing slashes.
+/// The matcher supports `*` (one component), `**` (zero or more), and optional anchors.
 #[derive(Debug, Clone)]
 pub struct PathMatcher {
     /// Original filter string used to construct the matcher.
     filter: Box<str>,
-    /// Compiled regular expression.
-    expr: regex::Regex,
+    /// Parsed path pattern.
+    pattern: PathPattern,
 }
 
 /// Path match metadata used for input precedence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PathMatch {
-    /// End byte index of the match in the path string.
-    pub end: usize,
-    /// Match length in bytes.
-    pub len: usize,
+    /// Count of literal segments in the pattern.
+    pub literals: usize,
+    /// Number of path components matched.
+    pub depth: usize,
+    /// Whether the match ends at the end of the path.
+    pub anchored_end: bool,
+}
+
+impl PathMatch {
+    /// Score tuple used for match precedence.
+    pub(crate) fn score(&self) -> (usize, usize, usize) {
+        (self.literals, usize::from(self.anchored_end), self.depth)
+    }
+}
+
+/// Parsed path pattern metadata.
+#[derive(Debug, Clone)]
+struct PathPattern {
+    /// Require matches to start at the root.
+    anchor_start: bool,
+    /// Require matches to end at the path terminus.
+    anchor_end: bool,
+    /// Pattern segments to match.
+    segments: Vec<Segment>,
+    /// Count of literal segments in the pattern.
+    literals: usize,
+}
+
+/// Pattern segment kinds used by the matcher.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Segment {
+    /// Literal component match.
+    Lit(String),
+    /// Match exactly one component.
+    Any,
+    /// Match zero or more components.
+    AnyDeep,
 }
 
 impl PathMatcher {
     /// Compile a path matcher from a filter string.
     pub fn new(path: &str) -> Result<Self> {
-        let parts = path.split('/');
-        let mut pattern = parts
-            .filter_map(|x| {
-                if x == "*" {
-                    Some(String::from(r"[a-z0-9_/]*"))
-                } else if !x.is_empty() {
-                    Some(format!("{}/", regex::escape(x)))
-                } else {
-                    None
+        let anchor_start = path.starts_with('/');
+        let anchor_end = path.ends_with('/');
+        let mut segments = Vec::new();
+        let mut literals = 0;
+        for part in path.split('/') {
+            if part.is_empty() {
+                continue;
+            }
+            let seg = match part {
+                "*" => Segment::Any,
+                "**" => Segment::AnyDeep,
+                _ => {
+                    literals += 1;
+                    Segment::Lit(part.to_string())
                 }
-            })
-            .collect::<Vec<_>>()
-            .join("");
-        if path.starts_with('/') {
-            pattern = format!("^/{pattern}")
+            };
+            segments.push(seg);
         }
-        pattern = pattern.trim_end_matches('/').to_string();
-        if path.ends_with('/') {
-            pattern += "$";
-        }
-        let expr = regex::Regex::new(&pattern).map_err(|e| error::Error::Invalid(e.to_string()))?;
         Ok(Self {
             filter: path.into(),
-            expr,
+            pattern: PathPattern {
+                anchor_start,
+                anchor_end,
+                segments,
+                literals,
+            },
         })
     }
 
@@ -140,22 +175,83 @@ impl PathMatcher {
         &self.filter
     }
 
-    /// Check whether the path filter matches a given path. Returns the position
-    /// of the final match character in the path string. We use this returned
-    /// value to disambiguate when mulitple matches are active for a key - the
-    /// path with the largest match position wins.
+    /// Check whether the path filter matches a given path.
+    /// Returns the matched depth for use in quick checks.
     pub fn check(&self, path: &Path) -> Option<usize> {
-        self.check_match(path).map(|m| m.end)
+        self.check_match(path).map(|m| m.depth)
     }
 
     /// Check whether the path filter matches a given path, returning match metadata.
     pub fn check_match(&self, path: &Path) -> Option<PathMatch> {
-        let haystack = path.to_string();
-        let mat = self.expr.find_iter(&haystack).last()?;
-        Some(PathMatch {
-            end: mat.end(),
-            len: mat.end() - mat.start(),
-        })
+        let parts = &path.path;
+        let mut best: Option<PathMatch> = None;
+        let starts = if self.pattern.anchor_start {
+            0..=0
+        } else {
+            0..=parts.len()
+        };
+        for start in starts {
+            if let Some(end) = match_end(&self.pattern.segments, parts, start) {
+                if self.pattern.anchor_end && end != parts.len() {
+                    continue;
+                }
+                let depth = end.saturating_sub(start);
+                let candidate = PathMatch {
+                    literals: self.pattern.literals,
+                    depth,
+                    anchored_end: end == parts.len() && depth > 0,
+                };
+                if best.is_none_or(|best| candidate.score() > best.score()) {
+                    best = Some(candidate);
+                }
+            }
+        }
+        best
+    }
+}
+
+/// Return the furthest end index for a match starting at `start`.
+fn match_end(segments: &[Segment], parts: &[String], start: usize) -> Option<usize> {
+    if segments.is_empty() {
+        return Some(start);
+    }
+    walk_match_end(segments, parts, 0, start)
+}
+
+/// Recursively resolve the furthest matching end index for a segment sequence.
+fn walk_match_end(
+    segments: &[Segment],
+    parts: &[String],
+    seg_idx: usize,
+    part_idx: usize,
+) -> Option<usize> {
+    if seg_idx == segments.len() {
+        return Some(part_idx);
+    }
+    match &segments[seg_idx] {
+        Segment::Lit(lit) => {
+            if part_idx < parts.len() && parts[part_idx] == *lit {
+                walk_match_end(segments, parts, seg_idx + 1, part_idx + 1)
+            } else {
+                None
+            }
+        }
+        Segment::Any => {
+            if part_idx < parts.len() {
+                walk_match_end(segments, parts, seg_idx + 1, part_idx + 1)
+            } else {
+                None
+            }
+        }
+        Segment::AnyDeep => {
+            let mut best: Option<usize> = None;
+            for next in part_idx..=parts.len() {
+                if let Some(end) = walk_match_end(segments, parts, seg_idx + 1, next) {
+                    best = Some(best.map_or(end, |best_end| best_end.max(end)));
+                }
+            }
+            best
+        }
     }
 }
 
@@ -166,38 +262,40 @@ mod tests {
     #[test]
     fn pathfilter() -> Result<()> {
         let v = PathMatcher::new("")?;
-        assert_eq!(v.check(&"/any/thing".into()), Some(10));
-        assert_eq!(v.check(&"/".into()), Some(1));
+        assert!(v.check(&"/any/thing".into()).is_some());
+        assert!(v.check(&"/".into()).is_some());
 
         let v = PathMatcher::new("bar")?;
-        assert_eq!(v.check(&"/foo/bar".into()), Some(8));
-
-        assert_eq!(v.check(&"/bar/foo".into()), Some(4));
+        assert!(v.check(&"/foo/bar".into()).is_some());
+        assert!(v.check(&"/bar/foo".into()).is_some());
         assert!(v.check(&"/foo/foo".into()).is_none());
 
         let v = PathMatcher::new("foo/*/bar")?;
-        assert_eq!(v.check(&"/foo/oink/oink/bar".into()), Some(18));
-        assert_eq!(v.check(&"/foo/bar".into()), Some(8));
-        assert_eq!(v.check(&"/oink/foo/bar/oink".into()), Some(13));
-        assert_eq!(v.check(&"/foo/oink/oink/bar".into()), Some(18));
-        assert_eq!(v.check(&"/foo/bar/voing".into()), Some(8));
+        assert!(v.check(&"/foo/oink/bar".into()).is_some());
+        assert!(v.check(&"/oink/foo/oink/bar/oink".into()).is_some());
+        assert!(v.check(&"/foo/bar".into()).is_none());
+        assert!(v.check(&"/foo/oink/oink/bar".into()).is_none());
 
         let v = PathMatcher::new("/foo")?;
-        assert_eq!(v.check(&"/foo".into()), Some(4));
-        assert_eq!(v.check(&"/foo/bar".into()), Some(4));
+        assert!(v.check(&"/foo".into()).is_some());
+        assert!(v.check(&"/foo/bar".into()).is_some());
         assert!(v.check(&"/bar/foo/bar".into()).is_none());
 
         let v = PathMatcher::new("foo/")?;
-        assert_eq!(v.check(&"/foo".into()), Some(4));
-        assert_eq!(v.check(&"/bar/foo".into()), Some(8));
+        assert!(v.check(&"/foo".into()).is_some());
+        assert!(v.check(&"/bar/foo".into()).is_some());
         assert!(v.check(&"/foo/bar".into()).is_none());
 
-        let v = PathMatcher::new("foo/*/bar/*/voing/")?;
-        assert_eq!(v.check(&"/foo/bar/voing".into()), Some(14));
-        assert_eq!(v.check(&"/foo/x/bar/voing".into()), Some(16));
-        assert_eq!(v.check(&"/foo/x/bar/x/voing".into()), Some(18));
-        assert_eq!(v.check(&"/x/foo/x/bar/x/voing".into()), Some(20));
-        assert!(v.check(&"/foo/x/bar/x/voing/x".into()).is_none());
+        let v = PathMatcher::new("foo/**/bar")?;
+        assert!(v.check(&"/foo/bar".into()).is_some());
+        assert!(v.check(&"/foo/x/bar".into()).is_some());
+        assert!(v.check(&"/foo/x/y/bar".into()).is_some());
+        assert!(v.check(&"/bar/foo/x/bar/x".into()).is_some());
+
+        let v = PathMatcher::new("foo/**/bar/")?;
+        assert!(v.check(&"/foo/bar".into()).is_some());
+        assert!(v.check(&"/foo/x/bar".into()).is_some());
+        assert!(v.check(&"/foo/x/bar/x".into()).is_none());
 
         Ok(())
     }

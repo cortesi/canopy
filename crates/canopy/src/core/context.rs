@@ -1,7 +1,6 @@
 use std::{
     any::{Any, TypeId, type_name, type_name_of_val},
     marker::PhantomData,
-    process,
     result::Result as StdResult,
 };
 
@@ -789,8 +788,8 @@ pub trait Context: ReadContext {
     /// Stop the backend renderer, releasing control of the terminal.
     fn stop(&mut self) -> Result<()>;
 
-    /// Stop the render backend and exit the process.
-    fn exit(&mut self, code: i32) -> !;
+    /// Request a cooperative shutdown with the provided status code.
+    fn exit(&mut self, code: i32);
 
     /// Add an effect to a node that will be applied during rendering.
     /// Effects stack and inherit through the tree.
@@ -1671,9 +1670,8 @@ impl<'a> Context for CoreContext<'a> {
             .stop()
     }
 
-    fn exit(&mut self, code: i32) -> ! {
-        let _ = self.stop().ok();
-        process::exit(code)
+    fn exit(&mut self, code: i32) {
+        self.core.request_exit(code);
     }
 
     fn push_effect(&mut self, node: NodeId, effect: Box<dyn StyleEffect>) -> Result<()> {

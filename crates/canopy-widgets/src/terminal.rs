@@ -1104,18 +1104,18 @@ impl Widget for Terminal {
         Ok(())
     }
 
-    fn on_event(&mut self, event: &event::Event, ctx: &mut dyn Context) -> EventOutcome {
+    fn on_event(&mut self, event: &event::Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
         match event {
             event::Event::Key(key) => {
                 if key.mods.shift {
                     match key.key {
                         key::KeyCode::PageUp => {
                             self.term.scroll_display(Scroll::PageUp);
-                            return EventOutcome::Handle;
+                            return Ok(EventOutcome::Handle);
                         }
                         key::KeyCode::PageDown => {
                             self.term.scroll_display(Scroll::PageDown);
-                            return EventOutcome::Handle;
+                            return Ok(EventOutcome::Handle);
                         }
                         _ => {}
                     }
@@ -1126,7 +1126,7 @@ impl Widget for Terminal {
                     && matches!(key.key, key::KeyCode::Char('c' | 'C'))
                 {
                     self.copy_selection();
-                    return EventOutcome::Handle;
+                    return Ok(EventOutcome::Handle);
                 }
 
                 if let Some(bytes) = self.encode_key(key)
@@ -1134,15 +1134,15 @@ impl Widget for Terminal {
                 {
                     self.clear_selection();
                     self.write_to_pty(&bytes);
-                    return EventOutcome::Handle;
+                    return Ok(EventOutcome::Handle);
                 }
 
-                EventOutcome::Ignore
+                Ok(EventOutcome::Ignore)
             }
             event::Event::Paste(content) => {
                 self.clear_selection();
                 self.handle_paste(content);
-                EventOutcome::Handle
+                Ok(EventOutcome::Handle)
             }
             event::Event::Mouse(m) => {
                 ctx.set_focus(ctx.node_id());
@@ -1159,10 +1159,10 @@ impl Widget for Terminal {
                     if send && let Some(seq) = self.encode_mouse(m, mode) {
                         self.write_to_pty(&seq);
                     }
-                    return EventOutcome::Handle;
+                    return Ok(EventOutcome::Handle);
                 }
 
-                match m.action {
+                let outcome = match m.action {
                     mouse::Action::ScrollUp => {
                         self.term.scroll_display(Scroll::Delta(SCROLL_LINES));
                         EventOutcome::Handle
@@ -1193,19 +1193,20 @@ impl Widget for Terminal {
                         }
                     }
                     _ => EventOutcome::Ignore,
-                }
+                };
+                Ok(outcome)
             }
             event::Event::FocusGained => {
                 self.app_focused = true;
                 self.update_focus(ctx);
-                EventOutcome::Handle
+                Ok(EventOutcome::Handle)
             }
             event::Event::FocusLost => {
                 self.app_focused = false;
                 self.update_focus(ctx);
-                EventOutcome::Handle
+                Ok(EventOutcome::Handle)
             }
-            _ => EventOutcome::Ignore,
+            _ => Ok(EventOutcome::Ignore),
         }
     }
 

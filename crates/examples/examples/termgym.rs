@@ -1,6 +1,6 @@
 //! Launch the terminal gym example.
 
-use std::io;
+use std::{io, process};
 
 use canopy::{
     Canopy, Loader,
@@ -39,6 +39,9 @@ fn main() -> Result<()> {
 
     let app_id = cnpy.core.create_detached(TermGym::new());
     Root::install_with_inspector(&mut cnpy.core, app_id, args.inspector)?;
-    runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
+    let exit_code = runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
+    if exit_code != 0 {
+        process::exit(exit_code);
+    }
     Ok(())
 }

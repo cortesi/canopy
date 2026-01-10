@@ -734,10 +734,6 @@ mod tests {
             Ok(())
         }
 
-        fn exit(&mut self, _code: i32) -> ! {
-            unreachable!()
-        }
-
         fn reset(&mut self) -> Result<()> {
             Ok(())
         }
@@ -786,10 +782,6 @@ mod tests {
 
         fn flush(&mut self) -> Result<()> {
             Ok(())
-        }
-
-        fn exit(&mut self, _code: i32) -> ! {
-            unreachable!()
         }
 
         fn reset(&mut self) -> Result<()> {

@@ -1,6 +1,6 @@
 //! Launch the textgym example.
 
-use std::{error::Error, result::Result};
+use std::{error::Error, process, result::Result};
 
 use canopy::{
     Canopy, Loader,
@@ -20,6 +20,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let app_id = cnpy.core.create_detached(TextGym::new());
     Root::install(&mut cnpy.core, app_id)?;
-    runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
+    let exit_code = runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
+    if exit_code != 0 {
+        process::exit(exit_code);
+    }
     Ok(())
 }

@@ -42,6 +42,8 @@ pub struct Core {
     pub(crate) focus_gen: u64,
     /// Active backend controller.
     pub(crate) backend: Option<Box<dyn BackendControl>>,
+    /// Exit code requested by a widget or command, if any.
+    pub(crate) exit_requested: Option<i32>,
     /// Pending style map to be applied before next render.
     pub(crate) pending_style: Option<StyleMap>,
     /// Node that captures mouse events regardless of cursor position.
@@ -162,6 +164,7 @@ impl Core {
             focus: None,
             focus_gen: 1,
             backend: None,
+            exit_requested: None,
             pending_style: None,
             mouse_capture: None,
             focus_hint: None,
@@ -182,6 +185,18 @@ impl Core {
     /// Take and clear the observed flag for a pending help snapshot.
     pub(crate) fn take_help_snapshot_observed(&self) -> bool {
         self.pending_help_snapshot_observed.replace(false)
+    }
+
+    /// Request a cooperative exit with the provided status code.
+    pub(crate) fn request_exit(&mut self, code: i32) {
+        if self.exit_requested.is_none() {
+            self.exit_requested = Some(code);
+        }
+    }
+
+    /// Take the pending exit request, if any.
+    pub(crate) fn take_exit_request(&mut self) -> Option<i32> {
+        self.exit_requested.take()
     }
 
     /// Return the current command-scope frame, if any.
@@ -934,7 +949,11 @@ impl Core {
     }
 
     /// Dispatch an event to a node, bubbling to parents if unhandled.
-    pub fn dispatch_event(&mut self, start: impl Into<NodeId>, event: &Event) -> EventOutcome {
+    pub fn dispatch_event(
+        &mut self,
+        start: impl Into<NodeId>,
+        event: &Event,
+    ) -> Result<EventOutcome> {
         let start = start.into();
         let depth = self.push_command_scope(self.command_scope_for_event(event));
         let outcome = self.dispatch_event_inner(start, event);
@@ -943,21 +962,22 @@ impl Core {
     }
 
     /// Dispatch an event to a node and bubble until handled.
-    fn dispatch_event_inner(&mut self, start: NodeId, event: &Event) -> EventOutcome {
+    fn dispatch_event_inner(&mut self, start: NodeId, event: &Event) -> Result<EventOutcome> {
         let mut target = Some(start);
         while let Some(id) = target {
             let outcome = self.with_widget_mut(id, |w, core| {
                 let mut ctx = CoreContext::new(core, id);
                 w.on_event(event, &mut ctx)
             });
+            let outcome = outcome?;
             match outcome {
-                EventOutcome::Handle | EventOutcome::Consume => return outcome,
+                EventOutcome::Handle | EventOutcome::Consume => return Ok(outcome),
                 EventOutcome::Ignore => {
                     target = self.nodes[id].parent;
                 }
             }
         }
-        EventOutcome::Ignore
+        Ok(EventOutcome::Ignore)
     }
 
     /// Dispatch an event to a single node without bubbling.
@@ -965,7 +985,7 @@ impl Core {
         &mut self,
         node_id: impl Into<NodeId>,
         event: &Event,
-    ) -> EventOutcome {
+    ) -> Result<EventOutcome> {
         let node_id = node_id.into();
         let depth = self.push_command_scope(self.command_scope_for_event(event));
         let outcome = self.with_widget_mut(node_id, |w, core| {

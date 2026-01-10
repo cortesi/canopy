@@ -1,6 +1,6 @@
 //! Launch the cedit example.
 
-use std::{env, error::Error, fs, path::Path, result::Result};
+use std::{env, error::Error, fs, path::Path, process, result::Result};
 
 use canopy::{
     Canopy, Loader,
@@ -28,7 +28,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let extension = file_extension(&filename);
     let app_id = cnpy.core.create_detached(Ed::new(&contents, &extension));
     Root::install_with_inspector(&mut cnpy.core, app_id, false)?;
-    runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
+    let exit_code = runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
+    if exit_code != 0 {
+        process::exit(exit_code);
+    }
     Ok(())
 }
 

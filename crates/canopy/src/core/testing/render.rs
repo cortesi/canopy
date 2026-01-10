@@ -1,5 +1,3 @@
-use std::process::exit;
-
 use crate::{error::Result, geom::Point, render::RenderBackend, style::Style};
 
 /// A dummy render backend that discards all output.
@@ -32,10 +30,6 @@ impl RenderBackend for NopBackend {
 
     fn flush(&mut self) -> Result<()> {
         Ok(())
-    }
-
-    fn exit(&mut self, code: i32) -> ! {
-        exit(code)
     }
 
     fn reset(&mut self) -> Result<()> {

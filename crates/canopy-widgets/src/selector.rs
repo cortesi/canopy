@@ -199,14 +199,14 @@ impl<T> Widget for Selector<T>
 where
     T: SelectorItem + Send + 'static,
 {
-    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> EventOutcome {
+    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
         if let Event::Mouse(mouse_event) = event
-            && matches!(self.handle_click(ctx, *mouse_event), Ok(true))
+            && self.handle_click(ctx, *mouse_event)?
         {
             // Return Ignore so mouse bindings can also fire (e.g., to trigger effects).
-            return EventOutcome::Ignore;
+            return Ok(EventOutcome::Ignore);
         }
-        EventOutcome::Ignore
+        Ok(EventOutcome::Ignore)
     }
 
     fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {

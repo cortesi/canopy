@@ -121,12 +121,13 @@ macro_rules! leaf {
                 )
             }
 
-            fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-                match event {
+            fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
+                let outcome = match event {
                     Event::Key(_) => self.handle("key"),
                     Event::Mouse(_) => self.handle("mouse"),
                     _ => EventOutcome::Ignore,
-                }
+                };
+                Ok(outcome)
             }
 
             fn name(&self) -> NodeName {
@@ -186,12 +187,13 @@ macro_rules! branch {
                 )
             }
 
-            fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-                match event {
+            fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
+                let outcome = match event {
                     Event::Key(_) => self.handle("key"),
                     Event::Mouse(_) => self.handle("mouse"),
                     _ => EventOutcome::Ignore,
-                }
+                };
+                Ok(outcome)
             }
 
             fn name(&self) -> NodeName {
@@ -269,12 +271,13 @@ impl Widget for R {
         )
     }
 
-    fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> EventOutcome {
-        match event {
+    fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
+        let outcome = match event {
             Event::Key(_) => self.handle("key"),
             Event::Mouse(_) => self.handle("mouse"),
             _ => EventOutcome::Ignore,
-        }
+        };
+        Ok(outcome)
     }
 
     fn name(&self) -> NodeName {

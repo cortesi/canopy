@@ -1,4 +1,4 @@
-use std::{any::TypeId, process, result::Result as StdResult};
+use std::{any::TypeId, result::Result as StdResult};
 
 use slotmap::Key;
 
@@ -266,9 +266,7 @@ impl Context for DummyContext {
         Ok(())
     }
 
-    fn exit(&mut self, code: i32) -> ! {
-        process::exit(code)
-    }
+    fn exit(&mut self, _code: i32) {}
 
     fn push_effect(&mut self, _node: NodeId, _effect: Box<dyn StyleEffect>) -> Result<()> {
         Ok(())
