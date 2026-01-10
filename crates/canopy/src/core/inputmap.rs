@@ -14,9 +14,24 @@ use crate::{
 /// Default input mode name.
 const DEFAULT_MODE: &str = "";
 
+/// Monotonic identifier for a binding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct BindingId(u64);
+
+impl BindingId {
+    /// Allocate the next binding ID.
+    fn next(next: &mut u64) -> Self {
+        let id = Self(*next);
+        *next = next.saturating_add(1);
+        id
+    }
+}
+
 /// An action to be taken in response to an event, if the path matches.
 #[derive(Debug)]
 struct BoundAction {
+    /// Unique identifier for the binding.
+    id: BindingId,
     /// Compiled path matcher (includes original filter string).
     pathmatch: PathMatcher,
     /// Action to execute.
@@ -104,12 +119,19 @@ impl InputMode {
     /// Insert a key binding into this mode.
     ///
     /// The input is normalized before storing.
-    fn insert(&mut self, pathmatch: PathMatcher, input: InputSpec, action: BindingTarget) {
+    fn insert(
+        &mut self,
+        id: BindingId,
+        pathmatch: PathMatcher,
+        input: InputSpec,
+        action: BindingTarget,
+    ) {
         let input = input.normalize();
-        self.inputs
-            .entry(input)
-            .or_default()
-            .push(BoundAction { pathmatch, action });
+        self.inputs.entry(input).or_default().push(BoundAction {
+            id,
+            pathmatch,
+            action,
+        });
     }
 
     /// Resolve a key with a given path filter to a binding target.
@@ -153,6 +175,7 @@ impl InputMode {
         for (input, actions) in &self.inputs {
             for a in actions {
                 out.push(BindingInfo {
+                    id: a.id,
                     input: *input,
                     path_filter: a.pathmatch.filter(),
                     target: &a.action,
@@ -170,6 +193,7 @@ impl InputMode {
                 if let Some(m) = a.pathmatch.check_match(path) {
                     out.push(MatchedBindingInfo {
                         info: BindingInfo {
+                            id: a.id,
                             input: *input,
                             path_filter: a.pathmatch.filter(),
                             target: &a.action,
@@ -180,6 +204,20 @@ impl InputMode {
             }
         }
         out
+    }
+
+    /// Remove a binding by ID. Returns true if a binding was removed.
+    fn unbind(&mut self, id: BindingId) -> bool {
+        let mut removed = false;
+        for actions in self.inputs.values_mut() {
+            let before = actions.len();
+            actions.retain(|a| a.id != id);
+            if actions.len() != before {
+                removed = true;
+            }
+        }
+        self.inputs.retain(|_, actions| !actions.is_empty());
+        removed
     }
 }
 
@@ -196,6 +234,8 @@ pub struct InputMap {
     modes: HashMap<String, InputMode>,
     /// Current active mode name.
     current_mode: String,
+    /// Next binding identifier.
+    next_id: u64,
 }
 
 impl Default for InputMap {
@@ -213,6 +253,7 @@ impl InputMap {
         Self {
             current_mode: DEFAULT_MODE.into(),
             modes,
+            next_id: 1,
         }
     }
 
@@ -267,43 +308,61 @@ impl InputMap {
     /// Bind a key, within a given mode, with a given context to a list of commands.
     ///
     /// The input is normalized before storing.
+    ///
+    /// Returns the new binding ID.
     pub fn bind(
         &mut self,
         mode: &str,
         input: InputSpec,
         path_filter: &str,
         script: script::ScriptId,
-    ) -> Result<()> {
+    ) -> Result<BindingId> {
         self.bind_action(mode, input, path_filter, BindingTarget::Script(script))
     }
 
     /// Bind a key, within a given mode, with a given context to a direct command invocation.
     ///
     /// The input is normalized before storing.
+    ///
+    /// Returns the new binding ID.
     pub fn bind_command(
         &mut self,
         mode: &str,
         input: InputSpec,
         path_filter: &str,
         command: CommandInvocation,
-    ) -> Result<()> {
+    ) -> Result<BindingId> {
         self.bind_action(mode, input, path_filter, BindingTarget::Command(command))
     }
 
     /// Store a key binding action for a mode and path filter.
+    ///
+    /// Returns the new binding ID.
     fn bind_action(
         &mut self,
         mode: &str,
         input: InputSpec,
         path_filter: &str,
         action: BindingTarget,
-    ) -> Result<()> {
+    ) -> Result<BindingId> {
         let pathmatch = PathMatcher::new(path_filter)?;
+        let id = BindingId::next(&mut self.next_id);
         self.modes
             .entry(mode.to_string())
             .or_insert_with(InputMode::new)
-            .insert(pathmatch, input, action);
-        Ok(())
+            .insert(id, pathmatch, input, action);
+        Ok(id)
+    }
+
+    /// Remove a binding by ID. Returns true if a binding was removed.
+    pub fn unbind(&mut self, id: BindingId) -> bool {
+        let mut removed = false;
+        for mode in self.modes.values_mut() {
+            if mode.unbind(id) {
+                removed = true;
+            }
+        }
+        removed
     }
 
     /// Return the name of the current input mode.
@@ -331,6 +390,8 @@ impl InputMap {
 /// Metadata about a single input binding.
 #[derive(Debug, Clone)]
 pub struct BindingInfo<'a> {
+    /// Binding identifier.
+    pub id: BindingId,
     /// Input that triggers this binding.
     pub input: InputSpec,
     /// Original path filter string (e.g., "editor/*").
@@ -360,6 +421,7 @@ mod tests {
         let a_foo = e.compile("x()")?;
 
         m.insert(
+            BindingId(1),
             PathMatcher::new("foo")?,
             InputSpec::Key('A'.into()),
             BindingTarget::Script(a_foo),
@@ -388,16 +450,19 @@ mod tests {
         let a_bar = e.compile("x()")?;
         let b = e.compile("x()")?;
         m.insert(
+            BindingId(1),
             PathMatcher::new("foo")?,
             InputSpec::Key('a'.into()),
             BindingTarget::Script(a_foo),
         );
         m.insert(
+            BindingId(2),
             PathMatcher::new("bar")?,
             InputSpec::Key('a'.into()),
             BindingTarget::Script(a_bar),
         );
         m.insert(
+            BindingId(3),
             PathMatcher::new("")?,
             InputSpec::Key('b'.into()),
             BindingTarget::Script(b),
@@ -477,6 +542,22 @@ mod tests {
     }
 
     #[test]
+    fn unbind_removes_binding() -> Result<()> {
+        let mut m = InputMap::new();
+        let mut e = script::ScriptHost::new();
+        let a_default = e.compile("x()")?;
+        let id = m.bind("", InputSpec::Key('a'.into()), "", a_default)?;
+
+        assert!(m.unbind(id));
+        assert!(!m.unbind(id));
+        assert!(
+            m.resolve(&"foo".into(), &InputSpec::Key('a'.into()))
+                .is_none()
+        );
+        Ok(())
+    }
+
+    #[test]
     fn binding_precedence_uses_match_length_then_order() -> Result<()> {
         let mut m = InputMode::new();
         let mut e = script::ScriptHost::new();
@@ -485,16 +566,19 @@ mod tests {
         let a_last = e.compile("x()")?;
 
         m.insert(
+            BindingId(1),
             PathMatcher::new("foo")?,
             InputSpec::Key('a'.into()),
             BindingTarget::Script(a_short),
         );
         m.insert(
+            BindingId(2),
             PathMatcher::new("bar/foo")?,
             InputSpec::Key('a'.into()),
             BindingTarget::Script(a_long),
         );
         m.insert(
+            BindingId(3),
             PathMatcher::new("bar/foo")?,
             InputSpec::Key('a'.into()),
             BindingTarget::Script(a_last),

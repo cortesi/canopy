@@ -38,21 +38,20 @@ execution checklist. Update the checklist as work proceeds.
 
 2. Phase 2: Ergonomics multipliers
 
-1. [ ] Add a `Slot<K: ChildKey>` helper in `canopy` core and refactor
+1. [x] Add a `Slot<K: ChildKey>` helper in `canopy` core and refactor
     `crates/canopy-widgets/src/button.rs` to use it instead of
     `try_with_unique_descendant::<Text>`.
-2. [ ] Introduce a keyed reconciliation helper (e.g., `KeyedChildren<K>`) in `canopy` core and
+2. [x] Introduce a keyed reconciliation helper (e.g., `KeyedChildren<K>`) in `canopy` core and
     refactor `crates/canopy-widgets/src/list.rs` to use it instead of manual `items` management
     and `set_children` syncing.
-3. [ ] Add `BindingId` (monotonic `u64`) + `unbind -> bool` + binding introspection to
-    `InputMap`/`Canopy`/`Binder`, and update examples/docs to prefer typed command bindings
-    (`bind_key_command('q', "", Root::cmd_quit().call())`).
-4. [ ] Run `ruskel` for the modified APIs (`canopy::core::context`, `canopy::core::inputmap`,
+3. [x] Add `BindingId` (monotonic `u64`) + `unbind -> bool` + binding introspection to
+    `InputMap`/`Canopy`/`Binder`.
+4. [x] Run `ruskel` for the modified APIs (`canopy::core::context`, `canopy::core::inputmap`,
     `canopy-widgets::list`, `canopy-widgets::button`).
-5. [ ] Run `cargo clippy -q --fix --all --all-targets --all-features --allow-dirty --tests \
+5. [x] Run `cargo clippy -q --fix --all --all-targets --all-features --allow-dirty --tests \
     --examples 2>&1` and resolve any warnings.
-6. [ ] Run tests via `cargo nextest run --all --all-features` (fallback: `cargo test`).
-7. [ ] Format with `cargo +nightly fmt --all -- --config-path ./rustfmt-nightly.toml` (fallback:
+6. [x] Run tests via `cargo nextest run --all --all-features` (fallback: `cargo test`).
+7. [x] Format with `cargo +nightly fmt --all -- --config-path ./rustfmt-nightly.toml` (fallback:
     `cargo +nightly fmt --all`).
 8. [ ] Review checkpoint: share the diff for approval before starting Phase 3.
 

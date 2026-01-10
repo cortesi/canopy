@@ -1,7 +1,7 @@
 //! Button widget.
 
 use canopy::{
-    Context, EventOutcome, ReadContext, Widget, command,
+    Context, EventOutcome, ReadContext, Slot, Widget, command,
     commands::{CommandCall, CommandInvocation},
     derive_commands,
     error::Result,
@@ -18,6 +18,8 @@ use crate::{
 };
 
 key!(LabelSlot: Text);
+key!(BoxSlot: Box);
+key!(CenterSlot: Center);
 
 /// Button widget that triggers a command when clicked.
 pub struct Button {
@@ -29,6 +31,12 @@ pub struct Button {
     glyphs: BoxGlyphs,
     /// Selection state for use in lists.
     selected: bool,
+    /// Slot for the box container.
+    box_slot: Slot<BoxSlot>,
+    /// Slot for the centered label container.
+    center_slot: Slot<CenterSlot>,
+    /// Slot for the label text.
+    label_slot: Slot<LabelSlot>,
 }
 
 impl Selectable for Button {
@@ -46,6 +54,9 @@ impl Button {
             command: None,
             glyphs: SINGLE,
             selected: false,
+            box_slot: Slot::new(),
+            center_slot: Slot::new(),
+            label_slot: Slot::new(),
         }
     }
 
@@ -91,10 +102,18 @@ impl Button {
     }
 
     /// Sync the label text widget to the current label.
-    fn sync_label(&self, ctx: &mut dyn Context) -> Result<()> {
-        let label = self.label.clone();
-        let _ = ctx.try_with_unique_descendant::<Text, _>(|text, _ctx| {
-            text.set_raw(label);
+    fn sync_label(&mut self, ctx: &mut dyn Context) -> Result<()> {
+        let box_id = self
+            .box_slot
+            .get_or_create(ctx, || Box::new().with_glyphs(self.glyphs).with_fill())?;
+        let center_id = self
+            .center_slot
+            .get_or_create_in(ctx, box_id, Center::new)?;
+        let label_id = self
+            .label_slot
+            .get_or_create_in(ctx, center_id, || Text::new(self.label.clone()))?;
+        ctx.with_typed(label_id, |text, _| {
+            text.set_raw(self.label.clone());
             Ok(())
         })?;
         Ok(())
@@ -113,9 +132,14 @@ impl Widget for Button {
     }
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        let box_id = ctx.add_child(Box::new().with_glyphs(self.glyphs).with_fill())?;
-        let center_id = ctx.add_child_to(box_id, Center::new())?;
-        ctx.add_keyed_to::<LabelSlot>(center_id, Text::new(self.label.clone()))?;
+        let box_id = self
+            .box_slot
+            .get_or_create(ctx, || Box::new().with_glyphs(self.glyphs).with_fill())?;
+        let center_id = self
+            .center_slot
+            .get_or_create_in(ctx, box_id, Center::new)?;
+        self.label_slot
+            .get_or_create_in(ctx, center_id, || Text::new(self.label.clone()))?;
         Ok(())
     }
 

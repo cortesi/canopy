@@ -6,13 +6,13 @@
 use std::marker::PhantomData;
 
 use canopy::{
-    Context, EventOutcome, NodeId, ReadContext, TypedId, Widget, command,
+    Context, EventOutcome, KeyedChildren, ReadContext, RemovePolicy, TypedId, Widget, command,
     commands::{
         CommandArgs, CommandCall, CommandInvocation, CommandScopeFrame, ListRowContext,
         ScrollDirection, ToArgValue, VerticalDirection,
     },
     derive_commands,
-    error::Result,
+    error::{Error, Result},
     event::{Event, mouse},
     geom::{Line, Point},
     layout::{CanvasContext, Constraint, Edges, Layout, MeasureConstraints, Measurement, Size},
@@ -92,6 +92,10 @@ struct PendingActivate {
     dragged: bool,
 }
 
+/// Monotonic key for list items.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct ListKey(u64);
+
 /// Trait for widgets that can be selected in a list.
 ///
 /// Items in a `List` must implement this trait so the list can manage
@@ -110,8 +114,10 @@ pub trait Selectable: Widget {
 /// Items must implement the [`Selectable`] trait so the list can manage their
 /// selection state independently of focus.
 pub struct List<W: Selectable> {
-    /// Item widget node IDs in order.
-    items: Vec<TypedId<W>>,
+    /// Keyed list items in order.
+    items: KeyedChildren<ListKey>,
+    /// Next monotonic key to assign.
+    next_key: u64,
     /// Currently selected item index.
     selected: Option<usize>,
     /// Optional list-level selection indicator.
@@ -135,7 +141,8 @@ impl<W: Selectable> List<W> {
     /// Construct an empty list.
     pub fn new() -> Self {
         Self {
-            items: Vec::new(),
+            items: KeyedChildren::new(),
+            next_key: 0,
             selected: None,
             selection_indicator: None,
             on_activate: None,
@@ -202,7 +209,7 @@ impl<W: Selectable> List<W> {
 
     /// Returns the typed ID of the item at the given index.
     pub fn item(&self, index: usize) -> Option<TypedId<W>> {
-        self.items.get(index).copied()
+        self.items.id_at(index).map(TypedId::new)
     }
 
     /// Returns the currently selected index.
@@ -212,7 +219,7 @@ impl<W: Selectable> List<W> {
 
     /// Returns the typed ID of the currently selected item.
     pub fn selected_item(&self) -> Option<TypedId<W>> {
-        self.selected.and_then(|idx| self.items.get(idx).copied())
+        self.selected.and_then(|idx| self.item(idx))
     }
 
     /// Append an item widget to the end of the list.
@@ -220,8 +227,16 @@ impl<W: Selectable> List<W> {
     where
         W: 'static,
     {
-        let id = ctx.add_child(widget)?;
-        self.items.push(id);
+        let key = self.next_key();
+        let mut desired = self.items.keys().to_vec();
+        desired.push(key);
+
+        let ordered =
+            self.reconcile_with_widget(ctx, desired, key, widget, RemovePolicy::RemoveSubtree)?;
+        let id = ordered
+            .last()
+            .copied()
+            .ok_or_else(|| Error::Internal("list append did not return the new item".into()))?;
 
         // Auto-select and focus if this is the first item
         if self.selected.is_none() {
@@ -238,9 +253,16 @@ impl<W: Selectable> List<W> {
         W: 'static,
     {
         let clamped = index.min(self.items.len());
+        let key = self.next_key();
         let was_empty = self.selected.is_none();
-        let id = ctx.add_child(widget)?;
-        self.items.insert(clamped, id);
+        let mut desired = self.items.keys().to_vec();
+        desired.insert(clamped, key);
+        let ordered =
+            self.reconcile_with_widget(ctx, desired, key, widget, RemovePolicy::RemoveSubtree)?;
+        let id = ordered
+            .get(clamped)
+            .copied()
+            .ok_or_else(|| Error::Internal("list insert did not return the new item".into()))?;
 
         // Adjust selection if inserting before current selection
         if let Some(sel) = self.selected {
@@ -253,47 +275,46 @@ impl<W: Selectable> List<W> {
         }
 
         // Focus first item if this was an empty list
-        if was_empty && let Some(first_id) = self.items.first() {
-            ctx.set_focus((*first_id).into());
+        if was_empty && let Some(first_id) = self.item(0) {
+            ctx.set_focus(first_id.into());
         }
-
-        // Sync children order with the arena
-        self.sync_children(ctx)?;
 
         Ok(id)
     }
 
     /// Remove the item at the specified index.
     pub fn remove(&mut self, ctx: &mut dyn Context, index: usize) -> Result<bool> {
-        if index >= self.items.len() {
+        let mut desired = self.items.keys().to_vec();
+        if index >= desired.len() {
             return Ok(false);
         }
-
-        let id = self.items.remove(index);
-        ctx.remove_subtree(id.into())?;
+        desired.remove(index);
+        self.reconcile_order(ctx, desired, RemovePolicy::RemoveSubtree)?;
         self.repair_selection_after_remove(ctx, index);
         Ok(true)
     }
 
     /// Detach the item at the specified index.
     pub fn take(&mut self, ctx: &mut dyn Context, index: usize) -> Result<Option<TypedId<W>>> {
-        if index >= self.items.len() {
+        let mut desired = self.items.keys().to_vec();
+        if index >= desired.len() {
             return Ok(None);
         }
-
-        let id = self.items.remove(index);
-        ctx.detach(id.into())?;
+        let removed = self
+            .items
+            .id_at(index)
+            .map(TypedId::new)
+            .ok_or_else(|| Error::Internal("list take missing node id".into()))?;
+        desired.remove(index);
+        self.reconcile_order(ctx, desired, RemovePolicy::Detach)?;
         self.repair_selection_after_remove(ctx, index);
-        Ok(Some(id))
+        Ok(Some(removed))
     }
 
     /// Clear all items from the list.
     #[command(ignore_result)]
     pub fn clear(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        let ids: Vec<_> = self.items.drain(..).collect();
-        for id in ids {
-            ctx.remove_subtree(id.into())?;
-        }
+        self.reconcile_order(ctx, Vec::new(), RemovePolicy::RemoveSubtree)?;
         self.selected = None;
         Ok(())
     }
@@ -319,7 +340,7 @@ impl<W: Selectable> List<W> {
     fn update_selection(&mut self, ctx: &mut dyn Context, new_selected: Option<usize>) {
         // Clear old selection
         if let Some(old_idx) = self.selected
-            && let Some(old_id) = self.items.get(old_idx).copied()
+            && let Some(old_id) = self.item(old_idx)
         {
             ctx.with_widget(old_id, |w: &mut W, _| {
                 w.set_selected(false);
@@ -330,7 +351,7 @@ impl<W: Selectable> List<W> {
 
         // Set new selection
         if let Some(new_idx) = new_selected
-            && let Some(new_id) = self.items.get(new_idx).copied()
+            && let Some(new_id) = self.item(new_idx)
         {
             ctx.with_widget(new_id, |w: &mut W, _| {
                 w.set_selected(true);
@@ -546,12 +567,6 @@ impl<W: Selectable> List<W> {
         self.page(c, VerticalDirection::Down);
     }
 
-    /// Sync children order with the items vec.
-    fn sync_children(&self, ctx: &mut dyn Context) -> Result<()> {
-        let children: Vec<NodeId> = self.items.iter().map(|id| (*id).into()).collect();
-        ctx.set_children(children)
-    }
-
     /// Ensure the selected item is visible in the view.
     fn ensure_selected_visible(&self, c: &mut dyn Context) {
         let Some(selected_idx) = self.selected else {
@@ -622,9 +637,9 @@ impl<W: Selectable> List<W> {
         let mut metrics = Vec::with_capacity(self.items.len());
         let mut y_offset = 0u32;
 
-        for id in &self.items {
+        for id in self.items.iter_ids() {
             // Get the child's layout and compute its height
-            let height = c.node_view((*id).into()).map(|v| v.outer.h).unwrap_or(1);
+            let height = c.node_view(id).map(|v| v.outer.h).unwrap_or(1);
 
             metrics.push((y_offset, height));
             y_offset = y_offset.saturating_add(height);
@@ -632,7 +647,7 @@ impl<W: Selectable> List<W> {
 
         // If no layout data yet, estimate with 1-height items
         if metrics.is_empty() && !self.items.is_empty() {
-            for (i, _) in self.items.iter().enumerate() {
+            for i in 0..self.items.len() {
                 metrics.push((i as u32, 1));
             }
         }
@@ -754,6 +769,63 @@ impl<W: Selectable + Send + 'static> Widget for List<W> {
 
     fn name(&self) -> NodeName {
         NodeName::convert("list")
+    }
+}
+
+impl<W: Selectable> List<W> {
+    /// Allocate the next list key.
+    fn next_key(&mut self) -> ListKey {
+        let key = ListKey(self.next_key);
+        self.next_key = self.next_key.saturating_add(1);
+        key
+    }
+
+    /// Reconcile the list order while creating a single new widget.
+    fn reconcile_with_widget(
+        &mut self,
+        ctx: &mut dyn Context,
+        desired: Vec<ListKey>,
+        key: ListKey,
+        widget: W,
+        remove: RemovePolicy,
+    ) -> Result<Vec<TypedId<W>>>
+    where
+        W: 'static,
+    {
+        if self.items.id_for(&key).is_some() {
+            return Err(Error::Internal("list key collision".into()));
+        }
+        let mut widget = Some(widget);
+        self.items.reconcile(
+            ctx,
+            desired,
+            |requested| {
+                if *requested != key {
+                    panic!("list reconcile requested an unexpected key");
+                }
+                widget.take().expect("list widget already consumed")
+            },
+            |_, _, _| Ok(()),
+            remove,
+        )
+    }
+
+    /// Reconcile the list order without creating new widgets.
+    fn reconcile_order(
+        &mut self,
+        ctx: &mut dyn Context,
+        desired: Vec<ListKey>,
+        remove: RemovePolicy,
+    ) -> Result<Vec<TypedId<W>>> {
+        self.items.reconcile(
+            ctx,
+            desired,
+            |_| {
+                panic!("list reconcile requested a missing widget");
+            },
+            |_, _, _| Ok(()),
+            remove,
+        )
     }
 }
 

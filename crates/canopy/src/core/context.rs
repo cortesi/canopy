@@ -1,5 +1,6 @@
 use std::{
     any::{Any, TypeId, type_name, type_name_of_val},
+    marker::PhantomData,
     process,
     result::Result as StdResult,
 };
@@ -43,6 +44,88 @@ pub trait ChildKey {
     type Widget: Widget + 'static;
     /// The string key used for storage.
     const KEY: &'static str;
+}
+
+/// Slot helper for keyed children that caches the resolved typed ID.
+#[derive(Debug)]
+pub struct Slot<K: ChildKey> {
+    /// Cached typed ID for the slot widget.
+    id: Option<TypedId<K::Widget>>,
+    /// Marker for the key type.
+    _marker: PhantomData<K>,
+}
+
+impl<K: ChildKey> Default for Slot<K> {
+    fn default() -> Self {
+        Self {
+            id: None,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<K: ChildKey> Slot<K> {
+    /// Construct an empty slot.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Clear any cached typed ID.
+    pub fn clear(&mut self) {
+        self.id = None;
+    }
+
+    /// Get or create the keyed child under the current node.
+    pub fn get_or_create(
+        &mut self,
+        ctx: &mut dyn Context,
+        make: impl FnOnce() -> K::Widget,
+    ) -> Result<TypedId<K::Widget>> {
+        let parent = ctx.node_id();
+        self.get_or_create_in(ctx, parent, make)
+    }
+
+    /// Get or create the keyed child under a specific parent node.
+    pub fn get_or_create_in(
+        &mut self,
+        ctx: &mut dyn Context,
+        parent: impl Into<NodeId>,
+        make: impl FnOnce() -> K::Widget,
+    ) -> Result<TypedId<K::Widget>> {
+        let parent = parent.into();
+        if let Some(id) = ctx.get_child_in::<K>(parent) {
+            self.id = Some(id);
+            return Ok(id);
+        }
+        let id = ctx.add_keyed_to::<K>(parent, make())?;
+        self.id = Some(id);
+        Ok(id)
+    }
+
+    /// Execute a closure with a keyed child under the current node.
+    pub fn with<R>(
+        &mut self,
+        ctx: &mut dyn Context,
+        f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
+    ) -> Result<R> {
+        let parent = ctx.node_id();
+        self.with_in(ctx, parent, f)
+    }
+
+    /// Execute a closure with a keyed child under a specific parent node.
+    pub fn with_in<R>(
+        &mut self,
+        ctx: &mut dyn Context,
+        parent: impl Into<NodeId>,
+        f: impl FnOnce(&mut K::Widget, &mut dyn Context) -> Result<R>,
+    ) -> Result<R> {
+        let parent = parent.into();
+        let id = ctx
+            .get_child_in::<K>(parent)
+            .ok_or_else(|| Error::NotFound(K::KEY.to_string()))?;
+        self.id = Some(id);
+        ctx.with_typed(id, f)
+    }
 }
 
 /// Define a typed key for keyed children.

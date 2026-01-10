@@ -1,8 +1,10 @@
 use crate::{
-    Canopy,
+    BindingId, Canopy,
     commands::CommandInvocation,
     error::Result,
     event::{key::Key, mouse::Mouse},
+    inputmap,
+    path::Path,
 };
 
 /// Binder provides an ergonomic way to specify a set of key bindings using a
@@ -47,12 +49,11 @@ impl<'a> Binder<'a> {
     }
 
     /// Bind a key to a script fallibly.
-    pub fn try_key<K>(self, key: K, script: &str) -> Result<Self>
+    pub fn try_key<K>(mut self, key: K, script: &str) -> Result<Self>
     where
         Key: From<K>,
     {
-        self.cnpy
-            .bind_mode_key(key, &self.mode, &self.path_filter, script)?;
+        let _ = self.try_key_id(key, script)?;
         Ok(self)
     }
 
@@ -67,13 +68,12 @@ impl<'a> Binder<'a> {
     }
 
     /// Bind a key to a typed command fallibly.
-    pub fn try_key_command<K, C>(self, key: K, command: C) -> Result<Self>
+    pub fn try_key_command<K, C>(mut self, key: K, command: C) -> Result<Self>
     where
         Key: From<K>,
         C: Into<CommandInvocation>,
     {
-        self.cnpy
-            .bind_mode_key_command(key, &self.mode, &self.path_filter, command)?;
+        let _ = self.try_key_command_id(key, command)?;
         Ok(self)
     }
 
@@ -87,12 +87,11 @@ impl<'a> Binder<'a> {
     }
 
     /// Bind a mouse action to a script fallibly.
-    pub fn try_mouse<K>(self, m: K, script: &str) -> Result<Self>
+    pub fn try_mouse<K>(mut self, m: K, script: &str) -> Result<Self>
     where
         Mouse: From<K>,
     {
-        self.cnpy
-            .bind_mode_mouse(m, &self.mode, &self.path_filter, script)?;
+        let _ = self.try_mouse_id(m, script)?;
         Ok(self)
     }
 
@@ -107,13 +106,12 @@ impl<'a> Binder<'a> {
     }
 
     /// Bind a mouse action to a typed command fallibly.
-    pub fn try_mouse_command<K, C>(self, m: K, command: C) -> Result<Self>
+    pub fn try_mouse_command<K, C>(mut self, m: K, command: C) -> Result<Self>
     where
         Mouse: From<K>,
         C: Into<CommandInvocation>,
     {
-        self.cnpy
-            .bind_mode_mouse_command(m, &self.mode, &self.path_filter, command)?;
+        let _ = self.try_mouse_command_id(m, command)?;
         Ok(self)
     }
 
@@ -124,6 +122,97 @@ impl<'a> Binder<'a> {
         C: Into<CommandInvocation>,
     {
         self.try_mouse_command(m, command).unwrap()
+    }
+
+    /// Bind a key to a script and return its binding ID.
+    pub fn try_key_id<K>(&mut self, key: K, script: &str) -> Result<BindingId>
+    where
+        Key: From<K>,
+    {
+        self.cnpy
+            .bind_mode_key(key, &self.mode, &self.path_filter, script)
+    }
+
+    /// Bind a key to a script and return its binding ID, panicking on error.
+    pub fn key_id<K>(&mut self, key: K, script: &str) -> BindingId
+    where
+        Key: From<K>,
+    {
+        self.try_key_id(key, script).unwrap()
+    }
+
+    /// Bind a key to a typed command and return its binding ID.
+    pub fn try_key_command_id<K, C>(&mut self, key: K, command: C) -> Result<BindingId>
+    where
+        Key: From<K>,
+        C: Into<CommandInvocation>,
+    {
+        self.cnpy
+            .bind_mode_key_command(key, &self.mode, &self.path_filter, command)
+    }
+
+    /// Bind a key to a typed command and return its binding ID, panicking on error.
+    pub fn key_command_id<K, C>(&mut self, key: K, command: C) -> BindingId
+    where
+        Key: From<K>,
+        C: Into<CommandInvocation>,
+    {
+        self.try_key_command_id(key, command).unwrap()
+    }
+
+    /// Bind a mouse action to a script and return its binding ID.
+    pub fn try_mouse_id<K>(&mut self, m: K, script: &str) -> Result<BindingId>
+    where
+        Mouse: From<K>,
+    {
+        self.cnpy
+            .bind_mode_mouse(m, &self.mode, &self.path_filter, script)
+    }
+
+    /// Bind a mouse action to a script and return its binding ID, panicking on error.
+    pub fn mouse_id<K>(&mut self, m: K, script: &str) -> BindingId
+    where
+        Mouse: From<K>,
+    {
+        self.try_mouse_id(m, script).unwrap()
+    }
+
+    /// Bind a mouse action to a typed command and return its binding ID.
+    pub fn try_mouse_command_id<K, C>(&mut self, m: K, command: C) -> Result<BindingId>
+    where
+        Mouse: From<K>,
+        C: Into<CommandInvocation>,
+    {
+        self.cnpy
+            .bind_mode_mouse_command(m, &self.mode, &self.path_filter, command)
+    }
+
+    /// Bind a mouse action to a typed command and return its binding ID, panicking on error.
+    pub fn mouse_command_id<K, C>(&mut self, m: K, command: C) -> BindingId
+    where
+        Mouse: From<K>,
+        C: Into<CommandInvocation>,
+    {
+        self.try_mouse_command_id(m, command).unwrap()
+    }
+
+    /// Remove a binding by ID. Returns true if a binding was removed.
+    pub fn unbind(&mut self, id: BindingId) -> bool {
+        self.cnpy.unbind(id)
+    }
+
+    /// Return all bindings defined for a mode.
+    pub fn bindings_for_mode(&self, mode: &str) -> Vec<inputmap::BindingInfo<'_>> {
+        self.cnpy.bindings_for_mode(mode)
+    }
+
+    /// Return bindings in a mode that match a specific path.
+    pub fn bindings_matching_path(
+        &self,
+        mode: &str,
+        path: &Path,
+    ) -> Vec<inputmap::MatchedBindingInfo<'_>> {
+        self.cnpy.bindings_matching_path(mode, path)
     }
 }
 

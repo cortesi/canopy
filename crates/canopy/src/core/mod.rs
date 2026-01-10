@@ -4,6 +4,8 @@
 // Core modules - public
 /// Backend implementations.
 pub mod backend;
+/// Keyed child collection helpers.
+pub mod children;
 /// Command definition and dispatch.
 pub mod commands;
 /// Cursor and position helpers.
@@ -59,8 +61,9 @@ pub mod world;
 // Public exports from internal modules
 pub use binder::{Binder, DefaultBindings};
 pub use canopy::{Canopy, Loader};
-pub use context::{ChildKey, Context, ReadContext};
+pub use children::{KeyedChildren, RemovePolicy};
+pub use context::{ChildKey, Context, ReadContext, Slot};
 pub use focus::FocusManager;
 pub use id::{NodeId, TypedId};
-pub use inputmap::{InputMap, InputSpec};
+pub use inputmap::{BindingId, InputMap, InputSpec};
 pub use world::Core;

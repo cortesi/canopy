@@ -110,7 +110,14 @@ impl Canopy {
     }
 
     /// Bind a mouse action in the global mode with a given path filter to a script.
-    pub fn bind_mouse<K>(&mut self, mouse: K, path_filter: &str, script: &str) -> Result<()>
+    ///
+    /// Returns the new binding ID.
+    pub fn bind_mouse<K>(
+        &mut self,
+        mouse: K,
+        path_filter: &str,
+        script: &str,
+    ) -> Result<inputmap::BindingId>
     where
         mouse::Mouse: From<K>,
     {
@@ -118,13 +125,15 @@ impl Canopy {
     }
 
     /// Bind a mouse action in a specified mode with a given path filter to a script.
+    ///
+    /// Returns the new binding ID.
     pub fn bind_mode_mouse<K>(
         &mut self,
         mouse: K,
         mode: &str,
         path_filter: &str,
         script: &str,
-    ) -> Result<()>
+    ) -> Result<inputmap::BindingId>
     where
         mouse::Mouse: From<K>,
     {
@@ -137,12 +146,14 @@ impl Canopy {
     }
 
     /// Bind a mouse action in the global mode with a given path filter to a typed command.
+    ///
+    /// Returns the new binding ID.
     pub fn bind_mouse_command<K, C>(
         &mut self,
         mouse: K,
         path_filter: &str,
         command: C,
-    ) -> Result<()>
+    ) -> Result<inputmap::BindingId>
     where
         mouse::Mouse: From<K>,
         C: Into<commands::CommandInvocation>,
@@ -151,7 +162,14 @@ impl Canopy {
     }
 
     /// Bind a key in the global mode, with a given path filter to a script.
-    pub fn bind_key<K>(&mut self, key: K, path_filter: &str, script: &str) -> Result<()>
+    ///
+    /// Returns the new binding ID.
+    pub fn bind_key<K>(
+        &mut self,
+        key: K,
+        path_filter: &str,
+        script: &str,
+    ) -> Result<inputmap::BindingId>
     where
         key::Key: From<K>,
     {
@@ -159,13 +177,15 @@ impl Canopy {
     }
 
     /// Bind a key within a given mode, with a given path filter to a script.
+    ///
+    /// Returns the new binding ID.
     pub fn bind_mode_key<K>(
         &mut self,
         key: K,
         mode: &str,
         path_filter: &str,
         script: &str,
-    ) -> Result<()>
+    ) -> Result<inputmap::BindingId>
     where
         key::Key: From<K>,
     {
@@ -178,7 +198,14 @@ impl Canopy {
     }
 
     /// Bind a key in the global mode with a given path filter to a typed command.
-    pub fn bind_key_command<K, C>(&mut self, key: K, path_filter: &str, command: C) -> Result<()>
+    ///
+    /// Returns the new binding ID.
+    pub fn bind_key_command<K, C>(
+        &mut self,
+        key: K,
+        path_filter: &str,
+        command: C,
+    ) -> Result<inputmap::BindingId>
     where
         key::Key: From<K>,
         C: Into<commands::CommandInvocation>,
@@ -187,13 +214,15 @@ impl Canopy {
     }
 
     /// Bind a key within a given mode, with a given path filter, to a typed command.
+    ///
+    /// Returns the new binding ID.
     pub fn bind_mode_key_command<K, C>(
         &mut self,
         key: K,
         mode: &str,
         path_filter: &str,
         command: C,
-    ) -> Result<()>
+    ) -> Result<inputmap::BindingId>
     where
         key::Key: From<K>,
         C: Into<commands::CommandInvocation>,
@@ -208,13 +237,15 @@ impl Canopy {
     }
 
     /// Bind a mouse action in a specified mode with a given path filter to a typed command.
+    ///
+    /// Returns the new binding ID.
     pub fn bind_mode_mouse_command<K, C>(
         &mut self,
         mouse: K,
         mode: &str,
         path_filter: &str,
         command: C,
-    ) -> Result<()>
+    ) -> Result<inputmap::BindingId>
     where
         mouse::Mouse: From<K>,
         C: Into<commands::CommandInvocation>,
@@ -226,6 +257,25 @@ impl Canopy {
             path_filter,
             invocation,
         )
+    }
+
+    /// Remove a binding by ID. Returns true if a binding was removed.
+    pub fn unbind(&mut self, id: inputmap::BindingId) -> bool {
+        self.keymap.unbind(id)
+    }
+
+    /// Return all bindings defined for a mode.
+    pub fn bindings_for_mode(&self, mode: &str) -> Vec<inputmap::BindingInfo<'_>> {
+        self.keymap.bindings_for_mode(mode)
+    }
+
+    /// Return bindings in a mode that match a specific path.
+    pub fn bindings_matching_path(
+        &self,
+        mode: &str,
+        path: &Path,
+    ) -> Vec<inputmap::MatchedBindingInfo<'_>> {
+        self.keymap.bindings_matching_path(mode, path)
     }
 
     /// Load the commands from a command node using the default node name.
