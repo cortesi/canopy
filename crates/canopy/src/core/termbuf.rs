@@ -607,6 +607,8 @@ fn render_line_range<R: RenderBackend>(
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
     use crate::{
         buf,
@@ -789,6 +791,70 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct CountingBackend {
+        style_calls: usize,
+        text_calls: usize,
+        shift_calls: usize,
+        flush_calls: usize,
+        reset_calls: usize,
+    }
+
+    impl CountingBackend {
+        fn total_calls(&self) -> usize {
+            self.style_calls
+                + self.text_calls
+                + self.shift_calls
+                + self.flush_calls
+                + self.reset_calls
+        }
+    }
+
+    impl RenderBackend for CountingBackend {
+        fn style(&mut self, _style: &Style) -> Result<()> {
+            self.style_calls += 1;
+            Ok(())
+        }
+
+        fn text(&mut self, _loc: Point, _txt: &str) -> Result<()> {
+            self.text_calls += 1;
+            Ok(())
+        }
+
+        fn supports_char_shift(&self) -> bool {
+            false
+        }
+
+        fn shift_chars(&mut self, _loc: Point, _count: i32) -> Result<()> {
+            self.shift_calls += 1;
+            Ok(())
+        }
+
+        fn flush(&mut self) -> Result<()> {
+            self.flush_calls += 1;
+            Ok(())
+        }
+
+        fn reset(&mut self) -> Result<()> {
+            self.reset_calls += 1;
+            Ok(())
+        }
+    }
+
+    fn char_strategy() -> impl Strategy<Value = char> {
+        prop::sample::select(vec![' ', 'a', 'b', 'c', 'x', 'y'])
+    }
+
+    prop_compose! {
+        fn buf_strategy()
+            (width in 1u32..6, height in 1u32..6)
+            (width in Just(width), height in Just(height),
+             cells in prop::collection::vec(char_strategy(), (width * height) as usize..=(width * height) as usize))
+             -> (u32, u32, Vec<char>) {
+                (width, height, cells)
+            }
+    }
+
     #[test]
     fn diff_no_change() {
         let style = def_style();
@@ -797,6 +863,25 @@ mod tests {
         let mut be = RecBackend::new();
         tb2.diff(&tb1, &mut be).unwrap();
         assert!(be.ops.is_empty());
+    }
+
+    proptest! {
+        #[test]
+        fn diff_identical_buffers_have_no_ops((width, height, cells) in buf_strategy()) {
+            let style = def_style();
+            let mut buf = TermBuf::new(Expanse::new(width, height), ' ', style.clone());
+            let mut idx = 0usize;
+            for y in 0..height {
+                for x in 0..width {
+                    buf.put(Point { x, y }, cells[idx], style.clone());
+                    idx += 1;
+                }
+            }
+            let prev = buf.clone();
+            let mut backend = CountingBackend::default();
+            buf.diff(&prev, &mut backend).unwrap();
+            prop_assert_eq!(backend.total_calls(), 0);
+        }
     }
 
     #[test]

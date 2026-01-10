@@ -292,4 +292,8 @@ impl Context for DummyContext {
         // DummyContext does not track help snapshots
         None
     }
+
+    fn request_diagnostic_dump(&mut self, _target: NodeId) {
+        // DummyContext does not track diagnostic requests
+    }
 }

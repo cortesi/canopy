@@ -257,6 +257,8 @@ fn walk_match_end(
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
 
     #[test]
@@ -298,5 +300,26 @@ mod tests {
         assert!(v.check(&"/foo/x/bar/x".into()).is_none());
 
         Ok(())
+    }
+
+    proptest! {
+        #[test]
+        fn literal_path_matches_when_anchored(components in prop::collection::vec("[a-z]{1,8}", 1..6)) {
+            let join = components.join("/");
+            let matcher = PathMatcher::new(&format!("/{join}/")).expect("matcher");
+            let path = Path::new(&components);
+            let m = matcher.check_match(&path).expect("match");
+            prop_assert_eq!(m.literals, components.len());
+            prop_assert_eq!(m.depth, components.len());
+            prop_assert!(m.anchored_end);
+        }
+
+        #[test]
+        fn any_deep_matches_all_paths(components in prop::collection::vec("[a-z]{1,8}", 0..6)) {
+            let matcher = PathMatcher::new("**").expect("matcher");
+            let path = Path::new(&components);
+            let m = matcher.check_match(&path).expect("match");
+            prop_assert_eq!(m.depth, components.len());
+        }
     }
 }

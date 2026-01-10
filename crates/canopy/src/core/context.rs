@@ -818,6 +818,9 @@ pub trait Context: ReadContext {
     /// captured when `request_help_snapshot` was called. Returns `None` if
     /// no snapshot is pending.
     fn take_help_snapshot(&mut self) -> Option<OwnedHelpSnapshot>;
+
+    /// Request a diagnostic dump for a target node.
+    fn request_diagnostic_dump(&mut self, target: NodeId);
 }
 
 impl dyn Context + '_ {
@@ -1719,6 +1722,10 @@ impl<'a> Context for CoreContext<'a> {
 
     fn take_help_snapshot(&mut self) -> Option<OwnedHelpSnapshot> {
         self.core.pending_help_snapshot.take()
+    }
+
+    fn request_diagnostic_dump(&mut self, target: NodeId) {
+        self.core.request_diagnostic_dump(target);
     }
 }
 

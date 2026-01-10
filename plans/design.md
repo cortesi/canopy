@@ -84,19 +84,19 @@ execution checklist. Update the checklist as work proceeds.
 
 4. Phase 4: Testing + diagnostics hardening
 
-1. [ ] Add snapshot tests for core widgets (`Frame`, `List`, `Text`, `Button`) using the existing
+1. [x] Add snapshot tests for core widgets (`Frame`, `List`, `Text`, `Button`) using the existing
     harness (`crates/canopy/src/core/testing`) and record stable snapshots in
     `./tests/snapshots`.
-2. [ ] Add property tests for the new path matcher and `TermBuf::diff` invariants (idempotence,
+2. [x] Add property tests for the new path matcher and `TermBuf::diff` invariants (idempotence,
     no-ops on identical buffers) using `proptest` (already in dev-deps).
-3. [ ] Add `debug_assert!` invariants in core mutation points (no duplicate children, parent
+3. [x] Add `debug_assert!` invariants in core mutation points (no duplicate children, parent
     pointers consistent, `child_keys` subset of `children`, focus attached or `None`).
-4. [ ] Add a diagnostic inspector command to dump tree, focus path, and active bindings for the
+4. [x] Add a diagnostic inspector command to dump tree, focus path, and active bindings for the
     current node (ties into the existing command system).
-5. [ ] Run `cargo clippy -q --fix --all --all-targets --all-features --allow-dirty --tests \
+5. [x] Run `cargo clippy -q --fix --all --all-targets --all-features --allow-dirty --tests \
     --examples 2>&1` and resolve any warnings.
-6. [ ] Run tests via `cargo nextest run --all --all-features` (fallback: `cargo test`).
-7. [ ] Format with `cargo +nightly fmt --all -- --config-path ./rustfmt-nightly.toml` (fallback:
+6. [x] Run tests via `cargo nextest run --all --all-features` (fallback: `cargo test`).
+7. [x] Format with `cargo +nightly fmt --all -- --config-path ./rustfmt-nightly.toml` (fallback:
     `cargo +nightly fmt --all`).
 8. [ ] Review checkpoint: share the diff for approval before committing.
 

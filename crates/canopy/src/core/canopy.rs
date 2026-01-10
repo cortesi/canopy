@@ -7,7 +7,8 @@ use crate::{
     backend::BackendControl,
     commands,
     core::{
-        Core, NodeId, context::CoreViewContext, focus::FocusManager, style::StyleEffect, view::View,
+        Core, NodeId, context::CoreViewContext, dump::dump_with_focus, focus::FocusManager, help,
+        style::StyleEffect, view::View,
     },
     cursor,
     error::{self, Result},
@@ -533,6 +534,63 @@ impl Canopy {
         }
     }
 
+    /// Build a diagnostic dump with tree, focus, and binding details.
+    pub fn diagnostic_dump(&self, target: NodeId) -> String {
+        let mut out = String::new();
+        let focus = self.core.focus;
+        let input_mode = self.keymap.current_mode();
+        let target = if self.core.nodes.contains_key(target) {
+            target
+        } else {
+            self.core.root
+        };
+        let focus_path = self.core.focus_path(self.core.root);
+        let target_path = self.core.node_path(self.core.root, target);
+
+        out.push_str("Canopy diagnostics\n");
+        out.push_str(&format!("focus: {focus:?}\n"));
+        out.push_str(&format!("focus path: {focus_path}\n"));
+        out.push_str(&format!("target: {target:?}\n"));
+        out.push_str(&format!("target path: {target_path}\n"));
+        out.push_str(&format!("input mode: {input_mode}\n"));
+
+        let bindings = self.keymap.bindings_matching_path(input_mode, &target_path);
+        if bindings.is_empty() {
+            out.push_str("bindings: (none)\n");
+        } else {
+            out.push_str("bindings:\n");
+            for mb in bindings {
+                let kind = if mb.m.anchored_end && mb.m.depth > 0 {
+                    "pre"
+                } else {
+                    "post"
+                };
+                let label = help::binding_label(mb.info.target, &self.core.commands, |sid| {
+                    self.script_host.script_source(sid).map(|s| s.to_string())
+                });
+                out.push_str(&format!(
+                    "  [{:?}] {} {} ({kind}) -> {label}\n",
+                    mb.info.id, mb.info.input, mb.info.path_filter
+                ));
+            }
+        }
+
+        out.push_str("\nnode tree:\n");
+        match dump_with_focus(&self.core, self.core.root, focus) {
+            Ok(tree) => {
+                out.push_str(&tree);
+                if !tree.ends_with('\n') {
+                    out.push('\n');
+                }
+            }
+            Err(err) => {
+                out.push_str(&format!("failed to dump node tree: {err}\n"));
+            }
+        }
+
+        out
+    }
+
     /// Render the tree only if a render is pending.
     pub(crate) fn render_if_pending<R: RenderBackend>(&mut self, be: &mut R) -> Result<bool> {
         if !self.render_pending {
@@ -791,6 +849,10 @@ impl Canopy {
                 next.render(be)?;
             }
             self.termbuf = Some(next);
+
+            if let Some(target) = self.core.take_diagnostic_dump_request() {
+                eprintln!("{}", self.diagnostic_dump(target));
+            }
 
             self.last_render_focus_gen = self.core.focus_gen;
             self.last_focus_path = self.core.focus_path_ids();

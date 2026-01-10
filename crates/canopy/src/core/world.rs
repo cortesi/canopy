@@ -62,6 +62,8 @@ pub struct Core {
     pub(crate) pending_help_snapshot: Option<OwnedHelpSnapshot>,
     /// Tracks whether a pending help snapshot was observed during render.
     pending_help_snapshot_observed: Cell<bool>,
+    /// Pending diagnostic dump request.
+    pub(crate) pending_diagnostic_dump: Option<NodeId>,
 }
 
 #[derive(Default)]
@@ -174,6 +176,7 @@ impl Core {
             pending_help_request: None,
             pending_help_snapshot: None,
             pending_help_snapshot_observed: Cell::new(false),
+            pending_diagnostic_dump: None,
         }
     }
 
@@ -197,6 +200,16 @@ impl Core {
     /// Take the pending exit request, if any.
     pub(crate) fn take_exit_request(&mut self) -> Option<i32> {
         self.exit_requested.take()
+    }
+
+    /// Request a diagnostic dump for a target node.
+    pub(crate) fn request_diagnostic_dump(&mut self, target: NodeId) {
+        self.pending_diagnostic_dump = Some(target);
+    }
+
+    /// Take and clear any pending diagnostic dump request.
+    pub(crate) fn take_diagnostic_dump_request(&mut self) -> Option<NodeId> {
+        self.pending_diagnostic_dump.take()
     }
 
     /// Return the current command-scope frame, if any.
@@ -518,6 +531,130 @@ impl Core {
         while let Some(id) = current {
             if id == self.root {
                 return true;
+            }
+            current = self.nodes.get(id).and_then(|n| n.parent);
+        }
+        false
+    }
+
+    /// Assert structural invariants on the node tree in debug builds.
+    #[cfg(debug_assertions)]
+    pub(crate) fn debug_assert_tree_invariants(&self) {
+        self.debug_assert_root();
+        for (id, node) in self.nodes.iter() {
+            self.debug_assert_node_links(id, node);
+            self.debug_assert_no_cycle(id);
+        }
+        self.debug_assert_focus();
+    }
+
+    #[cfg(not(debug_assertions))]
+    pub(crate) fn debug_assert_tree_invariants(&self) {}
+
+    /// Assert root node invariants in debug builds.
+    #[cfg(debug_assertions)]
+    fn debug_assert_root(&self) {
+        debug_assert!(self.nodes.contains_key(self.root), "root node missing");
+        if let Some(root) = self.nodes.get(self.root) {
+            debug_assert!(root.parent.is_none(), "root has parent");
+        }
+    }
+
+    /// Assert parent/child link invariants for a specific node in debug builds.
+    #[cfg(debug_assertions)]
+    fn debug_assert_node_links(&self, id: NodeId, node: &Node) {
+        let mut seen = HashSet::with_capacity(node.children.len());
+        for child in &node.children {
+            debug_assert!(
+                seen.insert(*child),
+                "duplicate child {child:?} under {id:?}"
+            );
+            let child_node = self.nodes.get(*child);
+            debug_assert!(child_node.is_some(), "child {child:?} missing");
+            if let Some(child_node) = child_node {
+                debug_assert!(
+                    child_node.parent == Some(id),
+                    "child {child:?} parent mismatch under {id:?}"
+                );
+            }
+        }
+
+        for (key, child) in &node.child_keys {
+            debug_assert!(
+                node.children.contains(child),
+                "child key {key} points to non-child {child:?} under {id:?}"
+            );
+            let child_node = self.nodes.get(*child);
+            debug_assert!(child_node.is_some(), "child {child:?} missing");
+            if let Some(child_node) = child_node {
+                debug_assert!(
+                    child_node.parent == Some(id),
+                    "child {child:?} parent mismatch for key {key}"
+                );
+            }
+        }
+
+        if let Some(parent) = node.parent {
+            let parent_node = self.nodes.get(parent);
+            debug_assert!(parent_node.is_some(), "parent {parent:?} missing");
+            if let Some(parent_node) = parent_node {
+                debug_assert!(
+                    parent_node.children.contains(&id),
+                    "parent {parent:?} missing child {id:?}"
+                );
+            }
+        }
+    }
+
+    /// Assert focus invariants in debug builds.
+    #[cfg(debug_assertions)]
+    fn debug_assert_focus(&self) {
+        if let Some(focus) = self.focus {
+            debug_assert!(
+                self.nodes.contains_key(focus),
+                "focus points at missing node {focus:?}"
+            );
+            debug_assert!(
+                self.attached_to_root_debug(focus),
+                "focus points at detached node {focus:?}"
+            );
+        }
+    }
+
+    /// Assert that the parent chain for a node contains no cycles.
+    #[cfg(debug_assertions)]
+    fn debug_assert_no_cycle(&self, start: NodeId) {
+        debug_assert!(
+            !self.parent_chain_has_cycle(start),
+            "cycle detected from {start:?}"
+        );
+    }
+
+    /// Return true if a node's parent chain contains a cycle.
+    #[cfg(debug_assertions)]
+    fn parent_chain_has_cycle(&self, start: NodeId) -> bool {
+        let mut seen = HashSet::new();
+        let mut current = Some(start);
+        while let Some(id) = current {
+            if !seen.insert(id) {
+                return true;
+            }
+            current = self.nodes.get(id).and_then(|n| n.parent);
+        }
+        false
+    }
+
+    /// Return true if a node reaches the root without cycles.
+    #[cfg(debug_assertions)]
+    fn attached_to_root_debug(&self, start: NodeId) -> bool {
+        let mut seen = HashSet::new();
+        let mut current = Some(start);
+        while let Some(id) = current {
+            if id == self.root {
+                return true;
+            }
+            if !seen.insert(id) {
+                return false;
             }
             current = self.nodes.get(id).and_then(|n| n.parent);
         }

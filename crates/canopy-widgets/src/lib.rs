@@ -62,3 +62,6 @@ pub use selector::{Selector, SelectorItem};
 pub use terminal::{Terminal, TerminalColors, TerminalConfig};
 pub use text::{CanvasWidth, Text};
 pub use vstack::VStack;
+
+#[cfg(test)]
+mod snapshots;

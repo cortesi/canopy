@@ -122,6 +122,14 @@ impl Root {
         Ok(())
     }
 
+    #[command]
+    /// Dump diagnostic information about the tree, focus, and bindings.
+    pub fn dump_diagnostics(&mut self, c: &mut dyn Context) -> Result<()> {
+        let target = c.focused_leaf(c.root_id()).unwrap_or_else(|| c.node_id());
+        c.request_diagnostic_dump(target);
+        Ok(())
+    }
+
     /// Move focus in the specified direction.
     pub fn focus(&mut self, c: &mut dyn Context, direction: FocusDirection) -> Result<()> {
         match direction {

@@ -289,6 +289,7 @@ impl FocusManager for Core {
     fn ensure_invariants(&mut self, removed_root: Option<NodeId>) {
         self.ensure_focus_valid(removed_root);
         self.ensure_mouse_capture_valid();
+        self.debug_assert_tree_invariants();
     }
 
     fn focus_path_ids(&self) -> Vec<NodeId> {
