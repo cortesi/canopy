@@ -53,8 +53,8 @@
 <a href=#53 id=53 data-nosnippet>53</a>    }
 <a href=#54 id=54 data-nosnippet>54</a>
 <a href=#55 id=55 data-nosnippet>55</a>    <span class="doccomment">/// Handle events.
-<a href=#56 id=56 data-nosnippet>56</a>    </span><span class="kw">fn </span>on_event(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _event: <span class="kw-2">&amp;</span>Event, _ctx: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Context) -&gt; EventOutcome {
-<a href=#57 id=57 data-nosnippet>57</a>        EventOutcome::Ignore
+<a href=#56 id=56 data-nosnippet>56</a>    </span><span class="kw">fn </span>on_event(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _event: <span class="kw-2">&amp;</span>Event, _ctx: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Context) -&gt; <span class="prelude-ty">Result</span>&lt;EventOutcome&gt; {
+<a href=#57 id=57 data-nosnippet>57</a>        <span class="prelude-val">Ok</span>(EventOutcome::Ignore)
 <a href=#58 id=58 data-nosnippet>58</a>    }
 <a href=#59 id=59 data-nosnippet>59</a>
 <a href=#60 id=60 data-nosnippet>60</a>    <span class="doccomment">/// Attempt to focus this widget.

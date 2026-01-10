@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["BindingTarget","InputSpec"],"struct":["BindingId","BindingInfo","InputMap","InputMode","MatchedBindingInfo"]};

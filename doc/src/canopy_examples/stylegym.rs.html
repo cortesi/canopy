@@ -3,7 +3,7 @@
 <a href=#3 id=3 data-nosnippet>3</a>//! This example showcases themes, effects, and modal overlays in a two-pane layout.
 <a href=#4 id=4 data-nosnippet>4</a>
 <a href=#5 id=5 data-nosnippet>5</a></span><span class="kw">use </span>canopy::{
-<a href=#6 id=6 data-nosnippet>6</a>    Binder, Canopy, Context, Loader, ReadContext, Widget, command, derive_commands,
+<a href=#6 id=6 data-nosnippet>6</a>    Binder, Canopy, ChildKey, Context, Loader, ReadContext, Widget, command, derive_commands,
 <a href=#7 id=7 data-nosnippet>7</a>    error::Result,
 <a href=#8 id=8 data-nosnippet>8</a>    event::{key, mouse},
 <a href=#9 id=9 data-nosnippet>9</a>    key,
@@ -235,12 +235,12 @@
 <a href=#235 id=235 data-nosnippet>235</a>            <span class="kw">let </span>frame_id = ctx.add_child_to(modal_id, Frame::new().with_title(<span class="string">"Demo Modal"</span>))<span class="question-mark">?</span>;
 <a href=#236 id=236 data-nosnippet>236</a>            ctx.add_child_to(frame_id, ModalContent)<span class="question-mark">?</span>;
 <a href=#237 id=237 data-nosnippet>237</a>
-<a href=#238 id=238 data-nosnippet>238</a>            ctx.with_layout_of(frame_id, <span class="kw-2">&amp;mut </span>|layout| {
-<a href=#239 id=239 data-nosnippet>239</a>                layout.min_width = <span class="prelude-val">Some</span>(<span class="number">35</span>);
-<a href=#240 id=240 data-nosnippet>240</a>                layout.max_width = <span class="prelude-val">Some</span>(<span class="number">40</span>);
-<a href=#241 id=241 data-nosnippet>241</a>                layout.min_height = <span class="prelude-val">Some</span>(<span class="number">5</span>);
-<a href=#242 id=242 data-nosnippet>242</a>                layout.max_height = <span class="prelude-val">Some</span>(<span class="number">7</span>);
-<a href=#243 id=243 data-nosnippet>243</a>            })<span class="question-mark">?</span>;
+<a href=#238 id=238 data-nosnippet>238</a>            <span class="kw">let </span><span class="kw-2">mut </span>layout = Layout::fill().padding(Edges::all(<span class="number">1</span>));
+<a href=#239 id=239 data-nosnippet>239</a>            layout.min_width = <span class="prelude-val">Some</span>(<span class="number">35</span>);
+<a href=#240 id=240 data-nosnippet>240</a>            layout.max_width = <span class="prelude-val">Some</span>(<span class="number">40</span>);
+<a href=#241 id=241 data-nosnippet>241</a>            layout.min_height = <span class="prelude-val">Some</span>(<span class="number">5</span>);
+<a href=#242 id=242 data-nosnippet>242</a>            layout.max_height = <span class="prelude-val">Some</span>(<span class="number">7</span>);
+<a href=#243 id=243 data-nosnippet>243</a>            ctx.set_layout_of(frame_id, layout)<span class="question-mark">?</span>;
 <a href=#244 id=244 data-nosnippet>244</a>            <span class="prelude-val">Ok</span>(())
 <a href=#245 id=245 data-nosnippet>245</a>        })<span class="question-mark">?</span>;
 <a href=#246 id=246 data-nosnippet>246</a>
@@ -261,7 +261,7 @@
 <a href=#261 id=261 data-nosnippet>261</a>        <span class="self">self</span>.modal_visible = <span class="bool-val">false</span>;
 <a href=#262 id=262 data-nosnippet>262</a>
 <a href=#263 id=263 data-nosnippet>263</a>        <span class="self">self</span>.with_right_container(c, |<span class="kw">_</span>, ctx| {
-<a href=#264 id=264 data-nosnippet>264</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(modal_id) = ctx.get_child::&lt;ModalSlot&gt;() {
+<a href=#264 id=264 data-nosnippet>264</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(modal_id) = ctx.child_keyed(ModalSlot::KEY) {
 <a href=#265 id=265 data-nosnippet>265</a>                ctx.remove_subtree(modal_id)<span class="question-mark">?</span>;
 <a href=#266 id=266 data-nosnippet>266</a>            }
 <a href=#267 id=267 data-nosnippet>267</a>            <span class="prelude-val">Ok</span>(())
@@ -401,54 +401,55 @@
 <a href=#401 id=401 data-nosnippet>401</a>}
 <a href=#402 id=402 data-nosnippet>402</a>
 <a href=#403 id=403 data-nosnippet>403</a><span class="kw">impl </span>Loader <span class="kw">for </span>Stylegym {
-<a href=#404 id=404 data-nosnippet>404</a>    <span class="kw">fn </span>load(c: <span class="kw-2">&amp;mut </span>Canopy) {
-<a href=#405 id=405 data-nosnippet>405</a>        c.add_commands::&lt;<span class="self">Self</span>&gt;();
-<a href=#406 id=406 data-nosnippet>406</a>        c.add_commands::&lt;DemoContent&gt;();
-<a href=#407 id=407 data-nosnippet>407</a>        c.add_commands::&lt;ModalContent&gt;();
-<a href=#408 id=408 data-nosnippet>408</a>        c.add_commands::&lt;Container&gt;();
-<a href=#409 id=409 data-nosnippet>409</a>        c.add_commands::&lt;Dropdown&lt;ThemeOption&gt;&gt;();
-<a href=#410 id=410 data-nosnippet>410</a>        c.add_commands::&lt;Selector&lt;EffectOption&gt;&gt;();
-<a href=#411 id=411 data-nosnippet>411</a>    }
-<a href=#412 id=412 data-nosnippet>412</a>}
-<a href=#413 id=413 data-nosnippet>413</a>
-<a href=#414 id=414 data-nosnippet>414</a><span class="doccomment">/// Set up key bindings for the stylegym demo.
-<a href=#415 id=415 data-nosnippet>415</a></span><span class="kw">pub fn </span>setup_bindings(cnpy: <span class="kw-2">&amp;mut </span>Canopy) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#416 id=416 data-nosnippet>416</a>    Binder::new(cnpy)
-<a href=#417 id=417 data-nosnippet>417</a>        .defaults::&lt;Root&gt;()
-<a href=#418 id=418 data-nosnippet>418</a>        .with_path(<span class="string">"stylegym/"</span>)
-<a href=#419 id=419 data-nosnippet>419</a>        .key(<span class="string">'q'</span>, <span class="string">"root::quit()"</span>)
-<a href=#420 id=420 data-nosnippet>420</a>        .key(key::KeyCode::Tab, <span class="string">"root::focus_next()"</span>)
-<a href=#421 id=421 data-nosnippet>421</a>        .key(key::KeyCode::BackTab, <span class="string">"root::focus_prev()"</span>)
-<a href=#422 id=422 data-nosnippet>422</a>        .key(<span class="string">'m'</span>, <span class="string">"stylegym::show_modal()"</span>)
-<a href=#423 id=423 data-nosnippet>423</a>        .key(key::KeyCode::Esc, <span class="string">"stylegym::hide_modal()"</span>)
-<a href=#424 id=424 data-nosnippet>424</a>        <span class="comment">// Global j/k for navigation between focusable items
-<a href=#425 id=425 data-nosnippet>425</a>        </span>.key(<span class="string">'j'</span>, <span class="string">"root::focus_next()"</span>)
-<a href=#426 id=426 data-nosnippet>426</a>        .key(<span class="string">'k'</span>, <span class="string">"root::focus_prev()"</span>)
-<a href=#427 id=427 data-nosnippet>427</a>        .with_path(<span class="string">"dropdown"</span>)
-<a href=#428 id=428 data-nosnippet>428</a>        .key(
-<a href=#429 id=429 data-nosnippet>429</a>            key::KeyCode::Enter,
-<a href=#430 id=430 data-nosnippet>430</a>            <span class="string">"dropdown::confirm(); stylegym::apply_theme()"</span>,
-<a href=#431 id=431 data-nosnippet>431</a>        )
-<a href=#432 id=432 data-nosnippet>432</a>        .key(<span class="string">' '</span>, <span class="string">"dropdown::toggle()"</span>)
-<a href=#433 id=433 data-nosnippet>433</a>        .key(key::KeyCode::Down, <span class="string">"dropdown::select_next()"</span>)
-<a href=#434 id=434 data-nosnippet>434</a>        .key(key::KeyCode::Up, <span class="string">"dropdown::select_prev()"</span>)
-<a href=#435 id=435 data-nosnippet>435</a>        <span class="comment">// Mouse click on dropdown triggers theme application
-<a href=#436 id=436 data-nosnippet>436</a>        </span>.mouse(
-<a href=#437 id=437 data-nosnippet>437</a>            mouse::Button::Left + mouse::Action::Down,
-<a href=#438 id=438 data-nosnippet>438</a>            <span class="string">"stylegym::apply_theme()"</span>,
-<a href=#439 id=439 data-nosnippet>439</a>        )
-<a href=#440 id=440 data-nosnippet>440</a>        .with_path(<span class="string">"selector"</span>)
-<a href=#441 id=441 data-nosnippet>441</a>        .key(<span class="string">' '</span>, <span class="string">"selector::toggle(); stylegym::apply_effects()"</span>)
-<a href=#442 id=442 data-nosnippet>442</a>        .key(
-<a href=#443 id=443 data-nosnippet>443</a>            key::KeyCode::Enter,
-<a href=#444 id=444 data-nosnippet>444</a>            <span class="string">"selector::toggle(); stylegym::apply_effects()"</span>,
-<a href=#445 id=445 data-nosnippet>445</a>        )
-<a href=#446 id=446 data-nosnippet>446</a>        .key(key::KeyCode::Down, <span class="string">"selector::select_next()"</span>)
-<a href=#447 id=447 data-nosnippet>447</a>        .key(key::KeyCode::Up, <span class="string">"selector::select_prev()"</span>)
-<a href=#448 id=448 data-nosnippet>448</a>        <span class="comment">// Mouse click on selector triggers effect application
-<a href=#449 id=449 data-nosnippet>449</a>        </span>.mouse(
-<a href=#450 id=450 data-nosnippet>450</a>            mouse::Button::Left + mouse::Action::Down,
-<a href=#451 id=451 data-nosnippet>451</a>            <span class="string">"stylegym::apply_effects()"</span>,
-<a href=#452 id=452 data-nosnippet>452</a>        );
-<a href=#453 id=453 data-nosnippet>453</a>    <span class="prelude-val">Ok</span>(())
-<a href=#454 id=454 data-nosnippet>454</a>}</code></pre></div></section></main></body></html>
+<a href=#404 id=404 data-nosnippet>404</a>    <span class="kw">fn </span>load(c: <span class="kw-2">&amp;mut </span>Canopy) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#405 id=405 data-nosnippet>405</a>        c.add_commands::&lt;<span class="self">Self</span>&gt;()<span class="question-mark">?</span>;
+<a href=#406 id=406 data-nosnippet>406</a>        c.add_commands::&lt;DemoContent&gt;()<span class="question-mark">?</span>;
+<a href=#407 id=407 data-nosnippet>407</a>        c.add_commands::&lt;ModalContent&gt;()<span class="question-mark">?</span>;
+<a href=#408 id=408 data-nosnippet>408</a>        c.add_commands::&lt;Container&gt;()<span class="question-mark">?</span>;
+<a href=#409 id=409 data-nosnippet>409</a>        c.add_commands::&lt;Dropdown&lt;ThemeOption&gt;&gt;()<span class="question-mark">?</span>;
+<a href=#410 id=410 data-nosnippet>410</a>        c.add_commands::&lt;Selector&lt;EffectOption&gt;&gt;()<span class="question-mark">?</span>;
+<a href=#411 id=411 data-nosnippet>411</a>        <span class="prelude-val">Ok</span>(())
+<a href=#412 id=412 data-nosnippet>412</a>    }
+<a href=#413 id=413 data-nosnippet>413</a>}
+<a href=#414 id=414 data-nosnippet>414</a>
+<a href=#415 id=415 data-nosnippet>415</a><span class="doccomment">/// Set up key bindings for the stylegym demo.
+<a href=#416 id=416 data-nosnippet>416</a></span><span class="kw">pub fn </span>setup_bindings(cnpy: <span class="kw-2">&amp;mut </span>Canopy) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#417 id=417 data-nosnippet>417</a>    Binder::new(cnpy)
+<a href=#418 id=418 data-nosnippet>418</a>        .defaults::&lt;Root&gt;()
+<a href=#419 id=419 data-nosnippet>419</a>        .with_path(<span class="string">"stylegym/"</span>)
+<a href=#420 id=420 data-nosnippet>420</a>        .key(<span class="string">'q'</span>, <span class="string">"root::quit()"</span>)
+<a href=#421 id=421 data-nosnippet>421</a>        .key(key::KeyCode::Tab, <span class="string">"root::focus_next()"</span>)
+<a href=#422 id=422 data-nosnippet>422</a>        .key(key::KeyCode::BackTab, <span class="string">"root::focus_prev()"</span>)
+<a href=#423 id=423 data-nosnippet>423</a>        .key(<span class="string">'m'</span>, <span class="string">"stylegym::show_modal()"</span>)
+<a href=#424 id=424 data-nosnippet>424</a>        .key(key::KeyCode::Esc, <span class="string">"stylegym::hide_modal()"</span>)
+<a href=#425 id=425 data-nosnippet>425</a>        <span class="comment">// Global j/k for navigation between focusable items
+<a href=#426 id=426 data-nosnippet>426</a>        </span>.key(<span class="string">'j'</span>, <span class="string">"root::focus_next()"</span>)
+<a href=#427 id=427 data-nosnippet>427</a>        .key(<span class="string">'k'</span>, <span class="string">"root::focus_prev()"</span>)
+<a href=#428 id=428 data-nosnippet>428</a>        .with_path(<span class="string">"dropdown"</span>)
+<a href=#429 id=429 data-nosnippet>429</a>        .key(
+<a href=#430 id=430 data-nosnippet>430</a>            key::KeyCode::Enter,
+<a href=#431 id=431 data-nosnippet>431</a>            <span class="string">"dropdown::confirm(); stylegym::apply_theme()"</span>,
+<a href=#432 id=432 data-nosnippet>432</a>        )
+<a href=#433 id=433 data-nosnippet>433</a>        .key(<span class="string">' '</span>, <span class="string">"dropdown::toggle()"</span>)
+<a href=#434 id=434 data-nosnippet>434</a>        .key(key::KeyCode::Down, <span class="string">"dropdown::select_next()"</span>)
+<a href=#435 id=435 data-nosnippet>435</a>        .key(key::KeyCode::Up, <span class="string">"dropdown::select_prev()"</span>)
+<a href=#436 id=436 data-nosnippet>436</a>        <span class="comment">// Mouse click on dropdown triggers theme application
+<a href=#437 id=437 data-nosnippet>437</a>        </span>.mouse(
+<a href=#438 id=438 data-nosnippet>438</a>            mouse::Button::Left + mouse::Action::Down,
+<a href=#439 id=439 data-nosnippet>439</a>            <span class="string">"stylegym::apply_theme()"</span>,
+<a href=#440 id=440 data-nosnippet>440</a>        )
+<a href=#441 id=441 data-nosnippet>441</a>        .with_path(<span class="string">"selector"</span>)
+<a href=#442 id=442 data-nosnippet>442</a>        .key(<span class="string">' '</span>, <span class="string">"selector::toggle(); stylegym::apply_effects()"</span>)
+<a href=#443 id=443 data-nosnippet>443</a>        .key(
+<a href=#444 id=444 data-nosnippet>444</a>            key::KeyCode::Enter,
+<a href=#445 id=445 data-nosnippet>445</a>            <span class="string">"selector::toggle(); stylegym::apply_effects()"</span>,
+<a href=#446 id=446 data-nosnippet>446</a>        )
+<a href=#447 id=447 data-nosnippet>447</a>        .key(key::KeyCode::Down, <span class="string">"selector::select_next()"</span>)
+<a href=#448 id=448 data-nosnippet>448</a>        .key(key::KeyCode::Up, <span class="string">"selector::select_prev()"</span>)
+<a href=#449 id=449 data-nosnippet>449</a>        <span class="comment">// Mouse click on selector triggers effect application
+<a href=#450 id=450 data-nosnippet>450</a>        </span>.mouse(
+<a href=#451 id=451 data-nosnippet>451</a>            mouse::Button::Left + mouse::Action::Down,
+<a href=#452 id=452 data-nosnippet>452</a>            <span class="string">"stylegym::apply_effects()"</span>,
+<a href=#453 id=453 data-nosnippet>453</a>        );
+<a href=#454 id=454 data-nosnippet>454</a>    <span class="prelude-val">Ok</span>(())
+<a href=#455 id=455 data-nosnippet>455</a>}</code></pre></div></section></main></body></html>

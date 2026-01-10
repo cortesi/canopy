@@ -188,14 +188,14 @@
 <a href=#188 id=188 data-nosnippet>188</a><span class="kw">where
 <a href=#189 id=189 data-nosnippet>189</a>    </span>T: DropdownItem + Send + <span class="lifetime">'static</span>,
 <a href=#190 id=190 data-nosnippet>190</a>{
-<a href=#191 id=191 data-nosnippet>191</a>    <span class="kw">fn </span>on_event(<span class="kw-2">&amp;mut </span><span class="self">self</span>, event: <span class="kw-2">&amp;</span>Event, ctx: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Context) -&gt; EventOutcome {
+<a href=#191 id=191 data-nosnippet>191</a>    <span class="kw">fn </span>on_event(<span class="kw-2">&amp;mut </span><span class="self">self</span>, event: <span class="kw-2">&amp;</span>Event, ctx: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>Context) -&gt; <span class="prelude-ty">Result</span>&lt;EventOutcome&gt; {
 <a href=#192 id=192 data-nosnippet>192</a>        <span class="kw">if let </span>Event::Mouse(mouse_event) = event
-<a href=#193 id=193 data-nosnippet>193</a>            &amp;&amp; <span class="macro">matches!</span>(<span class="self">self</span>.handle_click(ctx, <span class="kw-2">*</span>mouse_event), <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>))
-<a href=#194 id=194 data-nosnippet>194</a>        {
+<a href=#193 id=193 data-nosnippet>193</a>            &amp;&amp; <span class="self">self</span>.handle_click(ctx, <span class="kw-2">*</span>mouse_event)<span class="question-mark">?
+<a href=#194 id=194 data-nosnippet>194</a>        </span>{
 <a href=#195 id=195 data-nosnippet>195</a>            <span class="comment">// Return Ignore so mouse bindings can also fire.
-<a href=#196 id=196 data-nosnippet>196</a>            </span><span class="kw">return </span>EventOutcome::Ignore;
+<a href=#196 id=196 data-nosnippet>196</a>            </span><span class="kw">return </span><span class="prelude-val">Ok</span>(EventOutcome::Ignore);
 <a href=#197 id=197 data-nosnippet>197</a>        }
-<a href=#198 id=198 data-nosnippet>198</a>        EventOutcome::Ignore
+<a href=#198 id=198 data-nosnippet>198</a>        <span class="prelude-val">Ok</span>(EventOutcome::Ignore)
 <a href=#199 id=199 data-nosnippet>199</a>    }
 <a href=#200 id=200 data-nosnippet>200</a>
 <a href=#201 id=201 data-nosnippet>201</a>    <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, rndr: <span class="kw-2">&amp;mut </span>Render, ctx: <span class="kw-2">&amp;</span><span class="kw">dyn </span>ReadContext) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {

@@ -208,6 +208,93 @@ renders all visible widgets into an off-screen buffer and diffs against the
 previous frame to minimize terminal updates. During the traversal, each node's
 <a href="doc/canopy/trait.Widget.html#tymethod.render"><code>Widget::render</code></a> method is
 invoked in pre-order so children draw on top of parents.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="end-to-end-example"><a class="header" href="#end-to-end-example">End-to-end example</a></h1>
+<p>This page shows a minimal widget with a command, a key binding that invokes it, and a style
+override.</p>
+<h2 id="widget--command"><a class="header" href="#widget--command">Widget + command</a></h2>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use canopy::{Context, ReadContext, Widget, derive_commands, command, error::Result, render::Render, state::NodeName};
+use canopy_widgets::Text;
+
+key!(LabelSlot: Text);
+
+pub struct Counter {
+    value: i64,
+}
+
+#[derive_commands]
+impl Counter {
+    pub fn new() -&gt; Self {
+        Self { value: 0 }
+    }
+
+    #[command]
+    pub fn inc(&amp;mut self, ctx: &amp;mut dyn Context) -&gt; Result&lt;()&gt; {
+        self.value = self.value.saturating_add(1);
+        self.sync_label(ctx)
+    }
+
+    fn sync_label(&amp;self, ctx: &amp;mut dyn Context) -&gt; Result&lt;()&gt; {
+        let label = format!("count: {}", self.value);
+        ctx.with_child::&lt;LabelSlot, _&gt;(|text, _| {
+            text.set_raw(label);
+            Ok(())
+        })
+    }
+}
+
+impl Widget for Counter {
+    fn on_mount(&amp;mut self, ctx: &amp;mut dyn Context) -&gt; Result&lt;()&gt; {
+        ctx.add_keyed::&lt;LabelSlot&gt;(Text::new("count: 0"))?;
+        Ok(())
+    }
+
+    fn render(&amp;mut self, _r: &amp;mut Render, _ctx: &amp;dyn ReadContext) -&gt; Result&lt;()&gt; {
+        Ok(())
+    }
+
+    fn name(&amp;self) -&gt; NodeName {
+        NodeName::convert("counter")
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="install-and-bind"><a class="header" href="#install-and-bind">Install and bind</a></h2>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use canopy::Canopy;
+use canopy_widgets::Root;
+
+let mut canopy = Canopy::new();
+canopy.add_commands::&lt;Counter&gt;()?;
+
+// Replace the root widget for a minimal app.
+canopy.core.replace_subtree(canopy.core.root_id(), Counter::new())?;
+
+// Bind a key to the typed command.
+canopy.bind_key_command('j', "", Counter::cmd_inc().call())?;
+<span class="boring">}</span></code></pre></pre>
+<h2 id="style-override"><a class="header" href="#style-override">Style override</a></h2>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use canopy::style::{Attr, StyleMap, solarized};
+
+let mut style = StyleMap::new();
+style
+    .rules()
+    .fg("counter", solarized::BASE3)
+    .bg("counter", solarized::BASE02)
+    .attr("counter", Attr::Bold)
+    .apply();
+
+canopy.style = style;
+<span class="boring">}</span></code></pre></pre>
+<p>The key pieces are:</p>
+<ul>
+<li><code>#[derive_commands]</code> + <code>#[command]</code> for command metadata</li>
+<li><code>cmd_*().call()</code> for a typed invocation</li>
+<li>path-based styles to keep appearance separate from behavior</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="nodes"><a class="header" href="#nodes">Nodes</a></h1>
 <p>Each node in a Canopy application tree is a data container managed by the
 <a href="doc/canopy/struct.Core.html"><code>Core</code></a>. Nodes are identified by <code>NodeId</code> handles
@@ -264,83 +351,105 @@ node name <code>focus_gym</code>.</p>
 
 let name = NodeName::convert("MyWidget");
 <span class="boring">}</span></code></pre></pre>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="trait-commandnode"><a class="header" href="#trait-commandnode">trait CommandNode</a></h1>
-<p>Commands drive much of Canopy's flexibility and are the core mechanism for
-interacting with widgets. Widgets implement the
-<a href="doc/canopy/commands/trait.CommandNode.html">CommandNode</a> trait, which has two
-methods:</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="commands"><a class="header" href="#commands">Commands</a></h1>
+<p>Commands provide a uniform way to invoke widget behavior from Rust and from scripts. Each widget
+exposes a static list of <code>CommandSpec</code> values, and the runtime routes invocations to the correct
+node based on command metadata and focus context.</p>
+<h2 id="defining-commands"><a class="header" href="#defining-commands">Defining commands</a></h2>
+<p>Widgets implement the <code>CommandNode</code> trait. You almost never write it by hand; instead, use the
+<code>#[derive_commands]</code> macro on an impl block and tag command methods with <code>#[command]</code>.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn commands() -&gt; Vec&lt;CommandSpec&gt;
-    where Self: Sized;
+</span>use canopy::{Context, ReadContext, Widget, derive_commands, command, error::Result, render::Render, state::NodeName};
 
-fn dispatch(
-    &amp;mut self,
-    c: &amp;mut dyn Context,
-    cmd: &amp;CommandInvocation
-) -&gt; Result&lt;ReturnValue&gt;;
-<span class="boring">}</span></code></pre></pre>
-<p>The <code>commands</code> function returns a list of command specifications supported by
-this widget. Each <code>CommandSpec</code> includes a name, description, and signature.
-The <code>dispatch</code> function takes a <code>CommandInvocation</code> and runs the command.</p>
-<p>Implementing these functions by hand is tedious, so Canopy provides derive
-helpers. Use <code>#[derive_commands]</code> on the widget's impl block and annotate each
-command with <code>#[command]</code>. For example:</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>struct MyWidget {
-    value: u64,
+struct Counter {
+    value: i64,
 }
 
 #[derive_commands]
-impl MyWidget {
-    /// Increment our value.
+impl Counter {
+    pub fn new() -&gt; Self {
+        Self { value: 0 }
+    }
+
     #[command]
-    fn inc(&amp;mut self, _ctx: &amp;mut dyn Context) -&gt; Result&lt;()&gt; {
+    fn inc(&amp;mut self, _ctx: &amp;mut dyn Context) {
         self.value = self.value.saturating_add(1);
+    }
+
+    #[command]
+    fn add(&amp;mut self, _ctx: &amp;mut dyn Context, delta: i64) {
+        self.value = self.value.saturating_add(delta);
+    }
+}
+
+impl Widget for Counter {
+    fn render(&amp;mut self, _r: &amp;mut Render, _ctx: &amp;dyn ReadContext) -&gt; Result&lt;()&gt; {
         Ok(())
     }
 
-    /// Decrement our value.
-    #[command]
-    fn dec(&amp;mut self, _ctx: &amp;mut dyn Context) -&gt; Result&lt;()&gt; {
-        self.value = self.value.saturating_sub(1);
-        Ok(())
+    fn name(&amp;self) -&gt; NodeName {
+        NodeName::convert("counter")
     }
 }
 <span class="boring">}</span></code></pre></pre>
-<h1 id="arguments"><a class="header" href="#arguments">Arguments</a></h1>
-<p>Command functions can take an arbitrary number of arguments. The following
-types are supported:</p>
-<ul>
-<li><code>&amp;mut dyn Context</code>. This is handled specially: if the first argument is of
-type <code>&amp;mut dyn Context</code>, it is automatically supplied during dispatch and
-cannot be specified in a script.</li>
-<li><code>isize</code></li>
-</ul>
-<p>The list of supported types can be extended as needed.</p>
-<h1 id="return-values"><a class="header" href="#return-values">Return values</a></h1>
-<p>The following return value variants are supported:</p>
-<ul>
-<li>No return value.</li>
-<li><code>String</code></li>
-</ul>
-<p>We also support <code>Result</code> variants of the above:</p>
-<ul>
-<li><code>Result&lt;()&gt;</code></li>
-<li><code>Result&lt;T&gt;</code> where <code>T</code> is any supported type.</li>
-</ul>
-<p>Sometimes we want to expose a command that returns a value in Rust but has no
-equivalent in the scripting layer. In those cases use
-<code>#[command(ignore_result)]</code>. For example:</p>
+<p>The derive also generates <code>cmd_*()</code> helpers for building typed calls:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>/// Delete the currently selected item.
-#[command(ignore_result)]
-pub fn delete_selected(&amp;mut self, ctx: &amp;mut dyn Context) -&gt; Option&lt;N&gt; {
-    self.delete_item(ctx, self.offset)
+</span>let call = Counter::cmd_add().call_with((5,));
+ctx.dispatch_command(&amp;call.invocation())?;
+<span class="boring">}</span></code></pre></pre>
+<h2 id="command-registration"><a class="header" href="#command-registration">Command registration</a></h2>
+<p>Commands must be registered on the <code>Canopy</code> instance to be available for dispatch or scripting.
+Register widget command sets once during initialization:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>canopy.add_commands::&lt;Counter&gt;()?;
+<span class="boring">}</span></code></pre></pre>
+<h2 id="arguments-and-conversions"><a class="header" href="#arguments-and-conversions">Arguments and conversions</a></h2>
+<p>Command parameters use <code>ArgValue</code> conversions. Built-in conversions include:</p>
+<ul>
+<li><code>bool</code>, <code>String</code>, <code>&amp;str</code></li>
+<li>integers and floats</li>
+<li><code>Option&lt;T&gt;</code>, <code>Vec&lt;T&gt;</code>, maps (<code>BTreeMap</code>/<code>HashMap</code>) where <code>T: ToArgValue</code></li>
+</ul>
+<p>For custom types, derive <code>CommandArg</code> (serde-backed):</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, canopy::CommandArg)]
+struct MyArgs {
+    name: String,
+    count: u32,
 }
 <span class="boring">}</span></code></pre></pre>
+<h2 id="injection"><a class="header" href="#injection">Injection</a></h2>
+<p>Some parameter types are injected by the runtime rather than supplied by the caller:</p>
+<ul>
+<li><code>Event</code></li>
+<li><code>MouseEvent</code></li>
+<li><code>ListRowContext</code></li>
+<li><code>Option&lt;T&gt;</code> for optional injection</li>
+<li><code>Injected&lt;T&gt;</code> to explicitly request injection</li>
+<li><code>Arg&lt;T&gt;</code> to force a caller-supplied argument even if <code>T</code> is injectable</li>
+</ul>
+<p>Injected values are sourced from the current command scope (event, mouse, list row).</p>
+<h2 id="return-values"><a class="header" href="#return-values">Return values</a></h2>
+<p>Commands can return:</p>
+<ul>
+<li><code>()</code> or <code>Result&lt;()&gt;</code></li>
+<li>any type that implements <code>FromArgValue</code></li>
+<li><code>Result&lt;T&gt;</code> where <code>T: FromArgValue</code></li>
+</ul>
+<p>Use <code>#[command(ignore_result)]</code> when the result should be available in Rust but not surfaced in
+scripting.</p>
+<h2 id="dispatch-and-invocation"><a class="header" href="#dispatch-and-invocation">Dispatch and invocation</a></h2>
+<p><code>CommandCall</code> and <code>CommandInvocation</code> are the portable representations of a command call:</p>
+<ul>
+<li><code>CommandSpec::call()</code> builds a call with no args</li>
+<li><code>CommandSpec::call_with(...)</code> builds with positional or named args</li>
+<li><code>CommandCall::invocation()</code> produces the concrete <code>CommandInvocation</code></li>
+</ul>
+<p>Bindings (key/mouse) can target either scripts or typed command invocations.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="widget"><a class="header" href="#widget">Widget</a></h1>
 <p>Widgets provide the behavior attached to nodes in the Core arena. Every widget
 implements the <code>Widget</code> trait, which includes:</p>
@@ -458,7 +567,170 @@ These functions take the screen area of the currently focused node, then search
 for nodes that accept focus in the specified direction to choose the new focus.</p>
 <p>When a node's focus status changes, it is automatically invalidated for the next render sweep.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="binding-system"><a class="header" href="#binding-system">Binding system</a></h1>
-<div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><h1 id="themes-and-styling"><a class="header" href="#themes-and-styling">Themes and Styling</a></h1>
+<p>Bindings map input events (keys or mouse actions) to either scripts or typed command invocations.
+Bindings are resolved against the focused node's path and can be scoped by mode.</p>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick start</a></h2>
+<p>Script binding:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>canopy.bind_key('q', "", "root::quit()")?;
+<span class="boring">}</span></code></pre></pre>
+<p>Typed command binding:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>canopy.bind_key_command('q', "", Root::cmd_quit().call())?;
+<span class="boring">}</span></code></pre></pre>
+<p>The empty path filter (<code>""</code>) matches any focus path.</p>
+<h2 id="modes"><a class="header" href="#modes">Modes</a></h2>
+<p>Bindings live in named modes. Use the default mode (<code>""</code>) or set a mode explicitly:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>canopy.bind_mode_key('j', "nav", "", "editor::down()")?;
+canopy.keymap.set_mode("nav")?;
+<span class="boring">}</span></code></pre></pre>
+<p>If the current mode does not match a binding, Canopy falls back to the default mode.</p>
+<h2 id="path-filters"><a class="header" href="#path-filters">Path filters</a></h2>
+<p>Bindings include a path filter string. The filter is matched against the focus path, and the most
+specific match wins. Path filters are slash-separated components; <code>*</code> matches any component span.</p>
+<p>Examples:</p>
+<ul>
+<li><code>""</code> matches all paths</li>
+<li><code>"editor"</code> matches any path containing <code>editor</code></li>
+<li><code>"/root/editor"</code> anchors to the root</li>
+<li><code>"editor/"</code> anchors to the end</li>
+<li><code>"editor/*/line"</code> matches a line widget anywhere under editor</li>
+</ul>
+<h2 id="mouse-bindings"><a class="header" href="#mouse-bindings">Mouse bindings</a></h2>
+<p>Mouse bindings use the same path filters:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use canopy::event::mouse;
+
+canopy.bind_mouse(mouse::MouseEvent::left_click(), "list", "list::activate()")?;
+<span class="boring">}</span></code></pre></pre>
+<h2 id="binder-helper"><a class="header" href="#binder-helper">Binder helper</a></h2>
+<p>The <code>Binder</code> helper offers a fluent API for building sets of bindings and scoping them by path.
+It is especially useful in examples and apps with many bindings.</p>
+<div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><h1 id="themes-and-styling"><a class="header" href="#themes-and-styling">Themes and styling</a></h1>
+<p>Canopy uses a path-based styling system. Widgets render with style names (strings like
+"frame/focused"), and a <code>StyleMap</code> resolves those names into concrete colors and attributes.</p>
+<h2 id="style-paths"><a class="header" href="#style-paths">Style paths</a></h2>
+<p>Style paths are slash-separated components. The empty path <code>""</code> or <code>"/"</code> refers to the root style.
+Child paths extend the base style and override only the fields you set.</p>
+<p>Example paths:</p>
+<ul>
+<li><code>"frame"</code></li>
+<li><code>"frame/focused"</code></li>
+<li><code>"list/selected"</code></li>
+</ul>
+<h2 id="defining-a-style-map"><a class="header" href="#defining-a-style-map">Defining a style map</a></h2>
+<p>A <code>StyleMap</code> stores partial style rules. You can build it with the fluent <code>rules()</code> API:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use canopy::style::{Attr, StyleMap, StyleRules, solarized};
+
+let mut style = StyleMap::new();
+style
+    .rules()
+    .fg("frame", solarized::BASE0)
+    .fg("frame/focused", solarized::BASE3)
+    .bg("list/selected", solarized::BLUE)
+    .attr("list/selected", Attr::Bold)
+    .apply();
+<span class="boring">}</span></code></pre></pre>
+<p>You can also add attributes directly with <code>StyleMap::add_attr</code> for small tweaks.</p>
+<h2 id="applying-styles"><a class="header" href="#applying-styles">Applying styles</a></h2>
+<p>To switch the active style map at runtime, call <code>Context::set_style</code>. The new style map is applied
+before the next render.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>ctx.set_style(style_map);
+<span class="boring">}</span></code></pre></pre>
+<h2 id="rendering-with-styles"><a class="header" href="#rendering-with-styles">Rendering with styles</a></h2>
+<p>Rendering APIs accept a style path string. The resolved style is computed by merging rules along
+that path.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn render(&amp;mut self, r: &amp;mut Render, ctx: &amp;dyn ReadContext) -&gt; Result&lt;()&gt; {
+    let line = ctx.view().outer_rect_local().line(0);
+    r.text("frame/focused", line, "Hello")
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="style-effects"><a class="header" href="#style-effects">Style effects</a></h2>
+<p>Style effects are dynamic, composable transforms that apply to a subtree. They are pushed via the
+context and combined during render.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use canopy::style::effects;
+
+ctx.push_effect(ctx.node_id(), effects::dim(0.5))?;
+<span class="boring">}</span></code></pre></pre>
+<p>Effects are useful for overlays, disabled states, or hover/focus treatments that should apply to
+all descendants without redefining their rules.</p>
+<h2 id="theme-modules"><a class="header" href="#theme-modules">Theme modules</a></h2>
+<p>Canopy ships with a few theme palettes (<code>solarized</code>, <code>dracula</code>, <code>gruvbox</code>) under
+<code>canopy::style</code>. Use them to build a <code>StyleMap</code> or as a starting point for your own theme.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="patterns"><a class="header" href="#patterns">Patterns</a></h1>
+<p>This page collects practical patterns for building composable widgets with the current APIs.</p>
+<h2 id="typed-ids"><a class="header" href="#typed-ids">Typed IDs</a></h2>
+<p>Prefer <code>TypedId&lt;T&gt;</code> for widget IDs when you have a concrete type. It removes repetitive casts and
+works with helpers like <code>Context::with_typed</code>.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let label_id = ctx.add_child(Text::new("Hello"))?;
+ctx.with_typed(label_id, |text, _| {
+    text.set_raw("Updated");
+    Ok(())
+})?;
+<span class="boring">}</span></code></pre></pre>
+<h2 id="keyed-children-1"><a class="header" href="#keyed-children-1">Keyed children</a></h2>
+<p>Use typed child keys to manage stable internal children. Define a key with the <code>key!</code> macro, then
+add or query the child by key.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>key!(LabelSlot: Text);
+
+fn on_mount(&amp;mut self, ctx: &amp;mut dyn Context) -&gt; Result&lt;()&gt; {
+    ctx.add_keyed::&lt;LabelSlot&gt;(Text::new("Label"))?;
+    Ok(())
+}
+
+fn update_label(&amp;self, ctx: &amp;mut dyn Context) -&gt; Result&lt;()&gt; {
+    ctx.with_child::&lt;LabelSlot, _&gt;(|text, _| {
+        text.set_raw("Updated");
+        Ok(())
+    })
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="slot-pattern"><a class="header" href="#slot-pattern">Slot pattern</a></h2>
+<p>For repeated access, cache a typed ID in your widget. This avoids searching the tree on every
+update.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>struct LabelSlot {
+    id: Option&lt;TypedId&lt;Text&gt;&gt;,
+}
+
+impl LabelSlot {
+    fn get_or_create(&amp;mut self, ctx: &amp;mut dyn Context) -&gt; Result&lt;TypedId&lt;Text&gt;&gt; {
+        if let Some(id) = self.id {
+            return Ok(id);
+        }
+        let id = ctx.add_child(Text::new("Label"))?;
+        self.id = Some(id);
+        Ok(id)
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="reconciling-dynamic-children"><a class="header" href="#reconciling-dynamic-children">Reconciling dynamic children</a></h2>
+<p>When a container's children are driven by data, keep a stable map of keys to node IDs and
+synchronize with <code>set_children</code>:</p>
+<ul>
+<li>create missing nodes</li>
+<li>remove nodes that no longer exist (<code>remove_subtree</code>)</li>
+<li>update ordering with <code>set_children</code></li>
+</ul>
+<p>This keeps the tree stable while letting you update only what changed.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="widgets"><a class="header" href="#widgets">Widgets</a></h1>
 <p>Canopy ships with a small widget library. This section highlights the editor and input widgets;
 the rest follow the core <code>Widget</code> trait and the event/lifecycle guidelines in this book.</p>

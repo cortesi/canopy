@@ -342,7 +342,8 @@
 <a href=#342 id=342 data-nosnippet>342</a>}
 <a href=#343 id=343 data-nosnippet>343</a>
 <a href=#344 id=344 data-nosnippet>344</a><span class="kw">impl </span>Loader <span class="kw">for </span>Logs {
-<a href=#345 id=345 data-nosnippet>345</a>    <span class="kw">fn </span>load(c: <span class="kw-2">&amp;mut </span>Canopy) {
-<a href=#346 id=346 data-nosnippet>346</a>        c.add_commands::&lt;<span class="self">Self</span>&gt;();
-<a href=#347 id=347 data-nosnippet>347</a>    }
-<a href=#348 id=348 data-nosnippet>348</a>}</code></pre></div></section></main></body></html>
+<a href=#345 id=345 data-nosnippet>345</a>    <span class="kw">fn </span>load(c: <span class="kw-2">&amp;mut </span>Canopy) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#346 id=346 data-nosnippet>346</a>        c.add_commands::&lt;<span class="self">Self</span>&gt;()<span class="question-mark">?</span>;
+<a href=#347 id=347 data-nosnippet>347</a>        <span class="prelude-val">Ok</span>(())
+<a href=#348 id=348 data-nosnippet>348</a>    }
+<a href=#349 id=349 data-nosnippet>349</a>}</code></pre></div></section></main></body></html>

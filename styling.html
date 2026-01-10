@@ -178,7 +178,65 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="themes-and-styling"><a class="header" href="#themes-and-styling">Themes and Styling</a></h1>
+                        <h1 id="themes-and-styling"><a class="header" href="#themes-and-styling">Themes and styling</a></h1>
+<p>Canopy uses a path-based styling system. Widgets render with style names (strings like
+"frame/focused"), and a <code>StyleMap</code> resolves those names into concrete colors and attributes.</p>
+<h2 id="style-paths"><a class="header" href="#style-paths">Style paths</a></h2>
+<p>Style paths are slash-separated components. The empty path <code>""</code> or <code>"/"</code> refers to the root style.
+Child paths extend the base style and override only the fields you set.</p>
+<p>Example paths:</p>
+<ul>
+<li><code>"frame"</code></li>
+<li><code>"frame/focused"</code></li>
+<li><code>"list/selected"</code></li>
+</ul>
+<h2 id="defining-a-style-map"><a class="header" href="#defining-a-style-map">Defining a style map</a></h2>
+<p>A <code>StyleMap</code> stores partial style rules. You can build it with the fluent <code>rules()</code> API:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use canopy::style::{Attr, StyleMap, StyleRules, solarized};
+
+let mut style = StyleMap::new();
+style
+    .rules()
+    .fg("frame", solarized::BASE0)
+    .fg("frame/focused", solarized::BASE3)
+    .bg("list/selected", solarized::BLUE)
+    .attr("list/selected", Attr::Bold)
+    .apply();
+<span class="boring">}</span></code></pre></pre>
+<p>You can also add attributes directly with <code>StyleMap::add_attr</code> for small tweaks.</p>
+<h2 id="applying-styles"><a class="header" href="#applying-styles">Applying styles</a></h2>
+<p>To switch the active style map at runtime, call <code>Context::set_style</code>. The new style map is applied
+before the next render.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>ctx.set_style(style_map);
+<span class="boring">}</span></code></pre></pre>
+<h2 id="rendering-with-styles"><a class="header" href="#rendering-with-styles">Rendering with styles</a></h2>
+<p>Rendering APIs accept a style path string. The resolved style is computed by merging rules along
+that path.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn render(&amp;mut self, r: &amp;mut Render, ctx: &amp;dyn ReadContext) -&gt; Result&lt;()&gt; {
+    let line = ctx.view().outer_rect_local().line(0);
+    r.text("frame/focused", line, "Hello")
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="style-effects"><a class="header" href="#style-effects">Style effects</a></h2>
+<p>Style effects are dynamic, composable transforms that apply to a subtree. They are pushed via the
+context and combined during render.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use canopy::style::effects;
+
+ctx.push_effect(ctx.node_id(), effects::dim(0.5))?;
+<span class="boring">}</span></code></pre></pre>
+<p>Effects are useful for overlays, disabled states, or hover/focus treatments that should apply to
+all descendants without redefining their rules.</p>
+<h2 id="theme-modules"><a class="header" href="#theme-modules">Theme modules</a></h2>
+<p>Canopy ships with a few theme palettes (<code>solarized</code>, <code>dracula</code>, <code>gruvbox</code>) under
+<code>canopy::style</code>. Use them to build a <code>StyleMap</code> or as a starting point for your own theme.</p>
 
                     </main>
 
@@ -188,7 +246,7 @@
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="widgets.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="patterns.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -202,7 +260,7 @@
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="widgets.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="patterns.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

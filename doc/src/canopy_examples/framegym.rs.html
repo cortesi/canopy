@@ -6,7 +6,7 @@
 <a href=#6 id=6 data-nosnippet>6</a>    event::key,
 <a href=#7 id=7 data-nosnippet>7</a>    geom::{Expanse, Line},
 <a href=#8 id=8 data-nosnippet>8</a>    key,
-<a href=#9 id=9 data-nosnippet>9</a>    layout::{CanvasContext, Layout, MeasureConstraints, Measurement, Size, Sizing},
+<a href=#9 id=9 data-nosnippet>9</a>    layout::{CanvasContext, Layout, MeasureConstraints, Measurement, Size},
 <a href=#10 id=10 data-nosnippet>10</a>    render::Render,
 <a href=#11 id=11 data-nosnippet>11</a>};
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>canopy_widgets::{Frame, Root};
@@ -184,49 +184,46 @@
 <a href=#184 id=184 data-nosnippet>184</a>        <span class="kw">let </span>pattern_id = c.add_keyed_to::&lt;PatternSlot&gt;(frame_id, TestPattern::new())<span class="question-mark">?</span>;
 <a href=#185 id=185 data-nosnippet>185</a>
 <a href=#186 id=186 data-nosnippet>186</a>        c.set_layout(Layout::fill())<span class="question-mark">?</span>;
-<a href=#187 id=187 data-nosnippet>187</a>        c.with_layout_of(frame_id, <span class="kw-2">&amp;mut </span>|layout| {
-<a href=#188 id=188 data-nosnippet>188</a>            layout.width = Sizing::Flex(<span class="number">1</span>);
-<a href=#189 id=189 data-nosnippet>189</a>            layout.height = Sizing::Flex(<span class="number">1</span>);
-<a href=#190 id=190 data-nosnippet>190</a>        })<span class="question-mark">?</span>;
-<a href=#191 id=191 data-nosnippet>191</a>        c.set_layout_of(pattern_id, Layout::fill())<span class="question-mark">?</span>;
+<a href=#187 id=187 data-nosnippet>187</a>        c.set_layout_of(pattern_id, Layout::fill())<span class="question-mark">?</span>;
+<a href=#188 id=188 data-nosnippet>188</a>        <span class="prelude-val">Ok</span>(())
+<a href=#189 id=189 data-nosnippet>189</a>    }
+<a href=#190 id=190 data-nosnippet>190</a>
+<a href=#191 id=191 data-nosnippet>191</a>    <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _r: <span class="kw-2">&amp;mut </span>Render, _ctx: <span class="kw-2">&amp;</span><span class="kw">dyn </span>ReadContext) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
 <a href=#192 id=192 data-nosnippet>192</a>        <span class="prelude-val">Ok</span>(())
 <a href=#193 id=193 data-nosnippet>193</a>    }
-<a href=#194 id=194 data-nosnippet>194</a>
-<a href=#195 id=195 data-nosnippet>195</a>    <span class="kw">fn </span>render(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _r: <span class="kw-2">&amp;mut </span>Render, _ctx: <span class="kw-2">&amp;</span><span class="kw">dyn </span>ReadContext) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#196 id=196 data-nosnippet>196</a>        <span class="prelude-val">Ok</span>(())
-<a href=#197 id=197 data-nosnippet>197</a>    }
-<a href=#198 id=198 data-nosnippet>198</a>}
-<a href=#199 id=199 data-nosnippet>199</a>
-<a href=#200 id=200 data-nosnippet>200</a><span class="kw">impl </span>Loader <span class="kw">for </span>FrameGym {
-<a href=#201 id=201 data-nosnippet>201</a>    <span class="kw">fn </span>load(c: <span class="kw-2">&amp;mut </span>Canopy) {
-<a href=#202 id=202 data-nosnippet>202</a>        c.add_commands::&lt;<span class="self">Self</span>&gt;();
-<a href=#203 id=203 data-nosnippet>203</a>        c.add_commands::&lt;TestPattern&gt;();
-<a href=#204 id=204 data-nosnippet>204</a>    }
-<a href=#205 id=205 data-nosnippet>205</a>}
-<a href=#206 id=206 data-nosnippet>206</a>
-<a href=#207 id=207 data-nosnippet>207</a><span class="doccomment">/// Install key bindings for the frame gym demo.
-<a href=#208 id=208 data-nosnippet>208</a></span><span class="kw">pub fn </span>setup_bindings(cnpy: <span class="kw-2">&amp;mut </span>Canopy) {
-<a href=#209 id=209 data-nosnippet>209</a>    Binder::new(cnpy)
-<a href=#210 id=210 data-nosnippet>210</a>        .defaults::&lt;Root&gt;()
-<a href=#211 id=211 data-nosnippet>211</a>        <span class="comment">// Focus navigation
-<a href=#212 id=212 data-nosnippet>212</a>        </span>.with_path(<span class="string">"frame_gym"</span>)
-<a href=#213 id=213 data-nosnippet>213</a>        .key_command(key::KeyCode::Tab, Root::cmd_focus_next())
-<a href=#214 id=214 data-nosnippet>214</a>        <span class="comment">// Arrow keys for scrolling
-<a href=#215 id=215 data-nosnippet>215</a>        </span>.key_command(<span class="string">'g'</span>, TestPattern::cmd_scroll_to().call_with([<span class="number">0u32</span>, <span class="number">0u32</span>]))
-<a href=#216 id=216 data-nosnippet>216</a>        .key(key::KeyCode::Down, <span class="string">"test_pattern::scroll_down()"</span>)
-<a href=#217 id=217 data-nosnippet>217</a>        .key(key::KeyCode::Up, <span class="string">"test_pattern::scroll_up()"</span>)
-<a href=#218 id=218 data-nosnippet>218</a>        .key(key::KeyCode::Left, <span class="string">"test_pattern::scroll_left()"</span>)
-<a href=#219 id=219 data-nosnippet>219</a>        .key(key::KeyCode::Right, <span class="string">"test_pattern::scroll_right()"</span>)
-<a href=#220 id=220 data-nosnippet>220</a>        <span class="comment">// Vim-style navigation
-<a href=#221 id=221 data-nosnippet>221</a>        </span>.key(<span class="string">'j'</span>, <span class="string">"test_pattern::scroll_down()"</span>)
-<a href=#222 id=222 data-nosnippet>222</a>        .key(<span class="string">'k'</span>, <span class="string">"test_pattern::scroll_up()"</span>)
-<a href=#223 id=223 data-nosnippet>223</a>        .key(<span class="string">'h'</span>, <span class="string">"test_pattern::scroll_left()"</span>)
-<a href=#224 id=224 data-nosnippet>224</a>        .key(<span class="string">'l'</span>, <span class="string">"test_pattern::scroll_right()"</span>)
-<a href=#225 id=225 data-nosnippet>225</a>        <span class="comment">// Page navigation
-<a href=#226 id=226 data-nosnippet>226</a>        </span>.key(key::KeyCode::PageDown, <span class="string">"test_pattern::page_down()"</span>)
-<a href=#227 id=227 data-nosnippet>227</a>        .key(<span class="string">' '</span>, <span class="string">"test_pattern::page_down()"</span>)
-<a href=#228 id=228 data-nosnippet>228</a>        .key(key::KeyCode::PageUp, <span class="string">"test_pattern::page_up()"</span>)
-<a href=#229 id=229 data-nosnippet>229</a>        <span class="comment">// Quit
-<a href=#230 id=230 data-nosnippet>230</a>        </span>.with_path(<span class="string">"root"</span>)
-<a href=#231 id=231 data-nosnippet>231</a>        .key(<span class="string">'q'</span>, <span class="string">"root::quit()"</span>);
-<a href=#232 id=232 data-nosnippet>232</a>}</code></pre></div></section></main></body></html>
+<a href=#194 id=194 data-nosnippet>194</a>}
+<a href=#195 id=195 data-nosnippet>195</a>
+<a href=#196 id=196 data-nosnippet>196</a><span class="kw">impl </span>Loader <span class="kw">for </span>FrameGym {
+<a href=#197 id=197 data-nosnippet>197</a>    <span class="kw">fn </span>load(c: <span class="kw-2">&amp;mut </span>Canopy) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#198 id=198 data-nosnippet>198</a>        c.add_commands::&lt;<span class="self">Self</span>&gt;()<span class="question-mark">?</span>;
+<a href=#199 id=199 data-nosnippet>199</a>        c.add_commands::&lt;TestPattern&gt;()<span class="question-mark">?</span>;
+<a href=#200 id=200 data-nosnippet>200</a>        <span class="prelude-val">Ok</span>(())
+<a href=#201 id=201 data-nosnippet>201</a>    }
+<a href=#202 id=202 data-nosnippet>202</a>}
+<a href=#203 id=203 data-nosnippet>203</a>
+<a href=#204 id=204 data-nosnippet>204</a><span class="doccomment">/// Install key bindings for the frame gym demo.
+<a href=#205 id=205 data-nosnippet>205</a></span><span class="kw">pub fn </span>setup_bindings(cnpy: <span class="kw-2">&amp;mut </span>Canopy) {
+<a href=#206 id=206 data-nosnippet>206</a>    Binder::new(cnpy)
+<a href=#207 id=207 data-nosnippet>207</a>        .defaults::&lt;Root&gt;()
+<a href=#208 id=208 data-nosnippet>208</a>        <span class="comment">// Focus navigation
+<a href=#209 id=209 data-nosnippet>209</a>        </span>.with_path(<span class="string">"frame_gym"</span>)
+<a href=#210 id=210 data-nosnippet>210</a>        .key_command(key::KeyCode::Tab, Root::cmd_focus_next())
+<a href=#211 id=211 data-nosnippet>211</a>        <span class="comment">// Arrow keys for scrolling
+<a href=#212 id=212 data-nosnippet>212</a>        </span>.key_command(<span class="string">'g'</span>, TestPattern::cmd_scroll_to().call_with([<span class="number">0u32</span>, <span class="number">0u32</span>]))
+<a href=#213 id=213 data-nosnippet>213</a>        .key(key::KeyCode::Down, <span class="string">"test_pattern::scroll_down()"</span>)
+<a href=#214 id=214 data-nosnippet>214</a>        .key(key::KeyCode::Up, <span class="string">"test_pattern::scroll_up()"</span>)
+<a href=#215 id=215 data-nosnippet>215</a>        .key(key::KeyCode::Left, <span class="string">"test_pattern::scroll_left()"</span>)
+<a href=#216 id=216 data-nosnippet>216</a>        .key(key::KeyCode::Right, <span class="string">"test_pattern::scroll_right()"</span>)
+<a href=#217 id=217 data-nosnippet>217</a>        <span class="comment">// Vim-style navigation
+<a href=#218 id=218 data-nosnippet>218</a>        </span>.key(<span class="string">'j'</span>, <span class="string">"test_pattern::scroll_down()"</span>)
+<a href=#219 id=219 data-nosnippet>219</a>        .key(<span class="string">'k'</span>, <span class="string">"test_pattern::scroll_up()"</span>)
+<a href=#220 id=220 data-nosnippet>220</a>        .key(<span class="string">'h'</span>, <span class="string">"test_pattern::scroll_left()"</span>)
+<a href=#221 id=221 data-nosnippet>221</a>        .key(<span class="string">'l'</span>, <span class="string">"test_pattern::scroll_right()"</span>)
+<a href=#222 id=222 data-nosnippet>222</a>        <span class="comment">// Page navigation
+<a href=#223 id=223 data-nosnippet>223</a>        </span>.key(key::KeyCode::PageDown, <span class="string">"test_pattern::page_down()"</span>)
+<a href=#224 id=224 data-nosnippet>224</a>        .key(<span class="string">' '</span>, <span class="string">"test_pattern::page_down()"</span>)
+<a href=#225 id=225 data-nosnippet>225</a>        .key(key::KeyCode::PageUp, <span class="string">"test_pattern::page_up()"</span>)
+<a href=#226 id=226 data-nosnippet>226</a>        <span class="comment">// Quit
+<a href=#227 id=227 data-nosnippet>227</a>        </span>.with_path(<span class="string">"root"</span>)
+<a href=#228 id=228 data-nosnippet>228</a>        .key(<span class="string">'q'</span>, <span class="string">"root::quit()"</span>);
+<a href=#229 id=229 data-nosnippet>229</a>}</code></pre></div></section></main></body></html>

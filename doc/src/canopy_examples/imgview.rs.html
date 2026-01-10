@@ -24,8 +24,8 @@
 <a href=#24 id=24 data-nosnippet>24</a></span><span class="kw">pub fn </span>create_app(image_path: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;Canopy&gt; {
 <a href=#25 id=25 data-nosnippet>25</a>    <span class="kw">let </span><span class="kw-2">mut </span>cnpy = Canopy::new();
 <a href=#26 id=26 data-nosnippet>26</a>
-<a href=#27 id=27 data-nosnippet>27</a>    Root::load(<span class="kw-2">&amp;mut </span>cnpy);
-<a href=#28 id=28 data-nosnippet>28</a>    ImageView::load(<span class="kw-2">&amp;mut </span>cnpy);
+<a href=#27 id=27 data-nosnippet>27</a>    Root::load(<span class="kw-2">&amp;mut </span>cnpy)<span class="question-mark">?</span>;
+<a href=#28 id=28 data-nosnippet>28</a>    ImageView::load(<span class="kw-2">&amp;mut </span>cnpy)<span class="question-mark">?</span>;
 <a href=#29 id=29 data-nosnippet>29</a>    setup_bindings(<span class="kw-2">&amp;mut </span>cnpy);
 <a href=#30 id=30 data-nosnippet>30</a>
 <a href=#31 id=31 data-nosnippet>31</a>    <span class="kw">let </span>view = ImageView::from_path(image_path)<span class="question-mark">?</span>;

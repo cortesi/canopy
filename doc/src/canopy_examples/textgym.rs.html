@@ -146,7 +146,8 @@
 <a href=#146 id=146 data-nosnippet>146</a>}
 <a href=#147 id=147 data-nosnippet>147</a>
 <a href=#148 id=148 data-nosnippet>148</a><span class="kw">impl </span>Loader <span class="kw">for </span>TextGym {
-<a href=#149 id=149 data-nosnippet>149</a>    <span class="kw">fn </span>load(c: <span class="kw-2">&amp;mut </span>Canopy) {
-<a href=#150 id=150 data-nosnippet>150</a>        c.add_commands::&lt;<span class="self">Self</span>&gt;();
-<a href=#151 id=151 data-nosnippet>151</a>    }
-<a href=#152 id=152 data-nosnippet>152</a>}</code></pre></div></section></main></body></html>
+<a href=#149 id=149 data-nosnippet>149</a>    <span class="kw">fn </span>load(c: <span class="kw-2">&amp;mut </span>Canopy) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#150 id=150 data-nosnippet>150</a>        c.add_commands::&lt;<span class="self">Self</span>&gt;()<span class="question-mark">?</span>;
+<a href=#151 id=151 data-nosnippet>151</a>        <span class="prelude-val">Ok</span>(())
+<a href=#152 id=152 data-nosnippet>152</a>    }
+<a href=#153 id=153 data-nosnippet>153</a>}</code></pre></div></section></main></body></html>

@@ -178,83 +178,105 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="trait-commandnode"><a class="header" href="#trait-commandnode">trait CommandNode</a></h1>
-<p>Commands drive much of Canopy's flexibility and are the core mechanism for
-interacting with widgets. Widgets implement the
-<a href="doc/canopy/commands/trait.CommandNode.html">CommandNode</a> trait, which has two
-methods:</p>
+                        <h1 id="commands"><a class="header" href="#commands">Commands</a></h1>
+<p>Commands provide a uniform way to invoke widget behavior from Rust and from scripts. Each widget
+exposes a static list of <code>CommandSpec</code> values, and the runtime routes invocations to the correct
+node based on command metadata and focus context.</p>
+<h2 id="defining-commands"><a class="header" href="#defining-commands">Defining commands</a></h2>
+<p>Widgets implement the <code>CommandNode</code> trait. You almost never write it by hand; instead, use the
+<code>#[derive_commands]</code> macro on an impl block and tag command methods with <code>#[command]</code>.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn commands() -&gt; Vec&lt;CommandSpec&gt;
-    where Self: Sized;
+</span>use canopy::{Context, ReadContext, Widget, derive_commands, command, error::Result, render::Render, state::NodeName};
 
-fn dispatch(
-    &amp;mut self,
-    c: &amp;mut dyn Context,
-    cmd: &amp;CommandInvocation
-) -&gt; Result&lt;ReturnValue&gt;;
-<span class="boring">}</span></code></pre></pre>
-<p>The <code>commands</code> function returns a list of command specifications supported by
-this widget. Each <code>CommandSpec</code> includes a name, description, and signature.
-The <code>dispatch</code> function takes a <code>CommandInvocation</code> and runs the command.</p>
-<p>Implementing these functions by hand is tedious, so Canopy provides derive
-helpers. Use <code>#[derive_commands]</code> on the widget's impl block and annotate each
-command with <code>#[command]</code>. For example:</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>struct MyWidget {
-    value: u64,
+struct Counter {
+    value: i64,
 }
 
 #[derive_commands]
-impl MyWidget {
-    /// Increment our value.
+impl Counter {
+    pub fn new() -&gt; Self {
+        Self { value: 0 }
+    }
+
     #[command]
-    fn inc(&amp;mut self, _ctx: &amp;mut dyn Context) -&gt; Result&lt;()&gt; {
+    fn inc(&amp;mut self, _ctx: &amp;mut dyn Context) {
         self.value = self.value.saturating_add(1);
+    }
+
+    #[command]
+    fn add(&amp;mut self, _ctx: &amp;mut dyn Context, delta: i64) {
+        self.value = self.value.saturating_add(delta);
+    }
+}
+
+impl Widget for Counter {
+    fn render(&amp;mut self, _r: &amp;mut Render, _ctx: &amp;dyn ReadContext) -&gt; Result&lt;()&gt; {
         Ok(())
     }
 
-    /// Decrement our value.
-    #[command]
-    fn dec(&amp;mut self, _ctx: &amp;mut dyn Context) -&gt; Result&lt;()&gt; {
-        self.value = self.value.saturating_sub(1);
-        Ok(())
+    fn name(&amp;self) -&gt; NodeName {
+        NodeName::convert("counter")
     }
 }
 <span class="boring">}</span></code></pre></pre>
-<h1 id="arguments"><a class="header" href="#arguments">Arguments</a></h1>
-<p>Command functions can take an arbitrary number of arguments. The following
-types are supported:</p>
-<ul>
-<li><code>&amp;mut dyn Context</code>. This is handled specially: if the first argument is of
-type <code>&amp;mut dyn Context</code>, it is automatically supplied during dispatch and
-cannot be specified in a script.</li>
-<li><code>isize</code></li>
-</ul>
-<p>The list of supported types can be extended as needed.</p>
-<h1 id="return-values"><a class="header" href="#return-values">Return values</a></h1>
-<p>The following return value variants are supported:</p>
-<ul>
-<li>No return value.</li>
-<li><code>String</code></li>
-</ul>
-<p>We also support <code>Result</code> variants of the above:</p>
-<ul>
-<li><code>Result&lt;()&gt;</code></li>
-<li><code>Result&lt;T&gt;</code> where <code>T</code> is any supported type.</li>
-</ul>
-<p>Sometimes we want to expose a command that returns a value in Rust but has no
-equivalent in the scripting layer. In those cases use
-<code>#[command(ignore_result)]</code>. For example:</p>
+<p>The derive also generates <code>cmd_*()</code> helpers for building typed calls:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>/// Delete the currently selected item.
-#[command(ignore_result)]
-pub fn delete_selected(&amp;mut self, ctx: &amp;mut dyn Context) -&gt; Option&lt;N&gt; {
-    self.delete_item(ctx, self.offset)
+</span>let call = Counter::cmd_add().call_with((5,));
+ctx.dispatch_command(&amp;call.invocation())?;
+<span class="boring">}</span></code></pre></pre>
+<h2 id="command-registration"><a class="header" href="#command-registration">Command registration</a></h2>
+<p>Commands must be registered on the <code>Canopy</code> instance to be available for dispatch or scripting.
+Register widget command sets once during initialization:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>canopy.add_commands::&lt;Counter&gt;()?;
+<span class="boring">}</span></code></pre></pre>
+<h2 id="arguments-and-conversions"><a class="header" href="#arguments-and-conversions">Arguments and conversions</a></h2>
+<p>Command parameters use <code>ArgValue</code> conversions. Built-in conversions include:</p>
+<ul>
+<li><code>bool</code>, <code>String</code>, <code>&amp;str</code></li>
+<li>integers and floats</li>
+<li><code>Option&lt;T&gt;</code>, <code>Vec&lt;T&gt;</code>, maps (<code>BTreeMap</code>/<code>HashMap</code>) where <code>T: ToArgValue</code></li>
+</ul>
+<p>For custom types, derive <code>CommandArg</code> (serde-backed):</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, canopy::CommandArg)]
+struct MyArgs {
+    name: String,
+    count: u32,
 }
 <span class="boring">}</span></code></pre></pre>
+<h2 id="injection"><a class="header" href="#injection">Injection</a></h2>
+<p>Some parameter types are injected by the runtime rather than supplied by the caller:</p>
+<ul>
+<li><code>Event</code></li>
+<li><code>MouseEvent</code></li>
+<li><code>ListRowContext</code></li>
+<li><code>Option&lt;T&gt;</code> for optional injection</li>
+<li><code>Injected&lt;T&gt;</code> to explicitly request injection</li>
+<li><code>Arg&lt;T&gt;</code> to force a caller-supplied argument even if <code>T</code> is injectable</li>
+</ul>
+<p>Injected values are sourced from the current command scope (event, mouse, list row).</p>
+<h2 id="return-values"><a class="header" href="#return-values">Return values</a></h2>
+<p>Commands can return:</p>
+<ul>
+<li><code>()</code> or <code>Result&lt;()&gt;</code></li>
+<li>any type that implements <code>FromArgValue</code></li>
+<li><code>Result&lt;T&gt;</code> where <code>T: FromArgValue</code></li>
+</ul>
+<p>Use <code>#[command(ignore_result)]</code> when the result should be available in Rust but not surfaced in
+scripting.</p>
+<h2 id="dispatch-and-invocation"><a class="header" href="#dispatch-and-invocation">Dispatch and invocation</a></h2>
+<p><code>CommandCall</code> and <code>CommandInvocation</code> are the portable representations of a command call:</p>
+<ul>
+<li><code>CommandSpec::call()</code> builds a call with no args</li>
+<li><code>CommandSpec::call_with(...)</code> builds with positional or named args</li>
+<li><code>CommandCall::invocation()</code> produces the concrete <code>CommandInvocation</code></li>
+</ul>
+<p>Bindings (key/mouse) can target either scripts or typed command invocations.</p>
 
                     </main>
 

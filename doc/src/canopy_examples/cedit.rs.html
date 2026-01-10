@@ -54,17 +54,18 @@
 <a href=#54 id=54 data-nosnippet>54</a>}
 <a href=#55 id=55 data-nosnippet>55</a>
 <a href=#56 id=56 data-nosnippet>56</a><span class="kw">impl </span>Loader <span class="kw">for </span>Ed {
-<a href=#57 id=57 data-nosnippet>57</a>    <span class="kw">fn </span>load(c: <span class="kw-2">&amp;mut </span>Canopy) {
-<a href=#58 id=58 data-nosnippet>58</a>        c.add_commands::&lt;<span class="self">Self</span>&gt;();
-<a href=#59 id=59 data-nosnippet>59</a>        c.add_commands::&lt;Editor&gt;();
-<a href=#60 id=60 data-nosnippet>60</a>    }
-<a href=#61 id=61 data-nosnippet>61</a>}
-<a href=#62 id=62 data-nosnippet>62</a>
-<a href=#63 id=63 data-nosnippet>63</a><span class="doccomment">/// Install key bindings for the cedit demo.
-<a href=#64 id=64 data-nosnippet>64</a></span><span class="kw">pub fn </span>setup_bindings(cnpy: <span class="kw-2">&amp;mut </span>Canopy) {
-<a href=#65 id=65 data-nosnippet>65</a>    Binder::new(cnpy)
-<a href=#66 id=66 data-nosnippet>66</a>        .defaults::&lt;Root&gt;()
-<a href=#67 id=67 data-nosnippet>67</a>        .with_path(<span class="string">"ed/"</span>)
-<a href=#68 id=68 data-nosnippet>68</a>        .key(key::KeyCode::Tab, <span class="string">"root::focus_next()"</span>)
-<a href=#69 id=69 data-nosnippet>69</a>        .key(<span class="string">'p'</span>, <span class="string">"print(\"cedit\")"</span>);
-<a href=#70 id=70 data-nosnippet>70</a>}</code></pre></div></section></main></body></html>
+<a href=#57 id=57 data-nosnippet>57</a>    <span class="kw">fn </span>load(c: <span class="kw-2">&amp;mut </span>Canopy) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#58 id=58 data-nosnippet>58</a>        c.add_commands::&lt;<span class="self">Self</span>&gt;()<span class="question-mark">?</span>;
+<a href=#59 id=59 data-nosnippet>59</a>        c.add_commands::&lt;Editor&gt;()<span class="question-mark">?</span>;
+<a href=#60 id=60 data-nosnippet>60</a>        <span class="prelude-val">Ok</span>(())
+<a href=#61 id=61 data-nosnippet>61</a>    }
+<a href=#62 id=62 data-nosnippet>62</a>}
+<a href=#63 id=63 data-nosnippet>63</a>
+<a href=#64 id=64 data-nosnippet>64</a><span class="doccomment">/// Install key bindings for the cedit demo.
+<a href=#65 id=65 data-nosnippet>65</a></span><span class="kw">pub fn </span>setup_bindings(cnpy: <span class="kw-2">&amp;mut </span>Canopy) {
+<a href=#66 id=66 data-nosnippet>66</a>    Binder::new(cnpy)
+<a href=#67 id=67 data-nosnippet>67</a>        .defaults::&lt;Root&gt;()
+<a href=#68 id=68 data-nosnippet>68</a>        .with_path(<span class="string">"ed/"</span>)
+<a href=#69 id=69 data-nosnippet>69</a>        .key(key::KeyCode::Tab, <span class="string">"root::focus_next()"</span>)
+<a href=#70 id=70 data-nosnippet>70</a>        .key(<span class="string">'p'</span>, <span class="string">"print(\"cedit\")"</span>);
+<a href=#71 id=71 data-nosnippet>71</a>}</code></pre></div></section></main></body></html>

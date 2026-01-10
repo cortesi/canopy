@@ -179,6 +179,50 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="binding-system"><a class="header" href="#binding-system">Binding system</a></h1>
+<p>Bindings map input events (keys or mouse actions) to either scripts or typed command invocations.
+Bindings are resolved against the focused node's path and can be scoped by mode.</p>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick start</a></h2>
+<p>Script binding:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>canopy.bind_key('q', "", "root::quit()")?;
+<span class="boring">}</span></code></pre></pre>
+<p>Typed command binding:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>canopy.bind_key_command('q', "", Root::cmd_quit().call())?;
+<span class="boring">}</span></code></pre></pre>
+<p>The empty path filter (<code>""</code>) matches any focus path.</p>
+<h2 id="modes"><a class="header" href="#modes">Modes</a></h2>
+<p>Bindings live in named modes. Use the default mode (<code>""</code>) or set a mode explicitly:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>canopy.bind_mode_key('j', "nav", "", "editor::down()")?;
+canopy.keymap.set_mode("nav")?;
+<span class="boring">}</span></code></pre></pre>
+<p>If the current mode does not match a binding, Canopy falls back to the default mode.</p>
+<h2 id="path-filters"><a class="header" href="#path-filters">Path filters</a></h2>
+<p>Bindings include a path filter string. The filter is matched against the focus path, and the most
+specific match wins. Path filters are slash-separated components; <code>*</code> matches any component span.</p>
+<p>Examples:</p>
+<ul>
+<li><code>""</code> matches all paths</li>
+<li><code>"editor"</code> matches any path containing <code>editor</code></li>
+<li><code>"/root/editor"</code> anchors to the root</li>
+<li><code>"editor/"</code> anchors to the end</li>
+<li><code>"editor/*/line"</code> matches a line widget anywhere under editor</li>
+</ul>
+<h2 id="mouse-bindings"><a class="header" href="#mouse-bindings">Mouse bindings</a></h2>
+<p>Mouse bindings use the same path filters:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use canopy::event::mouse;
+
+canopy.bind_mouse(mouse::MouseEvent::left_click(), "list", "list::activate()")?;
+<span class="boring">}</span></code></pre></pre>
+<h2 id="binder-helper"><a class="header" href="#binder-helper">Binder helper</a></h2>
+<p>The <code>Binder</code> helper offers a fluent API for building sets of bindings and scoping them by path.
+It is especially useful in examples and apps with many bindings.</p>
 
                     </main>
 

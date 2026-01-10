@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["BindingKind"],"fn":["binding_label"],"struct":["HelpBinding","HelpCommand","HelpSnapshot","OwnedHelpBinding","OwnedHelpCommand","OwnedHelpSnapshot"]};
