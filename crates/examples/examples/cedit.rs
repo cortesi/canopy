@@ -3,8 +3,8 @@
 use std::{env, error::Error, fs, path::Path, process, result::Result};
 
 use canopy::{
-    Canopy, Loader,
     backend::crossterm::{RunloopOptions, runloop_with_options},
+    prelude::*,
 };
 use canopy_examples::cedit::{Ed, setup_bindings};
 use canopy_widgets::Root;

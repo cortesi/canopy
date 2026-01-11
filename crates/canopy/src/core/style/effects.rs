@@ -3,7 +3,7 @@
 //! Effects are transformations applied to styles that inherit through the node tree.
 //! They can modify colors, attributes, or both.
 
-use std::fmt::Debug;
+use std::{fmt::Debug, sync::Arc};
 
 use super::{Attr, AttrSet, Color, Style};
 
@@ -14,16 +14,10 @@ use super::{Attr, AttrSet, Color, Style};
 pub trait StyleEffect: Send + Sync + Debug {
     /// Apply this effect to a style, returning the transformed style.
     fn apply(&self, style: Style) -> Style;
-
-    /// Clone this effect into a boxed trait object.
-    fn box_clone(&self) -> Box<dyn StyleEffect>;
 }
 
-impl Clone for Box<dyn StyleEffect> {
-    fn clone(&self) -> Self {
-        self.box_clone()
-    }
-}
+/// Shared handle for effects stored on nodes and stacked during rendering.
+pub type Effect = Arc<dyn StyleEffect>;
 
 // ============================================================================
 // Built-in Effects
@@ -44,15 +38,11 @@ impl StyleEffect for Dim {
             attrs: style.attrs,
         }
     }
-
-    fn box_clone(&self) -> Box<dyn StyleEffect> {
-        Box::new(*self)
-    }
 }
 
 /// Create a dim effect. Factor 0.0-1.0 dims, >1.0 brightens.
-pub fn dim(factor: f32) -> Box<dyn StyleEffect> {
-    Box::new(Dim { factor })
+pub fn dim(factor: f32) -> Effect {
+    Arc::new(Dim { factor })
 }
 
 /// Brighten effect - scales brightness (alias for dim with factor > 1).
@@ -70,15 +60,11 @@ impl StyleEffect for Brighten {
             attrs: style.attrs,
         }
     }
-
-    fn box_clone(&self) -> Box<dyn StyleEffect> {
-        Box::new(*self)
-    }
 }
 
 /// Create a brighten effect. Factor > 1.0 brightens.
-pub fn brighten(factor: f32) -> Box<dyn StyleEffect> {
-    Box::new(Brighten { factor })
+pub fn brighten(factor: f32) -> Effect {
+    Arc::new(Brighten { factor })
 }
 
 /// Saturation effect - adjusts color saturation.
@@ -96,15 +82,11 @@ impl StyleEffect for Saturation {
             attrs: style.attrs,
         }
     }
-
-    fn box_clone(&self) -> Box<dyn StyleEffect> {
-        Box::new(*self)
-    }
 }
 
 /// Create a saturation effect. 0.0 = grayscale, 1.0 = unchanged.
-pub fn saturation(factor: f32) -> Box<dyn StyleEffect> {
-    Box::new(Saturation { factor })
+pub fn saturation(factor: f32) -> Effect {
+    Arc::new(Saturation { factor })
 }
 
 /// Swap foreground and background colors.
@@ -119,15 +101,11 @@ impl StyleEffect for SwapFgBg {
             attrs: style.attrs,
         }
     }
-
-    fn box_clone(&self) -> Box<dyn StyleEffect> {
-        Box::new(*self)
-    }
 }
 
 /// Create an effect that swaps foreground and background colors.
-pub fn swap_fg_bg() -> Box<dyn StyleEffect> {
-    Box::new(SwapFgBg)
+pub fn swap_fg_bg() -> Effect {
+    Arc::new(SwapFgBg)
 }
 
 /// Invert RGB channels of both colors.
@@ -142,15 +120,11 @@ impl StyleEffect for InvertRgb {
             attrs: style.attrs,
         }
     }
-
-    fn box_clone(&self) -> Box<dyn StyleEffect> {
-        Box::new(*self)
-    }
 }
 
 /// Create an effect that inverts RGB channels (255-value).
-pub fn invert_rgb() -> Box<dyn StyleEffect> {
-    Box::new(InvertRgb)
+pub fn invert_rgb() -> Effect {
+    Arc::new(InvertRgb)
 }
 
 /// Tint effect - blends colors toward a target color.
@@ -170,15 +144,11 @@ impl StyleEffect for Tint {
             attrs: style.attrs,
         }
     }
-
-    fn box_clone(&self) -> Box<dyn StyleEffect> {
-        Box::new(*self)
-    }
 }
 
 /// Create a tint effect that blends colors toward a target.
-pub fn tint(color: Color, ratio: f32) -> Box<dyn StyleEffect> {
-    Box::new(Tint { color, ratio })
+pub fn tint(color: Color, ratio: f32) -> Effect {
+    Arc::new(Tint { color, ratio })
 }
 
 /// Hue shift effect.
@@ -196,15 +166,11 @@ impl StyleEffect for HueShift {
             attrs: style.attrs,
         }
     }
-
-    fn box_clone(&self) -> Box<dyn StyleEffect> {
-        Box::new(*self)
-    }
 }
 
 /// Create a hue shift effect.
-pub fn hue_shift(degrees: f32) -> Box<dyn StyleEffect> {
-    Box::new(HueShift { degrees })
+pub fn hue_shift(degrees: f32) -> Effect {
+    Arc::new(HueShift { degrees })
 }
 
 // ============================================================================
@@ -223,15 +189,11 @@ impl StyleEffect for Bold {
             attrs: style.attrs.with(Attr::Bold),
         }
     }
-
-    fn box_clone(&self) -> Box<dyn StyleEffect> {
-        Box::new(*self)
-    }
 }
 
 /// Create an effect that adds bold attribute.
-pub fn bold() -> Box<dyn StyleEffect> {
-    Box::new(Bold)
+pub fn bold() -> Effect {
+    Arc::new(Bold)
 }
 
 /// Add italic attribute.
@@ -246,15 +208,11 @@ impl StyleEffect for Italic {
             attrs: style.attrs.with(Attr::Italic),
         }
     }
-
-    fn box_clone(&self) -> Box<dyn StyleEffect> {
-        Box::new(*self)
-    }
 }
 
 /// Create an effect that adds italic attribute.
-pub fn italic() -> Box<dyn StyleEffect> {
-    Box::new(Italic)
+pub fn italic() -> Effect {
+    Arc::new(Italic)
 }
 
 /// Add underline attribute.
@@ -269,15 +227,11 @@ impl StyleEffect for Underline {
             attrs: style.attrs.with(Attr::Underline),
         }
     }
-
-    fn box_clone(&self) -> Box<dyn StyleEffect> {
-        Box::new(*self)
-    }
 }
 
 /// Create an effect that adds underline attribute.
-pub fn underline() -> Box<dyn StyleEffect> {
-    Box::new(Underline)
+pub fn underline() -> Effect {
+    Arc::new(Underline)
 }
 
 /// Add dim attribute (terminal dim, not brightness scaling).
@@ -292,15 +246,11 @@ impl StyleEffect for AttrDim {
             attrs: style.attrs.with(Attr::Dim),
         }
     }
-
-    fn box_clone(&self) -> Box<dyn StyleEffect> {
-        Box::new(*self)
-    }
 }
 
 /// Create an effect that adds the terminal dim attribute.
-pub fn attr_dim() -> Box<dyn StyleEffect> {
-    Box::new(AttrDim)
+pub fn attr_dim() -> Effect {
+    Arc::new(AttrDim)
 }
 
 /// Replace the entire attribute set.
@@ -318,15 +268,11 @@ impl StyleEffect for SetAttrs {
             attrs: self.attrs,
         }
     }
-
-    fn box_clone(&self) -> Box<dyn StyleEffect> {
-        Box::new(*self)
-    }
 }
 
 /// Create an effect that replaces all attributes.
-pub fn set_attrs(attrs: AttrSet) -> Box<dyn StyleEffect> {
-    Box::new(SetAttrs { attrs })
+pub fn set_attrs(attrs: AttrSet) -> Effect {
+    Arc::new(SetAttrs { attrs })
 }
 
 /// Clear all attributes.
@@ -341,15 +287,11 @@ impl StyleEffect for ClearAttrs {
             attrs: AttrSet::default(),
         }
     }
-
-    fn box_clone(&self) -> Box<dyn StyleEffect> {
-        Box::new(*self)
-    }
 }
 
 /// Create an effect that clears all attributes.
-pub fn clear_attrs() -> Box<dyn StyleEffect> {
-    Box::new(ClearAttrs)
+pub fn clear_attrs() -> Effect {
+    Arc::new(ClearAttrs)
 }
 
 // ============================================================================
@@ -428,16 +370,5 @@ mod tests {
             assert_eq!(r, 100); // Dimmed
         }
         assert!(step2.attrs.bold);
-    }
-
-    #[test]
-    fn test_box_clone() {
-        let effect = dim(0.5);
-        let cloned = effect.box_clone();
-        // Both should produce same result
-        let style = test_style();
-        let result1 = effect.apply(style.clone());
-        let result2 = cloned.apply(style);
-        assert_eq!(result1, result2);
     }
 }

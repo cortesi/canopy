@@ -8,7 +8,7 @@ use super::{
     commands,
     help::OwnedHelpSnapshot,
     id::{NodeId, TypedId},
-    style::StyleEffect,
+    style::Effect,
     view::View,
     world::Core,
 };
@@ -184,9 +184,6 @@ pub trait ReadContext {
     /// Widget type identifier for a specific node.
     fn node_type_id(&self, node: NodeId) -> Option<TypeId>;
 
-    /// Mark this node dirty so the next frame re-runs layout.
-    fn invalidate_layout(&self);
-
     /// Canvas size for the current node.
     fn canvas(&self) -> Expanse {
         self.view().canvas
@@ -311,17 +308,42 @@ pub trait ReadContext {
     fn pending_help_snapshot(&self) -> Option<&OwnedHelpSnapshot>;
 }
 
+/// Pre-order traversal iterator over a subtree.
+pub struct Preorder<'a> {
+    /// Read-only context used to access children.
+    ctx: &'a dyn ReadContext,
+    /// Traversal stack.
+    stack: Vec<NodeId>,
+}
+
+impl<'a> Iterator for Preorder<'a> {
+    type Item = NodeId;
+
+    fn next(&mut self) -> Option<NodeId> {
+        let id = self.stack.pop()?;
+        let children = ReadContext::children_of(self.ctx, id);
+        for child in children.into_iter().rev() {
+            self.stack.push(child);
+        }
+        Some(id)
+    }
+}
+
 impl dyn ReadContext + '_ {
+    /// Pre-order traversal of the subtree rooted at `root`.
+    pub fn preorder(&self, root: impl Into<NodeId>) -> Preorder<'_> {
+        Preorder {
+            ctx: self,
+            stack: vec![root.into()],
+        }
+    }
+
     /// Return the first node of type `W` within `root` and its descendants.
     pub fn first_from<W: Widget + 'static>(&self, root: impl Into<NodeId>) -> Option<TypedId<W>> {
         let root = root.into();
-        let mut stack = vec![root];
-        while let Some(id) = stack.pop() {
+        for id in self.preorder(root) {
             if ReadContext::node_type_id(self, id) == Some(TypeId::of::<W>()) {
                 return Some(TypedId::new(id));
-            }
-            for child in ReadContext::children_of(self, id).into_iter().rev() {
-                stack.push(child);
             }
         }
         None
@@ -331,13 +353,9 @@ impl dyn ReadContext + '_ {
     pub fn all_from<W: Widget + 'static>(&self, root: impl Into<NodeId>) -> Vec<TypedId<W>> {
         let root = root.into();
         let mut out = Vec::new();
-        let mut stack = vec![root];
-        while let Some(id) = stack.pop() {
+        for id in self.preorder(root) {
             if ReadContext::node_type_id(self, id) == Some(TypeId::of::<W>()) {
                 out.push(TypedId::new(id));
-            }
-            for child in ReadContext::children_of(self, id).into_iter().rev() {
-                stack.push(child);
             }
         }
         out
@@ -407,31 +425,21 @@ impl dyn ReadContext + '_ {
 
     /// Return the first descendant of type `W` (excluding self).
     pub fn first_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
-        let mut stack = self.children();
-        while let Some(id) = stack.pop() {
-            if self.node_matches_type::<W>(id) {
-                return Some(TypedId::new(id));
-            }
-            for child in ReadContext::children_of(self, id).into_iter().rev() {
-                stack.push(child);
-            }
-        }
-        None
+        self.preorder(self.node_id())
+            .skip(1)
+            .find(|id| self.node_matches_type::<W>(*id))
+            .map(TypedId::new)
     }
 
     /// Return the unique descendant of type `W`, or error if more than one exists.
     pub fn unique_descendant<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
         let mut found = None;
-        let mut stack = self.children();
-        while let Some(id) = stack.pop() {
+        for id in self.preorder(self.node_id()).skip(1) {
             if self.node_matches_type::<W>(id) {
                 if found.is_some() {
                     return Err(Error::MultipleMatches);
                 }
                 found = Some(TypedId::new(id));
-            }
-            for child in ReadContext::children_of(self, id).into_iter().rev() {
-                stack.push(child);
             }
         }
         Ok(found)
@@ -440,13 +448,9 @@ impl dyn ReadContext + '_ {
     /// Return all descendants of type `W` (excluding self).
     pub fn descendants_of_type<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
         let mut out = Vec::new();
-        let mut stack = self.children();
-        while let Some(id) = stack.pop() {
+        for id in self.preorder(self.node_id()).skip(1) {
             if self.node_matches_type::<W>(id) {
                 out.push(TypedId::new(id));
-            }
-            for child in ReadContext::children_of(self, id).into_iter().rev() {
-                stack.push(child);
             }
         }
         out
@@ -482,17 +486,8 @@ impl dyn ReadContext + '_ {
     /// A leaf is a node with no children.
     pub fn first_leaf(&self, root: impl Into<NodeId>) -> Option<NodeId> {
         let root = root.into();
-        let mut stack = vec![root];
-        while let Some(id) = stack.pop() {
-            let children = ReadContext::children_of(self, id);
-            if children.is_empty() {
-                return Some(id);
-            }
-            for child in children.into_iter().rev() {
-                stack.push(child);
-            }
-        }
-        None
+        self.preorder(root)
+            .find(|id| ReadContext::children_of(self, *id).is_empty())
     }
 }
 
@@ -668,22 +663,39 @@ pub trait Context: ReadContext {
     fn scroll_by(&mut self, x: i32, y: i32) -> bool;
 
     /// Scroll the view up by one page. Returns `true` if movement occurred.
-    fn page_up(&mut self) -> bool;
+    fn page_up(&mut self) -> bool {
+        let h = self.view().content.h as i32;
+        self.scroll_by(0, -h)
+    }
 
     /// Scroll the view down by one page. Returns `true` if movement occurred.
-    fn page_down(&mut self) -> bool;
+    fn page_down(&mut self) -> bool {
+        let h = self.view().content.h as i32;
+        self.scroll_by(0, h)
+    }
 
     /// Scroll the view up by one line. Returns `true` if movement occurred.
-    fn scroll_up(&mut self) -> bool;
+    fn scroll_up(&mut self) -> bool {
+        self.scroll_by(0, -1)
+    }
 
     /// Scroll the view down by one line. Returns `true` if movement occurred.
-    fn scroll_down(&mut self) -> bool;
+    fn scroll_down(&mut self) -> bool {
+        self.scroll_by(0, 1)
+    }
 
     /// Scroll the view left by one line. Returns `true` if movement occurred.
-    fn scroll_left(&mut self) -> bool;
+    fn scroll_left(&mut self) -> bool {
+        self.scroll_by(-1, 0)
+    }
 
     /// Scroll the view right by one line. Returns `true` if movement occurred.
-    fn scroll_right(&mut self) -> bool;
+    fn scroll_right(&mut self) -> bool {
+        self.scroll_by(1, 0)
+    }
+
+    /// Mark this node dirty so the next frame re-runs layout.
+    fn invalidate_layout(&mut self);
 
     /// Update the layout for the current node.
     fn with_layout(&mut self, f: &mut dyn FnMut(&mut Layout)) -> Result<()> {
@@ -793,7 +805,7 @@ pub trait Context: ReadContext {
 
     /// Add an effect to a node that will be applied during rendering.
     /// Effects stack and inherit through the tree.
-    fn push_effect(&mut self, node: NodeId, effect: Box<dyn StyleEffect>) -> Result<()>;
+    fn push_effect(&mut self, node: NodeId, effect: Effect) -> Result<()>;
 
     /// Clear all effects on a node.
     fn clear_effects(&mut self, node: NodeId) -> Result<()>;
@@ -1015,6 +1027,18 @@ impl dyn Context + '_ {
         Ok(TypedId::new(id))
     }
 
+    /// Add a widget as a child of a specific parent and assign a layout.
+    pub fn add_child_to_with_layout<W: Widget + 'static>(
+        &mut self,
+        parent: impl Into<NodeId>,
+        widget: W,
+        layout: Layout,
+    ) -> Result<TypedId<W>> {
+        let id = self.add_child_to(parent, widget)?;
+        self.set_layout_of(id, layout)?;
+        Ok(id)
+    }
+
     /// Add a widget as a keyed child of the current node and return the new typed node ID.
     pub fn add_child_keyed<W: Widget + 'static>(
         &mut self,
@@ -1178,6 +1202,18 @@ impl dyn Context + '_ {
         self.add_child_to_keyed(parent, K::KEY, widget)
     }
 
+    /// Add a typed keyed child to a specific parent and assign a layout.
+    pub fn add_keyed_to_with_layout<K: ChildKey>(
+        &mut self,
+        parent: impl Into<NodeId>,
+        widget: K::Widget,
+        layout: Layout,
+    ) -> Result<TypedId<K::Widget>> {
+        let id = self.add_keyed_to::<K>(parent, widget)?;
+        self.set_layout_of(id, layout)?;
+        Ok(id)
+    }
+
     /// Execute a closure with a typed keyed child.
     pub fn with_child<K: ChildKey, R>(
         &mut self,
@@ -1253,13 +1289,17 @@ impl dyn Context + '_ {
 
 /// Return whether a node's widget reports it accepts focus.
 fn node_accepts_focus(core: &Core, node_id: NodeId) -> bool {
-    core.nodes
-        .get(node_id)
-        .and_then(|node| node.widget.as_ref())
-        .is_some_and(|widget| {
-            let ctx = CoreViewContext::new(core, node_id);
-            widget.accept_focus(&ctx)
-        })
+    let Some(node) = core.nodes.get(node_id) else {
+        return false;
+    };
+    let Ok(widget) = node.widget.try_borrow() else {
+        return false;
+    };
+    let Some(widget) = widget.as_ref() else {
+        return false;
+    };
+    let ctx = CoreViewContext::new(core, node_id);
+    widget.accept_focus(&ctx)
 }
 
 /// Return true if `node` is within the subtree rooted at `root`.
@@ -1277,8 +1317,9 @@ fn is_descendant(core: &Core, root: NodeId, node: NodeId) -> bool {
 /// Collect focusable leaves in pre-order for a core subtree.
 fn focusable_leaves_for(core: &Core, root: NodeId) -> Vec<NodeId> {
     let mut out = Vec::new();
-    let mut stack = vec![root];
-    while let Some(id) = stack.pop() {
+    let ctx = CoreViewContext::new(core, root);
+    let ctx = &ctx as &dyn ReadContext;
+    for id in ctx.preorder(root) {
         let Some(node) = core.nodes.get(id) else {
             continue;
         };
@@ -1287,9 +1328,6 @@ fn focusable_leaves_for(core: &Core, root: NodeId) -> Vec<NodeId> {
         }
         if node_accepts_focus(core, id) {
             out.push(id);
-        }
-        for child in node.children.iter().rev() {
-            stack.push(*child);
         }
     }
     out
@@ -1355,12 +1393,6 @@ impl<'a> ReadContext for CoreContext<'a> {
 
     fn node_type_id(&self, node: NodeId) -> Option<TypeId> {
         self.core.nodes.get(node).map(|n| n.widget_type)
-    }
-
-    fn invalidate_layout(&self) {
-        if let Some(node) = self.core.nodes.get(self.node_id) {
-            node.layout_dirty.set(true);
-        }
     }
 
     fn children_of(&self, node: NodeId) -> Vec<NodeId> {
@@ -1491,75 +1523,9 @@ impl<'a> Context for CoreContext<'a> {
         }
     }
 
-    fn page_up(&mut self) -> bool {
-        let node = self.core.nodes.get_mut(self.node_id);
-        if let Some(node) = node {
-            let before = node.scroll;
-            node.scroll = node.scroll.scroll(0, -(node.content_size.h as i32));
-            clamp_scroll_offset(&mut node.scroll, node.content_size, node.canvas);
-            before != node.scroll
-        } else {
-            false
-        }
-    }
-
-    fn page_down(&mut self) -> bool {
-        let node = self.core.nodes.get_mut(self.node_id);
-        if let Some(node) = node {
-            let before = node.scroll;
-            node.scroll = node.scroll.scroll(0, node.content_size.h as i32);
-            clamp_scroll_offset(&mut node.scroll, node.content_size, node.canvas);
-            before != node.scroll
-        } else {
-            false
-        }
-    }
-
-    fn scroll_up(&mut self) -> bool {
-        let node = self.core.nodes.get_mut(self.node_id);
-        if let Some(node) = node {
-            let before = node.scroll;
-            node.scroll = node.scroll.scroll(0, -1);
-            clamp_scroll_offset(&mut node.scroll, node.content_size, node.canvas);
-            before != node.scroll
-        } else {
-            false
-        }
-    }
-
-    fn scroll_down(&mut self) -> bool {
-        let node = self.core.nodes.get_mut(self.node_id);
-        if let Some(node) = node {
-            let before = node.scroll;
-            node.scroll = node.scroll.scroll(0, 1);
-            clamp_scroll_offset(&mut node.scroll, node.content_size, node.canvas);
-            before != node.scroll
-        } else {
-            false
-        }
-    }
-
-    fn scroll_left(&mut self) -> bool {
-        let node = self.core.nodes.get_mut(self.node_id);
-        if let Some(node) = node {
-            let before = node.scroll;
-            node.scroll = node.scroll.scroll(-1, 0);
-            clamp_scroll_offset(&mut node.scroll, node.content_size, node.canvas);
-            before != node.scroll
-        } else {
-            false
-        }
-    }
-
-    fn scroll_right(&mut self) -> bool {
-        let node = self.core.nodes.get_mut(self.node_id);
-        if let Some(node) = node {
-            let before = node.scroll;
-            node.scroll = node.scroll.scroll(1, 0);
-            clamp_scroll_offset(&mut node.scroll, node.content_size, node.canvas);
-            before != node.scroll
-        } else {
-            false
+    fn invalidate_layout(&mut self) {
+        if let Some(node) = self.core.nodes.get_mut(self.node_id) {
+            node.layout_dirty = true;
         }
     }
 
@@ -1579,7 +1545,7 @@ impl<'a> Context for CoreContext<'a> {
         self.core.with_widget_mut(node, |widget, core| {
             let mut ctx = CoreContext::new(core, node);
             f(widget, &mut ctx)
-        })
+        })?
     }
 
     fn dispatch_command(&mut self, cmd: &CommandInvocation) -> StdResult<ArgValue, CommandError> {
@@ -1677,7 +1643,7 @@ impl<'a> Context for CoreContext<'a> {
         self.core.request_exit(code);
     }
 
-    fn push_effect(&mut self, node: NodeId, effect: Box<dyn StyleEffect>) -> Result<()> {
+    fn push_effect(&mut self, node: NodeId, effect: Effect) -> Result<()> {
         let node = self
             .core
             .nodes
@@ -1775,12 +1741,6 @@ impl<'a> ReadContext for CoreViewContext<'a> {
 
     fn node_type_id(&self, node: NodeId) -> Option<TypeId> {
         self.core.nodes.get(node).map(|n| n.widget_type)
-    }
-
-    fn invalidate_layout(&self) {
-        if let Some(node) = self.core.nodes.get(self.node_id) {
-            node.layout_dirty.set(true);
-        }
     }
 
     fn children_of(&self, node: NodeId) -> Vec<NodeId> {

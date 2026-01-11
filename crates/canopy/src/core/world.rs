@@ -1,6 +1,6 @@
 use std::{
     any::TypeId,
-    cell::Cell,
+    cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
     ptr::NonNull,
 };
@@ -14,7 +14,7 @@ use super::{
 use crate::{
     ReadContext,
     backend::BackendControl,
-    commands::{CommandNode, CommandScopeFrame, CommandSet, CommandSpec},
+    commands::{CommandScopeFrame, CommandSet},
     core::{context::CoreContext, id::NodeId, node::Node, view::View},
     error::{Error, Result},
     event::Event,
@@ -100,20 +100,28 @@ struct WidgetSlotGuard {
 
 impl WidgetSlotGuard {
     /// Take ownership of the widget from its slot.
-    fn new(core: &mut Core, node_id: NodeId) -> Self {
-        let widget = core.nodes[node_id].widget.take();
-        Self {
+    fn new(core: &Core, node_id: NodeId) -> Result<Self> {
+        let node = core
+            .nodes
+            .get(node_id)
+            .ok_or(Error::NodeNotFound(node_id))?;
+        let mut slot = node
+            .widget
+            .try_borrow_mut()
+            .map_err(|_| Error::ReentrantWidgetBorrow(node_id))?;
+        let widget = slot.take().ok_or(Error::ReentrantWidgetBorrow(node_id))?;
+        Ok(Self {
             core: NonNull::from(core),
             node_id,
-            widget,
-        }
+            widget: Some(widget),
+        })
     }
 
     /// Borrow the widget mutably for the call.
     fn widget_mut(&mut self) -> &mut dyn Widget {
         self.widget
             .as_deref_mut()
-            .expect("Widget missing from node")
+            .expect("widget missing from guard")
     }
 }
 
@@ -121,11 +129,12 @@ impl Drop for WidgetSlotGuard {
     fn drop(&mut self) {
         // SAFETY: core pointer remains valid for the lifetime of the guard.
         unsafe {
-            let core = self.core.as_mut();
-            if let Some(node) = core.nodes.get_mut(self.node_id)
-                && node.widget.is_none()
+            let core = self.core.as_ref();
+            if let Some(node) = core.nodes.get(self.node_id)
+                && let Ok(mut slot) = node.widget.try_borrow_mut()
+                && slot.is_none()
             {
-                node.widget = self.widget.take();
+                *slot = self.widget.take();
             }
         }
     }
@@ -140,7 +149,7 @@ impl Core {
         let layout = root_widget.layout();
         let root_name = root_widget.name();
         let root = nodes.insert(Node {
-            widget: Some(Box::new(root_widget)),
+            widget: RefCell::new(Some(Box::new(root_widget))),
             widget_type: root_type,
             parent: None,
             children: Vec::new(),
@@ -155,7 +164,7 @@ impl Core {
             name: root_name,
             initialized: false,
             mounted: false,
-            layout_dirty: Cell::new(false),
+            layout_dirty: false,
             effects: None,
             clear_inherited_effects: false,
         });
@@ -256,7 +265,7 @@ impl Core {
         let widget_type = widget.as_ref().type_id();
 
         let node_id = self.nodes.insert(Node {
-            widget: Some(widget),
+            widget: RefCell::new(Some(widget)),
             widget_type,
             parent: None,
             children: Vec::new(),
@@ -271,7 +280,7 @@ impl Core {
             name,
             initialized: false,
             mounted: false,
-            layout_dirty: Cell::new(false),
+            layout_dirty: false,
             effects: None,
             clear_inherited_effects: false,
         });
@@ -320,7 +329,7 @@ impl Core {
             .nodes
             .get_mut(node_id)
             .ok_or(Error::NodeNotFound(node_id))?;
-        node.widget = Some(Box::new(widget));
+        node.widget = RefCell::new(Some(Box::new(widget)));
         node.name = name;
         node.layout = layout;
         node.widget_type = widget_type;
@@ -361,7 +370,7 @@ impl Core {
         self.with_widget_mut(node_id, |widget, core| {
             let mut ctx = CoreContext::new(core, node_id);
             widget.on_mount(&mut ctx)
-        })?;
+        })??;
 
         if let Some(node) = self.nodes.get_mut(node_id) {
             node.mounted = true;
@@ -481,7 +490,7 @@ impl Core {
                 if !self.nodes.contains_key(node_id) {
                     continue;
                 }
-                self.with_widget_mut(node_id, |widget, core| {
+                let _ignored = self.with_widget_mut(node_id, |widget, core| {
                     let mut ctx = CoreContext::new(core, node_id);
                     widget.on_unmount(&mut ctx);
                 });
@@ -941,11 +950,10 @@ impl Core {
 
         let pre_order = self.subtree_pre_order(root_id);
         for node_id in &pre_order {
-            let result = self.with_widget_mut(*node_id, |widget, core| {
+            self.with_widget_mut(*node_id, |widget, core| {
                 let mut ctx = CoreContext::new(core, *node_id);
                 widget.pre_remove(&mut ctx)
-            });
-            result?
+            })??;
         }
 
         let post_order = self.subtree_post_order(root_id);
@@ -953,7 +961,7 @@ impl Core {
             self.with_widget_mut(*node_id, |widget, core| {
                 let mut ctx = CoreContext::new(core, *node_id);
                 widget.on_unmount(&mut ctx);
-            });
+            })?;
         }
 
         let parent = self.nodes.get(root_id).and_then(|node| node.parent);
@@ -1057,21 +1065,19 @@ impl Core {
         &mut self,
         node_id: NodeId,
         f: impl FnOnce(&mut dyn Widget, &mut Self) -> R,
-    ) -> R {
-        let mut guard = WidgetSlotGuard::new(self, node_id);
-        f(guard.widget_mut(), self)
+    ) -> Result<R> {
+        let mut guard = WidgetSlotGuard::new(self, node_id)?;
+        Ok(f(guard.widget_mut(), self))
     }
 
     /// Take a mutable reference to a widget for rendering with a shared Core context.
     pub(crate) fn with_widget_view<R>(
-        &mut self,
+        &self,
         node_id: NodeId,
         f: impl FnOnce(&mut dyn Widget, &Self) -> R,
-    ) -> R {
-        let mut guard = WidgetSlotGuard::new(self, node_id);
-        let core_ptr: *const Self = self;
-        // SAFETY: we only provide shared access during the closure and do not mutate Core there.
-        f(guard.widget_mut(), unsafe { &*core_ptr })
+    ) -> Result<R> {
+        let mut guard = WidgetSlotGuard::new(self, node_id)?;
+        Ok(f(guard.widget_mut(), self))
     }
 
     /// Build a command-scope frame for a specific event.
@@ -1105,8 +1111,7 @@ impl Core {
             let outcome = self.with_widget_mut(id, |w, core| {
                 let mut ctx = CoreContext::new(core, id);
                 w.on_event(event, &mut ctx)
-            });
-            let outcome = outcome?;
+            })??;
             match outcome {
                 EventOutcome::Handle | EventOutcome::Consume => return Ok(outcome),
                 EventOutcome::Ignore => {
@@ -1130,7 +1135,8 @@ impl Core {
             w.on_event(event, &mut ctx)
         });
         self.pop_command_scope(depth);
-        outcome
+        let outcome = outcome??;
+        Ok(outcome)
     }
 
     /// Return the path for a node relative to a root.
@@ -1178,13 +1184,15 @@ impl Core {
 /// Refresh cached layout configurations for nodes marked dirty.
 fn refresh_layouts(core: &mut Core) {
     for (_id, node) in core.nodes.iter_mut() {
-        if !node.layout_dirty.get() {
+        if !node.layout_dirty {
             continue;
         }
-        if let Some(widget) = node.widget.as_ref() {
+        if let Ok(widget) = node.widget.try_borrow()
+            && let Some(widget) = widget.as_ref()
+        {
             node.layout = widget.layout();
+            node.layout_dirty = false;
         }
-        node.layout_dirty.set(false);
     }
 }
 
@@ -1731,7 +1739,7 @@ impl<'a> LayoutPass<'a> {
     }
 
     /// Compute the scrollable canvas size for a node.
-    fn compute_canvas(&mut self, node_id: NodeId, view_size: Size<u32>) -> Size<u32> {
+    fn compute_canvas(&self, node_id: NodeId, view_size: Size<u32>) -> Size<u32> {
         let children = self.visible_children(node_id);
         let mut canvas_children = Vec::with_capacity(children.len());
         for child in children {
@@ -1743,7 +1751,8 @@ impl<'a> LayoutPass<'a> {
         let ctx = CanvasContext::new(&canvas_children);
         let canvas = self
             .core
-            .with_widget_view(node_id, |widget, _core| widget.canvas(view_size, &ctx));
+            .with_widget_view(node_id, |widget, _core| widget.canvas(view_size, &ctx))
+            .unwrap_or(view_size);
         Size::new(
             canvas.width.max(view_size.width),
             canvas.height.max(view_size.height),
@@ -1801,7 +1810,8 @@ impl<'a> LayoutPass<'a> {
         }
         let measured = self
             .core
-            .with_widget_view(node_id, |widget, _core| widget.measure(constraints));
+            .with_widget_view(node_id, |widget, _core| widget.measure(constraints))
+            .unwrap_or_else(|_| constraints.clamp(Size::ZERO));
         self.measure_cache.insert(key, measured);
         measured
     }
@@ -2031,15 +2041,6 @@ impl Widget for RootContainer {
     }
 }
 
-impl CommandNode for RootContainer {
-    fn commands() -> &'static [&'static CommandSpec]
-    where
-        Self: Sized,
-    {
-        &[]
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, Mutex};
@@ -2049,7 +2050,6 @@ mod tests {
     use super::*;
     use crate::{
         Context,
-        commands::CommandNode,
         error::{Error, Result},
         geom::{Expanse, Point},
         layout::{
@@ -2100,15 +2100,6 @@ mod tests {
         }
     }
 
-    impl CommandNode for TestWidget {
-        fn commands() -> &'static [&'static CommandSpec]
-        where
-            Self: Sized,
-        {
-            &[]
-        }
-    }
-
     impl Widget for TestWidget {
         fn measure(&self, c: MeasureConstraints) -> Measurement {
             (self.measure_fn)(c)
@@ -2121,15 +2112,6 @@ mod tests {
 
     struct FocusableWidget;
 
-    impl CommandNode for FocusableWidget {
-        fn commands() -> &'static [&'static CommandSpec]
-        where
-            Self: Sized,
-        {
-            &[]
-        }
-    }
-
     impl Widget for FocusableWidget {
         fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
             true
@@ -2137,15 +2119,6 @@ mod tests {
     }
 
     struct MountFailWidget;
-
-    impl CommandNode for MountFailWidget {
-        fn commands() -> &'static [&'static CommandSpec]
-        where
-            Self: Sized,
-        {
-            &[]
-        }
-    }
 
     impl Widget for MountFailWidget {
         fn on_mount(&mut self, _ctx: &mut dyn Context) -> Result<()> {

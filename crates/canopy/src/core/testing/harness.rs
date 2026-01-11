@@ -165,11 +165,14 @@ impl Harness {
         W: Widget + 'static,
     {
         let node_id = node_id.into();
-        self.canopy.core.with_widget_mut(node_id, |widget, _| {
-            let any = widget as &mut dyn Any;
-            let widget = any.downcast_mut::<W>().expect("widget type mismatch");
-            f(widget)
-        })
+        self.canopy
+            .core
+            .with_widget_mut(node_id, |widget, _| {
+                let any = widget as &mut dyn Any;
+                let widget = any.downcast_mut::<W>().expect("widget type mismatch");
+                f(widget)
+            })
+            .expect("with_widget failed")
     }
 
     /// Execute a closure with mutable access to the root widget.
@@ -197,7 +200,7 @@ impl Harness {
                 .downcast_mut::<W>()
                 .expect("with_root_context: widget type mismatch");
             f(widget, &mut ctx)
-        })
+        })?
     }
 
     /// Get a BufTest instance that references the current buffer.

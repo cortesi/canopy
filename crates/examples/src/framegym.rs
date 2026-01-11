@@ -1,13 +1,11 @@
 use canopy::{
-    Binder, Canopy, Context, Loader, ReadContext, Widget, command,
+    command,
     commands::{ScrollDirection, VerticalDirection},
     derive_commands,
-    error::Result,
     event::key,
-    geom::{Expanse, Line},
-    key,
-    layout::{CanvasContext, Layout, MeasureConstraints, Measurement, Size},
-    render::Render,
+    geom::Line,
+    layout::CanvasContext,
+    prelude::*,
 };
 use canopy_widgets::{Frame, Root};
 

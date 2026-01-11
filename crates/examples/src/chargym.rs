@@ -1,11 +1,9 @@
 //! Chargym: A Unicode width and wide character demo.
 
 use canopy::{
-    Binder, Canopy, Context, Loader, ReadContext, Widget, derive_commands,
-    error::Result,
+    derive_commands,
     event::{key, mouse},
-    layout::Layout,
-    render::Render,
+    prelude::*,
 };
 use canopy_widgets::{CanvasWidth, Frame, Root, Text};
 use unicode_width::UnicodeWidthStr;

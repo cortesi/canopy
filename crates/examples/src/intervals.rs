@@ -1,12 +1,10 @@
 use std::time::Duration;
 
 use canopy::{
-    Binder, Canopy, Context, Loader, ReadContext, Widget, command, derive_commands,
-    error::Result,
+    command, derive_commands,
     event::{key, mouse},
-    layout::{Edges, Layout, MeasureConstraints, Measurement, Size},
-    render::Render,
-    state::NodeName,
+    layout::Edges,
+    prelude::*,
     style::{AttrSet, solarized},
 };
 use canopy_widgets::{Box, Center, Frame, List, SINGLE, Selectable, Text, VStack};

@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::Result;
-use canopy::{error::Result as CanopyResult, event::key::KeyCode, testing::harness::Harness};
+use anyhow::Result as AnyResult;
+use canopy::{event::key::KeyCode, prelude::*, testing::harness::Harness};
 use canopy_widgets::List;
 use todo::{Todo, TodoEntry, open_store, setup_app};
 
@@ -16,7 +16,7 @@ fn db_path(tag: &str) -> std::path::PathBuf {
     ))
 }
 
-fn add(h: &mut Harness, text: &str) -> CanopyResult<()> {
+fn add(h: &mut Harness, text: &str) -> Result<()> {
     h.key('a')?;
     for ch in text.chars() {
         h.key(ch)?;
@@ -26,7 +26,7 @@ fn add(h: &mut Harness, text: &str) -> CanopyResult<()> {
     Ok(())
 }
 
-fn del_first(h: &mut Harness, _next: Option<&str>) -> CanopyResult<()> {
+fn del_first(h: &mut Harness, _next: Option<&str>) -> Result<()> {
     h.key('g')?;
     h.key('d')?;
     // if let Some(txt) = next {
@@ -35,7 +35,7 @@ fn del_first(h: &mut Harness, _next: Option<&str>) -> CanopyResult<()> {
     Ok(())
 }
 
-fn del_no_nav(h: &mut Harness, _next: Option<&str>) -> CanopyResult<()> {
+fn del_no_nav(h: &mut Harness, _next: Option<&str>) -> Result<()> {
     h.key('d')?;
     // if let Some(txt) = next {
     //     h.expect_highlight(txt);
@@ -50,7 +50,7 @@ fn list_len(h: &mut Harness) -> usize {
     .expect("list node missing")
 }
 
-fn app(path: &str) -> Result<Harness> {
+fn app(path: &str) -> AnyResult<Harness> {
     open_store(db_path(path).to_str().unwrap())?;
     let mut h = Harness::new(Todo::new()?)?;
     setup_app(&mut h.canopy)?;
@@ -60,7 +60,7 @@ fn app(path: &str) -> Result<Harness> {
 
 #[test]
 #[ignore]
-fn add_item_via_script() -> Result<()> {
+fn add_item_via_script() -> AnyResult<()> {
     let mut h = app("script")?;
 
     h.key('a')?;
@@ -89,7 +89,7 @@ fn add_item_with_char_newline() {
 
 #[test]
 #[ignore]
-fn add_item_via_pty() -> Result<()> {
+fn add_item_via_pty() -> AnyResult<()> {
     let mut h = app("pty")?;
 
     add(&mut h, "item_one")?;
@@ -103,7 +103,7 @@ fn add_item_via_pty() -> Result<()> {
 
 #[test]
 #[ignore]
-fn delete_reverse_via_pty() -> Result<()> {
+fn delete_reverse_via_pty() -> AnyResult<()> {
     let mut h = app("rev")?;
     add(&mut h, "one")?;
     add(&mut h, "two")?;
@@ -118,7 +118,7 @@ fn delete_reverse_via_pty() -> Result<()> {
 
 #[test]
 #[ignore]
-fn single_item_add_remove() -> Result<()> {
+fn single_item_add_remove() -> AnyResult<()> {
     let mut h = app("single")?;
 
     add(&mut h, "solo")?;
@@ -128,7 +128,7 @@ fn single_item_add_remove() -> Result<()> {
 
 #[test]
 #[ignore]
-fn delete_after_moving_focus() -> Result<()> {
+fn delete_after_moving_focus() -> AnyResult<()> {
     let mut h = app("move_del")?;
     add(&mut h, "first")?;
     add(&mut h, "second")?;
@@ -139,7 +139,7 @@ fn delete_after_moving_focus() -> Result<()> {
 
 #[test]
 #[ignore]
-fn delete_middle_keeps_rest() -> Result<()> {
+fn delete_middle_keeps_rest() -> AnyResult<()> {
     let mut h = app("del_middle")?;
     add(&mut h, "first")?;
     add(&mut h, "second")?;
@@ -153,7 +153,7 @@ fn delete_middle_keeps_rest() -> Result<()> {
 
 #[test]
 #[ignore]
-fn delete_first_without_nav() -> Result<()> {
+fn delete_first_without_nav() -> AnyResult<()> {
     let mut h = app("del_first")?;
     add(&mut h, "a1")?;
     add(&mut h, "a2")?;
@@ -165,7 +165,7 @@ fn delete_first_without_nav() -> Result<()> {
 
 #[test]
 #[ignore]
-fn focus_moves_with_navigation() -> Result<()> {
+fn focus_moves_with_navigation() -> AnyResult<()> {
     let mut h = app("nav")?;
     add(&mut h, "one")?;
     add(&mut h, "two")?;
@@ -176,7 +176,7 @@ fn focus_moves_with_navigation() -> Result<()> {
 
 #[test]
 #[ignore]
-fn delete_first_keeps_second_visible() -> Result<()> {
+fn delete_first_keeps_second_visible() -> AnyResult<()> {
     let mut h = app("del_first_second")?;
     add(&mut h, "first")?;
     add(&mut h, "second")?;

@@ -1,10 +1,7 @@
 use canopy::{
-    Binder, Canopy, Context, Loader, NodeId, ReadContext, Widget, command, derive_commands,
-    error::Result,
+    command, derive_commands,
     event::{key, mouse},
-    geom::Expanse,
-    layout::{Direction, Layout, Sizing},
-    render::Render,
+    prelude::*,
 };
 use canopy_widgets::Root;
 

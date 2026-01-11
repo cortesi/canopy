@@ -1,12 +1,10 @@
 use std::env;
 
 use canopy::{
-    Binder, Canopy, Context, Loader, NodeId, ReadContext, Widget, command, derive_commands,
-    error::{Error, Result},
+    command, derive_commands,
+    error::Error,
     event::key,
-    layout::{Constraint, Direction, Layout, MeasureConstraints, Measurement, Size},
-    render::Render,
-    state::NodeName,
+    prelude::*,
     style::{Attr, AttrSet, solarized},
 };
 use canopy_widgets::{

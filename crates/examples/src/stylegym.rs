@@ -3,12 +3,10 @@
 //! This example showcases themes, effects, and modal overlays in a two-pane layout.
 
 use canopy::{
-    Binder, Canopy, ChildKey, Context, Loader, ReadContext, Widget, command, derive_commands,
-    error::Result,
+    command, derive_commands,
     event::{key, mouse},
-    key,
-    layout::{Direction, Edges, Layout},
-    render::Render,
+    layout::Edges,
+    prelude::*,
     style::{StyleMap, dracula, effects, gruvbox, solarized},
 };
 use canopy_widgets::{Dropdown, DropdownItem, Frame, Modal, Root, Selector, SelectorItem};

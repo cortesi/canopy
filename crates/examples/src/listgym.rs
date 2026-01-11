@@ -1,11 +1,9 @@
 use canopy::{
-    Binder, Canopy, Context, Loader, NodeId, ReadContext, TypedId, Widget, command,
-    derive_commands,
-    error::{Error, Result},
+    command, derive_commands,
+    error::Error,
     event::{key, mouse},
     layout::{CanvasContext, MeasureConstraints, Measurement, Size},
-    render::Render,
-    state::NodeName,
+    prelude::*,
     style::solarized,
 };
 use canopy_widgets::{CanvasWidth, Frame, List, Panes, Root, Selectable, Text, VStack};

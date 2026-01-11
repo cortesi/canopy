@@ -3,7 +3,7 @@ use crate::{
     core::text,
     error::Result,
     geom,
-    style::{AttrSet, Color, Style, StyleEffect, StyleManager, StyleMap},
+    style::{AttrSet, Color, Effect, Style, StyleManager, StyleMap},
 };
 
 /// The trait implemented by renderers.
@@ -72,7 +72,7 @@ pub struct Render<'a> {
     /// Translation offset from canvas coordinates to buffer coordinates.
     origin: Offset,
     /// Current effect stack, applied in order to resolved styles.
-    effects: &'a [Box<dyn StyleEffect>],
+    effects: &'a [Effect],
 }
 
 impl<'a> Render<'a> {
@@ -116,7 +116,7 @@ impl<'a> Render<'a> {
     }
 
     /// Set the effect stack for this renderer.
-    pub fn with_effects(mut self, effects: &'a [Box<dyn StyleEffect>]) -> Self {
+    pub fn with_effects(mut self, effects: &'a [Effect]) -> Self {
         self.effects = effects;
         self
     }

@@ -7,7 +7,6 @@ use std::{
 
 use crate::{
     Context,
-    commands::CommandNode,
     core::context::ReadContext,
     cursor,
     error::Result,
@@ -29,7 +28,7 @@ pub enum EventOutcome {
 }
 
 /// Widgets are the behavior attached to nodes in the Core arena.
-pub trait Widget: Any + Send + CommandNode {
+pub trait Widget: Any + Send {
     /// Layout configuration for this widget.
     fn layout(&self) -> Layout {
         Layout::column()

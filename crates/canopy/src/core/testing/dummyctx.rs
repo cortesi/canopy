@@ -5,7 +5,7 @@ use slotmap::Key;
 use crate::{
     Context, ReadContext,
     commands::{ArgValue, CommandError, CommandInvocation, CommandScopeFrame, ListRowContext},
-    core::{NodeId, help::OwnedHelpSnapshot, style::StyleEffect, view::View},
+    core::{NodeId, help::OwnedHelpSnapshot, style::Effect, view::View},
     error::Result,
     event::{Event, mouse::MouseEvent},
     geom::{Direction, Expanse, Point, PointI32, RectI32},
@@ -72,8 +72,6 @@ impl ReadContext for DummyContext {
     fn node_type_id(&self, _node: NodeId) -> Option<TypeId> {
         None
     }
-
-    fn invalidate_layout(&self) {}
 
     fn children_of(&self, _node: NodeId) -> Vec<NodeId> {
         Vec::new()
@@ -157,29 +155,7 @@ impl Context for DummyContext {
         false
     }
 
-    fn page_up(&mut self) -> bool {
-        false
-    }
-
-    fn page_down(&mut self) -> bool {
-        false
-    }
-
-    fn scroll_up(&mut self) -> bool {
-        false
-    }
-
-    fn scroll_down(&mut self) -> bool {
-        false
-    }
-
-    fn scroll_left(&mut self) -> bool {
-        false
-    }
-
-    fn scroll_right(&mut self) -> bool {
-        false
-    }
+    fn invalidate_layout(&mut self) {}
 
     fn with_layout_of(&mut self, _node: NodeId, _f: &mut dyn FnMut(&mut Layout)) -> Result<()> {
         Ok(())
@@ -268,7 +244,7 @@ impl Context for DummyContext {
 
     fn exit(&mut self, _code: i32) {}
 
-    fn push_effect(&mut self, _node: NodeId, _effect: Box<dyn StyleEffect>) -> Result<()> {
+    fn push_effect(&mut self, _node: NodeId, _effect: Effect) -> Result<()> {
         Ok(())
     }
 

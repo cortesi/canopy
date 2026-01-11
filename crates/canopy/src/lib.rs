@@ -26,6 +26,7 @@ mod core;
 // Public modules - re-export canopy-geom as geom for backwards compatibility
 pub use canopy_geom as geom;
 pub mod layout;
+pub mod prelude;
 pub(crate) mod widget;
 
 // Re-export submodules that users may need to access directly
@@ -35,8 +36,9 @@ pub use core::termbuf::TermBuf;
 pub use core::testing;
 // Re-export core application types
 pub use core::{
-    Binder, BindingId, Canopy, ChildKey, Context, Core, DefaultBindings, FocusManager, InputMap,
-    InputSpec, KeyedChildren, Loader, NodeId, ReadContext, RemovePolicy, Slot, TypedId,
+    Binder, BindingAction, BindingId, Canopy, ChildKey, Context, Core, DefaultBindings,
+    FocusManager, InputMap, InputSpec, KeyedChildren, Loader, NodeId, Preorder, ReadContext,
+    RemovePolicy, Slot, TypedId,
 };
 // Re-export input mapping
 pub use core::{

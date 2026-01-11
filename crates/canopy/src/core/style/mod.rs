@@ -12,7 +12,7 @@ pub mod solarized;
 use std::collections::HashMap;
 
 pub use color::Color;
-pub use effects::StyleEffect;
+pub use effects::{Effect, StyleEffect};
 
 /// A text attribute.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]

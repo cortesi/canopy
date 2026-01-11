@@ -1,10 +1,4 @@
-use canopy::{
-    Binder, Canopy, Context, Loader, ReadContext, Widget, derive_commands,
-    error::Result,
-    event::key,
-    layout::{Edges, Layout},
-    render::Render,
-};
+use canopy::{derive_commands, event::key, layout::Edges, prelude::*};
 use canopy_widgets::{
     Frame, Pad, Root,
     editor::{EditMode, Editor, EditorConfig, WrapMode, highlight::SyntectHighlighter},

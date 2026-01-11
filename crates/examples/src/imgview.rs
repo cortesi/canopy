@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use canopy::{Binder, Canopy, Loader, error::Result, event::key};
+use canopy::{event::key, prelude::*};
 use canopy_widgets::{ImageView, Root};
 
 /// Configure key bindings for the image viewer.

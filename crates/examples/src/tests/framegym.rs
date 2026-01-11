@@ -1,10 +1,4 @@
-use canopy::{
-    ReadContext,
-    error::Result,
-    geom,
-    layout::{Edges, Layout},
-    testing::harness::Harness,
-};
+use canopy::{geom, layout::Edges, prelude::*, testing::harness::Harness};
 
 use crate::framegym::{FrameGym, FrameSlot, PatternSlot};
 

@@ -1,9 +1,4 @@
-use canopy::{
-    Canopy, Context, Loader, NodeId, ReadContext, Widget, command, derive_commands,
-    error::Result,
-    layout::{Edges, Layout},
-    render::Render,
-};
+use canopy::{command, derive_commands, layout::Edges, prelude::*};
 use canopy_widgets::{CanvasWidth, Frame, Pad, Selectable, Text, VStack};
 
 /// Text sample using the default tab stop.

@@ -1,4 +1,4 @@
-use canopy::{error::Result, geom::Expanse, testing::harness::Harness};
+use canopy::{prelude::*, testing::harness::Harness};
 
 use crate::stylegym::{Stylegym, setup_bindings};
 

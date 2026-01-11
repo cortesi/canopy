@@ -173,7 +173,7 @@ macro_rules! impl_uint_to_arg_value {
         $(
             impl ToArgValue for $ty {
                 fn to_arg_value(self) -> ArgValue {
-                    ArgValue::Int(i64::from(self))
+                    ArgValue::UInt(u64::from(self))
                 }
             }
         )+
@@ -1380,10 +1380,12 @@ fn dispatch_on_node(
         return Ok(None);
     }
 
-    let result = core.with_widget_mut(node_id, |widget, core| {
-        let mut ctx = CoreContext::new(core, node_id);
-        (spec.invoke)(Some(widget as &mut dyn Any), &mut ctx, inv)
-    });
+    let result = core
+        .with_widget_mut(node_id, |widget, core| {
+            let mut ctx = CoreContext::new(core, node_id);
+            (spec.invoke)(Some(widget as &mut dyn Any), &mut ctx, inv)
+        })
+        .map_err(|err| CommandError::Exec(err.into()))?;
 
     result.map(Some)
 }

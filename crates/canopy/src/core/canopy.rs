@@ -7,8 +7,13 @@ use crate::{
     backend::BackendControl,
     commands,
     core::{
-        Core, NodeId, context::CoreViewContext, dump::dump_with_focus, focus::FocusManager, help,
-        style::StyleEffect, view::View,
+        Core, NodeId,
+        context::{CoreViewContext, ReadContext},
+        dump::dump_with_focus,
+        focus::FocusManager,
+        help,
+        style::Effect,
+        view::View,
     },
     cursor,
     error::{self, Result},
@@ -58,6 +63,16 @@ pub struct Canopy {
     pub style: StyleMap,
 }
 
+/// Binding target used by [`Canopy::bind`].
+pub enum BindingAction<'a> {
+    /// Compile and bind a script source.
+    Script(&'a str),
+    /// Bind an already-compiled script id.
+    ScriptId(script::ScriptId),
+    /// Bind a typed command invocation.
+    Command(commands::CommandInvocation),
+}
+
 /// Rendering traversal scratch state shared across recursion.
 struct RenderTraversal<'a> {
     /// Destination buffer for draw operations.
@@ -65,7 +80,7 @@ struct RenderTraversal<'a> {
     /// Style manager stack.
     styl: &'a mut StyleManager,
     /// Accumulated style effects for the current subtree.
-    effect_stack: &'a mut Vec<Box<dyn StyleEffect>>,
+    effect_stack: &'a mut Vec<Effect>,
 }
 
 impl Canopy {
@@ -125,6 +140,29 @@ impl Canopy {
         self.bind_mode_mouse(mouse, "", path_filter, script)
     }
 
+    /// Bind an input in a specified mode with a given path filter to a script or command.
+    ///
+    /// Returns the new binding ID.
+    pub fn bind(
+        &mut self,
+        mode: &str,
+        input: inputmap::InputSpec,
+        path_filter: &str,
+        action: BindingAction<'_>,
+    ) -> Result<inputmap::BindingId> {
+        match action {
+            BindingAction::Script(src) => {
+                let sid = self.script_host.compile(src)?;
+                self.keymap.bind(mode, input, path_filter, sid)
+            }
+            BindingAction::ScriptId(sid) => self.keymap.bind(mode, input, path_filter, sid),
+            BindingAction::Command(invocation) => {
+                self.keymap
+                    .bind_command(mode, input, path_filter, invocation)
+            }
+        }
+    }
+
     /// Bind a mouse action in a specified mode with a given path filter to a script.
     ///
     /// Returns the new binding ID.
@@ -138,11 +176,11 @@ impl Canopy {
     where
         mouse::Mouse: From<K>,
     {
-        self.keymap.bind(
+        self.bind(
             mode,
             inputmap::InputSpec::Mouse(mouse.into()),
             path_filter,
-            self.script_host.compile(script)?,
+            BindingAction::Script(script),
         )
     }
 
@@ -190,11 +228,11 @@ impl Canopy {
     where
         key::Key: From<K>,
     {
-        self.keymap.bind(
+        self.bind(
             mode,
             inputmap::InputSpec::Key(key.into()),
             path_filter,
-            self.script_host.compile(script)?,
+            BindingAction::Script(script),
         )
     }
 
@@ -228,12 +266,11 @@ impl Canopy {
         key::Key: From<K>,
         C: Into<commands::CommandInvocation>,
     {
-        let invocation = command.into();
-        self.keymap.bind_command(
+        self.bind(
             mode,
             inputmap::InputSpec::Key(key.into()),
             path_filter,
-            invocation,
+            BindingAction::Command(command.into()),
         )
     }
 
@@ -251,12 +288,11 @@ impl Canopy {
         mouse::Mouse: From<K>,
         C: Into<commands::CommandInvocation>,
     {
-        let invocation = command.into();
-        self.keymap.bind_command(
+        self.bind(
             mode,
             inputmap::InputSpec::Mouse(mouse.into()),
             path_filter,
-            invocation,
+            BindingAction::Command(command.into()),
         )
     }
 
@@ -366,19 +402,15 @@ impl Canopy {
         start: NodeId,
     ) -> HashMap<String, commands::CommandResolution> {
         let mut map: HashMap<String, commands::CommandResolution> = HashMap::new();
+        let ctx = CoreViewContext::new(&self.core, start);
+        let ctx = &ctx as &dyn ReadContext;
 
         // 1) Walk subtree in pre-order
-        let mut stack = vec![start];
-        while let Some(id) = stack.pop() {
+        for id in ctx.preorder(start) {
             if let Some(node) = self.core.nodes.get(id) {
                 let name = node.name.to_string();
                 map.entry(name)
                     .or_insert(commands::CommandResolution::Subtree { target: id });
-
-                // Push children in reverse order for correct pre-order traversal
-                for child in node.children.iter().rev() {
-                    stack.push(*child);
-                }
             }
         }
 
@@ -648,7 +680,7 @@ impl Canopy {
                 let next = self.core.with_widget_mut(id, |w, core| {
                     let mut ctx = crate::core::context::CoreContext::new(core, id);
                     w.poll(&mut ctx)
-                });
+                })?;
                 if let Some(d) = next {
                     self.poller.schedule(id, d);
                 }
@@ -672,13 +704,13 @@ impl Canopy {
 
     /// Render a single node (without children).
     fn render_node(
-        &mut self,
+        &self,
         dest_buf: &mut TermBuf,
         styl: &mut StyleManager,
         node_id: NodeId,
         view: View,
         screen_clip: Rect,
-        effect_slice: &[Box<dyn StyleEffect>],
+        effect_slice: &[Effect],
     ) -> Result<()> {
         let local_clip = Self::outer_clip_to_local(view.outer, screen_clip);
         let screen_origin = screen_clip.tl;
@@ -689,7 +721,7 @@ impl Canopy {
         self.core.with_widget_view(node_id, |widget, core| {
             let ctx = CoreViewContext::new(core, node_id);
             widget.render(&mut rndr, &ctx)
-        })
+        })?
     }
 
     /// Recursively render a node subtree.
@@ -728,9 +760,7 @@ impl Canopy {
         };
 
         if let Some(local) = self.core.nodes[node_id].effects.as_ref() {
-            for effect in local {
-                traversal.effect_stack.push(effect.box_clone());
-            }
+            traversal.effect_stack.extend(local.iter().cloned());
         }
 
         let current_len = base_len + traversal.effect_stack.len() - saved_len;
@@ -770,7 +800,7 @@ impl Canopy {
         let mut next = TermBuf::new(root_size, ' ', def_style);
 
         let screen_clip = Rect::new(0, 0, root_size.w, root_size.h);
-        let mut effect_stack: Vec<Box<dyn StyleEffect>> = Vec::new();
+        let mut effect_stack: Vec<Effect> = Vec::new();
         let mut traversal = RenderTraversal {
             dest_buf: &mut next,
             styl: &mut styl,
@@ -783,11 +813,11 @@ impl Canopy {
     }
 
     /// Post-render sweep of the tree.
-    pub(crate) fn post_render(&mut self, buf: &mut TermBuf) -> Result<()> {
+    pub(crate) fn post_render(&self, buf: &mut TermBuf) -> Result<()> {
         let mut current = self.core.focus;
         let mut cursor_spec: Option<(NodeId, View, cursor::Cursor)> = None;
         while let Some(id) = current {
-            let cursor = self.core.with_widget_view(id, |w, _| w.cursor());
+            let cursor = self.core.with_widget_view(id, |w, _| w.cursor())?;
             if let Some(node_cursor) = cursor
                 && let Some(node) = self.core.nodes.get(id)
             {
@@ -1072,7 +1102,7 @@ impl Canopy {
                 let next = self.core.with_widget_mut(*id, |w, core| {
                     let mut ctx = crate::core::context::CoreContext::new(core, *id);
                     w.poll(&mut ctx)
-                });
+                })?;
                 if let Some(d) = next {
                     self.poller.schedule(*id, d);
                 }
@@ -1223,7 +1253,7 @@ mod tests {
     }
 
     fn set_outcome<T: Any + OutcomeTarget>(core: &mut Core, id: NodeId, outcome: EventOutcome) {
-        core.with_widget_mut(id, |w, _| {
+        let _ignored = core.with_widget_mut(id, |w, _| {
             let any = w as &mut dyn Any;
             if let Some(node) = any.downcast_mut::<T>() {
                 node.set_outcome(outcome);
@@ -1238,6 +1268,7 @@ mod tests {
                 .map(|widget| widget.drags)
                 .unwrap_or(0)
         })
+        .unwrap_or(0)
     }
 
     fn make_mouse_event(core: &Core, node_id: NodeId) -> mouse::MouseEvent {

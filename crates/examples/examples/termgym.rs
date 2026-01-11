@@ -3,9 +3,8 @@
 use std::{io, process};
 
 use canopy::{
-    Canopy, Loader,
     backend::crossterm::{RunloopOptions, runloop_with_options},
-    error::Result,
+    prelude::*,
 };
 use canopy_examples::termgym::{TermGym, setup_bindings};
 use canopy_widgets::Root;

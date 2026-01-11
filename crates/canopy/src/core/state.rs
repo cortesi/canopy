@@ -11,7 +11,7 @@ pub fn valid_nodename_char(c: char) -> bool {
 
 /// Return true if the full name is valid.
 pub fn valid_nodename(name: &str) -> bool {
-    name.chars().all(valid_nodename_char)
+    !name.is_empty() && name.chars().all(valid_nodename_char)
 }
 
 /// A node name, which consists of lowercase ASCII alphanumeric characters, plus
@@ -45,10 +45,14 @@ impl NodeName {
     /// first converting the string to snake case, then removing all invalid
     /// characters.
     pub fn convert(name: &str) -> Self {
-        let name = name.to_case(Case::Snake);
-        Self {
-            name: name.chars().filter(|x| valid_nodename_char(*x)).collect(),
-        }
+        let raw = name.to_case(Case::Snake);
+        let filtered: String = raw.chars().filter(|x| valid_nodename_char(*x)).collect();
+        let name = if filtered.is_empty() {
+            "node".to_string()
+        } else {
+            filtered
+        };
+        Self { name }
     }
 }
 
@@ -90,6 +94,7 @@ mod tests {
         assert!(valid_nodename_char('_'));
         assert!(!valid_nodename_char('A'));
         assert!(!valid_nodename_char('-'));
+        assert!(!valid_nodename(""));
     }
 
     #[test]
@@ -99,5 +104,7 @@ mod tests {
         assert_eq!(NodeName::convert("Foo"), "foo");
         assert_eq!(NodeName::convert("FooBar"), "foo_bar");
         assert_eq!(NodeName::convert("FooBar Voing"), "foo_bar_voing");
+        assert_eq!(NodeName::convert(""), "node");
+        assert_eq!(NodeName::convert("!!!"), "node");
     }
 }

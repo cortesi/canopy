@@ -1,10 +1,4 @@
-use canopy::{
-    Context, NodeId,
-    error::{Error, Result},
-    geom::{Expanse, Point, RectI32},
-    layout::{Layout, Sizing},
-    testing::harness::Harness,
-};
+use canopy::{error::Error, geom::RectI32, prelude::*, testing::harness::Harness};
 
 use crate::focusgym::{Block, FocusGym, setup_bindings};
 

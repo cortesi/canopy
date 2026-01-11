@@ -139,7 +139,7 @@ where
     }
 
     /// Handle a click inside the dropdown.
-    fn handle_click(&mut self, c: &dyn Context, event: mouse::MouseEvent) -> Result<bool> {
+    fn handle_click(&mut self, c: &mut dyn Context, event: mouse::MouseEvent) -> Result<bool> {
         if event.action != mouse::Action::Down || event.button != mouse::Button::Left {
             return Ok(false);
         }

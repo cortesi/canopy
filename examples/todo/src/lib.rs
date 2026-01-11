@@ -1,15 +1,10 @@
 use anyhow::Result as AnyResult;
 use canopy::{
-    Binder, Canopy, Context, Loader, NodeId, ReadContext, Widget, command,
+    command,
     commands::VerticalDirection,
     derive_commands,
-    error::Result,
-    event::{key, mouse},
-    geom::Rect,
-    key,
-    layout::{Constraint, Direction, Layout, MeasureConstraints, Measurement, Size},
-    render::Render,
-    state::NodeName,
+    event::key,
+    prelude::*,
     style::{effects, solarized},
 };
 use canopy_widgets::{Frame, Input, List, Modal, Root, Selectable};
@@ -392,25 +387,37 @@ pub fn style(cnpy: &mut Canopy) {
 pub fn bind_keys(cnpy: &mut Canopy) {
     Binder::new(cnpy)
         .with_path("todo/")
-        .key('q', "root::quit()")
-        .key('d', "todo::delete_item()")
-        .key('a', "todo::enter_item()")
-        .key('g', "todo::select_first()")
-        .key('j', "todo::select_by(1)")
-        .key(key::KeyCode::Down, "todo::select_by(1)")
-        .key('k', "todo::select_by(-1)")
-        .key(key::KeyCode::Up, "todo::select_by(-1)")
-        .key(' ', "todo::page(\\\"down\\\")")
-        .key(key::KeyCode::PageDown, "todo::page(\\\"down\\\")")
-        .key(key::KeyCode::PageUp, "todo::page(\\\"up\\\")")
-        .mouse(mouse::Action::ScrollUp, "todo::select_by(-1)")
-        .mouse(mouse::Action::ScrollDown, "todo::select_by(1)")
+        .key_command('q', Root::cmd_quit().call())
+        .key_command('d', Todo::cmd_delete_item().call())
+        .key_command('a', Todo::cmd_enter_item().call())
+        .key_command('g', Todo::cmd_select_first().call())
+        .key_command('j', Todo::cmd_select_by().call_with([1]))
+        .key_command(key::KeyCode::Down, Todo::cmd_select_by().call_with([1]))
+        .key_command('k', Todo::cmd_select_by().call_with([-1]))
+        .key_command(key::KeyCode::Up, Todo::cmd_select_by().call_with([-1]))
+        .key_command(' ', Todo::cmd_page().call_with([VerticalDirection::Down]))
+        .key_command(
+            key::KeyCode::PageDown,
+            Todo::cmd_page().call_with([VerticalDirection::Down]),
+        )
+        .key_command(
+            key::KeyCode::PageUp,
+            Todo::cmd_page().call_with([VerticalDirection::Up]),
+        )
+        .mouse_command(
+            mouse::Action::ScrollUp,
+            Todo::cmd_select_by().call_with([-1]),
+        )
+        .mouse_command(
+            mouse::Action::ScrollDown,
+            Todo::cmd_select_by().call_with([1]),
+        )
         .with_path("input")
-        .key(key::KeyCode::Left, "input::left()")
-        .key(key::KeyCode::Right, "input::right()")
-        .key(key::KeyCode::Backspace, "input::backspace()")
-        .key(key::KeyCode::Enter, "todo::accept_add()")
-        .key(key::KeyCode::Esc, "todo::cancel_add()");
+        .key_command(key::KeyCode::Left, Input::cmd_left().call())
+        .key_command(key::KeyCode::Right, Input::cmd_right().call())
+        .key_command(key::KeyCode::Backspace, Input::cmd_backspace().call())
+        .key_command(key::KeyCode::Enter, Todo::cmd_accept_add().call())
+        .key_command(key::KeyCode::Esc, Todo::cmd_cancel_add().call());
 }
 
 pub fn open_store(path: &str) -> AnyResult<()> {

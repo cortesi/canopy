@@ -1,4 +1,5 @@
 use crate::{
+    ReadContext,
     core::{context::CoreViewContext, id::NodeId, world::Core},
     geom::{Direction, RectI32},
     path::Path,
@@ -146,19 +147,11 @@ impl FocusManager for Core {
 
     fn focus_dir(&mut self, root: NodeId, dir: Direction) {
         let mut focusables = Vec::new();
-        let mut stack = vec![root];
-        while let Some(id) = stack.pop() {
-            let Some(node) = self.nodes.get(id) else {
-                continue;
-            };
-            if node.hidden {
-                continue;
-            }
+        let ctx = CoreViewContext::new(self, root);
+        let ctx = &ctx as &dyn ReadContext;
+        for id in ctx.preorder(root) {
             if is_focus_candidate(self, id, true) {
                 focusables.push(id);
-            }
-            for child in node.children.iter().rev() {
-                stack.push(*child);
             }
         }
 
@@ -340,19 +333,10 @@ fn first_focusable(core: &Core, root: NodeId) -> Option<NodeId> {
 
 /// Return the first focusable node under `root` with view requirement control.
 fn first_focusable_with(core: &Core, root: NodeId, require_view: bool) -> Option<NodeId> {
-    let mut stack = vec![root];
-    while let Some(id) = stack.pop() {
-        let Some(node) = core.nodes.get(id) else {
-            continue;
-        };
-        if is_focus_candidate(core, id, require_view) {
-            return Some(id);
-        }
-        for child in node.children.iter().rev() {
-            stack.push(*child);
-        }
-    }
-    None
+    let ctx = CoreViewContext::new(core, root);
+    let ctx = &ctx as &dyn ReadContext;
+    ctx.preorder(root)
+        .find(|id| is_focus_candidate(core, *id, require_view))
 }
 
 /// Find next focusable node after `target`.
@@ -375,22 +359,22 @@ fn find_next_focus_with(
     skip_subtree: bool,
     require_view: bool,
 ) -> Option<NodeId> {
-    let mut stack = vec![root];
+    let ctx = CoreViewContext::new(core, root);
+    let ctx = &ctx as &dyn ReadContext;
     let mut past_target = false;
-    while let Some(id) = stack.pop() {
+    for id in ctx.preorder(root) {
         if id == target {
             past_target = true;
-            if skip_subtree {
-                continue;
-            }
-        } else if past_target && is_focus_candidate(core, id, require_view) {
-            return Some(id);
+            continue;
         }
-
-        if let Some(node) = core.nodes.get(id) {
-            for child in node.children.iter().rev() {
-                stack.push(*child);
-            }
+        if !past_target {
+            continue;
+        }
+        if skip_subtree && is_descendant(core, target, id) {
+            continue;
+        }
+        if is_focus_candidate(core, id, require_view) {
+            return Some(id);
         }
     }
     None
@@ -416,8 +400,9 @@ fn find_prev_focus_with(
     require_view: bool,
 ) -> Option<NodeId> {
     let mut prev = None;
-    let mut stack = vec![root];
-    while let Some(id) = stack.pop() {
+    let ctx = CoreViewContext::new(core, root);
+    let ctx = &ctx as &dyn ReadContext;
+    for id in ctx.preorder(root) {
         if let Some(t) = target
             && id == t
         {
@@ -426,13 +411,20 @@ fn find_prev_focus_with(
         if is_focus_candidate(core, id, require_view) {
             prev = Some(id);
         }
-        if let Some(node) = core.nodes.get(id) {
-            for child in node.children.iter().rev() {
-                stack.push(*child);
-            }
-        }
     }
     prev
+}
+
+/// Return true if `node` is within the subtree rooted at `root`.
+fn is_descendant(core: &Core, root: NodeId, node: NodeId) -> bool {
+    let mut current = Some(node);
+    while let Some(id) = current {
+        if id == root {
+            return true;
+        }
+        current = core.nodes.get(id).and_then(|n| n.parent);
+    }
+    false
 }
 
 /// Return the nearest focusable ancestor of `start` with optional view requirement.
@@ -462,9 +454,12 @@ fn is_focus_candidate(core: &Core, node_id: NodeId, require_view: bool) -> bool 
     if require_view && node.view.is_zero() {
         return false;
     }
-    // Inline node_accepts_focus
-    node.widget.as_ref().is_some_and(|widget| {
-        let ctx = CoreViewContext::new(core, node_id);
-        widget.accept_focus(&ctx)
-    })
+    let Ok(widget) = node.widget.try_borrow() else {
+        return false;
+    };
+    let Some(widget) = widget.as_ref() else {
+        return false;
+    };
+    let ctx = CoreViewContext::new(core, node_id);
+    widget.accept_focus(&ctx)
 }

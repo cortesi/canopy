@@ -1,10 +1,10 @@
 use canopy::{
-    Binder, Canopy, Context, Loader, NodeId, Widget, command,
+    command,
     commands::{ScrollDirection, VerticalDirection},
     derive_commands,
-    error::Result,
     event::{key, mouse},
-    layout::{CanvasContext, Direction, Edges, Layout, Size},
+    layout::{CanvasContext, Edges},
+    prelude::*,
 };
 use canopy_widgets::{
     Frame, Root,

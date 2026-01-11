@@ -4,7 +4,7 @@ use std::{path::PathBuf, process};
 
 use canopy::{
     backend::crossterm::{RunloopOptions, runloop_with_options},
-    error::Result,
+    prelude::*,
 };
 use canopy_examples::imgview::create_app;
 use clap::Parser;

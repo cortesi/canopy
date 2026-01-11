@@ -1,7 +1,7 @@
-use std::{any::TypeId, cell::Cell, collections::HashMap};
+use std::{any::TypeId, cell::RefCell, collections::HashMap};
 
 use crate::{
-    core::{id::NodeId, style::StyleEffect, view::View},
+    core::{id::NodeId, style::Effect, view::View},
     geom::{Expanse, Point, Rect},
     layout::Layout,
     state::NodeName,
@@ -11,7 +11,7 @@ use crate::{
 /// Core node data stored in the arena.
 pub struct Node {
     /// Widget behavior and state.
-    pub(crate) widget: Option<Box<dyn Widget>>,
+    pub(crate) widget: RefCell<Option<Box<dyn Widget>>>,
 
     /// Widget type identifier for fast type checks.
     pub(crate) widget_type: TypeId,
@@ -46,11 +46,11 @@ pub struct Node {
     /// Whether the widget mount hook has run.
     pub(crate) mounted: bool,
     /// Whether layout configuration should be refreshed from the widget.
-    pub(crate) layout_dirty: Cell<bool>,
+    pub(crate) layout_dirty: bool,
 
     /// Effects to apply to this node and descendants during rendering.
     /// None for the common case of no effects (avoids per-node Vec allocation).
-    pub(crate) effects: Option<Vec<Box<dyn StyleEffect>>>,
+    pub(crate) effects: Option<Vec<Effect>>,
     /// If true, clear inherited effects before applying local effects.
     pub(crate) clear_inherited_effects: bool,
 }
