@@ -1,8 +1,8 @@
 use canopy::{
     ReadContext, Widget,
     error::Result,
-    geom::{Expanse, Point},
-    layout::Layout,
+    geom::{Expanse, Point, Rect},
+    layout::{Align, Layout},
     render::Render,
     style::ResolvedStyle,
 };
@@ -150,8 +150,10 @@ impl Widget for FontBanner {
         } else {
             self.style.clone()
         };
+        let options = self.options;
         let layout = self.layout_for(size);
 
+        let bounds = content_rect(view_rect, layout, options);
         for (row_idx, row) in layout.cells.iter().enumerate() {
             let y = view_rect.tl.y.saturating_add(row_idx as u32);
             if y >= view_rect.tl.y.saturating_add(view_rect.h) {
@@ -166,7 +168,7 @@ impl Widget for FontBanner {
                     continue;
                 }
                 let point = Point { x, y };
-                let resolved = rndr.resolve_style_name_at(&style, view_rect, point);
+                let resolved = rndr.resolve_style_name_at(&style, bounds, point);
                 let blended = blend_style(resolved, cell.fg_coverage, cell.bg_coverage);
                 rndr.put_cell(blended, point, cell.ch)?;
             }
@@ -182,4 +184,33 @@ fn blend_style(resolved: ResolvedStyle, fg_cov: u8, bg_cov: u8) -> ResolvedStyle
     let fg = resolved.bg.blend(resolved.fg, fg_weight);
     let bg = resolved.bg.blend(resolved.fg, bg_weight);
     ResolvedStyle::new(fg, bg, resolved.attrs)
+}
+
+/// Compute a gradient bounds rect aligned to the rendered content.
+fn content_rect(view_rect: Rect, layout: &FontLayout, options: LayoutOptions) -> Rect {
+    if layout.content_size.w == 0 || layout.content_size.h == 0 {
+        return view_rect;
+    }
+
+    let offset_x = align_offset(layout.content_size.w, layout.size.w, options.h_align);
+    let offset_y = align_offset(layout.content_size.h, layout.size.h, options.v_align);
+
+    Rect::new(
+        view_rect.tl.x.saturating_add(offset_x),
+        view_rect.tl.y.saturating_add(offset_y),
+        layout.content_size.w,
+        layout.content_size.h,
+    )
+}
+
+/// Align content inside an available span.
+fn align_offset(content: u32, available: u32, align: Align) -> u32 {
+    if available <= content {
+        return 0;
+    }
+    match align {
+        Align::Start => 0,
+        Align::Center => (available - content) / 2,
+        Align::End => available - content,
+    }
 }

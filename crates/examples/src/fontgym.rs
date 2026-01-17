@@ -1,7 +1,7 @@
-use std::time::Duration;
+use std::{f32::consts::TAU, time::Duration};
 
 use canopy::{
-    Canopy, Context, EventOutcome, Loader, ReadContext, Widget, command,
+    Binder, Canopy, Context, EventOutcome, Loader, ReadContext, Widget, command,
     cursor::{Cursor, CursorShape},
     derive_commands,
     error::Result,
@@ -27,7 +27,7 @@ const BANNER_HEIGHT: u32 = 16;
 /// Minimum height for banner blocks.
 const MIN_BANNER_HEIGHT: u32 = 4;
 /// Fixed height for the status row.
-const STATUS_HEIGHT: u32 = 9;
+const STATUS_HEIGHT: u32 = 13;
 /// Minimum width for the controls panel.
 const CONTROLS_PANEL_WIDTH: u32 = 44;
 /// Minimum width for the status panel.
@@ -43,15 +43,21 @@ const LABEL_HEIGHT: u32 = 1;
 /// Gap between banner and label.
 const LABEL_GAP: u32 = 1;
 /// Milliseconds between gradient animation steps.
-const GRADIENT_POLL_MS: u64 = 60;
-/// Degrees advanced per animation step.
-const GRADIENT_STEP_DEG: f32 = 2.5;
+const GRADIENT_POLL_MS: u64 = 50;
+/// Phase step for gradient color animation.
+const GRADIENT_PHASE_STEP: f32 = 0.01;
+/// Base angle for gradient direction.
+const GRADIENT_BASE_ANGLE: f32 = 25.0;
+/// Hue sweep amplitude for animated palettes.
+const HUE_SWEEP_DEG: f32 = 60.0;
 /// Angle offset for the solar gradient.
 const SOLAR_ANGLE_OFFSET: f32 = 0.0;
 /// Angle offset for the ocean gradient.
 const OCEAN_ANGLE_OFFSET: f32 = 120.0;
 /// Angle offset for the ember gradient.
 const EMBER_ANGLE_OFFSET: f32 = 240.0;
+/// Angle offset for the violet gradient.
+const VIOLET_ANGLE_OFFSET: f32 = 300.0;
 
 /// Toggle state for banner font styles.
 #[derive(Debug, Clone, Copy, Default)]
@@ -86,8 +92,8 @@ impl FontStyleState {
 
 /// Demo node that renders ASCII font banners.
 pub struct FontGym {
-    /// Animated gradient angle.
-    gradient_angle: f32,
+    /// Animated gradient phase.
+    gradient_phase: f32,
 }
 
 impl Default for FontGym {
@@ -101,7 +107,7 @@ impl FontGym {
     /// Construct a new font gym demo.
     pub fn new() -> Self {
         Self {
-            gradient_angle: 0.0,
+            gradient_phase: 0.0,
         }
     }
 
@@ -117,7 +123,7 @@ impl Widget for FontGym {
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
         let style_state = FontStyleState::default();
-        ctx.set_style(font_styles(self.gradient_angle));
+        ctx.set_style(font_styles(self.gradient_phase));
 
         let list_id = ctx.create_detached(List::new());
         ctx.set_layout_of(list_id, Layout::fill())?;
@@ -162,11 +168,23 @@ impl Widget for FontGym {
             .with_effects(style_state.effects())
             .with_style("font/banner/ember")
             .with_layout_options(centered);
+            let font_d = load_font_tangerine();
+            let font_d_name = font_label(&font_d);
+            let banner_d = FontBanner::new(
+                DEFAULT_TEXT,
+                FontRenderer::new(font_d)
+                    .with_ramp(GlyphRamp::blocks())
+                    .with_fallback('?'),
+            )
+            .with_effects(style_state.effects())
+            .with_style("font/banner/violet")
+            .with_layout_options(centered);
 
             for (banner, label) in [
                 (banner_a, font_a_name),
                 (banner_b, font_b_name),
                 (banner_c, font_c_name),
+                (banner_d, font_d_name),
             ] {
                 let id = list.append(ctx, FontBlock::new(banner, label, BANNER_HEIGHT))?;
                 ctx.set_layout_of(id, block_layout(BANNER_HEIGHT))?;
@@ -175,6 +193,13 @@ impl Widget for FontGym {
 
             Ok(ids)
         })?;
+
+        let font_frame_id = ctx.create_detached(FocusFrame::new(
+            Frame::new().with_title("Fonts").with_glyphs(ROUND_THICK),
+            list_id,
+        ));
+        ctx.set_children_of(font_frame_id.into(), vec![list_id.into()])?;
+        ctx.set_layout_of(font_frame_id, Layout::fill().padding(Edges::all(1)))?;
 
         let controls_id = ctx.create_detached(ControlsLegend);
         let controls_pad = Pad::wrap_with(
@@ -234,7 +259,7 @@ impl Widget for FontGym {
         let stack = VStack::new()
             .push_fixed(input_frame, INPUT_HEIGHT)
             .push_fixed(status_row_id, STATUS_HEIGHT)
-            .push_flex(list_id, 1);
+            .push_flex(font_frame_id, 1);
         let stack_id = ctx.add_child(stack)?;
         ctx.set_layout_of(stack_id, Layout::fill())?;
         ctx.set_focus(input_id.into());
@@ -242,8 +267,8 @@ impl Widget for FontGym {
     }
 
     fn poll(&mut self, ctx: &mut dyn Context) -> Option<Duration> {
-        self.gradient_angle = (self.gradient_angle + GRADIENT_STEP_DEG) % 360.0;
-        ctx.set_style(font_styles(self.gradient_angle));
+        self.gradient_phase = (self.gradient_phase + GRADIENT_PHASE_STEP).fract();
+        ctx.set_style(font_styles(self.gradient_phase));
         Some(Duration::from_millis(GRADIENT_POLL_MS))
     }
 }
@@ -252,6 +277,67 @@ impl Loader for FontGym {
     fn load(c: &mut Canopy) -> Result<()> {
         c.add_commands::<Self>()?;
         Ok(())
+    }
+}
+
+/// Focusable frame wrapper that delegates rendering and handles keyboard scroll.
+struct FocusFrame {
+    /// Inner frame widget.
+    frame: Frame,
+    /// List widget to scroll.
+    list_id: canopy::TypedId<List<FontBlock>>,
+}
+
+impl FocusFrame {
+    /// Build a new focusable frame for the font list.
+    fn new(frame: Frame, list_id: canopy::TypedId<List<FontBlock>>) -> Self {
+        Self { frame, list_id }
+    }
+
+    /// Scroll the list view using the provided action.
+    fn scroll_list(
+        &self,
+        ctx: &mut dyn Context,
+        action: impl FnOnce(&mut dyn Context) -> bool,
+    ) -> Result<bool> {
+        ctx.with_typed(self.list_id, |_, list_ctx| Ok(action(list_ctx)))
+    }
+}
+
+impl Widget for FocusFrame {
+    fn layout(&self) -> Layout {
+        Layout::fill()
+    }
+
+    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+        true
+    }
+
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+        self.frame.render(rndr, ctx)
+    }
+
+    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
+        if let Event::Key(raw) = event {
+            let normalized = raw.normalize();
+            let handled = match normalized.key {
+                key::KeyCode::Up => self.scroll_list(ctx, |ctx| ctx.scroll_up())?,
+                key::KeyCode::Down => self.scroll_list(ctx, |ctx| ctx.scroll_down())?,
+                key::KeyCode::PageUp => self.scroll_list(ctx, |ctx| ctx.page_up())?,
+                key::KeyCode::PageDown => self.scroll_list(ctx, |ctx| ctx.page_down())?,
+                _ => false,
+            };
+
+            if handled {
+                return Ok(EventOutcome::Handle);
+            }
+        }
+
+        self.frame.on_event(event, ctx)
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("fontgym-focus-frame")
     }
 }
 
@@ -599,9 +685,6 @@ impl Widget for FontGymInput {
     fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
         if let Event::Key(raw) = event {
             let normalized = raw.normalize();
-            if matches!(normalized.key, key::KeyCode::Tab) && self.toggle_style(ctx, 'i')? {
-                return Ok(EventOutcome::Handle);
-            }
             if normalized.mods.ctrl {
                 match normalized.key {
                     key::KeyCode::Up => {
@@ -799,6 +882,20 @@ fn controls_legend_lines() -> Vec<Vec<LegendSegment>> {
     let indent = "         ";
     vec![
         vec![
+            LegendSegment::title("Focus"),
+            LegendSegment::text(" : "),
+            LegendSegment::key("Tab"),
+            LegendSegment::text(" / "),
+            LegendSegment::key("Shift+Tab"),
+        ],
+        vec![
+            LegendSegment::title("Scroll"),
+            LegendSegment::text(" : "),
+            LegendSegment::key("PgUp"),
+            LegendSegment::text(" / "),
+            LegendSegment::key("PgDn"),
+        ],
+        vec![
             LegendSegment::title("Height"),
             LegendSegment::text(" : "),
             LegendSegment::key("Ctrl+Up"),
@@ -811,8 +908,6 @@ fn controls_legend_lines() -> Vec<Vec<LegendSegment>> {
             LegendSegment::key("Ctrl+B"),
             LegendSegment::text(" Bold  "),
             LegendSegment::key("Ctrl+I"),
-            LegendSegment::text(" or "),
-            LegendSegment::key("Tab"),
             LegendSegment::text(" Italic"),
         ],
         vec![
@@ -864,6 +959,14 @@ fn load_font_fira() -> Font {
     .expect("fira mono font loads")
 }
 
+/// Load the Tangerine calligraphic font.
+fn load_font_tangerine() -> Font {
+    Font::from_bytes(include_bytes!(
+        "../../canopy-widgets/assets/fonts/Tangerine-Regular.ttf"
+    ))
+    .expect("tangerine font loads")
+}
+
 /// Build a label string for a font.
 fn font_label(font: &Font) -> String {
     let name = font.name().unwrap_or("Unknown font");
@@ -886,8 +989,45 @@ fn block_layout(banner_height: u32) -> Layout {
 }
 
 /// Construct the style map used by the demo banners.
-fn font_styles(angle_deg: f32) -> StyleMap {
+fn font_styles(phase: f32) -> StyleMap {
     let mut style = StyleMap::new();
+    let hue = (phase * TAU).sin() * HUE_SWEEP_DEG;
+    let solar = shift_palette(
+        [
+            Color::rgb("#FFF200"),
+            Color::rgb("#FF9F00"),
+            Color::rgb("#FF003C"),
+            Color::rgb("#7A00FF"),
+        ],
+        hue,
+    );
+    let ocean = shift_palette(
+        [
+            Color::rgb("#00F5FF"),
+            Color::rgb("#0084FF"),
+            Color::rgb("#003BFF"),
+            Color::rgb("#00FF9D"),
+        ],
+        hue,
+    );
+    let ember = shift_palette(
+        [
+            Color::rgb("#FFD000"),
+            Color::rgb("#FF7A00"),
+            Color::rgb("#FF1F00"),
+            Color::rgb("#B00000"),
+        ],
+        hue,
+    );
+    let violet = shift_palette(
+        [
+            Color::rgb("#FFD6FF"),
+            Color::rgb("#B5179E"),
+            Color::rgb("#7209B7"),
+            Color::rgb("#4361EE"),
+        ],
+        hue,
+    );
     style
         .rules()
         .attrs(
@@ -917,41 +1057,53 @@ fn font_styles(angle_deg: f32) -> StyleMap {
         .fg(
             "font/banner/solar",
             Paint::gradient(GradientSpec::with_stops(
-                angle_deg + SOLAR_ANGLE_OFFSET,
-                vec![
-                    GradientStop::new(0.0, Color::rgb("#FFF200")),
-                    GradientStop::new(0.35, Color::rgb("#FF9F00")),
-                    GradientStop::new(0.7, Color::rgb("#FF003C")),
-                    GradientStop::new(1.0, Color::rgb("#7A00FF")),
-                ],
+                GRADIENT_BASE_ANGLE + SOLAR_ANGLE_OFFSET,
+                gradient_stops(solar),
             )),
         )
         .fg(
             "font/banner/ocean",
             Paint::gradient(GradientSpec::with_stops(
-                angle_deg + OCEAN_ANGLE_OFFSET,
-                vec![
-                    GradientStop::new(0.0, Color::rgb("#00F5FF")),
-                    GradientStop::new(0.4, Color::rgb("#0084FF")),
-                    GradientStop::new(0.75, Color::rgb("#003BFF")),
-                    GradientStop::new(1.0, Color::rgb("#00FF9D")),
-                ],
+                GRADIENT_BASE_ANGLE + OCEAN_ANGLE_OFFSET,
+                gradient_stops(ocean),
             )),
         )
         .fg(
             "font/banner/ember",
             Paint::gradient(GradientSpec::with_stops(
-                angle_deg + EMBER_ANGLE_OFFSET,
-                vec![
-                    GradientStop::new(0.0, Color::rgb("#FFD000")),
-                    GradientStop::new(0.35, Color::rgb("#FF7A00")),
-                    GradientStop::new(0.7, Color::rgb("#FF1F00")),
-                    GradientStop::new(1.0, Color::rgb("#B00000")),
-                ],
+                GRADIENT_BASE_ANGLE + EMBER_ANGLE_OFFSET,
+                gradient_stops(ember),
+            )),
+        )
+        .fg(
+            "font/banner/violet",
+            Paint::gradient(GradientSpec::with_stops(
+                GRADIENT_BASE_ANGLE + VIOLET_ANGLE_OFFSET,
+                gradient_stops(violet),
             )),
         )
         .apply();
     style
+}
+
+/// Shift a palette by the provided hue delta in degrees.
+fn shift_palette(colors: [Color; 4], hue_deg: f32) -> [Color; 4] {
+    [
+        colors[0].shift_hue(hue_deg),
+        colors[1].shift_hue(hue_deg),
+        colors[2].shift_hue(hue_deg),
+        colors[3].shift_hue(hue_deg),
+    ]
+}
+
+/// Build gradient stops from a four-color palette.
+fn gradient_stops(colors: [Color; 4]) -> Vec<GradientStop> {
+    vec![
+        GradientStop::new(0.0, colors[0]),
+        GradientStop::new(0.35, colors[1]),
+        GradientStop::new(0.7, colors[2]),
+        GradientStop::new(1.0, colors[3]),
+    ]
 }
 
 /// Build the controls help text.
@@ -974,4 +1126,11 @@ fn status_text(height: u32, state: FontStyleState) -> String {
         ),
     ]
     .join("\n")
+}
+
+/// Install key bindings for focus navigation.
+pub fn setup_bindings(c: &mut Canopy) {
+    Binder::new(c)
+        .key(key::KeyCode::Tab, "root::focus_next()")
+        .key(key::KeyCode::BackTab, "root::focus_prev()");
 }

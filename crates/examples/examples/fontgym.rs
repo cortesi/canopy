@@ -6,7 +6,7 @@ use canopy::{
     backend::crossterm::{RunloopOptions, runloop_with_options},
     prelude::*,
 };
-use canopy_examples::fontgym::FontGym;
+use canopy_examples::fontgym::{FontGym, setup_bindings};
 use canopy_widgets::Root;
 use clap::Parser;
 
@@ -28,6 +28,7 @@ fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
     Root::load(&mut cnpy)?;
     FontGym::load(&mut cnpy)?;
+    setup_bindings(&mut cnpy);
 
     let args = Args::parse();
     if args.commands {
