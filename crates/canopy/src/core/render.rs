@@ -1,15 +1,17 @@
+use unicode_segmentation::UnicodeSegmentation;
+
 use super::termbuf::TermBuf;
 use crate::{
     core::text,
     error::Result,
     geom,
-    style::{AttrSet, Color, Effect, Style, StyleManager, StyleMap},
+    style::{AttrSet, Color, Effect, ResolvedStyle, Style, StyleManager, StyleMap},
 };
 
 /// The trait implemented by renderers.
 pub trait RenderBackend {
     /// Apply a style to the following text output
-    fn style(&mut self, style: &Style) -> Result<()>;
+    fn style(&mut self, style: &ResolvedStyle) -> Result<()>;
     /// Output text to screen. This method is used for all text output.
     fn text(&mut self, loc: geom::Point, txt: &str) -> Result<()>;
     /// Return true if the backend can shift characters within a line.
@@ -81,11 +83,7 @@ impl<'a> Render<'a> {
         let buf = TermBuf::new(
             (rect.w, rect.h),
             '\0',
-            Style {
-                fg: Color::White,
-                bg: Color::Black,
-                attrs: AttrSet::default(),
-            },
+            ResolvedStyle::new(Color::White, Color::Black, AttrSet::default()),
         );
         Render {
             target: RenderTarget::Owned(buf),
@@ -147,6 +145,26 @@ impl<'a> Render<'a> {
         self.resolve_style(name)
     }
 
+    /// Resolve a custom style at a point, applying the current effect stack.
+    pub fn resolve_style_at(
+        &self,
+        style: Style,
+        bounds: geom::Rect,
+        point: geom::Point,
+    ) -> ResolvedStyle {
+        self.apply_effects(style).resolve_at(bounds, point)
+    }
+
+    /// Resolve a style by name at a point within bounds.
+    pub fn resolve_style_name_at(
+        &self,
+        name: &str,
+        bounds: geom::Rect,
+        point: geom::Point,
+    ) -> ResolvedStyle {
+        self.resolve_style(name).resolve_at(bounds, point)
+    }
+
     /// Push a style layer.
     pub fn push_layer(&mut self, name: &str) {
         self.style.push_layer(name);
@@ -156,8 +174,21 @@ impl<'a> Render<'a> {
     pub fn fill(&mut self, style: &str, r: geom::Rect, c: char) -> Result<()> {
         if let Some(intersection) = r.intersect(&self.clip) {
             let style = self.resolve_style(style);
-            let adjusted = self.translate_rect(intersection);
-            self.buffer_mut().fill(&style, adjusted, c);
+            if let Some(resolved) = style.resolve_solid() {
+                let adjusted = self.translate_rect(intersection);
+                self.buffer_mut().fill(&resolved, adjusted, c);
+            } else {
+                let max_y = intersection.tl.y.saturating_add(intersection.h);
+                let max_x = intersection.tl.x.saturating_add(intersection.w);
+                for y in intersection.tl.y..max_y {
+                    for x in intersection.tl.x..max_x {
+                        let point = geom::Point { x, y };
+                        let adjusted = self.translate_point(point);
+                        let resolved = style.resolve_at(r, point);
+                        self.buffer_mut().put(adjusted, c, resolved);
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -180,39 +211,75 @@ impl<'a> Render<'a> {
     pub fn text(&mut self, style: &str, l: geom::Line, txt: &str) -> Result<()> {
         let line_rect = geom::Rect::new(l.tl.x, l.tl.y, l.w, 1);
         if let Some(intersection) = line_rect.intersect(&self.clip) {
-            let style_res = self.resolve_style(style);
+            let style = self.resolve_style(style);
 
-            // Calculate how much of the text to skip and take
             let skip_amount = intersection.tl.x.saturating_sub(l.tl.x) as usize;
             let take_amount = intersection.w as usize;
-
             let (out, out_width) = text::slice_by_columns(txt, skip_amount, take_amount);
 
-            let adjusted_line = geom::Line {
-                tl: self.translate_point(intersection.tl),
-                w: intersection.w,
-            };
+            if let Some(resolved) = style.resolve_solid() {
+                let adjusted_line = geom::Line {
+                    tl: self.translate_point(intersection.tl),
+                    w: intersection.w,
+                };
+                self.buffer_mut().text(&resolved, adjusted_line, out);
+                if out_width < adjusted_line.w as usize {
+                    let pad_rect = geom::Rect::new(
+                        adjusted_line.tl.x + out_width as u32,
+                        adjusted_line.tl.y,
+                        adjusted_line.w - out_width as u32,
+                        1,
+                    );
+                    self.buffer_mut().fill(&resolved, pad_rect, ' ');
+                }
+                return Ok(());
+            }
 
-            self.buffer_mut().text(&style_res, adjusted_line, out);
+            let mut col = 0usize;
+            let mut x = intersection.tl.x;
+            for grapheme in out.graphemes(true) {
+                let width = text::grapheme_width(grapheme);
+                if width == 0 {
+                    continue;
+                }
+                if col + width > take_amount {
+                    break;
+                }
 
-            // Pad with spaces if needed
-            if out_width < adjusted_line.w as usize {
-                let pad_rect = geom::Rect::new(
-                    adjusted_line.tl.x + out_width as u32,
-                    adjusted_line.tl.y,
-                    adjusted_line.w - out_width as u32,
-                    1,
-                );
-                self.buffer_mut().fill(&style_res, pad_rect, ' ');
+                let point = geom::Point {
+                    x,
+                    y: intersection.tl.y,
+                };
+                let adjusted = self.translate_point(point);
+                let resolved = style.resolve_at(line_rect, point);
+                self.buffer_mut().put_grapheme(adjusted, grapheme, resolved);
+                for i in 1..width {
+                    let continuation = geom::Point {
+                        x: adjusted.x.saturating_add(i as u32),
+                        y: adjusted.y,
+                    };
+                    self.buffer_mut().put_continuation(continuation, resolved);
+                }
+                x = x.saturating_add(width as u32);
+                col = col.saturating_add(width);
+            }
+
+            for offset in col..take_amount {
+                let point = geom::Point {
+                    x: intersection.tl.x.saturating_add(offset as u32),
+                    y: intersection.tl.y,
+                };
+                let adjusted = self.translate_point(point);
+                let resolved = style.resolve_at(line_rect, point);
+                self.buffer_mut().put(adjusted, ' ', resolved);
             }
         }
         Ok(())
     }
 
     /// Write a single cell with a resolved style.
-    pub fn put_cell(&mut self, style: Style, p: geom::Point, ch: char) -> Result<()> {
+    pub fn put_cell(&mut self, style: ResolvedStyle, p: geom::Point, ch: char) -> Result<()> {
         if self.clip.contains_point(p) {
-            let style = self.apply_effects(style);
             let adjusted = self.translate_point(p);
             self.buffer_mut().put(adjusted, ch, style);
         }
@@ -220,20 +287,22 @@ impl<'a> Render<'a> {
     }
 
     /// Write a grapheme with a resolved style, including continuation cells.
-    pub fn put_grapheme(&mut self, style: Style, p: geom::Point, grapheme: &str) -> Result<()> {
+    pub fn put_grapheme(
+        &mut self,
+        style: ResolvedStyle,
+        p: geom::Point,
+        grapheme: &str,
+    ) -> Result<()> {
         if self.clip.contains_point(p) {
-            let style = self.apply_effects(style);
             let adjusted = self.translate_point(p);
-            self.buffer_mut()
-                .put_grapheme(adjusted, grapheme, style.clone());
+            self.buffer_mut().put_grapheme(adjusted, grapheme, style);
             let width = text::grapheme_width(grapheme);
             for i in 1..width {
                 let continuation = geom::Point {
                     x: adjusted.x.saturating_add(i as u32),
                     y: adjusted.y,
                 };
-                self.buffer_mut()
-                    .put_continuation(continuation, style.clone());
+                self.buffer_mut().put_continuation(continuation, style);
             }
         }
         Ok(())
@@ -412,7 +481,10 @@ mod tests {
     fn test_shared_render_clips_to_canvas_rect() {
         let stylemap = StyleMap::new();
         let mut style_manager = StyleManager::new();
-        let default_style = style_manager.get(&stylemap, "");
+        let default_style = style_manager
+            .get(&stylemap, "")
+            .resolve_solid()
+            .expect("default style resolves to solid colors");
         let mut target = TermBuf::empty_with_style(geom::Expanse::new(6, 4), default_style);
 
         let clip = geom::Rect::new(2, 1, 2, 2);

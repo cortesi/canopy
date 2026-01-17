@@ -54,6 +54,31 @@ fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
 }
 ```
 
+## Paint and gradients
+
+Style foreground and background channels now accept `Paint`, which can be a solid color or a
+gradient. Gradients are defined with an angle (in degrees) and color stops.
+
+```rust
+use canopy::style::{GradientSpec, Paint, StyleMap, solarized};
+
+let mut style = StyleMap::new();
+style
+    .rules()
+    .fg(
+        "banner",
+        Paint::gradient(GradientSpec::new(
+            90.0,
+            solarized::CYAN,
+            solarized::BLUE,
+        )),
+    )
+    .apply();
+```
+
+Renderers resolve gradients per-cell within the supplied bounds, so the same style can be reused
+for different sized widgets.
+
 ## Style effects
 
 Style effects are dynamic, composable transforms that apply to a subtree. They are pushed via the

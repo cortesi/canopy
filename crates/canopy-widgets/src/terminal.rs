@@ -28,7 +28,7 @@ use canopy::{
     layout::{CanvasContext, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
-    style::{AttrSet, Color, Style},
+    style::{AttrSet, Color, ResolvedStyle},
 };
 use portable_pty::{Child, CommandBuilder, ExitStatus, MasterPty, PtySize, native_pty_system};
 
@@ -1073,7 +1073,7 @@ impl Widget for Terminal {
                 ch = ' ';
             }
 
-            let style = Style { fg, bg, attrs };
+            let style = ResolvedStyle::new(fg, bg, attrs);
             let local = geom::Point {
                 x: view.content_origin().x.saturating_add(col),
                 y: view.content_origin().y.saturating_add(row),

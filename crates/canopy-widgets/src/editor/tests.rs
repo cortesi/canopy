@@ -12,7 +12,7 @@ use canopy::{
     layout::Layout,
     render::Render,
     state::NodeName,
-    style::{AttrSet, Color, PartialStyle, Style, StyleManager},
+    style::{AttrSet, Color, Paint, PartialStyle, Style, StyleManager},
     testing::harness::Harness,
 };
 
@@ -438,8 +438,8 @@ fn highlight_spans_apply_styles() {
         .with_wrap(WrapMode::None);
     let mut harness = build_harness("hi", config, 5, 1);
     let style = Style {
-        fg: Color::Red,
-        bg: Color::Black,
+        fg: Paint::solid(Color::Red),
+        bg: Paint::solid(Color::Black),
         attrs: AttrSet::default(),
     };
     with_editor(&mut harness, |editor| {
@@ -457,8 +457,8 @@ fn highlight_spans_inherit_editor_background() {
     let config = EditorConfig::new().with_wrap(WrapMode::None);
     let mut harness = build_harness("hi\nok", config, 4, 2);
     let highlight_style = Style {
-        fg: Color::Green,
-        bg: Color::Red,
+        fg: Paint::solid(Color::Green),
+        bg: Paint::solid(Color::Red),
         attrs: AttrSet::default(),
     };
     with_editor(&mut harness, |editor| {
@@ -470,7 +470,9 @@ fn highlight_spans_inherit_editor_background() {
 
     let base_bg = StyleManager::default()
         .get(&harness.canopy.style, "editor/text")
-        .bg;
+        .bg
+        .solid_color()
+        .expect("editor text background is solid");
     let buf = harness.buf();
     let first = buf.get(Point { x: 0, y: 0 }).expect("cell missing");
     let second = buf.get(Point { x: 1, y: 0 }).expect("cell missing");

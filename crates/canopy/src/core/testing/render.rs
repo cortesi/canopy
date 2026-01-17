@@ -1,4 +1,4 @@
-use crate::{error::Result, geom::Point, render::RenderBackend, style::Style};
+use crate::{error::Result, geom::Point, render::RenderBackend, style::ResolvedStyle};
 
 /// A dummy render backend that discards all output.
 /// This is useful for tests where we want to inspect the TermBuf directly.
@@ -12,7 +12,7 @@ impl NopBackend {
 }
 
 impl RenderBackend for NopBackend {
-    fn style(&mut self, _style: &Style) -> Result<()> {
+    fn style(&mut self, _style: &ResolvedStyle) -> Result<()> {
         Ok(())
     }
 

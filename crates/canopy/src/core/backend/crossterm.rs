@@ -20,7 +20,7 @@ use crate::{
     event::{Event, key, mouse},
     geom::{Expanse, Point},
     render::RenderBackend,
-    style::{Color, Style},
+    style::{Color, ResolvedStyle},
 };
 /// Simple event source wrapper for receiving events.
 ///
@@ -169,7 +169,7 @@ impl CrosstermRender {
     }
 
     /// Apply a style to subsequent output.
-    fn apply_style(&mut self, s: &Style) -> io::Result<()> {
+    fn apply_style(&mut self, s: &ResolvedStyle) -> io::Result<()> {
         // Always reset first to clear any previous attributes, then set colors and attrs.
         // Order is important: reset clears everything, so we must set colors after.
         self.fp
@@ -224,7 +224,7 @@ impl RenderBackend for CrosstermRender {
         translate_result(self.flush())
     }
 
-    fn style(&mut self, s: &Style) -> Result<()> {
+    fn style(&mut self, s: &ResolvedStyle) -> Result<()> {
         translate_result(self.apply_style(s))
     }
 

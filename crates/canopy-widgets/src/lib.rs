@@ -15,6 +15,12 @@ mod center;
 mod dropdown;
 /// Editor widget with syntax highlighting and vi mode.
 pub mod editor;
+/// Widget-specific error types.
+mod error;
+/// ASCII font rasterization helpers.
+mod font;
+/// Banner widget that renders ASCII fonts.
+mod font_banner;
 /// Scrollable frame container.
 mod frame;
 /// Contextual help modal.
@@ -50,6 +56,12 @@ pub use boxed::{Box, BoxGlyphs, DOUBLE, ROUND, ROUND_THICK, SINGLE, SINGLE_THICK
 pub use button::Button;
 pub use center::Center;
 pub use dropdown::{Dropdown, DropdownItem};
+pub use error::{Error, Result};
+pub use font::{
+    Font, FontCell, FontEffects, FontLayout, FontRenderer, Glyph, GlyphRamp, LayoutOptions,
+    OverflowPolicy,
+};
+pub use font_banner::FontBanner;
 pub use frame::{Frame, SCROLL, ScrollGlyphs};
 pub use image_view::ImageView;
 pub use input::Input;

@@ -51,3 +51,18 @@ attributes unless you supply a custom highlighter. The default syntect palette i
 
 The `Input` widget is a single-line text field that shares the editor's buffer and column mapping
 logic. It renders with horizontal scrolling to keep the cursor visible.
+
+## FontBanner
+
+`FontBanner` renders large terminal text from a TTF font into the available region. It scales to the
+target height and clips overflow by default.
+
+```rust
+use canopy_widgets::{Font, FontBanner, FontRenderer, LayoutOptions};
+
+let font = Font::from_bytes(include_bytes!("MyFont-Regular.ttf"))?;
+let renderer = FontRenderer::new(font);
+let banner = FontBanner::new("Canopy", renderer).with_layout_options(LayoutOptions::default());
+```
+
+Use the style system to apply solid or gradient paint to the banner via its style path.

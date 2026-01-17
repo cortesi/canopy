@@ -2216,7 +2216,7 @@ impl Editor {
                     }
                     if span.range.start < g_end && span.range.end > g_start {
                         let mut span_style = span.style.clone();
-                        span_style.bg = base_text_style.bg;
+                        span_style.bg = base_text_style.bg.clone();
                         style = Some(span_style);
                     }
                     break;
@@ -2232,9 +2232,10 @@ impl Editor {
                         x: ctx.origin.x.saturating_add(x),
                         y: line_y,
                     };
-                    let resolved = style
-                        .clone()
-                        .unwrap_or_else(|| ctx.r.resolve_style_name(style_name));
+                    let resolved = match style.as_ref() {
+                        Some(custom) => ctx.r.resolve_style_at(custom.clone(), line_rect, p),
+                        None => ctx.r.resolve_style_name_at(style_name, line_rect, p),
+                    };
                     ctx.r.put_cell(resolved, p, ' ')?;
                 }
             } else {
@@ -2243,9 +2244,10 @@ impl Editor {
                     x: ctx.origin.x.saturating_add(x),
                     y: line_y,
                 };
-                let resolved = style
-                    .clone()
-                    .unwrap_or_else(|| ctx.r.resolve_style_name(style_name));
+                let resolved = match style.as_ref() {
+                    Some(custom) => ctx.r.resolve_style_at(custom.clone(), line_rect, p),
+                    None => ctx.r.resolve_style_name_at(style_name, line_rect, p),
+                };
                 ctx.r.put_grapheme(resolved, p, grapheme)?;
             }
 

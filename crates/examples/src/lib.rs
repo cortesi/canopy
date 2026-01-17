@@ -8,6 +8,8 @@ pub mod chargym;
 pub mod editorgym;
 /// Focus gym example nodes.
 pub mod focusgym;
+/// Font gym example nodes.
+pub mod fontgym;
 /// Frame gym example nodes.
 pub mod framegym;
 /// Image viewer example nodes.

@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use canopy::style::{Attr, AttrSet, Color, Style};
+use canopy::style::{Attr, AttrSet, Color, Paint, Style};
 use syntect::{
     easy::HighlightLines,
     highlighting,
@@ -129,8 +129,8 @@ fn default_theme(themes: &ThemeSet) -> Theme {
 fn map_style(style: SyntectStyle) -> Style {
     let attrs = map_attrs(style.font_style);
     Style {
-        fg: map_color(style.foreground),
-        bg: map_color(style.background),
+        fg: Paint::solid(map_color(style.foreground)),
+        bg: Paint::solid(map_color(style.background)),
         attrs,
     }
 }

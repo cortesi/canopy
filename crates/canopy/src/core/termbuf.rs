@@ -8,7 +8,7 @@ use crate::{
     error::Result,
     geom::{Expanse, FrameRects, Line, Point, Rect},
     render::RenderBackend,
-    style::{Attr, AttrSet, Color, Style},
+    style::{Attr, AttrSet, Color, ResolvedStyle},
 };
 
 /// NULL character constant.
@@ -26,15 +26,15 @@ pub struct Cell {
     pub ch: char,
     /// Additional grapheme characters stored with the base glyph.
     pub suffix: String,
-    /// Style applied to the cell.
-    pub style: Style,
+    /// ResolvedStyle applied to the cell.
+    pub style: ResolvedStyle,
     /// True when this cell continues a wide glyph from the previous column.
     pub continuation: bool,
 }
 
 impl Cell {
     /// Construct a cell containing a single glyph.
-    fn new(ch: char, style: Style) -> Self {
+    fn new(ch: char, style: ResolvedStyle) -> Self {
         Self {
             ch,
             suffix: String::new(),
@@ -44,7 +44,7 @@ impl Cell {
     }
 
     /// Construct an empty cell.
-    fn empty(style: Style) -> Self {
+    fn empty(style: ResolvedStyle) -> Self {
         Self {
             ch: NULL,
             suffix: String::new(),
@@ -54,7 +54,7 @@ impl Cell {
     }
 
     /// Construct a continuation cell for a wide glyph.
-    fn continuation(style: Style) -> Self {
+    fn continuation(style: ResolvedStyle) -> Self {
         Self {
             ch: NULL,
             suffix: String::new(),
@@ -103,7 +103,7 @@ pub struct TermBuf {
 
 impl TermBuf {
     /// Construct a buffer filled with the given character and style.
-    pub fn new(size: impl Into<Expanse>, ch: char, style: Style) -> Self {
+    pub fn new(size: impl Into<Expanse>, ch: char, style: ResolvedStyle) -> Self {
         let size = size.into();
         let cell = Cell::new(ch, style);
         Self {
@@ -112,7 +112,7 @@ impl TermBuf {
         }
     }
     /// Create an empty TermBuf filled with NULL characters.
-    pub fn empty_with_style(size: impl Into<Expanse>, style: Style) -> Self {
+    pub fn empty_with_style(size: impl Into<Expanse>, style: ResolvedStyle) -> Self {
         let size = size.into();
         let cell = Cell::empty(style);
         Self {
@@ -123,7 +123,7 @@ impl TermBuf {
 
     /// Create an empty TermBuf filled with NULL characters.
     pub fn empty(size: impl Into<Expanse>) -> Self {
-        let default_style = Style {
+        let default_style = ResolvedStyle {
             fg: Color::White,
             bg: Color::Black,
             attrs: AttrSet::default(),
@@ -207,14 +207,14 @@ impl TermBuf {
     }
 
     /// Write a cell at a specific point.
-    pub(crate) fn put(&mut self, p: Point, ch: char, style: Style) {
+    pub(crate) fn put(&mut self, p: Point, ch: char, style: ResolvedStyle) {
         if let Some(i) = self.idx(p) {
             self.cells[i] = Cell::new(ch, style);
         }
     }
 
     /// Write a grapheme cluster at a specific point.
-    pub(crate) fn put_grapheme(&mut self, p: Point, grapheme: &str, style: Style) {
+    pub(crate) fn put_grapheme(&mut self, p: Point, grapheme: &str, style: ResolvedStyle) {
         if let Some(i) = self.idx(p) {
             let mut chars = grapheme.chars();
             let ch = chars.next().unwrap_or(' ');
@@ -229,28 +229,28 @@ impl TermBuf {
     }
 
     /// Write a continuation cell for a wide glyph.
-    pub(crate) fn put_continuation(&mut self, p: Point, style: Style) {
+    pub(crate) fn put_continuation(&mut self, p: Point, style: ResolvedStyle) {
         if let Some(i) = self.idx(p) {
             self.cells[i] = Cell::continuation(style);
         }
     }
 
     /// Fill a rectangle with a glyph and style.
-    pub fn fill(&mut self, style: &Style, r: Rect, ch: char) {
+    pub fn fill(&mut self, style: &ResolvedStyle, r: Rect, ch: char) {
         if let Some(isec) = self.rect().intersect(&r) {
             for y in isec.tl.y..isec.tl.y + isec.h {
                 for x in isec.tl.x..isec.tl.x + isec.w {
-                    self.put(Point { x, y }, ch, style.clone());
+                    self.put(Point { x, y }, ch, *style);
                 }
             }
         }
     }
 
     /// Fill all empty cells with the given character and style.
-    pub fn fill_empty(&mut self, ch: char, style: &Style) {
+    pub fn fill_empty(&mut self, ch: char, style: &ResolvedStyle) {
         for i in 0..self.cells.len() {
             if self.cells[i].is_empty() {
-                self.cells[i] = Cell::new(ch, style.clone());
+                self.cells[i] = Cell::new(ch, *style);
             }
         }
     }
@@ -278,7 +278,7 @@ impl TermBuf {
     }
 
     /// Fill the frame outline with a glyph and style.
-    pub fn solid_frame(&mut self, style: &Style, f: FrameRects, ch: char) {
+    pub fn solid_frame(&mut self, style: &ResolvedStyle, f: FrameRects, ch: char) {
         self.fill(style, f.top, ch);
         self.fill(style, f.left, ch);
         self.fill(style, f.right, ch);
@@ -290,7 +290,7 @@ impl TermBuf {
     }
 
     /// Draw text clipped to the given line.
-    pub fn text(&mut self, style: &Style, l: Line, txt: &str) {
+    pub fn text(&mut self, style: &ResolvedStyle, l: Line, txt: &str) {
         if let Some(isec) = self.rect().intersect(&l.rect()) {
             let offset = isec.tl.x.saturating_sub(l.tl.x) as usize;
             let max = isec.w as usize;
@@ -307,14 +307,14 @@ impl TermBuf {
                     break;
                 }
 
-                self.put_grapheme(Point { x, y: isec.tl.y }, grapheme, style.clone());
+                self.put_grapheme(Point { x, y: isec.tl.y }, grapheme, *style);
                 for i in 1..width {
                     self.put_continuation(
                         Point {
                             x: x + i as u32,
                             y: isec.tl.y,
                         },
-                        style.clone(),
+                        *style,
                     );
                 }
                 x += width as u32;
@@ -328,7 +328,7 @@ impl TermBuf {
                         y: isec.tl.y,
                     },
                     ' ',
-                    style.clone(),
+                    *style,
                 );
             }
         }
@@ -448,7 +448,7 @@ impl TermBuf {
             while x < self.size.w {
                 let idx = y as usize * self.size.w as usize + x as usize;
                 let cell = &self.cells[idx];
-                let style = cell.style.clone();
+                let style = cell.style;
                 let start_x = x;
                 let mut text = String::new();
                 while x < self.size.w {
@@ -618,8 +618,8 @@ mod tests {
         testing::buf::BufTest,
     };
 
-    fn def_style() -> Style {
-        Style {
+    fn def_style() -> ResolvedStyle {
+        ResolvedStyle {
             fg: Color::White,
             bg: Color::Black,
             attrs: AttrSet::default(),
@@ -630,7 +630,7 @@ mod tests {
         let height = rows.len() as u32;
         let width = rows.first().map(|row| row.len()).unwrap_or(0) as u32;
         let style = def_style();
-        let mut tb = TermBuf::new(Expanse::new(width, height), ' ', style.clone());
+        let mut tb = TermBuf::new(Expanse::new(width, height), ' ', style);
         for (y, row) in rows.iter().enumerate() {
             tb.text(&style, Line::new(0, y as u32, width), row);
         }
@@ -659,7 +659,7 @@ mod tests {
     #[test]
     fn text_handles_combining_and_wide_graphemes() {
         let style = def_style();
-        let mut tb = TermBuf::new(Expanse::new(12, 1), ' ', style.clone());
+        let mut tb = TermBuf::new(Expanse::new(12, 1), ' ', style);
         tb.text(&style, Line::new(0, 0, 12), "A\u{0301}界👩‍💻B");
 
         let first = tb.get(Point { x: 0, y: 0 }).expect("missing cell");
@@ -714,7 +714,7 @@ mod tests {
     }
 
     impl RenderBackend for RecBackend {
-        fn style(&mut self, s: &Style) -> Result<()> {
+        fn style(&mut self, s: &ResolvedStyle) -> Result<()> {
             self.ops.push(format!("style {s:?}"));
             Ok(())
         }
@@ -756,7 +756,7 @@ mod tests {
     }
 
     impl RenderBackend for ShiftBackend {
-        fn style(&mut self, _s: &Style) -> Result<()> {
+        fn style(&mut self, _s: &ResolvedStyle) -> Result<()> {
             Ok(())
         }
 
@@ -811,7 +811,7 @@ mod tests {
     }
 
     impl RenderBackend for CountingBackend {
-        fn style(&mut self, _style: &Style) -> Result<()> {
+        fn style(&mut self, _style: &ResolvedStyle) -> Result<()> {
             self.style_calls += 1;
             Ok(())
         }
@@ -858,7 +858,7 @@ mod tests {
     #[test]
     fn diff_no_change() {
         let style = def_style();
-        let tb1 = TermBuf::new(Expanse::new(3, 1), ' ', style.clone());
+        let tb1 = TermBuf::new(Expanse::new(3, 1), ' ', style);
         let tb2 = TermBuf::new(Expanse::new(3, 1), ' ', style);
         let mut be = RecBackend::new();
         tb2.diff(&tb1, &mut be).unwrap();
@@ -869,11 +869,11 @@ mod tests {
         #[test]
         fn diff_identical_buffers_have_no_ops((width, height, cells) in buf_strategy()) {
             let style = def_style();
-            let mut buf = TermBuf::new(Expanse::new(width, height), ' ', style.clone());
+            let mut buf = TermBuf::new(Expanse::new(width, height), ' ', style);
             let mut idx = 0usize;
             for y in 0..height {
                 for x in 0..width {
-                    buf.put(Point { x, y }, cells[idx], style.clone());
+                    buf.put(Point { x, y }, cells[idx], style);
                     idx += 1;
                 }
             }
@@ -897,8 +897,8 @@ mod tests {
     #[test]
     fn diff_single_run() {
         let style = def_style();
-        let prev = TermBuf::new(Expanse::new(3, 1), ' ', style.clone());
-        let mut cur = TermBuf::new(Expanse::new(3, 1), ' ', style.clone());
+        let prev = TermBuf::new(Expanse::new(3, 1), ' ', style);
+        let mut cur = TermBuf::new(Expanse::new(3, 1), ' ', style);
         cur.text(&style, Line::new(0, 0, 3), "ab");
         let mut be = RecBackend::new();
         cur.diff(&prev, &mut be).unwrap();
@@ -910,11 +910,11 @@ mod tests {
     #[test]
     fn diff_style_changes() {
         let style1 = def_style();
-        let mut style2 = style1.clone();
+        let mut style2 = style1;
         style2.fg = Color::Red;
 
-        let prev = TermBuf::new(Expanse::new(2, 1), ' ', style1.clone());
-        let mut cur = TermBuf::new(Expanse::new(2, 1), ' ', style1.clone());
+        let prev = TermBuf::new(Expanse::new(2, 1), ' ', style1);
+        let mut cur = TermBuf::new(Expanse::new(2, 1), ' ', style1);
         cur.fill(&style2, Rect::new(0, 0, 1, 1), 'a');
         cur.fill(&style1, Rect::new(1, 0, 1, 1), 'b');
 
@@ -931,8 +931,8 @@ mod tests {
     #[test]
     fn diff_multi_line() {
         let style = def_style();
-        let prev = TermBuf::new(Expanse::new(3, 2), ' ', style.clone());
-        let mut cur = TermBuf::new(Expanse::new(3, 2), ' ', style.clone());
+        let prev = TermBuf::new(Expanse::new(3, 2), ' ', style);
+        let mut cur = TermBuf::new(Expanse::new(3, 2), ' ', style);
         cur.fill(&style, Rect::new(0, 1, 2, 1), 'x');
         let mut be = RecBackend::new();
         cur.diff(&prev, &mut be).unwrap();
@@ -944,7 +944,7 @@ mod tests {
     #[test]
     fn render_whole_buffer() {
         let style = def_style();
-        let mut tb = TermBuf::new(Expanse::new(3, 1), ' ', style.clone());
+        let mut tb = TermBuf::new(Expanse::new(3, 1), ' ', style);
         tb.text(&style, Line::new(0, 0, 3), "ab");
         let mut be = RecBackend::new();
         tb.render(&mut be).unwrap();
@@ -957,8 +957,8 @@ mod tests {
     #[test]
     fn diff_size_change_rerender() {
         let style = def_style();
-        let prev = TermBuf::new(Expanse::new(2, 1), ' ', style.clone());
-        let mut cur = TermBuf::new(Expanse::new(3, 1), ' ', style.clone());
+        let prev = TermBuf::new(Expanse::new(2, 1), ' ', style);
+        let mut cur = TermBuf::new(Expanse::new(3, 1), ' ', style);
         cur.text(&style, Line::new(0, 0, 3), "abc");
         let mut be = RecBackend::new();
         cur.diff(&prev, &mut be).unwrap();

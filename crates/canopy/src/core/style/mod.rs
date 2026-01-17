@@ -14,6 +14,8 @@ use std::collections::HashMap;
 pub use color::Color;
 pub use effects::{Effect, StyleEffect};
 
+use crate::geom;
+
 /// A text attribute.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Attr {
@@ -90,9 +92,177 @@ impl AttrSet {
     }
 }
 
-/// A resolved style specification.
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Style {
+/// A gradient stop in a paint specification.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GradientStop {
+    /// Offset along the gradient (0.0-1.0).
+    pub offset: f32,
+    /// Color at this stop.
+    pub color: Color,
+}
+
+impl GradientStop {
+    /// Construct a gradient stop, clamping the offset to 0.0-1.0.
+    pub fn new(offset: f32, color: Color) -> Self {
+        Self {
+            offset: offset.clamp(0.0, 1.0),
+            color,
+        }
+    }
+}
+
+/// A gradient paint specification.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GradientSpec {
+    /// Gradient angle in degrees (0 = left to right, 90 = top to bottom).
+    pub angle_deg: f32,
+    /// Ordered list of gradient stops.
+    pub stops: Vec<GradientStop>,
+}
+
+impl GradientSpec {
+    /// Construct a two-stop gradient.
+    pub fn new(angle_deg: f32, start: Color, end: Color) -> Self {
+        Self::with_stops(
+            angle_deg,
+            vec![GradientStop::new(0.0, start), GradientStop::new(1.0, end)],
+        )
+    }
+
+    /// Construct a gradient from explicit stops.
+    pub fn with_stops(angle_deg: f32, mut stops: Vec<GradientStop>) -> Self {
+        if stops.is_empty() {
+            stops.push(GradientStop::new(0.0, Color::White));
+            stops.push(GradientStop::new(1.0, Color::White));
+        }
+        stops.sort_by(|a, b| a.offset.total_cmp(&b.offset));
+        Self { angle_deg, stops }
+    }
+
+    /// Map all colors in this gradient through a transform.
+    pub fn map_colors(&self, f: impl Fn(Color) -> Color) -> Self {
+        let stops = self
+            .stops
+            .iter()
+            .map(|stop| GradientStop::new(stop.offset, f(stop.color)))
+            .collect();
+        Self {
+            angle_deg: self.angle_deg,
+            stops,
+        }
+    }
+
+    /// Resolve a gradient color at a point within a rectangle.
+    pub fn color_at(&self, rect: geom::Rect, point: geom::Point) -> Color {
+        if rect.w == 0 || rect.h == 0 {
+            return self.stops[0].color;
+        }
+
+        let width = rect.w as f32;
+        let height = rect.h as f32;
+        let angle = self.angle_deg.to_radians();
+        let dir_x = angle.cos();
+        let dir_y = angle.sin();
+        let corners = [(0.0, 0.0), (width, 0.0), (0.0, height), (width, height)];
+        let (min_dot, max_dot) = corners.iter().fold(
+            (f32::INFINITY, f32::NEG_INFINITY),
+            |(min_dot, max_dot), (x, y)| {
+                let dot = dir_x * x + dir_y * y;
+                (min_dot.min(dot), max_dot.max(dot))
+            },
+        );
+
+        let local_x = point.x.saturating_sub(rect.tl.x) as f32 + 0.5;
+        let local_y = point.y.saturating_sub(rect.tl.y) as f32 + 0.5;
+        let dot = dir_x * local_x + dir_y * local_y;
+        let ratio = if (max_dot - min_dot).abs() < f32::EPSILON {
+            0.0
+        } else {
+            ((dot - min_dot) / (max_dot - min_dot)).clamp(0.0, 1.0)
+        };
+
+        self.color_for_ratio(ratio)
+    }
+
+    /// Blend between gradient stops for a normalized ratio.
+    fn color_for_ratio(&self, ratio: f32) -> Color {
+        if self.stops.len() == 1 {
+            return self.stops[0].color;
+        }
+        let ratio = ratio.clamp(0.0, 1.0);
+        let mut prev = &self.stops[0];
+        for stop in &self.stops[1..] {
+            if ratio <= stop.offset {
+                let span = (stop.offset - prev.offset).max(f32::EPSILON);
+                let local = (ratio - prev.offset) / span;
+                return prev.color.blend(stop.color, local);
+            }
+            prev = stop;
+        }
+        self.stops.last().expect("gradient stops exist").color
+    }
+}
+
+/// A paint definition for a style channel.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Paint {
+    /// Solid color fill.
+    Solid(Color),
+    /// Gradient fill.
+    Gradient(GradientSpec),
+}
+
+impl Paint {
+    /// Construct a solid paint.
+    pub fn solid(color: Color) -> Self {
+        Self::Solid(color)
+    }
+
+    /// Construct a gradient paint.
+    pub fn gradient(spec: GradientSpec) -> Self {
+        Self::Gradient(spec)
+    }
+
+    /// Return the solid color if this paint is solid.
+    pub fn solid_color(&self) -> Option<Color> {
+        match self {
+            Self::Solid(color) => Some(*color),
+            Self::Gradient(_) => None,
+        }
+    }
+
+    /// Resolve the paint at a location.
+    pub fn resolve(&self, rect: geom::Rect, point: geom::Point) -> Color {
+        match self {
+            Self::Solid(color) => *color,
+            Self::Gradient(spec) => spec.color_at(rect, point),
+        }
+    }
+
+    /// Map colors within this paint.
+    pub fn map_colors(&self, f: impl Fn(Color) -> Color) -> Self {
+        match self {
+            Self::Solid(color) => Self::Solid(f(*color)),
+            Self::Gradient(spec) => Self::Gradient(spec.map_colors(f)),
+        }
+    }
+}
+
+impl From<Color> for Paint {
+    fn from(color: Color) -> Self {
+        Self::Solid(color)
+    }
+}
+
+impl From<GradientSpec> for Paint {
+    fn from(spec: GradientSpec) -> Self {
+        Self::Gradient(spec)
+    }
+}
+
+/// A resolved style specification stored in terminal buffers.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct ResolvedStyle {
     /// Foreground color.
     pub fg: Color,
     /// Background color.
@@ -101,14 +271,52 @@ pub struct Style {
     pub attrs: AttrSet,
 }
 
+impl ResolvedStyle {
+    /// Construct a resolved style from components.
+    pub fn new(fg: Color, bg: Color, attrs: AttrSet) -> Self {
+        Self { fg, bg, attrs }
+    }
+}
+
+/// A paint-based style specification.
+#[derive(Debug, PartialEq, Clone)]
+pub struct Style {
+    /// Foreground paint.
+    pub fg: Paint,
+    /// Background paint.
+    pub bg: Paint,
+    /// Text attributes.
+    pub attrs: AttrSet,
+}
+
+impl Style {
+    /// Resolve the style at a location within a rectangle.
+    pub fn resolve_at(&self, rect: geom::Rect, point: geom::Point) -> ResolvedStyle {
+        ResolvedStyle::new(
+            self.fg.resolve(rect, point),
+            self.bg.resolve(rect, point),
+            self.attrs,
+        )
+    }
+
+    /// Resolve the style to a solid variant if both paints are solid.
+    pub fn resolve_solid(&self) -> Option<ResolvedStyle> {
+        Some(ResolvedStyle::new(
+            self.fg.solid_color()?,
+            self.bg.solid_color()?,
+            self.attrs,
+        ))
+    }
+}
+
 /// A possibly partial style specification, which is stored in a StyleManager.
 /// Partial styles are completely resolved during the style resolution process.
-#[derive(Default, Debug, PartialEq, Eq, Clone)]
+#[derive(Default, Debug, PartialEq, Clone)]
 pub struct PartialStyle {
-    /// Optional foreground color.
-    pub fg: Option<Color>,
-    /// Optional background color.
-    pub bg: Option<Color>,
+    /// Optional foreground paint.
+    pub fg: Option<Paint>,
+    /// Optional background paint.
+    pub bg: Option<Paint>,
     /// Optional attributes.
     pub attrs: Option<AttrSet>,
 }
@@ -129,7 +337,7 @@ pub struct PartialStyle {
 ///     .rule("item/selected").style(selected)
 ///     .apply();
 /// ```
-#[derive(Clone, Default, Debug, PartialEq, Eq)]
+#[derive(Clone, Default, Debug, PartialEq)]
 pub struct StyleBuilder {
     /// The partial style being built.
     inner: PartialStyle,
@@ -141,15 +349,15 @@ impl StyleBuilder {
         Self::default()
     }
 
-    /// Set the foreground color.
-    pub fn fg(mut self, color: Color) -> Self {
-        self.inner.fg = Some(color);
+    /// Set the foreground paint.
+    pub fn fg(mut self, paint: impl Into<Paint>) -> Self {
+        self.inner.fg = Some(paint.into());
         self
     }
 
-    /// Set the background color.
-    pub fn bg(mut self, color: Color) -> Self {
-        self.inner.bg = Some(color);
+    /// Set the background paint.
+    pub fn bg(mut self, paint: impl Into<Paint>) -> Self {
+        self.inner.bg = Some(paint.into());
         self
     }
 
@@ -177,20 +385,20 @@ impl From<StyleBuilder> for PartialStyle {
 }
 
 impl PartialStyle {
-    /// Create a new PartialStyle with only a foreground color.
-    pub fn fg(fg: Color) -> Self {
+    /// Create a new PartialStyle with only a foreground paint.
+    pub fn fg(fg: impl Into<Paint>) -> Self {
         Self {
-            fg: Some(fg),
+            fg: Some(fg.into()),
             bg: None,
             attrs: None,
         }
     }
 
-    /// Create a new PartialStyle with only a background color.
-    pub fn bg(bg: Color) -> Self {
+    /// Create a new PartialStyle with only a background paint.
+    pub fn bg(bg: impl Into<Paint>) -> Self {
         Self {
             fg: None,
-            bg: Some(bg),
+            bg: Some(bg.into()),
             attrs: None,
         }
     }
@@ -207,21 +415,21 @@ impl PartialStyle {
     /// Resolve the partial style into a full style.
     pub fn resolve(&self) -> Style {
         Style {
-            fg: self.fg.unwrap(),
-            bg: self.bg.unwrap(),
-            attrs: self.attrs.unwrap(),
+            fg: self.fg.clone().expect("foreground paint is set"),
+            bg: self.bg.clone().expect("background paint is set"),
+            attrs: self.attrs.expect("attributes are set"),
         }
     }
 
-    /// Set the foreground color.
-    pub fn with_fg(mut self, fg: Color) -> Self {
-        self.fg = Some(fg);
+    /// Set the foreground paint.
+    pub fn with_fg(mut self, fg: impl Into<Paint>) -> Self {
+        self.fg = Some(fg.into());
         self
     }
 
-    /// Set the background color.
-    pub fn with_bg(mut self, bg: Color) -> Self {
-        self.bg = Some(bg);
+    /// Set the background paint.
+    pub fn with_bg(mut self, bg: impl Into<Paint>) -> Self {
+        self.bg = Some(bg.into());
         self
     }
 
@@ -244,8 +452,16 @@ impl PartialStyle {
     /// Merge two partial styles.
     pub fn join(&self, other: &Self) -> Self {
         Self {
-            fg: if self.fg.is_some() { self.fg } else { other.fg },
-            bg: if self.bg.is_some() { self.bg } else { other.bg },
+            fg: if self.fg.is_some() {
+                self.fg.clone()
+            } else {
+                other.fg.clone()
+            },
+            bg: if self.bg.is_some() {
+                self.bg.clone()
+            } else {
+                other.bg.clone()
+            },
             attrs: if self.attrs.is_some() {
                 self.attrs
             } else {
@@ -289,8 +505,8 @@ impl StyleMap {
         cs.insert_style(
             "/",
             PartialStyle {
-                fg: Some(Color::White),
-                bg: Some(Color::Black),
+                fg: Some(Paint::Solid(Color::White)),
+                bg: Some(Paint::Solid(Color::Black)),
                 attrs: Some(AttrSet::default()),
             },
         );
@@ -357,23 +573,23 @@ pub struct StyleRules<'a> {
 }
 
 impl<'a> StyleRules<'a> {
-    /// Set the foreground color for a path.
+    /// Set the foreground paint for a path.
     ///
-    /// If a rule already exists for this path, the foreground color is merged
+    /// If a rule already exists for this path, the foreground paint is merged
     /// with the existing style.
-    pub fn fg(mut self, path: &str, color: Color) -> Self {
+    pub fn fg(mut self, path: &str, paint: impl Into<Paint>) -> Self {
         let full_path = self.make_path(path);
-        self.merge_pending(full_path, PartialStyle::fg(color));
+        self.merge_pending(full_path, PartialStyle::fg(paint));
         self
     }
 
-    /// Set the background color for a path.
+    /// Set the background paint for a path.
     ///
-    /// If a rule already exists for this path, the background color is merged
+    /// If a rule already exists for this path, the background paint is merged
     /// with the existing style.
-    pub fn bg(mut self, path: &str, color: Color) -> Self {
+    pub fn bg(mut self, path: &str, paint: impl Into<Paint>) -> Self {
         let full_path = self.make_path(path);
-        self.merge_pending(full_path, PartialStyle::bg(color));
+        self.merge_pending(full_path, PartialStyle::bg(paint));
         self
     }
 
@@ -407,26 +623,34 @@ impl<'a> StyleRules<'a> {
         self
     }
 
-    /// Set the foreground color for multiple paths.
+    /// Set the foreground paint for multiple paths.
     ///
-    /// If a rule already exists for any path, the foreground color is merged
+    /// If a rule already exists for any path, the foreground paint is merged
     /// with the existing style.
-    pub fn fg_all(mut self, paths: &[&str], color: Color) -> Self {
+    pub fn fg_all<P>(mut self, paths: &[&str], paint: P) -> Self
+    where
+        P: Into<Paint>,
+    {
+        let paint: Paint = paint.into();
         for path in paths {
             let full_path = self.make_path(path);
-            self.merge_pending(full_path, PartialStyle::fg(color));
+            self.merge_pending(full_path, PartialStyle::fg(paint.clone()));
         }
         self
     }
 
-    /// Set the background color for multiple paths.
+    /// Set the background paint for multiple paths.
     ///
-    /// If a rule already exists for any path, the background color is merged
+    /// If a rule already exists for any path, the background paint is merged
     /// with the existing style.
-    pub fn bg_all(mut self, paths: &[&str], color: Color) -> Self {
+    pub fn bg_all<P>(mut self, paths: &[&str], paint: P) -> Self
+    where
+        P: Into<Paint>,
+    {
+        let paint: Paint = paint.into();
         for path in paths {
             let full_path = self.make_path(path);
-            self.merge_pending(full_path, PartialStyle::bg(color));
+            self.merge_pending(full_path, PartialStyle::bg(paint.clone()));
         }
         self
     }
@@ -637,6 +861,14 @@ mod tests {
     #[allow(unused_imports)]
     use crate::error::Result;
 
+    fn solid_style(fg: Color, bg: Color) -> Style {
+        Style {
+            fg: Paint::solid(fg),
+            bg: Paint::solid(bg),
+            attrs: AttrSet::default(),
+        }
+    }
+
     #[test]
     fn style_parse_path() -> Result<()> {
         assert_eq!(parse_path("/one/two"), vec!["one", "two"]);
@@ -670,11 +902,7 @@ mod tests {
                 &["one".to_string(), "two".to_string()],
                 &["target".to_string(), "voing".to_string()],
             ),
-            Style {
-                fg: Color::Green,
-                bg: Color::Black,
-                attrs: AttrSet::default(),
-            }
+            solid_style(Color::Green, Color::Black)
         );
 
         assert_eq!(
@@ -683,11 +911,7 @@ mod tests {
                 &["one".to_string(), "two".to_string()],
                 &["two".to_string(), "voing".to_string()],
             ),
-            Style {
-                fg: Color::Blue,
-                bg: Color::Black,
-                attrs: AttrSet::default(),
-            }
+            solid_style(Color::Blue, Color::Black)
         );
 
         assert_eq!(
@@ -696,11 +920,7 @@ mod tests {
                 &["one".to_string(), "two".to_string()],
                 &["target".to_string()],
             ),
-            Style {
-                fg: Color::Green,
-                bg: Color::Black,
-                attrs: AttrSet::default(),
-            }
+            solid_style(Color::Green, Color::Black)
         );
         assert_eq!(
             c.resolve(
@@ -708,11 +928,7 @@ mod tests {
                 &["one".to_string(), "two".to_string()],
                 &["nonexistent".to_string()],
             ),
-            Style {
-                fg: Color::Blue,
-                bg: Color::Black,
-                attrs: AttrSet::default(),
-            }
+            solid_style(Color::Blue, Color::Black)
         );
         assert_eq!(
             c.resolve(
@@ -720,11 +936,7 @@ mod tests {
                 &["somelayer".to_string()],
                 &["nonexistent".to_string()],
             ),
-            Style {
-                fg: Color::White,
-                bg: Color::Black,
-                attrs: AttrSet::default(),
-            }
+            solid_style(Color::White, Color::Black)
         );
         assert_eq!(
             c.resolve(
@@ -732,11 +944,7 @@ mod tests {
                 &["one".to_string(), "two".to_string()],
                 &["frame".to_string(), "border".to_string()],
             ),
-            Style {
-                fg: Color::Yellow,
-                bg: Color::Black,
-                attrs: AttrSet::default(),
-            }
+            solid_style(Color::Yellow, Color::Black)
         );
         assert_eq!(
             c.resolve(
@@ -744,19 +952,11 @@ mod tests {
                 &["one".to_string(), "two".to_string()],
                 &["frame".to_string(), "border".to_string()],
             ),
-            Style {
-                fg: Color::Yellow,
-                bg: Color::Black,
-                attrs: AttrSet::default(),
-            }
+            solid_style(Color::Yellow, Color::Black)
         );
         assert_eq!(
             c.resolve(&smap, &["frame".to_string()], &["border".to_string()],),
-            Style {
-                fg: Color::Yellow,
-                bg: Color::Black,
-                attrs: AttrSet::default(),
-            }
+            solid_style(Color::Yellow, Color::Black)
         );
         Ok(())
     }
@@ -837,8 +1037,8 @@ mod tests {
         let c = StyleManager::new();
         let resolved = c.resolve(&smap, &[], &["test".to_string(), "path".to_string()]);
 
-        assert_eq!(resolved.fg, Color::Red);
-        assert_eq!(resolved.bg, Color::Blue);
+        assert_eq!(resolved.fg.solid_color(), Some(Color::Red));
+        assert_eq!(resolved.bg.solid_color(), Some(Color::Blue));
 
         Ok(())
     }
@@ -871,7 +1071,7 @@ mod tests {
         let c = StyleManager::new();
         let resolved = c.resolve(&smap, &[], &["test".to_string()]);
 
-        assert_eq!(resolved.fg, Color::Green);
+        assert_eq!(resolved.fg.solid_color(), Some(Color::Green));
 
         Ok(())
     }
@@ -881,9 +1081,102 @@ mod tests {
         let smap = StyleMap::default();
         let c = StyleManager::new();
         let resolved = c.get(&smap, "");
-        assert_eq!(resolved.fg, Color::White);
-        assert_eq!(resolved.bg, Color::Black);
+        assert_eq!(resolved.fg.solid_color(), Some(Color::White));
+        assert_eq!(resolved.bg.solid_color(), Some(Color::Black));
         assert_eq!(resolved.attrs, AttrSet::default());
         Ok(())
+    }
+
+    #[test]
+    fn gradient_resolves_left_to_right() {
+        let start = Color::Rgb { r: 0, g: 0, b: 0 };
+        let end = Color::Rgb {
+            r: 255,
+            g: 255,
+            b: 255,
+        };
+        let spec = GradientSpec::new(0.0, start, end);
+        let rect = geom::Rect::new(0, 0, 10, 1);
+
+        let left = spec.color_at(rect, geom::Point { x: 0, y: 0 });
+        let right = spec.color_at(rect, geom::Point { x: 9, y: 0 });
+
+        assert_eq!(left, start.blend(end, 0.05));
+        assert_eq!(right, start.blend(end, 0.95));
+    }
+
+    #[test]
+    fn gradient_resolves_top_to_bottom() {
+        let start = Color::Rgb { r: 0, g: 0, b: 0 };
+        let end = Color::Rgb {
+            r: 255,
+            g: 255,
+            b: 255,
+        };
+        let spec = GradientSpec::new(90.0, start, end);
+        let rect = geom::Rect::new(0, 0, 1, 10);
+
+        let top = spec.color_at(rect, geom::Point { x: 0, y: 0 });
+        let bottom = spec.color_at(rect, geom::Point { x: 0, y: 9 });
+
+        assert_eq!(top, start.blend(end, 0.05));
+        assert_eq!(bottom, start.blend(end, 0.95));
+    }
+
+    #[test]
+    fn gradient_interpolates_multiple_stops() {
+        let red = Color::Rgb { r: 255, g: 0, b: 0 };
+        let green = Color::Rgb { r: 0, g: 255, b: 0 };
+        let blue = Color::Rgb { r: 0, g: 0, b: 255 };
+        let spec = GradientSpec::with_stops(
+            0.0,
+            vec![
+                GradientStop::new(1.0, blue),
+                GradientStop::new(0.0, red),
+                GradientStop::new(0.5, green),
+            ],
+        );
+        let rect = geom::Rect::new(0, 0, 10, 1);
+        let point = geom::Point { x: 4, y: 0 };
+
+        let width = rect.w as f32;
+        let angle = spec.angle_deg.to_radians();
+        let dir_x = angle.cos();
+        let dir_y = angle.sin();
+        let corners = [(0.0, 0.0), (width, 0.0), (0.0, 1.0), (width, 1.0)];
+        let (min_dot, max_dot) = corners.iter().fold(
+            (f32::INFINITY, f32::NEG_INFINITY),
+            |(min_dot, max_dot), (x, y)| {
+                let dot = dir_x * x + dir_y * y;
+                (min_dot.min(dot), max_dot.max(dot))
+            },
+        );
+        let local_x = point.x as f32 + 0.5;
+        let dot = dir_x * local_x + dir_y * 0.5;
+        let ratio = ((dot - min_dot) / (max_dot - min_dot)).clamp(0.0, 1.0);
+        let expected = if ratio <= 0.5 {
+            red.blend(green, ratio / 0.5)
+        } else {
+            green.blend(blue, (ratio - 0.5) / 0.5)
+        };
+
+        assert_eq!(spec.color_at(rect, point), expected);
+    }
+
+    #[test]
+    fn style_resolves_gradient_paints() {
+        let fg_spec = GradientSpec::new(0.0, Color::White, Color::Black);
+        let bg_spec = GradientSpec::new(90.0, Color::Red, Color::Blue);
+        let style = Style {
+            fg: Paint::gradient(fg_spec.clone()),
+            bg: Paint::gradient(bg_spec.clone()),
+            attrs: AttrSet::default(),
+        };
+        let rect = geom::Rect::new(0, 0, 4, 4);
+        let point = geom::Point { x: 1, y: 2 };
+        let resolved = style.resolve_at(rect, point);
+
+        assert_eq!(resolved.fg, fg_spec.color_at(rect, point));
+        assert_eq!(resolved.bg, bg_spec.color_at(rect, point));
     }
 }

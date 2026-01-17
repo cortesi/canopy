@@ -5,7 +5,7 @@ use crate::{
     error::Result,
     geom::{Expanse, Point},
     render::RenderBackend,
-    style::{Style, StyleManager},
+    style::{ResolvedStyle, StyleManager},
 };
 
 /// A handle to a vector that contains the result of the render.
@@ -80,7 +80,7 @@ impl RenderBackend for TestRender {
         Ok(())
     }
 
-    fn style(&mut self, _s: &Style) -> Result<()> {
+    fn style(&mut self, _s: &ResolvedStyle) -> Result<()> {
         Ok(())
     }
 
@@ -162,7 +162,7 @@ impl RenderBackend for CanvasRender {
         Ok(())
     }
 
-    fn style(&mut self, _s: &Style) -> Result<()> {
+    fn style(&mut self, _s: &ResolvedStyle) -> Result<()> {
         Ok(())
     }
 

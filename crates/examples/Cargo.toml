@@ -39,6 +39,10 @@ name = "focusgym"
 path = "examples/focusgym.rs"
 
 [[example]]
+name = "fontgym"
+path = "examples/fontgym.rs"
+
+[[example]]
 name = "framegym"
 path = "examples/framegym.rs"
 

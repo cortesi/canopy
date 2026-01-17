@@ -796,7 +796,10 @@ impl Canopy {
         let mut styl = StyleManager::default();
         styl.reset();
 
-        let def_style = styl.get(&self.style, "");
+        let def_style = styl
+            .get(&self.style, "")
+            .resolve_solid()
+            .expect("default style resolves to solid colors");
         let mut next = TermBuf::new(root_size, ' ', def_style);
 
         let screen_clip = Rect::new(0, 0, root_size.w, root_size.h);

@@ -9,7 +9,7 @@ use canopy::{
     geom::{Expanse, Point, Rect},
     layout::Layout,
     render::Render,
-    style::{AttrSet, Color, Style},
+    style::{AttrSet, Color, ResolvedStyle},
 };
 use image::RgbaImage;
 
@@ -262,11 +262,7 @@ impl ImageView {
                 let column = column_index as f32 - offset_x;
                 let top_color = self.sample_color(column, top_row);
                 let bottom_color = self.sample_color(column, bottom_row);
-                let style = Style {
-                    fg: top_color,
-                    bg: bottom_color,
-                    attrs: AttrSet::default(),
-                };
+                let style = ResolvedStyle::new(top_color, bottom_color, AttrSet::default());
                 let point = Point {
                     x: origin.x + column_index,
                     y: origin.y + row_index,

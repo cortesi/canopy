@@ -33,8 +33,12 @@ pub struct Dim {
 impl StyleEffect for Dim {
     fn apply(&self, style: Style) -> Style {
         Style {
-            fg: style.fg.scale_brightness(self.factor),
-            bg: style.bg.scale_brightness(self.factor),
+            fg: style
+                .fg
+                .map_colors(|color| color.scale_brightness(self.factor)),
+            bg: style
+                .bg
+                .map_colors(|color| color.scale_brightness(self.factor)),
             attrs: style.attrs,
         }
     }
@@ -55,8 +59,12 @@ pub struct Brighten {
 impl StyleEffect for Brighten {
     fn apply(&self, style: Style) -> Style {
         Style {
-            fg: style.fg.scale_brightness(self.factor),
-            bg: style.bg.scale_brightness(self.factor),
+            fg: style
+                .fg
+                .map_colors(|color| color.scale_brightness(self.factor)),
+            bg: style
+                .bg
+                .map_colors(|color| color.scale_brightness(self.factor)),
             attrs: style.attrs,
         }
     }
@@ -77,8 +85,8 @@ pub struct Saturation {
 impl StyleEffect for Saturation {
     fn apply(&self, style: Style) -> Style {
         Style {
-            fg: style.fg.saturation(self.factor),
-            bg: style.bg.saturation(self.factor),
+            fg: style.fg.map_colors(|color| color.saturation(self.factor)),
+            bg: style.bg.map_colors(|color| color.saturation(self.factor)),
             attrs: style.attrs,
         }
     }
@@ -115,8 +123,8 @@ pub struct InvertRgb;
 impl StyleEffect for InvertRgb {
     fn apply(&self, style: Style) -> Style {
         Style {
-            fg: style.fg.invert_rgb(),
-            bg: style.bg.invert_rgb(),
+            fg: style.fg.map_colors(Color::invert_rgb),
+            bg: style.bg.map_colors(Color::invert_rgb),
             attrs: style.attrs,
         }
     }
@@ -139,8 +147,12 @@ pub struct Tint {
 impl StyleEffect for Tint {
     fn apply(&self, style: Style) -> Style {
         Style {
-            fg: style.fg.blend(self.color, self.ratio),
-            bg: style.bg.blend(self.color, self.ratio),
+            fg: style
+                .fg
+                .map_colors(|color| color.blend(self.color, self.ratio)),
+            bg: style
+                .bg
+                .map_colors(|color| color.blend(self.color, self.ratio)),
             attrs: style.attrs,
         }
     }
@@ -161,8 +173,8 @@ pub struct HueShift {
 impl StyleEffect for HueShift {
     fn apply(&self, style: Style) -> Style {
         Style {
-            fg: style.fg.shift_hue(self.degrees),
-            bg: style.bg.shift_hue(self.degrees),
+            fg: style.fg.map_colors(|color| color.shift_hue(self.degrees)),
+            bg: style.bg.map_colors(|color| color.shift_hue(self.degrees)),
             attrs: style.attrs,
         }
     }
@@ -301,19 +313,20 @@ pub fn clear_attrs() -> Effect {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::style::Paint;
 
     fn test_style() -> Style {
         Style {
-            fg: Color::Rgb {
+            fg: Paint::solid(Color::Rgb {
                 r: 200,
                 g: 100,
                 b: 50,
-            },
-            bg: Color::Rgb {
+            }),
+            bg: Paint::solid(Color::Rgb {
                 r: 20,
                 g: 20,
                 b: 20,
-            },
+            }),
             attrs: AttrSet::default(),
         }
     }
@@ -322,25 +335,23 @@ mod tests {
     fn test_dim_effect() {
         let style = test_style();
         let dimmed = dim(0.5).apply(style);
-        if let Color::Rgb { r, g, b } = dimmed.fg {
-            assert_eq!(r, 100);
-            assert_eq!(g, 50);
-            assert_eq!(b, 25);
-        } else {
-            panic!("Expected RGB");
-        }
+        let Some(Color::Rgb { r, g, b }) = dimmed.fg.solid_color() else {
+            panic!("Expected solid RGB");
+        };
+        assert_eq!(r, 100);
+        assert_eq!(g, 50);
+        assert_eq!(b, 25);
     }
 
     #[test]
     fn test_saturation_effect() {
         let style = test_style();
         let gray = saturation(0.0).apply(style);
-        if let Color::Rgb { r, g, b } = gray.fg {
-            assert_eq!(r, g);
-            assert_eq!(g, b);
-        } else {
-            panic!("Expected RGB");
-        }
+        let Some(Color::Rgb { r, g, b }) = gray.fg.solid_color() else {
+            panic!("Expected solid RGB");
+        };
+        assert_eq!(r, g);
+        assert_eq!(g, b);
     }
 
     #[test]
@@ -366,9 +377,10 @@ mod tests {
         let step1 = dim(0.5).apply(style);
         let step2 = bold().apply(step1);
         // Should have both dimmed colors and bold attribute
-        if let Color::Rgb { r, .. } = step2.fg {
-            assert_eq!(r, 100); // Dimmed
-        }
+        let Some(Color::Rgb { r, .. }) = step2.fg.solid_color() else {
+            panic!("Expected solid RGB");
+        };
+        assert_eq!(r, 100); // Dimmed
         assert!(step2.attrs.bold);
     }
 }

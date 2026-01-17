@@ -2,7 +2,7 @@
 use crate::{
     core::termbuf::TermBuf,
     geom::Point,
-    style::{Color, PartialStyle},
+    style::{Color, Paint, PartialStyle},
 };
 
 /// A helper macro to create buffers for the termbuf match assertions.
@@ -152,9 +152,19 @@ impl<'a> BufTest<'a> {
                             break;
                         }
                         // Check if the cell style matches the partial style
-                        let style_matches = (style.fg.is_none() || style.fg == Some(cell.style.fg))
-                            && (style.bg.is_none() || style.bg == Some(cell.style.bg))
-                            && (style.attrs.is_none() || style.attrs == Some(cell.style.attrs));
+                        let fg_matches = match &style.fg {
+                            None => true,
+                            Some(Paint::Solid(color)) => *color == cell.style.fg,
+                            Some(Paint::Gradient(_)) => false,
+                        };
+                        let bg_matches = match &style.bg {
+                            None => true,
+                            Some(Paint::Solid(color)) => *color == cell.style.bg,
+                            Some(Paint::Gradient(_)) => false,
+                        };
+                        let attr_matches =
+                            style.attrs.is_none() || style.attrs == Some(cell.style.attrs);
+                        let style_matches = fg_matches && bg_matches && attr_matches;
                         if style_matches {
                             c = true;
                         }
@@ -295,15 +305,11 @@ mod tests {
     use super::*;
     use crate::{
         geom::{Expanse, Line},
-        style::{AttrSet, Color, Style},
+        style::{AttrSet, Color, ResolvedStyle},
     };
 
-    fn test_style() -> Style {
-        Style {
-            fg: Color::White,
-            bg: Color::Black,
-            attrs: AttrSet::default(),
-        }
+    fn test_style() -> ResolvedStyle {
+        ResolvedStyle::new(Color::White, Color::Black, AttrSet::default())
     }
 
     #[test]
