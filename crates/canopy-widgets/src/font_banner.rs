@@ -67,6 +67,12 @@ impl FontBanner {
         self.cache = None;
     }
 
+    /// Update the banner renderer.
+    pub fn set_renderer(&mut self, renderer: FontRenderer) {
+        self.renderer = renderer;
+        self.cache = None;
+    }
+
     /// Configure the banner style path.
     pub fn with_style(mut self, style: impl Into<String>) -> Self {
         self.style = style.into();

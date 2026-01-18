@@ -20,6 +20,16 @@ managing only its children, who manage their own children in turn, until the lea
 All interface operations are defined cleanly as traversals of this node tree.
 
 
+# Widgets
+
+
+## TTF font renderer for hero banners and headers.
+
+<img src="./demos/font.gif" height="200" />
+
+
+
+
 # Documentation
 
 - [Guide](https://cortesi.github.io/canopy/book)

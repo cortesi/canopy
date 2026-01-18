@@ -26,6 +26,8 @@ pub mod stylegym;
 pub mod termgym;
 /// Text gym example nodes.
 pub mod textgym;
+/// Widget demo nodes.
+pub mod widget;
 
 #[cfg(test)]
 mod tests;
