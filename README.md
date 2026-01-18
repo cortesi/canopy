@@ -28,6 +28,10 @@ All interface operations are defined cleanly as traversals of this node tree.
 <img src="./demos/font.gif" height="200" />
 
 
+## Image viewer
+
+<img src="./demos/image.gif" height="300" />
+
 
 
 # Documentation

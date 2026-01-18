@@ -7,7 +7,7 @@ use canopy::{
     commands::{ScrollDirection, ZoomDirection},
     derive_commands, error as canopy_error,
     geom::{Expanse, Point, Rect},
-    layout::Layout,
+    layout::{CanvasContext, Layout, Size},
     render::Render,
     style::{AttrSet, Color, ResolvedStyle},
 };
@@ -26,15 +26,6 @@ const PAN_STEP_COLUMNS: i32 = 1;
 /// Pan step in terminal rows.
 const PAN_STEP_ROWS: i32 = 1;
 
-/// Current panning offset in image coordinates.
-#[derive(Clone, Copy, Debug, Default)]
-struct Pan {
-    /// Horizontal offset in image pixels.
-    column: f32,
-    /// Vertical offset in image pixels.
-    row: f32,
-}
-
 /// Widget that renders an image into terminal cells.
 pub struct ImageView {
     /// Loaded image buffer.
@@ -45,8 +36,6 @@ pub struct ImageView {
     image_height: u32,
     /// Zoom factor in display subpixels per image pixel.
     zoom: f32,
-    /// Current panning offset.
-    pan: Pan,
     /// Whether the view should auto-fit the image to the terminal.
     auto_fit: bool,
 }
@@ -73,22 +62,6 @@ impl ImageView {
         view_size.h as f32 * 2.0
     }
 
-    /// Clamp the pan offset so it stays within the image bounds.
-    fn clamp_pan(&mut self, view_size: Expanse) {
-        if self.image_width == 0 || self.image_height == 0 {
-            self.pan = Pan::default();
-            return;
-        }
-
-        let view_width = Self::view_subpixel_width(view_size) / self.zoom;
-        let view_height = Self::view_subpixel_height(view_size) / self.zoom;
-        let max_column = (self.image_width_f32() - view_width).max(0.0);
-        let max_row = (self.image_height_f32() - view_height).max(0.0);
-
-        self.pan.column = self.pan.column.clamp(0.0, max_column);
-        self.pan.row = self.pan.row.clamp(0.0, max_row);
-    }
-
     /// Compute a zoom value that fits the entire image inside the view.
     fn fit_zoom(&self, view_size: Expanse) -> f32 {
         let image_width = self.image_width_f32();
@@ -105,6 +78,15 @@ impl ImageView {
         zoom_width.min(zoom_height).clamp(0.0, MAX_ZOOM)
     }
 
+    /// Determine the zoom value to use for the provided view.
+    fn effective_zoom(&self, view_size: Expanse) -> f32 {
+        if self.auto_fit {
+            self.fit_zoom(view_size)
+        } else {
+            self.zoom
+        }
+    }
+
     /// Apply automatic fit if enabled.
     fn apply_auto_fit(&mut self, view_size: Expanse) {
         if !self.auto_fit {
@@ -115,52 +97,54 @@ impl ImageView {
         }
 
         self.zoom = self.fit_zoom(view_size);
-        self.pan = Pan::default();
-        self.clamp_pan(view_size);
     }
 
     /// Zoom around the center of the current view.
-    fn zoom_by(&mut self, view_size: Expanse, factor: f32) {
+    fn zoom_by(&mut self, view_size: Expanse, scroll: Point, factor: f32) -> Point {
         let view_width = Self::view_subpixel_width(view_size);
         let view_height = Self::view_subpixel_height(view_size);
+        if view_width == 0.0 || view_height == 0.0 {
+            return scroll;
+        }
 
-        let center_column = self.pan.column + view_width / (2.0 * self.zoom);
-        let center_row = self.pan.row + view_height / (2.0 * self.zoom);
+        let zoom_before = self.zoom;
+        let (offset_x, offset_y) = self.center_offset(view_size, zoom_before);
+        let center_sub_x = scroll.x as f32 - offset_x + view_width / 2.0;
+        let center_sub_y = scroll.y as f32 * 2.0 - offset_y + view_height / 2.0;
+        let center_image_x = center_sub_x / zoom_before;
+        let center_image_y = center_sub_y / zoom_before;
 
         let min_zoom = MIN_ZOOM.min(self.fit_zoom(view_size));
         self.zoom = (self.zoom * factor).clamp(min_zoom, MAX_ZOOM);
-        self.pan.column = center_column - view_width / (2.0 * self.zoom);
-        self.pan.row = center_row - view_height / (2.0 * self.zoom);
-        self.clamp_pan(view_size);
-    }
-
-    /// Pan by a number of terminal cells.
-    fn pan_by_cells(&mut self, view_size: Expanse, delta_columns: i32, delta_rows: i32) {
-        let delta_subpixels_x = delta_columns as f32;
-        let delta_subpixels_y = delta_rows as f32 * 2.0;
-        self.pan_by_subpixels(view_size, delta_subpixels_x, delta_subpixels_y);
-    }
-
-    /// Pan by a number of display subpixels.
-    fn pan_by_subpixels(&mut self, view_size: Expanse, delta_columns: f32, delta_rows: f32) {
-        self.pan.column += delta_columns / self.zoom;
-        self.pan.row += delta_rows / self.zoom;
-        self.clamp_pan(view_size);
+        let (new_offset_x, new_offset_y) = self.center_offset(view_size, self.zoom);
+        let new_center_sub_x = center_image_x * self.zoom;
+        let new_center_sub_y = center_image_y * self.zoom;
+        let new_scroll_x = new_center_sub_x + new_offset_x - view_width / 2.0;
+        let new_scroll_y = (new_center_sub_y + new_offset_y - view_height / 2.0) / 2.0;
+        Point {
+            x: new_scroll_x.max(0.0).round() as u32,
+            y: new_scroll_y.max(0.0).round() as u32,
+        }
     }
 
     /// Compute the image-space bounds of a display subpixel.
-    fn subpixel_bounds(&self, subpixel_column: f32, subpixel_row: f32) -> (f32, f32, f32, f32) {
-        let inverse_zoom = 1.0 / self.zoom;
-        let left = self.pan.column + subpixel_column * inverse_zoom;
-        let right = self.pan.column + (subpixel_column + 1.0) * inverse_zoom;
-        let top = self.pan.row + subpixel_row * inverse_zoom;
-        let bottom = self.pan.row + (subpixel_row + 1.0) * inverse_zoom;
+    fn subpixel_bounds(
+        &self,
+        zoom: f32,
+        subpixel_column: f32,
+        subpixel_row: f32,
+    ) -> (f32, f32, f32, f32) {
+        let inverse_zoom = 1.0 / zoom;
+        let left = subpixel_column * inverse_zoom;
+        let right = (subpixel_column + 1.0) * inverse_zoom;
+        let top = subpixel_row * inverse_zoom;
+        let bottom = (subpixel_row + 1.0) * inverse_zoom;
         (left, top, right, bottom)
     }
 
     /// Sample a color from the image for a display subpixel.
-    fn sample_color(&self, subpixel_column: f32, subpixel_row: f32) -> Color {
-        let (left, top, right, bottom) = self.subpixel_bounds(subpixel_column, subpixel_row);
+    fn sample_color(&self, zoom: f32, subpixel_column: f32, subpixel_row: f32) -> Color {
+        let (left, top, right, bottom) = self.subpixel_bounds(zoom, subpixel_column, subpixel_row);
         let center_column = (left + right) * 0.5;
         let center_row = (top + bottom) * 0.5;
         if center_column < 0.0
@@ -183,11 +167,11 @@ impl ImageView {
     }
 
     /// Compute the display subpixel offset to center the image in the view.
-    fn center_offset(&self, view_size: Expanse) -> (f32, f32) {
+    fn center_offset(&self, view_size: Expanse, zoom: f32) -> (f32, f32) {
         let view_width = Self::view_subpixel_width(view_size);
         let view_height = Self::view_subpixel_height(view_size);
-        let image_width = self.image_width_f32() * self.zoom;
-        let image_height = self.image_height_f32() * self.zoom;
+        let image_width = self.image_width_f32() * zoom;
+        let image_height = self.image_height_f32() * zoom;
 
         let offset_x = (view_width - image_width).max(0.0) / 2.0;
         let offset_y = (view_height - image_height).max(0.0) / 2.0;
@@ -247,21 +231,22 @@ impl ImageView {
         &self,
         render: &mut Render,
         view: Rect,
+        origin: Point,
         offset: (f32, f32),
+        zoom: f32,
     ) -> canopy_error::Result<()> {
-        let origin = view.tl;
         let (offset_x, offset_y) = offset;
 
         for row_index in 0..view.h {
-            let top_subpixel_row = row_index.saturating_mul(2);
+            let top_subpixel_row = view.tl.y.saturating_add(row_index).saturating_mul(2);
             let bottom_subpixel_row = top_subpixel_row.saturating_add(1);
             let top_row = top_subpixel_row as f32 - offset_y;
             let bottom_row = bottom_subpixel_row as f32 - offset_y;
 
             for column_index in 0..view.w {
-                let column = column_index as f32 - offset_x;
-                let top_color = self.sample_color(column, top_row);
-                let bottom_color = self.sample_color(column, bottom_row);
+                let column = (view.tl.x + column_index) as f32 - offset_x;
+                let top_color = self.sample_color(zoom, column, top_row);
+                let bottom_color = self.sample_color(zoom, column, bottom_row);
                 let style = ResolvedStyle::new(top_color, bottom_color, AttrSet::default());
                 let point = Point {
                     x: origin.x + column_index,
@@ -283,7 +268,6 @@ impl ImageView {
             image_width,
             image_height,
             zoom: 1.0,
-            pan: Pan::default(),
             auto_fit: true,
         }
     }
@@ -295,34 +279,42 @@ impl ImageView {
         Ok(Self::new(image.to_rgba8()))
     }
 
+    /// Configure whether the image auto-fits to the view.
+    pub fn with_auto_fit(mut self, auto_fit: bool) -> Self {
+        self.auto_fit = auto_fit;
+        self
+    }
+
     /// Zoom around the view center.
     pub fn zoom(&mut self, ctx: &mut dyn Context, dir: ZoomDirection) -> canopy_error::Result<()> {
-        let view_size = ctx.view().content_size();
+        let view = ctx.view();
+        let view_size = view.content_size();
+        self.zoom = self.effective_zoom(view_size);
         self.auto_fit = false;
         let factor = match dir {
             ZoomDirection::In => ZOOM_STEP,
             ZoomDirection::Out => 1.0 / ZOOM_STEP,
         };
-        self.zoom_by(view_size, factor);
+        let scroll = self.zoom_by(view_size, view.tl, factor);
+        ctx.scroll_to(scroll.x, scroll.y);
         Ok(())
     }
 
     /// Pan by one step in the specified direction.
     pub fn pan(&mut self, ctx: &mut dyn Context, dir: ScrollDirection) -> canopy_error::Result<()> {
-        let view_size = ctx.view().content_size();
         self.auto_fit = false;
         match dir {
             ScrollDirection::Left => {
-                self.pan_by_cells(view_size, -PAN_STEP_COLUMNS, 0);
+                ctx.scroll_by(-PAN_STEP_COLUMNS, 0);
             }
             ScrollDirection::Right => {
-                self.pan_by_cells(view_size, PAN_STEP_COLUMNS, 0);
+                ctx.scroll_by(PAN_STEP_COLUMNS, 0);
             }
             ScrollDirection::Up => {
-                self.pan_by_cells(view_size, 0, -PAN_STEP_ROWS);
+                ctx.scroll_by(0, -PAN_STEP_ROWS);
             }
             ScrollDirection::Down => {
-                self.pan_by_cells(view_size, 0, PAN_STEP_ROWS);
+                ctx.scroll_by(0, PAN_STEP_ROWS);
             }
         }
         Ok(())
@@ -371,19 +363,27 @@ impl Widget for ImageView {
         Layout::fill()
     }
 
+    fn canvas(&self, view: Size<u32>, _ctx: &CanvasContext) -> Size<u32> {
+        let view_size = Expanse::new(view.width, view.height);
+        let zoom = self.effective_zoom(view_size);
+        let width = (self.image_width_f32() * zoom).ceil() as u32;
+        let height = ((self.image_height_f32() * zoom) / 2.0).ceil() as u32;
+        Size::new(width.max(view.width), height.max(view.height))
+    }
+
     /// Render the current image view into the terminal buffer.
     fn render(&mut self, render: &mut Render, ctx: &dyn ReadContext) -> canopy_error::Result<()> {
-        let view = ctx.view().view_rect_local();
-        if view.w == 0 || view.h == 0 {
+        let view = ctx.view();
+        let view_rect = view.view_rect();
+        if view_rect.w == 0 || view_rect.h == 0 {
             return Ok(());
         }
 
-        let view_size = ctx.view().content_size();
+        let view_size = view.content_size();
         self.apply_auto_fit(view_size);
-        self.clamp_pan(view_size);
 
-        let offset = self.center_offset(view_size);
-        self.render_cells(render, view, offset)
+        let offset = self.center_offset(view_size, self.zoom);
+        self.render_cells(render, view_rect, view.content_origin(), offset, self.zoom)
     }
 
     /// Accept focus so key bindings apply to this widget.
@@ -432,7 +432,7 @@ mod tests {
         let image = RgbaImage::new(2000, 1000);
         let mut view = ImageView::new(image);
         let view_size = make_view(100, 25);
-        view.zoom_by(view_size, 0.01);
+        let _ = view.zoom_by(view_size, Point::default(), 0.01);
         let fit_zoom = view.fit_zoom(view_size);
         assert!((view.zoom - fit_zoom).abs() < 0.0001);
     }
@@ -441,9 +441,9 @@ mod tests {
     fn sample_color_returns_black_outside_image() {
         let image = RgbaImage::from_pixel(4, 4, Rgba([255, 0, 0, 255]));
         let view = ImageView::new(image);
-        assert_eq!(view.sample_color(-1.0, 0.0), Color::Black);
+        assert_eq!(view.sample_color(1.0, -1.0, 0.0), Color::Black);
         assert_eq!(
-            view.sample_color(0.0, 0.0),
+            view.sample_color(1.0, 0.0, 0.0),
             Color::Rgb { r: 255, g: 0, b: 0 }
         );
     }

@@ -9,10 +9,11 @@ use std::{
 
 use canopy::{
     backend::crossterm::{RunloopOptions, runloop_with_options},
+    event::key,
     prelude::*,
 };
 use canopy_examples::widget::{DemoHost, DemoSize, FontDemo, FontSource, ListDemo};
-use canopy_widgets::{FontEffects, Root};
+use canopy_widgets::{FontEffects, ImageView, Root};
 use clap::{Parser, Subcommand};
 use unicode_width::UnicodeWidthStr;
 
@@ -22,6 +23,8 @@ const DEFAULT_TEXT: &str = "Canopy";
 const DEFAULT_FONT_DIR: &str = "assets/fonts";
 /// Default interval for switching fonts, in milliseconds.
 const DEFAULT_FONT_INTERVAL_MS: u64 = 1000;
+/// Default image path for the image demo.
+const DEFAULT_IMAGE_PATH: &str = "assets/tiger.jpg";
 /// Default interval for list selection changes, in milliseconds.
 const DEFAULT_LIST_INTERVAL_MS: u64 = 500;
 /// Items used in the list demo.
@@ -67,6 +70,8 @@ struct Args {
 enum Command {
     /// Render text using the font widget.
     Font(FontArgs),
+    /// Render an image using the image viewer.
+    Image(ImageArgs),
     /// Render a simple list demo.
     List(ListArgs),
 }
@@ -119,6 +124,14 @@ struct FontArgs {
     strike: bool,
 }
 
+/// Arguments for the image widget demo.
+#[derive(Parser, Debug)]
+struct ImageArgs {
+    /// Path to an image file.
+    #[arg(long, value_name = "PATH", default_value = DEFAULT_IMAGE_PATH)]
+    path: PathBuf,
+}
+
 /// Run the widget demo.
 fn main() -> Result<()> {
     let args = Args::parse();
@@ -154,6 +167,12 @@ fn main() -> Result<()> {
                 size,
                 args.frame,
             )
+        }
+        Command::Image(image_args) => {
+            ImageView::load(&mut cnpy)?;
+            setup_image_bindings(&mut cnpy);
+            let view = ImageView::from_path(&image_args.path)?;
+            DemoHost::new(view, size, true)
         }
         Command::List(list_args) => {
             let interval = Duration::from_millis(list_args.interval_ms.max(1));
@@ -228,4 +247,21 @@ fn load_font_sources(path: &Path) -> Result<Vec<FontSource>> {
         )));
     }
     Ok(sources)
+}
+
+/// Register keybindings for image zooming and panning.
+fn setup_image_bindings(cnpy: &mut Canopy) {
+    Binder::new(cnpy)
+        .key('q', "root::quit()")
+        .with_path("image_view/")
+        .key('i', "image_view::zoom_in()")
+        .key('o', "image_view::zoom_out()")
+        .key('h', "image_view::pan_left()")
+        .key('j', "image_view::pan_down()")
+        .key('k', "image_view::pan_up()")
+        .key('l', "image_view::pan_right()")
+        .key(key::KeyCode::Left, "image_view::pan_left()")
+        .key(key::KeyCode::Right, "image_view::pan_right()")
+        .key(key::KeyCode::Up, "image_view::pan_up()")
+        .key(key::KeyCode::Down, "image_view::pan_down()");
 }

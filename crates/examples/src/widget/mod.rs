@@ -5,7 +5,7 @@ use std::time::Duration;
 use canopy::{
     Context, NodeId, ReadContext, TypedId, Widget,
     error::{Error, Result},
-    layout::Layout,
+    layout::{Edges, Layout},
     render::Render,
     state::NodeName,
     style::{Color, Paint, StyleMap},
@@ -92,7 +92,7 @@ impl Widget for DemoHost {
         } else {
             ctx.add_child_to_boxed(pad_id.into(), child)?
         };
-        let mut layout = Layout::fill();
+        let mut layout = Layout::fill().padding(Edges::all(DEMO_PADDING));
         if let Some(width) = self.size.width {
             layout = layout.fixed_width(width);
         }
@@ -100,7 +100,9 @@ impl Widget for DemoHost {
             layout = layout.fixed_height(height);
         }
         ctx.set_layout_of(pad_id, layout)?;
-        ctx.set_layout_of(sized_id, Layout::fill())?;
+        if !self.frame {
+            ctx.set_layout_of(sized_id, Layout::fill())?;
+        }
         Ok(())
     }
 
