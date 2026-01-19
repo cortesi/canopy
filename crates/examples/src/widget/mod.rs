@@ -14,8 +14,10 @@ use canopy_widgets::{Center, Frame, List, Pad, Text};
 use unicode_width::UnicodeWidthStr;
 
 mod font;
+mod term;
 
 pub use font::{FontDemo, FontSource};
+pub use term::TermDemo;
 
 /// Style path used for list items.
 const LIST_STYLE_PATH: &str = "widget/list/item";

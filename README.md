@@ -36,6 +36,18 @@ All interface operations are defined cleanly as traversals of this node tree.
             </td>
         </tr>
     </tbody>
+    <tbody>
+        <tr>
+            <td align="center" width="50%">
+                <img src="./demos/term.gif" height="300" />
+                <p><b>Full embedded terminals based on alacritty.</b></p>
+            </td>
+            <td align="center" width="50%">
+                <img src="./demos/image.gif" height="300" />
+                <p><b>Image viewer</b></p>
+            </td>
+        </tr>
+    </tbody>
 </table>
 
 

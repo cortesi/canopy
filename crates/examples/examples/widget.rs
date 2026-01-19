@@ -12,7 +12,7 @@ use canopy::{
     event::key,
     prelude::*,
 };
-use canopy_examples::widget::{DemoHost, DemoSize, FontDemo, FontSource, ListDemo};
+use canopy_examples::widget::{DemoHost, DemoSize, FontDemo, FontSource, ListDemo, TermDemo};
 use canopy_widgets::{FontEffects, ImageView, Root};
 use clap::{Parser, Subcommand};
 use unicode_width::UnicodeWidthStr;
@@ -74,6 +74,8 @@ enum Command {
     Image(ImageArgs),
     /// Render a simple list demo.
     List(ListArgs),
+    /// Render a terminal demo with tabs.
+    Term,
 }
 
 /// Arguments for the list widget demo.
@@ -189,6 +191,11 @@ fn main() -> Result<()> {
             };
             DemoHost::new(ListDemo::new(interval), size, args.frame)
         }
+        Command::Term => {
+            cnpy.add_commands::<TermDemo>()?;
+            setup_term_bindings(&mut cnpy);
+            DemoHost::new(TermDemo::new(), size, args.frame)
+        }
     };
     let app_id = cnpy.core.create_detached(demo);
 
@@ -266,4 +273,11 @@ fn setup_image_bindings(cnpy: &mut Canopy) {
         .key(key::KeyCode::Right, "image_view::pan_right()")
         .key(key::KeyCode::Up, "image_view::pan_up()")
         .key(key::KeyCode::Down, "image_view::pan_down()");
+}
+
+/// Register keybindings for the terminal demo.
+fn setup_term_bindings(cnpy: &mut Canopy) {
+    Binder::new(cnpy)
+        .with_path("term_demo/**/")
+        .key_command(key::Ctrl + key::KeyCode::Tab, TermDemo::cmd_next_tab());
 }

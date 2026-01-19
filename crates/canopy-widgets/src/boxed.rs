@@ -127,6 +127,11 @@ impl Box {
         self
     }
 
+    /// Update the border style name.
+    pub fn set_border_style(&mut self, style: impl Into<String>) {
+        self.border_style = style.into();
+    }
+
     /// Enable interior fill using the default fill style name.
     pub fn with_fill(mut self) -> Self {
         self.fill_style = Some("fill".to_string());
