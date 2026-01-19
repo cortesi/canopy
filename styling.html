@@ -223,6 +223,28 @@ that path.</p>
     r.text("frame/focused", line, "Hello")
 }
 <span class="boring">}</span></code></pre></pre>
+<h2 id="paint-and-gradients"><a class="header" href="#paint-and-gradients">Paint and gradients</a></h2>
+<p>Style foreground and background channels now accept <code>Paint</code>, which can be a solid color or a
+gradient. Gradients are defined with an angle (in degrees) and color stops.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use canopy::style::{GradientSpec, Paint, StyleMap, solarized};
+
+let mut style = StyleMap::new();
+style
+    .rules()
+    .fg(
+        "banner",
+        Paint::gradient(GradientSpec::new(
+            90.0,
+            solarized::CYAN,
+            solarized::BLUE,
+        )),
+    )
+    .apply();
+<span class="boring">}</span></code></pre></pre>
+<p>Renderers resolve gradients per-cell within the supplied bounds, so the same style can be reused
+for different sized widgets.</p>
 <h2 id="style-effects"><a class="header" href="#style-effects">Style effects</a></h2>
 <p>Style effects are dynamic, composable transforms that apply to a subtree. They are pushed via the
 context and combined during render.</p>

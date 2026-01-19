@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Attr","Color"],"mod":["dracula","effects","gruvbox","solarized"],"struct":["AttrSet","PartialStyle","Style","StyleBuilder","StyleManager","StyleMap","StyleRules"],"trait":["StyleEffect"],"type":["Effect"]};
+window.SIDEBAR_ITEMS = {"enum":["Attr","Color","Paint"],"mod":["dracula","effects","gruvbox","solarized"],"struct":["AttrSet","GradientSpec","GradientStop","PartialStyle","ResolvedStyle","Style","StyleBuilder","StyleManager","StyleMap","StyleRules"],"trait":["StyleEffect"],"type":["Effect"]};

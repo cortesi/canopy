@@ -222,6 +222,18 @@ attributes unless you supply a custom highlighter. The default syntect palette i
 <h2 id="input"><a class="header" href="#input">Input</a></h2>
 <p>The <code>Input</code> widget is a single-line text field that shares the editor's buffer and column mapping
 logic. It renders with horizontal scrolling to keep the cursor visible.</p>
+<h2 id="fontbanner"><a class="header" href="#fontbanner">FontBanner</a></h2>
+<p><code>FontBanner</code> renders large terminal text from a TTF font into the available region. It scales to the
+target height and clips overflow by default.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use canopy_widgets::{Font, FontBanner, FontRenderer, LayoutOptions};
+
+let font = Font::from_bytes(include_bytes!("MyFont-Regular.ttf"))?;
+let renderer = FontRenderer::new(font);
+let banner = FontBanner::new("Canopy", renderer).with_layout_options(LayoutOptions::default());
+<span class="boring">}</span></code></pre></pre>
+<p>Use the style system to apply solid or gradient paint to the banner via its style path.</p>
 
                     </main>
 

@@ -28,7 +28,7 @@
 <a href=#28 id=28 data-nosnippet>28</a>    layout::{CanvasContext, MeasureConstraints, Measurement, Size},
 <a href=#29 id=29 data-nosnippet>29</a>    render::Render,
 <a href=#30 id=30 data-nosnippet>30</a>    state::NodeName,
-<a href=#31 id=31 data-nosnippet>31</a>    style::{AttrSet, Color, Style},
+<a href=#31 id=31 data-nosnippet>31</a>    style::{AttrSet, Color, ResolvedStyle},
 <a href=#32 id=32 data-nosnippet>32</a>};
 <a href=#33 id=33 data-nosnippet>33</a><span class="kw">use </span>portable_pty::{Child, CommandBuilder, ExitStatus, MasterPty, PtySize, native_pty_system};
 <a href=#34 id=34 data-nosnippet>34</a>
@@ -1073,7 +1073,7 @@
 <a href=#1073 id=1073 data-nosnippet>1073</a>                ch = <span class="string">' '</span>;
 <a href=#1074 id=1074 data-nosnippet>1074</a>            }
 <a href=#1075 id=1075 data-nosnippet>1075</a>
-<a href=#1076 id=1076 data-nosnippet>1076</a>            <span class="kw">let </span>style = Style { fg, bg, attrs };
+<a href=#1076 id=1076 data-nosnippet>1076</a>            <span class="kw">let </span>style = ResolvedStyle::new(fg, bg, attrs);
 <a href=#1077 id=1077 data-nosnippet>1077</a>            <span class="kw">let </span>local = geom::Point {
 <a href=#1078 id=1078 data-nosnippet>1078</a>                x: view.content_origin().x.saturating_add(col),
 <a href=#1079 id=1079 data-nosnippet>1079</a>                y: view.content_origin().y.saturating_add(row),
