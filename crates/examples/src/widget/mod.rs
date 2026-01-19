@@ -50,6 +50,10 @@ pub struct DemoHost {
     size: DemoSize,
     /// Whether to wrap the demo in a frame.
     frame: bool,
+    /// Padding inside the demo host.
+    inner_padding: u32,
+    /// Padding outside the demo host.
+    outer_padding: u32,
 }
 
 impl DemoHost {
@@ -59,7 +63,21 @@ impl DemoHost {
             child: Some(child.into()),
             size,
             frame,
+            inner_padding: DEMO_PADDING,
+            outer_padding: 0,
         }
+    }
+
+    /// Set the inner padding for the demo host.
+    pub fn with_inner_padding(mut self, padding: u32) -> Self {
+        self.inner_padding = padding;
+        self
+    }
+
+    /// Set the outer padding for the demo host.
+    pub fn with_outer_padding(mut self, padding: u32) -> Self {
+        self.outer_padding = padding;
+        self
     }
 }
 
@@ -84,7 +102,15 @@ impl Widget for DemoHost {
             ctx.set_style(style);
         }
         let center_id = ctx.add_child(Center::new())?;
-        let pad_id = ctx.add_child_to(center_id, Pad::uniform(DEMO_PADDING))?;
+        let parent_id: NodeId = if self.outer_padding > 0 {
+            let outer_pad_id = ctx.add_child_to(center_id, Pad::uniform(self.outer_padding))?;
+            let outer_layout = Layout::fill().padding(Edges::all(self.outer_padding));
+            ctx.set_layout_of(outer_pad_id, outer_layout)?;
+            outer_pad_id.into()
+        } else {
+            center_id.into()
+        };
+        let pad_id = ctx.add_child_to(parent_id, Pad::uniform(self.inner_padding))?;
         let sized_id: NodeId = if self.frame {
             let frame_id = ctx.add_child_to(pad_id, Frame::new())?;
             let _child_id = ctx.add_child_to_boxed(frame_id.into(), child)?;
@@ -92,7 +118,7 @@ impl Widget for DemoHost {
         } else {
             ctx.add_child_to_boxed(pad_id.into(), child)?
         };
-        let mut layout = Layout::fill().padding(Edges::all(DEMO_PADDING));
+        let mut layout = Layout::fill().padding(Edges::all(self.inner_padding));
         if let Some(width) = self.size.width {
             layout = layout.fixed_width(width);
         }

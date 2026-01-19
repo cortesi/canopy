@@ -26,14 +26,88 @@ const PAN_STEP_COLUMNS: i32 = 1;
 /// Pan step in terminal rows.
 const PAN_STEP_ROWS: i32 = 1;
 
+/// Summed-area table for fast image region sampling.
+struct IntegralImage {
+    /// Row stride in the summed-area tables.
+    stride: usize,
+    /// Summed red channel values (premultiplied by alpha).
+    red: Vec<u64>,
+    /// Summed green channel values (premultiplied by alpha).
+    green: Vec<u64>,
+    /// Summed blue channel values (premultiplied by alpha).
+    blue: Vec<u64>,
+}
+
+impl IntegralImage {
+    /// Build an integral image from an RGBA buffer.
+    fn new(image: &RgbaImage) -> Self {
+        let width = image.width();
+        let height = image.height();
+        let stride = (width + 1) as usize;
+        let size = stride * (height + 1) as usize;
+        let mut red = vec![0u64; size];
+        let mut green = vec![0u64; size];
+        let mut blue = vec![0u64; size];
+
+        for y in 0..height {
+            let mut row_red = 0u64;
+            let mut row_green = 0u64;
+            let mut row_blue = 0u64;
+            for x in 0..width {
+                let pixel = image.get_pixel(x, y);
+                let alpha = pixel[3] as u64;
+                row_red += (pixel[0] as u64 * alpha) / 255;
+                row_green += (pixel[1] as u64 * alpha) / 255;
+                row_blue += (pixel[2] as u64 * alpha) / 255;
+
+                let idx = (y as usize + 1) * stride + (x as usize + 1);
+                let above = idx - stride;
+                red[idx] = red[above] + row_red;
+                green[idx] = green[above] + row_green;
+                blue[idx] = blue[above] + row_blue;
+            }
+        }
+
+        Self {
+            stride,
+            red,
+            green,
+            blue,
+        }
+    }
+
+    /// Sum a channel over a rectangular region (exclusive end coordinates).
+    fn sum_channel(&self, channel: &[u64], left: u32, top: u32, right: u32, bottom: u32) -> u64 {
+        let left = left as usize;
+        let right = right as usize;
+        let top = top as usize;
+        let bottom = bottom as usize;
+        let idx = |x: usize, y: usize| y * self.stride + x;
+        let a = channel[idx(right, bottom)];
+        let b = channel[idx(left, top)];
+        let c = channel[idx(right, top)];
+        let d = channel[idx(left, bottom)];
+        a + b - c - d
+    }
+
+    /// Sum all RGB channels over a region.
+    fn sum_rgb(&self, left: u32, top: u32, right: u32, bottom: u32) -> (u64, u64, u64) {
+        (
+            self.sum_channel(&self.red, left, top, right, bottom),
+            self.sum_channel(&self.green, left, top, right, bottom),
+            self.sum_channel(&self.blue, left, top, right, bottom),
+        )
+    }
+}
+
 /// Widget that renders an image into terminal cells.
 pub struct ImageView {
-    /// Loaded image buffer.
-    image: RgbaImage,
     /// Cached image width in pixels.
     image_width: u32,
     /// Cached image height in pixels.
     image_height: u32,
+    /// Integral image for fast sampling.
+    integral: IntegralImage,
     /// Zoom factor in display subpixels per image pixel.
     zoom: f32,
     /// Whether the view should auto-fit the image to the terminal.
@@ -190,38 +264,26 @@ impl ImageView {
         let top_index = top.floor() as i32;
         let bottom_index = bottom.ceil() as i32;
 
-        let left_clamped = left_index.max(0);
-        let right_clamped = right_index.min(self.image_width as i32);
-        let top_clamped = top_index.max(0);
-        let bottom_clamped = bottom_index.min(self.image_height as i32);
+        let left_clamped = left_index.max(0) as u32;
+        let right_clamped = right_index.min(self.image_width as i32).max(0) as u32;
+        let top_clamped = top_index.max(0) as u32;
+        let bottom_clamped = bottom_index.min(self.image_height as i32).max(0) as u32;
 
         if left_clamped >= right_clamped || top_clamped >= bottom_clamped {
             return None;
         }
 
-        let mut red_total: u32 = 0;
-        let mut green_total: u32 = 0;
-        let mut blue_total: u32 = 0;
-        let mut sample_count: u32 = 0;
-
-        for row_index in top_clamped..bottom_clamped {
-            for column_index in left_clamped..right_clamped {
-                let pixel = self.image.get_pixel(column_index as u32, row_index as u32);
-                let alpha = pixel[3] as u32;
-                red_total += (pixel[0] as u32 * alpha) / 255;
-                green_total += (pixel[1] as u32 * alpha) / 255;
-                blue_total += (pixel[2] as u32 * alpha) / 255;
-                sample_count += 1;
-            }
-        }
-
-        if sample_count == 0 {
+        let area = (right_clamped - left_clamped) as u64 * (bottom_clamped - top_clamped) as u64;
+        if area == 0 {
             return None;
         }
+        let (red_total, green_total, blue_total) =
+            self.integral
+                .sum_rgb(left_clamped, top_clamped, right_clamped, bottom_clamped);
 
-        let red = (red_total / sample_count) as u8;
-        let green = (green_total / sample_count) as u8;
-        let blue = (blue_total / sample_count) as u8;
+        let red = (red_total / area) as u8;
+        let green = (green_total / area) as u8;
+        let blue = (blue_total / area) as u8;
 
         Some((red, green, blue))
     }
@@ -260,13 +322,14 @@ impl ImageView {
     }
 
     /// Create a new image view widget.
-    pub fn new(image: RgbaImage) -> Self {
+    pub fn new(image: &RgbaImage) -> Self {
         let image_width = image.width();
         let image_height = image.height();
+        let integral = IntegralImage::new(image);
         Self {
-            image,
             image_width,
             image_height,
+            integral,
             zoom: 1.0,
             auto_fit: true,
         }
@@ -276,7 +339,8 @@ impl ImageView {
     pub fn from_path(path: impl AsRef<Path>) -> canopy_error::Result<Self> {
         let image = image::open(path.as_ref())
             .map_err(|err| canopy_error::Error::Invalid(format!("image error: {err}")))?;
-        Ok(Self::new(image.to_rgba8()))
+        let rgba = image.to_rgba8();
+        Ok(Self::new(&rgba))
     }
 
     /// Configure whether the image auto-fits to the view.
@@ -413,7 +477,7 @@ mod tests {
     #[test]
     fn fit_zoom_scales_down_below_min_zoom() {
         let image = RgbaImage::new(2000, 1000);
-        let view = ImageView::new(image);
+        let view = ImageView::new(&image);
         let zoom = view.fit_zoom(make_view(100, 25));
         assert!(zoom < MIN_ZOOM);
         assert!((zoom - 0.05).abs() < 0.0001);
@@ -422,7 +486,7 @@ mod tests {
     #[test]
     fn fit_zoom_scales_up_when_view_is_larger() {
         let image = RgbaImage::new(20, 10);
-        let view = ImageView::new(image);
+        let view = ImageView::new(&image);
         let zoom = view.fit_zoom(make_view(100, 25));
         assert!((zoom - 5.0).abs() < 0.0001);
     }
@@ -430,7 +494,7 @@ mod tests {
     #[test]
     fn zoom_out_clamps_to_fit_zoom_when_needed() {
         let image = RgbaImage::new(2000, 1000);
-        let mut view = ImageView::new(image);
+        let mut view = ImageView::new(&image);
         let view_size = make_view(100, 25);
         let _ = view.zoom_by(view_size, Point::default(), 0.01);
         let fit_zoom = view.fit_zoom(view_size);
@@ -440,7 +504,7 @@ mod tests {
     #[test]
     fn sample_color_returns_black_outside_image() {
         let image = RgbaImage::from_pixel(4, 4, Rgba([255, 0, 0, 255]));
-        let view = ImageView::new(image);
+        let view = ImageView::new(&image);
         assert_eq!(view.sample_color(1.0, -1.0, 0.0), Color::Black);
         assert_eq!(
             view.sample_color(1.0, 0.0, 0.0),

@@ -173,6 +173,8 @@ fn main() -> Result<()> {
             setup_image_bindings(&mut cnpy);
             let view = ImageView::from_path(&image_args.path)?;
             DemoHost::new(view, size, true)
+                .with_inner_padding(0)
+                .with_outer_padding(1)
         }
         Command::List(list_args) => {
             let interval = Duration::from_millis(list_args.interval_ms.max(1));

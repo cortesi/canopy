@@ -23,7 +23,7 @@ pub trait RenderBackend {
     fn supports_line_shift(&self) -> bool {
         false
     }
-    /// Shift lines within a region by the provided count.
+    /// Shift lines within the inclusive (top..=bottom) region.
     /// Positive counts shift content down, negative counts shift content up.
     fn shift_lines(&mut self, _top: u32, _bottom: u32, _count: i32) -> Result<()> {
         Ok(())

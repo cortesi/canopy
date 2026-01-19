@@ -371,6 +371,35 @@ impl TermBuf {
             backend.flush()?;
             return Ok(());
         }
+        if backend.supports_line_shift()
+            && let Some((rect, shift)) = detect_inner_shift(self, prev, MAX_ROW_SHIFT)
+        {
+            let top = rect.tl.y;
+            let bottom = rect.tl.y + rect.h - 1;
+            backend.shift_lines(top, bottom, shift)?;
+            let width = self.size.w as usize;
+            let count = shift.unsigned_abs();
+            let start_x = rect.tl.x as usize;
+            let len = rect.w as usize;
+            if shift > 0 {
+                for y in rect.tl.y..rect.tl.y + count {
+                    let row_start = y as usize * width;
+                    let row_end = row_start + width;
+                    let row = &self.cells[row_start..row_end];
+                    render_line_range(backend, row, y, start_x, len)?;
+                }
+            } else if shift < 0 {
+                let start = rect.tl.y + rect.h - count;
+                for y in start..rect.tl.y + rect.h {
+                    let row_start = y as usize * width;
+                    let row_end = row_start + width;
+                    let row = &self.cells[row_start..row_end];
+                    render_line_range(backend, row, y, start_x, len)?;
+                }
+            }
+            backend.flush()?;
+            return Ok(());
+        }
         let width = self.size.w as usize;
         let can_shift = backend.supports_char_shift();
         for y in 0..self.size.h {
@@ -503,7 +532,7 @@ fn detect_row_shift(current: &TermBuf, prev: &TermBuf, max_shift: usize) -> Opti
         return None;
     }
 
-    let max = max_shift.min(height.saturating_sub(1) as usize);
+    let max = max_shift.min(height.saturating_sub(2) as usize);
     if max == 0 {
         return None;
     }
@@ -514,6 +543,94 @@ fn detect_row_shift(current: &TermBuf, prev: &TermBuf, max_shift: usize) -> Opti
             return Some(shift);
         }
         if buffer_matches_shift(current, prev, -shift) {
+            return Some(-shift);
+        }
+    }
+    None
+}
+
+/// Check whether two buffers have matching borders and a shifted interior.
+fn detect_inner_shift(current: &TermBuf, prev: &TermBuf, max_shift: usize) -> Option<(Rect, i32)> {
+    if current.size != prev.size {
+        return None;
+    }
+    if current.size.w <= 2 || current.size.h <= 2 {
+        return None;
+    }
+    if !borders_match(current, prev) {
+        return None;
+    }
+
+    let rect = Rect::new(1, 1, current.size.w - 2, current.size.h - 2);
+    let shift = detect_row_shift_in_rect(current, prev, rect, max_shift)?;
+    Some((rect, shift))
+}
+
+/// Check that the outer border cells match between buffers.
+fn borders_match(current: &TermBuf, prev: &TermBuf) -> bool {
+    if current.size != prev.size {
+        return false;
+    }
+
+    let width = current.size.w as usize;
+    let height = current.size.h as usize;
+    if width == 0 || height == 0 {
+        return false;
+    }
+
+    let top = &current.cells[..width];
+    let prev_top = &prev.cells[..width];
+    if top != prev_top {
+        return false;
+    }
+
+    if height > 1 {
+        let bottom_start = (height - 1) * width;
+        let bottom = &current.cells[bottom_start..bottom_start + width];
+        let prev_bottom = &prev.cells[bottom_start..bottom_start + width];
+        if bottom != prev_bottom {
+            return false;
+        }
+    }
+
+    if width > 1 && height > 2 {
+        for row in 1..height - 1 {
+            let row_start = row * width;
+            let row_end = row_start + width - 1;
+            if current.cells[row_start] != prev.cells[row_start]
+                || current.cells[row_end] != prev.cells[row_end]
+            {
+                return false;
+            }
+        }
+    }
+
+    true
+}
+
+/// Check whether two buffers are identical up to a vertical shift within a rect.
+fn detect_row_shift_in_rect(
+    current: &TermBuf,
+    prev: &TermBuf,
+    rect: Rect,
+    max_shift: usize,
+) -> Option<i32> {
+    let height = rect.h as i32;
+    if rect.w == 0 || rect.h == 0 {
+        return None;
+    }
+
+    let max = max_shift.min(height.saturating_sub(2) as usize);
+    if max == 0 {
+        return None;
+    }
+
+    for shift in 1..=max {
+        let shift = shift as i32;
+        if buffer_matches_shift_in_rect(current, prev, rect, shift) {
+            return Some(shift);
+        }
+        if buffer_matches_shift_in_rect(current, prev, rect, -shift) {
             return Some(-shift);
         }
     }
@@ -542,6 +659,52 @@ fn buffer_matches_shift(current: &TermBuf, prev: &TermBuf, shift: i32) -> bool {
             let row = y as usize * width;
             let prev_row = (y - shift) as usize * width;
             if current.cells[row..row + width] != prev.cells[prev_row..prev_row + width] {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+/// Determine whether two buffers match for a given vertical shift within a rect.
+fn buffer_matches_shift_in_rect(current: &TermBuf, prev: &TermBuf, rect: Rect, shift: i32) -> bool {
+    if shift == 0 {
+        return false;
+    }
+
+    let height = rect.h as i32;
+    if shift.unsigned_abs() as i32 >= height {
+        return false;
+    }
+
+    let width = current.size.w as usize;
+    let rect_x = rect.tl.x as usize;
+    let rect_w = rect.w as usize;
+    if rect_x + rect_w > width {
+        return false;
+    }
+
+    let rect_top = rect.tl.y as i32;
+    let rect_bottom = rect_top + rect.h as i32;
+
+    if shift > 0 {
+        for y in rect_top + shift..rect_bottom {
+            let row = y as usize * width;
+            let prev_row = (y - shift) as usize * width;
+            let cur_slice = &current.cells[row + rect_x..row + rect_x + rect_w];
+            let prev_slice = &prev.cells[prev_row + rect_x..prev_row + rect_x + rect_w];
+            if cur_slice != prev_slice {
+                return false;
+            }
+        }
+    } else {
+        let limit = rect_bottom + shift;
+        for y in rect_top..limit {
+            let row = y as usize * width;
+            let prev_row = (y - shift) as usize * width;
+            let cur_slice = &current.cells[row + rect_x..row + rect_x + rect_w];
+            let prev_slice = &prev.cells[prev_row + rect_x..prev_row + rect_x + rect_w];
+            if cur_slice != prev_slice {
                 return false;
             }
         }
@@ -792,6 +955,48 @@ mod tests {
     }
 
     #[derive(Default)]
+    struct RegionShiftBackend {
+        shift: Option<(u32, u32, i32)>,
+        text_ops: usize,
+    }
+
+    impl RenderBackend for RegionShiftBackend {
+        fn style(&mut self, _style: &ResolvedStyle) -> Result<()> {
+            Ok(())
+        }
+
+        fn text(&mut self, _loc: Point, _txt: &str) -> Result<()> {
+            self.text_ops += 1;
+            Ok(())
+        }
+
+        fn supports_char_shift(&self) -> bool {
+            false
+        }
+
+        fn shift_chars(&mut self, _loc: Point, _count: i32) -> Result<()> {
+            Ok(())
+        }
+
+        fn supports_line_shift(&self) -> bool {
+            true
+        }
+
+        fn shift_lines(&mut self, top: u32, bottom: u32, count: i32) -> Result<()> {
+            self.shift = Some((top, bottom, count));
+            Ok(())
+        }
+
+        fn flush(&mut self) -> Result<()> {
+            Ok(())
+        }
+
+        fn reset(&mut self) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    #[derive(Default)]
     struct CountingBackend {
         style_calls: usize,
         text_calls: usize,
@@ -891,6 +1096,16 @@ mod tests {
         let mut be = ShiftBackend::new();
         cur.diff(&prev, &mut be).unwrap();
         assert_eq!(be.shift, Some(1));
+        assert_eq!(be.text_ops, 1);
+    }
+
+    #[test]
+    fn diff_vertical_shift_uses_scroll_interior() {
+        let prev = buf_from_rows(&["#####", "#abc#", "#def#", "#ghi#", "#####"]);
+        let cur = buf_from_rows(&["#####", "#xxx#", "#abc#", "#def#", "#####"]);
+        let mut be = RegionShiftBackend::default();
+        cur.diff(&prev, &mut be).unwrap();
+        assert_eq!(be.shift, Some((1, 3, 1)));
         assert_eq!(be.text_ops, 1);
     }
 

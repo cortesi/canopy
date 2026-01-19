@@ -260,12 +260,22 @@ impl RenderBackend for CrosstermRender {
         if count == 0 {
             return Ok(());
         }
-        let count_abs = count.unsigned_abs().min(u16::MAX as u32) as u16;
-        if count > 0 {
-            translate_result(self.fp.queue(terminal::ScrollDown(count_abs)))?;
-        } else {
-            translate_result(self.fp.queue(terminal::ScrollUp(count_abs)))?;
+        let top = _top.min(u16::MAX as u32) as u16;
+        let bottom = _bottom.min(u16::MAX as u32) as u16;
+        if top > bottom {
+            return Ok(());
         }
+        let count_abs = count.unsigned_abs().min(u16::MAX as u32) as u16;
+        let region = format!("\x1b[{};{}r", top + 1, bottom + 1);
+        translate_result(self.fp.queue(style::Print(region)))?;
+        translate_result(self.fp.queue(ccursor::MoveTo(0, top)))?;
+        let seq = if count > 0 {
+            format!("\x1b[{count_abs}T")
+        } else {
+            format!("\x1b[{count_abs}S")
+        };
+        translate_result(self.fp.queue(style::Print(seq)))?;
+        translate_result(self.fp.queue(style::Print("\x1b[r")))?;
         Ok(())
     }
 
