@@ -43,8 +43,8 @@ All interface operations are defined cleanly as traversals of this node tree.
                 <p><b>Full embedded terminals based on alacritty.</b></p>
             </td>
             <td align="center" width="50%">
-                <img src="./demos/image.gif" height="300" />
-                <p><b>Image viewer</b></p>
+                <img src="./demos/editor.gif" height="300" />
+                <p><b>Editor + syntax + vi keys</b></p>
             </td>
         </tr>
     </tbody>

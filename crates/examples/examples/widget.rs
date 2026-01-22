@@ -12,7 +12,10 @@ use canopy::{
     event::key,
     prelude::*,
 };
-use canopy_examples::widget::{DemoHost, DemoSize, FontDemo, FontSource, ListDemo, TermDemo};
+use canopy_examples::{
+    widget::{DemoHost, DemoSize, FontDemo, FontSource, ListDemo, TermDemo},
+    widget_editor::{WidgetEditor, setup_bindings},
+};
 use canopy_widgets::{FontEffects, ImageView, Root};
 use clap::{Parser, Subcommand};
 use unicode_width::UnicodeWidthStr;
@@ -27,6 +30,8 @@ const DEFAULT_FONT_INTERVAL_MS: u64 = 1000;
 const DEFAULT_IMAGE_PATH: &str = "assets/tiger.jpg";
 /// Default interval for list selection changes, in milliseconds.
 const DEFAULT_LIST_INTERVAL_MS: u64 = 500;
+/// Default Rust file to open in the widget editor.
+const DEFAULT_SOURCE_PATH: &str = "crates/canopy-widgets/src/button.rs";
 /// Items used in the list demo.
 const LIST_ITEMS: [&str; 5] = [
     "Item One",
@@ -76,6 +81,8 @@ enum Command {
     List(ListArgs),
     /// Render a terminal demo with tabs.
     Term,
+    /// Open a source file in the widget editor.
+    Editor(EditorArgs),
 }
 
 /// Arguments for the list widget demo.
@@ -131,6 +138,14 @@ struct FontArgs {
 struct ImageArgs {
     /// Path to an image file.
     #[arg(long, value_name = "PATH", default_value = DEFAULT_IMAGE_PATH)]
+    path: PathBuf,
+}
+
+/// Arguments for the widget editor demo.
+#[derive(Parser, Debug)]
+struct EditorArgs {
+    /// Path to the file to open.
+    #[arg(long, value_name = "PATH", default_value = DEFAULT_SOURCE_PATH)]
     path: PathBuf,
 }
 
@@ -196,6 +211,22 @@ fn main() -> Result<()> {
             setup_term_bindings(&mut cnpy);
             DemoHost::new(TermDemo::new(), size, args.frame)
         }
+        Command::Editor(editor_args) => {
+            let contents = fs::read_to_string(&editor_args.path)
+                .map_err(|err| error::Error::Internal(err.to_string()))?;
+            let extension = file_extension(&editor_args.path);
+            let title = file_title(&editor_args.path);
+
+            WidgetEditor::load(&mut cnpy)?;
+            setup_bindings(&mut cnpy);
+
+            DemoHost::new(
+                WidgetEditor::new(contents, extension, title),
+                size,
+                args.frame,
+            )
+            .with_inner_padding(0)
+        }
     };
     let app_id = cnpy.core.create_detached(demo);
 
@@ -256,6 +287,23 @@ fn load_font_sources(path: &Path) -> Result<Vec<FontSource>> {
         )));
     }
     Ok(sources)
+}
+
+/// Return a lowercase file extension hint for syntax selection.
+fn file_extension(path: &Path) -> String {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| extension.to_ascii_lowercase())
+        .filter(|extension| !extension.is_empty())
+        .unwrap_or_else(|| "txt".to_string())
+}
+
+/// Return a short title for the editor frame.
+fn file_title(path: &Path) -> String {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.to_string())
+        .unwrap_or_else(|| path.display().to_string())
 }
 
 /// Register keybindings for image zooming and panning.

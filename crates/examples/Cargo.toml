@@ -67,10 +67,6 @@ name = "widget"
 path = "examples/widget.rs"
 
 [[example]]
-name = "widget_editor"
-path = "examples/widget_editor.rs"
-
-[[example]]
 name = "pager"
 path = "examples/pager.rs"
 
