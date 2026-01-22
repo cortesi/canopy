@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["DemoHost","DemoSize","FontDemo","FontSource","ListDemo"]};
+window.SIDEBAR_ITEMS = {"struct":["DemoHost","DemoSize","FontDemo","FontSource","ListDemo","TermDemo"]};

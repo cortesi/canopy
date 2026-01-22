@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["cedit","chargym","editorgym","focusgym","fontgym","framegym","imgview","intervals","listgym","pager","stylegym","termgym","textgym","widget"]};
+window.SIDEBAR_ITEMS = {"mod":["cedit","chargym","editorgym","focusgym","fontgym","framegym","imgview","intervals","listgym","pager","stylegym","termgym","textgym","widget","widget_editor"]};
