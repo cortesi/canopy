@@ -52,6 +52,17 @@ attributes unless you supply a custom highlighter. The default syntect palette i
 The `Input` widget is a single-line text field that shares the editor's buffer and column mapping
 logic. It renders with horizontal scrolling to keep the cursor visible.
 
+## Terminal
+
+`Terminal` embeds a PTY-backed terminal using `alacritty_terminal`.
+
+`TerminalConfig::kitty_keyboard` controls whether kitty keyboard protocol negotiation is enabled
+(default on). When the child enables `DISAMBIGUATE_ESC_CODES`, the widget emits CSI-u sequences for
+ambiguous modified keys; otherwise it falls back to legacy sequences.
+
+For the crossterm backend, `RunloopOptions::enable_keyboard_enhancements` controls whether
+`KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES` is pushed on startup.
+
 ## FontBanner
 
 `FontBanner` renders large terminal text from a TTF font into the available region. It scales to the

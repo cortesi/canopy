@@ -11,6 +11,7 @@ use canopy::{
     render::Render,
     state::NodeName,
 };
+use unicode_width::UnicodeWidthStr;
 
 use crate::{
     Box, Center, Selectable, Text,
@@ -29,6 +30,8 @@ pub struct Button {
     command: Option<CommandInvocation>,
     /// Glyph set for the button border.
     glyphs: BoxGlyphs,
+    /// Active state for the button.
+    active: bool,
     /// Selection state for use in lists.
     selected: bool,
     /// Slot for the box container.
@@ -53,6 +56,7 @@ impl Button {
             label: label.into(),
             command: None,
             glyphs: SINGLE,
+            active: false,
             selected: false,
             box_slot: Slot::new(),
             center_slot: Slot::new(),
@@ -72,9 +76,20 @@ impl Button {
         self
     }
 
+    /// Build a button with an active state.
+    pub fn with_active(mut self, active: bool) -> Self {
+        self.active = active;
+        self
+    }
+
     /// Return the button label.
     pub fn label(&self) -> &str {
         &self.label
+    }
+
+    /// Set whether the button is active.
+    pub fn set_active(&mut self, active: bool) {
+        self.active = active;
     }
 
     /// Replace the button label.
@@ -101,6 +116,16 @@ impl Button {
         Ok(false)
     }
 
+    /// Compute the label width in terminal cells.
+    fn label_width(&self) -> u32 {
+        self.label
+            .lines()
+            .map(UnicodeWidthStr::width)
+            .max()
+            .unwrap_or(0)
+            .max(1) as u32
+    }
+
     /// Sync the label text widget to the current label.
     fn sync_label(&mut self, ctx: &mut dyn Context) -> Result<()> {
         let box_id = self
@@ -116,6 +141,7 @@ impl Button {
             text.set_raw(self.label.clone());
             Ok(())
         })?;
+        ctx.set_layout_of(label_id, Layout::column().max_width(self.label_width()))?;
         Ok(())
     }
 }
@@ -132,21 +158,18 @@ impl Widget for Button {
     }
 
     fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {
-        let box_id = self
-            .box_slot
-            .get_or_create(ctx, || Box::new().with_glyphs(self.glyphs).with_fill())?;
-        let center_id = self
-            .center_slot
-            .get_or_create_in(ctx, box_id, Center::new)?;
-        self.label_slot
-            .get_or_create_in(ctx, center_id, || Text::new(self.label.clone()))?;
-        Ok(())
+        self.sync_label(ctx)
     }
 
     fn render(&mut self, rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
         rndr.push_layer("button");
         if self.selected {
             rndr.push_layer("selected");
+        }
+        if self.active {
+            rndr.push_layer("active");
+        } else {
+            rndr.push_layer("inactive");
         }
         Ok(())
     }

@@ -380,6 +380,8 @@ pub struct TerminalConfig {
     pub mouse_reporting: bool,
     /// Enable bracketed paste when requested by the app.
     pub bracketed_paste: bool,
+    /// Enable kitty keyboard protocol support.
+    pub kitty_keyboard: bool,
     /// Color palette for the terminal.
     pub colors: TerminalColors,
     /// Optional callback invoked when the clipboard is updated.
@@ -399,6 +401,7 @@ impl Default for TerminalConfig {
             scrollback_lines: DEFAULT_SCROLLBACK,
             mouse_reporting: true,
             bracketed_paste: true,
+            kitty_keyboard: true,
             colors: TerminalColors::default(),
             clipboard_store: None,
             clipboard_load: None,
@@ -471,6 +474,7 @@ impl Terminal {
         let size = TerminalSize::new(DEFAULT_COLUMNS, DEFAULT_LINES, config.scrollback_lines);
         let term_config = Config {
             scrolling_history: config.scrollback_lines,
+            kitty_keyboard: config.kitty_keyboard,
             ..Config::default()
         };
         let term = Term::new(term_config, &size, event_proxy);
@@ -802,6 +806,43 @@ impl Terminal {
 
     /// Encode a key event into terminal escape sequences.
     fn encode_key(&self, key: &key::Key) -> Option<Vec<u8>> {
+        if self.term.mode().contains(TermMode::DISAMBIGUATE_ESC_CODES)
+            && let Some(bytes) = self.encode_key_disambiguate(key)
+        {
+            return Some(bytes);
+        }
+
+        self.encode_key_legacy(key)
+    }
+
+    /// Encode a key using kitty keyboard protocol rules for disambiguated escapes.
+    fn encode_key_disambiguate(&self, key: &key::Key) -> Option<Vec<u8>> {
+        use key::KeyCode;
+
+        let needs_disambiguation = matches!(key.key, KeyCode::Esc) || key.mods.alt || key.mods.ctrl;
+        if !needs_disambiguation {
+            return None;
+        }
+
+        let mut mods = key.mods;
+        let codepoint = match key.key {
+            KeyCode::Char(c) => c as u32,
+            KeyCode::Enter => b'\r' as u32,
+            KeyCode::Tab => b'\t' as u32,
+            KeyCode::BackTab => {
+                mods.shift = true;
+                b'\t' as u32
+            }
+            KeyCode::Backspace => 0x7f,
+            KeyCode::Esc => 0x1b,
+            _ => return None,
+        };
+
+        Some(Self::csi_u_sequence(codepoint, mods))
+    }
+
+    /// Encode a key event into legacy terminal escape sequences.
+    fn encode_key_legacy(&self, key: &key::Key) -> Option<Vec<u8>> {
         use key::KeyCode;
 
         let app_cursor = self.term.mode().contains(TermMode::APP_CURSOR);
@@ -895,6 +936,34 @@ impl Terminal {
         }
 
         Some(out)
+    }
+
+    /// Render the kitty CSI-u modifier parameter, if any modifiers are set.
+    fn csi_u_modifier(mods: key::Mods) -> Option<u8> {
+        if !(mods.shift || mods.alt || mods.ctrl) {
+            return None;
+        }
+
+        let mut param = 1;
+        if mods.shift {
+            param += 1;
+        }
+        if mods.alt {
+            param += 2;
+        }
+        if mods.ctrl {
+            param += 4;
+        }
+        Some(param)
+    }
+
+    /// Format a CSI-u sequence for the given codepoint and modifiers.
+    fn csi_u_sequence(codepoint: u32, mods: key::Mods) -> Vec<u8> {
+        if let Some(param) = Self::csi_u_modifier(mods) {
+            format!("\x1b[{codepoint};{param}u").into_bytes()
+        } else {
+            format!("\x1b[{codepoint}u").into_bytes()
+        }
     }
 
     /// Encode a control character if supported.
@@ -1327,5 +1396,52 @@ impl Drop for Terminal {
         if let Some(handle) = self.reader_handle.take()
             && handle.join().is_err()
         {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn terminal_for_test() -> Terminal {
+        let mut config = TerminalConfig::new();
+        config.kitty_keyboard = true;
+        Terminal::new(config)
+    }
+
+    fn enable_disambiguate(term: &mut Terminal) {
+        term.parser.advance(&mut term.term, b"\x1b[>1u");
+        assert!(term.term.mode().contains(TermMode::DISAMBIGUATE_ESC_CODES));
+    }
+
+    #[test]
+    fn encode_ctrl_tab_legacy_falls_back_to_tab() {
+        let terminal = terminal_for_test();
+        let key = key::Ctrl + key::KeyCode::Tab;
+        assert_eq!(terminal.encode_key(&key).unwrap(), b"\t");
+    }
+
+    #[test]
+    fn encode_ctrl_tab_disambiguate_uses_csi_u() {
+        let mut terminal = terminal_for_test();
+        enable_disambiguate(&mut terminal);
+        let key = key::Ctrl + key::KeyCode::Tab;
+        assert_eq!(terminal.encode_key(&key).unwrap(), b"\x1b[9;5u");
+    }
+
+    #[test]
+    fn encode_ctrl_char_disambiguate_uses_csi_u() {
+        let mut terminal = terminal_for_test();
+        enable_disambiguate(&mut terminal);
+        let key = key::Ctrl + 'c';
+        assert_eq!(terminal.encode_key(&key).unwrap(), b"\x1b[99;5u");
+    }
+
+    #[test]
+    fn encode_escape_disambiguate_uses_csi_u() {
+        let mut terminal = terminal_for_test();
+        enable_disambiguate(&mut terminal);
+        let key = key::Empty + key::KeyCode::Esc;
+        assert_eq!(terminal.encode_key(&key).unwrap(), b"\x1b[27u");
     }
 }

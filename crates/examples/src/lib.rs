@@ -28,6 +28,8 @@ pub mod termgym;
 pub mod textgym;
 /// Widget demo nodes.
 pub mod widget;
+/// Widget editor example nodes.
+pub mod widget_editor;
 
 #[cfg(test)]
 mod tests;

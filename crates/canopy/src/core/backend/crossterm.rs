@@ -119,19 +119,42 @@ fn translate_result<T>(e: io::Result<T>) -> Result<T> {
 pub struct CrosstermControl {
     /// Stderr handle used for control output.
     fp: Stderr,
+    /// Whether to enable keyboard enhancement flags on startup.
+    enable_keyboard_enhancements: bool,
+    /// Track whether keyboard enhancements were pushed.
+    keyboard_enhancements_pushed: bool,
 }
 
 impl CrosstermControl {
+    /// Build a crossterm controller with keyboard enhancements enabled or disabled.
+    pub fn new(enable_keyboard_enhancements: bool) -> Self {
+        Self {
+            fp: io::stderr(),
+            enable_keyboard_enhancements,
+            keyboard_enhancements_pushed: false,
+        }
+    }
+
     /// Enter alternate screen and raw mode.
     fn enter(&mut self) -> io::Result<()> {
         terminal::enable_raw_mode()?;
         self.fp.execute(terminal::EnterAlternateScreen)?;
         self.fp.execute(cevent::EnableMouseCapture)?;
         self.fp.execute(ccursor::Hide)?;
+        if self.enable_keyboard_enhancements {
+            self.fp.execute(cevent::PushKeyboardEnhancementFlags(
+                cevent::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES,
+            ))?;
+            self.keyboard_enhancements_pushed = true;
+        }
         Ok(())
     }
     /// Leave alternate screen and restore terminal state.
     fn exit(&mut self) -> io::Result<()> {
+        if self.keyboard_enhancements_pushed {
+            self.fp.execute(cevent::PopKeyboardEnhancementFlags)?;
+            self.keyboard_enhancements_pushed = false;
+        }
         self.fp.execute(terminal::LeaveAlternateScreen)?;
         self.fp.execute(cevent::DisableMouseCapture)?;
         self.fp.execute(ccursor::Show)?;
@@ -142,7 +165,7 @@ impl CrosstermControl {
 
 impl Default for CrosstermControl {
     fn default() -> Self {
-        Self { fp: io::stderr() }
+        Self::new(true)
     }
 }
 
@@ -470,6 +493,8 @@ pub struct RunloopOptions {
     pub install_panic_hook: bool,
     /// Configure how Ctrl+C is handled.
     pub ctrl_c: CtrlCBehavior,
+    /// Enable keyboard enhancement flags for disambiguated escape codes.
+    pub enable_keyboard_enhancements: bool,
 }
 
 impl RunloopOptions {
@@ -487,6 +512,7 @@ impl Default for RunloopOptions {
         Self {
             install_panic_hook: false,
             ctrl_c: CtrlCBehavior::Exit,
+            enable_keyboard_enhancements: true,
         }
     }
 }
@@ -499,7 +525,7 @@ pub fn runloop(cnpy: Canopy) -> Result<i32> {
 /// Run the main render/event loop using the crossterm backend with custom options.
 pub fn runloop_with_options(mut cnpy: Canopy, options: RunloopOptions) -> Result<i32> {
     let mut be = CrosstermRender::default();
-    cnpy.register_backend(CrosstermControl::default());
+    cnpy.register_backend(CrosstermControl::new(options.enable_keyboard_enhancements));
     let mut session = {
         let backend = cnpy
             .core

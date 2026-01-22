@@ -10,18 +10,14 @@ use canopy::{
     state::NodeName,
     style::{Color, Paint, StyleMap},
 };
-use canopy_widgets::{Box, Center, Frame, ROUND, Terminal, TerminalConfig, Text};
+use canopy_widgets::{Button, Frame, ROUND, Terminal, TerminalConfig};
 
 /// Tab labels shown in the demo.
 const TAB_LABELS: [&str; 3] = ["claude", "codex", "gemini"];
 /// Height of each tab widget.
 const TAB_HEIGHT: u32 = 3;
-/// Active tab border style path.
-const TAB_ACTIVE_STYLE: &str = "term/tab/active";
-/// Inactive tab border style path.
-const TAB_INACTIVE_STYLE: &str = "term/tab/inactive";
-/// Tab text style path.
-const TAB_TEXT_STYLE: &str = "term/tab/text";
+/// Button style prefix for tab widgets.
+const TAB_STYLE_PREFIX: &str = "term_demo/button";
 
 /// Row container for tab widgets.
 struct TabBar;
@@ -78,8 +74,8 @@ impl Widget for TerminalStack {
 pub struct TermDemo {
     /// Current active index.
     active: usize,
-    /// Tab box node ids.
-    tab_ids: Vec<TypedId<Box>>,
+    /// Tab button node ids.
+    tab_ids: Vec<TypedId<Button>>,
     /// Terminal frame node ids.
     frame_ids: Vec<NodeId>,
     /// Terminal node ids.
@@ -114,13 +110,9 @@ impl TermDemo {
         self.active = target;
 
         for (idx, tab_id) in self.tab_ids.iter().enumerate() {
-            let style = if idx == self.active {
-                TAB_ACTIVE_STYLE
-            } else {
-                TAB_INACTIVE_STYLE
-            };
-            ctx.with_typed(*tab_id, |tab: &mut Box, _ctx| {
-                tab.set_border_style(style);
+            let active = idx == self.active;
+            ctx.with_typed(*tab_id, |tab: &mut Button, _ctx| {
+                tab.set_active(active);
                 Ok(())
             })?;
         }
@@ -163,9 +155,11 @@ impl Widget for TermDemo {
         let mut style = StyleMap::new();
         style
             .rules()
-            .fg(TAB_ACTIVE_STYLE, Paint::solid(Color::rgb("#FF8C00")))
-            .fg(TAB_INACTIVE_STYLE, Paint::solid(Color::rgb("#6B6B6B")))
-            .fg(TAB_TEXT_STYLE, Paint::solid(Color::White))
+            .prefix(TAB_STYLE_PREFIX)
+            .fg("active/border", Paint::solid(Color::rgb("#FF8C00")))
+            .fg("inactive/border", Paint::solid(Color::rgb("#6B6B6B")))
+            .fg("active/text", Paint::solid(Color::White))
+            .fg("inactive/text", Paint::solid(Color::White))
             .apply();
         ctx.set_style(style);
 
@@ -173,21 +167,11 @@ impl Widget for TermDemo {
         for label in TAB_LABELS {
             let tab_id = ctx.add_child_to(
                 tab_bar_id,
-                Box::new()
-                    .with_glyphs(ROUND)
-                    .with_border_style(TAB_INACTIVE_STYLE),
+                Button::new(label.to_string()).with_glyphs(ROUND),
             )?;
             ctx.set_layout_of(
                 tab_id,
-                Layout::fill()
-                    .fixed_height(TAB_HEIGHT)
-                    .flex_horizontal(1)
-                    .padding(Edges::all(1)),
-            )?;
-            let center_id = ctx.add_child_to(tab_id, Center::new())?;
-            let _text_id = ctx.add_child_to(
-                center_id,
-                Text::new(label.to_string()).with_style(TAB_TEXT_STYLE),
+                Layout::fill().fixed_height(TAB_HEIGHT).flex_horizontal(1),
             )?;
             self.tab_ids.push(tab_id);
         }
@@ -215,7 +199,8 @@ impl Widget for TermDemo {
         Ok(())
     }
 
-    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+        rndr.push_layer("term_demo");
         Ok(())
     }
 

@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::PathBuf};
+    use std::{env, fs, path::PathBuf};
 
     use canopy::{
         Canopy, Context, Loader, Widget,
@@ -66,7 +66,20 @@ mod tests {
     }
 
     fn snapshot_dir() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/snapshots")
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let candidate = manifest_dir.join("../../tests/snapshots");
+        if candidate.is_dir() {
+            return candidate;
+        }
+
+        let cwd_candidate = env::current_dir()
+            .ok()
+            .map(|cwd| cwd.join("tests/snapshots"));
+        if let Some(cwd_candidate) = cwd_candidate.filter(|path| path.is_dir()) {
+            return cwd_candidate;
+        }
+
+        candidate
     }
 
     fn snapshot_path(name: &str) -> PathBuf {
