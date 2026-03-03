@@ -397,13 +397,13 @@ impl Constraint {
         }
     }
 
-    /// Return true if the constraint is exact.
-    fn is_exact(self) -> bool {
+    /// Return true if this constraint is exact.
+    pub fn is_exact(self) -> bool {
         matches!(self, Self::Exact(_))
     }
 
     /// Return the maximum bound implied by the constraint.
-    fn max_bound(self) -> u32 {
+    pub fn max_bound(self) -> u32 {
         match self {
             Self::Unbounded => u32::MAX,
             Self::AtMost(n) | Self::Exact(n) => n,
@@ -529,16 +529,6 @@ impl CanvasChild {
 /// Clamp a flex weight to at least 1.
 pub fn clamp_weight(weight: u32) -> u32 {
     weight.max(1)
-}
-
-/// Return true if a constraint is exact.
-pub fn is_exact(c: Constraint) -> bool {
-    c.is_exact()
-}
-
-/// Return the maximum bound for a constraint.
-pub fn max_bound(c: Constraint) -> u32 {
-    c.max_bound()
 }
 
 #[cfg(test)]

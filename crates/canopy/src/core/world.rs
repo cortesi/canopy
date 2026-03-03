@@ -18,7 +18,7 @@ use crate::{
     geom::{Expanse, Point, Rect, RectI32},
     layout::{
         Align, CanvasChild, CanvasContext, Constraint, Direction as LayoutDirection, Display,
-        Layout, MeasureConstraints, Measurement, Size, Sizing, max_bound,
+        Layout, MeasureConstraints, Measurement, Size, Sizing,
     },
     path::Path,
     render::Render,
@@ -1471,8 +1471,8 @@ impl<'a> LayoutPass<'a> {
 
         let main_fixed = constraints.main_is_exact(layout.direction);
         let cross_fixed = constraints.cross_is_exact(layout.direction);
-        let avail_main = max_bound(constraints.main(layout.direction));
-        let avail_cross = max_bound(constraints.cross(layout.direction));
+        let avail_main = constraints.main(layout.direction).max_bound();
+        let avail_cross = constraints.cross(layout.direction).max_bound();
         let avail = Size::from_main_cross(layout.direction, avail_main, avail_cross);
 
         let mut fixed_main_total = 0u32;
@@ -1562,8 +1562,8 @@ impl<'a> LayoutPass<'a> {
         constraints: MeasureConstraints,
         children: &[NodeId],
     ) -> Size<u32> {
-        let avail_w = max_bound(constraints.width);
-        let avail_h = max_bound(constraints.height);
+        let avail_w = constraints.width.max_bound();
+        let avail_h = constraints.height.max_bound();
         let avail = Size::new(avail_w, avail_h);
 
         let mut max_w = 0u32;
