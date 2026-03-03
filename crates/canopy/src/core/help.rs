@@ -99,6 +99,52 @@ impl<'a> HelpSnapshot<'a> {
     pub fn unavailable_commands(&self) -> Vec<&HelpCommand<'a>> {
         self.commands.iter().filter(|c| !c.is_available()).collect()
     }
+
+    /// Convert to an owned version for storage.
+    pub fn to_owned(&self) -> OwnedHelpSnapshot {
+        let bindings = self
+            .bindings
+            .iter()
+            .map(|b| {
+                let path_match = PathMatcher::new(b.path_filter)
+                    .ok()
+                    .and_then(|matcher| matcher.check_match(&self.focus_path))
+                    .unwrap_or(PathMatch {
+                        literals: 0,
+                        depth: 0,
+                        anchored_end: false,
+                    });
+                OwnedHelpBinding {
+                    input: b.input,
+                    mode: b.mode.to_string(),
+                    path_filter: b.path_filter.to_string(),
+                    kind: b.kind,
+                    label: b.label.clone(),
+                    path_match,
+                }
+            })
+            .collect();
+
+        let commands = self
+            .commands
+            .iter()
+            .filter(|c| !c.spec.doc.hidden)
+            .map(|c| OwnedHelpCommand {
+                id: c.spec.id.0.to_string(),
+                owner: c.owner.map(|s| s.to_string()),
+                short: c.spec.doc.short.map(|s| s.to_string()),
+                resolution: c.resolution,
+                hidden: c.spec.doc.hidden,
+            })
+            .collect();
+
+        OwnedHelpSnapshot {
+            focus_path: self.focus_path.clone(),
+            input_mode: self.input_mode.to_string(),
+            bindings,
+            commands,
+        }
+    }
 }
 
 /// Extract a command ID from a script source if it's a simple command call.
@@ -220,52 +266,4 @@ pub struct OwnedHelpSnapshot {
     pub bindings: Vec<OwnedHelpBinding>,
     /// Commands with their availability status.
     pub commands: Vec<OwnedHelpCommand>,
-}
-
-impl<'a> HelpSnapshot<'a> {
-    /// Convert to an owned version for storage.
-    pub fn to_owned(&self) -> OwnedHelpSnapshot {
-        let bindings = self
-            .bindings
-            .iter()
-            .map(|b| {
-                let path_match = PathMatcher::new(b.path_filter)
-                    .ok()
-                    .and_then(|matcher| matcher.check_match(&self.focus_path))
-                    .unwrap_or(PathMatch {
-                        literals: 0,
-                        depth: 0,
-                        anchored_end: false,
-                    });
-                OwnedHelpBinding {
-                    input: b.input,
-                    mode: b.mode.to_string(),
-                    path_filter: b.path_filter.to_string(),
-                    kind: b.kind,
-                    label: b.label.clone(),
-                    path_match,
-                }
-            })
-            .collect();
-
-        let commands = self
-            .commands
-            .iter()
-            .filter(|c| !c.spec.doc.hidden)
-            .map(|c| OwnedHelpCommand {
-                id: c.spec.id.0.to_string(),
-                owner: c.owner.map(|s| s.to_string()),
-                short: c.spec.doc.short.map(|s| s.to_string()),
-                resolution: c.resolution,
-                hidden: c.spec.doc.hidden,
-            })
-            .collect();
-
-        OwnedHelpSnapshot {
-            focus_path: self.focus_path.clone(),
-            input_mode: self.input_mode.to_string(),
-            bindings,
-            commands,
-        }
-    }
 }

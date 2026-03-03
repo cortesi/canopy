@@ -10,7 +10,6 @@ use crate::{
         Core, NodeId,
         context::{CoreViewContext, ReadContext},
         dump::dump_with_focus,
-        focus::FocusManager,
         help,
         style::Effect,
         view::View,

@@ -7,10 +7,7 @@ use std::{
 
 use slotmap::SlotMap;
 
-use super::{
-    focus::{FocusManager, FocusRecoveryHint},
-    help::OwnedHelpSnapshot,
-};
+use super::{focus::FocusRecoveryHint, help::OwnedHelpSnapshot};
 use crate::{
     ReadContext,
     backend::BackendControl,

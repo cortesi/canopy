@@ -14,7 +14,6 @@ use super::{
 };
 use crate::{
     commands::{ArgValue, CommandError, CommandInvocation, CommandScopeFrame, ListRowContext},
-    core::focus::FocusManager,
     error::{Error, Result},
     event::{Event, mouse::MouseEvent},
     geom::{Direction, Expanse, Point, PointI32, Rect, RectI32},

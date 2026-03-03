@@ -63,7 +63,6 @@ pub use binder::{Binder, DefaultBindings};
 pub use canopy::{BindingAction, Canopy, Loader};
 pub use children::{KeyedChildren, RemovePolicy};
 pub use context::{ChildKey, Context, Preorder, ReadContext, Slot};
-pub use focus::FocusManager;
 pub use id::{NodeId, TypedId};
 pub use inputmap::{BindingId, InputMap, InputSpec};
 pub use world::Core;

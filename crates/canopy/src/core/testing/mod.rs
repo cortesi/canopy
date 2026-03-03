@@ -17,7 +17,7 @@ pub mod ttree;
 mod tests {
     use super::backend::TestRender;
     use crate::{
-        Canopy, FocusManager, ReadContext, derive_commands,
+        Canopy, ReadContext, derive_commands,
         error::Result,
         geom::Expanse,
         layout::{Direction, Layout},

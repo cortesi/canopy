@@ -16,59 +16,10 @@ pub struct FocusRecoveryHint {
     pub ancestor: Option<NodeId>,
 }
 
-/// Trait for managing focus and mouse capture.
-pub trait FocusManager {
+#[allow(clippy::multiple_inherent_impl)]
+impl Core {
     /// Check whether a node is on the focus path.
-    fn is_on_focus_path(&self, node: NodeId) -> bool;
-
-    /// Does the node have terminal focus?
-    fn is_focused(&self, node: NodeId) -> bool;
-
-    /// Focus a node. Returns `true` if focus changed.
-    fn set_focus(&mut self, node: NodeId) -> bool;
-
-    /// Return the focus path for the subtree under `root`.
-    fn focus_path(&self, root: NodeId) -> Path;
-
-    /// Focus the first node that accepts focus in the pre-order traversal of the subtree at root.
-    fn focus_first(&mut self, root: NodeId);
-
-    /// Focus the next node in the pre-order traversal of root.
-    fn focus_next(&mut self, root: NodeId);
-
-    /// Focus the previous node in the pre-order traversal of `root`.
-    fn focus_prev(&mut self, root: NodeId);
-
-    /// Move focus in a specified direction within the subtree at root.
-    fn focus_dir(&mut self, root: NodeId, dir: Direction);
-
-    /// Ensure the focus invariant is satisfied.
-    fn ensure_focus_valid(&mut self, removed_root: Option<NodeId>);
-
-    /// Ensure mouse capture only points at attached nodes.
-    fn ensure_mouse_capture_valid(&mut self);
-
-    /// Ensure focus and mouse capture invariants after structural changes.
-    fn ensure_invariants(&mut self, removed_root: Option<NodeId>);
-
-    /// Return the focus path as node IDs from root to focus.
-    fn focus_path_ids(&self) -> Vec<NodeId>;
-
-    /// Precompute focus recovery candidates for a removed subtree.
-    fn focus_recovery_hint(&self, removed_root: NodeId) -> FocusRecoveryHint;
-
-    /// Return the next focusable node after the subtree rooted at `removed_root`.
-    fn next_focusable_after_subtree(&self, removed_root: NodeId) -> Option<NodeId>;
-
-    /// Return the previous focusable node before the subtree rooted at `removed_root`.
-    fn prev_focusable_before_subtree(&self, removed_root: NodeId) -> Option<NodeId>;
-
-    /// Return the nearest focusable ancestor of `start`.
-    fn nearest_focusable_ancestor(&self, start: NodeId) -> Option<NodeId>;
-}
-
-impl FocusManager for Core {
-    fn is_on_focus_path(&self, node: NodeId) -> bool {
+    pub fn is_on_focus_path(&self, node: NodeId) -> bool {
         let mut current = self.focus;
         while let Some(id) = current {
             if id == node {
@@ -79,11 +30,13 @@ impl FocusManager for Core {
         false
     }
 
-    fn is_focused(&self, node: NodeId) -> bool {
+    /// Does the node have terminal focus?
+    pub fn is_focused(&self, node: NodeId) -> bool {
         self.focus == Some(node)
     }
 
-    fn set_focus(&mut self, node: NodeId) -> bool {
+    /// Focus a node. Returns `true` if focus changed.
+    pub fn set_focus(&mut self, node: NodeId) -> bool {
         if self.is_focused(node) {
             false
         } else {
@@ -93,7 +46,8 @@ impl FocusManager for Core {
         }
     }
 
-    fn focus_path(&self, root: NodeId) -> Path {
+    /// Return the focus path for the subtree under `root`.
+    pub fn focus_path(&self, root: NodeId) -> Path {
         let mut parts = Vec::new();
         let mut current = self.focus;
         while let Some(id) = current {
@@ -110,13 +64,15 @@ impl FocusManager for Core {
         Path::new(parts)
     }
 
-    fn focus_first(&mut self, root: NodeId) {
+    /// Focus the first node that accepts focus in the pre-order traversal of the subtree at root.
+    pub fn focus_first(&mut self, root: NodeId) {
         if let Some(target) = first_focusable(self, root) {
             self.set_focus(target);
         }
     }
 
-    fn focus_next(&mut self, root: NodeId) {
+    /// Focus the next node in the pre-order traversal of root.
+    pub fn focus_next(&mut self, root: NodeId) {
         if let Some(current) = self.focus
             && let Some(target) = find_next_focus(self, root, current, false)
         {
@@ -130,7 +86,8 @@ impl FocusManager for Core {
         }
     }
 
-    fn focus_prev(&mut self, root: NodeId) {
+    /// Focus the previous node in the pre-order traversal of `root`.
+    pub fn focus_prev(&mut self, root: NodeId) {
         if let Some(current) = self.focus
             && let Some(target) = find_prev_focus(self, root, current)
         {
@@ -145,7 +102,8 @@ impl FocusManager for Core {
         }
     }
 
-    fn focus_dir(&mut self, root: NodeId, dir: Direction) {
+    /// Move focus in a specified direction within the subtree at root.
+    pub fn focus_dir(&mut self, root: NodeId, dir: Direction) {
         let mut focusables = Vec::new();
         let ctx = CoreViewContext::new(self, root);
         let ctx = &ctx as &dyn ReadContext;
@@ -234,7 +192,8 @@ impl FocusManager for Core {
         }
     }
 
-    fn ensure_focus_valid(&mut self, removed_root: Option<NodeId>) {
+    /// Ensure the focus invariant is satisfied.
+    pub fn ensure_focus_valid(&mut self, removed_root: Option<NodeId>) {
         let Some(focus) = self.focus else {
             self.focus_hint = None;
             return;
@@ -271,7 +230,8 @@ impl FocusManager for Core {
         }
     }
 
-    fn ensure_mouse_capture_valid(&mut self) {
+    /// Ensure mouse capture only points at attached nodes.
+    pub fn ensure_mouse_capture_valid(&mut self) {
         if let Some(capture) = self.mouse_capture
             && (!self.nodes.contains_key(capture) || !self.is_attached_to_root(capture))
         {
@@ -279,13 +239,15 @@ impl FocusManager for Core {
         }
     }
 
-    fn ensure_invariants(&mut self, removed_root: Option<NodeId>) {
+    /// Ensure focus and mouse capture invariants after structural changes.
+    pub fn ensure_invariants(&mut self, removed_root: Option<NodeId>) {
         self.ensure_focus_valid(removed_root);
         self.ensure_mouse_capture_valid();
         self.debug_assert_tree_invariants();
     }
 
-    fn focus_path_ids(&self) -> Vec<NodeId> {
+    /// Return the focus path as node IDs from root to focus.
+    pub fn focus_path_ids(&self) -> Vec<NodeId> {
         let mut ids = Vec::new();
         let mut current = self.focus;
         while let Some(id) = current {
@@ -296,7 +258,8 @@ impl FocusManager for Core {
         ids
     }
 
-    fn focus_recovery_hint(&self, removed_root: NodeId) -> FocusRecoveryHint {
+    /// Precompute focus recovery candidates for a removed subtree.
+    pub fn focus_recovery_hint(&self, removed_root: NodeId) -> FocusRecoveryHint {
         FocusRecoveryHint {
             next: self.next_focusable_after_subtree(removed_root),
             prev: self.prev_focusable_before_subtree(removed_root),
@@ -304,21 +267,24 @@ impl FocusManager for Core {
         }
     }
 
-    fn next_focusable_after_subtree(&self, removed_root: NodeId) -> Option<NodeId> {
+    /// Return the next focusable node after the subtree rooted at `removed_root`.
+    pub fn next_focusable_after_subtree(&self, removed_root: NodeId) -> Option<NodeId> {
         if !self.is_attached_to_root(removed_root) {
             return None;
         }
         find_next_focus(self, self.root, removed_root, true)
     }
 
-    fn prev_focusable_before_subtree(&self, removed_root: NodeId) -> Option<NodeId> {
+    /// Return the previous focusable node before the subtree rooted at `removed_root`.
+    pub fn prev_focusable_before_subtree(&self, removed_root: NodeId) -> Option<NodeId> {
         if !self.is_attached_to_root(removed_root) {
             return None;
         }
         find_prev_focus(self, self.root, removed_root)
     }
 
-    fn nearest_focusable_ancestor(&self, start: NodeId) -> Option<NodeId> {
+    /// Return the nearest focusable ancestor of `start`.
+    pub fn nearest_focusable_ancestor(&self, start: NodeId) -> Option<NodeId> {
         nearest_focusable_ancestor_with(self, start, true)
             .or_else(|| nearest_focusable_ancestor_with(self, start, false))
     }

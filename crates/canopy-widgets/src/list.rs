@@ -669,6 +669,60 @@ impl<W: Selectable> List<W> {
             Some(metrics.len() - 1)
         }
     }
+    /// Allocate the next list key.
+    fn next_key(&mut self) -> ListKey {
+        let key = ListKey(self.next_key);
+        self.next_key = self.next_key.saturating_add(1);
+        key
+    }
+
+    /// Reconcile the list order while creating a single new widget.
+    fn reconcile_with_widget(
+        &mut self,
+        ctx: &mut dyn Context,
+        desired: Vec<ListKey>,
+        key: ListKey,
+        widget: W,
+        remove: RemovePolicy,
+    ) -> Result<Vec<TypedId<W>>>
+    where
+        W: 'static,
+    {
+        if self.items.id_for(&key).is_some() {
+            return Err(Error::Internal("list key collision".into()));
+        }
+        let mut widget = Some(widget);
+        self.items.reconcile(
+            ctx,
+            desired,
+            |requested| {
+                if *requested != key {
+                    panic!("list reconcile requested an unexpected key");
+                }
+                widget.take().expect("list widget already consumed")
+            },
+            |_, _, _| Ok(()),
+            remove,
+        )
+    }
+
+    /// Reconcile the list order without creating new widgets.
+    fn reconcile_order(
+        &mut self,
+        ctx: &mut dyn Context,
+        desired: Vec<ListKey>,
+        remove: RemovePolicy,
+    ) -> Result<Vec<TypedId<W>>> {
+        self.items.reconcile(
+            ctx,
+            desired,
+            |_| {
+                panic!("list reconcile requested a missing widget");
+            },
+            |_, _, _| Ok(()),
+            remove,
+        )
+    }
 }
 
 impl<W: Selectable + Send + 'static> Widget for List<W> {
@@ -769,63 +823,6 @@ impl<W: Selectable + Send + 'static> Widget for List<W> {
 
     fn name(&self) -> NodeName {
         NodeName::convert("list")
-    }
-}
-
-impl<W: Selectable> List<W> {
-    /// Allocate the next list key.
-    fn next_key(&mut self) -> ListKey {
-        let key = ListKey(self.next_key);
-        self.next_key = self.next_key.saturating_add(1);
-        key
-    }
-
-    /// Reconcile the list order while creating a single new widget.
-    fn reconcile_with_widget(
-        &mut self,
-        ctx: &mut dyn Context,
-        desired: Vec<ListKey>,
-        key: ListKey,
-        widget: W,
-        remove: RemovePolicy,
-    ) -> Result<Vec<TypedId<W>>>
-    where
-        W: 'static,
-    {
-        if self.items.id_for(&key).is_some() {
-            return Err(Error::Internal("list key collision".into()));
-        }
-        let mut widget = Some(widget);
-        self.items.reconcile(
-            ctx,
-            desired,
-            |requested| {
-                if *requested != key {
-                    panic!("list reconcile requested an unexpected key");
-                }
-                widget.take().expect("list widget already consumed")
-            },
-            |_, _, _| Ok(()),
-            remove,
-        )
-    }
-
-    /// Reconcile the list order without creating new widgets.
-    fn reconcile_order(
-        &mut self,
-        ctx: &mut dyn Context,
-        desired: Vec<ListKey>,
-        remove: RemovePolicy,
-    ) -> Result<Vec<TypedId<W>>> {
-        self.items.reconcile(
-            ctx,
-            desired,
-            |_| {
-                panic!("list reconcile requested a missing widget");
-            },
-            |_, _, _| Ok(()),
-            remove,
-        )
     }
 }
 
