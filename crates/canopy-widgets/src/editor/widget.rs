@@ -2407,25 +2407,17 @@ impl Widget for Editor {
     fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
         if let Event::Mouse(mouse_event) = event {
             match mouse_event.action {
-                mouse::Action::ScrollUp => {
-                    if ctx.scroll_by(0, -WHEEL_SCROLL_LINES) {
-                        return Ok(EventOutcome::Handle);
-                    }
+                mouse::Action::ScrollUp if ctx.scroll_by(0, -WHEEL_SCROLL_LINES) => {
+                    return Ok(EventOutcome::Handle);
                 }
-                mouse::Action::ScrollDown => {
-                    if ctx.scroll_by(0, WHEEL_SCROLL_LINES) {
-                        return Ok(EventOutcome::Handle);
-                    }
+                mouse::Action::ScrollDown if ctx.scroll_by(0, WHEEL_SCROLL_LINES) => {
+                    return Ok(EventOutcome::Handle);
                 }
-                mouse::Action::ScrollLeft => {
-                    if ctx.scroll_by(-WHEEL_SCROLL_LINES, 0) {
-                        return Ok(EventOutcome::Handle);
-                    }
+                mouse::Action::ScrollLeft if ctx.scroll_by(-WHEEL_SCROLL_LINES, 0) => {
+                    return Ok(EventOutcome::Handle);
                 }
-                mouse::Action::ScrollRight => {
-                    if ctx.scroll_by(WHEEL_SCROLL_LINES, 0) {
-                        return Ok(EventOutcome::Handle);
-                    }
+                mouse::Action::ScrollRight if ctx.scroll_by(WHEEL_SCROLL_LINES, 0) => {
+                    return Ok(EventOutcome::Handle);
                 }
                 _ => {}
             }

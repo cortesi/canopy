@@ -1,13 +1,11 @@
 use std::{
+    mem,
     path::PathBuf,
+    result::Result as StdResult,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
-use alacritty_terminal::{
-    index::{Column, Point},
-    selection::SelectionRange,
-};
 use canopy::{
     Context, EventOutcome, ReadContext, Widget, cursor, derive_commands,
     error::{Error, Result},
@@ -19,7 +17,7 @@ use canopy::{
     style::{AttrSet, Color, ResolvedStyle},
 };
 use itty::{
-    Session,
+    Session, ViewportSelection,
     clipboard::ClipboardHandler,
     config::{EguiTTYConfig, EguiTTYConfigBuilder, Hex, PaletteConfig, PaletteKind, PaletteMeta},
     driver::{self, DriverHandle, DriverHost},
@@ -74,7 +72,7 @@ impl SharedClipboard {
 }
 
 impl ClipboardHandler for SharedClipboard {
-    fn set_text(&self, text: &str) -> std::result::Result<(), String> {
+    fn set_text(&self, text: &str) -> StdResult<(), String> {
         if let Some(store) = &self.store {
             store(text.to_string());
         }
@@ -83,7 +81,7 @@ impl ClipboardHandler for SharedClipboard {
         Ok(())
     }
 
-    fn get_text(&self) -> std::result::Result<String, String> {
+    fn get_text(&self) -> StdResult<String, String> {
         if let Some(load) = &self.load {
             return Ok(load());
         }
@@ -611,8 +609,8 @@ impl Terminal {
             return;
         };
         let handle = Arc::clone(handle);
-        std::mem::drop(runtime.spawn(async move {
-            let _ = handle.send_input(bytes).await;
+        mem::drop(runtime.spawn(async move {
+            drop(handle.send_input(bytes).await);
         }));
     }
 
@@ -624,7 +622,7 @@ impl Terminal {
     }
 
     /// Copy the current selection to the configured clipboard callback.
-    fn copy_selection(&mut self) {
+    fn copy_selection(&self) {
         let Some(text) = self.session().and_then(Session::copy_selection) else {
             return;
         };
@@ -640,7 +638,7 @@ impl Terminal {
         };
 
         if self.config.bracketed_paste {
-            let _ = session.paste(content);
+            drop(session.paste(content));
             return;
         }
 
@@ -678,7 +676,7 @@ impl Terminal {
 
         self.clear_selection();
         if let Some(session) = self.session() {
-            let _ = session.send_key(mapped);
+            drop(session.send_key(mapped));
             return true;
         }
         false
@@ -736,7 +734,7 @@ impl Widget for Terminal {
 
         let state = session.state();
         let runs = session.visible_runs();
-        let selection = session.selection_range();
+        let selection = session.viewport_selection();
         let child_exited = session.child_exited();
         let child_exit_code = session.child_exit_code().unwrap_or(1);
         let default_bg = self.config.colors.background;
@@ -997,16 +995,12 @@ fn render_run(
     origin: geom::Point,
     row_idx: usize,
     run: &StyledRunPublic,
-    selection: Option<SelectionRange>,
+    selection: Option<ViewportSelection>,
     default_bg: Color,
 ) -> Result<()> {
     let mut col = run.start_col;
     for ch in run.text.chars() {
         let width = UnicodeWidthChar::width(ch).unwrap_or(1).max(1);
-        let point = Point {
-            line: alacritty_terminal::index::Line(row_idx as i32),
-            column: Column(col),
-        };
         let mut fg = Color::Rgb {
             r: run.fg.r(),
             g: run.fg.g(),
@@ -1017,15 +1011,17 @@ fn render_run(
             g: color.g(),
             b: color.b(),
         });
-        if selection.is_some_and(|range| range.contains(point)) {
-            std::mem::swap(&mut fg, &mut bg);
+        if selection_contains(selection, row_idx, col) {
+            mem::swap(&mut fg, &mut bg);
         }
 
-        let mut attrs = AttrSet::default();
-        attrs.bold = run.bold;
-        attrs.italic = run.italic;
-        attrs.underline = run.underline;
-        attrs.crossedout = run.strikethrough;
+        let attrs = AttrSet {
+            bold: run.bold,
+            italic: run.italic,
+            underline: run.underline,
+            crossedout: run.strikethrough,
+            ..AttrSet::default()
+        };
 
         let style = ResolvedStyle::new(fg, bg, attrs);
         rndr.put_cell(
@@ -1039,6 +1035,35 @@ fn render_run(
         col += width;
     }
     Ok(())
+}
+
+/// Return true when a viewport selection contains the given cell.
+fn selection_contains(selection: Option<ViewportSelection>, row: usize, col: usize) -> bool {
+    let Some(selection) = selection else {
+        return false;
+    };
+    if selection.block {
+        let start_row = selection.start_row.min(selection.end_row);
+        let end_row = selection.start_row.max(selection.end_row);
+        let start_col = selection.start_col.min(selection.end_col);
+        let end_col = selection.start_col.max(selection.end_col);
+        return (start_row..=end_row).contains(&row) && (start_col..=end_col).contains(&col);
+    }
+    if row < selection.start_row || row > selection.end_row {
+        return false;
+    }
+    if selection.start_row == selection.end_row {
+        let start_col = selection.start_col.min(selection.end_col);
+        let end_col = selection.start_col.max(selection.end_col);
+        return (start_col..=end_col).contains(&col);
+    }
+    if row == selection.start_row {
+        return col >= selection.start_col;
+    }
+    if row == selection.end_row {
+        return col <= selection.end_col;
+    }
+    true
 }
 
 /// Encode a Canopy mouse event into terminal escape sequences.

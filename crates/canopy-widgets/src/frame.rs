@@ -219,33 +219,29 @@ impl Widget for Frame {
         }
 
         match m.action {
-            mouse::Action::ScrollUp => {
+            mouse::Action::ScrollUp
                 if scrollable(view_size.h, canvas_size.h)
-                    && scroll_child_by(ctx, child_id, 0, -WHEEL_SCROLL_LINES)
-                {
-                    return Ok(EventOutcome::Handle);
-                }
+                    && scroll_child_by(ctx, child_id, 0, -WHEEL_SCROLL_LINES) =>
+            {
+                return Ok(EventOutcome::Handle);
             }
-            mouse::Action::ScrollDown => {
+            mouse::Action::ScrollDown
                 if scrollable(view_size.h, canvas_size.h)
-                    && scroll_child_by(ctx, child_id, 0, WHEEL_SCROLL_LINES)
-                {
-                    return Ok(EventOutcome::Handle);
-                }
+                    && scroll_child_by(ctx, child_id, 0, WHEEL_SCROLL_LINES) =>
+            {
+                return Ok(EventOutcome::Handle);
             }
-            mouse::Action::ScrollLeft => {
+            mouse::Action::ScrollLeft
                 if scrollable(view_size.w, canvas_size.w)
-                    && scroll_child_by(ctx, child_id, -WHEEL_SCROLL_LINES, 0)
-                {
-                    return Ok(EventOutcome::Handle);
-                }
+                    && scroll_child_by(ctx, child_id, -WHEEL_SCROLL_LINES, 0) =>
+            {
+                return Ok(EventOutcome::Handle);
             }
-            mouse::Action::ScrollRight => {
+            mouse::Action::ScrollRight
                 if scrollable(view_size.w, canvas_size.w)
-                    && scroll_child_by(ctx, child_id, WHEEL_SCROLL_LINES, 0)
-                {
-                    return Ok(EventOutcome::Handle);
-                }
+                    && scroll_child_by(ctx, child_id, WHEEL_SCROLL_LINES, 0) =>
+            {
+                return Ok(EventOutcome::Handle);
             }
             mouse::Action::Down if m.button == mouse::Button::Left => {
                 let mut consumed = false;
