@@ -4,10 +4,10 @@ use std::path::Path;
 
 use canopy::{
     Canopy, Context, Loader, ReadContext, Widget, command,
-    commands::{ScrollDirection, ZoomDirection},
+    commands::ZoomDirection,
     derive_commands, error as canopy_error,
-    geom::{Expanse, Point, Rect},
-    layout::{CanvasContext, Layout, Size},
+    geom::{Point, Rect, Size},
+    layout::{CanvasContext, Layout},
     render::Render,
     style::{AttrSet, Color, ResolvedStyle},
 };
@@ -127,17 +127,17 @@ impl ImageView {
     }
 
     /// Convert the view width to display subpixels.
-    fn view_subpixel_width(view_size: Expanse) -> f32 {
+    fn view_subpixel_width(view_size: Size) -> f32 {
         view_size.w as f32
     }
 
     /// Convert the view height to display subpixels.
-    fn view_subpixel_height(view_size: Expanse) -> f32 {
+    fn view_subpixel_height(view_size: Size) -> f32 {
         view_size.h as f32 * 2.0
     }
 
     /// Compute a zoom value that fits the entire image inside the view.
-    fn fit_zoom(&self, view_size: Expanse) -> f32 {
+    fn fit_zoom(&self, view_size: Size) -> f32 {
         let image_width = self.image_width_f32();
         let image_height = self.image_height_f32();
         if image_width == 0.0 || image_height == 0.0 || view_size.w == 0 || view_size.h == 0 {
@@ -153,7 +153,7 @@ impl ImageView {
     }
 
     /// Determine the zoom value to use for the provided view.
-    fn effective_zoom(&self, view_size: Expanse) -> f32 {
+    fn effective_zoom(&self, view_size: Size) -> f32 {
         if self.auto_fit {
             self.fit_zoom(view_size)
         } else {
@@ -162,7 +162,7 @@ impl ImageView {
     }
 
     /// Apply automatic fit if enabled.
-    fn apply_auto_fit(&mut self, view_size: Expanse) {
+    fn apply_auto_fit(&mut self, view_size: Size) {
         if !self.auto_fit {
             return;
         }
@@ -174,7 +174,7 @@ impl ImageView {
     }
 
     /// Zoom around the center of the current view.
-    fn zoom_by(&mut self, view_size: Expanse, scroll: Point, factor: f32) -> Point {
+    fn zoom_by(&mut self, view_size: Size, scroll: Point, factor: f32) -> Point {
         let view_width = Self::view_subpixel_width(view_size);
         let view_height = Self::view_subpixel_height(view_size);
         if view_width == 0.0 || view_height == 0.0 {
@@ -241,7 +241,7 @@ impl ImageView {
     }
 
     /// Compute the display subpixel offset to center the image in the view.
-    fn center_offset(&self, view_size: Expanse, zoom: f32) -> (f32, f32) {
+    fn center_offset(&self, view_size: Size, zoom: f32) -> (f32, f32) {
         let view_width = Self::view_subpixel_width(view_size);
         let view_height = Self::view_subpixel_height(view_size);
         let image_width = self.image_width_f32() * zoom;
@@ -365,19 +365,23 @@ impl ImageView {
     }
 
     /// Pan by one step in the specified direction.
-    pub fn pan(&mut self, ctx: &mut dyn Context, dir: ScrollDirection) -> canopy_error::Result<()> {
+    pub fn pan(
+        &mut self,
+        ctx: &mut dyn Context,
+        dir: canopy::geom::Direction,
+    ) -> canopy_error::Result<()> {
         self.auto_fit = false;
         match dir {
-            ScrollDirection::Left => {
+            canopy::geom::Direction::Left => {
                 ctx.scroll_by(-PAN_STEP_COLUMNS, 0);
             }
-            ScrollDirection::Right => {
+            canopy::geom::Direction::Right => {
                 ctx.scroll_by(PAN_STEP_COLUMNS, 0);
             }
-            ScrollDirection::Up => {
+            canopy::geom::Direction::Up => {
                 ctx.scroll_by(0, -PAN_STEP_ROWS);
             }
-            ScrollDirection::Down => {
+            canopy::geom::Direction::Down => {
                 ctx.scroll_by(0, PAN_STEP_ROWS);
             }
         }
@@ -399,25 +403,25 @@ impl ImageView {
     #[command]
     /// Pan up by one step.
     pub fn pan_up(&mut self, ctx: &mut dyn Context) -> canopy_error::Result<()> {
-        self.pan(ctx, ScrollDirection::Up)
+        self.pan(ctx, canopy::geom::Direction::Up)
     }
 
     #[command]
     /// Pan down by one step.
     pub fn pan_down(&mut self, ctx: &mut dyn Context) -> canopy_error::Result<()> {
-        self.pan(ctx, ScrollDirection::Down)
+        self.pan(ctx, canopy::geom::Direction::Down)
     }
 
     #[command]
     /// Pan left by one step.
     pub fn pan_left(&mut self, ctx: &mut dyn Context) -> canopy_error::Result<()> {
-        self.pan(ctx, ScrollDirection::Left)
+        self.pan(ctx, canopy::geom::Direction::Left)
     }
 
     #[command]
     /// Pan right by one step.
     pub fn pan_right(&mut self, ctx: &mut dyn Context) -> canopy_error::Result<()> {
-        self.pan(ctx, ScrollDirection::Right)
+        self.pan(ctx, canopy::geom::Direction::Right)
     }
 }
 
@@ -428,11 +432,11 @@ impl Widget for ImageView {
     }
 
     fn canvas(&self, view: Size<u32>, _ctx: &CanvasContext) -> Size<u32> {
-        let view_size = Expanse::new(view.width, view.height);
+        let view_size = Size::new(view.w, view.h);
         let zoom = self.effective_zoom(view_size);
         let width = (self.image_width_f32() * zoom).ceil() as u32;
         let height = ((self.image_height_f32() * zoom) / 2.0).ceil() as u32;
-        Size::new(width.max(view.width), height.max(view.height))
+        Size::new(width.max(view.w), height.max(view.h))
     }
 
     /// Render the current image view into the terminal buffer.
@@ -470,8 +474,8 @@ mod tests {
 
     use super::*;
 
-    fn make_view(width: u32, height: u32) -> Expanse {
-        Expanse::new(width, height)
+    fn make_view(width: u32, height: u32) -> Size {
+        Size::new(width, height)
     }
 
     #[test]

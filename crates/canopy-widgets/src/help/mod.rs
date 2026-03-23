@@ -371,7 +371,7 @@ impl Widget for HelpContent {
     }
 
     fn canvas(&self, view: Size<u32>, _ctx: &CanvasContext) -> Size<u32> {
-        let wrap_width = view.width.max(1) as usize;
+        let wrap_width = view.w.max(1) as usize;
         // If no snapshot yet, assume large content to ensure scrollbar appears
         // on first render. The actual content size will be used after snapshot loads.
         let total_lines = if self.snapshot.is_some() {
@@ -379,7 +379,7 @@ impl Widget for HelpContent {
         } else {
             100 // Reasonable default for help content
         };
-        Size::new(view.width, total_lines as u32)
+        Size::new(view.w, total_lines as u32)
     }
 
     fn on_event(&mut self, _event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {

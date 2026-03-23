@@ -6,8 +6,8 @@ mod tests {
         Canopy, Loader, ReadContext, Widget,
         commands::{CommandNode, CommandSpec},
         error::Result,
-        geom::Expanse,
-        layout::{Edges, Layout, MeasureConstraints, Measurement, Size},
+        geom::Size,
+        layout::{Edges, Layout, MeasureConstraints, Measurement},
         render::Render,
         state::NodeName,
         testing::harness::Harness,
@@ -111,7 +111,7 @@ mod tests {
 
         h.canopy.core.set_layout_of(child, Layout::fill())?;
 
-        h.canopy.set_root_size(Expanse::new(20, 20))?;
+        h.canopy.set_root_size(Size::new(20, 20))?;
         h.render()?;
 
         let core = &h.canopy.core;

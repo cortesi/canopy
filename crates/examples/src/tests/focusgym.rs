@@ -2,7 +2,7 @@ use canopy::{error::Error, geom::RectI32, prelude::*, testing::harness::Harness}
 
 use crate::focusgym::{Block, FocusGym, setup_bindings};
 
-fn setup_harness(size: Expanse) -> Result<Harness> {
+fn setup_harness(size: Size) -> Result<Harness> {
     let mut harness = Harness::builder(FocusGym::new())
         .size(size.w, size.h)
         .build()?;
@@ -96,7 +96,7 @@ macro_rules! find_separator_column {
 
 #[test]
 fn test_initial_render_draws_blocks() -> Result<()> {
-    let harness = setup_harness(Expanse::new(40, 12))?;
+    let harness = setup_harness(Size::new(40, 12))?;
     let buf = harness.buf();
     let size = buf.size();
     let mut found = false;
@@ -118,7 +118,7 @@ fn test_initial_render_draws_blocks() -> Result<()> {
 
 #[test]
 fn test_horizontal_children_fill_height() -> Result<()> {
-    let mut harness = setup_harness(Expanse::new(60, 14))?;
+    let mut harness = setup_harness(Size::new(60, 14))?;
     let (parent, children) = with_root_block(&mut harness, |ctx, root| {
         let parent = outer_of(ctx, root, "root block")?;
         let mut child_views = Vec::new();
@@ -138,7 +138,7 @@ fn test_horizontal_children_fill_height() -> Result<()> {
 
 #[test]
 fn test_vertical_children_fill_width_and_height() -> Result<()> {
-    let mut harness = setup_harness(Expanse::new(60, 14))?;
+    let mut harness = setup_harness(Size::new(60, 14))?;
 
     harness.key('s')?;
 
@@ -168,7 +168,7 @@ fn test_vertical_children_fill_width_and_height() -> Result<()> {
 
 #[test]
 fn test_flex_grow_and_shrink_commands_update_style() -> Result<()> {
-    let mut harness = setup_harness(Expanse::new(60, 14))?;
+    let mut harness = setup_harness(Size::new(60, 14))?;
     let weight_before = with_root_block(&mut harness, |ctx, root| {
         let left = ctx
             .children_of(root)
@@ -205,7 +205,7 @@ fn test_flex_grow_and_shrink_commands_update_style() -> Result<()> {
 
 #[test]
 fn test_flex_grow_affects_layout() -> Result<()> {
-    let mut harness = setup_harness(Expanse::new(60, 14))?;
+    let mut harness = setup_harness(Size::new(60, 14))?;
     let (left_before, right_before) = with_root_block(&mut harness, |ctx, root| {
         let children = ctx.children_of(root);
         let left = children
@@ -244,7 +244,7 @@ fn test_flex_grow_affects_layout() -> Result<()> {
 
 #[test]
 fn test_flex_adjust_refuses_at_min_size() -> Result<()> {
-    let mut harness = setup_harness(Expanse::new(2, 2))?;
+    let mut harness = setup_harness(Size::new(2, 2))?;
     let (view, weight_before) = with_root_block(&mut harness, |ctx, root| {
         let left = ctx
             .children_of(root)
@@ -284,7 +284,7 @@ fn test_flex_adjust_refuses_at_min_size() -> Result<()> {
 
 #[test]
 fn test_screen_edge_is_flush() -> Result<()> {
-    let harness = setup_harness(Expanse::new(40, 12))?;
+    let harness = setup_harness(Size::new(40, 12))?;
     let cell = harness.buf().get(Point { x: 0, y: 0 }).unwrap();
     assert_eq!(cell.ch, '\u{2588}');
     Ok(())
@@ -292,7 +292,7 @@ fn test_screen_edge_is_flush() -> Result<()> {
 
 #[test]
 fn test_single_separator_between_root_children() -> Result<()> {
-    let mut harness = setup_harness(Expanse::new(40, 12))?;
+    let mut harness = setup_harness(Size::new(40, 12))?;
     let (left_view, right_view) = with_root_block(&mut harness, |ctx, root| {
         let children = ctx.children_of(root);
         let left = children
@@ -321,7 +321,7 @@ fn test_single_separator_between_root_children() -> Result<()> {
 
 #[test]
 fn test_delete_focused_block() -> Result<()> {
-    let mut harness = setup_harness(Expanse::new(60, 14))?;
+    let mut harness = setup_harness(Size::new(60, 14))?;
     let (left, right) = root_children_pair(&mut harness)?;
     let left_focused = with_root_block(&mut harness, |ctx, _root| {
         Ok(ctx.node_is_on_focus_path(left))
@@ -342,7 +342,7 @@ fn test_delete_focused_block() -> Result<()> {
 
 #[test]
 fn test_separators_remain_continuous_after_nested_splits() -> Result<()> {
-    let mut harness = setup_harness(Expanse::new(40, 12))?;
+    let mut harness = setup_harness(Size::new(40, 12))?;
     harness.key('s')?;
 
     let (_, right) = root_children_pair(&mut harness)?;

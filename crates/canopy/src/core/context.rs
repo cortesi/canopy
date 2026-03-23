@@ -16,7 +16,7 @@ use crate::{
     commands::{ArgValue, CommandError, CommandInvocation, CommandScopeFrame, ListRowContext},
     error::{Error, Result},
     event::{Event, mouse::MouseEvent},
-    geom::{Direction, Expanse, Point, PointI32, Rect, RectI32},
+    geom::{Direction, Point, PointI32, Rect, RectI32, Size},
     layout::Layout,
     path::{Path, PathMatcher},
     style::StyleMap,
@@ -32,10 +32,10 @@ use crate::{
 ///
 /// ```ignore
 /// // Key with same name as widget type
-/// key!(Editor);
+/// Editor);
 ///
 /// // Key with custom name
-/// key!(ModalSlot: Modal);
+/// ModalSlot: Modal);
 /// ```
 pub trait ChildKey {
     /// The widget type associated with this key.
@@ -95,7 +95,7 @@ impl<K: ChildKey> Slot<K> {
             self.id = Some(id);
             return Ok(id);
         }
-        let id = ctx.add_keyed_to::<K>(parent, make())?;
+        let id = ctx.add_keyed_to(parent, K::KEY, make())?;
         self.id = Some(id);
         Ok(id)
     }
@@ -132,12 +132,12 @@ impl<K: ChildKey> Slot<K> {
 ///
 /// ```ignore
 /// // Simple form: key name matches widget type, string key is snake_case
-/// key!(Editor);  // KEY = "Editor", Widget = Editor (private)
-/// key!(pub Editor);  // same, but public
+/// Editor);  // KEY = "Editor", Widget = Editor (private)
+/// pub Editor);  // same, but public
 ///
 /// // Custom name form: specify the widget type explicitly
-/// key!(ModalSlot: Modal);  // KEY = "ModalSlot", Widget = Modal (private)
-/// key!(pub ModalSlot: Modal);  // same, but public
+/// ModalSlot: Modal);  // KEY = "ModalSlot", Widget = Modal (private)
+/// pub ModalSlot: Modal);  // same, but public
 /// ```
 #[macro_export]
 macro_rules! key {
@@ -184,7 +184,7 @@ pub trait ReadContext {
     fn node_type_id(&self, node: NodeId) -> Option<TypeId>;
 
     /// Canvas size for the current node.
-    fn canvas(&self) -> Expanse {
+    fn canvas(&self) -> Size {
         self.view().canvas
     }
 
@@ -503,11 +503,11 @@ const DEFAULT_VIEW: View = View {
         h: 0,
     },
     tl: Point { x: 0, y: 0 },
-    canvas: Expanse { w: 0, h: 0 },
+    canvas: Size { w: 0, h: 0 },
 };
 
 /// Clamp a scroll offset so it stays within the view/canvas bounds.
-fn clamp_scroll_offset(scroll: &mut Point, view: Expanse, canvas: Expanse) {
+fn clamp_scroll_offset(scroll: &mut Point, view: Size, canvas: Size) {
     let max_x = if view.w == 0 {
         0
     } else {
@@ -1193,22 +1193,24 @@ impl dyn Context + '_ {
     }
 
     /// Add a typed keyed child to a specific parent and return its typed node ID.
-    pub fn add_keyed_to<K: ChildKey>(
+    pub fn add_keyed_to<W: Widget + 'static>(
         &mut self,
         parent: impl Into<NodeId>,
-        widget: K::Widget,
-    ) -> Result<TypedId<K::Widget>> {
-        self.add_child_to_keyed(parent, K::KEY, widget)
+        key: &str,
+        widget: W,
+    ) -> Result<TypedId<W>> {
+        self.add_child_to_keyed(parent, key, widget)
     }
 
     /// Add a typed keyed child to a specific parent and assign a layout.
-    pub fn add_keyed_to_with_layout<K: ChildKey>(
+    pub fn add_keyed_to_with_layout<W: Widget + 'static>(
         &mut self,
         parent: impl Into<NodeId>,
-        widget: K::Widget,
+        key: &str,
+        widget: W,
         layout: Layout,
-    ) -> Result<TypedId<K::Widget>> {
-        let id = self.add_keyed_to::<K>(parent, widget)?;
+    ) -> Result<TypedId<W>> {
+        let id = self.add_keyed_to::<W>(parent, key, widget)?;
         self.set_layout_of(id, layout)?;
         Ok(id)
     }

@@ -9,7 +9,7 @@ use crate::{
     },
     error::Result,
     event::{key, mouse},
-    geom::Expanse,
+    geom::Size,
     layout::Sizing,
     widget::Widget,
 };
@@ -31,7 +31,7 @@ pub struct HarnessBuilder<W> {
     /// Root widget under test.
     root: W,
     /// View size for the harness.
-    size: Expanse,
+    size: Size,
 }
 
 impl<W: Widget + Loader + 'static> HarnessBuilder<W> {
@@ -39,13 +39,13 @@ impl<W: Widget + Loader + 'static> HarnessBuilder<W> {
     fn new(root: W) -> Self {
         Self {
             root,
-            size: Expanse::new(100, 100),
+            size: Size::new(100, 100),
         }
     }
 
     /// Set the size of the harness view.
     pub fn size(mut self, width: u32, height: u32) -> Self {
-        self.size = Expanse::new(width, height);
+        self.size = Size::new(width, height);
         self
     }
 
@@ -79,7 +79,7 @@ impl Harness {
     }
 
     /// Create a harness using `size` for the root layout.
-    pub fn with_size<W: Widget + Loader + 'static>(root: W, size: Expanse) -> Result<Self> {
+    pub fn with_size<W: Widget + Loader + 'static>(root: W, size: Size) -> Result<Self> {
         let render = NopBackend::new();
         let mut canopy = Canopy::new();
         <W as Loader>::load(&mut canopy)?;
@@ -97,7 +97,7 @@ impl Harness {
 
     /// Create a harness with a default root size of 100x100.
     pub fn new<W: Widget + Loader + 'static>(root: W) -> Result<Self> {
-        Self::with_size(root, Expanse::new(100, 100))
+        Self::with_size(root, Size::new(100, 100))
     }
 
     /// Access the current render buffer. Panics if a render has not yet been performed.
@@ -280,7 +280,7 @@ mod tests {
 
     #[test]
     fn test_harness_with_size() {
-        let mut h = Harness::with_size(TestNode::new(), Expanse::new(15, 4)).unwrap();
+        let mut h = Harness::with_size(TestNode::new(), Size::new(15, 4)).unwrap();
         h.render().unwrap();
         assert!(h.tbuf().contains_text("test"));
     }

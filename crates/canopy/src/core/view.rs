@@ -1,6 +1,6 @@
 use crate::{
     error::Result,
-    geom::{Expanse, Point, Rect, RectI32},
+    geom::{Point, Rect, RectI32, Size},
 };
 
 /// Render-time view information for a node.
@@ -13,18 +13,18 @@ pub struct View {
     /// Viewport offset in content coordinates (scroll position).
     pub tl: Point,
     /// Canvas size in content coordinates.
-    pub canvas: Expanse,
+    pub canvas: Size,
 }
 
 impl View {
     /// Size of the outer rect.
-    pub fn outer_size(&self) -> Expanse {
-        Expanse::new(self.outer.w, self.outer.h)
+    pub fn outer_size(&self) -> Size {
+        Size::new(self.outer.w, self.outer.h)
     }
 
     /// Size of the content rect.
-    pub fn content_size(&self) -> Expanse {
-        Expanse::new(self.content.w, self.content.h)
+    pub fn content_size(&self) -> Size {
+        Size::new(self.content.w, self.content.h)
     }
 
     /// True if the view is zero-sized.
@@ -56,7 +56,7 @@ impl View {
     }
 
     /// Build a view from signed outer/content rects and content/canvas sizes.
-    pub fn new(outer: RectI32, content: RectI32, tl: Point, canvas: Expanse) -> Self {
+    pub fn new(outer: RectI32, content: RectI32, tl: Point, canvas: Size) -> Self {
         Self {
             outer,
             content,

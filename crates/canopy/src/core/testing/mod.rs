@@ -19,7 +19,7 @@ mod tests {
     use crate::{
         Canopy, ReadContext, derive_commands,
         error::Result,
-        geom::Expanse,
+        geom::Size,
         layout::{Direction, Layout},
         render::Render,
         state::NodeName,
@@ -75,7 +75,7 @@ mod tests {
         canopy.core.set_layout_of(left, Layout::fill())?;
         canopy.core.set_layout_of(right, Layout::fill())?;
 
-        canopy.set_root_size(Expanse::new(20, 10))?;
+        canopy.set_root_size(Size::new(20, 10))?;
         canopy.render(&mut tr)?;
         assert!(!tr.buf_empty());
         Ok(())
@@ -98,7 +98,7 @@ mod tests {
         canopy.core.set_layout_of(left, Layout::fill())?;
         canopy.core.set_layout_of(right, Layout::fill())?;
 
-        canopy.set_root_size(Expanse::new(20, 10))?;
+        canopy.set_root_size(Size::new(20, 10))?;
         canopy.render(&mut tr)?;
         tr.text.lock().unwrap().text.clear();
 

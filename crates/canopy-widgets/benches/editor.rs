@@ -9,7 +9,7 @@ use canopy::{
 use canopy_widgets::editor::{EditMode, Editor, EditorConfig, LineNumbers, WrapMode};
 use criterion::{Criterion, criterion_group, criterion_main};
 
-key!(EditorSlot: Editor);
+canopy::key!(EditorSlot: Editor);
 
 /// Wrapper node used for editor render benchmarks.
 struct BenchmarkEditorWrapper {

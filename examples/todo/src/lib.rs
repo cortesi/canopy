@@ -1,8 +1,6 @@
 use anyhow::Result as AnyResult;
 use canopy::{
-    command,
-    commands::VerticalDirection,
-    derive_commands,
+    command, derive_commands,
     event::key,
     prelude::*,
     style::{effects, solarized},
@@ -10,8 +8,8 @@ use canopy::{
 use canopy_widgets::{Frame, Input, List, Modal, Root, Selectable};
 
 // Typed keys for keyed children
-key!(MainSlot: MainContent);
-key!(ModalSlot: Modal);
+canopy::key!(MainSlot: MainContent);
+canopy::key!(ModalSlot: Modal);
 
 pub mod store;
 
@@ -337,7 +335,7 @@ impl Todo {
     }
 
     #[command]
-    pub fn page(&mut self, c: &mut dyn Context, dir: VerticalDirection) -> Result<()> {
+    pub fn page(&mut self, c: &mut dyn Context, dir: canopy::geom::Direction) -> Result<()> {
         self.with_list(c, |list, ctx| {
             list.page(ctx, dir);
             Ok(())
@@ -395,14 +393,17 @@ pub fn bind_keys(cnpy: &mut Canopy) {
         .key_command(key::KeyCode::Down, Todo::cmd_select_by().call_with([1]))
         .key_command('k', Todo::cmd_select_by().call_with([-1]))
         .key_command(key::KeyCode::Up, Todo::cmd_select_by().call_with([-1]))
-        .key_command(' ', Todo::cmd_page().call_with([VerticalDirection::Down]))
+        .key_command(
+            ' ',
+            Todo::cmd_page().call_with([canopy::geom::Direction::Down]),
+        )
         .key_command(
             key::KeyCode::PageDown,
-            Todo::cmd_page().call_with([VerticalDirection::Down]),
+            Todo::cmd_page().call_with([canopy::geom::Direction::Down]),
         )
         .key_command(
             key::KeyCode::PageUp,
-            Todo::cmd_page().call_with([VerticalDirection::Up]),
+            Todo::cmd_page().call_with([canopy::geom::Direction::Up]),
         )
         .mouse_command(
             mouse::Action::ScrollUp,

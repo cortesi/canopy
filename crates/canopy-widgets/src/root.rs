@@ -5,7 +5,6 @@ use canopy::{
     derive_commands,
     error::{Error, Result},
     event::key::*,
-    key,
     layout::{Direction, Layout, Sizing},
     render::Render,
     state::NodeName,
@@ -15,10 +14,10 @@ use canopy::{
 use crate::{help::Help, inspector::Inspector};
 
 // Typed key for the inspector slot
-key!(InspectorSlot: Inspector);
+canopy::key!(InspectorSlot: Inspector);
 
 // Typed key for the help slot
-key!(HelpSlot: Help);
+canopy::key!(HelpSlot: Help);
 
 /// Key for the application subtree under root (widget type varies).
 const KEY_APP: &str = "AppSlot";
@@ -366,7 +365,7 @@ mod tests {
         ReadContext, Widget,
         commands::{CommandNode, CommandSpec},
         error::Result,
-        geom::Expanse,
+        geom::Size,
         layout::Layout,
         render::Render,
         state::NodeName,
@@ -440,7 +439,7 @@ mod tests {
         canopy.core.set_layout_of(right, Layout::fill())?;
 
         Root::install(&mut canopy.core, app_id)?;
-        canopy.set_root_size(Expanse::new(20, 6))?;
+        canopy.set_root_size(Size::new(20, 6))?;
 
         let mut backend = NopBackend::new();
         canopy.render(&mut backend)?;

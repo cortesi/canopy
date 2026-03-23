@@ -5,7 +5,7 @@ pub mod mouse;
 
 use std::sync::mpsc;
 
-use crate::{NodeId, geom::Expanse};
+use crate::{NodeId, geom::Size};
 
 /// This enum represents all the event types that drive the application.
 #[derive(Debug, Clone)]
@@ -15,7 +15,7 @@ pub enum Event {
     /// A mouse action
     Mouse(mouse::MouseEvent),
     /// Terminal resize
-    Resize(Expanse),
+    Resize(Size),
     /// A poll event
     Poll(Vec<NodeId>),
     /// Terminal has gained focus

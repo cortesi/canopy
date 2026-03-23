@@ -5,7 +5,7 @@ use crate::{
     core::Core,
     derive_commands,
     error::Result,
-    geom::{Expanse, Point},
+    geom::{Point, Size},
     layout::Layout,
     state::NodeName,
     widget::Widget,
@@ -97,14 +97,14 @@ impl Grid {
     }
 
     /// Get the expected grid size in cells.
-    pub fn expected_size(&self) -> Expanse {
+    pub fn expected_size(&self) -> Size {
         let cells_per_side = if self.recursion == 0 {
             1
         } else {
             self.divisions.pow(self.recursion as u32)
         };
         let size = cells_per_side as u32 * 10;
-        Expanse::new(size, size)
+        Size::new(size, size)
     }
 
     /// Get the dimensions of the grid (number of cells in x and y).

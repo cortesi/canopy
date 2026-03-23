@@ -3,11 +3,10 @@
 pub use crate::{
     Binder, Canopy, ChildKey, Context, Loader, NodeId, ReadContext, Slot, TypedId, Widget, error,
     event::{Event, key::Key, mouse},
-    geom::{Expanse, Point, Rect},
+    geom::{Point, Rect, Size},
     key,
     layout::{
-        Align, Constraint, Direction, Display, Layout, MeasureConstraints, Measurement, Size,
-        Sizing,
+        Align, Constraint, Direction, Display, Layout, MeasureConstraints, Measurement, Sizing,
     },
     render::Render,
     state::NodeName,

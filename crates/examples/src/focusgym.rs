@@ -19,7 +19,7 @@ impl Block {
     }
 
     /// Return true when the available area is too small to split.
-    fn size_limited(&self, a: Expanse) -> bool {
+    fn size_limited(&self, a: Size) -> bool {
         (self.horizontal && a.w <= 4) || (!self.horizontal && a.h <= 4)
     }
 
@@ -76,7 +76,7 @@ impl Block {
         if let Some(first_child) = c.children().first().copied()
             && let Some(view) = c.node_view(first_child)
         {
-            let size = Expanse::new(view.outer.w, view.outer.h);
+            let size = Size::new(view.outer.w, view.outer.h);
             if self.size_limited(size) {
                 return Ok(());
             }
@@ -89,7 +89,7 @@ impl Block {
     /// Split into two child blocks.
     fn split(&self, c: &mut dyn Context) -> Result<()> {
         let view = c.view();
-        let size = Expanse::new(view.outer.w, view.outer.h);
+        let size = Size::new(view.outer.w, view.outer.h);
         if !self.size_limited(size) && c.children().is_empty() {
             c.add_child(Self::new(!self.horizontal))?;
             c.add_child(Self::new(!self.horizontal))?;

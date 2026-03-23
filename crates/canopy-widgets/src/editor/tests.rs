@@ -8,7 +8,6 @@ use canopy::{
     error::Result,
     event::{key, mouse},
     geom::Point,
-    key,
     layout::Layout,
     render::Render,
     state::NodeName,
@@ -22,7 +21,7 @@ use crate::editor::{
     highlight::{HighlightSpan, Highlighter},
 };
 
-key!(EditorSlot: Editor);
+canopy::key!(EditorSlot: Editor);
 
 /// Host widget that mounts an editor as its only child.
 struct EditorHost {

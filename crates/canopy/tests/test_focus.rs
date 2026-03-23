@@ -6,7 +6,7 @@ mod tests {
         Canopy, Core, NodeId, ReadContext, Widget,
         commands::{CommandNode, CommandSpec},
         error::{Error, Result},
-        geom::{Direction, Expanse},
+        geom::{Direction, Size},
         layout::{Layout, Sizing},
         render::Render,
         state::NodeName,
@@ -43,7 +43,7 @@ mod tests {
         }
     }
 
-    fn attach_grid(core: &mut Core, grid_root: NodeId, size: Expanse) -> Result<()> {
+    fn attach_grid(core: &mut Core, grid_root: NodeId, size: Size) -> Result<()> {
         let root = core.root_id();
         core.set_children(root, vec![grid_root])?;
         core.set_layout_of(root, Layout::fill())?;
@@ -61,7 +61,7 @@ mod tests {
             .filter(|name| name.starts_with("cell_"))
     }
 
-    fn test_snake_navigation(grid: &Grid, canopy: &mut Canopy, size: Expanse) -> Result<()> {
+    fn test_snake_navigation(grid: &Grid, canopy: &mut Canopy, size: Size) -> Result<()> {
         attach_grid(&mut canopy.core, grid.root, size)?;
         let (grid_width, grid_height) = grid.dimensions();
         let total_cells = grid_width * grid_height;
@@ -186,7 +186,7 @@ mod tests {
         let mut canopy = Canopy::new();
         let grid = Grid::install(&mut canopy.core, 1, 2)?;
         let grid_size = grid.expected_size();
-        assert_eq!(grid_size, Expanse::new(20, 20));
+        assert_eq!(grid_size, Size::new(20, 20));
         attach_grid(&mut canopy.core, grid.root, grid_size)?;
 
         canopy.core.focus_first(grid.root);
@@ -239,13 +239,13 @@ mod tests {
             .set_layout_of(first, Layout::column().fixed_width(10).fixed_height(5))?;
         canopy.core.set_layout_of(second, Layout::fill())?;
 
-        canopy.core.update_layout(Expanse::new(10, 10))?;
+        canopy.core.update_layout(Size::new(10, 10))?;
         canopy.core.set_focus(first);
 
         canopy.core.with_layout_of(first, |layout| {
             *layout = layout.fixed_height(0);
         })?;
-        canopy.core.update_layout(Expanse::new(10, 10))?;
+        canopy.core.update_layout(Size::new(10, 10))?;
 
         assert_eq!(canopy.core.focus_id(), Some(second));
         Ok(())

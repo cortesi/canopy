@@ -9,7 +9,7 @@ use canopy::{
 use canopy_widgets::Text;
 use criterion::{Criterion, criterion_group, criterion_main};
 
-key!(TextSlot: Text);
+canopy::key!(TextSlot: Text);
 
 /// Wrapper node used for text render benchmarks.
 struct BenchmarkTextWrapper {

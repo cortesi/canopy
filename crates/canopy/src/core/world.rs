@@ -15,10 +15,10 @@ use crate::{
     core::{context::CoreContext, id::NodeId, node::Node, view::View},
     error::{Error, Result},
     event::Event,
-    geom::{Expanse, Point, Rect, RectI32},
+    geom::{Point, Rect, RectI32, Size},
     layout::{
         Align, CanvasChild, CanvasContext, Constraint, Direction as LayoutDirection, Display,
-        Layout, MeasureConstraints, Measurement, Size, Sizing,
+        Layout, MeasureConstraints, Measurement, Sizing,
     },
     path::Path,
     render::Render,
@@ -153,8 +153,8 @@ impl Core {
             child_keys: HashMap::new(),
             layout,
             rect: Rect::zero(),
-            content_size: Expanse::default(),
-            canvas: Expanse::default(),
+            content_size: Size::default(),
+            canvas: Size::default(),
             scroll: Point::zero(),
             view: View::default(),
             hidden: false,
@@ -269,8 +269,8 @@ impl Core {
             child_keys: HashMap::new(),
             layout,
             rect: Rect::zero(),
-            content_size: Expanse::default(),
-            canvas: Expanse::default(),
+            content_size: Size::default(),
+            canvas: Size::default(),
             scroll: Point::zero(),
             view: View::default(),
             hidden: false,
@@ -1039,7 +1039,7 @@ impl Core {
     }
 
     /// Run layout computation and synchronize views.
-    pub fn update_layout(&mut self, screen_size: Expanse) -> Result<()> {
+    pub fn update_layout(&mut self, screen_size: Size) -> Result<()> {
         refresh_layouts(self);
         let root = self.root;
         let mut pass = LayoutPass::new(self);
@@ -1247,7 +1247,7 @@ impl<'a> LayoutPass<'a> {
     fn layout_node(
         &mut self,
         node_id: NodeId,
-        available_outer: Expanse,
+        available_outer: Size,
         position: Point,
         parent_overflow: Overflow,
     ) -> Size<u32> {
@@ -1268,15 +1268,12 @@ impl<'a> LayoutPass<'a> {
         let outer = self.resolve_outer_size(node_id, effective_layout, available_outer);
         let pad_x = layout.padding.horizontal();
         let pad_y = layout.padding.vertical();
-        let content_size = Size::new(
-            outer.width.saturating_sub(pad_x),
-            outer.height.saturating_sub(pad_y),
-        );
+        let content_size = Size::new(outer.w.saturating_sub(pad_x), outer.h.saturating_sub(pad_y));
 
         {
             let node = self.core.nodes.get_mut(node_id).expect("missing node");
-            node.rect = Rect::new(position.x, position.y, outer.width, outer.height);
-            node.content_size = content_size.into();
+            node.rect = Rect::new(position.x, position.y, outer.w, outer.h);
+            node.content_size = content_size;
         }
 
         self.layout_children(node_id, effective_layout, content_size);
@@ -1346,7 +1343,7 @@ impl<'a> LayoutPass<'a> {
         &mut self,
         node_id: NodeId,
         layout: Layout,
-        available_outer: Expanse,
+        available_outer: Size,
     ) -> Size<u32> {
         self.resolve_outer_size_with_layout(node_id, layout, available_outer)
     }
@@ -1356,13 +1353,13 @@ impl<'a> LayoutPass<'a> {
         &mut self,
         node_id: NodeId,
         layout: Layout,
-        available_outer: Expanse,
+        available_outer: Size,
     ) -> Size<u32> {
-        let available: Size<u32> = available_outer.into();
+        let available: Size<u32> = available_outer;
         let pad_x = layout.padding.horizontal();
         let pad_y = layout.padding.vertical();
-        let available_content_w = available.width.saturating_sub(pad_x);
-        let available_content_h = available.height.saturating_sub(pad_y);
+        let available_content_w = available.w.saturating_sub(pad_x);
+        let available_content_h = available.h.saturating_sub(pad_y);
 
         let c0 = MeasureConstraints {
             width: constraint_for_axis(
@@ -1397,31 +1394,28 @@ impl<'a> LayoutPass<'a> {
         }
 
         let outer_w0 = match layout.width {
-            Sizing::Flex(_) => available.width,
-            Sizing::Measure => measured_content.width.saturating_add(pad_x),
+            Sizing::Flex(_) => available.w,
+            Sizing::Measure => measured_content.w.saturating_add(pad_x),
         };
         let outer_h0 = match layout.height {
-            Sizing::Flex(_) => available.height,
-            Sizing::Measure => measured_content.height.saturating_add(pad_y),
+            Sizing::Flex(_) => available.h,
+            Sizing::Measure => measured_content.h.saturating_add(pad_y),
         };
 
         let mut outer = Size::new(outer_w0, outer_h0);
         outer = clamp_outer(outer, layout);
 
-        let mut content = Size::new(
-            outer.width.saturating_sub(pad_x),
-            outer.height.saturating_sub(pad_y),
-        );
+        let mut content = Size::new(outer.w.saturating_sub(pad_x), outer.h.saturating_sub(pad_y));
 
         if did_measure {
             let width_seen = match c0.width {
                 Constraint::Exact(n) => n,
-                Constraint::AtMost(_) | Constraint::Unbounded => measured_content.width,
+                Constraint::AtMost(_) | Constraint::Unbounded => measured_content.w,
             };
 
-            if content.width != width_seen {
+            if content.w != width_seen {
                 let c1 = MeasureConstraints {
-                    width: Constraint::Exact(content.width),
+                    width: Constraint::Exact(content.w),
                     height: c0.height,
                 };
                 let m1 = self.measure_cached(node_id, c1);
@@ -1432,19 +1426,17 @@ impl<'a> LayoutPass<'a> {
                 let content1 = c1.clamp_size(raw1);
 
                 if matches!(layout.height, Sizing::Measure) {
-                    let outer_h1 = content1.height.saturating_add(pad_y);
-                    outer.height = outer_h1;
+                    let outer_h1 = content1.h.saturating_add(pad_y);
+                    outer.h = outer_h1;
                     outer = clamp_outer(outer, layout);
-                    content = Size::new(
-                        outer.width.saturating_sub(pad_x),
-                        outer.height.saturating_sub(pad_y),
-                    );
+                    content =
+                        Size::new(outer.w.saturating_sub(pad_x), outer.h.saturating_sub(pad_y));
                 }
             }
 
             let c_final = MeasureConstraints {
-                width: Constraint::Exact(content.width),
-                height: Constraint::Exact(content.height),
+                width: Constraint::Exact(content.w),
+                height: Constraint::Exact(content.h),
             };
             let _ = self.measure_cached(node_id, c_final);
         }
@@ -1473,7 +1465,9 @@ impl<'a> LayoutPass<'a> {
         let cross_fixed = constraints.cross_is_exact(layout.direction);
         let avail_main = constraints.main(layout.direction).max_bound();
         let avail_cross = constraints.cross(layout.direction).max_bound();
-        let avail = Size::from_main_cross(layout.direction, avail_main, avail_cross);
+        let avail = layout
+            .direction
+            .size_from_main_cross(avail_main, avail_cross);
 
         let mut fixed_main_total = 0u32;
         let mut flex_children: Vec<(usize, u32)> = Vec::new();
@@ -1506,9 +1500,9 @@ impl<'a> LayoutPass<'a> {
                 continue;
             }
 
-            let size = self.resolve_outer_size_with_layout(*child, effective, avail.into());
+            let size = self.resolve_outer_size_with_layout(*child, effective, avail);
             child_sizes[i] = size;
-            fixed_main_total = fixed_main_total.saturating_add(size.main(layout.direction));
+            fixed_main_total = fixed_main_total.saturating_add(layout.direction.main_size(size));
         }
 
         let gap_total = layout
@@ -1532,12 +1526,13 @@ impl<'a> LayoutPass<'a> {
                 if layout.overflow_y {
                     effective.overflow_y = true;
                 }
-                let child_available =
-                    Size::from_main_cross(layout.direction, shares[idx], avail_cross);
+                let child_available = layout
+                    .direction
+                    .size_from_main_cross(shares[idx], avail_cross);
                 let size = self.resolve_outer_size_with_layout(
                     children[*child_index],
                     effective,
-                    child_available.into(),
+                    child_available,
                 );
                 child_sizes[*child_index] = size;
             }
@@ -1546,12 +1541,12 @@ impl<'a> LayoutPass<'a> {
         let mut main_total = 0u32;
         let mut cross_max = 0u32;
         for size in &child_sizes {
-            main_total = main_total.saturating_add(size.main(layout.direction));
-            cross_max = cross_max.max(size.cross(layout.direction));
+            main_total = main_total.saturating_add(layout.direction.main_size(*size));
+            cross_max = cross_max.max(layout.direction.cross_size(*size));
         }
         main_total = main_total.saturating_add(gap_total);
 
-        let content = Size::from_main_cross(layout.direction, main_total, cross_max);
+        let content = layout.direction.size_from_main_cross(main_total, cross_max);
         constraints.clamp_size(content)
     }
 
@@ -1592,9 +1587,9 @@ impl<'a> LayoutPass<'a> {
                 effective.overflow_y = true;
             }
 
-            let size = self.resolve_outer_size_with_layout(*child, effective, avail.into());
-            max_w = max_w.max(size.width);
-            max_h = max_h.max(size.height);
+            let size = self.resolve_outer_size_with_layout(*child, effective, avail);
+            max_w = max_w.max(size.w);
+            max_h = max_h.max(size.h);
         }
 
         let content = Size::new(max_w, max_h);
@@ -1614,14 +1609,12 @@ impl<'a> LayoutPass<'a> {
                 // Stack: all children get full content area, positioned according to alignment
                 for child in &children {
                     // First, layout the child to determine its size
-                    self.layout_node(*child, content.into(), Point::zero(), parent_overflow);
+                    self.layout_node(*child, content, Point::zero(), parent_overflow);
 
                     // Then apply alignment to position the child within content area
                     let child_size = self.node_size(*child);
-                    let offset_x =
-                        align_offset(child_size.width, content.width, layout.align_horizontal);
-                    let offset_y =
-                        align_offset(child_size.height, content.height, layout.align_vertical);
+                    let offset_x = align_offset(child_size.w, content.w, layout.align_horizontal);
+                    let offset_y = align_offset(child_size.h, content.h, layout.align_vertical);
                     self.set_node_position(
                         *child,
                         Point {
@@ -1666,17 +1659,17 @@ impl<'a> LayoutPass<'a> {
             }
 
             let child_available = content;
-            let size =
-                self.resolve_outer_size_with_layout(*child, effective, child_available.into());
+            let size = self.resolve_outer_size_with_layout(*child, effective, child_available);
             pre_sizes[i] = size;
-            fixed_main_total = fixed_main_total.saturating_add(size.main(layout.direction));
+            fixed_main_total = fixed_main_total.saturating_add(layout.direction.main_size(size));
         }
 
         let gap_total = layout
             .gap
             .saturating_mul(children.len().saturating_sub(1) as u32);
-        let remaining = content
-            .main(layout.direction)
+        let remaining = layout
+            .direction
+            .main_size(content)
             .saturating_sub(fixed_main_total.saturating_add(gap_total));
 
         let weights: Vec<u32> = flex_children.iter().map(|(_, w)| (*w).max(1)).collect();
@@ -1700,21 +1693,21 @@ impl<'a> LayoutPass<'a> {
                     flex_idx += 1;
                     share
                 }
-                Sizing::Measure => pre_sizes[i].main(layout.direction),
+                Sizing::Measure => layout.direction.main_size(pre_sizes[i]),
             };
 
-            let child_available =
-                Size::from_main_cross(layout.direction, main, content.cross(layout.direction));
+            let child_available = layout
+                .direction
+                .size_from_main_cross(main, layout.direction.cross_size(content));
             let child_pos = match layout.direction {
                 LayoutDirection::Row => Point { x: pos_main, y: 0 },
                 LayoutDirection::Column => Point { x: 0, y: pos_main },
                 LayoutDirection::Stack => unreachable!(),
             };
 
-            let actual =
-                self.layout_node(*child, child_available.into(), child_pos, parent_overflow);
+            let actual = self.layout_node(*child, child_available, child_pos, parent_overflow);
             pos_main = pos_main
-                .saturating_add(actual.main(layout.direction))
+                .saturating_add(layout.direction.main_size(actual))
                 .saturating_add(layout.gap);
         }
     }
@@ -1741,7 +1734,7 @@ impl<'a> LayoutPass<'a> {
         let mut canvas_children = Vec::with_capacity(children.len());
         for child in children {
             if let Some(node) = self.core.nodes.get(child) {
-                let child_canvas: Size<u32> = node.canvas.into();
+                let child_canvas: Size<u32> = node.canvas;
                 canvas_children.push(CanvasChild::new(node.rect, child_canvas));
             }
         }
@@ -1750,23 +1743,20 @@ impl<'a> LayoutPass<'a> {
             .core
             .with_widget_view(node_id, |widget, _core| widget.canvas(view_size, &ctx))
             .unwrap_or(view_size);
-        Size::new(
-            canvas.width.max(view_size.width),
-            canvas.height.max(view_size.height),
-        )
+        Size::new(canvas.w.max(view_size.w), canvas.h.max(view_size.h))
     }
 
     /// Store canvas size and clamp scroll offset for a node.
     fn update_canvas(&mut self, node_id: NodeId, view_size: Size<u32>, canvas: Size<u32>) {
         if let Some(node) = self.core.nodes.get_mut(node_id) {
             let mut canvas = canvas;
-            canvas.width = canvas.width.max(view_size.width);
-            canvas.height = canvas.height.max(view_size.height);
+            canvas.w = canvas.w.max(view_size.w);
+            canvas.h = canvas.h.max(view_size.h);
 
             let mut scroll = node.scroll;
             clamp_scroll(&mut scroll, view_size, canvas);
             node.scroll = scroll;
-            node.canvas = canvas.into();
+            node.canvas = canvas;
         }
     }
 
@@ -1817,8 +1807,8 @@ impl<'a> LayoutPass<'a> {
     fn clear_layout(&mut self, node_id: NodeId, position: Point) {
         if let Some(node) = self.core.nodes.get_mut(node_id) {
             node.rect = Rect::new(position.x, position.y, 0, 0);
-            node.content_size = Expanse::default();
-            node.canvas = Expanse::default();
+            node.content_size = Size::default();
+            node.canvas = Size::default();
             node.scroll = Point::zero();
             node.view = View::default();
         }
@@ -1837,8 +1827,8 @@ impl<'a> LayoutPass<'a> {
 /// Clamp an outer size against min/max constraints.
 fn clamp_outer(size: Size<u32>, layout: Layout) -> Size<u32> {
     Size::new(
-        clamp_axis(size.width, layout.min_width, layout.max_width),
-        clamp_axis(size.height, layout.min_height, layout.max_height),
+        clamp_axis(size.w, layout.min_width, layout.max_width),
+        clamp_axis(size.h, layout.min_height, layout.max_height),
     )
 }
 
@@ -1892,15 +1882,15 @@ fn constraint_for_axis(
 
 /// Clamp a scroll offset so it stays within view/canvas bounds.
 fn clamp_scroll(scroll: &mut Point, view: Size<u32>, canvas: Size<u32>) {
-    let max_x = if view.width == 0 {
+    let max_x = if view.w == 0 {
         0
     } else {
-        canvas.width.saturating_sub(view.width)
+        canvas.w.saturating_sub(view.w)
     };
-    let max_y = if view.height == 0 {
+    let max_y = if view.h == 0 {
         0
     } else {
-        canvas.height.saturating_sub(view.height)
+        canvas.h.saturating_sub(view.h)
     };
     scroll.x = scroll.x.min(max_x);
     scroll.y = scroll.y.min(max_y);
@@ -2048,10 +2038,10 @@ mod tests {
     use crate::{
         Context,
         error::{Error, Result},
-        geom::{Expanse, Point},
+        geom::{Point, Size},
         layout::{
-            Align, CanvasContext, Constraint, Direction, Edges, Layout, MeasureConstraints,
-            Measurement, Size, Sizing,
+            Align, CanvasChild, Constraint, Direction, Display, Edges, Layout, MeasureConstraints,
+            Measurement, Sizing,
         },
         widget::Widget,
     };
@@ -2185,11 +2175,11 @@ mod tests {
         core.with_layout_of(child, |layout| {
             *layout = Layout::column().padding(Edges::all(1));
         })?;
-        core.update_layout(Expanse::new(50, 50))?;
+        core.update_layout(Size::new(50, 50))?;
         let node = &core.nodes[child];
         assert_eq!(node.rect.w, 7);
         assert_eq!(node.rect.h, 7);
-        assert_eq!(node.content_size, Expanse::new(5, 5));
+        assert_eq!(node.content_size, Size::new(5, 5));
         Ok(())
     }
 
@@ -2202,9 +2192,9 @@ mod tests {
         core.with_layout_of(child, |layout| {
             *layout = Layout::fill().padding(Edges::all(1));
         })?;
-        core.update_layout(Expanse::new(1, 1))?;
+        core.update_layout(Size::new(1, 1))?;
         let node = &core.nodes[child];
-        assert_eq!(node.content_size, Expanse::new(0, 0));
+        assert_eq!(node.content_size, Size::new(0, 0));
         Ok(())
     }
 
@@ -2217,7 +2207,7 @@ mod tests {
         core.with_layout_of(child, |layout| {
             *layout = Layout::column().flex_horizontal(1);
         })?;
-        core.update_layout(Expanse::new(10, 5))?;
+        core.update_layout(Size::new(10, 5))?;
         let calls = calls.lock().unwrap();
         assert!(!calls.is_empty());
         assert_eq!(calls[0].width, Constraint::Exact(10));
@@ -2240,7 +2230,7 @@ mod tests {
         core.with_layout_of(child, |layout| {
             *layout = Layout::column().min_width(10);
         })?;
-        core.update_layout(Expanse::new(20, 20))?;
+        core.update_layout(Size::new(20, 20))?;
         let calls = calls.lock().unwrap();
         assert!(calls.iter().any(|c| c.width == Constraint::Exact(10)));
         let node = &core.nodes[child];
@@ -2266,7 +2256,7 @@ mod tests {
                 .padding(Edges::all(1))
                 .min_width(30);
         })?;
-        core.update_layout(Expanse::new(10, 10))?;
+        core.update_layout(Size::new(10, 10))?;
         let calls = calls.lock().unwrap();
         assert!(calls.iter().any(|c| c.width == Constraint::Exact(8)));
         assert!(calls.iter().any(|c| c.width == Constraint::Exact(28)));
@@ -2282,9 +2272,9 @@ mod tests {
         core.with_layout_of(parent, |layout| {
             *layout = Layout::column().padding(Edges::all(1));
         })?;
-        core.update_layout(Expanse::new(20, 20))?;
+        core.update_layout(Size::new(20, 20))?;
         let node = &core.nodes[parent];
-        assert_eq!(node.content_size, Expanse::new(0, 0));
+        assert_eq!(node.content_size, Size::new(0, 0));
         assert_eq!(node.rect.w, 2);
         assert_eq!(node.rect.h, 2);
         Ok(())
@@ -2306,9 +2296,9 @@ mod tests {
         core.with_layout_of(parent, |layout| {
             *layout = Layout::column().gap(1);
         })?;
-        core.update_layout(Expanse::new(50, 50))?;
+        core.update_layout(Size::new(50, 50))?;
         let node = &core.nodes[parent];
-        assert_eq!(node.content_size, Expanse::new(4, 8));
+        assert_eq!(node.content_size, Size::new(4, 8));
         Ok(())
     }
 
@@ -2327,9 +2317,9 @@ mod tests {
         core.with_layout_of(child, |layout| {
             *layout = Layout::column().padding(Edges::all(1));
         })?;
-        core.update_layout(Expanse::new(50, 50))?;
+        core.update_layout(Size::new(50, 50))?;
         let node = &core.nodes[parent];
-        assert_eq!(node.content_size, Expanse::new(5, 3));
+        assert_eq!(node.content_size, Size::new(5, 3));
         Ok(())
     }
 
@@ -2348,7 +2338,7 @@ mod tests {
         core.with_layout_of(child, |layout| {
             layout.height = Sizing::Flex(1);
         })?;
-        core.update_layout(Expanse::new(20, 20))?;
+        core.update_layout(Size::new(20, 20))?;
         let node = &core.nodes[parent];
         assert_eq!(node.content_size.h, 4);
         Ok(())
@@ -2388,7 +2378,7 @@ mod tests {
         core.with_layout_of(child2, |layout| {
             layout.width = Sizing::Flex(1);
         })?;
-        core.update_layout(Expanse::new(10, 10))?;
+        core.update_layout(Size::new(10, 10))?;
         let calls1 = calls1.lock().unwrap();
         let calls2 = calls2.lock().unwrap();
         assert!(calls1.iter().any(|c| c.width == Constraint::Exact(5)));
@@ -2417,7 +2407,7 @@ mod tests {
         core.with_layout_of(child2, |layout| {
             *layout = Layout::column().none();
         })?;
-        core.update_layout(Expanse::new(20, 20))?;
+        core.update_layout(Size::new(20, 20))?;
         let node = &core.nodes[parent];
         assert_eq!(node.content_size.h, 4);
         Ok(())
@@ -2462,7 +2452,7 @@ mod tests {
         core.with_layout_of(child2, |layout| {
             layout.width = Sizing::Flex(0);
         })?;
-        core.update_layout(Expanse::new(10, 5))?;
+        core.update_layout(Size::new(10, 5))?;
         assert_eq!(core.nodes[child1].rect.w, 5);
         assert_eq!(core.nodes[child2].rect.w, 5);
         Ok(())
@@ -2484,7 +2474,7 @@ mod tests {
         core.with_layout_of(parent, |layout| {
             *layout = Layout::row().flex_horizontal(1).gap(1);
         })?;
-        core.update_layout(Expanse::new(20, 5))?;
+        core.update_layout(Size::new(20, 5))?;
         let p1 = core.nodes[child1].rect.tl.x;
         let p2 = core.nodes[child2].rect.tl.x;
         let p3 = core.nodes[child3].rect.tl.x;
@@ -2514,7 +2504,7 @@ mod tests {
             layout.width = Sizing::Flex(1);
             layout.min_width = Some(10);
         })?;
-        core.update_layout(Expanse::new(5, 5))?;
+        core.update_layout(Size::new(5, 5))?;
         let first = &core.nodes[child1];
         let second = &core.nodes[child2];
         assert_eq!(second.rect.tl.x, first.rect.tl.x + first.rect.w);
@@ -2535,7 +2525,7 @@ mod tests {
         core.with_layout_of(parent, |layout| {
             *layout = Layout::row().flex_horizontal(1).gap(1);
         })?;
-        core.update_layout(Expanse::new(5, 5))?;
+        core.update_layout(Size::new(5, 5))?;
         assert_eq!(core.nodes[child2].rect.tl.x, 5);
         Ok(())
     }
@@ -2550,9 +2540,9 @@ mod tests {
         core.with_layout_of(child, |layout| {
             *layout = Layout::fill();
         })?;
-        core.update_layout(Expanse::new(5, 5))?;
+        core.update_layout(Size::new(5, 5))?;
         let node = &core.nodes[child];
-        assert_eq!(node.canvas, Expanse::new(5, 5));
+        assert_eq!(node.canvas, Size::new(5, 5));
         Ok(())
     }
 
@@ -2573,10 +2563,10 @@ mod tests {
         if let Some(node) = core.nodes.get_mut(child) {
             node.scroll = Point { x: 15, y: 15 };
         }
-        core.update_layout(Expanse::new(10, 10))?;
+        core.update_layout(Size::new(10, 10))?;
         assert_eq!(core.nodes[child].scroll, Point { x: 10, y: 10 });
         *canvas.lock().unwrap() = Size::new(12, 12);
-        core.update_layout(Expanse::new(10, 10))?;
+        core.update_layout(Size::new(10, 10))?;
         assert_eq!(core.nodes[child].scroll, Point { x: 2, y: 2 });
         Ok(())
     }
@@ -2598,9 +2588,9 @@ mod tests {
         if let Some(node) = core.nodes.get_mut(child) {
             node.scroll = Point { x: 15, y: 15 };
         }
-        core.update_layout(Expanse::new(5, 5))?;
+        core.update_layout(Size::new(5, 5))?;
         assert_eq!(core.nodes[child].scroll, Point { x: 15, y: 15 });
-        core.update_layout(Expanse::new(10, 10))?;
+        core.update_layout(Size::new(10, 10))?;
         assert_eq!(core.nodes[child].scroll, Point { x: 10, y: 10 });
         Ok(())
     }
@@ -2622,7 +2612,7 @@ mod tests {
         if let Some(node) = core.nodes.get_mut(child) {
             node.scroll = Point { x: 5, y: 5 };
         }
-        core.update_layout(Expanse::new(0, 0))?;
+        core.update_layout(Size::new(0, 0))?;
         assert_eq!(core.nodes[child].scroll, Point { x: 0, y: 0 });
         Ok(())
     }
@@ -2646,7 +2636,7 @@ mod tests {
         if let Some(node) = core.nodes.get_mut(parent) {
             node.scroll = Point { x: 5, y: 0 };
         }
-        core.update_layout(Expanse::new(10, 10))?;
+        core.update_layout(Size::new(10, 10))?;
         let child_view = core.nodes[child].view;
         assert_eq!(child_view.outer.tl.x, -5);
         Ok(())
@@ -2661,7 +2651,7 @@ mod tests {
         core.with_layout_of(child, |layout| {
             *layout = Layout::column().padding(Edges::all(1));
         })?;
-        core.update_layout(Expanse::new(20, 20))?;
+        core.update_layout(Size::new(20, 20))?;
         let view = core.nodes[child].view;
         assert_eq!(view.content.tl.x, view.outer.tl.x + 1);
         assert_eq!(view.content.tl.y, view.outer.tl.y + 1);
@@ -2676,7 +2666,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(0x5eed);
         let root_child = build_random_tree(&mut core, &mut rng, 3)?;
         attach_root_child(&mut core, root_child)?;
-        core.update_layout(Expanse::new(40, 20))?;
+        core.update_layout(Size::new(40, 20))?;
 
         for node in core.nodes.values() {
             let expected_w = node.rect.w.saturating_sub(node.layout.padding.horizontal());
@@ -2780,7 +2770,7 @@ mod tests {
         core.with_layout_of(parent, |layout| {
             *layout = Layout::stack();
         })?;
-        core.update_layout(Expanse::new(50, 50))?;
+        core.update_layout(Size::new(50, 50))?;
 
         // Both children should be at the same position (0, 0) by default
         assert_eq!(core.nodes[child1].rect.tl.x, 0);
@@ -2790,7 +2780,7 @@ mod tests {
 
         // Parent content size should be the max of children
         let parent_node = &core.nodes[parent];
-        assert_eq!(parent_node.content_size, Expanse::new(10, 10));
+        assert_eq!(parent_node.content_size, Size::new(10, 10));
         Ok(())
     }
 
@@ -2806,7 +2796,7 @@ mod tests {
         core.with_layout_of(parent, |layout| {
             *layout = Layout::fill().direction(Direction::Stack).align_center();
         })?;
-        core.update_layout(Expanse::new(50, 50))?;
+        core.update_layout(Size::new(50, 50))?;
 
         // Child should be centered in the 50x50 parent
         let child_node = &core.nodes[child];
@@ -2830,7 +2820,7 @@ mod tests {
                 .align_horizontal(Align::End)
                 .align_vertical(Align::End);
         })?;
-        core.update_layout(Expanse::new(50, 50))?;
+        core.update_layout(Size::new(50, 50))?;
 
         // Child should be at the end (bottom-right)
         let child_node = &core.nodes[child];
@@ -2853,7 +2843,7 @@ mod tests {
         core.with_layout_of(parent, |layout| {
             *layout = Layout::fill().direction(Direction::Stack).align_center();
         })?;
-        core.update_layout(Expanse::new(50, 50))?;
+        core.update_layout(Size::new(50, 50))?;
 
         // Both children should be centered independently
         let c1_node = &core.nodes[child1];
@@ -2948,7 +2938,7 @@ mod tests {
         core.with_layout_of(second, |layout| {
             *layout = Layout::fill();
         })?;
-        core.update_layout(Expanse::new(10, 10))?;
+        core.update_layout(Size::new(10, 10))?;
 
         core.set_focus(first);
         core.remove_subtree(first)?;
@@ -2972,7 +2962,7 @@ mod tests {
         core.with_layout_of(second, |layout| {
             *layout = Layout::fill();
         })?;
-        core.update_layout(Expanse::new(10, 10))?;
+        core.update_layout(Size::new(10, 10))?;
 
         core.set_focus(second);
         core.remove_subtree(second)?;

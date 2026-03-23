@@ -34,28 +34,6 @@ pub enum ArgValue {
     Map(BTreeMap<String, Self>),
 }
 
-/// Direction for scroll-like commands.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, CommandEnum)]
-pub enum ScrollDirection {
-    /// Upward movement.
-    Up,
-    /// Downward movement.
-    Down,
-    /// Leftward movement.
-    Left,
-    /// Rightward movement.
-    Right,
-}
-
-/// Direction for vertical-only commands.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, CommandEnum)]
-pub enum VerticalDirection {
-    /// Upward movement.
-    Up,
-    /// Downward movement.
-    Down,
-}
-
 /// Direction for focus movement commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, CommandEnum)]
 pub enum FocusDirection {
@@ -80,6 +58,47 @@ pub enum ZoomDirection {
     In,
     /// Zoom out.
     Out,
+}
+
+impl ToArgValue for crate::geom::Direction {
+    fn to_arg_value(self) -> ArgValue {
+        ArgValue::String(
+            match self {
+                Self::Up => "Up",
+                Self::Down => "Down",
+                Self::Left => "Left",
+                Self::Right => "Right",
+            }
+            .to_string(),
+        )
+    }
+}
+
+impl FromArgValue for crate::geom::Direction {
+    fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {
+        if let ArgValue::String(s) = v {
+            if s.eq_ignore_ascii_case("Up") {
+                return Ok(Self::Up);
+            }
+            if s.eq_ignore_ascii_case("Down") {
+                return Ok(Self::Down);
+            }
+            if s.eq_ignore_ascii_case("Left") {
+                return Ok(Self::Left);
+            }
+            if s.eq_ignore_ascii_case("Right") {
+                return Ok(Self::Right);
+            }
+            return Err(CommandError::Conversion {
+                param: "direction".to_string(),
+                message: format!("unknown direction: {}", s),
+            });
+        }
+        Err(CommandError::Conversion {
+            param: "direction".to_string(),
+            message: "expected string for direction".to_string(),
+        })
+    }
 }
 
 impl ArgValue {

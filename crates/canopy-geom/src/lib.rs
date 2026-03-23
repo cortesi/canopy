@@ -4,8 +4,6 @@
 
 /// Error types for geometry operations.
 mod error;
-/// Width/height size type.
-mod expanse;
 /// Frame and padding helpers.
 mod frame;
 /// Horizontal line helpers.
@@ -20,9 +18,10 @@ mod point_i32;
 mod rect;
 /// Signed rectangle operations.
 mod rect_i32;
+/// Width/height size type.
+mod size;
 
 pub use error::{Error, Result};
-pub use expanse::Expanse;
 pub use frame::FrameRects;
 pub use line::Line;
 pub use linesegment::LineSegment;
@@ -30,6 +29,7 @@ pub use point::Point;
 pub use point_i32::PointI32;
 pub use rect::Rect;
 pub use rect_i32::RectI32;
+pub use size::Size;
 
 /// Cardinal directions.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]

@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use crate::{
     Canopy,
     error::Result,
-    geom::{Expanse, Point},
+    geom::{Point, Size},
     render::RenderBackend,
     style::{ResolvedStyle, StyleManager},
 };
@@ -105,7 +105,7 @@ impl RenderBackend for TestRender {
 #[derive(Default)]
 pub struct CanvasBuf {
     /// Canvas size.
-    size: Expanse,
+    size: Size,
     /// Character cells.
     pub cells: Vec<Vec<char>>,
     /// Track which cells have been written to during a render.
@@ -114,7 +114,7 @@ pub struct CanvasBuf {
 
 impl CanvasBuf {
     /// Construct a new canvas buffer.
-    fn new(size: Expanse) -> Self {
+    fn new(size: Size) -> Self {
         Self {
             size,
             cells: vec![vec![' '; size.w as usize]; size.h as usize],
@@ -145,7 +145,7 @@ pub struct CanvasRender {
 
 impl CanvasRender {
     /// Create a new canvas render backend.
-    pub fn create(size: Expanse) -> (Arc<Mutex<CanvasBuf>>, Self) {
+    pub fn create(size: Size) -> (Arc<Mutex<CanvasBuf>>, Self) {
         let buf = Arc::new(Mutex::new(CanvasBuf::new(size)));
         let buf2 = buf.clone();
         (buf, Self { canvas: buf2 })

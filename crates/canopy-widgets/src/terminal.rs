@@ -1,24 +1,12 @@
 use std::{
-    ffi::OsString,
-    io::{Read, Write},
-    mem,
     path::PathBuf,
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
-    },
-    thread,
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
 use alacritty_terminal::{
-    event as alacritty_event,
-    event::EventListener,
-    grid::{Dimensions, Scroll},
-    index,
-    selection::{Selection, SelectionType},
-    term::{self, Config, Term, TermMode},
-    vte::ansi,
+    index::{Column, Point},
+    selection::SelectionRange,
 };
 use canopy::{
     Context, EventOutcome, ReadContext, Widget, cursor, derive_commands,
@@ -30,7 +18,18 @@ use canopy::{
     state::NodeName,
     style::{AttrSet, Color, ResolvedStyle},
 };
-use portable_pty::{Child, CommandBuilder, ExitStatus, MasterPty, PtySize, native_pty_system};
+use itty::{
+    Session,
+    clipboard::ClipboardHandler,
+    config::{EguiTTYConfig, EguiTTYConfigBuilder, Hex, PaletteConfig, PaletteKind, PaletteMeta},
+    driver::{self, DriverHandle, DriverHost},
+    inspect::{StyledRunPublic, TerminalState},
+    key::{Key as IttyKey, KeyCode as IttyKeyCode, Modifiers as IttyModifiers},
+    title::TitleHook,
+};
+use portable_pty::ExitStatus;
+use tokio::runtime::{Builder, Runtime};
+use unicode_width::UnicodeWidthChar;
 
 /// Fallback terminal column count before sizing is known.
 const DEFAULT_COLUMNS: usize = 80;
@@ -42,111 +41,6 @@ const DEFAULT_SCROLLBACK: usize = 10_000;
 const POLL_INTERVAL_MS: u64 = 16;
 /// Maximum delay between clicks to count as a multi-click selection.
 const DOUBLE_CLICK_MS: u64 = 400;
-/// Lines to scroll per mouse wheel tick when not reporting mouse.
-const SCROLL_LINES: i32 = 3;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-/// Terminal grid sizing and scrollback metadata.
-struct TerminalSize {
-    /// Visible terminal columns.
-    columns: usize,
-    /// Visible terminal rows.
-    screen_lines: usize,
-    /// Scrollback buffer length.
-    scrollback_lines: usize,
-}
-
-impl TerminalSize {
-    /// Construct a terminal size ensuring non-zero dimensions.
-    fn new(columns: usize, screen_lines: usize, scrollback_lines: usize) -> Self {
-        Self {
-            columns: columns.max(1),
-            screen_lines: screen_lines.max(1),
-            scrollback_lines,
-        }
-    }
-
-    /// Convert a Canopy expanse into a terminal grid size.
-    fn from_expanse(expanse: geom::Expanse, scrollback_lines: usize) -> Self {
-        Self::new(expanse.w as usize, expanse.h as usize, scrollback_lines)
-    }
-
-    /// Render the PTY size payload for portable-pty.
-    fn pty_size(self) -> PtySize {
-        PtySize {
-            rows: self.screen_lines.min(u16::MAX as usize) as u16,
-            cols: self.columns.min(u16::MAX as usize) as u16,
-            pixel_width: 0,
-            pixel_height: 0,
-        }
-    }
-
-    /// Render the terminal window size payload for alacritty.
-    fn window_size(self) -> alacritty_event::WindowSize {
-        alacritty_event::WindowSize {
-            num_lines: self.screen_lines.min(u16::MAX as usize) as u16,
-            num_cols: self.columns.min(u16::MAX as usize) as u16,
-            cell_width: 0,
-            cell_height: 0,
-        }
-    }
-}
-
-impl Dimensions for TerminalSize {
-    fn total_lines(&self) -> usize {
-        self.screen_lines.saturating_add(self.scrollback_lines)
-    }
-
-    fn screen_lines(&self) -> usize {
-        self.screen_lines
-    }
-
-    fn columns(&self) -> usize {
-        self.columns
-    }
-}
-
-/// Simple clipboard store used by alacritty for selection and paste callbacks.
-#[derive(Default)]
-struct TerminalClipboard {
-    /// Stored clipboard contents.
-    clipboard: String,
-    /// Stored selection contents.
-    selection: String,
-}
-
-impl TerminalClipboard {
-    /// Store clipboard or selection contents.
-    fn store(&mut self, ty: term::ClipboardType, text: String) {
-        match ty {
-            term::ClipboardType::Clipboard => self.clipboard = text,
-            term::ClipboardType::Selection => self.selection = text,
-        }
-    }
-
-    /// Load clipboard or selection contents.
-    fn load(&self, ty: term::ClipboardType) -> &str {
-        match ty {
-            term::ClipboardType::Clipboard => &self.clipboard,
-            term::ClipboardType::Selection => &self.selection,
-        }
-    }
-}
-
-/// Event bridge used by alacritty to forward terminal events back to the widget.
-#[derive(Clone)]
-struct EventProxy {
-    /// Shared queue of alacritty events.
-    events: Arc<Mutex<Vec<alacritty_event::Event>>>,
-}
-
-impl EventListener for EventProxy {
-    fn send_event(&self, event: alacritty_event::Event) {
-        if let Ok(mut events) = self.events.lock() {
-            events.push(event);
-        }
-    }
-}
 
 /// Track click timing for selection behavior.
 struct ClickState {
@@ -156,6 +50,90 @@ struct ClickState {
     last_click: Instant,
     /// Number of clicks in the current multi-click sequence.
     count: u8,
+}
+
+/// Shared clipboard shim that bridges Canopy callbacks into `itty`.
+struct SharedClipboard {
+    /// Stored clipboard contents when no external callback is installed.
+    text: Mutex<String>,
+    /// Optional callback invoked when text is stored.
+    store: Option<Arc<dyn Fn(String) + Send + Sync>>,
+    /// Optional callback invoked when text is loaded.
+    load: Option<Arc<dyn Fn() -> String + Send + Sync>>,
+}
+
+impl SharedClipboard {
+    /// Construct a clipboard bridge from the widget config.
+    fn new(config: &TerminalConfig) -> Arc<Self> {
+        Arc::new(Self {
+            text: Mutex::new(String::new()),
+            store: config.clipboard_store.clone(),
+            load: config.clipboard_load.clone(),
+        })
+    }
+}
+
+impl ClipboardHandler for SharedClipboard {
+    fn set_text(&self, text: &str) -> std::result::Result<(), String> {
+        if let Some(store) = &self.store {
+            store(text.to_string());
+        }
+        let mut guard = self.text.lock().map_err(|error| error.to_string())?;
+        *guard = text.to_string();
+        Ok(())
+    }
+
+    fn get_text(&self) -> std::result::Result<String, String> {
+        if let Some(load) = &self.load {
+            return Ok(load());
+        }
+        let guard = self.text.lock().map_err(|error| error.to_string())?;
+        Ok(guard.clone())
+    }
+}
+
+/// Shared title hook used to surface title updates from `itty`.
+struct SharedTitle {
+    /// Most recent title emitted by the backend.
+    title: Arc<Mutex<Option<String>>>,
+}
+
+/// Send wrapper around the thread-affine driver host.
+struct DriverPortal {
+    /// Host polled from the UI thread.
+    host: DriverHost,
+}
+
+// SAFETY: `DriverHost` already records and asserts the thread it is polled on.
+// Canopy requires widgets to be `Send`, but this wrapper does not relax the
+// actual thread-affinity checks enforced by the host itself.
+unsafe impl Send for DriverPortal {}
+
+impl TitleHook for SharedTitle {
+    fn set_title(&self, title: &str) {
+        if let Ok(mut guard) = self.title.lock() {
+            *guard = Some(title.to_string());
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Terminal grid sizing metadata.
+struct TerminalSize {
+    /// Visible terminal columns.
+    columns: usize,
+    /// Visible terminal rows.
+    rows: usize,
+}
+
+impl TerminalSize {
+    /// Convert a Canopy expanse into a terminal grid size.
+    fn from_expanse(expanse: geom::Size) -> Self {
+        Self {
+            columns: expanse.w.max(1) as usize,
+            rows: expanse.h.max(1) as usize,
+        }
+    }
 }
 
 /// Terminal color palette.
@@ -228,141 +206,44 @@ impl Default for TerminalColors {
 }
 
 impl TerminalColors {
-    /// Resolve an alacritty color using overrides and the configured palette.
-    fn resolve_color(&self, color: ansi::Color, overrides: &term::color::Colors) -> Color {
-        match color {
-            ansi::Color::Spec(rgb) => Self::rgb_color(rgb),
-            ansi::Color::Indexed(idx) => self.resolve_indexed(idx, overrides),
-            ansi::Color::Named(named) => {
-                if let Some(rgb) = overrides[named] {
-                    Self::rgb_color(rgb)
-                } else {
-                    self.resolve_named(named)
-                }
-            }
+    /// Convert the Canopy palette into an inline `itty` palette.
+    fn palette_config(self) -> PaletteConfig {
+        PaletteConfig {
+            normal: [
+                canopy_hex(self.black),
+                canopy_hex(self.red),
+                canopy_hex(self.green),
+                canopy_hex(self.yellow),
+                canopy_hex(self.blue),
+                canopy_hex(self.magenta),
+                canopy_hex(self.cyan),
+                canopy_hex(self.white),
+            ],
+            bright: [
+                canopy_hex(self.bright_black),
+                canopy_hex(self.bright_red),
+                canopy_hex(self.bright_green),
+                canopy_hex(self.bright_yellow),
+                canopy_hex(self.bright_blue),
+                canopy_hex(self.bright_magenta),
+                canopy_hex(self.bright_cyan),
+                canopy_hex(self.bright_white),
+            ],
+            dim: None,
+            foreground: canopy_hex(self.foreground),
+            background: canopy_hex(self.background),
+            cursor: canopy_hex(self.cursor),
+            bright_foreground: None,
+            dim_foreground: None,
+            selection_bg: None,
+            selection_fg: None,
+            search_match_bg: None,
+            search_current_bg: None,
+            meta: PaletteMeta {
+                name: "canopy".to_string(),
+                kind: PaletteKind::Dark,
+            },
         }
-    }
-
-    /// Resolve a color request for OSC color queries.
-    fn resolve_request_color(&self, index: usize, overrides: &term::color::Colors) -> Color {
-        if index < term::color::COUNT
-            && let Some(rgb) = overrides[index]
-        {
-            return Self::rgb_color(rgb);
-        }
-
-        if index < 256 {
-            return self.resolve_indexed(index as u8, overrides);
-        }
-
-        match index {
-            256 => self.foreground,
-            257 => self.background,
-            258 => self.cursor,
-            259 => self.dim_color(self.black),
-            260 => self.dim_color(self.red),
-            261 => self.dim_color(self.green),
-            262 => self.dim_color(self.yellow),
-            263 => self.dim_color(self.blue),
-            264 => self.dim_color(self.magenta),
-            265 => self.dim_color(self.cyan),
-            266 => self.dim_color(self.white),
-            267 => self.bright_color(self.foreground),
-            268 => self.dim_color(self.foreground),
-            _ => self.foreground,
-        }
-    }
-
-    /// Resolve indexed palette colors, respecting overrides.
-    fn resolve_indexed(&self, idx: u8, overrides: &term::color::Colors) -> Color {
-        let index = idx as usize;
-        if index < term::color::COUNT
-            && let Some(rgb) = overrides[index]
-        {
-            return Self::rgb_color(rgb);
-        }
-
-        match idx {
-            0 => self.black,
-            1 => self.red,
-            2 => self.green,
-            3 => self.yellow,
-            4 => self.blue,
-            5 => self.magenta,
-            6 => self.cyan,
-            7 => self.white,
-            8 => self.bright_black,
-            9 => self.bright_red,
-            10 => self.bright_green,
-            11 => self.bright_yellow,
-            12 => self.bright_blue,
-            13 => self.bright_magenta,
-            14 => self.bright_cyan,
-            15 => self.bright_white,
-            _ => Color::AnsiValue(idx),
-        }
-    }
-
-    /// Resolve named palette colors.
-    fn resolve_named(&self, named: ansi::NamedColor) -> Color {
-        match named {
-            ansi::NamedColor::Black => self.black,
-            ansi::NamedColor::Red => self.red,
-            ansi::NamedColor::Green => self.green,
-            ansi::NamedColor::Yellow => self.yellow,
-            ansi::NamedColor::Blue => self.blue,
-            ansi::NamedColor::Magenta => self.magenta,
-            ansi::NamedColor::Cyan => self.cyan,
-            ansi::NamedColor::White => self.white,
-            ansi::NamedColor::BrightBlack => self.bright_black,
-            ansi::NamedColor::BrightRed => self.bright_red,
-            ansi::NamedColor::BrightGreen => self.bright_green,
-            ansi::NamedColor::BrightYellow => self.bright_yellow,
-            ansi::NamedColor::BrightBlue => self.bright_blue,
-            ansi::NamedColor::BrightMagenta => self.bright_magenta,
-            ansi::NamedColor::BrightCyan => self.bright_cyan,
-            ansi::NamedColor::BrightWhite => self.bright_white,
-            ansi::NamedColor::Foreground => self.foreground,
-            ansi::NamedColor::Background => self.background,
-            ansi::NamedColor::Cursor => self.cursor,
-            ansi::NamedColor::DimBlack => self.dim_color(self.black),
-            ansi::NamedColor::DimRed => self.dim_color(self.red),
-            ansi::NamedColor::DimGreen => self.dim_color(self.green),
-            ansi::NamedColor::DimYellow => self.dim_color(self.yellow),
-            ansi::NamedColor::DimBlue => self.dim_color(self.blue),
-            ansi::NamedColor::DimMagenta => self.dim_color(self.magenta),
-            ansi::NamedColor::DimCyan => self.dim_color(self.cyan),
-            ansi::NamedColor::DimWhite => self.dim_color(self.white),
-            ansi::NamedColor::BrightForeground => self.bright_color(self.foreground),
-            ansi::NamedColor::DimForeground => self.dim_color(self.foreground),
-        }
-    }
-
-    /// Brighten a palette color for bold variants.
-    fn bright_color(&self, color: Color) -> Color {
-        color.scale_brightness(1.2)
-    }
-
-    /// Dim a palette color for dim variants.
-    fn dim_color(&self, color: Color) -> Color {
-        color.scale_brightness(0.66)
-    }
-
-    /// Convert a vte RGB color into a Canopy color.
-    fn rgb_color(rgb: ansi::Rgb) -> Color {
-        Color::Rgb {
-            r: rgb.r,
-            g: rgb.g,
-            b: rgb.b,
-        }
-    }
-
-    /// Convert a Canopy color into a vte RGB payload.
-    fn to_vte_rgb(color: Color) -> ansi::Rgb {
-        let Color::Rgb { r, g, b } = color.to_rgb() else {
-            unreachable!("Color::to_rgb always returns Color::Rgb");
-        };
-        ansi::Rgb { r, g, b }
     }
 }
 
@@ -417,90 +298,60 @@ impl TerminalConfig {
     }
 }
 
-/// Terminal widget backed by alacritty_terminal and portable-pty.
+/// Terminal widget backed by `itty`.
 pub struct Terminal {
     /// User-provided configuration.
     config: TerminalConfig,
-    /// Alacritty terminal state machine.
-    term: Term<EventProxy>,
-    /// VTE parser for incoming PTY bytes.
-    parser: ansi::Processor,
-    /// Buffered alacritty events for processing on poll.
-    events: Arc<Mutex<Vec<alacritty_event::Event>>>,
-    /// Shared buffer of PTY output bytes.
-    read_buf: Arc<Mutex<Vec<u8>>>,
-    /// Flag set when the reader thread hits EOF.
-    reader_done: Arc<AtomicBool>,
-    /// Join handle for the reader thread.
-    reader_handle: Option<thread::JoinHandle<()>>,
-    /// PTY master handle used for resize.
-    master: Option<Box<dyn MasterPty + Send>>,
-    /// Writer for PTY input.
-    writer: Option<Box<dyn Write + Send>>,
-    /// Child process handle.
-    child: Option<Box<dyn Child + Send + Sync>>,
+    /// Backend terminal session.
+    session: Option<Session>,
+    /// Driver host polled from Canopy's UI loop.
+    driver_host: Option<DriverPortal>,
+    /// Cloneable driver handle exposed to integrations.
+    driver_handle: Option<Arc<DriverHandle>>,
+    /// Runtime used to enqueue async driver operations without blocking UI events.
+    driver_runtime: Option<Runtime>,
     /// Most recent terminal size.
-    last_size: Option<TerminalSize>,
-    /// Window size used for OSC size queries.
-    window_size: alacritty_event::WindowSize,
-    /// Cached child exit status.
-    exit_status: Option<ExitStatus>,
-    /// Whether the child process has exited.
-    exited: bool,
+    last_size: TerminalSize,
     /// Cached cursor for rendering.
     cursor: Option<cursor::Cursor>,
-    /// Local clipboard store for alacritty callbacks.
-    clipboard: TerminalClipboard,
     /// Whether a selection drag is active.
     selection_active: bool,
+    /// Selection anchor in viewport coordinates.
+    selection_anchor: Option<geom::Point>,
     /// Multi-click tracking state.
     last_click: Option<ClickState>,
     /// App focus state from Canopy focus events.
     app_focused: bool,
-    /// Current focus state reported to alacritty.
-    focused: bool,
     /// Last reported terminal title.
-    title: Option<String>,
+    title: Arc<Mutex<Option<String>>>,
+    /// Whether the child exit callback has been invoked.
+    exit_notified: bool,
+    /// Cached child exit status.
+    exit_status: Option<ExitStatus>,
 }
 
 #[derive_commands]
 impl Terminal {
     /// Construct a new terminal widget with the provided configuration.
     pub fn new(config: TerminalConfig) -> Self {
-        let events = Arc::new(Mutex::new(Vec::new()));
-        let event_proxy = EventProxy {
-            events: events.clone(),
-        };
-        let size = TerminalSize::new(DEFAULT_COLUMNS, DEFAULT_LINES, config.scrollback_lines);
-        let term_config = Config {
-            scrolling_history: config.scrollback_lines,
-            kitty_keyboard: config.kitty_keyboard,
-            ..Config::default()
-        };
-        let term = Term::new(term_config, &size, event_proxy);
-        let window_size = size.window_size();
         Self {
             config,
-            term,
-            parser: ansi::Processor::new(),
-            events,
-            read_buf: Arc::new(Mutex::new(Vec::new())),
-            reader_done: Arc::new(AtomicBool::new(false)),
-            reader_handle: None,
-            master: None,
-            writer: None,
-            child: None,
-            last_size: Some(size),
-            window_size,
-            exit_status: None,
-            exited: false,
+            session: None,
+            driver_host: None,
+            driver_handle: None,
+            driver_runtime: None,
+            last_size: TerminalSize {
+                columns: DEFAULT_COLUMNS,
+                rows: DEFAULT_LINES,
+            },
             cursor: None,
-            clipboard: TerminalClipboard::default(),
             selection_active: false,
+            selection_anchor: None,
             last_click: None,
             app_focused: true,
-            focused: false,
-            title: None,
+            title: Arc::new(Mutex::new(None)),
+            exit_notified: false,
+            exit_status: None,
         }
     }
 
@@ -511,212 +362,121 @@ impl Terminal {
 
     /// Return true if the child process is still running.
     pub fn is_running(&self) -> bool {
-        self.child.is_some() && !self.exited
+        self.session
+            .as_ref()
+            .is_some_and(|session| !session.child_exited())
     }
 
     /// Return the most recent terminal title, if any.
-    pub fn title(&self) -> Option<&str> {
-        self.title.as_deref()
+    pub fn title(&self) -> Option<String> {
+        self.title.lock().ok().and_then(|guard| guard.clone())
     }
 
-    /// Build the child process command line.
-    fn build_command(&self) -> CommandBuilder {
-        let mut cmd = if let Some(argv) = &self.config.command {
-            if argv.is_empty() {
-                CommandBuilder::new_default_prog()
-            } else {
-                let args: Vec<OsString> = argv.iter().map(OsString::from).collect();
-                CommandBuilder::from_argv(args)
-            }
-        } else {
-            CommandBuilder::new_default_prog()
-        };
-
-        if let Some(cwd) = &self.config.cwd {
-            cmd.cwd(cwd);
-        }
-        for (key, value) in &self.config.env {
-            cmd.env(key, value);
-        }
-
-        cmd
+    /// Return the attached `itty` driver handle for scripting integrations.
+    pub fn driver_handle(&self) -> Option<Arc<DriverHandle>> {
+        self.driver_handle.as_ref().map(Arc::clone)
     }
 
-    /// Ensure the terminal grid and PTY are resized to match the view.
-    fn ensure_size(&mut self, expanse: geom::Expanse) {
-        let size = TerminalSize::from_expanse(expanse, self.config.scrollback_lines);
-        if self.last_size == Some(size) {
+    /// Lazily create the backend session and driver bridge.
+    fn mount_session(&mut self) -> Result<()> {
+        if self.session.is_some() {
+            return Ok(());
+        }
+
+        let cfg = terminal_config(&self.config, self.last_size);
+        let mut session =
+            Session::from_config(&cfg).map_err(|error| Error::Internal(error.to_string()))?;
+        session.set_clipboard_handler(SharedClipboard::new(&self.config));
+        session.set_title_hook(Arc::new(SharedTitle {
+            title: Arc::clone(&self.title),
+        }));
+
+        let (host, handle) = driver::attach(&mut session);
+        let runtime = Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_all()
+            .build()
+            .map_err(|error| Error::Internal(error.to_string()))?;
+
+        self.exit_notified = false;
+        self.exit_status = None;
+        self.session = Some(session);
+        self.driver_host = Some(DriverPortal { host });
+        self.driver_handle = Some(Arc::new(handle));
+        self.driver_runtime = Some(runtime);
+        Ok(())
+    }
+
+    /// Borrow the live backend session.
+    fn session(&self) -> Option<&Session> {
+        self.session.as_ref()
+    }
+
+    /// Borrow the live backend session mutably.
+    fn session_mut(&mut self) -> Option<&mut Session> {
+        self.session.as_mut()
+    }
+
+    /// Drive any pending backend work once from Canopy's poll loop.
+    fn poll_driver(&mut self) {
+        if let (Some(portal), Some(session)) = (self.driver_host.as_mut(), self.session.as_mut()) {
+            let _ = portal.host.poll_nonblocking(session);
+        }
+    }
+
+    /// Ensure the terminal grid matches the current view.
+    fn ensure_size(&mut self, expanse: geom::Size) {
+        let size = TerminalSize::from_expanse(expanse);
+        if self.last_size == size {
             return;
         }
 
-        self.term.resize(size);
-        if let Some(master) = self.master.as_ref()
-            && master.resize(size.pty_size()).is_err()
-        {
-            // Ignore PTY resize failures; terminal state remains consistent.
-        }
-        self.window_size = size.window_size();
-        self.last_size = Some(size);
+        self.last_size = size;
+        if let Some(session) = self.session.as_mut()
+            && let Err(_error) = session.resize_grid_and_pty(size.columns, size.rows, 1.0)
+        {}
     }
 
-    /// Drain any pending PTY output captured by the reader thread.
-    fn drain_read_buffer(&self) -> Vec<u8> {
-        if let Ok(mut buf) = self.read_buf.lock() {
-            buf.drain(..).collect()
-        } else {
-            Vec::new()
-        }
+    /// Return the current backend state snapshot.
+    fn state(&self) -> Option<TerminalState> {
+        self.session().map(Session::state)
     }
 
-    /// Drain any queued terminal events from alacritty.
-    fn drain_events(&self) -> Vec<alacritty_event::Event> {
-        if let Ok(mut events) = self.events.lock() {
-            events.drain(..).collect()
-        } else {
-            Vec::new()
-        }
-    }
-
-    /// Process an alacritty terminal event.
-    fn handle_term_event(&mut self, event: alacritty_event::Event) -> bool {
-        match event {
-            alacritty_event::Event::ClipboardStore(ty, text) => {
-                self.clipboard.store(ty, text.clone());
-                if let Some(callback) = &self.config.clipboard_store {
-                    callback(text);
-                }
-                false
-            }
-            alacritty_event::Event::ClipboardLoad(ty, format) => {
-                let content = if let Some(callback) = &self.config.clipboard_load {
-                    callback()
-                } else {
-                    self.clipboard.load(ty).to_string()
-                };
-                let sequence = format(&content);
-                self.write_to_pty(sequence.as_bytes());
-                false
-            }
-            alacritty_event::Event::ColorRequest(index, format) => {
-                let color = self
-                    .config
-                    .colors
-                    .resolve_request_color(index, self.term.colors());
-                let rgb = TerminalColors::to_vte_rgb(color);
-                let sequence = format(rgb);
-                self.write_to_pty(sequence.as_bytes());
-                false
-            }
-            alacritty_event::Event::TextAreaSizeRequest(format) => {
-                let sequence = format(self.window_size);
-                self.write_to_pty(sequence.as_bytes());
-                false
-            }
-            alacritty_event::Event::PtyWrite(text) => {
-                self.write_to_pty(text.as_bytes());
-                false
-            }
-            alacritty_event::Event::Title(title) => {
-                self.title = Some(title);
-                false
-            }
-            alacritty_event::Event::ResetTitle => {
-                self.title = None;
-                false
-            }
-            alacritty_event::Event::CursorBlinkingChange => true,
-            alacritty_event::Event::MouseCursorDirty => false,
-            alacritty_event::Event::Wakeup => true,
-            alacritty_event::Event::Bell => false,
-            alacritty_event::Event::Exit => false,
-            alacritty_event::Event::ChildExit(_code) => true,
-        }
-    }
-
-    /// Write bytes to the PTY master.
-    fn write_to_pty(&mut self, bytes: &[u8]) {
-        if bytes.is_empty() {
-            return;
-        }
-
-        let Some(writer) = self.writer.as_mut() else {
-            return;
-        };
-
-        if writer.write_all(bytes).is_err() {
-            return;
-        }
-        if writer.flush().is_err() {}
-    }
-
-    /// Record the child exit status and invoke the exit callback.
-    fn note_exit(&mut self, status: ExitStatus) {
-        if self.exited {
-            return;
-        }
-        self.exited = true;
-        self.exit_status = Some(status.clone());
-        if let Some(callback) = &self.config.on_exit {
-            callback(status);
-        }
-    }
-
-    /// Copy the current selection to the clipboard and notify callbacks.
-    fn copy_selection(&mut self) {
-        let Some(text) = self.term.selection_to_string() else {
-            return;
-        };
-        self.clipboard
-            .store(term::ClipboardType::Clipboard, text.clone());
-        if let Some(callback) = &self.config.clipboard_store {
-            callback(text);
-        }
-    }
-
-    /// Clear the terminal selection state.
+    /// Clear the current viewport selection overlay.
     fn clear_selection(&mut self) {
-        self.term.selection = None;
+        if let Some(session) = self.session_mut() {
+            session.set_viewport_selection(None);
+        }
         self.selection_active = false;
+        self.selection_anchor = None;
     }
 
-    /// Return whether the terminal should be considered focused.
-    fn focus_state(&self, ctx: &dyn ReadContext) -> bool {
-        ctx.is_focused() && self.app_focused
+    /// Update the viewport selection overlay between two points.
+    fn set_selection(&mut self, start: geom::Point, end: geom::Point) -> bool {
+        let Some(session) = self.session_mut() else {
+            return false;
+        };
+
+        session.set_viewport_selection(Some(itty::ViewportSelection {
+            start_row: start.y as usize,
+            start_col: start.x as usize,
+            end_row: end.y as usize,
+            end_col: end.x as usize,
+            block: false,
+        }));
+        true
     }
 
-    /// Sync focus state with the terminal and emit focus events.
-    fn update_focus(&mut self, ctx: &dyn ReadContext) {
-        let focused = self.focus_state(ctx);
-        if focused == self.focused {
-            self.term.is_focused = focused;
-            return;
-        }
-
-        self.focused = focused;
-        self.term.is_focused = focused;
-
-        if self.term.mode().contains(TermMode::FOCUS_IN_OUT) {
-            let sequence = if focused { "\x1b[I" } else { "\x1b[O" };
-            self.write_to_pty(sequence.as_bytes());
-        }
-    }
-
-    /// Translate a mouse location into a terminal grid point.
-    fn selection_point(&self, location: geom::Point) -> Option<index::Point> {
-        let size = self.last_size?;
-        let cols = size.columns.max(1) as u32;
-        let rows = size.screen_lines.max(1) as u32;
-        let col = location.x.min(cols.saturating_sub(1)) as usize;
-        let row = location.y.min(rows.saturating_sub(1)) as usize;
-        let viewport = index::Point::new(row, index::Column(col));
-        Some(term::viewport_to_point(
-            self.term.grid().display_offset(),
-            viewport,
-        ))
+    /// Translate a mouse location into a clamped terminal grid point.
+    fn selection_point(&self, location: geom::Point) -> Option<geom::Point> {
+        let state = self.state()?;
+        let x = location.x.min(state.cols.saturating_sub(1) as u32);
+        let y = location.y.min(state.lines.saturating_sub(1) as u32);
+        Some(geom::Point { x, y })
     }
 
     /// Determine the selection mode based on click timing.
-    fn selection_type_for_click(&mut self, location: geom::Point) -> SelectionType {
+    fn selection_type_for_click(&mut self, location: geom::Point) -> u8 {
         let now = Instant::now();
         let threshold = Duration::from_millis(DOUBLE_CLICK_MS);
         let mut count = 1;
@@ -739,11 +499,61 @@ impl Terminal {
             });
         }
 
-        match count {
-            2 => SelectionType::Semantic,
-            3 => SelectionType::Lines,
-            _ => SelectionType::Simple,
+        count
+    }
+
+    /// Select a single semantic word around the provided viewport point.
+    fn select_word(&mut self, point: geom::Point) -> bool {
+        let Some(line) = self
+            .session()
+            .and_then(|session| session.visible_text().get(point.y as usize).cloned())
+        else {
+            return false;
+        };
+
+        let chars: Vec<char> = line.chars().collect();
+        if chars.is_empty() {
+            return self.set_selection(point, point);
         }
+
+        let mut idx = (point.x as usize).min(chars.len().saturating_sub(1));
+        if chars[idx].is_whitespace() {
+            return self.set_selection(point, point);
+        }
+
+        while idx > 0 && !chars[idx - 1].is_whitespace() {
+            idx -= 1;
+        }
+        let start = idx;
+        let mut end = (point.x as usize).min(chars.len().saturating_sub(1));
+        while end + 1 < chars.len() && !chars[end + 1].is_whitespace() {
+            end += 1;
+        }
+
+        self.set_selection(
+            geom::Point {
+                x: start as u32,
+                y: point.y,
+            },
+            geom::Point {
+                x: end as u32,
+                y: point.y,
+            },
+        )
+    }
+
+    /// Select the full viewport line containing the provided point.
+    fn select_line(&mut self, point: geom::Point) -> bool {
+        let Some(state) = self.state() else {
+            return false;
+        };
+        self.set_selection(
+            geom::Point { x: 0, y: point.y },
+            geom::Point {
+                x: state.cols.saturating_sub(1) as u32,
+                y: point.y,
+            },
+        )
     }
 
     /// Begin a selection at the provided location.
@@ -752,10 +562,23 @@ impl Terminal {
             return false;
         };
 
-        let selection_type = self.selection_type_for_click(location);
-        self.term.selection = Some(Selection::new(selection_type, point, index::Side::Left));
-        self.selection_active = true;
-        true
+        match self.selection_type_for_click(point) {
+            2 => {
+                self.selection_active = false;
+                self.selection_anchor = None;
+                self.select_word(point)
+            }
+            3 => {
+                self.selection_active = false;
+                self.selection_anchor = None;
+                self.select_line(point)
+            }
+            _ => {
+                self.selection_active = true;
+                self.selection_anchor = Some(point);
+                self.set_selection(point, point)
+            }
+        }
     }
 
     /// Update the active selection while dragging.
@@ -764,16 +587,13 @@ impl Terminal {
             return false;
         }
 
+        let Some(anchor) = self.selection_anchor else {
+            return false;
+        };
         let Some(point) = self.selection_point(location) else {
             return false;
         };
-
-        if let Some(selection) = self.term.selection.as_mut() {
-            selection.update(point, index::Side::Right);
-            return true;
-        }
-
-        false
+        self.set_selection(anchor, point)
     }
 
     /// Finalize the current selection.
@@ -781,258 +601,122 @@ impl Terminal {
         if !self.selection_active {
             return false;
         }
-
-        if let Some(selection) = self.term.selection.as_mut() {
-            selection.include_all();
-        }
         self.selection_active = false;
         true
     }
 
-    /// Send pasted content to the PTY, respecting bracketed paste.
-    fn handle_paste(&mut self, content: &str) {
-        let mut bytes = Vec::new();
-        let bracketed =
-            self.config.bracketed_paste && self.term.mode().contains(TermMode::BRACKETED_PASTE);
-        if bracketed {
-            bytes.extend_from_slice(b"\x1b[200~");
-        }
-        bytes.extend_from_slice(content.as_bytes());
-        if bracketed {
-            bytes.extend_from_slice(b"\x1b[201~");
-        }
-        self.write_to_pty(&bytes);
+    /// Queue raw input bytes through the attached driver without blocking the UI thread.
+    fn queue_input(&self, bytes: Vec<u8>) {
+        let (Some(runtime), Some(handle)) = (&self.driver_runtime, &self.driver_handle) else {
+            return;
+        };
+        let handle = Arc::clone(handle);
+        std::mem::drop(runtime.spawn(async move {
+            let _ = handle.send_input(bytes).await;
+        }));
     }
 
-    /// Encode a key event into terminal escape sequences.
-    fn encode_key(&self, key: &key::Key) -> Option<Vec<u8>> {
-        if self.term.mode().contains(TermMode::DISAMBIGUATE_ESC_CODES)
-            && let Some(bytes) = self.encode_key_disambiguate(key)
-        {
-            return Some(bytes);
+    /// Send a mouse input sequence to the terminal when mouse reporting is enabled.
+    fn send_mouse_sequence(&self, event: &mouse::MouseEvent, state: &TerminalState) {
+        if let Some(bytes) = encode_mouse(event, state) {
+            self.queue_input(bytes);
         }
-
-        self.encode_key_legacy(key)
     }
 
-    /// Encode a key using kitty keyboard protocol rules for disambiguated escapes.
-    fn encode_key_disambiguate(&self, key: &key::Key) -> Option<Vec<u8>> {
-        use key::KeyCode;
-
-        let needs_disambiguation = matches!(key.key, KeyCode::Esc) || key.mods.alt || key.mods.ctrl;
-        if !needs_disambiguation {
-            return None;
+    /// Copy the current selection to the configured clipboard callback.
+    fn copy_selection(&mut self) {
+        let Some(text) = self.session().and_then(Session::copy_selection) else {
+            return;
+        };
+        if let Some(store) = &self.config.clipboard_store {
+            store(text);
         }
+    }
 
-        let mut mods = key.mods;
-        let codepoint = match key.key {
-            KeyCode::Char(c) => c as u32,
-            KeyCode::Enter => b'\r' as u32,
-            KeyCode::Tab => b'\t' as u32,
-            KeyCode::BackTab => {
-                mods.shift = true;
-                b'\t' as u32
-            }
-            KeyCode::Backspace => 0x7f,
-            KeyCode::Esc => 0x1b,
-            _ => return None,
+    /// Send pasted content to the PTY, optionally bypassing bracketed paste.
+    fn handle_paste(&self, content: &str) {
+        let Some(session) = self.session() else {
+            return;
         };
 
-        Some(Self::csi_u_sequence(codepoint, mods))
-    }
-
-    /// Encode a key event into legacy terminal escape sequences.
-    fn encode_key_legacy(&self, key: &key::Key) -> Option<Vec<u8>> {
-        use key::KeyCode;
-
-        let app_cursor = self.term.mode().contains(TermMode::APP_CURSOR);
-        let mut out = Vec::new();
-
-        if key.mods.alt {
-            out.push(0x1b);
+        if self.config.bracketed_paste {
+            let _ = session.paste(content);
+            return;
         }
 
-        match key.key {
-            KeyCode::Enter => out.push(b'\r'),
-            KeyCode::Tab => out.push(b'\t'),
-            KeyCode::BackTab => out.extend_from_slice(b"\x1b[Z"),
-            KeyCode::Backspace => out.push(0x7f),
-            KeyCode::Esc => out.push(0x1b),
-            KeyCode::Left => {
-                if app_cursor {
-                    out.extend_from_slice(b"\x1bOD");
-                } else {
-                    out.extend_from_slice(b"\x1b[D");
-                }
-            }
-            KeyCode::Right => {
-                if app_cursor {
-                    out.extend_from_slice(b"\x1bOC");
-                } else {
-                    out.extend_from_slice(b"\x1b[C");
-                }
-            }
-            KeyCode::Up => {
-                if app_cursor {
-                    out.extend_from_slice(b"\x1bOA");
-                } else {
-                    out.extend_from_slice(b"\x1b[A");
-                }
-            }
-            KeyCode::Down => {
-                if app_cursor {
-                    out.extend_from_slice(b"\x1bOB");
-                } else {
-                    out.extend_from_slice(b"\x1b[B");
-                }
-            }
-            KeyCode::Home => {
-                if app_cursor {
-                    out.extend_from_slice(b"\x1bOH");
-                } else {
-                    out.extend_from_slice(b"\x1b[H");
-                }
-            }
-            KeyCode::End => {
-                if app_cursor {
-                    out.extend_from_slice(b"\x1bOF");
-                } else {
-                    out.extend_from_slice(b"\x1b[F");
-                }
-            }
-            KeyCode::Insert => out.extend_from_slice(b"\x1b[2~"),
-            KeyCode::Delete => out.extend_from_slice(b"\x1b[3~"),
-            KeyCode::PageUp => out.extend_from_slice(b"\x1b[5~"),
-            KeyCode::PageDown => out.extend_from_slice(b"\x1b[6~"),
-            KeyCode::F(n) => match n {
-                1 => out.extend_from_slice(b"\x1bOP"),
-                2 => out.extend_from_slice(b"\x1bOQ"),
-                3 => out.extend_from_slice(b"\x1bOR"),
-                4 => out.extend_from_slice(b"\x1bOS"),
-                5 => out.extend_from_slice(b"\x1b[15~"),
-                6 => out.extend_from_slice(b"\x1b[17~"),
-                7 => out.extend_from_slice(b"\x1b[18~"),
-                8 => out.extend_from_slice(b"\x1b[19~"),
-                9 => out.extend_from_slice(b"\x1b[20~"),
-                10 => out.extend_from_slice(b"\x1b[21~"),
-                11 => out.extend_from_slice(b"\x1b[23~"),
-                12 => out.extend_from_slice(b"\x1b[24~"),
-                _ => return None,
-            },
-            KeyCode::Char(c) => {
-                if key.mods.ctrl {
-                    if let Some(ctrl) = Self::ctrl_char(c) {
-                        out.push(ctrl);
-                    } else {
-                        let mut buf = [0u8; 4];
-                        out.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
+        self.queue_input(content.as_bytes().to_vec());
+    }
+
+    /// Encode and send a keyboard event to the backend session.
+    fn handle_key(&mut self, key: key::Key) -> bool {
+        if key.mods.shift {
+            match key.key {
+                key::KeyCode::PageUp => {
+                    if let Some(session) = self.session_mut() {
+                        session.scroll_page_up();
                     }
-                } else {
-                    let mut buf = [0u8; 4];
-                    out.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
+                    return true;
                 }
+                key::KeyCode::PageDown => {
+                    if let Some(session) = self.session_mut() {
+                        session.scroll_page_down();
+                    }
+                    return true;
+                }
+                _ => {}
             }
-            _ => return None,
         }
 
-        Some(out)
-    }
-
-    /// Render the kitty CSI-u modifier parameter, if any modifiers are set.
-    fn csi_u_modifier(mods: key::Mods) -> Option<u8> {
-        if !(mods.shift || mods.alt || mods.ctrl) {
-            return None;
+        if key.mods.ctrl && key.mods.shift && matches!(key.key, key::KeyCode::Char('c' | 'C')) {
+            self.copy_selection();
+            return true;
         }
 
-        let mut param = 1;
-        if mods.shift {
-            param += 1;
-        }
-        if mods.alt {
-            param += 2;
-        }
-        if mods.ctrl {
-            param += 4;
-        }
-        Some(param)
-    }
-
-    /// Format a CSI-u sequence for the given codepoint and modifiers.
-    fn csi_u_sequence(codepoint: u32, mods: key::Mods) -> Vec<u8> {
-        if let Some(param) = Self::csi_u_modifier(mods) {
-            format!("\x1b[{codepoint};{param}u").into_bytes()
-        } else {
-            format!("\x1b[{codepoint}u").into_bytes()
-        }
-    }
-
-    /// Encode a control character if supported.
-    fn ctrl_char(c: char) -> Option<u8> {
-        let upper = c.to_ascii_uppercase();
-        match upper {
-            '@' | ' ' => Some(0),
-            'A'..='Z' => Some((upper as u8) - b'A' + 1),
-            '[' => Some(27),
-            '\\' => Some(28),
-            ']' => Some(29),
-            '^' => Some(30),
-            '_' => Some(31),
-            _ => None,
-        }
-    }
-
-    /// Encode mouse events into terminal escape sequences.
-    fn encode_mouse(&self, event: &mouse::MouseEvent, mode: TermMode) -> Option<Vec<u8>> {
-        let cols = self.term.columns().max(1) as u32;
-        let rows = self.term.screen_lines().max(1) as u32;
-        let x = event.location.x.min(cols.saturating_sub(1)) + 1;
-        let y = event.location.y.min(rows.saturating_sub(1)) + 1;
-
-        let mut cb = match event.action {
-            mouse::Action::ScrollUp => 64,
-            mouse::Action::ScrollDown => 65,
-            mouse::Action::ScrollLeft => 66,
-            mouse::Action::ScrollRight => 67,
-            _ => match event.button {
-                mouse::Button::Left => 0,
-                mouse::Button::Middle => 1,
-                mouse::Button::Right => 2,
-                mouse::Button::None => 3,
-            },
+        let Some(mapped) = map_key(key) else {
+            return false;
         };
 
-        if event.action == mouse::Action::Up {
-            cb = 3;
+        self.clear_selection();
+        if let Some(session) = self.session() {
+            let _ = session.send_key(mapped);
+            return true;
+        }
+        false
+    }
+
+    /// Sync exit bookkeeping and invoke the configured callback exactly once.
+    fn sync_exit_status(&mut self) {
+        let Some(session) = self.session() else {
+            return;
+        };
+        if !session.child_exited() || self.exit_notified {
+            return;
         }
 
-        if matches!(event.action, mouse::Action::Moved | mouse::Action::Drag) {
-            cb |= 32;
+        let code = session.child_exit_code().unwrap_or(1).max(0) as u32;
+        let status = ExitStatus::with_exit_code(code);
+        self.exit_status = Some(status.clone());
+        self.exit_notified = true;
+        if let Some(callback) = &self.config.on_exit {
+            callback(status);
+        }
+    }
+
+    /// Sync terminal focus reporting with the backend.
+    fn sync_focus(&self, focused: bool) {
+        let Some(state) = self.state() else {
+            return;
+        };
+        if !state.modes.focus_in_out {
+            return;
         }
 
-        if event.modifiers.shift {
-            cb |= 4;
-        }
-        if event.modifiers.alt {
-            cb |= 8;
-        }
-        if event.modifiers.ctrl {
-            cb |= 16;
-        }
-
-        if mode.contains(TermMode::SGR_MOUSE) {
-            let suffix = if event.action == mouse::Action::Up {
-                'm'
-            } else {
-                'M'
-            };
-            let sequence = format!("\x1b[<{cb};{x};{y}{suffix}");
-            return Some(sequence.into_bytes());
-        }
-
-        let cb = (cb + 32).min(255);
-        let x = (x + 32).min(255) as u8;
-        let y = (y + 32).min(255) as u8;
-        Some(vec![0x1b, b'[', b'M', cb as u8, x, y])
+        let bytes = if focused {
+            b"\x1b[I".to_vec()
+        } else {
+            b"\x1b[O".to_vec()
+        };
+        self.queue_input(bytes);
     }
 }
 
@@ -1046,116 +730,33 @@ impl Widget for Terminal {
         }
 
         self.ensure_size(content_size);
-        self.update_focus(ctx);
+        let Some(session) = self.session() else {
+            return Ok(());
+        };
 
-        let renderable = self.term.renderable_content();
-        let display_offset = renderable.display_offset;
-        let selection = renderable.selection;
-        let cursor_shape = renderable.cursor.shape;
-        let blink = self.term.cursor_style().blinking;
+        let state = session.state();
+        let runs = session.visible_runs();
+        let selection = session.selection_range();
+        let child_exited = session.child_exited();
+        let child_exit_code = session.child_exit_code().unwrap_or(1);
+        let default_bg = self.config.colors.background;
+        self.cursor = cursor_from_state(&state);
 
-        self.cursor = None;
-        if self.focus_state(ctx) && cursor_shape != ansi::CursorShape::Hidden {
-            let point = term::point_to_viewport(display_offset, renderable.cursor.point);
-            if let Some(point) = point {
-                let col = point.column.0 as u32;
-                let row = point.line as u32;
-                if col < content_size.w && row < content_size.h {
-                    let shape = match cursor_shape {
-                        ansi::CursorShape::Block | ansi::CursorShape::HollowBlock => {
-                            cursor::CursorShape::Block
-                        }
-                        ansi::CursorShape::Underline => cursor::CursorShape::Underscore,
-                        ansi::CursorShape::Beam => cursor::CursorShape::Line,
-                        ansi::CursorShape::Hidden => cursor::CursorShape::Block,
-                    };
-                    self.cursor = Some(cursor::Cursor {
-                        location: geom::Point { x: col, y: row },
-                        shape,
-                        blink,
-                    });
-                }
+        for (row_idx, line) in runs.iter().enumerate() {
+            for run in line {
+                render_run(
+                    rndr,
+                    view.content_origin(),
+                    row_idx,
+                    run,
+                    selection,
+                    default_bg,
+                )?;
             }
         }
 
-        for indexed in renderable.display_iter {
-            let line = indexed.point.line.0 + display_offset as i32;
-            if line < 0 {
-                continue;
-            }
-            let row = line as u32;
-            if row >= content_size.h {
-                continue;
-            }
-            let col = indexed.point.column.0 as u32;
-            if col >= content_size.w {
-                continue;
-            }
-
-            let mut ch = indexed.cell.c;
-            let flags = indexed.cell.flags;
-            let mut fg = self
-                .config
-                .colors
-                .resolve_color(indexed.cell.fg, renderable.colors);
-            let mut bg = self
-                .config
-                .colors
-                .resolve_color(indexed.cell.bg, renderable.colors);
-
-            if flags.contains(term::cell::Flags::INVERSE) {
-                mem::swap(&mut fg, &mut bg);
-            }
-
-            // Attribute mapping: bold/italic/underline/strike/dim -> AttrSet,
-            // inverse swaps fg/bg, and hidden renders as a space.
-            let mut attrs = AttrSet::default();
-            if flags.contains(term::cell::Flags::BOLD) {
-                attrs.bold = true;
-            }
-            if flags.contains(term::cell::Flags::ITALIC) {
-                attrs.italic = true;
-            }
-            if flags.contains(term::cell::Flags::DIM) {
-                attrs.dim = true;
-            }
-            if flags.contains(term::cell::Flags::STRIKEOUT) {
-                attrs.crossedout = true;
-            }
-            if flags.intersects(term::cell::Flags::ALL_UNDERLINES) {
-                attrs.underline = true;
-            }
-
-            if flags.contains(term::cell::Flags::HIDDEN) {
-                ch = ' ';
-            }
-
-            if let Some(selection) = selection
-                && selection.contains_cell(&indexed, indexed.point, cursor_shape)
-            {
-                mem::swap(&mut fg, &mut bg);
-            }
-
-            if flags.contains(term::cell::Flags::WIDE_CHAR_SPACER)
-                || flags.contains(term::cell::Flags::LEADING_WIDE_CHAR_SPACER)
-            {
-                ch = ' ';
-            }
-
-            let style = ResolvedStyle::new(fg, bg, attrs);
-            let local = geom::Point {
-                x: view.content_origin().x.saturating_add(col),
-                y: view.content_origin().y.saturating_add(row),
-            };
-            rndr.put_cell(style, local, ch)?;
-        }
-
-        if self.exited {
-            let status = self
-                .exit_status
-                .as_ref()
-                .map(|s| s.exit_code())
-                .unwrap_or(1);
+        if child_exited {
+            let status = child_exit_code;
             let message = format!("Process exited (status {status})");
             let width = message.chars().count() as u32;
             if width > 0 && content_size.w > 0 && content_size.h > 0 {
@@ -1174,87 +775,66 @@ impl Widget for Terminal {
     }
 
     fn on_event(&mut self, event: &event::Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
+        if self.session.is_none() {
+            return Ok(EventOutcome::Ignore);
+        }
+
         match event {
             event::Event::Key(key) => {
-                if key.mods.shift {
-                    match key.key {
-                        key::KeyCode::PageUp => {
-                            self.term.scroll_display(Scroll::PageUp);
-                            return Ok(EventOutcome::Handle);
-                        }
-                        key::KeyCode::PageDown => {
-                            self.term.scroll_display(Scroll::PageDown);
-                            return Ok(EventOutcome::Handle);
-                        }
-                        _ => {}
-                    }
+                if self.handle_key(*key) {
+                    Ok(EventOutcome::Handle)
+                } else {
+                    Ok(EventOutcome::Ignore)
                 }
-
-                if key.mods.ctrl
-                    && key.mods.shift
-                    && matches!(key.key, key::KeyCode::Char('c' | 'C'))
-                {
-                    self.copy_selection();
-                    return Ok(EventOutcome::Handle);
-                }
-
-                if let Some(bytes) = self.encode_key(key)
-                    && !bytes.is_empty()
-                {
-                    self.clear_selection();
-                    self.write_to_pty(&bytes);
-                    return Ok(EventOutcome::Handle);
-                }
-
-                Ok(EventOutcome::Ignore)
             }
             event::Event::Paste(content) => {
                 self.clear_selection();
                 self.handle_paste(content);
                 Ok(EventOutcome::Handle)
             }
-            event::Event::Mouse(m) => {
+            event::Event::Mouse(mouse_event) => {
                 ctx.set_focus(ctx.node_id());
+                let Some(state) = self.state() else {
+                    return Ok(EventOutcome::Ignore);
+                };
 
-                let mode = *self.term.mode();
-                if self.config.mouse_reporting && mode.contains(TermMode::MOUSE_MODE) {
-                    let allow_motion = mode.contains(TermMode::MOUSE_MOTION);
-                    let allow_drag = mode.contains(TermMode::MOUSE_DRAG);
-                    let send = match m.action {
-                        mouse::Action::Moved => allow_motion,
-                        mouse::Action::Drag => allow_motion || allow_drag,
-                        _ => true,
-                    };
-                    if send && let Some(seq) = self.encode_mouse(m, mode) {
-                        self.write_to_pty(&seq);
-                    }
+                let mouse_reporting = self.config.mouse_reporting
+                    && (state.modes.mouse_report_click
+                        || state.modes.mouse_drag
+                        || state.modes.mouse_motion);
+                if mouse_reporting {
+                    self.send_mouse_sequence(mouse_event, &state);
                     return Ok(EventOutcome::Handle);
                 }
 
-                let outcome = match m.action {
+                let outcome = match mouse_event.action {
                     mouse::Action::ScrollUp => {
-                        self.term.scroll_display(Scroll::Delta(SCROLL_LINES));
+                        if let Some(session) = self.session_mut() {
+                            session.scroll_delta(session.scroll_wheel_step());
+                        }
                         EventOutcome::Handle
                     }
                     mouse::Action::ScrollDown => {
-                        self.term.scroll_display(Scroll::Delta(-SCROLL_LINES));
+                        if let Some(session) = self.session_mut() {
+                            session.scroll_delta(-session.scroll_wheel_step());
+                        }
                         EventOutcome::Handle
                     }
-                    mouse::Action::Down if m.button == mouse::Button::Left => {
-                        if self.handle_selection_start(m.location) {
+                    mouse::Action::Down if mouse_event.button == mouse::Button::Left => {
+                        if self.handle_selection_start(mouse_event.location) {
                             EventOutcome::Handle
                         } else {
                             EventOutcome::Ignore
                         }
                     }
-                    mouse::Action::Drag if m.button == mouse::Button::Left => {
-                        if self.handle_selection_update(m.location) {
+                    mouse::Action::Drag if mouse_event.button == mouse::Button::Left => {
+                        if self.handle_selection_update(mouse_event.location) {
                             EventOutcome::Handle
                         } else {
                             EventOutcome::Ignore
                         }
                     }
-                    mouse::Action::Up if m.button == mouse::Button::Left => {
+                    mouse::Action::Up if mouse_event.button == mouse::Button::Left => {
                         if self.handle_selection_end() {
                             EventOutcome::Handle
                         } else {
@@ -1267,12 +847,12 @@ impl Widget for Terminal {
             }
             event::Event::FocusGained => {
                 self.app_focused = true;
-                self.update_focus(ctx);
+                self.sync_focus(true);
                 Ok(EventOutcome::Handle)
             }
             event::Event::FocusLost => {
                 self.app_focused = false;
-                self.update_focus(ctx);
+                self.sync_focus(false);
                 Ok(EventOutcome::Handle)
             }
             _ => Ok(EventOutcome::Ignore),
@@ -1296,90 +876,13 @@ impl Widget for Terminal {
     }
 
     fn poll(&mut self, _ctx: &mut dyn Context) -> Option<Duration> {
-        if self.exited {
-            return None;
-        }
-
-        let bytes = self.drain_read_buffer();
-        if !bytes.is_empty() {
-            self.parser.advance(&mut self.term, &bytes);
-        }
-
-        for event in self.drain_events() {
-            let _ = self.handle_term_event(event);
-        }
-
-        if self.reader_done.load(Ordering::SeqCst) {
-            if let Some(child) = self.child.as_mut() {
-                match child.try_wait() {
-                    Ok(Some(status)) => self.note_exit(status),
-                    Ok(None) => {}
-                    Err(_) => {
-                        self.note_exit(ExitStatus::with_exit_code(1));
-                    }
-                }
-            } else if !self.exited {
-                self.exited = true;
-            }
-        }
-
+        self.poll_driver();
+        self.sync_exit_status();
         Some(Duration::from_millis(POLL_INTERVAL_MS))
     }
 
     fn on_mount(&mut self, _ctx: &mut dyn Context) -> Result<()> {
-        let size = self.last_size.unwrap_or_else(|| {
-            TerminalSize::new(DEFAULT_COLUMNS, DEFAULT_LINES, self.config.scrollback_lines)
-        });
-        let pty_system = native_pty_system();
-        let pair = pty_system
-            .openpty(size.pty_size())
-            .map_err(|e| Error::Internal(e.to_string()))?;
-
-        let writer = pair
-            .master
-            .take_writer()
-            .map_err(|e| Error::Internal(e.to_string()))?;
-        let reader = pair
-            .master
-            .try_clone_reader()
-            .map_err(|e| Error::Internal(e.to_string()))?;
-
-        let cmd = self.build_command();
-        let child = pair
-            .slave
-            .spawn_command(cmd)
-            .map_err(|e| Error::Internal(e.to_string()))?;
-
-        let read_buf = self.read_buf.clone();
-        let reader_done = self.reader_done.clone();
-        let handle = thread::spawn(move || {
-            let mut reader = reader;
-            let mut buf = [0u8; 8192];
-            loop {
-                match reader.read(&mut buf) {
-                    Ok(0) => {
-                        reader_done.store(true, Ordering::SeqCst);
-                        break;
-                    }
-                    Ok(n) => {
-                        if let Ok(mut out) = read_buf.lock() {
-                            out.extend_from_slice(&buf[..n]);
-                        }
-                    }
-                    Err(_) => {
-                        reader_done.store(true, Ordering::SeqCst);
-                        break;
-                    }
-                }
-            }
-        });
-
-        self.reader_handle = Some(handle);
-        self.master = Some(pair.master);
-        self.writer = Some(writer);
-        self.child = Some(child);
-
-        Ok(())
+        self.mount_session()
     }
 
     fn name(&self) -> NodeName {
@@ -1387,61 +890,337 @@ impl Widget for Terminal {
     }
 }
 
-impl Drop for Terminal {
-    fn drop(&mut self) {
-        if let Some(mut child) = self.child.take()
-            && child.kill().is_err()
-        {}
-        self.writer.take();
-        if let Some(handle) = self.reader_handle.take()
-            && handle.join().is_err()
-        {}
+/// Convert a Canopy color into an `itty` hex wrapper.
+fn canopy_hex(color: Color) -> Hex {
+    let Color::Rgb { r, g, b } = color.to_rgb() else {
+        unreachable!("Color::to_rgb always returns Color::Rgb");
+    };
+    Hex::from_rgb(itty::Rgb { r, g, b })
+}
+
+/// Build an `itty` config from Canopy's terminal config.
+fn terminal_config(config: &TerminalConfig, size: TerminalSize) -> EguiTTYConfig {
+    let mut builder = EguiTTYConfigBuilder::new()
+        .grid_fixed(size.columns, size.rows)
+        .scrollback_lines(config.scrollback_lines)
+        .kitty_keyboard(config.kitty_keyboard)
+        .palette_inline(config.colors.palette_config());
+
+    if let Some(argv) = &config.command
+        && let Some((program, args)) = argv.split_first()
+    {
+        builder = builder
+            .pty_shell(program.clone())
+            .pty_args(args.iter().cloned());
     }
+    if let Some(cwd) = &config.cwd {
+        builder = builder.pty_working_dir(cwd.display().to_string());
+    }
+    for (key, value) in &config.env {
+        builder = builder.pty_env_var(key.clone(), value.clone());
+    }
+    builder.build()
+}
+
+/// Convert a Canopy key into an `itty` key.
+fn map_key(key: key::Key) -> Option<IttyKey> {
+    let mut modifiers = IttyModifiers::empty();
+    if key.mods.shift {
+        modifiers |= IttyModifiers::SHIFT;
+    }
+    if key.mods.ctrl {
+        modifiers |= IttyModifiers::CTRL;
+    }
+    if key.mods.alt {
+        modifiers |= IttyModifiers::ALT;
+    }
+
+    let code = match key.key {
+        key::KeyCode::Backspace => IttyKeyCode::Backspace,
+        key::KeyCode::Enter => IttyKeyCode::Enter,
+        key::KeyCode::Left => IttyKeyCode::ArrowLeft,
+        key::KeyCode::Right => IttyKeyCode::ArrowRight,
+        key::KeyCode::Up => IttyKeyCode::ArrowUp,
+        key::KeyCode::Down => IttyKeyCode::ArrowDown,
+        key::KeyCode::Home => IttyKeyCode::Home,
+        key::KeyCode::End => IttyKeyCode::End,
+        key::KeyCode::PageUp => IttyKeyCode::PageUp,
+        key::KeyCode::PageDown => IttyKeyCode::PageDown,
+        key::KeyCode::Tab | key::KeyCode::BackTab => IttyKeyCode::Tab,
+        key::KeyCode::Delete => IttyKeyCode::Delete,
+        key::KeyCode::Insert => IttyKeyCode::Insert,
+        key::KeyCode::Esc => IttyKeyCode::Escape,
+        key::KeyCode::F(1) => IttyKeyCode::F1,
+        key::KeyCode::F(2) => IttyKeyCode::F2,
+        key::KeyCode::F(3) => IttyKeyCode::F3,
+        key::KeyCode::F(4) => IttyKeyCode::F4,
+        key::KeyCode::F(5) => IttyKeyCode::F5,
+        key::KeyCode::F(6) => IttyKeyCode::F6,
+        key::KeyCode::F(7) => IttyKeyCode::F7,
+        key::KeyCode::F(8) => IttyKeyCode::F8,
+        key::KeyCode::F(9) => IttyKeyCode::F9,
+        key::KeyCode::F(10) => IttyKeyCode::F10,
+        key::KeyCode::F(11) => IttyKeyCode::F11,
+        key::KeyCode::F(12) => IttyKeyCode::F12,
+        key::KeyCode::Char(ch) => IttyKeyCode::Char(ch),
+        _ => return None,
+    };
+
+    Some(IttyKey { code, modifiers })
+}
+
+/// Convert backend cursor state into Canopy's cursor model.
+fn cursor_from_state(state: &TerminalState) -> Option<cursor::Cursor> {
+    let (row, col) = state.cursor.grid_pos?;
+    if !state.cursor.visible_in_viewport {
+        return None;
+    }
+
+    let shape = match state.cursor.shape.as_str() {
+        "Underline" => cursor::CursorShape::Underscore,
+        "Beam" => cursor::CursorShape::Line,
+        _ => cursor::CursorShape::Block,
+    };
+    Some(cursor::Cursor {
+        location: geom::Point {
+            x: col as u32,
+            y: row as u32,
+        },
+        shape,
+        blink: false,
+    })
+}
+
+/// Render one styled run from the backend snapshot into Canopy cells.
+fn render_run(
+    rndr: &mut Render,
+    origin: geom::Point,
+    row_idx: usize,
+    run: &StyledRunPublic,
+    selection: Option<SelectionRange>,
+    default_bg: Color,
+) -> Result<()> {
+    let mut col = run.start_col;
+    for ch in run.text.chars() {
+        let width = UnicodeWidthChar::width(ch).unwrap_or(1).max(1);
+        let point = Point {
+            line: alacritty_terminal::index::Line(row_idx as i32),
+            column: Column(col),
+        };
+        let mut fg = Color::Rgb {
+            r: run.fg.r(),
+            g: run.fg.g(),
+            b: run.fg.b(),
+        };
+        let mut bg = run.bg.map_or(default_bg, |color| Color::Rgb {
+            r: color.r(),
+            g: color.g(),
+            b: color.b(),
+        });
+        if selection.is_some_and(|range| range.contains(point)) {
+            std::mem::swap(&mut fg, &mut bg);
+        }
+
+        let mut attrs = AttrSet::default();
+        attrs.bold = run.bold;
+        attrs.italic = run.italic;
+        attrs.underline = run.underline;
+        attrs.crossedout = run.strikethrough;
+
+        let style = ResolvedStyle::new(fg, bg, attrs);
+        rndr.put_cell(
+            style,
+            geom::Point {
+                x: origin.x.saturating_add(col as u32),
+                y: origin.y.saturating_add(row_idx as u32),
+            },
+            ch,
+        )?;
+        col += width;
+    }
+    Ok(())
+}
+
+/// Encode a Canopy mouse event into terminal escape sequences.
+fn encode_mouse(event: &mouse::MouseEvent, state: &TerminalState) -> Option<Vec<u8>> {
+    let cols = state.cols.max(1) as u32;
+    let rows = state.lines.max(1) as u32;
+    let x = event.location.x.min(cols.saturating_sub(1)) + 1;
+    let y = event.location.y.min(rows.saturating_sub(1)) + 1;
+
+    let mut cb = match event.action {
+        mouse::Action::ScrollUp => 64,
+        mouse::Action::ScrollDown => 65,
+        mouse::Action::ScrollLeft => 66,
+        mouse::Action::ScrollRight => 67,
+        _ => match event.button {
+            mouse::Button::Left => 0,
+            mouse::Button::Middle => 1,
+            mouse::Button::Right => 2,
+            mouse::Button::None => 3,
+        },
+    };
+
+    if event.action == mouse::Action::Up {
+        cb = 3;
+    }
+    if matches!(event.action, mouse::Action::Moved | mouse::Action::Drag) {
+        cb |= 32;
+    }
+    if event.modifiers.shift {
+        cb |= 4;
+    }
+    if event.modifiers.alt {
+        cb |= 8;
+    }
+    if event.modifiers.ctrl {
+        cb |= 16;
+    }
+
+    if state.modes.mouse_sgr {
+        let suffix = if event.action == mouse::Action::Up {
+            'm'
+        } else {
+            'M'
+        };
+        let sequence = format!("\x1b[<{cb};{x};{y}{suffix}");
+        return Some(sequence.into_bytes());
+    }
+
+    let cb = (cb + 32).min(255) as u8;
+    let x = (x + 32).min(255) as u8;
+    let y = (y + 32).min(255) as u8;
+    Some(vec![0x1b, b'[', b'M', cb, x, y])
 }
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        collections::BTreeMap,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        },
+        thread,
+        time::{Duration, Instant},
+    };
+
+    use canopy::event::{key, mouse};
+    use itty_script::{
+        RunMetrics, ScriptExecPolicy, SharedEngineFactory, TermModuleBuilder, run_source,
+    };
+
     use super::*;
 
-    fn terminal_for_test() -> Terminal {
-        let mut config = TerminalConfig::new();
-        config.kitty_keyboard = true;
-        Terminal::new(config)
-    }
-
-    fn enable_disambiguate(term: &mut Terminal) {
-        term.parser.advance(&mut term.term, b"\x1b[>1u");
-        assert!(term.term.mode().contains(TermMode::DISAMBIGUATE_ESC_CODES));
+    fn mounted_terminal() -> Terminal {
+        let mut terminal = Terminal::new(TerminalConfig::default());
+        terminal
+            .mount_session()
+            .expect("mount itty-backed terminal");
+        terminal
     }
 
     #[test]
-    fn encode_ctrl_tab_legacy_falls_back_to_tab() {
-        let terminal = terminal_for_test();
-        let key = key::Ctrl + key::KeyCode::Tab;
-        assert_eq!(terminal.encode_key(&key).unwrap(), b"\t");
+    fn maps_shift_backtab_to_shift_tab() {
+        let key = key::Shift + key::KeyCode::BackTab;
+        let mapped = map_key(key).expect("mapped");
+        assert_eq!(mapped.code, IttyKeyCode::Tab);
+        assert!(mapped.modifiers.contains(IttyModifiers::SHIFT));
     }
 
     #[test]
-    fn encode_ctrl_tab_disambiguate_uses_csi_u() {
-        let mut terminal = terminal_for_test();
-        enable_disambiguate(&mut terminal);
-        let key = key::Ctrl + key::KeyCode::Tab;
-        assert_eq!(terminal.encode_key(&key).unwrap(), b"\x1b[9;5u");
+    fn double_click_selects_word() {
+        let mut terminal = mounted_terminal();
+        terminal
+            .session_mut()
+            .expect("session")
+            .set_visible_lines(&["hello world".to_string()])
+            .expect("seed lines");
+
+        let point = geom::Point { x: 1, y: 0 };
+        assert!(terminal.handle_selection_start(point));
+        assert!(terminal.handle_selection_end());
+        assert!(terminal.handle_selection_start(point));
+
+        let selected = terminal
+            .session()
+            .and_then(Session::copy_selection)
+            .expect("word selection");
+        assert_eq!(selected, "hello");
     }
 
     #[test]
-    fn encode_ctrl_char_disambiguate_uses_csi_u() {
-        let mut terminal = terminal_for_test();
-        enable_disambiguate(&mut terminal);
-        let key = key::Ctrl + 'c';
-        assert_eq!(terminal.encode_key(&key).unwrap(), b"\x1b[99;5u");
+    fn focus_events_enqueue_focus_reports() {
+        let terminal = mounted_terminal();
+        terminal.queue_input(Vec::new());
+        terminal.sync_focus(true);
+        terminal.sync_focus(false);
     }
 
     #[test]
-    fn encode_escape_disambiguate_uses_csi_u() {
-        let mut terminal = terminal_for_test();
-        enable_disambiguate(&mut terminal);
-        let key = key::Empty + key::KeyCode::Esc;
-        assert_eq!(terminal.encode_key(&key).unwrap(), b"\x1b[27u");
+    fn itty_script_can_drive_attached_handle() {
+        let mut terminal = mounted_terminal();
+        let handle = terminal.driver_handle().expect("driver handle");
+        let script_done = Arc::new(AtomicBool::new(false));
+        let script_done_flag = Arc::clone(&script_done);
+
+        let runner = thread::spawn(move || {
+            let runtime = Arc::new(
+                Builder::new_multi_thread()
+                    .worker_threads(1)
+                    .enable_all()
+                    .build()
+                    .expect("script runtime"),
+            );
+            let metrics = Arc::new(RunMetrics::new());
+            let builder = TermModuleBuilder::new(&runtime, &handle, &metrics);
+            let setup: SharedEngineFactory =
+                Arc::new(|lua, term_builder| term_builder.install_lua(lua));
+            let result = run_source(
+                builder.context(),
+                &setup,
+                ScriptExecPolicy::default(),
+                None,
+                "attached_test.luau",
+                "local term = open()\nterm:paste('echo canopy\\r')\nterm:wait_text('canopy')\n",
+                BTreeMap::new(),
+            );
+            script_done_flag.store(true, Ordering::Relaxed);
+            result
+        });
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !script_done.load(Ordering::Relaxed) && Instant::now() < deadline {
+            terminal.poll_driver();
+            thread::sleep(Duration::from_millis(10));
+        }
+
+        assert!(
+            script_done.load(Ordering::Relaxed),
+            "script did not finish in time"
+        );
+        runner
+            .join()
+            .expect("script thread")
+            .expect("script succeeds");
+    }
+
+    #[test]
+    fn mouse_encoding_uses_sgr_when_requested() {
+        let mut terminal = mounted_terminal();
+        let mut state = terminal.session_mut().expect("session").state();
+        state.modes.mouse_report_click = true;
+        state.modes.mouse_drag = false;
+        state.modes.mouse_motion = false;
+        state.modes.mouse_sgr = true;
+        let event = mouse::MouseEvent {
+            action: mouse::Action::Down,
+            button: mouse::Button::Left,
+            modifiers: key::Empty,
+            location: geom::Point { x: 4, y: 6 },
+        };
+
+        let encoded = encode_mouse(&event, &state).expect("mouse bytes");
+        assert_eq!(encoded, b"\x1b[<0;5;7M");
     }
 }

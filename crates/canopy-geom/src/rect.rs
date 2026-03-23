@@ -1,4 +1,4 @@
-use super::{Direction, Error, Expanse, Line, LineSegment, Point, Result};
+use super::{Direction, Error, Line, LineSegment, Point, Result, Size};
 
 /// A rectangle
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -376,9 +376,9 @@ impl Rect {
         self.area() == 0
     }
 
-    /// Return the `Expanse` of this rectangle, which has the same size as the
+    /// Return the `Size` of this rectangle, which has the same size as the
     /// `Rect` but no location.
-    pub fn expanse(&self) -> Expanse {
+    pub fn expanse(&self) -> Size {
         (*self).into()
     }
 
@@ -430,8 +430,8 @@ impl Rect {
     }
 }
 
-impl From<Expanse> for Rect {
-    fn from(s: Expanse) -> Self {
+impl From<Size> for Rect {
+    fn from(s: Size) -> Self {
         Self {
             tl: Point::default(),
             w: s.w,

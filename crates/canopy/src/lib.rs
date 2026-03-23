@@ -13,7 +13,7 @@
 //!
 //! # Module Organization
 //!
-//! - [`geom`] - Geometry primitives (Rect, Point, Expanse, etc.)
+//! - [`geom`] - Geometry primitives (Rect, Point, Size, etc.)
 
 #![warn(missing_docs)]
 

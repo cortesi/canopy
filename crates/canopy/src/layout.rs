@@ -1,6 +1,6 @@
 //! Layout types for configuring node positioning and sizing.
 
-use crate::geom::{Expanse, Rect};
+use crate::geom::Rect;
 
 /// Stack direction for children.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -102,65 +102,31 @@ impl Edges<u32> {
 }
 
 /// Size with width and height.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub struct Size<T> {
-    /// Width component.
-    pub width: T,
-    /// Height component.
-    pub height: T,
-}
+pub type Size<T = u32> = crate::geom::Size<T>;
 
-impl<T> Size<T> {
-    /// Create a new size with the given width and height.
-    pub fn new(width: T, height: T) -> Self {
-        Self { width, height }
-    }
-}
-
-impl Size<u32> {
-    /// Zero size.
-    pub const ZERO: Self = Self {
-        width: 0,
-        height: 0,
-    };
-
+impl Direction {
     /// Size along the main axis.
-    pub fn main(self, direction: Direction) -> u32 {
-        match direction {
-            Direction::Column | Direction::Stack => self.height,
-            Direction::Row => self.width,
+    pub fn main_size(&self, size: Size<u32>) -> u32 {
+        match self {
+            Self::Column | Self::Stack => size.h,
+            Self::Row => size.w,
         }
     }
 
     /// Size along the cross axis.
-    pub fn cross(self, direction: Direction) -> u32 {
-        match direction {
-            Direction::Column | Direction::Stack => self.width,
-            Direction::Row => self.height,
+    pub fn cross_size(&self, size: Size<u32>) -> u32 {
+        match self {
+            Self::Column | Self::Stack => size.w,
+            Self::Row => size.h,
         }
     }
 
     /// Construct a size from main and cross axis values.
-    pub fn from_main_cross(direction: Direction, main: u32, cross: u32) -> Self {
-        match direction {
-            Direction::Column | Direction::Stack => Self::new(cross, main),
-            Direction::Row => Self::new(main, cross),
+    pub fn size_from_main_cross(&self, main: u32, cross: u32) -> Size<u32> {
+        match self {
+            Self::Column | Self::Stack => Size::new(cross, main),
+            Self::Row => Size::new(main, cross),
         }
-    }
-}
-
-impl From<Expanse> for Size<u32> {
-    fn from(v: Expanse) -> Self {
-        Self {
-            width: v.w,
-            height: v.h,
-        }
-    }
-}
-
-impl From<Size<u32>> for Expanse {
-    fn from(v: Size<u32>) -> Self {
-        Self::new(v.width, v.height)
     }
 }
 
@@ -433,10 +399,7 @@ impl MeasureConstraints {
 
     /// Clamp a size to these constraints.
     pub fn clamp_size(&self, content: Size<u32>) -> Size<u32> {
-        Size::new(
-            self.width.clamp(content.width),
-            self.height.clamp(content.height),
-        )
+        Size::new(self.width.clamp(content.w), self.height.clamp(content.h))
     }
 
     /// True if the main axis is exact.

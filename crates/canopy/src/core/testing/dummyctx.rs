@@ -8,7 +8,7 @@ use crate::{
     core::{NodeId, help::OwnedHelpSnapshot, style::Effect, view::View},
     error::Result,
     event::{Event, mouse::MouseEvent},
-    geom::{Direction, Expanse, Point, PointI32, RectI32},
+    geom::{Direction, Point, PointI32, RectI32, Size},
     layout::Layout,
     path::Path,
     style::StyleMap,
@@ -28,7 +28,7 @@ const DUMMY_VIEW: View = View {
         h: 0,
     },
     tl: Point { x: 0, y: 0 },
-    canvas: Expanse { w: 0, h: 0 },
+    canvas: Size { w: 0, h: 0 },
 };
 
 /// Dummy context for tests.

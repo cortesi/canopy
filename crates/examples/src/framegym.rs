@@ -1,25 +1,17 @@
-use canopy::{
-    command,
-    commands::{ScrollDirection, VerticalDirection},
-    derive_commands,
-    event::key,
-    geom::Line,
-    layout::CanvasContext,
-    prelude::*,
-};
+use canopy::{command, derive_commands, event::key, geom::Line, layout::CanvasContext, prelude::*};
 use canopy_widgets::{Frame, Root};
 
 /// Base characters used to generate the test pattern.
 const PATTERN: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
 
 // Typed keys for keyed children
-key!(pub(crate) FrameSlot: Frame);
-key!(pub(crate) PatternSlot: TestPattern);
+canopy::key!(FrameSlot: Frame);
+canopy::key!(PatternSlot: TestPattern);
 
 /// A widget that renders a test pattern.
 pub struct TestPattern {
     /// Virtual canvas size.
-    size: Expanse,
+    size: Size,
 }
 
 impl Default for TestPattern {
@@ -33,7 +25,7 @@ impl TestPattern {
     /// Construct the test pattern node.
     pub fn new() -> Self {
         Self {
-            size: Expanse::new(500, 500),
+            size: Size::new(500, 500),
         }
     }
 
@@ -44,57 +36,62 @@ impl TestPattern {
     }
 
     /// Scroll by one line in the specified direction.
-    pub fn scroll(&mut self, c: &mut dyn Context, dir: ScrollDirection) {
+    pub fn scroll(&mut self, c: &mut dyn Context, dir: canopy::geom::Direction) {
         match dir {
-            ScrollDirection::Up => c.scroll_up(),
-            ScrollDirection::Down => c.scroll_down(),
-            ScrollDirection::Left => c.scroll_left(),
-            ScrollDirection::Right => c.scroll_right(),
+            canopy::geom::Direction::Up => c.scroll_up(),
+            canopy::geom::Direction::Down => c.scroll_down(),
+            canopy::geom::Direction::Left => c.scroll_left(),
+            canopy::geom::Direction::Right => c.scroll_right(),
         };
     }
 
     /// Page in the specified direction.
-    pub fn page(&mut self, c: &mut dyn Context, dir: VerticalDirection) {
+    pub fn page(&mut self, c: &mut dyn Context, dir: canopy::geom::Direction) {
         match dir {
-            VerticalDirection::Up => c.page_up(),
-            VerticalDirection::Down => c.page_down(),
+            canopy::geom::Direction::Up => {
+                c.page_up();
+            }
+            canopy::geom::Direction::Down => {
+                c.page_down();
+            }
+            _ => {}
         };
     }
 
     #[command]
     /// Scroll up by one line.
     pub fn scroll_up(&mut self, c: &mut dyn Context) {
-        self.scroll(c, ScrollDirection::Up);
+        self.scroll(c, canopy::geom::Direction::Up);
     }
 
     #[command]
     /// Scroll down by one line.
     pub fn scroll_down(&mut self, c: &mut dyn Context) {
-        self.scroll(c, ScrollDirection::Down);
+        self.scroll(c, canopy::geom::Direction::Down);
     }
 
     #[command]
     /// Scroll left by one column.
     pub fn scroll_left(&mut self, c: &mut dyn Context) {
-        self.scroll(c, ScrollDirection::Left);
+        self.scroll(c, canopy::geom::Direction::Left);
     }
 
     #[command]
     /// Scroll right by one column.
     pub fn scroll_right(&mut self, c: &mut dyn Context) {
-        self.scroll(c, ScrollDirection::Right);
+        self.scroll(c, canopy::geom::Direction::Right);
     }
 
     #[command]
     /// Page up by one screen.
     pub fn page_up(&mut self, c: &mut dyn Context) {
-        self.page(c, VerticalDirection::Up);
+        self.page(c, canopy::geom::Direction::Up);
     }
 
     #[command]
     /// Page down by one screen.
     pub fn page_down(&mut self, c: &mut dyn Context) {
-        self.page(c, VerticalDirection::Down);
+        self.page(c, canopy::geom::Direction::Down);
     }
 
     /// Return the character for the test pattern at a position.
@@ -179,7 +176,7 @@ impl FrameGym {
 impl Widget for FrameGym {
     fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
         let frame_id = c.add_keyed::<FrameSlot>(Frame::new().with_title("Frame Gym"))?;
-        let pattern_id = c.add_keyed_to::<PatternSlot>(frame_id, TestPattern::new())?;
+        let pattern_id = c.add_keyed_to(frame_id, PatternSlot::KEY, TestPattern::new())?;
 
         c.set_layout(Layout::fill())?;
         c.set_layout_of(pattern_id, Layout::fill())?;

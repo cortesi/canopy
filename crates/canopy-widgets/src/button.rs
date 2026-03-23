@@ -6,7 +6,6 @@ use canopy::{
     derive_commands,
     error::Result,
     event::{Event, mouse},
-    key,
     layout::Layout,
     render::Render,
     state::NodeName,
@@ -18,9 +17,9 @@ use crate::{
     boxed::{BoxGlyphs, SINGLE},
 };
 
-key!(LabelSlot: Text);
-key!(BoxSlot: Box);
-key!(CenterSlot: Center);
+canopy::key!(LabelSlot: Text);
+canopy::key!(BoxSlot: Box);
+canopy::key!(CenterSlot: Center);
 
 /// Button widget that triggers a command when clicked.
 pub struct Button {

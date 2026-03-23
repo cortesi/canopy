@@ -304,7 +304,7 @@ impl<'a> BufTest<'a> {
 mod tests {
     use super::*;
     use crate::{
-        geom::{Expanse, Line},
+        geom::{Line, Size},
         style::{AttrSet, Color, ResolvedStyle},
     };
 
@@ -314,7 +314,7 @@ mod tests {
 
     #[test]
     fn test_bufmatch_default() {
-        let mut buf = TermBuf::empty(Expanse::new(5, 3));
+        let mut buf = TermBuf::empty(Size::new(5, 3));
         buf.text(&test_style(), Line::new(0, 0, 5), "hello");
 
         let matcher = BufTest::new(&buf);
@@ -324,7 +324,7 @@ mod tests {
 
     #[test]
     fn test_bufmatch_custom_null() {
-        let mut buf = TermBuf::empty(Expanse::new(4, 2));
+        let mut buf = TermBuf::empty(Size::new(4, 2));
         buf.text(&test_style(), Line::new(0, 0, 2), "ab");
 
         let matcher = BufTest::new(&buf).with_null('_');
@@ -334,7 +334,7 @@ mod tests {
 
     #[test]
     fn test_bufmatch_any_char() {
-        let mut buf = TermBuf::new(Expanse::new(4, 2), ' ', test_style());
+        let mut buf = TermBuf::new(Size::new(4, 2), ' ', test_style());
         buf.text(&test_style(), Line::new(0, 0, 4), "test");
         buf.text(&test_style(), Line::new(0, 1, 4), "word");
 
@@ -347,7 +347,7 @@ mod tests {
 
     #[test]
     fn test_bufmatch_combined() {
-        let mut buf = TermBuf::empty(Expanse::new(6, 2));
+        let mut buf = TermBuf::empty(Size::new(6, 2));
         buf.text(&test_style(), Line::new(0, 0, 3), "foo");
 
         let matcher = BufTest::new(&buf).with_null('_').with_any('*');
@@ -358,7 +358,7 @@ mod tests {
 
     #[test]
     fn test_contains_functions() {
-        let mut buf = TermBuf::new(Expanse::new(10, 2), ' ', test_style());
+        let mut buf = TermBuf::new(Size::new(10, 2), ' ', test_style());
 
         let mut red_style = test_style();
         red_style.fg = Color::Red;
@@ -380,7 +380,7 @@ mod tests {
 
     #[test]
     fn test_dump() {
-        let mut buf = TermBuf::empty(Expanse::new(5, 3));
+        let mut buf = TermBuf::empty(Size::new(5, 3));
         buf.text(&test_style(), Line::new(0, 0, 5), "hello");
         buf.text(&test_style(), Line::new(1, 1, 3), "abc");
 
@@ -392,7 +392,7 @@ mod tests {
     #[test]
     fn test_dump_with_larger_buffer() {
         // Test with a larger buffer to see the ruler wrap around
-        let mut buf = TermBuf::empty(Expanse::new(25, 15));
+        let mut buf = TermBuf::empty(Size::new(25, 15));
         buf.text(&test_style(), Line::new(0, 0, 10), "0123456789");
         buf.text(&test_style(), Line::new(10, 5, 15), "Offset at (10,5)");
         buf.text(&test_style(), Line::new(5, 10, 10), "Row 10 test");
@@ -402,7 +402,7 @@ mod tests {
 
     #[test]
     fn test_dump_line() {
-        let mut buf = TermBuf::empty(Expanse::new(20, 5));
+        let mut buf = TermBuf::empty(Size::new(20, 5));
         buf.text(&test_style(), Line::new(0, 0, 10), "First line");
         buf.text(&test_style(), Line::new(5, 2, 15), "Middle line at 5");
         buf.text(&test_style(), Line::new(0, 4, 20), "Last line with text!");
@@ -417,7 +417,7 @@ mod tests {
 
     #[test]
     fn test_buftest_instance_methods() {
-        let mut buf = TermBuf::new(Expanse::new(10, 2), ' ', test_style());
+        let mut buf = TermBuf::new(Size::new(10, 2), ' ', test_style());
 
         let mut red_style = test_style();
         red_style.fg = Color::Red;

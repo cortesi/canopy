@@ -485,7 +485,7 @@ mod tests {
             .get(&stylemap, "")
             .resolve_solid()
             .expect("default style resolves to solid colors");
-        let mut target = TermBuf::empty_with_style(geom::Expanse::new(6, 4), default_style);
+        let mut target = TermBuf::empty_with_style(geom::Size::new(6, 4), default_style);
 
         let clip = geom::Rect::new(2, 1, 2, 2);
         let screen_origin = geom::Point { x: 3, y: 0 };

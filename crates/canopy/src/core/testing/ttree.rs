@@ -7,7 +7,7 @@ use crate::{
     derive_commands,
     error::Result,
     event::Event,
-    geom::Expanse,
+    geom::Size,
     layout::{Direction, Layout},
     render::Render,
     state::NodeName,
@@ -353,7 +353,7 @@ pub fn run_ttree(func: impl FnOnce(&mut Canopy, TestRender, TestTree) -> Result<
     c.add_commands::<Ba>()?;
     c.add_commands::<Bb>()?;
 
-    c.set_root_size(Expanse::new(100, 100))?;
+    c.set_root_size(Size::new(100, 100))?;
     reset_state();
     func(&mut c, tr, tree)
 }

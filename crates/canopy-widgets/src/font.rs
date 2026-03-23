@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use canopy::{geom::Expanse, layout::Align};
+use canopy::{geom::Size, layout::Align};
 use fontdue::{Font as FontdueFont, FontSettings, LineMetrics, Metrics};
 
 use crate::error::{Error, Result};
@@ -308,9 +308,9 @@ pub struct FontCell {
 #[derive(Debug, Clone)]
 pub struct FontLayout {
     /// Target canvas size.
-    pub size: Expanse,
+    pub size: Size,
     /// Size of the rendered content before clipping.
-    pub content_size: Expanse,
+    pub content_size: Size,
     /// Rendered cell data for each row.
     pub cells: Vec<Vec<FontCell>>,
 }
@@ -355,14 +355,14 @@ impl FontRenderer {
     pub fn layout(
         &mut self,
         text: &str,
-        size: Expanse,
+        size: Size,
         options: LayoutOptions,
         effects: FontEffects,
     ) -> FontLayout {
         if size.w == 0 || size.h == 0 {
             return FontLayout {
                 size,
-                content_size: Expanse::new(0, 0),
+                content_size: Size::new(0, 0),
                 cells: Vec::new(),
             };
         }
@@ -522,7 +522,7 @@ impl FontRenderer {
 
         FontLayout {
             size,
-            content_size: Expanse::new(content_width, content_height),
+            content_size: Size::new(content_width, content_height),
             cells,
         }
     }
@@ -928,7 +928,7 @@ fn draw_centered_line(
 
 #[cfg(test)]
 mod tests {
-    use canopy::geom::Expanse;
+    use canopy::geom::Size;
 
     use super::*;
 
@@ -941,7 +941,7 @@ mod tests {
     #[test]
     fn layout_sizes_match_target() {
         let mut renderer = FontRenderer::new(test_font());
-        let size = Expanse::new(24, 8);
+        let size = Size::new(24, 8);
         let layout = renderer.layout(
             "Hello",
             size,
@@ -956,7 +956,7 @@ mod tests {
     #[test]
     fn layout_clips_overflow() {
         let mut renderer = FontRenderer::new(test_font());
-        let size = Expanse::new(8, 4);
+        let size = Size::new(8, 4);
         let layout = renderer.layout(
             "Overflow",
             size,
@@ -971,7 +971,7 @@ mod tests {
     #[test]
     fn layout_handles_multiline() {
         let mut renderer = FontRenderer::new(test_font());
-        let size = Expanse::new(24, 8);
+        let size = Size::new(24, 8);
         let layout = renderer.layout(
             "Hi\nThere",
             size,
@@ -993,7 +993,7 @@ mod tests {
     #[test]
     fn missing_glyphs_use_fallback() {
         let mut renderer = FontRenderer::new(test_font());
-        let size = Expanse::new(24, 8);
+        let size = Size::new(24, 8);
         let missing = renderer.layout(
             "\u{10ffff}",
             size,

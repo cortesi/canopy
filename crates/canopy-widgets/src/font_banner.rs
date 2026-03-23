@@ -1,7 +1,7 @@
 use canopy::{
     ReadContext, Widget,
     error::Result,
-    geom::{Expanse, Point, Rect},
+    geom::{Point, Rect, Size},
     layout::{Align, Layout},
     render::Render,
     style::ResolvedStyle,
@@ -37,7 +37,7 @@ struct LayoutCache {
     /// Text used to build the layout.
     text: String,
     /// Target canvas size.
-    size: Expanse,
+    size: Size,
     /// Layout options used for rendering.
     options: LayoutOptions,
     /// Rendering effects for the banner.
@@ -104,7 +104,7 @@ impl FontBanner {
     }
 
     /// Return a cached layout for the provided size.
-    fn layout_for(&mut self, size: Expanse) -> &FontLayout {
+    fn layout_for(&mut self, size: Size) -> &FontLayout {
         let rebuild = match &self.cache {
             Some(cache) => {
                 cache.text != self.text
@@ -147,7 +147,7 @@ impl Widget for FontBanner {
         if view_rect.w == 0 || view_rect.h == 0 {
             return Ok(());
         }
-        let size = Expanse::new(view_rect.w, view_rect.h);
+        let size = Size::new(view_rect.w, view_rect.h);
         let style = if self.selected {
             self.selected_style
                 .as_deref()

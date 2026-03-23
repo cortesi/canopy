@@ -2,7 +2,7 @@ use std::{any::TypeId, cell::RefCell, collections::HashMap};
 
 use crate::{
     core::{id::NodeId, style::Effect, view::View},
-    geom::{Expanse, Point, Rect},
+    geom::{Point, Rect, Size},
     layout::Layout,
     state::NodeName,
     widget::Widget,
@@ -29,9 +29,9 @@ pub struct Node {
     /// Outer rect relative to the parent content origin.
     pub(crate) rect: Rect,
     /// Content size (outer minus padding).
-    pub(crate) content_size: Expanse,
+    pub(crate) content_size: Size,
     /// Canvas size in content coordinates.
-    pub(crate) canvas: Expanse,
+    pub(crate) canvas: Size,
     /// Scroll offset in content coordinates.
     pub(crate) scroll: Point,
     /// View information in screen coordinates.
@@ -82,12 +82,12 @@ impl Node {
     }
 
     /// Return the content size.
-    pub fn content_size(&self) -> Expanse {
+    pub fn content_size(&self) -> Size {
         self.content_size
     }
 
     /// Return the canvas size.
-    pub fn canvas(&self) -> Expanse {
+    pub fn canvas(&self) -> Size {
         self.canvas
     }
 

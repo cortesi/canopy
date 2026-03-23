@@ -2387,7 +2387,7 @@ impl Widget for Editor {
 
     fn canvas(&self, view: Size<u32>, _ctx: &CanvasContext) -> Size<u32> {
         let gutter = self.gutter_width();
-        let wrap_width = view.width.saturating_sub(gutter).max(1) as usize;
+        let wrap_width = view.w.saturating_sub(gutter).max(1) as usize;
         let height = display_line_count(
             &self.buffer,
             self.config.wrap,
@@ -2397,9 +2397,9 @@ impl Widget for Editor {
         let width = match self.config.wrap {
             WrapMode::None => {
                 let max_width = display_line_width(&self.buffer, self.config.tab_stop) as u32;
-                max_width.saturating_add(gutter).max(view.width.max(1))
+                max_width.saturating_add(gutter).max(view.w.max(1))
             }
-            WrapMode::Soft => view.width.max(1),
+            WrapMode::Soft => view.w.max(1),
         };
         Size::new(width.max(1), height.max(1))
     }

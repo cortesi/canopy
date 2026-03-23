@@ -2,7 +2,7 @@ use canopy::{prelude::*, testing::harness::Harness};
 
 use crate::stylegym::{Stylegym, setup_bindings};
 
-fn setup_harness(size: Expanse) -> Result<Harness> {
+fn setup_harness(size: Size) -> Result<Harness> {
     let mut harness = Harness::builder(Stylegym::new())
         .size(size.w, size.h)
         .build()?;
@@ -13,13 +13,13 @@ fn setup_harness(size: Expanse) -> Result<Harness> {
 
 #[test]
 fn test_stylegym_creates() -> Result<()> {
-    let _harness = setup_harness(Expanse::new(80, 24))?;
+    let _harness = setup_harness(Size::new(80, 24))?;
     Ok(())
 }
 
 #[test]
 fn test_stylegym_renders() -> Result<()> {
-    let harness = setup_harness(Expanse::new(80, 24))?;
+    let harness = setup_harness(Size::new(80, 24))?;
     // Just check it rendered without panicking.
     let _buf = harness.buf();
     Ok(())

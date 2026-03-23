@@ -8,8 +8,7 @@ use std::marker::PhantomData;
 use canopy::{
     Context, EventOutcome, KeyedChildren, ReadContext, RemovePolicy, TypedId, Widget, command,
     commands::{
-        CommandArgs, CommandCall, CommandInvocation, CommandScopeFrame, ListRowContext,
-        ScrollDirection, ToArgValue, VerticalDirection,
+        CommandArgs, CommandCall, CommandInvocation, CommandScopeFrame, ListRowContext, ToArgValue,
     },
     derive_commands,
     error::{Error, Result},
@@ -509,62 +508,62 @@ impl<W: Selectable> List<W> {
     }
 
     /// Scroll the view by one line in the specified direction.
-    pub fn scroll(&mut self, c: &mut dyn Context, dir: ScrollDirection) {
+    pub fn scroll(&mut self, c: &mut dyn Context, dir: canopy::geom::Direction) {
         match dir {
-            ScrollDirection::Up => {
+            canopy::geom::Direction::Up => {
                 c.scroll_up();
             }
-            ScrollDirection::Down => {
+            canopy::geom::Direction::Down => {
                 c.scroll_down();
             }
-            ScrollDirection::Left => {
+            canopy::geom::Direction::Left => {
                 c.scroll_left();
             }
-            ScrollDirection::Right => {
+            canopy::geom::Direction::Right => {
                 c.scroll_right();
             }
         }
     }
 
     /// Move selection by one page in the specified direction.
-    pub fn page(&mut self, c: &mut dyn Context, dir: VerticalDirection) {
-        self.page_shift(c, matches!(dir, VerticalDirection::Down));
+    pub fn page(&mut self, c: &mut dyn Context, dir: canopy::geom::Direction) {
+        self.page_shift(c, matches!(dir, canopy::geom::Direction::Down));
     }
 
     #[command]
     /// Scroll up by one line.
     pub fn scroll_up(&mut self, c: &mut dyn Context) {
-        self.scroll(c, ScrollDirection::Up);
+        self.scroll(c, canopy::geom::Direction::Up);
     }
 
     #[command]
     /// Scroll down by one line.
     pub fn scroll_down(&mut self, c: &mut dyn Context) {
-        self.scroll(c, ScrollDirection::Down);
+        self.scroll(c, canopy::geom::Direction::Down);
     }
 
     #[command]
     /// Scroll left by one column.
     pub fn scroll_left(&mut self, c: &mut dyn Context) {
-        self.scroll(c, ScrollDirection::Left);
+        self.scroll(c, canopy::geom::Direction::Left);
     }
 
     #[command]
     /// Scroll right by one column.
     pub fn scroll_right(&mut self, c: &mut dyn Context) {
-        self.scroll(c, ScrollDirection::Right);
+        self.scroll(c, canopy::geom::Direction::Right);
     }
 
     #[command]
     /// Page up by one screen.
     pub fn page_up(&mut self, c: &mut dyn Context) {
-        self.page(c, VerticalDirection::Up);
+        self.page(c, canopy::geom::Direction::Up);
     }
 
     #[command]
     /// Page down by one screen.
     pub fn page_down(&mut self, c: &mut dyn Context) {
-        self.page(c, VerticalDirection::Down);
+        self.page(c, canopy::geom::Direction::Down);
     }
 
     /// Ensure the selected item is visible in the view.
@@ -805,12 +804,12 @@ impl<W: Selectable + Send + 'static> Widget for List<W> {
     fn canvas(&self, view: Size<u32>, ctx: &CanvasContext<'_>) -> Size<u32> {
         // Sum child canvas heights and find max canvas width for scrolling
         let mut total_height = 0u32;
-        let mut max_width = view.width;
+        let mut max_width = view.w;
 
         for child in ctx.children() {
             // Use canvas dimensions for proper scroll support
-            total_height = total_height.saturating_add(child.canvas.height);
-            max_width = max_width.max(child.canvas.width);
+            total_height = total_height.saturating_add(child.canvas.h);
+            max_width = max_width.max(child.canvas.w);
         }
 
         Size::new(max_width, total_height.max(1))

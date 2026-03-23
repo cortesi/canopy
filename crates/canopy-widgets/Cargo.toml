@@ -23,10 +23,13 @@ tracing-subscriber = "0.3.19"
 anyhow = "1.0.100"
 fontdue = "0.9.3"
 thiserror = "2.0.17"
+tokio = { version = "1.50.0", features = ["rt-multi-thread", "time", "sync"] }
+itty = { version = "0.1.0", path = "../../../eguitty/crates/itty" }
 
 [dev-dependencies]
 canopy = { path = "../canopy", features = ["testing"] }
 criterion = "0.8"
+itty-script = { path = "../../../eguitty/crates/itty-script" }
 proptest = "1.9.0"
 
 [features]

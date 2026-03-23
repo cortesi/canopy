@@ -18,7 +18,7 @@ use crate::{
     },
     error::{self, Result},
     event::{Event, key, mouse},
-    geom::{Expanse, Point},
+    geom::{Point, Size},
     render::RenderBackend,
     style::{Color, ResolvedStyle},
 };
@@ -420,7 +420,7 @@ fn translate_event(e: cevent::Event) -> Event {
                 modifiers: translate_key_modifiers(m.modifiers),
             })
         }
-        cevent::Event::Resize(x, y) => Event::Resize(Expanse::new(x.into(), y.into())),
+        cevent::Event::Resize(x, y) => Event::Resize(Size::new(x.into(), y.into())),
         cevent::Event::FocusGained => Event::FocusGained,
         cevent::Event::FocusLost => Event::FocusLost,
         cevent::Event::Paste(s) => Event::Paste(s),
@@ -567,7 +567,7 @@ pub fn runloop_with_options(mut cnpy: Canopy, options: RunloopOptions) -> Result
     let mut events = EventSource::new(rx);
     event_emitter(cnpy.event_tx.clone());
     let size = translate_result(terminal::size())?;
-    cnpy.set_root_size(Expanse::new(size.0.into(), size.1.into()))?;
+    cnpy.set_root_size(Size::new(size.0.into(), size.1.into()))?;
     cnpy.start_poller(cnpy.event_tx.clone());
 
     if let Err(e) = cnpy.render(&mut be) {

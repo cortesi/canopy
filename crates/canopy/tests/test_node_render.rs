@@ -5,7 +5,7 @@ mod tests {
     use canopy::{
         Canopy, Core, Loader, NodeId, ReadContext, Widget, buf, derive_commands,
         error::Result,
-        geom::Expanse,
+        geom::Size,
         layout::{Layout, Sizing},
         render::Render,
         state::NodeName,
@@ -125,7 +125,7 @@ mod tests {
 
         h.canopy.core.set_layout_of(node_b, Layout::fill())?;
 
-        h.canopy.set_root_size(Expanse::new(30, 10))?;
+        h.canopy.set_root_size(Size::new(30, 10))?;
         h.render()?;
         h.tbuf().assert_matches(buf![
             "BBBBBBBBBB                    "
@@ -165,7 +165,7 @@ mod tests {
             .core
             .set_layout_of(bottom, Layout::column().fixed_width(10).fixed_height(0))?;
 
-        h.canopy.set_root_size(Expanse::new(10, 10))?;
+        h.canopy.set_root_size(Size::new(10, 10))?;
         h.render()?;
 
         let bottom_view = h.canopy.core.node(bottom).expect("node missing").view();
@@ -194,9 +194,9 @@ mod tests {
         style_flex_child(&mut h.canopy.core, tree)?;
 
         h.render()?;
-        h.canopy.set_root_size(Expanse::new(246, 63))?;
+        h.canopy.set_root_size(Size::new(246, 63))?;
         h.render()?;
-        h.canopy.set_root_size(Expanse::new(123, 31))?;
+        h.canopy.set_root_size(Size::new(123, 31))?;
         h.render()?;
 
         let mut stack = vec![h.root];

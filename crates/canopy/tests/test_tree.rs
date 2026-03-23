@@ -5,7 +5,7 @@ mod tests {
     use canopy::{
         Canopy, Core, NodeId, ReadContext, Widget, derive_commands,
         error::{Error, Result},
-        geom::{Direction, Expanse, Point},
+        geom::{Direction, Point, Size},
         layout::{Layout, Sizing},
         path::Path,
         render::Render,
@@ -296,7 +296,7 @@ mod tests {
         Ok(())
     }
 
-    fn attach_grid(core: &mut Core, grid_root: NodeId, size: Expanse) -> Result<()> {
+    fn attach_grid(core: &mut Core, grid_root: NodeId, size: Size) -> Result<()> {
         let root = core.root_id();
         core.set_children(root, vec![grid_root])?;
         core.set_layout_of(root, Layout::fill())?;
@@ -313,7 +313,7 @@ mod tests {
         let mut canopy = Canopy::new();
         let grid = Grid::install(&mut canopy.core, 0, 2)?;
         let grid_size = grid.expected_size();
-        assert_eq!(grid_size, Expanse::new(10, 10));
+        assert_eq!(grid_size, Size::new(10, 10));
         attach_grid(&mut canopy.core, grid.root, grid_size)?;
 
         let test_points = vec![
@@ -346,7 +346,7 @@ mod tests {
         let mut canopy = Canopy::new();
         let grid = Grid::install(&mut canopy.core, 1, 2)?;
         let grid_size = grid.expected_size();
-        assert_eq!(grid_size, Expanse::new(20, 20));
+        assert_eq!(grid_size, Size::new(20, 20));
         attach_grid(&mut canopy.core, grid.root, grid_size)?;
 
         let test_points = vec![
@@ -378,7 +378,7 @@ mod tests {
         let mut canopy = Canopy::new();
         let grid = Grid::install(&mut canopy.core, 1, 3)?;
         let grid_size = grid.expected_size();
-        assert_eq!(grid_size, Expanse::new(30, 30));
+        assert_eq!(grid_size, Size::new(30, 30));
         attach_grid(&mut canopy.core, grid.root, grid_size)?;
 
         for row in 0..3 {
@@ -402,7 +402,7 @@ mod tests {
         let mut canopy = Canopy::new();
         let grid = Grid::install(&mut canopy.core, 2, 2)?;
         let grid_size = grid.expected_size();
-        assert_eq!(grid_size, Expanse::new(40, 40));
+        assert_eq!(grid_size, Size::new(40, 40));
         attach_grid(&mut canopy.core, grid.root, grid_size)?;
 
         let corner_tests = vec![

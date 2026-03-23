@@ -75,14 +75,14 @@ fn available_effects() -> Vec<EffectOption> {
 }
 
 // Typed keys for keyed children
-key!(ControlsSlot: Frame);
-key!(ThemeFrameSlot: Frame);
-key!(ThemeDropdownSlot: Dropdown<ThemeOption>);
-key!(EffectsFrameSlot: Frame);
-key!(EffectsSelectorSlot: Selector<EffectOption>);
-key!(RightContainerSlot: Container);
-key!(DemoFrameSlot: Frame);
-key!(ModalSlot: Modal);
+canopy::key!(ControlsSlot: Frame);
+canopy::key!(ThemeFrameSlot: Frame);
+canopy::key!(ThemeDropdownSlot: Dropdown<ThemeOption>);
+canopy::key!(EffectsFrameSlot: Frame);
+canopy::key!(EffectsSelectorSlot: Selector<EffectOption>);
+canopy::key!(RightContainerSlot: Container);
+canopy::key!(DemoFrameSlot: Frame);
+canopy::key!(ModalSlot: Modal);
 
 /// The demo content pane showing styled samples.
 pub struct DemoContent;
@@ -364,19 +364,30 @@ impl Widget for Stylegym {
         )?;
 
         // Create theme dropdown with its own frame - no fixed height so it can expand
-        let theme_frame_id =
-            c.add_keyed_to::<ThemeFrameSlot>(left_frame_id, Frame::new().with_title("Theme"))?;
-        c.add_keyed_to::<ThemeDropdownSlot>(theme_frame_id, Dropdown::new(available_themes()))?;
+        let theme_frame_id = c.add_keyed_to(
+            left_frame_id,
+            ThemeFrameSlot::KEY,
+            Frame::new().with_title("Theme"),
+        )?;
+        c.add_keyed_to(
+            theme_frame_id,
+            ThemeDropdownSlot::KEY,
+            Dropdown::new(available_themes()),
+        )?;
         c.set_layout_of(
             theme_frame_id,
             Layout::column().flex_horizontal(1).padding(Edges::all(1)),
         )?;
 
         // Create effects selector with its own frame
-        let effects_frame_id =
-            c.add_keyed_to::<EffectsFrameSlot>(left_frame_id, Frame::new().with_title("Effects"))?;
-        c.add_keyed_to::<EffectsSelectorSlot>(
+        let effects_frame_id = c.add_keyed_to(
+            left_frame_id,
+            EffectsFrameSlot::KEY,
+            Frame::new().with_title("Effects"),
+        )?;
+        c.add_keyed_to(
             effects_frame_id,
+            EffectsSelectorSlot::KEY,
             Selector::new(available_effects()),
         )?;
         c.set_layout_of(effects_frame_id, Layout::fill().padding(Edges::all(1)))?;
@@ -389,8 +400,11 @@ impl Widget for Stylegym {
         )?;
 
         // Create right frame (demo content)
-        let right_frame_id =
-            c.add_keyed_to::<DemoFrameSlot>(right_container_id, Frame::new().with_title("Demo"))?;
+        let right_frame_id = c.add_keyed_to(
+            right_container_id,
+            DemoFrameSlot::KEY,
+            Frame::new().with_title("Demo"),
+        )?;
         c.add_child_to(right_frame_id, DemoContent)?;
         c.set_layout_of(right_frame_id, Layout::fill().padding(Edges::all(1)))?;
 

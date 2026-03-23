@@ -17,7 +17,7 @@ use crate::{
     cursor,
     error::{self, Result},
     event::{Event, key, mouse},
-    geom::{Expanse, Point, Rect, RectI32},
+    geom::{Point, Rect, RectI32, Size},
     layout::Display,
     path::Path,
     render::{Render, RenderBackend},
@@ -41,7 +41,7 @@ pub struct Canopy {
     poller: Poller,
 
     /// Root window size.
-    pub(crate) root_size: Option<Expanse>,
+    pub(crate) root_size: Option<Size>,
 
     /// Script execution host.
     pub(crate) script_host: script::ScriptHost,
@@ -791,7 +791,7 @@ impl Canopy {
     }
 
     /// Render the tree into an offscreen buffer.
-    fn render_pass(&mut self, root_size: Expanse) -> Result<TermBuf> {
+    fn render_pass(&mut self, root_size: Size) -> Result<TermBuf> {
         let mut styl = StyleManager::default();
         styl.reset();
 
@@ -1143,7 +1143,7 @@ impl Canopy {
     }
 
     /// Set the size on the root node.
-    pub fn set_root_size(&mut self, size: Expanse) -> Result<()> {
+    pub fn set_root_size(&mut self, size: Size) -> Result<()> {
         self.root_size = Some(size);
         self.render_pending = true;
         self.core.update_layout(size)?;
@@ -1300,7 +1300,7 @@ mod tests {
             .core
             .add_child_to_boxed(canopy.core.root, Box::new(StaticWidget::new()))?;
         canopy.core.set_layout_of(app_id, Layout::fill())?;
-        canopy.set_root_size(Expanse::new(10, 6))?;
+        canopy.set_root_size(Size::new(10, 6))?;
 
         let (_, mut render) = TestRender::create();
         canopy.render(&mut render)?;
@@ -1324,7 +1324,7 @@ mod tests {
             .core
             .add_child_to_boxed(canopy.core.root, Box::new(CaptureWidget::new()))?;
         canopy.core.set_layout_of(app_id, Layout::fill())?;
-        canopy.set_root_size(Expanse::new(10, 6))?;
+        canopy.set_root_size(Size::new(10, 6))?;
 
         let (_, mut render) = TestRender::create();
         canopy.render(&mut render)?;
@@ -1360,7 +1360,7 @@ mod tests {
         let node_id = canopy
             .core
             .add_child_to_boxed(canopy.core.root, Box::new(PollWidget::new()))?;
-        canopy.set_root_size(Expanse::new(10, 10))?;
+        canopy.set_root_size(Size::new(10, 10))?;
 
         let (_, mut render) = TestRender::create();
         render.render(&mut canopy)?;
@@ -1620,7 +1620,7 @@ mod tests {
                 RectI32::new(half, 0, size / 2, size)
             );
 
-            c.set_root_size(Expanse::new(50, 50))?;
+            c.set_root_size(Size::new(50, 50))?;
             tr.render(c)?;
             assert_eq!(c.core.nodes[tree.b].view.outer, RectI32::new(25, 0, 25, 50));
             Ok(())
@@ -1829,7 +1829,7 @@ mod tests {
         canopy.add_commands::<N>()?;
         canopy.core.replace_subtree(canopy.core.root, N)?;
 
-        canopy.set_root_size(Expanse::new(10, 1))?;
+        canopy.set_root_size(Size::new(10, 1))?;
         canopy.core.set_focus(canopy.core.root);
         canopy.render(&mut tr)?;
         assert!(!tr.buf_empty());
@@ -1879,7 +1879,7 @@ mod tests {
             }
         }
 
-        let size = Expanse::new(5, 1);
+        let size = Size::new(5, 1);
         let (_, mut cr) = CanvasRender::create(size);
         let mut canopy = Canopy::new();
         canopy

@@ -6,7 +6,7 @@ use crate::{
     core::text,
     cursor,
     error::Result,
-    geom::{Expanse, FrameRects, Line, Point, Rect},
+    geom::{FrameRects, Line, Point, Rect, Size},
     render::RenderBackend,
     style::{Attr, AttrSet, Color, ResolvedStyle},
 };
@@ -96,14 +96,14 @@ impl Cell {
 #[derive(Clone, Debug)]
 pub struct TermBuf {
     /// Buffer size in cells.
-    pub(crate) size: Expanse,
+    pub(crate) size: Size,
     /// Backing cell storage.
     pub(crate) cells: Vec<Cell>,
 }
 
 impl TermBuf {
     /// Construct a buffer filled with the given character and style.
-    pub fn new(size: impl Into<Expanse>, ch: char, style: ResolvedStyle) -> Self {
+    pub fn new(size: impl Into<Size>, ch: char, style: ResolvedStyle) -> Self {
         let size = size.into();
         let cell = Cell::new(ch, style);
         Self {
@@ -112,7 +112,7 @@ impl TermBuf {
         }
     }
     /// Create an empty TermBuf filled with NULL characters.
-    pub fn empty_with_style(size: impl Into<Expanse>, style: ResolvedStyle) -> Self {
+    pub fn empty_with_style(size: impl Into<Size>, style: ResolvedStyle) -> Self {
         let size = size.into();
         let cell = Cell::empty(style);
         Self {
@@ -122,7 +122,7 @@ impl TermBuf {
     }
 
     /// Create an empty TermBuf filled with NULL characters.
-    pub fn empty(size: impl Into<Expanse>) -> Self {
+    pub fn empty(size: impl Into<Size>) -> Self {
         let default_style = ResolvedStyle {
             fg: Color::White,
             bg: Color::Black,
@@ -188,7 +188,7 @@ impl TermBuf {
     }
 
     /// Return the buffer size.
-    pub fn size(&self) -> Expanse {
+    pub fn size(&self) -> Size {
         self.size
     }
 
@@ -793,7 +793,7 @@ mod tests {
         let height = rows.len() as u32;
         let width = rows.first().map(|row| row.len()).unwrap_or(0) as u32;
         let style = def_style();
-        let mut tb = TermBuf::new(Expanse::new(width, height), ' ', style);
+        let mut tb = TermBuf::new(Size::new(width, height), ' ', style);
         for (y, row) in rows.iter().enumerate() {
             tb.text(&style, Line::new(0, y as u32, width), row);
         }
@@ -802,7 +802,7 @@ mod tests {
 
     #[test]
     fn basic_fill() {
-        let mut tb = TermBuf::new(Expanse::new(4, 2), ' ', def_style());
+        let mut tb = TermBuf::new(Size::new(4, 2), ' ', def_style());
         tb.fill(&def_style(), Rect::new(1, 0, 2, 2), 'x');
 
         BufTest::new(&tb).assert_matches(buf![
@@ -813,7 +813,7 @@ mod tests {
 
     #[test]
     fn text_write() {
-        let mut tb = TermBuf::new(Expanse::new(5, 1), ' ', def_style());
+        let mut tb = TermBuf::new(Size::new(5, 1), ' ', def_style());
         tb.text(&def_style(), Line::new(0, 0, 5), "hi");
 
         BufTest::new(&tb).assert_matches(buf!["hi   "]);
@@ -822,7 +822,7 @@ mod tests {
     #[test]
     fn text_handles_combining_and_wide_graphemes() {
         let style = def_style();
-        let mut tb = TermBuf::new(Expanse::new(12, 1), ' ', style);
+        let mut tb = TermBuf::new(Size::new(12, 1), ' ', style);
         tb.text(&style, Line::new(0, 0, 12), "A\u{0301}界👩‍💻B");
 
         let first = tb.get(Point { x: 0, y: 0 }).expect("missing cell");
@@ -854,7 +854,7 @@ mod tests {
 
     #[test]
     fn solid_frame_draw() {
-        let mut tb = TermBuf::new(Expanse::new(4, 4), ' ', def_style());
+        let mut tb = TermBuf::new(Size::new(4, 4), ' ', def_style());
         let f = FrameRects::new(Rect::new(0, 0, 4, 4), 1);
         tb.solid_frame(&def_style(), f, '#');
 
@@ -1063,8 +1063,8 @@ mod tests {
     #[test]
     fn diff_no_change() {
         let style = def_style();
-        let tb1 = TermBuf::new(Expanse::new(3, 1), ' ', style);
-        let tb2 = TermBuf::new(Expanse::new(3, 1), ' ', style);
+        let tb1 = TermBuf::new(Size::new(3, 1), ' ', style);
+        let tb2 = TermBuf::new(Size::new(3, 1), ' ', style);
         let mut be = RecBackend::new();
         tb2.diff(&tb1, &mut be).unwrap();
         assert!(be.ops.is_empty());
@@ -1074,7 +1074,7 @@ mod tests {
         #[test]
         fn diff_identical_buffers_have_no_ops((width, height, cells) in buf_strategy()) {
             let style = def_style();
-            let mut buf = TermBuf::new(Expanse::new(width, height), ' ', style);
+            let mut buf = TermBuf::new(Size::new(width, height), ' ', style);
             let mut idx = 0usize;
             for y in 0..height {
                 for x in 0..width {
@@ -1112,8 +1112,8 @@ mod tests {
     #[test]
     fn diff_single_run() {
         let style = def_style();
-        let prev = TermBuf::new(Expanse::new(3, 1), ' ', style);
-        let mut cur = TermBuf::new(Expanse::new(3, 1), ' ', style);
+        let prev = TermBuf::new(Size::new(3, 1), ' ', style);
+        let mut cur = TermBuf::new(Size::new(3, 1), ' ', style);
         cur.text(&style, Line::new(0, 0, 3), "ab");
         let mut be = RecBackend::new();
         cur.diff(&prev, &mut be).unwrap();
@@ -1128,8 +1128,8 @@ mod tests {
         let mut style2 = style1;
         style2.fg = Color::Red;
 
-        let prev = TermBuf::new(Expanse::new(2, 1), ' ', style1);
-        let mut cur = TermBuf::new(Expanse::new(2, 1), ' ', style1);
+        let prev = TermBuf::new(Size::new(2, 1), ' ', style1);
+        let mut cur = TermBuf::new(Size::new(2, 1), ' ', style1);
         cur.fill(&style2, Rect::new(0, 0, 1, 1), 'a');
         cur.fill(&style1, Rect::new(1, 0, 1, 1), 'b');
 
@@ -1146,8 +1146,8 @@ mod tests {
     #[test]
     fn diff_multi_line() {
         let style = def_style();
-        let prev = TermBuf::new(Expanse::new(3, 2), ' ', style);
-        let mut cur = TermBuf::new(Expanse::new(3, 2), ' ', style);
+        let prev = TermBuf::new(Size::new(3, 2), ' ', style);
+        let mut cur = TermBuf::new(Size::new(3, 2), ' ', style);
         cur.fill(&style, Rect::new(0, 1, 2, 1), 'x');
         let mut be = RecBackend::new();
         cur.diff(&prev, &mut be).unwrap();
@@ -1159,7 +1159,7 @@ mod tests {
     #[test]
     fn render_whole_buffer() {
         let style = def_style();
-        let mut tb = TermBuf::new(Expanse::new(3, 1), ' ', style);
+        let mut tb = TermBuf::new(Size::new(3, 1), ' ', style);
         tb.text(&style, Line::new(0, 0, 3), "ab");
         let mut be = RecBackend::new();
         tb.render(&mut be).unwrap();
@@ -1172,8 +1172,8 @@ mod tests {
     #[test]
     fn diff_size_change_rerender() {
         let style = def_style();
-        let prev = TermBuf::new(Expanse::new(2, 1), ' ', style);
-        let mut cur = TermBuf::new(Expanse::new(3, 1), ' ', style);
+        let prev = TermBuf::new(Size::new(2, 1), ' ', style);
+        let mut cur = TermBuf::new(Size::new(3, 1), ' ', style);
         cur.text(&style, Line::new(0, 0, 3), "abc");
         let mut be = RecBackend::new();
         cur.diff(&prev, &mut be).unwrap();
@@ -1185,7 +1185,7 @@ mod tests {
 
     #[test]
     fn contains_text() {
-        let mut tb = TermBuf::new(Expanse::new(10, 3), ' ', def_style());
+        let mut tb = TermBuf::new(Size::new(10, 3), ' ', def_style());
         tb.text(&def_style(), Line::new(0, 0, 10), "hello");
         tb.text(&def_style(), Line::new(0, 1, 10), "world");
 
@@ -1197,7 +1197,7 @@ mod tests {
 
     #[test]
     fn contains_text_style() {
-        let mut tb = TermBuf::new(Expanse::new(10, 3), ' ', def_style());
+        let mut tb = TermBuf::new(Size::new(10, 3), ' ', def_style());
 
         // Add text with different styles
         let mut red_style = def_style();
@@ -1231,7 +1231,7 @@ mod tests {
     #[test]
     fn contains_text_fg_compat() {
         use crate::style::solarized;
-        let mut tb = TermBuf::new(Expanse::new(10, 1), ' ', def_style());
+        let mut tb = TermBuf::new(Size::new(10, 1), ' ', def_style());
 
         let mut blue_style = def_style();
         blue_style.fg = solarized::BLUE;
@@ -1248,8 +1248,8 @@ mod tests {
     #[test]
     fn test_empty_and_copy() {
         // Test empty constructor
-        let empty = TermBuf::empty(Expanse::new(5, 3));
-        assert_eq!(empty.size(), Expanse::new(5, 3));
+        let empty = TermBuf::empty(Size::new(5, 3));
+        assert_eq!(empty.size(), Size::new(5, 3));
         BufTest::new(&empty).assert_matches(buf![
             "XXXXX"
             "XXXXX"
@@ -1257,7 +1257,7 @@ mod tests {
         ]);
 
         // Test copy functionality
-        let mut src = TermBuf::new(Expanse::new(5, 3), ' ', def_style());
+        let mut src = TermBuf::new(Size::new(5, 3), ' ', def_style());
         src.text(&def_style(), Line::new(1, 1, 3), "ABC");
 
         BufTest::new(&src).assert_matches(buf![
@@ -1266,7 +1266,7 @@ mod tests {
             "     "
         ]);
 
-        let mut dst = TermBuf::empty(Expanse::new(5, 3));
+        let mut dst = TermBuf::empty(Size::new(5, 3));
         dst.copy(&src, Rect::new(1, 1, 3, 1));
 
         // Check that only the text was copied (spaces are not copied)
@@ -1277,7 +1277,7 @@ mod tests {
         ]);
 
         // Test copy with partial rectangle
-        let mut dst2 = TermBuf::empty(Expanse::new(5, 3));
+        let mut dst2 = TermBuf::empty(Size::new(5, 3));
         dst2.copy(&src, Rect::new(2, 1, 2, 1));
 
         BufTest::new(&dst2).assert_matches(buf![
@@ -1287,7 +1287,7 @@ mod tests {
         ]);
 
         // Test copy with different sizes (should do nothing)
-        let mut wrong_size = TermBuf::empty(Expanse::new(4, 3));
+        let mut wrong_size = TermBuf::empty(Size::new(4, 3));
         wrong_size.copy(&src, Rect::new(0, 0, 5, 3));
 
         BufTest::new(&wrong_size).assert_matches(buf![
@@ -1300,7 +1300,7 @@ mod tests {
     #[test]
     fn contains_text_style_builders() {
         use crate::style::Attr;
-        let mut tb = TermBuf::new(Expanse::new(10, 2), ' ', def_style());
+        let mut tb = TermBuf::new(Size::new(10, 2), ' ', def_style());
 
         // Create styles with different attributes
         let mut bold_red = def_style();
@@ -1340,7 +1340,7 @@ mod tests {
     #[test]
     fn test_fill_empty() {
         // Create an empty buffer
-        let mut tb = TermBuf::empty(Expanse::new(5, 3));
+        let mut tb = TermBuf::empty(Size::new(5, 3));
 
         // Verify all cells are NULL initially using buf macro
         BufTest::new(&tb).assert_matches(buf![

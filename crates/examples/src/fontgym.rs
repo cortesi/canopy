@@ -695,10 +695,8 @@ impl Widget for FontGymInput {
                         self.adjust_height(ctx, -1)?;
                         return Ok(EventOutcome::Handle);
                     }
-                    key::KeyCode::Char(ch) => {
-                        if self.toggle_style(ctx, ch)? {
-                            return Ok(EventOutcome::Handle);
-                        }
+                    key::KeyCode::Char(ch) if self.toggle_style(ctx, ch)? => {
+                        return Ok(EventOutcome::Handle);
                     }
                     _ => {}
                 }

@@ -4,7 +4,7 @@
 mod tests {
     use canopy::{
         buf, geom,
-        geom::Expanse,
+        geom::Size,
         render::Render,
         style::{StyleManager, StyleMap},
         testing::buf::BufTest as TBufTest,
@@ -14,10 +14,7 @@ mod tests {
         TBufTest::new(render.buffer()).assert_matches(expected);
     }
 
-    fn setup_render_test(
-        _canvas_size: Expanse,
-        _render_rect: geom::Rect,
-    ) -> (StyleMap, StyleManager) {
+    fn setup_render_test(_canvas_size: Size, _render_rect: geom::Rect) -> (StyleMap, StyleManager) {
         let stylemap = StyleMap::new();
         // The default style is already added by StyleMap::new()
 
@@ -30,7 +27,7 @@ mod tests {
         line: geom::Line,
         text: &'static str,
         expected: &'static [&'static str],
-        canvas_size: Option<Expanse>,
+        canvas_size: Option<Size>,
         render_rect: Option<geom::Rect>,
     }
 
@@ -67,12 +64,12 @@ mod tests {
             }
         }
 
-        fn buffer_size(&self) -> Expanse {
+        fn buffer_size(&self) -> Size {
             assert!(
                 !self.expected.is_empty(),
                 "Cannot calculate buffer size from empty expected buffer"
             );
-            Expanse::new(self.expected[0].len() as u32, self.expected.len() as u32)
+            Size::new(self.expected[0].len() as u32, self.expected.len() as u32)
         }
 
         fn line(mut self, x: u32, y: u32, width: u32, text: &'static str) -> Self {
@@ -84,7 +81,7 @@ mod tests {
             self
         }
 
-        fn canvas(mut self, canvas_size: Expanse) -> Self {
+        fn canvas(mut self, canvas_size: Size) -> Self {
             self.canvas_size = Some(canvas_size);
             self
         }
@@ -131,7 +128,7 @@ mod tests {
 
     #[test]
     fn test_fill_full_render_rect() {
-        let canvas_size = Expanse::new(10, 5);
+        let canvas_size = Size::new(10, 5);
         let render_rect = geom::Rect::new(0, 0, 10, 5);
         let (stylemap, mut style_manager) = setup_render_test(canvas_size, render_rect);
         let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
@@ -155,7 +152,7 @@ mod tests {
 
     #[test]
     fn test_fill_partial_render_rect() {
-        let canvas_size = Expanse::new(20, 10);
+        let canvas_size = Size::new(20, 10);
         let render_rect = geom::Rect::new(5, 2, 10, 5);
         let (stylemap, mut style_manager) = setup_render_test(canvas_size, render_rect);
         let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
@@ -182,7 +179,7 @@ mod tests {
 
     #[test]
     fn test_text_rendering() {
-        let canvas = Expanse::new(20, 10);
+        let canvas = Size::new(20, 10);
         let render_rect = geom::Rect::new(0, 0, 5, 5);
 
         let test_cases = vec![
@@ -286,7 +283,7 @@ mod tests {
 
     #[test]
     fn test_text_partial_overlap() {
-        let canvas = Expanse::new(20, 10);
+        let canvas = Size::new(20, 10);
         let render_rect = geom::Rect::new(5, 2, 10, 5);
 
         let test_cases = vec![
@@ -368,7 +365,7 @@ mod tests {
 
     #[test]
     fn test_solid_frame() {
-        let canvas_size = Expanse::new(10, 10);
+        let canvas_size = Size::new(10, 10);
         let render_rect = geom::Rect::new(0, 0, 10, 10);
         let (stylemap, mut style_manager) = setup_render_test(canvas_size, render_rect);
         let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
@@ -397,7 +394,7 @@ mod tests {
 
     #[test]
     fn test_solid_frame_single_width() {
-        let canvas_size = Expanse::new(5, 5);
+        let canvas_size = Size::new(5, 5);
         let render_rect = geom::Rect::new(0, 0, 5, 5);
         let (stylemap, mut style_manager) = setup_render_test(canvas_size, render_rect);
         let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
@@ -412,7 +409,7 @@ mod tests {
 
     #[test]
     fn test_solid_frame_partial_overlap() {
-        let canvas_size = Expanse::new(20, 15);
+        let canvas_size = Size::new(20, 15);
         let render_rect = geom::Rect::new(5, 5, 10, 5);
         let (stylemap, mut style_manager) = setup_render_test(canvas_size, render_rect);
         let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
@@ -439,7 +436,7 @@ mod tests {
 
     #[test]
     fn test_multiple_render_rects() {
-        let canvas_size = Expanse::new(30, 20);
+        let canvas_size = Size::new(30, 20);
 
         // Test different render rect positions within the same canvas
         let positions = vec![
@@ -480,7 +477,7 @@ mod tests {
 
     #[test]
     fn test_render_outside_canvas_bounds() {
-        let canvas_size = Expanse::new(20, 20);
+        let canvas_size = Size::new(20, 20);
         let render_rect = geom::Rect::new(5, 5, 10, 10);
         let (stylemap, mut style_manager) = setup_render_test(canvas_size, render_rect);
         let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
