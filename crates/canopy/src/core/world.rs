@@ -2040,8 +2040,8 @@ mod tests {
         error::{Error, Result},
         geom::{Point, Size},
         layout::{
-            Align, CanvasChild, Constraint, Direction, Display, Edges, Layout, MeasureConstraints,
-            Measurement, Sizing,
+            Align, Constraint, Direction, Display, Edges, Layout, MeasureConstraints, Measurement,
+            Sizing,
         },
         widget::Widget,
     };

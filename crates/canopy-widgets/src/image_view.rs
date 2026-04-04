@@ -6,7 +6,7 @@ use canopy::{
     Canopy, Context, Loader, ReadContext, Widget, command,
     commands::ZoomDirection,
     derive_commands, error as canopy_error,
-    geom::{Point, Rect, Size},
+    geom::{Direction, Point, Rect, Size},
     layout::{CanvasContext, Layout},
     render::Render,
     style::{AttrSet, Color, ResolvedStyle},
@@ -365,23 +365,19 @@ impl ImageView {
     }
 
     /// Pan by one step in the specified direction.
-    pub fn pan(
-        &mut self,
-        ctx: &mut dyn Context,
-        dir: canopy::geom::Direction,
-    ) -> canopy_error::Result<()> {
+    pub fn pan(&mut self, ctx: &mut dyn Context, dir: Direction) -> canopy_error::Result<()> {
         self.auto_fit = false;
         match dir {
-            canopy::geom::Direction::Left => {
+            Direction::Left => {
                 ctx.scroll_by(-PAN_STEP_COLUMNS, 0);
             }
-            canopy::geom::Direction::Right => {
+            Direction::Right => {
                 ctx.scroll_by(PAN_STEP_COLUMNS, 0);
             }
-            canopy::geom::Direction::Up => {
+            Direction::Up => {
                 ctx.scroll_by(0, -PAN_STEP_ROWS);
             }
-            canopy::geom::Direction::Down => {
+            Direction::Down => {
                 ctx.scroll_by(0, PAN_STEP_ROWS);
             }
         }
@@ -403,25 +399,25 @@ impl ImageView {
     #[command]
     /// Pan up by one step.
     pub fn pan_up(&mut self, ctx: &mut dyn Context) -> canopy_error::Result<()> {
-        self.pan(ctx, canopy::geom::Direction::Up)
+        self.pan(ctx, Direction::Up)
     }
 
     #[command]
     /// Pan down by one step.
     pub fn pan_down(&mut self, ctx: &mut dyn Context) -> canopy_error::Result<()> {
-        self.pan(ctx, canopy::geom::Direction::Down)
+        self.pan(ctx, Direction::Down)
     }
 
     #[command]
     /// Pan left by one step.
     pub fn pan_left(&mut self, ctx: &mut dyn Context) -> canopy_error::Result<()> {
-        self.pan(ctx, canopy::geom::Direction::Left)
+        self.pan(ctx, Direction::Left)
     }
 
     #[command]
     /// Pan right by one step.
     pub fn pan_right(&mut self, ctx: &mut dyn Context) -> canopy_error::Result<()> {
-        self.pan(ctx, canopy::geom::Direction::Right)
+        self.pan(ctx, Direction::Right)
     }
 }
 

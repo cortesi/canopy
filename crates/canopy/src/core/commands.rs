@@ -11,6 +11,7 @@ use crate::{
     CommandEnum, Context,
     core::{Core, NodeId, context::CoreContext},
     event::{Event, mouse::MouseEvent},
+    geom::Direction,
 };
 
 /// Canonical dynamic representation for command arguments and return values.
@@ -60,7 +61,7 @@ pub enum ZoomDirection {
     Out,
 }
 
-impl ToArgValue for crate::geom::Direction {
+impl ToArgValue for Direction {
     fn to_arg_value(self) -> ArgValue {
         ArgValue::String(
             match self {
@@ -74,7 +75,7 @@ impl ToArgValue for crate::geom::Direction {
     }
 }
 
-impl FromArgValue for crate::geom::Direction {
+impl FromArgValue for Direction {
     fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {
         if let ArgValue::String(s) = v {
             if s.eq_ignore_ascii_case("Up") {

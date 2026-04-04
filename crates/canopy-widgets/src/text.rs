@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use canopy::{
     Context, ReadContext, Widget, command, derive_commands,
     error::Result,
-    geom::Line,
+    geom::{Direction, Line},
     layout::{Constraint, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
@@ -116,22 +116,22 @@ impl Text {
     }
 
     /// Scroll by one line in the specified direction.
-    pub fn scroll(&mut self, c: &mut dyn Context, dir: canopy::geom::Direction) {
+    pub fn scroll(&mut self, c: &mut dyn Context, dir: Direction) {
         match dir {
-            canopy::geom::Direction::Up => c.scroll_up(),
-            canopy::geom::Direction::Down => c.scroll_down(),
-            canopy::geom::Direction::Left => c.scroll_left(),
-            canopy::geom::Direction::Right => c.scroll_right(),
+            Direction::Up => c.scroll_up(),
+            Direction::Down => c.scroll_down(),
+            Direction::Left => c.scroll_left(),
+            Direction::Right => c.scroll_right(),
         };
     }
 
     /// Page in the specified direction.
-    pub fn page(&mut self, c: &mut dyn Context, dir: canopy::geom::Direction) {
+    pub fn page(&mut self, c: &mut dyn Context, dir: Direction) {
         match dir {
-            canopy::geom::Direction::Up => {
+            Direction::Up => {
                 c.page_up();
             }
-            canopy::geom::Direction::Down => {
+            Direction::Down => {
                 c.page_down();
             }
             _ => {}
@@ -141,37 +141,37 @@ impl Text {
     #[command]
     /// Scroll up by one line.
     pub fn scroll_up(&mut self, c: &mut dyn Context) {
-        self.scroll(c, canopy::geom::Direction::Up);
+        self.scroll(c, Direction::Up);
     }
 
     #[command]
     /// Scroll down by one line.
     pub fn scroll_down(&mut self, c: &mut dyn Context) {
-        self.scroll(c, canopy::geom::Direction::Down);
+        self.scroll(c, Direction::Down);
     }
 
     #[command]
     /// Scroll left by one column.
     pub fn scroll_left(&mut self, c: &mut dyn Context) {
-        self.scroll(c, canopy::geom::Direction::Left);
+        self.scroll(c, Direction::Left);
     }
 
     #[command]
     /// Scroll right by one column.
     pub fn scroll_right(&mut self, c: &mut dyn Context) {
-        self.scroll(c, canopy::geom::Direction::Right);
+        self.scroll(c, Direction::Right);
     }
 
     #[command]
     /// Page up by one screen.
     pub fn page_up(&mut self, c: &mut dyn Context) {
-        self.page(c, canopy::geom::Direction::Up);
+        self.page(c, Direction::Up);
     }
 
     #[command]
     /// Page down by one screen.
     pub fn page_down(&mut self, c: &mut dyn Context) {
-        self.page(c, canopy::geom::Direction::Down);
+        self.page(c, Direction::Down);
     }
 
     /// Determine the wrapping width for the given available space.

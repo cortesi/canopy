@@ -9,7 +9,7 @@ use std::{
 use canopy::{
     Canopy, Context, Loader, ReadContext, Widget, command, derive_commands,
     error::{Error, Result},
-    geom::Rect,
+    geom::{Direction, Rect},
     layout::{CanvasContext, Constraint, Layout, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
@@ -280,7 +280,7 @@ impl Logs {
     }
 
     /// Scroll the view by one line in the specified direction.
-    pub fn scroll(&self, c: &mut dyn Context, dir: canopy::geom::Direction) {
+    pub fn scroll(&self, c: &mut dyn Context, dir: Direction) {
         drop(self.with_list(c, |list, ctx| {
             list.scroll(ctx, dir);
             Ok(())
@@ -288,7 +288,7 @@ impl Logs {
     }
 
     /// Move selection by one page in the specified direction.
-    pub fn page(&self, c: &mut dyn Context, dir: canopy::geom::Direction) {
+    pub fn page(&self, c: &mut dyn Context, dir: Direction) {
         drop(self.with_list(c, |list, ctx| {
             list.page(ctx, dir);
             Ok(())
@@ -298,37 +298,37 @@ impl Logs {
     #[command]
     /// Scroll up by one line.
     pub fn scroll_up(&self, c: &mut dyn Context) {
-        self.scroll(c, canopy::geom::Direction::Up);
+        self.scroll(c, Direction::Up);
     }
 
     #[command]
     /// Scroll down by one line.
     pub fn scroll_down(&self, c: &mut dyn Context) {
-        self.scroll(c, canopy::geom::Direction::Down);
+        self.scroll(c, Direction::Down);
     }
 
     #[command]
     /// Scroll left by one column.
     pub fn scroll_left(&self, c: &mut dyn Context) {
-        self.scroll(c, canopy::geom::Direction::Left);
+        self.scroll(c, Direction::Left);
     }
 
     #[command]
     /// Scroll right by one column.
     pub fn scroll_right(&self, c: &mut dyn Context) {
-        self.scroll(c, canopy::geom::Direction::Right);
+        self.scroll(c, Direction::Right);
     }
 
     #[command]
     /// Page up by one screen.
     pub fn page_up(&self, c: &mut dyn Context) {
-        self.page(c, canopy::geom::Direction::Up);
+        self.page(c, Direction::Up);
     }
 
     #[command]
     /// Page down by one screen.
     pub fn page_down(&self, c: &mut dyn Context) {
-        self.page(c, canopy::geom::Direction::Down);
+        self.page(c, Direction::Down);
     }
 }
 

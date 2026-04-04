@@ -1,6 +1,6 @@
 //! Layout types for configuring node positioning and sizing.
 
-use crate::geom::Rect;
+use crate::geom::{Rect, Size as GeomSize};
 
 /// Stack direction for children.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -102,7 +102,7 @@ impl Edges<u32> {
 }
 
 /// Size with width and height.
-pub type Size<T = u32> = crate::geom::Size<T>;
+pub type Size<T = u32> = GeomSize<T>;
 
 impl Direction {
     /// Size along the main axis.

@@ -1,6 +1,7 @@
 use canopy::{
     command, derive_commands,
     event::{key, mouse},
+    geom,
     layout::{CanvasContext, Edges},
     prelude::*,
 };
@@ -112,22 +113,22 @@ impl EditorGym {
     }
 
     /// Scroll the outer pane by one line in the specified direction.
-    pub fn scroll(&mut self, c: &mut dyn Context, dir: canopy::geom::Direction) {
+    pub fn scroll(&mut self, c: &mut dyn Context, dir: geom::Direction) {
         match dir {
-            canopy::geom::Direction::Up => c.scroll_up(),
-            canopy::geom::Direction::Down => c.scroll_down(),
-            canopy::geom::Direction::Left => c.scroll_left(),
-            canopy::geom::Direction::Right => c.scroll_right(),
+            geom::Direction::Up => c.scroll_up(),
+            geom::Direction::Down => c.scroll_down(),
+            geom::Direction::Left => c.scroll_left(),
+            geom::Direction::Right => c.scroll_right(),
         };
     }
 
     /// Page in the outer pane.
-    pub fn page(&mut self, c: &mut dyn Context, dir: canopy::geom::Direction) {
+    pub fn page(&mut self, c: &mut dyn Context, dir: geom::Direction) {
         match dir {
-            canopy::geom::Direction::Up => {
+            geom::Direction::Up => {
                 c.page_up();
             }
-            canopy::geom::Direction::Down => {
+            geom::Direction::Down => {
                 c.page_down();
             }
             _ => {}
@@ -137,37 +138,37 @@ impl EditorGym {
     #[command]
     /// Scroll up by one line.
     pub fn scroll_up(&mut self, c: &mut dyn Context) {
-        self.scroll(c, canopy::geom::Direction::Up);
+        self.scroll(c, geom::Direction::Up);
     }
 
     #[command]
     /// Scroll down by one line.
     pub fn scroll_down(&mut self, c: &mut dyn Context) {
-        self.scroll(c, canopy::geom::Direction::Down);
+        self.scroll(c, geom::Direction::Down);
     }
 
     #[command]
     /// Scroll left by one column.
     pub fn scroll_left(&mut self, c: &mut dyn Context) {
-        self.scroll(c, canopy::geom::Direction::Left);
+        self.scroll(c, geom::Direction::Left);
     }
 
     #[command]
     /// Scroll right by one column.
     pub fn scroll_right(&mut self, c: &mut dyn Context) {
-        self.scroll(c, canopy::geom::Direction::Right);
+        self.scroll(c, geom::Direction::Right);
     }
 
     #[command]
     /// Page up by one screen.
     pub fn page_up(&mut self, c: &mut dyn Context) {
-        self.page(c, canopy::geom::Direction::Up);
+        self.page(c, geom::Direction::Up);
     }
 
     #[command]
     /// Page down by one screen.
     pub fn page_down(&mut self, c: &mut dyn Context) {
-        self.page(c, canopy::geom::Direction::Down);
+        self.page(c, geom::Direction::Down);
     }
 
     #[command]

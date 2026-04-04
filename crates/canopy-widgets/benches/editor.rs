@@ -3,8 +3,8 @@
 use std::hint::black_box;
 
 use canopy::{
-    Canopy, Context, Loader, ReadContext, Widget, derive_commands, error::Result, key,
-    layout::Layout, render::Render, testing::harness::Harness,
+    Canopy, Context, Loader, ReadContext, Widget, derive_commands, error::Result, layout::Layout,
+    render::Render, testing::harness::Harness,
 };
 use canopy_widgets::editor::{EditMode, Editor, EditorConfig, LineNumbers, WrapMode};
 use criterion::{Criterion, criterion_group, criterion_main};

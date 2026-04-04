@@ -3,7 +3,7 @@
 //! Effects are transformations applied to styles that inherit through the node tree.
 //! They can modify colors, attributes, or both.
 
-use std::{fmt::Debug, sync::Arc};
+use std::{fmt::Debug, mem, sync::Arc};
 
 use super::{Attr, AttrSet, Color, Style};
 
@@ -92,7 +92,7 @@ pub struct SwapFgBg;
 
 impl StyleEffect for SwapFgBg {
     fn apply(&self, mut style: Style) -> Style {
-        std::mem::swap(&mut style.fg, &mut style.bg);
+        mem::swap(&mut style.fg, &mut style.bg);
         style
     }
 }

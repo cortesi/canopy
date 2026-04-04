@@ -13,7 +13,7 @@ use canopy::{
     derive_commands,
     error::{Error, Result},
     event::{Event, mouse},
-    geom::{Line, Point},
+    geom::{Direction, Line, Point},
     layout::{CanvasContext, Constraint, Edges, Layout, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
@@ -508,62 +508,62 @@ impl<W: Selectable> List<W> {
     }
 
     /// Scroll the view by one line in the specified direction.
-    pub fn scroll(&mut self, c: &mut dyn Context, dir: canopy::geom::Direction) {
+    pub fn scroll(&mut self, c: &mut dyn Context, dir: Direction) {
         match dir {
-            canopy::geom::Direction::Up => {
+            Direction::Up => {
                 c.scroll_up();
             }
-            canopy::geom::Direction::Down => {
+            Direction::Down => {
                 c.scroll_down();
             }
-            canopy::geom::Direction::Left => {
+            Direction::Left => {
                 c.scroll_left();
             }
-            canopy::geom::Direction::Right => {
+            Direction::Right => {
                 c.scroll_right();
             }
         }
     }
 
     /// Move selection by one page in the specified direction.
-    pub fn page(&mut self, c: &mut dyn Context, dir: canopy::geom::Direction) {
-        self.page_shift(c, matches!(dir, canopy::geom::Direction::Down));
+    pub fn page(&mut self, c: &mut dyn Context, dir: Direction) {
+        self.page_shift(c, matches!(dir, Direction::Down));
     }
 
     #[command]
     /// Scroll up by one line.
     pub fn scroll_up(&mut self, c: &mut dyn Context) {
-        self.scroll(c, canopy::geom::Direction::Up);
+        self.scroll(c, Direction::Up);
     }
 
     #[command]
     /// Scroll down by one line.
     pub fn scroll_down(&mut self, c: &mut dyn Context) {
-        self.scroll(c, canopy::geom::Direction::Down);
+        self.scroll(c, Direction::Down);
     }
 
     #[command]
     /// Scroll left by one column.
     pub fn scroll_left(&mut self, c: &mut dyn Context) {
-        self.scroll(c, canopy::geom::Direction::Left);
+        self.scroll(c, Direction::Left);
     }
 
     #[command]
     /// Scroll right by one column.
     pub fn scroll_right(&mut self, c: &mut dyn Context) {
-        self.scroll(c, canopy::geom::Direction::Right);
+        self.scroll(c, Direction::Right);
     }
 
     #[command]
     /// Page up by one screen.
     pub fn page_up(&mut self, c: &mut dyn Context) {
-        self.page(c, canopy::geom::Direction::Up);
+        self.page(c, Direction::Up);
     }
 
     #[command]
     /// Page down by one screen.
     pub fn page_down(&mut self, c: &mut dyn Context) {
-        self.page(c, canopy::geom::Direction::Down);
+        self.page(c, Direction::Down);
     }
 
     /// Ensure the selected item is visible in the view.

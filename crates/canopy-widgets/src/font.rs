@@ -713,16 +713,10 @@ fn coverage_weights(coverage: [u8; 4], mask: [u8; 4]) -> (u8, u8) {
         }
     }
 
-    let fg_avg = if fg_count > 0 {
-        (fg_sum / fg_count) as u8
-    } else {
-        0
-    };
-    let bg_avg = if bg_count > 0 {
-        (bg_sum / bg_count) as u8
-    } else {
-        fg_avg
-    };
+    let fg_avg = fg_sum.checked_div(fg_count).map_or(0, |value| value as u8);
+    let bg_avg = bg_sum
+        .checked_div(bg_count)
+        .map_or(fg_avg, |value| value as u8);
 
     (fg_avg, bg_avg)
 }
