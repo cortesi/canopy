@@ -4,7 +4,7 @@ use std::sync::{
 };
 
 use canopy::{
-    Binder, Canopy, Context, Loader, ReadContext, Widget, buf, command, derive_commands,
+    Canopy, Context, Loader, ReadContext, Widget, buf, command, derive_commands,
     error::Result,
     event::{key, mouse},
     geom::Point,
@@ -423,9 +423,16 @@ fn cursor_location_tracks_horizontal_scroll() {
 fn binding_precedence_blocks_text_entry() {
     let config = EditorConfig::new().with_mode(EditMode::Text);
     let mut harness = build_harness("", config, 10, 1);
-    Binder::new(&mut harness.canopy)
-        .with_path("editor")
-        .key('x', "editor.cursor_left()");
+    harness
+        .canopy
+        .run_default_script(
+            r#"
+canopy.bind_with("x", { path = "editor", desc = "Cursor left" }, function()
+    editor.cursor_left()
+end)
+"#,
+        )
+        .unwrap();
     harness.key('x').unwrap();
     assert_eq!(editor_text(&mut harness), "");
 }
@@ -504,9 +511,16 @@ fn highlight_spans_cached_by_revision() {
 fn root_binding_does_not_override_text_entry() {
     let config = EditorConfig::new().with_mode(EditMode::Text);
     let mut harness = build_harness("", config, 6, 1);
-    Binder::new(&mut harness.canopy)
-        .with_path("editor_host")
-        .key('q', "editor_host.record_binding()");
+    harness
+        .canopy
+        .run_default_script(
+            r#"
+canopy.bind_with("q", { path = "editor_host", desc = "Record binding" }, function()
+    editor_host.record_binding()
+end)
+"#,
+        )
+        .unwrap();
     harness.key('q').unwrap();
     assert_eq!(editor_text(&mut harness), "q");
     assert_eq!(host_binding_hits(&mut harness), 0);

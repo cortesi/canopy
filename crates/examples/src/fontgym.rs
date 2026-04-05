@@ -1,7 +1,7 @@
 use std::{f32::consts::TAU, time::Duration};
 
 use canopy::{
-    Binder, Canopy, Context, EventOutcome, Loader, ReadContext, Widget, command,
+    Canopy, Context, EventOutcome, Loader, ReadContext, Widget, command,
     cursor::{Cursor, CursorShape},
     derive_commands,
     error::Result,
@@ -1128,7 +1128,15 @@ fn status_text(height: u32, state: FontStyleState) -> String {
 
 /// Install key bindings for focus navigation.
 pub fn setup_bindings(c: &mut Canopy) {
-    Binder::new(c)
-        .key(key::KeyCode::Tab, "root.focus_next()")
-        .key(key::KeyCode::BackTab, "root.focus_prev()");
+    c.run_default_script(
+        r#"
+canopy.bind_with("Tab", { desc = "Next focus" }, function()
+    root.focus_next()
+end)
+canopy.bind_with("BackTab", { desc = "Previous focus" }, function()
+    root.focus_prev()
+end)
+"#,
+    )
+    .unwrap();
 }

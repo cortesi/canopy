@@ -1,14 +1,61 @@
 use canopy::{
     command, derive_commands,
-    event::key,
     geom::{Direction, Line},
     layout::CanvasContext,
     prelude::*,
 };
-use canopy_widgets::{Frame, Root};
+use canopy_widgets::Frame;
 
 /// Base characters used to generate the test pattern.
 const PATTERN: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+
+/// Default bindings for the frame gym demo.
+const DEFAULT_BINDINGS: &str = r#"
+root.default_bindings()
+
+canopy.bind_with("Tab", { path = "frame_gym", desc = "Next focus" }, function()
+    root.focus_next()
+end)
+canopy.bind_with("g", { path = "frame_gym", desc = "Top" }, function()
+    test_pattern.scroll_to(0, 0)
+end)
+canopy.bind_with("Down", { path = "frame_gym", desc = "Scroll down" }, function()
+    test_pattern.scroll_down()
+end)
+canopy.bind_with("Up", { path = "frame_gym", desc = "Scroll up" }, function()
+    test_pattern.scroll_up()
+end)
+canopy.bind_with("Left", { path = "frame_gym", desc = "Scroll left" }, function()
+    test_pattern.scroll_left()
+end)
+canopy.bind_with("Right", { path = "frame_gym", desc = "Scroll right" }, function()
+    test_pattern.scroll_right()
+end)
+canopy.bind_with("j", { path = "frame_gym", desc = "Scroll down" }, function()
+    test_pattern.scroll_down()
+end)
+canopy.bind_with("k", { path = "frame_gym", desc = "Scroll up" }, function()
+    test_pattern.scroll_up()
+end)
+canopy.bind_with("h", { path = "frame_gym", desc = "Scroll left" }, function()
+    test_pattern.scroll_left()
+end)
+canopy.bind_with("l", { path = "frame_gym", desc = "Scroll right" }, function()
+    test_pattern.scroll_right()
+end)
+canopy.bind_with("PageDown", { path = "frame_gym", desc = "Page down" }, function()
+    test_pattern.page_down()
+end)
+canopy.bind_with("Space", { path = "frame_gym", desc = "Page down" }, function()
+    test_pattern.page_down()
+end)
+canopy.bind_with("PageUp", { path = "frame_gym", desc = "Page up" }, function()
+    test_pattern.page_up()
+end)
+canopy.bind_with("q", { path = "root", desc = "Quit" }, function()
+    root.quit()
+end)
+"#;
 
 // Typed keys for keyed children
 canopy::key!(FrameSlot: Frame);
@@ -204,27 +251,5 @@ impl Loader for FrameGym {
 
 /// Install key bindings for the frame gym demo.
 pub fn setup_bindings(cnpy: &mut Canopy) {
-    Binder::new(cnpy)
-        .defaults::<Root>()
-        // Focus navigation
-        .with_path("frame_gym")
-        .key_command(key::KeyCode::Tab, Root::cmd_focus_next())
-        // Arrow keys for scrolling
-        .key_command('g', TestPattern::cmd_scroll_to().call_with([0u32, 0u32]))
-        .key(key::KeyCode::Down, "test_pattern.scroll_down()")
-        .key(key::KeyCode::Up, "test_pattern.scroll_up()")
-        .key(key::KeyCode::Left, "test_pattern.scroll_left()")
-        .key(key::KeyCode::Right, "test_pattern.scroll_right()")
-        // Vim-style navigation
-        .key('j', "test_pattern.scroll_down()")
-        .key('k', "test_pattern.scroll_up()")
-        .key('h', "test_pattern.scroll_left()")
-        .key('l', "test_pattern.scroll_right()")
-        // Page navigation
-        .key(key::KeyCode::PageDown, "test_pattern.page_down()")
-        .key(' ', "test_pattern.page_down()")
-        .key(key::KeyCode::PageUp, "test_pattern.page_up()")
-        // Quit
-        .with_path("root")
-        .key('q', "root.quit()");
+    cnpy.run_default_script(DEFAULT_BINDINGS).unwrap();
 }

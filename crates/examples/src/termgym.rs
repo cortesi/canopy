@@ -3,18 +3,50 @@ use std::env;
 use canopy::{
     command, derive_commands,
     error::Error,
-    event::key,
     prelude::*,
     style::{Attr, AttrSet, solarized},
 };
 use canopy_widgets::{
-    Box, Button, Center, Frame, List, ROUND_THICK, Root, SINGLE, Selectable, Terminal,
-    TerminalConfig, Text, VStack,
+    Box, Button, Center, Frame, List, ROUND_THICK, SINGLE, Selectable, Terminal, TerminalConfig,
+    Text, VStack,
 };
 use unicode_width::UnicodeWidthStr;
 
 /// Height for each terminal entry row, including borders.
 const ENTRY_HEIGHT: u32 = 3;
+
+/// Default bindings for the terminal gym demo.
+const DEFAULT_BINDINGS: &str = r#"
+root.default_bindings()
+
+canopy.bind_with("ctrl-a", { path = "term_gym/*/terminal/", desc = "Focus sidebar" }, function()
+    term_gym.focus_sidebar()
+end)
+canopy.bind_with("ctrl-F2", { path = "term_gym", desc = "New terminal" }, function()
+    term_gym.new_terminal()
+end)
+canopy.bind_with("ctrl-F3", { path = "term_gym", desc = "Next terminal" }, function()
+    term_gym.next_terminal()
+end)
+canopy.bind_with("ctrl-F4", { path = "term_gym", desc = "Previous terminal" }, function()
+    term_gym.prev_terminal()
+end)
+canopy.bind_with("n", { path = "term_gym/*/list", desc = "New terminal" }, function()
+    term_gym.new_terminal_sidebar()
+end)
+canopy.bind_with("j", { path = "term_gym/*/list", desc = "Next terminal" }, function()
+    term_gym.next_terminal_sidebar()
+end)
+canopy.bind_with("k", { path = "term_gym/*/list", desc = "Previous terminal" }, function()
+    term_gym.prev_terminal_sidebar()
+end)
+canopy.bind_with("Enter", { path = "term_gym/*/list", desc = "Focus active terminal" }, function()
+    term_gym.focus_active_terminal()
+end)
+canopy.bind_with("d", { path = "term_gym/*/list", desc = "Delete terminal" }, function()
+    term_gym.delete_terminal()
+end)
+"#;
 
 /// List item widget for the terminal sidebar.
 struct TermEntry {
@@ -464,21 +496,5 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
         )
         .apply();
 
-    Binder::new(cnpy)
-        .defaults::<Root>()
-        .with_path("term_gym/*/terminal/")
-        .key(
-            key::Ctrl + key::KeyCode::Char('a'),
-            "term_gym.focus_sidebar()",
-        )
-        .with_path("term_gym")
-        .key(key::Ctrl + key::KeyCode::F(2), "term_gym.new_terminal()")
-        .key(key::Ctrl + key::KeyCode::F(3), "term_gym.next_terminal()")
-        .key(key::Ctrl + key::KeyCode::F(4), "term_gym.prev_terminal()")
-        .with_path("term_gym/*/list")
-        .key('n', "term_gym.new_terminal_sidebar()")
-        .key('j', "term_gym.next_terminal_sidebar()")
-        .key('k', "term_gym.prev_terminal_sidebar()")
-        .key(key::KeyCode::Enter, "term_gym.focus_active_terminal()")
-        .key('d', "term_gym.delete_terminal()");
+    cnpy.run_default_script(DEFAULT_BINDINGS).unwrap();
 }

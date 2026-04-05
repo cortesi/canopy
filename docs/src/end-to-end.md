@@ -65,7 +65,11 @@ canopy.add_commands::<Counter>()?;
 canopy.core.replace_subtree(canopy.core.root_id(), Counter::new())?;
 
 // Bind a key to the typed command.
-canopy.bind_key_command('j', "", Counter::cmd_inc().call())?;
+canopy.run_default_script(r#"
+canopy.bind_with("j", { desc = "Increment" }, function()
+    counter.inc()
+end)
+"#)?;
 ```
 
 ## Style override

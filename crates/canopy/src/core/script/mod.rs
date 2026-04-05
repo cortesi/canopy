@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt, mem,
     rc::Rc,
     result::Result as StdResult,
@@ -1097,13 +1097,18 @@ impl LuauHost {
     }
 
     /// Finalize the command surface and cache rendered definitions.
-    pub fn finalize(&self, commands: &CommandSet, definitions: String) -> Result<()> {
+    pub fn finalize(
+        &self,
+        commands: &CommandSet,
+        default_binding_owners: &BTreeSet<String>,
+        definitions: String,
+    ) -> Result<()> {
         if self.is_finalized() {
             return Err(error::Error::InvalidOperation(
                 "Luau API already finalized".into(),
             ));
         }
-        self.register_commands(commands)?;
+        self.register_commands(commands, default_binding_owners)?;
         self.lua
             .sandbox(true)
             .map_err(|err| error::Error::Script(format!("enabling Luau sandbox failed: {err}")))?;
@@ -1114,13 +1119,20 @@ impl LuauHost {
     }
 
     /// Register per-owner command tables in the Lua globals.
-    fn register_commands(&self, commands: &CommandSet) -> Result<()> {
-        let mut owners: HashMap<&'static str, Vec<&'static CommandSpec>> = HashMap::new();
+    fn register_commands(
+        &self,
+        commands: &CommandSet,
+        default_binding_owners: &BTreeSet<String>,
+    ) -> Result<()> {
+        let mut owners: HashMap<String, Vec<&'static CommandSpec>> = HashMap::new();
         for (_, spec) in commands.iter() {
             let commands::CommandDispatchKind::Node { owner } = spec.dispatch else {
                 continue;
             };
-            owners.entry(owner).or_default().push(spec);
+            owners.entry(owner.to_string()).or_default().push(spec);
+        }
+        for owner in default_binding_owners {
+            owners.entry(owner.clone()).or_default();
         }
 
         let globals = self.lua.globals();
@@ -1157,8 +1169,30 @@ impl LuauHost {
                     ))
                 })?;
             }
+            if default_binding_owners.contains(&owner) {
+                let owner_name = owner.clone();
+                let function = self
+                    .lua
+                    .create_function(move |_, ()| {
+                        with_current_canopy(|canopy, _| {
+                            canopy.run_registered_default_bindings(&owner_name)?;
+                            Ok(Value::Nil)
+                        })
+                        .map_err(LuaError::external)
+                    })
+                    .map_err(|err| {
+                        error::Error::Script(format!(
+                            "registering default bindings for {owner} failed: {err}"
+                        ))
+                    })?;
+                table.set("default_bindings", function).map_err(|err| {
+                    error::Error::Script(format!(
+                        "installing default bindings for {owner} failed: {err}"
+                    ))
+                })?;
+            }
             globals
-                .set(luau_global_owner_name(owner), table)
+                .set(luau_global_owner_name(&owner), table)
                 .map_err(|err| {
                     error::Error::Script(format!(
                         "registering Luau owner table for {owner} failed: {err}"

@@ -4,12 +4,53 @@ mod logs;
 mod view;
 
 use canopy::{
-    Binder, Canopy, Core, DefaultBindings, Loader, NodeId, ReadContext, Widget, derive_commands,
-    error::Result, event::key::*, layout::Layout, render::Render, state::NodeName,
+    Canopy, Core, Loader, NodeId, ReadContext, Widget, derive_commands, error::Result,
+    layout::Layout, render::Render, state::NodeName,
 };
 use logs::Logs;
 
 use crate::{frame, tabs};
+
+/// Default inspector bindings exposed through `inspector.default_bindings()`.
+const DEFAULT_BINDINGS: &str = r#"
+canopy.bind_with("Tab", { path = "inspector/", desc = "Next tab" }, function()
+    tabs.next()
+end)
+
+canopy.bind_with("C", { path = "logs", desc = "Clear log entry" }, function()
+    logs.clear()
+end)
+canopy.bind_with("d", { path = "logs", desc = "Delete selected log entry" }, function()
+    logs.delete_selected()
+end)
+canopy.bind_with("j", { path = "logs", desc = "Next log entry" }, function()
+    logs.select_by(1)
+end)
+canopy.bind_with("k", { path = "logs", desc = "Previous log entry" }, function()
+    logs.select_by(-1)
+end)
+canopy.bind_with("g", { path = "logs", desc = "First log entry" }, function()
+    logs.select_first()
+end)
+canopy.bind_with("G", { path = "logs", desc = "Last log entry" }, function()
+    logs.select_last()
+end)
+canopy.bind_with("Space", { path = "logs", desc = "Page down" }, function()
+    logs.page_down()
+end)
+canopy.bind_with("PageDown", { path = "logs", desc = "Page down" }, function()
+    logs.page_down()
+end)
+canopy.bind_with("PageUp", { path = "logs", desc = "Page up" }, function()
+    logs.page_up()
+end)
+canopy.bind_with("Down", { path = "logs", desc = "Next log entry" }, function()
+    logs.select_by(1)
+end)
+canopy.bind_with("Up", { path = "logs", desc = "Previous log entry" }, function()
+    logs.select_by(-1)
+end)
+"#;
 
 /// Inspector overlay widget.
 pub struct Inspector;
@@ -53,29 +94,11 @@ impl Widget for Inspector {
     }
 }
 
-impl DefaultBindings for Inspector {
-    fn defaults(b: Binder) -> Binder {
-        b.with_path("inspector/")
-            .key(KeyCode::Tab, "tabs.next()")
-            .with_path("logs")
-            .key('C', "logs.clear()")
-            .key('d', "logs.delete_selected()")
-            .key('j', "logs.select_by(1)")
-            .key('k', "logs.select_by(-1)")
-            .key('g', "logs.select_first()")
-            .key('G', "logs.select_last()")
-            .key(' ', "logs.page_down()")
-            .key(KeyCode::PageDown, "logs.page_down()")
-            .key(KeyCode::PageUp, "logs.page_up()")
-            .key(KeyCode::Down, "logs.select_by(1)")
-            .key(KeyCode::Up, "logs.select_by(-1)")
-    }
-}
-
 impl Loader for Inspector {
     fn load(c: &mut Canopy) -> Result<()> {
         c.add_commands::<Self>()?;
         c.add_commands::<tabs::Tabs>()?;
+        c.register_default_bindings("inspector", DEFAULT_BINDINGS)?;
         Logs::load(c)?;
         Ok(())
     }

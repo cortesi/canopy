@@ -1,12 +1,11 @@
 use canopy::{
     command, derive_commands,
     error::Error,
-    event::{key, mouse},
     layout::{CanvasContext, MeasureConstraints, Measurement, Size},
     prelude::*,
     style::solarized,
 };
-use canopy_widgets::{CanvasWidth, Frame, List, Panes, Root, Selectable, Text, VStack};
+use canopy_widgets::{CanvasWidth, Frame, List, Panes, Selectable, Text, VStack};
 use rand::Rng;
 
 /// Sample text content for list items.
@@ -14,6 +13,93 @@ const TEXT: &str = "What a struggle must have gone on during long centuries betw
 
 /// Alternating color names for list items.
 const COLORS: &[&str] = &["red", "blue"];
+
+/// Default bindings for the list gym demo.
+const DEFAULT_BINDINGS: &str = r#"
+root.default_bindings()
+
+canopy.bind_with("p", { path = "list_gym", desc = "Log demo message" }, function()
+    canopy.log("list gym")
+end)
+canopy.bind_with("a", { path = "list_gym", desc = "Add item" }, function()
+    list_gym.add_item()
+end)
+canopy.bind_with("A", { path = "list_gym", desc = "Append item" }, function()
+    list_gym.append_item()
+end)
+canopy.bind_with("C", { path = "list_gym", desc = "Clear list" }, function()
+    list_gym.clear()
+end)
+canopy.bind_with("q", { path = "list_gym", desc = "Quit" }, function()
+    root.quit()
+end)
+canopy.bind_with("g", { path = "list_gym", desc = "First item" }, function()
+    list.select_first()
+end)
+canopy.bind_with("G", { path = "list_gym", desc = "Last item" }, function()
+    list.select_last()
+end)
+canopy.bind_with("d", { path = "list_gym", desc = "Delete item" }, function()
+    list.delete_selected()
+end)
+canopy.bind_with("j", { path = "list_gym", desc = "Next item" }, function()
+    list.select_next()
+end)
+canopy.bind_with("k", { path = "list_gym", desc = "Previous item" }, function()
+    list.select_prev()
+end)
+canopy.bind_mouse_with("ScrollDown", { path = "list_gym", desc = "Next item" }, function()
+    list.select_next()
+end)
+canopy.bind_mouse_with("ScrollUp", { path = "list_gym", desc = "Previous item" }, function()
+    list.select_prev()
+end)
+canopy.bind_with("Down", { path = "list_gym", desc = "Next item" }, function()
+    list.select_next()
+end)
+canopy.bind_with("Up", { path = "list_gym", desc = "Previous item" }, function()
+    list.select_prev()
+end)
+canopy.bind_with("J", { path = "list_gym", desc = "Scroll down" }, function()
+    list.scroll_down()
+end)
+canopy.bind_with("K", { path = "list_gym", desc = "Scroll up" }, function()
+    list.scroll_up()
+end)
+canopy.bind_with("h", { path = "list_gym", desc = "Scroll left" }, function()
+    list.scroll_left()
+end)
+canopy.bind_with("l", { path = "list_gym", desc = "Scroll right" }, function()
+    list.scroll_right()
+end)
+canopy.bind_with("Left", { path = "list_gym", desc = "Scroll left" }, function()
+    list.scroll_left()
+end)
+canopy.bind_with("Right", { path = "list_gym", desc = "Scroll right" }, function()
+    list.scroll_right()
+end)
+canopy.bind_with("s", { path = "list_gym", desc = "Add column" }, function()
+    list_gym.add_column()
+end)
+canopy.bind_with("x", { path = "list_gym", desc = "Delete column" }, function()
+    list_gym.delete_column()
+end)
+canopy.bind_with("Tab", { path = "list_gym", desc = "Next column" }, function()
+    panes.next_column()
+end)
+canopy.bind_with("BackTab", { path = "list_gym", desc = "Previous column" }, function()
+    panes.prev_column()
+end)
+canopy.bind_with("PageDown", { path = "list_gym", desc = "Page down" }, function()
+    list.page_down()
+end)
+canopy.bind_with("Space", { path = "list_gym", desc = "Page down" }, function()
+    list.page_down()
+end)
+canopy.bind_with("PageUp", { path = "list_gym", desc = "Page up" }, function()
+    list.page_up()
+end)
+"#;
 
 /// Focusable list entry that renders text content.
 pub struct ListEntry {
@@ -258,34 +344,5 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
         .fg("list/selected", solarized::BLUE)
         .apply();
 
-    Binder::new(cnpy)
-        .defaults::<Root>()
-        .with_path("list_gym")
-        .key('p', "canopy.log(\"list gym\")")
-        .key('a', "list_gym.add_item()")
-        .key('A', "list_gym.append_item()")
-        .key('C', "list_gym.clear()")
-        .key('q', "root.quit()")
-        .key('g', "list.select_first()")
-        .key('G', "list.select_last()")
-        .key('d', "list.delete_selected()")
-        .key('j', "list.select_next()")
-        .key('k', "list.select_prev()")
-        .mouse(mouse::Action::ScrollDown, "list.select_next()")
-        .mouse(mouse::Action::ScrollUp, "list.select_prev()")
-        .key(key::KeyCode::Down, "list.select_next()")
-        .key(key::KeyCode::Up, "list.select_prev()")
-        .key('J', "list.scroll_down()")
-        .key('K', "list.scroll_up()")
-        .key('h', "list.scroll_left()")
-        .key('l', "list.scroll_right()")
-        .key(key::KeyCode::Left, "list.scroll_left()")
-        .key(key::KeyCode::Right, "list.scroll_right()")
-        .key('s', "list_gym.add_column()")
-        .key('x', "list_gym.delete_column()")
-        .key(key::KeyCode::Tab, "panes.next_column()")
-        .key(key::KeyCode::BackTab, "panes.prev_column()")
-        .key(key::KeyCode::PageDown, "list.page_down()")
-        .key(' ', "list.page_down()")
-        .key(key::KeyCode::PageUp, "list.page_up()");
+    cnpy.run_default_script(DEFAULT_BINDINGS).unwrap();
 }

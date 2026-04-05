@@ -2,7 +2,6 @@ use std::time::Duration;
 
 use canopy::{
     command, derive_commands,
-    event::{key, mouse},
     layout::Edges,
     prelude::*,
     style::{AttrSet, solarized},
@@ -14,6 +13,49 @@ use unicode_width::UnicodeWidthStr;
 const ENTRY_PADDING: u32 = 2;
 /// Height for each counter entry row, including borders.
 const ENTRY_HEIGHT: u32 = 1 + ENTRY_PADDING * 2;
+
+/// Default bindings for the intervals demo.
+const DEFAULT_BINDINGS: &str = r#"
+canopy.bind_with("a", { path = "intervals", desc = "Add item" }, function()
+    intervals.add_item()
+end)
+canopy.bind_with("g", { path = "intervals", desc = "First item" }, function()
+    list.select_first()
+end)
+canopy.bind_with("j", { path = "intervals", desc = "Next item" }, function()
+    list.select_by(1)
+end)
+canopy.bind_with("Down", { path = "intervals", desc = "Next item" }, function()
+    list.select_by(1)
+end)
+canopy.bind_mouse_with("ScrollDown", { path = "intervals", desc = "Next item" }, function()
+    list.select_by(1)
+end)
+canopy.bind_with("k", { path = "intervals", desc = "Previous item" }, function()
+    list.select_by(-1)
+end)
+canopy.bind_with("Up", { path = "intervals", desc = "Previous item" }, function()
+    list.select_by(-1)
+end)
+canopy.bind_mouse_with("ScrollUp", { path = "intervals", desc = "Previous item" }, function()
+    list.select_by(-1)
+end)
+canopy.bind_with("d", { path = "intervals", desc = "Delete item" }, function()
+    list.delete_selected()
+end)
+canopy.bind_with("PageDown", { path = "intervals", desc = "Page down" }, function()
+    list.page_down()
+end)
+canopy.bind_with("Space", { path = "intervals", desc = "Page down" }, function()
+    list.page_down()
+end)
+canopy.bind_with("PageUp", { path = "intervals", desc = "Page up" }, function()
+    list.page_up()
+end)
+canopy.bind_with("q", { path = "intervals", desc = "Quit" }, function()
+    root.quit()
+end)
+"#;
 
 /// Counter widget that increments on a timer.
 pub struct CounterItem {
@@ -270,19 +312,5 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
         )
         .apply();
 
-    Binder::new(cnpy)
-        .with_path("intervals")
-        .key('a', "intervals.add_item()")
-        .key('g', "list.select_first()")
-        .key('j', "list.select_by(1)")
-        .key(key::KeyCode::Down, "list.select_by(1)")
-        .mouse(mouse::Action::ScrollDown, "list.select_by(1)")
-        .key('k', "list.select_by(-1)")
-        .key(key::KeyCode::Up, "list.select_by(-1)")
-        .mouse(mouse::Action::ScrollUp, "list.select_by(-1)")
-        .key('d', "list.delete_selected()")
-        .key(key::KeyCode::PageDown, "list.page_down()")
-        .key(' ', "list.page_down()")
-        .key(key::KeyCode::PageUp, "list.page_up()")
-        .key('q', "root.quit()");
+    cnpy.run_default_script(DEFAULT_BINDINGS).unwrap();
 }

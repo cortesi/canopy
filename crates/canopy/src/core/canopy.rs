@@ -1,11 +1,17 @@
-use std::{collections::HashMap, fs, io::Write, path::Path as FsPath, sync::mpsc};
+use std::{
+    collections::{BTreeSet, HashMap},
+    fs,
+    io::Write,
+    path::Path as FsPath,
+    sync::mpsc,
+};
 
 use comfy_table::{ContentArrangement, Table, presets::UTF8_FULL};
 
 use super::{inputmap, poll::Poller, termbuf::TermBuf};
 use crate::{
     backend::BackendControl,
-    commands::{self, CommandCall},
+    commands::{self, CommandDispatchKind},
     core::{
         Core, NodeId,
         context::{CoreViewContext, ReadContext},
@@ -47,6 +53,8 @@ pub struct Canopy {
     pub(crate) script_host: script::ScriptHost,
     /// Cached Luau API definition text.
     script_api_text: Option<String>,
+    /// Registered default binding scripts keyed by owner name.
+    default_bindings: HashMap<String, DefaultBindingsScript>,
     /// Input mapping table.
     pub(crate) keymap: inputmap::InputMap,
 
@@ -64,18 +72,12 @@ pub struct Canopy {
     pub style: StyleMap,
 }
 
-/// Binding target used by [`Canopy::bind`].
-pub enum BindingAction<'a> {
-    /// Compile and bind a script source.
-    Script(&'a str),
-    /// Bind an already-compiled script id.
-    ScriptId(script::ScriptId),
-    /// Bind a typed command invocation.
-    Command(commands::CommandInvocation),
-    /// Bind a sequence of typed command invocations.
-    CommandSequence(Vec<commands::CommandInvocation>),
-    /// Bind a stored Luau closure.
-    LuauFunction(script::LuauFunctionId),
+/// Registered default binding script metadata.
+struct DefaultBindingsScript {
+    /// Source text evaluated for this owner.
+    source: String,
+    /// Pre-compiled script handle available after `finalize_api()`.
+    script_id: Option<script::ScriptId>,
 }
 
 /// Rendering traversal scratch state shared across recursion.
@@ -102,6 +104,7 @@ impl Canopy {
             keymap: inputmap::InputMap::new(),
             script_host: script::ScriptHost::new(),
             script_api_text: None,
+            default_bindings: HashMap::new(),
             style: solarized::solarized_dark(),
             root_size: None,
             termbuf: None,
@@ -155,6 +158,41 @@ impl Canopy {
         self.eval_script(source)
     }
 
+    /// Register a Luau script as the default bindings for a widget namespace.
+    pub fn register_default_bindings(&mut self, name: &str, script: &str) -> Result<()> {
+        if self.script_host.is_finalized() {
+            return Err(error::Error::InvalidOperation(
+                "default binding registration is sealed after finalize_api()".into(),
+            ));
+        }
+        if name.trim().is_empty() {
+            return Err(error::Error::Invalid(
+                "default binding owner name cannot be empty".into(),
+            ));
+        }
+        if self.owner_has_default_bindings_command(name) {
+            return Err(error::Error::Invalid(format!(
+                "owner {name} already defines a command named default_bindings"
+            )));
+        }
+        if let Some(existing) = self.default_bindings.get(name) {
+            if existing.source == script {
+                return Ok(());
+            }
+            return Err(error::Error::Invalid(format!(
+                "conflicting default bindings already registered for owner {name}"
+            )));
+        }
+        self.default_bindings.insert(
+            name.to_string(),
+            DefaultBindingsScript {
+                source: script.to_string(),
+                script_id: None,
+            },
+        );
+        Ok(())
+    }
+
     #[cfg(feature = "typecheck")]
     /// Type-check a Luau source string against the finalized app API.
     pub fn check_script(&mut self, source: &str) -> Result<luau_analyze::CheckResult> {
@@ -179,239 +217,6 @@ impl Canopy {
         let source = fs::read_to_string(path)
             .map_err(|err| error::Error::Invalid(format!("config read failed: {err}")))?;
         self.eval_script(&source)
-    }
-
-    /// Bind a mouse action in the global mode with a given path filter to a script.
-    ///
-    /// Returns the new binding ID.
-    pub fn bind_mouse<K>(
-        &mut self,
-        mouse: K,
-        path_filter: &str,
-        script: &str,
-    ) -> Result<inputmap::BindingId>
-    where
-        mouse::Mouse: From<K>,
-    {
-        self.bind_mode_mouse(mouse, "", path_filter, script)
-    }
-
-    /// Bind an input in a specified mode with a given path filter to a script or command.
-    ///
-    /// Returns the new binding ID.
-    pub fn bind(
-        &mut self,
-        mode: &str,
-        input: inputmap::InputSpec,
-        path_filter: &str,
-        action: BindingAction<'_>,
-    ) -> Result<inputmap::BindingId> {
-        match action {
-            BindingAction::Script(src) => {
-                let sid = self.script_host.compile(src)?;
-                self.keymap.bind(mode, input, path_filter, sid)
-            }
-            BindingAction::ScriptId(sid) => self.keymap.bind(mode, input, path_filter, sid),
-            BindingAction::Command(invocation) => {
-                self.keymap
-                    .bind_command(mode, input, path_filter, invocation)
-            }
-            BindingAction::CommandSequence(invocations) => {
-                self.keymap
-                    .bind_commands(mode, input, path_filter, invocations)
-            }
-            BindingAction::LuauFunction(function_id) => {
-                self.keymap
-                    .bind_luau_function(mode, input, path_filter, function_id)
-            }
-        }
-    }
-
-    /// Bind a mouse action in a specified mode with a given path filter to a script.
-    ///
-    /// Returns the new binding ID.
-    pub fn bind_mode_mouse<K>(
-        &mut self,
-        mouse: K,
-        mode: &str,
-        path_filter: &str,
-        script: &str,
-    ) -> Result<inputmap::BindingId>
-    where
-        mouse::Mouse: From<K>,
-    {
-        self.bind(
-            mode,
-            inputmap::InputSpec::Mouse(mouse.into()),
-            path_filter,
-            BindingAction::Script(script),
-        )
-    }
-
-    /// Bind a mouse action in the global mode with a given path filter to a typed command.
-    ///
-    /// Returns the new binding ID.
-    pub fn bind_mouse_command<K, C>(
-        &mut self,
-        mouse: K,
-        path_filter: &str,
-        command: C,
-    ) -> Result<inputmap::BindingId>
-    where
-        mouse::Mouse: From<K>,
-        C: Into<commands::CommandInvocation>,
-    {
-        self.bind_mode_mouse_command(mouse, "", path_filter, command)
-    }
-
-    /// Bind a key in the global mode, with a given path filter to a script.
-    ///
-    /// Returns the new binding ID.
-    pub fn bind_key<K>(
-        &mut self,
-        key: K,
-        path_filter: &str,
-        script: &str,
-    ) -> Result<inputmap::BindingId>
-    where
-        key::Key: From<K>,
-    {
-        self.bind_mode_key(key, "", path_filter, script)
-    }
-
-    /// Bind a key within a given mode, with a given path filter to a script.
-    ///
-    /// Returns the new binding ID.
-    pub fn bind_mode_key<K>(
-        &mut self,
-        key: K,
-        mode: &str,
-        path_filter: &str,
-        script: &str,
-    ) -> Result<inputmap::BindingId>
-    where
-        key::Key: From<K>,
-    {
-        self.bind(
-            mode,
-            inputmap::InputSpec::Key(key.into()),
-            path_filter,
-            BindingAction::Script(script),
-        )
-    }
-
-    /// Bind a key in the global mode with a given path filter to a typed command.
-    ///
-    /// Returns the new binding ID.
-    pub fn bind_key_command<K, C>(
-        &mut self,
-        key: K,
-        path_filter: &str,
-        command: C,
-    ) -> Result<inputmap::BindingId>
-    where
-        key::Key: From<K>,
-        C: Into<commands::CommandInvocation>,
-    {
-        self.bind_mode_key_command(key, "", path_filter, command)
-    }
-
-    /// Bind a key within a given mode, with a given path filter, to a typed command.
-    ///
-    /// Returns the new binding ID.
-    pub fn bind_mode_key_command<K, C>(
-        &mut self,
-        key: K,
-        mode: &str,
-        path_filter: &str,
-        command: C,
-    ) -> Result<inputmap::BindingId>
-    where
-        key::Key: From<K>,
-        C: Into<commands::CommandInvocation>,
-    {
-        self.bind(
-            mode,
-            inputmap::InputSpec::Key(key.into()),
-            path_filter,
-            BindingAction::Command(command.into()),
-        )
-    }
-
-    /// Bind a key within a given mode, with a given path filter, to a command sequence.
-    ///
-    /// Returns the new binding ID.
-    pub fn bind_mode_key_commands<K>(
-        &mut self,
-        key: K,
-        mode: &str,
-        path_filter: &str,
-        commands: &[CommandCall],
-    ) -> Result<inputmap::BindingId>
-    where
-        key::Key: From<K>,
-    {
-        self.bind(
-            mode,
-            inputmap::InputSpec::Key(key.into()),
-            path_filter,
-            BindingAction::CommandSequence(
-                commands
-                    .iter()
-                    .cloned()
-                    .map(CommandCall::invocation)
-                    .collect(),
-            ),
-        )
-    }
-
-    /// Bind a mouse action in a specified mode with a given path filter to a typed command.
-    ///
-    /// Returns the new binding ID.
-    pub fn bind_mode_mouse_command<K, C>(
-        &mut self,
-        mouse: K,
-        mode: &str,
-        path_filter: &str,
-        command: C,
-    ) -> Result<inputmap::BindingId>
-    where
-        mouse::Mouse: From<K>,
-        C: Into<commands::CommandInvocation>,
-    {
-        self.bind(
-            mode,
-            inputmap::InputSpec::Mouse(mouse.into()),
-            path_filter,
-            BindingAction::Command(command.into()),
-        )
-    }
-
-    /// Bind a mouse action in a specified mode with a given path filter to a command sequence.
-    ///
-    /// Returns the new binding ID.
-    pub fn bind_mode_mouse_commands<K>(
-        &mut self,
-        mouse: K,
-        mode: &str,
-        path_filter: &str,
-        commands: &[CommandCall],
-    ) -> Result<inputmap::BindingId>
-    where
-        mouse::Mouse: From<K>,
-    {
-        self.bind(
-            mode,
-            inputmap::InputSpec::Mouse(mouse.into()),
-            path_filter,
-            BindingAction::CommandSequence(
-                commands
-                    .iter()
-                    .cloned()
-                    .map(CommandCall::invocation)
-                    .collect(),
-            ),
-        )
     }
 
     /// Remove a binding by ID. Returns true if a binding was removed.
@@ -504,9 +309,15 @@ impl Canopy {
         if self.script_host.is_finalized() {
             return Ok(());
         }
-        let definitions = script::defs::render_definitions(&self.core.commands);
-        self.script_host
-            .finalize(&self.core.commands, definitions.clone())?;
+        let default_binding_owners = self.default_binding_owners();
+        let definitions =
+            script::defs::render_definitions(&self.core.commands, &default_binding_owners);
+        self.script_host.finalize(
+            &self.core.commands,
+            &default_binding_owners,
+            definitions.clone(),
+        )?;
+        self.compile_registered_default_bindings()?;
         self.script_api_text = Some(definitions);
         Ok(())
     }
@@ -516,6 +327,46 @@ impl Canopy {
         self.script_api_text
             .as_deref()
             .expect("script API requested before finalize_api()")
+    }
+
+    /// Run a registered default binding script by owner name.
+    pub(crate) fn run_registered_default_bindings(&mut self, owner: &str) -> Result<()> {
+        if !self.script_host.is_finalized() {
+            self.finalize_api()?;
+        }
+        let script_id = self
+            .default_bindings
+            .get(owner)
+            .and_then(|script| script.script_id)
+            .ok_or_else(|| {
+                error::Error::NotFound(format!("default bindings not registered for owner {owner}"))
+            })?;
+        let host = self.script_host.clone();
+        host.execute(self, self.core.root_id(), script_id)
+    }
+
+    /// Return true if the named owner already exports a `default_bindings` command.
+    fn owner_has_default_bindings_command(&self, owner: &str) -> bool {
+        self.core.commands.iter().any(|(_, spec)| {
+            matches!(spec.dispatch, CommandDispatchKind::Node { owner: spec_owner } if spec_owner == owner)
+                && spec.name == "default_bindings"
+        })
+    }
+
+    /// Return the set of owners with registered default binding scripts.
+    fn default_binding_owners(&self) -> BTreeSet<String> {
+        self.default_bindings.keys().cloned().collect()
+    }
+
+    /// Compile any registered default binding scripts after finalization.
+    fn compile_registered_default_bindings(&mut self) -> Result<()> {
+        let host = self.script_host.clone();
+        for script in self.default_bindings.values_mut() {
+            if script.script_id.is_none() {
+                script.script_id = Some(host.compile(&script.source)?);
+            }
+        }
+        Ok(())
     }
 
     /// Execute and release all queued startup hooks.
@@ -1677,6 +1528,21 @@ mod tests {
             let s = get_state();
             assert_eq!(s.path, vec!["r@key->ignore"]);
 
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    #[test]
+    fn register_default_bindings_is_idempotent_for_identical_scripts() -> Result<()> {
+        run_ttree(|c, _, _| {
+            c.register_default_bindings("r", "canopy.log(\"once\")")?;
+            c.register_default_bindings("r", "canopy.log(\"once\")")?;
+
+            let err = c
+                .register_default_bindings("r", "canopy.log(\"twice\")")
+                .unwrap_err();
+            assert!(matches!(err, error::Error::Invalid(_)));
             Ok(())
         })?;
         Ok(())

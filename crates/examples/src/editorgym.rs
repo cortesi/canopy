@@ -1,16 +1,44 @@
 use canopy::{
-    command, derive_commands,
-    event::{key, mouse},
-    geom,
+    command, derive_commands, geom,
     layout::{CanvasContext, Edges},
     prelude::*,
 };
 use canopy_widgets::{
-    Frame, Root,
+    Frame,
     editor::{
         EditMode, Editor, EditorConfig, LineNumbers, WrapMode, highlight::SyntectHighlighter,
     },
 };
+
+/// Default bindings for the editor gym demo.
+const DEFAULT_BINDINGS: &str = r#"
+root.default_bindings()
+
+canopy.bind_with("Tab", { path = "editor_gym", desc = "Next focus" }, function()
+    root.focus_next()
+end)
+canopy.bind_with("BackTab", { path = "editor_gym", desc = "Previous focus" }, function()
+    root.focus_prev()
+end)
+canopy.bind_with("PageDown", { path = "editor_gym", desc = "Page down" }, function()
+    editor_gym.page_down()
+end)
+canopy.bind_with("PageUp", { path = "editor_gym", desc = "Page up" }, function()
+    editor_gym.page_up()
+end)
+canopy.bind_with("Home", { path = "editor_gym", desc = "Top" }, function()
+    editor_gym.scroll_to(0, 0)
+end)
+canopy.bind_mouse_with("ScrollDown", { path = "editor_gym", desc = "Scroll down" }, function()
+    editor_gym.scroll_down()
+end)
+canopy.bind_mouse_with("ScrollUp", { path = "editor_gym", desc = "Scroll up" }, function()
+    editor_gym.scroll_up()
+end)
+canopy.bind_with("q", { path = "root", desc = "Quit" }, function()
+    root.quit()
+end)
+"#;
 
 /// Seed text for the single-line editor sample.
 const SINGLE_LINE_SEED: &str = "Single line input shows horizontal scrolling with wrap off. ";
@@ -336,16 +364,5 @@ impl Loader for EditorGym {
 
 /// Install key bindings for the editor gym demo.
 pub fn setup_bindings(cnpy: &mut Canopy) {
-    Binder::new(cnpy)
-        .defaults::<Root>()
-        .with_path("editor_gym")
-        .key(key::KeyCode::Tab, "root.focus_next()")
-        .key(key::KeyCode::BackTab, "root.focus_prev()")
-        .key(key::KeyCode::PageDown, "editor_gym.page_down()")
-        .key(key::KeyCode::PageUp, "editor_gym.page_up()")
-        .key(key::KeyCode::Home, "editor_gym.scroll_to(0, 0)")
-        .mouse(mouse::Action::ScrollDown, "editor_gym.scroll_down()")
-        .mouse(mouse::Action::ScrollUp, "editor_gym.scroll_up()")
-        .with_path("root")
-        .key('q', "root.quit()");
+    cnpy.run_default_script(DEFAULT_BINDINGS).unwrap();
 }

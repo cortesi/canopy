@@ -7,10 +7,13 @@ use std::cell::RefCell;
 // Re-export help types for convenience
 pub use canopy::help::{BindingKind, OwnedHelpBinding, OwnedHelpCommand, OwnedHelpSnapshot};
 use canopy::{
-    Binder, Canopy, Context, Core, DefaultBindings, EventOutcome, Loader, NodeId, ReadContext,
-    Widget, command, derive_commands,
+    Canopy, Context, Core, EventOutcome, Loader, NodeId, ReadContext, Widget, command,
+    derive_commands,
     error::Result,
-    event::{Event, key::*},
+    event::{
+        Event,
+        key::{Empty, KeyCode},
+    },
     geom::Line,
     inputmap::InputSpec,
     layout::{CanvasContext, Edges, Layout, Size},
@@ -20,6 +23,37 @@ use canopy::{
 use unicode_width::UnicodeWidthStr;
 
 use crate::{frame, modal::Modal};
+
+/// Default help bindings exposed through `help.default_bindings()`.
+const DEFAULT_BINDINGS: &str = r#"
+canopy.bind_with("Esc", { path = "help/", desc = "Close help" }, function()
+    root.hide_help()
+end)
+canopy.bind_with("q", { path = "help/", desc = "Close help" }, function()
+    root.hide_help()
+end)
+canopy.bind_with("j", { path = "help/", desc = "Scroll down" }, function()
+    help_content.scroll_down()
+end)
+canopy.bind_with("k", { path = "help/", desc = "Scroll up" }, function()
+    help_content.scroll_up()
+end)
+canopy.bind_with("Down", { path = "help/", desc = "Scroll down" }, function()
+    help_content.scroll_down()
+end)
+canopy.bind_with("Up", { path = "help/", desc = "Scroll up" }, function()
+    help_content.scroll_up()
+end)
+canopy.bind_with("g", { path = "help/", desc = "Top" }, function()
+    help_content.scroll_to_top()
+end)
+canopy.bind_with("G", { path = "help/", desc = "Bottom" }, function()
+    help_content.scroll_to_bottom()
+end)
+canopy.bind_with("Space", { path = "help/", desc = "Page down" }, function()
+    help_content.page_down()
+end)
+"#;
 
 /// Help modal widget displaying contextual bindings and commands.
 pub struct Help {
@@ -104,26 +138,11 @@ impl Widget for Help {
     }
 }
 
-impl DefaultBindings for Help {
-    fn defaults(b: Binder) -> Binder {
-        b.with_path("help/")
-            .key(KeyCode::Esc, "root.hide_help()")
-            .key('q', "root.hide_help()")
-            // Scroll bindings
-            .key('j', "help_content.scroll_down()")
-            .key('k', "help_content.scroll_up()")
-            .key(KeyCode::Down, "help_content.scroll_down()")
-            .key(KeyCode::Up, "help_content.scroll_up()")
-            .key('g', "help_content.scroll_to_top()")
-            .key('G', "help_content.scroll_to_bottom()")
-            .key(' ', "help_content.page_down()")
-    }
-}
-
 impl Loader for Help {
     fn load(c: &mut Canopy) -> Result<()> {
         c.add_commands::<Self>()?;
         c.add_commands::<HelpContent>()?;
+        c.register_default_bindings("help", DEFAULT_BINDINGS)?;
         Ok(())
     }
 }

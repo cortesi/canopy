@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::luau_global_owner_name;
 use crate::commands::{
@@ -10,13 +10,19 @@ use crate::commands::{
 const PREAMBLE: &str = include_str!("../../../luau/preamble.d.luau");
 
 /// Render the complete Luau definition file for the current command set.
-pub fn render_definitions(commands: &CommandSet) -> String {
-    let mut owners: BTreeMap<&'static str, Vec<&'static CommandSpec>> = BTreeMap::new();
+pub fn render_definitions(
+    commands: &CommandSet,
+    default_binding_owners: &BTreeSet<String>,
+) -> String {
+    let mut owners: BTreeMap<String, Vec<&'static CommandSpec>> = BTreeMap::new();
     for (_, spec) in commands.iter() {
         let CommandDispatchKind::Node { owner } = spec.dispatch else {
             continue;
         };
-        owners.entry(owner).or_default().push(spec);
+        owners.entry(owner.to_string()).or_default().push(spec);
+    }
+    for owner in default_binding_owners {
+        owners.entry(owner.clone()).or_default();
     }
 
     let mut output = String::from(PREAMBLE);
@@ -29,7 +35,7 @@ pub fn render_definitions(commands: &CommandSet) -> String {
     for (owner, specs) in owners {
         output.push('\n');
         output.push_str(&format!("--- Commands for widget \"{owner}\"\n"));
-        output.push_str(&format!("declare {}: {{\n", luau_global_owner_name(owner)));
+        output.push_str(&format!("declare {}: {{\n", luau_global_owner_name(&owner)));
 
         let mut specs = specs;
         specs.sort_by_key(|spec| spec.id.0);
@@ -42,6 +48,11 @@ pub fn render_definitions(commands: &CommandSet) -> String {
             output.push_str(": ");
             output.push_str(&render_function_type(spec));
             output.push_str(",\n");
+        }
+
+        if default_binding_owners.contains(&owner) {
+            output.push_str("    --- Register this widget's default bindings.\n");
+            output.push_str("    default_bindings: () -> (),\n");
         }
 
         output.push_str("}\n");

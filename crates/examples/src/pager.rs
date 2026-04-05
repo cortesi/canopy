@@ -1,9 +1,54 @@
-use canopy::{
-    derive_commands,
-    event::{key, mouse},
-    prelude::*,
-};
-use canopy_widgets::{Frame, Root, Text};
+use canopy::{derive_commands, prelude::*};
+use canopy_widgets::{Frame, Text};
+
+/// Default bindings for the pager demo.
+const DEFAULT_BINDINGS: &str = r#"
+canopy.bind_with("g", { path = "pager", desc = "Top" }, function()
+    text.scroll_to(0, 0)
+end)
+canopy.bind_with("j", { path = "pager", desc = "Scroll down" }, function()
+    text.scroll_down()
+end)
+canopy.bind_with("Down", { path = "pager", desc = "Scroll down" }, function()
+    text.scroll_down()
+end)
+canopy.bind_mouse_with("ScrollDown", { path = "pager", desc = "Scroll down" }, function()
+    text.scroll_down()
+end)
+canopy.bind_with("k", { path = "pager", desc = "Scroll up" }, function()
+    text.scroll_up()
+end)
+canopy.bind_with("Up", { path = "pager", desc = "Scroll up" }, function()
+    text.scroll_up()
+end)
+canopy.bind_mouse_with("ScrollUp", { path = "pager", desc = "Scroll up" }, function()
+    text.scroll_up()
+end)
+canopy.bind_with("h", { path = "pager", desc = "Scroll left" }, function()
+    text.scroll_left()
+end)
+canopy.bind_with("Left", { path = "pager", desc = "Scroll left" }, function()
+    text.scroll_left()
+end)
+canopy.bind_with("l", { path = "pager", desc = "Scroll right" }, function()
+    text.scroll_right()
+end)
+canopy.bind_with("Right", { path = "pager", desc = "Scroll right" }, function()
+    text.scroll_right()
+end)
+canopy.bind_with("PageDown", { path = "pager", desc = "Page down" }, function()
+    text.page_down()
+end)
+canopy.bind_with("Space", { path = "pager", desc = "Page down" }, function()
+    text.page_down()
+end)
+canopy.bind_with("PageUp", { path = "pager", desc = "Page up" }, function()
+    text.page_up()
+end)
+canopy.bind_with("q", { path = "root", desc = "Quit" }, function()
+    root.quit()
+end)
+"#;
 
 /// Simple pager widget for file contents.
 pub struct Pager {
@@ -48,22 +93,5 @@ impl Loader for Pager {
 
 /// Install key bindings for the pager demo.
 pub fn setup_bindings(cnpy: &mut Canopy) {
-    Binder::new(cnpy)
-        .with_path("pager")
-        .key_command('g', Text::cmd_scroll_to().call_with([0u32, 0u32]))
-        .key_command('j', Text::cmd_scroll_down())
-        .key_command(key::KeyCode::Down, Text::cmd_scroll_down())
-        .mouse_command(mouse::Action::ScrollDown, Text::cmd_scroll_down())
-        .key_command('k', Text::cmd_scroll_up())
-        .key_command(key::KeyCode::Up, Text::cmd_scroll_up())
-        .mouse_command(mouse::Action::ScrollUp, Text::cmd_scroll_up())
-        .key_command('h', Text::cmd_scroll_left())
-        .key_command(key::KeyCode::Left, Text::cmd_scroll_left())
-        .key_command('l', Text::cmd_scroll_right())
-        .key_command(key::KeyCode::Right, Text::cmd_scroll_right())
-        .key_command(key::KeyCode::PageDown, Text::cmd_page_down())
-        .key_command(' ', Text::cmd_page_down())
-        .key_command(key::KeyCode::PageUp, Text::cmd_page_up())
-        .with_path("root")
-        .key_command('q', Root::cmd_quit());
+    cnpy.run_default_script(DEFAULT_BINDINGS).unwrap();
 }

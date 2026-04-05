@@ -35,8 +35,6 @@ pub mod testing;
 pub mod view;
 
 // Core modules - internal
-/// Binding utilities.
-pub mod binder;
 /// Core Canopy application implementation.
 pub mod canopy;
 /// Core context traits and implementations.
@@ -59,8 +57,7 @@ pub mod text;
 pub mod world;
 
 // Public exports from internal modules
-pub use binder::{Binder, DefaultBindings};
-pub use canopy::{BindingAction, Canopy, Loader};
+pub use canopy::{Canopy, Loader};
 pub use children::{KeyedChildren, RemovePolicy};
 pub use context::{ChildKey, Context, Preorder, ReadContext, Slot};
 pub use id::{NodeId, TypedId};

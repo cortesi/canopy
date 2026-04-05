@@ -1,8 +1,20 @@
-use canopy::{derive_commands, event::key, layout::Edges, prelude::*};
+use canopy::{derive_commands, layout::Edges, prelude::*};
 use canopy_widgets::{
-    Frame, Pad, Root,
+    Frame, Pad,
     editor::{EditMode, Editor, EditorConfig, WrapMode, highlight::SyntectHighlighter},
 };
+
+/// Default bindings for the cedit demo.
+const DEFAULT_BINDINGS: &str = r#"
+root.default_bindings()
+
+canopy.bind_with("Tab", { path = "ed/", desc = "Next focus" }, function()
+    root.focus_next()
+end)
+canopy.bind_with("p", { path = "ed/", desc = "Log demo message" }, function()
+    canopy.log("cedit")
+end)
+"#;
 
 /// Simple editor wrapper for the cedit demo.
 pub struct Ed {
@@ -57,9 +69,5 @@ impl Loader for Ed {
 
 /// Install key bindings for the cedit demo.
 pub fn setup_bindings(cnpy: &mut Canopy) {
-    Binder::new(cnpy)
-        .defaults::<Root>()
-        .with_path("ed/")
-        .key(key::KeyCode::Tab, "root.focus_next()")
-        .key('p', "canopy.log(\"cedit\")");
+    cnpy.run_default_script(DEFAULT_BINDINGS).unwrap();
 }

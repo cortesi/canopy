@@ -4,12 +4,73 @@
 
 use canopy::{
     command, derive_commands,
-    event::{key, mouse},
     layout::Edges,
     prelude::*,
     style::{StyleMap, dracula, effects, gruvbox, solarized},
 };
 use canopy_widgets::{Dropdown, DropdownItem, Frame, Modal, Root, Selector, SelectorItem};
+
+/// Default bindings for the style gym demo.
+const DEFAULT_BINDINGS: &str = r#"
+root.default_bindings()
+
+canopy.bind_with("q", { path = "stylegym/", desc = "Quit" }, function()
+    root.quit()
+end)
+canopy.bind_with("Tab", { path = "stylegym/", desc = "Next focus" }, function()
+    root.focus_next()
+end)
+canopy.bind_with("BackTab", { path = "stylegym/", desc = "Previous focus" }, function()
+    root.focus_prev()
+end)
+canopy.bind_with("m", { path = "stylegym/", desc = "Show modal" }, function()
+    stylegym.show_modal()
+end)
+canopy.bind_with("Esc", { path = "stylegym/", desc = "Hide modal" }, function()
+    stylegym.hide_modal()
+end)
+canopy.bind_with("j", { path = "stylegym/", desc = "Next focus" }, function()
+    root.focus_next()
+end)
+canopy.bind_with("k", { path = "stylegym/", desc = "Previous focus" }, function()
+    root.focus_prev()
+end)
+
+canopy.bind_with("Enter", { path = "dropdown", desc = "Apply theme" }, function()
+    dropdown.confirm()
+    stylegym.apply_theme()
+end)
+canopy.bind_with("Space", { path = "dropdown", desc = "Toggle dropdown" }, function()
+    dropdown.toggle()
+end)
+canopy.bind_with("Down", { path = "dropdown", desc = "Next option" }, function()
+    dropdown.select_next()
+end)
+canopy.bind_with("Up", { path = "dropdown", desc = "Previous option" }, function()
+    dropdown.select_prev()
+end)
+canopy.bind_mouse_with("LeftDown", { path = "dropdown", desc = "Apply theme" }, function()
+    stylegym.apply_theme()
+end)
+
+canopy.bind_with("Space", { path = "selector", desc = "Toggle effect" }, function()
+    selector.toggle()
+    stylegym.apply_effects()
+end)
+canopy.bind_with("Enter", { path = "selector", desc = "Toggle effect" }, function()
+    selector.toggle()
+    stylegym.apply_effects()
+end)
+canopy.bind_with("Down", { path = "selector", desc = "Next effect" }, function()
+    selector.select_next()
+end)
+canopy.bind_with("Up", { path = "selector", desc = "Previous effect" }, function()
+    selector.select_prev()
+end)
+canopy.bind_mouse_with("LeftDown", { path = "selector", desc = "Apply effects" }, function()
+    stylegym.apply_effects()
+end)
+"#;
 
 /// Theme option for the dropdown.
 #[derive(Clone)]
@@ -427,42 +488,5 @@ impl Loader for Stylegym {
 
 /// Set up key bindings for the stylegym demo.
 pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
-    Binder::new(cnpy)
-        .defaults::<Root>()
-        .with_path("stylegym/")
-        .key('q', "root.quit()")
-        .key(key::KeyCode::Tab, "root.focus_next()")
-        .key(key::KeyCode::BackTab, "root.focus_prev()")
-        .key('m', "stylegym.show_modal()")
-        .key(key::KeyCode::Esc, "stylegym.hide_modal()")
-        // Global j/k for navigation between focusable items
-        .key('j', "root.focus_next()")
-        .key('k', "root.focus_prev()")
-        .with_path("dropdown")
-        .key(
-            key::KeyCode::Enter,
-            "dropdown.confirm(); stylegym.apply_theme()",
-        )
-        .key(' ', "dropdown.toggle()")
-        .key(key::KeyCode::Down, "dropdown.select_next()")
-        .key(key::KeyCode::Up, "dropdown.select_prev()")
-        // Mouse click on dropdown triggers theme application
-        .mouse(
-            mouse::Button::Left + mouse::Action::Down,
-            "stylegym.apply_theme()",
-        )
-        .with_path("selector")
-        .key(' ', "selector.toggle(); stylegym.apply_effects()")
-        .key(
-            key::KeyCode::Enter,
-            "selector.toggle(); stylegym.apply_effects()",
-        )
-        .key(key::KeyCode::Down, "selector.select_next()")
-        .key(key::KeyCode::Up, "selector.select_prev()")
-        // Mouse click on selector triggers effect application
-        .mouse(
-            mouse::Button::Left + mouse::Action::Down,
-            "stylegym.apply_effects()",
-        );
-    Ok(())
+    cnpy.run_default_script(DEFAULT_BINDINGS)
 }

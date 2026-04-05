@@ -1,10 +1,8 @@
 use canopy::{
-    Binder, Canopy, ChildKey, Context, Core, DefaultBindings, Loader, NodeId, ReadContext, Widget,
-    command,
+    Canopy, ChildKey, Context, Core, Loader, NodeId, ReadContext, Widget, command,
     commands::{CommandNode, CommandSpec, FocusDirection},
     derive_commands,
     error::{Error, Result},
-    event::key::*,
     layout::{Direction, Layout, Sizing},
     render::Render,
     state::NodeName,
@@ -12,6 +10,25 @@ use canopy::{
 };
 
 use crate::{help::Help, inspector::Inspector};
+
+/// Default root bindings exposed through `root.default_bindings()`.
+const DEFAULT_BINDINGS: &str = r#"
+inspector.default_bindings()
+help.default_bindings()
+
+canopy.bind_with("ctrl-Right", { path = "root", desc = "Toggle inspector" }, function()
+    root.toggle_inspector()
+end)
+canopy.bind_with("ctrl-/", { path = "root", desc = "Toggle help" }, function()
+    root.toggle_help()
+end)
+canopy.bind_with("q", { path = "root", desc = "Quit" }, function()
+    root.quit()
+end)
+canopy.bind_with("a", { path = "inspector", desc = "Focus app" }, function()
+    root.focus_app()
+end)
+"#;
 
 // Typed key for the inspector slot
 canopy::key!(InspectorSlot: Inspector);
@@ -337,22 +354,10 @@ impl Default for Root {
     }
 }
 
-impl DefaultBindings for Root {
-    fn defaults(b: Binder) -> Binder {
-        b.defaults::<Inspector>()
-            .defaults::<Help>()
-            .with_path("root")
-            .key(Ctrl + KeyCode::Right, "root.toggle_inspector()")
-            .key(Ctrl + Shift + '/', "root.toggle_help()")
-            .key('q', "root.quit()")
-            .with_path("inspector")
-            .key('a', "root.focus_app()")
-    }
-}
-
 impl Loader for Root {
     fn load(c: &mut Canopy) -> Result<()> {
         c.add_commands::<Self>()?;
+        c.register_default_bindings("root", DEFAULT_BINDINGS)?;
         Inspector::load(c)?;
         Help::load(c)?;
         Ok(())

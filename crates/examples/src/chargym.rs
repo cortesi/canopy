@@ -1,11 +1,7 @@
 //! Chargym: A Unicode width and wide character demo.
 
-use canopy::{
-    derive_commands,
-    event::{key, mouse},
-    prelude::*,
-};
-use canopy_widgets::{CanvasWidth, Frame, Root, Text};
+use canopy::{derive_commands, prelude::*};
+use canopy_widgets::{CanvasWidth, Frame, Text};
 use unicode_width::UnicodeWidthStr;
 
 /// Wrap width used for the text widget.
@@ -18,6 +14,55 @@ const LABEL_SEPARATOR: &str = " | ";
 const RULER_PREFIX_LEN: usize = LABEL_WIDTH + LABEL_SEPARATOR.len();
 /// Column count for the ruler lines, aligned with the sample text start.
 const RULER_COLUMNS: usize = WRAP_WIDTH as usize - RULER_PREFIX_LEN;
+
+/// Default bindings for the chargym demo.
+const DEFAULT_BINDINGS: &str = r#"
+canopy.bind_with("g", { path = "char_gym", desc = "Top" }, function()
+    text.scroll_to(0, 0)
+end)
+canopy.bind_with("j", { path = "char_gym", desc = "Scroll down" }, function()
+    text.scroll_down()
+end)
+canopy.bind_with("Down", { path = "char_gym", desc = "Scroll down" }, function()
+    text.scroll_down()
+end)
+canopy.bind_mouse_with("ScrollDown", { path = "char_gym", desc = "Scroll down" }, function()
+    text.scroll_down()
+end)
+canopy.bind_with("k", { path = "char_gym", desc = "Scroll up" }, function()
+    text.scroll_up()
+end)
+canopy.bind_with("Up", { path = "char_gym", desc = "Scroll up" }, function()
+    text.scroll_up()
+end)
+canopy.bind_mouse_with("ScrollUp", { path = "char_gym", desc = "Scroll up" }, function()
+    text.scroll_up()
+end)
+canopy.bind_with("h", { path = "char_gym", desc = "Scroll left" }, function()
+    text.scroll_left()
+end)
+canopy.bind_with("Left", { path = "char_gym", desc = "Scroll left" }, function()
+    text.scroll_left()
+end)
+canopy.bind_with("l", { path = "char_gym", desc = "Scroll right" }, function()
+    text.scroll_right()
+end)
+canopy.bind_with("Right", { path = "char_gym", desc = "Scroll right" }, function()
+    text.scroll_right()
+end)
+canopy.bind_with("PageDown", { path = "char_gym", desc = "Page down" }, function()
+    text.page_down()
+end)
+canopy.bind_with("Space", { path = "char_gym", desc = "Page down" }, function()
+    text.page_down()
+end)
+canopy.bind_with("PageUp", { path = "char_gym", desc = "Page up" }, function()
+    text.page_up()
+end)
+canopy.bind_with("q", { path = "root", desc = "Quit" }, function()
+    root.quit()
+end)
+"#;
 
 /// ASCII-only sample text.
 const SAMPLE_ASCII: &str =
@@ -260,22 +305,5 @@ impl Loader for CharGym {
 
 /// Install key bindings for the chargym demo.
 pub fn setup_bindings(cnpy: &mut Canopy) {
-    Binder::new(cnpy)
-        .with_path("char_gym")
-        .key_command('g', Text::cmd_scroll_to().call_with([0u32, 0u32]))
-        .key_command('j', Text::cmd_scroll_down())
-        .key_command(key::KeyCode::Down, Text::cmd_scroll_down())
-        .mouse_command(mouse::Action::ScrollDown, Text::cmd_scroll_down())
-        .key_command('k', Text::cmd_scroll_up())
-        .key_command(key::KeyCode::Up, Text::cmd_scroll_up())
-        .mouse_command(mouse::Action::ScrollUp, Text::cmd_scroll_up())
-        .key_command('h', Text::cmd_scroll_left())
-        .key_command(key::KeyCode::Left, Text::cmd_scroll_left())
-        .key_command('l', Text::cmd_scroll_right())
-        .key_command(key::KeyCode::Right, Text::cmd_scroll_right())
-        .key_command(key::KeyCode::PageDown, Text::cmd_page_down())
-        .key_command(' ', Text::cmd_page_down())
-        .key_command(key::KeyCode::PageUp, Text::cmd_page_up())
-        .with_path("root")
-        .key_command('q', Root::cmd_quit());
+    cnpy.run_default_script(DEFAULT_BINDINGS).unwrap();
 }

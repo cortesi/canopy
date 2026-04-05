@@ -1,34 +1,38 @@
 # Binding system
 
-Bindings map input events (keys or mouse actions) to either scripts or typed command invocations.
+Bindings are declared from Luau with `canopy.bind_with()` and `canopy.bind_mouse_with()`.
 Bindings are resolved against the focused node's path and can be scoped by mode.
 
 ## Quick start
 
-Script binding:
+Key binding:
 
-```rust
-canopy.bind_key('q', "", "root::quit()")?;
+```luau
+canopy.bind_with("q", { desc = "Quit" }, function()
+    root.quit()
+end)
 ```
 
-Typed command binding:
+Path-scoped binding:
 
-```rust
-canopy.bind_key_command('q', "", Root::cmd_quit().call())?;
+```luau
+canopy.bind_with("j", { path = "list", desc = "Next item" }, function()
+    list.select_next()
+end)
 ```
-
-The empty path filter (`""`) matches any focus path.
 
 ## Modes
 
-Bindings live in named modes. Use the default mode (`""`) or set a mode explicitly:
+Bindings live in named modes. Use the default mode or set a mode explicitly in the options table:
 
-```rust
-canopy.bind_mode_key('j', "nav", "", "editor::down()")?;
-canopy.keymap.set_mode("nav")?;
+```luau
+canopy.bind_with("j", { mode = "nav", desc = "Cursor down" }, function()
+    editor.down()
+end)
 ```
 
-If the current mode does not match a binding, Canopy falls back to the default mode.
+Applications switch modes through the runtime's `InputMap`; if the current mode does not match a
+binding, Canopy falls back to the default mode.
 
 ## Path filters
 
@@ -47,13 +51,20 @@ Examples:
 
 Mouse bindings use the same path filters:
 
-```rust
-use canopy::event::mouse;
-
-canopy.bind_mouse(mouse::MouseEvent::left_click(), "list", "list::activate()")?;
+```luau
+canopy.bind_mouse_with("LeftDown", { path = "list", desc = "Activate item" }, function()
+    list.activate()
+end)
 ```
 
-## Binder helper
+## Default binding scripts
 
-The `Binder` helper offers a fluent API for building sets of bindings and scoping them by path.
-It is especially useful in examples and apps with many bindings.
+Widgets can register optional default bindings that are callable from Luau after `finalize_api()`:
+
+```luau
+root.default_bindings()
+help.default_bindings()
+```
+
+Applications typically run a short startup script that composes widget defaults with
+app-specific bindings.

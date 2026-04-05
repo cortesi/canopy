@@ -1,8 +1,17 @@
-use canopy::{derive_commands, event::key, layout::Edges, prelude::*};
+use canopy::{derive_commands, layout::Edges, prelude::*};
 use canopy_widgets::{
-    Frame, Pad, Root,
+    Frame, Pad,
     editor::{EditMode, Editor, EditorConfig, WrapMode, highlight::SyntectHighlighter},
 };
+
+/// Default bindings for the widget editor demo.
+const DEFAULT_BINDINGS: &str = r#"
+root.default_bindings()
+
+canopy.bind_with("Tab", { path = "widget_editor/", desc = "Next focus" }, function()
+    root.focus_next()
+end)
+"#;
 
 /// Widget editor example that opens a Rust file with syntax highlighting.
 pub struct WidgetEditor {
@@ -60,8 +69,5 @@ impl Loader for WidgetEditor {
 
 /// Install key bindings for the widget editor example.
 pub fn setup_bindings(cnpy: &mut Canopy) {
-    Binder::new(cnpy)
-        .defaults::<Root>()
-        .with_path("widget_editor/")
-        .key(key::KeyCode::Tab, "root.focus_next()");
+    cnpy.run_default_script(DEFAULT_BINDINGS).unwrap();
 }
