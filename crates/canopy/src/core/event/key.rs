@@ -312,6 +312,84 @@ impl Key {
             normalized
         }
     }
+
+    /// Parse a key specification such as `ctrl-s`, `PageDown`, or `A`.
+    pub fn parse_spec(spec: &str) -> Result<Self, String> {
+        let spec = spec.trim();
+        if spec.is_empty() {
+            return Err("key specification cannot be empty".into());
+        }
+
+        let parts = spec
+            .split(['-', '+'])
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>();
+        let Some((key_part, modifier_parts)) = parts.split_last() else {
+            return Err("key specification cannot be empty".into());
+        };
+
+        let mut mods = Empty;
+        for part in modifier_parts {
+            if part.eq_ignore_ascii_case("ctrl") || part.eq_ignore_ascii_case("control") {
+                mods.ctrl = true;
+            } else if part.eq_ignore_ascii_case("alt") {
+                mods.alt = true;
+            } else if part.eq_ignore_ascii_case("shift") {
+                mods.shift = true;
+            } else {
+                return Err(format!("unknown key modifier: {part}"));
+            }
+        }
+
+        Ok((mods + parse_key_code(key_part)?).normalize())
+    }
+}
+
+/// Parse a single key name into a key code.
+fn parse_key_code(spec: &str) -> Result<KeyCode, String> {
+    if spec.chars().count() == 1 {
+        return Ok(KeyCode::Char(
+            spec.chars().next().expect("single-character key spec"),
+        ));
+    }
+
+    let lower = spec.to_ascii_lowercase();
+    let code = match lower.as_str() {
+        "backspace" => KeyCode::Backspace,
+        "enter" | "return" => KeyCode::Enter,
+        "left" | "arrowleft" => KeyCode::Left,
+        "right" | "arrowright" => KeyCode::Right,
+        "up" | "arrowup" => KeyCode::Up,
+        "down" | "arrowdown" => KeyCode::Down,
+        "home" => KeyCode::Home,
+        "end" => KeyCode::End,
+        "pageup" => KeyCode::PageUp,
+        "pagedown" => KeyCode::PageDown,
+        "tab" => KeyCode::Tab,
+        "backtab" => KeyCode::BackTab,
+        "delete" | "del" => KeyCode::Delete,
+        "insert" | "ins" => KeyCode::Insert,
+        "null" => KeyCode::Null,
+        "esc" | "escape" => KeyCode::Esc,
+        "capslock" => KeyCode::CapsLock,
+        "scrolllock" => KeyCode::ScrollLock,
+        "numlock" => KeyCode::NumLock,
+        "printscreen" => KeyCode::PrintScreen,
+        "pause" => KeyCode::Pause,
+        "menu" => KeyCode::Menu,
+        "keypadbegin" => KeyCode::KeypadBegin,
+        "space" => KeyCode::Char(' '),
+        _ => {
+            if let Some(number) = lower.strip_prefix('f') {
+                let number = number
+                    .parse::<u8>()
+                    .map_err(|_| format!("invalid function key: {spec}"))?;
+                return Ok(KeyCode::F(number));
+            }
+            return Err(format!("unknown key: {spec}"));
+        }
+    };
+    Ok(code)
 }
 
 /// Map ASCII control codes to canonical printable characters.
@@ -485,6 +563,17 @@ mod tests {
                 key: KeyCode::Char('c')
             }
         );
+        Ok(())
+    }
+
+    #[test]
+    fn parse_specs() -> Result<()> {
+        assert_eq!(Key::parse_spec("ctrl-s"), Ok(Ctrl + 's'));
+        assert_eq!(Key::parse_spec("PageDown"), Ok(KeyCode::PageDown.into()));
+        assert_eq!(Key::parse_spec("ArrowUp"), Ok(KeyCode::Up.into()));
+        assert_eq!(Key::parse_spec("A"), Ok('A'.into()));
+        assert_eq!(Key::parse_spec("Space"), Ok(' '.into()));
+        assert!(Key::parse_spec("ctrl-what").is_err());
         Ok(())
     }
 }

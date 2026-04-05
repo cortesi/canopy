@@ -90,7 +90,7 @@ fn test_harness_script_method() -> Result<()> {
     harness.render()?;
 
     // Test that we can execute a simple print script.
-    harness.script("print(\"Hello from script\")")?;
+    harness.script("canopy.log(\"Hello from script\")")?;
 
     Ok(())
 }
@@ -103,7 +103,7 @@ fn test_harness_script_with_list_navigation() -> Result<()> {
     let initial_selected = list_selected_index(&mut harness)?;
 
     // Navigate using list commands (these are loaded by the List type).
-    harness.script("list::select_last()")?;
+    harness.script("list.select_last()")?;
 
     let selected = list_selected_index(&mut harness)?;
 
@@ -119,11 +119,11 @@ fn test_listgym_adds_and_deletes_columns() -> Result<()> {
 
     let initial_cols = panes_column_count(&mut harness)?;
 
-    harness.script("list_gym::add_column()")?;
+    harness.script("list_gym.add_column()")?;
     let after_add = panes_column_count(&mut harness)?;
     assert_eq!(after_add, initial_cols + 1);
 
-    harness.script("list_gym::delete_column()")?;
+    harness.script("list_gym.delete_column()")?;
     let after_delete = panes_column_count(&mut harness)?;
     assert_eq!(after_delete, initial_cols);
 
@@ -135,9 +135,9 @@ fn test_listgym_add_item_command() -> Result<()> {
     let mut harness = create_test_harness()?;
     harness.render()?;
 
-    harness.script("list_gym::add_item()")?;
-    harness.script("list_gym::add_column()")?;
-    harness.script("list_gym::add_item()")?;
+    harness.script("list_gym.add_item()")?;
+    harness.script("list_gym.add_column()")?;
+    harness.script("list_gym.add_item()")?;
 
     Ok(())
 }
@@ -147,15 +147,15 @@ fn test_listgym_tabs_between_columns() -> Result<()> {
     let mut harness = create_test_harness()?;
     harness.render()?;
 
-    harness.script("list_gym::add_column()")?;
+    harness.script("list_gym.add_column()")?;
     let lists = list_count(&mut harness)?;
     assert_eq!(lists, 2);
     assert_eq!(focused_list_index(&mut harness)?, Some(1));
 
-    harness.script("panes::focus_column(1)")?;
+    harness.script("panes.focus_column(1)")?;
     assert_eq!(focused_list_index(&mut harness)?, Some(0));
 
-    harness.script("panes::focus_column(-1)")?;
+    harness.script("panes.focus_column(-1)")?;
     assert_eq!(focused_list_index(&mut harness)?, Some(1));
 
     Ok(())

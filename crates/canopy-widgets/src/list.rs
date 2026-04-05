@@ -897,25 +897,25 @@ mod tests {
         harness.render()?;
 
         // Navigate down
-        harness.script("list::select_next()")?;
+        harness.script("list.select_next()")?;
         harness.with_root_widget::<List<Text>, _>(|list| {
             assert_eq!(list.selected_index(), Some(1));
         });
 
         // Navigate to last
-        harness.script("list::select_last()")?;
+        harness.script("list.select_last()")?;
         harness.with_root_widget::<List<Text>, _>(|list| {
             assert_eq!(list.selected_index(), Some(2));
         });
 
         // Navigate up
-        harness.script("list::select_prev()")?;
+        harness.script("list.select_prev()")?;
         harness.with_root_widget::<List<Text>, _>(|list| {
             assert_eq!(list.selected_index(), Some(1));
         });
 
         // Navigate to first
-        harness.script("list::select_first()")?;
+        harness.script("list.select_first()")?;
         harness.with_root_widget::<List<Text>, _>(|list| {
             assert_eq!(list.selected_index(), Some(0));
         });
@@ -962,7 +962,7 @@ mod tests {
         })?;
 
         harness.render()?;
-        harness.script("list::clear()")?;
+        harness.script("list.clear()")?;
 
         harness.with_root_widget::<List<Text>, _>(|list| {
             assert!(list.is_empty());

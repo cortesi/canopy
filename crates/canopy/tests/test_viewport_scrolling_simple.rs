@@ -76,7 +76,7 @@ mod tests {
         let mut harness = Harness::builder(ScrollTest::new()).size(30, 10).build()?;
         harness
             .canopy
-            .bind_key(key::KeyCode::Down, "", "scroll_test::scroll_down()")?;
+            .bind_key(key::KeyCode::Down, "", "scroll_test.scroll_down()")?;
 
         harness.render()?;
         assert!(harness.tbuf().contains_text("Scroll position: (0, 0)"));

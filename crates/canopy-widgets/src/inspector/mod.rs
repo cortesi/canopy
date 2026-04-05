@@ -56,19 +56,19 @@ impl Widget for Inspector {
 impl DefaultBindings for Inspector {
     fn defaults(b: Binder) -> Binder {
         b.with_path("inspector/")
-            .key(KeyCode::Tab, "tabs::next()")
+            .key(KeyCode::Tab, "tabs.next()")
             .with_path("logs")
-            .key('C', "logs::clear()")
-            .key('d', "logs::delete_selected()")
-            .key('j', "logs::select_by(1)")
-            .key('k', "logs::select_by(-1)")
-            .key('g', "logs::select_first()")
-            .key('G', "logs::select_last()")
-            .key(' ', "logs::page_down()")
-            .key(KeyCode::PageDown, "logs::page_down()")
-            .key(KeyCode::PageUp, "logs::page_up()")
-            .key(KeyCode::Down, "logs::select_by(1)")
-            .key(KeyCode::Up, "logs::select_by(-1)")
+            .key('C', "logs.clear()")
+            .key('d', "logs.delete_selected()")
+            .key('j', "logs.select_by(1)")
+            .key('k', "logs.select_by(-1)")
+            .key('g', "logs.select_first()")
+            .key('G', "logs.select_last()")
+            .key(' ', "logs.page_down()")
+            .key(KeyCode::PageDown, "logs.page_down()")
+            .key(KeyCode::PageUp, "logs.page_up()")
+            .key(KeyCode::Down, "logs.select_by(1)")
+            .key(KeyCode::Up, "logs.select_by(-1)")
     }
 }
 

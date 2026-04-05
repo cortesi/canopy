@@ -309,18 +309,18 @@ fn file_title(path: &Path) -> String {
 /// Register keybindings for image zooming and panning.
 fn setup_image_bindings(cnpy: &mut Canopy) {
     Binder::new(cnpy)
-        .key('q', "root::quit()")
+        .key('q', "root.quit()")
         .with_path("image_view/")
-        .key('i', "image_view::zoom_in()")
-        .key('o', "image_view::zoom_out()")
-        .key('h', "image_view::pan_left()")
-        .key('j', "image_view::pan_down()")
-        .key('k', "image_view::pan_up()")
-        .key('l', "image_view::pan_right()")
-        .key(key::KeyCode::Left, "image_view::pan_left()")
-        .key(key::KeyCode::Right, "image_view::pan_right()")
-        .key(key::KeyCode::Up, "image_view::pan_up()")
-        .key(key::KeyCode::Down, "image_view::pan_down()");
+        .key('i', "image_view.zoom_in()")
+        .key('o', "image_view.zoom_out()")
+        .key('h', "image_view.pan_left()")
+        .key('j', "image_view.pan_down()")
+        .key('k', "image_view.pan_up()")
+        .key('l', "image_view.pan_right()")
+        .key(key::KeyCode::Left, "image_view.pan_left()")
+        .key(key::KeyCode::Right, "image_view.pan_right()")
+        .key(key::KeyCode::Up, "image_view.pan_up()")
+        .key(key::KeyCode::Down, "image_view.pan_down()");
 }
 
 /// Register keybindings for the terminal demo.

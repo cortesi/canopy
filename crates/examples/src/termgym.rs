@@ -469,16 +469,16 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
         .with_path("term_gym/*/terminal/")
         .key(
             key::Ctrl + key::KeyCode::Char('a'),
-            "term_gym::focus_sidebar()",
+            "term_gym.focus_sidebar()",
         )
         .with_path("term_gym")
-        .key(key::Ctrl + key::KeyCode::F(2), "term_gym::new_terminal()")
-        .key(key::Ctrl + key::KeyCode::F(3), "term_gym::next_terminal()")
-        .key(key::Ctrl + key::KeyCode::F(4), "term_gym::prev_terminal()")
+        .key(key::Ctrl + key::KeyCode::F(2), "term_gym.new_terminal()")
+        .key(key::Ctrl + key::KeyCode::F(3), "term_gym.next_terminal()")
+        .key(key::Ctrl + key::KeyCode::F(4), "term_gym.prev_terminal()")
         .with_path("term_gym/*/list")
-        .key('n', "term_gym::new_terminal_sidebar()")
-        .key('j', "term_gym::next_terminal_sidebar()")
-        .key('k', "term_gym::prev_terminal_sidebar()")
-        .key(key::KeyCode::Enter, "term_gym::focus_active_terminal()")
-        .key('d', "term_gym::delete_terminal()");
+        .key('n', "term_gym.new_terminal_sidebar()")
+        .key('j', "term_gym.next_terminal_sidebar()")
+        .key('k', "term_gym.prev_terminal_sidebar()")
+        .key(key::KeyCode::Enter, "term_gym.focus_active_terminal()")
+        .key('d', "term_gym.delete_terminal()");
 }

@@ -116,6 +116,16 @@ impl ArgValue {
             Self::Map(_) => "Map",
         }
     }
+
+    /// Convert this dynamic value into JSON for external automation APIs.
+    pub fn to_json_value(&self) -> Result<JsonValue, CommandError> {
+        arg_value_to_json(self.clone())
+    }
+
+    /// Convert JSON into an `ArgValue` for external automation APIs.
+    pub fn from_json_value(value: JsonValue) -> Result<Self, CommandError> {
+        json_to_arg_value(value)
+    }
 }
 
 /// Convert a typed value into an ArgValue.
@@ -817,6 +827,8 @@ pub enum CommandParamKind {
 pub struct CommandTypeSpec {
     /// Rust type name for introspection.
     pub rust: &'static str,
+    /// Optional Luau type override.
+    pub luau: Option<&'static str>,
     /// Optional documentation string.
     pub doc: Option<&'static str>,
 }

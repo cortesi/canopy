@@ -60,6 +60,6 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
     Binder::new(cnpy)
         .defaults::<Root>()
         .with_path("ed/")
-        .key(key::KeyCode::Tab, "root::focus_next()")
-        .key('p', "print(\"cedit\")");
+        .key(key::KeyCode::Tab, "root.focus_next()")
+        .key('p', "canopy.log(\"cedit\")");
 }

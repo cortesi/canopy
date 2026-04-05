@@ -25,6 +25,16 @@ impl BindingId {
         *next = next.saturating_add(1);
         id
     }
+
+    /// Return the numeric binding identifier.
+    pub fn as_u64(self) -> u64 {
+        self.0
+    }
+
+    /// Reconstruct a binding identifier from its numeric form.
+    pub fn from_u64(id: u64) -> Self {
+        Self(id)
+    }
 }
 
 /// An action to be taken in response to an event, if the path matches.
@@ -44,6 +54,15 @@ type BindingScore = (usize, usize, usize, usize);
 /// Tuple storing a binding match and its score.
 type BindingCandidate = (BindingScore, BindingTarget, PathMatch);
 
+/// Binding mode/path filter used when removing or replacing bindings.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct BindingFilter<'a> {
+    /// Optional mode name to match.
+    pub mode: Option<&'a str>,
+    /// Optional exact path filter string to match.
+    pub path_filter: Option<&'a str>,
+}
+
 /// A resolved input binding target.
 #[derive(Debug, Clone, PartialEq)]
 pub enum BindingTarget {
@@ -51,6 +70,10 @@ pub enum BindingTarget {
     Script(script::ScriptId),
     /// Direct command invocation.
     Command(CommandInvocation),
+    /// Sequence of commands executed in order.
+    CommandSequence(Vec<CommandInvocation>),
+    /// Stored Luau closure owned by the script host.
+    LuauFunction(script::LuauFunctionId),
 }
 
 /// Input event used for bindings.
@@ -211,17 +234,64 @@ impl InputMode {
         out
     }
 
-    /// Remove a binding by ID. Returns true if a binding was removed.
-    fn unbind(&mut self, id: BindingId) -> bool {
+    /// Remove a binding by ID and return removed targets.
+    fn unbind_with_targets(&mut self, id: BindingId) -> Vec<BindingTarget> {
         let mut removed = false;
+        let mut targets = Vec::new();
         for actions in self.inputs.values_mut() {
-            let before = actions.len();
-            actions.retain(|a| a.id != id);
-            if actions.len() != before {
-                removed = true;
+            let mut retained = Vec::new();
+            for action in actions.drain(..) {
+                if action.id == id {
+                    removed = true;
+                    targets.push(action.action);
+                } else {
+                    retained.push(action);
+                }
             }
+            *actions = retained;
         }
         self.inputs.retain(|_, actions| !actions.is_empty());
+        if removed { targets } else { Vec::new() }
+    }
+
+    /// Remove bindings for an input, optionally filtered by path.
+    fn unbind_input(
+        &mut self,
+        input: InputSpec,
+        path_filter: Option<&str>,
+    ) -> Vec<(BindingId, BindingTarget)> {
+        let input = input.normalize();
+        let Some(actions) = self.inputs.get_mut(&input) else {
+            return Vec::new();
+        };
+
+        let mut removed = Vec::new();
+        actions.retain(|action| {
+            let matches = path_filter.is_none_or(|filter| action.pathmatch.filter() == filter);
+            if matches {
+                removed.push((action.id, action.action.clone()));
+                false
+            } else {
+                true
+            }
+        });
+
+        if actions.is_empty() {
+            self.inputs.remove(&input);
+        }
+
+        removed
+    }
+
+    /// Remove all bindings from this mode.
+    fn clear(&mut self) -> Vec<(BindingId, BindingTarget)> {
+        let mut removed = Vec::new();
+        for actions in self.inputs.values_mut() {
+            for action in actions.drain(..) {
+                removed.push((action.id, action.action));
+            }
+        }
+        self.inputs.clear();
         removed
     }
 }
@@ -340,6 +410,46 @@ impl InputMap {
         self.bind_action(mode, input, path_filter, BindingTarget::Command(command))
     }
 
+    /// Bind a key or mouse input to a direct command sequence.
+    ///
+    /// The input is normalized before storing.
+    ///
+    /// Returns the new binding ID.
+    pub fn bind_commands(
+        &mut self,
+        mode: &str,
+        input: InputSpec,
+        path_filter: &str,
+        commands: Vec<CommandInvocation>,
+    ) -> Result<BindingId> {
+        self.bind_action(
+            mode,
+            input,
+            path_filter,
+            BindingTarget::CommandSequence(commands),
+        )
+    }
+
+    /// Bind a key or mouse input to a stored Luau closure.
+    ///
+    /// The input is normalized before storing.
+    ///
+    /// Returns the new binding ID.
+    pub fn bind_luau_function(
+        &mut self,
+        mode: &str,
+        input: InputSpec,
+        path_filter: &str,
+        function: script::LuauFunctionId,
+    ) -> Result<BindingId> {
+        self.bind_action(
+            mode,
+            input,
+            path_filter,
+            BindingTarget::LuauFunction(function),
+        )
+    }
+
     /// Store a key binding action for a mode and path filter.
     ///
     /// Returns the new binding ID.
@@ -361,12 +471,73 @@ impl InputMap {
 
     /// Remove a binding by ID. Returns true if a binding was removed.
     pub fn unbind(&mut self, id: BindingId) -> bool {
+        !self.unbind_with_targets(id).is_empty()
+    }
+
+    /// Remove a binding by ID and return removed targets.
+    pub fn unbind_with_targets(&mut self, id: BindingId) -> Vec<BindingTarget> {
         let mut removed = false;
+        let mut targets = Vec::new();
         for mode in self.modes.values_mut() {
-            if mode.unbind(id) {
+            let removed_targets = mode.unbind_with_targets(id);
+            if !removed_targets.is_empty() {
                 removed = true;
+                targets.extend(removed_targets);
             }
         }
+        if removed { targets } else { Vec::new() }
+    }
+
+    /// Remove bindings matching an input/mode/path filter.
+    pub fn unbind_input(
+        &mut self,
+        input: InputSpec,
+        filter: BindingFilter<'_>,
+    ) -> Vec<(BindingId, BindingTarget)> {
+        let mut removed = Vec::new();
+
+        if let Some(mode) = filter.mode {
+            if let Some(entry) = self.modes.get_mut(mode) {
+                removed.extend(entry.unbind_input(input, filter.path_filter));
+            }
+        } else {
+            for entry in self.modes.values_mut() {
+                removed.extend(entry.unbind_input(input, filter.path_filter));
+            }
+        }
+
+        self.modes
+            .retain(|mode, actions| mode == DEFAULT_MODE || !actions.inputs.is_empty());
+        removed
+    }
+
+    /// Replace any bindings matching an input/mode/path filter, then insert the new binding.
+    pub fn replace_binding(
+        &mut self,
+        mode: &str,
+        input: InputSpec,
+        path_filter: &str,
+        target: BindingTarget,
+    ) -> Result<(BindingId, Vec<(BindingId, BindingTarget)>)> {
+        let removed = self.unbind_input(
+            input,
+            BindingFilter {
+                mode: Some(mode),
+                path_filter: Some(path_filter),
+            },
+        );
+        let id = self.bind_action(mode, input, path_filter, target)?;
+        Ok((id, removed))
+    }
+
+    /// Remove every binding from every mode.
+    pub fn clear(&mut self) -> Vec<(BindingId, BindingTarget)> {
+        let mut removed = Vec::new();
+        for mode in self.modes.values_mut() {
+            removed.extend(mode.clear());
+        }
+        self.modes.retain(|mode, _| mode == DEFAULT_MODE);
+        self.current_mode = DEFAULT_MODE.to_string();
         removed
     }
 
@@ -401,7 +572,7 @@ pub struct BindingInfo<'a> {
     pub input: InputSpec,
     /// Original path filter string (e.g., "editor/*").
     pub path_filter: &'a str,
-    /// Target action (script or command).
+    /// Target action (script, command, command sequence, or Luau closure).
     pub target: &'a BindingTarget,
 }
 
@@ -421,7 +592,7 @@ mod tests {
 
     #[test]
     fn caseconfusion() -> Result<()> {
-        let mut e = script::ScriptHost::new();
+        let e = script::ScriptHost::new();
         let mut m = InputMode::new();
         let a_foo = e.compile("x()")?;
 
@@ -448,7 +619,7 @@ mod tests {
 
     #[test]
     fn keymode() -> Result<()> {
-        let mut e = script::ScriptHost::new();
+        let e = script::ScriptHost::new();
 
         let mut m = InputMode::new();
         let a_foo = e.compile("x()")?;
@@ -508,7 +679,7 @@ mod tests {
     #[test]
     fn keymap() -> Result<()> {
         let mut m = InputMap::new();
-        let mut e = script::ScriptHost::new();
+        let e = script::ScriptHost::new();
 
         let a_default = e.compile("x()")?;
         let a_m = e.compile("x()")?;
@@ -534,7 +705,7 @@ mod tests {
     #[test]
     fn layered_modes_fall_back_to_default() -> Result<()> {
         let mut m = InputMap::new();
-        let mut e = script::ScriptHost::new();
+        let e = script::ScriptHost::new();
         let a_default = e.compile("x()")?;
         m.bind("", InputSpec::Key('b'.into()), "", a_default)?;
         m.set_mode("m")?;
@@ -549,7 +720,7 @@ mod tests {
     #[test]
     fn unbind_removes_binding() -> Result<()> {
         let mut m = InputMap::new();
-        let mut e = script::ScriptHost::new();
+        let e = script::ScriptHost::new();
         let a_default = e.compile("x()")?;
         let id = m.bind("", InputSpec::Key('a'.into()), "", a_default)?;
 
@@ -565,7 +736,7 @@ mod tests {
     #[test]
     fn binding_precedence_prefers_anchored_end() -> Result<()> {
         let mut m = InputMode::new();
-        let mut e = script::ScriptHost::new();
+        let e = script::ScriptHost::new();
         let a_loose = e.compile("x()")?;
         let a_anchor = e.compile("x()")?;
 
@@ -593,7 +764,7 @@ mod tests {
     #[test]
     fn binding_precedence_prefers_depth_when_literals_equal() -> Result<()> {
         let mut m = InputMode::new();
-        let mut e = script::ScriptHost::new();
+        let e = script::ScriptHost::new();
         let a_shallow = e.compile("x()")?;
         let a_deep = e.compile("x()")?;
 
@@ -621,7 +792,7 @@ mod tests {
     #[test]
     fn binding_precedence_prefers_insertion_order_on_tie() -> Result<()> {
         let mut m = InputMode::new();
-        let mut e = script::ScriptHost::new();
+        let e = script::ScriptHost::new();
         let a_first = e.compile("x()")?;
         let a_last = e.compile("x()")?;
 

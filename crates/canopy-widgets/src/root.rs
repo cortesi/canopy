@@ -342,11 +342,11 @@ impl DefaultBindings for Root {
         b.defaults::<Inspector>()
             .defaults::<Help>()
             .with_path("root")
-            .key(Ctrl + KeyCode::Right, "root::toggle_inspector()")
-            .key(Ctrl + Shift + '/', "root::toggle_help()")
-            .key('q', "root::quit()")
+            .key(Ctrl + KeyCode::Right, "root.toggle_inspector()")
+            .key(Ctrl + Shift + '/', "root.toggle_help()")
+            .key('q', "root.quit()")
             .with_path("inspector")
-            .key('a', "root::focus_app()")
+            .key('a', "root.focus_app()")
     }
 }
 
@@ -459,14 +459,14 @@ mod tests {
 
         assert_eq!(canopy.core.focus_id(), Some(left));
 
-        run_script(&mut canopy, "root::focus_right()")?;
+        run_script(&mut canopy, "root.focus_right()")?;
         assert_eq!(canopy.core.focus_id(), Some(right));
 
-        run_script(&mut canopy, "root::focus_left()")?;
+        run_script(&mut canopy, "root.focus_left()")?;
         assert_eq!(canopy.core.focus_id(), Some(left));
 
-        run_script(&mut canopy, "root::focus_up()")?;
-        run_script(&mut canopy, "root::focus_down()")?;
+        run_script(&mut canopy, "root.focus_up()")?;
+        run_script(&mut canopy, "root.focus_down()")?;
 
         canopy.render(&mut backend)?;
         assert!(canopy.core.focus_id().is_some());
@@ -480,10 +480,10 @@ mod tests {
 
         assert_eq!(canopy.core.focus_id(), Some(left));
 
-        run_script(&mut canopy, "root::focus_next()")?;
+        run_script(&mut canopy, "root.focus_next()")?;
         assert_eq!(canopy.core.focus_id(), Some(right));
 
-        run_script(&mut canopy, "root::focus_prev()")?;
+        run_script(&mut canopy, "root.focus_prev()")?;
         assert_eq!(canopy.core.focus_id(), Some(left));
 
         canopy.render(&mut backend)?;

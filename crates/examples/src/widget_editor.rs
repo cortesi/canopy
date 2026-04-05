@@ -63,5 +63,5 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
     Binder::new(cnpy)
         .defaults::<Root>()
         .with_path("widget_editor/")
-        .key(key::KeyCode::Tab, "root::focus_next()");
+        .key(key::KeyCode::Tab, "root.focus_next()");
 }

@@ -8,7 +8,7 @@ mod tests {
         Canopy, Context, ReadContext, Widget, command,
         commands::{ArgValue, CommandDispatchKind, CommandError, CommandNode, dispatch},
         derive_commands,
-        error::{Error, Result},
+        error::Result,
         render::Render,
     };
 
@@ -77,18 +77,24 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_command_ids_error() -> Result<()> {
+    fn duplicate_command_ids_are_deduplicated() -> Result<()> {
+        reset_state();
+
         let mut canopy = Canopy::new();
         canopy.add_commands::<TestLeaf>()?;
+        canopy.add_commands::<TestLeaf>()?;
 
-        let err = canopy.add_commands::<TestLeaf>().unwrap_err();
-        let id = TestLeaf::cmd_c_leaf().id.0.to_string();
+        let leaf_id = canopy.core.create_detached(TestLeaf);
+        let branch_id = canopy.core.create_detached(TestBranch);
+        canopy.core.set_children(branch_id, vec![leaf_id])?;
+        canopy
+            .core
+            .set_children(canopy.core.root_id(), vec![branch_id])?;
 
-        assert!(matches!(
-            err,
-            Error::Command(CommandError::DuplicateCommand { id: ref dup_id })
-                if dup_id == &id
-        ));
+        let inv = TestLeaf::cmd_c_leaf().call_with(()).invocation();
+        let result = dispatch(&mut canopy.core, branch_id, &inv)?;
+        assert_eq!(result, ArgValue::Null);
+        assert_eq!(state_path(), vec!["test_leaf.c_leaf()"]);
 
         Ok(())
     }

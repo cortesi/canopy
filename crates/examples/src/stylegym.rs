@@ -414,6 +414,7 @@ impl Widget for Stylegym {
 
 impl Loader for Stylegym {
     fn load(c: &mut Canopy) -> Result<()> {
+        Root::load(c)?;
         c.add_commands::<Self>()?;
         c.add_commands::<DemoContent>()?;
         c.add_commands::<ModalContent>()?;
@@ -429,39 +430,39 @@ pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
     Binder::new(cnpy)
         .defaults::<Root>()
         .with_path("stylegym/")
-        .key('q', "root::quit()")
-        .key(key::KeyCode::Tab, "root::focus_next()")
-        .key(key::KeyCode::BackTab, "root::focus_prev()")
-        .key('m', "stylegym::show_modal()")
-        .key(key::KeyCode::Esc, "stylegym::hide_modal()")
+        .key('q', "root.quit()")
+        .key(key::KeyCode::Tab, "root.focus_next()")
+        .key(key::KeyCode::BackTab, "root.focus_prev()")
+        .key('m', "stylegym.show_modal()")
+        .key(key::KeyCode::Esc, "stylegym.hide_modal()")
         // Global j/k for navigation between focusable items
-        .key('j', "root::focus_next()")
-        .key('k', "root::focus_prev()")
+        .key('j', "root.focus_next()")
+        .key('k', "root.focus_prev()")
         .with_path("dropdown")
         .key(
             key::KeyCode::Enter,
-            "dropdown::confirm(); stylegym::apply_theme()",
+            "dropdown.confirm(); stylegym.apply_theme()",
         )
-        .key(' ', "dropdown::toggle()")
-        .key(key::KeyCode::Down, "dropdown::select_next()")
-        .key(key::KeyCode::Up, "dropdown::select_prev()")
+        .key(' ', "dropdown.toggle()")
+        .key(key::KeyCode::Down, "dropdown.select_next()")
+        .key(key::KeyCode::Up, "dropdown.select_prev()")
         // Mouse click on dropdown triggers theme application
         .mouse(
             mouse::Button::Left + mouse::Action::Down,
-            "stylegym::apply_theme()",
+            "stylegym.apply_theme()",
         )
         .with_path("selector")
-        .key(' ', "selector::toggle(); stylegym::apply_effects()")
+        .key(' ', "selector.toggle(); stylegym.apply_effects()")
         .key(
             key::KeyCode::Enter,
-            "selector::toggle(); stylegym::apply_effects()",
+            "selector.toggle(); stylegym.apply_effects()",
         )
-        .key(key::KeyCode::Down, "selector::select_next()")
-        .key(key::KeyCode::Up, "selector::select_prev()")
+        .key(key::KeyCode::Down, "selector.select_next()")
+        .key(key::KeyCode::Up, "selector.select_prev()")
         // Mouse click on selector triggers effect application
         .mouse(
             mouse::Button::Left + mouse::Action::Down,
-            "stylegym::apply_effects()",
+            "stylegym.apply_effects()",
         );
     Ok(())
 }

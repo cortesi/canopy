@@ -1129,6 +1129,6 @@ fn status_text(height: u32, state: FontStyleState) -> String {
 /// Install key bindings for focus navigation.
 pub fn setup_bindings(c: &mut Canopy) {
     Binder::new(c)
-        .key(key::KeyCode::Tab, "root::focus_next()")
-        .key(key::KeyCode::BackTab, "root::focus_prev()");
+        .key(key::KeyCode::Tab, "root.focus_next()")
+        .key(key::KeyCode::BackTab, "root.focus_prev()");
 }

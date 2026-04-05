@@ -1,11 +1,11 @@
-use std::{collections::HashMap, io::Write, sync::mpsc};
+use std::{collections::HashMap, fs, io::Write, path::Path as FsPath, sync::mpsc};
 
 use comfy_table::{ContentArrangement, Table, presets::UTF8_FULL};
 
 use super::{inputmap, poll::Poller, termbuf::TermBuf};
 use crate::{
     backend::BackendControl,
-    commands,
+    commands::{self, CommandCall},
     core::{
         Core, NodeId,
         context::{CoreViewContext, ReadContext},
@@ -45,6 +45,8 @@ pub struct Canopy {
 
     /// Script execution host.
     pub(crate) script_host: script::ScriptHost,
+    /// Cached Luau API definition text.
+    script_api_text: Option<String>,
     /// Input mapping table.
     pub(crate) keymap: inputmap::InputMap,
 
@@ -70,6 +72,10 @@ pub enum BindingAction<'a> {
     ScriptId(script::ScriptId),
     /// Bind a typed command invocation.
     Command(commands::CommandInvocation),
+    /// Bind a sequence of typed command invocations.
+    CommandSequence(Vec<commands::CommandInvocation>),
+    /// Bind a stored Luau closure.
+    LuauFunction(script::LuauFunctionId),
 }
 
 /// Rendering traversal scratch state shared across recursion.
@@ -95,6 +101,7 @@ impl Canopy {
             event_rx: Some(rx),
             keymap: inputmap::InputMap::new(),
             script_host: script::ScriptHost::new(),
+            script_api_text: None,
             style: solarized::solarized_dark(),
             root_size: None,
             termbuf: None,
@@ -115,13 +122,63 @@ impl Canopy {
 
     /// Run a compiled script by id on the target node.
     pub fn run_script(&mut self, node_id: impl Into<NodeId>, sid: script::ScriptId) -> Result<()> {
-        self.script_host
-            .execute(&mut self.core, node_id.into(), sid)
+        if !self.script_host.is_finalized() {
+            self.finalize_api()?;
+        }
+        let host = self.script_host.clone();
+        host.execute(self, node_id.into(), sid)
     }
 
     /// Compile a script and return its identifier.
     pub fn compile_script(&mut self, source: &str) -> Result<script::ScriptId> {
         self.script_host.compile(source)
+    }
+
+    /// Evaluate a Luau source string in the current app context.
+    pub fn eval_script(&mut self, source: &str) -> Result<()> {
+        let script_id = self.compile_script(source)?;
+        self.run_script(self.core.root_id(), script_id)
+    }
+
+    /// Evaluate a Luau source string and return its value.
+    pub fn eval_script_value(&mut self, source: &str) -> Result<commands::ArgValue> {
+        if !self.script_host.is_finalized() {
+            self.finalize_api()?;
+        }
+        let script_id = self.compile_script(source)?;
+        let host = self.script_host.clone();
+        host.execute_value(self, self.core.root_id(), script_id)
+    }
+
+    /// Evaluate the app's built-in default bindings script.
+    pub fn run_default_script(&mut self, source: &str) -> Result<()> {
+        self.eval_script(source)
+    }
+
+    #[cfg(feature = "typecheck")]
+    /// Type-check a Luau source string against the finalized app API.
+    pub fn check_script(&mut self, source: &str) -> Result<luau_analyze::CheckResult> {
+        if !self.script_host.is_finalized() {
+            self.finalize_api()?;
+        }
+        self.script_host.check_script(source)
+    }
+
+    /// Drain and return log lines recorded by the most recent script evaluation.
+    pub fn take_script_logs(&self) -> Vec<String> {
+        self.script_host.take_logs()
+    }
+
+    /// Drain and return assertion outcomes from the most recent script evaluation.
+    pub fn take_script_assertions(&self) -> Vec<script::ScriptAssertion> {
+        self.script_host.take_assertions()
+    }
+
+    /// Evaluate a Luau config file from disk.
+    pub fn run_config(&mut self, path: &FsPath) -> Result<()> {
+        let source = fs::read_to_string(path)
+            .map_err(|err| error::Error::Invalid(format!("config read failed: {err}")))?;
+        self.eval_script(&source)
     }
 
     /// Bind a mouse action in the global mode with a given path filter to a script.
@@ -158,6 +215,14 @@ impl Canopy {
             BindingAction::Command(invocation) => {
                 self.keymap
                     .bind_command(mode, input, path_filter, invocation)
+            }
+            BindingAction::CommandSequence(invocations) => {
+                self.keymap
+                    .bind_commands(mode, input, path_filter, invocations)
+            }
+            BindingAction::LuauFunction(function_id) => {
+                self.keymap
+                    .bind_luau_function(mode, input, path_filter, function_id)
             }
         }
     }
@@ -273,6 +338,33 @@ impl Canopy {
         )
     }
 
+    /// Bind a key within a given mode, with a given path filter, to a command sequence.
+    ///
+    /// Returns the new binding ID.
+    pub fn bind_mode_key_commands<K>(
+        &mut self,
+        key: K,
+        mode: &str,
+        path_filter: &str,
+        commands: &[CommandCall],
+    ) -> Result<inputmap::BindingId>
+    where
+        key::Key: From<K>,
+    {
+        self.bind(
+            mode,
+            inputmap::InputSpec::Key(key.into()),
+            path_filter,
+            BindingAction::CommandSequence(
+                commands
+                    .iter()
+                    .cloned()
+                    .map(CommandCall::invocation)
+                    .collect(),
+            ),
+        )
+    }
+
     /// Bind a mouse action in a specified mode with a given path filter to a typed command.
     ///
     /// Returns the new binding ID.
@@ -295,9 +387,83 @@ impl Canopy {
         )
     }
 
+    /// Bind a mouse action in a specified mode with a given path filter to a command sequence.
+    ///
+    /// Returns the new binding ID.
+    pub fn bind_mode_mouse_commands<K>(
+        &mut self,
+        mouse: K,
+        mode: &str,
+        path_filter: &str,
+        commands: &[CommandCall],
+    ) -> Result<inputmap::BindingId>
+    where
+        mouse::Mouse: From<K>,
+    {
+        self.bind(
+            mode,
+            inputmap::InputSpec::Mouse(mouse.into()),
+            path_filter,
+            BindingAction::CommandSequence(
+                commands
+                    .iter()
+                    .cloned()
+                    .map(CommandCall::invocation)
+                    .collect(),
+            ),
+        )
+    }
+
     /// Remove a binding by ID. Returns true if a binding was removed.
     pub fn unbind(&mut self, id: inputmap::BindingId) -> bool {
-        self.keymap.unbind(id)
+        let removed = self.keymap.unbind_with_targets(id);
+        if removed.is_empty() {
+            return false;
+        }
+        for binding in removed {
+            self.release_binding_target(&binding);
+        }
+        true
+    }
+
+    /// Remove bindings for a key input, optionally filtered by mode and path.
+    pub fn unbind_key_input<K>(
+        &mut self,
+        key: K,
+        mode: Option<&str>,
+        path_filter: Option<&str>,
+    ) -> usize
+    where
+        key::Key: From<K>,
+    {
+        let removed = self.keymap.unbind_input(
+            inputmap::InputSpec::Key(key.into()),
+            inputmap::BindingFilter { mode, path_filter },
+        );
+        self.release_removed_bindings(removed)
+    }
+
+    /// Remove bindings for a mouse input, optionally filtered by mode and path.
+    pub fn unbind_mouse_input<K>(
+        &mut self,
+        mouse: K,
+        mode: Option<&str>,
+        path_filter: Option<&str>,
+    ) -> usize
+    where
+        mouse::Mouse: From<K>,
+    {
+        let removed = self.keymap.unbind_input(
+            inputmap::InputSpec::Mouse(mouse.into()),
+            inputmap::BindingFilter { mode, path_filter },
+        );
+        self.release_removed_bindings(removed)
+    }
+
+    /// Remove all bindings from all modes.
+    pub fn clear_bindings(&mut self) -> usize {
+        let removed = self.keymap.clear();
+        self.release_removed_bindings(removed)
     }
 
     /// Return all bindings defined for a mode.
@@ -317,10 +483,56 @@ impl Canopy {
     /// Load the commands from a command node using the default node name.
     /// Returns an error if any command id is already registered.
     pub fn add_commands<T: commands::CommandNode>(&mut self) -> Result<()> {
+        if self.script_host.is_finalized() {
+            return Err(error::Error::InvalidOperation(
+                "command registration is sealed after finalize_api()".into(),
+            ));
+        }
         let cmds = <T>::commands();
+        if cmds
+            .iter()
+            .all(|spec| self.core.commands.get(spec.id.0).is_some())
+        {
+            return Ok(());
+        }
         self.core.commands.add(cmds)?;
-        self.script_host.register_commands(cmds);
         Ok(())
+    }
+
+    /// Finalize the script API surface for this app.
+    pub fn finalize_api(&mut self) -> Result<()> {
+        if self.script_host.is_finalized() {
+            return Ok(());
+        }
+        let definitions = script::defs::render_definitions(&self.core.commands);
+        self.script_host
+            .finalize(&self.core.commands, definitions.clone())?;
+        self.script_api_text = Some(definitions);
+        Ok(())
+    }
+
+    /// Return the rendered Luau definition file for this app.
+    pub fn script_api(&self) -> &str {
+        self.script_api_text
+            .as_deref()
+            .expect("script API requested before finalize_api()")
+    }
+
+    /// Execute and release all queued startup hooks.
+    fn run_on_start_hooks(&mut self) -> Result<bool> {
+        let host = self.script_host.clone();
+        let mut ran = false;
+        while host.has_on_start_hooks() {
+            let hooks = host.drain_on_start_hooks();
+            ran |= !hooks.is_empty();
+            for hook in hooks {
+                let root_id = self.core.root_id();
+                let result = host.call_function(self, root_id, hook);
+                host.release_function(hook);
+                result?;
+            }
+        }
+        Ok(ran)
     }
 
     /// Output a formatted table of commands to a writer.
@@ -465,10 +677,12 @@ impl Canopy {
                     super::help::BindingKind::PostEventFallback
                 };
 
-                let label =
-                    super::help::binding_label(mb.info.target, &self.core.commands, |sid| {
-                        self.script_host.script_source(sid).map(|s| s.to_string())
-                    });
+                let label = super::help::binding_label(
+                    mb.info.target,
+                    &self.core.commands,
+                    |sid| self.script_host.script_source(sid),
+                    |id| self.script_host.function_label(id),
+                );
 
                 super::help::HelpBinding {
                     input: mb.info.input,
@@ -540,10 +754,12 @@ impl Canopy {
                     super::help::BindingKind::PostEventFallback
                 };
 
-                let label =
-                    super::help::binding_label(mb.info.target, &self.core.commands, |sid| {
-                        self.script_host.script_source(sid).map(|s| s.to_string())
-                    });
+                let label = super::help::binding_label(
+                    mb.info.target,
+                    &self.core.commands,
+                    |sid| self.script_host.script_source(sid),
+                    |id| self.script_host.function_label(id),
+                );
 
                 super::help::HelpBinding {
                     input: mb.info.input,
@@ -596,9 +812,12 @@ impl Canopy {
                 } else {
                     "post"
                 };
-                let label = help::binding_label(mb.info.target, &self.core.commands, |sid| {
-                    self.script_host.script_source(sid).map(|s| s.to_string())
-                });
+                let label = help::binding_label(
+                    mb.info.target,
+                    &self.core.commands,
+                    |sid| self.script_host.script_source(sid),
+                    |id| self.script_host.function_label(id),
+                );
                 out.push_str(&format!(
                     "  [{:?}] {} {} ({kind}) -> {label}\n",
                     mb.info.id, mb.info.input, mb.info.path_filter
@@ -849,6 +1068,8 @@ impl Canopy {
 
     /// Render the widget tree. All visible nodes are rendered.
     pub fn render<R: RenderBackend>(&mut self, be: &mut R) -> Result<()> {
+        let first_render = self.termbuf.is_none();
+
         // Apply pending style change from Context::set_style
         if let Some(new_style) = self.core.pending_style.take() {
             self.style = new_style;
@@ -888,6 +1109,11 @@ impl Canopy {
 
             self.last_render_focus_gen = self.core.focus_gen;
             self.last_focus_path = self.core.focus_path_ids();
+
+            if first_render && self.run_on_start_hooks()? {
+                return self.render(be);
+            }
+
             self.render_pending = false;
         }
 
@@ -985,14 +1211,7 @@ impl Canopy {
                 .command_scope_for_event(&Event::Mouse(local_mouse));
             let depth = self.core.push_command_scope(frame);
 
-            let result: Result<()> = match binding {
-                inputmap::BindingTarget::Script(sid) => self.run_script(nid, sid),
-                inputmap::BindingTarget::Command(cmd) => {
-                    commands::dispatch(&mut self.core, nid, &cmd)
-                        .map(|_| ())
-                        .map_err(|e| e.into())
-                }
-            };
+            let result = self.execute_binding(nid, binding);
 
             self.core.pop_command_scope(depth);
 
@@ -1061,14 +1280,7 @@ impl Canopy {
             let frame = self.core.command_scope_for_event(&Event::Key(k));
             let depth = self.core.push_command_scope(frame);
 
-            let result: Result<()> = match binding {
-                inputmap::BindingTarget::Script(sid) => self.run_script(nid, sid),
-                inputmap::BindingTarget::Command(cmd) => {
-                    commands::dispatch(&mut self.core, nid, &cmd)
-                        .map(|_| ())
-                        .map_err(|e| e.into())
-                }
-            };
+            let result = self.execute_binding(nid, binding);
 
             self.core.pop_command_scope(depth);
 
@@ -1148,6 +1360,47 @@ impl Canopy {
         self.render_pending = true;
         self.core.update_layout(size)?;
         Ok(())
+    }
+
+    /// Execute a resolved binding target on a node.
+    fn execute_binding(&mut self, node_id: NodeId, binding: inputmap::BindingTarget) -> Result<()> {
+        match binding {
+            inputmap::BindingTarget::Script(sid) => self.run_script(node_id, sid),
+            inputmap::BindingTarget::Command(cmd) => {
+                commands::dispatch(&mut self.core, node_id, &cmd)
+                    .map(|_| ())
+                    .map_err(Into::into)
+            }
+            inputmap::BindingTarget::CommandSequence(sequence) => {
+                for command in sequence {
+                    commands::dispatch(&mut self.core, node_id, &command)?;
+                }
+                Ok(())
+            }
+            inputmap::BindingTarget::LuauFunction(id) => {
+                let host = self.script_host.clone();
+                host.call_function(self, node_id, id)
+            }
+        }
+    }
+
+    /// Release any Luau closures referenced by removed bindings.
+    pub(crate) fn release_removed_bindings(
+        &self,
+        removed: Vec<(inputmap::BindingId, inputmap::BindingTarget)>,
+    ) -> usize {
+        let released = removed.len();
+        for (_, binding) in removed {
+            self.release_binding_target(&binding);
+        }
+        released
+    }
+
+    /// Release script-host resources held by a binding target.
+    pub(crate) fn release_binding_target(&self, binding: &inputmap::BindingTarget) {
+        if let inputmap::BindingTarget::LuauFunction(id) = binding {
+            self.script_host.release_function(*id);
+        }
     }
 }
 
@@ -1381,19 +1634,19 @@ mod tests {
                 "",
                 inputmap::InputSpec::Key('a'.into()),
                 "",
-                c.script_host.compile(r#"ba_la::c_leaf()"#)?,
+                c.script_host.compile(r#"ba_la.c_leaf()"#)?,
             )?;
             c.keymap.bind(
                 "",
                 inputmap::InputSpec::Key('r'.into()),
                 "",
-                c.script_host.compile(r#"r::c_root()"#)?,
+                c.script_host.compile(r#"r.c_root()"#)?,
             )?;
             c.keymap.bind(
                 "",
                 inputmap::InputSpec::Key('x'.into()),
                 "ba/",
-                c.script_host.compile(r#"r::c_root()"#)?,
+                c.script_host.compile(r#"r.c_root()"#)?,
             )?;
 
             c.core.set_focus(tree.a_a);

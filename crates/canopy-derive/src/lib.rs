@@ -81,6 +81,13 @@ pub fn derive_command_enum(input: proc_macro::TokenStream) -> proc_macro::TokenS
         quote! { if value.eq_ignore_ascii_case(#name) { return Ok(Self::#variant); } }
     });
 
+    let luau_union = variants
+        .iter()
+        .map(|variant| format!("\"{}\"", variant))
+        .collect::<Vec<_>>()
+        .join(" | ");
+    let luau_union = syn::LitStr::new(&luau_union, proc_macro2::Span::call_site());
+
     let expanded = quote! {
         impl #impl_generics canopy::commands::ToArgValue for #ident #ty_generics #where_clause {
             fn to_arg_value(self) -> canopy::commands::ArgValue {
@@ -103,6 +110,11 @@ pub fn derive_command_enum(input: proc_macro::TokenStream) -> proc_macro::TokenS
                     "unknown enum variant: {value}"
                 )))
             }
+        }
+
+        impl #impl_generics #ident #ty_generics #where_clause {
+            /// Luau union type for this command enum.
+            pub const LUAU_TYPE: &'static str = #luau_union;
         }
     };
 

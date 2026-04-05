@@ -55,6 +55,7 @@ impl ParamMeta {
                 kind: #kind_tokens,
                 ty: canopy::commands::CommandTypeSpec {
                     rust: #ty,
+                    luau: None,
                     doc: None,
                 },
                 optional: #optional,
@@ -178,6 +179,7 @@ impl ReturnMeta {
                     canopy::commands::CommandReturnSpec::Value(
                         canopy::commands::CommandTypeSpec {
                             rust: #ty,
+                            luau: None,
                             doc: None,
                         }
                     )

@@ -205,6 +205,72 @@ impl Add<key::Mods> for Mouse {
     }
 }
 
+impl Mouse {
+    /// Parse a mouse specification such as `ScrollUp` or `ctrl-LeftDown`.
+    pub fn parse_spec(spec: &str) -> Result<Self, String> {
+        let spec = spec.trim();
+        if spec.is_empty() {
+            return Err("mouse specification cannot be empty".into());
+        }
+
+        let parts = spec
+            .split('-')
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>();
+        let Some((body, modifier_parts)) = parts.split_last() else {
+            return Err("mouse specification cannot be empty".into());
+        };
+
+        let mut modifiers = key::Empty;
+        for part in modifier_parts {
+            if part.eq_ignore_ascii_case("ctrl") || part.eq_ignore_ascii_case("control") {
+                modifiers.ctrl = true;
+            } else if part.eq_ignore_ascii_case("alt") {
+                modifiers.alt = true;
+            } else if part.eq_ignore_ascii_case("shift") {
+                modifiers.shift = true;
+            } else {
+                return Err(format!("unknown mouse modifier: {part}"));
+            }
+        }
+
+        let lower = body.to_ascii_lowercase();
+        let action = [
+            ("scrollright", Action::ScrollRight),
+            ("scrollleft", Action::ScrollLeft),
+            ("scrolldown", Action::ScrollDown),
+            ("scrollup", Action::ScrollUp),
+            ("moved", Action::Moved),
+            ("drag", Action::Drag),
+            ("down", Action::Down),
+            ("up", Action::Up),
+        ]
+        .into_iter()
+        .find_map(|(suffix, action)| lower.ends_with(suffix).then_some((suffix, action)))
+        .ok_or_else(|| format!("unknown mouse action: {spec}"))?;
+
+        let button = match &body[..body.len() - action.0.len()] {
+            "" => {
+                if action.1.is_button() {
+                    Button::Left
+                } else {
+                    Button::None
+                }
+            }
+            prefix if prefix.eq_ignore_ascii_case("left") => Button::Left,
+            prefix if prefix.eq_ignore_ascii_case("right") => Button::Right,
+            prefix if prefix.eq_ignore_ascii_case("middle") => Button::Middle,
+            other => return Err(format!("unknown mouse button: {other}")),
+        };
+
+        Ok(Self {
+            action: action.1,
+            button,
+            modifiers,
+        })
+    }
+}
+
 /// A mouse input event. This has the same fields as the `Mouse` event
 /// specification, but also includes a location.
 #[derive(Debug, Clone, Copy)]
@@ -325,6 +391,21 @@ mod tests {
             },
             Action::Down
         );
+        Ok(())
+    }
+
+    #[test]
+    fn parse_specs() -> Result<()> {
+        assert_eq!(Mouse::parse_spec("ScrollUp"), Ok(Action::ScrollUp.into()));
+        assert_eq!(
+            Mouse::parse_spec("ctrl-LeftDown"),
+            Ok(key::Ctrl + Button::Left)
+        );
+        assert_eq!(
+            Mouse::parse_spec("shift-MiddleDrag"),
+            Ok(key::Shift + Action::Drag + Button::Middle)
+        );
+        assert!(Mouse::parse_spec("ctrl-nope").is_err());
         Ok(())
     }
 }

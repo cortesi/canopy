@@ -1,7 +1,8 @@
+use std::path::Path;
+
 use anyhow::Result as AnyResult;
 use canopy::{
     command, derive_commands,
-    event::key,
     prelude::*,
     style::{effects, solarized},
 };
@@ -367,6 +368,44 @@ impl Loader for Todo {
     }
 }
 
+/// Default Luau bindings for the todo app.
+pub const DEFAULT_BINDINGS: &str = r#"
+canopy.bind_with("q", { desc = "Quit" }, function() root.quit() end)
+canopy.bind_with("d", { desc = "Delete item" }, function() todo.delete_item() end)
+canopy.bind_with("a", { desc = "Add item" }, function() todo.enter_item() end)
+canopy.bind_with("g", { desc = "First item" }, function() todo.select_first() end)
+canopy.bind_with("j", { desc = "Next item" }, function() todo.select_by(1) end)
+canopy.bind_with("Down", { desc = "Next item" }, function() todo.select_by(1) end)
+canopy.bind_with("k", { desc = "Previous item" }, function() todo.select_by(-1) end)
+canopy.bind_with("Up", { desc = "Previous item" }, function() todo.select_by(-1) end)
+canopy.bind_with("Space", { desc = "Page down" }, function() todo.page("Down") end)
+canopy.bind_with("PageDown", { desc = "Page down" }, function() todo.page("Down") end)
+canopy.bind_with("PageUp", { desc = "Page up" }, function() todo.page("Up") end)
+
+canopy.bind_mouse_with("ScrollUp", { desc = "Previous item" }, function()
+    todo.select_by(-1)
+end)
+canopy.bind_mouse_with("ScrollDown", { desc = "Next item" }, function()
+    todo.select_by(1)
+end)
+
+canopy.bind_with("Left", { path = "input", desc = "Cursor left" }, function()
+    input.left()
+end)
+canopy.bind_with("Right", { path = "input", desc = "Cursor right" }, function()
+    input.right()
+end)
+canopy.bind_with("Backspace", { path = "input", desc = "Delete char" }, function()
+    input.backspace()
+end)
+canopy.bind_with("Enter", { path = "input", desc = "Confirm new item" }, function()
+    todo.accept_add()
+end)
+canopy.bind_with("Escape", { path = "input", desc = "Cancel add" }, function()
+    todo.cancel_add()
+end)
+"#;
+
 pub fn style(cnpy: &mut Canopy) {
     use canopy::style::StyleBuilder;
 
@@ -382,62 +421,37 @@ pub fn style(cnpy: &mut Canopy) {
         .apply();
 }
 
-pub fn bind_keys(cnpy: &mut Canopy) {
-    Binder::new(cnpy)
-        .with_path("todo/")
-        .key_command('q', Root::cmd_quit().call())
-        .key_command('d', Todo::cmd_delete_item().call())
-        .key_command('a', Todo::cmd_enter_item().call())
-        .key_command('g', Todo::cmd_select_first().call())
-        .key_command('j', Todo::cmd_select_by().call_with([1]))
-        .key_command(key::KeyCode::Down, Todo::cmd_select_by().call_with([1]))
-        .key_command('k', Todo::cmd_select_by().call_with([-1]))
-        .key_command(key::KeyCode::Up, Todo::cmd_select_by().call_with([-1]))
-        .key_command(
-            ' ',
-            Todo::cmd_page().call_with([canopy::geom::Direction::Down]),
-        )
-        .key_command(
-            key::KeyCode::PageDown,
-            Todo::cmd_page().call_with([canopy::geom::Direction::Down]),
-        )
-        .key_command(
-            key::KeyCode::PageUp,
-            Todo::cmd_page().call_with([canopy::geom::Direction::Up]),
-        )
-        .mouse_command(
-            mouse::Action::ScrollUp,
-            Todo::cmd_select_by().call_with([-1]),
-        )
-        .mouse_command(
-            mouse::Action::ScrollDown,
-            Todo::cmd_select_by().call_with([1]),
-        )
-        .with_path("input")
-        .key_command(key::KeyCode::Left, Input::cmd_left().call())
-        .key_command(key::KeyCode::Right, Input::cmd_right().call())
-        .key_command(key::KeyCode::Backspace, Input::cmd_backspace().call())
-        .key_command(key::KeyCode::Enter, Todo::cmd_accept_add().call())
-        .key_command(key::KeyCode::Esc, Todo::cmd_cancel_add().call());
-}
-
 pub fn open_store(path: &str) -> AnyResult<()> {
     store::open(path)
 }
 
 pub fn setup_app(cnpy: &mut Canopy) -> Result<()> {
+    setup_app_with_config(cnpy, None)
+}
+
+/// Register commands, finalize the Luau API, and apply default/user bindings.
+pub fn setup_app_with_config(cnpy: &mut Canopy, config: Option<&Path>) -> Result<()> {
     Root::load(cnpy)?;
     <Todo as Loader>::load(cnpy)?;
     style(cnpy);
-    bind_keys(cnpy);
+    cnpy.finalize_api()?;
+    cnpy.run_default_script(DEFAULT_BINDINGS)?;
+    if let Some(config) = config {
+        cnpy.run_config(config)?;
+    }
     Ok(())
 }
 
 pub fn create_app(db_path: &str) -> AnyResult<Canopy> {
+    create_app_with_config(db_path, None)
+}
+
+/// Create a todo canopy app with optional user config.
+pub fn create_app_with_config(db_path: &str, config: Option<&Path>) -> AnyResult<Canopy> {
     open_store(db_path)?;
 
     let mut cnpy = Canopy::new();
-    setup_app(&mut cnpy)?;
+    setup_app_with_config(&mut cnpy, config)?;
 
     let todo = Todo::new()?;
     let app_id = cnpy.core.create_detached(todo);

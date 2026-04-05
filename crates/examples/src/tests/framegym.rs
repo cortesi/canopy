@@ -77,7 +77,7 @@ fn framegym_scroll_commands_update_vertical_scroll() -> Result<()> {
     harness.render()?;
 
     let initial_scroll = pattern_scroll(&mut harness)?.y;
-    harness.script("test_pattern::scroll_down()")?;
+    harness.script("test_pattern.scroll_down()")?;
     let updated_scroll = pattern_scroll(&mut harness)?.y;
     assert!(updated_scroll > initial_scroll);
 
@@ -90,7 +90,7 @@ fn framegym_scroll_commands_update_horizontal_scroll() -> Result<()> {
     harness.render()?;
 
     let initial_scroll = pattern_scroll(&mut harness)?.x;
-    harness.script("test_pattern::scroll_right()")?;
+    harness.script("test_pattern.scroll_right()")?;
     let updated_scroll = pattern_scroll(&mut harness)?.x;
     assert!(updated_scroll > initial_scroll);
 

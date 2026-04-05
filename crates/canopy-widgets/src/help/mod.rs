@@ -107,16 +107,16 @@ impl Widget for Help {
 impl DefaultBindings for Help {
     fn defaults(b: Binder) -> Binder {
         b.with_path("help/")
-            .key(KeyCode::Esc, "root::hide_help()")
-            .key('q', "root::hide_help()")
+            .key(KeyCode::Esc, "root.hide_help()")
+            .key('q', "root.hide_help()")
             // Scroll bindings
-            .key('j', "help_content::scroll_down()")
-            .key('k', "help_content::scroll_up()")
-            .key(KeyCode::Down, "help_content::scroll_down()")
-            .key(KeyCode::Up, "help_content::scroll_up()")
-            .key('g', "help_content::scroll_to_top()")
-            .key('G', "help_content::scroll_to_bottom()")
-            .key(' ', "help_content::page_down()")
+            .key('j', "help_content.scroll_down()")
+            .key('k', "help_content.scroll_up()")
+            .key(KeyCode::Down, "help_content.scroll_down()")
+            .key(KeyCode::Up, "help_content.scroll_up()")
+            .key('g', "help_content.scroll_to_top()")
+            .key('G', "help_content.scroll_to_bottom()")
+            .key(' ', "help_content.page_down()")
     }
 }
 

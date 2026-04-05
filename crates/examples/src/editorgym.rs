@@ -339,13 +339,13 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
     Binder::new(cnpy)
         .defaults::<Root>()
         .with_path("editor_gym")
-        .key(key::KeyCode::Tab, "root::focus_next()")
-        .key(key::KeyCode::BackTab, "root::focus_prev()")
-        .key(key::KeyCode::PageDown, "editor_gym::page_down()")
-        .key(key::KeyCode::PageUp, "editor_gym::page_up()")
-        .key(key::KeyCode::Home, "editor_gym::scroll_to(0, 0)")
-        .mouse(mouse::Action::ScrollDown, "editor_gym::scroll_down()")
-        .mouse(mouse::Action::ScrollUp, "editor_gym::scroll_up()")
+        .key(key::KeyCode::Tab, "root.focus_next()")
+        .key(key::KeyCode::BackTab, "root.focus_prev()")
+        .key(key::KeyCode::PageDown, "editor_gym.page_down()")
+        .key(key::KeyCode::PageUp, "editor_gym.page_up()")
+        .key(key::KeyCode::Home, "editor_gym.scroll_to(0, 0)")
+        .mouse(mouse::Action::ScrollDown, "editor_gym.scroll_down()")
+        .mouse(mouse::Action::ScrollUp, "editor_gym.scroll_up()")
         .with_path("root")
-        .key('q', "root::quit()");
+        .key('q', "root.quit()");
 }

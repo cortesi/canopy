@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.98"
 canopy = { path = "../../crates/canopy" }
+canopy-mcp = { version = "0.1.0", path = "../../crates/canopy-mcp" }
 canopy-widgets = { path = "../../crates/canopy-widgets" }
 clap = { version = "4.5.40", features = ["derive"] }
 rusqlite = "0.38"

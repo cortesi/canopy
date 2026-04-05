@@ -1,6 +1,6 @@
 use crate::{
     BindingId, Canopy,
-    commands::CommandInvocation,
+    commands::{CommandCall, CommandInvocation},
     error::Result,
     event::{key::Key, mouse::Mouse},
     inputmap,
@@ -86,6 +86,23 @@ impl<'a> Binder<'a> {
         self.try_key_command(key, command).unwrap()
     }
 
+    /// Bind a key to a typed command sequence fallibly.
+    pub fn try_key_commands<K>(mut self, key: K, commands: &[CommandCall]) -> Result<Self>
+    where
+        Key: From<K>,
+    {
+        let _ = self.try_key_commands_id(key, commands)?;
+        Ok(self)
+    }
+
+    /// Bind a key to a typed command sequence, panicking if there is any error.
+    pub fn key_commands<K>(self, key: K, commands: &[CommandCall]) -> Self
+    where
+        Key: From<K>,
+    {
+        self.try_key_commands(key, commands).unwrap()
+    }
+
     /// Bind a mouse action to a script fallibly.
     pub fn try_mouse<K>(mut self, m: K, script: &str) -> Result<Self>
     where
@@ -124,6 +141,23 @@ impl<'a> Binder<'a> {
         self.try_mouse_command(m, command).unwrap()
     }
 
+    /// Bind a mouse action to a typed command sequence fallibly.
+    pub fn try_mouse_commands<K>(mut self, m: K, commands: &[CommandCall]) -> Result<Self>
+    where
+        Mouse: From<K>,
+    {
+        let _ = self.try_mouse_commands_id(m, commands)?;
+        Ok(self)
+    }
+
+    /// Bind a mouse action to a typed command sequence, panicking on error.
+    pub fn mouse_commands<K>(self, m: K, commands: &[CommandCall]) -> Self
+    where
+        Mouse: From<K>,
+    {
+        self.try_mouse_commands(m, commands).unwrap()
+    }
+
     /// Bind a key to a script and return its binding ID.
     pub fn try_key_id<K>(&mut self, key: K, script: &str) -> Result<BindingId>
     where
@@ -160,6 +194,23 @@ impl<'a> Binder<'a> {
         self.try_key_command_id(key, command).unwrap()
     }
 
+    /// Bind a key to a typed command sequence and return its binding ID.
+    pub fn try_key_commands_id<K>(&mut self, key: K, commands: &[CommandCall]) -> Result<BindingId>
+    where
+        Key: From<K>,
+    {
+        self.cnpy
+            .bind_mode_key_commands(key, &self.mode, &self.path_filter, commands)
+    }
+
+    /// Bind a key to a typed command sequence and return its binding ID, panicking on error.
+    pub fn key_commands_id<K>(&mut self, key: K, commands: &[CommandCall]) -> BindingId
+    where
+        Key: From<K>,
+    {
+        self.try_key_commands_id(key, commands).unwrap()
+    }
+
     /// Bind a mouse action to a script and return its binding ID.
     pub fn try_mouse_id<K>(&mut self, m: K, script: &str) -> Result<BindingId>
     where
@@ -194,6 +245,23 @@ impl<'a> Binder<'a> {
         C: Into<CommandInvocation>,
     {
         self.try_mouse_command_id(m, command).unwrap()
+    }
+
+    /// Bind a mouse action to a typed command sequence and return its binding ID.
+    pub fn try_mouse_commands_id<K>(&mut self, m: K, commands: &[CommandCall]) -> Result<BindingId>
+    where
+        Mouse: From<K>,
+    {
+        self.cnpy
+            .bind_mode_mouse_commands(m, &self.mode, &self.path_filter, commands)
+    }
+
+    /// Bind a mouse action to a typed command sequence and return its binding ID.
+    pub fn mouse_commands_id<K>(&mut self, m: K, commands: &[CommandCall]) -> BindingId
+    where
+        Mouse: From<K>,
+    {
+        self.try_mouse_commands_id(m, commands).unwrap()
     }
 
     /// Remove a binding by ID. Returns true if a binding was removed.

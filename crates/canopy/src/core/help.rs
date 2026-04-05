@@ -11,7 +11,7 @@ use crate::{
         inputmap::{BindingTarget, InputSpec},
     },
     path::Path,
-    script::ScriptId,
+    script::{LuauFunctionId, ScriptId},
 };
 
 /// Classification of how a binding matched the focus path.
@@ -177,9 +177,15 @@ fn extract_command_id(source: &str) -> Option<&str> {
 ///
 /// For scripts that are simple command calls (e.g., `root::focus_next()`), looks up
 /// the command's documentation. For compound scripts, falls back to the source.
-pub fn binding_label<F>(target: &BindingTarget, commands: &CommandSet, script_source: F) -> String
+pub fn binding_label<F, G>(
+    target: &BindingTarget,
+    commands: &CommandSet,
+    script_source: F,
+    luau_label: G,
+) -> String
 where
     F: Fn(ScriptId) -> Option<String>,
+    G: Fn(LuauFunctionId) -> Option<String>,
 {
     match target {
         BindingTarget::Script(sid) => {
@@ -207,6 +213,17 @@ where
             // Fall back to command ID
             inv.id.0.to_string()
         }
+        BindingTarget::CommandSequence(invocations) => invocations
+            .iter()
+            .filter_map(|invocation| {
+                commands
+                    .get(invocation.id.0)
+                    .and_then(|spec| spec.doc.short)
+                    .or(Some(invocation.id.0))
+            })
+            .collect::<Vec<_>>()
+            .join(" -> "),
+        BindingTarget::LuauFunction(id) => luau_label(*id).unwrap_or_else(|| "script".to_string()),
     }
 }
 

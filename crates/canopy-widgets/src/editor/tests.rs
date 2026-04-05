@@ -425,7 +425,7 @@ fn binding_precedence_blocks_text_entry() {
     let mut harness = build_harness("", config, 10, 1);
     Binder::new(&mut harness.canopy)
         .with_path("editor")
-        .key('x', "editor::cursor_left()");
+        .key('x', "editor.cursor_left()");
     harness.key('x').unwrap();
     assert_eq!(editor_text(&mut harness), "");
 }
@@ -506,7 +506,7 @@ fn root_binding_does_not_override_text_entry() {
     let mut harness = build_harness("", config, 6, 1);
     Binder::new(&mut harness.canopy)
         .with_path("editor_host")
-        .key('q', "editor_host::record_binding()");
+        .key('q', "editor_host.record_binding()");
     harness.key('q').unwrap();
     assert_eq!(editor_text(&mut harness), "q");
     assert_eq!(host_binding_hits(&mut harness), 0);

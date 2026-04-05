@@ -55,6 +55,7 @@ impl<W: Widget + Loader + 'static> HarnessBuilder<W> {
         let mut canopy = Canopy::new();
 
         <W as Loader>::load(&mut canopy)?;
+        canopy.finalize_api()?;
         canopy
             .core
             .replace_subtree(canopy.core.root, self.root)
@@ -83,6 +84,7 @@ impl Harness {
         let render = NopBackend::new();
         let mut canopy = Canopy::new();
         <W as Loader>::load(&mut canopy)?;
+        canopy.finalize_api()?;
         canopy
             .core
             .replace_subtree(canopy.core.root, root)

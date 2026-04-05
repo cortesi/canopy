@@ -211,20 +211,20 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
         .key_command(key::KeyCode::Tab, Root::cmd_focus_next())
         // Arrow keys for scrolling
         .key_command('g', TestPattern::cmd_scroll_to().call_with([0u32, 0u32]))
-        .key(key::KeyCode::Down, "test_pattern::scroll_down()")
-        .key(key::KeyCode::Up, "test_pattern::scroll_up()")
-        .key(key::KeyCode::Left, "test_pattern::scroll_left()")
-        .key(key::KeyCode::Right, "test_pattern::scroll_right()")
+        .key(key::KeyCode::Down, "test_pattern.scroll_down()")
+        .key(key::KeyCode::Up, "test_pattern.scroll_up()")
+        .key(key::KeyCode::Left, "test_pattern.scroll_left()")
+        .key(key::KeyCode::Right, "test_pattern.scroll_right()")
         // Vim-style navigation
-        .key('j', "test_pattern::scroll_down()")
-        .key('k', "test_pattern::scroll_up()")
-        .key('h', "test_pattern::scroll_left()")
-        .key('l', "test_pattern::scroll_right()")
+        .key('j', "test_pattern.scroll_down()")
+        .key('k', "test_pattern.scroll_up()")
+        .key('h', "test_pattern.scroll_left()")
+        .key('l', "test_pattern.scroll_right()")
         // Page navigation
-        .key(key::KeyCode::PageDown, "test_pattern::page_down()")
-        .key(' ', "test_pattern::page_down()")
-        .key(key::KeyCode::PageUp, "test_pattern::page_up()")
+        .key(key::KeyCode::PageDown, "test_pattern.page_down()")
+        .key(' ', "test_pattern.page_down()")
+        .key(key::KeyCode::PageUp, "test_pattern.page_up()")
         // Quit
         .with_path("root")
-        .key('q', "root::quit()");
+        .key('q', "root.quit()");
 }

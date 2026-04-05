@@ -11,11 +11,9 @@ crossterm = "0.29.0"
 thiserror = "2.0.12"
 scopeguard = "1.2.0"
 convert_case = "0.10"
-rhai = { version = "1.22.2", features = ["internals"] }
 termcolor = "1.4.1"
 comfy-table = "7.1.4"
 color-backtrace = "0.7.0"
-scoped-tls = "1.0.1"
 tracing = "0.1.41"
 canopy-derive = { path = "../canopy-derive" }
 slotmap = "1.1.1"
@@ -24,6 +22,8 @@ unicode-width = "0.2.2"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.148"
 anyhow = "1.0.100"
+mlua = { version = "0.11.6", features = ["luau", "serialize", "vendored"] }
+luau-analyze = { path = "../../../luau-analyze/crates/luau-analyze", optional = true }
 
 [dev-dependencies]
 clap = { version = "4.5.40", features = ["derive"] }
@@ -33,6 +33,7 @@ proptest = "1.9.0"
 
 [features]
 testing = []
+typecheck = ["dep:luau-analyze"]
 
 [lints]
 workspace = true
