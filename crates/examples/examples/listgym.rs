@@ -1,12 +1,15 @@
 //! Launch the list gym example.
 
-use std::{io, process};
+use std::process;
 
 use canopy::{
     backend::crossterm::{RunloopOptions, runloop_with_options},
     prelude::*,
 };
-use canopy_examples::listgym::{ListGym, setup_bindings};
+use canopy_examples::{
+    listgym::{ListGym, setup_bindings},
+    print_luau_api,
+};
 use canopy_widgets::Root;
 use clap::Parser;
 
@@ -14,9 +17,9 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    /// Print available commands and exit.
-    #[clap(short, long)]
-    commands: bool,
+    /// Print the Luau API definition and exit.
+    #[clap(long)]
+    api: bool,
 
     /// Enable the inspector overlay.
     #[clap(short, long)]
@@ -31,8 +34,8 @@ fn main() -> Result<()> {
     setup_bindings(&mut cnpy);
 
     let args = Args::parse();
-    if args.commands {
-        cnpy.print_command_table(&mut io::stdout(), false)?;
+    if args.api {
+        print_luau_api(&mut cnpy)?;
         return Ok(());
     }
 

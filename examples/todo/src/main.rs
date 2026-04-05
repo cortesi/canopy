@@ -12,10 +12,6 @@ struct Args {
     #[command(subcommand)]
     command: Option<Command>,
 
-    /// Print the command table and exit
-    #[clap(short, long)]
-    commands: bool,
-
     /// Print the Luau API definition and exit
     #[clap(long)]
     api: bool,
@@ -65,6 +61,13 @@ fn make_factory(path: String, config: Option<PathBuf>) -> canopy_mcp::script::Ap
 pub fn main() -> Result<()> {
     let args = Args::parse();
 
+    if args.api {
+        let mut cnpy = canopy::Canopy::new();
+        todo::setup_app(&mut cnpy)?;
+        print!("{}", cnpy.script_api());
+        return Ok(());
+    }
+
     match args.command {
         Some(Command::Mcp { path, config }) => {
             serve_stdio({
@@ -111,15 +114,6 @@ pub fn main() -> Result<()> {
 
     if let Some(path) = args.path {
         let cnpy = create_app_with_config(&path, args.config.as_deref())?;
-
-        if args.commands {
-            cnpy.print_command_table(&mut std::io::stdout(), false)?;
-            return Ok(());
-        }
-        if args.api {
-            print!("{}", cnpy.script_api());
-            return Ok(());
-        }
 
         let exit_code = runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
         if exit_code != 0 {

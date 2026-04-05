@@ -251,7 +251,7 @@ fn main() -> Result<()> {
 
 This means `my-app --api > my-app.d.luau` produces a file that models, editors, and `luau-analyze`
 can all consume. The `--api` and `--config` flags follow the same per-app wiring pattern as the
-existing `--commands` flag. This is boilerplate, but the alternative (framework-level CLI parsing)
+previous command-dump flag. This is boilerplate, but the alternative (framework-level CLI parsing)
 would constrain how apps structure their own argument handling.
 
 ### Config Files: Layered Binding Customization

@@ -1,7 +1,7 @@
 //! Launch the widget demo application.
 
 use std::{
-    fs, io,
+    fs,
     path::{Path, PathBuf},
     process,
     time::Duration,
@@ -13,6 +13,7 @@ use canopy::{
     prelude::*,
 };
 use canopy_examples::{
+    print_luau_api,
     widget::{DemoHost, DemoSize, FontDemo, FontSource, ListDemo, TermDemo},
     widget_editor::{WidgetEditor, setup_bindings},
 };
@@ -45,9 +46,9 @@ const LIST_ITEMS: [&str; 5] = [
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    /// Print available commands and exit.
-    #[clap(short, long)]
-    commands: bool,
+    /// Print the Luau API definition for the selected demo and exit.
+    #[clap(long)]
+    api: bool,
 
     /// Enable the inspector overlay.
     #[clap(short, long)]
@@ -155,8 +156,10 @@ fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
     Root::load(&mut cnpy)?;
 
-    if args.commands {
-        cnpy.print_command_table(&mut io::stdout(), false)?;
+    load_widget_api(&mut cnpy, &args.command)?;
+
+    if args.api {
+        print_luau_api(&mut cnpy)?;
         return Ok(());
     }
 
@@ -186,7 +189,6 @@ fn main() -> Result<()> {
             )
         }
         Command::Image(image_args) => {
-            ImageView::load(&mut cnpy)?;
             setup_image_bindings(&mut cnpy);
             let view = ImageView::from_path(&image_args.path)?;
             DemoHost::new(view, size, true)
@@ -207,7 +209,6 @@ fn main() -> Result<()> {
             DemoHost::new(ListDemo::new(interval), size, args.frame)
         }
         Command::Term => {
-            cnpy.add_commands::<TermDemo>()?;
             setup_term_bindings(&mut cnpy);
             DemoHost::new(TermDemo::new(), size, args.frame)
         }
@@ -217,7 +218,6 @@ fn main() -> Result<()> {
             let extension = file_extension(&editor_args.path);
             let title = file_title(&editor_args.path);
 
-            WidgetEditor::load(&mut cnpy)?;
             setup_bindings(&mut cnpy);
 
             DemoHost::new(
@@ -236,6 +236,16 @@ fn main() -> Result<()> {
         process::exit(exit_code);
     }
     Ok(())
+}
+
+/// Load the command surface needed by the selected widget demo.
+fn load_widget_api(cnpy: &mut Canopy, command: &Command) -> Result<()> {
+    match command {
+        Command::Font(_) | Command::List(_) => Ok(()),
+        Command::Image(_) => ImageView::load(cnpy),
+        Command::Term => cnpy.add_commands::<TermDemo>(),
+        Command::Editor(_) => WidgetEditor::load(cnpy),
+    }
 }
 
 /// Compute the list demo width and height.
