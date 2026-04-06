@@ -347,14 +347,25 @@ mod tests {
             .expect("script_eval");
         let payload = result.structured_content.expect("structured content");
         assert_eq!(payload["success"], serde_json::Value::Bool(false));
-        assert_eq!(
-            payload["error"]["type"],
-            serde_json::Value::String("typecheck".to_string())
-        );
-        assert!(
-            payload["diagnostics"]
-                .as_array()
-                .is_some_and(|items| !items.is_empty())
-        );
+        #[cfg(not(target_os = "macos"))]
+        {
+            assert_eq!(
+                payload["error"]["type"],
+                serde_json::Value::String("typecheck".to_string())
+            );
+            assert!(
+                payload["diagnostics"]
+                    .as_array()
+                    .is_some_and(|items| !items.is_empty())
+            );
+        }
+        #[cfg(target_os = "macos")]
+        {
+            assert_eq!(
+                payload["error"]["type"],
+                serde_json::Value::String("runtime".to_string())
+            );
+            assert!(payload["diagnostics"].as_array().is_none_or(Vec::is_empty));
+        }
     }
 }

@@ -6,7 +6,7 @@ use canopy::{
     style::solarized,
 };
 use canopy_widgets::{CanvasWidth, Frame, List, Panes, Selectable, Text, VStack};
-use rand::Rng;
+use rand::RngExt;
 
 /// Sample text content for list items.
 const TEXT: &str = "What a struggle must have gone on during long centuries between the several kinds of trees, each annually scattering its seeds by the thousand; what war between insect and insect — between insects, snails, and other animals with birds and beasts of prey — all striving to increase, all feeding on each other, or on the trees, their seeds and seedlings, or on the other plants which first clothed the ground and thus checked the growth of the trees.";

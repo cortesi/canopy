@@ -4,14 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0.98"
+anyhow = "1.0.102"
 canopy = { path = "../../crates/canopy" }
 canopy-mcp = { version = "0.1.0", path = "../../crates/canopy-mcp" }
 canopy-widgets = { path = "../../crates/canopy-widgets" }
-clap = { version = "4.5.40", features = ["derive"] }
-rusqlite = "0.38"
+clap = { version = "4.6.0", features = ["derive"] }
+rusqlite = "0.39"
 textwrap = "0.16.2"
-tracing = "0.1.41"
+tracing = "0.1.44"
 
 [dev-dependencies]
 canopy = { path = "../../crates/canopy", features = ["testing"] }

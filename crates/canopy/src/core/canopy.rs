@@ -335,7 +335,7 @@ impl Canopy {
         f(&mut ctx)
     }
 
-    #[cfg(feature = "typecheck")]
+    #[cfg(all(feature = "typecheck", not(target_os = "macos")))]
     /// Type-check a Luau source string against the finalized app API.
     pub fn check_script(&mut self, source: &str) -> Result<luau_analyze::CheckResult> {
         if !self.script_host.is_finalized() {

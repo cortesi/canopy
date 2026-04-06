@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/*", "examples/*"]
+members = ["crates/*", "examples/*", "xtask"]
 
 [workspace.package]
 edition = "2024"
@@ -33,3 +33,6 @@ needless_pass_by_ref_mut = "warn"
 cognitive_complexity = "warn"
 excessive_nesting = "warn"
 too_many_lines = "warn"
+
+[patch.crates-io]
+mlua = { path = "vendor/mlua" }

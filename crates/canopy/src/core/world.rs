@@ -2032,7 +2032,7 @@ impl Widget for RootContainer {
 mod tests {
     use std::sync::{Arc, Mutex};
 
-    use rand::{Rng, SeedableRng, rngs::StdRng};
+    use rand::{RngExt, SeedableRng, rngs::StdRng};
 
     use super::*;
     use crate::{

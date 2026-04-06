@@ -10,9 +10,10 @@ jobs:
                 include:
                 - { toolchain: beta, os: ubuntu-latest }
                 - { toolchain: beta, os: windows-latest }
+                - { toolchain: beta, os: macos-latest }
         steps:
             - uses: actions/checkout@v3
             - uses: dtolnay/rust-toolchain@master
               with:
                     toolchain: ${{ matrix.toolchain }}
-            - run: cargo test --all-features
+            - run: cargo xtask test

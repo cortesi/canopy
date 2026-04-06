@@ -8,16 +8,16 @@ license.workspace = true
 proc-macro = true
 
 [dependencies]
-syn = { version = "2.0.104", features = ["full"] }
-quote = "1.0.40"
-proc-macro2 = "1.0.95"
+syn = { version = "2.0.117", features = ["full"] }
+quote = "1.0.45"
+proc-macro2 = "1.0.106"
 structmeta = "0.3.0"
 proc-macro-error = "1.0.4"
-thiserror = "2.0.12"
-convert_case = "0.10.0"
+thiserror = "2.0.18"
+convert_case = "0.11.0"
 
 [dev-dependencies]
-anyhow = "1.0.98"
+anyhow = "1.0.102"
 canopy = { path = "../canopy" }
 pretty_assertions = "1.4.1"
 

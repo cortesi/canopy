@@ -157,7 +157,7 @@ fn format_parse_error(err: LuaError) -> error::ParseError {
     }
 }
 
-#[cfg(feature = "typecheck")]
+#[cfg(all(feature = "typecheck", not(target_os = "macos")))]
 /// Format Luau typecheck diagnostics for display.
 fn format_typecheck_diagnostics(result: &luau_analyze::CheckResult) -> String {
     let mut lines = result
@@ -879,7 +879,7 @@ impl LuauHost {
         self.state.borrow().finalized
     }
 
-    #[cfg(feature = "typecheck")]
+    #[cfg(all(feature = "typecheck", not(target_os = "macos")))]
     /// Type-check a Luau source string against the finalized canopy API.
     pub fn check_script(&self, source: &str) -> Result<luau_analyze::CheckResult> {
         let definitions = self.state.borrow().definitions.clone().ok_or_else(|| {
@@ -899,7 +899,7 @@ impl LuauHost {
             .map_err(|err| error::Error::Script(format!("checking Luau script failed: {err}")))
     }
 
-    #[cfg(feature = "typecheck")]
+    #[cfg(all(feature = "typecheck", not(target_os = "macos")))]
     /// Enforce Luau type checking for finalized APIs in debug builds.
     fn maybe_typecheck(&self, source: &str) -> Result<()> {
         if !cfg!(debug_assertions) || !self.is_finalized() {
@@ -915,8 +915,8 @@ impl LuauHost {
         }
     }
 
-    /// Skip Luau type checking when the feature is disabled.
-    #[cfg(not(feature = "typecheck"))]
+    /// Skip Luau type checking when the feature is disabled or unsupported on this target.
+    #[cfg(not(all(feature = "typecheck", not(target_os = "macos"))))]
     fn maybe_typecheck(&self, _source: &str) -> Result<()> {
         Ok(())
     }
@@ -1834,7 +1834,7 @@ mod tests {
         })
     }
 
-    #[cfg(feature = "typecheck")]
+    #[cfg(all(feature = "typecheck", not(target_os = "macos")))]
     #[test]
     fn tcheck_script_reports_type_errors() -> Result<()> {
         run_ttree(|c, _, _| {
@@ -1846,7 +1846,7 @@ mod tests {
         })
     }
 
-    #[cfg(feature = "typecheck")]
+    #[cfg(all(feature = "typecheck", not(target_os = "macos")))]
     #[test]
     fn tcompile_rejects_type_errors_when_finalized() -> Result<()> {
         run_ttree(|c, _, _| {

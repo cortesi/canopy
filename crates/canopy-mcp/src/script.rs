@@ -329,17 +329,8 @@ pub fn evaluate_live(canopy: &mut Canopy, request: &ScriptEvalRequest) -> Script
     }
 
     let total_start = Instant::now();
-    let diagnostics = match canopy.check_script(&request.script) {
-        Ok(result) => result
-            .errors()
-            .into_iter()
-            .map(|diagnostic| ScriptDiagnostic {
-                severity: "error".to_string(),
-                line: diagnostic.line as usize + 1,
-                column: diagnostic.col as usize + 1,
-                message: diagnostic.message.clone(),
-            })
-            .collect::<Vec<_>>(),
+    let diagnostics = match typecheck_diagnostics(canopy, &request.script) {
+        Ok(diagnostics) => diagnostics,
         Err(error) => {
             return ScriptEvalOutcome::error_only(
                 "typecheck",
@@ -430,17 +421,7 @@ impl HeadlessSession {
 
     /// Type-check a script against the app's rendered Luau API.
     fn typecheck(&mut self, script: &str) -> Result<Vec<ScriptDiagnostic>> {
-        let result = self.canopy.check_script(script)?;
-        Ok(result
-            .errors()
-            .into_iter()
-            .map(|diagnostic| ScriptDiagnostic {
-                severity: "error".to_string(),
-                line: diagnostic.line as usize + 1,
-                column: diagnostic.col as usize + 1,
-                message: diagnostic.message.clone(),
-            })
-            .collect())
+        typecheck_diagnostics(&mut self.canopy, script)
     }
 
     /// Execute a script and return its JSON-serializable result value.
@@ -466,6 +447,27 @@ impl HeadlessSession {
             })
             .collect()
     }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn typecheck_diagnostics(canopy: &mut Canopy, script: &str) -> Result<Vec<ScriptDiagnostic>> {
+    let result = canopy.check_script(script)?;
+    Ok(result
+        .errors()
+        .into_iter()
+        .map(|diagnostic| ScriptDiagnostic {
+            severity: "error".to_string(),
+            line: diagnostic.line as usize + 1,
+            column: diagnostic.col as usize + 1,
+            message: diagnostic.message.clone(),
+        })
+        .collect())
+}
+
+#[cfg(target_os = "macos")]
+/// Return no diagnostics when Luau type checking is disabled on macOS.
+fn typecheck_diagnostics(_canopy: &mut Canopy, _script: &str) -> Result<Vec<ScriptDiagnostic>> {
+    Ok(Vec::new())
 }
 
 #[cfg(test)]
@@ -561,19 +563,33 @@ mod tests {
             timeout_ms: None,
         });
         assert!(!outcome.success);
-        assert_eq!(
-            outcome
-                .error
-                .as_ref()
-                .map(|error| error.error_type.as_str()),
-            Some("typecheck")
-        );
-        assert!(!outcome.diagnostics.is_empty());
-        assert!(
-            outcome
-                .diagnostics
-                .iter()
-                .any(|diagnostic| diagnostic.message.contains("number"))
-        );
+        #[cfg(not(target_os = "macos"))]
+        {
+            assert_eq!(
+                outcome
+                    .error
+                    .as_ref()
+                    .map(|error| error.error_type.as_str()),
+                Some("typecheck")
+            );
+            assert!(!outcome.diagnostics.is_empty());
+            assert!(
+                outcome
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.message.contains("number"))
+            );
+        }
+        #[cfg(target_os = "macos")]
+        {
+            assert_eq!(
+                outcome
+                    .error
+                    .as_ref()
+                    .map(|error| error.error_type.as_str()),
+                Some("runtime")
+            );
+            assert!(outcome.diagnostics.is_empty());
+        }
     }
 }
