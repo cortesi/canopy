@@ -712,11 +712,13 @@ async fn smoke_command(config: LoadedConfig, args: SmokeArgs) -> Result<()> {
             })
             .await?;
         let elapsed = started.elapsed().as_millis();
+        let fixture = script.fixture.as_deref().unwrap_or("-");
+        let test_name = smoke_test_name(&suite_dir, &script.path);
         if outcome.success {
-            println!("PASS {} ({elapsed}ms)", script.path.display());
+            println!("PASS fixture={fixture} test={test_name} ({elapsed}ms)");
         } else {
             failed += 1;
-            println!("FAIL {} ({elapsed}ms)", script.path.display());
+            println!("FAIL fixture={fixture} test={test_name} ({elapsed}ms)");
             if let Some(error) = outcome.error {
                 println!("  {}", error.message);
             }
@@ -730,6 +732,24 @@ async fn smoke_command(config: LoadedConfig, args: SmokeArgs) -> Result<()> {
         bail!("{failed} smoke script(s) failed");
     }
     Ok(())
+}
+
+/// Format a smoke script path relative to the suite root and fixture.
+fn smoke_test_name(suite_dir: &Path, script_path: &Path) -> String {
+    let relative = script_path
+        .strip_prefix(suite_dir)
+        .unwrap_or(script_path)
+        .to_path_buf();
+    let fixture = fixture_for_script(suite_dir, script_path);
+
+    if let Some(fixture) = fixture {
+        let fixture_path = Path::new(&fixture);
+        if let Ok(without_fixture) = relative.strip_prefix(fixture_path) {
+            return without_fixture.display().to_string();
+        }
+    }
+
+    relative.display().to_string()
 }
 
 /// Execute `canopyctl fixtures`.

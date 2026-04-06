@@ -17,7 +17,7 @@ use canopy::{
     style::{AttrSet, Color, ResolvedStyle},
 };
 use itty::{
-    Session, ViewportSelection,
+    SelectionSnapshot, SelectionSpec, Session,
     clipboard::ClipboardHandler,
     config::{EguiTTYConfig, EguiTTYConfigBuilder, Hex, PaletteConfig, PaletteKind, PaletteMeta},
     driver::{self, DriverHandle, DriverHost},
@@ -443,7 +443,7 @@ impl Terminal {
     /// Clear the current viewport selection overlay.
     fn clear_selection(&mut self) {
         if let Some(session) = self.session_mut() {
-            session.set_viewport_selection(None);
+            session.set_selection(None);
         }
         self.selection_active = false;
         self.selection_anchor = None;
@@ -451,14 +451,19 @@ impl Terminal {
 
     /// Update the viewport selection overlay between two points.
     fn set_selection(&mut self, start: geom::Point, end: geom::Point) -> bool {
+        let Some(state) = self.state() else {
+            return false;
+        };
         let Some(session) = self.session_mut() else {
             return false;
         };
+        let start_line = start.y as i32 - state.display_offset as i32;
+        let end_line = end.y as i32 - state.display_offset as i32;
 
-        session.set_viewport_selection(Some(itty::ViewportSelection {
-            start_row: start.y as usize,
+        session.set_selection(Some(SelectionSpec {
+            start_line,
             start_col: start.x as usize,
-            end_row: end.y as usize,
+            end_line,
             end_col: end.x as usize,
             block: false,
         }));
@@ -734,7 +739,7 @@ impl Widget for Terminal {
 
         let state = session.state();
         let runs = session.visible_runs();
-        let selection = session.viewport_selection();
+        let selection = session.selection();
         let child_exited = session.child_exited();
         let child_exit_code = session.child_exit_code().unwrap_or(1);
         let default_bg = self.config.colors.background;
@@ -748,6 +753,7 @@ impl Widget for Terminal {
                     row_idx,
                     run,
                     selection,
+                    state.display_offset,
                     default_bg,
                 )?;
             }
@@ -995,7 +1001,8 @@ fn render_run(
     origin: geom::Point,
     row_idx: usize,
     run: &StyledRunPublic,
-    selection: Option<ViewportSelection>,
+    selection: Option<SelectionSnapshot>,
+    display_offset: usize,
     default_bg: Color,
 ) -> Result<()> {
     let mut col = run.start_col;
@@ -1011,7 +1018,7 @@ fn render_run(
             g: color.g(),
             b: color.b(),
         });
-        if selection_contains(selection, row_idx, col) {
+        if selection_contains(selection, row_idx, col, display_offset) {
             mem::swap(&mut fg, &mut bg);
         }
 
@@ -1038,29 +1045,35 @@ fn render_run(
 }
 
 /// Return true when a viewport selection contains the given cell.
-fn selection_contains(selection: Option<ViewportSelection>, row: usize, col: usize) -> bool {
+fn selection_contains(
+    selection: Option<SelectionSnapshot>,
+    row: usize,
+    col: usize,
+    display_offset: usize,
+) -> bool {
     let Some(selection) = selection else {
         return false;
     };
+    let row = row as i32 - display_offset as i32;
     if selection.block {
-        let start_row = selection.start_row.min(selection.end_row);
-        let end_row = selection.start_row.max(selection.end_row);
+        let start_row = selection.start_line.min(selection.end_line);
+        let end_row = selection.start_line.max(selection.end_line);
         let start_col = selection.start_col.min(selection.end_col);
         let end_col = selection.start_col.max(selection.end_col);
         return (start_row..=end_row).contains(&row) && (start_col..=end_col).contains(&col);
     }
-    if row < selection.start_row || row > selection.end_row {
+    if row < selection.start_line || row > selection.end_line {
         return false;
     }
-    if selection.start_row == selection.end_row {
+    if selection.start_line == selection.end_line {
         let start_col = selection.start_col.min(selection.end_col);
         let end_col = selection.start_col.max(selection.end_col);
         return (start_col..=end_col).contains(&col);
     }
-    if row == selection.start_row {
+    if row == selection.start_line {
         return col >= selection.start_col;
     }
-    if row == selection.end_row {
+    if row == selection.end_line {
         return col <= selection.end_col;
     }
     true
