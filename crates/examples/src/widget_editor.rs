@@ -9,7 +9,7 @@ const DEFAULT_BINDINGS: &str = r#"
 root.default_bindings()
 
 canopy.bind_with("Tab", { path = "widget_editor/", desc = "Next focus" }, function()
-    root.focus_next()
+    root.focus("Next")
 end)
 "#;
 

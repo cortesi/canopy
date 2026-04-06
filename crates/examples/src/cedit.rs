@@ -9,7 +9,7 @@ const DEFAULT_BINDINGS: &str = r#"
 root.default_bindings()
 
 canopy.bind_with("Tab", { path = "ed/", desc = "Next focus" }, function()
-    root.focus_next()
+    root.focus("Next")
 end)
 canopy.bind_with("p", { path = "ed/", desc = "Log demo message" }, function()
     canopy.log("cedit")

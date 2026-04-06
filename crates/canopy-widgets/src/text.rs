@@ -116,6 +116,8 @@ impl Text {
     }
 
     /// Scroll by one line in the specified direction.
+    /// @param dir The direction to scroll.
+    #[command]
     pub fn scroll(&mut self, c: &mut dyn Context, dir: Direction) {
         match dir {
             Direction::Up => c.scroll_up(),
@@ -125,53 +127,16 @@ impl Text {
         };
     }
 
-    /// Page in the specified direction.
-    pub fn page(&mut self, c: &mut dyn Context, dir: Direction) {
-        match dir {
-            Direction::Up => {
-                c.page_up();
-            }
-            Direction::Down => {
-                c.page_down();
-            }
-            _ => {}
-        };
-    }
-
+    /// Page vertically through the text.
+    /// Positive values move down; negative values move up.
+    /// @param delta Signed page delta. Positive moves down and negative moves up.
     #[command]
-    /// Scroll up by one line.
-    pub fn scroll_up(&mut self, c: &mut dyn Context) {
-        self.scroll(c, Direction::Up);
-    }
-
-    #[command]
-    /// Scroll down by one line.
-    pub fn scroll_down(&mut self, c: &mut dyn Context) {
-        self.scroll(c, Direction::Down);
-    }
-
-    #[command]
-    /// Scroll left by one column.
-    pub fn scroll_left(&mut self, c: &mut dyn Context) {
-        self.scroll(c, Direction::Left);
-    }
-
-    #[command]
-    /// Scroll right by one column.
-    pub fn scroll_right(&mut self, c: &mut dyn Context) {
-        self.scroll(c, Direction::Right);
-    }
-
-    #[command]
-    /// Page up by one screen.
-    pub fn page_up(&mut self, c: &mut dyn Context) {
-        self.page(c, Direction::Up);
-    }
-
-    #[command]
-    /// Page down by one screen.
-    pub fn page_down(&mut self, c: &mut dyn Context) {
-        self.page(c, Direction::Down);
+    pub fn page(&mut self, c: &mut dyn Context, delta: i32) {
+        if delta < 0 {
+            c.page_up();
+        } else if delta > 0 {
+            c.page_down();
+        }
     }
 
     /// Determine the wrapping width for the given available space.

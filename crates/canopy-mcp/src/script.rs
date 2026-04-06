@@ -4,7 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use canopy::{Canopy, geom::Size, testing::render::NopBackend};
+use canopy::{Canopy, FixtureInfo, geom::Size, testing::render::NopBackend};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -32,6 +32,9 @@ const DEFAULT_VIEW_SIZE: Size = Size { w: 120, h: 40 };
 pub struct ScriptEvalRequest {
     /// Luau source code to execute.
     pub script: String,
+    /// Optional named fixture applied before evaluation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fixture: Option<String>,
     /// Optional evaluation timeout in milliseconds.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timeout_ms: Option<u64>,
@@ -194,6 +197,12 @@ impl AppEvaluator {
         Ok(canopy.script_api().to_string())
     }
 
+    /// Return the evaluator's registered fixture catalog.
+    pub fn fixtures(&self) -> Result<Vec<FixtureInfo>> {
+        let canopy = (self.factory)()?;
+        Ok(canopy.fixture_infos())
+    }
+
     /// Evaluate a Luau script, enforcing the requested timeout when present.
     pub fn evaluate_with_timeout(&self, request: ScriptEvalRequest) -> ScriptEvalOutcome {
         let Some(timeout_ms) = request.timeout_ms.filter(|timeout| *timeout > 0) else {
@@ -229,17 +238,18 @@ impl AppEvaluator {
     pub fn evaluate(&self, request: &ScriptEvalRequest) -> ScriptEvalOutcome {
         let total_start = Instant::now();
         let build_start = Instant::now();
-        let mut session = match HeadlessSession::new(&self.factory, self.view_size) {
-            Ok(session) => session,
-            Err(error) => {
-                return ScriptEvalOutcome::error_only(
-                    "build",
-                    error.to_string(),
-                    Vec::new(),
-                    ScriptTiming::zero(),
-                );
-            }
-        };
+        let mut session =
+            match HeadlessSession::new(&self.factory, self.view_size, request.fixture.as_deref()) {
+                Ok(session) => session,
+                Err(error) => {
+                    return ScriptEvalOutcome::error_only(
+                        "build",
+                        error.to_string(),
+                        Vec::new(),
+                        ScriptTiming::zero(),
+                    );
+                }
+            };
         let build_ms = build_start.elapsed().as_millis() as u64;
 
         let diagnostics = match session.typecheck(&request.script) {
@@ -307,6 +317,95 @@ impl AppEvaluator {
     }
 }
 
+/// Evaluate a Luau script against an existing live canopy app.
+pub fn evaluate_live(canopy: &mut Canopy, request: &ScriptEvalRequest) -> ScriptEvalOutcome {
+    if request.fixture.is_some() {
+        return ScriptEvalOutcome::error_only(
+            "invalid",
+            "live sessions do not support eval(fixture=...); use apply_fixture instead",
+            Vec::new(),
+            ScriptTiming::zero(),
+        );
+    }
+
+    let total_start = Instant::now();
+    let diagnostics = match canopy.check_script(&request.script) {
+        Ok(result) => result
+            .errors()
+            .into_iter()
+            .map(|diagnostic| ScriptDiagnostic {
+                severity: "error".to_string(),
+                line: diagnostic.line as usize + 1,
+                column: diagnostic.col as usize + 1,
+                message: diagnostic.message.clone(),
+            })
+            .collect::<Vec<_>>(),
+        Err(error) => {
+            return ScriptEvalOutcome::error_only(
+                "typecheck",
+                error.to_string(),
+                Vec::new(),
+                ScriptTiming::zero(),
+            );
+        }
+    };
+
+    if !diagnostics.is_empty() {
+        return ScriptEvalOutcome::error_only(
+            "typecheck",
+            "script failed Luau type checking",
+            diagnostics,
+            ScriptTiming {
+                build_ms: 0,
+                exec_ms: 0,
+                total_ms: total_start.elapsed().as_millis() as u64,
+            },
+        );
+    }
+
+    let exec_start = Instant::now();
+    let eval_result = canopy.eval_script_value(&request.script);
+    let exec_ms = exec_start.elapsed().as_millis() as u64;
+    let timing = ScriptTiming {
+        build_ms: 0,
+        exec_ms,
+        total_ms: total_start.elapsed().as_millis() as u64,
+    };
+    let logs = canopy.take_script_logs();
+    let assertions = canopy
+        .take_script_assertions()
+        .into_iter()
+        .map(|assertion| ScriptAssertion {
+            passed: assertion.passed,
+            message: assertion.message,
+        })
+        .collect();
+
+    match eval_result {
+        Ok(value) => ScriptEvalOutcome {
+            success: true,
+            value: Some(value.to_json_value().unwrap_or(JsonValue::Null)),
+            logs,
+            assertions,
+            diagnostics,
+            timing,
+            error: None,
+        },
+        Err(error) => ScriptEvalOutcome {
+            success: false,
+            value: None,
+            logs,
+            assertions,
+            diagnostics,
+            timing,
+            error: Some(ScriptErrorInfo {
+                error_type: "runtime".to_string(),
+                message: error.to_string(),
+            }),
+        },
+    }
+}
+
 /// Headless canopy session used while evaluating one script request.
 struct HeadlessSession {
     /// The app instance under test.
@@ -317,9 +416,12 @@ struct HeadlessSession {
 
 impl HeadlessSession {
     /// Build and render a fresh headless canopy session.
-    fn new(factory: &AppFactory, view_size: Size) -> Result<Self> {
+    fn new(factory: &AppFactory, view_size: Size, fixture: Option<&str>) -> Result<Self> {
         let mut canopy = factory()?;
         canopy.finalize_api()?;
+        if let Some(fixture) = fixture {
+            canopy.apply_fixture(fixture)?;
+        }
         canopy.set_root_size(view_size)?;
         let mut backend = NopBackend::new();
         canopy.render(&mut backend)?;
@@ -442,6 +544,7 @@ mod tests {
                 return script_target.get()
             "#
             .to_string(),
+            fixture: None,
             timeout_ms: None,
         });
         assert!(outcome.success);
@@ -454,6 +557,7 @@ mod tests {
         let evaluator = AppEvaluator::new(test_factory());
         let outcome = evaluator.evaluate(&ScriptEvalRequest {
             script: r#"script_target.set("bad")"#.to_string(),
+            fixture: None,
             timeout_ms: None,
         });
         assert!(!outcome.success);

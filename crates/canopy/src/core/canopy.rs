@@ -16,6 +16,7 @@ use crate::{
         Core, NodeId,
         context::{CoreViewContext, ReadContext},
         dump::dump_with_focus,
+        fixture::{Fixture, FixtureInfo},
         help,
         style::Effect,
         view::View,
@@ -28,7 +29,7 @@ use crate::{
     path::Path,
     render::{Render, RenderBackend},
     script,
-    style::{StyleManager, StyleMap, solarized},
+    style::{ResolvedStyle, StyleManager, StyleMap, solarized},
     widget::EventOutcome,
 };
 
@@ -55,6 +56,8 @@ pub struct Canopy {
     script_api_text: Option<String>,
     /// Registered default binding scripts keyed by owner name.
     default_bindings: HashMap<String, DefaultBindingsScript>,
+    /// Registered named fixtures keyed by fixture name.
+    fixtures: HashMap<String, Fixture>,
     /// Input mapping table.
     pub(crate) keymap: inputmap::InputMap,
 
@@ -67,9 +70,51 @@ pub struct Canopy {
     pub(crate) event_tx: mpsc::Sender<Event>,
     /// Event receiver channel.
     pub(crate) event_rx: Option<mpsc::Receiver<Event>>,
+    /// Cross-thread automation callback sender.
+    automation_tx: mpsc::Sender<AutomationCallback>,
+    /// Cross-thread automation callback receiver.
+    automation_rx: mpsc::Receiver<AutomationCallback>,
 
     /// Style map used for rendering.
     pub style: StyleMap,
+}
+
+/// Callback marshalled onto the UI thread for live automation.
+pub type AutomationCallback = Box<dyn FnOnce(&mut Canopy) + Send + 'static>;
+
+/// Handle for submitting automation work to a live canopy runloop.
+#[derive(Clone)]
+pub struct AutomationHandle {
+    /// Sender for queued UI-thread callbacks.
+    callback_tx: mpsc::Sender<AutomationCallback>,
+    /// Sender for wake events so the runloop notices queued work.
+    wake_tx: mpsc::Sender<Event>,
+}
+
+impl AutomationHandle {
+    /// Queue a callback to run on the UI thread.
+    pub fn submit(&self, callback: AutomationCallback) -> Result<()> {
+        self.callback_tx
+            .send(callback)
+            .map_err(|_| error::Error::RunLoop("automation callback channel closed".into()))?;
+        self.wake_tx
+            .send(Event::Wake)
+            .map_err(|_| error::Error::RunLoop("event loop wake channel closed".into()))?;
+        Ok(())
+    }
+
+    /// Execute a closure on the UI thread and wait for its result.
+    pub fn request<R, F>(&self, callback: F) -> Result<R>
+    where
+        R: Send + 'static,
+        F: FnOnce(&mut Canopy) -> Result<R> + Send + 'static,
+    {
+        let (tx, rx) = mpsc::channel();
+        self.submit(Box::new(move |canopy| {
+            let _ignored = tx.send(callback(canopy));
+        }))?;
+        rx.recv()?
+    }
 }
 
 /// Registered default binding script metadata.
@@ -90,10 +135,40 @@ struct RenderTraversal<'a> {
     effect_stack: &'a mut Vec<Effect>,
 }
 
+/// No-op backend used to refresh the offscreen terminal buffer for inspection.
+struct SnapshotBackend;
+
+impl RenderBackend for SnapshotBackend {
+    fn style(&mut self, _style: &ResolvedStyle) -> Result<()> {
+        Ok(())
+    }
+
+    fn text(&mut self, _loc: Point, _txt: &str) -> Result<()> {
+        Ok(())
+    }
+
+    fn supports_char_shift(&self) -> bool {
+        false
+    }
+
+    fn shift_chars(&mut self, _loc: Point, _count: i32) -> Result<()> {
+        Ok(())
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn reset(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
 impl Canopy {
     /// Construct a new Canopy instance.
     pub fn new() -> Self {
         let (tx, rx) = mpsc::channel();
+        let (automation_tx, automation_rx) = mpsc::channel();
         let core = Core::new();
         Self {
             last_render_focus_gen: core.focus_gen,
@@ -101,15 +176,26 @@ impl Canopy {
             poller: Poller::new(tx.clone()),
             event_tx: tx,
             event_rx: Some(rx),
+            automation_tx,
+            automation_rx,
             keymap: inputmap::InputMap::new(),
             script_host: script::ScriptHost::new(),
             script_api_text: None,
             default_bindings: HashMap::new(),
+            fixtures: HashMap::new(),
             style: solarized::solarized_dark(),
             root_size: None,
             termbuf: None,
             render_pending: true,
             core,
+        }
+    }
+
+    /// Return a handle for submitting automation work to this app's UI thread.
+    pub fn automation_handle(&self) -> AutomationHandle {
+        AutomationHandle {
+            callback_tx: self.automation_tx.clone(),
+            wake_tx: self.event_tx.clone(),
         }
     }
 
@@ -191,6 +277,62 @@ impl Canopy {
             },
         );
         Ok(())
+    }
+
+    /// Register a named fixture available to headless and live automation.
+    pub fn register_fixture(&mut self, fixture: Fixture) -> Result<()> {
+        if self.script_host.is_finalized() {
+            return Err(error::Error::InvalidOperation(
+                "fixture registration is sealed after finalize_api()".into(),
+            ));
+        }
+        if fixture.name.trim().is_empty() {
+            return Err(error::Error::Invalid("fixture name cannot be empty".into()));
+        }
+        if let Some(existing) = self.fixtures.get(&fixture.name) {
+            if existing.description == fixture.description {
+                return Ok(());
+            }
+            return Err(error::Error::Invalid(format!(
+                "conflicting fixture already registered for {}",
+                fixture.name
+            )));
+        }
+        self.fixtures.insert(fixture.name.clone(), fixture);
+        Ok(())
+    }
+
+    /// Return registered fixture metadata in stable name order.
+    pub fn fixture_infos(&self) -> Vec<FixtureInfo> {
+        let mut fixtures = self
+            .fixtures
+            .values()
+            .map(Fixture::info)
+            .collect::<Vec<_>>();
+        fixtures.sort_by(|left, right| left.name.cmp(&right.name));
+        fixtures
+    }
+
+    /// Apply a named fixture to the current app instance.
+    pub fn apply_fixture(&mut self, name: &str) -> Result<()> {
+        let fixture = self
+            .fixtures
+            .get(name)
+            .cloned()
+            .ok_or_else(|| error::Error::NotFound(format!("fixture {name}")))?;
+        (fixture.setup)(self)?;
+        self.render_pending = true;
+        Ok(())
+    }
+
+    /// Run a closure against the root context.
+    pub fn with_root_context<R>(
+        &mut self,
+        f: impl FnOnce(&mut dyn crate::Context) -> Result<R>,
+    ) -> Result<R> {
+        let root_id = self.core.root_id();
+        let mut ctx = crate::core::context::CoreContext::new(&mut self.core, root_id);
+        f(&mut ctx)
     }
 
     #[cfg(feature = "typecheck")]
@@ -310,8 +452,11 @@ impl Canopy {
             return Ok(());
         }
         let default_binding_owners = self.default_binding_owners();
-        let definitions =
-            script::defs::render_definitions(&self.core.commands, &default_binding_owners);
+        let definitions = script::defs::render_definitions(
+            &self.core.commands,
+            &default_binding_owners,
+            &self.fixture_infos(),
+        );
         self.script_host.finalize(
             &self.core.commands,
             &default_binding_owners,
@@ -699,6 +844,13 @@ impl Canopy {
         }
         self.render(be)?;
         Ok(true)
+    }
+
+    /// Refresh the cached terminal buffer without producing user-visible output.
+    pub(crate) fn refresh_snapshot(&mut self) -> Result<()> {
+        let mut backend = SnapshotBackend;
+        let _ignored = self.render_if_pending(&mut backend)?;
+        Ok(())
     }
 
     /// Has the focus path status of this node changed since the last render sweep?
@@ -1176,6 +1328,13 @@ impl Canopy {
         Ok(())
     }
 
+    /// Drain queued automation callbacks that were marshalled onto the UI thread.
+    pub(crate) fn service_automation(&mut self) {
+        while let Ok(callback) = self.automation_rx.try_recv() {
+            callback(self);
+        }
+    }
+
     /// Propagate an event through the tree.
     pub(crate) fn event(&mut self, e: Event) -> Result<()> {
         match e {
@@ -1194,6 +1353,7 @@ impl Canopy {
                 let event = Event::Paste(content);
                 self.dispatch_focus_event(&event)
             }
+            Event::Wake => Ok(()),
             Event::FocusGained => {
                 self.render_pending = true;
                 self.dispatch_focus_event(&Event::FocusGained)

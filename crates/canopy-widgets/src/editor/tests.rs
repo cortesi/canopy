@@ -127,7 +127,9 @@ fn editor_selection(harness: &mut Harness) -> Selection {
 
 fn editor_cursor_location(harness: &mut Harness) -> Point {
     with_editor(harness, |editor| {
-        editor.cursor().expect("cursor missing").location
+        <Editor as Widget>::cursor(editor)
+            .expect("cursor missing")
+            .location
     })
 }
 
@@ -428,7 +430,7 @@ fn binding_precedence_blocks_text_entry() {
         .run_default_script(
             r#"
 canopy.bind_with("x", { path = "editor", desc = "Cursor left" }, function()
-    editor.cursor_left()
+    editor.cursor("Left")
 end)
 "#,
         )

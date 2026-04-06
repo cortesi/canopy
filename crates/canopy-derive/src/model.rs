@@ -51,6 +51,8 @@ pub struct ParamMeta {
     pub(crate) is_option: bool,
     /// Optional default value.
     pub(crate) default: Option<DefaultValue>,
+    /// Optional parameter documentation from `@param` tags.
+    pub(crate) doc: Option<String>,
 }
 
 /// Classification of command return types.

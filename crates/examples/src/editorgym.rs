@@ -15,10 +15,10 @@ const DEFAULT_BINDINGS: &str = r#"
 root.default_bindings()
 
 canopy.bind_with("Tab", { path = "editor_gym", desc = "Next focus" }, function()
-    root.focus_next()
+    root.focus("Next")
 end)
 canopy.bind_with("BackTab", { path = "editor_gym", desc = "Previous focus" }, function()
-    root.focus_prev()
+    root.focus("Prev")
 end)
 canopy.bind_with("PageDown", { path = "editor_gym", desc = "Page down" }, function()
     editor_gym.page_down()

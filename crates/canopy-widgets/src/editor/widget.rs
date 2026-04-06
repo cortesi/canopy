@@ -7,7 +7,7 @@ use canopy::{
     Context, EventOutcome, ReadContext, Widget, command, cursor, derive_commands,
     error::Result,
     event::{Event, key, mouse},
-    geom::{Line, Point, Rect},
+    geom::{Direction, Line, Point, Rect},
     layout::{CanvasContext, Constraint, MeasureConstraints, Measurement, Size},
     render::Render,
     state::NodeName,
@@ -2258,33 +2258,26 @@ impl Editor {
         Ok(())
     }
 
-    /// Move the cursor left.
+    /// Move the cursor.
+    /// @param dir The direction to move the cursor.
     #[command]
-    pub fn cursor_left(&mut self, ctx: &mut dyn Context) {
-        let _ = self.buffer.move_left(self.config.multiline);
-        self.update_preferred_column();
-        self.ensure_cursor_visible(ctx);
-    }
-
-    /// Move the cursor right.
-    #[command]
-    pub fn cursor_right(&mut self, ctx: &mut dyn Context) {
-        let _ = self.buffer.move_right(self.config.multiline);
-        self.update_preferred_column();
-        self.ensure_cursor_visible(ctx);
-    }
-
-    /// Move the cursor up.
-    #[command]
-    pub fn cursor_up(&mut self, ctx: &mut dyn Context) {
-        self.move_vertical(-1);
-        self.ensure_cursor_visible(ctx);
-    }
-
-    /// Move the cursor down.
-    #[command]
-    pub fn cursor_down(&mut self, ctx: &mut dyn Context) {
-        self.move_vertical(1);
+    pub fn cursor(&mut self, ctx: &mut dyn Context, dir: Direction) {
+        match dir {
+            Direction::Left => {
+                let _ = self.buffer.move_left(self.config.multiline);
+                self.update_preferred_column();
+            }
+            Direction::Right => {
+                let _ = self.buffer.move_right(self.config.multiline);
+                self.update_preferred_column();
+            }
+            Direction::Up => {
+                self.move_vertical(-1);
+            }
+            Direction::Down => {
+                self.move_vertical(1);
+            }
+        }
         self.ensure_cursor_visible(ctx);
     }
 

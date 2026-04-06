@@ -20,7 +20,7 @@ use crate::{
     },
     error::{self, Result},
     event::{key, mouse},
-    geom::{Point, RectI32},
+    geom::{Point, RectI32, Size},
 };
 
 /// Render Luau definition files from the current command set.
@@ -272,6 +272,33 @@ fn table_with_entries(
     Ok(table)
 }
 
+/// Convert a string into a Luau value.
+fn string_to_lua(lua: &Lua, value: &str) -> mlua::Result<Value> {
+    Ok(Value::String(lua.create_string(value)?))
+}
+
+/// Convert a point into a Luau table.
+fn point_to_lua(lua: &Lua, point: Point) -> mlua::Result<Value> {
+    Ok(Value::Table(table_with_entries(
+        lua,
+        [
+            ("x", Value::Integer(i64::from(point.x))),
+            ("y", Value::Integer(i64::from(point.y))),
+        ],
+    )?))
+}
+
+/// Convert a size into a Luau table.
+fn size_to_lua(lua: &Lua, size: Size) -> mlua::Result<Value> {
+    Ok(Value::Table(table_with_entries(
+        lua,
+        [
+            ("w", Value::Integer(i64::from(size.w))),
+            ("h", Value::Integer(i64::from(size.h))),
+        ],
+    )?))
+}
+
 /// Convert a screen rect into a Luau table.
 fn rect_to_lua(lua: &Lua, rect: RectI32) -> mlua::Result<Value> {
     Ok(Value::Table(table_with_entries(
@@ -305,6 +332,21 @@ fn node_info_to_lua(lua: &Lua, canopy: &Canopy, node_id: NodeId) -> Result<Table
     } else {
         rect_to_lua(lua, node.view.outer).map_err(lua_to_canopy)?
     };
+    let content_rect = if node.view.content.w == 0 || node.view.content.h == 0 {
+        Value::Nil
+    } else {
+        rect_to_lua(lua, node.view.content).map_err(lua_to_canopy)?
+    };
+    let accept_focus = match node.widget.try_borrow() {
+        Ok(widget) => match widget.as_ref() {
+            Some(widget) => {
+                let ctx = CoreViewContext::new(&canopy.core, node_id);
+                widget.accept_focus(&ctx)
+            }
+            None => false,
+        },
+        Err(_) => false,
+    };
     table_with_entries(
         lua,
         [
@@ -321,15 +363,275 @@ fn node_info_to_lua(lua: &Lua, canopy: &Canopy, node_id: NodeId) -> Result<Table
                 "on_focus_path",
                 Value::Boolean(root_ctx.node_is_on_focus_path(node_id)),
             ),
+            ("hidden", Value::Boolean(node.hidden())),
             ("visible", Value::Boolean(!node.hidden())),
             (
                 "children",
                 node_list_to_lua(lua, node.children().iter().copied()).map_err(lua_to_canopy)?,
             ),
             ("rect", rect),
+            ("content_rect", content_rect),
+            (
+                "canvas",
+                size_to_lua(lua, node.canvas()).map_err(lua_to_canopy)?,
+            ),
+            (
+                "scroll",
+                point_to_lua(lua, node.scroll()).map_err(lua_to_canopy)?,
+            ),
+            ("accept_focus", Value::Boolean(accept_focus)),
         ],
     )
     .map_err(lua_to_canopy)
+}
+
+/// Convert a node into a recursive tree record.
+fn tree_node_to_lua(lua: &Lua, canopy: &Canopy, node_id: NodeId) -> Result<Table> {
+    let table = node_info_to_lua(lua, canopy, node_id)?;
+    let Some(node) = canopy.core.nodes.get(node_id) else {
+        return Err(error::Error::NotFound(format!("node {node_id:?}")));
+    };
+    let children = lua.create_table().map_err(lua_to_canopy)?;
+    for (index, child_id) in node.children().iter().copied().enumerate() {
+        children
+            .raw_set(
+                index + 1,
+                Value::Table(tree_node_to_lua(lua, canopy, child_id).map_err(lua_to_canopy)?),
+            )
+            .map_err(lua_to_canopy)?;
+    }
+    table.set("children", children).map_err(lua_to_canopy)?;
+    Ok(table)
+}
+
+/// Convert registered fixtures into a Luau array.
+fn fixtures_to_lua(lua: &Lua, canopy: &Canopy) -> Result<Value> {
+    let fixtures = canopy.fixture_infos();
+    let table = lua.create_table().map_err(lua_to_canopy)?;
+    for (index, fixture) in fixtures.iter().enumerate() {
+        table
+            .raw_set(
+                index + 1,
+                Value::Table(
+                    table_with_entries(
+                        lua,
+                        [
+                            (
+                                "name",
+                                string_to_lua(lua, &fixture.name).map_err(lua_to_canopy)?,
+                            ),
+                            (
+                                "description",
+                                string_to_lua(lua, &fixture.description).map_err(lua_to_canopy)?,
+                            ),
+                        ],
+                    )
+                    .map_err(lua_to_canopy)?,
+                ),
+            )
+            .map_err(lua_to_canopy)?;
+    }
+    Ok(Value::Table(table))
+}
+
+/// Render a command invocation into a human-readable target string.
+fn invocation_target(invocation: &CommandInvocation) -> String {
+    let (owner, name) = invocation
+        .id
+        .0
+        .split_once("::")
+        .unwrap_or(("", invocation.id.0));
+    let callee = if owner.is_empty() {
+        name.to_string()
+    } else {
+        format!("{}.{}", luau_global_owner_name(owner), name)
+    };
+    match &invocation.args {
+        CommandArgs::Positional(values) if values.is_empty() => format!("{callee}()"),
+        CommandArgs::Named(values) if values.is_empty() => format!("{callee}()"),
+        _ => format!("{callee}(...)"),
+    }
+}
+
+/// Convert a binding target into a discoverable summary string.
+fn binding_target_summary(target: &BindingTarget) -> String {
+    match target {
+        BindingTarget::Script(_) => "script".to_string(),
+        BindingTarget::Command(invocation) => invocation_target(invocation),
+        BindingTarget::CommandSequence(commands) => {
+            format!("[sequence: {} commands]", commands.len())
+        }
+        BindingTarget::LuauFunction(_) => "luau".to_string(),
+    }
+}
+
+/// Extract an optional human-readable binding description.
+fn binding_desc(canopy: &Canopy, target: &BindingTarget) -> Option<String> {
+    match target {
+        BindingTarget::LuauFunction(id) => canopy.script_host.function_label(*id),
+        _ => None,
+    }
+}
+
+/// Convert one binding record into a Luau table.
+fn binding_info_to_lua(
+    lua: &Lua,
+    canopy: &Canopy,
+    mode: &str,
+    binding: &inputmap::BindingInfo<'_>,
+) -> Result<Table> {
+    let input_type = match binding.input {
+        inputmap::InputSpec::Key(_) => "key",
+        inputmap::InputSpec::Mouse(_) => "mouse",
+    };
+    table_with_entries(
+        lua,
+        [
+            (
+                "input",
+                string_to_lua(lua, &binding.input.to_string()).map_err(lua_to_canopy)?,
+            ),
+            (
+                "input_type",
+                string_to_lua(lua, input_type).map_err(lua_to_canopy)?,
+            ),
+            ("mode", string_to_lua(lua, mode).map_err(lua_to_canopy)?),
+            (
+                "path",
+                string_to_lua(lua, binding.path_filter).map_err(lua_to_canopy)?,
+            ),
+            (
+                "desc",
+                binding_desc(canopy, binding.target)
+                    .map(|desc| string_to_lua(lua, &desc))
+                    .transpose()
+                    .map_err(lua_to_canopy)?
+                    .unwrap_or(Value::Nil),
+            ),
+            (
+                "target",
+                string_to_lua(lua, &binding_target_summary(binding.target))
+                    .map_err(lua_to_canopy)?,
+            ),
+        ],
+    )
+    .map_err(lua_to_canopy)
+}
+
+/// Convert a command parameter specification into a Luau table.
+fn command_param_to_lua(lua: &Lua, param: &commands::CommandParamSpec) -> Result<Table> {
+    table_with_entries(
+        lua,
+        [
+            (
+                "name",
+                string_to_lua(lua, param.name).map_err(lua_to_canopy)?,
+            ),
+            (
+                "kind",
+                string_to_lua(
+                    lua,
+                    match param.kind {
+                        commands::CommandParamKind::Injected => "injected",
+                        commands::CommandParamKind::User => "user",
+                    },
+                )
+                .map_err(lua_to_canopy)?,
+            ),
+            (
+                "rust_type",
+                string_to_lua(lua, param.ty.rust).map_err(lua_to_canopy)?,
+            ),
+            (
+                "luau_type",
+                string_to_lua(lua, &defs::rust_type_to_luau(&param.ty)).map_err(lua_to_canopy)?,
+            ),
+            (
+                "doc",
+                param
+                    .doc
+                    .map(|doc| string_to_lua(lua, doc))
+                    .transpose()
+                    .map_err(lua_to_canopy)?
+                    .unwrap_or(Value::Nil),
+            ),
+            ("optional", Value::Boolean(param.optional)),
+            (
+                "default",
+                param
+                    .default
+                    .map(|value| string_to_lua(lua, value))
+                    .transpose()
+                    .map_err(lua_to_canopy)?
+                    .unwrap_or(Value::Nil),
+            ),
+        ],
+    )
+    .map_err(lua_to_canopy)
+}
+
+/// Convert a command specification into a Luau table.
+fn command_info_to_lua(lua: &Lua, spec: &CommandSpec) -> Result<Table> {
+    let owner = match spec.dispatch {
+        commands::CommandDispatchKind::Node { owner } => owner,
+        commands::CommandDispatchKind::Free => "",
+    };
+    let params = lua.create_table().map_err(lua_to_canopy)?;
+    for (index, param) in spec.params.iter().enumerate() {
+        params
+            .raw_set(
+                index + 1,
+                Value::Table(command_param_to_lua(lua, param).map_err(lua_to_canopy)?),
+            )
+            .map_err(lua_to_canopy)?;
+    }
+    table_with_entries(
+        lua,
+        [
+            (
+                "name",
+                string_to_lua(lua, spec.name).map_err(lua_to_canopy)?,
+            ),
+            ("owner", string_to_lua(lua, owner).map_err(lua_to_canopy)?),
+            (
+                "doc",
+                spec.doc
+                    .long
+                    .or(spec.doc.short)
+                    .map(|doc| string_to_lua(lua, doc))
+                    .transpose()
+                    .map_err(lua_to_canopy)?
+                    .unwrap_or(Value::Nil),
+            ),
+            ("params", Value::Table(params)),
+        ],
+    )
+    .map_err(lua_to_canopy)
+}
+
+/// Convert the current rendered screen buffer into a Luau table.
+fn screen_to_lua(lua: &Lua, canopy: &mut Canopy) -> Result<Value> {
+    canopy.refresh_snapshot()?;
+    let Some(buffer) = canopy.buf() else {
+        return Err(error::Error::Script(
+            "screen unavailable before render".into(),
+        ));
+    };
+    let rows = lua.create_table().map_err(lua_to_canopy)?;
+    for (row_index, row) in buffer.rows().into_iter().enumerate() {
+        let row_table = lua.create_table().map_err(lua_to_canopy)?;
+        for (column_index, cell) in row.into_iter().enumerate() {
+            row_table
+                .raw_set(
+                    column_index + 1,
+                    string_to_lua(lua, &cell).map_err(lua_to_canopy)?,
+                )
+                .map_err(lua_to_canopy)?;
+        }
+        rows.raw_set(row_index + 1, Value::Table(row_table))
+            .map_err(lua_to_canopy)?;
+    }
+    Ok(Value::Table(rows))
 }
 
 /// Convert a Lua value into a dynamic command argument.
@@ -803,6 +1105,16 @@ impl LuauHost {
         )?;
 
         canopy_table.set(
+            "tree",
+            self.lua.create_function(|_, ()| {
+                with_current_canopy(|canopy, _| {
+                    tree_node_to_lua(&canopy.script_host.lua, canopy, canopy.core.root_id())
+                })
+                .map_err(LuaError::external)
+            })?,
+        )?;
+
+        canopy_table.set(
             "set_focus",
             self.lua.create_function(|_, node: Value| {
                 let node_id = userdata_to_node_id(node).map_err(LuaError::runtime)?;
@@ -810,6 +1122,22 @@ impl LuauHost {
                     let root_id = canopy.core.root_id();
                     let mut ctx = CoreContext::new(&mut canopy.core, root_id);
                     Ok(ctx.set_focus(node_id))
+                })
+                .map_err(LuaError::external)
+            })?,
+        )?;
+
+        canopy_table.set(
+            "node_at",
+            self.lua.create_function(|lua, (x, y): (i64, i64)| {
+                with_current_canopy(|canopy, _| {
+                    let Some(node_id) = canopy
+                        .core
+                        .locate_node(canopy.core.root_id(), point_from_coords(x, y)?)?
+                    else {
+                        return Ok(Value::Nil);
+                    };
+                    node_id_to_lua(lua, node_id).map_err(lua_to_canopy)
                 })
                 .map_err(LuaError::external)
             })?,
@@ -912,6 +1240,56 @@ impl LuauHost {
                     })
                     .map_err(LuaError::external)
                 })?,
+        )?;
+
+        canopy_table.set(
+            "bindings",
+            self.lua.create_function(|lua, ()| {
+                with_current_canopy(|canopy, _| {
+                    let bindings = lua.create_table().map_err(lua_to_canopy)?;
+                    for (index, binding) in canopy.keymap.bindings().into_iter().enumerate() {
+                        bindings
+                            .raw_set(
+                                index + 1,
+                                Value::Table(
+                                    binding_info_to_lua(lua, canopy, binding.mode, &binding.info)
+                                        .map_err(lua_to_canopy)?,
+                                ),
+                            )
+                            .map_err(lua_to_canopy)?;
+                    }
+                    Ok(Value::Table(bindings))
+                })
+                .map_err(LuaError::external)
+            })?,
+        )?;
+
+        canopy_table.set(
+            "commands",
+            self.lua.create_function(|lua, ()| {
+                with_current_canopy(|canopy, _| {
+                    let mut specs = canopy
+                        .core
+                        .commands
+                        .iter()
+                        .map(|(_, spec)| spec)
+                        .collect::<Vec<_>>();
+                    specs.sort_by_key(|spec| spec.id.0);
+                    let commands = lua.create_table().map_err(lua_to_canopy)?;
+                    for (index, spec) in specs.into_iter().enumerate() {
+                        commands
+                            .raw_set(
+                                index + 1,
+                                Value::Table(
+                                    command_info_to_lua(lua, spec).map_err(lua_to_canopy)?,
+                                ),
+                            )
+                            .map_err(lua_to_canopy)?;
+                    }
+                    Ok(Value::Table(commands))
+                })
+                .map_err(LuaError::external)
+            })?,
         )?;
 
         canopy_table.set(
@@ -1080,6 +1458,30 @@ impl LuauHost {
             })?,
         )?;
 
+        canopy_table.set(
+            "screen",
+            self.lua.create_function(|lua, ()| {
+                with_current_canopy(|canopy, _| screen_to_lua(lua, canopy))
+                    .map_err(LuaError::external)
+            })?,
+        )?;
+
+        canopy_table.set(
+            "screen_text",
+            self.lua.create_function(|lua, ()| {
+                with_current_canopy(|canopy, _| {
+                    canopy.refresh_snapshot()?;
+                    let Some(buffer) = canopy.buf() else {
+                        return Err(error::Error::Script(
+                            "screen unavailable before render".into(),
+                        ));
+                    };
+                    string_to_lua(lua, &buffer.screen_text()).map_err(lua_to_canopy)
+                })
+                .map_err(LuaError::external)
+            })?,
+        )?;
+
         let host = self.clone();
         canopy_table.set(
             "on_start",
@@ -1093,6 +1495,13 @@ impl LuauHost {
         )?;
 
         self.lua.globals().set("canopy", canopy_table)?;
+        self.lua.globals().set(
+            "fixtures",
+            self.lua.create_function(|lua, ()| {
+                with_current_canopy(|canopy, _| fixtures_to_lua(lua, canopy))
+                    .map_err(LuaError::external)
+            })?,
+        )?;
         Ok(())
     }
 

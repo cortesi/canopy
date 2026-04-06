@@ -90,6 +90,13 @@ impl Cell {
         out.push(self.ch);
         out.push_str(&self.suffix);
     }
+
+    /// Return this cell's rendered text.
+    pub fn rendered_text(&self) -> String {
+        let mut out = String::new();
+        self.push_text(&mut out);
+        out
+    }
 }
 
 /// A 2D terminal buffer of styled cells.
@@ -338,6 +345,32 @@ impl TermBuf {
     pub fn get(&self, p: Point) -> Option<&Cell> {
         self.idx(p).map(|i| &self.cells[i])
     }
+
+    /// Return the rendered screen as rows of cell strings.
+    pub fn rows(&self) -> Vec<Vec<String>> {
+        let mut rows = Vec::with_capacity(self.size.h as usize);
+        for y in 0..self.size.h {
+            let mut row = Vec::with_capacity(self.size.w as usize);
+            for x in 0..self.size.w {
+                let cell = self
+                    .get(Point { x, y })
+                    .expect("buffer coordinates should always be valid");
+                row.push(cell.rendered_text());
+            }
+            rows.push(row);
+        }
+        rows
+    }
+
+    /// Return the rendered screen as newline-joined plain text.
+    pub fn screen_text(&self) -> String {
+        self.rows()
+            .into_iter()
+            .map(|row| row.concat())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     /// Diff this terminal buffer against a previous state, emitting changes
     /// to the provided render backend.
     pub fn diff<R: RenderBackend>(&self, prev: &Self, backend: &mut R) -> Result<()> {

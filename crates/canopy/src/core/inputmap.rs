@@ -546,6 +546,19 @@ impl InputMap {
         &self.current_mode
     }
 
+    /// Return all bindings across all modes.
+    pub fn bindings(&self) -> Vec<ModeBindingInfo<'_>> {
+        let mut modes = self.modes.iter().collect::<Vec<_>>();
+        modes.sort_by_key(|(left, _)| *left);
+        let mut out = Vec::new();
+        for (mode, bindings) in modes {
+            for info in bindings.bindings() {
+                out.push(ModeBindingInfo { mode, info });
+            }
+        }
+        out
+    }
+
     /// Return all bindings defined for a mode.
     pub fn bindings_for_mode(&self, mode: &str) -> Vec<BindingInfo<'_>> {
         self.modes
@@ -583,6 +596,15 @@ pub struct MatchedBindingInfo<'a> {
     pub info: BindingInfo<'a>,
     /// Match metadata from the path matcher.
     pub m: PathMatch,
+}
+
+/// Binding info annotated with the mode it belongs to.
+#[derive(Debug, Clone)]
+pub struct ModeBindingInfo<'a> {
+    /// Input mode name.
+    pub mode: &'a str,
+    /// Binding metadata.
+    pub info: BindingInfo<'a>,
 }
 
 #[cfg(test)]

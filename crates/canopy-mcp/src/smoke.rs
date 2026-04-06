@@ -50,6 +50,8 @@ pub enum ScriptStatus {
 pub struct ScriptResult {
     /// Script path on disk.
     pub path: PathBuf,
+    /// Fixture derived for this script, if any.
+    pub fixture: Option<String>,
     /// Pass or fail status.
     pub status: ScriptStatus,
     /// Total script duration in milliseconds.
@@ -85,9 +87,11 @@ pub fn run_suite(
     let scripts = discover_scripts(config)?;
     let mut results = Vec::with_capacity(scripts.len());
     for path in scripts {
+        let fixture = fixture_for_script(&config.suite_dir, &path);
         let source = fs::read_to_string(&path)?;
         let outcome = evaluator.evaluate_with_timeout(ScriptEvalRequest {
             script: source,
+            fixture: fixture.clone(),
             timeout_ms: config.timeout_ms,
         });
         let message = outcome
@@ -108,6 +112,7 @@ pub fn run_suite(
         };
         results.push(ScriptResult {
             path,
+            fixture,
             status,
             elapsed_ms: outcome.timing.total_ms,
             message,
@@ -118,6 +123,15 @@ pub fn run_suite(
         }
     }
     Ok(SuiteResult { scripts: results })
+}
+
+/// Derive a fixture name from the first path component under the suite root.
+fn fixture_for_script(suite_dir: &Path, script: &Path) -> Option<String> {
+    let relative = script.strip_prefix(suite_dir).ok()?;
+    let mut components = relative.components();
+    let first = components.next()?;
+    components.next()?;
+    Some(first.as_os_str().to_string_lossy().to_string())
 }
 
 /// Resolve the ordered list of smoke scripts for a suite run.

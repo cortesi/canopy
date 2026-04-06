@@ -36,8 +36,9 @@ pub use core::termbuf::TermBuf;
 pub use core::testing;
 // Re-export core application types
 pub use core::{
-    BindingId, Canopy, ChildKey, Context, Core, InputMap, InputSpec, KeyedChildren, Loader, NodeId,
-    Preorder, ReadContext, RemovePolicy, Slot, TypedId,
+    AutomationCallback, AutomationHandle, BindingId, Canopy, ChildKey, Context, Core, Fixture,
+    FixtureInfo, InputMap, InputSpec, KeyedChildren, Loader, NodeId, Preorder, ReadContext,
+    RemovePolicy, Slot, TypedId,
 };
 // Re-export input mapping
 pub use core::{

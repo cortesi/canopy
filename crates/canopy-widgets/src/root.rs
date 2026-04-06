@@ -147,6 +147,8 @@ impl Root {
     }
 
     /// Move focus in the specified direction.
+    /// @param direction The direction to move focus.
+    #[command]
     pub fn focus(&mut self, c: &mut dyn Context, direction: FocusDirection) -> Result<()> {
         match direction {
             FocusDirection::Next => c.focus_next_global(),
@@ -157,42 +159,6 @@ impl Root {
             FocusDirection::Right => c.focus_right_global(),
         }
         Ok(())
-    }
-
-    #[command]
-    /// Move focus to the next node.
-    pub fn focus_next(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.focus(c, FocusDirection::Next)
-    }
-
-    #[command]
-    /// Move focus to the previous node.
-    pub fn focus_prev(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.focus(c, FocusDirection::Prev)
-    }
-
-    #[command]
-    /// Move focus up.
-    pub fn focus_up(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.focus(c, FocusDirection::Up)
-    }
-
-    #[command]
-    /// Move focus down.
-    pub fn focus_down(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.focus(c, FocusDirection::Down)
-    }
-
-    #[command]
-    /// Move focus left.
-    pub fn focus_left(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.focus(c, FocusDirection::Left)
-    }
-
-    #[command]
-    /// Move focus right.
-    pub fn focus_right(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.focus(c, FocusDirection::Right)
     }
 
     #[command]
@@ -460,18 +426,15 @@ mod tests {
 
     #[test]
     fn test_root_focus_dir_commands_via_script() -> Result<()> {
-        let (mut canopy, mut backend, left, right) = setup_root_tree()?;
+        let (mut canopy, mut backend, left, _right) = setup_root_tree()?;
 
         assert_eq!(canopy.core.focus_id(), Some(left));
 
-        run_script(&mut canopy, "root.focus_right()")?;
-        assert_eq!(canopy.core.focus_id(), Some(right));
-
-        run_script(&mut canopy, "root.focus_left()")?;
+        run_script(
+            &mut canopy,
+            include_str!("../tests/luau/root_focus_dir.luau"),
+        )?;
         assert_eq!(canopy.core.focus_id(), Some(left));
-
-        run_script(&mut canopy, "root.focus_up()")?;
-        run_script(&mut canopy, "root.focus_down()")?;
 
         canopy.render(&mut backend)?;
         assert!(canopy.core.focus_id().is_some());
@@ -481,14 +444,14 @@ mod tests {
 
     #[test]
     fn test_root_focus_next_prev_commands_via_script() -> Result<()> {
-        let (mut canopy, mut backend, left, right) = setup_root_tree()?;
+        let (mut canopy, mut backend, left, _right) = setup_root_tree()?;
 
         assert_eq!(canopy.core.focus_id(), Some(left));
 
-        run_script(&mut canopy, "root.focus_next()")?;
-        assert_eq!(canopy.core.focus_id(), Some(right));
-
-        run_script(&mut canopy, "root.focus_prev()")?;
+        run_script(
+            &mut canopy,
+            include_str!("../tests/luau/root_focus_order.luau"),
+        )?;
         assert_eq!(canopy.core.focus_id(), Some(left));
 
         canopy.render(&mut backend)?;

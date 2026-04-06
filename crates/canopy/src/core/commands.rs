@@ -840,6 +840,8 @@ pub struct CommandParamSpec {
     pub name: &'static str,
     /// Parameter kind.
     pub kind: CommandParamKind,
+    /// Optional parameter documentation.
+    pub doc: Option<&'static str>,
     /// Type metadata.
     pub ty: CommandTypeSpec,
     /// Whether the parameter is optional.

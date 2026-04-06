@@ -2,7 +2,7 @@ use std::{path::PathBuf, process};
 
 use anyhow::Result;
 use canopy::backend::crossterm::{RunloopOptions, runloop_with_options};
-use canopy_mcp::{Error as McpError, SuiteConfig, app_factory, run_suite, serve_stdio};
+use canopy_mcp::{Error as McpError, SuiteConfig, app_factory, run_suite, serve_stdio, serve_uds};
 use clap::{Parser, Subcommand};
 use todo::create_app_with_config;
 
@@ -19,6 +19,10 @@ struct Args {
     /// Path to a Luau config file
     #[clap(short, long)]
     config: Option<PathBuf>,
+
+    /// Serve live MCP automation over the given Unix-domain socket path.
+    #[clap(long)]
+    mcp: Option<PathBuf>,
 
     path: Option<String>,
 }
@@ -114,8 +118,18 @@ pub fn main() -> Result<()> {
 
     if let Some(path) = args.path {
         let cnpy = create_app_with_config(&path, args.config.as_deref())?;
+        let automation = cnpy.automation_handle();
+        let live_server = args
+            .mcp
+            .as_ref()
+            .map(|socket_path| serve_uds(socket_path, automation))
+            .transpose()?;
 
-        let exit_code = runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
+        let run_result = runloop_with_options(cnpy, RunloopOptions::ctrlc_dump());
+        if let Some(server) = live_server {
+            server.stop()?;
+        }
+        let exit_code = run_result?;
         if exit_code != 0 {
             process::exit(exit_code);
         }

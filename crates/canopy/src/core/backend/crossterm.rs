@@ -607,6 +607,7 @@ pub fn runloop_with_options(mut cnpy: Canopy, options: RunloopOptions) -> Result
         }
 
         cnpy.event(event)?;
+        cnpy.service_automation();
         if let Some(code) = cnpy.core.take_exit_request() {
             return Ok(code);
         }

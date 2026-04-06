@@ -16,6 +16,8 @@ pub mod dump;
 pub mod error;
 /// Input event types.
 pub mod event;
+/// Named, reproducible application fixtures.
+pub mod fixture;
 /// Node data and arena structures.
 pub mod node;
 /// Path and traversal helpers.
@@ -57,9 +59,10 @@ pub mod text;
 pub mod world;
 
 // Public exports from internal modules
-pub use canopy::{Canopy, Loader};
+pub use canopy::{AutomationCallback, AutomationHandle, Canopy, Loader};
 pub use children::{KeyedChildren, RemovePolicy};
 pub use context::{ChildKey, Context, Preorder, ReadContext, Slot};
+pub use fixture::{Fixture, FixtureInfo};
 pub use id::{NodeId, TypedId};
 pub use inputmap::{BindingId, InputMap, InputSpec};
 pub use world::Core;

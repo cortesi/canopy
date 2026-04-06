@@ -3,6 +3,7 @@ use std::path::Path;
 use anyhow::Result as AnyResult;
 use canopy::{
     command, derive_commands,
+    error::Error,
     prelude::*,
     style::{effects, solarized},
 };
@@ -13,6 +14,12 @@ canopy::key!(MainSlot: MainContent);
 canopy::key!(ModalSlot: Modal);
 
 pub mod store;
+
+const FIXTURE_WITH_ITEMS: &[&str] = &[
+    "Buy milk",
+    "Ship fixture-driven smoke tests",
+    "Review MCP bindings",
+];
 
 /// Widget for a todo entry.
 pub struct TodoEntry {
@@ -250,6 +257,40 @@ impl Todo {
         Ok(())
     }
 
+    fn apply_items_fixture(
+        &mut self,
+        c: &mut dyn Context,
+        items: Vec<store::Todo>,
+        modal_open: bool,
+    ) -> Result<()> {
+        self.ensure_tree(c)?;
+        self.with_list(c, |list, ctx| {
+            list.clear(ctx)?;
+            for item in items.iter().cloned() {
+                list.append(ctx, TodoEntry::new(item))?;
+            }
+            if !items.is_empty() {
+                list.select_first(ctx);
+            }
+            Ok(())
+        })?;
+
+        self.adder_active = modal_open;
+        self.sync_modal_state(c)?;
+        if modal_open {
+            self.with_input(c, |input| {
+                input.set_value("");
+                Ok(())
+            })?;
+            if let Some(input_id) = c.unique_descendant::<Input>()? {
+                c.set_focus(NodeId::from(input_id));
+            }
+        } else if items.is_empty() {
+            c.set_focus(c.node_id());
+        }
+        Ok(())
+    }
+
     #[command]
     pub fn enter_item(&mut self, c: &mut dyn Context) -> Result<()> {
         self.ensure_tree(c)?;
@@ -336,9 +377,9 @@ impl Todo {
     }
 
     #[command]
-    pub fn page(&mut self, c: &mut dyn Context, dir: canopy::geom::Direction) -> Result<()> {
+    pub fn page(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
         self.with_list(c, |list, ctx| {
-            list.page(ctx, dir);
+            list.page(ctx, delta);
             Ok(())
         })
     }
@@ -378,9 +419,9 @@ canopy.bind_with("j", { desc = "Next item" }, function() todo.select_by(1) end)
 canopy.bind_with("Down", { desc = "Next item" }, function() todo.select_by(1) end)
 canopy.bind_with("k", { desc = "Previous item" }, function() todo.select_by(-1) end)
 canopy.bind_with("Up", { desc = "Previous item" }, function() todo.select_by(-1) end)
-canopy.bind_with("Space", { desc = "Page down" }, function() todo.page("Down") end)
-canopy.bind_with("PageDown", { desc = "Page down" }, function() todo.page("Down") end)
-canopy.bind_with("PageUp", { desc = "Page up" }, function() todo.page("Up") end)
+canopy.bind_with("Space", { desc = "Page down" }, function() todo.page(1) end)
+canopy.bind_with("PageDown", { desc = "Page down" }, function() todo.page(1) end)
+canopy.bind_with("PageUp", { desc = "Page up" }, function() todo.page(-1) end)
 
 canopy.bind_mouse_with("ScrollUp", { desc = "Previous item" }, function()
     todo.select_by(-1)
@@ -429,11 +470,57 @@ pub fn setup_app(cnpy: &mut Canopy) -> Result<()> {
     setup_app_with_config(cnpy, None)
 }
 
+fn store_fixture_items(items: &[&str]) -> Result<Vec<store::Todo>> {
+    store::get()
+        .replace_todos(items.iter().copied())
+        .map_err(|error| Error::Invalid(error.to_string()))
+}
+
+fn with_todo<R>(
+    cnpy: &mut Canopy,
+    f: impl FnOnce(&mut Todo, &mut dyn Context) -> Result<R>,
+) -> Result<R> {
+    cnpy.with_root_context(|ctx| ctx.with_unique_descendant::<Todo, _>(|todo, ctx| f(todo, ctx)))
+}
+
+fn register_fixtures(cnpy: &mut Canopy) -> Result<()> {
+    cnpy.register_fixture(canopy::Fixture::new(
+        "empty",
+        "App with no todo items and no modal open",
+        |cnpy| {
+            let items = store_fixture_items(&[])?;
+            with_todo(cnpy, |todo, ctx| {
+                todo.apply_items_fixture(ctx, items, false)
+            })
+        },
+    ))?;
+    cnpy.register_fixture(canopy::Fixture::new(
+        "with_items",
+        "App with a pre-populated todo list",
+        |cnpy| {
+            let items = store_fixture_items(FIXTURE_WITH_ITEMS)?;
+            with_todo(cnpy, |todo, ctx| {
+                todo.apply_items_fixture(ctx, items, false)
+            })
+        },
+    ))?;
+    cnpy.register_fixture(canopy::Fixture::new(
+        "modal_open",
+        "App with the add-item modal open and ready for typing",
+        |cnpy| {
+            let items = store_fixture_items(FIXTURE_WITH_ITEMS)?;
+            with_todo(cnpy, |todo, ctx| todo.apply_items_fixture(ctx, items, true))
+        },
+    ))?;
+    Ok(())
+}
+
 /// Register commands, finalize the Luau API, and apply default/user bindings.
 pub fn setup_app_with_config(cnpy: &mut Canopy, config: Option<&Path>) -> Result<()> {
     Root::load(cnpy)?;
     <Todo as Loader>::load(cnpy)?;
     style(cnpy);
+    register_fixtures(cnpy)?;
     cnpy.finalize_api()?;
     cnpy.run_default_script(DEFAULT_BINDINGS)?;
     if let Some(config) = config {

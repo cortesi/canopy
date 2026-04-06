@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use convert_case::{Case, Casing};
 use quote::ToTokens;
 use syn::{
@@ -13,8 +15,11 @@ use crate::{
 };
 
 /// Extract documentation from `#[doc = "..."]` attributes.
-fn extract_doc_comments(attrs: &[Attribute]) -> (Option<String>, Option<String>) {
+fn extract_doc_comments(
+    attrs: &[Attribute],
+) -> (Option<String>, Option<String>, HashMap<String, String>) {
     let mut lines = Vec::new();
+    let mut param_docs = HashMap::new();
     for attr in attrs {
         if !attr.path().is_ident("doc") {
             continue;
@@ -35,11 +40,26 @@ fn extract_doc_comments(attrs: &[Attribute]) -> (Option<String>, Option<String>)
     }
 
     if lines.is_empty() {
-        return (None, None);
+        return (None, None, param_docs);
     }
 
-    let long = Some(lines.join("\n").trim().to_string()).filter(|text| !text.is_empty());
-    let first_line = lines.iter().find(|line| !line.is_empty()).cloned();
+    let mut body = Vec::new();
+    for line in lines {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("@param ") {
+            let mut parts = rest.splitn(2, char::is_whitespace);
+            if let Some(name) = parts.next()
+                && let Some(doc) = parts.next()
+            {
+                param_docs.insert(name.to_string(), doc.trim().to_string());
+            }
+            continue;
+        }
+        body.push(line);
+    }
+
+    let long = Some(body.join("\n").trim().to_string()).filter(|text| !text.is_empty());
+    let first_line = body.iter().find(|line| !line.is_empty()).cloned();
     let short = first_line.map(|line| {
         if let Some(index) = line.find(". ") {
             format!("{}.", &line[..index])
@@ -48,7 +68,7 @@ fn extract_doc_comments(attrs: &[Attribute]) -> (Option<String>, Option<String>)
         }
     });
 
-    (short, long)
+    (short, long, param_docs)
 }
 
 /// Render a Rust type into a string for metadata.
@@ -239,13 +259,19 @@ fn parse_command_macro_args(attrs: &[Attribute]) -> Result<Option<MacroArgs>> {
 }
 
 /// Build documentation metadata for a parsed command method.
-fn build_doc_meta(attrs: &[Attribute], macro_args: &MacroArgs) -> DocMeta {
-    let (short, long) = extract_doc_comments(attrs);
-    DocMeta {
-        short: macro_args.desc.as_ref().map(syn::LitStr::value).or(short),
-        long,
-        hidden: macro_args.hidden,
-    }
+fn build_doc_meta(
+    attrs: &[Attribute],
+    macro_args: &MacroArgs,
+) -> (DocMeta, HashMap<String, String>) {
+    let (short, long, param_docs) = extract_doc_comments(attrs);
+    (
+        DocMeta {
+            short: macro_args.desc.as_ref().map(syn::LitStr::value).or(short),
+            long,
+            hidden: macro_args.hidden,
+        },
+        param_docs,
+    )
 }
 
 /// Ensure a command receiver is borrowed.
@@ -330,6 +356,7 @@ fn parse_command_param(pat: &mut syn::PatType) -> Result<ParamMeta> {
             kind: ParamKind::Context { mutable },
             is_option: false,
             default: None,
+            doc: None,
         });
     }
 
@@ -343,6 +370,7 @@ fn parse_command_param(pat: &mut syn::PatType) -> Result<ParamMeta> {
         kind,
         is_option,
         default,
+        doc: None,
     })
 }
 
@@ -351,7 +379,7 @@ pub fn parse_command_method(owner: &str, method: &mut ImplItemFn) -> Result<Opti
     let Some(macro_args) = parse_command_macro_args(&method.attrs)? else {
         return Ok(None);
     };
-    let doc = build_doc_meta(&method.attrs, &macro_args);
+    let (doc, param_docs) = build_doc_meta(&method.attrs, &macro_args);
 
     let mut params = Vec::new();
     let mut has_receiver = false;
@@ -370,6 +398,10 @@ pub fn parse_command_method(owner: &str, method: &mut ImplItemFn) -> Result<Opti
         return Err(Error::Unsupported(
             "command methods must take &self or &mut self".into(),
         ));
+    }
+
+    for param in &mut params {
+        param.doc = param_docs.get(&param.name).cloned();
     }
 
     let ret = parse_return_type(&method.sig.output)?;

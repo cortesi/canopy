@@ -350,6 +350,8 @@ impl ImageView {
     }
 
     /// Zoom around the view center.
+    /// @param dir The zoom direction.
+    #[command]
     pub fn zoom(&mut self, ctx: &mut dyn Context, dir: ZoomDirection) -> canopy_error::Result<()> {
         let view = ctx.view();
         let view_size = view.content_size();
@@ -365,6 +367,8 @@ impl ImageView {
     }
 
     /// Pan by one step in the specified direction.
+    /// @param dir The pan direction.
+    #[command]
     pub fn pan(&mut self, ctx: &mut dyn Context, dir: Direction) -> canopy_error::Result<()> {
         self.auto_fit = false;
         match dir {
@@ -382,42 +386,6 @@ impl ImageView {
             }
         }
         Ok(())
-    }
-
-    #[command]
-    /// Zoom in around the view center.
-    pub fn zoom_in(&mut self, ctx: &mut dyn Context) -> canopy_error::Result<()> {
-        self.zoom(ctx, ZoomDirection::In)
-    }
-
-    #[command]
-    /// Zoom out around the view center.
-    pub fn zoom_out(&mut self, ctx: &mut dyn Context) -> canopy_error::Result<()> {
-        self.zoom(ctx, ZoomDirection::Out)
-    }
-
-    #[command]
-    /// Pan up by one step.
-    pub fn pan_up(&mut self, ctx: &mut dyn Context) -> canopy_error::Result<()> {
-        self.pan(ctx, Direction::Up)
-    }
-
-    #[command]
-    /// Pan down by one step.
-    pub fn pan_down(&mut self, ctx: &mut dyn Context) -> canopy_error::Result<()> {
-        self.pan(ctx, Direction::Down)
-    }
-
-    #[command]
-    /// Pan left by one step.
-    pub fn pan_left(&mut self, ctx: &mut dyn Context) -> canopy_error::Result<()> {
-        self.pan(ctx, Direction::Left)
-    }
-
-    #[command]
-    /// Pan right by one step.
-    pub fn pan_right(&mut self, ctx: &mut dyn Context) -> canopy_error::Result<()> {
-        self.pan(ctx, Direction::Right)
     }
 }
 

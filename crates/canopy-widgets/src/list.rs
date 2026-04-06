@@ -422,18 +422,6 @@ impl<W: Selectable> List<W> {
         self.ensure_selected_visible(c);
     }
 
-    /// Move selection to the next item.
-    #[command]
-    pub fn select_next(&mut self, c: &mut dyn Context) {
-        self.select_by(c, 1);
-    }
-
-    /// Move selection to the previous item.
-    #[command]
-    pub fn select_prev(&mut self, c: &mut dyn Context) {
-        self.select_by(c, -1);
-    }
-
     /// Handle a mouse click within the list.
     fn handle_click(&mut self, c: &mut dyn Context, event: mouse::MouseEvent) -> bool {
         match event.action {
@@ -508,6 +496,8 @@ impl<W: Selectable> List<W> {
     }
 
     /// Scroll the view by one line in the specified direction.
+    /// @param dir The direction to scroll.
+    #[command]
     pub fn scroll(&mut self, c: &mut dyn Context, dir: Direction) {
         match dir {
             Direction::Up => {
@@ -525,45 +515,12 @@ impl<W: Selectable> List<W> {
         }
     }
 
-    /// Move selection by one page in the specified direction.
-    pub fn page(&mut self, c: &mut dyn Context, dir: Direction) {
-        self.page_shift(c, matches!(dir, Direction::Down));
-    }
-
+    /// Move selection by pages.
+    /// Positive values move down; negative values move up.
+    /// @param delta Signed page delta. Positive moves down and negative moves up.
     #[command]
-    /// Scroll up by one line.
-    pub fn scroll_up(&mut self, c: &mut dyn Context) {
-        self.scroll(c, Direction::Up);
-    }
-
-    #[command]
-    /// Scroll down by one line.
-    pub fn scroll_down(&mut self, c: &mut dyn Context) {
-        self.scroll(c, Direction::Down);
-    }
-
-    #[command]
-    /// Scroll left by one column.
-    pub fn scroll_left(&mut self, c: &mut dyn Context) {
-        self.scroll(c, Direction::Left);
-    }
-
-    #[command]
-    /// Scroll right by one column.
-    pub fn scroll_right(&mut self, c: &mut dyn Context) {
-        self.scroll(c, Direction::Right);
-    }
-
-    #[command]
-    /// Page up by one screen.
-    pub fn page_up(&mut self, c: &mut dyn Context) {
-        self.page(c, Direction::Up);
-    }
-
-    #[command]
-    /// Page down by one screen.
-    pub fn page_down(&mut self, c: &mut dyn Context) {
-        self.page(c, Direction::Down);
+    pub fn page(&mut self, c: &mut dyn Context, delta: i32) {
+        self.page_shift(c, delta >= 0);
     }
 
     /// Ensure the selected item is visible in the view.
@@ -896,26 +853,7 @@ mod tests {
 
         harness.render()?;
 
-        // Navigate down
-        harness.script("list.select_next()")?;
-        harness.with_root_widget::<List<Text>, _>(|list| {
-            assert_eq!(list.selected_index(), Some(1));
-        });
-
-        // Navigate to last
-        harness.script("list.select_last()")?;
-        harness.with_root_widget::<List<Text>, _>(|list| {
-            assert_eq!(list.selected_index(), Some(2));
-        });
-
-        // Navigate up
-        harness.script("list.select_prev()")?;
-        harness.with_root_widget::<List<Text>, _>(|list| {
-            assert_eq!(list.selected_index(), Some(1));
-        });
-
-        // Navigate to first
-        harness.script("list.select_first()")?;
+        harness.script(include_str!("../tests/luau/list_navigation.luau"))?;
         harness.with_root_widget::<List<Text>, _>(|list| {
             assert_eq!(list.selected_index(), Some(0));
         });
@@ -932,15 +870,11 @@ mod tests {
             list.append(ctx, Text::new("Item 1"))?;
             list.append(ctx, Text::new("Item 2"))?;
             list.append(ctx, Text::new("Item 3"))?;
-            list.select(ctx, 1); // Select middle item
             Ok(())
         })?;
 
-        // Remove selected
-        harness.with_root_context(|list: &mut List<Text>, ctx| {
-            list.remove(ctx, 1)?;
-            Ok(())
-        })?;
+        harness.render()?;
+        harness.script(include_str!("../tests/luau/list_remove.luau"))?;
 
         harness.with_root_widget::<List<Text>, _>(|list| {
             assert_eq!(list.len(), 2);
@@ -962,7 +896,7 @@ mod tests {
         })?;
 
         harness.render()?;
-        harness.script("list.clear()")?;
+        harness.script(include_str!("../tests/luau/list_clear.luau"))?;
 
         harness.with_root_widget::<List<Text>, _>(|list| {
             assert!(list.is_empty());

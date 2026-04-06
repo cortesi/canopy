@@ -115,18 +115,6 @@ where
         Ok(())
     }
 
-    /// Move highlight to the next item.
-    #[command]
-    pub fn select_next(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.select_by(c, 1)
-    }
-
-    /// Move highlight to the previous item.
-    #[command]
-    pub fn select_prev(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.select_by(c, -1)
-    }
-
     /// Confirm the highlighted selection and collapse.
     #[command]
     pub fn confirm(&mut self, c: &mut dyn Context) -> Result<()> {
@@ -283,7 +271,16 @@ where
 
 #[cfg(test)]
 mod tests {
+    use canopy::{Canopy, Loader, testing::harness::Harness};
+
     use super::*;
+
+    impl Loader for Dropdown<String> {
+        fn load(c: &mut Canopy) -> Result<()> {
+            c.add_commands::<Self>()?;
+            Ok(())
+        }
+    }
 
     #[test]
     fn test_dropdown_creation() {
@@ -311,5 +308,23 @@ mod tests {
     fn test_dropdown_empty_panics() {
         let items: Vec<String> = vec![];
         let _ = Dropdown::new(items);
+    }
+
+    #[test]
+    fn test_dropdown_luau_selection() -> Result<()> {
+        let items = vec![
+            "Option 1".to_string(),
+            "Option 2".to_string(),
+            "Option 3".to_string(),
+        ];
+        let root = Dropdown::new(items);
+        let mut harness = Harness::builder(root).size(20, 6).build()?;
+        harness.render()?;
+        harness.script(include_str!("../tests/luau/dropdown_select_second.luau"))?;
+        harness.with_root_widget::<Dropdown<String>, _>(|dropdown| {
+            assert_eq!(dropdown.selected_index(), 1);
+            assert!(!dropdown.is_expanded());
+        });
+        Ok(())
     }
 }

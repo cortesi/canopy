@@ -1,9 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::luau_global_owner_name;
-use crate::commands::{
-    CommandDispatchKind, CommandParamKind, CommandReturnSpec, CommandSet, CommandSpec,
-    CommandTypeSpec,
+use crate::{
+    FixtureInfo,
+    commands::{
+        CommandDispatchKind, CommandParamKind, CommandReturnSpec, CommandSet, CommandSpec,
+        CommandTypeSpec,
+    },
 };
 
 /// Static Luau preamble shared by every canopy app.
@@ -13,6 +16,7 @@ const PREAMBLE: &str = include_str!("../../../luau/preamble.d.luau");
 pub fn render_definitions(
     commands: &CommandSet,
     default_binding_owners: &BTreeSet<String>,
+    fixtures: &[FixtureInfo],
 ) -> String {
     let mut owners: BTreeMap<String, Vec<&'static CommandSpec>> = BTreeMap::new();
     for (_, spec) in commands.iter() {
@@ -29,6 +33,12 @@ pub fn render_definitions(
     if !output.ends_with('\n') {
         output.push('\n');
     }
+    if !fixtures.is_empty() {
+        output.push_str("\n-- ===== Fixtures =====\n");
+        for fixture in fixtures {
+            output.push_str(&format!("-- {}: {}\n", fixture.name, fixture.description));
+        }
+    }
     output.push_str("\n-- ===== Application Commands =====\n");
     output.push_str("-- Auto-generated from registered CommandSpecs.\n");
 
@@ -42,6 +52,23 @@ pub fn render_definitions(
         for spec in specs {
             if let Some(short) = spec.doc.short {
                 output.push_str(&format!("    --- {short}\n"));
+            }
+            if let Some(long) = spec.doc.long {
+                for line in long.lines().filter(|line| !line.trim().is_empty()) {
+                    if spec.doc.short.is_some_and(|short| short == line.trim()) {
+                        continue;
+                    }
+                    output.push_str(&format!("    --- {}\n", line.trim()));
+                }
+            }
+            for param in spec
+                .params
+                .iter()
+                .filter(|param| param.kind == CommandParamKind::User)
+            {
+                if let Some(doc) = param.doc {
+                    output.push_str(&format!("    --- @param {} {doc}\n", param.name));
+                }
             }
             output.push_str("    ");
             output.push_str(spec.name);

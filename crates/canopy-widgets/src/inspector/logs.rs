@@ -280,6 +280,8 @@ impl Logs {
     }
 
     /// Scroll the view by one line in the specified direction.
+    /// @param dir The direction to scroll.
+    #[command]
     pub fn scroll(&self, c: &mut dyn Context, dir: Direction) {
         drop(self.with_list(c, |list, ctx| {
             list.scroll(ctx, dir);
@@ -287,48 +289,15 @@ impl Logs {
         }));
     }
 
-    /// Move selection by one page in the specified direction.
-    pub fn page(&self, c: &mut dyn Context, dir: Direction) {
+    /// Page through the log view.
+    /// Positive values move down; negative values move up.
+    /// @param delta Signed page delta. Positive moves down and negative moves up.
+    #[command]
+    pub fn page(&self, c: &mut dyn Context, delta: i32) {
         drop(self.with_list(c, |list, ctx| {
-            list.page(ctx, dir);
+            list.page(ctx, delta);
             Ok(())
         }));
-    }
-
-    #[command]
-    /// Scroll up by one line.
-    pub fn scroll_up(&self, c: &mut dyn Context) {
-        self.scroll(c, Direction::Up);
-    }
-
-    #[command]
-    /// Scroll down by one line.
-    pub fn scroll_down(&self, c: &mut dyn Context) {
-        self.scroll(c, Direction::Down);
-    }
-
-    #[command]
-    /// Scroll left by one column.
-    pub fn scroll_left(&self, c: &mut dyn Context) {
-        self.scroll(c, Direction::Left);
-    }
-
-    #[command]
-    /// Scroll right by one column.
-    pub fn scroll_right(&self, c: &mut dyn Context) {
-        self.scroll(c, Direction::Right);
-    }
-
-    #[command]
-    /// Page up by one screen.
-    pub fn page_up(&self, c: &mut dyn Context) {
-        self.page(c, Direction::Up);
-    }
-
-    #[command]
-    /// Page down by one screen.
-    pub fn page_down(&self, c: &mut dyn Context) {
-        self.page(c, Direction::Down);
     }
 }
 

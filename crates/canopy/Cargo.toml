@@ -24,6 +24,7 @@ serde_json = "1.0.148"
 anyhow = "1.0.100"
 mlua = { version = "0.11.6", features = ["luau", "serialize", "vendored"] }
 luau-analyze = { path = "../../../luau-analyze/crates/luau-analyze", optional = true }
+schemars = "1.2.1"
 
 [dev-dependencies]
 clap = { version = "4.5.40", features = ["derive"] }

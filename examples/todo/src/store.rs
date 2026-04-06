@@ -55,6 +55,21 @@ impl Store {
         Ok(())
     }
 
+    pub fn clear_todos(&self) -> Result<()> {
+        self.conn
+            .execute("DELETE FROM todo;", rusqlite::params![])?;
+        Ok(())
+    }
+
+    pub fn replace_todos<'a>(&self, items: impl IntoIterator<Item = &'a str>) -> Result<Vec<Todo>> {
+        self.clear_todos()?;
+        let mut todos = Vec::new();
+        for item in items {
+            todos.push(self.add_todo(item)?);
+        }
+        Ok(todos)
+    }
+
     pub fn todos(&self) -> Result<Vec<Todo>> {
         let mut stmt = self.conn.prepare("SELECT id, item FROM todo")?;
         let ret = stmt

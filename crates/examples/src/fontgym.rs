@@ -1131,10 +1131,10 @@ pub fn setup_bindings(c: &mut Canopy) {
     c.run_default_script(
         r#"
 canopy.bind_with("Tab", { desc = "Next focus" }, function()
-    root.focus_next()
+    root.focus("Next")
 end)
 canopy.bind_with("BackTab", { desc = "Previous focus" }, function()
-    root.focus_prev()
+    root.focus("Prev")
 end)
 "#,
     )

@@ -14,7 +14,7 @@ const DEFAULT_BINDINGS: &str = r#"
 root.default_bindings()
 
 canopy.bind_with("Tab", { path = "frame_gym", desc = "Next focus" }, function()
-    root.focus_next()
+    root.focus("Next")
 end)
 canopy.bind_with("g", { path = "frame_gym", desc = "Top" }, function()
     test_pattern.scroll_to(0, 0)

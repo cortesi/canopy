@@ -25,20 +25,15 @@ impl Tabs {
         }
     }
 
-    /// Select the next tab.
+    /// Select a tab by signed offset.
+    /// @param delta Signed tab delta. Positive moves forward and negative moves backward.
     #[command]
-    pub fn next(&mut self, _c: &mut dyn Context) {
-        if !self.tabs.is_empty() {
-            self.active = (self.active + 1) % self.tabs.len();
+    pub fn select_by(&mut self, _c: &mut dyn Context, delta: i32) {
+        if self.tabs.is_empty() {
+            return;
         }
-    }
-
-    /// Select the previous tab.
-    #[command]
-    pub fn prev(&mut self, _c: &mut dyn Context) {
-        if !self.tabs.is_empty() {
-            self.active = (self.active.wrapping_sub(1)) % self.tabs.len();
-        }
+        let len = self.tabs.len() as i32;
+        self.active = (self.active as i32 + delta).rem_euclid(len) as usize;
     }
 }
 

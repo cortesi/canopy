@@ -1,0 +1,10 @@
+[app]
+headless = ["cargo", "run", "-p", "todo", "--", "mcp", ":memory:"]
+run = ["cargo", "run", "-p", "todo", "--", "./tmp/dev.db"]
+cwd = "."
+
+[smoke]
+suite = "./smoke"
+
+[mcp]
+idle_shutdown_after_secs = 1200

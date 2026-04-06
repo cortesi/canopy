@@ -25,6 +25,8 @@ pub enum Event {
     /// Cut and paste
     #[allow(dead_code)]
     Paste(String),
+    /// Internal wake event used to service queued automation work.
+    Wake,
 }
 
 /// An emitter that is polled by the application to retrieve events.

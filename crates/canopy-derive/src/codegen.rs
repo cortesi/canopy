@@ -44,6 +44,13 @@ impl ParamMeta {
         let name = self.name_lit();
         let ty = self.ty_lit();
         let optional = self.is_optional_for_dispatch();
+        let doc = self.doc.as_ref().map_or_else(
+            || quote! { None },
+            |doc| {
+                let doc = syn::LitStr::new(doc, proc_macro2::Span::call_site());
+                quote! { Some(#doc) }
+            },
+        );
         let default = self
             .default
             .as_ref()
@@ -53,6 +60,7 @@ impl ParamMeta {
             canopy::commands::CommandParamSpec {
                 name: #name,
                 kind: #kind_tokens,
+                doc: #doc,
                 ty: canopy::commands::CommandTypeSpec {
                     rust: #ty,
                     luau: None,
