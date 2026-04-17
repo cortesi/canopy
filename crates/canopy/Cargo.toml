@@ -13,7 +13,7 @@ scopeguard = "1.2.0"
 convert_case = "0.11"
 termcolor = "1.4.1"
 comfy-table = "7.2.2"
-color-backtrace = "0.7.3"
+color-backtrace = "0.7.2"
 tracing = "0.1.44"
 canopy-derive = { path = "../canopy-derive" }
 slotmap = "1.1.1"
@@ -27,9 +27,7 @@ luau-analyze = { version = "0.0.1", optional = true }
 schemars = "1.2.1"
 
 [dev-dependencies]
-clap = { version = "4.6.0", features = ["derive"] }
-rand = "0.10.0"
-criterion = "0.8"
+rand = "0.10.1"
 proptest = "1.11.0"
 
 [features]
