@@ -362,7 +362,7 @@ impl Rect {
 
     /// Return a line with a given offset in the rectangle.
     pub fn line(&self, off: u32) -> Line {
-        if off > self.h {
+        if off >= self.h {
             panic!("offset exceeds rectangle height")
         }
         Line {
@@ -678,6 +678,12 @@ mod tests {
         let r = Rect::new(0, 0, 10, 10);
         assert_eq!(r.inner(1), Rect::new(1, 1, 8, 8),);
         Ok(())
+    }
+
+    #[test]
+    #[should_panic(expected = "offset exceeds rectangle height")]
+    fn line_rejects_bottom_edge() {
+        Rect::new(0, 0, 10, 10).line(10);
     }
 
     #[test]
