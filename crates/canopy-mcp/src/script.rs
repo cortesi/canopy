@@ -373,14 +373,28 @@ pub fn evaluate_live(canopy: &mut Canopy, request: &ScriptEvalRequest) -> Script
         .collect();
 
     match eval_result {
-        Ok(value) => ScriptEvalOutcome {
-            success: true,
-            value: Some(value.to_json_value().unwrap_or(JsonValue::Null)),
-            logs,
-            assertions,
-            diagnostics,
-            timing,
-            error: None,
+        Ok(value) => match value.to_json_value() {
+            Ok(value) => ScriptEvalOutcome {
+                success: true,
+                value: Some(value),
+                logs,
+                assertions,
+                diagnostics,
+                timing,
+                error: None,
+            },
+            Err(error) => ScriptEvalOutcome {
+                success: false,
+                value: None,
+                logs,
+                assertions,
+                diagnostics,
+                timing,
+                error: Some(ScriptErrorInfo {
+                    error_type: "runtime".to_string(),
+                    message: error.to_string(),
+                }),
+            },
         },
         Err(error) => ScriptEvalOutcome {
             success: false,
@@ -591,5 +605,29 @@ mod tests {
             );
             assert!(outcome.diagnostics.is_empty());
         }
+    }
+
+    #[test]
+    fn evaluate_live_reports_json_conversion_errors() -> crate::Result<()> {
+        let mut canopy = (test_factory().as_ref())()?;
+        let outcome = evaluate_live(
+            &mut canopy,
+            &ScriptEvalRequest {
+                script: "return function() end".to_string(),
+                fixture: None,
+                timeout_ms: None,
+            },
+        );
+
+        assert!(!outcome.success);
+        assert_eq!(outcome.value, None);
+        assert_eq!(
+            outcome
+                .error
+                .as_ref()
+                .map(|error| error.error_type.as_str()),
+            Some("runtime")
+        );
+        Ok(())
     }
 }
