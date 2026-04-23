@@ -181,6 +181,18 @@ where
     pub fn selected_count(&self) -> usize {
         self.selected.len()
     }
+
+    /// Return the unclamped size required to render all selector items.
+    fn content_size(&self) -> Size<u32> {
+        let max_label_width = self
+            .items
+            .iter()
+            .map(|item| item.label().len())
+            .max()
+            .unwrap_or(0) as u32;
+
+        Size::new(max_label_width + 4, self.items.len() as u32)
+    }
 }
 
 impl<T> Widget for Selector<T>
@@ -235,33 +247,11 @@ where
     }
 
     fn measure(&self, c: MeasureConstraints) -> Measurement {
-        let max_label_width = self
-            .items
-            .iter()
-            .map(|item| item.label().len())
-            .max()
-            .unwrap_or(0) as u32;
-
-        // Add space for "[x] " prefix (4 chars)
-        let width = max_label_width + 4;
-        let height = self.items.len() as u32;
-
-        let size = Size::new(width, height);
-        c.clamp(size)
+        c.clamp(self.content_size())
     }
 
     fn canvas(&self, _view: Size<u32>, _ctx: &canopy::layout::CanvasContext) -> Size<u32> {
-        let max_label_width = self
-            .items
-            .iter()
-            .map(|item| item.label().len())
-            .max()
-            .unwrap_or(0) as u32;
-
-        let width = max_label_width + 4;
-        let height = self.items.len() as u32;
-
-        Size::new(width, height)
+        self.content_size()
     }
 
     fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
