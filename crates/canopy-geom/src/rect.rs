@@ -388,40 +388,35 @@ impl Rect {
         if other == self {
             vec![]
         } else if let Some(isec) = self.intersect(other) {
+            let right = self.tl.x + self.w;
+            let bottom = self.tl.y + self.h;
+            let isec_right = isec.tl.x + isec.w;
+            let isec_bottom = isec.tl.y + isec.h;
             let rects = vec![
-                // Left
-                Self {
-                    tl: self.tl,
-                    h: self.h,
-                    w: isec.tl.x.saturating_sub(self.tl.x),
-                },
-                // Right
-                Self {
-                    tl: Point {
-                        x: isec.tl.x + isec.w,
-                        y: self.tl.y,
-                    },
-                    h: self.h,
-                    w: (self.tl.x + self.w).saturating_sub(isec.tl.x + isec.w),
-                },
-                // Top
-                Self {
-                    tl: Point {
-                        x: isec.tl.x,
-                        y: self.tl.y,
-                    },
-                    h: isec.tl.y.saturating_sub(self.tl.y),
-                    w: isec.w,
-                },
-                // Bottom
-                Self {
-                    tl: Point {
-                        x: isec.tl.x,
-                        y: isec.tl.y + isec.h,
-                    },
-                    h: (self.tl.x + self.h).saturating_sub(isec.tl.y + isec.h),
-                    w: isec.w,
-                },
+                Self::new(
+                    self.tl.x,
+                    self.tl.y,
+                    isec.tl.x.saturating_sub(self.tl.x),
+                    self.h,
+                ),
+                Self::new(
+                    isec_right,
+                    self.tl.y,
+                    right.saturating_sub(isec_right),
+                    self.h,
+                ),
+                Self::new(
+                    isec.tl.x,
+                    self.tl.y,
+                    isec.w,
+                    isec.tl.y.saturating_sub(self.tl.y),
+                ),
+                Self::new(
+                    isec.tl.x,
+                    isec_bottom,
+                    isec.w,
+                    bottom.saturating_sub(isec_bottom),
+                ),
             ];
             rects.into_iter().filter(|x| !x.is_zero()).collect()
         } else {
@@ -561,6 +556,16 @@ mod tests {
         assert_eq!(
             Rect::new(10, 10, 10, 10).sub(&Rect::new(10, 10, 10, 5)),
             vec![Rect::new(10, 15, 10, 5),],
+        );
+
+        assert_eq!(
+            Rect::new(3, 10, 10, 10).sub(&Rect::new(5, 12, 6, 6)),
+            vec![
+                Rect::new(3, 10, 2, 10),
+                Rect::new(11, 10, 2, 10),
+                Rect::new(5, 10, 6, 2),
+                Rect::new(5, 18, 6, 2),
+            ],
         );
 
         Ok(())
