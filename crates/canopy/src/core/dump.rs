@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::{fmt::Display, io::Write};
 
 use termcolor::{Buffer, Color, ColorSpec, WriteColor};
 
@@ -30,14 +30,20 @@ pub fn dump_with_focus(
 }
 
 /// Helper to write an indented, colored label followed by a value.
-fn write_field(buffer: &mut Buffer, indent: &str, label: &str, value: &str) {
-    write!(buffer, "{indent}  ").unwrap();
+fn write_field(buffer: &mut Buffer, indent: &str, label: &str, value: &str) -> Result<()> {
+    write!(buffer, "{indent}  ").map_err(dump_error)?;
     buffer
         .set_color(ColorSpec::new().set_fg(Some(Color::Green)))
-        .unwrap();
-    write!(buffer, "{label}").unwrap();
-    buffer.reset().unwrap();
-    writeln!(buffer, " {value}").unwrap();
+        .map_err(dump_error)?;
+    write!(buffer, "{label}").map_err(dump_error)?;
+    buffer.reset().map_err(dump_error)?;
+    writeln!(buffer, " {value}").map_err(dump_error)?;
+    Ok(())
+}
+
+/// Convert dump output failures into the local error type.
+fn dump_error(error: impl Display) -> Error {
+    Error::Internal(error.to_string())
 }
 
 /// Walk a node subtree and emit formatted debug output.
@@ -62,14 +68,14 @@ fn dump_node(
     let is_focused = focus.map(|fg| fg == node_id).unwrap_or(false);
 
     // Write indent
-    write!(buffer, "{indent}").unwrap();
+    write!(buffer, "{indent}").map_err(dump_error)?;
 
     // Format the node name with bold and color
     buffer
         .set_color(ColorSpec::new().set_fg(Some(Color::Cyan)).set_bold(true))
-        .unwrap();
-    write!(buffer, "{id:?}").unwrap();
-    buffer.reset().unwrap();
+        .map_err(dump_error)?;
+    write!(buffer, "{id:?}").map_err(dump_error)?;
+    buffer.reset().map_err(dump_error)?;
 
     // Add status indicators
     let mut indicators = Vec::new();
@@ -81,12 +87,12 @@ fn dump_node(
     }
 
     if !indicators.is_empty() {
-        write!(buffer, " ").unwrap();
+        write!(buffer, " ").map_err(dump_error)?;
 
         // Write each indicator with its own color
         for (i, indicator) in indicators.iter().enumerate() {
             if i > 0 {
-                write!(buffer, ", ").unwrap();
+                write!(buffer, ", ").map_err(dump_error)?;
             }
             let color = match *indicator {
                 "FOCUSED" => Color::Magenta,
@@ -95,12 +101,12 @@ fn dump_node(
             };
             buffer
                 .set_color(ColorSpec::new().set_fg(Some(color)))
-                .unwrap();
-            write!(buffer, "{indicator}").unwrap();
-            buffer.reset().unwrap();
+                .map_err(dump_error)?;
+            write!(buffer, "{indicator}").map_err(dump_error)?;
+            buffer.reset().map_err(dump_error)?;
         }
     }
-    writeln!(buffer).unwrap();
+    writeln!(buffer).map_err(dump_error)?;
 
     // Format position
     let pos = node.rect.tl;
@@ -109,7 +115,7 @@ fn dump_node(
         &indent,
         "pos in parent canvas:",
         &format!("({}, {})", pos.x, pos.y),
-    );
+    )?;
 
     // Format view rectangle
     let view = node.view.view_rect();
@@ -121,7 +127,7 @@ fn dump_node(
             "x: {}, y: {}, w: {}, h: {}",
             view.tl.x, view.tl.y, view.w, view.h
         ),
-    );
+    )?;
 
     // Format canvas size
     let canvas = node.canvas;
@@ -130,7 +136,7 @@ fn dump_node(
         &indent,
         "canvas:",
         &format!("{} × {}", canvas.w, canvas.h),
-    );
+    )?;
 
     // Recursively dump children (skip if node is hidden)
     if !is_hidden {
