@@ -6,11 +6,23 @@ use canopy::{
     backend::crossterm::{RunloopOptions, runloop_with_options},
     prelude::*,
 };
-use canopy_examples::textgym::TextGym;
+use canopy_examples::{print_luau_api, textgym::TextGym};
 use canopy_widgets::Root;
+use clap::Parser;
+
+/// CLI flags for the textgym example.
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    /// Print the Luau API definition and exit.
+    #[clap(long)]
+    api: bool,
+}
 
 /// Run the textgym example.
 fn main() -> Result<(), Box<dyn Error>> {
+    let args = Args::parse();
+
     let mut cnpy = Canopy::new();
     Root::load(&mut cnpy)?;
     TextGym::load(&mut cnpy)?;
@@ -25,6 +37,11 @@ canopy.bind_with("r", { path = "text_gym", desc = "Redraw" }, function()
 end)
 "#,
     )?;
+
+    if args.api {
+        print_luau_api(&mut cnpy)?;
+        return Ok(());
+    }
 
     let app_id = cnpy.core.create_detached(TextGym::new());
     Root::install(&mut cnpy.core, app_id)?;

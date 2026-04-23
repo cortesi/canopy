@@ -1,28 +1,51 @@
 //! Launch the cedit example.
 
-use std::{env, error::Error, fs, path::Path, process, result::Result};
+use std::{error::Error, fs, path::Path, process, result::Result};
 
 use canopy::{
     backend::crossterm::{RunloopOptions, runloop_with_options},
     prelude::*,
 };
-use canopy_examples::cedit::{Ed, setup_bindings};
+use canopy_examples::{
+    cedit::{Ed, setup_bindings},
+    print_luau_api,
+};
 use canopy_widgets::Root;
+use clap::Parser;
+
+/// CLI flags for the cedit example.
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    /// Print the Luau API definition and exit.
+    #[clap(long)]
+    api: bool,
+
+    /// Path to the file to edit.
+    filename: Option<String>,
+}
 
 /// Run the cedit example.
 fn main() -> Result<(), Box<dyn Error>> {
-    let filename = match env::args().nth(1) {
+    let args = Args::parse();
+
+    let mut cnpy = Canopy::new();
+    Root::load(&mut cnpy)?;
+    Ed::load(&mut cnpy)?;
+    setup_bindings(&mut cnpy);
+
+    if args.api {
+        print_luau_api(&mut cnpy)?;
+        return Ok(());
+    }
+
+    let filename = match args.filename {
         Some(filename) => filename,
         None => {
             eprintln!("Usage: cedit <filename>");
             return Ok(());
         }
     };
-
-    let mut cnpy = Canopy::new();
-    Root::load(&mut cnpy)?;
-    Ed::load(&mut cnpy)?;
-    setup_bindings(&mut cnpy);
 
     let contents = fs::read_to_string(&filename)?;
     let extension = file_extension(&filename);
