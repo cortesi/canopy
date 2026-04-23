@@ -1,10 +1,10 @@
 use std::{cell::RefCell, path::Path, rc::Rc};
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use rusqlite::Connection;
 
 thread_local! {
-    pub static STORE: RefCell<Option<Store>> = const { RefCell::new(None) };
+    static STORE: RefCell<Option<Store>> = const { RefCell::new(None) };
 }
 
 #[derive(Debug, Clone)]
@@ -72,16 +72,15 @@ impl Store {
 
     pub fn todos(&self) -> Result<Vec<Todo>> {
         let mut stmt = self.conn.prepare("SELECT id, item FROM todo")?;
-        let ret = stmt
+        let todos = stmt
             .query_map([], |row| {
                 Ok(Todo {
                     id: row.get(0)?,
                     item: row.get(1)?,
                 })
             })?
-            .map(|x| x.unwrap())
-            .collect();
-        Ok(ret)
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(todos)
     }
 }
 
@@ -93,6 +92,48 @@ pub fn open(path: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn get() -> Store {
-    STORE.with(|store| store.borrow_mut().as_mut().unwrap().clone())
+pub fn get() -> Result<Store> {
+    STORE.with(|store| {
+        store
+            .borrow()
+            .as_ref()
+            .cloned()
+            .ok_or_else(|| anyhow!("todo store has not been opened"))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::rc::Rc;
+
+    use rusqlite::Connection;
+
+    use super::*;
+
+    #[test]
+    fn get_errors_before_open() {
+        STORE.with(|store| {
+            *store.borrow_mut() = None;
+        });
+        assert!(get().is_err());
+    }
+
+    #[test]
+    fn todos_propagates_row_errors() -> Result<()> {
+        let conn = Connection::open_in_memory()?;
+        conn.execute(
+            "CREATE TABLE todo (
+                id INTEGER PRIMARY KEY,
+                item BLOB NOT NULL
+            );",
+            [],
+        )?;
+        conn.execute("INSERT INTO todo (id, item) VALUES (1, x'ff');", [])?;
+
+        let store = Store {
+            conn: Rc::new(conn),
+        };
+        assert!(store.todos().is_err());
+        Ok(())
+    }
 }

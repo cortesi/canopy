@@ -69,7 +69,7 @@ fn add_item_via_script() -> AnyResult<()> {
     use canopy::event::key::KeyCode;
     h.key(KeyCode::Enter)?;
     assert_eq!(list_len(&mut h), 1);
-    let todos = todo::store::get().todos().unwrap();
+    let todos = todo::store::get()?.todos()?;
     assert_eq!(todos.len(), 1);
     assert_eq!(todos[0].item.trim(), "hi");
     Ok(())
@@ -187,7 +187,7 @@ fn delete_first_keeps_second_visible() -> AnyResult<()> {
     assert_eq!(list_len(&mut h), 1);
 
     // Check that the database still has the right item
-    let todos = todo::store::get().todos()?;
+    let todos = todo::store::get()?.todos()?;
     assert_eq!(todos.len(), 1);
     assert!(todos[0].item.contains("second"));
     Ok(())

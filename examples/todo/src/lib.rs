@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{fmt::Display, path::Path};
 
 use anyhow::Result as AnyResult;
 use canopy::{
@@ -148,7 +148,7 @@ pub struct Todo {
 #[derive_commands]
 impl Todo {
     pub fn new() -> AnyResult<Self> {
-        let pending = store::get().todos()?;
+        let pending = store::get()?.todos()?;
         Ok(Self {
             pending,
             adder_active: false,
@@ -324,7 +324,7 @@ impl Todo {
         })?;
 
         if let Some(id) = to_delete {
-            store::get().delete_todo(id).unwrap();
+            current_store()?.delete_todo(id).map_err(store_error)?;
         }
         Ok(())
     }
@@ -338,7 +338,7 @@ impl Todo {
         })?;
 
         if !value.is_empty() {
-            let item = store::get().add_todo(&value).unwrap();
+            let item = current_store()?.add_todo(&value).map_err(store_error)?;
             self.with_list(c, |list, ctx| {
                 list.append(ctx, TodoEntry::new(item.clone()))?;
                 list.select_last(ctx);
@@ -466,14 +466,22 @@ pub fn open_store(path: &str) -> AnyResult<()> {
     store::open(path)
 }
 
+fn store_error(error: impl Display) -> Error {
+    Error::Invalid(error.to_string())
+}
+
+fn current_store() -> Result<store::Store> {
+    store::get().map_err(store_error)
+}
+
 pub fn setup_app(cnpy: &mut Canopy) -> Result<()> {
     setup_app_with_config(cnpy, None)
 }
 
 fn store_fixture_items(items: &[&str]) -> Result<Vec<store::Todo>> {
-    store::get()
+    current_store()?
         .replace_todos(items.iter().copied())
-        .map_err(|error| Error::Invalid(error.to_string()))
+        .map_err(store_error)
 }
 
 fn with_todo<R>(
