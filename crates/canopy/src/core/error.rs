@@ -61,6 +61,9 @@ pub enum Error {
     #[error("internal: {0}")]
     /// Internal error.
     Internal(String),
+    /// Core invariant violation.
+    #[error("invariant violation: {0}")]
+    Invariant(String),
     /// Re-entrant widget borrow attempt.
     #[error("re-entrant widget borrow: {0:?}")]
     ReentrantWidgetBorrow(NodeId),

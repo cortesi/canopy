@@ -85,6 +85,15 @@ struct NodeStructureSnapshot {
     child_keys: HashMap<String, NodeId>,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+/// How invariant validation should treat temporarily extracted widget slots.
+enum WidgetSlotPolicy {
+    /// Widget slots must be present and available for inspection.
+    RequirePresent,
+    /// Widget slots may be borrowed or temporarily empty during a callback.
+    AllowBorrowed,
+}
+
 /// Guard that restores a widget slot on drop.
 struct WidgetSlotGuard {
     /// Core pointer used for restoration.
@@ -332,6 +341,7 @@ impl Core {
         node.widget_type = widget_type;
         node.mounted = false;
         node.initialized = false;
+        self.ensure_invariants(None);
         Ok(())
     }
 
@@ -543,128 +553,271 @@ impl Core {
         false
     }
 
+    /// Validate structural and cached state invariants for the core arena.
+    pub fn validate_invariants(&self) -> Result<()> {
+        self.validate_invariants_with(WidgetSlotPolicy::RequirePresent)
+    }
+
+    /// Validate core invariants using a caller-specific widget slot policy.
+    fn validate_invariants_with(&self, widget_slot_policy: WidgetSlotPolicy) -> Result<()> {
+        self.validate_root()?;
+        for (node_id, node) in &self.nodes {
+            self.validate_widget_slot(node_id, node, widget_slot_policy)?;
+            self.validate_node_links(node_id, node)?;
+            self.validate_parent_chain(node_id)?;
+            self.validate_lifecycle_state(node_id, node)?;
+            self.validate_cached_state(node_id, node)?;
+        }
+        self.validate_focus_and_capture()?;
+        self.validate_pending_targets()?;
+        Ok(())
+    }
+
     /// Assert structural invariants on the node tree in debug builds.
     #[cfg(debug_assertions)]
     pub(crate) fn debug_assert_tree_invariants(&self) {
-        self.debug_assert_root();
-        for (id, node) in self.nodes.iter() {
-            self.debug_assert_node_links(id, node);
-            self.debug_assert_no_cycle(id);
+        if let Err(error) = self.validate_invariants_with(WidgetSlotPolicy::AllowBorrowed) {
+            debug_assert!(false, "{error}");
         }
-        self.debug_assert_focus();
     }
 
     #[cfg(not(debug_assertions))]
     pub(crate) fn debug_assert_tree_invariants(&self) {}
 
-    /// Assert root node invariants in debug builds.
-    #[cfg(debug_assertions)]
-    fn debug_assert_root(&self) {
-        debug_assert!(self.nodes.contains_key(self.root), "root node missing");
-        if let Some(root) = self.nodes.get(self.root) {
-            debug_assert!(root.parent.is_none(), "root has parent");
+    /// Validate root node invariants.
+    fn validate_root(&self) -> Result<()> {
+        let root = self
+            .nodes
+            .get(self.root)
+            .ok_or_else(|| invariant_violation("root node is missing"))?;
+        if root.parent.is_some() {
+            return Err(invariant_violation("root node has a parent"));
         }
+        Ok(())
     }
 
-    /// Assert parent/child link invariants for a specific node in debug builds.
-    #[cfg(debug_assertions)]
-    fn debug_assert_node_links(&self, id: NodeId, node: &Node) {
+    /// Validate that the widget slot is present and currently inspectable.
+    fn validate_widget_slot(
+        &self,
+        node_id: NodeId,
+        node: &Node,
+        policy: WidgetSlotPolicy,
+    ) -> Result<()> {
+        let Ok(widget) = node.widget.try_borrow() else {
+            return match policy {
+                WidgetSlotPolicy::RequirePresent => Err(Error::ReentrantWidgetBorrow(node_id)),
+                WidgetSlotPolicy::AllowBorrowed => Ok(()),
+            };
+        };
+        if widget.is_some() || policy == WidgetSlotPolicy::AllowBorrowed {
+            return Ok(());
+        }
+        Err(invariant_violation(format!(
+            "node {node_id:?} has an empty widget slot"
+        )))
+    }
+
+    /// Validate parent, child, and keyed child links for a node.
+    fn validate_node_links(&self, node_id: NodeId, node: &Node) -> Result<()> {
         let mut seen = HashSet::with_capacity(node.children.len());
         for child in &node.children {
-            debug_assert!(
-                seen.insert(*child),
-                "duplicate child {child:?} under {id:?}"
-            );
-            let child_node = self.nodes.get(*child);
-            debug_assert!(child_node.is_some(), "child {child:?} missing");
-            if let Some(child_node) = child_node {
-                debug_assert!(
-                    child_node.parent == Some(id),
-                    "child {child:?} parent mismatch under {id:?}"
-                );
+            if !seen.insert(*child) {
+                return Err(invariant_violation(format!(
+                    "duplicate child {child:?} under {node_id:?}"
+                )));
+            }
+            if *child == node_id {
+                return Err(invariant_violation(format!(
+                    "node {node_id:?} lists itself as a child"
+                )));
+            }
+            let child_node = self.nodes.get(*child).ok_or_else(|| {
+                invariant_violation(format!("child {child:?} under {node_id:?} is missing"))
+            })?;
+            if child_node.parent != Some(node_id) {
+                return Err(invariant_violation(format!(
+                    "child {child:?} parent is {:?}, expected {node_id:?}",
+                    child_node.parent
+                )));
             }
         }
 
         for (key, child) in &node.child_keys {
-            debug_assert!(
-                node.children.contains(child),
-                "child key {key} points to non-child {child:?} under {id:?}"
-            );
-            let child_node = self.nodes.get(*child);
-            debug_assert!(child_node.is_some(), "child {child:?} missing");
-            if let Some(child_node) = child_node {
-                debug_assert!(
-                    child_node.parent == Some(id),
-                    "child {child:?} parent mismatch for key {key}"
-                );
+            if !node.children.contains(child) {
+                return Err(invariant_violation(format!(
+                    "child key {key:?} points to non-child {child:?} under {node_id:?}"
+                )));
+            }
+            let child_node = self.nodes.get(*child).ok_or_else(|| {
+                invariant_violation(format!(
+                    "child key {key:?} under {node_id:?} points to missing {child:?}"
+                ))
+            })?;
+            if child_node.parent != Some(node_id) {
+                return Err(invariant_violation(format!(
+                    "keyed child {child:?} parent is {:?}, expected {node_id:?}",
+                    child_node.parent
+                )));
             }
         }
 
         if let Some(parent) = node.parent {
-            let parent_node = self.nodes.get(parent);
-            debug_assert!(parent_node.is_some(), "parent {parent:?} missing");
-            if let Some(parent_node) = parent_node {
-                debug_assert!(
-                    parent_node.children.contains(&id),
-                    "parent {parent:?} missing child {id:?}"
-                );
+            let parent_node = self.nodes.get(parent).ok_or_else(|| {
+                invariant_violation(format!("parent {parent:?} of {node_id:?} is missing"))
+            })?;
+            if !parent_node.children.contains(&node_id) {
+                return Err(invariant_violation(format!(
+                    "parent {parent:?} does not list child {node_id:?}"
+                )));
             }
         }
+
+        Ok(())
     }
 
-    /// Assert focus invariants in debug builds.
-    #[cfg(debug_assertions)]
-    fn debug_assert_focus(&self) {
+    /// Validate that the parent chain from a node contains no cycles.
+    fn validate_parent_chain(&self, start: NodeId) -> Result<()> {
+        let mut seen = HashSet::new();
+        let mut current = Some(start);
+        while let Some(id) = current {
+            if !seen.insert(id) {
+                return Err(invariant_violation(format!(
+                    "parent cycle detected from {start:?} through {id:?}"
+                )));
+            }
+            let node = self.nodes.get(id).ok_or_else(|| {
+                invariant_violation(format!(
+                    "parent chain from {start:?} references missing node {id:?}"
+                ))
+            })?;
+            current = node.parent;
+        }
+        Ok(())
+    }
+
+    /// Validate focus and mouse capture targets.
+    fn validate_focus_and_capture(&self) -> Result<()> {
         if let Some(focus) = self.focus {
-            debug_assert!(
-                self.nodes.contains_key(focus),
-                "focus points at missing node {focus:?}"
-            );
-            debug_assert!(
-                self.attached_to_root_debug(focus),
-                "focus points at detached node {focus:?}"
-            );
+            self.validate_attached_target("focus", focus)?;
         }
+        if let Some(capture) = self.mouse_capture {
+            self.validate_attached_target("mouse capture", capture)?;
+        }
+        Ok(())
     }
 
-    /// Assert that the parent chain for a node contains no cycles.
-    #[cfg(debug_assertions)]
-    fn debug_assert_no_cycle(&self, start: NodeId) {
-        debug_assert!(
-            !self.parent_chain_has_cycle(start),
-            "cycle detected from {start:?}"
-        );
+    /// Validate a stored node target that must be attached.
+    fn validate_attached_target(&self, label: &str, node_id: NodeId) -> Result<()> {
+        if !self.nodes.contains_key(node_id) {
+            return Err(invariant_violation(format!(
+                "{label} points at missing node {node_id:?}"
+            )));
+        }
+        if !self.is_attached_to_root(node_id) {
+            return Err(invariant_violation(format!(
+                "{label} points at detached node {node_id:?}"
+            )));
+        }
+        Ok(())
     }
 
-    /// Return true if a node's parent chain contains a cycle.
-    #[cfg(debug_assertions)]
-    fn parent_chain_has_cycle(&self, start: NodeId) -> bool {
-        let mut seen = HashSet::new();
-        let mut current = Some(start);
-        while let Some(id) = current {
-            if !seen.insert(id) {
-                return true;
+    /// Validate pending target references stored by auxiliary runtime features.
+    fn validate_pending_targets(&self) -> Result<()> {
+        if let Some((target, pre_focus)) = self.pending_help_request {
+            if !self.nodes.contains_key(target) {
+                return Err(invariant_violation(format!(
+                    "pending help request points at missing target {target:?}"
+                )));
             }
-            current = self.nodes.get(id).and_then(|n| n.parent);
+            if let Some(pre_focus) = pre_focus
+                && !self.nodes.contains_key(pre_focus)
+            {
+                return Err(invariant_violation(format!(
+                    "pending help request points at missing focus {pre_focus:?}"
+                )));
+            }
         }
-        false
+        if let Some(target) = self.pending_diagnostic_dump
+            && !self.nodes.contains_key(target)
+        {
+            return Err(invariant_violation(format!(
+                "pending diagnostic dump points at missing node {target:?}"
+            )));
+        }
+        Ok(())
     }
 
-    /// Return true if a node reaches the root without cycles.
-    #[cfg(debug_assertions)]
-    fn attached_to_root_debug(&self, start: NodeId) -> bool {
-        let mut seen = HashSet::new();
-        let mut current = Some(start);
-        while let Some(id) = current {
-            if id == self.root {
-                return true;
-            }
-            if !seen.insert(id) {
-                return false;
-            }
-            current = self.nodes.get(id).and_then(|n| n.parent);
+    /// Validate lifecycle flags that are independent of widget behavior.
+    fn validate_lifecycle_state(&self, node_id: NodeId, node: &Node) -> Result<()> {
+        if node.initialized && !node.mounted && self.is_attached_to_root(node_id) {
+            return Err(invariant_violation(format!(
+                "attached node {node_id:?} is initialized before it is mounted"
+            )));
         }
-        false
+        Ok(())
+    }
+
+    /// Validate cached layout and view state for a node.
+    fn validate_cached_state(&self, node_id: NodeId, node: &Node) -> Result<()> {
+        if node.content_size.w > node.rect.w || node.content_size.h > node.rect.h {
+            return Err(invariant_violation(format!(
+                "node {node_id:?} content size {:?} exceeds rect {:?}",
+                node.content_size, node.rect
+            )));
+        }
+        if node.canvas.w < node.content_size.w || node.canvas.h < node.content_size.h {
+            return Err(invariant_violation(format!(
+                "node {node_id:?} canvas {:?} is smaller than content {:?}",
+                node.canvas, node.content_size
+            )));
+        }
+
+        let max_scroll_x = node.canvas.w.saturating_sub(node.content_size.w);
+        let max_scroll_y = node.canvas.h.saturating_sub(node.content_size.h);
+        if node.scroll.x > max_scroll_x || node.scroll.y > max_scroll_y {
+            return Err(invariant_violation(format!(
+                "node {node_id:?} scroll {:?} exceeds canvas {:?} and content {:?}",
+                node.scroll, node.canvas, node.content_size
+            )));
+        }
+
+        if view_has_cached_state(node.view) {
+            self.validate_view_cache(node_id, node)?;
+        }
+
+        Ok(())
+    }
+
+    /// Validate a computed view cache against node layout caches.
+    fn validate_view_cache(&self, node_id: NodeId, node: &Node) -> Result<()> {
+        if node.view.canvas != node.canvas {
+            return Err(invariant_violation(format!(
+                "node {node_id:?} view canvas {:?} does not match node canvas {:?}",
+                node.view.canvas, node.canvas
+            )));
+        }
+        if node.view.tl != node.scroll {
+            return Err(invariant_violation(format!(
+                "node {node_id:?} view scroll {:?} does not match node scroll {:?}",
+                node.view.tl, node.scroll
+            )));
+        }
+        if node.view.outer.w != node.rect.w || node.view.outer.h != node.rect.h {
+            return Err(invariant_violation(format!(
+                "node {node_id:?} view outer size {:?} does not match rect {:?}",
+                node.view.outer_size(),
+                node.rect
+            )));
+        }
+        if node.view.content.w != node.content_size.w || node.view.content.h != node.content_size.h
+        {
+            return Err(invariant_violation(format!(
+                "node {node_id:?} view content size {:?} does not match {:?}",
+                node.view.content_size(),
+                node.content_size
+            )));
+        }
+        Ok(())
     }
 
     /// Create a node in the arena detached from the tree.
@@ -1040,19 +1193,20 @@ impl Core {
 
     /// Run layout computation and synchronize views.
     pub fn update_layout(&mut self, screen_size: Size) -> Result<()> {
-        refresh_layouts(self);
+        refresh_layouts(self)?;
         let root = self.root;
         let mut pass = LayoutPass::new(self);
-        pass.layout_node(root, screen_size, Point::zero(), Overflow::none());
+        pass.layout_node(root, screen_size, Point::zero(), Overflow::none())?;
         let screen_view = View::new(
             RectI32::new(0, 0, screen_size.w, screen_size.h),
             RectI32::new(0, 0, screen_size.w, screen_size.h),
             Point::zero(),
             screen_size,
         );
-        pass.update_views(root, screen_view);
+        pass.update_views(root, screen_view)?;
 
         self.ensure_focus_valid(None);
+        self.validate_invariants()?;
 
         Ok(())
     }
@@ -1178,19 +1332,33 @@ impl Core {
     }
 }
 
+/// Build an invariant violation error.
+fn invariant_violation(message: impl Into<String>) -> Error {
+    Error::Invariant(message.into())
+}
+
+/// Return true when a view contains computed cache data.
+fn view_has_cached_state(view: View) -> bool {
+    view != View::default()
+}
+
 /// Refresh cached layout configurations for nodes marked dirty.
-fn refresh_layouts(core: &mut Core) {
-    for (_id, node) in core.nodes.iter_mut() {
+fn refresh_layouts(core: &mut Core) -> Result<()> {
+    for (node_id, node) in core.nodes.iter_mut() {
         if !node.layout_dirty {
             continue;
         }
-        if let Ok(widget) = node.widget.try_borrow()
-            && let Some(widget) = widget.as_ref()
-        {
-            node.layout = widget.layout();
-            node.layout_dirty = false;
-        }
+        let widget = node
+            .widget
+            .try_borrow()
+            .map_err(|_| Error::ReentrantWidgetBorrow(node_id))?;
+        let widget = widget
+            .as_ref()
+            .ok_or(Error::ReentrantWidgetBorrow(node_id))?;
+        node.layout = widget.layout();
+        node.layout_dirty = false;
     }
+    Ok(())
 }
 
 #[derive(Hash, PartialEq, Eq)]
@@ -1250,11 +1418,11 @@ impl<'a> LayoutPass<'a> {
         available_outer: Size,
         position: Point,
         parent_overflow: Overflow,
-    ) -> Size<u32> {
-        let (layout, hidden) = self.node_layout_snapshot(node_id);
+    ) -> Result<Size<u32>> {
+        let (layout, hidden) = self.node_layout_snapshot(node_id)?;
         if hidden || layout.display == Display::None {
-            self.clear_layout(node_id, position);
-            return Size::ZERO;
+            self.clear_layout(node_id, position)?;
+            return Ok(Size::ZERO);
         }
 
         let mut effective_layout = layout;
@@ -1265,32 +1433,37 @@ impl<'a> LayoutPass<'a> {
             effective_layout.overflow_y = true;
         }
 
-        let outer = self.resolve_outer_size(node_id, effective_layout, available_outer);
+        let outer = self.resolve_outer_size(node_id, effective_layout, available_outer)?;
         let pad_x = layout.padding.horizontal();
         let pad_y = layout.padding.vertical();
         let content_size = Size::new(outer.w.saturating_sub(pad_x), outer.h.saturating_sub(pad_y));
 
         {
-            let node = self.core.nodes.get_mut(node_id).expect("missing node");
+            let node = self
+                .core
+                .nodes
+                .get_mut(node_id)
+                .ok_or(Error::NodeNotFound(node_id))?;
             node.rect = Rect::new(position.x, position.y, outer.w, outer.h);
             node.content_size = content_size;
         }
 
-        self.layout_children(node_id, effective_layout, content_size);
+        self.layout_children(node_id, effective_layout, content_size)?;
 
-        let canvas = self.compute_canvas(node_id, content_size);
+        let canvas = self.compute_canvas(node_id, content_size)?;
         self.update_canvas(node_id, content_size, canvas);
 
-        outer
+        Ok(outer)
     }
 
     /// Update view rectangles for a subtree based on parent view data.
-    fn update_views(&mut self, node_id: NodeId, parent_view: View) {
+    fn update_views(&mut self, node_id: NodeId, parent_view: View) -> Result<()> {
         let (layout, hidden, rect, content_size, canvas, scroll, children) = {
-            let node = match self.core.nodes.get(node_id) {
-                Some(node) => node,
-                None => return,
-            };
+            let node = self
+                .core
+                .nodes
+                .get(node_id)
+                .ok_or(Error::NodeNotFound(node_id))?;
             (
                 node.layout,
                 node.hidden,
@@ -1306,7 +1479,7 @@ impl<'a> LayoutPass<'a> {
             if let Some(node) = self.core.nodes.get_mut(node_id) {
                 node.view = View::default();
             }
-            return;
+            return Ok(());
         }
 
         let outer_x = parent_view.content.tl.x as i64 + rect.tl.x as i64 - parent_view.tl.x as i64;
@@ -1331,11 +1504,15 @@ impl<'a> LayoutPass<'a> {
         let view = View::new(outer, content, scroll, canvas);
         if let Some(node) = self.core.nodes.get_mut(node_id) {
             node.view = view;
+        } else {
+            return Err(Error::NodeNotFound(node_id));
         }
 
         for child in children {
-            self.update_views(child, view);
+            self.update_views(child, view)?;
         }
+
+        Ok(())
     }
 
     /// Resolve a node's outer size using its layout configuration.
@@ -1344,7 +1521,7 @@ impl<'a> LayoutPass<'a> {
         node_id: NodeId,
         layout: Layout,
         available_outer: Size,
-    ) -> Size<u32> {
+    ) -> Result<Size<u32>> {
         self.resolve_outer_size_with_layout(node_id, layout, available_outer)
     }
 
@@ -1354,7 +1531,7 @@ impl<'a> LayoutPass<'a> {
         node_id: NodeId,
         layout: Layout,
         available_outer: Size,
-    ) -> Size<u32> {
+    ) -> Result<Size<u32>> {
         let available: Size<u32> = available_outer;
         let pad_x = layout.padding.horizontal();
         let pad_y = layout.padding.vertical();
@@ -1385,10 +1562,10 @@ impl<'a> LayoutPass<'a> {
 
         let mut measured_content = Size::ZERO;
         if did_measure {
-            let m0 = self.measure_cached(node_id, c0);
+            let m0 = self.measure_cached(node_id, c0)?;
             let raw0 = match m0 {
                 Measurement::Fixed(content) => content,
-                Measurement::Wrap => self.measure_wrap_content(node_id, layout, c0),
+                Measurement::Wrap => self.measure_wrap_content(node_id, layout, c0)?,
             };
             measured_content = c0.clamp_size(raw0);
         }
@@ -1418,10 +1595,10 @@ impl<'a> LayoutPass<'a> {
                     width: Constraint::Exact(content.w),
                     height: c0.height,
                 };
-                let m1 = self.measure_cached(node_id, c1);
+                let m1 = self.measure_cached(node_id, c1)?;
                 let raw1 = match m1 {
                     Measurement::Fixed(content) => content,
-                    Measurement::Wrap => self.measure_wrap_content(node_id, layout, c1),
+                    Measurement::Wrap => self.measure_wrap_content(node_id, layout, c1)?,
                 };
                 let content1 = c1.clamp_size(raw1);
 
@@ -1438,10 +1615,10 @@ impl<'a> LayoutPass<'a> {
                 width: Constraint::Exact(content.w),
                 height: Constraint::Exact(content.h),
             };
-            let _ = self.measure_cached(node_id, c_final);
+            self.measure_cached(node_id, c_final)?;
         }
 
-        outer
+        Ok(outer)
     }
 
     /// Measure content size by wrapping children when requested.
@@ -1450,10 +1627,10 @@ impl<'a> LayoutPass<'a> {
         node_id: NodeId,
         layout: Layout,
         constraints: MeasureConstraints,
-    ) -> Size<u32> {
-        let children = self.visible_children(node_id);
+    ) -> Result<Size<u32>> {
+        let children = self.visible_children(node_id)?;
         if children.is_empty() {
-            return Size::ZERO;
+            return Ok(Size::ZERO);
         }
 
         // For Stack direction, content size is the max of all children
@@ -1474,7 +1651,7 @@ impl<'a> LayoutPass<'a> {
         let mut child_sizes = vec![Size::ZERO; children.len()];
 
         for (i, child) in children.iter().enumerate() {
-            let child_layout = self.node_layout_snapshot(*child).0;
+            let child_layout = self.node_layout_snapshot(*child)?.0;
             let mut effective = child_layout;
 
             let child_main = main_sizing(child_layout, layout.direction);
@@ -1500,7 +1677,7 @@ impl<'a> LayoutPass<'a> {
                 continue;
             }
 
-            let size = self.resolve_outer_size_with_layout(*child, effective, avail);
+            let size = self.resolve_outer_size_with_layout(*child, effective, avail)?;
             child_sizes[i] = size;
             fixed_main_total = fixed_main_total.saturating_add(layout.direction.main_size(size));
         }
@@ -1514,7 +1691,7 @@ impl<'a> LayoutPass<'a> {
             let weights: Vec<u32> = flex_children.iter().map(|(_, w)| (*w).max(1)).collect();
             let shares = allocate_flex_shares(remaining, &weights);
             for (idx, (child_index, _)) in flex_children.iter().enumerate() {
-                let child_layout = self.node_layout_snapshot(children[*child_index]).0;
+                let child_layout = self.node_layout_snapshot(children[*child_index])?.0;
                 let mut effective = child_layout;
                 let child_cross = cross_sizing(child_layout, layout.direction);
                 if !cross_fixed && matches!(child_cross, Sizing::Flex(_)) {
@@ -1533,7 +1710,7 @@ impl<'a> LayoutPass<'a> {
                     children[*child_index],
                     effective,
                     child_available,
-                );
+                )?;
                 child_sizes[*child_index] = size;
             }
         }
@@ -1547,7 +1724,7 @@ impl<'a> LayoutPass<'a> {
         main_total = main_total.saturating_add(gap_total);
 
         let content = layout.direction.size_from_main_cross(main_total, cross_max);
-        constraints.clamp_size(content)
+        Ok(constraints.clamp_size(content))
     }
 
     /// Measure content size for Stack direction - max of all children sizes.
@@ -1556,7 +1733,7 @@ impl<'a> LayoutPass<'a> {
         layout: Layout,
         constraints: MeasureConstraints,
         children: &[NodeId],
-    ) -> Size<u32> {
+    ) -> Result<Size<u32>> {
         let avail_w = constraints.width.max_bound();
         let avail_h = constraints.height.max_bound();
         let avail = Size::new(avail_w, avail_h);
@@ -1565,7 +1742,7 @@ impl<'a> LayoutPass<'a> {
         let mut max_h = 0u32;
 
         for child in children {
-            let child_layout = self.node_layout_snapshot(*child).0;
+            let child_layout = self.node_layout_snapshot(*child)?.0;
             let mut effective = child_layout;
 
             // Treat flex as measure when parent is not exact
@@ -1587,20 +1764,25 @@ impl<'a> LayoutPass<'a> {
                 effective.overflow_y = true;
             }
 
-            let size = self.resolve_outer_size_with_layout(*child, effective, avail);
+            let size = self.resolve_outer_size_with_layout(*child, effective, avail)?;
             max_w = max_w.max(size.w);
             max_h = max_h.max(size.h);
         }
 
         let content = Size::new(max_w, max_h);
-        constraints.clamp_size(content)
+        Ok(constraints.clamp_size(content))
     }
 
     /// Lay out visible children inside the provided content box.
-    fn layout_children(&mut self, node_id: NodeId, layout: Layout, content: Size<u32>) {
-        let children = self.visible_children(node_id);
+    fn layout_children(
+        &mut self,
+        node_id: NodeId,
+        layout: Layout,
+        content: Size<u32>,
+    ) -> Result<()> {
+        let children = self.visible_children(node_id)?;
         if children.is_empty() {
-            return;
+            return Ok(());
         }
 
         let parent_overflow = Overflow::from_layout(layout);
@@ -1609,10 +1791,10 @@ impl<'a> LayoutPass<'a> {
                 // Stack: all children get full content area, positioned according to alignment
                 for child in &children {
                     // First, layout the child to determine its size
-                    self.layout_node(*child, content, Point::zero(), parent_overflow);
+                    self.layout_node(*child, content, Point::zero(), parent_overflow)?;
 
                     // Then apply alignment to position the child within content area
-                    let child_size = self.node_size(*child);
+                    let child_size = self.node_size(*child)?;
                     let offset_x = align_offset(child_size.w, content.w, layout.align_horizontal);
                     let offset_y = align_offset(child_size.h, content.h, layout.align_vertical);
                     self.set_node_position(
@@ -1621,13 +1803,14 @@ impl<'a> LayoutPass<'a> {
                             x: offset_x,
                             y: offset_y,
                         },
-                    );
+                    )?;
                 }
             }
             LayoutDirection::Row | LayoutDirection::Column => {
-                self.layout_children_sequential(layout, content, &children, parent_overflow);
+                self.layout_children_sequential(layout, content, &children, parent_overflow)?;
             }
         }
+        Ok(())
     }
 
     /// Layout children sequentially (Row or Column direction).
@@ -1637,13 +1820,13 @@ impl<'a> LayoutPass<'a> {
         content: Size<u32>,
         children: &[NodeId],
         parent_overflow: Overflow,
-    ) {
+    ) -> Result<()> {
         let mut fixed_main_total = 0u32;
         let mut flex_children: Vec<(usize, u32)> = Vec::new();
         let mut pre_sizes = vec![Size::ZERO; children.len()];
 
         for (i, child) in children.iter().enumerate() {
-            let child_layout = self.node_layout_snapshot(*child).0;
+            let child_layout = self.node_layout_snapshot(*child)?.0;
             let main = main_sizing(child_layout, layout.direction);
             if let Sizing::Flex(w) = main {
                 flex_children.push((i, w.max(1)));
@@ -1659,7 +1842,7 @@ impl<'a> LayoutPass<'a> {
             }
 
             let child_available = content;
-            let size = self.resolve_outer_size_with_layout(*child, effective, child_available);
+            let size = self.resolve_outer_size_with_layout(*child, effective, child_available)?;
             pre_sizes[i] = size;
             fixed_main_total = fixed_main_total.saturating_add(layout.direction.main_size(size));
         }
@@ -1678,7 +1861,7 @@ impl<'a> LayoutPass<'a> {
         let mut pos_main = 0u32;
         let mut flex_idx = 0usize;
         for (i, child) in children.iter().enumerate() {
-            let child_layout = self.node_layout_snapshot(*child).0;
+            let child_layout = self.node_layout_snapshot(*child)?.0;
             let mut effective = child_layout;
             if parent_overflow.x {
                 effective.overflow_x = true;
@@ -1705,45 +1888,56 @@ impl<'a> LayoutPass<'a> {
                 LayoutDirection::Stack => unreachable!(),
             };
 
-            let actual = self.layout_node(*child, child_available, child_pos, parent_overflow);
+            let actual = self.layout_node(*child, child_available, child_pos, parent_overflow)?;
             pos_main = pos_main
                 .saturating_add(layout.direction.main_size(actual))
                 .saturating_add(layout.gap);
         }
+        Ok(())
     }
 
     /// Get a node's outer size.
-    fn node_size(&self, node_id: NodeId) -> Size<u32> {
+    fn node_size(&self, node_id: NodeId) -> Result<Size<u32>> {
         self.core
             .nodes
             .get(node_id)
             .map(|n| Size::new(n.rect.w, n.rect.h))
-            .unwrap_or(Size::ZERO)
+            .ok_or(Error::NodeNotFound(node_id))
     }
 
     /// Set a node's position within its parent's content area.
-    fn set_node_position(&mut self, node_id: NodeId, position: Point) {
-        if let Some(node) = self.core.nodes.get_mut(node_id) {
-            node.rect.tl = position;
-        }
+    fn set_node_position(&mut self, node_id: NodeId, position: Point) -> Result<()> {
+        let node = self
+            .core
+            .nodes
+            .get_mut(node_id)
+            .ok_or(Error::NodeNotFound(node_id))?;
+        node.rect.tl = position;
+        Ok(())
     }
 
     /// Compute the scrollable canvas size for a node.
-    fn compute_canvas(&self, node_id: NodeId, view_size: Size<u32>) -> Size<u32> {
-        let children = self.visible_children(node_id);
+    fn compute_canvas(&self, node_id: NodeId, view_size: Size<u32>) -> Result<Size<u32>> {
+        let children = self.visible_children(node_id)?;
         let mut canvas_children = Vec::with_capacity(children.len());
         for child in children {
-            if let Some(node) = self.core.nodes.get(child) {
-                let child_canvas: Size<u32> = node.canvas;
-                canvas_children.push(CanvasChild::new(node.rect, child_canvas));
-            }
+            let node = self
+                .core
+                .nodes
+                .get(child)
+                .ok_or(Error::NodeNotFound(child))?;
+            let child_canvas: Size<u32> = node.canvas;
+            canvas_children.push(CanvasChild::new(node.rect, child_canvas));
         }
         let ctx = CanvasContext::new(&canvas_children);
         let canvas = self
             .core
             .with_widget_view(node_id, |widget, _core| widget.canvas(view_size, &ctx))
-            .unwrap_or(view_size);
-        Size::new(canvas.w.max(view_size.w), canvas.h.max(view_size.h))
+            .map_err(|error| Error::Layout(format!("canvas for {node_id:?}: {error}")))?;
+        Ok(Size::new(
+            canvas.w.max(view_size.w),
+            canvas.h.max(view_size.h),
+        ))
     }
 
     /// Store canvas size and clamp scroll offset for a node.
@@ -1761,66 +1955,78 @@ impl<'a> LayoutPass<'a> {
     }
 
     /// Snapshot a node's layout and hidden state.
-    fn node_layout_snapshot(&self, node_id: NodeId) -> (Layout, bool) {
+    fn node_layout_snapshot(&self, node_id: NodeId) -> Result<(Layout, bool)> {
         self.core
             .nodes
             .get(node_id)
             .map(|node| (node.layout, node.hidden))
-            .unwrap_or((Layout::default(), true))
+            .ok_or(Error::NodeNotFound(node_id))
     }
 
     /// Collect visible child nodes in tree order.
-    fn visible_children(&self, node_id: NodeId) -> Vec<NodeId> {
-        let Some(node) = self.core.nodes.get(node_id) else {
-            return Vec::new();
-        };
-        node.children
-            .iter()
-            .copied()
-            .filter(|child| {
-                self.core
-                    .nodes
-                    .get(*child)
-                    .is_some_and(|n| !n.hidden && n.layout.display == Display::Block)
-            })
-            .collect()
+    fn visible_children(&self, node_id: NodeId) -> Result<Vec<NodeId>> {
+        let node = self
+            .core
+            .nodes
+            .get(node_id)
+            .ok_or(Error::NodeNotFound(node_id))?;
+        let mut visible = Vec::new();
+        for child in &node.children {
+            let child_node = self
+                .core
+                .nodes
+                .get(*child)
+                .ok_or(Error::NodeNotFound(*child))?;
+            if !child_node.hidden && child_node.layout.display == Display::Block {
+                visible.push(*child);
+            }
+        }
+        Ok(visible)
     }
 
     /// Get a cached measurement or compute and store it for this pass.
-    fn measure_cached(&mut self, node_id: NodeId, constraints: MeasureConstraints) -> Measurement {
+    fn measure_cached(
+        &mut self,
+        node_id: NodeId,
+        constraints: MeasureConstraints,
+    ) -> Result<Measurement> {
         let key = MeasureKey {
             node: node_id,
             constraints,
         };
         if let Some(m) = self.measure_cache.get(&key) {
-            return *m;
+            return Ok(*m);
         }
         let measured = self
             .core
             .with_widget_view(node_id, |widget, _core| widget.measure(constraints))
-            .unwrap_or_else(|_| constraints.clamp(Size::ZERO));
+            .map_err(|error| Error::Layout(format!("measure for {node_id:?}: {error}")))?;
         self.measure_cache.insert(key, measured);
-        measured
+        Ok(measured)
     }
 
     /// Reset layout data for a hidden subtree.
-    fn clear_layout(&mut self, node_id: NodeId, position: Point) {
-        if let Some(node) = self.core.nodes.get_mut(node_id) {
-            node.rect = Rect::new(position.x, position.y, 0, 0);
-            node.content_size = Size::default();
-            node.canvas = Size::default();
-            node.scroll = Point::zero();
-            node.view = View::default();
-        }
+    fn clear_layout(&mut self, node_id: NodeId, position: Point) -> Result<()> {
+        let node = self
+            .core
+            .nodes
+            .get_mut(node_id)
+            .ok_or(Error::NodeNotFound(node_id))?;
+        node.rect = Rect::new(position.x, position.y, 0, 0);
+        node.content_size = Size::default();
+        node.canvas = Size::default();
+        node.scroll = Point::zero();
+        node.view = View::default();
         let children = self
             .core
             .nodes
             .get(node_id)
             .map(|node| node.children.clone())
-            .unwrap_or_default();
+            .ok_or(Error::NodeNotFound(node_id))?;
         for child in children {
-            self.clear_layout(child, Point::zero());
+            self.clear_layout(child, Point::zero())?;
         }
+        Ok(())
     }
 }
 
@@ -2032,6 +2238,7 @@ impl Widget for RootContainer {
 mod tests {
     use std::sync::{Arc, Mutex};
 
+    use proptest::{prelude::*, test_runner::TestCaseResult};
     use rand::{RngExt, SeedableRng, rngs::StdRng};
 
     use super::*;
@@ -2113,8 +2320,183 @@ mod tests {
         }
     }
 
+    #[derive(Clone, Debug)]
+    enum TreeMutation {
+        Attach { parent: usize, child: usize },
+        Detach { child: usize },
+        SetChildren { parent: usize, children: Vec<usize> },
+        Remove { node: usize },
+        Replace { target: usize },
+    }
+
+    const PROPERTY_NODE_COUNT: usize = 8;
+
     fn attach_root_child(core: &mut Core, child: NodeId) -> Result<()> {
         core.set_children(core.root, vec![child])
+    }
+
+    fn simple_widget() -> TestWidget {
+        TestWidget::new(|_constraints| Measurement::Fixed(Size::new(1, 1))).0
+    }
+
+    fn property_nodes(core: &mut Core) -> Vec<Option<NodeId>> {
+        (0..PROPERTY_NODE_COUNT)
+            .map(|_| Some(core.create_detached(simple_widget())))
+            .collect()
+    }
+
+    fn target_node(core: &Core, nodes: &[Option<NodeId>], target: usize) -> Option<NodeId> {
+        if target == 0 {
+            Some(core.root)
+        } else {
+            nodes.get(target - 1).copied().flatten()
+        }
+    }
+
+    fn child_node(nodes: &[Option<NodeId>], child: usize) -> Option<NodeId> {
+        nodes.get(child).copied().flatten()
+    }
+
+    fn forget_removed_nodes(nodes: &mut [Option<NodeId>], core: &Core) {
+        for node in nodes {
+            if node.is_some_and(|node_id| !core.nodes.contains_key(node_id)) {
+                *node = None;
+            }
+        }
+    }
+
+    fn tree_mutation_strategy() -> impl Strategy<Value = Vec<TreeMutation>> {
+        prop::collection::vec(
+            prop_oneof![
+                (0usize..=PROPERTY_NODE_COUNT, 0usize..PROPERTY_NODE_COUNT)
+                    .prop_map(|(parent, child)| TreeMutation::Attach { parent, child }),
+                (0usize..PROPERTY_NODE_COUNT).prop_map(|child| TreeMutation::Detach { child }),
+                (
+                    0usize..=PROPERTY_NODE_COUNT,
+                    prop::collection::vec(0usize..PROPERTY_NODE_COUNT, 0..=4),
+                )
+                    .prop_map(|(parent, children)| TreeMutation::SetChildren { parent, children }),
+                (0usize..PROPERTY_NODE_COUNT).prop_map(|node| TreeMutation::Remove { node }),
+                (0usize..=PROPERTY_NODE_COUNT).prop_map(|target| TreeMutation::Replace { target }),
+            ],
+            1..80,
+        )
+    }
+
+    fn apply_tree_mutation(
+        core: &mut Core,
+        nodes: &mut [Option<NodeId>],
+        mutation: &TreeMutation,
+    ) -> TestCaseResult {
+        match mutation {
+            TreeMutation::Attach { parent, child } => {
+                if let (Some(parent_id), Some(child_id)) =
+                    (target_node(core, nodes, *parent), child_node(nodes, *child))
+                {
+                    drop(core.attach(parent_id, child_id));
+                }
+            }
+            TreeMutation::Detach { child } => {
+                if let Some(child_id) = child_node(nodes, *child) {
+                    drop(core.detach(child_id));
+                }
+            }
+            TreeMutation::SetChildren { parent, children } => {
+                if let Some(parent_id) = target_node(core, nodes, *parent) {
+                    let child_ids = children
+                        .iter()
+                        .filter_map(|child| child_node(nodes, *child))
+                        .collect();
+                    drop(core.set_children(parent_id, child_ids));
+                }
+            }
+            TreeMutation::Remove { node } => {
+                if let Some(node_id) = child_node(nodes, *node) {
+                    drop(core.remove_subtree(node_id));
+                }
+            }
+            TreeMutation::Replace { target } => {
+                if let Some(target_id) = target_node(core, nodes, *target) {
+                    drop(core.replace_subtree(target_id, simple_widget()));
+                }
+            }
+        }
+
+        forget_removed_nodes(nodes, core);
+        let validation = core.validate_invariants();
+        prop_assert!(
+            validation.is_ok(),
+            "after {mutation:?}, validation failed: {validation:?}"
+        );
+        Ok(())
+    }
+
+    proptest! {
+        #[test]
+        fn random_tree_mutations_preserve_invariants(mutations in tree_mutation_strategy()) {
+            let mut core = Core::new();
+            let mut nodes = property_nodes(&mut core);
+            prop_assert!(core.validate_invariants().is_ok());
+
+            for mutation in mutations {
+                apply_tree_mutation(&mut core, &mut nodes, &mutation)?;
+            }
+        }
+    }
+
+    #[test]
+    fn validate_invariants_accepts_laid_out_tree() -> Result<()> {
+        let mut core = Core::new();
+        let parent = core.create_detached(simple_widget());
+        let child = core.create_detached(simple_widget());
+        core.set_children(parent, vec![child])?;
+        attach_root_child(&mut core, parent)?;
+        core.update_layout(Size::new(10, 10))?;
+        core.validate_invariants()
+    }
+
+    #[test]
+    fn validate_invariants_rejects_detached_focus() {
+        let mut core = Core::new();
+        let child = core.create_detached(FocusableWidget);
+        core.set_focus(child);
+
+        let error = core
+            .validate_invariants()
+            .expect_err("detached focus should fail validation");
+        assert!(matches!(error, Error::Invariant(_)));
+    }
+
+    #[test]
+    fn validate_invariants_rejects_missing_child_link() -> Result<()> {
+        let mut core = Core::new();
+        let parent = core.create_detached(simple_widget());
+        let child = core.create_detached(simple_widget());
+        core.set_children(parent, vec![child])?;
+        core.nodes.remove(child);
+
+        let error = core
+            .validate_invariants()
+            .expect_err("missing child should fail validation");
+        assert!(matches!(error, Error::Invariant(_)));
+        Ok(())
+    }
+
+    #[test]
+    fn validate_invariants_rejects_initialized_attached_unmounted_node() -> Result<()> {
+        let mut core = Core::new();
+        let child = core.create_detached(simple_widget());
+        attach_root_child(&mut core, child)?;
+        if let Some(node) = core.nodes.get_mut(child) {
+            node.mounted = false;
+            node.initialized = true;
+        }
+
+        let error = core
+            .validate_invariants()
+            .expect_err("initialized attached node must be mounted");
+        assert!(matches!(error, Error::Invariant(_)));
+        Ok(())
     }
 
     #[test]

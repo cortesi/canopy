@@ -558,11 +558,10 @@ pub fn runloop_with_options(mut cnpy: Canopy, options: RunloopOptions) -> Result
         None
     };
 
-    let rx = if let Some(x) = cnpy.event_rx.take() {
-        x
-    } else {
-        panic!("core event loop already initialized")
-    };
+    let rx = cnpy
+        .event_rx
+        .take()
+        .ok_or_else(|| error::Error::InvalidOperation("event loop already initialized".into()))?;
 
     let mut events = EventSource::new(rx);
     event_emitter(cnpy.event_tx.clone());
