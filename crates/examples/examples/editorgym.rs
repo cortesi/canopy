@@ -32,7 +32,7 @@ fn main() -> Result<()> {
 
     Root::load(&mut cnpy)?;
     EditorGym::load(&mut cnpy)?;
-    setup_bindings(&mut cnpy);
+    setup_bindings(&mut cnpy)?;
 
     let args = Args::parse();
     if args.api {

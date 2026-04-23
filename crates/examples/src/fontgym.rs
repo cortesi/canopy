@@ -1127,7 +1127,7 @@ fn status_text(height: u32, state: FontStyleState) -> String {
 }
 
 /// Install key bindings for focus navigation.
-pub fn setup_bindings(c: &mut Canopy) {
+pub fn setup_bindings(c: &mut Canopy) -> Result<()> {
     c.run_default_script(
         r#"
 canopy.bind_with("Tab", { desc = "Next focus" }, function()
@@ -1137,6 +1137,6 @@ canopy.bind_with("BackTab", { desc = "Previous focus" }, function()
     root.focus("Prev")
 end)
 "#,
-    )
-    .unwrap();
+    )?;
+    Ok(())
 }

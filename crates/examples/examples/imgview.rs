@@ -33,7 +33,7 @@ fn main() -> Result<()> {
         let mut cnpy = Canopy::new();
         Root::load(&mut cnpy)?;
         ImageView::load(&mut cnpy)?;
-        setup_bindings(&mut cnpy);
+        setup_bindings(&mut cnpy)?;
         print_luau_api(&mut cnpy)?;
         return Ok(());
     }

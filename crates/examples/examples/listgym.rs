@@ -31,7 +31,7 @@ fn main() -> Result<()> {
     let mut cnpy = Canopy::new();
     Root::load(&mut cnpy)?;
     ListGym::load(&mut cnpy)?;
-    setup_bindings(&mut cnpy);
+    setup_bindings(&mut cnpy)?;
 
     let args = Args::parse();
     if args.api {

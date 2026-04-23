@@ -188,7 +188,7 @@ fn main() -> Result<()> {
             )
         }
         Command::Image(image_args) => {
-            setup_image_bindings(&mut cnpy);
+            setup_image_bindings(&mut cnpy)?;
             let view = ImageView::from_path(&image_args.path)?;
             DemoHost::new(view, size, true)
                 .with_inner_padding(0)
@@ -208,7 +208,7 @@ fn main() -> Result<()> {
             DemoHost::new(ListDemo::new(interval), size, args.frame)
         }
         Command::Term => {
-            setup_term_bindings(&mut cnpy);
+            setup_term_bindings(&mut cnpy)?;
             DemoHost::new(TermDemo::new(), size, args.frame)
         }
         Command::Editor(editor_args) => {
@@ -217,7 +217,7 @@ fn main() -> Result<()> {
             let extension = file_extension(&editor_args.path);
             let title = file_title(&editor_args.path);
 
-            setup_bindings(&mut cnpy);
+            setup_bindings(&mut cnpy)?;
 
             DemoHost::new(
                 WidgetEditor::new(contents, extension, title),
@@ -316,7 +316,7 @@ fn file_title(path: &Path) -> String {
 }
 
 /// Register keybindings for image zooming and panning.
-fn setup_image_bindings(cnpy: &mut Canopy) {
+fn setup_image_bindings(cnpy: &mut Canopy) -> Result<()> {
     cnpy.run_default_script(
         r#"
 canopy.bind_with("q", { desc = "Quit" }, function()
@@ -353,18 +353,18 @@ canopy.bind_with("Down", { path = "image_view/", desc = "Pan down" }, function()
     image_view.pan("Down")
 end)
 "#,
-    )
-    .unwrap();
+    )?;
+    Ok(())
 }
 
 /// Register keybindings for the terminal demo.
-fn setup_term_bindings(cnpy: &mut Canopy) {
+fn setup_term_bindings(cnpy: &mut Canopy) -> Result<()> {
     cnpy.run_default_script(
         r#"
 canopy.bind_with("ctrl-Tab", { path = "term_demo/**/", desc = "Next tab" }, function()
     term_demo.next_tab()
 end)
 "#,
-    )
-    .unwrap();
+    )?;
+    Ok(())
 }

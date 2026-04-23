@@ -443,7 +443,7 @@ impl Loader for TermGym {
 }
 
 /// Install key bindings and styles for the terminal gym demo.
-pub fn setup_bindings(cnpy: &mut Canopy) {
+pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
     use canopy::style::StyleBuilder;
 
     let selected_attrs = AttrSet {
@@ -496,5 +496,6 @@ pub fn setup_bindings(cnpy: &mut Canopy) {
         )
         .apply();
 
-    cnpy.run_default_script(DEFAULT_BINDINGS).unwrap();
+    cnpy.run_default_script(DEFAULT_BINDINGS)?;
+    Ok(())
 }

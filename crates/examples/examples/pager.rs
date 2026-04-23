@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut cnpy = Canopy::new();
     Root::load(&mut cnpy)?;
     Pager::load(&mut cnpy)?;
-    setup_bindings(&mut cnpy);
+    setup_bindings(&mut cnpy)?;
 
     if args.api {
         print_luau_api(&mut cnpy)?;

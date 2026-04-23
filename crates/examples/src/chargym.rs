@@ -304,6 +304,7 @@ impl Loader for CharGym {
 }
 
 /// Install key bindings for the chargym demo.
-pub fn setup_bindings(cnpy: &mut Canopy) {
-    cnpy.run_default_script(DEFAULT_BINDINGS).unwrap();
+pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
+    cnpy.run_default_script(DEFAULT_BINDINGS)?;
+    Ok(())
 }

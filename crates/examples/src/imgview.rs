@@ -41,8 +41,9 @@ end)
 "#;
 
 /// Configure key bindings for the image viewer.
-pub fn setup_bindings(cnpy: &mut Canopy) {
-    cnpy.run_default_script(DEFAULT_BINDINGS).unwrap();
+pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
+    cnpy.run_default_script(DEFAULT_BINDINGS)?;
+    Ok(())
 }
 
 /// Create a Canopy application for viewing the specified image.
@@ -51,7 +52,7 @@ pub fn create_app(image_path: &Path) -> Result<Canopy> {
 
     Root::load(&mut cnpy)?;
     ImageView::load(&mut cnpy)?;
-    setup_bindings(&mut cnpy);
+    setup_bindings(&mut cnpy)?;
 
     let view = ImageView::from_path(image_path)?;
     let app_id = cnpy.core.create_detached(view);
