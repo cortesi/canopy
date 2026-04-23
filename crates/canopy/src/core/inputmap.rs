@@ -346,13 +346,18 @@ impl InputMap {
         Ok(())
     }
 
+    /// Return the active input mode, falling back to the default mode if needed.
+    fn active_mode(&self) -> Option<&InputMode> {
+        self.modes
+            .get(&self.current_mode)
+            .or_else(|| self.modes.get(DEFAULT_MODE))
+    }
+
     /// Resolve a binding in the current mode.
     ///
     /// The input is normalized before matching.
     pub fn resolve(&self, path: &Path, input: &InputSpec) -> Option<BindingTarget> {
-        // Unwrap is safe, because we make it impossible for our current mode to
-        // be non-existent.
-        let m = self.modes.get(&self.current_mode).unwrap();
+        let m = self.active_mode()?;
         if let Some(action) = m.resolve(path, input) {
             return Some(action);
         }
@@ -370,7 +375,7 @@ impl InputMap {
         path: &Path,
         input: &InputSpec,
     ) -> Option<(BindingTarget, PathMatch)> {
-        let m = self.modes.get(&self.current_mode).unwrap();
+        let m = self.active_mode()?;
         if let Some(action) = m.resolve_match(path, input) {
             return Some(action);
         }
@@ -735,6 +740,26 @@ mod tests {
             m.resolve(&"foo".into(), &InputSpec::Key('b'.into()))
                 .unwrap(),
             BindingTarget::Script(a_default)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn missing_active_mode_falls_back_to_default() -> Result<()> {
+        let mut m = InputMap::new();
+        let e = script::ScriptHost::new();
+        let a_default = e.compile("x()")?;
+        m.bind("", InputSpec::Key('b'.into()), "", a_default)?;
+        m.current_mode = "missing".to_string();
+
+        assert_eq!(
+            m.resolve(&"foo".into(), &InputSpec::Key('b'.into()))
+                .unwrap(),
+            BindingTarget::Script(a_default)
+        );
+        assert!(
+            m.resolve_match(&"foo".into(), &InputSpec::Key('x'.into()))
+                .is_none()
         );
         Ok(())
     }
