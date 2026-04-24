@@ -2,12 +2,17 @@ use std::{
     any::TypeId,
     cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
-    ptr::NonNull,
 };
 
 use slotmap::SlotMap;
 
-use super::{focus::FocusRecoveryHint, help::OwnedHelpSnapshot};
+use super::{
+    focus::FocusRecoveryHint,
+    help::OwnedHelpSnapshot,
+    widget_access::{
+        WidgetMutGuard, WidgetReadGuard, WidgetSlotGuard, WidgetSlotPolicy, validate_slot,
+    },
+};
 use crate::{
     ReadContext,
     backend::BackendControl,
@@ -83,67 +88,6 @@ struct NodeStructureSnapshot {
     children: Vec<NodeId>,
     /// Stored keyed child map.
     child_keys: HashMap<String, NodeId>,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-/// How invariant validation should treat temporarily extracted widget slots.
-enum WidgetSlotPolicy {
-    /// Widget slots must be present and available for inspection.
-    RequirePresent,
-    /// Widget slots may be borrowed or temporarily empty during a callback.
-    AllowBorrowed,
-}
-
-/// Guard that restores a widget slot on drop.
-struct WidgetSlotGuard {
-    /// Core pointer used for restoration.
-    core: NonNull<Core>,
-    /// Node that owns the widget slot.
-    node_id: NodeId,
-    /// Temporarily held widget.
-    widget: Option<Box<dyn Widget>>,
-}
-
-impl WidgetSlotGuard {
-    /// Take ownership of the widget from its slot.
-    fn new(core: &Core, node_id: NodeId) -> Result<Self> {
-        let node = core
-            .nodes
-            .get(node_id)
-            .ok_or(Error::NodeNotFound(node_id))?;
-        let mut slot = node
-            .widget
-            .try_borrow_mut()
-            .map_err(|_| Error::ReentrantWidgetBorrow(node_id))?;
-        let widget = slot.take().ok_or(Error::ReentrantWidgetBorrow(node_id))?;
-        Ok(Self {
-            core: NonNull::from(core),
-            node_id,
-            widget: Some(widget),
-        })
-    }
-
-    /// Borrow the widget mutably for the call.
-    fn widget_mut(&mut self) -> &mut dyn Widget {
-        self.widget
-            .as_deref_mut()
-            .expect("widget missing from guard")
-    }
-}
-
-impl Drop for WidgetSlotGuard {
-    fn drop(&mut self) {
-        // SAFETY: core pointer remains valid for the lifetime of the guard.
-        unsafe {
-            let core = self.core.as_ref();
-            if let Some(node) = core.nodes.get(self.node_id)
-                && let Ok(mut slot) = node.widget.try_borrow_mut()
-                && slot.is_none()
-            {
-                *slot = self.widget.take();
-            }
-        }
-    }
 }
 
 impl Core {
@@ -603,18 +547,7 @@ impl Core {
         node: &Node,
         policy: WidgetSlotPolicy,
     ) -> Result<()> {
-        let Ok(widget) = node.widget.try_borrow() else {
-            return match policy {
-                WidgetSlotPolicy::RequirePresent => Err(Error::ReentrantWidgetBorrow(node_id)),
-                WidgetSlotPolicy::AllowBorrowed => Ok(()),
-            };
-        };
-        if widget.is_some() || policy == WidgetSlotPolicy::AllowBorrowed {
-            return Ok(());
-        }
-        Err(invariant_violation(format!(
-            "node {node_id:?} has an empty widget slot"
-        )))
+        validate_slot(node_id, node, policy)
     }
 
     /// Validate parent, child, and keyed child links for a node.
@@ -1217,8 +1150,22 @@ impl Core {
         node_id: NodeId,
         f: impl FnOnce(&mut dyn Widget, &mut Self) -> R,
     ) -> Result<R> {
-        let mut guard = WidgetSlotGuard::new(self, node_id)?;
+        let mut guard = WidgetSlotGuard::take(self, node_id)?;
         Ok(f(guard.widget_mut(), self))
+    }
+
+    /// Borrow a widget immutably for a read-only core query.
+    pub(crate) fn with_widget_read<R>(
+        &self,
+        node_id: NodeId,
+        f: impl FnOnce(&dyn Widget, &Self) -> R,
+    ) -> Result<R> {
+        let node = self
+            .nodes
+            .get(node_id)
+            .ok_or(Error::NodeNotFound(node_id))?;
+        let guard = WidgetReadGuard::borrow(node_id, node)?;
+        Ok(f(guard.widget(), self))
     }
 
     /// Take a mutable reference to a widget for rendering with a shared Core context.
@@ -1227,7 +1174,11 @@ impl Core {
         node_id: NodeId,
         f: impl FnOnce(&mut dyn Widget, &Self) -> R,
     ) -> Result<R> {
-        let mut guard = WidgetSlotGuard::new(self, node_id)?;
+        let node = self
+            .nodes
+            .get(node_id)
+            .ok_or(Error::NodeNotFound(node_id))?;
+        let mut guard = WidgetMutGuard::borrow(node_id, node)?;
         Ok(f(guard.widget_mut(), self))
     }
 
@@ -1346,14 +1297,11 @@ fn refresh_layouts(core: &mut Core) -> Result<()> {
         if !node.layout_dirty {
             continue;
         }
-        let widget = node
-            .widget
-            .try_borrow()
-            .map_err(|_| Error::ReentrantWidgetBorrow(node_id))?;
-        let widget = widget
-            .as_ref()
-            .ok_or(Error::ReentrantWidgetBorrow(node_id))?;
-        node.layout = widget.layout();
+        let layout = {
+            let widget = WidgetReadGuard::borrow(node_id, node)?;
+            widget.widget().layout()
+        };
+        node.layout = layout;
         node.layout_dirty = false;
     }
     Ok(())
@@ -1930,7 +1878,7 @@ impl<'a> LayoutPass<'a> {
         let ctx = CanvasContext::new(&canvas_children);
         let canvas = self
             .core
-            .with_widget_view(node_id, |widget, _core| widget.canvas(view_size, &ctx))
+            .with_widget_read(node_id, |widget, _core| widget.canvas(view_size, &ctx))
             .map_err(|error| Error::Layout(format!("canvas for {node_id:?}: {error}")))?;
         Ok(Size::new(
             canvas.w.max(view_size.w),
@@ -1997,7 +1945,7 @@ impl<'a> LayoutPass<'a> {
         }
         let measured = self
             .core
-            .with_widget_view(node_id, |widget, _core| widget.measure(constraints))
+            .with_widget_read(node_id, |widget, _core| widget.measure(constraints))
             .map_err(|error| Error::Layout(format!("measure for {node_id:?}: {error}")))?;
         self.measure_cache.insert(key, measured);
         Ok(measured)
@@ -2233,7 +2181,10 @@ impl Widget for RootContainer {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
+    use std::{
+        panic::{AssertUnwindSafe, catch_unwind},
+        sync::{Arc, Mutex},
+    };
 
     use proptest::{prelude::*, test_runner::TestCaseResult};
     use rand::{RngExt, SeedableRng, rngs::StdRng};
@@ -2493,6 +2444,66 @@ mod tests {
             .validate_invariants()
             .expect_err("initialized attached node must be mounted");
         assert!(matches!(error, Error::Invariant(_)));
+        Ok(())
+    }
+
+    #[test]
+    fn read_only_widget_access_allows_nested_reads() -> Result<()> {
+        let mut core = Core::new();
+        let child = core.create_detached(simple_widget());
+
+        let nested = core.with_widget_read(child, |_widget, core| {
+            core.with_widget_read(child, |_widget, _core| true)
+        })??;
+
+        assert!(nested);
+        Ok(())
+    }
+
+    #[test]
+    fn widget_slot_restores_after_nested_access_error() -> Result<()> {
+        let mut core = Core::new();
+        let child = core.create_detached(simple_widget());
+
+        core.with_widget_mut(child, |_widget, core| {
+            let nested = core.with_widget_mut(child, |_widget, _core| ());
+            assert!(matches!(
+                nested,
+                Err(Error::ReentrantWidgetBorrow(node)) if node == child
+            ));
+        })?;
+        core.with_widget_mut(child, |_widget, _core| ())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn widget_slot_restores_after_callback_error() -> Result<()> {
+        let mut core = Core::new();
+        let child = core.create_detached(simple_widget());
+
+        let result = core.with_widget_mut(child, |_widget, _core| -> Result<()> {
+            Err(Error::Invalid("callback failed".into()))
+        })?;
+        assert!(matches!(result, Err(Error::Invalid(_))));
+        core.with_widget_mut(child, |_widget, _core| ())?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn widget_slot_restores_after_callback_panic() -> Result<()> {
+        let mut core = Core::new();
+        let child = core.create_detached(simple_widget());
+
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            let _ignored = core.with_widget_mut(child, |_widget, _core| {
+                panic!("callback panic");
+            });
+        }));
+
+        assert!(result.is_err());
+        core.with_widget_mut(child, |_widget, _core| ())?;
         Ok(())
     }
 

@@ -2,6 +2,7 @@ use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt, mem,
+    ptr::NonNull,
     rc::Rc,
     result::Result as StdResult,
 };
@@ -17,6 +18,7 @@ use crate::{
     core::{
         context::{Context, CoreContext, CoreViewContext, ReadContext},
         inputmap::{self, BindingTarget},
+        widget_access,
     },
     error::{self, Result},
     event::{key, mouse},
@@ -110,15 +112,57 @@ struct LuauState {
 
 /// Active script execution context.
 #[derive(Clone, Copy)]
-struct ScriptGlobal {
+struct ScriptExecutionContext {
     /// Current canopy instance.
-    canopy: *mut Canopy,
+    canopy: NonNull<Canopy>,
     /// Node used as the command dispatch anchor.
     node_id: NodeId,
 }
 
+impl ScriptExecutionContext {
+    /// Construct a context for the active script call.
+    fn new(canopy: &mut Canopy, node_id: NodeId) -> Self {
+        Self {
+            canopy: NonNull::from(canopy),
+            node_id,
+        }
+    }
+
+    /// Execute a closure with the active canopy instance.
+    fn with_canopy<R>(self, f: impl FnOnce(&mut Canopy, NodeId) -> Result<R>) -> Result<R> {
+        // SAFETY: contexts are pushed only by `ScriptContextGuard` while executing a script
+        // callback on the current thread. The guard is stack-scoped and pops this context on drop,
+        // so the pointer is used only while the original `&mut Canopy` is live.
+        let canopy = unsafe { &mut *self.canopy.as_ptr() };
+        f(canopy, self.node_id)
+    }
+}
+
+/// Stack guard for the thread-local script execution context.
+struct ScriptContextGuard;
+
+impl ScriptContextGuard {
+    /// Push a script execution context for the current thread.
+    fn push(canopy: &mut Canopy, node_id: NodeId) -> Self {
+        SCRIPT_GLOBAL.with(|stack| {
+            stack
+                .borrow_mut()
+                .push(ScriptExecutionContext::new(canopy, node_id));
+        });
+        Self
+    }
+}
+
+impl Drop for ScriptContextGuard {
+    fn drop(&mut self) {
+        SCRIPT_GLOBAL.with(|stack| {
+            let _ = stack.borrow_mut().pop();
+        });
+    }
+}
+
 thread_local! {
-    static SCRIPT_GLOBAL: RefCell<Vec<ScriptGlobal>> = const { RefCell::new(Vec::new()) };
+    static SCRIPT_GLOBAL: RefCell<Vec<ScriptExecutionContext>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Luau host state shared by the canopy runtime.
@@ -202,17 +246,8 @@ fn with_script_context<R>(
     node_id: NodeId,
     f: impl FnOnce() -> Result<R>,
 ) -> Result<R> {
-    SCRIPT_GLOBAL.with(|stack| {
-        stack.borrow_mut().push(ScriptGlobal {
-            canopy: canopy as *mut Canopy,
-            node_id,
-        });
-    });
-    let result = f();
-    SCRIPT_GLOBAL.with(|stack| {
-        let _ = stack.borrow_mut().pop();
-    });
-    result
+    let _guard = ScriptContextGuard::push(canopy, node_id);
+    f()
 }
 
 /// Execute a closure with mutable access to the active canopy instance.
@@ -222,9 +257,7 @@ fn with_current_canopy<R>(f: impl FnOnce(&mut Canopy, NodeId) -> Result<R>) -> R
             .borrow()
             .last()
             .ok_or_else(|| error::Error::Script("no active script context".into()))?;
-        // SAFETY: the pointer is set from a live `&mut Canopy` for the duration of script execution.
-        let canopy = unsafe { &mut *current.canopy };
-        f(canopy, current.node_id)
+        current.with_canopy(f)
     })
 }
 
@@ -337,16 +370,7 @@ fn node_info_to_lua(lua: &Lua, canopy: &Canopy, node_id: NodeId) -> Result<Table
     } else {
         rect_to_lua(lua, node.view.content).map_err(lua_to_canopy)?
     };
-    let accept_focus = match node.widget.try_borrow() {
-        Ok(widget) => match widget.as_ref() {
-            Some(widget) => {
-                let ctx = CoreViewContext::new(&canopy.core, node_id);
-                widget.accept_focus(&ctx)
-            }
-            None => false,
-        },
-        Err(_) => false,
-    };
+    let accept_focus = widget_access::accepts_focus(&canopy.core, node_id);
     table_with_entries(
         lua,
         [
@@ -1822,6 +1846,8 @@ impl LuauHost {
 
 #[cfg(test)]
 mod tests {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
     use super::*;
     use crate::testing::ttree::{get_state, run_ttree};
 
@@ -1853,6 +1879,52 @@ mod tests {
             let host = c.script_host.clone();
             let err = host.execute(c, tree.b_a, scr);
             assert!(matches!(err, Err(error::Error::Script(_))));
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn script_context_restores_nested_contexts() -> Result<()> {
+        run_ttree(|c, _, tree| {
+            with_script_context(c, tree.a, || {
+                with_current_canopy(|canopy, node| {
+                    assert_eq!(node, tree.a);
+                    with_script_context(canopy, tree.b, || {
+                        let inner = with_current_canopy(|_, node| Ok(node))?;
+                        assert_eq!(inner, tree.b);
+                        Ok(())
+                    })
+                })?;
+
+                let restored = with_current_canopy(|_, node| Ok(node))?;
+                assert_eq!(restored, tree.a);
+                Ok(())
+            })?;
+
+            let error = with_current_canopy(|_, _| Ok(())).unwrap_err();
+            assert!(matches!(
+                error,
+                error::Error::Script(message) if message == "no active script context"
+            ));
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn script_context_pops_after_panic() -> Result<()> {
+        run_ttree(|c, _, tree| {
+            let result = catch_unwind(AssertUnwindSafe(|| {
+                let _ignored: Result<()> = with_script_context(c, tree.a, || -> Result<()> {
+                    panic!("script callback panic");
+                });
+            }));
+
+            assert!(result.is_err());
+            let error = with_current_canopy(|_, _| Ok(())).unwrap_err();
+            assert!(matches!(
+                error,
+                error::Error::Script(message) if message == "no active script context"
+            ));
             Ok(())
         })
     }

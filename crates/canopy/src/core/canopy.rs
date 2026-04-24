@@ -1082,7 +1082,7 @@ impl Canopy {
         let mut current = self.core.focus;
         let mut cursor_spec: Option<(NodeId, View, cursor::Cursor)> = None;
         while let Some(id) = current {
-            let cursor = self.core.with_widget_view(id, |w, _| w.cursor())?;
+            let cursor = self.core.with_widget_read(id, |w, _| w.cursor())?;
             if let Some(node_cursor) = cursor
                 && let Some(node) = self.core.nodes.get(id)
             {

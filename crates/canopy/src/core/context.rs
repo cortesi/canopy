@@ -10,6 +10,7 @@ use super::{
     id::{NodeId, TypedId},
     style::Effect,
     view::View,
+    widget_access,
     world::Core,
 };
 use crate::{
@@ -1290,17 +1291,7 @@ impl dyn Context + '_ {
 
 /// Return whether a node's widget reports it accepts focus.
 fn node_accepts_focus(core: &Core, node_id: NodeId) -> bool {
-    let Some(node) = core.nodes.get(node_id) else {
-        return false;
-    };
-    let Ok(widget) = node.widget.try_borrow() else {
-        return false;
-    };
-    let Some(widget) = widget.as_ref() else {
-        return false;
-    };
-    let ctx = CoreViewContext::new(core, node_id);
-    widget.accept_focus(&ctx)
+    widget_access::accepts_focus(core, node_id)
 }
 
 /// Return true if `node` is within the subtree rooted at `root`.

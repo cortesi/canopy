@@ -81,78 +81,132 @@ dispatch. This reduces correctness risk and makes binding behavior easier to exp
 The current slot-removal model permits powerful widget callbacks, but it spreads a risky
 ownership pattern across the core. Narrowing the unsafe boundary should be a priority.
 
-1. [ ] Replace direct mutable widget extraction with an explicit widget access module.
-2. [ ] Keep any remaining unsafe code inside that module with audited invariants.
-3. [ ] Make widget restoration panic-safe and test nested access, panic, and early return.
-4. [ ] Split read-only layout/render access from mutation hooks where practical.
-5. [ ] Evaluate a command-buffer or `TreeMutator` model for widget-triggered tree edits.
-6. [ ] Convert `with_script_context` to an RAII guard that always pops thread-local state.
-7. [ ] Replace raw script `*mut Canopy` access with an explicit execution context if viable.
-8. [ ] Add deterministic tests for nested script callbacks, release, unbind, and dispatch.
+1. [x] Replace direct mutable widget extraction with an explicit widget access module.
+2. [x] Keep any remaining unsafe code inside that module with audited invariants.
+3. [x] Make widget restoration panic-safe and test nested access, panic, and early return.
+4. [x] Split read-only layout/render access from mutation hooks where practical.
+5. [x] Evaluate a command-buffer or `TreeMutator` model for widget-triggered tree edits.
+6. [x] Convert `with_script_context` to an RAII guard that always pops thread-local state.
+7. [x] Replace raw script `*mut Canopy` access with an explicit execution context if viable.
+8. [x] Add deterministic tests for nested script callbacks, release, unbind, and dispatch.
 
-## 4. Stage Four: Strengthen Layout, Rendering, and Geometry
+Stage Three keeps the current callback mutation model, but narrows it behind
+`widget_access`. A command buffer or `TreeMutator` would be a larger API break and
+should wait until layout/render error contracts are strengthened; the new access layer is
+the intended migration point if that model becomes worthwhile.
 
-Layout and rendering are correctness-heavy and hard to inspect manually. The goal is to
-turn silent behavior into explicit contracts and test render output mechanically.
+## 4. Stage Four: Finalize Widget View and Layout Contracts
+
+Stage Three gave Canopy explicit widget access modes. Before deeper rendering work, make
+those modes part of the internal contract and make layout failures carry useful context.
+
+1. [ ] Rename or split `with_widget_view` so render-time mutable access cannot be confused
+       with read-only widget queries.
+2. [ ] Add a small helper for attaching node ID, node path, and operation name to widget
+       access, layout refresh, measure, canvas, and render errors.
+3. [ ] Decide whether `Widget::measure` and `Widget::canvas` should become fallible APIs.
+4. [ ] If measure and canvas become fallible, update trait methods, call sites, tests, and
+       script diagnostics in one coherent breaking change.
+5. [ ] If measure and canvas stay infallible, document that policy and ensure all access
+       failures still surface with node context.
+6. [ ] Add tests proving read, render, layout refresh, measure, and canvas failures report
+       the affected node and operation.
+7. [ ] Update `docs/architecture.md` with the three widget access modes: read, render, and
+       mutation callback.
+
+## 5. Stage Five: Strengthen Layout, Rendering, and Geometry
+
+Once widget view failures are explicit, tighten layout and rendering themselves. The goal
+is to make geometry and terminal output mechanically testable rather than visually
+inspected.
 
 1. [ ] Add `Layout::validate()` or introduce a validating `LayoutSpec` builder.
-2. [ ] Consider `Sizing::Fixed(u32)` or a `Length` enum instead of encoding fixed sizes
-       as min equals max.
-3. [ ] Propagate measure and canvas errors through `Core::update_layout` with node context.
-4. [ ] Add property tests for `Rect`, `LineSegment`, clipping, `View`, and scroll clamping.
-5. [ ] Add layout property tests for flex allocation, hidden nodes, and extreme sizes.
-6. [ ] Build a differential render test comparing full repaint and diff output states.
-7. [ ] Centralize grapheme writing and clipping in `TermBuf`.
-8. [ ] Test wide graphemes, continuation cells, row shifts, line shifts, and stale cells.
+2. [ ] Consider `Sizing::Fixed(u32)` or a `Length` enum instead of encoding fixed sizes as
+       min equals max.
+3. [ ] Add property tests for `Rect`, `LineSegment`, clipping, `View`, and scroll clamping.
+4. [ ] Add layout property tests for flex allocation, hidden nodes, display modes, padding,
+       and extreme sizes.
+5. [ ] Build a differential render test comparing full repaint and diff output states.
+6. [ ] Centralize grapheme writing and clipping in `TermBuf`.
+7. [ ] Test wide graphemes, continuation cells, row shifts, line shifts, and stale cells.
+8. [ ] Add compact render snapshots for failure cases that property tests find hard to
+       explain.
 
-## 5. Stage Five: Harden Scripting and MCP Evaluation
+## 6. Stage Six: Decide the Tree Mutation Boundary
 
-Scripting and MCP are user-facing automation boundaries. They should fail predictably,
-surface diagnostics, and avoid background work continuing beyond the caller's contract.
+Stage Three kept immediate mutation during callbacks because the current behavior is useful
+and now better contained. Revisit buffering only after layout and render contracts can
+report failures clearly.
+
+1. [ ] Audit every `Context` method that mutates tree structure, focus, capture, input
+       bindings, script state, or layout state during callbacks.
+2. [ ] Write `plans/tree-mutator.md` comparing immediate mutation, command buffering, and
+       a `TreeMutator` API against Canopy's callback use cases.
+3. [ ] Add regression tests for callbacks that remove or replace the current node, parent,
+       sibling, focused node, and mouse-capture node.
+4. [ ] Decide whether mutation remains immediate or moves behind a buffered boundary.
+5. [ ] If mutation remains immediate, document allowed reentrancy and add tests for the
+       documented edge cases.
+6. [ ] If mutation becomes buffered, route structural `Context` methods through the buffer
+       and drain it at callback boundaries.
+
+## 7. Stage Seven: Harden Scripting and MCP Evaluation
+
+The script context stack is now RAII-protected, but scripting and MCP remain user-facing
+automation boundaries. They should fail predictably, surface diagnostics, and avoid
+background work continuing beyond the caller's contract.
 
 1. [ ] Replace thread-per-timeout MCP evaluation with cooperative cancellation or process
        isolation.
 2. [ ] If hard cancellation is impossible, document timeout semantics and expose task state.
-3. [ ] Make Luau typechecking APIs stable across targets by returning unavailable
+3. [ ] Audit `ScriptExecutionContext` and thread-local use for cross-thread assumptions and
+       document the supported execution model.
+4. [ ] Make Luau typechecking APIs stable across targets by returning unavailable
        diagnostics instead of removing methods.
-4. [ ] Split script host responsibilities into compiler, typechecker, command binding,
+5. [ ] Split script host responsibilities into compiler, typechecker, command binding,
        closure registry, and diagnostics components.
-5. [ ] Add golden tests for generated `.d.luau`, command enums, named args, and fixtures.
-6. [ ] Add script ABI tests for optional args, error reporting, callbacks, and unbinding.
-7. [ ] Write `docs/scripting.md` from the generated API and keep it snapshotted.
+6. [ ] Add golden tests for generated `.d.luau`, command enums, named args, and fixtures.
+7. [ ] Expand script ABI tests for optional args, error reporting, nested callbacks,
+       deferred release, unbind, and dispatch.
+8. [ ] Write `docs/scripting.md` from the generated API and keep it snapshotted.
 
-## 6. Stage Six: Improve Widget Composition APIs
+## 8. Stage Eight: Improve Widget Composition APIs
 
 Built-in widgets should model the app-author API Canopy wants users to write. Shared
-composition machinery will also reduce bugs in child lifecycle and selection handling.
+composition machinery should build on the chosen mutation boundary rather than adding
+another ownership pattern.
 
-1. [ ] Add reusable keyed-child reconciliation in `canopy`.
-2. [ ] Move `List` reconciliation to the shared reconciler and remove internal panics.
-3. [ ] Make `List` selection updates return errors instead of swallowing access failures.
-4. [ ] Add focus and selection invariant tests for `List`, `Selector`, and `Dropdown`.
-5. [ ] Split `Editor` into clearer buffer, view, and controller responsibilities.
-6. [ ] Add strict `TextBuffer` accessors alongside current clamping helpers.
-7. [ ] Replace manual editor undo transactions with an RAII transaction guard.
-8. [ ] Encapsulate terminal driver threading in a private driver runtime module.
-9. [ ] Remove sleeps from terminal tests by waiting on explicit driver or session events.
-10. [ ] Audit widget constructors and replace complex public fields with config builders.
+1. [ ] Review existing `Slot`, keyed child, and typed ID helpers before adding new
+       reconciliation APIs.
+2. [ ] Add reusable keyed-child reconciliation in `canopy`.
+3. [ ] Move `List` reconciliation to the shared reconciler and remove internal panics.
+4. [ ] Make `List` selection updates return errors instead of swallowing access failures.
+5. [ ] Add focus and selection invariant tests for `List`, `Selector`, and `Dropdown`.
+6. [ ] Split `Editor` into clearer buffer, view, and controller responsibilities.
+7. [ ] Add strict `TextBuffer` accessors alongside current clamping helpers.
+8. [ ] Replace manual editor undo transactions with an RAII transaction guard.
+9. [ ] Encapsulate terminal driver threading in a private driver runtime module.
+10. [ ] Remove sleeps from terminal tests by waiting on explicit driver or session events.
+11. [ ] Audit widget constructors and replace complex public fields with config builders.
 
-## 7. Stage Seven: Narrow the Public API Surface
+## 9. Stage Nine: Narrow the Public API Surface
 
 This is the main breaking-change stage. It should happen after the internal contracts are
 tested so public API reductions can be made confidently.
 
-1. [ ] Decide the stable app-author surface: prelude, widget trait, context, layout,
+1. [ ] Use `ruskel` to capture the public API skeleton for each workspace crate before
+       changing exports.
+2. [ ] Decide the stable app-author surface: prelude, widget trait, context, layout,
        commands, styles, and selected widgets.
-2. [ ] Make `Canopy` fields private and expose focused methods for core and style access.
-3. [ ] Split `Context` into smaller capability traits or extension traits.
-4. [ ] Hide lower-level core modules that app authors should not depend on directly.
-5. [ ] Replace raw string path APIs with typed `Path`, `PathFilter`, and `NodeName`.
-6. [ ] Validate path components and scripting path strings at the boundary.
-7. [ ] Review `canopy-widgets` exports and mark experimental APIs before release.
-8. [ ] Update examples and docs so they use only the intended public surface.
+3. [ ] Make `Canopy` fields private and expose focused methods for core and style access.
+4. [ ] Split `Context` into smaller capability traits or extension traits.
+5. [ ] Hide lower-level core modules that app authors should not depend on directly.
+6. [ ] Replace raw string path APIs with typed `Path`, `PathFilter`, and `NodeName`.
+7. [ ] Validate path components and scripting path strings at the boundary.
+8. [ ] Review `canopy-widgets` exports and mark experimental APIs before release.
+9. [ ] Update examples and docs so they use only the intended public surface.
 
-## 8. Stage Eight: Expand Tooling and CI Guardrails
+## 10. Stage Ten: Expand Tooling and CI Guardrails
 
 Once the core contracts are clearer, automate checks that keep regressions from returning.
 
@@ -162,11 +216,11 @@ Once the core contracts are clearer, automate checks that keep regressions from 
 4. [ ] Add MCP headless and live evaluation fixture tests.
 5. [ ] Add benchmark coverage for layout, render diffing, text buffers, and large trees.
 6. [ ] Add a fixture inventory so CLI, MCP, and widget smoke tests cover real workflows.
-7. [ ] Move completed historical work out of `plans/next.md` or clearly mark it archived.
+7. [ ] Add an API-surface diff check using `ruskel` output for intentional public changes.
+8. [ ] Move completed historical work out of `plans/next.md` or clearly mark it archived.
 
-## Suggested First Batch
+## Suggested Next Batch
 
-The first implementation batch should be Stage One items 1 through 3. That deletes the
-stale mdBook tree and replaces it with a plain Markdown architecture document before any
-larger implementation refactors. After that, the invariant checker and tree mutation
-property tests will give later changes a better safety net.
+The next implementation batch should be Stage Four items 1 through 2. That gives the new
+`widget_access` layer stable names and consistent node-context diagnostics before changing
+layout trait signatures or adding more render property tests.

@@ -219,6 +219,45 @@ mod tests {
     }
 
     #[test]
+    fn luau_nested_callbacks_can_unbind_and_dispatch() -> Result<()> {
+        let mut harness = Harness::builder(ApiRoot).size(20, 5).build()?;
+        harness.render()?;
+
+        harness.canopy.eval_script(
+            r#"
+            local leaves = canopy.find_nodes("api_root/api_leaf")
+            canopy.set_focus(leaves[1])
+
+            local nested = 0
+            nested = canopy.bind("n", function()
+                canopy.unbind(nested)
+                canopy.cmd_on(leaves[2], "api_leaf::set", 41)
+            end)
+
+            local outer = 0
+            outer = canopy.bind("o", function()
+                canopy.send_key("n")
+                api_leaf.set(17)
+                canopy.unbind(outer)
+            end)
+        "#,
+        )?;
+
+        harness.script(r#"canopy.send_key("o")"#)?;
+        assert_eq!(leaf_values(&mut harness), vec![17, 41]);
+
+        harness.script(
+            r#"
+            canopy.send_key("o")
+            canopy.send_key("n")
+        "#,
+        )?;
+        assert_eq!(leaf_values(&mut harness), vec![17, 41]);
+
+        Ok(())
+    }
+
+    #[test]
     fn luau_can_switch_input_modes() -> Result<()> {
         let mut harness = Harness::builder(ApiRoot).size(20, 5).build()?;
 

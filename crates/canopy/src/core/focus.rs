@@ -1,6 +1,6 @@
 use crate::{
     ReadContext,
-    core::{context::CoreViewContext, id::NodeId, world::Core},
+    core::{context::CoreViewContext, id::NodeId, widget_access, world::Core},
     geom::{Direction, RectI32},
     path::Path,
 };
@@ -420,12 +420,5 @@ fn is_focus_candidate(core: &Core, node_id: NodeId, require_view: bool) -> bool 
     if require_view && node.view.is_zero() {
         return false;
     }
-    let Ok(widget) = node.widget.try_borrow() else {
-        return false;
-    };
-    let Some(widget) = widget.as_ref() else {
-        return false;
-    };
-    let ctx = CoreViewContext::new(core, node_id);
-    widget.accept_focus(&ctx)
+    widget_access::accepts_focus(core, node_id)
 }

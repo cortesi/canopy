@@ -55,6 +55,8 @@ pub mod poll;
 pub mod termbuf;
 /// Text utilities.
 pub mod text;
+/// Widget slot borrowing and extraction guards.
+mod widget_access;
 /// World state and layout integration.
 pub mod world;
 
