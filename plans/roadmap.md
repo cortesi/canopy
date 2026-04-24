@@ -100,18 +100,18 @@ the intended migration point if that model becomes worthwhile.
 Stage Three gave Canopy explicit widget access modes. Before deeper rendering work, make
 those modes part of the internal contract and make layout failures carry useful context.
 
-1. [ ] Rename or split `with_widget_view` so render-time mutable access cannot be confused
+1. [x] Rename or split `with_widget_view` so render-time mutable access cannot be confused
        with read-only widget queries.
-2. [ ] Add a small helper for attaching node ID, node path, and operation name to widget
+2. [x] Add a small helper for attaching node ID, node path, and operation name to widget
        access, layout refresh, measure, canvas, and render errors.
-3. [ ] Decide whether `Widget::measure` and `Widget::canvas` should become fallible APIs.
-4. [ ] If measure and canvas become fallible, update trait methods, call sites, tests, and
-       script diagnostics in one coherent breaking change.
-5. [ ] If measure and canvas stay infallible, document that policy and ensure all access
+3. [x] Decide whether `Widget::measure` and `Widget::canvas` should become fallible APIs.
+4. [x] Keep measure and canvas infallible for now, with fallible slot access reported as
+       contextual layout errors.
+5. [x] If measure and canvas stay infallible, document that policy and ensure all access
        failures still surface with node context.
-6. [ ] Add tests proving read, render, layout refresh, measure, and canvas failures report
+6. [x] Add tests proving read, render, layout refresh, measure, and canvas failures report
        the affected node and operation.
-7. [ ] Update `docs/architecture.md` with the three widget access modes: read, render, and
+7. [x] Update `docs/architecture.md` with the three widget access modes: read, render, and
        mutation callback.
 
 ## 5. Stage Five: Strengthen Layout, Rendering, and Geometry

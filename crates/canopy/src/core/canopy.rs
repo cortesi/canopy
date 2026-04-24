@@ -20,6 +20,7 @@ use crate::{
         help,
         style::Effect,
         view::View,
+        world::WidgetOperation,
     },
     cursor,
     error::{self, Result},
@@ -980,10 +981,14 @@ impl Canopy {
         let mut rndr = Render::new_shared(&self.style, styl, dest_buf, local_clip, screen_origin)
             .with_effects(effect_slice);
 
-        self.core.with_widget_view(node_id, |widget, core| {
+        let result = self.core.with_widget_render(node_id, |widget, core| {
             let ctx = CoreViewContext::new(core, node_id);
             widget.render(&mut rndr, &ctx)
-        })?
+        })?;
+        result.map_err(|error| {
+            self.core
+                .widget_operation_error(WidgetOperation::render("render"), node_id, &error)
+        })
     }
 
     /// Recursively render a node subtree.
@@ -1082,7 +1087,9 @@ impl Canopy {
         let mut current = self.core.focus;
         let mut cursor_spec: Option<(NodeId, View, cursor::Cursor)> = None;
         while let Some(id) = current {
-            let cursor = self.core.with_widget_read(id, |w, _| w.cursor())?;
+            let cursor =
+                self.core
+                    .with_widget_read(id, WidgetOperation::render("cursor"), |w, _| w.cursor())?;
             if let Some(node_cursor) = cursor
                 && let Some(node) = self.core.nodes.get(id)
             {
@@ -1487,7 +1494,7 @@ mod tests {
         Context, ReadContext,
         commands::{CommandNode, CommandSpec},
         derive_commands,
-        error::Result,
+        error::{Error, Result},
         geom::{Direction, Point, RectI32},
         layout::Layout,
         path::Path,
@@ -1529,6 +1536,22 @@ mod tests {
     impl Widget for StaticWidget {
         fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
             Ok(())
+        }
+    }
+
+    pub struct FailRenderWidget;
+
+    impl Widget for FailRenderWidget {
+        fn layout(&self) -> Layout {
+            Layout::fill()
+        }
+
+        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+            Err(Error::Invalid("render failed".into()))
+        }
+
+        fn name(&self) -> NodeName {
+            NodeName::convert("fail_render")
         }
     }
 
@@ -1603,6 +1626,42 @@ mod tests {
             modifiers: key::Empty,
             location: loc,
         }
+    }
+
+    fn assert_error_context(error: &Error, operation: &str, node_id: NodeId, path: &str) {
+        let message = error.to_string();
+        assert!(
+            message.contains(operation),
+            "expected {message:?} to contain operation {operation:?}"
+        );
+        assert!(
+            message.contains(&format!("{node_id:?}")),
+            "expected {message:?} to contain node ID {node_id:?}"
+        );
+        assert!(
+            message.contains(path),
+            "expected {message:?} to contain path {path:?}"
+        );
+    }
+
+    #[test]
+    fn render_errors_include_operation_node_and_path() -> Result<()> {
+        let (_, mut render) = TestRender::create();
+        let mut canopy = Canopy::new();
+        canopy
+            .core
+            .replace_subtree(canopy.core.root, FailRenderWidget)?;
+        canopy.set_root_size(Size::new(10, 2))?;
+        let node_id = canopy.core.root;
+        let path = canopy.core.node_path(canopy.core.root, node_id).to_string();
+
+        let error = canopy
+            .render(&mut render)
+            .expect_err("render should include node context");
+
+        assert!(matches!(error, Error::Render(_)));
+        assert_error_context(&error, "render", node_id, &path);
+        Ok(())
     }
 
     #[test]

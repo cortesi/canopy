@@ -50,6 +50,26 @@ and computed view caches.
 
 It does not run layout. Run layout before using screen coordinates.
 
+## Widget Access
+
+The runtime has three widget access modes.
+
+Read access borrows a widget immutably. Layout refresh, measurement, canvas
+calculation, cursor lookup, focus checks, and script node inspection use this
+mode. Nested read access is allowed.
+
+Render access borrows a widget mutably while holding only a shared `Core`
+reference. This lets widgets render local cached state without mutating the tree.
+It is separate from read access so render-only borrowing is visible in code.
+
+Mutation callback access temporarily removes the widget from its node slot and
+passes `&mut Core` to the callback. Event, mount, unmount, poll, command, and
+test helper callbacks use this mode. Nested access to the same widget fails
+instead of aliasing the widget.
+
+All widget access failures include the operation, node ID, node path, and source
+error. The access layer owns the unsafe restoration boundary.
+
 ## Layout
 
 Layout starts at the root with the terminal size. Each node gets an outer
@@ -57,17 +77,18 @@ rectangle relative to its parent's content origin. Padding produces content size
 The parent's direction, sizing, gap, alignment, display, and overflow settings
 place its children.
 
-Measurement is a widget hook. A widget returns a fixed content size or asks layout
-to wrap visible children. Layout may measure a widget several times in one pass.
+Measurement is an infallible widget hook. A widget returns a fixed content size
+or asks layout to wrap visible children. Layout may measure a widget several
+times in one pass.
 
-The canvas is the scrollable content extent. It is at least the content size.
-Layout clamps scroll after every pass.
+Canvas calculation is also infallible. It returns the scrollable content extent,
+which is at least the content size. Layout clamps scroll after every pass.
 
 Hidden nodes and `Display::None` nodes do not participate in visible layout.
 Layout clears their subtree caches.
 
-Layout errors must surface. Re-entrant widget access, missing nodes, and failed
-widget hooks must not become zero measurements or fallback canvases.
+Layout errors must surface. Re-entrant widget access and missing nodes must not
+become zero measurements or fallback canvases.
 
 ## Rendering
 
@@ -131,4 +152,3 @@ Do not hide internal errors behind harmless defaults. If layout cannot measure a
 node, canvas computation cannot access a widget, or the runloop has consumed its
 event receiver, return a typed error with enough context to debug the phase and
 node.
-

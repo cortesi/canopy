@@ -90,6 +90,52 @@ struct NodeStructureSnapshot {
     child_keys: HashMap<String, NodeId>,
 }
 
+/// Widget operation whose failures should carry node context.
+#[derive(Clone, Copy)]
+pub struct WidgetOperation {
+    /// Error category used for reporting.
+    kind: WidgetOperationKind,
+    /// Short operation name.
+    name: &'static str,
+}
+
+impl WidgetOperation {
+    /// Construct a generic widget access operation.
+    pub(crate) const fn access(name: &'static str) -> Self {
+        Self {
+            kind: WidgetOperationKind::Access,
+            name,
+        }
+    }
+
+    /// Construct a layout-phase widget operation.
+    pub(crate) const fn layout(name: &'static str) -> Self {
+        Self {
+            kind: WidgetOperationKind::Layout,
+            name,
+        }
+    }
+
+    /// Construct a render-phase widget operation.
+    pub(crate) const fn render(name: &'static str) -> Self {
+        Self {
+            kind: WidgetOperationKind::Render,
+            name,
+        }
+    }
+}
+
+/// Error category for contextual widget operation failures.
+#[derive(Clone, Copy)]
+enum WidgetOperationKind {
+    /// Generic widget access failure.
+    Access,
+    /// Layout-phase failure.
+    Layout,
+    /// Render-phase failure.
+    Render,
+}
+
 impl Core {
     /// Create a new Core with a default root node.
     pub fn new() -> Self {
@@ -1150,7 +1196,13 @@ impl Core {
         node_id: NodeId,
         f: impl FnOnce(&mut dyn Widget, &mut Self) -> R,
     ) -> Result<R> {
-        let mut guard = WidgetSlotGuard::take(self, node_id)?;
+        let mut guard = WidgetSlotGuard::take(self, node_id).map_err(|error| {
+            self.widget_operation_error(
+                WidgetOperation::access("mutation callback"),
+                node_id,
+                &error,
+            )
+        })?;
         Ok(f(guard.widget_mut(), self))
     }
 
@@ -1158,18 +1210,21 @@ impl Core {
     pub(crate) fn with_widget_read<R>(
         &self,
         node_id: NodeId,
+        operation: WidgetOperation,
         f: impl FnOnce(&dyn Widget, &Self) -> R,
     ) -> Result<R> {
         let node = self
             .nodes
             .get(node_id)
-            .ok_or(Error::NodeNotFound(node_id))?;
-        let guard = WidgetReadGuard::borrow(node_id, node)?;
+            .ok_or(Error::NodeNotFound(node_id))
+            .map_err(|error| self.widget_operation_error(operation, node_id, &error))?;
+        let guard = WidgetReadGuard::borrow(node_id, node)
+            .map_err(|error| self.widget_operation_error(operation, node_id, &error))?;
         Ok(f(guard.widget(), self))
     }
 
-    /// Take a mutable reference to a widget for rendering with a shared Core context.
-    pub(crate) fn with_widget_view<R>(
+    /// Borrow a widget mutably for rendering with a shared Core context.
+    pub(crate) fn with_widget_render<R>(
         &self,
         node_id: NodeId,
         f: impl FnOnce(&mut dyn Widget, &Self) -> R,
@@ -1177,9 +1232,52 @@ impl Core {
         let node = self
             .nodes
             .get(node_id)
-            .ok_or(Error::NodeNotFound(node_id))?;
-        let mut guard = WidgetMutGuard::borrow(node_id, node)?;
+            .ok_or(Error::NodeNotFound(node_id))
+            .map_err(|error| {
+                self.widget_operation_error(
+                    WidgetOperation::render("render access"),
+                    node_id,
+                    &error,
+                )
+            })?;
+        let mut guard = WidgetMutGuard::borrow(node_id, node).map_err(|error| {
+            self.widget_operation_error(WidgetOperation::render("render access"), node_id, &error)
+        })?;
         Ok(f(guard.widget_mut(), self))
+    }
+
+    /// Attach node and operation context to a widget operation failure.
+    pub(crate) fn widget_operation_error(
+        &self,
+        operation: WidgetOperation,
+        node_id: NodeId,
+        source: &Error,
+    ) -> Error {
+        let message = self.node_operation_message(operation.name, node_id, source);
+        match operation.kind {
+            WidgetOperationKind::Access => Error::WidgetAccess(message),
+            WidgetOperationKind::Layout => Error::Layout(message),
+            WidgetOperationKind::Render => Error::Render(message),
+        }
+    }
+
+    /// Format a node operation failure with operation, node ID, path, and source.
+    fn node_operation_message(&self, operation: &str, node_id: NodeId, source: &Error) -> String {
+        let path = self.node_path_label(node_id);
+        format!("{operation} for node {node_id:?} at {path}: {source}")
+    }
+
+    /// Return a path label suitable for diagnostics.
+    fn node_path_label(&self, node_id: NodeId) -> String {
+        if !self.nodes.contains_key(node_id) {
+            return "<missing>".into();
+        }
+        let path = self.node_path(self.root, node_id).to_string();
+        if path == "/" && node_id != self.root {
+            "<detached>".into()
+        } else {
+            path
+        }
     }
 
     /// Build a command-scope frame for a specific event.
@@ -1293,16 +1391,21 @@ fn view_has_cached_state(view: View) -> bool {
 
 /// Refresh cached layout configurations for nodes marked dirty.
 fn refresh_layouts(core: &mut Core) -> Result<()> {
-    for (node_id, node) in core.nodes.iter_mut() {
-        if !node.layout_dirty {
-            continue;
+    let dirty = core
+        .nodes
+        .iter()
+        .filter_map(|(node_id, node)| node.layout_dirty.then_some(node_id))
+        .collect::<Vec<_>>();
+    for node_id in dirty {
+        let layout = core.with_widget_read(
+            node_id,
+            WidgetOperation::layout("layout refresh"),
+            |widget, _core| widget.layout(),
+        )?;
+        if let Some(node) = core.nodes.get_mut(node_id) {
+            node.layout = layout;
+            node.layout_dirty = false;
         }
-        let layout = {
-            let widget = WidgetReadGuard::borrow(node_id, node)?;
-            widget.widget().layout()
-        };
-        node.layout = layout;
-        node.layout_dirty = false;
     }
     Ok(())
 }
@@ -1864,22 +1967,33 @@ impl<'a> LayoutPass<'a> {
 
     /// Compute the scrollable canvas size for a node.
     fn compute_canvas(&self, node_id: NodeId, view_size: Size<u32>) -> Result<Size<u32>> {
-        let children = self.visible_children(node_id)?;
+        let children = self.visible_children(node_id).map_err(|error| {
+            self.core
+                .widget_operation_error(WidgetOperation::layout("canvas"), node_id, &error)
+        })?;
         let mut canvas_children = Vec::with_capacity(children.len());
         for child in children {
             let node = self
                 .core
                 .nodes
                 .get(child)
-                .ok_or(Error::NodeNotFound(child))?;
+                .ok_or(Error::NodeNotFound(child))
+                .map_err(|error| {
+                    self.core.widget_operation_error(
+                        WidgetOperation::layout("canvas"),
+                        node_id,
+                        &error,
+                    )
+                })?;
             let child_canvas: Size<u32> = node.canvas;
             canvas_children.push(CanvasChild::new(node.rect, child_canvas));
         }
         let ctx = CanvasContext::new(&canvas_children);
-        let canvas = self
-            .core
-            .with_widget_read(node_id, |widget, _core| widget.canvas(view_size, &ctx))
-            .map_err(|error| Error::Layout(format!("canvas for {node_id:?}: {error}")))?;
+        let canvas = self.core.with_widget_read(
+            node_id,
+            WidgetOperation::layout("canvas"),
+            |widget, _core| widget.canvas(view_size, &ctx),
+        )?;
         Ok(Size::new(
             canvas.w.max(view_size.w),
             canvas.h.max(view_size.h),
@@ -1943,10 +2057,11 @@ impl<'a> LayoutPass<'a> {
         if let Some(m) = self.measure_cache.get(&key) {
             return Ok(*m);
         }
-        let measured = self
-            .core
-            .with_widget_read(node_id, |widget, _core| widget.measure(constraints))
-            .map_err(|error| Error::Layout(format!("measure for {node_id:?}: {error}")))?;
+        let measured = self.core.with_widget_read(
+            node_id,
+            WidgetOperation::layout("measure"),
+            |widget, _core| widget.measure(constraints),
+        )?;
         self.measure_cache.insert(key, measured);
         Ok(measured)
     }
@@ -2287,6 +2402,22 @@ mod tests {
         TestWidget::new(|_constraints| Measurement::Fixed(Size::new(1, 1))).0
     }
 
+    fn assert_error_context(error: &Error, operation: &str, node_id: NodeId, path: &str) {
+        let message = error.to_string();
+        assert!(
+            message.contains(operation),
+            "expected {message:?} to contain operation {operation:?}"
+        );
+        assert!(
+            message.contains(&format!("{node_id:?}")),
+            "expected {message:?} to contain node ID {node_id:?}"
+        );
+        assert!(
+            message.contains(path),
+            "expected {message:?} to contain path {path:?}"
+        );
+    }
+
     fn property_nodes(core: &mut Core) -> Vec<Option<NodeId>> {
         (0..PROPERTY_NODE_COUNT)
             .map(|_| Some(core.create_detached(simple_widget())))
@@ -2452,11 +2583,41 @@ mod tests {
         let mut core = Core::new();
         let child = core.create_detached(simple_widget());
 
-        let nested = core.with_widget_read(child, |_widget, core| {
-            core.with_widget_read(child, |_widget, _core| true)
-        })??;
+        let nested = core.with_widget_read(
+            child,
+            WidgetOperation::access("outer read"),
+            |_widget, core| {
+                core.with_widget_read(
+                    child,
+                    WidgetOperation::access("inner read"),
+                    |_widget, _core| true,
+                )
+            },
+        )??;
 
         assert!(nested);
+        Ok(())
+    }
+
+    #[test]
+    fn widget_read_errors_include_operation_node_and_path() -> Result<()> {
+        let mut core = Core::new();
+        let child = core.create_detached(simple_widget());
+        attach_root_child(&mut core, child)?;
+        let path = core.node_path(core.root, child).to_string();
+
+        let error = core
+            .with_widget_mut(child, |_widget, core| {
+                core.with_widget_read(
+                    child,
+                    WidgetOperation::access("test read"),
+                    |_widget, _core| (),
+                )
+            })?
+            .expect_err("nested read should fail while the widget is extracted");
+
+        assert!(matches!(error, Error::WidgetAccess(_)));
+        assert_error_context(&error, "test read", child, &path);
         Ok(())
     }
 
@@ -2467,13 +2628,71 @@ mod tests {
 
         core.with_widget_mut(child, |_widget, core| {
             let nested = core.with_widget_mut(child, |_widget, _core| ());
-            assert!(matches!(
-                nested,
-                Err(Error::ReentrantWidgetBorrow(node)) if node == child
-            ));
+            let error = nested.expect_err("nested mutation should fail");
+            assert!(matches!(error, Error::WidgetAccess(_)));
+            assert_error_context(&error, "mutation callback", child, "<detached>");
         })?;
         core.with_widget_mut(child, |_widget, _core| ())?;
 
+        Ok(())
+    }
+
+    #[test]
+    fn layout_refresh_errors_include_operation_node_and_path() -> Result<()> {
+        let mut core = Core::new();
+        let child = core.create_detached(simple_widget());
+        attach_root_child(&mut core, child)?;
+        let path = core.node_path(core.root, child).to_string();
+        core.nodes[child].layout_dirty = true;
+
+        let error = core
+            .with_widget_mut(child, |_widget, core| refresh_layouts(core))?
+            .expect_err("layout refresh should fail while the widget is extracted");
+
+        assert!(matches!(error, Error::Layout(_)));
+        assert_error_context(&error, "layout refresh", child, &path);
+        Ok(())
+    }
+
+    #[test]
+    fn measure_errors_include_operation_node_and_path() -> Result<()> {
+        let mut core = Core::new();
+        let child = core.create_detached(simple_widget());
+        attach_root_child(&mut core, child)?;
+        let path = core.node_path(core.root, child).to_string();
+        let constraints = MeasureConstraints {
+            width: Constraint::AtMost(1),
+            height: Constraint::AtMost(1),
+        };
+
+        let error = core
+            .with_widget_mut(child, |_widget, core| {
+                let mut pass = LayoutPass::new(core);
+                pass.measure_cached(child, constraints)
+            })?
+            .expect_err("measure should fail while the widget is extracted");
+
+        assert!(matches!(error, Error::Layout(_)));
+        assert_error_context(&error, "measure", child, &path);
+        Ok(())
+    }
+
+    #[test]
+    fn canvas_errors_include_operation_node_and_path() -> Result<()> {
+        let mut core = Core::new();
+        let child = core.create_detached(simple_widget());
+        attach_root_child(&mut core, child)?;
+        let path = core.node_path(core.root, child).to_string();
+
+        let error = core
+            .with_widget_mut(child, |_widget, core| {
+                let pass = LayoutPass::new(core);
+                pass.compute_canvas(child, Size::new(1, 1))
+            })?
+            .expect_err("canvas should fail while the widget is extracted");
+
+        assert!(matches!(error, Error::Layout(_)));
+        assert_error_context(&error, "canvas", child, &path);
         Ok(())
     }
 
