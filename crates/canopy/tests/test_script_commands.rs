@@ -39,6 +39,11 @@ mod tests {
         }
 
         #[command]
+        fn set_optional(&mut self, count: Option<usize>) {
+            self.value = count.unwrap_or(99);
+        }
+
+        #[command]
         fn set_payload(&mut self, _ctx: &mut dyn Context, payload: Payload) {
             let Payload { count } = payload;
             self.payload_value = count;
@@ -86,6 +91,16 @@ mod tests {
         harness.script(r#"script_target.set(5)"#)?;
         harness.with_root_widget::<ScriptTarget, _>(|target| {
             assert_eq!(target.value, 5);
+        });
+
+        harness.script(r#"script_target.set_optional()"#)?;
+        harness.with_root_widget::<ScriptTarget, _>(|target| {
+            assert_eq!(target.value, 99);
+        });
+
+        harness.script(r#"script_target.set_optional({ count = 14 })"#)?;
+        harness.with_root_widget::<ScriptTarget, _>(|target| {
+            assert_eq!(target.value, 14);
         });
 
         harness.script(r#"script_target.set_payload({ count = 3 })"#)?;

@@ -56,7 +56,7 @@ impl CanopyMcpServer {
     async fn script_eval(&self, params: ScriptEvalRequest) -> ToolResult<CallToolResult> {
         Ok(self
             .evaluator
-            .evaluate_with_timeout(params)
+            .evaluate_with_timeout(&params)
             .to_tool_result())
     }
 
@@ -347,6 +347,10 @@ mod tests {
             .expect("script_eval");
         let payload = result.structured_content.expect("structured content");
         assert_eq!(payload["success"], serde_json::Value::Bool(false));
+        assert_eq!(
+            payload["state"],
+            serde_json::Value::String("failed".to_string())
+        );
         #[cfg(not(target_os = "macos"))]
         {
             assert_eq!(
@@ -365,7 +369,11 @@ mod tests {
                 payload["error"]["type"],
                 serde_json::Value::String("runtime".to_string())
             );
-            assert!(payload["diagnostics"].as_array().is_none_or(Vec::is_empty));
+            assert!(
+                payload["diagnostics"].as_array().is_some_and(|items| items
+                    .iter()
+                    .any(|item| item["severity"] == "unavailable"))
+            );
         }
     }
 }

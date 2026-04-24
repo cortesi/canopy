@@ -89,7 +89,7 @@ pub fn run_suite(
     for path in scripts {
         let fixture = fixture_for_script(&config.suite_dir, &path);
         let source = fs::read_to_string(&path)?;
-        let outcome = evaluator.evaluate_with_timeout(ScriptEvalRequest {
+        let outcome = evaluator.evaluate_with_timeout(&ScriptEvalRequest {
             script: source,
             fixture: fixture.clone(),
             timeout_ms: config.timeout_ms,

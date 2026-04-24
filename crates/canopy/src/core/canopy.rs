@@ -4,6 +4,7 @@ use std::{
     io::Write,
     path::Path as FsPath,
     sync::mpsc,
+    time::Duration,
 };
 
 use comfy_table::{ContentArrangement, Table, presets::UTF8_FULL};
@@ -348,6 +349,20 @@ impl Canopy {
         host.execute_value(self, self.core.root_id(), script_id)
     }
 
+    /// Evaluate a Luau source string with a cooperative timeout.
+    pub fn eval_script_value_with_timeout(
+        &mut self,
+        source: &str,
+        timeout: Duration,
+    ) -> Result<commands::ArgValue> {
+        if !self.script_host.is_finalized() {
+            self.finalize_api()?;
+        }
+        let script_id = self.compile_script(source)?;
+        let host = self.script_host.clone();
+        host.execute_value_with_timeout(self, self.core.root_id(), script_id, timeout)
+    }
+
     /// Evaluate the app's built-in default bindings script.
     pub fn run_default_script(&mut self, source: &str) -> Result<()> {
         self.eval_script(source)
@@ -444,9 +459,8 @@ impl Canopy {
         f(&mut ctx)
     }
 
-    #[cfg(all(feature = "typecheck", not(target_os = "macos")))]
     /// Type-check a Luau source string against the finalized app API.
-    pub fn check_script(&mut self, source: &str) -> Result<luau_analyze::CheckResult> {
+    pub fn check_script(&mut self, source: &str) -> Result<script::ScriptCheckResult> {
         if !self.script_host.is_finalized() {
             self.finalize_api()?;
         }

@@ -156,19 +156,19 @@ The script context stack is now RAII-protected, but scripting and MCP remain use
 automation boundaries. They should fail predictably, surface diagnostics, and avoid
 background work continuing beyond the caller's contract.
 
-1. [ ] Replace thread-per-timeout MCP evaluation with cooperative cancellation or process
+1. [x] Replace thread-per-timeout MCP evaluation with cooperative cancellation or process
        isolation.
-2. [ ] If hard cancellation is impossible, document timeout semantics and expose task state.
-3. [ ] Audit `ScriptExecutionContext` and thread-local use for cross-thread assumptions and
+2. [x] If hard cancellation is impossible, document timeout semantics and expose task state.
+3. [x] Audit `ScriptExecutionContext` and thread-local use for cross-thread assumptions and
        document the supported execution model.
-4. [ ] Make Luau typechecking APIs stable across targets by returning unavailable
+4. [x] Make Luau typechecking APIs stable across targets by returning unavailable
        diagnostics instead of removing methods.
-5. [ ] Split script host responsibilities into compiler, typechecker, command binding,
+5. [x] Split script host responsibilities into compiler, typechecker, command binding,
        closure registry, and diagnostics components.
-6. [ ] Add golden tests for generated `.d.luau`, command enums, named args, and fixtures.
-7. [ ] Expand script ABI tests for optional args, error reporting, nested callbacks,
+6. [x] Add golden tests for generated `.d.luau`, command enums, named args, and fixtures.
+7. [x] Expand script ABI tests for optional args, error reporting, nested callbacks,
        deferred release, unbind, and dispatch.
-8. [ ] Write `docs/scripting.md` from the generated API and keep it snapshotted.
+8. [x] Write `docs/scripting.md` from the generated API and keep it snapshotted.
 
 ## 8. Stage Eight: Improve Widget Composition APIs
 

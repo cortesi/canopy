@@ -5,11 +5,12 @@ use std::{
     ptr::NonNull,
     rc::Rc,
     result::Result as StdResult,
+    time::{Duration, Instant},
 };
 
 use mlua::{
     Error as LuaError, Function, Lua, LuaOptions, MetaMethod, MultiValue, RegistryKey, StdLib,
-    Table, UserDataMethods, Value,
+    Table, UserDataMethods, Value, VmState,
 };
 
 use crate::{
@@ -42,6 +43,109 @@ pub struct ScriptAssertion {
     pub passed: bool,
     /// Assertion message or fallback description.
     pub message: String,
+}
+
+/// Structured Luau typecheck diagnostic.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScriptCheckDiagnostic {
+    /// Diagnostic severity such as `error`, `warning`, or `unavailable`.
+    pub severity: String,
+    /// One-based line number, or zero when the diagnostic is not source-bound.
+    pub line: usize,
+    /// One-based column number, or zero when the diagnostic is not source-bound.
+    pub column: usize,
+    /// Human-readable diagnostic message.
+    pub message: String,
+}
+
+impl ScriptCheckDiagnostic {
+    /// Construct an error diagnostic at a source location.
+    pub fn error(line: usize, column: usize, message: impl Into<String>) -> Self {
+        Self {
+            severity: "error".to_string(),
+            line,
+            column,
+            message: message.into(),
+        }
+    }
+
+    /// Construct a diagnostic for unavailable typechecking support.
+    pub fn unavailable(message: impl Into<String>) -> Self {
+        Self {
+            severity: "unavailable".to_string(),
+            line: 0,
+            column: 0,
+            message: message.into(),
+        }
+    }
+
+    /// Return true if this diagnostic should fail script evaluation.
+    pub fn is_error(&self) -> bool {
+        self.severity == "error"
+    }
+}
+
+/// Stable result returned by Luau typechecking APIs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScriptCheckResult {
+    /// Diagnostics emitted by the checker or by the unavailable checker shim.
+    diagnostics: Vec<ScriptCheckDiagnostic>,
+    /// Whether the checker timed out.
+    timed_out: bool,
+    /// Whether the checker was cancelled.
+    cancelled: bool,
+}
+
+impl ScriptCheckResult {
+    /// Construct a successful typecheck result.
+    pub fn ok() -> Self {
+        Self {
+            diagnostics: Vec::new(),
+            timed_out: false,
+            cancelled: false,
+        }
+    }
+
+    /// Construct a result indicating typechecking is unavailable on this target.
+    pub fn unavailable(message: impl Into<String>) -> Self {
+        Self {
+            diagnostics: vec![ScriptCheckDiagnostic::unavailable(message)],
+            timed_out: false,
+            cancelled: false,
+        }
+    }
+
+    /// Return true if there are no failing diagnostics.
+    pub fn is_ok(&self) -> bool {
+        !self.has_errors() && !self.timed_out && !self.cancelled
+    }
+
+    /// Return all diagnostics.
+    pub fn diagnostics(&self) -> &[ScriptCheckDiagnostic] {
+        &self.diagnostics
+    }
+
+    /// Return true when the result contains failing diagnostics.
+    pub fn has_errors(&self) -> bool {
+        self.diagnostics.iter().any(ScriptCheckDiagnostic::is_error)
+    }
+
+    /// Return failing diagnostics.
+    pub fn errors(&self) -> impl Iterator<Item = &ScriptCheckDiagnostic> {
+        self.diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.is_error())
+    }
+
+    /// Return true if typechecking timed out.
+    pub fn timed_out(&self) -> bool {
+        self.timed_out
+    }
+
+    /// Return true if typechecking was cancelled.
+    pub fn cancelled(&self) -> bool {
+        self.cancelled
+    }
 }
 
 /// Opaque wrapper used when a script needs to keep a node handle.
@@ -85,29 +189,208 @@ struct StoredFunction {
     refs: usize,
 }
 
-/// Shared mutable host state.
+/// Compiled script cache.
 #[derive(Default)]
-struct LuauState {
+struct ScriptCache {
     /// Cached compiled scripts.
     scripts: HashMap<ScriptId, Script>,
     /// Next script identifier.
     next_script_id: ScriptId,
+}
+
+impl ScriptCache {
+    /// Construct an empty cache with one-based script ids.
+    fn new() -> Self {
+        Self {
+            next_script_id: 1,
+            ..Self::default()
+        }
+    }
+
+    /// Insert a compiled script and return its id.
+    fn insert(&mut self, function: Function, source: &str) -> ScriptId {
+        let id = self.next_script_id;
+        self.next_script_id = self.next_script_id.saturating_add(1);
+        self.scripts.insert(
+            id,
+            Script {
+                function,
+                source: source.to_string(),
+            },
+        );
+        id
+    }
+
+    /// Return a cloned compiled script.
+    fn get(&self, id: ScriptId) -> Option<Script> {
+        self.scripts.get(&id).cloned()
+    }
+
+    /// Return the original source for a script.
+    fn source(&self, id: ScriptId) -> Option<String> {
+        self.scripts
+            .get(&id)
+            .map(|script| script.source().to_string())
+    }
+}
+
+/// Stored Luau closure registry.
+#[derive(Default)]
+struct ClosureRegistry {
     /// Stored Luau closures keyed by stable id.
     functions: HashMap<LuauFunctionId, StoredFunction>,
     /// Next stored function identifier.
     next_function_id: u64,
+    /// Whether zero-ref closures need a post-callback registry sweep.
+    pending_sweep: bool,
+}
+
+impl ClosureRegistry {
+    /// Construct an empty registry with one-based function ids.
+    fn new() -> Self {
+        Self {
+            next_function_id: 1,
+            ..Self::default()
+        }
+    }
+
+    /// Insert a registry key and return its stable function id.
+    fn insert(&mut self, key: RegistryKey, label: Option<String>) -> LuauFunctionId {
+        let id = LuauFunctionId(self.next_function_id);
+        self.next_function_id = self.next_function_id.saturating_add(1);
+        self.functions.insert(
+            id,
+            StoredFunction {
+                key,
+                label,
+                refs: 1,
+            },
+        );
+        id
+    }
+
+    /// Return a stored function.
+    fn get(&self, id: LuauFunctionId) -> Option<&StoredFunction> {
+        self.functions.get(&id)
+    }
+
+    /// Return the help/debug label for a stored function.
+    fn label(&self, id: LuauFunctionId) -> Option<String> {
+        self.functions
+            .get(&id)
+            .and_then(|function| function.label.clone())
+    }
+
+    /// Release one reference and return a function ready for registry removal.
+    fn release(&mut self, id: LuauFunctionId, defer_removal: bool) -> Option<StoredFunction> {
+        let function = self.functions.get_mut(&id)?;
+        function.refs = function.refs.saturating_sub(1);
+        if function.refs != 0 {
+            return None;
+        }
+        if defer_removal {
+            self.pending_sweep = true;
+            None
+        } else {
+            self.functions.remove(&id)
+        }
+    }
+
+    /// Drain zero-ref closures queued during active callbacks.
+    fn drain_released(&mut self) -> Vec<(LuauFunctionId, StoredFunction)> {
+        if !self.pending_sweep {
+            return Vec::new();
+        }
+        self.pending_sweep = false;
+        let to_remove = self
+            .functions
+            .iter()
+            .filter_map(|(id, function)| (function.refs == 0).then_some(*id))
+            .collect::<Vec<_>>();
+        let mut removed = Vec::with_capacity(to_remove.len());
+        for id in to_remove {
+            if let Some(function) = self.functions.remove(&id) {
+                removed.push((id, function));
+            }
+        }
+        removed
+    }
+}
+
+/// Diagnostics collected during script execution.
+#[derive(Default)]
+struct ScriptDiagnostics {
+    /// Log messages emitted by the most recent script evaluation.
+    logs: Vec<String>,
+    /// Assertion results emitted by the most recent script evaluation.
+    assertions: Vec<ScriptAssertion>,
+}
+
+impl ScriptDiagnostics {
+    /// Clear recorded logs and assertions.
+    fn clear(&mut self) {
+        self.logs.clear();
+        self.assertions.clear();
+    }
+
+    /// Append a log line.
+    fn push_log(&mut self, message: String) {
+        self.logs.push(message);
+    }
+
+    /// Append an assertion result.
+    fn push_assertion(&mut self, passed: bool, message: String) {
+        self.assertions.push(ScriptAssertion { passed, message });
+    }
+
+    /// Drain log lines.
+    fn take_logs(&mut self) -> Vec<String> {
+        mem::take(&mut self.logs)
+    }
+
+    /// Drain assertion results.
+    fn take_assertions(&mut self) -> Vec<ScriptAssertion> {
+        mem::take(&mut self.assertions)
+    }
+}
+
+/// Shared mutable host state.
+#[derive(Default)]
+struct LuauState {
+    /// Compiled script cache.
+    scripts: ScriptCache,
+    /// Stored closure registry.
+    closures: ClosureRegistry,
+    /// Execution diagnostics.
+    diagnostics: ScriptDiagnostics,
     /// Cached rendered d.luau definitions.
     definitions: Option<String>,
     /// Whether the command surface has been finalized.
     finalized: bool,
     /// Deferred hooks to execute after the first live render.
     on_start_hooks: Vec<LuauFunctionId>,
-    /// Whether zero-ref closures need a post-callback registry sweep.
-    pending_function_sweep: bool,
-    /// Log messages emitted by the most recent script evaluation.
-    logs: Vec<String>,
-    /// Assertion results emitted by the most recent script evaluation.
-    assertions: Vec<ScriptAssertion>,
+}
+
+impl LuauState {
+    /// Construct empty script host state.
+    fn new() -> Self {
+        Self {
+            scripts: ScriptCache::new(),
+            closures: ClosureRegistry::new(),
+            ..Self::default()
+        }
+    }
+
+    /// Mark the script API as finalized and cache its definitions.
+    fn finalize(&mut self, definitions: String) {
+        self.definitions = Some(definitions);
+        self.finalized = true;
+    }
+
+    /// Drain deferred `on_start` hooks in registration order.
+    fn drain_on_start_hooks(&mut self) -> Vec<LuauFunctionId> {
+        mem::take(&mut self.on_start_hooks)
+    }
 }
 
 /// Active script execution context.
@@ -174,6 +457,18 @@ pub(crate) struct LuauHost {
     state: Rc<RefCell<LuauState>>,
 }
 
+/// RAII guard for a temporary Luau execution interrupt.
+struct ScriptInterruptGuard<'a> {
+    /// Host whose interrupt should be cleared on drop.
+    host: &'a LuauHost,
+}
+
+impl<'a> Drop for ScriptInterruptGuard<'a> {
+    fn drop(&mut self) {
+        self.host.lua.remove_interrupt();
+    }
+}
+
 /// Backwards-compatible type alias used throughout the current codebase.
 pub(crate) type ScriptHost = LuauHost;
 
@@ -201,26 +496,21 @@ fn format_parse_error(err: LuaError) -> error::ParseError {
     }
 }
 
-#[cfg(all(feature = "typecheck", not(target_os = "macos")))]
 /// Format Luau typecheck diagnostics for display.
-fn format_typecheck_diagnostics(result: &luau_analyze::CheckResult) -> String {
+fn format_typecheck_diagnostics(result: &ScriptCheckResult) -> String {
     let mut lines = result
-        .diagnostics
-        .iter()
-        .filter(|diagnostic| diagnostic.severity == luau_analyze::Severity::Error)
+        .errors()
         .map(|diagnostic| {
             format!(
                 "{}:{}: {}",
-                diagnostic.line + 1,
-                diagnostic.col + 1,
-                diagnostic.message
+                diagnostic.line, diagnostic.column, diagnostic.message
             )
         })
         .collect::<Vec<_>>();
-    if result.timed_out {
+    if result.timed_out() {
         lines.push("type checking timed out".to_string());
     }
-    if result.cancelled {
+    if result.cancelled() {
         lines.push("type checking was cancelled".to_string());
     }
     lines.join("\n")
@@ -889,11 +1179,7 @@ impl LuauHost {
         drop(root_lua);
         let host = Self {
             lua,
-            state: Rc::new(RefCell::new(LuauState {
-                next_script_id: 1,
-                next_function_id: 1,
-                ..LuauState::default()
-            })),
+            state: Rc::new(RefCell::new(LuauState::new())),
         };
         host.register_base_api()
             .expect("registering Luau base API should not fail");
@@ -905,27 +1191,82 @@ impl LuauHost {
         self.state.borrow().finalized
     }
 
-    #[cfg(all(feature = "typecheck", not(target_os = "macos")))]
+    /// Install a temporary interrupt that fails execution after the timeout.
+    fn interrupt_after(&self, timeout: Duration) -> ScriptInterruptGuard<'_> {
+        let timeout_ms = timeout.as_millis();
+        let deadline = Instant::now() + timeout;
+        self.lua.set_interrupt(move |_| {
+            if Instant::now() >= deadline {
+                Err(LuaError::runtime(format!(
+                    "script evaluation exceeded {timeout_ms}ms"
+                )))
+            } else {
+                Ok(VmState::Continue)
+            }
+        });
+        ScriptInterruptGuard { host: self }
+    }
+
     /// Type-check a Luau source string against the finalized canopy API.
-    pub fn check_script(&self, source: &str) -> Result<luau_analyze::CheckResult> {
+    pub fn check_script(&self, source: &str) -> Result<ScriptCheckResult> {
         let definitions = self.state.borrow().definitions.clone().ok_or_else(|| {
             error::Error::InvalidOperation(
                 "cannot type-check scripts before finalize_api()".to_string(),
             )
         })?;
+        self.check_script_with_definitions(source, &definitions)
+    }
+
+    #[cfg(all(feature = "typecheck", not(target_os = "macos")))]
+    /// Type-check Luau source against pre-rendered definitions.
+    fn check_script_with_definitions(
+        &self,
+        source: &str,
+        definitions: &str,
+    ) -> Result<ScriptCheckResult> {
         let mut checker = luau_analyze::Checker::new()
             .map_err(|err| error::Error::Script(format!("creating Luau checker failed: {err}")))?;
-        checker.add_definitions(&definitions).map_err(|err| {
+        checker.add_definitions(definitions).map_err(|err| {
             error::Error::Script(format!(
                 "loading Luau definitions into checker failed: {err}"
             ))
         })?;
-        checker
+        let result = checker
             .check(&strict_source(source))
-            .map_err(|err| error::Error::Script(format!("checking Luau script failed: {err}")))
+            .map_err(|err| error::Error::Script(format!("checking Luau script failed: {err}")))?;
+        let diagnostics = result
+            .diagnostics
+            .iter()
+            .map(|diagnostic| ScriptCheckDiagnostic {
+                severity: match diagnostic.severity {
+                    luau_analyze::Severity::Error => "error",
+                    luau_analyze::Severity::Warning => "warning",
+                }
+                .to_string(),
+                line: diagnostic.line as usize + 1,
+                column: diagnostic.col as usize + 1,
+                message: diagnostic.message.clone(),
+            })
+            .collect();
+        Ok(ScriptCheckResult {
+            diagnostics,
+            timed_out: result.timed_out,
+            cancelled: result.cancelled,
+        })
     }
 
-    #[cfg(all(feature = "typecheck", not(target_os = "macos")))]
+    #[cfg(not(all(feature = "typecheck", not(target_os = "macos"))))]
+    /// Return an unavailable diagnostic when the checker is not compiled for this target.
+    fn check_script_with_definitions(
+        &self,
+        _source: &str,
+        _definitions: &str,
+    ) -> Result<ScriptCheckResult> {
+        Ok(ScriptCheckResult::unavailable(
+            "Luau typechecking is unavailable for this build target",
+        ))
+    }
+
     /// Enforce Luau type checking for finalized APIs in debug builds.
     fn maybe_typecheck(&self, source: &str) -> Result<()> {
         if !cfg!(debug_assertions) || !self.is_finalized() {
@@ -941,36 +1282,27 @@ impl LuauHost {
         }
     }
 
-    /// Skip Luau type checking when the feature is disabled or unsupported on this target.
-    #[cfg(not(all(feature = "typecheck", not(target_os = "macos"))))]
-    fn maybe_typecheck(&self, _source: &str) -> Result<()> {
-        Ok(())
-    }
-
     /// Clear recorded logs and assertions for the next script evaluation.
     fn clear_diagnostics(&self) {
-        let mut state = self.state.borrow_mut();
-        state.logs.clear();
-        state.assertions.clear();
+        self.state.borrow_mut().diagnostics.clear();
     }
 
     /// Append a log line to the current evaluation state.
     fn push_log(&self, message: String) {
-        self.state.borrow_mut().logs.push(message);
+        self.state.borrow_mut().diagnostics.push_log(message);
     }
 
     /// Append an assertion result to the current evaluation state.
     fn push_assertion(&self, passed: bool, message: String) {
         self.state
             .borrow_mut()
-            .assertions
-            .push(ScriptAssertion { passed, message });
+            .diagnostics
+            .push_assertion(passed, message);
     }
 
     /// Drain deferred `on_start` hooks in registration order.
     pub fn drain_on_start_hooks(&self) -> Vec<LuauFunctionId> {
-        let mut state = self.state.borrow_mut();
-        mem::take(&mut state.on_start_hooks)
+        self.state.borrow_mut().drain_on_start_hooks()
     }
 
     /// Return true when deferred `on_start` hooks are pending.
@@ -980,12 +1312,12 @@ impl LuauHost {
 
     /// Take the logs collected during the most recent evaluation.
     pub fn take_logs(&self) -> Vec<String> {
-        mem::take(&mut self.state.borrow_mut().logs)
+        self.state.borrow_mut().diagnostics.take_logs()
     }
 
     /// Take the assertions collected during the most recent evaluation.
     pub fn take_assertions(&self) -> Vec<ScriptAssertion> {
-        mem::take(&mut self.state.borrow_mut().assertions)
+        self.state.borrow_mut().diagnostics.take_assertions()
     }
 
     /// Register base canopy globals that are available before finalization.
@@ -1568,9 +1900,7 @@ impl LuauHost {
         self.lua
             .sandbox(true)
             .map_err(|err| error::Error::Script(format!("enabling Luau sandbox failed: {err}")))?;
-        let mut state = self.state.borrow_mut();
-        state.definitions = Some(definitions);
-        state.finalized = true;
+        self.state.borrow_mut().finalize(definitions);
         Ok(())
     }
 
@@ -1668,17 +1998,7 @@ impl LuauHost {
             .set_name("canopy")
             .into_function()
             .map_err(|err| error::Error::Parse(format_parse_error(err)))?;
-        let mut state = self.state.borrow_mut();
-        let id = state.next_script_id;
-        state.next_script_id = state.next_script_id.saturating_add(1);
-        state.scripts.insert(
-            id,
-            Script {
-                function,
-                source: source.to_string(),
-            },
-        );
-        Ok(id)
+        Ok(self.state.borrow_mut().scripts.insert(function, source))
     }
 
     /// Execute a compiled script.
@@ -1698,14 +2018,34 @@ impl LuauHost {
         node_id: impl Into<NodeId>,
         sid: ScriptId,
     ) -> Result<ArgValue> {
+        self.execute_value_inner(canopy, node_id.into(), sid)
+    }
+
+    /// Execute a compiled script with a cooperative timeout.
+    pub fn execute_value_with_timeout(
+        &self,
+        canopy: &mut Canopy,
+        node_id: impl Into<NodeId>,
+        sid: ScriptId,
+        timeout: Duration,
+    ) -> Result<ArgValue> {
+        let _interrupt = self.interrupt_after(timeout);
+        self.execute_value_inner(canopy, node_id.into(), sid)
+    }
+
+    /// Execute a compiled script and return its value.
+    fn execute_value_inner(
+        &self,
+        canopy: &mut Canopy,
+        node_id: NodeId,
+        sid: ScriptId,
+    ) -> Result<ArgValue> {
         let script = self
             .state
             .borrow()
             .scripts
-            .get(&sid)
-            .cloned()
+            .get(sid)
             .ok_or_else(|| error::Error::Script(format!("script {sid} not found")))?;
-        let node_id = node_id.into();
         self.clear_diagnostics();
         let result = with_script_context(canopy, node_id, || {
             let value = script.function.call::<Value>(()).map_err(|err| {
@@ -1720,11 +2060,7 @@ impl LuauHost {
 
     /// Return the source for a cached script.
     pub fn script_source(&self, sid: ScriptId) -> Option<String> {
-        self.state
-            .borrow()
-            .scripts
-            .get(&sid)
-            .map(|script| script.source().to_string())
+        self.state.borrow().scripts.source(sid)
     }
 
     /// Store a Luau closure and return a stable host-side id.
@@ -1737,38 +2073,14 @@ impl LuauHost {
             .lua
             .create_registry_value(function)
             .map_err(|err| error::Error::Script(format!("storing Luau closure failed: {err}")))?;
-        let mut state = self.state.borrow_mut();
-        let id = LuauFunctionId(state.next_function_id);
-        state.next_function_id = state.next_function_id.saturating_add(1);
-        state.functions.insert(
-            id,
-            StoredFunction {
-                key,
-                label,
-                refs: 1,
-            },
-        );
-        Ok(id)
+        Ok(self.state.borrow_mut().closures.insert(key, label))
     }
 
     /// Release a stored function reference.
     pub fn release_function(&self, id: LuauFunctionId) {
         let removed = {
             let mut state = self.state.borrow_mut();
-            let Some(function) = state.functions.get_mut(&id) else {
-                return;
-            };
-            function.refs = function.refs.saturating_sub(1);
-            if function.refs == 0 {
-                if script_context_active() {
-                    state.pending_function_sweep = true;
-                    None
-                } else {
-                    state.functions.remove(&id)
-                }
-            } else {
-                None
-            }
+            state.closures.release(id, script_context_active())
         };
 
         if let Some(function) = removed
@@ -1780,11 +2092,7 @@ impl LuauHost {
 
     /// Return the help/debug label for a stored function.
     pub fn function_label(&self, id: LuauFunctionId) -> Option<String> {
-        self.state
-            .borrow()
-            .functions
-            .get(&id)
-            .and_then(|function| function.label.clone())
+        self.state.borrow().closures.label(id)
     }
 
     /// Execute a stored Luau closure in the current script context.
@@ -1797,8 +2105,8 @@ impl LuauHost {
         let function = {
             let state = self.state.borrow();
             let stored = state
-                .functions
-                .get(&id)
+                .closures
+                .get(id)
                 .ok_or_else(|| error::Error::Script(format!("Luau function {id:?} not found")))?;
             self.lua
                 .registry_value::<Function>(&stored.key)
@@ -1819,22 +2127,7 @@ impl LuauHost {
     fn flush_released_functions(&self) {
         let removed = {
             let mut state = self.state.borrow_mut();
-            if !state.pending_function_sweep {
-                return;
-            }
-            state.pending_function_sweep = false;
-            let to_remove = state
-                .functions
-                .iter()
-                .filter_map(|(id, function)| (function.refs == 0).then_some(*id))
-                .collect::<Vec<_>>();
-            let mut removed = Vec::with_capacity(to_remove.len());
-            for id in to_remove {
-                if let Some(function) = state.functions.remove(&id) {
-                    removed.push((id, function));
-                }
-            }
-            removed
+            state.closures.drain_released()
         };
         for (id, function) in removed {
             if let Err(err) = self.lua.remove_registry_value(function.key) {
@@ -1929,6 +2222,24 @@ mod tests {
         })
     }
 
+    #[test]
+    fn tcheck_script_api_is_stable_across_targets() -> Result<()> {
+        run_ttree(|c, _, _| {
+            c.finalize_api()?;
+            let result = c.script_host.check_script("local value: string = 1")?;
+            if result
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.severity == "unavailable")
+            {
+                assert!(result.is_ok());
+            } else {
+                assert!(result.has_errors());
+            }
+            Ok(())
+        })
+    }
+
     #[cfg(all(feature = "typecheck", not(target_os = "macos")))]
     #[test]
     fn tcheck_script_reports_type_errors() -> Result<()> {
@@ -1936,7 +2247,7 @@ mod tests {
             c.finalize_api()?;
             let result = c.script_host.check_script("local value: string = 1")?;
             assert!(!result.is_ok());
-            assert!(!result.errors().is_empty());
+            assert!(result.has_errors());
             Ok(())
         })
     }

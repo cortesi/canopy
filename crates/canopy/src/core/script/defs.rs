@@ -213,16 +213,21 @@ fn matches_primitive_number(ty: &str) -> bool {
 
 /// Extract the inner type from a single-parameter generic.
 fn unwrap_generic<'a>(ty: &'a str, name: &str) -> Option<&'a str> {
-    let suffix = format!("{name}<");
     let ty = ty.trim();
-    if let Some(rest) = ty.strip_prefix(&suffix)
-        && let Some(inner) = rest.strip_suffix('>')
-    {
-        return Some(inner.trim());
-    }
-    if let Some(rest) = ty.strip_prefix(&format!("std::option::{name}<"))
-        && let Some(inner) = rest.strip_suffix('>')
-    {
+    for prefix in [
+        name.to_string(),
+        format!("std::option::{name}"),
+        format!("core::option::{name}"),
+    ] {
+        let Some(rest) = ty.strip_prefix(&prefix) else {
+            continue;
+        };
+        let Some(rest) = rest.trim_start().strip_prefix('<') else {
+            continue;
+        };
+        let Some(inner) = rest.trim_end().strip_suffix('>') else {
+            continue;
+        };
         return Some(inner.trim());
     }
     None

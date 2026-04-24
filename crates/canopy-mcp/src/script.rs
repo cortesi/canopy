@@ -1,10 +1,9 @@
 use std::{
-    sync::{Arc, mpsc},
-    thread,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
-use canopy::{Canopy, FixtureInfo, geom::Size, testing::render::NopBackend};
+use canopy::{Canopy, FixtureInfo, commands::ArgValue, geom::Size, testing::render::NopBackend};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -45,9 +44,9 @@ pub struct ScriptEvalRequest {
 pub struct ScriptDiagnostic {
     /// Diagnostic severity such as `error` or `warning`.
     pub severity: String,
-    /// One-based line number.
+    /// One-based line number, or zero when the diagnostic is not source-bound.
     pub line: usize,
-    /// One-based column number.
+    /// One-based column number, or zero when the diagnostic is not source-bound.
     pub column: usize,
     /// Human-readable diagnostic message.
     pub message: String,
@@ -71,6 +70,18 @@ pub struct ScriptTiming {
     pub exec_ms: u64,
     /// Total wall-clock time for the request.
     pub total_ms: u64,
+}
+
+/// Evaluation task state exposed to automation callers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ScriptTaskState {
+    /// Evaluation completed successfully.
+    Completed,
+    /// Evaluation failed before completion.
+    Failed,
+    /// Evaluation stopped at the cooperative timeout boundary.
+    TimedOut,
 }
 
 impl ScriptTiming {
@@ -99,6 +110,8 @@ pub struct ScriptErrorInfo {
 pub struct ScriptEvalOutcome {
     /// Whether the script completed successfully.
     pub success: bool,
+    /// Final task state for the evaluation.
+    pub state: ScriptTaskState,
     #[serde(skip_serializing_if = "Option::is_none")]
     /// Optional JSON-serializable script return value.
     pub value: Option<JsonValue>,
@@ -145,15 +158,21 @@ impl ScriptEvalOutcome {
         diagnostics: Vec<ScriptDiagnostic>,
         timing: ScriptTiming,
     ) -> Self {
+        let error_type = error_type.into();
         Self {
             success: false,
+            state: if error_type == "timeout" {
+                ScriptTaskState::TimedOut
+            } else {
+                ScriptTaskState::Failed
+            },
             value: None,
             logs: Vec::new(),
             assertions: Vec::new(),
             diagnostics,
             timing,
             error: Some(ScriptErrorInfo {
-                error_type: error_type.into(),
+                error_type,
                 message: message.into(),
             }),
         }
@@ -204,34 +223,8 @@ impl AppEvaluator {
     }
 
     /// Evaluate a Luau script, enforcing the requested timeout when present.
-    pub fn evaluate_with_timeout(&self, request: ScriptEvalRequest) -> ScriptEvalOutcome {
-        let Some(timeout_ms) = request.timeout_ms.filter(|timeout| *timeout > 0) else {
-            return self.evaluate(&request);
-        };
-
-        let (tx, rx) = mpsc::channel();
-        let evaluator = self.clone();
-        let mut request = request;
-        request.timeout_ms = None;
-        thread::spawn(move || {
-            drop(tx.send(evaluator.evaluate(&request)));
-        });
-
-        match rx.recv_timeout(Duration::from_millis(timeout_ms)) {
-            Ok(outcome) => outcome,
-            Err(mpsc::RecvTimeoutError::Timeout) => ScriptEvalOutcome::error_only(
-                "timeout",
-                format!("script evaluation exceeded {timeout_ms}ms"),
-                Vec::new(),
-                ScriptTiming::zero(),
-            ),
-            Err(mpsc::RecvTimeoutError::Disconnected) => ScriptEvalOutcome::error_only(
-                "runtime",
-                "script evaluation thread terminated unexpectedly",
-                Vec::new(),
-                ScriptTiming::zero(),
-            ),
-        }
+    pub fn evaluate_with_timeout(&self, request: &ScriptEvalRequest) -> ScriptEvalOutcome {
+        self.evaluate(request)
     }
 
     /// Evaluate a Luau script against a fresh headless app.
@@ -267,7 +260,7 @@ impl AppEvaluator {
                 );
             }
         };
-        if !diagnostics.is_empty() {
+        if diagnostics_have_errors(&diagnostics) {
             return ScriptEvalOutcome::error_only(
                 "typecheck",
                 "script failed Luau type checking",
@@ -281,7 +274,7 @@ impl AppEvaluator {
         }
 
         let exec_start = Instant::now();
-        let eval_result = session.evaluate(&request.script);
+        let eval_result = session.evaluate(&request.script, request.timeout_ms);
         let exec_ms = exec_start.elapsed().as_millis() as u64;
         let timing = ScriptTiming {
             build_ms,
@@ -294,6 +287,7 @@ impl AppEvaluator {
         match eval_result {
             Ok(value) => ScriptEvalOutcome {
                 success: true,
+                state: ScriptTaskState::Completed,
                 value: Some(value),
                 logs,
                 assertions,
@@ -301,18 +295,7 @@ impl AppEvaluator {
                 timing,
                 error: None,
             },
-            Err(error) => ScriptEvalOutcome {
-                success: false,
-                value: None,
-                logs,
-                assertions,
-                diagnostics,
-                timing,
-                error: Some(ScriptErrorInfo {
-                    error_type: "runtime".to_string(),
-                    message: error.to_string(),
-                }),
-            },
+            Err(error) => failure_with_logs(&error, logs, assertions, diagnostics, timing),
         }
     }
 }
@@ -341,7 +324,7 @@ pub fn evaluate_live(canopy: &mut Canopy, request: &ScriptEvalRequest) -> Script
         }
     };
 
-    if !diagnostics.is_empty() {
+    if diagnostics_have_errors(&diagnostics) {
         return ScriptEvalOutcome::error_only(
             "typecheck",
             "script failed Luau type checking",
@@ -355,7 +338,7 @@ pub fn evaluate_live(canopy: &mut Canopy, request: &ScriptEvalRequest) -> Script
     }
 
     let exec_start = Instant::now();
-    let eval_result = canopy.eval_script_value(&request.script);
+    let eval_result = eval_script_value(canopy, &request.script, request.timeout_ms);
     let exec_ms = exec_start.elapsed().as_millis() as u64;
     let timing = ScriptTiming {
         build_ms: 0,
@@ -376,6 +359,7 @@ pub fn evaluate_live(canopy: &mut Canopy, request: &ScriptEvalRequest) -> Script
         Ok(value) => match value.to_json_value() {
             Ok(value) => ScriptEvalOutcome {
                 success: true,
+                state: ScriptTaskState::Completed,
                 value: Some(value),
                 logs,
                 assertions,
@@ -385,6 +369,7 @@ pub fn evaluate_live(canopy: &mut Canopy, request: &ScriptEvalRequest) -> Script
             },
             Err(error) => ScriptEvalOutcome {
                 success: false,
+                state: ScriptTaskState::Failed,
                 value: None,
                 logs,
                 assertions,
@@ -396,18 +381,7 @@ pub fn evaluate_live(canopy: &mut Canopy, request: &ScriptEvalRequest) -> Script
                 }),
             },
         },
-        Err(error) => ScriptEvalOutcome {
-            success: false,
-            value: None,
-            logs,
-            assertions,
-            diagnostics,
-            timing,
-            error: Some(ScriptErrorInfo {
-                error_type: "runtime".to_string(),
-                message: error.to_string(),
-            }),
-        },
+        Err(error) => failure_with_logs(&error, logs, assertions, diagnostics, timing),
     }
 }
 
@@ -439,8 +413,8 @@ impl HeadlessSession {
     }
 
     /// Execute a script and return its JSON-serializable result value.
-    fn evaluate(&mut self, script: &str) -> Result<JsonValue> {
-        let value = self.canopy.eval_script_value(script)?;
+    fn evaluate(&mut self, script: &str, timeout_ms: Option<u64>) -> Result<JsonValue> {
+        let value = eval_script_value(&mut self.canopy, script, timeout_ms)?;
         self.canopy.render(&mut self.backend)?;
         Ok(value.to_json_value()?)
     }
@@ -463,31 +437,86 @@ impl HeadlessSession {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+/// Evaluate a script with an optional cooperative timeout.
+fn eval_script_value(
+    canopy: &mut Canopy,
+    script: &str,
+    timeout_ms: Option<u64>,
+) -> Result<ArgValue> {
+    if let Some(timeout_ms) = timeout_ms.filter(|timeout| *timeout > 0) {
+        canopy
+            .eval_script_value_with_timeout(script, Duration::from_millis(timeout_ms))
+            .map_err(Into::into)
+    } else {
+        canopy.eval_script_value(script).map_err(Into::into)
+    }
+}
+
+/// Return true if typecheck diagnostics should fail evaluation.
+fn diagnostics_have_errors(diagnostics: &[ScriptDiagnostic]) -> bool {
+    diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.severity == "error")
+}
+
+/// Return the evaluation error category for a runtime error.
+fn evaluation_error_type(error: &crate::Error) -> &'static str {
+    if error.to_string().contains("script evaluation exceeded") {
+        "timeout"
+    } else {
+        "runtime"
+    }
+}
+
+/// Build a failed outcome while preserving logs, assertions, and diagnostics.
+fn failure_with_logs(
+    error: &crate::Error,
+    logs: Vec<String>,
+    assertions: Vec<ScriptAssertion>,
+    diagnostics: Vec<ScriptDiagnostic>,
+    timing: ScriptTiming,
+) -> ScriptEvalOutcome {
+    let error_type = evaluation_error_type(error).to_string();
+    let state = if error_type == "timeout" {
+        ScriptTaskState::TimedOut
+    } else {
+        ScriptTaskState::Failed
+    };
+    ScriptEvalOutcome {
+        success: false,
+        state,
+        value: None,
+        logs,
+        assertions,
+        diagnostics,
+        timing,
+        error: Some(ScriptErrorInfo {
+            error_type,
+            message: error.to_string(),
+        }),
+    }
+}
+
+/// Return Luau typecheck diagnostics for a script.
 fn typecheck_diagnostics(canopy: &mut Canopy, script: &str) -> Result<Vec<ScriptDiagnostic>> {
     let result = canopy.check_script(script)?;
     Ok(result
-        .errors()
-        .into_iter()
+        .diagnostics()
+        .iter()
         .map(|diagnostic| ScriptDiagnostic {
-            severity: "error".to_string(),
-            line: diagnostic.line as usize + 1,
-            column: diagnostic.col as usize + 1,
+            severity: diagnostic.severity.clone(),
+            line: diagnostic.line,
+            column: diagnostic.column,
             message: diagnostic.message.clone(),
         })
         .collect())
 }
 
-#[cfg(target_os = "macos")]
-/// Return no diagnostics when Luau type checking is disabled on macOS.
-fn typecheck_diagnostics(_canopy: &mut Canopy, _script: &str) -> Result<Vec<ScriptDiagnostic>> {
-    Ok(Vec::new())
-}
-
 #[cfg(test)]
 mod tests {
     use canopy::{
-        ReadContext, command, derive_commands, error::Result as CanopyResult, prelude::*,
+        Fixture, ReadContext, command, commands::FocusDirection, derive_commands,
+        error::Result as CanopyResult, prelude::*,
     };
 
     use super::*;
@@ -509,6 +538,20 @@ mod tests {
 
         #[command]
         fn get(&self) -> i32 {
+            self.value
+        }
+
+        #[command]
+        fn choose(&mut self, direction: FocusDirection, count: Option<i32>) -> i32 {
+            let direction_value = match direction {
+                FocusDirection::Next => 1,
+                FocusDirection::Prev => 2,
+                FocusDirection::Up => 3,
+                FocusDirection::Down => 4,
+                FocusDirection::Left => 5,
+                FocusDirection::Right => 6,
+            };
+            self.value = direction_value + count.unwrap_or_default();
             self.value
         }
     }
@@ -533,6 +576,12 @@ mod tests {
         app_factory(|| {
             let mut canopy = Canopy::new();
             ScriptTarget::load(&mut canopy)?;
+            canopy.register_default_bindings("script_target", r#"canopy.log("defaults")"#)?;
+            canopy.register_fixture(Fixture::new(
+                "seeded",
+                "Set script_target to a known value",
+                |canopy| canopy.eval_script("script_target.set(31)"),
+            ))?;
             canopy.finalize_api()?;
             canopy
                 .core
@@ -547,6 +596,42 @@ mod tests {
         let api = evaluator.script_api()?;
         assert!(api.contains("declare script_target"));
         assert!(api.contains("set: (value: number) -> ()"));
+        assert!(api.contains("-- seeded: Set script_target to a known value"));
+        assert!(api.contains("default_bindings: () -> ()"));
+        assert!(
+            api.contains(
+                "choose: (direction: \"Next\" | \"Prev\" | \"Up\" | \"Down\" | \"Left\" | \"Right\", count: number?) -> number"
+            ),
+            "{api}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn script_api_generated_tail_matches_snapshot() -> crate::Result<()> {
+        let evaluator = AppEvaluator::new(test_factory());
+        let api = evaluator.script_api()?;
+        let marker = "-- ===== Fixtures =====";
+        let (_, tail) = api
+            .split_once(marker)
+            .expect("script API should contain generated fixture section");
+        let actual = format!("{marker}{tail}");
+        let expected = r#"-- ===== Fixtures =====
+-- seeded: Set script_target to a known value
+
+-- ===== Application Commands =====
+-- Auto-generated from registered CommandSpecs.
+
+--- Commands for widget "script_target"
+declare script_target: {
+    choose: (direction: "Next" | "Prev" | "Up" | "Down" | "Left" | "Right", count: number?) -> number,
+    get: () -> number,
+    set: (value: number) -> (),
+    --- Register this widget's default bindings.
+    default_bindings: () -> (),
+}"#;
+
+        assert_eq!(actual.trim_end(), expected);
         Ok(())
     }
 
@@ -564,8 +649,47 @@ mod tests {
             timeout_ms: None,
         });
         assert!(outcome.success);
+        assert_eq!(outcome.state, ScriptTaskState::Completed);
         assert_eq!(outcome.logs, vec!["hello"]);
         assert_eq!(outcome.value, Some(JsonValue::from(7)));
+    }
+
+    #[test]
+    fn evaluate_applies_fixtures_and_named_optional_args() {
+        let evaluator = AppEvaluator::new(test_factory());
+        let outcome = evaluator.evaluate(&ScriptEvalRequest {
+            script: r#"
+                canopy.assert(script_target.get() == 31, "fixture should run before eval")
+                return script_target.choose({ direction = "Right" })
+            "#
+            .to_string(),
+            fixture: Some("seeded".to_string()),
+            timeout_ms: None,
+        });
+
+        assert!(outcome.success);
+        assert_eq!(outcome.state, ScriptTaskState::Completed);
+        assert_eq!(outcome.value, Some(JsonValue::from(6)));
+    }
+
+    #[test]
+    fn evaluate_reports_cooperative_timeout() {
+        let evaluator = AppEvaluator::new(test_factory());
+        let outcome = evaluator.evaluate_with_timeout(&ScriptEvalRequest {
+            script: "while true do end".to_string(),
+            fixture: None,
+            timeout_ms: Some(1),
+        });
+
+        assert!(!outcome.success);
+        assert_eq!(outcome.state, ScriptTaskState::TimedOut);
+        assert_eq!(
+            outcome
+                .error
+                .as_ref()
+                .map(|error| error.error_type.as_str()),
+            Some("timeout")
+        );
     }
 
     #[test]
@@ -579,6 +703,7 @@ mod tests {
         assert!(!outcome.success);
         #[cfg(not(target_os = "macos"))]
         {
+            assert_eq!(outcome.state, ScriptTaskState::Failed);
             assert_eq!(
                 outcome
                     .error
@@ -596,6 +721,7 @@ mod tests {
         }
         #[cfg(target_os = "macos")]
         {
+            assert_eq!(outcome.state, ScriptTaskState::Failed);
             assert_eq!(
                 outcome
                     .error
@@ -603,7 +729,10 @@ mod tests {
                     .map(|error| error.error_type.as_str()),
                 Some("runtime")
             );
-            assert!(outcome.diagnostics.is_empty());
+            assert!(outcome.diagnostics.iter().any(|diagnostic| {
+                diagnostic.severity == "unavailable"
+                    && diagnostic.message.contains("typechecking is unavailable")
+            }));
         }
     }
 
@@ -620,6 +749,7 @@ mod tests {
         );
 
         assert!(!outcome.success);
+        assert_eq!(outcome.state, ScriptTaskState::Failed);
         assert_eq!(outcome.value, None);
         assert_eq!(
             outcome
