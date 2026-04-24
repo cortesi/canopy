@@ -1,6 +1,6 @@
 use std::{
     io::{self, Stderr, Write},
-    panic,
+    mem, panic,
     result::Result as StdResult,
     sync::mpsc::{self, TryRecvError},
     thread,
@@ -8,6 +8,7 @@ use std::{
 
 use color_backtrace::{BacktracePrinter, default_output_stream};
 use scopeguard::guard;
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
     Canopy, NodeId,
@@ -15,6 +16,7 @@ use crate::{
     core::{
         Core,
         dump::{dump, dump_with_focus},
+        text,
     },
     error::{self, Result},
     event::{Event, key, mouse},
@@ -230,10 +232,70 @@ impl CrosstermRender {
 
     /// Write text at a position.
     fn text(&mut self, loc: Point, txt: &str) -> io::Result<()> {
-        self.fp.queue(ccursor::MoveTo(loc.x as u16, loc.y as u16))?;
-        self.fp.queue(style::Print(txt))?;
+        for run in positioned_text_runs(loc, txt) {
+            self.fp.queue(ccursor::MoveTo(
+                run.location.x as u16,
+                run.location.y as u16,
+            ))?;
+            self.fp.queue(style::Print(run.text))?;
+        }
         Ok(())
     }
+}
+
+/// A string fragment with an absolute terminal-cell location.
+#[derive(Debug, PartialEq, Eq)]
+struct PositionedTextRun {
+    /// Location where the text run should be printed.
+    location: Point,
+    /// Text to print at the location.
+    text: String,
+}
+
+/// Split text into absolute-positioned runs at wide grapheme boundaries.
+fn positioned_text_runs(loc: Point, txt: &str) -> Vec<PositionedTextRun> {
+    let mut runs = Vec::new();
+    let mut run = String::new();
+    let mut run_x = loc.x;
+    let mut x = loc.x;
+
+    for grapheme in txt.graphemes(true) {
+        let width = text::grapheme_width(grapheme);
+        if width == 0 {
+            continue;
+        }
+
+        if width > 1 {
+            push_positioned_text_run(&mut runs, Point { x: run_x, y: loc.y }, &mut run);
+            runs.push(PositionedTextRun {
+                location: Point { x, y: loc.y },
+                text: grapheme.to_string(),
+            });
+            x = x.saturating_add(width as u32);
+            run_x = x;
+            continue;
+        }
+
+        if run.is_empty() {
+            run_x = x;
+        }
+        run.push_str(grapheme);
+        x = x.saturating_add(width as u32);
+    }
+
+    push_positioned_text_run(&mut runs, Point { x: run_x, y: loc.y }, &mut run);
+    runs
+}
+
+/// Add a non-empty positioned text run.
+fn push_positioned_text_run(runs: &mut Vec<PositionedTextRun>, location: Point, text: &mut String) {
+    if text.is_empty() {
+        return;
+    }
+    runs.push(PositionedTextRun {
+        location,
+        text: mem::take(text),
+    });
 }
 
 impl Default for CrosstermRender {
@@ -632,5 +694,38 @@ pub fn runloop_with_options(mut cnpy: Canopy, options: RunloopOptions) -> Result
                 ));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn text_run(x: u32, y: u32, text: &str) -> PositionedTextRun {
+        PositionedTextRun {
+            location: Point { x, y },
+            text: text.to_string(),
+        }
+    }
+
+    #[test]
+    fn positioned_text_runs_split_after_wide_graphemes() {
+        let runs = positioned_text_runs(Point { x: 5, y: 2 }, "a界bc");
+
+        assert_eq!(
+            runs,
+            vec![
+                text_run(5, 2, "a"),
+                text_run(6, 2, "界"),
+                text_run(8, 2, "bc"),
+            ]
+        );
+    }
+
+    #[test]
+    fn positioned_text_runs_keep_combining_graphemes_in_run() {
+        let runs = positioned_text_runs(Point { x: 1, y: 3 }, "e\u{0301}x");
+
+        assert_eq!(runs, vec![text_run(1, 3, "e\u{0301}x")]);
     }
 }

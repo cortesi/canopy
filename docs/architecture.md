@@ -70,6 +70,21 @@ instead of aliasing the widget.
 All widget access failures include the operation, node ID, node path, and source
 error. The access layer owns the unsafe restoration boundary.
 
+## Callback Mutation
+
+Callback mutation is immediate. A widget callback can create, attach, detach,
+hide, focus, capture, scroll, restyle, and dispatch during the callback. Later
+code in the same callback observes the new state.
+
+A callback cannot remove or replace the active callback subtree. Removing or
+replacing the current node fails. Removing or replacing an ancestor that contains
+the current node also fails. Canopy checks this before running lifecycle hooks,
+so a rejected edit does not partially run `pre_remove` or `on_unmount`.
+
+Removing or replacing siblings is allowed. Removing the focused node recovers
+focus immediately. Removing the mouse-capture node clears capture immediately.
+Removed `NodeId`s become invalid immediately.
+
 ## Layout
 
 Layout starts at the root with the terminal size. Each node gets an outer

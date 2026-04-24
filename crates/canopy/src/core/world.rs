@@ -347,6 +347,7 @@ impl Core {
             .ok_or(Error::NodeNotFound(node_id))?
             .children
             .clone();
+        self.ensure_subtree_widget_slots_available(node_id, "replace subtree")?;
         for child in children {
             self.remove_subtree(child)?;
         }
@@ -1070,6 +1071,7 @@ impl Core {
         if !self.nodes.contains_key(root_id) {
             return Err(Error::NodeNotFound(root_id));
         }
+        self.ensure_subtree_widget_slots_available(root_id, "remove subtree")?;
 
         let hint = if self.is_attached_to_root(root_id) {
             Some(self.focus_recovery_hint(root_id))
@@ -1124,6 +1126,34 @@ impl Core {
             }
         }
         out
+    }
+
+    /// Ensure a structural edit will not delete a widget currently owned by a callback guard.
+    fn ensure_subtree_widget_slots_available(
+        &self,
+        root: NodeId,
+        operation: &'static str,
+    ) -> Result<()> {
+        for node_id in self.subtree_pre_order(root) {
+            let Some(node) = self.nodes.get(node_id) else {
+                continue;
+            };
+            let Ok(widget) = node.widget.try_borrow() else {
+                return Err(self.widget_operation_error(
+                    WidgetOperation::access(operation),
+                    node_id,
+                    &Error::ReentrantWidgetBorrow(node_id),
+                ));
+            };
+            if widget.is_none() {
+                return Err(self.widget_operation_error(
+                    WidgetOperation::access(operation),
+                    node_id,
+                    &Error::ReentrantWidgetBorrow(node_id),
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// Collect a subtree in post-order, including the root.
@@ -2297,6 +2327,7 @@ impl Widget for RootContainer {
 #[cfg(test)]
 mod tests {
     use std::{
+        any::TypeId,
         panic::{AssertUnwindSafe, catch_unwind},
         sync::{Arc, Mutex},
     };
@@ -2416,6 +2447,78 @@ mod tests {
             message.contains(path),
             "expected {message:?} to contain path {path:?}"
         );
+    }
+
+    struct CallbackMutationNodes {
+        parent: NodeId,
+        current: NodeId,
+        sibling: NodeId,
+        focused: NodeId,
+        focus_fallback: NodeId,
+        mouse_capture: NodeId,
+    }
+
+    fn callback_mutation_tree() -> Result<(Core, CallbackMutationNodes)> {
+        let mut core = Core::new();
+        let parent = core.create_detached(simple_widget());
+        let current = core.create_detached(simple_widget());
+        let sibling = core.create_detached(simple_widget());
+        let focused = core.create_detached(FocusableWidget);
+        let focus_fallback = core.create_detached(FocusableWidget);
+        let mouse_capture = core.create_detached(simple_widget());
+        core.set_children(
+            parent,
+            vec![current, sibling, focused, focus_fallback, mouse_capture],
+        )?;
+        attach_root_child(&mut core, parent)?;
+        for node in [
+            core.root,
+            parent,
+            current,
+            sibling,
+            focused,
+            focus_fallback,
+            mouse_capture,
+        ] {
+            core.with_layout_of(node, |layout| {
+                *layout = Layout::fill();
+            })?;
+        }
+        core.update_layout(Size::new(40, 20))?;
+        let nodes = CallbackMutationNodes {
+            parent,
+            current,
+            sibling,
+            focused,
+            focus_fallback,
+            mouse_capture,
+        };
+        Ok((core, nodes))
+    }
+
+    fn with_callback_context(
+        core: &mut Core,
+        node: NodeId,
+        f: impl FnOnce(&mut dyn Context) -> Result<()>,
+    ) -> Result<Result<()>> {
+        let mut f = Some(f);
+        core.with_widget_mut(node, |_widget, core| {
+            let mut ctx = CoreContext::new(core, node);
+            let f = f.take().expect("callback should run once");
+            f(&mut ctx)
+        })
+    }
+
+    fn with_callback_core(
+        core: &mut Core,
+        node: NodeId,
+        f: impl FnOnce(&mut Core) -> Result<()>,
+    ) -> Result<Result<()>> {
+        let mut f = Some(f);
+        core.with_widget_mut(node, |_widget, core| {
+            let f = f.take().expect("callback should run once");
+            f(core)
+        })
     }
 
     fn property_nodes(core: &mut Core) -> Vec<Option<NodeId>> {
@@ -2724,6 +2827,132 @@ mod tests {
         assert!(result.is_err());
         core.with_widget_mut(child, |_widget, _core| ())?;
         Ok(())
+    }
+
+    #[test]
+    fn callback_cannot_remove_current_node() -> Result<()> {
+        let (mut core, nodes) = callback_mutation_tree()?;
+        let path = core.node_path(core.root, nodes.current).to_string();
+
+        let error = with_callback_context(&mut core, nodes.current, |ctx| {
+            ctx.remove_subtree(nodes.current)
+        })?
+        .expect_err("callback should not remove the current node");
+
+        assert!(matches!(error, Error::WidgetAccess(_)));
+        assert_error_context(&error, "remove subtree", nodes.current, &path);
+        assert!(core.nodes.contains_key(nodes.current));
+        core.validate_invariants()
+    }
+
+    #[test]
+    fn callback_cannot_replace_current_node() -> Result<()> {
+        let (mut core, nodes) = callback_mutation_tree()?;
+        let path = core.node_path(core.root, nodes.current).to_string();
+
+        let error = with_callback_core(&mut core, nodes.current, |core| {
+            core.replace_subtree(nodes.current, simple_widget())
+        })?
+        .expect_err("callback should not replace the current node");
+
+        assert!(matches!(error, Error::WidgetAccess(_)));
+        assert_error_context(&error, "replace subtree", nodes.current, &path);
+        assert_eq!(
+            core.nodes[nodes.current].widget_type,
+            TypeId::of::<TestWidget>()
+        );
+        core.validate_invariants()
+    }
+
+    #[test]
+    fn callback_cannot_remove_parent_containing_current_node() -> Result<()> {
+        let (mut core, nodes) = callback_mutation_tree()?;
+        let path = core.node_path(core.root, nodes.current).to_string();
+
+        let error = with_callback_context(&mut core, nodes.current, |ctx| {
+            ctx.remove_subtree(nodes.parent)
+        })?
+        .expect_err("callback should not remove the current node's parent");
+
+        assert!(matches!(error, Error::WidgetAccess(_)));
+        assert_error_context(&error, "remove subtree", nodes.current, &path);
+        assert!(core.nodes.contains_key(nodes.parent));
+        assert!(core.nodes.contains_key(nodes.current));
+        core.validate_invariants()
+    }
+
+    #[test]
+    fn callback_cannot_replace_parent_containing_current_node() -> Result<()> {
+        let (mut core, nodes) = callback_mutation_tree()?;
+        let path = core.node_path(core.root, nodes.current).to_string();
+
+        let error = with_callback_core(&mut core, nodes.current, |core| {
+            core.replace_subtree(nodes.parent, simple_widget())
+        })?
+        .expect_err("callback should not replace the current node's parent");
+
+        assert!(matches!(error, Error::WidgetAccess(_)));
+        assert_error_context(&error, "replace subtree", nodes.current, &path);
+        assert!(core.nodes.contains_key(nodes.parent));
+        assert!(core.nodes.contains_key(nodes.current));
+        core.validate_invariants()
+    }
+
+    #[test]
+    fn callback_removes_sibling_immediately() -> Result<()> {
+        let (mut core, nodes) = callback_mutation_tree()?;
+
+        with_callback_context(&mut core, nodes.current, |ctx| {
+            ctx.remove_subtree(nodes.sibling)
+        })??;
+
+        assert!(!core.nodes.contains_key(nodes.sibling));
+        assert!(!core.nodes[nodes.parent].children.contains(&nodes.sibling));
+        core.validate_invariants()
+    }
+
+    #[test]
+    fn callback_replaces_sibling_immediately() -> Result<()> {
+        let (mut core, nodes) = callback_mutation_tree()?;
+
+        with_callback_core(&mut core, nodes.current, |core| {
+            core.replace_subtree(nodes.sibling, FocusableWidget)
+        })??;
+
+        assert!(core.nodes.contains_key(nodes.sibling));
+        assert_eq!(
+            core.nodes[nodes.sibling].widget_type,
+            TypeId::of::<FocusableWidget>()
+        );
+        core.validate_invariants()
+    }
+
+    #[test]
+    fn callback_removing_focused_node_recovers_focus() -> Result<()> {
+        let (mut core, nodes) = callback_mutation_tree()?;
+        core.set_focus(nodes.focused);
+
+        with_callback_context(&mut core, nodes.current, |ctx| {
+            ctx.remove_subtree(nodes.focused)
+        })??;
+
+        assert!(!core.nodes.contains_key(nodes.focused));
+        assert_eq!(core.focus, Some(nodes.focus_fallback));
+        core.validate_invariants()
+    }
+
+    #[test]
+    fn callback_removing_mouse_capture_node_clears_capture() -> Result<()> {
+        let (mut core, nodes) = callback_mutation_tree()?;
+        core.mouse_capture = Some(nodes.mouse_capture);
+
+        with_callback_context(&mut core, nodes.current, |ctx| {
+            ctx.remove_subtree(nodes.mouse_capture)
+        })??;
+
+        assert!(!core.nodes.contains_key(nodes.mouse_capture));
+        assert!(core.mouse_capture.is_none());
+        core.validate_invariants()
     }
 
     #[test]

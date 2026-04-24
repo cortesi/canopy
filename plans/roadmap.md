@@ -138,17 +138,17 @@ Stage Three kept immediate mutation during callbacks because the current behavio
 and now better contained. Revisit buffering only after layout and render contracts can
 report failures clearly.
 
-1. [ ] Audit every `Context` method that mutates tree structure, focus, capture, input
+1. [x] Audit every `Context` method that mutates tree structure, focus, capture, input
        bindings, script state, or layout state during callbacks.
-2. [ ] Write `plans/tree-mutator.md` comparing immediate mutation, command buffering, and
+2. [x] Write `plans/tree-mutator.md` comparing immediate mutation, command buffering, and
        a `TreeMutator` API against Canopy's callback use cases.
-3. [ ] Add regression tests for callbacks that remove or replace the current node, parent,
+3. [x] Add regression tests for callbacks that remove or replace the current node, parent,
        sibling, focused node, and mouse-capture node.
-4. [ ] Decide whether mutation remains immediate or moves behind a buffered boundary.
-5. [ ] If mutation remains immediate, document allowed reentrancy and add tests for the
+4. [x] Decide whether mutation remains immediate or moves behind a buffered boundary.
+5. [x] If mutation remains immediate, document allowed reentrancy and add tests for the
        documented edge cases.
-6. [ ] If mutation becomes buffered, route structural `Context` methods through the buffer
-       and drain it at callback boundaries.
+6. [x] Defer buffered mutation and record the migration triggers in
+       `plans/tree-mutator.md`.
 
 ## 7. Stage Seven: Harden Scripting and MCP Evaluation
 
