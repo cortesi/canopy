@@ -461,6 +461,8 @@ fn binding_target_summary(target: &BindingTarget) -> String {
         BindingTarget::CommandSequence(commands) => {
             format!("[sequence: {} commands]", commands.len())
         }
+        BindingTarget::SetInputMode(mode) if mode.is_empty() => "canopy.set_mode(\"\")".to_string(),
+        BindingTarget::SetInputMode(mode) => format!("canopy.set_mode({mode:?})"),
         BindingTarget::LuauFunction(_) => "luau".to_string(),
     }
 }
@@ -1287,6 +1289,27 @@ impl LuauHost {
                             .map_err(lua_to_canopy)?;
                     }
                     Ok(Value::Table(commands))
+                })
+                .map_err(LuaError::external)
+            })?,
+        )?;
+
+        canopy_table.set(
+            "input_mode",
+            self.lua.create_function(|lua, ()| {
+                with_current_canopy(|canopy, _| {
+                    string_to_lua(lua, canopy.input_mode()).map_err(lua_to_canopy)
+                })
+                .map_err(LuaError::external)
+            })?,
+        )?;
+
+        canopy_table.set(
+            "set_mode",
+            self.lua.create_function(|_, mode: String| {
+                with_current_canopy(|canopy, _| {
+                    canopy.set_input_mode(&mode)?;
+                    Ok(())
                 })
                 .map_err(LuaError::external)
             })?,

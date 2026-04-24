@@ -6,7 +6,10 @@ mod tests {
 
     use canopy::{
         Canopy, Context, ReadContext, Widget, command,
-        commands::{ArgValue, CommandDispatchKind, CommandError, CommandNode, dispatch},
+        commands::{
+            ArgValue, CommandDispatchKind, CommandError, CommandNode, CommandResolution,
+            CommandResolver, dispatch,
+        },
         derive_commands,
         error::Result,
         render::Render,
@@ -46,7 +49,14 @@ mod tests {
     struct TestBranch;
 
     #[derive_commands]
-    impl TestBranch {}
+    impl TestBranch {
+        #[command]
+        fn c_branch(&self, _c: &mut dyn Context) {
+            STATE_PATH.with(|s| {
+                s.borrow_mut().push(format!("{}.c_branch()", self.name()));
+            });
+        }
+    }
 
     impl Widget for TestBranch {
         fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
@@ -117,6 +127,46 @@ mod tests {
             CommandError::NoTarget { ref id, ref owner }
                 if id == inv.id.0 && owner == owner_name
         ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn command_resolver_matches_dispatch_targets() -> Result<()> {
+        let mut canopy = Canopy::new();
+        canopy.add_commands::<TestLeaf>()?;
+        canopy.add_commands::<TestBranch>()?;
+        let first_leaf = canopy.core.create_detached(TestLeaf);
+        let second_leaf = canopy.core.create_detached(TestLeaf);
+        let branch_id = canopy.core.create_detached(TestBranch);
+        canopy
+            .core
+            .set_children(branch_id, vec![first_leaf, second_leaf])?;
+        canopy
+            .core
+            .set_children(canopy.core.root_id(), vec![branch_id])?;
+
+        let resolver = CommandResolver::new(&canopy.core, branch_id);
+        assert_eq!(
+            resolver.resolve(TestLeaf::cmd_c_leaf()),
+            Some(CommandResolution::Subtree { target: first_leaf })
+        );
+
+        let resolver = CommandResolver::new(&canopy.core, first_leaf);
+        assert_eq!(
+            resolver.resolve(TestBranch::cmd_c_branch()),
+            Some(CommandResolution::Ancestor { target: branch_id })
+        );
+
+        let availability = resolver.availability();
+        let branch_availability = availability
+            .iter()
+            .find(|availability| availability.spec.id == TestBranch::cmd_c_branch().id)
+            .expect("branch command availability");
+        assert_eq!(
+            branch_availability.resolution,
+            Some(CommandResolution::Ancestor { target: branch_id })
+        );
 
         Ok(())
     }

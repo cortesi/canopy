@@ -934,6 +934,95 @@ pub struct CommandAvailability<'a> {
     pub resolution: Option<CommandResolution>,
 }
 
+impl CommandResolution {
+    /// Return the resolved node target, if this command dispatches to a node.
+    pub fn target(self) -> Option<NodeId> {
+        match self {
+            Self::Free => None,
+            Self::Subtree { target } | Self::Ancestor { target } => Some(target),
+        }
+    }
+}
+
+/// Resolves command targets relative to a starting node.
+pub struct CommandResolver<'a> {
+    /// Core tree and command registry.
+    core: &'a Core,
+    /// Starting node for command dispatch.
+    start: NodeId,
+}
+
+impl<'a> CommandResolver<'a> {
+    /// Construct a resolver for commands dispatched from `start`.
+    pub fn new(core: &'a Core, start: NodeId) -> Self {
+        Self { core, start }
+    }
+
+    /// Resolve a command specification to the target dispatch would use.
+    pub fn resolve(&self, spec: &CommandSpec) -> Option<CommandResolution> {
+        match spec.dispatch {
+            CommandDispatchKind::Free => Some(CommandResolution::Free),
+            CommandDispatchKind::Node { owner } => self.resolve_owner(owner),
+        }
+    }
+
+    /// Resolve an invocation by looking up its command specification.
+    pub fn resolve_invocation(
+        &self,
+        inv: &CommandInvocation,
+    ) -> Result<Option<CommandResolution>, CommandError> {
+        let spec =
+            self.core
+                .commands
+                .get(inv.id.0)
+                .ok_or_else(|| CommandError::UnknownCommand {
+                    id: inv.id.0.to_string(),
+                })?;
+        Ok(self.resolve(spec))
+    }
+
+    /// Return availability for every registered command.
+    pub fn availability(&self) -> Vec<CommandAvailability<'a>> {
+        self.core
+            .commands
+            .iter()
+            .map(|(_, spec)| CommandAvailability {
+                spec,
+                resolution: self.resolve(spec),
+            })
+            .collect()
+    }
+
+    /// Resolve a node owner with subtree targets preferred over ancestors.
+    fn resolve_owner(&self, owner: &'static str) -> Option<CommandResolution> {
+        if !self.core.nodes.contains_key(self.start) {
+            return None;
+        }
+
+        let mut stack = vec![self.start];
+        while let Some(node_id) = stack.pop() {
+            let node = &self.core.nodes[node_id];
+            if node.name == owner {
+                return Some(CommandResolution::Subtree { target: node_id });
+            }
+            for child in node.children.iter().rev() {
+                stack.push(*child);
+            }
+        }
+
+        let mut current = self.core.nodes[self.start].parent;
+        while let Some(node_id) = current {
+            let node = &self.core.nodes[node_id];
+            if node.name == owner {
+                return Some(CommandResolution::Ancestor { target: node_id });
+            }
+            current = node.parent;
+        }
+
+        None
+    }
+}
+
 /// The CommandNode trait is implemented by widgets to expose commands.
 pub trait CommandNode {
     /// Return a list of commands for this node.
@@ -1355,73 +1444,38 @@ pub fn dispatch(
             id: inv.id.0.to_string(),
         })?;
 
-    match spec.dispatch {
-        CommandDispatchKind::Free => {
+    let resolution = CommandResolver::new(core, current_id).resolve(spec);
+
+    match resolution {
+        Some(CommandResolution::Free) => {
             let mut ctx = CoreContext::new(core, current_id);
             (spec.invoke)(None, &mut ctx, inv)
         }
-        CommandDispatchKind::Node { owner } => {
-            if let Some(result) = dispatch_subtree(core, current_id, owner, spec, inv)? {
-                return Ok(result);
-            }
-
-            let mut current = core.nodes[current_id].parent;
-            while let Some(node_id) = current {
-                if let Some(result) = dispatch_on_node(core, node_id, owner, spec, inv)? {
-                    return Ok(result);
-                }
-                current = core.nodes[node_id].parent;
-            }
-
-            Err(CommandError::NoTarget {
+        Some(CommandResolution::Subtree { target } | CommandResolution::Ancestor { target }) => {
+            dispatch_on_node(core, target, spec, inv)
+        }
+        None => match spec.dispatch {
+            CommandDispatchKind::Free => unreachable!("free commands always resolve"),
+            CommandDispatchKind::Node { owner } => Err(CommandError::NoTarget {
                 id: inv.id.0.to_string(),
                 owner: owner.to_string(),
-            })
-        }
+            }),
+        },
     }
 }
 
-/// Dispatch a node-routed command over a subtree in pre-order.
-fn dispatch_subtree(
-    core: &mut Core,
-    root: NodeId,
-    owner: &'static str,
-    spec: &CommandSpec,
-    inv: &CommandInvocation,
-) -> Result<Option<ArgValue>, CommandError> {
-    let mut stack = vec![root];
-    while let Some(node_id) = stack.pop() {
-        if let Some(result) = dispatch_on_node(core, node_id, owner, spec, inv)? {
-            return Ok(Some(result));
-        }
-        let children = core.nodes[node_id].children.clone();
-        for child in children.into_iter().rev() {
-            stack.push(child);
-        }
-    }
-    Ok(None)
-}
-
-/// Dispatch a node-routed command to a specific node if it matches.
+/// Dispatch a node-routed command to a resolved node.
 fn dispatch_on_node(
     core: &mut Core,
     node_id: NodeId,
-    owner: &'static str,
     spec: &CommandSpec,
     inv: &CommandInvocation,
-) -> Result<Option<ArgValue>, CommandError> {
-    if core.nodes[node_id].name != owner {
-        return Ok(None);
-    }
-
-    let result = core
-        .with_widget_mut(node_id, |widget, core| {
-            let mut ctx = CoreContext::new(core, node_id);
-            (spec.invoke)(Some(widget as &mut dyn Any), &mut ctx, inv)
-        })
-        .map_err(|err| CommandError::Exec(err.into()))?;
-
-    result.map(Some)
+) -> Result<ArgValue, CommandError> {
+    core.with_widget_mut(node_id, |widget, core| {
+        let mut ctx = CoreContext::new(core, node_id);
+        (spec.invoke)(Some(widget as &mut dyn Any), &mut ctx, inv)
+    })
+    .map_err(|err| CommandError::Exec(err.into()))?
 }
 
 /// Convenience macro for building named arguments.

@@ -67,14 +67,14 @@ except where failures are currently hidden.
 Canopy needs one authoritative path for converting input into widget events and command
 dispatch. This reduces correctness risk and makes binding behavior easier to explain.
 
-1. [ ] Extract a `CommandResolver` shared by dispatch, availability, help, and
+1. [x] Extract a `CommandResolver` shared by dispatch, availability, help, and
        diagnostic reporting.
-2. [ ] Unify key and mouse routing into a single pipeline with explicit routing phases.
-3. [ ] Represent binding precedence with a typed priority or documented replacement rule.
-4. [ ] Promote input modes to first-class public commands and remove dead-code allowances.
-5. [ ] Add tests for command target resolution across descendants, ancestors, and owners.
-6. [ ] Fix and test hit-testing order so topmost rendered children receive pointer input.
-7. [ ] Add route tracing for diagnostics so a key or mouse event can explain its outcome.
+2. [x] Unify key and mouse routing into a single pipeline with explicit routing phases.
+3. [x] Represent binding precedence with a typed priority or documented replacement rule.
+4. [x] Promote input modes to first-class public commands and remove dead-code allowances.
+5. [x] Add tests for command target resolution across descendants, ancestors, and owners.
+6. [x] Fix and test hit-testing order so topmost rendered children receive pointer input.
+7. [x] Add route tracing for diagnostics so a key or mouse event can explain its outcome.
 
 ## 3. Stage Three: Make Reentrancy and Ownership Explicit
 

@@ -1326,9 +1326,7 @@ impl Core {
             .outer
             .intersect_rect(Rect::new(0, 0, root_view.outer.w, root_view.outer.h))
             .unwrap_or_else(Rect::zero);
-        let mut result = None;
-        locate_recursive(self, root, point, clip, &mut result)?;
-        Ok(result)
+        locate_recursive(self, root, point, clip)
     }
 }
 
@@ -2185,35 +2183,34 @@ fn locate_recursive(
     node_id: NodeId,
     point: Point,
     parent_clip: Rect,
-    result: &mut Option<NodeId>,
-) -> Result<()> {
+) -> Result<Option<NodeId>> {
     let node = core
         .nodes
         .get(node_id)
         .ok_or_else(|| Error::Internal("missing node".into()))?;
 
     if node.hidden || node.layout.display == Display::None {
-        return Ok(());
+        return Ok(None);
     }
 
     let Some(outer_clip) = node.view.outer.intersect_rect(parent_clip) else {
-        return Ok(());
+        return Ok(None);
     };
     if !outer_clip.contains_point(point) {
-        return Ok(());
+        return Ok(None);
     }
-
-    *result = Some(node_id);
 
     let Some(child_clip) = node.view.content.intersect_rect(parent_clip) else {
-        return Ok(());
+        return Ok(Some(node_id));
     };
     let children = node.children.clone();
-    for child in children {
-        locate_recursive(core, child, point, child_clip, result)?;
+    for child in children.into_iter().rev() {
+        if let Some(hit) = locate_recursive(core, child, point, child_clip)? {
+            return Ok(Some(hit));
+        }
     }
 
-    Ok(())
+    Ok(Some(node_id))
 }
 
 #[derive(Default)]
@@ -3163,6 +3160,27 @@ mod tests {
         // Parent content size should be the max of children
         let parent_node = &core.nodes[parent];
         assert_eq!(parent_node.content_size, Size::new(10, 10));
+        Ok(())
+    }
+
+    #[test]
+    fn locate_node_prefers_topmost_stack_child() -> Result<()> {
+        let mut core = Core::new();
+        let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+        let parent = core.add_boxed(Box::new(parent_widget));
+        let (c1, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(10, 10)));
+        let (c2, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(10, 10)));
+        let child1 = core.add_boxed(Box::new(c1));
+        let child2 = core.add_boxed(Box::new(c2));
+        core.set_children(parent, vec![child1, child2])?;
+        attach_root_child(&mut core, parent)?;
+        core.with_layout_of(parent, |layout| {
+            *layout = Layout::stack();
+        })?;
+        core.update_layout(Size::new(50, 50))?;
+
+        let hit = core.locate_node(core.root, Point { x: 1, y: 1 })?;
+        assert_eq!(hit, Some(child2));
         Ok(())
     }
 

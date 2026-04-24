@@ -190,6 +190,10 @@ declare canopy: {
     bindings: () -> {BindingInfo},
     --- Return structured metadata for all registered commands.
     commands: () -> {CommandInfo},
+    --- Return the active input mode. The default mode is the empty string.
+    input_mode: () -> string,
+    --- Switch the active input mode. Passing the empty string returns to default mode.
+    set_mode: (mode: string) -> (),
     --- Return the rendered screen as rows of cell strings.
     screen: () -> {{string}},
     --- Return the rendered screen as newline-joined plain text.

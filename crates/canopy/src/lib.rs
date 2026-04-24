@@ -38,7 +38,7 @@ pub use core::testing;
 pub use core::{
     AutomationCallback, AutomationHandle, BindingId, Canopy, ChildKey, Context, Core, Fixture,
     FixtureInfo, InputMap, InputSpec, KeyedChildren, Loader, NodeId, Preorder, ReadContext,
-    RemovePolicy, Slot, TypedId,
+    RemovePolicy, RoutePhase, RouteTraceEntry, Slot, TypedId,
 };
 // Re-export input mapping
 pub use core::{

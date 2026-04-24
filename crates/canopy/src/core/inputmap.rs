@@ -48,11 +48,33 @@ struct BoundAction {
     action: BindingTarget,
 }
 
-/// Score tuple used to compare binding matches.
-type BindingScore = (usize, usize, usize, usize);
+/// Binding match priority. Higher values win; later insertion wins exact ties.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct BindingPriority {
+    /// Count of literal path segments.
+    literals: usize,
+    /// Whether the match ends at the focused path terminus.
+    anchored_end: bool,
+    /// Number of path components matched.
+    depth: usize,
+    /// Insertion position for stable replacement on otherwise equal matches.
+    insertion_order: usize,
+}
+
+impl BindingPriority {
+    /// Build priority from path match metadata and insertion order.
+    fn new(path_match: PathMatch, insertion_order: usize) -> Self {
+        Self {
+            literals: path_match.literals,
+            anchored_end: path_match.anchored_end,
+            depth: path_match.depth,
+            insertion_order,
+        }
+    }
+}
 
 /// Tuple storing a binding match and its score.
-type BindingCandidate = (BindingScore, BindingTarget, PathMatch);
+type BindingCandidate = (BindingPriority, BindingTarget, PathMatch);
 
 /// Binding mode/path filter used when removing or replacing bindings.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -72,6 +94,8 @@ pub enum BindingTarget {
     Command(CommandInvocation),
     /// Sequence of commands executed in order.
     CommandSequence(Vec<CommandInvocation>),
+    /// Switch to another input mode.
+    SetInputMode(String),
     /// Stored Luau closure owned by the script host.
     LuauFunction(script::LuauFunctionId),
 }
@@ -183,8 +207,7 @@ impl InputMode {
         let mut best: Option<BindingCandidate> = None;
         for (idx, k) in self.inputs.get(&input)?.iter().enumerate() {
             if let Some(m) = k.pathmatch.check_match(path) {
-                let (literals, anchored_end, depth) = m.score();
-                let score: BindingScore = (literals, anchored_end, depth, idx);
+                let score = BindingPriority::new(m, idx);
                 let replace = match best {
                     Some((best_score, _, _)) => score > best_score,
                     None => true,
@@ -332,7 +355,6 @@ impl InputMap {
         }
     }
 
-    #[allow(dead_code)]
     /// Set the current input mode.
     pub fn set_mode(&mut self, mode: &str) -> Result<()> {
         if mode.is_empty() {
@@ -432,6 +454,26 @@ impl InputMap {
             input,
             path_filter,
             BindingTarget::CommandSequence(commands),
+        )
+    }
+
+    /// Bind a key or mouse input to switch the active input mode.
+    ///
+    /// The input is normalized before storing.
+    ///
+    /// Returns the new binding ID.
+    pub fn bind_input_mode(
+        &mut self,
+        mode: &str,
+        input: InputSpec,
+        path_filter: &str,
+        next_mode: &str,
+    ) -> Result<BindingId> {
+        self.bind_action(
+            mode,
+            input,
+            path_filter,
+            BindingTarget::SetInputMode(next_mode.to_string()),
         )
     }
 

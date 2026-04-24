@@ -223,6 +223,8 @@ where
             })
             .collect::<Vec<_>>()
             .join(" -> "),
+        BindingTarget::SetInputMode(mode) if mode.is_empty() => "set input mode: default".into(),
+        BindingTarget::SetInputMode(mode) => format!("set input mode: {mode}"),
         BindingTarget::LuauFunction(id) => luau_label(*id).unwrap_or_else(|| "script".to_string()),
     }
 }

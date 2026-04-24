@@ -14,7 +14,7 @@ use crate::{
     commands::{self, CommandDispatchKind},
     core::{
         Core, NodeId,
-        context::{CoreViewContext, ReadContext},
+        context::CoreViewContext,
         dump::dump_with_focus,
         fixture::{Fixture, FixtureInfo},
         help,
@@ -60,6 +60,8 @@ pub struct Canopy {
     fixtures: HashMap<String, Fixture>,
     /// Input mapping table.
     pub(crate) keymap: inputmap::InputMap,
+    /// Trace for the most recent key or mouse routing pass.
+    route_trace: Vec<RouteTraceEntry>,
 
     /// Cached terminal buffer.
     termbuf: Option<TermBuf>,
@@ -77,6 +79,56 @@ pub struct Canopy {
 
     /// Style map used for rendering.
     pub style: StyleMap,
+}
+
+/// A phase in key or mouse event routing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RoutePhase {
+    /// The initial routing target was selected.
+    Target,
+    /// A binding matched before the widget received the event.
+    PreEventBinding,
+    /// The event was offered to a widget.
+    WidgetEvent,
+    /// A binding matched after the widget ignored the event.
+    PostEventBinding,
+    /// Routing moved from a node to its parent.
+    Bubble,
+    /// A resolved binding is being executed.
+    BindingExecution,
+    /// A widget or binding handled the event.
+    Handled,
+    /// Routing ended without a handler.
+    Unhandled,
+}
+
+impl RoutePhase {
+    /// Return a stable diagnostic label for this phase.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Target => "target",
+            Self::PreEventBinding => "pre-event-binding",
+            Self::WidgetEvent => "widget-event",
+            Self::PostEventBinding => "post-event-binding",
+            Self::Bubble => "bubble",
+            Self::BindingExecution => "binding-execution",
+            Self::Handled => "handled",
+            Self::Unhandled => "unhandled",
+        }
+    }
+}
+
+/// One entry in the most recent input route trace.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RouteTraceEntry {
+    /// Routing phase.
+    pub phase: RoutePhase,
+    /// Node associated with this route step.
+    pub node: Option<NodeId>,
+    /// Path visible to binding resolution at this route step.
+    pub path: String,
+    /// Human-readable route detail.
+    pub detail: String,
 }
 
 /// Callback marshalled onto the UI thread for live automation.
@@ -164,6 +216,61 @@ impl RenderBackend for SnapshotBackend {
     }
 }
 
+/// Input routed through the shared bubbling pipeline.
+#[derive(Clone, Copy)]
+enum RoutedInput {
+    /// Key input.
+    Key(key::Key),
+    /// Mouse input in screen coordinates.
+    Mouse(mouse::MouseEvent),
+}
+
+impl RoutedInput {
+    /// Return the binding input spec for this routed input.
+    fn input_spec(self) -> inputmap::InputSpec {
+        match self {
+            Self::Key(key) => inputmap::InputSpec::Key(key),
+            Self::Mouse(mouse) => inputmap::InputSpec::Mouse(mouse.into()),
+        }
+    }
+
+    /// Return the event to dispatch to a specific node.
+    fn event_for_node(self, core: &Core, node_id: NodeId) -> Event {
+        match self {
+            Self::Key(key) => Event::Key(key),
+            Self::Mouse(mouse) => Event::Mouse(Self::local_mouse(core, node_id, mouse)),
+        }
+    }
+
+    /// Return true when an anchored binding may run before widget event dispatch.
+    fn allows_pre_event_binding(self) -> bool {
+        matches!(self, Self::Key(_))
+    }
+
+    /// Return a short diagnostic label.
+    fn label(self) -> &'static str {
+        match self {
+            Self::Key(_) => "key",
+            Self::Mouse(_) => "mouse",
+        }
+    }
+
+    /// Convert a screen-space mouse event to a node-local event.
+    fn local_mouse(core: &Core, node_id: NodeId, mouse: mouse::MouseEvent) -> mouse::MouseEvent {
+        let view = core
+            .nodes
+            .get(node_id)
+            .map(|node| node.view)
+            .unwrap_or_default();
+        mouse::MouseEvent {
+            action: mouse.action,
+            button: mouse.button,
+            modifiers: mouse.modifiers,
+            location: view.content.to_local_point(mouse.location),
+        }
+    }
+}
+
 impl Canopy {
     /// Construct a new Canopy instance.
     pub fn new() -> Self {
@@ -179,6 +286,7 @@ impl Canopy {
             automation_tx,
             automation_rx,
             keymap: inputmap::InputMap::new(),
+            route_trace: Vec::new(),
             script_host: script::ScriptHost::new(),
             script_api_text: None,
             default_bindings: HashMap::new(),
@@ -427,6 +535,33 @@ impl Canopy {
         self.keymap.bindings_matching_path(mode, path)
     }
 
+    /// Return the active input mode.
+    pub fn input_mode(&self) -> &str {
+        self.keymap.current_mode()
+    }
+
+    /// Set the active input mode.
+    pub fn set_input_mode(&mut self, mode: &str) -> Result<()> {
+        self.keymap.set_mode(mode)
+    }
+
+    /// Bind a key or mouse input to switch the active input mode.
+    pub fn bind_input_mode(
+        &mut self,
+        mode: &str,
+        input: inputmap::InputSpec,
+        path_filter: &str,
+        next_mode: &str,
+    ) -> Result<inputmap::BindingId> {
+        self.keymap
+            .bind_input_mode(mode, input, path_filter, next_mode)
+    }
+
+    /// Return the most recent key or mouse route trace.
+    pub fn route_trace(&self) -> &[RouteTraceEntry] {
+        &self.route_trace
+    }
+
     /// Load the commands from a command node using the default node name.
     /// Returns an error if any command id is already registered.
     pub fn add_commands<T: commands::CommandNode>(&mut self) -> Result<()> {
@@ -581,60 +716,7 @@ impl Canopy {
         &self,
         start: NodeId,
     ) -> Vec<commands::CommandAvailability<'_>> {
-        // Build owner-to-target index once
-        let owner_index = self.build_owner_target_index(start);
-
-        self.core
-            .commands
-            .iter()
-            .map(|(_, spec)| {
-                let resolution = match spec.dispatch {
-                    commands::CommandDispatchKind::Free => Some(commands::CommandResolution::Free),
-                    commands::CommandDispatchKind::Node { owner } => {
-                        owner_index.get(owner).copied()
-                    }
-                };
-                commands::CommandAvailability { spec, resolution }
-            })
-            .collect()
-    }
-
-    /// Build an index mapping owner names to their dispatch targets.
-    ///
-    /// Uses the same resolution order as `commands::dispatch`:
-    /// 1. Subtree (pre-order) takes precedence
-    /// 2. Then ancestors
-    fn build_owner_target_index(
-        &self,
-        start: NodeId,
-    ) -> HashMap<String, commands::CommandResolution> {
-        let mut map: HashMap<String, commands::CommandResolution> = HashMap::new();
-        let ctx = CoreViewContext::new(&self.core, start);
-        let ctx = &ctx as &dyn ReadContext;
-
-        // 1) Walk subtree in pre-order
-        for id in ctx.preorder(start) {
-            if let Some(node) = self.core.nodes.get(id) {
-                let name = node.name.to_string();
-                map.entry(name)
-                    .or_insert(commands::CommandResolution::Subtree { target: id });
-            }
-        }
-
-        // 2) Walk ancestors (only if not already found in subtree)
-        let mut cur = self.core.nodes.get(start).and_then(|n| n.parent);
-        while let Some(id) = cur {
-            if let Some(node) = self.core.nodes.get(id) {
-                let name = node.name.to_string();
-                map.entry(name)
-                    .or_insert(commands::CommandResolution::Ancestor { target: id });
-                cur = node.parent;
-            } else {
-                break;
-            }
-        }
-
-        map
+        commands::CommandResolver::new(&self.core, start).availability()
     }
 
     /// Generate a contextual help snapshot for the current focus.
@@ -643,61 +725,7 @@ impl Canopy {
     /// - Bindings that would match from the focus path
     /// - Commands with their availability status
     pub fn help_snapshot(&self) -> super::help::HelpSnapshot<'_> {
-        let focus = self.core.focus.unwrap_or(self.core.root);
-        let focus_path = self.core.node_path(self.core.root, focus);
-        let input_mode = self.keymap.current_mode();
-
-        // Get command availability
-        let command_avail = self.command_availability_from_node(focus);
-        let help_commands: Vec<super::help::HelpCommand<'_>> = command_avail
-            .into_iter()
-            .map(|avail| super::help::HelpCommand {
-                owner: match avail.spec.dispatch {
-                    commands::CommandDispatchKind::Free => None,
-                    commands::CommandDispatchKind::Node { owner } => Some(owner),
-                },
-                spec: avail.spec,
-                resolution: avail.resolution,
-            })
-            .collect();
-
-        // Get bindings for the current mode that match the focus path
-        let matched_bindings = self.keymap.bindings_matching_path(input_mode, &focus_path);
-        let help_bindings: Vec<super::help::HelpBinding<'_>> = matched_bindings
-            .into_iter()
-            .map(|mb| {
-                // Determine binding kind based on match position
-                let kind = if mb.m.anchored_end && mb.m.depth > 0 {
-                    super::help::BindingKind::PreEventOverride
-                } else {
-                    super::help::BindingKind::PostEventFallback
-                };
-
-                let label = super::help::binding_label(
-                    mb.info.target,
-                    &self.core.commands,
-                    |sid| self.script_host.script_source(sid),
-                    |id| self.script_host.function_label(id),
-                );
-
-                super::help::HelpBinding {
-                    input: mb.info.input,
-                    mode: input_mode,
-                    path_filter: mb.info.path_filter,
-                    target: mb.info.target,
-                    kind,
-                    label,
-                }
-            })
-            .collect();
-
-        super::help::HelpSnapshot {
-            focus,
-            focus_path,
-            input_mode,
-            bindings: help_bindings,
-            commands: help_commands,
-        }
+        self.help_snapshot_for_focus(self.core.focus)
     }
 
     /// Has the focus changed since the last render sweep?
@@ -725,7 +753,6 @@ impl Canopy {
         let focus_path = self.core.node_path(self.core.root, focus);
         let input_mode = self.keymap.current_mode();
 
-        // Get command availability from the specified focus
         let command_avail = self.command_availability_from_node(focus);
         let help_commands: Vec<super::help::HelpCommand<'_>> = command_avail
             .into_iter()
@@ -739,7 +766,6 @@ impl Canopy {
             })
             .collect();
 
-        // Get bindings for the current mode that match the focus path
         let matched_bindings = self.keymap.bindings_matching_path(input_mode, &focus_path);
         let help_bindings: Vec<super::help::HelpBinding<'_>> = matched_bindings
             .into_iter()
@@ -817,6 +843,21 @@ impl Canopy {
                 out.push_str(&format!(
                     "  [{:?}] {} {} ({kind}) -> {label}\n",
                     mb.info.id, mb.info.input, mb.info.path_filter
+                ));
+            }
+        }
+
+        if self.route_trace.is_empty() {
+            out.push_str("route trace: (none)\n");
+        } else {
+            out.push_str("route trace:\n");
+            for entry in &self.route_trace {
+                out.push_str(&format!(
+                    "  {} node={:?} path={} {}\n",
+                    entry.phase.as_str(),
+                    entry.node,
+                    entry.path,
+                    entry.detail
                 ));
             }
         }
@@ -1130,105 +1171,160 @@ impl Canopy {
         Rect::new(dx, dy, clip.w, clip.h)
     }
 
-    /// Return the path for the uppermost node at a specific location.
-    fn location_path(&self, location: Point) -> Result<Path> {
-        if let Some(id) = self.core.locate_node(self.core.root, location)? {
-            Ok(self.core.node_path(self.core.root, id))
-        } else {
-            Ok(Path::empty())
-        }
-    }
-
-    /// Propagate a mouse event through the node under the event and all its ancestors.
-    pub(crate) fn mouse(&mut self, m: mouse::MouseEvent) -> Result<()> {
-        let mut action = None;
-        let mut changed = false;
-        let mut target = None;
-        let mut path = Path::empty();
-
+    /// Return the starting target and binding path for a mouse event.
+    fn mouse_route_start(&mut self, location: Point) -> Result<(Option<NodeId>, Path)> {
         if let Some(capture) = self.core.mouse_capture {
             if self.core.nodes.contains_key(capture) {
-                path = self.core.node_path(self.core.root, capture);
-                target = Some(capture);
+                return Ok((Some(capture), self.core.node_path(self.core.root, capture)));
             } else {
                 self.core.mouse_capture = None;
             }
         }
 
-        if target.is_none() {
-            path = self.location_path(m.location)?;
-            target = self.core.locate_node(self.core.root, m.location)?;
-        }
+        let target = self.core.locate_node(self.core.root, location)?;
+        let path = target
+            .map(|id| self.core.node_path(self.core.root, id))
+            .unwrap_or_else(Path::empty);
+        Ok((target, path))
+    }
 
-        if let Some(nid) = target {
-            let mut target = Some(nid);
-            while let Some(id) = target {
-                let view = self.core.nodes.get(id).map(|n| n.view).unwrap_or_default();
-                let content = view.content;
-                let local_location = content.to_local_point(m.location);
+    /// Add one entry to the current route trace.
+    fn trace_route(
+        &mut self,
+        phase: RoutePhase,
+        node: Option<NodeId>,
+        path: &Path,
+        detail: impl Into<String>,
+    ) {
+        self.route_trace.push(RouteTraceEntry {
+            phase,
+            node,
+            path: path.to_string(),
+            detail: detail.into(),
+        });
+    }
 
-                let outcome = self.core.dispatch_event_on_node(
-                    id,
-                    &Event::Mouse(mouse::MouseEvent {
-                        action: m.action,
-                        button: m.button,
-                        modifiers: m.modifiers,
-                        location: local_location,
-                    }),
-                )?;
+    /// Propagate a key or mouse event through one bubbling route.
+    fn route_input(
+        &mut self,
+        start: Option<NodeId>,
+        mut path: Path,
+        input: RoutedInput,
+    ) -> Result<bool> {
+        self.route_trace.clear();
+        self.trace_route(
+            RoutePhase::Target,
+            start,
+            &path,
+            format!("{} route selected", input.label()),
+        );
 
-                match outcome {
-                    EventOutcome::Handle | EventOutcome::Consume => {
-                        changed = true;
-                        break;
+        let mut target = start;
+        while let Some(id) = target {
+            if !self.core.nodes.contains_key(id) {
+                self.trace_route(
+                    RoutePhase::Unhandled,
+                    Some(id),
+                    &path,
+                    "target node disappeared",
+                );
+                return Ok(false);
+            }
+
+            let mut fallback_binding = None;
+            if let Some((binding, path_match)) =
+                self.keymap.resolve_match(&path, &input.input_spec())
+            {
+                if input.allows_pre_event_binding()
+                    && path_match.anchored_end
+                    && path_match.depth > 0
+                {
+                    self.trace_route(
+                        RoutePhase::PreEventBinding,
+                        Some(id),
+                        &path,
+                        "matched before widget event",
+                    );
+                    return self.execute_routed_binding(id, &path, input, binding);
+                }
+                fallback_binding = Some(binding);
+            }
+
+            let event = input.event_for_node(&self.core, id);
+            self.trace_route(
+                RoutePhase::WidgetEvent,
+                Some(id),
+                &path,
+                format!("{event:?}"),
+            );
+            let outcome = self.core.dispatch_event_on_node(id, &event)?;
+
+            match outcome {
+                EventOutcome::Handle | EventOutcome::Consume => {
+                    self.trace_route(RoutePhase::Handled, Some(id), &path, format!("{outcome:?}"));
+                    return Ok(true);
+                }
+                EventOutcome::Ignore => {
+                    if let Some(binding) = fallback_binding {
+                        self.trace_route(
+                            RoutePhase::PostEventBinding,
+                            Some(id),
+                            &path,
+                            "matched after widget ignored event",
+                        );
+                        return self.execute_routed_binding(id, &path, input, binding);
                     }
-                    EventOutcome::Ignore => {
-                        if let Some(binding) = self
-                            .keymap
-                            .resolve(&path, &inputmap::InputSpec::Mouse(m.into()))
-                        {
-                            action = Some((binding, id));
-                            break;
-                        }
-                        path.pop();
-                        target = self.core.nodes[id].parent;
-                    }
+                    self.trace_route(RoutePhase::Bubble, Some(id), &path, "ignored");
+                    target = self.core.nodes.get(id).and_then(|node| node.parent);
+                    path.pop();
                 }
             }
         }
 
-        if let Some((binding, nid)) = action {
-            // Build a local mouse event for the target node.
-            let view = self.core.nodes.get(nid).map(|n| n.view).unwrap_or_default();
-            let local_location = view.content.to_local_point(m.location);
-            let local_mouse = mouse::MouseEvent {
-                action: m.action,
-                button: m.button,
-                modifiers: m.modifiers,
-                location: local_location,
-            };
+        self.trace_route(RoutePhase::Unhandled, None, &path, "no handler");
+        Ok(false)
+    }
 
-            // Push a command-scope frame with the triggering mouse event so injected params work.
-            let frame = self
-                .core
-                .command_scope_for_event(&Event::Mouse(local_mouse));
-            let depth = self.core.push_command_scope(frame);
+    /// Execute a binding after route resolution.
+    fn execute_routed_binding(
+        &mut self,
+        node_id: NodeId,
+        path: &Path,
+        input: RoutedInput,
+        binding: inputmap::BindingTarget,
+    ) -> Result<bool> {
+        let label = help::binding_label(
+            &binding,
+            &self.core.commands,
+            |sid| self.script_host.script_source(sid),
+            |id| self.script_host.function_label(id),
+        );
+        self.trace_route(RoutePhase::BindingExecution, Some(node_id), path, label);
 
-            let result = self.execute_binding(nid, binding);
+        let event = input.event_for_node(&self.core, node_id);
+        let frame = self.core.command_scope_for_event(&event);
+        let depth = self.core.push_command_scope(frame);
+        let result = self.execute_binding(node_id, binding);
+        self.core.pop_command_scope(depth);
+        self.fulfill_pending_help_request();
+        result?;
 
-            self.core.pop_command_scope(depth);
+        self.trace_route(
+            RoutePhase::Handled,
+            Some(node_id),
+            path,
+            "binding completed",
+        );
+        Ok(true)
+    }
 
-            // Fulfill any pending help snapshot request before returning
-            self.fulfill_pending_help_request();
-
-            result?;
-            changed = true;
-        }
-
+    /// Propagate a mouse event through the node under the event and all its ancestors.
+    pub(crate) fn mouse(&mut self, m: mouse::MouseEvent) -> Result<()> {
+        let (target, path) = self.mouse_route_start(m.location)?;
+        let changed = self.route_input(target, path, RoutedInput::Mouse(m))?;
         if changed {
             self.render_pending = true;
         }
-
         Ok(())
     }
 
@@ -1237,63 +1333,14 @@ impl Canopy {
     where
         T: Into<key::Key>,
     {
-        let k = tk.into();
+        let key = tk.into();
         if self.core.focus.is_none() {
             self.core.focus_first(self.core.root);
         }
 
         let start = self.core.focus.unwrap_or(self.core.root);
-        let mut path = self.core.node_path(self.core.root, start);
-        let mut target = Some(start);
-        let mut action = None;
-        let mut changed = false;
-
-        while let Some(id) = target {
-            let mut fallback_binding = None;
-            if let Some((binding, m)) = self
-                .keymap
-                .resolve_match(&path, &inputmap::InputSpec::Key(k))
-            {
-                if m.anchored_end && m.depth > 0 {
-                    action = Some((binding, id));
-                    break;
-                }
-                fallback_binding = Some(binding);
-            }
-
-            let outcome = self.core.dispatch_event_on_node(id, &Event::Key(k))?;
-            match outcome {
-                EventOutcome::Handle | EventOutcome::Consume => {
-                    changed = true;
-                    break;
-                }
-                EventOutcome::Ignore => {
-                    if let Some(binding) = fallback_binding {
-                        action = Some((binding, id));
-                        break;
-                    }
-                    path.pop();
-                    target = self.core.nodes[id].parent;
-                }
-            }
-        }
-
-        if let Some((binding, nid)) = action {
-            // Push a command-scope frame with the triggering key event so injected params work.
-            let frame = self.core.command_scope_for_event(&Event::Key(k));
-            let depth = self.core.push_command_scope(frame);
-
-            let result = self.execute_binding(nid, binding);
-
-            self.core.pop_command_scope(depth);
-
-            // Fulfill any pending help snapshot request before returning
-            self.fulfill_pending_help_request();
-
-            result?;
-            changed = true;
-        }
-
+        let path = self.core.node_path(self.core.root, start);
+        let changed = self.route_input(Some(start), path, RoutedInput::Key(key))?;
         if changed {
             self.render_pending = true;
         }
@@ -1388,6 +1435,7 @@ impl Canopy {
                 }
                 Ok(())
             }
+            inputmap::BindingTarget::SetInputMode(mode) => self.set_input_mode(&mode),
             inputmap::BindingTarget::LuauFunction(id) => {
                 let host = self.script_host.clone();
                 host.call_function(self, node_id, id)
@@ -1688,6 +1736,44 @@ mod tests {
             let s = get_state();
             assert_eq!(s.path, vec!["r@key->ignore"]);
 
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    #[test]
+    fn input_mode_binding_target_switches_modes() -> Result<()> {
+        let mut canopy = Canopy::new();
+        canopy.bind_input_mode("", inputmap::InputSpec::Key('i'.into()), "", "insert")?;
+
+        canopy.key('i')?;
+
+        assert_eq!(canopy.input_mode(), "insert");
+        assert!(
+            canopy
+                .route_trace()
+                .iter()
+                .any(|entry| entry.phase == RoutePhase::BindingExecution)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn route_trace_records_unhandled_key_pipeline() -> Result<()> {
+        run_ttree(|c, _, tree| {
+            c.core.set_focus(tree.a_a);
+            c.key('z')?;
+            let phases = c
+                .route_trace()
+                .iter()
+                .map(|entry| entry.phase)
+                .collect::<Vec<_>>();
+
+            assert!(phases.contains(&RoutePhase::Target));
+            assert!(phases.contains(&RoutePhase::WidgetEvent));
+            assert!(phases.contains(&RoutePhase::Bubble));
+            assert!(phases.contains(&RoutePhase::Unhandled));
+            assert!(c.diagnostic_dump(tree.a_a).contains("route trace:"));
             Ok(())
         })?;
         Ok(())

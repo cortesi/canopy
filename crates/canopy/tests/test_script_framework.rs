@@ -217,4 +217,19 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn luau_can_switch_input_modes() -> Result<()> {
+        let mut harness = Harness::builder(ApiRoot).size(20, 5).build()?;
+
+        harness.canopy.eval_script(
+            r#"
+            canopy.set_mode("insert")
+            canopy.assert(canopy.input_mode() == "insert", "mode should switch")
+        "#,
+        )?;
+
+        assert_eq!(harness.canopy.input_mode(), "insert");
+        Ok(())
+    }
 }

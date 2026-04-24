@@ -59,7 +59,9 @@ pub mod text;
 pub mod world;
 
 // Public exports from internal modules
-pub use canopy::{AutomationCallback, AutomationHandle, Canopy, Loader};
+pub use canopy::{
+    AutomationCallback, AutomationHandle, Canopy, Loader, RoutePhase, RouteTraceEntry,
+};
 pub use children::{KeyedChildren, RemovePolicy};
 pub use context::{ChildKey, Context, Preorder, ReadContext, Slot};
 pub use fixture::{Fixture, FixtureInfo};
