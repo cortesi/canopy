@@ -91,6 +91,18 @@ impl Cell {
         out.push_str(&self.suffix);
     }
 
+    /// Return the rendered terminal cell width.
+    fn rendered_width(&self) -> usize {
+        if self.continuation {
+            return 0;
+        }
+        if self.is_empty() {
+            return 1;
+        }
+
+        text::grapheme_width(&self.rendered_text())
+    }
+
     /// Return this cell's rendered text.
     pub fn rendered_text(&self) -> String {
         let mut out = String::new();
@@ -478,26 +490,26 @@ impl TermBuf {
                     continue;
                 }
 
-                let style = &current_row[x].style;
-                let start_x = x;
-                let mut text = String::new();
-                while x < width {
-                    let cell = &current_row[x];
-                    if cell == &prev_row[x] || cell.style != *style {
+                let start_x = grapheme_start(current_row, x);
+                let style = &current_row[start_x].style;
+                let mut end_x = x;
+                while end_x < width {
+                    let cell = &current_row[end_x];
+                    if cell == &prev_row[end_x] || cell.style != *style {
                         break;
                     }
-                    cell.push_text(&mut text);
-                    x += 1;
+                    end_x += 1;
                 }
-                backend.style(style)?;
-                backend.text(
-                    Point {
-                        x: start_x as u32,
-                        y,
-                    },
-                    &text,
-                )?;
+                end_x = grapheme_end(current_row, end_x);
+
+                if end_x <= start_x {
+                    x += 1;
+                    continue;
+                }
+
+                render_line_range(backend, current_row, y, start_x, end_x - start_x)?;
                 wrote = true;
+                x = end_x;
             }
         }
         if wrote {
@@ -510,34 +522,48 @@ impl TermBuf {
     /// batching runs of text with the same style.
     pub fn render<R: RenderBackend>(&self, backend: &mut R) -> Result<()> {
         let mut wrote = false;
+        let width = self.size.w as usize;
         for y in 0..self.size.h {
-            let mut x = 0;
-            while x < self.size.w {
-                let idx = y as usize * self.size.w as usize + x as usize;
-                let cell = &self.cells[idx];
-                let style = cell.style;
-                let start_x = x;
-                let mut text = String::new();
-                while x < self.size.w {
-                    let idx2 = y as usize * self.size.w as usize + x as usize;
-                    let ccell = &self.cells[idx2];
-                    if ccell.style == style {
-                        ccell.push_text(&mut text);
-                        x += 1;
-                    } else {
-                        break;
-                    }
-                }
-                backend.style(&style)?;
-                backend.text(Point { x: start_x, y }, &text)?;
-                wrote = true;
-            }
+            let row_start = y as usize * width;
+            let row_end = row_start + width;
+            let row = &self.cells[row_start..row_end];
+            render_line_range(backend, row, y, 0, width)?;
+            wrote = true;
         }
         if wrote {
             backend.flush()?;
         }
         Ok(())
     }
+}
+
+/// Return the first cell of the grapheme containing the provided cell index.
+fn grapheme_start(row: &[Cell], mut x: usize) -> usize {
+    while x > 0 && row[x].continuation {
+        x -= 1;
+    }
+    x
+}
+
+/// Return the exclusive end of a range expanded to include trailing continuations.
+fn grapheme_end(row: &[Cell], mut x: usize) -> usize {
+    x = x.min(row.len());
+    while x < row.len() && row[x].continuation {
+        x += 1;
+    }
+    x
+}
+
+/// Return a cell range expanded to whole graphemes.
+fn grapheme_range(row: &[Cell], start: usize, len: usize) -> Option<(usize, usize)> {
+    if len == 0 || start >= row.len() {
+        return None;
+    }
+
+    let end = start.saturating_add(len).min(row.len());
+    let start = grapheme_start(row, start);
+    let end = grapheme_end(row, end);
+    Some((start, end))
 }
 
 /// Check whether two lines are identical up to a horizontal shift.
@@ -780,35 +806,63 @@ fn render_line_range<R: RenderBackend>(
     start: usize,
     len: usize,
 ) -> Result<()> {
-    if len == 0 || start >= row.len() {
+    let Some((start, end)) = grapheme_range(row, start, len) else {
         return Ok(());
-    }
+    };
 
-    let end = start.saturating_add(len).min(row.len());
     let mut x = start;
     while x < end {
-        let style = &row[x].style;
-        let run_start = x;
-        let mut text = String::new();
-        while x < end && row[x].style == *style {
-            row[x].push_text(&mut text);
-            x += 1;
-        }
-        backend.style(style)?;
-        backend.text(
-            Point {
-                x: run_start as u32,
-                y,
-            },
-            &text,
-        )?;
+        x = render_styled_cells(backend, row, y, x, end)?;
     }
     Ok(())
+}
+
+/// Render cells that share a style, splitting after wide graphemes.
+fn render_styled_cells<R: RenderBackend>(
+    backend: &mut R,
+    row: &[Cell],
+    y: u32,
+    start: usize,
+    end: usize,
+) -> Result<usize> {
+    let style = &row[start].style;
+    let mut text = String::new();
+    let mut x = start;
+    let mut split_after_wide = false;
+
+    while x < end {
+        let cell = &row[x];
+        if split_after_wide {
+            if cell.continuation {
+                x += 1;
+                continue;
+            }
+            break;
+        }
+        if cell.style != *style {
+            break;
+        }
+
+        let width = cell.rendered_width();
+        cell.push_text(&mut text);
+        split_after_wide = width > 1;
+        x += 1;
+    }
+
+    backend.style(style)?;
+    if text.is_empty() {
+        backend.text(Point { x: start as u32, y }, " ")?;
+        return Ok(x.max(start + 1));
+    }
+
+    backend.text(Point { x: start as u32, y }, &text)?;
+    Ok(x)
 }
 
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
+    use unicode_segmentation::UnicodeSegmentation;
 
     use super::*;
     use crate::{
@@ -1089,6 +1143,7 @@ mod tests {
         rows: Vec<Vec<char>>,
         char_shift: bool,
         line_shift: bool,
+        wide_as_narrow: bool,
     }
 
     impl ReplayBackend {
@@ -1098,6 +1153,14 @@ mod tests {
                 rows: vec![vec![' '; size.w as usize]; size.h as usize],
                 char_shift: true,
                 line_shift: true,
+                wide_as_narrow: false,
+            }
+        }
+
+        fn blank_with_narrow_wide(size: Size) -> Self {
+            Self {
+                wide_as_narrow: true,
+                ..Self::blank(size)
             }
         }
 
@@ -1126,11 +1189,18 @@ mod tests {
             if y >= self.rows.len() {
                 return Ok(());
             }
-            for (offset, ch) in txt.chars().enumerate() {
-                let x = loc.x as usize + offset;
+            let mut x = loc.x as usize;
+            for grapheme in txt.graphemes(true) {
+                let width = if self.wide_as_narrow {
+                    1
+                } else {
+                    grapheme_width(grapheme)
+                };
                 if x < self.rows[y].len() {
+                    let ch = grapheme.chars().next().unwrap_or(' ');
                     self.rows[y][x] = ch;
                 }
+                x = x.saturating_add(width);
             }
             Ok(())
         }
@@ -1375,6 +1445,19 @@ mod tests {
             be.ops,
             vec![format!("style {style:?}"), "text 0 0 ab ".to_string(),]
         );
+    }
+
+    #[test]
+    fn render_repositions_after_wide_graphemes() {
+        let style = def_style();
+        let mut tb = TermBuf::new(Size::new(8, 1), ' ', style);
+        tb.text(&style, Line::new(0, 0, 7), "a界bc");
+        tb.fill(&style, Rect::new(7, 0, 1, 1), '|');
+
+        let mut backend = ReplayBackend::blank_with_narrow_wide(Size::new(8, 1));
+        tb.render(&mut backend).unwrap();
+
+        assert_eq!(backend.screen_text(), "a界 bc  |");
     }
 
     #[test]

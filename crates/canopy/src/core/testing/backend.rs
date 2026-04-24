@@ -1,7 +1,10 @@
 use std::sync::{Arc, Mutex};
 
+use unicode_segmentation::UnicodeSegmentation;
+
 use crate::{
     Canopy,
+    core::text,
     error::Result,
     geom::{Point, Size},
     render::RenderBackend,
@@ -168,13 +171,23 @@ impl RenderBackend for CanvasRender {
 
     fn text(&mut self, loc: Point, txt: &str) -> Result<()> {
         let mut buf = self.canvas.lock().unwrap();
-        for (i, ch) in txt.chars().enumerate() {
-            let x = loc.x as usize + i;
-            let y = loc.y as usize;
+        let mut x = loc.x as usize;
+        let y = loc.y as usize;
+        for grapheme in txt.graphemes(true) {
+            let width = text::grapheme_width(grapheme);
             if x < buf.size.w as usize && y < buf.size.h as usize {
+                let ch = grapheme.chars().next().unwrap_or(' ');
                 buf.cells[y][x] = ch;
                 buf.painted[y][x] = true;
             }
+            for offset in 1..width {
+                let continuation_x = x.saturating_add(offset);
+                if continuation_x < buf.size.w as usize && y < buf.size.h as usize {
+                    buf.cells[y][continuation_x] = ' ';
+                    buf.painted[y][continuation_x] = true;
+                }
+            }
+            x = x.saturating_add(width);
         }
         Ok(())
     }
