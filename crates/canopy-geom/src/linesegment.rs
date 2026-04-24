@@ -12,7 +12,7 @@ pub struct LineSegment {
 impl LineSegment {
     /// The far limit of the extent.
     pub fn far(&self) -> u32 {
-        self.off + self.len
+        self.off.saturating_add(self.len)
     }
 
     /// Return a line segment that encloses this line segment and another. If
@@ -44,7 +44,7 @@ impl LineSegment {
                     len: n,
                 },
                 Self {
-                    off: self.off + n,
+                    off: self.off.saturating_add(n),
                     len: self.len - n,
                 },
             )
@@ -161,13 +161,58 @@ impl LineSegment {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
+
+    fn segment_strategy() -> impl Strategy<Value = LineSegment> {
+        (0u32..200, 0u32..100).prop_map(|(off, len)| LineSegment { off, len })
+    }
 
     #[test]
     fn far() -> Result<()> {
         let s = LineSegment { off: 5, len: 5 };
         assert_eq!(s.far(), 10);
         Ok(())
+    }
+
+    #[test]
+    fn far_saturates() {
+        let s = LineSegment {
+            off: u32::MAX - 1,
+            len: 10,
+        };
+        assert_eq!(s.far(), u32::MAX);
+    }
+
+    proptest! {
+        #[test]
+        fn intersection_is_commutative_and_contained(a in segment_strategy(), b in segment_strategy()) {
+            let ab = a.intersection(&b);
+            let ba = b.intersection(&a);
+            prop_assert_eq!(ab, ba);
+            if let Some(intersection) = ab {
+                prop_assert!(a.contains(&intersection));
+                prop_assert!(b.contains(&intersection));
+                prop_assert!(intersection.len > 0);
+            }
+        }
+
+        #[test]
+        fn enclose_contains_both_segments(a in segment_strategy(), b in segment_strategy()) {
+            let enclosure = a.enclose(&b);
+            prop_assert!(enclosure.contains(&a));
+            prop_assert!(enclosure.contains(&b));
+        }
+
+        #[test]
+        fn carve_start_preserves_original_extent(segment in segment_strategy(), n in 0u32..150) {
+            let (head, tail) = segment.carve_start(n);
+            prop_assert_eq!(head.off, segment.off);
+            prop_assert!(segment.contains(&head));
+            prop_assert!(segment.contains(&tail));
+            prop_assert_eq!(head.len.saturating_add(tail.len), segment.len);
+        }
     }
 
     #[test]

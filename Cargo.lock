@@ -606,6 +606,9 @@ dependencies = [
 [[package]]
 name = "canopy-geom"
 version = "0.0.1"
+dependencies = [
+ "proptest",
+]
 
 [[package]]
 name = "canopy-mcp"

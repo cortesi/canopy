@@ -1,5 +1,9 @@
 //! Layout types for configuring node positioning and sizing.
 
+use std::result::Result;
+
+use thiserror::Error;
+
 use crate::geom::{Rect, Size as GeomSize};
 
 /// Stack direction for children.
@@ -42,6 +46,33 @@ pub enum Sizing {
     Measure,
     /// Weighted share of remaining space along the axis.
     Flex(u32),
+}
+
+/// Invalid layout configuration.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum LayoutValidationError {
+    /// A minimum bound exceeds the corresponding maximum bound.
+    #[error("{axis} minimum {min} exceeds maximum {max}")]
+    MinExceedsMax {
+        /// Layout axis name.
+        axis: &'static str,
+        /// Minimum bound.
+        min: u32,
+        /// Maximum bound.
+        max: u32,
+    },
+    /// A flex sizing strategy has a zero weight.
+    #[error("{axis} flex weight must be greater than zero")]
+    ZeroFlexWeight {
+        /// Layout axis name.
+        axis: &'static str,
+    },
+    /// Padding on an axis overflows `u32`.
+    #[error("{axis} padding overflows u32")]
+    PaddingOverflow {
+        /// Padding axis name.
+        axis: &'static str,
+    },
 }
 
 /// Edge insets for padding.
@@ -340,6 +371,51 @@ impl Layout {
     pub fn measured(self) -> Self {
         self.width(Sizing::Measure).height(Sizing::Measure)
     }
+
+    /// Validate this layout configuration.
+    pub fn validate(&self) -> Result<(), LayoutValidationError> {
+        validate_bounds("width", self.min_width, self.max_width)?;
+        validate_bounds("height", self.min_height, self.max_height)?;
+        validate_sizing("width", self.width)?;
+        validate_sizing("height", self.height)?;
+        validate_padding("horizontal", self.padding.left, self.padding.right)?;
+        validate_padding("vertical", self.padding.top, self.padding.bottom)?;
+        Ok(())
+    }
+}
+
+/// Validate min/max bounds for one axis.
+fn validate_bounds(
+    axis: &'static str,
+    min: Option<u32>,
+    max: Option<u32>,
+) -> Result<(), LayoutValidationError> {
+    if let (Some(min), Some(max)) = (min, max)
+        && min > max
+    {
+        return Err(LayoutValidationError::MinExceedsMax { axis, min, max });
+    }
+    Ok(())
+}
+
+/// Validate one sizing strategy.
+fn validate_sizing(axis: &'static str, sizing: Sizing) -> Result<(), LayoutValidationError> {
+    if matches!(sizing, Sizing::Flex(0)) {
+        return Err(LayoutValidationError::ZeroFlexWeight { axis });
+    }
+    Ok(())
+}
+
+/// Validate padding arithmetic for one axis.
+fn validate_padding(
+    axis: &'static str,
+    first: u32,
+    second: u32,
+) -> Result<(), LayoutValidationError> {
+    first
+        .checked_add(second)
+        .ok_or(LayoutValidationError::PaddingOverflow { axis })?;
+    Ok(())
 }
 
 /// Content-box measurement constraints.
@@ -570,5 +646,42 @@ mod tests {
         let layout = Layout::fill().measured();
         assert_eq!(layout.width, Sizing::Measure);
         assert_eq!(layout.height, Sizing::Measure);
+    }
+
+    #[test]
+    fn validate_accepts_fixed_helpers() {
+        let layout = Layout::row().fixed_width(10).fixed_height(3);
+        assert!(layout.validate().is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_inverted_bounds() {
+        let layout = Layout::column().min_width(10).max_width(4);
+        assert!(matches!(
+            layout.validate(),
+            Err(LayoutValidationError::MinExceedsMax {
+                axis: "width",
+                min: 10,
+                max: 4,
+            })
+        ));
+    }
+
+    #[test]
+    fn validate_rejects_zero_flex_weight() {
+        let layout = Layout::column().width(Sizing::Flex(0));
+        assert!(matches!(
+            layout.validate(),
+            Err(LayoutValidationError::ZeroFlexWeight { axis: "width" })
+        ));
+    }
+
+    #[test]
+    fn validate_rejects_padding_overflow() {
+        let layout = Layout::column().padding(Edges::symmetric(0, u32::MAX));
+        assert!(matches!(
+            layout.validate(),
+            Err(LayoutValidationError::PaddingOverflow { axis: "horizontal" })
+        ));
     }
 }

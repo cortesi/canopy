@@ -33,33 +33,59 @@ impl FrameRects {
     /// Construct a new frame. If the rect is too small to fit the specified
     /// frame, we return a zero FrameRects.
     pub fn new(rect: Rect, border: u32) -> Self {
-        if rect.w <= (border * 2) || rect.h <= (border * 2) {
+        let Some(border_width) = border.checked_mul(2) else {
+            let mut frame = Self::zero();
+            frame.outer_rect = rect;
+            frame.border = border;
+            return frame;
+        };
+        if rect.w <= border_width || rect.h <= border_width {
             let mut f = Self::zero();
             f.outer_rect = rect;
             f.border = border;
             f
         } else {
             Self {
-                top: Rect::new(rect.tl.x + border, rect.tl.y, rect.w - 2 * border, border),
-                bottom: Rect::new(
-                    rect.tl.x + border,
-                    rect.tl.y + rect.h - border,
-                    rect.w - 2 * border,
+                top: Rect::new(
+                    rect.tl.x.saturating_add(border),
+                    rect.tl.y,
+                    rect.w - border_width,
                     border,
                 ),
-                left: Rect::new(rect.tl.x, rect.tl.y + border, border, rect.h - 2 * border),
-                right: Rect::new(
-                    rect.tl.x + rect.w - border,
-                    rect.tl.y + border,
+                bottom: Rect::new(
+                    rect.tl.x.saturating_add(border),
+                    rect.tl.y.saturating_add(rect.h).saturating_sub(border),
+                    rect.w - border_width,
                     border,
-                    rect.h - 2 * border,
+                ),
+                left: Rect::new(
+                    rect.tl.x,
+                    rect.tl.y.saturating_add(border),
+                    border,
+                    rect.h - border_width,
+                ),
+                right: Rect::new(
+                    rect.tl.x.saturating_add(rect.w).saturating_sub(border),
+                    rect.tl.y.saturating_add(border),
+                    border,
+                    rect.h - border_width,
                 ),
                 topleft: Rect::new(rect.tl.x, rect.tl.y, border, border),
-                topright: Rect::new(rect.tl.x + rect.w - border, rect.tl.y, border, border),
-                bottomleft: Rect::new(rect.tl.x, rect.tl.y + rect.h - border, border, border),
+                topright: Rect::new(
+                    rect.tl.x.saturating_add(rect.w).saturating_sub(border),
+                    rect.tl.y,
+                    border,
+                    border,
+                ),
+                bottomleft: Rect::new(
+                    rect.tl.x,
+                    rect.tl.y.saturating_add(rect.h).saturating_sub(border),
+                    border,
+                    border,
+                ),
                 bottomright: Rect::new(
-                    rect.tl.x + rect.w - border,
-                    rect.tl.y + rect.h - border,
+                    rect.tl.x.saturating_add(rect.w).saturating_sub(border),
+                    rect.tl.y.saturating_add(rect.h).saturating_sub(border),
                     border,
                     border,
                 ),
@@ -71,14 +97,17 @@ impl FrameRects {
 
     /// Get the inner rect of the frame (the space inside the frame)
     pub fn inner(&self) -> Rect {
-        if self.outer_rect.w <= (self.border * 2) || self.outer_rect.h <= (self.border * 2) {
+        let Some(border_width) = self.border.checked_mul(2) else {
+            return Rect::zero();
+        };
+        if self.outer_rect.w <= border_width || self.outer_rect.h <= border_width {
             Rect::zero()
         } else {
             Rect::new(
-                self.outer_rect.tl.x + self.border,
-                self.outer_rect.tl.y + self.border,
-                self.outer_rect.w - 2 * self.border,
-                self.outer_rect.h - 2 * self.border,
+                self.outer_rect.tl.x.saturating_add(self.border),
+                self.outer_rect.tl.y.saturating_add(self.border),
+                self.outer_rect.w - border_width,
+                self.outer_rect.h - border_width,
             )
         }
     }

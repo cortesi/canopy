@@ -120,16 +120,16 @@ Once widget view failures are explicit, tighten layout and rendering themselves.
 is to make geometry and terminal output mechanically testable rather than visually
 inspected.
 
-1. [ ] Add `Layout::validate()` or introduce a validating `LayoutSpec` builder.
-2. [ ] Consider `Sizing::Fixed(u32)` or a `Length` enum instead of encoding fixed sizes as
-       min equals max.
-3. [ ] Add property tests for `Rect`, `LineSegment`, clipping, `View`, and scroll clamping.
-4. [ ] Add layout property tests for flex allocation, hidden nodes, display modes, padding,
+1. [x] Add `Layout::validate()` or introduce a validating `LayoutSpec` builder.
+2. [x] Keep fixed sizing as `fixed_width()` and `fixed_height()` constraints rather than
+       adding `Sizing::Fixed(u32)` or a `Length` enum.
+3. [x] Add property tests for `Rect`, `LineSegment`, clipping, `View`, and scroll clamping.
+4. [x] Add layout property tests for flex allocation, hidden nodes, display modes, padding,
        and extreme sizes.
-5. [ ] Build a differential render test comparing full repaint and diff output states.
-6. [ ] Centralize grapheme writing and clipping in `TermBuf`.
-7. [ ] Test wide graphemes, continuation cells, row shifts, line shifts, and stale cells.
-8. [ ] Add compact render snapshots for failure cases that property tests find hard to
+5. [x] Build a differential render test comparing full repaint and diff output states.
+6. [x] Centralize grapheme writing and clipping in `TermBuf`.
+7. [x] Test wide graphemes, continuation cells, row shifts, line shifts, and stale cells.
+8. [x] Add compact render snapshots for failure cases that property tests find hard to
        explain.
 
 ## 6. Stage Six: Decide the Tree Mutation Boundary

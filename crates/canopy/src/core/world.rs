@@ -3041,6 +3041,89 @@ mod tests {
         assert_eq!(shares, vec![1, 1, 0]);
     }
 
+    proptest! {
+        #[test]
+        fn flex_shares_preserve_remaining_space(remaining in 0u32..1000, weights in prop::collection::vec(0u32..20, 0..12)) {
+            let shares = allocate_flex_shares(remaining, &weights);
+            prop_assert_eq!(shares.len(), weights.len());
+            let expected = if weights.is_empty() { 0 } else { remaining };
+            prop_assert_eq!(shares.iter().sum::<u32>(), expected);
+            prop_assert!(shares.iter().all(|share| *share <= remaining));
+        }
+
+        #[test]
+        fn clamp_scroll_stays_inside_canvas(
+            scroll_x in 0u32..200,
+            scroll_y in 0u32..200,
+            view_w in 0u32..100,
+            view_h in 0u32..100,
+            canvas_w in 0u32..150,
+            canvas_h in 0u32..150,
+        ) {
+            let mut scroll = Point { x: scroll_x, y: scroll_y };
+            let view = Size::new(view_w, view_h);
+            let canvas = Size::new(canvas_w, canvas_h);
+
+            clamp_scroll(&mut scroll, view, canvas);
+
+            let max_x = if view.w == 0 { 0 } else { canvas.w.saturating_sub(view.w) };
+            let max_y = if view.h == 0 { 0 } else { canvas.h.saturating_sub(view.h) };
+            prop_assert!(scroll.x <= max_x);
+            prop_assert!(scroll.y <= max_y);
+        }
+
+        #[test]
+        fn hidden_display_and_padding_layout_properties(
+            hidden in any::<bool>(),
+            display_none in any::<bool>(),
+            padding in 0u32..8,
+            screen_w in 0u32..40,
+            screen_h in 0u32..40,
+        ) {
+            let mut core = Core::new();
+            let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+            let parent = core.add_boxed(Box::new(parent_widget));
+            let (child_widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(3, 2)));
+            let child = core.add_boxed(Box::new(child_widget));
+
+            prop_assert!(core.set_children(parent, vec![child]).is_ok());
+            prop_assert!(attach_root_child(&mut core, parent).is_ok());
+            let parent_layout_set = core.with_layout_of(parent, |layout| {
+                *layout = Layout::fill().padding(Edges::all(padding));
+            }).is_ok();
+            prop_assert!(parent_layout_set);
+            let child_layout_set = core.with_layout_of(child, |layout| {
+                *layout = if display_none {
+                    Layout::fill().none()
+                } else {
+                    Layout::fill()
+                };
+            }).is_ok();
+            prop_assert!(child_layout_set);
+            core.set_hidden(child, hidden);
+
+            prop_assert!(core.update_layout(Size::new(screen_w, screen_h)).is_ok());
+
+            let parent_node = &core.nodes[parent];
+            let expected_content = Size::new(
+                parent_node.rect.w.saturating_sub(parent_node.layout.padding.horizontal()),
+                parent_node.rect.h.saturating_sub(parent_node.layout.padding.vertical()),
+            );
+            prop_assert_eq!(parent_node.content_size, expected_content);
+
+            let child_node = &core.nodes[child];
+            if hidden || display_none {
+                prop_assert_eq!(child_node.rect.w, 0);
+                prop_assert_eq!(child_node.rect.h, 0);
+                prop_assert_eq!(child_node.canvas, Size::ZERO);
+                prop_assert!(child_node.view.is_zero());
+            } else {
+                prop_assert!(child_node.rect.w <= parent_node.content_size.w);
+                prop_assert!(child_node.rect.h <= parent_node.content_size.h);
+            }
+        }
+    }
+
     #[test]
     fn flex_weight_zero_clamped() -> Result<()> {
         let mut core = Core::new();
@@ -3223,6 +3306,24 @@ mod tests {
         }
         core.update_layout(Size::new(0, 0))?;
         assert_eq!(core.nodes[child].scroll, Point { x: 0, y: 0 });
+        Ok(())
+    }
+
+    #[test]
+    fn extreme_padding_layout_does_not_panic() -> Result<()> {
+        let mut core = Core::new();
+        let (widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(u32::MAX, u32::MAX)));
+        let child = core.add_boxed(Box::new(widget));
+        attach_root_child(&mut core, child)?;
+        core.with_layout_of(child, |layout| {
+            *layout = Layout::fill().padding(Edges::all(u32::MAX));
+        })?;
+
+        core.update_layout(Size::new(u32::MAX, u32::MAX))?;
+
+        let node = &core.nodes[child];
+        assert_eq!(node.content_size, Size::ZERO);
+        assert_eq!(node.canvas, Size::ZERO);
         Ok(())
     }
 

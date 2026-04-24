@@ -29,7 +29,7 @@ impl Rect {
 
     /// The width times the height of the rectangle
     pub fn area(&self) -> u32 {
-        self.w * self.h
+        self.w.saturating_mul(self.h)
     }
 
     /// Creat a zero-sized `Rect` at the origin.
@@ -105,11 +105,12 @@ impl Rect {
     /// Does this rectangle contain the point?
     pub fn contains_point(&self, p: impl Into<Point>) -> bool {
         let p = p.into();
-        if self.is_zero() && p.is_zero() {
-            true
+        if self.is_zero() {
+            p == self.tl
         } else {
-            !((p.x < self.tl.x || p.x >= self.tl.x + self.w)
-                || (p.y < self.tl.y || p.y >= self.tl.y + self.h))
+            let right = self.tl.x.saturating_add(self.w);
+            let bottom = self.tl.y.saturating_add(self.h);
+            !((p.x < self.tl.x || p.x >= right) || (p.y < self.tl.y || p.y >= bottom))
         }
     }
 
@@ -136,14 +137,17 @@ impl Rect {
     /// Extracts an inner rectangle, given a border width. If the border width
     /// would exceed the size of the Rect, we return a zero rect.
     pub fn inner(&self, border: u32) -> Self {
-        if self.w < (border * 2) || self.h < (border * 2) {
+        let Some(border_width) = border.checked_mul(2) else {
+            return Self::default();
+        };
+        if self.w < border_width || self.h < border_width {
             Self::default()
         } else {
             Self::new(
-                self.tl.x + border,
-                self.tl.y + border,
-                self.w - (border * 2),
-                self.h - (border * 2),
+                self.tl.x.saturating_add(border),
+                self.tl.y.saturating_add(border),
+                self.w - border_width,
+                self.h - border_width,
             )
         }
     }
@@ -243,7 +247,7 @@ impl Rect {
         let mut ret = vec![];
         for i in 0..n {
             ret.push(Self::new(off, self.tl.y, widths[i as usize], self.h));
-            off += widths[i as usize];
+            off = off.saturating_add(widths[i as usize]);
         }
         Ok(ret)
     }
@@ -256,7 +260,7 @@ impl Rect {
         let mut ret = vec![];
         for i in 0..n {
             ret.push(Self::new(self.tl.x, off, self.w, heights[i as usize]));
-            off += heights[i as usize];
+            off = off.saturating_add(heights[i as usize]);
         }
         Ok(ret)
     }
@@ -277,10 +281,10 @@ impl Rect {
                     w: *width,
                     h: height,
                 });
-                y += height;
+                y = y.saturating_add(height);
             }
             ret.push(colret);
-            x += width;
+            x = x.saturating_add(*width);
         }
         Ok(ret)
     }
@@ -288,7 +292,7 @@ impl Rect {
     /// Sweeps upwards from the top of the rectangle. Stops once the closure returns true.
     pub fn search_up(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
         'outer: for y in (0..self.tl.y).rev() {
-            for x in self.tl.x..(self.tl.x + self.w) {
+            for x in self.tl.x..self.tl.x.saturating_add(self.w) {
                 if f(Point { x, y })? {
                     break 'outer;
                 }
@@ -299,8 +303,8 @@ impl Rect {
 
     /// Sweeps downwards from the bottom of the rectangle. Stops once the closure returns true.
     pub fn search_down(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
-        'outer: for y in self.tl.y + self.h..u32::MAX {
-            for x in self.tl.x..(self.tl.x + self.w) {
+        'outer: for y in self.tl.y.saturating_add(self.h)..u32::MAX {
+            for x in self.tl.x..self.tl.x.saturating_add(self.w) {
                 if f(Point { x, y })? {
                     break 'outer;
                 }
@@ -312,7 +316,7 @@ impl Rect {
     /// Sweeps leftwards the left of the rectangle. Stops once the closure returns true.
     pub fn search_left(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
         'outer: for x in (0..self.tl.x).rev() {
-            for y in self.tl.y..self.tl.y + self.h {
+            for y in self.tl.y..self.tl.y.saturating_add(self.h) {
                 if f(Point { x, y })? {
                     break 'outer;
                 }
@@ -323,8 +327,8 @@ impl Rect {
 
     /// Sweeps rightwards from the right of the rectangle. Stops once the closure returns true.
     pub fn search_right(&self, f: &mut dyn FnMut(Point) -> Result<bool>) -> Result<()> {
-        'outer: for x in self.tl.x + self.w..u32::MAX {
-            for y in self.tl.y..self.tl.y + self.h {
+        'outer: for x in self.tl.x.saturating_add(self.w)..u32::MAX {
+            for y in self.tl.y..self.tl.y.saturating_add(self.h) {
                 if f(Point { x, y })? {
                     break 'outer;
                 }
@@ -366,7 +370,7 @@ impl Rect {
             panic!("offset exceeds rectangle height")
         }
         Line {
-            tl: (self.tl.x, self.tl.y + off).into(),
+            tl: (self.tl.x, self.tl.y.saturating_add(off)).into(),
             w: self.w,
         }
     }
@@ -388,10 +392,10 @@ impl Rect {
         if other == self {
             vec![]
         } else if let Some(isec) = self.intersect(other) {
-            let right = self.tl.x + self.w;
-            let bottom = self.tl.y + self.h;
-            let isec_right = isec.tl.x + isec.w;
-            let isec_bottom = isec.tl.y + isec.h;
+            let right = self.tl.x.saturating_add(self.w);
+            let bottom = self.tl.y.saturating_add(self.h);
+            let isec_right = isec.tl.x.saturating_add(isec.w);
+            let isec_bottom = isec.tl.y.saturating_add(isec.h);
             let rects = vec![
                 Self::new(
                     self.tl.x,
@@ -472,7 +476,13 @@ fn split(len: u32, n: u32) -> Result<Vec<u32>> {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
+
+    fn rect_strategy() -> impl Strategy<Value = Rect> {
+        (0u32..200, 0u32..200, 0u32..100, 0u32..100).prop_map(|(x, y, w, h)| Rect::new(x, y, w, h))
+    }
 
     #[test]
     fn carve() -> Result<()> {
@@ -515,6 +525,54 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn extreme_rect_arithmetic_saturates() {
+        let rect = Rect::new(u32::MAX - 1, u32::MAX - 1, 10, 10);
+        assert_eq!(rect.area(), 100);
+        assert!(rect.contains_point((u32::MAX - 1, u32::MAX - 1)));
+        assert!(!rect.contains_point((0, 0)));
+
+        let huge = Rect::new(0, 0, u32::MAX, u32::MAX);
+        assert_eq!(huge.area(), u32::MAX);
+    }
+
+    proptest! {
+        #[test]
+        fn intersection_is_commutative_and_contained(a in rect_strategy(), b in rect_strategy()) {
+            let ab = a.intersect(&b);
+            let ba = b.intersect(&a);
+            prop_assert_eq!(ab, ba);
+            if let Some(intersection) = ab {
+                prop_assert!(a.contains_rect(&intersection));
+                prop_assert!(b.contains_rect(&intersection));
+            }
+        }
+
+        #[test]
+        fn sub_fragments_stay_in_source_and_avoid_removed_rect(a in rect_strategy(), b in rect_strategy()) {
+            for fragment in a.sub(&b) {
+                prop_assert!(a.contains_rect(&fragment));
+                prop_assert!(fragment.intersect(&b).is_none());
+            }
+        }
+
+        #[test]
+        fn split_horizontal_covers_original_width(rect in rect_strategy(), n in 1u32..20) {
+            let parts = rect.split_horizontal(n).expect("non-zero split count should succeed");
+            let total: u32 = parts.iter().map(|part| part.w).sum();
+            prop_assert_eq!(total, rect.w);
+            prop_assert!(parts.iter().all(|part| part.h == rect.h));
+        }
+
+        #[test]
+        fn split_vertical_covers_original_height(rect in rect_strategy(), n in 1u32..20) {
+            let parts = rect.split_vertical(n).expect("non-zero split count should succeed");
+            let total: u32 = parts.iter().map(|part| part.h).sum();
+            prop_assert_eq!(total, rect.h);
+            prop_assert!(parts.iter().all(|part| part.w == rect.w));
+        }
     }
 
     #[test]

@@ -22,7 +22,7 @@ impl Size<u32> {
 
     /// The area of this expanse.
     pub fn area(&self) -> u32 {
-        self.w * self.h
+        self.w.saturating_mul(self.h)
     }
 
     /// Return a `Rect` with the same dimensions as the `Size`, but a location at (0, 0).

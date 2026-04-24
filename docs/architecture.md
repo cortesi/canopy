@@ -77,6 +77,14 @@ rectangle relative to its parent's content origin. Padding produces content size
 The parent's direction, sizing, gap, alignment, display, and overflow settings
 place its children.
 
+`Layout::validate()` checks author-facing layout contracts: min must not exceed
+max, flex weights must be non-zero, and padding arithmetic must not overflow.
+The engine still uses saturating arithmetic internally so invalid or extreme
+geometry does not panic.
+
+Fixed outer sizes use `fixed_width()` and `fixed_height()`, which encode fixed
+size as equal min and max constraints. There is no separate fixed-size enum.
+
 Measurement is an infallible widget hook. A widget returns a fixed content size
 or asks layout to wrap visible children. Layout may measure a widget several
 times in one pass.
@@ -98,6 +106,14 @@ the previous buffer when possible.
 
 Widgets draw through `Render` in local coordinates. The runtime clips to the view,
 translates to terminal coordinates, and applies style effects.
+
+`TermBuf` owns grapheme writes. It stores a base cell plus continuation cells for
+wide graphemes, clips text by display columns, and clears stale continuation
+cells when narrower text overwrites wider text.
+
+Diff rendering must produce the same terminal state as a full repaint. Tests
+replay diff operations into an in-memory backend and compare the resulting screen
+with full render output.
 
 If a pre-render hook marks layout dirty, Canopy runs layout again before
 rendering. Rendering must not rely on stale views.

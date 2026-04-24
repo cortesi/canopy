@@ -220,8 +220,12 @@ impl TermBuf {
         }
     }
 
-    /// Write a grapheme cluster at a specific point.
-    pub(crate) fn put_grapheme(&mut self, p: Point, grapheme: &str, style: ResolvedStyle) {
+    /// Write a grapheme cluster and return its terminal cell width.
+    pub(crate) fn put_grapheme(&mut self, p: Point, grapheme: &str, style: ResolvedStyle) -> usize {
+        let width = text::grapheme_width(grapheme);
+        if width == 0 {
+            return 0;
+        }
         if let Some(i) = self.idx(p) {
             let mut chars = grapheme.chars();
             let ch = chars.next().unwrap_or(' ');
@@ -233,10 +237,20 @@ impl TermBuf {
                 continuation: false,
             };
         }
+        for offset in 1..width {
+            self.put_continuation(
+                Point {
+                    x: p.x.saturating_add(offset as u32),
+                    y: p.y,
+                },
+                style,
+            );
+        }
+        width
     }
 
     /// Write a continuation cell for a wide glyph.
-    pub(crate) fn put_continuation(&mut self, p: Point, style: ResolvedStyle) {
+    fn put_continuation(&mut self, p: Point, style: ResolvedStyle) {
         if let Some(i) = self.idx(p) {
             self.cells[i] = Cell::continuation(style);
         }
@@ -315,15 +329,6 @@ impl TermBuf {
                 }
 
                 self.put_grapheme(Point { x, y: isec.tl.y }, grapheme, *style);
-                for i in 1..width {
-                    self.put_continuation(
-                        Point {
-                            x: x + i as u32,
-                            y: isec.tl.y,
-                        },
-                        *style,
-                    );
-                }
                 x += width as u32;
                 col += width;
             }
@@ -1079,6 +1084,138 @@ mod tests {
         }
     }
 
+    struct ReplayBackend {
+        size: Size,
+        rows: Vec<Vec<char>>,
+        char_shift: bool,
+        line_shift: bool,
+    }
+
+    impl ReplayBackend {
+        fn blank(size: Size) -> Self {
+            Self {
+                size,
+                rows: vec![vec![' '; size.w as usize]; size.h as usize],
+                char_shift: true,
+                line_shift: true,
+            }
+        }
+
+        fn from_buffer(buf: &TermBuf) -> Self {
+            let mut backend = Self::blank(buf.size());
+            buf.render(&mut backend).unwrap();
+            backend
+        }
+
+        fn screen_text(&self) -> String {
+            self.rows
+                .iter()
+                .map(|row| row.iter().collect::<String>())
+                .collect::<Vec<_>>()
+                .join("\n")
+        }
+    }
+
+    impl RenderBackend for ReplayBackend {
+        fn style(&mut self, _style: &ResolvedStyle) -> Result<()> {
+            Ok(())
+        }
+
+        fn text(&mut self, loc: Point, txt: &str) -> Result<()> {
+            let y = loc.y as usize;
+            if y >= self.rows.len() {
+                return Ok(());
+            }
+            for (offset, ch) in txt.chars().enumerate() {
+                let x = loc.x as usize + offset;
+                if x < self.rows[y].len() {
+                    self.rows[y][x] = ch;
+                }
+            }
+            Ok(())
+        }
+
+        fn supports_char_shift(&self) -> bool {
+            self.char_shift
+        }
+
+        fn shift_chars(&mut self, loc: Point, count: i32) -> Result<()> {
+            let y = loc.y as usize;
+            let start = loc.x as usize;
+            if y >= self.rows.len() || start >= self.rows[y].len() || count == 0 {
+                return Ok(());
+            }
+
+            let width = self.rows[y].len();
+            if count > 0 {
+                let count = count as usize;
+                for x in (start..width).rev() {
+                    self.rows[y][x] = x
+                        .checked_sub(count)
+                        .filter(|source| *source >= start)
+                        .map_or(' ', |source| self.rows[y][source]);
+                }
+            } else {
+                let count = (-count) as usize;
+                for x in start..width {
+                    let source = x.saturating_add(count);
+                    self.rows[y][x] = if source < width {
+                        self.rows[y][source]
+                    } else {
+                        ' '
+                    };
+                }
+            }
+            Ok(())
+        }
+
+        fn supports_line_shift(&self) -> bool {
+            self.line_shift
+        }
+
+        fn shift_lines(&mut self, top: u32, bottom: u32, count: i32) -> Result<()> {
+            let top = top as usize;
+            let bottom = bottom.min(self.size.h.saturating_sub(1)) as usize;
+            if top > bottom || count == 0 {
+                return Ok(());
+            }
+            let original = self.rows.clone();
+            if count > 0 {
+                let count = count as usize;
+                for y in (top..=bottom).rev() {
+                    self.rows[y] = y
+                        .checked_sub(count)
+                        .filter(|source| *source >= top)
+                        .map_or(vec![' '; self.size.w as usize], |source| {
+                            original[source].clone()
+                        });
+                }
+            } else {
+                let count = (-count) as usize;
+                for y in top..=bottom {
+                    let source = y.saturating_add(count);
+                    self.rows[y] = if source <= bottom {
+                        original[source].clone()
+                    } else {
+                        vec![' '; self.size.w as usize]
+                    };
+                }
+            }
+            Ok(())
+        }
+
+        fn flush(&mut self) -> Result<()> {
+            Ok(())
+        }
+
+        fn reset(&mut self) -> Result<()> {
+            for row in &mut self.rows {
+                row.fill(' ');
+            }
+            Ok(())
+        }
+    }
+
     fn char_strategy() -> impl Strategy<Value = char> {
         prop::sample::select(vec![' ', 'a', 'b', 'c', 'x', 'y'])
     }
@@ -1091,6 +1228,30 @@ mod tests {
              -> (u32, u32, Vec<char>) {
                 (width, height, cells)
             }
+    }
+
+    prop_compose! {
+        fn buf_pair_strategy()
+            (width in 1u32..8, height in 1u32..6)
+            (width in Just(width), height in Just(height),
+             prev in prop::collection::vec(char_strategy(), (width * height) as usize..=(width * height) as usize),
+             current in prop::collection::vec(char_strategy(), (width * height) as usize..=(width * height) as usize))
+             -> (u32, u32, Vec<char>, Vec<char>) {
+                (width, height, prev, current)
+            }
+    }
+
+    fn buf_from_cells(width: u32, height: u32, cells: &[char]) -> TermBuf {
+        let style = def_style();
+        let mut buf = TermBuf::new(Size::new(width, height), ' ', style);
+        let mut index = 0usize;
+        for y in 0..height {
+            for x in 0..width {
+                buf.put(Point { x, y }, cells[index], style);
+                index += 1;
+            }
+        }
+        buf
     }
 
     #[test]
@@ -1119,6 +1280,20 @@ mod tests {
             let mut backend = CountingBackend::default();
             buf.diff(&prev, &mut backend).unwrap();
             prop_assert_eq!(backend.total_calls(), 0);
+        }
+
+        #[test]
+        fn diff_replay_matches_full_render((width, height, prev_cells, current_cells) in buf_pair_strategy()) {
+            let prev = buf_from_cells(width, height, &prev_cells);
+            let current = buf_from_cells(width, height, &current_cells);
+
+            let mut full = ReplayBackend::blank(Size::new(width, height));
+            current.render(&mut full).unwrap();
+
+            let mut diff = ReplayBackend::from_buffer(&prev);
+            current.diff(&prev, &mut diff).unwrap();
+
+            prop_assert_eq!(diff.screen_text(), full.screen_text());
         }
     }
 
@@ -1200,6 +1375,28 @@ mod tests {
             be.ops,
             vec![format!("style {style:?}"), "text 0 0 ab ".to_string(),]
         );
+    }
+
+    #[test]
+    fn text_overwrites_stale_wide_continuation_cells() {
+        let style = def_style();
+        let mut tb = TermBuf::new(Size::new(3, 1), ' ', style);
+        tb.text(&style, Line::new(0, 0, 3), "界a");
+        BufTest::new(&tb).assert_matches(buf!["界Xa"]);
+
+        tb.text(&style, Line::new(0, 0, 3), "b");
+        BufTest::new(&tb).assert_matches(buf!["b  "]);
+    }
+
+    #[test]
+    fn text_clips_wide_grapheme_without_partial_cell() {
+        let style = def_style();
+        let mut tb = TermBuf::empty(Size::new(1, 1));
+        tb.text(&style, Line::new(0, 0, 1), "界");
+
+        let cell = tb.get(Point { x: 0, y: 0 }).expect("missing cell");
+        assert_eq!(cell.ch, ' ');
+        assert!(!cell.continuation);
     }
 
     #[test]

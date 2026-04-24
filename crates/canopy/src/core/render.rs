@@ -253,13 +253,6 @@ impl<'a> Render<'a> {
                 let adjusted = self.translate_point(point);
                 let resolved = style.resolve_at(line_rect, point);
                 self.buffer_mut().put_grapheme(adjusted, grapheme, resolved);
-                for i in 1..width {
-                    let continuation = geom::Point {
-                        x: adjusted.x.saturating_add(i as u32),
-                        y: adjusted.y,
-                    };
-                    self.buffer_mut().put_continuation(continuation, resolved);
-                }
                 x = x.saturating_add(width as u32);
                 col = col.saturating_add(width);
             }
@@ -293,17 +286,14 @@ impl<'a> Render<'a> {
         p: geom::Point,
         grapheme: &str,
     ) -> Result<()> {
-        if self.clip.contains_point(p) {
+        let width = text::grapheme_width(grapheme);
+        if width == 0 {
+            return Ok(());
+        }
+        let glyph_rect = geom::Rect::new(p.x, p.y, width as u32, 1);
+        if self.clip.contains_rect(&glyph_rect) {
             let adjusted = self.translate_point(p);
             self.buffer_mut().put_grapheme(adjusted, grapheme, style);
-            let width = text::grapheme_width(grapheme);
-            for i in 1..width {
-                let continuation = geom::Point {
-                    x: adjusted.x.saturating_add(i as u32),
-                    y: adjusted.y,
-                };
-                self.buffer_mut().put_continuation(continuation, style);
-            }
         }
         Ok(())
     }
@@ -511,6 +501,27 @@ mod tests {
             "XXXXXX"
             "XXXXXX"
         ));
+    }
+
+    #[test]
+    fn put_grapheme_clips_wide_glyphs_atomically() {
+        let stylemap = StyleMap::new();
+        let mut style_manager = StyleManager::new();
+        let style = style_manager
+            .get(&stylemap, "")
+            .resolve_solid()
+            .expect("default style resolves to solid colors");
+        let mut render = Render::new(&stylemap, &mut style_manager, geom::Rect::new(0, 0, 2, 1));
+
+        render
+            .put_grapheme(style, geom::Point { x: 1, y: 0 }, "界")
+            .unwrap();
+        assert_buffer_matches(&render, buf!("XX"));
+
+        render
+            .put_grapheme(style, geom::Point { x: 0, y: 0 }, "界")
+            .unwrap();
+        assert_buffer_matches(&render, buf!("界X"));
     }
 
     #[test]
