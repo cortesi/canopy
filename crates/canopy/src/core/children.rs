@@ -93,6 +93,25 @@ where
         &mut self,
         ctx: &mut dyn Context,
         desired: I,
+        create: C,
+        update: U,
+        remove: RemovePolicy,
+    ) -> Result<Vec<TypedId<W>>>
+    where
+        W: Widget + 'static,
+        I: IntoIterator<Item = K>,
+        C: FnMut(&K) -> W,
+        U: FnMut(&K, TypedId<W>, &mut dyn Context) -> Result<()>,
+    {
+        let mut create = create;
+        self.try_reconcile(ctx, desired, |key| Ok(create(key)), update, remove)
+    }
+
+    /// Reconcile this collection against the desired key order with fallible creation.
+    pub fn try_reconcile<W, I, C, U>(
+        &mut self,
+        ctx: &mut dyn Context,
+        desired: I,
         mut create: C,
         mut update: U,
         remove: RemovePolicy,
@@ -100,7 +119,7 @@ where
     where
         W: Widget + 'static,
         I: IntoIterator<Item = K>,
-        C: FnMut(&K) -> W,
+        C: FnMut(&K) -> Result<W>,
         U: FnMut(&K, TypedId<W>, &mut dyn Context) -> Result<()>,
     {
         let desired: Vec<K> = desired.into_iter().collect();
@@ -147,7 +166,7 @@ where
                 }
                 id
             } else {
-                let id = ctx.add_child(create(key))?;
+                let id = ctx.add_child(create(key)?)?;
                 let node_id = NodeId::from(id);
                 self.map.insert(key.clone(), node_id);
                 node_id

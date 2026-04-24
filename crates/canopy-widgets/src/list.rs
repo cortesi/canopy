@@ -6,7 +6,8 @@
 use std::marker::PhantomData;
 
 use canopy::{
-    Context, EventOutcome, KeyedChildren, ReadContext, RemovePolicy, TypedId, Widget, command,
+    Context, EventOutcome, KeyedChildren, NodeId, ReadContext, RemovePolicy, TypedId, Widget,
+    command,
     commands::{
         CommandArgs, CommandCall, CommandInvocation, CommandScopeFrame, ListRowContext, ToArgValue,
     },
@@ -229,6 +230,7 @@ impl<W: Selectable> List<W> {
         let key = self.next_key();
         let mut desired = self.items.keys().to_vec();
         desired.push(key);
+        let previous_focus = ctx.focused_leaf(ctx.root_id());
 
         let ordered =
             self.reconcile_with_widget(ctx, desired, key, widget, RemovePolicy::RemoveSubtree)?;
@@ -239,8 +241,12 @@ impl<W: Selectable> List<W> {
 
         // Auto-select and focus if this is the first item
         if self.selected.is_none() {
-            self.update_selection(ctx, Some(self.items.len() - 1));
+            self.update_selection(ctx, Some(self.items.len() - 1))?;
             ctx.set_focus(id.into());
+        } else if let Some(previous_focus) = previous_focus {
+            ctx.set_focus(previous_focus);
+        } else {
+            self.focus_selected(ctx);
         }
 
         Ok(id)
@@ -254,6 +260,7 @@ impl<W: Selectable> List<W> {
         let clamped = index.min(self.items.len());
         let key = self.next_key();
         let was_empty = self.selected.is_none();
+        let previous_focus = ctx.focused_leaf(ctx.root_id());
         let mut desired = self.items.keys().to_vec();
         desired.insert(clamped, key);
         let ordered =
@@ -270,12 +277,16 @@ impl<W: Selectable> List<W> {
                 self.selected = Some(sel + 1);
             }
         } else if !self.items.is_empty() {
-            self.update_selection(ctx, Some(0));
+            self.update_selection(ctx, Some(0))?;
         }
 
         // Focus first item if this was an empty list
         if was_empty && let Some(first_id) = self.item(0) {
             ctx.set_focus(first_id.into());
+        } else if let Some(previous_focus) = previous_focus {
+            ctx.set_focus(previous_focus);
+        } else {
+            self.focus_selected(ctx);
         }
 
         Ok(id)
@@ -289,7 +300,7 @@ impl<W: Selectable> List<W> {
         }
         desired.remove(index);
         self.reconcile_order(ctx, desired, RemovePolicy::RemoveSubtree)?;
-        self.repair_selection_after_remove(ctx, index);
+        self.repair_selection_after_remove(ctx, index)?;
         Ok(true)
     }
 
@@ -306,7 +317,7 @@ impl<W: Selectable> List<W> {
             .ok_or_else(|| Error::Internal("list take missing node id".into()))?;
         desired.remove(index);
         self.reconcile_order(ctx, desired, RemovePolicy::Detach)?;
-        self.repair_selection_after_remove(ctx, index);
+        self.repair_selection_after_remove(ctx, index)?;
         Ok(Some(removed))
     }
 
@@ -328,46 +339,78 @@ impl<W: Selectable> List<W> {
     }
 
     /// Select an item at the given index.
-    pub fn select(&mut self, ctx: &mut dyn Context, index: usize) {
+    pub fn select(&mut self, ctx: &mut dyn Context, index: usize) -> Result<()> {
         if self.items.is_empty() {
-            return;
+            return Ok(());
         }
-        self.update_selection(ctx, Some(index.min(self.items.len() - 1)));
+        self.update_selection(ctx, Some(index.min(self.items.len() - 1)))
     }
 
     /// Update selection to a new index, managing item selection states.
-    fn update_selection(&mut self, ctx: &mut dyn Context, new_selected: Option<usize>) {
-        // Clear old selection
-        if let Some(old_idx) = self.selected
-            && let Some(old_id) = self.item(old_idx)
+    fn update_selection(
+        &mut self,
+        ctx: &mut dyn Context,
+        new_selected: Option<usize>,
+    ) -> Result<()> {
+        if let Some(index) = new_selected
+            && index >= self.items.len()
         {
+            return Err(Error::Invalid(
+                "list selection index is out of bounds".into(),
+            ));
+        }
+
+        let old_id = self.selection_id(self.selected, "list selection points at a missing item")?;
+        let new_id =
+            self.selection_id(new_selected, "new list selection points at a missing item")?;
+        let same_selection = old_id.as_ref().map(|id| NodeId::from(*id))
+            == new_id.as_ref().map(|id| NodeId::from(*id));
+        if same_selection {
+            self.selected = new_selected;
+            return Ok(());
+        }
+
+        if let Some(old_id) = old_id {
             ctx.with_widget(old_id, |w: &mut W, _| {
                 w.set_selected(false);
                 Ok(())
-            })
-            .ok();
+            })?;
         }
 
-        // Set new selection
-        if let Some(new_idx) = new_selected
-            && let Some(new_id) = self.item(new_idx)
-        {
+        if let Some(new_id) = new_id {
             ctx.with_widget(new_id, |w: &mut W, _| {
                 w.set_selected(true);
                 Ok(())
-            })
-            .ok();
+            })?;
         }
 
         self.selected = new_selected;
+        debug_assert!(self.selection_invariant_holds());
+        Ok(())
+    }
+
+    /// Return a selected item ID or an error when the list invariants are broken.
+    fn selection_id(&self, index: Option<usize>, message: &str) -> Result<Option<TypedId<W>>> {
+        let Some(index) = index else {
+            return Ok(None);
+        };
+        self.item(index)
+            .map(Some)
+            .ok_or_else(|| Error::Internal(message.into()))
+    }
+
+    /// Return whether the stored selection points at a live list item.
+    fn selection_invariant_holds(&self) -> bool {
+        self.selected.is_none_or(|index| index < self.items.len())
     }
 
     /// Repair selection and focus after removing an item.
-    fn repair_selection_after_remove(&mut self, ctx: &mut dyn Context, index: usize) {
+    fn repair_selection_after_remove(&mut self, ctx: &mut dyn Context, index: usize) -> Result<()> {
         if let Some(sel) = self.selected {
             if index < sel {
                 self.selected = Some(sel - 1);
-                return;
+                debug_assert!(self.selection_invariant_holds());
+                return Ok(());
             }
             if index == sel {
                 let new_sel = if self.items.is_empty() {
@@ -375,41 +418,46 @@ impl<W: Selectable> List<W> {
                 } else {
                     Some(sel.min(self.items.len() - 1))
                 };
-                self.update_selection(ctx, new_sel);
+                self.selected = None;
+                self.update_selection(ctx, new_sel)?;
                 if new_sel.is_some() {
                     self.focus_selected(ctx);
                 }
             }
         }
+        debug_assert!(self.selection_invariant_holds());
+        Ok(())
     }
 
     /// Move selection to the first item.
     #[command]
-    pub fn select_first(&mut self, c: &mut dyn Context) {
+    pub fn select_first(&mut self, c: &mut dyn Context) -> Result<()> {
         if self.items.is_empty() {
-            return;
+            return Ok(());
         }
-        self.update_selection(c, Some(0));
+        self.update_selection(c, Some(0))?;
         self.focus_selected(c);
         self.ensure_selected_visible(c);
+        Ok(())
     }
 
     /// Move selection to the last item.
     #[command]
-    pub fn select_last(&mut self, c: &mut dyn Context) {
+    pub fn select_last(&mut self, c: &mut dyn Context) -> Result<()> {
         if self.items.is_empty() {
-            return;
+            return Ok(());
         }
-        self.update_selection(c, Some(self.items.len() - 1));
+        self.update_selection(c, Some(self.items.len() - 1))?;
         self.focus_selected(c);
         self.ensure_selected_visible(c);
+        Ok(())
     }
 
     /// Move selection by a signed offset.
     #[command]
-    pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) {
+    pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
         if self.items.is_empty() {
-            return;
+            return Ok(());
         }
         let current = self.selected.unwrap_or(0);
         let next = if delta.is_negative() {
@@ -417,19 +465,20 @@ impl<W: Selectable> List<W> {
         } else {
             current.saturating_add(delta as usize)
         };
-        self.update_selection(c, Some(next.min(self.items.len() - 1)));
+        self.update_selection(c, Some(next.min(self.items.len() - 1)))?;
         self.focus_selected(c);
         self.ensure_selected_visible(c);
+        Ok(())
     }
 
     /// Handle a mouse click within the list.
-    fn handle_click(&mut self, c: &mut dyn Context, event: mouse::MouseEvent) -> bool {
+    fn handle_click(&mut self, c: &mut dyn Context, event: mouse::MouseEvent) -> Result<bool> {
         match event.action {
             mouse::Action::Down if event.button == mouse::Button::Left => {
                 let Some(index) = self.index_at_location(c, event.location) else {
-                    return false;
+                    return Ok(false);
                 };
-                self.select(c, index);
+                self.select(c, index)?;
                 self.focus_selected(c);
                 self.ensure_selected_visible(c);
                 if self.on_activate.is_some() {
@@ -440,7 +489,7 @@ impl<W: Selectable> List<W> {
                     });
                     c.capture_mouse();
                 }
-                true
+                Ok(true)
             }
             mouse::Action::Drag if event.button == mouse::Button::Left => {
                 if let Some(pending) = self.pending_activate.as_mut()
@@ -449,9 +498,9 @@ impl<W: Selectable> List<W> {
                     if drag_exceeded(pending.origin, event.location, config.drag_threshold) {
                         pending.dragged = true;
                     }
-                    return true;
+                    return Ok(true);
                 }
-                false
+                Ok(false)
             }
             mouse::Action::Up if event.button == mouse::Button::Left => {
                 let pending = self.pending_activate.take();
@@ -463,11 +512,11 @@ impl<W: Selectable> List<W> {
                             self.dispatch_activate(c, pending.index);
                         }
                     }
-                    return true;
+                    return Ok(true);
                 }
-                false
+                Ok(false)
             }
-            _ => false,
+            _ => Ok(false),
         }
     }
 
@@ -519,8 +568,8 @@ impl<W: Selectable> List<W> {
     /// Positive values move down; negative values move up.
     /// @param delta Signed page delta. Positive moves down and negative moves up.
     #[command]
-    pub fn page(&mut self, c: &mut dyn Context, delta: i32) {
-        self.page_shift(c, delta >= 0);
+    pub fn page(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
+        self.page_shift(c, delta >= 0)
     }
 
     /// Ensure the selected item is visible in the view.
@@ -548,21 +597,21 @@ impl<W: Selectable> List<W> {
     }
 
     /// Move selection by one page and keep it visible.
-    fn page_shift(&mut self, c: &mut dyn Context, forward: bool) {
+    fn page_shift(&mut self, c: &mut dyn Context, forward: bool) -> Result<()> {
         if self.items.is_empty() {
-            return;
+            return Ok(());
         }
 
         let view = c.view();
         let view_rect = view.view_rect();
         if view_rect.h == 0 {
-            return;
+            return Ok(());
         }
 
         let metrics = self.item_metrics(c, view_rect.w.max(1));
         let selected_idx = self.selected.unwrap_or(0).min(self.items.len() - 1);
         let Some((start, _height)) = metrics.get(selected_idx).copied() else {
-            return;
+            return Ok(());
         };
 
         let page = view_rect.h.max(1);
@@ -573,10 +622,11 @@ impl<W: Selectable> List<W> {
         };
 
         if let Some(target_idx) = Self::index_at_y(&metrics, target_y) {
-            self.select(c, target_idx);
+            self.select(c, target_idx)?;
             self.focus_selected(c);
             self.ensure_selected_visible(c);
         }
+        Ok(())
     }
 
     /// Find the item index at a local content-space location.
@@ -648,14 +698,18 @@ impl<W: Selectable> List<W> {
             return Err(Error::Internal("list key collision".into()));
         }
         let mut widget = Some(widget);
-        self.items.reconcile(
+        self.items.try_reconcile(
             ctx,
             desired,
             |requested| {
                 if *requested != key {
-                    panic!("list reconcile requested an unexpected key");
+                    return Err(Error::Internal(
+                        "list reconcile requested an unexpected key".into(),
+                    ));
                 }
-                widget.take().expect("list widget already consumed")
+                widget
+                    .take()
+                    .ok_or_else(|| Error::Internal("list widget already consumed".into()))
             },
             |_, _, _| Ok(()),
             remove,
@@ -669,11 +723,13 @@ impl<W: Selectable> List<W> {
         desired: Vec<ListKey>,
         remove: RemovePolicy,
     ) -> Result<Vec<TypedId<W>>> {
-        self.items.reconcile(
+        self.items.try_reconcile(
             ctx,
             desired,
-            |_| {
-                panic!("list reconcile requested a missing widget");
+            |requested| {
+                Err(Error::Internal(format!(
+                    "list reconcile requested missing widget for key {requested:?}",
+                )))
             },
             |_, _, _| Ok(()),
             remove,
@@ -694,7 +750,7 @@ impl<W: Selectable + Send + 'static> Widget for List<W> {
 
     fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
         if let Event::Mouse(mouse_event) = event
-            && self.handle_click(ctx, *mouse_event)
+            && self.handle_click(ctx, *mouse_event)?
         {
             return Ok(EventOutcome::Handle);
         }
@@ -801,16 +857,68 @@ fn drag_exceeded(origin: Point, current: Point, threshold: u32) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use canopy::{Canopy, Loader, testing::harness::Harness};
+    use canopy::{
+        Canopy, Loader, NodeId, ReadContext, derive_commands, state::NodeName,
+        testing::harness::Harness,
+    };
 
     use super::*;
     use crate::Text;
+
+    struct Row {
+        selected: bool,
+    }
+
+    #[derive_commands]
+    impl Row {
+        fn new() -> Self {
+            Self { selected: false }
+        }
+    }
+
+    impl Selectable for Row {
+        fn set_selected(&mut self, selected: bool) {
+            self.selected = selected;
+        }
+    }
+
+    impl Widget for Row {
+        fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+            true
+        }
+
+        fn name(&self) -> NodeName {
+            NodeName::convert("row")
+        }
+    }
 
     impl Loader for List<Text> {
         fn load(c: &mut Canopy) -> Result<()> {
             c.add_commands::<Self>()?;
             Ok(())
         }
+    }
+
+    impl Loader for List<Row> {
+        fn load(c: &mut Canopy) -> Result<()> {
+            c.add_commands::<Self>()?;
+            Ok(())
+        }
+    }
+
+    fn row_selection(harness: &mut Harness) -> Vec<bool> {
+        let ids = harness.with_root_widget::<List<Row>, _>(|list| {
+            (0..list.len())
+                .map(|index| list.item(index).expect("row id"))
+                .collect::<Vec<_>>()
+        });
+        ids.into_iter()
+            .map(|id| harness.with_widget::<Row, _>(id, |row| row.selected))
+            .collect()
+    }
+
+    fn focused_row(harness: &Harness) -> Option<NodeId> {
+        harness.canopy.core.focus_id()
     }
 
     #[test]
@@ -902,6 +1010,52 @@ mod tests {
             assert!(list.is_empty());
             assert_eq!(list.selected_index(), None);
         });
+
+        Ok(())
+    }
+
+    #[test]
+    fn selection_and_focus_follow_selected_row() -> Result<()> {
+        let root = List::<Row>::new();
+        let mut harness = Harness::builder(root).size(20, 10).build()?;
+
+        let first = harness.with_root_context(|list: &mut List<Row>, ctx| {
+            let first = list.append(ctx, Row::new())?;
+            list.append(ctx, Row::new())?;
+            list.append(ctx, Row::new())?;
+            Ok(first)
+        })?;
+
+        harness.with_root_widget::<List<Row>, _>(|list| {
+            assert!(list.selection_invariant_holds());
+            assert_eq!(list.selected_index(), Some(0));
+        });
+        assert_eq!(row_selection(&mut harness), [true, false, false]);
+        assert_eq!(focused_row(&harness), Some(first.into()));
+
+        let third = harness.with_root_context(|list: &mut List<Row>, ctx| {
+            list.select_by(ctx, 2)?;
+            Ok(list.selected_item().expect("selected row"))
+        })?;
+
+        harness.with_root_widget::<List<Row>, _>(|list| {
+            assert!(list.selection_invariant_holds());
+            assert_eq!(list.selected_index(), Some(2));
+        });
+        assert_eq!(row_selection(&mut harness), [false, false, true]);
+        assert_eq!(focused_row(&harness), Some(third.into()));
+
+        let second = harness.with_root_context(|list: &mut List<Row>, ctx| {
+            assert!(list.remove(ctx, 2)?);
+            Ok(list.selected_item().expect("selected row"))
+        })?;
+
+        harness.with_root_widget::<List<Row>, _>(|list| {
+            assert!(list.selection_invariant_holds());
+            assert_eq!(list.selected_index(), Some(1));
+        });
+        assert_eq!(row_selection(&mut harness), [false, true]);
+        assert_eq!(focused_row(&harness), Some(second.into()));
 
         Ok(())
     }

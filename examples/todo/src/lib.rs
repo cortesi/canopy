@@ -270,7 +270,7 @@ impl Todo {
                 list.append(ctx, TodoEntry::new(item))?;
             }
             if !items.is_empty() {
-                list.select_first(ctx);
+                list.select_first(ctx)?;
             }
             Ok(())
         })?;
@@ -341,7 +341,7 @@ impl Todo {
             let item = current_store()?.add_todo(&value).map_err(store_error)?;
             self.with_list(c, |list, ctx| {
                 list.append(ctx, TodoEntry::new(item.clone()))?;
-                list.select_last(ctx);
+                list.select_last(ctx)?;
                 Ok(())
             })?;
         }
@@ -362,26 +362,17 @@ impl Todo {
 
     #[command]
     pub fn select_first(&mut self, c: &mut dyn Context) -> Result<()> {
-        self.with_list(c, |list, ctx| {
-            list.select_first(ctx);
-            Ok(())
-        })
+        self.with_list(c, |list, ctx| list.select_first(ctx))
     }
 
     #[command]
     pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
-        self.with_list(c, |list, ctx| {
-            list.select_by(ctx, delta);
-            Ok(())
-        })
+        self.with_list(c, |list, ctx| list.select_by(ctx, delta))
     }
 
     #[command]
     pub fn page(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
-        self.with_list(c, |list, ctx| {
-            list.page(ctx, delta);
-            Ok(())
-        })
+        self.with_list(c, |list, ctx| list.page(ctx, delta))
     }
 }
 

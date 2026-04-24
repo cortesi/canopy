@@ -1,3 +1,5 @@
+use std::ops::{Deref, DerefMut};
+
 use canopy::text;
 use ropey::Rope;
 use unicode_segmentation::UnicodeSegmentation;
@@ -102,6 +104,19 @@ impl TextBuffer {
     /// Return the line length in chars, excluding any trailing newline.
     pub fn line_char_len(&self, line: usize) -> usize {
         let line = line.min(self.line_count().saturating_sub(1));
+        self.line_char_len_at(line)
+    }
+
+    /// Return the line length in chars, or `None` when the line is out of bounds.
+    pub fn try_line_char_len(&self, line: usize) -> Option<usize> {
+        if line >= self.line_count() {
+            return None;
+        }
+        Some(self.line_char_len_at(line))
+    }
+
+    /// Return the line length in chars without clamping the line index.
+    fn line_char_len_at(&self, line: usize) -> usize {
         let slice = self.rope.line(line);
         let mut len = slice.len_chars();
         if line + 1 < self.line_count() {
@@ -113,6 +128,19 @@ impl TextBuffer {
     /// Return the text of a logical line without a trailing newline.
     pub fn line_text(&self, line: usize) -> String {
         let line = line.min(self.line_count().saturating_sub(1));
+        self.line_text_at(line)
+    }
+
+    /// Return the text of a logical line, or `None` when the line is out of bounds.
+    pub fn try_line_text(&self, line: usize) -> Option<String> {
+        if line >= self.line_count() {
+            return None;
+        }
+        Some(self.line_text_at(line))
+    }
+
+    /// Return the text of a logical line without clamping the line index.
+    fn line_text_at(&self, line: usize) -> String {
         let slice = self.rope.line(line);
         let mut text = slice.to_string();
         if line + 1 < self.line_count() {
@@ -144,6 +172,15 @@ impl TextBuffer {
         transaction.finish(self.selection);
         self.undo.push(transaction);
         self.redo.clear();
+    }
+
+    /// Begin a grouped transaction that commits when the guard is dropped.
+    pub fn transaction(&mut self) -> TextTransaction<'_> {
+        self.begin_transaction();
+        TextTransaction {
+            buffer: self,
+            active: true,
+        }
     }
 
     /// Undo the most recent transaction.
@@ -361,6 +398,14 @@ impl TextBuffer {
         self.rope.slice(start_char..end_char).to_string()
     }
 
+    /// Return the text in a range, or `None` if either endpoint is out of bounds.
+    pub fn try_range_text(&self, range: TextRange) -> Option<String> {
+        let range = range.normalized();
+        let start_char = self.try_position_to_char(range.start)?;
+        let end_char = self.try_position_to_char(range.end)?;
+        Some(self.rope.slice(start_char..end_char).to_string())
+    }
+
     /// Record an edit into the active transaction or history.
     fn record_edit(&mut self, edit: Edit) {
         if let Some(transaction) = self.transaction.as_mut() {
@@ -394,6 +439,15 @@ impl TextBuffer {
         let pos = self.clamp_position(pos);
         let line_start = self.rope.line_to_char(pos.line);
         line_start.saturating_add(pos.column)
+    }
+
+    /// Convert a text position to a rope char index, or `None` if it is out of bounds.
+    pub fn try_position_to_char(&self, pos: TextPosition) -> Option<usize> {
+        if pos.line >= self.line_count() || pos.column > self.line_char_len_at(pos.line) {
+            return None;
+        }
+        let line_start = self.rope.line_to_char(pos.line);
+        Some(line_start.saturating_add(pos.column))
     }
 
     /// Update revision tracking and pending line-change metadata.
@@ -431,6 +485,46 @@ impl TextBuffer {
         self.rope.insert(start_char, insert_text);
         self.revision = self.revision.saturating_add(1);
         self.pending_change = None;
+    }
+}
+
+/// Scoped text edit transaction.
+pub struct TextTransaction<'a> {
+    /// Buffer being edited.
+    buffer: &'a mut TextBuffer,
+    /// Whether the transaction should commit on drop.
+    active: bool,
+}
+
+impl TextTransaction<'_> {
+    /// Commit the transaction before the guard is dropped.
+    pub fn commit(mut self) {
+        if self.active {
+            self.buffer.commit_transaction();
+            self.active = false;
+        }
+    }
+}
+
+impl Deref for TextTransaction<'_> {
+    type Target = TextBuffer;
+
+    fn deref(&self) -> &Self::Target {
+        self.buffer
+    }
+}
+
+impl DerefMut for TextTransaction<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.buffer
+    }
+}
+
+impl Drop for TextTransaction<'_> {
+    fn drop(&mut self) {
+        if self.active {
+            self.buffer.commit_transaction();
+        }
     }
 }
 
@@ -590,6 +684,38 @@ mod tests {
         assert_eq!(buf.text(), "abc");
         assert!(buf.redo());
         assert_eq!(buf.text(), "abcd");
+    }
+
+    #[test]
+    fn strict_accessors_reject_out_of_bounds_positions() {
+        let buf = TextBuffer::new("ab\ncd");
+
+        assert_eq!(buf.try_line_char_len(0), Some(2));
+        assert_eq!(buf.try_line_text(1).as_deref(), Some("cd"));
+        assert_eq!(buf.try_line_char_len(2), None);
+        assert_eq!(buf.try_line_text(2), None);
+        assert_eq!(buf.try_position_to_char(TextPosition::new(0, 2)), Some(2));
+        assert_eq!(buf.try_position_to_char(TextPosition::new(0, 3)), None);
+        assert_eq!(buf.try_position_to_char(TextPosition::new(2, 0)), None);
+
+        let range = TextRange::new(TextPosition::new(0, 1), TextPosition::new(1, 1));
+        assert_eq!(buf.try_range_text(range).as_deref(), Some("b\nc"));
+        let invalid = TextRange::new(TextPosition::new(0, 0), TextPosition::new(2, 0));
+        assert_eq!(buf.try_range_text(invalid), None);
+    }
+
+    #[test]
+    fn transaction_guard_groups_edits_until_drop() {
+        let mut buf = TextBuffer::new("a");
+        {
+            let mut transaction = buf.transaction();
+            transaction.insert_text("b");
+            transaction.insert_text("c");
+        }
+
+        assert_eq!(buf.text(), "abc");
+        assert!(buf.undo());
+        assert_eq!(buf.text(), "a");
     }
 
     proptest! {

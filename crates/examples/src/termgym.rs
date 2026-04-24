@@ -191,10 +191,7 @@ impl TermGym {
     fn add_terminal(&mut self, c: &mut dyn Context) -> Result<()> {
         let cwd = env::current_dir().map_err(|err| Error::Internal(err.to_string()))?;
         self.with_stack(c, |_, ctx| {
-            let terminal_id = ctx.add_child(Terminal::new(TerminalConfig {
-                cwd: Some(cwd),
-                ..TerminalConfig::default()
-            }))?;
+            let terminal_id = ctx.add_child(Terminal::new(TerminalConfig::new().with_cwd(cwd)))?;
             ctx.set_layout_of(terminal_id, Layout::fill())?;
             Ok(())
         })?;
@@ -231,10 +228,7 @@ impl TermGym {
         }
 
         let active = self.active;
-        self.with_list(c, |list, ctx| {
-            list.select(ctx, active);
-            Ok(())
-        })?;
+        self.with_list(c, |list, ctx| list.select(ctx, active))?;
 
         if let Some(active_id) = terminals.get(self.active).copied() {
             c.set_focus(active_id);

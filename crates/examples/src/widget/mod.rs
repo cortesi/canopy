@@ -234,9 +234,9 @@ impl Widget for ListDemo {
                 }
                 let last = len.saturating_sub(1);
                 match list.selected_index() {
-                    Some(idx) if idx < last => list.select_by(ctx, 1),
-                    Some(_) => list.select_first(ctx),
-                    None => list.select_first(ctx),
+                    Some(idx) if idx < last => list.select_by(ctx, 1)?,
+                    Some(_) => list.select_first(ctx)?,
+                    None => list.select_first(ctx)?,
                 }
                 Ok(())
             })

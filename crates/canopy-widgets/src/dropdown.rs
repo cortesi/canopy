@@ -81,6 +81,7 @@ where
             self.selected = index;
             self.highlighted = index;
         }
+        debug_assert!(self.selection_invariant_holds());
     }
 
     /// Check if the dropdown is expanded.
@@ -95,6 +96,7 @@ where
         self.highlighted = self.selected;
         // Mark layout dirty so parent can resize
         c.invalidate_layout();
+        debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
 
@@ -112,6 +114,7 @@ where
             self.highlighted.saturating_add(delta as usize)
         };
         self.highlighted = next.min(self.items.len() - 1);
+        debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
 
@@ -123,6 +126,7 @@ where
             self.expanded = false;
             c.invalidate_layout();
         }
+        debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
 
@@ -139,6 +143,7 @@ where
                 self.selected = self.highlighted;
                 self.expanded = false;
                 c.invalidate_layout();
+                debug_assert!(self.selection_invariant_holds());
                 return Ok(true);
             }
             return Ok(false);
@@ -147,6 +152,7 @@ where
         self.expanded = true;
         self.highlighted = self.selected;
         c.invalidate_layout();
+        debug_assert!(self.selection_invariant_holds());
         Ok(true)
     }
 
@@ -158,6 +164,7 @@ where
             self.highlighted = self.selected;
             c.invalidate_layout();
         }
+        debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
 
@@ -188,6 +195,13 @@ where
         };
 
         Size::new(width, height)
+    }
+
+    /// Return whether selection and highlight indices point at current items.
+    fn selection_invariant_holds(&self) -> bool {
+        !self.items.is_empty()
+            && self.selected < self.items.len()
+            && self.highlighted < self.items.len()
     }
 }
 
@@ -262,7 +276,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use canopy::{Canopy, Loader, testing::harness::Harness};
+    use canopy::{
+        Canopy, Loader,
+        testing::{dummyctx::DummyContext, harness::Harness},
+    };
 
     use super::*;
 
@@ -316,6 +333,35 @@ mod tests {
             assert_eq!(dropdown.selected_index(), 1);
             assert!(!dropdown.is_expanded());
         });
+        Ok(())
+    }
+
+    #[test]
+    fn focus_and_selection_invariants_hold_after_commands() -> Result<()> {
+        let items = vec![
+            "Option 1".to_string(),
+            "Option 2".to_string(),
+            "Option 3".to_string(),
+        ];
+        let mut dropdown = Dropdown::new(items);
+        let mut ctx = DummyContext::default();
+
+        assert!(dropdown.selection_invariant_holds());
+        dropdown.set_selected(1);
+        dropdown.set_selected(99);
+        dropdown.toggle(&mut ctx)?;
+        dropdown.select_by(&mut ctx, 99)?;
+        dropdown.confirm(&mut ctx)?;
+        assert_eq!(dropdown.selected_index(), 2);
+        assert!(!dropdown.is_expanded());
+        assert!(dropdown.selection_invariant_holds());
+
+        dropdown.toggle(&mut ctx)?;
+        dropdown.select_by(&mut ctx, -99)?;
+        dropdown.cancel(&mut ctx)?;
+        assert_eq!(dropdown.selected_index(), 2);
+        assert!(!dropdown.is_expanded());
+        assert!(dropdown.selection_invariant_holds());
         Ok(())
     }
 }

@@ -96,6 +96,7 @@ where
             // Not selected - add it (in selection order)
             self.selected.push(self.focused);
         }
+        debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
 
@@ -112,6 +113,7 @@ where
             self.focused.saturating_add(delta as usize)
         };
         self.focused = next.min(self.items.len() - 1);
+        debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
 
@@ -121,6 +123,7 @@ where
         if !self.items.is_empty() {
             self.focused = 0;
         }
+        debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
 
@@ -130,6 +133,7 @@ where
         if !self.items.is_empty() {
             self.focused = self.items.len() - 1;
         }
+        debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
 
@@ -137,6 +141,7 @@ where
     #[command]
     pub fn clear(&mut self, _c: &mut dyn Context) -> Result<()> {
         self.selected.clear();
+        debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
 
@@ -155,6 +160,7 @@ where
             } else {
                 self.selected.push(self.focused);
             }
+            debug_assert!(self.selection_invariant_holds());
             return Ok(true);
         }
         Ok(false)
@@ -164,6 +170,7 @@ where
     #[command]
     pub fn select_all(&mut self, _c: &mut dyn Context) -> Result<()> {
         self.selected = (0..self.items.len()).collect();
+        debug_assert!(self.selection_invariant_holds());
         Ok(())
     }
 
@@ -192,6 +199,19 @@ where
             .unwrap_or(0) as u32;
 
         Size::new(max_label_width + 4, self.items.len() as u32)
+    }
+
+    /// Return whether focus and selection indices point at current items.
+    fn selection_invariant_holds(&self) -> bool {
+        let focus_valid = if self.items.is_empty() {
+            self.focused == 0
+        } else {
+            self.focused < self.items.len()
+        };
+        let selections_valid = self.selected.iter().enumerate().all(|(position, index)| {
+            *index < self.items.len() && !self.selected[..position].contains(index)
+        });
+        focus_valid && selections_valid
     }
 }
 
@@ -265,6 +285,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use canopy::testing::dummyctx::DummyContext;
+
     use super::*;
 
     #[test]
@@ -311,5 +333,52 @@ mod tests {
         let selector = Selector::new(items);
         assert!(selector.is_empty());
         assert_eq!(selector.selected_count(), 0);
+    }
+
+    #[test]
+    fn focus_and_selection_invariants_hold_after_commands() -> Result<()> {
+        let items = vec![
+            "Option 1".to_string(),
+            "Option 2".to_string(),
+            "Option 3".to_string(),
+        ];
+        let mut selector = Selector::new(items);
+        let mut ctx = DummyContext::default();
+
+        assert!(selector.selection_invariant_holds());
+        selector.toggle(&mut ctx)?;
+        selector.select_by(&mut ctx, 2)?;
+        selector.toggle(&mut ctx)?;
+        selector.select_by(&mut ctx, 99)?;
+        selector.toggle(&mut ctx)?;
+        selector.select_all(&mut ctx)?;
+        assert_eq!(selector.focused_index(), 2);
+        assert_eq!(selector.selected_indices(), &[0, 1, 2]);
+        assert!(selector.selection_invariant_holds());
+
+        selector.clear(&mut ctx)?;
+        selector.select_by(&mut ctx, -99)?;
+        assert_eq!(selector.focused_index(), 0);
+        assert_eq!(selector.selected_count(), 0);
+        assert!(selector.selection_invariant_holds());
+        Ok(())
+    }
+
+    #[test]
+    fn empty_selector_invariants_hold_after_commands() -> Result<()> {
+        let mut selector = Selector::<String>::new(Vec::new());
+        let mut ctx = DummyContext::default();
+
+        selector.toggle(&mut ctx)?;
+        selector.select_by(&mut ctx, 1)?;
+        selector.select_first(&mut ctx)?;
+        selector.select_last(&mut ctx)?;
+        selector.select_all(&mut ctx)?;
+        selector.clear(&mut ctx)?;
+
+        assert!(selector.selection_invariant_holds());
+        assert_eq!(selector.focused_index(), 0);
+        assert_eq!(selector.selected_count(), 0);
+        Ok(())
     }
 }

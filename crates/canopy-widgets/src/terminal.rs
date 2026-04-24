@@ -107,6 +107,51 @@ struct DriverPortal {
 // actual thread-affinity checks enforced by the host itself.
 unsafe impl Send for DriverPortal {}
 
+/// Runtime and handles required to drive an attached terminal session.
+struct DriverRuntime {
+    /// Driver host polled from Canopy's UI loop.
+    portal: DriverPortal,
+    /// Cloneable driver handle exposed to integrations.
+    handle: Arc<DriverHandle>,
+    /// Runtime used to enqueue async driver operations without blocking UI events.
+    runtime: Runtime,
+}
+
+impl DriverRuntime {
+    /// Attach a driver runtime to a session.
+    fn attach(session: &mut Session) -> Result<Self> {
+        let (host, handle) = driver::attach(session);
+        let runtime = Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_all()
+            .build()
+            .map_err(|error| Error::Internal(error.to_string()))?;
+        Ok(Self {
+            portal: DriverPortal { host },
+            handle: Arc::new(handle),
+            runtime,
+        })
+    }
+
+    /// Return a clone of the attached driver handle.
+    fn handle(&self) -> Arc<DriverHandle> {
+        Arc::clone(&self.handle)
+    }
+
+    /// Drive any pending backend work once from Canopy's poll loop.
+    fn poll(&mut self, session: &mut Session) {
+        let _ = self.portal.host.poll_nonblocking(session);
+    }
+
+    /// Queue raw input bytes through the attached driver.
+    fn queue_input(&self, bytes: Vec<u8>) {
+        let handle = Arc::clone(&self.handle);
+        mem::drop(self.runtime.spawn(async move {
+            drop(handle.send_input(bytes).await);
+        }));
+    }
+}
+
 impl TitleHook for SharedTitle {
     fn set_title(&self, title: &str) {
         if let Ok(mut guard) = self.title.lock() {
@@ -248,27 +293,27 @@ impl TerminalColors {
 /// Terminal widget configuration.
 pub struct TerminalConfig {
     /// Optional command argv to run instead of the default shell.
-    pub command: Option<Vec<String>>,
+    command: Option<Vec<String>>,
     /// Working directory for the terminal process.
-    pub cwd: Option<PathBuf>,
+    cwd: Option<PathBuf>,
     /// Environment variables to inject into the terminal process.
-    pub env: Vec<(String, String)>,
+    env: Vec<(String, String)>,
     /// Number of scrollback lines to keep.
-    pub scrollback_lines: usize,
+    scrollback_lines: usize,
     /// Enable mouse reporting to the terminal when requested by the app.
-    pub mouse_reporting: bool,
+    mouse_reporting: bool,
     /// Enable bracketed paste when requested by the app.
-    pub bracketed_paste: bool,
+    bracketed_paste: bool,
     /// Enable kitty keyboard protocol support.
-    pub kitty_keyboard: bool,
+    kitty_keyboard: bool,
     /// Color palette for the terminal.
-    pub colors: TerminalColors,
+    colors: TerminalColors,
     /// Optional callback invoked when the clipboard is updated.
-    pub clipboard_store: Option<Arc<dyn Fn(String) + Send + Sync>>,
+    clipboard_store: Option<Arc<dyn Fn(String) + Send + Sync>>,
     /// Optional callback used to fetch clipboard contents.
-    pub clipboard_load: Option<Arc<dyn Fn() -> String + Send + Sync>>,
+    clipboard_load: Option<Arc<dyn Fn() -> String + Send + Sync>>,
     /// Optional callback invoked when the child process exits.
-    pub on_exit: Option<Arc<dyn Fn(ExitStatus) + Send + Sync>>,
+    on_exit: Option<Arc<dyn Fn(ExitStatus) + Send + Sync>>,
 }
 
 impl Default for TerminalConfig {
@@ -294,6 +339,85 @@ impl TerminalConfig {
     pub fn new() -> Self {
         Self::default()
     }
+
+    /// Configure the command argv to run instead of the default shell.
+    pub fn with_command<I, S>(mut self, command: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.command = Some(command.into_iter().map(Into::into).collect());
+        self
+    }
+
+    /// Configure the working directory for the terminal process.
+    pub fn with_cwd(mut self, cwd: impl Into<PathBuf>) -> Self {
+        self.cwd = Some(cwd.into());
+        self
+    }
+
+    /// Add an environment variable for the terminal process.
+    pub fn with_env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.env.push((key.into(), value.into()));
+        self
+    }
+
+    /// Configure the number of scrollback lines to keep.
+    pub fn with_scrollback_lines(mut self, scrollback_lines: usize) -> Self {
+        self.scrollback_lines = scrollback_lines;
+        self
+    }
+
+    /// Configure terminal mouse reporting.
+    pub fn with_mouse_reporting(mut self, mouse_reporting: bool) -> Self {
+        self.mouse_reporting = mouse_reporting;
+        self
+    }
+
+    /// Configure bracketed paste support.
+    pub fn with_bracketed_paste(mut self, bracketed_paste: bool) -> Self {
+        self.bracketed_paste = bracketed_paste;
+        self
+    }
+
+    /// Configure kitty keyboard protocol support.
+    pub fn with_kitty_keyboard(mut self, kitty_keyboard: bool) -> Self {
+        self.kitty_keyboard = kitty_keyboard;
+        self
+    }
+
+    /// Configure the terminal color palette.
+    pub fn with_colors(mut self, colors: TerminalColors) -> Self {
+        self.colors = colors;
+        self
+    }
+
+    /// Configure the clipboard store callback.
+    pub fn with_clipboard_store<F>(mut self, store: F) -> Self
+    where
+        F: Fn(String) + Send + Sync + 'static,
+    {
+        self.clipboard_store = Some(Arc::new(store));
+        self
+    }
+
+    /// Configure the clipboard load callback.
+    pub fn with_clipboard_load<F>(mut self, load: F) -> Self
+    where
+        F: Fn() -> String + Send + Sync + 'static,
+    {
+        self.clipboard_load = Some(Arc::new(load));
+        self
+    }
+
+    /// Configure the child exit callback.
+    pub fn with_on_exit<F>(mut self, on_exit: F) -> Self
+    where
+        F: Fn(ExitStatus) + Send + Sync + 'static,
+    {
+        self.on_exit = Some(Arc::new(on_exit));
+        self
+    }
 }
 
 /// Terminal widget backed by `itty`.
@@ -302,12 +426,8 @@ pub struct Terminal {
     config: TerminalConfig,
     /// Backend terminal session.
     session: Option<Session>,
-    /// Driver host polled from Canopy's UI loop.
-    driver_host: Option<DriverPortal>,
-    /// Cloneable driver handle exposed to integrations.
-    driver_handle: Option<Arc<DriverHandle>>,
-    /// Runtime used to enqueue async driver operations without blocking UI events.
-    driver_runtime: Option<Runtime>,
+    /// Runtime and handles for the attached terminal driver.
+    driver: Option<DriverRuntime>,
     /// Most recent terminal size.
     last_size: TerminalSize,
     /// Cached cursor for rendering.
@@ -335,9 +455,7 @@ impl Terminal {
         Self {
             config,
             session: None,
-            driver_host: None,
-            driver_handle: None,
-            driver_runtime: None,
+            driver: None,
             last_size: TerminalSize {
                 columns: DEFAULT_COLUMNS,
                 rows: DEFAULT_LINES,
@@ -372,7 +490,7 @@ impl Terminal {
 
     /// Return the attached `itty` driver handle for scripting integrations.
     pub fn driver_handle(&self) -> Option<Arc<DriverHandle>> {
-        self.driver_handle.as_ref().map(Arc::clone)
+        self.driver.as_ref().map(DriverRuntime::handle)
     }
 
     /// Lazily create the backend session and driver bridge.
@@ -389,19 +507,12 @@ impl Terminal {
             title: Arc::clone(&self.title),
         }));
 
-        let (host, handle) = driver::attach(&mut session);
-        let runtime = Builder::new_multi_thread()
-            .worker_threads(1)
-            .enable_all()
-            .build()
-            .map_err(|error| Error::Internal(error.to_string()))?;
+        let driver = DriverRuntime::attach(&mut session)?;
 
         self.exit_notified = false;
         self.exit_status = None;
         self.session = Some(session);
-        self.driver_host = Some(DriverPortal { host });
-        self.driver_handle = Some(Arc::new(handle));
-        self.driver_runtime = Some(runtime);
+        self.driver = Some(driver);
         Ok(())
     }
 
@@ -417,8 +528,8 @@ impl Terminal {
 
     /// Drive any pending backend work once from Canopy's poll loop.
     fn poll_driver(&mut self) {
-        if let (Some(portal), Some(session)) = (self.driver_host.as_mut(), self.session.as_mut()) {
-            let _ = portal.host.poll_nonblocking(session);
+        if let (Some(driver), Some(session)) = (self.driver.as_mut(), self.session.as_mut()) {
+            driver.poll(session);
         }
     }
 
@@ -610,13 +721,10 @@ impl Terminal {
 
     /// Queue raw input bytes through the attached driver without blocking the UI thread.
     fn queue_input(&self, bytes: Vec<u8>) {
-        let (Some(runtime), Some(handle)) = (&self.driver_runtime, &self.driver_handle) else {
+        let Some(driver) = &self.driver else {
             return;
         };
-        let handle = Arc::clone(handle);
-        mem::drop(runtime.spawn(async move {
-            drop(handle.send_input(bytes).await);
-        }));
+        driver.queue_input(bytes);
     }
 
     /// Send a mouse input sequence to the terminal when mouse reporting is enabled.
@@ -1137,10 +1245,9 @@ mod tests {
         collections::BTreeMap,
         sync::{
             Arc,
-            atomic::{AtomicBool, Ordering},
+            mpsc::{self, TryRecvError},
         },
         thread,
-        time::{Duration, Instant},
     };
 
     use canopy::event::{key, mouse};
@@ -1156,6 +1263,18 @@ mod tests {
             .mount_session()
             .expect("mount itty-backed terminal");
         terminal
+    }
+
+    fn wait_for_driver_signal<T>(terminal: &mut Terminal, rx: &mpsc::Receiver<T>) -> Option<T> {
+        loop {
+            terminal.poll_driver();
+            terminal.sync_exit_status();
+            match rx.try_recv() {
+                Ok(value) => return Some(value),
+                Err(TryRecvError::Empty) => thread::yield_now(),
+                Err(TryRecvError::Disconnected) => return None,
+            }
+        }
     }
 
     #[test]
@@ -1198,10 +1317,15 @@ mod tests {
     #[test]
     #[ignore = "unstable under full-workspace nextest runs; verify with a targeted cargo test"]
     fn itty_script_can_drive_attached_handle() {
-        let mut terminal = mounted_terminal();
+        let (exit_tx, exit_rx) = mpsc::channel();
+        let mut terminal = Terminal::new(TerminalConfig::new().with_on_exit(move |_| {
+            exit_tx.send(()).expect("exit receiver alive");
+        }));
+        terminal
+            .mount_session()
+            .expect("mount itty-backed terminal");
         let handle = terminal.driver_handle().expect("driver handle");
-        let script_done = Arc::new(AtomicBool::new(false));
-        let script_done_flag = Arc::clone(&script_done);
+        let (script_tx, script_rx) = mpsc::channel();
 
         let runner = thread::spawn(move || {
             let runtime = Arc::new(
@@ -1224,33 +1348,18 @@ mod tests {
                 "local term = open()\nterm:paste('echo canopy\\r')\nterm:wait_text('canopy')\n",
                 BTreeMap::new(),
             );
-            script_done_flag.store(true, Ordering::Relaxed);
+            script_tx.send(()).expect("script receiver alive");
             result
         });
 
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while !script_done.load(Ordering::Relaxed) && Instant::now() < deadline {
-            terminal.poll_driver();
-            thread::sleep(Duration::from_millis(10));
-        }
-
-        assert!(
-            script_done.load(Ordering::Relaxed),
-            "script did not finish in time"
-        );
+        wait_for_driver_signal(&mut terminal, &script_rx).expect("script thread signals");
         runner
             .join()
             .expect("script thread")
             .expect("script succeeds");
 
         terminal.queue_input(b"exit\r".to_vec());
-        let shutdown_deadline = Instant::now() + Duration::from_secs(5);
-        while !terminal.session().is_some_and(Session::child_exited)
-            && Instant::now() < shutdown_deadline
-        {
-            terminal.poll_driver();
-            thread::sleep(Duration::from_millis(10));
-        }
+        wait_for_driver_signal(&mut terminal, &exit_rx).expect("exit callback signals");
         assert!(
             terminal.session().is_some_and(Session::child_exited),
             "attached shell did not exit in time"

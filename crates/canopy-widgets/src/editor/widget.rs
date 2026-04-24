@@ -17,11 +17,13 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use super::{
     EditMode, EditorConfig, LineNumbers, Selection, TextBuffer, TextPosition, TextRange, WrapMode,
+    controller::EditorController,
     highlight::{HighlightSpan, Highlighter},
-    layout::{LayoutCache, WrapSegment, layout_line},
+    layout::{WrapSegment, layout_line},
     search::{SearchDirection, SearchState, find_matches},
     tab_width,
     vi::{PendingKey, RepeatableEdit, ViMode, ViState, VisualMode},
+    view::EditorView,
 };
 
 /// Maximum delay between clicks to count as multi-click selection.
@@ -35,10 +37,10 @@ pub struct Editor {
     config: EditorConfig,
     /// Text buffer backing the editor.
     buffer: TextBuffer,
-    /// Layout cache for wrapping and mapping.
-    layout: LayoutCache,
-    /// Preferred display column for vertical movement.
-    preferred_column: usize,
+    /// View-derived layout and cursor cache.
+    view: EditorView,
+    /// Movement and edit-session control state.
+    controller: EditorController,
     /// Vi mode state when enabled.
     vi: ViState,
     /// Yank register for vi operations.
@@ -55,12 +57,6 @@ pub struct Editor {
     highlighter: Option<Box<dyn Highlighter>>,
     /// Cached syntax highlight spans.
     highlight_cache: HighlightCache,
-    /// Cached cursor position in content coordinates.
-    cursor_point: Option<Point>,
-    /// Cached cursor position in view coordinates.
-    cursor_view_point: Option<Point>,
-    /// Whether a text-entry transaction is active.
-    text_entry_transaction: bool,
 }
 
 /// Prompt modes for search and replace interactions.
@@ -203,12 +199,12 @@ impl Editor {
     pub fn with_config(text: impl Into<String>, config: EditorConfig) -> Self {
         let mut buffer = TextBuffer::new(text);
         buffer.set_cursor(TextPosition::new(0, 0));
-        let preferred_column = buffer.column_for_position(buffer.cursor(), config.tab_stop);
+        let controller = EditorController::new(&buffer, config.tab_stop);
         Self {
             config,
             buffer,
-            layout: LayoutCache::new(),
-            preferred_column,
+            view: EditorView::new(),
+            controller,
             vi: ViState::new(),
             yank: String::new(),
             yank_linewise: false,
@@ -217,9 +213,6 @@ impl Editor {
             mouse: MouseState::new(),
             highlighter: None,
             highlight_cache: HighlightCache::new(),
-            cursor_point: None,
-            cursor_view_point: None,
-            text_entry_transaction: false,
         }
     }
 
@@ -231,9 +224,7 @@ impl Editor {
     /// Replace the editor configuration.
     pub fn set_config(&mut self, config: EditorConfig) {
         self.config = config;
-        self.preferred_column = self
-            .buffer
-            .column_for_position(self.buffer.cursor(), self.config.tab_stop);
+        self.update_preferred_column();
     }
 
     /// Return the buffer contents.
@@ -245,9 +236,7 @@ impl Editor {
     pub fn set_text(&mut self, text: impl Into<String>) {
         self.buffer = TextBuffer::new(text);
         self.buffer.set_cursor(TextPosition::new(0, 0));
-        self.preferred_column = self
-            .buffer
-            .column_for_position(self.buffer.cursor(), self.config.tab_stop);
+        self.update_preferred_column();
         self.highlight_cache.clear();
     }
 
@@ -288,29 +277,14 @@ impl Editor {
     /// Synchronize layout and cached cursor position.
     fn update_layout(&mut self, view_rect: Rect, gutter_width: u32) {
         let wrap_width = self.view_wrap_width(view_rect, gutter_width);
-        self.layout.sync(
+        self.view.sync(
             &mut self.buffer,
+            view_rect,
+            gutter_width,
             wrap_width,
             self.config.wrap,
             self.config.tab_stop,
         );
-        let cursor = self.buffer.cursor();
-        let point = self
-            .layout
-            .point_for_position(&self.buffer, cursor, self.config.tab_stop);
-        let cursor_point = Point {
-            x: point.x.saturating_add(gutter_width),
-            y: point.y,
-        };
-        self.cursor_point = Some(cursor_point);
-        self.cursor_view_point = if view_rect.contains_point(cursor_point) {
-            Some(Point {
-                x: cursor_point.x - view_rect.tl.x,
-                y: cursor_point.y - view_rect.tl.y,
-            })
-        } else {
-            None
-        };
     }
 
     /// Ensure the cursor is visible within the current scroll view.
@@ -320,7 +294,7 @@ impl Editor {
         let gutter_width = self.gutter_width();
         self.update_layout(view_rect, gutter_width);
 
-        let Some(cursor) = self.cursor_point else {
+        let Some(cursor) = self.view.cursor_point else {
             return;
         };
         let cursor_x = cursor.x;
@@ -350,9 +324,8 @@ impl Editor {
 
     /// Refresh the preferred display column from the cursor position.
     fn update_preferred_column(&mut self) {
-        self.preferred_column = self
-            .buffer
-            .column_for_position(self.buffer.cursor(), self.config.tab_stop);
+        self.controller
+            .refresh_preferred_column(&self.buffer, self.config.tab_stop);
     }
 
     /// Move vertically by logical lines, preserving preferred column.
@@ -363,7 +336,7 @@ impl Editor {
         line = line.clamp(0, line_count.saturating_sub(1) as isize);
         let target = self.buffer.position_for_column(
             line as usize,
-            self.preferred_column,
+            self.controller.preferred_column(),
             self.config.tab_stop,
         );
         self.buffer.set_cursor(target);
@@ -375,7 +348,7 @@ impl Editor {
         let view_rect = view.view_rect();
         let gutter_width = self.gutter_width();
         self.update_layout(view_rect, gutter_width);
-        let point = self.layout.point_for_position(
+        let point = self.view.layout.point_for_position(
             &self.buffer,
             self.buffer.cursor(),
             self.config.tab_stop,
@@ -384,7 +357,7 @@ impl Editor {
         if y < 0 {
             y = 0;
         }
-        let max_y = self.layout.total_lines().saturating_sub(1) as isize;
+        let max_y = self.view.layout.total_lines().saturating_sub(1) as isize;
         if y > max_y {
             y = max_y;
         }
@@ -392,9 +365,10 @@ impl Editor {
             x: point.x,
             y: y as u32,
         };
-        let pos = self
-            .layout
-            .position_for_point(&self.buffer, new_point, self.config.tab_stop);
+        let pos =
+            self.view
+                .layout
+                .position_for_point(&self.buffer, new_point, self.config.tab_stop);
         self.buffer.set_cursor(pos);
         self.update_preferred_column();
     }
@@ -505,18 +479,14 @@ impl Editor {
 
     /// Begin a grouped text-entry transaction if needed.
     fn begin_text_entry_transaction(&mut self) {
-        if !self.text_entry_transaction {
-            self.buffer.begin_transaction();
-            self.text_entry_transaction = true;
-        }
+        self.controller
+            .begin_text_entry_transaction(&mut self.buffer);
     }
 
     /// Commit the active text-entry transaction if present.
     fn commit_text_entry_transaction(&mut self) {
-        if self.text_entry_transaction {
-            self.buffer.commit_transaction();
-            self.text_entry_transaction = false;
-        }
+        self.controller
+            .commit_text_entry_transaction(&mut self.buffer);
     }
 
     /// Start a search prompt in the specified direction.
@@ -938,7 +908,7 @@ impl Editor {
                 key: key::KeyCode::Char('i'),
                 ..
             }) => {
-                self.buffer.begin_transaction();
+                self.begin_text_entry_transaction();
                 self.vi.begin_insert(self.buffer.cursor());
                 EventOutcome::Handle
             }
@@ -948,7 +918,7 @@ impl Editor {
             }) => {
                 let _ = self.buffer.move_right(self.config.multiline);
                 self.update_preferred_column();
-                self.buffer.begin_transaction();
+                self.begin_text_entry_transaction();
                 self.vi.begin_insert(self.buffer.cursor());
                 EventOutcome::Handle
             }
@@ -958,7 +928,7 @@ impl Editor {
             }) => {
                 self.buffer.move_line_start();
                 self.update_preferred_column();
-                self.buffer.begin_transaction();
+                self.begin_text_entry_transaction();
                 self.vi.begin_insert(self.buffer.cursor());
                 EventOutcome::Handle
             }
@@ -968,7 +938,7 @@ impl Editor {
             }) => {
                 self.buffer.move_line_end();
                 self.update_preferred_column();
-                self.buffer.begin_transaction();
+                self.begin_text_entry_transaction();
                 self.vi.begin_insert(self.buffer.cursor());
                 EventOutcome::Handle
             }
@@ -976,7 +946,7 @@ impl Editor {
                 key: key::KeyCode::Char('o'),
                 ..
             }) => {
-                self.buffer.begin_transaction();
+                self.begin_text_entry_transaction();
                 if self.config.multiline {
                     let cursor = self.buffer.cursor();
                     let end = self.buffer.line_end_position(cursor.line, true);
@@ -991,7 +961,7 @@ impl Editor {
                 key: key::KeyCode::Char('O'),
                 ..
             }) => {
-                self.buffer.begin_transaction();
+                self.begin_text_entry_transaction();
                 if self.config.multiline {
                     let cursor = self.buffer.cursor();
                     let start = self.buffer.line_start_position(cursor.line);
@@ -1294,7 +1264,7 @@ impl Editor {
                 key: key::KeyCode::Char('C'),
                 ..
             }) => {
-                self.buffer.begin_transaction();
+                self.begin_text_entry_transaction();
                 self.delete_to_line_end();
                 self.vi.set_last_edit(RepeatableEdit::ChangeToEnd);
                 self.vi.begin_insert(self.buffer.cursor());
@@ -1381,7 +1351,7 @@ impl Editor {
                     ..
                 }),
             ) => {
-                self.buffer.begin_transaction();
+                self.begin_text_entry_transaction();
                 self.delete_line();
                 self.vi.set_last_edit(RepeatableEdit::ChangeLine);
                 self.vi.begin_insert(self.buffer.cursor());
@@ -1414,7 +1384,7 @@ impl Editor {
                 key: key::KeyCode::Esc,
                 ..
             }) => {
-                self.buffer.commit_transaction();
+                self.commit_text_entry_transaction();
                 let _ = self.vi.end_insert();
                 self.ensure_cursor_visible(ctx);
                 EventOutcome::Handle
@@ -1574,7 +1544,7 @@ impl Editor {
                     range = self.linewise_range(range);
                 }
                 self.set_yank(range, linewise);
-                self.buffer.begin_transaction();
+                self.begin_text_entry_transaction();
                 self.buffer.replace_range(range, "");
                 self.vi.begin_insert(self.buffer.cursor());
                 self.exit_visual();
@@ -1754,20 +1724,24 @@ impl Editor {
             return;
         }
         let yank = self.yank.clone();
-        self.buffer.begin_transaction();
-        if self.yank_linewise {
-            let cursor = self.buffer.cursor();
-            let target = if before {
-                self.buffer.line_start_position(cursor.line)
-            } else {
-                self.buffer.line_end_position(cursor.line, true)
-            };
-            self.buffer.set_cursor(target);
-        } else if !before {
-            let _ = self.buffer.move_right(self.config.multiline);
+        let content = self.normalize_insert_text(&yank);
+        let multiline = self.config.multiline;
+        let linewise = self.yank_linewise;
+        {
+            let mut transaction = self.buffer.transaction();
+            if linewise {
+                let cursor = transaction.cursor();
+                let target = if before {
+                    transaction.line_start_position(cursor.line)
+                } else {
+                    transaction.line_end_position(cursor.line, true)
+                };
+                transaction.set_cursor(target);
+            } else if !before {
+                let _ = transaction.move_right(multiline);
+            }
+            transaction.insert_text(&content);
         }
-        self.handle_insert_text(&yank);
-        self.buffer.commit_transaction();
         self.update_preferred_column();
     }
 
@@ -1783,27 +1757,27 @@ impl Editor {
         let start_line = range.start.line;
         let end_line = range.end.line;
         let tab = " ".repeat(self.config.tab_stop.max(1));
-        self.buffer.begin_transaction();
-        for line in start_line..=end_line {
-            let line_start = TextPosition::new(line, 0);
-            if indent {
-                self.buffer
-                    .replace_range(TextRange::new(line_start, line_start), &tab);
-            } else {
-                let line_text = self.buffer.line_text(line);
-                let remove = line_text
-                    .chars()
-                    .take(self.config.tab_stop)
-                    .take_while(|c| *c == ' ')
-                    .count();
-                if remove > 0 {
-                    let end = TextPosition::new(line, remove);
-                    self.buffer
-                        .replace_range(TextRange::new(line_start, end), "");
+        let tab_stop = self.config.tab_stop;
+        {
+            let mut transaction = self.buffer.transaction();
+            for line in start_line..=end_line {
+                let line_start = TextPosition::new(line, 0);
+                if indent {
+                    transaction.replace_range(TextRange::new(line_start, line_start), &tab);
+                } else {
+                    let line_text = transaction.line_text(line);
+                    let remove = line_text
+                        .chars()
+                        .take(tab_stop)
+                        .take_while(|c| *c == ' ')
+                        .count();
+                    if remove > 0 {
+                        let end = TextPosition::new(line, remove);
+                        transaction.replace_range(TextRange::new(line_start, end), "");
+                    }
                 }
             }
         }
-        self.buffer.commit_transaction();
         if let VisualMode::Line = mode {
             self.extend_selection(mode);
         }
@@ -1976,7 +1950,7 @@ impl Editor {
             RepeatableEdit::ChangeLine => {
                 self.delete_line();
                 self.vi.begin_insert(self.buffer.cursor());
-                self.buffer.begin_transaction();
+                self.begin_text_entry_transaction();
             }
             RepeatableEdit::DeleteChar => {
                 let _ = self.handle_delete_forward();
@@ -1987,7 +1961,7 @@ impl Editor {
             RepeatableEdit::ChangeToEnd => {
                 self.delete_to_line_end();
                 self.vi.begin_insert(self.buffer.cursor());
-                self.buffer.begin_transaction();
+                self.begin_text_entry_transaction();
             }
             RepeatableEdit::OpenBelow => {
                 if self.config.multiline {
@@ -1997,7 +1971,7 @@ impl Editor {
                     self.handle_insert_text("\n");
                 }
                 self.vi.begin_insert(self.buffer.cursor());
-                self.buffer.begin_transaction();
+                self.begin_text_entry_transaction();
             }
             RepeatableEdit::OpenAbove => {
                 if self.config.multiline {
@@ -2008,7 +1982,7 @@ impl Editor {
                     let _ = self.buffer.move_left(true);
                 }
                 self.vi.begin_insert(self.buffer.cursor());
-                self.buffer.begin_transaction();
+                self.begin_text_entry_transaction();
             }
         }
     }
@@ -2037,9 +2011,10 @@ impl Editor {
         } else {
             text_point.x = 0;
         }
-        let pos = self
-            .layout
-            .position_for_point(&self.buffer, text_point, self.config.tab_stop);
+        let pos =
+            self.view
+                .layout
+                .position_for_point(&self.buffer, text_point, self.config.tab_stop);
 
         match event.action {
             mouse::Action::Down if event.button == mouse::Button::Left => {
@@ -2302,7 +2277,7 @@ impl Widget for Editor {
     }
 
     fn cursor(&self) -> Option<cursor::Cursor> {
-        let location = self.cursor_view_point?;
+        let location = self.view.cursor_view_point?;
         let shape = match self.config.mode {
             EditMode::Text => cursor::CursorShape::Line,
             EditMode::Vi => match self.vi.mode() {
@@ -2331,13 +2306,14 @@ impl Widget for Editor {
             let mut line_ctx = RenderLineContext::new(r, view_rect, origin, gutter_width);
             for row in 0..view_rect.h {
                 let display_line = view_rect.tl.y.saturating_add(row) as usize;
-                if display_line >= self.layout.total_lines() {
+                if display_line >= self.view.layout.total_lines() {
                     continue;
                 }
-                let line_idx = self.layout.line_for_display(display_line);
-                let line_start = self.layout.line_offset(line_idx);
+                let line_idx = self.view.layout.line_for_display(display_line);
+                let line_start = self.view.layout.line_offset(line_idx);
                 let seg_idx = display_line.saturating_sub(line_start);
                 let segment = self
+                    .view
                     .layout
                     .line(line_idx)
                     .and_then(|line| line.segment(seg_idx).cloned());
@@ -2354,7 +2330,7 @@ impl Widget for Editor {
     fn measure(&self, c: MeasureConstraints) -> Measurement {
         let mut width = match c.width {
             Constraint::Exact(n) | Constraint::AtMost(n) => n.max(1),
-            Constraint::Unbounded => self.layout.max_line_width() as u32,
+            Constraint::Unbounded => self.view.layout.max_line_width() as u32,
         };
         width = width.max(1);
 

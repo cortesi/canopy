@@ -254,29 +254,20 @@ impl Logs {
 
     #[command]
     /// Move selection to the first item.
-    pub fn select_first(&self, c: &mut dyn Context) {
-        drop(self.with_list(c, |list, ctx| {
-            list.select_first(ctx);
-            Ok(())
-        }));
+    pub fn select_first(&self, c: &mut dyn Context) -> Result<()> {
+        self.with_list(c, |list, ctx| list.select_first(ctx))
     }
 
     #[command]
     /// Move selection to the last item.
-    pub fn select_last(&self, c: &mut dyn Context) {
-        drop(self.with_list(c, |list, ctx| {
-            list.select_last(ctx);
-            Ok(())
-        }));
+    pub fn select_last(&self, c: &mut dyn Context) -> Result<()> {
+        self.with_list(c, |list, ctx| list.select_last(ctx))
     }
 
     #[command]
     /// Move selection by a signed offset.
-    pub fn select_by(&self, c: &mut dyn Context, delta: i32) {
-        drop(self.with_list(c, |list, ctx| {
-            list.select_by(ctx, delta);
-            Ok(())
-        }));
+    pub fn select_by(&self, c: &mut dyn Context, delta: i32) -> Result<()> {
+        self.with_list(c, |list, ctx| list.select_by(ctx, delta))
     }
 
     /// Scroll the view by one line in the specified direction.
@@ -293,11 +284,8 @@ impl Logs {
     /// Positive values move down; negative values move up.
     /// @param delta Signed page delta. Positive moves down and negative moves up.
     #[command]
-    pub fn page(&self, c: &mut dyn Context, delta: i32) {
-        drop(self.with_list(c, |list, ctx| {
-            list.page(ctx, delta);
-            Ok(())
-        }));
+    pub fn page(&self, c: &mut dyn Context, delta: i32) -> Result<()> {
+        self.with_list(c, |list, ctx| list.page(ctx, delta))
     }
 }
 

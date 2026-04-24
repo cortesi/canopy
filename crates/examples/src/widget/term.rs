@@ -184,11 +184,11 @@ impl Widget for TermDemo {
             ctx.set_layout_of(frame_id, Layout::fill().padding(Edges::all(1)))?;
             let terminal_id = ctx.add_child_to(
                 frame_id,
-                Terminal::new(TerminalConfig {
-                    command: Some(vec![label.to_string()]),
-                    cwd: Some(cwd.clone()),
-                    ..TerminalConfig::default()
-                }),
+                Terminal::new(
+                    TerminalConfig::new()
+                        .with_command([label.to_string()])
+                        .with_cwd(cwd.clone()),
+                ),
             )?;
             ctx.set_layout_of(terminal_id, Layout::fill())?;
             self.frame_ids.push(frame_id.into());

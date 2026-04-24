@@ -176,18 +176,18 @@ Built-in widgets should model the app-author API Canopy wants users to write. Sh
 composition machinery should build on the chosen mutation boundary rather than adding
 another ownership pattern.
 
-1. [ ] Review existing `Slot`, keyed child, and typed ID helpers before adding new
+1. [x] Review existing `Slot`, keyed child, and typed ID helpers before adding new
        reconciliation APIs.
-2. [ ] Add reusable keyed-child reconciliation in `canopy`.
-3. [ ] Move `List` reconciliation to the shared reconciler and remove internal panics.
-4. [ ] Make `List` selection updates return errors instead of swallowing access failures.
-5. [ ] Add focus and selection invariant tests for `List`, `Selector`, and `Dropdown`.
-6. [ ] Split `Editor` into clearer buffer, view, and controller responsibilities.
-7. [ ] Add strict `TextBuffer` accessors alongside current clamping helpers.
-8. [ ] Replace manual editor undo transactions with an RAII transaction guard.
-9. [ ] Encapsulate terminal driver threading in a private driver runtime module.
-10. [ ] Remove sleeps from terminal tests by waiting on explicit driver or session events.
-11. [ ] Audit widget constructors and replace complex public fields with config builders.
+2. [x] Add reusable keyed-child reconciliation in `canopy`.
+3. [x] Move `List` reconciliation to the shared reconciler and remove internal panics.
+4. [x] Make `List` selection updates return errors instead of swallowing access failures.
+5. [x] Add focus and selection invariant tests for `List`, `Selector`, and `Dropdown`.
+6. [x] Split `Editor` into clearer buffer, view, and controller responsibilities.
+7. [x] Add strict `TextBuffer` accessors alongside current clamping helpers.
+8. [x] Replace manual editor undo transactions with an RAII transaction guard.
+9. [x] Encapsulate terminal driver threading in a private driver runtime module.
+10. [x] Remove sleeps from terminal tests by waiting on explicit driver or session events.
+11. [x] Audit widget constructors and replace complex public fields with config builders.
 
 ## 9. Stage Nine: Narrow the Public API Surface
 
