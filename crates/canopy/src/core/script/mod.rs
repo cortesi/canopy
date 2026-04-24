@@ -24,6 +24,7 @@ use crate::{
     error::{self, Result},
     event::{key, mouse},
     geom::{Point, RectI32, Size},
+    path::PathFilter,
 };
 
 /// Render Luau definition files from the current command set.
@@ -1414,8 +1415,9 @@ impl LuauHost {
             "find_node",
             self.lua.create_function(|lua, pattern: String| {
                 with_current_canopy(|canopy, _| {
+                    let filter = PathFilter::normalized(&pattern)?;
                     let root_ctx = CoreViewContext::new(&canopy.core, canopy.core.root_id());
-                    let Some(node_id) = root_ctx.find_node(&pattern) else {
+                    let Some(node_id) = root_ctx.find_node_matching(&filter) else {
                         return Ok(Value::Nil);
                     };
                     node_id_to_lua(lua, node_id).map_err(lua_to_canopy)
@@ -1428,8 +1430,10 @@ impl LuauHost {
             "find_nodes",
             self.lua.create_function(|lua, pattern: String| {
                 with_current_canopy(|canopy, _| {
+                    let filter = PathFilter::normalized(&pattern)?;
                     let root_ctx = CoreViewContext::new(&canopy.core, canopy.core.root_id());
-                    node_list_to_lua(lua, root_ctx.find_nodes(&pattern)).map_err(lua_to_canopy)
+                    node_list_to_lua(lua, root_ctx.find_nodes_matching(&filter))
+                        .map_err(lua_to_canopy)
                 })
                 .map_err(LuaError::external)
             })?,

@@ -194,17 +194,17 @@ another ownership pattern.
 This is the main breaking-change stage. It should happen after the internal contracts are
 tested so public API reductions can be made confidently.
 
-1. [ ] Use `ruskel` to capture the public API skeleton for each workspace crate before
+1. [x] Use `ruskel` to capture the public API skeleton for each workspace crate before
        changing exports.
-2. [ ] Decide the stable app-author surface: prelude, widget trait, context, layout,
+2. [x] Decide the stable app-author surface: prelude, widget trait, context, layout,
        commands, styles, and selected widgets.
-3. [ ] Make `Canopy` fields private and expose focused methods for core and style access.
-4. [ ] Split `Context` into smaller capability traits or extension traits.
-5. [ ] Hide lower-level core modules that app authors should not depend on directly.
-6. [ ] Replace raw string path APIs with typed `Path`, `PathFilter`, and `NodeName`.
-7. [ ] Validate path components and scripting path strings at the boundary.
-8. [ ] Review `canopy-widgets` exports and mark experimental APIs before release.
-9. [ ] Update examples and docs so they use only the intended public surface.
+3. [x] Make `Canopy` fields private and expose focused methods for core and style access.
+4. [x] Split `Context` into smaller capability traits or extension traits.
+5. [x] Hide lower-level core modules that app authors should not depend on directly.
+6. [x] Replace raw string path APIs with typed `Path`, `PathFilter`, and `NodeName`.
+7. [x] Validate path components and scripting path strings at the boundary.
+8. [x] Review `canopy-widgets` exports and mark experimental APIs before release.
+9. [x] Update examples and docs so they use only the intended public surface.
 
 ## 10. Stage Ten: Expand Tooling and CI Guardrails
 
@@ -221,6 +221,6 @@ Once the core contracts are clearer, automate checks that keep regressions from 
 
 ## Suggested Next Batch
 
-The next implementation batch should be Stage Four items 1 through 2. That gives the new
-`widget_access` layer stable names and consistent node-context diagnostics before changing
-layout trait signatures or adding more render property tests.
+The next implementation batch should be Stage Ten items 1 through 3: add library panic
+guardrails to `cargo xtask tidy`, keep any justified panic allowlist small and documented,
+and wire the existing smoke, docs, and generated Luau checks into CI.

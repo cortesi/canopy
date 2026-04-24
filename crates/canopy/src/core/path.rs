@@ -1,6 +1,9 @@
 use std::{fmt, str::FromStr};
 
-use crate::error::{self, Result};
+use crate::{
+    error::{self, Result},
+    state::NodeName,
+};
 
 /// A path of node name components.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -12,7 +15,7 @@ pub struct Path {
 impl FromStr for Path {
     type Err = error::Error;
     fn from_str(s: &str) -> Result<Self> {
-        Ok(Self::from(s))
+        Self::parse(s)
     }
 }
 
@@ -26,6 +29,16 @@ impl Path {
     /// Construct an empty path.
     pub fn empty() -> Self {
         Self { path: vec![] }
+    }
+
+    /// Parse and validate a path from a slash-separated string.
+    pub fn parse(path: &str) -> Result<Self> {
+        let mut components = Vec::new();
+        for component in path.split('/').filter(|component| !component.is_empty()) {
+            NodeName::new(component)?;
+            components.push(component.to_string());
+        }
+        Ok(Self { path: components })
     }
 
     /// Pop an item off the end of the path, modifying it in place. Return None
@@ -83,6 +96,48 @@ impl From<&str> for Path {
                 })
                 .collect(),
         }
+    }
+}
+
+/// A validated path filter used to search node paths.
+///
+/// Filters support `*` for one component and `**` for zero or more components.
+/// Literal components must be valid [`NodeName`] values.
+#[derive(Debug, Clone)]
+pub struct PathFilter {
+    /// Compiled matcher.
+    matcher: PathMatcher,
+}
+
+impl PathFilter {
+    /// Compile a validated path filter.
+    pub fn new(filter: &str) -> Result<Self> {
+        Ok(Self {
+            matcher: PathMatcher::new(filter)?,
+        })
+    }
+
+    /// Compile a filter after normalizing it to a full-path match.
+    pub fn normalized(filter: &str) -> Result<Self> {
+        Self::new(&normalize_filter(filter))
+    }
+
+    /// Return the original filter string.
+    pub fn as_str(&self) -> &str {
+        self.matcher.filter()
+    }
+
+    /// Return the compiled matcher.
+    pub(crate) fn matcher(&self) -> &PathMatcher {
+        &self.matcher
+    }
+}
+
+impl FromStr for PathFilter {
+    type Err = error::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Self::new(s)
     }
 }
 
@@ -153,6 +208,7 @@ impl PathMatcher {
                 "*" => Segment::Any,
                 "**" => Segment::AnyDeep,
                 _ => {
+                    NodeName::new(part)?;
                     literals += 1;
                     Segment::Lit(part.to_string())
                 }
@@ -207,6 +263,16 @@ impl PathMatcher {
             }
         }
         best
+    }
+}
+
+/// Normalize a path filter to match a full path.
+pub(crate) fn normalize_filter(path_filter: &str) -> String {
+    let trimmed = path_filter.trim_matches('/');
+    if trimmed.is_empty() {
+        String::new()
+    } else {
+        format!("/{trimmed}/")
     }
 }
 
@@ -300,6 +366,22 @@ mod tests {
         assert!(v.check(&"/foo/x/bar/x".into()).is_none());
 
         Ok(())
+    }
+
+    #[test]
+    fn path_filters_validate_literal_components() {
+        assert!(PathFilter::new("valid_name/**").is_ok());
+        assert!(PathFilter::new("invalid-name").is_err());
+        assert!(PathFilter::new("InvalidName").is_err());
+    }
+
+    #[test]
+    fn parsed_paths_validate_components() {
+        assert_eq!(
+            Path::parse("/valid_name/node").unwrap(),
+            Path::new(["valid_name", "node"])
+        );
+        assert!(Path::parse("/invalid-name").is_err());
     }
 
     proptest! {

@@ -13,7 +13,7 @@ mod button;
 mod center;
 /// Dropdown selection widget.
 mod dropdown;
-/// Editor widget with syntax highlighting and vi mode.
+/// Experimental editor API with syntax highlighting and vi mode.
 pub mod editor;
 /// Widget-specific error types.
 mod error;
@@ -23,13 +23,13 @@ mod font;
 mod font_banner;
 /// Scrollable frame container.
 mod frame;
-/// Contextual help modal.
+/// Experimental contextual help modal internals.
 pub mod help;
 /// Image rendering widget.
 mod image_view;
 /// Text input widget.
 mod input;
-/// Inspector overlay widget.
+/// Experimental inspector overlay internals.
 pub mod inspector;
 /// Typed list container with selection.
 mod list;
@@ -43,7 +43,7 @@ mod panes;
 mod root;
 /// Selection widget.
 mod selector;
-/// Tab container widget.
+/// Experimental tab container API.
 pub mod tabs;
 /// Terminal emulation widget.
 mod terminal;
@@ -57,6 +57,7 @@ pub use button::Button;
 pub use center::Center;
 pub use dropdown::{Dropdown, DropdownItem};
 pub use error::{Error, Result};
+/// Experimental ASCII font rendering API.
 pub use font::{
     Font, FontCell, FontEffects, FontLayout, FontRenderer, Glyph, GlyphRamp, LayoutOptions,
     OverflowPolicy,

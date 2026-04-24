@@ -227,9 +227,7 @@ fn main() -> Result<()> {
             .with_inner_padding(0)
         }
     };
-    let app_id = cnpy.core.create_detached(demo);
-
-    Root::install_with_inspector(&mut cnpy.core, app_id, args.inspector)?;
+    Root::install_app_with_inspector(&mut cnpy, demo, args.inspector)?;
     let exit_code = runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
     if exit_code != 0 {
         process::exit(exit_code);

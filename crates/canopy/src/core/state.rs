@@ -32,7 +32,7 @@ impl FromStr for NodeName {
 impl NodeName {
     /// Create a new NodeName, returning an error if the string contains invalid
     /// characters.
-    fn new(name: &str) -> Result<Self> {
+    pub fn new(name: &str) -> Result<Self> {
         if !valid_nodename(name) {
             return Err(error::Error::Invalid(name.into()));
         }

@@ -8,8 +8,8 @@
 //!
 //! The main entry points are:
 //! - [`Canopy`] - The core application state
-//! - [`Core`] - The arena and layout engine
 //! - [`Widget`] - The trait implemented by all widgets
+//! - [`Context`] - The mutation API available to widgets
 //!
 //! # Module Organization
 //!
@@ -29,18 +29,19 @@ pub mod layout;
 pub mod prelude;
 pub(crate) mod widget;
 
-// Re-export submodules that users may need to access directly
-// Re-export terminal buffer and text buffer
 pub use core::termbuf::TermBuf;
 #[cfg(any(test, feature = "testing"))]
 pub use core::testing;
-// Re-export core application types
+// Stable app-author surface.
 pub use core::{
-    AutomationCallback, AutomationHandle, BindingId, Canopy, ChildKey, Context, Core, Fixture,
-    FixtureInfo, InputMap, InputSpec, KeyedChildren, Loader, NodeId, Preorder, ReadContext,
-    RemovePolicy, RoutePhase, RouteTraceEntry, Slot, TypedId,
+    AutomationCallback, AutomationHandle, BindingId, Canopy, ChildKey, CommandContext, Context,
+    Fixture, FixtureInfo, FocusContext, KeyedChildren, LayoutContext, Loader, NodeId, Path,
+    PathFilter, ReadContext, RemovePolicy, ScrollContext, Slot, StyleContext, TreeContext, TypedId,
 };
-// Re-export input mapping
+// Lower-level runtime exports retained for internal crates and diagnostics.
+#[doc(hidden)]
+pub use core::{Core, InputMap, InputSpec, Preorder, RoutePhase, RouteTraceEntry};
+#[doc(hidden)]
 pub use core::{
     backend, commands, cursor, error, event, help, inputmap, path, render, script, state, style,
     text, view,

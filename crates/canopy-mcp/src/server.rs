@@ -295,9 +295,10 @@ mod tests {
             let mut canopy = Canopy::new();
             EchoNode::load(&mut canopy)?;
             canopy.finalize_api()?;
+            let root_id = canopy.root_id();
             canopy
-                .core
-                .replace_subtree(canopy.core.root_id(), EchoNode::new())?;
+                .core_mut()
+                .replace_subtree(root_id, EchoNode::new())?;
             Ok(canopy)
         }))
     }

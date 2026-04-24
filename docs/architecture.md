@@ -7,6 +7,27 @@ traits; they do not keep arena references.
 Treat this file as the current contract. If it disagrees with code, fix one before
 adding behavior.
 
+## Public API Surface
+
+Application code should start from `canopy::prelude::*` and selected
+`canopy_widgets` types. The stable surface is `Canopy`, `Widget`, `ReadContext`,
+`Context`, capability context traits, typed node IDs, layout types, geometry,
+styles, command macros, and validated path types.
+
+`Canopy` owns `Core` and the style map. Its fields are private. Apps install root
+widgets with helpers such as `Root::install_app`, mutate styles through
+`Canopy::style_mut()`, and use `Canopy` methods for scripting, fixtures, input
+modes, rendering, and automation.
+
+Lower-level runtime modules remain available only as hidden escape hatches for
+internal crates, diagnostics, and tests. App authors should not depend on `Core`,
+`inputmap`, `script`, `view`, backend internals, or raw arena mutation unless a
+future API explicitly promotes that use.
+
+Path-oriented APIs use `Path`, `PathFilter`, and `NodeName`. Literal path
+components must be valid node names. Raw script path strings are validated at the
+Luau boundary before matching.
+
 ## Tree Model
 
 `Core` stores `Node`s in a `SlotMap<NodeId, Node>`. A `NodeId` is valid only while

@@ -48,8 +48,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let contents = fs::read_to_string(filename)?;
-    let app_id = cnpy.core.create_detached(Pager::new(&contents));
-    Root::install(&mut cnpy.core, app_id)?;
+    Root::install_app(&mut cnpy, Pager::new(&contents))?;
     let exit_code = runloop_with_options(cnpy, RunloopOptions::ctrlc_dump())?;
     if exit_code != 0 {
         process::exit(exit_code);

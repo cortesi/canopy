@@ -70,15 +70,14 @@ mod tests {
 
         let mut canopy = Canopy::new();
         canopy.add_commands::<TestLeaf>()?;
-        let leaf_id = canopy.core.create_detached(TestLeaf);
-        let branch_id = canopy.core.create_detached(TestBranch);
-        canopy.core.set_children(branch_id, vec![leaf_id])?;
-        canopy
-            .core
-            .set_children(canopy.core.root_id(), vec![branch_id])?;
+        let leaf_id = canopy.core_mut().create_detached(TestLeaf);
+        let branch_id = canopy.core_mut().create_detached(TestBranch);
+        canopy.core_mut().set_children(branch_id, vec![leaf_id])?;
+        let root_id = canopy.root_id();
+        canopy.core_mut().set_children(root_id, vec![branch_id])?;
 
         let inv = TestLeaf::cmd_c_leaf().call_with(()).invocation();
-        let result = dispatch(&mut canopy.core, branch_id, &inv)?;
+        let result = dispatch(canopy.core_mut(), branch_id, &inv)?;
 
         assert_eq!(result, ArgValue::Null);
         assert_eq!(state_path(), vec!["test_leaf.c_leaf()"]);
@@ -94,15 +93,14 @@ mod tests {
         canopy.add_commands::<TestLeaf>()?;
         canopy.add_commands::<TestLeaf>()?;
 
-        let leaf_id = canopy.core.create_detached(TestLeaf);
-        let branch_id = canopy.core.create_detached(TestBranch);
-        canopy.core.set_children(branch_id, vec![leaf_id])?;
-        canopy
-            .core
-            .set_children(canopy.core.root_id(), vec![branch_id])?;
+        let leaf_id = canopy.core_mut().create_detached(TestLeaf);
+        let branch_id = canopy.core_mut().create_detached(TestBranch);
+        canopy.core_mut().set_children(branch_id, vec![leaf_id])?;
+        let root_id = canopy.root_id();
+        canopy.core_mut().set_children(root_id, vec![branch_id])?;
 
         let inv = TestLeaf::cmd_c_leaf().call_with(()).invocation();
-        let result = dispatch(&mut canopy.core, branch_id, &inv)?;
+        let result = dispatch(canopy.core_mut(), branch_id, &inv)?;
         assert_eq!(result, ArgValue::Null);
         assert_eq!(state_path(), vec!["test_leaf.c_leaf()"]);
 
@@ -115,8 +113,8 @@ mod tests {
         canopy.add_commands::<TestLeaf>()?;
         let inv = TestLeaf::cmd_c_leaf().call_with(()).invocation();
 
-        let root_id = canopy.core.root_id();
-        let err = dispatch(&mut canopy.core, root_id, &inv).unwrap_err();
+        let root_id = canopy.core().root_id();
+        let err = dispatch(canopy.core_mut(), root_id, &inv).unwrap_err();
         let owner_name = match TestLeaf::cmd_c_leaf().dispatch {
             CommandDispatchKind::Node { owner } => owner,
             CommandDispatchKind::Free => "free",
@@ -136,23 +134,22 @@ mod tests {
         let mut canopy = Canopy::new();
         canopy.add_commands::<TestLeaf>()?;
         canopy.add_commands::<TestBranch>()?;
-        let first_leaf = canopy.core.create_detached(TestLeaf);
-        let second_leaf = canopy.core.create_detached(TestLeaf);
-        let branch_id = canopy.core.create_detached(TestBranch);
+        let first_leaf = canopy.core_mut().create_detached(TestLeaf);
+        let second_leaf = canopy.core_mut().create_detached(TestLeaf);
+        let branch_id = canopy.core_mut().create_detached(TestBranch);
         canopy
-            .core
+            .core_mut()
             .set_children(branch_id, vec![first_leaf, second_leaf])?;
-        canopy
-            .core
-            .set_children(canopy.core.root_id(), vec![branch_id])?;
+        let root_id = canopy.root_id();
+        canopy.core_mut().set_children(root_id, vec![branch_id])?;
 
-        let resolver = CommandResolver::new(&canopy.core, branch_id);
+        let resolver = CommandResolver::new(canopy.core(), branch_id);
         assert_eq!(
             resolver.resolve(TestLeaf::cmd_c_leaf()),
             Some(CommandResolution::Subtree { target: first_leaf })
         );
 
-        let resolver = CommandResolver::new(&canopy.core, first_leaf);
+        let resolver = CommandResolver::new(canopy.core(), first_leaf);
         assert_eq!(
             resolver.resolve(TestBranch::cmd_c_branch()),
             Some(CommandResolution::Ancestor { target: branch_id })

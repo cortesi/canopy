@@ -477,7 +477,7 @@ fn highlight_spans_inherit_editor_background() {
     harness.key(key::KeyCode::Down).unwrap();
 
     let base_bg = StyleManager::default()
-        .get(&harness.canopy.style, "editor/text")
+        .get(harness.canopy.style(), "editor/text")
         .bg
         .solid_color()
         .expect("editor text background is solid");

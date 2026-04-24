@@ -98,23 +98,23 @@ mod tests {
     #[test]
     fn child_respects_parent_padding() -> Result<()> {
         let mut h = Harness::builder(Root::new()).size(20, 20).build()?;
-        let container = h.canopy.core.create_detached(Container::new());
-        let child = h.canopy.core.create_detached(Huge::new());
-        h.canopy.core.set_children(h.root, vec![container])?;
-        h.canopy.core.set_children(container, vec![child])?;
+        let container = h.canopy.core_mut().create_detached(Container::new());
+        let child = h.canopy.core_mut().create_detached(Huge::new());
+        h.canopy.core_mut().set_children(h.root, vec![container])?;
+        h.canopy.core_mut().set_children(container, vec![child])?;
 
-        h.canopy.core.set_layout_of(h.root, Layout::fill())?;
+        h.canopy.core_mut().set_layout_of(h.root, Layout::fill())?;
 
         h.canopy
-            .core
+            .core_mut()
             .set_layout_of(container, Layout::fill().padding(Edges::all(1)))?;
 
-        h.canopy.core.set_layout_of(child, Layout::fill())?;
+        h.canopy.core_mut().set_layout_of(child, Layout::fill())?;
 
         h.canopy.set_root_size(Size::new(20, 20))?;
         h.render()?;
 
-        let core = &h.canopy.core;
+        let core = h.canopy.core();
         let container_view = core.node(container).expect("missing container").view();
         let child_view = core.node(child).expect("missing child").view();
         assert_eq!(child_view.outer.tl.x, container_view.content.tl.x);

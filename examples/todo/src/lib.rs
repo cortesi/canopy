@@ -441,7 +441,7 @@ end)
 pub fn style(cnpy: &mut Canopy) {
     use canopy::style::StyleBuilder;
 
-    cnpy.style
+    cnpy.style_mut()
         .rules()
         .style(
             "statusbar/text",
@@ -540,7 +540,6 @@ pub fn create_app_with_config(db_path: &str, config: Option<&Path>) -> AnyResult
     setup_app_with_config(&mut cnpy, config)?;
 
     let todo = Todo::new()?;
-    let app_id = cnpy.core.create_detached(todo);
-    Root::install(&mut cnpy.core, app_id)?;
+    Root::install_app(&mut cnpy, todo)?;
     Ok(cnpy)
 }

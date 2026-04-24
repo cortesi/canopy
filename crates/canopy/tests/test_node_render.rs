@@ -112,18 +112,18 @@ mod tests {
     fn test_simple_node_fill() -> Result<()> {
         let mut h = Harness::builder(Root::new()).size(30, 10).build()?;
 
-        let node_a = h.canopy.core.create_detached(NodeA::new());
-        let node_b = h.canopy.core.create_detached(NodeB::new());
-        h.canopy.core.set_children(h.root, vec![node_a])?;
-        h.canopy.core.set_children(node_a, vec![node_b])?;
+        let node_a = h.canopy.core_mut().create_detached(NodeA::new());
+        let node_b = h.canopy.core_mut().create_detached(NodeB::new());
+        h.canopy.core_mut().set_children(h.root, vec![node_a])?;
+        h.canopy.core_mut().set_children(node_a, vec![node_b])?;
 
-        h.canopy.core.set_layout_of(h.root, Layout::fill())?;
+        h.canopy.core_mut().set_layout_of(h.root, Layout::fill())?;
 
         h.canopy
-            .core
+            .core_mut()
             .set_layout_of(node_a, Layout::column().fixed_width(10).fixed_height(5))?;
 
-        h.canopy.core.set_layout_of(node_b, Layout::fill())?;
+        h.canopy.core_mut().set_layout_of(node_b, Layout::fill())?;
 
         h.canopy.set_root_size(Size::new(30, 10))?;
         h.render()?;
@@ -146,33 +146,37 @@ mod tests {
     fn test_zero_size_child_at_boundary_renders() -> Result<()> {
         let mut h = Harness::builder(Root::new()).size(10, 10).build()?;
 
-        let container = h.canopy.core.create_detached(NodeA::new());
-        let top = h.canopy.core.create_detached(NodeB::new());
-        let bottom = h.canopy.core.create_detached(NodeA::new());
+        let container = h.canopy.core_mut().create_detached(NodeA::new());
+        let top = h.canopy.core_mut().create_detached(NodeB::new());
+        let bottom = h.canopy.core_mut().create_detached(NodeA::new());
 
-        h.canopy.core.set_children(h.root, vec![container])?;
-        h.canopy.core.set_children(container, vec![top, bottom])?;
+        h.canopy.core_mut().set_children(h.root, vec![container])?;
+        h.canopy
+            .core_mut()
+            .set_children(container, vec![top, bottom])?;
 
-        h.canopy.core.set_layout_of(h.root, Layout::fill())?;
-
-        h.canopy.core.set_layout_of(container, Layout::fill())?;
+        h.canopy.core_mut().set_layout_of(h.root, Layout::fill())?;
 
         h.canopy
-            .core
+            .core_mut()
+            .set_layout_of(container, Layout::fill())?;
+
+        h.canopy
+            .core_mut()
             .set_layout_of(top, Layout::column().fixed_width(10).fixed_height(10))?;
 
         h.canopy
-            .core
+            .core_mut()
             .set_layout_of(bottom, Layout::column().fixed_width(10).fixed_height(0))?;
 
         h.canopy.set_root_size(Size::new(10, 10))?;
         h.render()?;
 
-        let bottom_view = h.canopy.core.node(bottom).expect("node missing").view();
+        let bottom_view = h.canopy.core().node(bottom).expect("node missing").view();
         assert!(bottom_view.outer.is_zero());
         assert_eq!(
             h.canopy
-                .core
+                .core()
                 .node(bottom)
                 .expect("node missing")
                 .rect()
@@ -188,10 +192,10 @@ mod tests {
     fn test_resize_deep_tree_does_not_error() -> Result<()> {
         let mut h = Harness::builder(Root::new()).size(123, 31).build()?;
 
-        let tree = build_split_tree(&mut h.canopy.core, 5, true)?;
-        h.canopy.core.set_children(h.root, vec![tree])?;
-        h.canopy.core.set_layout_of(h.root, Layout::fill())?;
-        style_flex_child(&mut h.canopy.core, tree)?;
+        let tree = build_split_tree(h.canopy.core_mut(), 5, true)?;
+        h.canopy.core_mut().set_children(h.root, vec![tree])?;
+        h.canopy.core_mut().set_layout_of(h.root, Layout::fill())?;
+        style_flex_child(h.canopy.core_mut(), tree)?;
 
         h.render()?;
         h.canopy.set_root_size(Size::new(246, 63))?;
@@ -201,7 +205,7 @@ mod tests {
 
         let mut stack = vec![h.root];
         while let Some(node_id) = stack.pop() {
-            let node = h.canopy.core.node(node_id).expect("node missing");
+            let node = h.canopy.core().node(node_id).expect("node missing");
             for child in node.children().iter().rev() {
                 stack.push(*child);
             }

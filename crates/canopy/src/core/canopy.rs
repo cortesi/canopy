@@ -14,7 +14,7 @@ use crate::{
     backend::BackendControl,
     commands::{self, CommandDispatchKind},
     core::{
-        Core, NodeId,
+        Core, NodeId, TypedId,
         context::CoreViewContext,
         dump::dump_with_focus,
         fixture::{Fixture, FixtureInfo},
@@ -32,13 +32,13 @@ use crate::{
     render::{Render, RenderBackend},
     script,
     style::{ResolvedStyle, StyleManager, StyleMap, solarized},
-    widget::EventOutcome,
+    widget::{EventOutcome, Widget},
 };
 
 /// Application runtime state and renderer coordination.
 pub struct Canopy {
     /// Core state.
-    pub core: Core,
+    pub(super) core: Core,
 
     /// Stores the focus_gen during the last render.
     last_render_focus_gen: u64,
@@ -80,7 +80,7 @@ pub struct Canopy {
     automation_rx: mpsc::Receiver<AutomationCallback>,
 
     /// Style map used for rendering.
-    pub style: StyleMap,
+    style: StyleMap,
 }
 
 /// A phase in key or mouse event routing.
@@ -307,6 +307,55 @@ impl Canopy {
             callback_tx: self.automation_tx.clone(),
             wake_tx: self.event_tx.clone(),
         }
+    }
+
+    /// Return the root node ID.
+    pub fn root_id(&self) -> NodeId {
+        self.core.root_id()
+    }
+
+    /// Create a detached widget node.
+    pub fn create_detached<W>(&mut self, widget: W) -> TypedId<W>
+    where
+        W: Widget + 'static,
+    {
+        TypedId::new(self.core.create_detached(widget))
+    }
+
+    /// Replace the root's children with a single node.
+    pub fn set_root_child(&mut self, child: impl Into<NodeId>) -> Result<()> {
+        let root = self.root_id();
+        self.core.set_children(root, vec![child.into()])
+    }
+
+    /// Return the active style map.
+    pub fn style(&self) -> &StyleMap {
+        &self.style
+    }
+
+    /// Mutate the active style map before the next render.
+    pub fn style_mut(&mut self) -> &mut StyleMap {
+        self.render_pending = true;
+        &mut self.style
+    }
+
+    /// Replace the active style map before the next render.
+    pub fn set_style(&mut self, style: StyleMap) {
+        self.style = style;
+        self.render_pending = true;
+    }
+
+    /// Return the internal core state.
+    #[doc(hidden)]
+    pub fn core(&self) -> &Core {
+        &self.core
+    }
+
+    /// Return the internal core state mutably.
+    #[doc(hidden)]
+    pub fn core_mut(&mut self) -> &mut Core {
+        self.render_pending = true;
+        &mut self.core
     }
 
     /// Register a backend controller.

@@ -336,7 +336,7 @@ impl Loader for ListGym {
 
 /// Install key bindings for the list gym demo.
 pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
-    cnpy.style
+    cnpy.style_mut()
         .rules()
         .fg("red/text", solarized::RED)
         .fg("blue/text", solarized::BLUE)

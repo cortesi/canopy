@@ -62,12 +62,12 @@ mod tests {
     }
 
     fn test_snake_navigation(grid: &Grid, canopy: &mut Canopy, size: Size) -> Result<()> {
-        attach_grid(&mut canopy.core, grid.root, size)?;
+        attach_grid(canopy.core_mut(), grid.root, size)?;
         let (grid_width, grid_height) = grid.dimensions();
         let total_cells = grid_width * grid_height;
 
-        canopy.core.focus_first(grid.root);
-        let initial = get_focused_cell(&canopy.core);
+        canopy.core_mut().focus_first(grid.root);
+        let initial = get_focused_cell(canopy.core());
         if initial != Some("cell_0_0".to_string()) {
             return Err(Error::Focus(format!(
                 "Expected to start at cell_0_0, but started at {initial:?}"
@@ -80,7 +80,7 @@ mod tests {
         for row in 0..grid_height {
             if row % 2 == 0 {
                 for col in 0..grid_width {
-                    let cell = get_focused_cell(&canopy.core);
+                    let cell = get_focused_cell(canopy.core());
                     let expected_cell = format!("cell_{col}_{row}");
 
                     match &cell {
@@ -101,9 +101,9 @@ mod tests {
                     }
 
                     if col < grid_width - 1 {
-                        let before = get_focused_cell(&canopy.core);
-                        canopy.core.focus_dir(grid.root, Direction::Right);
-                        let after = get_focused_cell(&canopy.core);
+                        let before = get_focused_cell(canopy.core());
+                        canopy.core_mut().focus_dir(grid.root, Direction::Right);
+                        let after = get_focused_cell(canopy.core());
 
                         if before == after {
                             return Err(Error::Focus(format!(
@@ -114,7 +114,7 @@ mod tests {
                 }
             } else {
                 for col in (0..grid_width).rev() {
-                    let cell = get_focused_cell(&canopy.core);
+                    let cell = get_focused_cell(canopy.core());
                     let expected_cell = format!("cell_{col}_{row}");
 
                     match &cell {
@@ -135,9 +135,9 @@ mod tests {
                     }
 
                     if col > 0 {
-                        let before = get_focused_cell(&canopy.core);
-                        canopy.core.focus_dir(grid.root, Direction::Left);
-                        let after = get_focused_cell(&canopy.core);
+                        let before = get_focused_cell(canopy.core());
+                        canopy.core_mut().focus_dir(grid.root, Direction::Left);
+                        let after = get_focused_cell(canopy.core());
 
                         if before == after {
                             return Err(Error::Focus(format!(
@@ -149,9 +149,9 @@ mod tests {
             }
 
             if row < grid_height - 1 {
-                let before = get_focused_cell(&canopy.core);
-                canopy.core.focus_dir(grid.root, Direction::Down);
-                let after = get_focused_cell(&canopy.core);
+                let before = get_focused_cell(canopy.core());
+                canopy.core_mut().focus_dir(grid.root, Direction::Down);
+                let after = get_focused_cell(canopy.core());
 
                 if before == after {
                     return Err(Error::Focus(format!(
@@ -184,25 +184,40 @@ mod tests {
     #[test]
     fn test_focus_dir_simple_grid() -> Result<()> {
         let mut canopy = Canopy::new();
-        let grid = Grid::install(&mut canopy.core, 1, 2)?;
+        let grid = Grid::install(canopy.core_mut(), 1, 2)?;
         let grid_size = grid.expected_size();
         assert_eq!(grid_size, Size::new(20, 20));
-        attach_grid(&mut canopy.core, grid.root, grid_size)?;
+        attach_grid(canopy.core_mut(), grid.root, grid_size)?;
 
-        canopy.core.focus_first(grid.root);
-        assert_eq!(get_focused_cell(&canopy.core), Some("cell_0_0".to_string()));
+        canopy.core_mut().focus_first(grid.root);
+        assert_eq!(
+            get_focused_cell(canopy.core()),
+            Some("cell_0_0".to_string())
+        );
 
-        canopy.core.focus_dir(grid.root, Direction::Right);
-        assert_eq!(get_focused_cell(&canopy.core), Some("cell_1_0".to_string()));
+        canopy.core_mut().focus_dir(grid.root, Direction::Right);
+        assert_eq!(
+            get_focused_cell(canopy.core()),
+            Some("cell_1_0".to_string())
+        );
 
-        canopy.core.focus_dir(grid.root, Direction::Down);
-        assert_eq!(get_focused_cell(&canopy.core), Some("cell_1_1".to_string()));
+        canopy.core_mut().focus_dir(grid.root, Direction::Down);
+        assert_eq!(
+            get_focused_cell(canopy.core()),
+            Some("cell_1_1".to_string())
+        );
 
-        canopy.core.focus_dir(grid.root, Direction::Left);
-        assert_eq!(get_focused_cell(&canopy.core), Some("cell_0_1".to_string()));
+        canopy.core_mut().focus_dir(grid.root, Direction::Left);
+        assert_eq!(
+            get_focused_cell(canopy.core()),
+            Some("cell_0_1".to_string())
+        );
 
-        canopy.core.focus_dir(grid.root, Direction::Up);
-        assert_eq!(get_focused_cell(&canopy.core), Some("cell_0_0".to_string()));
+        canopy.core_mut().focus_dir(grid.root, Direction::Up);
+        assert_eq!(
+            get_focused_cell(canopy.core()),
+            Some("cell_0_0".to_string())
+        );
 
         Ok(())
     }
@@ -210,7 +225,7 @@ mod tests {
     #[test]
     fn test_focus_snake_navigation_3x3() -> Result<()> {
         let mut canopy = Canopy::new();
-        let grid = Grid::install(&mut canopy.core, 1, 3)?;
+        let grid = Grid::install(canopy.core_mut(), 1, 3)?;
         let grid_size = grid.expected_size();
         test_snake_navigation(&grid, &mut canopy, grid_size)
     }
@@ -218,7 +233,7 @@ mod tests {
     #[test]
     fn test_focus_snake_navigation_4x4() -> Result<()> {
         let mut canopy = Canopy::new();
-        let grid = Grid::install(&mut canopy.core, 2, 2)?;
+        let grid = Grid::install(canopy.core_mut(), 2, 2)?;
         let grid_size = grid.expected_size();
         test_snake_navigation(&grid, &mut canopy, grid_size)
     }
@@ -226,28 +241,28 @@ mod tests {
     #[test]
     fn test_focus_moves_off_zero_view_nodes() -> Result<()> {
         let mut canopy = Canopy::new();
-        let first = canopy.core.create_detached(FocusLeaf::new("first"));
-        let second = canopy.core.create_detached(FocusLeaf::new("second"));
+        let first = canopy.core_mut().create_detached(FocusLeaf::new("first"));
+        let second = canopy.core_mut().create_detached(FocusLeaf::new("second"));
 
-        let root = canopy.core.root_id();
-        canopy.core.set_children(root, vec![first, second])?;
+        let root = canopy.core().root_id();
+        canopy.core_mut().set_children(root, vec![first, second])?;
         canopy
-            .core
+            .core_mut()
             .set_layout_of(root, Layout::column().flex_horizontal(1).flex_vertical(1))?;
         canopy
-            .core
+            .core_mut()
             .set_layout_of(first, Layout::column().fixed_width(10).fixed_height(5))?;
-        canopy.core.set_layout_of(second, Layout::fill())?;
+        canopy.core_mut().set_layout_of(second, Layout::fill())?;
 
-        canopy.core.update_layout(Size::new(10, 10))?;
-        canopy.core.set_focus(first);
+        canopy.core_mut().update_layout(Size::new(10, 10))?;
+        canopy.core_mut().set_focus(first);
 
-        canopy.core.with_layout_of(first, |layout| {
+        canopy.core_mut().with_layout_of(first, |layout| {
             *layout = layout.fixed_height(0);
         })?;
-        canopy.core.update_layout(Size::new(10, 10))?;
+        canopy.core_mut().update_layout(Size::new(10, 10))?;
 
-        assert_eq!(canopy.core.focus_id(), Some(second));
+        assert_eq!(canopy.core().focus_id(), Some(second));
         Ok(())
     }
 }

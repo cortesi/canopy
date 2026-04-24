@@ -295,7 +295,7 @@ pub fn setup_bindings(cnpy: &mut Canopy) -> Result<()> {
         .bg(solarized::BLUE)
         .attrs(selected_attrs);
 
-    cnpy.style
+    cnpy.style_mut()
         .rules()
         .prefix("intervals/entry")
         .style_all(&["border", "fill", "text"], normal)

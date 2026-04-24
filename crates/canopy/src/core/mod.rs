@@ -65,8 +65,12 @@ pub use canopy::{
     AutomationCallback, AutomationHandle, Canopy, Loader, RoutePhase, RouteTraceEntry,
 };
 pub use children::{KeyedChildren, RemovePolicy};
-pub use context::{ChildKey, Context, Preorder, ReadContext, Slot};
+pub use context::{
+    ChildKey, CommandContext, Context, FocusContext, LayoutContext, Preorder, ReadContext,
+    ScrollContext, Slot, StyleContext, TreeContext,
+};
 pub use fixture::{Fixture, FixtureInfo};
 pub use id::{NodeId, TypedId};
 pub use inputmap::{BindingId, InputMap, InputSpec};
+pub use path::{Path, PathFilter};
 pub use world::Core;

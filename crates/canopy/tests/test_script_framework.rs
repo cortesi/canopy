@@ -219,6 +219,19 @@ mod tests {
     }
 
     #[test]
+    fn script_find_rejects_invalid_path_filters() -> Result<()> {
+        let mut harness = Harness::builder(ApiRoot).size(20, 5).build()?;
+        harness.render()?;
+
+        let err = harness
+            .script(r#"canopy.find_node("api-root")"#)
+            .expect_err("invalid path filter should fail");
+        assert!(err.to_string().contains("api-root"));
+
+        Ok(())
+    }
+
+    #[test]
     fn luau_nested_callbacks_can_unbind_and_dispatch() -> Result<()> {
         let mut harness = Harness::builder(ApiRoot).size(20, 5).build()?;
         harness.render()?;

@@ -19,7 +19,7 @@ use crate::{
     event::{Event, mouse::MouseEvent},
     geom::{Direction, Point, PointI32, Rect, RectI32, Size},
     layout::Layout,
-    path::{Path, PathMatcher},
+    path::{Path, PathFilter},
     style::StyleMap,
     widget::Widget,
 };
@@ -254,14 +254,18 @@ pub trait ReadContext {
     ///
     /// The filter is normalized to match full paths.
     fn find_node(&self, path_filter: &str) -> Option<NodeId> {
-        let filter = normalize_path_filter(path_filter);
-        let matcher = PathMatcher::new(&filter).ok()?;
+        let filter = PathFilter::normalized(path_filter).ok()?;
+        self.find_node_matching(&filter)
+    }
+
+    /// Find the first node whose path matches the validated filter.
+    fn find_node_matching(&self, path_filter: &PathFilter) -> Option<NodeId> {
         let root = self.node_id();
         let mut stack = vec![root];
 
         while let Some(id) = stack.pop() {
             let path = self.node_path(root, id);
-            if matcher.check(&path).is_some() {
+            if path_filter.matcher().check(&path).is_some() {
                 return Some(id);
             }
 
@@ -278,17 +282,21 @@ pub trait ReadContext {
     ///
     /// The filter is normalized to match full paths.
     fn find_nodes(&self, path_filter: &str) -> Vec<NodeId> {
-        let filter = normalize_path_filter(path_filter);
-        let Ok(matcher) = PathMatcher::new(&filter) else {
+        let Ok(filter) = PathFilter::normalized(path_filter) else {
             return Vec::new();
         };
+        self.find_nodes_matching(&filter)
+    }
+
+    /// Find all nodes whose paths match the validated filter.
+    fn find_nodes_matching(&self, path_filter: &PathFilter) -> Vec<NodeId> {
         let root = self.node_id();
         let mut out = Vec::new();
         let mut stack = vec![root];
 
         while let Some(id) = stack.pop() {
             let path = self.node_path(root, id);
-            if matcher.check(&path).is_some() {
+            if path_filter.matcher().check(&path).is_some() {
                 out.push(id);
             }
 
@@ -373,17 +381,29 @@ impl dyn ReadContext + '_ {
 
     /// Find exactly one node matching a path filter.
     pub fn find_one(&self, path: &str) -> Result<NodeId> {
-        let matches = self.find_nodes(path);
+        let filter = PathFilter::normalized(path)?;
+        self.find_one_matching(&filter)
+    }
+
+    /// Try to find exactly one node matching a path filter.
+    pub fn try_find_one(&self, path: &str) -> Result<Option<NodeId>> {
+        let filter = PathFilter::normalized(path)?;
+        self.try_find_one_matching(&filter)
+    }
+
+    /// Find exactly one node matching a validated path filter.
+    pub fn find_one_matching(&self, path_filter: &PathFilter) -> Result<NodeId> {
+        let matches = self.find_nodes_matching(path_filter);
         match matches.len() {
-            0 => Err(Error::NotFound(format!("path {path}"))),
+            0 => Err(Error::NotFound(format!("path {}", path_filter.as_str()))),
             1 => Ok(matches[0]),
             _ => Err(Error::MultipleMatches),
         }
     }
 
-    /// Try to find exactly one node matching a path filter.
-    pub fn try_find_one(&self, path: &str) -> Result<Option<NodeId>> {
-        let matches = self.find_nodes(path);
+    /// Try to find exactly one node matching a validated path filter.
+    pub fn try_find_one_matching(&self, path_filter: &PathFilter) -> Result<Option<NodeId>> {
+        let matches = self.find_nodes_matching(path_filter);
         match matches.len() {
             0 => Ok(None),
             1 => Ok(Some(matches[0])),
@@ -521,16 +541,6 @@ fn clamp_scroll_offset(scroll: &mut Point, view: Size, canvas: Size) {
     };
     scroll.x = scroll.x.min(max_x);
     scroll.y = scroll.y.min(max_y);
-}
-
-/// Normalize a path filter to match a full path.
-fn normalize_path_filter(path_filter: &str) -> String {
-    let trimmed = path_filter.trim_matches('/');
-    if trimmed.is_empty() {
-        String::new()
-    } else {
-        format!("/{trimmed}/")
-    }
 }
 
 /// Mutable context available to widgets during event handling.
@@ -835,6 +845,85 @@ pub trait Context: ReadContext {
     fn request_diagnostic_dump(&mut self, target: NodeId);
 }
 
+/// Focus-related context helpers.
+pub trait FocusContext: Context {
+    /// Focus a specific node.
+    fn focus_node(&mut self, node: NodeId) -> bool {
+        self.set_focus(node)
+    }
+
+    /// Move focus from the current node in a direction.
+    fn move_focus(&mut self, direction: Direction) {
+        self.focus_dir(direction);
+    }
+}
+
+impl<T: Context + ?Sized> FocusContext for T {}
+
+/// Tree mutation context helpers.
+pub trait TreeContext: Context {
+    /// Add a typed child to a parent node.
+    fn add_child_widget<W: Widget + 'static>(
+        &mut self,
+        parent: impl Into<NodeId>,
+        widget: W,
+    ) -> Result<TypedId<W>> {
+        let node = self.add_child_to_boxed(parent.into(), Box::new(widget))?;
+        Ok(TypedId::new(node))
+    }
+
+    /// Remove a subtree rooted at `node`.
+    fn remove_node_subtree(&mut self, node: impl Into<NodeId>) -> Result<()> {
+        self.remove_subtree(node.into())
+    }
+}
+
+impl<T: Context + ?Sized> TreeContext for T {}
+
+/// Layout mutation context helpers.
+pub trait LayoutContext: Context {
+    /// Replace a node's layout.
+    fn replace_layout(&mut self, node: impl Into<NodeId>, layout: Layout) -> Result<()> {
+        let node = node.into();
+        self.with_layout_of(node, &mut |target| *target = layout)
+    }
+}
+
+impl<T: Context + ?Sized> LayoutContext for T {}
+
+/// Scroll context helpers.
+pub trait ScrollContext: Context {
+    /// Scroll to a typed point.
+    fn scroll_to_point(&mut self, point: Point) -> bool {
+        self.scroll_to(point.x, point.y)
+    }
+}
+
+impl<T: Context + ?Sized> ScrollContext for T {}
+
+/// Command dispatch context helpers.
+pub trait CommandContext: Context {
+    /// Dispatch a prepared command invocation from the current node.
+    fn dispatch_prepared_command(
+        &mut self,
+        command: &CommandInvocation,
+    ) -> StdResult<ArgValue, CommandError> {
+        self.dispatch_command(command)
+    }
+}
+
+impl<T: Context + ?Sized> CommandContext for T {}
+
+/// Style context helpers.
+pub trait StyleContext: Context {
+    /// Queue a style map for the next render pass.
+    fn replace_style(&mut self, style: StyleMap) {
+        self.set_style(style);
+    }
+}
+
+impl<T: Context + ?Sized> StyleContext for T {}
+
 impl dyn Context + '_ {
     /// Get a read-only view of this context.
     ///
@@ -852,6 +941,16 @@ impl dyn Context + '_ {
     /// Try to find exactly one node matching a path filter.
     pub fn try_find_one(&self, path: &str) -> Result<Option<NodeId>> {
         self.read().try_find_one(path)
+    }
+
+    /// Find exactly one node matching a validated path filter.
+    pub fn find_one_matching(&self, path_filter: &PathFilter) -> Result<NodeId> {
+        self.read().find_one_matching(path_filter)
+    }
+
+    /// Try to find exactly one node matching a validated path filter.
+    pub fn try_find_one_matching(&self, path_filter: &PathFilter) -> Result<Option<NodeId>> {
+        self.read().try_find_one_matching(path_filter)
     }
 
     /// Return the first child of type `W`.

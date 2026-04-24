@@ -1,5 +1,5 @@
 use canopy::{
-    Canopy, ChildKey, Context, Core, Loader, NodeId, ReadContext, Widget, command,
+    Canopy, ChildKey, Context, Core, Loader, NodeId, ReadContext, TypedId, Widget, command,
     commands::{CommandNode, CommandSpec, FocusDirection},
     derive_commands,
     error::{Error, Result},
@@ -235,6 +235,28 @@ impl Root {
         }
     }
 
+    /// Helper to install a root widget into a canopy app.
+    pub fn install_app<W>(canopy: &mut Canopy, app: W) -> Result<TypedId<W>>
+    where
+        W: Widget + 'static,
+    {
+        Self::install_app_with_inspector(canopy, app, false)
+    }
+
+    /// Helper to install a root widget into the canopy with an optional inspector pane.
+    pub fn install_app_with_inspector<W>(
+        canopy: &mut Canopy,
+        app: W,
+        inspector_active: bool,
+    ) -> Result<TypedId<W>>
+    where
+        W: Widget + 'static,
+    {
+        let app_id = canopy.create_detached(app);
+        Self::install_with_inspector(canopy.core_mut(), app_id, inspector_active)?;
+        Ok(app_id)
+    }
+
     /// Helper to install a root widget into the core and configure children.
     pub fn install(core: &mut Core, app: impl Into<NodeId>) -> Result<NodeId> {
         Self::install_with_inspector(core, app, false)
@@ -397,30 +419,32 @@ mod tests {
         let mut canopy = Canopy::new();
         Root::load(&mut canopy)?;
 
-        let app_id = canopy.core.create_detached(App);
-        let left = canopy.core.create_detached(FocusLeaf::new("left"));
-        let right = canopy.core.create_detached(FocusLeaf::new("right"));
-        canopy.core.set_children(app_id, vec![left, right])?;
+        let app_id = canopy.create_detached(App);
+        let left = canopy.create_detached(FocusLeaf::new("left"));
+        let right = canopy.create_detached(FocusLeaf::new("right"));
+        canopy
+            .core_mut()
+            .set_children(app_id, vec![left.into(), right.into()])?;
 
         canopy
-            .core
+            .core_mut()
             .set_layout_of(app_id, Layout::fill().direction(Direction::Row))?;
 
-        canopy.core.set_layout_of(left, Layout::fill())?;
-        canopy.core.set_layout_of(right, Layout::fill())?;
+        canopy.core_mut().set_layout_of(left, Layout::fill())?;
+        canopy.core_mut().set_layout_of(right, Layout::fill())?;
 
-        Root::install(&mut canopy.core, app_id)?;
+        Root::install(canopy.core_mut(), app_id)?;
         canopy.set_root_size(Size::new(20, 6))?;
 
         let mut backend = NopBackend::new();
         canopy.render(&mut backend)?;
 
-        Ok((canopy, backend, left, right))
+        Ok((canopy, backend, left.into(), right.into()))
     }
 
     fn run_script(canopy: &mut Canopy, script: &str) -> Result<()> {
         let script_id = canopy.compile_script(script)?;
-        canopy.run_script(canopy.core.root_id(), script_id)?;
+        canopy.run_script(canopy.root_id(), script_id)?;
         Ok(())
     }
 
@@ -428,16 +452,16 @@ mod tests {
     fn test_root_focus_dir_commands_via_script() -> Result<()> {
         let (mut canopy, mut backend, left, _right) = setup_root_tree()?;
 
-        assert_eq!(canopy.core.focus_id(), Some(left));
+        assert_eq!(canopy.core().focus_id(), Some(left));
 
         run_script(
             &mut canopy,
             include_str!("../tests/luau/root_focus_dir.luau"),
         )?;
-        assert_eq!(canopy.core.focus_id(), Some(left));
+        assert_eq!(canopy.core().focus_id(), Some(left));
 
         canopy.render(&mut backend)?;
-        assert!(canopy.core.focus_id().is_some());
+        assert!(canopy.core().focus_id().is_some());
 
         Ok(())
     }
@@ -446,16 +470,16 @@ mod tests {
     fn test_root_focus_next_prev_commands_via_script() -> Result<()> {
         let (mut canopy, mut backend, left, _right) = setup_root_tree()?;
 
-        assert_eq!(canopy.core.focus_id(), Some(left));
+        assert_eq!(canopy.core().focus_id(), Some(left));
 
         run_script(
             &mut canopy,
             include_str!("../tests/luau/root_focus_order.luau"),
         )?;
-        assert_eq!(canopy.core.focus_id(), Some(left));
+        assert_eq!(canopy.core().focus_id(), Some(left));
 
         canopy.render(&mut backend)?;
-        assert!(canopy.core.focus_id().is_some());
+        assert!(canopy.core().focus_id().is_some());
 
         Ok(())
     }

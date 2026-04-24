@@ -148,11 +148,11 @@ mod tests {
     #[test]
     fn test_node_path() -> Result<()> {
         let mut canopy = Canopy::new();
-        let (root, _ba, _bb, ba_la, _ba_lb, _bb_la, _bb_lb) = build_tree(&mut canopy.core)?;
+        let (root, _ba, _bb, ba_la, _ba_lb, _bb_la, _bb_lb) = build_tree(canopy.core_mut())?;
 
-        assert_eq!(canopy.core.node_path(root, root), Path::new(&["r"]));
+        assert_eq!(canopy.core().node_path(root, root), Path::new(&["r"]));
         assert_eq!(
-            canopy.core.node_path(root, ba_la),
+            canopy.core().node_path(root, ba_la),
             Path::new(&["r", "ba", "ba_la"])
         );
 
@@ -168,11 +168,11 @@ mod tests {
         fn trigger(name: &str, outcome: TriggerOutcome) -> (Vec<String>, Result<Walk<()>>) {
             let mut canopy = Canopy::new();
             let (root, _ba, _bb, _ba_la, _ba_lb, _bb_la, _bb_lb) =
-                build_tree(&mut canopy.core).unwrap();
+                build_tree(canopy.core_mut()).unwrap();
             let mut v = Vec::new();
-            let res = preorder(&canopy.core, root, &mut |id| -> Result<Walk<()>> {
+            let res = preorder(canopy.core(), root, &mut |id| -> Result<Walk<()>> {
                 let name_str = canopy
-                    .core
+                    .core()
                     .node(id)
                     .expect("node missing")
                     .name()
@@ -226,11 +226,11 @@ mod tests {
         fn trigger(name: &str, outcome: TriggerOutcome) -> (Vec<String>, Result<Walk<()>>) {
             let mut canopy = Canopy::new();
             let (root, _ba, _bb, _ba_la, _ba_lb, _bb_la, _bb_lb) =
-                build_tree(&mut canopy.core).unwrap();
+                build_tree(canopy.core_mut()).unwrap();
             let mut v = Vec::new();
-            let res = postorder(&canopy.core, root, &mut |id| -> Result<Walk<()>> {
+            let res = postorder(canopy.core(), root, &mut |id| -> Result<Walk<()>> {
                 let name_str = canopy
-                    .core
+                    .core()
                     .node(id)
                     .expect("node missing")
                     .name()
@@ -311,10 +311,10 @@ mod tests {
     #[test]
     fn test_locate_single_cell_grid() -> Result<()> {
         let mut canopy = Canopy::new();
-        let grid = Grid::install(&mut canopy.core, 0, 2)?;
+        let grid = Grid::install(canopy.core_mut(), 0, 2)?;
         let grid_size = grid.expected_size();
         assert_eq!(grid_size, Size::new(10, 10));
-        attach_grid(&mut canopy.core, grid.root, grid_size)?;
+        attach_grid(canopy.core_mut(), grid.root, grid_size)?;
 
         let test_points = vec![
             ((5, 5), "cell_0_0"),
@@ -326,7 +326,7 @@ mod tests {
 
         for (point, expected) in test_points {
             let found = canopy
-                .core
+                .core()
                 .locate_node(
                     grid.root,
                     Point {
@@ -334,7 +334,7 @@ mod tests {
                         y: point.1,
                     },
                 )?
-                .and_then(|id| canopy.core.node(id).map(|n| n.name().to_string()));
+                .and_then(|id| canopy.core().node(id).map(|n| n.name().to_string()));
             assert_eq!(found, Some(expected.to_string()));
         }
 
@@ -344,10 +344,10 @@ mod tests {
     #[test]
     fn test_locate_2x2_grid() -> Result<()> {
         let mut canopy = Canopy::new();
-        let grid = Grid::install(&mut canopy.core, 1, 2)?;
+        let grid = Grid::install(canopy.core_mut(), 1, 2)?;
         let grid_size = grid.expected_size();
         assert_eq!(grid_size, Size::new(20, 20));
-        attach_grid(&mut canopy.core, grid.root, grid_size)?;
+        attach_grid(canopy.core_mut(), grid.root, grid_size)?;
 
         let test_points = vec![
             ((5, 5), "cell_0_0"),
@@ -358,7 +358,7 @@ mod tests {
 
         for (point, expected) in test_points {
             let found = canopy
-                .core
+                .core()
                 .locate_node(
                     grid.root,
                     Point {
@@ -366,7 +366,7 @@ mod tests {
                         y: point.1,
                     },
                 )?
-                .and_then(|id| canopy.core.node(id).map(|n| n.name().to_string()));
+                .and_then(|id| canopy.core().node(id).map(|n| n.name().to_string()));
             assert_eq!(found, Some(expected.to_string()));
         }
 
@@ -376,10 +376,10 @@ mod tests {
     #[test]
     fn test_locate_3x3_grid() -> Result<()> {
         let mut canopy = Canopy::new();
-        let grid = Grid::install(&mut canopy.core, 1, 3)?;
+        let grid = Grid::install(canopy.core_mut(), 1, 3)?;
         let grid_size = grid.expected_size();
         assert_eq!(grid_size, Size::new(30, 30));
-        attach_grid(&mut canopy.core, grid.root, grid_size)?;
+        attach_grid(canopy.core_mut(), grid.root, grid_size)?;
 
         for row in 0..3 {
             for col in 0..3 {
@@ -387,9 +387,9 @@ mod tests {
                 let y = row as u32 * 10 + 5;
                 let expected = format!("cell_{col}_{row}");
                 let found = canopy
-                    .core
+                    .core()
                     .locate_node(grid.root, Point { x, y })?
-                    .and_then(|id| canopy.core.node(id).map(|n| n.name().to_string()));
+                    .and_then(|id| canopy.core().node(id).map(|n| n.name().to_string()));
                 assert_eq!(found, Some(expected));
             }
         }
@@ -400,10 +400,10 @@ mod tests {
     #[test]
     fn test_locate_nested_grid() -> Result<()> {
         let mut canopy = Canopy::new();
-        let grid = Grid::install(&mut canopy.core, 2, 2)?;
+        let grid = Grid::install(canopy.core_mut(), 2, 2)?;
         let grid_size = grid.expected_size();
         assert_eq!(grid_size, Size::new(40, 40));
-        attach_grid(&mut canopy.core, grid.root, grid_size)?;
+        attach_grid(canopy.core_mut(), grid.root, grid_size)?;
 
         let corner_tests = vec![
             (Point { x: 5, y: 5 }, "cell_0_0"),
@@ -414,9 +414,9 @@ mod tests {
 
         for (point, expected) in corner_tests {
             let found = canopy
-                .core
+                .core()
                 .locate_node(grid.root, point)?
-                .and_then(|id| canopy.core.node(id).map(|n| n.name().to_string()));
+                .and_then(|id| canopy.core().node(id).map(|n| n.name().to_string()));
             assert_eq!(found, Some(expected.to_string()));
         }
 
@@ -426,12 +426,12 @@ mod tests {
     #[test]
     fn test_grid_boundary_conditions() -> Result<()> {
         let mut canopy = Canopy::new();
-        let grid = Grid::install(&mut canopy.core, 1, 2)?;
+        let grid = Grid::install(canopy.core_mut(), 1, 2)?;
         let grid_size = grid.expected_size();
-        attach_grid(&mut canopy.core, grid.root, grid_size)?;
+        attach_grid(canopy.core_mut(), grid.root, grid_size)?;
 
         let result = canopy
-            .core
+            .core()
             .locate_node(grid.root, Point { x: 100, y: 100 })?;
         assert_eq!(result, None);
 
@@ -441,30 +441,30 @@ mod tests {
     #[test]
     fn test_focus_dir_navigation() -> Result<()> {
         let mut canopy = Canopy::new();
-        let grid = Grid::install(&mut canopy.core, 1, 2)?;
+        let grid = Grid::install(canopy.core_mut(), 1, 2)?;
         let grid_size = grid.expected_size();
-        attach_grid(&mut canopy.core, grid.root, grid_size)?;
+        attach_grid(canopy.core_mut(), grid.root, grid_size)?;
 
         let get_focused_cell = |canopy: &Canopy| -> Option<String> {
             canopy
-                .core
+                .core()
                 .focus_id()
-                .and_then(|id| canopy.core.node(id).map(|n| n.name().to_string()))
+                .and_then(|id| canopy.core().node(id).map(|n| n.name().to_string()))
         };
 
-        canopy.core.focus_first(grid.root);
+        canopy.core_mut().focus_first(grid.root);
         assert_eq!(get_focused_cell(&canopy), Some("cell_0_0".to_string()));
 
-        canopy.core.focus_dir(grid.root, Direction::Right);
+        canopy.core_mut().focus_dir(grid.root, Direction::Right);
         assert_eq!(get_focused_cell(&canopy), Some("cell_1_0".to_string()));
 
-        canopy.core.focus_dir(grid.root, Direction::Down);
+        canopy.core_mut().focus_dir(grid.root, Direction::Down);
         assert_eq!(get_focused_cell(&canopy), Some("cell_1_1".to_string()));
 
-        canopy.core.focus_dir(grid.root, Direction::Left);
+        canopy.core_mut().focus_dir(grid.root, Direction::Left);
         assert_eq!(get_focused_cell(&canopy), Some("cell_0_1".to_string()));
 
-        canopy.core.focus_dir(grid.root, Direction::Up);
+        canopy.core_mut().focus_dir(grid.root, Direction::Up);
         assert_eq!(get_focused_cell(&canopy), Some("cell_0_0".to_string()));
 
         Ok(())
