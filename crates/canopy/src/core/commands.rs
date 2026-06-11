@@ -562,8 +562,142 @@ impl FromArgValue for () {
     }
 }
 
+/// Static Luau type metadata for values in command signatures.
+pub trait CommandType {
+    /// Luau type expression for this Rust value.
+    const LUAU_TYPE: &'static str;
+}
+
 /// Marker trait for serde-backed command arguments.
 pub trait CommandArg: Serialize + DeserializeOwned + 'static {}
+
+impl CommandType for ArgValue {
+    const LUAU_TYPE: &'static str = "any";
+}
+
+impl CommandType for () {
+    const LUAU_TYPE: &'static str = "()";
+}
+
+impl CommandType for bool {
+    const LUAU_TYPE: &'static str = "boolean";
+}
+
+impl CommandType for String {
+    const LUAU_TYPE: &'static str = "string";
+}
+
+impl CommandType for &str {
+    const LUAU_TYPE: &'static str = "string";
+}
+
+/// Implement numeric command type metadata for primitive numbers.
+macro_rules! impl_number_command_type {
+    ($($ty:ty),+ $(,)?) => {
+        $(
+            impl CommandType for $ty {
+                const LUAU_TYPE: &'static str = "number";
+            }
+        )+
+    };
+}
+
+impl_number_command_type!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize, f32, f64);
+
+impl CommandType for Direction {
+    const LUAU_TYPE: &'static str = "\"Up\" | \"Down\" | \"Left\" | \"Right\"";
+}
+
+/// Implement optional command type metadata for supported command values.
+macro_rules! impl_option_command_type {
+    ($($ty:ty => $luau:literal),+ $(,)?) => {
+        $(
+            impl CommandType for Option<$ty> {
+                const LUAU_TYPE: &'static str = $luau;
+            }
+        )+
+    };
+}
+
+impl_option_command_type!(
+    bool => "boolean?",
+    String => "string?",
+    i8 => "number?",
+    i16 => "number?",
+    i32 => "number?",
+    i64 => "number?",
+    isize => "number?",
+    u8 => "number?",
+    u16 => "number?",
+    u32 => "number?",
+    u64 => "number?",
+    usize => "number?",
+    f32 => "number?",
+    f64 => "number?",
+    Direction => "\"Up\" | \"Down\" | \"Left\" | \"Right\"?",
+    FocusDirection => "\"Next\" | \"Prev\" | \"Up\" | \"Down\" | \"Left\" | \"Right\"?",
+    ZoomDirection => "\"In\" | \"Out\"?",
+);
+
+/// Implement array command type metadata for supported command values.
+macro_rules! impl_vec_command_type {
+    ($($ty:ty => $luau:literal),+ $(,)?) => {
+        $(
+            impl CommandType for Vec<$ty> {
+                const LUAU_TYPE: &'static str = $luau;
+            }
+        )+
+    };
+}
+
+impl_vec_command_type!(
+    bool => "{boolean}",
+    String => "{string}",
+    i8 => "{number}",
+    i16 => "{number}",
+    i32 => "{number}",
+    i64 => "{number}",
+    isize => "{number}",
+    u8 => "{number}",
+    u16 => "{number}",
+    u32 => "{number}",
+    u64 => "{number}",
+    usize => "{number}",
+    f32 => "{number}",
+    f64 => "{number}",
+);
+
+/// Implement string-keyed map command type metadata for supported command values.
+macro_rules! impl_string_map_command_type {
+    ($($ty:ty => $luau:literal),+ $(,)?) => {
+        $(
+            impl CommandType for BTreeMap<String, $ty> {
+                const LUAU_TYPE: &'static str = $luau;
+            }
+
+            impl CommandType for HashMap<String, $ty> {
+                const LUAU_TYPE: &'static str = $luau;
+            }
+        )+
+    };
+}
+
+impl_string_map_command_type!(
+    bool => "{[string]: boolean}",
+    String => "{[string]: string}",
+    i8 => "{[string]: number}",
+    i16 => "{[string]: number}",
+    i32 => "{[string]: number}",
+    i64 => "{[string]: number}",
+    isize => "{[string]: number}",
+    u8 => "{[string]: number}",
+    u16 => "{[string]: number}",
+    u32 => "{[string]: number}",
+    u64 => "{[string]: number}",
+    usize => "{[string]: number}",
+    f32 => "{[string]: number}",
+    f64 => "{[string]: number}",
+);
 
 /// Wrapper for fallible serde argument conversion.
 pub struct SerdeArg<T>(pub T);

@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::luau_global_owner_name;
+use super::{base_api, luau_global_owner_name};
 use crate::{
     FixtureInfo,
     commands::{
@@ -13,8 +13,14 @@ use crate::{
 const PREAMBLE: &str = include_str!("../../../luau/preamble.d.luau");
 
 /// Return the static Luau preamble declaring the base canopy API surface.
-pub(crate) fn preamble() -> &'static str {
-    PREAMBLE
+pub(crate) fn preamble() -> String {
+    let mut output = String::from(PREAMBLE);
+    if !output.ends_with('\n') {
+        output.push('\n');
+    }
+    output.push('\n');
+    output.push_str(&base_api::render_declaration());
+    output
 }
 
 /// Group node-dispatched command specs by owner, including default-binding owners.
@@ -93,10 +99,7 @@ pub fn render_definitions(
 ) -> String {
     let owners = owner_command_specs(commands, default_binding_owners);
 
-    let mut output = String::from(PREAMBLE);
-    if !output.ends_with('\n') {
-        output.push('\n');
-    }
+    let mut output = preamble();
     if !fixtures.is_empty() {
         output.push_str("\n-- ===== Fixtures =====\n");
         for fixture in fixtures {
@@ -124,203 +127,19 @@ fn render_function_type(spec: &CommandSpec) -> String {
         .params
         .iter()
         .filter(|param| param.kind == CommandParamKind::User)
-        .map(|param| format!("{}: {}", param.name, rust_type_to_luau(&param.ty)))
+        .map(|param| format!("{}: {}", param.name, command_type_to_luau(&param.ty)))
         .collect::<Vec<_>>()
         .join(", ");
     format!(
         "({params}) -> {}",
         match spec.ret {
             CommandReturnSpec::Unit => "()".to_string(),
-            CommandReturnSpec::Value(ty) => rust_type_to_luau(&ty),
+            CommandReturnSpec::Value(ty) => command_type_to_luau(&ty).to_string(),
         }
     )
 }
 
-/// Best-effort mapping from command type metadata to Luau types.
-pub fn rust_type_to_luau(spec: &CommandTypeSpec) -> String {
-    if let Some(luau) = spec.luau {
-        return luau.to_string();
-    }
-
-    let ty = spec.rust.trim();
-    if ty == "()" {
-        return "()".to_string();
-    }
-    if matches!(
-        ty,
-        "bool" | "&bool" | "std::primitive::bool" | "core::primitive::bool"
-    ) {
-        return "boolean".to_string();
-    }
-    if matches_primitive_number(ty) {
-        return "number".to_string();
-    }
-    if matches_string(ty) {
-        return "string".to_string();
-    }
-    if let Some(inner) = unwrap_generic(ty, "Option") {
-        return format!(
-            "{}?",
-            rust_type_to_luau(&CommandTypeSpec {
-                rust: inner,
-                luau: None,
-                doc: None,
-            })
-        );
-    }
-    if let Some(inner) = unwrap_generic(ty, "Vec") {
-        return format!(
-            "{{{}}}",
-            rust_type_to_luau(&CommandTypeSpec {
-                rust: inner,
-                luau: None,
-                doc: None,
-            })
-        );
-    }
-    if let Some((key, value)) = unwrap_map(ty)
-        && matches_string(key)
-    {
-        return format!(
-            "{{[string]: {}}}",
-            rust_type_to_luau(&CommandTypeSpec {
-                rust: value,
-                luau: None,
-                doc: None,
-            })
-        );
-    }
-    if matches!(ty, "Direction" | "canopy::geom::Direction") {
-        return "\"Up\" | \"Down\" | \"Left\" | \"Right\"".to_string();
-    }
-    if ty.ends_with("FocusDirection") {
-        return "\"Next\" | \"Prev\" | \"Up\" | \"Down\" | \"Left\" | \"Right\"".to_string();
-    }
-    if ty.ends_with("ZoomDirection") {
-        return "\"In\" | \"Out\"".to_string();
-    }
-
-    "any".to_string()
-}
-
-/// Return true if the Rust type is treated as a string in Luau.
-fn matches_string(ty: &str) -> bool {
-    matches!(
-        ty.trim_start_matches('&'),
-        "str" | "String" | "std::string::String" | "alloc::string::String"
-    )
-}
-
-/// Return true if the Rust type is numeric.
-fn matches_primitive_number(ty: &str) -> bool {
-    matches!(
-        ty,
-        "i8" | "i16"
-            | "i32"
-            | "i64"
-            | "isize"
-            | "u8"
-            | "u16"
-            | "u32"
-            | "u64"
-            | "usize"
-            | "f32"
-            | "f64"
-            | "std::primitive::i8"
-            | "std::primitive::i16"
-            | "std::primitive::i32"
-            | "std::primitive::i64"
-            | "std::primitive::isize"
-            | "std::primitive::u8"
-            | "std::primitive::u16"
-            | "std::primitive::u32"
-            | "std::primitive::u64"
-            | "std::primitive::usize"
-            | "std::primitive::f32"
-            | "std::primitive::f64"
-    )
-}
-
-/// Extract the inner type from a single-parameter generic.
-fn unwrap_generic<'a>(ty: &'a str, name: &str) -> Option<&'a str> {
-    let ty = ty.trim();
-    for prefix in [
-        name.to_string(),
-        format!("std::option::{name}"),
-        format!("core::option::{name}"),
-    ] {
-        let Some(rest) = ty.strip_prefix(&prefix) else {
-            continue;
-        };
-        let Some(rest) = rest.trim_start().strip_prefix('<') else {
-            continue;
-        };
-        let Some(inner) = rest.trim_end().strip_suffix('>') else {
-            continue;
-        };
-        return Some(inner.trim());
-    }
-    None
-}
-
-/// Extract key/value types from a supported map type.
-fn unwrap_map(ty: &str) -> Option<(&str, &str)> {
-    for prefix in [
-        "BTreeMap<",
-        "HashMap<",
-        "std::collections::BTreeMap<",
-        "std::collections::HashMap<",
-    ] {
-        if let Some(rest) = ty.strip_prefix(prefix)
-            && let Some(inner) = rest.strip_suffix('>')
-            && let Some((key, value)) = split_top_level_once(inner, ',')
-        {
-            return Some((key.trim(), value.trim()));
-        }
-    }
-    None
-}
-
-/// Split a generic argument list once at the top level.
-fn split_top_level_once(input: &str, needle: char) -> Option<(&str, &str)> {
-    let mut depth = 0usize;
-    for (index, ch) in input.char_indices() {
-        match ch {
-            '<' => depth = depth.saturating_add(1),
-            '>' => depth = depth.saturating_sub(1),
-            _ if ch == needle && depth == 0 => return Some((&input[..index], &input[index + 1..])),
-            _ => {}
-        }
-    }
-    None
-}
-
-#[cfg(test)]
-mod tests {
-    use super::rust_type_to_luau;
-    use crate::commands::CommandTypeSpec;
-
-    #[test]
-    fn type_mapping_covers_common_cases() {
-        let string = CommandTypeSpec {
-            rust: "String",
-            luau: None,
-            doc: None,
-        };
-        assert_eq!(rust_type_to_luau(&string), "string");
-
-        let option = CommandTypeSpec {
-            rust: "Option<Vec<u32>>",
-            luau: None,
-            doc: None,
-        };
-        assert_eq!(rust_type_to_luau(&option), "{number}?");
-
-        let map = CommandTypeSpec {
-            rust: "BTreeMap<String, bool>",
-            luau: None,
-            doc: None,
-        };
-        assert_eq!(rust_type_to_luau(&map), "{[string]: boolean}");
-    }
+/// Return the Luau type recorded in command metadata.
+pub fn command_type_to_luau(spec: &CommandTypeSpec) -> &'static str {
+    spec.luau.unwrap_or("any")
 }

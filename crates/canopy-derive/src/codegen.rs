@@ -36,9 +36,18 @@ impl ParamMeta {
 
     /// Render command metadata for this parameter when it is externally visible.
     fn spec_tokens(&self) -> Option<proc_macro2::TokenStream> {
-        let kind_tokens = match self.kind {
-            ParamKind::Injected => quote! { canopy::commands::CommandParamKind::Injected },
-            ParamKind::User => quote! { canopy::commands::CommandParamKind::User },
+        let (kind_tokens, luau_tokens) = match self.kind {
+            ParamKind::Injected => (
+                quote! { canopy::commands::CommandParamKind::Injected },
+                quote! { None },
+            ),
+            ParamKind::User => {
+                let ty = &self.ty;
+                (
+                    quote! { canopy::commands::CommandParamKind::User },
+                    quote! { Some(<#ty as canopy::commands::CommandType>::LUAU_TYPE) },
+                )
+            }
             ParamKind::Context { .. } => return None,
         };
         let name = self.name_lit();
@@ -63,7 +72,7 @@ impl ParamMeta {
                 doc: #doc,
                 ty: canopy::commands::CommandTypeSpec {
                     rust: #ty,
-                    luau: None,
+                    luau: #luau_tokens,
                     doc: None,
                 },
                 optional: #optional,
@@ -181,13 +190,13 @@ impl ReturnMeta {
 
         match &self.kind {
             ReturnKind::Unit => quote! { canopy::commands::CommandReturnSpec::Unit },
-            ReturnKind::Value { ty_str } => {
-                let ty = syn::LitStr::new(ty_str, proc_macro2::Span::call_site());
+            ReturnKind::Value { ty, ty_str } => {
+                let ty_lit = syn::LitStr::new(ty_str, proc_macro2::Span::call_site());
                 quote! {
                     canopy::commands::CommandReturnSpec::Value(
                         canopy::commands::CommandTypeSpec {
-                            rust: #ty,
-                            luau: None,
+                            rust: #ty_lit,
+                            luau: Some(<#ty as canopy::commands::CommandType>::LUAU_TYPE),
                             doc: None,
                         }
                     )

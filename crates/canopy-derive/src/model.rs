@@ -62,6 +62,8 @@ pub enum ReturnKind {
     Unit,
     /// Non-unit return.
     Value {
+        /// Original Rust type.
+        ty: Box<Type>,
         /// Rendered return type name.
         ty_str: String,
     },

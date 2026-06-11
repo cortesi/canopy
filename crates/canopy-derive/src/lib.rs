@@ -43,6 +43,10 @@ pub fn derive_command_arg(input: proc_macro::TokenStream) -> proc_macro::TokenSt
 
     let expanded = quote! {
         impl #impl_generics canopy::commands::CommandArg for #ident #ty_generics #where_clause {}
+
+        impl #impl_generics canopy::commands::CommandType for #ident #ty_generics #where_clause {
+            const LUAU_TYPE: &'static str = "any";
+        }
     };
 
     expanded.into()
@@ -115,6 +119,10 @@ pub fn derive_command_enum(input: proc_macro::TokenStream) -> proc_macro::TokenS
         impl #impl_generics #ident #ty_generics #where_clause {
             /// Luau union type for this command enum.
             pub const LUAU_TYPE: &'static str = #luau_union;
+        }
+
+        impl #impl_generics canopy::commands::CommandType for #ident #ty_generics #where_clause {
+            const LUAU_TYPE: &'static str = #luau_union;
         }
     };
 

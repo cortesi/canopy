@@ -3561,7 +3561,7 @@ dependencies = [
  "oxau-ast",
  "oxau-bytecode",
  "oxau-pretty",
- "oxau-stdlib",
+ "oxau-source",
  "oxau-typecheck",
  "oxau-vm",
  "serde_json",
@@ -3626,6 +3626,7 @@ dependencies = [
 name = "oxau-vm"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "foldhash 0.2.0",
  "oxau-bytecode",
  "oxau-source",

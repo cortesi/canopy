@@ -194,6 +194,7 @@ fn parse_return_type(output: &ReturnType) -> Result<ReturnMeta> {
                 let kind = match inner {
                     Type::Tuple(tuple) if tuple.elems.is_empty() => ReturnKind::Unit,
                     _ => ReturnKind::Value {
+                        ty: Box::new((*inner).clone()),
                         ty_str: type_to_string(inner),
                     },
                 };
@@ -205,6 +206,7 @@ fn parse_return_type(output: &ReturnType) -> Result<ReturnMeta> {
                 let kind = match &**ty {
                     Type::Tuple(tuple) if tuple.elems.is_empty() => ReturnKind::Unit,
                     _ => ReturnKind::Value {
+                        ty: Box::new((**ty).clone()),
                         ty_str: type_to_string(ty),
                     },
                 };

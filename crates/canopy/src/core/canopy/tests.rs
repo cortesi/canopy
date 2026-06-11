@@ -1,0 +1,839 @@
+use std::{
+    any::Any,
+    sync::atomic::{AtomicUsize, Ordering},
+    time::Duration,
+};
+
+use super::*;
+use crate::{
+    Context, ReadContext,
+    commands::{CommandNode, CommandSpec},
+    derive_commands,
+    error::{Error, Result},
+    event::{Event, key, mouse},
+    geom::{Direction, Point, RectI32},
+    layout::Layout,
+    path::Path,
+    render::Render,
+    state::NodeName,
+    testing::{
+        backend::{CanvasRender, TestRender},
+        ttree::{Ba, BaLa, BaLb, OutcomeTarget, R, get_state, reset_state, run_ttree},
+    },
+    widget::{EventOutcome, Widget},
+};
+
+static POLL_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+pub struct PollWidget;
+
+#[derive_commands]
+impl PollWidget {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Widget for PollWidget {
+    fn poll(&mut self, _ctx: &mut dyn Context) -> Option<Duration> {
+        POLL_COUNT.fetch_add(1, Ordering::SeqCst);
+        None
+    }
+}
+
+pub struct StaticWidget;
+
+#[derive_commands]
+impl StaticWidget {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Widget for StaticWidget {
+    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+        Ok(())
+    }
+}
+
+pub struct FailRenderWidget;
+
+impl Widget for FailRenderWidget {
+    fn layout(&self) -> Layout {
+        Layout::fill()
+    }
+
+    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+        Err(Error::Invalid("render failed".into()))
+    }
+
+    fn name(&self) -> NodeName {
+        NodeName::convert("fail_render")
+    }
+}
+
+pub struct CaptureWidget {
+    drags: usize,
+}
+
+#[derive_commands]
+impl CaptureWidget {
+    pub fn new() -> Self {
+        Self { drags: 0 }
+    }
+}
+
+impl Widget for CaptureWidget {
+    fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {
+        if let Event::Mouse(mouse_event) = event {
+            match mouse_event.action {
+                mouse::Action::Down if mouse_event.button == mouse::Button::Left => {
+                    ctx.capture_mouse();
+                    return Ok(EventOutcome::Handle);
+                }
+                mouse::Action::Drag if mouse_event.button == mouse::Button::Left => {
+                    self.drags = self.drags.saturating_add(1);
+                    return Ok(EventOutcome::Handle);
+                }
+                mouse::Action::Up if mouse_event.button == mouse::Button::Left => {
+                    ctx.release_mouse();
+                    return Ok(EventOutcome::Handle);
+                }
+                _ => {}
+            }
+        }
+        Ok(EventOutcome::Ignore)
+    }
+}
+
+fn set_outcome<T: Any + OutcomeTarget>(core: &mut Core, id: NodeId, outcome: EventOutcome) {
+    let _ignored = core.with_widget_mut(id, |w, _| {
+        let any = w as &mut dyn Any;
+        if let Some(node) = any.downcast_mut::<T>() {
+            node.set_outcome(outcome);
+        }
+    });
+}
+
+fn capture_drag_count(core: &mut Core, id: NodeId) -> usize {
+    core.with_widget_mut(id, |w, _| {
+        let any = w as &mut dyn Any;
+        any.downcast_mut::<CaptureWidget>()
+            .map(|widget| widget.drags)
+            .unwrap_or(0)
+    })
+    .unwrap_or(0)
+}
+
+fn make_mouse_event(core: &Core, node_id: NodeId) -> mouse::MouseEvent {
+    let loc = core
+        .nodes
+        .get(node_id)
+        .map(|n| {
+            let tl = n.view.outer.tl;
+            Point {
+                x: tl.x.max(0) as u32,
+                y: tl.y.max(0) as u32,
+            }
+        })
+        .unwrap_or_default();
+    mouse::MouseEvent {
+        action: mouse::Action::Down,
+        button: mouse::Button::Left,
+        modifiers: key::Empty,
+        location: loc,
+    }
+}
+
+fn assert_error_context(error: &Error, operation: &str, node_id: NodeId, path: &str) {
+    let message = error.to_string();
+    assert!(
+        message.contains(operation),
+        "expected {message:?} to contain operation {operation:?}"
+    );
+    assert!(
+        message.contains(&format!("{node_id:?}")),
+        "expected {message:?} to contain node ID {node_id:?}"
+    );
+    assert!(
+        message.contains(path),
+        "expected {message:?} to contain path {path:?}"
+    );
+}
+
+#[test]
+fn render_errors_include_operation_node_and_path() -> Result<()> {
+    let (_, mut render) = TestRender::create();
+    let mut canopy = Canopy::new();
+    canopy
+        .core
+        .replace_subtree(canopy.core.root, FailRenderWidget)?;
+    canopy.set_root_size(Size::new(10, 2))?;
+    let node_id = canopy.core.root;
+    let path = canopy.core.node_path(canopy.core.root, node_id).to_string();
+
+    let error = canopy
+        .render(&mut render)
+        .expect_err("render should include node context");
+
+    assert!(matches!(error, Error::Render(_)));
+    assert_error_context(&error, "render", node_id, &path);
+    Ok(())
+}
+
+#[test]
+fn mouse_move_does_not_request_render() -> Result<()> {
+    let mut canopy = Canopy::new();
+    let app_id = canopy
+        .core
+        .add_child_to_boxed(canopy.core.root, Box::new(StaticWidget::new()))?;
+    canopy.core.set_layout_of(app_id, Layout::fill())?;
+    canopy.set_root_size(Size::new(10, 6))?;
+
+    let (_, mut render) = TestRender::create();
+    canopy.render(&mut render)?;
+    assert!(!canopy.render_if_pending(&mut render)?);
+
+    let event = mouse::MouseEvent {
+        action: mouse::Action::Moved,
+        button: mouse::Button::None,
+        modifiers: key::Empty,
+        location: Point { x: 1, y: 1 },
+    };
+    canopy.event(Event::Mouse(event))?;
+    assert!(!canopy.render_if_pending(&mut render)?);
+    Ok(())
+}
+
+#[test]
+fn mouse_capture_routes_drag_outside() -> Result<()> {
+    let mut canopy = Canopy::new();
+    let app_id = canopy
+        .core
+        .add_child_to_boxed(canopy.core.root, Box::new(CaptureWidget::new()))?;
+    canopy.core.set_layout_of(app_id, Layout::fill())?;
+    canopy.set_root_size(Size::new(10, 6))?;
+
+    let (_, mut render) = TestRender::create();
+    canopy.render(&mut render)?;
+
+    let down = make_mouse_event(&canopy.core, app_id);
+    canopy.event(Event::Mouse(down))?;
+
+    let drag = mouse::MouseEvent {
+        action: mouse::Action::Drag,
+        button: mouse::Button::Left,
+        modifiers: key::Empty,
+        location: Point { x: 50, y: 50 },
+    };
+    canopy.event(Event::Mouse(drag))?;
+
+    assert_eq!(capture_drag_count(&mut canopy.core, app_id), 1);
+
+    let up = mouse::MouseEvent {
+        action: mouse::Action::Up,
+        button: mouse::Button::Left,
+        modifiers: key::Empty,
+        location: Point { x: 50, y: 50 },
+    };
+    canopy.event(Event::Mouse(up))?;
+
+    Ok(())
+}
+
+#[test]
+fn set_widget_resets_initialization() -> Result<()> {
+    POLL_COUNT.store(0, Ordering::SeqCst);
+    let mut canopy = Canopy::new();
+    let node_id = canopy
+        .core
+        .add_child_to_boxed(canopy.core.root, Box::new(PollWidget::new()))?;
+    canopy.set_root_size(Size::new(10, 10))?;
+
+    let (_, mut render) = TestRender::create();
+    render.render(&mut canopy)?;
+    assert_eq!(POLL_COUNT.load(Ordering::SeqCst), 1);
+
+    canopy
+        .core
+        .replace_widget_keep_children(node_id, PollWidget::new())?;
+    render.render(&mut canopy)?;
+    assert_eq!(POLL_COUNT.load(Ordering::SeqCst), 2);
+    Ok(())
+}
+
+#[test]
+fn tbindings() -> Result<()> {
+    run_ttree(|c, _, tree| {
+        c.keymap.bind(
+            "",
+            inputmap::InputSpec::Key('a'.into()),
+            "",
+            c.script_host.compile(r#"ba_la.c_leaf()"#)?,
+        )?;
+        c.keymap.bind(
+            "",
+            inputmap::InputSpec::Key('r'.into()),
+            "",
+            c.script_host.compile(r#"r.c_root()"#)?,
+        )?;
+        c.keymap.bind(
+            "",
+            inputmap::InputSpec::Key('x'.into()),
+            "ba/",
+            c.script_host.compile(r#"r.c_root()"#)?,
+        )?;
+
+        c.core.set_focus(tree.a_a);
+        c.key('a')?;
+        let s = get_state();
+        assert_eq!(s.path, vec!["ba_la@key->ignore", "ba_la.c_leaf()"]);
+
+        reset_state();
+        c.key('r')?;
+        let s = get_state();
+        assert_eq!(s.path, vec!["ba_la@key->ignore", "r.c_root()"]);
+
+        reset_state();
+        c.core.set_focus(tree.a);
+        c.key('a')?;
+        let s = get_state();
+        assert_eq!(s.path, vec!["ba@key->ignore", "ba_la.c_leaf()"]);
+
+        reset_state();
+        c.core.set_focus(tree.a_a);
+        c.key('x')?;
+        let s = get_state();
+        assert_eq!(s.path, vec!["ba_la@key->ignore", "r.c_root()"]);
+
+        reset_state();
+        c.core.set_focus(tree.root);
+        c.key('x')?;
+        let s = get_state();
+        assert_eq!(s.path, vec!["r@key->ignore"]);
+
+        Ok(())
+    })?;
+    Ok(())
+}
+
+#[test]
+fn input_mode_binding_target_switches_modes() -> Result<()> {
+    let mut canopy = Canopy::new();
+    canopy.bind_input_mode("", inputmap::InputSpec::Key('i'.into()), "", "insert")?;
+
+    canopy.key('i')?;
+
+    assert_eq!(canopy.input_mode(), "insert");
+    assert!(
+        canopy
+            .route_trace()
+            .iter()
+            .any(|entry| entry.phase == RoutePhase::BindingExecution)
+    );
+    Ok(())
+}
+
+#[test]
+fn route_trace_records_unhandled_key_pipeline() -> Result<()> {
+    run_ttree(|c, _, tree| {
+        c.core.set_focus(tree.a_a);
+        c.key('z')?;
+        let phases = c
+            .route_trace()
+            .iter()
+            .map(|entry| entry.phase)
+            .collect::<Vec<_>>();
+
+        assert!(phases.contains(&RoutePhase::Target));
+        assert!(phases.contains(&RoutePhase::WidgetEvent));
+        assert!(phases.contains(&RoutePhase::Bubble));
+        assert!(phases.contains(&RoutePhase::Unhandled));
+        assert!(c.diagnostic_dump(tree.a_a).contains("route trace:"));
+        Ok(())
+    })?;
+    Ok(())
+}
+
+#[test]
+fn register_default_bindings_is_idempotent_for_identical_scripts() -> Result<()> {
+    run_ttree(|c, _, _| {
+        c.register_default_bindings("r", "canopy.log(\"once\")")?;
+        c.register_default_bindings("r", "canopy.log(\"once\")")?;
+
+        let err = c
+            .register_default_bindings("r", "canopy.log(\"twice\")")
+            .unwrap_err();
+        assert!(matches!(err, error::Error::Invalid(_)));
+        Ok(())
+    })?;
+    Ok(())
+}
+
+#[test]
+fn tkey() -> Result<()> {
+    run_ttree(|c, _, tree| {
+        c.core.set_focus(tree.root);
+        set_outcome::<R>(&mut c.core, tree.root, EventOutcome::Handle);
+        c.key('a')?;
+        let s = get_state();
+        assert_eq!(s.path, vec!["r@key->handle"]);
+        Ok(())
+    })?;
+
+    run_ttree(|c, _, tree| {
+        c.core.set_focus(tree.a_a);
+        set_outcome::<BaLa>(&mut c.core, tree.a_a, EventOutcome::Handle);
+        c.key('a')?;
+        let s = get_state();
+        assert_eq!(s.path, vec!["ba_la@key->handle"]);
+        Ok(())
+    })?;
+
+    run_ttree(|c, _, tree| {
+        c.core.set_focus(tree.a_a);
+        set_outcome::<Ba>(&mut c.core, tree.a, EventOutcome::Handle);
+        c.key('a')?;
+        let s = get_state();
+        assert_eq!(s.path, vec!["ba_la@key->ignore", "ba@key->handle"]);
+        Ok(())
+    })?;
+
+    run_ttree(|c, _, tree| {
+        c.core.set_focus(tree.a_a);
+        set_outcome::<R>(&mut c.core, tree.root, EventOutcome::Handle);
+        c.key('a')?;
+        let s = get_state();
+        assert_eq!(
+            s.path,
+            vec!["ba_la@key->ignore", "ba@key->ignore", "r@key->handle"]
+        );
+        Ok(())
+    })?;
+
+    run_ttree(|c, _, tree| {
+        c.core.set_focus(tree.a);
+        set_outcome::<Ba>(&mut c.core, tree.a, EventOutcome::Handle);
+        c.key('a')?;
+        let s = get_state();
+        assert_eq!(s.path, vec!["ba@key->handle"]);
+        Ok(())
+    })?;
+
+    run_ttree(|c, _, tree| {
+        c.core.set_focus(tree.a);
+        set_outcome::<R>(&mut c.core, tree.root, EventOutcome::Handle);
+        c.key('a')?;
+        let s = get_state();
+        assert_eq!(s.path, vec!["ba@key->ignore", "r@key->handle"]);
+        c.key('a')?;
+        let s = get_state();
+        assert_eq!(
+            s.path,
+            vec![
+                "ba@key->ignore",
+                "r@key->handle",
+                "ba@key->ignore",
+                "r@key->ignore"
+            ]
+        );
+        Ok(())
+    })?;
+
+    run_ttree(|c, _, tree| {
+        c.core.set_focus(tree.a_b);
+        set_outcome::<Ba>(&mut c.core, tree.a, EventOutcome::Ignore);
+        set_outcome::<R>(&mut c.core, tree.root, EventOutcome::Handle);
+        c.key('a')?;
+        let s = get_state();
+        assert_eq!(
+            s.path,
+            vec!["ba_lb@key->ignore", "ba@key->ignore", "r@key->handle"]
+        );
+        Ok(())
+    })?;
+
+    run_ttree(|c, _, tree| {
+        c.core.set_focus(tree.a_a);
+        set_outcome::<BaLa>(&mut c.core, tree.a_a, EventOutcome::Handle);
+        c.key('a')?;
+        let s = get_state();
+        assert_eq!(s.path, vec!["ba_la@key->handle"]);
+        Ok(())
+    })?;
+
+    run_ttree(|c, _, tree| {
+        c.core.set_focus(tree.a_b);
+        set_outcome::<Ba>(&mut c.core, tree.a, EventOutcome::Handle);
+        c.key('a')?;
+        let s = get_state();
+        assert_eq!(s.path, vec!["ba_lb@key->ignore", "ba@key->handle"]);
+        Ok(())
+    })?;
+
+    run_ttree(|c, _, tree| {
+        c.core.set_focus(tree.a_b);
+        set_outcome::<BaLb>(&mut c.core, tree.a_b, EventOutcome::Handle);
+        c.key('a')?;
+        let s = get_state();
+        assert_eq!(s.path, vec!["ba_lb@key->handle"]);
+        Ok(())
+    })?;
+
+    run_ttree(|c, _, tree| {
+        c.core.set_focus(tree.a_b);
+        set_outcome::<BaLb>(&mut c.core, tree.a_b, EventOutcome::Handle);
+        set_outcome::<Ba>(&mut c.core, tree.a, EventOutcome::Handle);
+        c.key('a')?;
+        let s = get_state();
+        assert_eq!(s.path, vec!["ba_lb@key->handle"]);
+        Ok(())
+    })?;
+
+    Ok(())
+}
+
+#[test]
+fn tmouse() -> Result<()> {
+    run_ttree(|c, mut tr, tree| {
+        c.core.set_focus(tree.root);
+        set_outcome::<R>(&mut c.core, tree.root, EventOutcome::Handle);
+        tr.render(c)?;
+        let evt = make_mouse_event(&c.core, tree.a_a);
+        c.mouse(evt)?;
+        let s = get_state();
+        assert_eq!(
+            s.path,
+            vec!["ba_la@mouse->ignore", "ba@mouse->ignore", "r@mouse->handle"]
+        );
+        Ok(())
+    })?;
+
+    run_ttree(|c, mut tr, tree| {
+        set_outcome::<BaLa>(&mut c.core, tree.a_a, EventOutcome::Handle);
+        tr.render(c)?;
+        let evt = make_mouse_event(&c.core, tree.a_a);
+        c.mouse(evt)?;
+        let s = get_state();
+        assert_eq!(s.path, vec!["ba_la@mouse->handle"]);
+        Ok(())
+    })?;
+
+    run_ttree(|c, mut tr, tree| {
+        set_outcome::<BaLa>(&mut c.core, tree.a_a, EventOutcome::Handle);
+        tr.render(c)?;
+        let evt = make_mouse_event(&c.core, tree.a_a);
+        c.mouse(evt)?;
+        let s = get_state();
+        assert_eq!(s.path, vec!["ba_la@mouse->handle"]);
+        Ok(())
+    })?;
+
+    run_ttree(|c, mut tr, tree| {
+        set_outcome::<BaLa>(&mut c.core, tree.a_a, EventOutcome::Handle);
+        tr.render(c)?;
+        let evt = make_mouse_event(&c.core, tree.a_a);
+        c.mouse(evt)?;
+        let s = get_state();
+        assert_eq!(s.path, vec!["ba_la@mouse->handle"]);
+        Ok(())
+    })?;
+
+    Ok(())
+}
+
+#[test]
+fn tresize() -> Result<()> {
+    run_ttree(|c, mut tr, tree| {
+        let size: u32 = 100;
+        let half = i32::try_from(size / 2).expect("size fits i32");
+        tr.render(c)?;
+        assert_eq!(
+            c.core.nodes[tree.root].view.outer,
+            RectI32::new(0, 0, size, size)
+        );
+        assert_eq!(
+            c.core.nodes[tree.a].view.outer,
+            RectI32::new(0, 0, size / 2, size)
+        );
+        assert_eq!(
+            c.core.nodes[tree.b].view.outer,
+            RectI32::new(half, 0, size / 2, size)
+        );
+
+        c.set_root_size(Size::new(50, 50))?;
+        tr.render(c)?;
+        assert_eq!(c.core.nodes[tree.b].view.outer, RectI32::new(25, 0, 25, 50));
+        Ok(())
+    })?;
+    Ok(())
+}
+
+#[test]
+fn trender() -> Result<()> {
+    run_ttree(|c, mut tr, tree| {
+        tr.render(c)?;
+        assert!(!tr.buf_empty());
+
+        tr.render(c)?;
+        assert!(tr.buf_empty());
+        tr.render(c)?;
+        tr.render(c)?;
+        tr.render(c)?;
+
+        tr.render(c)?;
+        assert!(tr.buf_empty());
+
+        c.core.set_focus(tree.a_a);
+        tr.render(c)?;
+        assert!(tr.buf_empty());
+
+        c.core.focus_next(c.core.root);
+        tr.render(c)?;
+        assert!(tr.buf_empty());
+
+        c.core.focus_prev(c.core.root);
+        tr.render(c)?;
+        assert!(tr.buf_empty());
+
+        tr.render(c)?;
+        assert!(tr.buf_empty());
+
+        Ok(())
+    })?;
+
+    Ok(())
+}
+
+#[test]
+fn focus_path() -> Result<()> {
+    run_ttree(|c, _, _tree| {
+        assert_eq!(c.core.focus_path(c.core.root), Path::empty());
+        c.core.focus_next(c.core.root);
+        assert_eq!(c.core.focus_path(c.core.root), Path::new(&["r"]));
+        c.core.focus_next(c.core.root);
+        assert_eq!(c.core.focus_path(c.core.root), Path::new(&["r", "ba"]));
+        c.core.focus_next(c.core.root);
+        assert_eq!(
+            c.core.focus_path(c.core.root),
+            Path::new(&["r", "ba", "ba_la"])
+        );
+        Ok(())
+    })?;
+    Ok(())
+}
+
+#[test]
+fn focus_next() -> Result<()> {
+    run_ttree(|c, _, tree| {
+        assert!(!c.core.is_focused(tree.root));
+        c.core.focus_next(c.core.root);
+        assert!(c.core.is_focused(tree.root));
+
+        c.core.focus_next(c.core.root);
+        assert!(c.core.is_focused(tree.a));
+
+        c.core.focus_next(c.core.root);
+        assert!(c.core.is_focused(tree.a_a));
+        c.core.focus_next(c.core.root);
+        assert!(c.core.is_focused(tree.a_b));
+        c.core.focus_next(c.core.root);
+        assert!(c.core.is_focused(tree.b));
+
+        c.core.focus_next(c.core.root);
+        assert!(c.core.is_focused(tree.b_a));
+        c.core.focus_next(c.core.root);
+        assert!(c.core.is_focused(tree.b_b));
+
+        c.core.focus_next(c.core.root);
+        assert!(c.core.is_focused(tree.root));
+        Ok(())
+    })?;
+    Ok(())
+}
+
+#[test]
+fn focus_prev() -> Result<()> {
+    run_ttree(|c, _, tree| {
+        assert!(!c.core.is_focused(tree.root));
+        c.core.focus_prev(c.core.root);
+        assert!(c.core.is_focused(tree.b_b));
+
+        c.core.focus_prev(c.core.root);
+        assert!(c.core.is_focused(tree.b_a));
+
+        c.core.focus_prev(c.core.root);
+        assert!(c.core.is_focused(tree.b));
+
+        c.core.set_focus(tree.root);
+        c.core.focus_prev(c.core.root);
+        assert!(c.core.is_focused(tree.b_b));
+
+        Ok(())
+    })?;
+    Ok(())
+}
+
+#[test]
+fn tshift_right() -> Result<()> {
+    run_ttree(|c, mut tr, tree| {
+        tr.render(c)?;
+        c.core.set_focus(tree.a_a);
+        c.core.focus_dir(c.core.root, Direction::Right);
+        assert!(c.core.is_focused(tree.b_a));
+        c.core.focus_dir(c.core.root, Direction::Right);
+        assert!(c.core.is_focused(tree.b_a));
+
+        c.core.set_focus(tree.a_b);
+        c.core.focus_dir(c.core.root, Direction::Right);
+        assert!(c.core.is_focused(tree.b_b));
+        c.core.focus_dir(c.core.root, Direction::Right);
+        assert!(c.core.is_focused(tree.b_b));
+        Ok(())
+    })?;
+
+    Ok(())
+}
+
+#[test]
+fn tfoci() -> Result<()> {
+    run_ttree(|c, _, tree| {
+        assert_eq!(c.core.focus_path(c.core.root), Path::empty());
+
+        assert!(!c.core.is_on_focus_path(tree.root));
+        assert!(!c.core.is_on_focus_path(tree.a));
+
+        c.core.set_focus(tree.a_a);
+        assert!(c.core.is_on_focus_path(tree.root));
+        assert!(c.core.is_on_focus_path(tree.a));
+        assert!(!c.core.is_on_focus_path(tree.b));
+        assert_eq!(
+            c.core.focus_path(c.core.root),
+            Path::new(&["r", "ba", "ba_la"])
+        );
+
+        c.core.set_focus(tree.a);
+        assert_eq!(c.core.focus_path(c.core.root), Path::new(&["r", "ba"]));
+
+        c.core.set_focus(tree.root);
+        assert_eq!(c.core.focus_path(c.core.root), Path::new(&["r"]));
+
+        c.core.set_focus(tree.b_a);
+        assert_eq!(
+            c.core.focus_path(c.core.root),
+            Path::new(&["r", "bb", "bb_la"])
+        );
+        Ok(())
+    })?;
+
+    Ok(())
+}
+
+#[test]
+fn tkey_no_render() -> Result<()> {
+    struct N;
+
+    impl CommandNode for N {
+        fn commands() -> &'static [&'static CommandSpec] {
+            &[]
+        }
+    }
+
+    impl Widget for N {
+        fn layout(&self) -> Layout {
+            Layout::fill()
+        }
+
+        fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+            true
+        }
+
+        fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+            r.text("any", ctx.view().outer_rect_local().line(0), "<n>")
+        }
+
+        fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {
+            let outcome = match event {
+                Event::Key(_) => EventOutcome::Consume,
+                _ => EventOutcome::Ignore,
+            };
+            Ok(outcome)
+        }
+
+        fn name(&self) -> NodeName {
+            NodeName::convert("n")
+        }
+    }
+
+    let (_, mut tr) = TestRender::create();
+    let mut canopy = Canopy::new();
+    canopy.add_commands::<N>()?;
+    canopy.core.replace_subtree(canopy.core.root, N)?;
+
+    canopy.set_root_size(Size::new(10, 1))?;
+    canopy.core.set_focus(canopy.core.root);
+    canopy.render(&mut tr)?;
+    assert!(!tr.buf_empty());
+    let prev_buf = canopy.termbuf.clone().expect("missing termbuf");
+    tr.text.lock().unwrap().text.clear();
+
+    canopy.key('a')?;
+    canopy.render(&mut tr)?;
+    let next_buf = canopy.termbuf.clone().expect("missing termbuf");
+    assert_eq!(prev_buf.cells, next_buf.cells);
+    Ok(())
+}
+
+#[test]
+fn zero_size_child_ok() -> Result<()> {
+    struct Child;
+
+    #[derive_commands]
+    impl Child {}
+
+    impl Widget for Child {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+            Ok(())
+        }
+
+        fn name(&self) -> NodeName {
+            NodeName::convert("child")
+        }
+    }
+
+    struct Parent;
+
+    #[derive_commands]
+    impl Parent {
+        fn new() -> Self {
+            Self
+        }
+    }
+
+    impl Widget for Parent {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+            Ok(())
+        }
+
+        fn name(&self) -> NodeName {
+            NodeName::convert("parent")
+        }
+    }
+
+    let size = Size::new(5, 1);
+    let (_, mut cr) = CanvasRender::create(size);
+    let mut canopy = Canopy::new();
+    canopy
+        .core
+        .replace_subtree(canopy.core.root, Parent::new())?;
+    let child = canopy
+        .core
+        .add_child_to_boxed(canopy.core.root, Box::new(Child))?;
+    canopy
+        .core
+        .set_layout_of(child, Layout::column().fixed_width(0).fixed_height(0))?;
+
+    canopy.set_root_size(size)?;
+    canopy.render(&mut cr)?;
+    Ok(())
+}

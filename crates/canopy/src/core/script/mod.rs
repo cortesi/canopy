@@ -19,7 +19,7 @@ use oxau::{
         StashedClosure, Table,
     },
     profile::Profile,
-    session::{Ambient, Cancel, Limits, LoadedModule, RuntimeErrorKind, Vm},
+    session::{Ambient, Cancel, Limits, LoadedModule, RuntimeErrorKind, SinkQuota, Vm},
     surface::SurfaceSpec,
     types::{BuiltinDefinitionModule, BuiltinEnvironment, Checker, TypeArena},
 };
@@ -39,6 +39,8 @@ use crate::{
     path::PathFilter,
 };
 
+/// Base `canopy` scripting API declarations and native registration.
+mod base_api;
 /// Render Luau definition files from the current command set.
 pub mod defs;
 
@@ -483,6 +485,13 @@ fn default_vm_limits() -> Limits {
     }
 }
 
+/// Per-invocation `print` output quota: enough for any reasonable diagnostic
+/// run, small enough that a print loop cannot grow the log without bound.
+const PRINT_QUOTA: SinkQuota = SinkQuota {
+    max_bytes: Some(256 * 1024),
+    max_calls: Some(4096),
+};
+
 /// Per-invocation limit override: builder defaults, plus a wall-clock watchdog
 /// when the caller requested a timeout.
 fn invocation_limits(timeout: Option<Duration>) -> Limits {
@@ -507,8 +516,14 @@ fn compile_chunk(source: &str) -> Result<BytecodeChunk> {
     let profile = canopy_profile();
     let mut options = CompileOptions::for_vm_execution();
     restrict_compile_options(&profile, &mut options);
-    compile_for(&profile, source.as_bytes(), &options)
-        .map_err(|err| error::Error::Parse(error::ParseError::new(err.to_string())))
+    compile_for(&profile, source.as_bytes(), &options).map_err(|err| {
+        let begin = err.location().map(|location| location.begin);
+        error::Error::Parse(error::ParseError::with_position(
+            err.message(),
+            begin.map(|position| position.line as usize + 1),
+            begin.map(|position| position.column as usize + 1),
+        ))
+    })
 }
 
 /// Format Luau typecheck diagnostics for display.
@@ -817,6 +832,15 @@ fn fixtures_to_arg(canopy: &Canopy) -> ArgValue {
     )
 }
 
+/// Label for a script-declared callback: the caller's script line when the
+/// declaration site is known, so binding introspection points at the source.
+fn script_callback_label(scope: &Scope<'_>) -> String {
+    match scope.caller_location(0) {
+        Some(location) => format!("script:{}", location.line),
+        None => "script".to_string(),
+    }
+}
+
 /// Render a command invocation into a human-readable target string.
 fn invocation_target(invocation: &CommandInvocation) -> String {
     let (owner, name) = invocation
@@ -913,7 +937,7 @@ fn command_param_to_arg(param: &commands::CommandParamSpec) -> ArgValue {
         ),
         (
             "luau_type".to_string(),
-            ArgValue::String(defs::rust_type_to_luau(&param.ty)),
+            ArgValue::String(defs::command_type_to_luau(&param.ty).to_string()),
         ),
         ("optional".to_string(), ArgValue::Bool(param.optional)),
     ]);
@@ -1238,7 +1262,12 @@ fn install_function_binding<'s>(
     options: &ScriptBindOptions,
 ) -> StdResult<i64, RuntimeError> {
     let stashed = scope.stash_function(function)?;
-    let label = options.desc.clone().or(Some("script".to_string()));
+    let label = Some(
+        options
+            .desc
+            .clone()
+            .unwrap_or_else(|| script_callback_label(scope)),
+    );
     with_current_canopy(|canopy, _| {
         let function_id = canopy.script_host.store_function(stashed, label);
         let result = canopy.keymap.replace_binding(
@@ -1831,10 +1860,9 @@ fn host_on_start<'s>(
     let mut args = ArgReader::new(args);
     let function = args.function(scope)?;
     let stashed = scope.stash_function(function)?;
+    let label = script_callback_label(scope);
     with_current_canopy(|canopy, _| {
-        let function_id = canopy
-            .script_host
-            .store_function(stashed, Some("script".to_string()));
+        let function_id = canopy.script_host.store_function(stashed, Some(label));
         canopy
             .script_host
             .state
@@ -1857,9 +1885,20 @@ fn host_fixtures<'s>(
     ret_arg(scope, &fixtures)
 }
 
-/// The base canopy native module: the `canopy` library plus the `fixtures`
-/// global, declared by the static preamble.
-struct CanopyBaseModule;
+/// The base canopy native module: the `canopy` library plus global helpers.
+struct CanopyBaseModule {
+    /// Rendered base API declaration used by the surface audit.
+    declaration: String,
+}
+
+impl CanopyBaseModule {
+    /// Build a base module with declarations generated from the native table.
+    fn new() -> Self {
+        Self {
+            declaration: defs::preamble(),
+        }
+    }
+}
 
 impl NativeModule for CanopyBaseModule {
     fn name(&self) -> &str {
@@ -1867,58 +1906,11 @@ impl NativeModule for CanopyBaseModule {
     }
 
     fn declaration(&self) -> &str {
-        defs::preamble()
+        &self.declaration
     }
 
     fn build(&self, builder: &mut dyn ModuleBuilder) {
-        let entries: &[(&str, HostHandler)] = &[
-            ("root", host_root),
-            ("focused", host_focused),
-            ("node_info", host_node_info),
-            ("find_node", host_find_node),
-            ("find_nodes", host_find_nodes),
-            ("parent", host_parent),
-            ("children", host_children),
-            ("tree", host_tree),
-            ("node_at", host_node_at),
-            ("set_focus", host_set_focus),
-            ("focus_next", host_focus_next),
-            ("focus_prev", host_focus_prev),
-            ("focus_dir", host_focus_dir),
-            ("send_key", host_send_key),
-            ("send_click", host_send_click),
-            ("send_scroll", host_send_scroll),
-            ("cmd", host_cmd),
-            ("cmd_on", host_cmd_on),
-            ("bindings", host_bindings),
-            ("commands", host_commands),
-            ("input_mode", host_input_mode),
-            ("set_mode", host_set_mode),
-            ("screen", host_screen),
-            ("screen_text", host_screen_text),
-            ("bind", host_bind),
-            ("bind_with", host_bind_with),
-            ("bind_mouse", host_bind_mouse),
-            ("bind_mouse_with", host_bind_mouse_with),
-            ("unbind", host_unbind),
-            ("unbind_key", host_unbind_key),
-            ("clear_bindings", host_clear_bindings),
-            ("on_start", host_on_start),
-            ("log", host_log),
-            ("assert", host_assert),
-        ];
-        for (name, handler) in entries {
-            builder.scoped_function(
-                name,
-                ModuleBinding::library("canopy"),
-                canopy_host_fn(*handler),
-            );
-        }
-        builder.scoped_function(
-            "fixtures",
-            ModuleBinding::Global,
-            canopy_host_fn(host_fixtures),
-        );
+        base_api::install(builder);
     }
 }
 
@@ -2232,7 +2224,8 @@ impl LuauHost {
                 "Luau API already finalized".into(),
             ));
         }
-        let mut builder = SurfaceSpec::builder(canopy_profile()).module(Arc::new(CanopyBaseModule));
+        let mut builder =
+            SurfaceSpec::builder(canopy_profile()).module(Arc::new(CanopyBaseModule::new()));
         for module in build_owner_modules(commands, default_binding_owners) {
             builder = builder.module(Arc::new(module));
         }
@@ -2387,6 +2380,23 @@ impl LuauHost {
                 "cannot execute scripts before finalize_api()".to_string(),
             )
         })?;
+        // A fresh print sink per invocation: `print` output lands in the
+        // evaluation log alongside `canopy.log`, bounded by a per-run quota so
+        // a print loop cannot grow the log without limit.
+        vm.set_print_sink_with_quota(
+            Box::new(|bytes: &[u8]| {
+                let line = String::from_utf8_lossy(bytes).trim_end().to_string();
+                tracing::info!("{line}");
+                // Print can only fire while a script context is active; a
+                // missing context (no canopy run in flight) drops the line to
+                // the tracing log above.
+                let _logged = with_current_canopy(|canopy, _| {
+                    canopy.script_host.push_log(line.clone());
+                    Ok(())
+                });
+            }),
+            PRINT_QUOTA,
+        );
         let mut outcome: Option<Result<ArgValue>> = None;
         let step = vm.step_with_limits(invocation_limits(timeout), |scope| {
             let _guard = ScriptContextGuard::push_with_scope(canopy, node_id, scope);
@@ -2466,7 +2476,60 @@ mod tests {
     fn tcompile_error_reports_details() {
         let host = ScriptHost::new();
         let err = host.compile("local =").unwrap_err();
-        assert!(matches!(err, error::Error::Parse(_)));
+        let error::Error::Parse(parse) = err else {
+            panic!("expected a parse error");
+        };
+        // The strict-mode prefix occupies line 1, so the fault is on line 2,
+        // carried as a structured position from the compiler.
+        assert!(
+            parse.to_string().contains("(line 2"),
+            "parse error should carry the source line: {parse}"
+        );
+    }
+
+    #[test]
+    fn tprint_output_lands_in_script_logs() -> Result<()> {
+        run_ttree(|c, _, _| {
+            c.finalize_api()?;
+            let scr = c.script_host.compile(r#"print("plain print", 42)"#)?;
+            let host = c.script_host.clone();
+            host.execute(c, c.core.root_id(), scr)?;
+            let logs = host.take_logs();
+            assert!(
+                logs.iter().any(|line| line.contains("plain print")),
+                "print output should land in the evaluation log: {logs:?}"
+            );
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn tscript_bindings_carry_declaration_sites() -> Result<()> {
+        run_ttree(|c, _, _| {
+            c.finalize_api()?;
+            let scr = c
+                .script_host
+                .compile("canopy.bind(\"z\", function() end)")?;
+            let host = c.script_host.clone();
+            host.execute(c, c.core.root_id(), scr)?;
+            let check = c.script_host.compile(
+                r#"
+                for _, binding in canopy.bindings() do
+                    if binding.input == "z" then
+                        local desc = tostring(binding.desc)
+                        canopy.assert(
+                            string.find(desc, "script:", 1, true) ~= nil,
+                            "binding desc should carry the declaration site: " .. desc
+                        )
+                        return
+                    end
+                end
+                canopy.assert(false, "binding for z not found")
+                "#,
+            )?;
+            host.execute(c, c.core.root_id(), check)?;
+            Ok(())
+        })
     }
 
     #[test]

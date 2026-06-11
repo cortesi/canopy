@@ -132,6 +132,11 @@ Every script invocation runs under resource ceilings: a gas (instruction) budget
 bounds runaway loops even without an explicit timeout, and a memory cap bounds
 script allocations. Exhausting either fails the script with a runtime error.
 
+`print(...)` output lands in the evaluation log alongside `canopy.log`, bounded by
+a per-invocation quota; output past the quota is dropped with a truncation marker.
+Script-declared key and mouse bindings record their declaration site (`script:LINE`)
+as the default binding description, visible through `canopy.bindings()`.
+
 ## Timeouts
 
 MCP timeouts are wall-clock watchdogs layered per invocation on top of the gas
