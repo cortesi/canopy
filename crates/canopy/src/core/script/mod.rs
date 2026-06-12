@@ -37,7 +37,7 @@ use crate::{
     },
     error::{self, Result},
     event::{key, mouse},
-    geom::{Point, Rect, RectI32, Size},
+    geom::{Point, RectI32, Size},
     path::PathFilter,
     style::{AttrSet, Color},
 };
@@ -466,6 +466,14 @@ thread_local! {
 /// Return the innermost live scope pointer from the script context stack.
 fn current_scope_ptr() -> Option<NonNull<()>> {
     SCRIPT_GLOBAL.with(|stack| stack.borrow().last().and_then(|context| context.scope))
+}
+
+/// Return true when a live script scope is active on this thread.
+///
+/// True means the current Rust code was reached from inside a running script,
+/// so any script execution started now is nested within that evaluation.
+pub(crate) fn in_live_scope() -> bool {
+    current_scope_ptr().is_some()
 }
 
 /// Reconstruct a scope reference from the type-erased context pointer.
@@ -1160,15 +1168,15 @@ fn attrs_to_arg(attrs: AttrSet) -> ArgValue {
     ArgValue::Array(names)
 }
 
-/// Return the rendered screen text inside a rectangle.
-fn screen_text_for_rect(canopy: &mut Canopy, rect: Rect) -> Result<String> {
+/// Return the rendered screen text inside a signed rectangle, clipped to the screen.
+fn screen_text_for_rect(canopy: &mut Canopy, rect: RectI32) -> Result<String> {
     canopy.refresh_snapshot()?;
     let Some(buffer) = canopy.buf() else {
         return Err(error::Error::Script(
             "screen unavailable before render".into(),
         ));
     };
-    let Some(rect) = buffer.rect().intersect(&rect) else {
+    let Some(rect) = rect.intersect_rect(buffer.rect()) else {
         return Ok(String::new());
     };
     let mut rows = Vec::with_capacity(rect.h as usize);
@@ -1183,15 +1191,6 @@ fn screen_text_for_rect(canopy: &mut Canopy, rect: Rect) -> Result<String> {
         rows.push(row);
     }
     Ok(rows.join("\n"))
-}
-
-/// Convert a signed view rectangle to a clipped screen rectangle.
-fn screen_rect_from_signed(rect: RectI32, bounds: Rect) -> Option<Rect> {
-    let left = rect.tl.x.max(0) as u32;
-    let top = rect.tl.y.max(0) as u32;
-    let right = (rect.tl.x + rect.w as i32).clamp(0, bounds.w as i32) as u32;
-    let bottom = (rect.tl.y + rect.h as i32).clamp(0, bounds.h as i32) as u32;
-    (right > left && bottom > top).then(|| Rect::new(left, top, right - left, bottom - top))
 }
 
 /// Convert the most recent route trace to scripting records.
@@ -2409,11 +2408,11 @@ fn host_screen_region<'s>(
     let y = args.integer(scope)?;
     let w = args.integer(scope)?;
     let h = args.integer(scope)?;
-    let rect = Rect::new(
-        u32::try_from(x).unwrap_or(0),
-        u32::try_from(y).unwrap_or(0),
-        u32::try_from(w).unwrap_or(0),
-        u32::try_from(h).unwrap_or(0),
+    let rect = RectI32::new(
+        i32::try_from(x).unwrap_or(if x < 0 { i32::MIN } else { i32::MAX }),
+        i32::try_from(y).unwrap_or(if y < 0 { i32::MIN } else { i32::MAX }),
+        u32::try_from(w.max(0)).unwrap_or(u32::MAX),
+        u32::try_from(h.max(0)).unwrap_or(u32::MAX),
     );
     let text = with_current_canopy(|canopy, _| screen_text_for_rect(canopy, rect))
         .map_err(|err| canopy_to_host(&err))?;
@@ -2429,20 +2428,12 @@ fn host_node_region<'s>(
     let node_id = args.node_id(scope)?;
     let text = with_current_canopy(|canopy, _| {
         canopy.refresh_snapshot()?;
-        let Some(buffer) = canopy.buf() else {
-            return Err(error::Error::Script(
-                "screen unavailable before render".into(),
-            ));
-        };
         let view = canopy
             .core
             .node(node_id)
             .ok_or_else(|| error::Error::from(commands::CommandError::InvalidNode { id: node_id }))?
             .view();
-        let Some(rect) = screen_rect_from_signed(view.content, buffer.rect()) else {
-            return Ok(String::new());
-        };
-        screen_text_for_rect(canopy, rect)
+        screen_text_for_rect(canopy, view.content)
     })
     .map_err(|err| canopy_to_host(&err))?;
     Ok(ret_one(ScopedValue::String(scope.create_string(&text)?)))
@@ -2864,6 +2855,15 @@ impl LuauHost {
         self.state.borrow().diagnostics.assertions()
     }
 
+    /// Return current (log, assertion) counts for journal baselines.
+    pub(crate) fn diagnostics_counts(&self) -> (usize, usize) {
+        let state = self.state.borrow();
+        (
+            state.diagnostics.logs.len(),
+            state.diagnostics.assertions.len(),
+        )
+    }
+
     /// Finalize the command surface: audit and build the script surface, then
     /// construct the retained sandboxed VM and load any scripts compiled
     /// before finalization.
@@ -3020,7 +3020,12 @@ impl LuauHost {
         timeout: Option<Duration>,
     ) -> Result<ArgValue> {
         let module = self.loaded_module(sid)?;
-        self.clear_diagnostics();
+        // Diagnostics accumulate per top-level evaluation: a nested run
+        // triggered from inside a live script must not erase the logs and
+        // assertions the outer evaluation has already collected.
+        if !in_live_scope() {
+            self.clear_diagnostics();
+        }
         let label = format!("script {sid} on node {node_id:?}");
         self.run_target(
             canopy,
@@ -3079,7 +3084,9 @@ impl LuauHost {
             PRINT_QUOTA,
         );
         let mut outcome: Option<Result<ArgValue>> = None;
-        let step = vm.step_with_limits(invocation_limits(timeout), |scope| {
+        let step = vm.step_with(
+            oxau::session::CallOptions::new().limits(invocation_limits(timeout)),
+            |scope| {
             let _guard = ScriptContextGuard::push_with_scope(canopy, node_id, scope);
             let result = match target.resolve(scope) {
                 Ok(function) => call_in_scope(scope, function, label, timeout),
@@ -3087,7 +3094,8 @@ impl LuauHost {
             };
             outcome = Some(result);
             Ok(())
-        });
+            },
+        );
         match step {
             Ok(()) => outcome.unwrap_or_else(|| {
                 Err(error::Error::Script(format!("{label} produced no result")))
