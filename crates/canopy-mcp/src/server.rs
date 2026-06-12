@@ -13,7 +13,10 @@ use tokio::{net::UnixListener, runtime::Builder, sync::oneshot, task::block_in_p
 
 use crate::{
     Error, Result,
-    script::{AppEvaluator, AppFactory, ScriptEvalRequest, app_factory, evaluate_live},
+    script::{
+        AppEvaluator, AppFactory, ScriptEvalRequest, app_factory, bootstrap_for_canopy,
+        evaluate_live,
+    },
 };
 
 /// Build an MCP tool result with structured and text JSON payloads.
@@ -59,6 +62,18 @@ fn live_canopy_mcp_server(automation: AutomationHandle) -> LiveCanopyMcpServer {
 #[mcp_server]
 impl CanopyMcpServer {
     #[tool]
+    /// Return the operating guide, generated API, fixtures, availability, and journal summary.
+    async fn bootstrap(&self) -> ToolResult<CallToolResult> {
+        let bootstrap = self
+            .evaluator
+            .bootstrap()
+            .map_err(|error| ToolError::internal(error.to_string()))?;
+        let value = serde_json::to_value(bootstrap)
+            .map_err(|error| ToolError::internal(error.to_string()))?;
+        Ok(json_tool_result(&value))
+    }
+
+    #[tool]
     /// Evaluate a Luau script against a fresh headless canopy app instance.
     async fn script_eval(&self, params: ScriptEvalRequest) -> ToolResult<CallToolResult> {
         Ok(self.evaluator.evaluate(&params).to_tool_result())
@@ -89,6 +104,22 @@ impl CanopyMcpServer {
 
 #[mcp_server]
 impl LiveCanopyMcpServer {
+    #[tool]
+    /// Return the operating guide, generated API, fixtures, availability, and journal summary.
+    async fn bootstrap(&self) -> ToolResult<CallToolResult> {
+        let automation = self.automation.clone();
+        let bootstrap = block_in_place(move || {
+            automation.request(|canopy| {
+                canopy.finalize_api()?;
+                Ok(bootstrap_for_canopy(canopy))
+            })
+        })
+        .map_err(|error| ToolError::internal(error.to_string()))?;
+        let value = serde_json::to_value(bootstrap)
+            .map_err(|error| ToolError::internal(error.to_string()))?;
+        Ok(json_tool_result(&value))
+    }
+
     #[tool]
     /// Evaluate a Luau script against the currently running canopy app.
     async fn script_eval(&self, params: ScriptEvalRequest) -> ToolResult<CallToolResult> {
@@ -323,6 +354,27 @@ mod tests {
         let result = server().script_api().await.expect("script_api");
         let text = result.text().expect("text response");
         assert!(text.contains("declare echo_node"));
+    }
+
+    #[tokio::test]
+    async fn bootstrap_returns_api_and_availability() {
+        let result = server().bootstrap().await.expect("bootstrap");
+        let payload = result.structured_content.expect("structured content");
+        assert!(
+            payload["api"]
+                .as_str()
+                .expect("api")
+                .contains("declare echo_node")
+        );
+        assert!(!payload["api_digest"].as_str().expect("digest").is_empty());
+        assert!(
+            payload["commands"]
+                .as_array()
+                .expect("commands")
+                .iter()
+                .any(|command| command["owner"] == "echo_node" && command["name"] == "ping")
+        );
+        assert_eq!(payload["fixtures"][0]["name"], "seeded");
     }
 
     #[tokio::test]

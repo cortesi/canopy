@@ -11,7 +11,10 @@ mod parse;
 
 use proc_macro_error::{abort, abort_call_site, proc_macro_error};
 use quote::quote;
-use syn::{ItemImpl, parse_macro_input};
+use syn::{
+    Attribute, Expr, ExprLit, Fields, ItemImpl, Lit, Meta, parse_macro_input, parse_quote,
+    spanned::Spanned,
+};
 
 /// Generate command metadata and wrappers for `#[command]` methods in an impl block.
 #[proc_macro_error]
@@ -35,28 +38,135 @@ pub fn command(
 }
 
 /// Derive the CommandArg marker trait for serde-backed types.
-#[proc_macro_derive(CommandArg)]
+#[proc_macro_derive(CommandArg, attributes(canopy))]
 pub fn derive_command_arg(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as syn::DeriveInput);
-    let ident = input.ident;
-    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    let ident = &input.ident;
+    let type_name = command_arg_type_name(&input.attrs, ident);
+    let type_doc = doc_tokens(&input.attrs);
+    let fields = match &input.data {
+        syn::Data::Struct(data) => match &data.fields {
+            Fields::Named(fields) => &fields.named,
+            _ => abort!(ident.span(), "CommandArg only supports named-field structs"),
+        },
+        _ => abort!(ident.span(), "CommandArg can only be derived for structs"),
+    };
+    let mut generics = input.generics.clone();
+    let where_clause = generics.make_where_clause();
+    for field in fields {
+        let ty = &field.ty;
+        where_clause
+            .predicates
+            .push(parse_quote!(#ty: canopy::commands::CommandType));
+    }
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    let field_decl_regs = fields.iter().map(|field| {
+        let ty = &field.ty;
+        quote! { <#ty as canopy::commands::CommandType>::luau_decls(registry); }
+    });
+    let field_tokens = fields.iter().map(|field| {
+        let Some(ident) = &field.ident else {
+            abort!(field, "CommandArg only supports named-field structs");
+        };
+        let name = ident.to_string();
+        let name = syn::LitStr::new(&name, ident.span());
+        let ty = &field.ty;
+        let doc = doc_tokens(&field.attrs);
+        quote! {
+            canopy::commands::decl::Field::new(
+                #name,
+                <#ty as canopy::commands::CommandType>::luau_ty(),
+            )
+            #doc
+        }
+    });
 
     let expanded = quote! {
         impl #impl_generics canopy::commands::CommandArg for #ident #ty_generics #where_clause {}
 
         impl #impl_generics canopy::commands::CommandType for #ident #ty_generics #where_clause {
-            const LUAU_TYPE: &'static str = "any";
+            fn luau_ty() -> canopy::commands::decl::Ty {
+                canopy::commands::decl::Ty::named(#type_name)
+            }
+
+            fn luau_decls(registry: &mut canopy::commands::DeclRegistry<'_>) {
+                #(#field_decl_regs)*
+                registry.alias(
+                    canopy::commands::decl::Alias::new(
+                        #type_name,
+                        canopy::commands::decl::Ty::table([#(#field_tokens),*]),
+                    )
+                    #type_doc,
+                );
+            }
         }
     };
 
     expanded.into()
 }
 
+/// Return the explicit `#[canopy(type_name = "...")]` or the Rust identifier.
+fn command_arg_type_name(attrs: &[Attribute], ident: &syn::Ident) -> syn::LitStr {
+    let mut type_name = None;
+    for attr in attrs.iter().filter(|attr| attr.path().is_ident("canopy")) {
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("type_name") {
+                let value = meta.value()?;
+                let value: syn::LitStr = value.parse()?;
+                type_name = Some(value);
+                Ok(())
+            } else {
+                Err(meta.error("unsupported canopy attribute"))
+            }
+        })
+        .unwrap_or_else(|err| abort!(attr.span(), err));
+    }
+    type_name.unwrap_or_else(|| syn::LitStr::new(&ident.to_string(), ident.span()))
+}
+
+/// Render a doc-attachment token stream for declaration model items.
+fn doc_tokens(attrs: &[Attribute]) -> proc_macro2::TokenStream {
+    match doc_string(attrs) {
+        Some(doc) => {
+            let doc = syn::LitStr::new(&doc, proc_macro2::Span::call_site());
+            quote! { .doc(#doc) }
+        }
+        None => quote! {},
+    }
+}
+
+/// Extract normalized Rust doc comments.
+fn doc_string(attrs: &[Attribute]) -> Option<String> {
+    let lines = attrs
+        .iter()
+        .filter_map(|attr| {
+            if !attr.path().is_ident("doc") {
+                return None;
+            }
+            let Meta::NameValue(name_value) = &attr.meta else {
+                return None;
+            };
+            let Expr::Lit(ExprLit {
+                lit: Lit::Str(value),
+                ..
+            }) = &name_value.value
+            else {
+                return None;
+            };
+            Some(value.value().trim().to_string())
+        })
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>();
+    (!lines.is_empty()).then(|| lines.join("\n"))
+}
+
 /// Derive command enum conversions from/to ArgValue.
-#[proc_macro_derive(CommandEnum)]
+#[proc_macro_derive(CommandEnum, attributes(canopy))]
 pub fn derive_command_enum(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as syn::DeriveInput);
     let ident = input.ident;
+    let type_name = command_arg_type_name(&input.attrs, &ident);
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     let data = match input.data {
@@ -85,12 +195,9 @@ pub fn derive_command_enum(input: proc_macro::TokenStream) -> proc_macro::TokenS
         quote! { if value.eq_ignore_ascii_case(#name) { return Ok(Self::#variant); } }
     });
 
-    let luau_union = variants
+    let luau_values = variants
         .iter()
-        .map(|variant| format!("\"{}\"", variant))
-        .collect::<Vec<_>>()
-        .join(" | ");
-    let luau_union = syn::LitStr::new(&luau_union, proc_macro2::Span::call_site());
+        .map(|variant| syn::LitStr::new(&variant.to_string(), proc_macro2::Span::call_site()));
 
     let expanded = quote! {
         impl #impl_generics canopy::commands::ToArgValue for #ident #ty_generics #where_clause {
@@ -117,12 +224,21 @@ pub fn derive_command_enum(input: proc_macro::TokenStream) -> proc_macro::TokenS
         }
 
         impl #impl_generics #ident #ty_generics #where_clause {
-            /// Luau union type for this command enum.
-            pub const LUAU_TYPE: &'static str = #luau_union;
+            /// Luau literal values for this command enum.
+            pub const LUAU_VALUES: &'static [&'static str] = &[#(#luau_values),*];
         }
 
         impl #impl_generics canopy::commands::CommandType for #ident #ty_generics #where_clause {
-            const LUAU_TYPE: &'static str = #luau_union;
+            fn luau_ty() -> canopy::commands::decl::Ty {
+                canopy::commands::decl::Ty::named(#type_name)
+            }
+
+            fn luau_decls(registry: &mut canopy::commands::DeclRegistry<'_>) {
+                registry.alias(canopy::commands::decl::Alias::new(
+                    #type_name,
+                    canopy::commands::decl::Ty::literals(Self::LUAU_VALUES.iter().copied()),
+                ));
+            }
         }
     };
 

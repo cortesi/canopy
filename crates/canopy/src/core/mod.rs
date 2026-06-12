@@ -63,6 +63,7 @@ pub mod world;
 // Public exports from internal modules
 pub use canopy::{
     AutomationCallback, AutomationHandle, Canopy, Loader, RoutePhase, RouteTraceEntry,
+    ScriptJournalEntry,
 };
 pub use children::{KeyedChildren, RemovePolicy};
 pub use context::{
@@ -73,4 +74,5 @@ pub use fixture::{Fixture, FixtureInfo};
 pub use id::{NodeId, TypedId};
 pub use inputmap::{BindingId, InputMap, InputSpec};
 pub use path::{Path, PathFilter};
+pub use script::ScriptModuleRoots;
 pub use world::Core;

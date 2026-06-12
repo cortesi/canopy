@@ -17,9 +17,15 @@ use crate::{
 /// Extract documentation from `#[doc = "..."]` attributes.
 fn extract_doc_comments(
     attrs: &[Attribute],
-) -> (Option<String>, Option<String>, HashMap<String, String>) {
+) -> (
+    Option<String>,
+    Option<String>,
+    HashMap<String, String>,
+    Option<String>,
+) {
     let mut lines = Vec::new();
     let mut param_docs = HashMap::new();
+    let mut return_doc = None;
     for attr in attrs {
         if !attr.path().is_ident("doc") {
             continue;
@@ -40,7 +46,7 @@ fn extract_doc_comments(
     }
 
     if lines.is_empty() {
-        return (None, None, param_docs);
+        return (None, None, param_docs, None);
     }
 
     let mut body = Vec::new();
@@ -53,6 +59,10 @@ fn extract_doc_comments(
             {
                 param_docs.insert(name.to_string(), doc.trim().to_string());
             }
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("@return ") {
+            return_doc = Some(rest.trim().to_string());
             continue;
         }
         body.push(line);
@@ -68,7 +78,7 @@ fn extract_doc_comments(
         }
     });
 
-    (short, long, param_docs)
+    (short, long, param_docs, return_doc)
 }
 
 /// Render a Rust type into a string for metadata.
@@ -188,6 +198,7 @@ fn parse_return_type(output: &ReturnType) -> Result<ReturnMeta> {
         ReturnType::Default => Ok(ReturnMeta {
             is_result: false,
             kind: ReturnKind::Unit,
+            doc: None,
         }),
         ReturnType::Type(_, ty) => {
             if let Some(inner) = extract_single_generic(ty, "Result") {
@@ -201,6 +212,7 @@ fn parse_return_type(output: &ReturnType) -> Result<ReturnMeta> {
                 Ok(ReturnMeta {
                     is_result: true,
                     kind,
+                    doc: None,
                 })
             } else {
                 let kind = match &**ty {
@@ -213,6 +225,7 @@ fn parse_return_type(output: &ReturnType) -> Result<ReturnMeta> {
                 Ok(ReturnMeta {
                     is_result: false,
                     kind,
+                    doc: None,
                 })
             }
         }
@@ -264,8 +277,8 @@ fn parse_command_macro_args(attrs: &[Attribute]) -> Result<Option<MacroArgs>> {
 fn build_doc_meta(
     attrs: &[Attribute],
     macro_args: &MacroArgs,
-) -> (DocMeta, HashMap<String, String>) {
-    let (short, long, param_docs) = extract_doc_comments(attrs);
+) -> (DocMeta, HashMap<String, String>, Option<String>) {
+    let (short, long, param_docs, return_doc) = extract_doc_comments(attrs);
     (
         DocMeta {
             short: macro_args.desc.as_ref().map(syn::LitStr::value).or(short),
@@ -273,6 +286,7 @@ fn build_doc_meta(
             hidden: macro_args.hidden,
         },
         param_docs,
+        return_doc,
     )
 }
 
@@ -381,7 +395,7 @@ pub fn parse_command_method(owner: &str, method: &mut ImplItemFn) -> Result<Opti
     let Some(macro_args) = parse_command_macro_args(&method.attrs)? else {
         return Ok(None);
     };
-    let (doc, param_docs) = build_doc_meta(&method.attrs, &macro_args);
+    let (doc, param_docs, return_doc) = build_doc_meta(&method.attrs, &macro_args);
 
     let mut params = Vec::new();
     let mut has_receiver = false;
@@ -406,7 +420,8 @@ pub fn parse_command_method(owner: &str, method: &mut ImplItemFn) -> Result<Opti
         param.doc = param_docs.get(&param.name).cloned();
     }
 
-    let ret = parse_return_type(&method.sig.output)?;
+    let mut ret = parse_return_type(&method.sig.output)?;
+    ret.doc = return_doc;
 
     Ok(Some(CommandMeta {
         name: method.sig.ident.to_string(),

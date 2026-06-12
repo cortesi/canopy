@@ -4,7 +4,10 @@ use std::{
 };
 
 use canopy::{
-    Canopy, FixtureInfo, commands::ArgValue, error::Error as CanopyError, geom::Size,
+    Canopy, FixtureInfo,
+    commands::{ArgValue, CommandDispatchKind, CommandResolution},
+    error::Error as CanopyError,
+    geom::Size,
     testing::render::NopBackend,
 };
 use schemars::JsonSchema;
@@ -27,6 +30,12 @@ where
 
 /// Default headless viewport used by the automation helpers.
 const DEFAULT_VIEW_SIZE: Size = Size { w: 120, h: 40 };
+
+/// Short operating guide returned by the bootstrap tool.
+const BOOTSTRAP_GUIDE: &str = "Use script_eval for actions and assertions. Scripts run against \
+the generated Luau API, can call canopy.help_snapshot(), canopy.commands(), canopy.screen_text(), \
+canopy.screen_cells(), canopy.route_trace(), and canopy.script_journal(), and should prefer typed \
+command calls over coordinate input when possible.";
 
 /// Request payload for the `script_eval` tool.
 #[derive(Debug, Clone, PartialEq)]
@@ -104,6 +113,15 @@ pub struct ScriptErrorInfo {
     #[serde(rename = "type")]
     /// Error category such as `build`, `typecheck`, `timeout`, or `runtime`.
     pub error_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Stable host error category when one is available.
+    pub kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Command id when the error came from command dispatch.
+    pub command: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Owner name when the error came from node-target resolution.
+    pub owner: Option<String>,
     /// Human-readable error message.
     pub message: String,
 }
@@ -132,6 +150,54 @@ pub struct ScriptEvalOutcome {
     #[serde(skip_serializing_if = "Option::is_none")]
     /// Error payload when evaluation fails.
     pub error: Option<ScriptErrorInfo>,
+}
+
+/// Compact command availability record returned by bootstrap.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct BootstrapCommand {
+    /// Command name relative to its owner.
+    pub name: String,
+    /// Widget owner name, or empty for free commands.
+    pub owner: String,
+    /// Whether the command currently resolves.
+    pub available: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Debug token for the current target node, when available.
+    pub target: Option<String>,
+}
+
+/// Compact script journal record returned by bootstrap.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct BootstrapJournalEntry {
+    /// Monotonic journal id.
+    pub id: u64,
+    /// Script origin.
+    pub origin: String,
+    /// Whether the evaluation completed successfully.
+    pub ok: bool,
+    /// Number of logs emitted by this evaluation.
+    pub log_count: usize,
+    /// Number of assertions emitted by this evaluation.
+    pub assertion_count: usize,
+    /// Wall-clock duration in milliseconds.
+    pub duration_ms: u64,
+}
+
+/// Bootstrap payload for an agent entering a Canopy app.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct BootstrapResponse {
+    /// Operating guide for the automation surface.
+    pub guide: String,
+    /// Full generated Luau API definition.
+    pub api: String,
+    /// Stable FNV-1a digest of `api`.
+    pub api_digest: String,
+    /// Registered fixtures.
+    pub fixtures: Vec<FixtureInfo>,
+    /// Current command availability.
+    pub commands: Vec<BootstrapCommand>,
+    /// Recent script journal entries.
+    pub journal: Vec<BootstrapJournalEntry>,
 }
 
 impl ScriptEvalOutcome {
@@ -172,6 +238,9 @@ impl ScriptEvalOutcome {
             timing,
             error: Some(ScriptErrorInfo {
                 error_type,
+                kind: None,
+                command: None,
+                owner: None,
                 message: message.into(),
             }),
         }
@@ -215,6 +284,12 @@ impl AppEvaluator {
         Ok(canopy.fixture_infos())
     }
 
+    /// Return bootstrap information for a fresh headless app instance.
+    pub fn bootstrap(&self) -> Result<BootstrapResponse> {
+        let mut session = HeadlessSession::new(&self.factory, self.view_size, None)?;
+        Ok(bootstrap_for_canopy(&mut session.canopy))
+    }
+
     /// Evaluate a Luau script against a fresh headless app.
     pub fn evaluate(&self, request: &ScriptEvalRequest) -> ScriptEvalOutcome {
         let total_start = Instant::now();
@@ -243,7 +318,7 @@ impl AppEvaluator {
             },
         ) {
             TypecheckGate::Ready(diagnostics) => diagnostics,
-            TypecheckGate::Failed(outcome) => return outcome,
+            TypecheckGate::Failed(outcome) => return *outcome,
         };
 
         let exec_start = Instant::now();
@@ -273,6 +348,71 @@ impl AppEvaluator {
     }
 }
 
+/// Build a bootstrap payload from a finalized app.
+pub fn bootstrap_for_canopy(canopy: &mut Canopy) -> BootstrapResponse {
+    let api = canopy.script_api().to_string();
+    BootstrapResponse {
+        guide: BOOTSTRAP_GUIDE.to_string(),
+        api_digest: stable_digest(&api),
+        api,
+        fixtures: canopy.fixture_infos(),
+        commands: bootstrap_commands(canopy),
+        journal: bootstrap_journal(canopy),
+    }
+}
+
+/// Return command availability records.
+fn bootstrap_commands(canopy: &Canopy) -> Vec<BootstrapCommand> {
+    canopy
+        .command_availability_from_focus()
+        .into_iter()
+        .map(|availability| {
+            let owner = match availability.spec.dispatch {
+                CommandDispatchKind::Node { owner } => owner,
+                CommandDispatchKind::Free => "",
+            };
+            BootstrapCommand {
+                name: availability.spec.name.to_string(),
+                owner: owner.to_string(),
+                available: availability.resolution.is_some(),
+                target: availability
+                    .resolution
+                    .and_then(CommandResolution::target)
+                    .map(|target| format!("{target:?}")),
+            }
+        })
+        .collect()
+}
+
+/// Return compact journal records.
+fn bootstrap_journal(canopy: &Canopy) -> Vec<BootstrapJournalEntry> {
+    canopy
+        .script_journal()
+        .iter()
+        .rev()
+        .take(20)
+        .rev()
+        .map(|entry| BootstrapJournalEntry {
+            id: entry.id,
+            origin: entry.origin.clone(),
+            ok: entry.ok,
+            log_count: entry.logs.len(),
+            assertion_count: entry.assertions.len(),
+            duration_ms: entry.duration_ms,
+        })
+        .collect()
+}
+
+/// Stable FNV-1a digest for short API identity tokens.
+fn stable_digest(text: &str) -> String {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    for byte in text.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x1000_0000_01b3);
+    }
+    format!("{hash:016x}")
+}
+
 /// Evaluate a Luau script against an existing live canopy app.
 pub fn evaluate_live(canopy: &mut Canopy, request: &ScriptEvalRequest) -> ScriptEvalOutcome {
     if request.fixture.is_some() {
@@ -295,7 +435,7 @@ pub fn evaluate_live(canopy: &mut Canopy, request: &ScriptEvalRequest) -> Script
         },
     ) {
         TypecheckGate::Ready(diagnostics) => diagnostics,
-        TypecheckGate::Failed(outcome) => return outcome,
+        TypecheckGate::Failed(outcome) => return *outcome,
     };
 
     let exec_start = Instant::now();
@@ -310,7 +450,7 @@ pub fn evaluate_live(canopy: &mut Canopy, request: &ScriptEvalRequest) -> Script
     let assertions = script_assertions(canopy);
 
     match eval_result {
-        Ok(value) => match value.to_json_value() {
+        Ok(value) => match value.to_external_json_value() {
             Ok(value) => ScriptEvalOutcome {
                 success: true,
                 state: ScriptTaskState::Completed,
@@ -331,6 +471,9 @@ pub fn evaluate_live(canopy: &mut Canopy, request: &ScriptEvalRequest) -> Script
                 timing,
                 error: Some(ScriptErrorInfo {
                     error_type: "runtime".to_string(),
+                    kind: None,
+                    command: None,
+                    owner: None,
                     message: error.to_string(),
                 }),
             },
@@ -365,7 +508,7 @@ impl HeadlessSession {
     fn evaluate(&mut self, script: &str, timeout_ms: Option<u64>) -> Result<JsonValue> {
         let value = eval_script_value(&mut self.canopy, script, timeout_ms)?;
         self.canopy.render(&mut self.backend)?;
-        Ok(value.to_json_value()?)
+        Ok(value.to_external_json_value()?)
     }
 
     /// Drain the script log buffer.
@@ -399,7 +542,7 @@ enum TypecheckGate {
     /// Typechecking succeeded and evaluation may continue.
     Ready(Vec<ScriptDiagnostic>),
     /// Typechecking failed and evaluation should stop.
-    Failed(ScriptEvalOutcome),
+    Failed(Box<ScriptEvalOutcome>),
 }
 
 /// Run Luau typechecking and return a failure outcome when evaluation should stop.
@@ -407,21 +550,21 @@ fn typecheck_for_eval(canopy: &mut Canopy, script: &str, timing: ScriptTiming) -
     let diagnostics = match typecheck_diagnostics(canopy, script) {
         Ok(diagnostics) => diagnostics,
         Err(error) => {
-            return TypecheckGate::Failed(ScriptEvalOutcome::error_only(
+            return TypecheckGate::Failed(Box::new(ScriptEvalOutcome::error_only(
                 "typecheck",
                 error.to_string(),
                 Vec::new(),
                 timing,
-            ));
+            )));
         }
     };
     if diagnostics_have_errors(&diagnostics) {
-        return TypecheckGate::Failed(ScriptEvalOutcome::error_only(
+        return TypecheckGate::Failed(Box::new(ScriptEvalOutcome::error_only(
             "typecheck",
             "script failed Luau type checking",
             diagnostics,
             timing,
-        ));
+        )));
     }
     TypecheckGate::Ready(diagnostics)
 }
@@ -479,7 +622,8 @@ fn failure_with_logs(
     diagnostics: Vec<ScriptDiagnostic>,
     timing: ScriptTiming,
 ) -> ScriptEvalOutcome {
-    let error_type = evaluation_error_type(error).to_string();
+    let info = script_error_info(error);
+    let error_type = info.error_type.clone();
     let state = script_task_state(&error_type);
     ScriptEvalOutcome {
         success: false,
@@ -489,10 +633,33 @@ fn failure_with_logs(
         assertions,
         diagnostics,
         timing,
-        error: Some(ScriptErrorInfo {
-            error_type,
-            message: error.to_string(),
-        }),
+        error: Some(info),
+    }
+}
+
+/// Build structured script error information from a canopy or automation error.
+fn script_error_info(error: &crate::Error) -> ScriptErrorInfo {
+    if let crate::Error::Canopy(CanopyError::ScriptStructured {
+        kind,
+        command,
+        owner,
+        message,
+    }) = error
+    {
+        return ScriptErrorInfo {
+            error_type: kind.clone(),
+            kind: Some(kind.clone()),
+            command: command.clone(),
+            owner: owner.clone(),
+            message: message.clone(),
+        };
+    }
+    ScriptErrorInfo {
+        error_type: evaluation_error_type(error).to_string(),
+        kind: None,
+        command: None,
+        owner: None,
+        message: error.to_string(),
     }
 }
 
@@ -598,10 +765,9 @@ mod tests {
         assert!(api.contains("set: (value: number) -> ()"));
         assert!(api.contains("-- seeded: Set script_target to a known value"));
         assert!(api.contains("default_bindings: () -> ()"));
+        assert!(api.contains("api: () -> string"));
         assert!(
-            api.contains(
-                "choose: (direction: \"Next\" | \"Prev\" | \"Up\" | \"Down\" | \"Left\" | \"Right\", count: number?) -> number"
-            ),
+            api.contains("choose: (direction: FocusDirection, count: number?) -> number"),
             "{api}"
         );
         Ok(())
@@ -620,11 +786,13 @@ mod tests {
 -- seeded: Set script_target to a known value
 
 -- ===== Application Commands =====
--- Auto-generated from registered CommandSpecs.
 
---- Commands for widget "script_target"
+export type FocusDirection = "Next" | "Prev" | "Up" | "Down" | "Left" | "Right"
+
+-- ===== Commands for widget "script_target" =====
+
 declare script_target: {
-    choose: (direction: "Next" | "Prev" | "Up" | "Down" | "Left" | "Right", count: number?) -> number,
+    choose: (direction: FocusDirection, count: number?) -> number,
     get: () -> number,
     set: (value: number) -> (),
     --- Register this widget's default bindings.
@@ -652,6 +820,21 @@ declare script_target: {
         assert_eq!(outcome.state, ScriptTaskState::Completed);
         assert_eq!(outcome.logs, vec!["hello"]);
         assert_eq!(outcome.value, Some(JsonValue::from(7)));
+    }
+
+    #[test]
+    fn evaluate_returns_node_handles_as_external_tokens() {
+        let evaluator = AppEvaluator::new(test_factory());
+        let outcome = evaluator.evaluate(&ScriptEvalRequest {
+            script: "return canopy.root()".to_string(),
+            fixture: None,
+            timeout_ms: None,
+        });
+
+        assert!(outcome.success);
+        let value = outcome.value.expect("node token");
+        assert_eq!(value["type"], JsonValue::String("NodeId".to_string()));
+        assert!(value["token"].is_string());
     }
 
     #[test]
@@ -710,6 +893,24 @@ declare script_target: {
             Some("typecheck")
         );
         assert!(!outcome.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn evaluate_reports_structured_command_errors() {
+        let evaluator = AppEvaluator::new(test_factory());
+        let outcome = evaluator.evaluate(&ScriptEvalRequest {
+            script: r#"canopy.cmd("missing::command")"#.to_string(),
+            fixture: None,
+            timeout_ms: None,
+        });
+
+        assert!(!outcome.success);
+        assert_eq!(outcome.state, ScriptTaskState::Failed);
+        let error = outcome.error.as_ref().expect("structured error");
+        assert_eq!(error.error_type, "unknown_command");
+        assert_eq!(error.kind.as_deref(), Some("unknown_command"));
+        assert_eq!(error.command.as_deref(), Some("missing::command"));
+        assert_eq!(error.owner, None);
     }
 
     #[test]

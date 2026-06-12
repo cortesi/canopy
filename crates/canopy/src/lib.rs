@@ -36,7 +36,8 @@ pub use core::testing;
 pub use core::{
     AutomationCallback, AutomationHandle, BindingId, Canopy, ChildKey, CommandContext, Context,
     Fixture, FixtureInfo, FocusContext, KeyedChildren, LayoutContext, Loader, NodeId, Path,
-    PathFilter, ReadContext, RemovePolicy, ScrollContext, Slot, StyleContext, TreeContext, TypedId,
+    PathFilter, ReadContext, RemovePolicy, ScriptJournalEntry, ScriptModuleRoots, ScrollContext,
+    Slot, StyleContext, TreeContext, TypedId,
 };
 // Lower-level runtime exports retained for internal crates and diagnostics.
 #[doc(hidden)]
@@ -49,5 +50,7 @@ pub use core::{
 
 // Re-export derive macros
 pub use canopy_derive::{CommandArg, CommandEnum, command, derive_commands};
+/// Oxau declaration and embedding APIs used for app-provided native modules.
+pub use oxau::{decl, embed};
 // Re-export widget trait and event outcome
 pub use widget::{EventOutcome, Widget};

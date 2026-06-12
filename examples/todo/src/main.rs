@@ -1,8 +1,7 @@
 use std::{path::PathBuf, process};
 
 use anyhow::Result;
-use canopy::backend::crossterm::{RunloopOptions, runloop_with_options};
-use canopy_mcp::{Error as McpError, SuiteConfig, app_factory, run_suite, serve_stdio, serve_uds};
+use canopy_mcp::{Error as McpError, LaunchMode, SuiteConfig, app_factory, launch};
 use clap::{Parser, Subcommand};
 use todo::create_app_with_config;
 
@@ -66,19 +65,23 @@ pub fn main() -> Result<()> {
     let args = Args::parse();
 
     if args.api {
-        let mut cnpy = canopy::Canopy::new();
-        todo::setup_app(&mut cnpy)?;
-        print!("{}", cnpy.script_api());
+        let code = launch(
+            app_factory(|| {
+                let mut cnpy = canopy::Canopy::new();
+                todo::setup_app(&mut cnpy).map_err(McpError::app)?;
+                Ok(cnpy)
+            }),
+            LaunchMode::Api,
+        )?;
+        if code != 0 {
+            process::exit(code);
+        }
         return Ok(());
     }
 
-    match args.command {
+    let code = match args.command {
         Some(Command::Mcp { path, config }) => {
-            serve_stdio({
-                let factory = make_factory(path, config);
-                move || (factory.as_ref())()
-            })?;
-            return Ok(());
+            launch(make_factory(path, config), LaunchMode::HeadlessMcp)?
         }
         Some(Command::Smoke {
             path,
@@ -87,54 +90,29 @@ pub fn main() -> Result<()> {
             timeout_ms,
             config,
             scripts,
-        }) => {
-            let factory = make_factory(path, config);
-            let result = run_suite(
-                move || (factory.as_ref())(),
-                &SuiteConfig {
-                    suite_dir: suite,
-                    scripts,
-                    timeout_ms,
-                    fail_fast,
-                },
-            )?;
-            for script in &result.scripts {
-                let status = match script.status {
-                    canopy_mcp::ScriptStatus::Passed => "PASS",
-                    canopy_mcp::ScriptStatus::Failed => "FAIL",
-                };
-                println!("{status} {}", script.path.display());
-                if let Some(message) = &script.message {
-                    println!("  {message}");
-                }
+        }) => launch(
+            make_factory(path, config),
+            LaunchMode::Smoke(SuiteConfig {
+                suite_dir: suite,
+                scripts,
+                timeout_ms,
+                fail_fast,
+            }),
+        )?,
+        None => {
+            if let Some(path) = args.path {
+                let mode = args
+                    .mcp
+                    .map_or_else(LaunchMode::run, LaunchMode::run_with_mcp);
+                launch(make_factory(path, args.config), mode)?
+            } else {
+                println!("Specify a file path");
+                0
             }
-            if !result.success() {
-                process::exit(1);
-            }
-            return Ok(());
         }
-        None => {}
-    }
-
-    if let Some(path) = args.path {
-        let cnpy = create_app_with_config(&path, args.config.as_deref())?;
-        let automation = cnpy.automation_handle();
-        let live_server = args
-            .mcp
-            .as_ref()
-            .map(|socket_path| serve_uds(socket_path, automation))
-            .transpose()?;
-
-        let run_result = runloop_with_options(cnpy, RunloopOptions::ctrlc_dump());
-        if let Some(server) = live_server {
-            server.stop()?;
-        }
-        let exit_code = run_result?;
-        if exit_code != 0 {
-            process::exit(exit_code);
-        }
-    } else {
-        println!("Specify a file path");
+    };
+    if code != 0 {
+        process::exit(code);
     }
 
     Ok(())

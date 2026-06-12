@@ -34,5 +34,5 @@ suite. The todo suite is currently the only checked-in suite, so new examples sh
 `.canopyctl.toml`, at least one root smoke script, and fixture-specific scripts for every
 non-trivial state they register.
 
-`cargo xtask docs` requires this inventory to exist. That keeps fixture coverage visible
-when the docs tree changes.
+`cargo xtask smoke` is the executable guardrail for this inventory. That keeps fixture
+coverage visible when examples and smoke scripts change.

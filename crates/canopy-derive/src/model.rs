@@ -76,6 +76,8 @@ pub struct ReturnMeta {
     pub(crate) is_result: bool,
     /// Return type classification.
     pub(crate) kind: ReturnKind,
+    /// Optional return documentation from an `@return` tag.
+    pub(crate) doc: Option<String>,
 }
 
 /// Extracted documentation from a method.

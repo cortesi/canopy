@@ -7,12 +7,18 @@ use std::{
     collections::{BTreeSet, HashMap},
     fs,
     io::Write,
-    path::Path as FsPath,
-    sync::mpsc,
-    time::Duration,
+    path::{Path as FsPath, PathBuf},
+    sync::{Arc, mpsc},
+    time::{Duration, Instant},
 };
 
 use comfy_table::{ContentArrangement, Table, presets::UTF8_FULL};
+use oxau::{
+    embed::NativeModule,
+    source::{EmptyConfigResolver, ModuleId, ModuleSource},
+    types::CheckedFrontend,
+};
+use serde::{Deserialize, Serialize};
 
 use super::{inputmap, poll::Poller, termbuf::TermBuf};
 
@@ -59,6 +65,20 @@ pub struct Canopy {
     pub(crate) script_host: script::ScriptHost,
     /// Cached Luau API definition text.
     script_api_text: Option<String>,
+    /// Configured persistent Luau module roots.
+    script_module_roots: script::ScriptModuleRoots,
+    /// Finalized persistent Luau module source, if any.
+    script_module_source: Option<Arc<script::CanopyModuleSource>>,
+    /// Extra audited Oxau native modules registered by the app.
+    script_native_modules: Vec<Arc<dyn NativeModule>>,
+    /// App-level startup scripts run before user and project init files.
+    startup_scripts: Vec<StartupScript>,
+    /// Whether startup scripts have been run for this process.
+    startup_scripts_ran: bool,
+    /// Latest conformance fingerprints for checked paired script declarations.
+    script_conformance_cache: HashMap<PathBuf, u64>,
+    /// In-memory journal of script evaluations.
+    script_journal: Vec<ScriptJournalEntry>,
     /// Registered default binding scripts keyed by owner name.
     default_bindings: HashMap<String, DefaultBindingsScript>,
     /// Registered named fixtures keyed by fixture name.
@@ -182,6 +202,45 @@ struct DefaultBindingsScript {
     script_id: Option<script::ScriptId>,
 }
 
+/// Registered app startup script metadata.
+struct StartupScript {
+    /// Human-readable startup script name.
+    name: String,
+    /// Source text evaluated during startup.
+    source: String,
+    /// Pre-compiled script handle available after `finalize_api()`.
+    script_id: Option<script::ScriptId>,
+}
+
+/// Paired implementation and declaration module found under a script root.
+struct ScriptDeclarationPair {
+    /// Module id for the implementation source.
+    module_id: ModuleId,
+    /// Declaration source path.
+    declaration_path: PathBuf,
+}
+
+/// Replayable record of one script evaluation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScriptJournalEntry {
+    /// Monotonic journal id.
+    pub id: u64,
+    /// Script origin such as `eval`, `config:<path>`, or `startup:app`.
+    pub origin: String,
+    /// Evaluated source text.
+    pub source: String,
+    /// Whether the evaluation completed successfully.
+    pub ok: bool,
+    /// Error message when `ok` is false.
+    pub error: Option<String>,
+    /// Logs emitted by the script.
+    pub logs: Vec<String>,
+    /// Assertions emitted by the script.
+    pub assertions: Vec<script::ScriptAssertion>,
+    /// Wall-clock duration in milliseconds.
+    pub duration_ms: u64,
+}
+
 impl Canopy {
     /// Construct a new Canopy instance.
     pub fn new() -> Self {
@@ -200,6 +259,13 @@ impl Canopy {
             route_trace: Vec::new(),
             script_host: script::ScriptHost::new(),
             script_api_text: None,
+            script_module_roots: script::ScriptModuleRoots::new(),
+            script_module_source: None,
+            script_native_modules: Vec::new(),
+            startup_scripts: Vec::new(),
+            startup_scripts_ran: false,
+            script_conformance_cache: HashMap::new(),
+            script_journal: Vec::new(),
             default_bindings: HashMap::new(),
             fixtures: HashMap::new(),
             style: solarized::solarized_dark(),
@@ -293,18 +359,31 @@ impl Canopy {
 
     /// Evaluate a Luau source string in the current app context.
     pub fn eval_script(&mut self, source: &str) -> Result<()> {
-        let script_id = self.compile_script(source)?;
-        self.run_script(self.core.root_id(), script_id)
+        let started = Instant::now();
+        let result = (|| {
+            if !self.script_host.is_finalized() {
+                self.finalize_api()?;
+            }
+            let script_id = self.compile_script(source)?;
+            self.run_script(self.core.root_id(), script_id)
+        })();
+        self.record_script_journal("eval", source, started, &result);
+        result
     }
 
     /// Evaluate a Luau source string and return its value.
     pub fn eval_script_value(&mut self, source: &str) -> Result<commands::ArgValue> {
-        if !self.script_host.is_finalized() {
-            self.finalize_api()?;
-        }
-        let script_id = self.compile_script(source)?;
-        let host = self.script_host.clone();
-        host.execute_value(self, self.core.root_id(), script_id)
+        let started = Instant::now();
+        let result = (|| {
+            if !self.script_host.is_finalized() {
+                self.finalize_api()?;
+            }
+            let script_id = self.compile_script(source)?;
+            let host = self.script_host.clone();
+            host.execute_value(self, self.core.root_id(), script_id)
+        })();
+        self.record_script_journal("eval", source, started, &result);
+        result
     }
 
     /// Evaluate a Luau source string with a cooperative timeout.
@@ -313,17 +392,143 @@ impl Canopy {
         source: &str,
         timeout: Duration,
     ) -> Result<commands::ArgValue> {
-        if !self.script_host.is_finalized() {
-            self.finalize_api()?;
-        }
-        let script_id = self.compile_script(source)?;
-        let host = self.script_host.clone();
-        host.execute_value_with_timeout(self, self.core.root_id(), script_id, timeout)
+        let started = Instant::now();
+        let result = (|| {
+            if !self.script_host.is_finalized() {
+                self.finalize_api()?;
+            }
+            let script_id = self.compile_script(source)?;
+            let host = self.script_host.clone();
+            host.execute_value_with_timeout(self, self.core.root_id(), script_id, timeout)
+        })();
+        self.record_script_journal("eval", source, started, &result);
+        result
     }
 
     /// Evaluate the app's built-in default bindings script.
     pub fn run_default_script(&mut self, source: &str) -> Result<()> {
         self.eval_script(source)
+    }
+
+    /// Return the configured persistent script module roots.
+    pub fn script_module_roots(&self) -> &script::ScriptModuleRoots {
+        &self.script_module_roots
+    }
+
+    /// Configure the `@user` persistent script root.
+    pub fn set_user_script_root(&mut self, root: impl Into<PathBuf>) -> Result<()> {
+        self.ensure_api_unfinalized("script module roots")?;
+        self.script_module_roots.set_user_root(root);
+        Ok(())
+    }
+
+    /// Configure the `@project` persistent script root.
+    pub fn set_project_script_root(&mut self, root: impl Into<PathBuf>) -> Result<()> {
+        self.ensure_api_unfinalized("script module roots")?;
+        self.script_module_roots.set_project_root(root);
+        Ok(())
+    }
+
+    /// Discover and configure the nearest `.canopy` project script root.
+    pub fn discover_project_script_root_from(&mut self, start: impl AsRef<FsPath>) -> Result<bool> {
+        self.ensure_api_unfinalized("script module roots")?;
+        let Some(root) = script::ScriptModuleRoots::discover_project_root(start) else {
+            return Ok(false);
+        };
+        self.script_module_roots.set_project_root(root);
+        Ok(true)
+    }
+
+    /// Invalidate cached exports from persistent script modules.
+    pub fn invalidate_script_modules(&self) -> Option<u64> {
+        self.script_module_source
+            .as_ref()
+            .map(|source| source.invalidate())
+    }
+
+    /// Register an audited Oxau native module on the same surface as Canopy commands.
+    pub fn register_script_module(&mut self, module: Arc<dyn NativeModule>) -> Result<()> {
+        self.ensure_api_unfinalized("script native module registration")?;
+        self.script_native_modules.push(module);
+        Ok(())
+    }
+
+    /// Register an app-level startup script.
+    pub fn register_startup_script(&mut self, name: &str, source: &str) -> Result<()> {
+        self.ensure_api_unfinalized("startup script registration")?;
+        if name.trim().is_empty() {
+            return Err(error::Error::Invalid(
+                "startup script name cannot be empty".into(),
+            ));
+        }
+        if let Some(existing) = self
+            .startup_scripts
+            .iter()
+            .find(|script| script.name == name)
+        {
+            if existing.source == source {
+                return Ok(());
+            }
+            return Err(error::Error::Invalid(format!(
+                "conflicting startup script already registered for {name}"
+            )));
+        }
+        self.startup_scripts.push(StartupScript {
+            name: name.to_string(),
+            source: source.to_string(),
+            script_id: None,
+        });
+        Ok(())
+    }
+
+    /// Run app, user, and project startup scripts once.
+    pub fn run_startup_scripts(&mut self) -> Result<usize> {
+        if self.startup_scripts_ran {
+            return Ok(0);
+        }
+        if !self.script_host.is_finalized() {
+            self.finalize_api()?;
+        }
+        let host = self.script_host.clone();
+        let mut ran = 0;
+        let startup_ids = self
+            .startup_scripts
+            .iter()
+            .filter_map(|script| {
+                script
+                    .script_id
+                    .map(|script_id| (script.name.clone(), script_id))
+            })
+            .collect::<Vec<_>>();
+        for (name, script_id) in startup_ids {
+            let source = host.script_source(script_id).unwrap_or_default();
+            let started = Instant::now();
+            let result = host.execute(self, self.core.root_id(), script_id);
+            self.record_script_journal(format!("startup:{name}"), &source, started, &result);
+            result?;
+            ran += 1;
+        }
+        for module in self.script_module_roots.startup_modules() {
+            let source = fs::read_to_string(&module.path).map_err(|err| {
+                error::Error::Invalid(format!(
+                    "{} startup script read failed: {err}",
+                    module.namespace.name()
+                ))
+            })?;
+            let script_id = host.compile_named(&source, module.module_id.as_bytes())?;
+            let started = Instant::now();
+            let result = host.execute(self, self.core.root_id(), script_id);
+            self.record_script_journal(
+                format!("startup:{}", module.module_id),
+                &source,
+                started,
+                &result,
+            );
+            result?;
+            ran += 1;
+        }
+        self.startup_scripts_ran = true;
+        Ok(ran)
     }
 
     /// Register a Luau script as the default bindings for a widget namespace.
@@ -435,11 +640,41 @@ impl Canopy {
         self.script_host.take_assertions()
     }
 
+    /// Return the in-memory script evaluation journal.
+    pub fn script_journal(&self) -> &[ScriptJournalEntry] {
+        &self.script_journal
+    }
+
+    /// Clear the in-memory script evaluation journal.
+    pub fn clear_script_journal(&mut self) {
+        self.script_journal.clear();
+    }
+
     /// Evaluate a Luau config file from disk.
     pub fn run_config(&mut self, path: &FsPath) -> Result<()> {
+        let started = Instant::now();
         let source = fs::read_to_string(path)
             .map_err(|err| error::Error::Invalid(format!("config read failed: {err}")))?;
-        self.eval_script(&source)
+        let result = (|| {
+            if !self.script_host.is_finalized() {
+                self.finalize_api()?;
+            }
+            let module_name = self
+                .script_module_roots
+                .module_id_for_path(path)
+                .map(|id| id.as_bytes().to_vec())
+                .unwrap_or_else(|| b"canopy".to_vec());
+            let script_id = self.script_host.compile_named(&source, module_name)?;
+            let host = self.script_host.clone();
+            host.execute(self, self.core.root_id(), script_id)
+        })();
+        self.record_script_journal(
+            format!("config:{}", path.display()),
+            &source,
+            started,
+            &result,
+        );
+        result
     }
 
     /// Remove a binding by ID. Returns true if a binding was removed.
@@ -513,9 +748,29 @@ impl Canopy {
         self.keymap.current_mode()
     }
 
+    /// Return active non-default input modes from oldest to newest.
+    pub fn input_mode_stack(&self) -> &[String] {
+        self.keymap.mode_stack()
+    }
+
+    /// Return input modes in binding-resolution order.
+    pub fn active_input_modes(&self) -> Vec<&str> {
+        self.keymap.active_modes()
+    }
+
     /// Set the active input mode.
     pub fn set_input_mode(&mut self, mode: &str) -> Result<()> {
         self.keymap.set_mode(mode)
+    }
+
+    /// Push an input mode above the current mode.
+    pub fn push_input_mode(&mut self, mode: &str) -> Result<()> {
+        self.keymap.push_mode(mode)
+    }
+
+    /// Pop the top input mode and return the new active mode.
+    pub fn pop_input_mode(&mut self) -> &str {
+        self.keymap.pop_mode()
     }
 
     /// Bind a key or mouse input to switch the active input mode.
@@ -559,6 +814,10 @@ impl Canopy {
         if self.script_host.is_finalized() {
             return Ok(());
         }
+        let module_source = self.script_module_roots.module_source();
+        let surface_source = module_source
+            .as_ref()
+            .map(|source| Arc::clone(source) as Arc<dyn ModuleSource>);
         let default_binding_owners = self.default_binding_owners();
         let definitions = script::defs::render_definitions(
             &self.core.commands,
@@ -568,9 +827,14 @@ impl Canopy {
         self.script_host.finalize(
             &self.core.commands,
             &default_binding_owners,
+            &self.script_native_modules,
+            surface_source,
             definitions.clone(),
         )?;
+        self.script_module_source = module_source;
+        self.validate_script_module_declarations()?;
         self.compile_registered_default_bindings()?;
+        self.compile_registered_startup_scripts()?;
         self.script_api_text = Some(definitions);
         Ok(())
     }
@@ -595,7 +859,16 @@ impl Canopy {
                 error::Error::NotFound(format!("default bindings not registered for owner {owner}"))
             })?;
         let host = self.script_host.clone();
-        host.execute(self, self.core.root_id(), script_id)
+        let source = host.script_source(script_id).unwrap_or_default();
+        let started = Instant::now();
+        let result = host.execute(self, self.core.root_id(), script_id);
+        self.record_script_journal(
+            format!("default-bindings:{owner}"),
+            &source,
+            started,
+            &result,
+        );
+        result
     }
 
     /// Return true if the named owner already exports a `default_bindings` command.
@@ -604,6 +877,102 @@ impl Canopy {
             matches!(spec.dispatch, CommandDispatchKind::Node { owner: spec_owner } if spec_owner == owner)
                 && spec.name == "default_bindings"
         })
+    }
+
+    /// Ensure the script surface can still be extended.
+    fn ensure_api_unfinalized(&self, subject: &str) -> Result<()> {
+        if self.script_host.is_finalized() {
+            return Err(error::Error::InvalidOperation(format!(
+                "{subject} is sealed after finalize_api()"
+            )));
+        }
+        Ok(())
+    }
+
+    /// Validate paired `.luau`/`.d.luau` modules under persistent roots.
+    fn validate_script_module_declarations(&mut self) -> Result<()> {
+        let Some(source) = &self.script_module_source else {
+            return Ok(());
+        };
+        let Some(surface) = self.script_host.surface() else {
+            return Ok(());
+        };
+        let configs = EmptyConfigResolver;
+        let mut failures = Vec::new();
+        for pair in self.script_declaration_pairs()? {
+            let declaration_source = fs::read_to_string(&pair.declaration_path).map_err(|err| {
+                error::Error::Invalid(format!(
+                    "script declaration read failed for {}: {err}",
+                    pair.declaration_path.display()
+                ))
+            })?;
+            let module_name = pair.module_id.as_str().ok_or_else(|| {
+                error::Error::Invalid(format!("script module id {} is not UTF-8", pair.module_id))
+            })?;
+            let mut frontend =
+                CheckedFrontend::with_checker(source.as_ref(), &configs, surface.new_checker());
+            frontend.set_source_mode_override(Some(surface.analysis_mode()));
+            let check = frontend.check_conformance(module_name, &declaration_source);
+            self.script_conformance_cache
+                .insert(pair.declaration_path.clone(), check.fingerprint().as_u64());
+            if check.is_ok() {
+                continue;
+            }
+            let diagnostics = check
+                .diagnostics()
+                .iter()
+                .map(script::type_diagnostic_to_script)
+                .collect::<Vec<_>>();
+            failures.push(format!(
+                "{}:\n{}",
+                pair.declaration_path.display(),
+                format_script_diagnostics(&diagnostics)
+            ));
+        }
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(error::Error::Parse(error::ParseError::new(
+                failures.join("\n"),
+            )))
+        }
+    }
+
+    /// Return paired implementation/declaration modules under configured roots.
+    fn script_declaration_pairs(&self) -> Result<Vec<ScriptDeclarationPair>> {
+        let mut pairs = Vec::new();
+        for root in [
+            self.script_module_roots.user_root(),
+            self.script_module_roots.project_root(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            collect_script_declaration_pairs(&self.script_module_roots, root, &mut pairs)?;
+        }
+        Ok(pairs)
+    }
+
+    /// Append a script evaluation to the in-memory journal.
+    fn record_script_journal<T>(
+        &mut self,
+        origin: impl Into<String>,
+        source: &str,
+        started: Instant,
+        result: &Result<T>,
+    ) {
+        let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let id = self.script_journal.len() as u64 + 1;
+        self.script_journal.push(ScriptJournalEntry {
+            id,
+            origin: origin.into(),
+            source: source.to_string(),
+            ok: result.is_ok(),
+            error: result.as_ref().err().map(ToString::to_string),
+            logs: self.script_host.logs(),
+            assertions: self.script_host.assertions(),
+            duration_ms,
+        });
     }
 
     /// Return the set of owners with registered default binding scripts.
@@ -617,6 +986,20 @@ impl Canopy {
         for script in self.default_bindings.values_mut() {
             if script.script_id.is_none() {
                 script.script_id = Some(host.compile(&script.source)?);
+            }
+        }
+        Ok(())
+    }
+
+    /// Compile any registered startup scripts after finalization.
+    fn compile_registered_startup_scripts(&mut self) -> Result<()> {
+        let host = self.script_host.clone();
+        for script in &mut self.startup_scripts {
+            if script.script_id.is_none() {
+                script.script_id = Some(host.compile_named(
+                    &script.source,
+                    format!("startup/{}", script.name).as_bytes(),
+                )?);
             }
         }
         Ok(())
@@ -739,10 +1122,15 @@ impl Canopy {
             })
             .collect();
 
-        let matched_bindings = self.keymap.bindings_matching_path(input_mode, &focus_path);
+        let mut matched_bindings = Vec::new();
+        for mode in self.keymap.active_modes() {
+            for binding in self.keymap.bindings_matching_path(mode, &focus_path) {
+                matched_bindings.push((mode, binding));
+            }
+        }
         let help_bindings: Vec<super::help::HelpBinding<'_>> = matched_bindings
             .into_iter()
-            .map(|mb| {
+            .map(|(mode, mb)| {
                 let kind = if mb.m.anchored_end && mb.m.depth > 0 {
                     super::help::BindingKind::PreEventOverride
                 } else {
@@ -758,7 +1146,7 @@ impl Canopy {
 
                 super::help::HelpBinding {
                     input: mb.info.input,
-                    mode: input_mode,
+                    mode,
                     path_filter: mb.info.path_filter,
                     target: mb.info.target,
                     kind,
@@ -796,12 +1184,17 @@ impl Canopy {
         out.push_str(&format!("target path: {target_path}\n"));
         out.push_str(&format!("input mode: {input_mode}\n"));
 
-        let bindings = self.keymap.bindings_matching_path(input_mode, &target_path);
+        let mut bindings = Vec::new();
+        for mode in self.keymap.active_modes() {
+            for binding in self.keymap.bindings_matching_path(mode, &target_path) {
+                bindings.push((mode, binding));
+            }
+        }
         if bindings.is_empty() {
             out.push_str("bindings: (none)\n");
         } else {
             out.push_str("bindings:\n");
-            for mb in bindings {
+            for (mode, mb) in bindings {
                 let kind = if mb.m.anchored_end && mb.m.depth > 0 {
                     "pre"
                 } else {
@@ -814,7 +1207,7 @@ impl Canopy {
                     |id| self.script_host.function_label(id),
                 );
                 out.push_str(&format!(
-                    "  [{:?}] {} {} ({kind}) -> {label}\n",
+                    "  [{:?}] mode={mode:?} {} {} ({kind}) -> {label}\n",
                     mb.info.id, mb.info.input, mb.info.path_filter
                 ));
             }
@@ -850,6 +1243,72 @@ impl Canopy {
 
         out
     }
+}
+
+/// Recursively collect adjacent `.luau` and `.d.luau` module pairs.
+fn collect_script_declaration_pairs(
+    roots: &script::ScriptModuleRoots,
+    dir: &FsPath,
+    pairs: &mut Vec<ScriptDeclarationPair>,
+) -> Result<()> {
+    if !dir.is_dir() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(dir)
+        .map_err(|err| error::Error::Invalid(format!("script root scan failed: {err}")))?
+    {
+        let entry = entry
+            .map_err(|err| error::Error::Invalid(format!("script root scan failed: {err}")))?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_script_declaration_pairs(roots, &path, pairs)?;
+            continue;
+        }
+        let Some(implementation_path) = implementation_path_for_declaration(&path) else {
+            continue;
+        };
+        if !implementation_path.is_file() {
+            return Err(error::Error::Invalid(format!(
+                "script declaration {} has no implementation sibling",
+                path.display()
+            )));
+        }
+        let module_id = roots
+            .module_id_for_path(&implementation_path)
+            .ok_or_else(|| {
+                error::Error::Invalid(format!(
+                    "script implementation {} is outside configured roots",
+                    implementation_path.display()
+                ))
+            })?;
+        pairs.push(ScriptDeclarationPair {
+            module_id,
+            declaration_path: path,
+        });
+    }
+    Ok(())
+}
+
+/// Return the implementation sibling for a declaration path.
+fn implementation_path_for_declaration(path: &FsPath) -> Option<PathBuf> {
+    let file_name = path.file_name()?.to_str()?;
+    let stem = file_name.strip_suffix(".d.luau")?;
+    Some(path.with_file_name(format!("{stem}.luau")))
+}
+
+/// Render script diagnostics for an error message.
+fn format_script_diagnostics(diagnostics: &[script::ScriptCheckDiagnostic]) -> String {
+    diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.is_error())
+        .map(|diagnostic| {
+            format!(
+                "{}:{}: {}",
+                diagnostic.line, diagnostic.column, diagnostic.message
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Validate a child view position against the parent canvas bounds.

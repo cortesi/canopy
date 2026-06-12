@@ -124,6 +124,19 @@ pub enum Error {
     /// Script execution failure.
     Script(String),
 
+    /// Script execution failure with stable host category fields.
+    #[error("script run error: {message}")]
+    ScriptStructured {
+        /// Stable script-visible category.
+        kind: String,
+        /// Command id when the error came from command dispatch.
+        command: Option<String>,
+        /// Owner name when the error came from node-target resolution.
+        owner: Option<String>,
+        /// Human-readable error message.
+        message: String,
+    },
+
     /// Script execution exceeded its cooperative timeout.
     #[error("script evaluation exceeded {timeout_ms}ms")]
     ScriptTimeout {

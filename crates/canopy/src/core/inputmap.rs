@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt, iter};
 
 use crate::{
     commands::CommandInvocation,
@@ -332,6 +332,8 @@ pub struct InputMap {
     modes: HashMap<String, InputMode>,
     /// Current active mode name.
     current_mode: String,
+    /// Active non-default modes, ordered from oldest to newest.
+    mode_stack: Vec<String>,
     /// Next binding identifier.
     next_id: u64,
 }
@@ -350,6 +352,7 @@ impl InputMap {
         modes.insert(DEFAULT_MODE.to_string(), default);
         Self {
             current_mode: DEFAULT_MODE.into(),
+            mode_stack: Vec::new(),
             modes,
             next_id: 1,
         }
@@ -359,34 +362,90 @@ impl InputMap {
     pub fn set_mode(&mut self, mode: &str) -> Result<()> {
         if mode.is_empty() {
             self.current_mode = DEFAULT_MODE.into();
+            self.mode_stack.clear();
             return Ok(());
         }
-        self.modes
-            .entry(mode.to_string())
-            .or_insert_with(InputMode::new);
-        self.current_mode = mode.to_string();
+        self.ensure_mode(mode);
+        self.mode_stack.clear();
+        self.mode_stack.push(mode.to_string());
+        self.refresh_current_mode();
         Ok(())
     }
 
-    /// Return the active input mode, falling back to the default mode if needed.
-    fn active_mode(&self) -> Option<&InputMode> {
+    /// Push an input mode on top of the active mode stack.
+    pub fn push_mode(&mut self, mode: &str) -> Result<()> {
+        if mode.is_empty() {
+            return Ok(());
+        }
+        self.ensure_mode(mode);
+        self.mode_stack.push(mode.to_string());
+        self.refresh_current_mode();
+        Ok(())
+    }
+
+    /// Pop the top input mode and return the newly-active mode name.
+    pub fn pop_mode(&mut self) -> &str {
+        self.mode_stack.pop();
+        self.refresh_current_mode();
+        self.current_mode()
+    }
+
+    /// Return active non-default modes from oldest to newest.
+    pub fn mode_stack(&self) -> &[String] {
+        &self.mode_stack
+    }
+
+    /// Return active mode names in binding-resolution order.
+    pub fn active_modes(&self) -> Vec<&str> {
+        let mut modes = Vec::new();
+        for mode in self.resolution_modes() {
+            if !modes.contains(&mode) {
+                modes.push(mode);
+            }
+        }
+        modes
+    }
+
+    /// Ensure a mode exists in the registry.
+    fn ensure_mode(&mut self, mode: &str) {
         self.modes
-            .get(&self.current_mode)
-            .or_else(|| self.modes.get(DEFAULT_MODE))
+            .entry(mode.to_string())
+            .or_insert_with(InputMode::new);
+    }
+
+    /// Refresh the cached current mode name from the stack top.
+    fn refresh_current_mode(&mut self) {
+        self.current_mode = self
+            .mode_stack
+            .last()
+            .cloned()
+            .unwrap_or_else(|| DEFAULT_MODE.to_string());
+    }
+
+    /// Return active mode names in resolution order.
+    fn resolution_modes(&self) -> impl Iterator<Item = &str> {
+        self.mode_stack
+            .iter()
+            .rev()
+            .map(String::as_str)
+            .chain(iter::once(DEFAULT_MODE))
+    }
+
+    /// Resolve a binding using a supplied mode sequence.
+    fn resolve_in_modes<R>(&self, mut resolve: impl FnMut(&InputMode) -> Option<R>) -> Option<R> {
+        for mode in self.resolution_modes() {
+            if let Some(result) = self.modes.get(mode).and_then(&mut resolve) {
+                return Some(result);
+            }
+        }
+        None
     }
 
     /// Resolve a binding in the current mode.
     ///
     /// The input is normalized before matching.
     pub fn resolve(&self, path: &Path, input: &InputSpec) -> Option<BindingTarget> {
-        let m = self.active_mode()?;
-        if let Some(action) = m.resolve(path, input) {
-            return Some(action);
-        }
-        if self.current_mode != DEFAULT_MODE {
-            return self.modes.get(DEFAULT_MODE)?.resolve(path, input);
-        }
-        None
+        self.resolve_in_modes(|mode| mode.resolve(path, input))
     }
 
     /// Resolve a binding in the current mode, returning match metadata.
@@ -397,14 +456,7 @@ impl InputMap {
         path: &Path,
         input: &InputSpec,
     ) -> Option<(BindingTarget, PathMatch)> {
-        let m = self.active_mode()?;
-        if let Some(action) = m.resolve_match(path, input) {
-            return Some(action);
-        }
-        if self.current_mode != DEFAULT_MODE {
-            return self.modes.get(DEFAULT_MODE)?.resolve_match(path, input);
-        }
-        None
+        self.resolve_in_modes(|mode| mode.resolve_match(path, input))
     }
 
     /// Bind a key, within a given mode, with a given context to a list of commands.
@@ -585,6 +637,7 @@ impl InputMap {
         }
         self.modes.retain(|mode, _| mode == DEFAULT_MODE);
         self.current_mode = DEFAULT_MODE.to_string();
+        self.mode_stack.clear();
         removed
     }
 
@@ -766,6 +819,59 @@ mod tests {
             m.resolve(&"foo/bar".into(), &InputSpec::Key('a'.into()))
                 .unwrap(),
             BindingTarget::Script(a_m)
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn mode_stack_resolves_top_to_bottom_then_default() -> Result<()> {
+        let mut m = InputMap::new();
+        let e = script::ScriptHost::new();
+        let a_default = e.compile("default()")?;
+        let a_normal = e.compile("normal()")?;
+        let a_modal = e.compile("modal()")?;
+        let b_normal = e.compile("normal_b()")?;
+        let c_default = e.compile("default_c()")?;
+
+        m.bind("", InputSpec::Key('a'.into()), "", a_default)?;
+        m.bind("normal", InputSpec::Key('a'.into()), "", a_normal)?;
+        m.bind("modal", InputSpec::Key('a'.into()), "", a_modal)?;
+        m.bind("normal", InputSpec::Key('b'.into()), "", b_normal)?;
+        m.bind("", InputSpec::Key('c'.into()), "", c_default)?;
+
+        m.push_mode("normal")?;
+        m.push_mode("modal")?;
+        assert_eq!(m.current_mode(), "modal");
+        assert_eq!(m.mode_stack(), &["normal".to_string(), "modal".to_string()]);
+        assert_eq!(m.active_modes(), vec!["modal", "normal", ""]);
+        assert_eq!(
+            m.resolve(&"foo".into(), &InputSpec::Key('a'.into()))
+                .unwrap(),
+            BindingTarget::Script(a_modal)
+        );
+        assert_eq!(
+            m.resolve(&"foo".into(), &InputSpec::Key('b'.into()))
+                .unwrap(),
+            BindingTarget::Script(b_normal)
+        );
+        assert_eq!(
+            m.resolve(&"foo".into(), &InputSpec::Key('c'.into()))
+                .unwrap(),
+            BindingTarget::Script(c_default)
+        );
+
+        assert_eq!(m.pop_mode(), "normal");
+        assert_eq!(
+            m.resolve(&"foo".into(), &InputSpec::Key('a'.into()))
+                .unwrap(),
+            BindingTarget::Script(a_normal)
+        );
+        assert_eq!(m.pop_mode(), "");
+        assert_eq!(
+            m.resolve(&"foo".into(), &InputSpec::Key('a'.into()))
+                .unwrap(),
+            BindingTarget::Script(a_default)
         );
 
         Ok(())

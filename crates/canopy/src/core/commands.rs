@@ -4,6 +4,7 @@ use std::{
     fmt,
 };
 
+pub use oxau::decl;
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Map as JsonMap, Number as JsonNumber, Value as JsonValue};
 
@@ -29,6 +30,8 @@ pub enum ArgValue {
     Float(f64),
     /// String value.
     String(String),
+    /// Opaque node handle.
+    Node(NodeId),
     /// Array value.
     Array(Vec<Self>),
     /// Map value.
@@ -112,6 +115,7 @@ impl ArgValue {
             Self::UInt(_) => "UInt",
             Self::Float(_) => "Float",
             Self::String(_) => "String",
+            Self::Node(_) => "NodeId",
             Self::Array(_) => "Array",
             Self::Map(_) => "Map",
         }
@@ -119,7 +123,15 @@ impl ArgValue {
 
     /// Convert this dynamic value into JSON for external automation APIs.
     pub fn to_json_value(&self) -> Result<JsonValue, CommandError> {
-        arg_value_to_json(self.clone())
+        arg_value_to_json(self.clone(), NodeJson::Reject)
+    }
+
+    /// Convert this dynamic value into external automation JSON.
+    ///
+    /// Opaque `NodeId` values become descriptive tokens for reporting, but those
+    /// tokens are not accepted by [`ArgValue::from_json_value`].
+    pub fn to_external_json_value(&self) -> Result<JsonValue, CommandError> {
+        arg_value_to_json(self.clone(), NodeJson::Token)
     }
 
     /// Convert JSON into an `ArgValue` for external automation APIs.
@@ -224,6 +236,12 @@ impl ToArgValue for usize {
     }
 }
 
+impl ToArgValue for NodeId {
+    fn to_arg_value(self) -> ArgValue {
+        ArgValue::Node(self)
+    }
+}
+
 impl<T> ToArgValue for Option<T>
 where
     T: ToArgValue,
@@ -318,6 +336,15 @@ impl FromArgValue for String {
         match v {
             ArgValue::String(value) => Ok(value.clone()),
             other => Err(CommandError::type_mismatch("String", other)),
+        }
+    }
+}
+
+impl FromArgValue for NodeId {
+    fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {
+        match v {
+            ArgValue::Node(value) => Ok(*value),
+            other => Err(CommandError::type_mismatch("NodeId", other)),
         }
     }
 }
@@ -565,30 +592,47 @@ impl FromArgValue for () {
 /// Static Luau type metadata for values in command signatures.
 pub trait CommandType {
     /// Luau type expression for this Rust value.
-    const LUAU_TYPE: &'static str;
+    fn luau_ty() -> decl::Ty;
+
+    /// Registers declaration items needed by this type.
+    fn luau_decls(_registry: &mut DeclRegistry<'_>) {}
 }
 
 /// Marker trait for serde-backed command arguments.
 pub trait CommandArg: Serialize + DeserializeOwned + 'static {}
 
 impl CommandType for ArgValue {
-    const LUAU_TYPE: &'static str = "any";
-}
-
-impl CommandType for () {
-    const LUAU_TYPE: &'static str = "()";
+    fn luau_ty() -> decl::Ty {
+        decl::Ty::Any
+    }
 }
 
 impl CommandType for bool {
-    const LUAU_TYPE: &'static str = "boolean";
+    fn luau_ty() -> decl::Ty {
+        decl::Ty::Boolean
+    }
 }
 
 impl CommandType for String {
-    const LUAU_TYPE: &'static str = "string";
+    fn luau_ty() -> decl::Ty {
+        decl::Ty::String
+    }
 }
 
 impl CommandType for &str {
-    const LUAU_TYPE: &'static str = "string";
+    fn luau_ty() -> decl::Ty {
+        decl::Ty::String
+    }
+}
+
+impl CommandType for NodeId {
+    fn luau_ty() -> decl::Ty {
+        decl::Ty::named("NodeId")
+    }
+
+    fn luau_decls(registry: &mut DeclRegistry<'_>) {
+        registry.extern_ty("NodeId");
+    }
 }
 
 /// Implement numeric command type metadata for primitive numbers.
@@ -596,7 +640,9 @@ macro_rules! impl_number_command_type {
     ($($ty:ty),+ $(,)?) => {
         $(
             impl CommandType for $ty {
-                const LUAU_TYPE: &'static str = "number";
+                fn luau_ty() -> decl::Ty {
+                    decl::Ty::Number
+                }
             }
         )+
     };
@@ -605,105 +651,84 @@ macro_rules! impl_number_command_type {
 impl_number_command_type!(i8, i16, i32, i64, isize, u8, u16, u32, u64, usize, f32, f64);
 
 impl CommandType for Direction {
-    const LUAU_TYPE: &'static str = "\"Up\" | \"Down\" | \"Left\" | \"Right\"";
+    fn luau_ty() -> decl::Ty {
+        decl::Ty::literals(["Up", "Down", "Left", "Right"])
+    }
 }
 
-/// Implement optional command type metadata for supported command values.
-macro_rules! impl_option_command_type {
-    ($($ty:ty => $luau:literal),+ $(,)?) => {
-        $(
-            impl CommandType for Option<$ty> {
-                const LUAU_TYPE: &'static str = $luau;
-            }
-        )+
-    };
+impl<T: CommandType> CommandType for Option<T> {
+    fn luau_ty() -> decl::Ty {
+        T::luau_ty().optional()
+    }
+
+    fn luau_decls(registry: &mut DeclRegistry<'_>) {
+        T::luau_decls(registry);
+    }
 }
 
-impl_option_command_type!(
-    bool => "boolean?",
-    String => "string?",
-    i8 => "number?",
-    i16 => "number?",
-    i32 => "number?",
-    i64 => "number?",
-    isize => "number?",
-    u8 => "number?",
-    u16 => "number?",
-    u32 => "number?",
-    u64 => "number?",
-    usize => "number?",
-    f32 => "number?",
-    f64 => "number?",
-    Direction => "\"Up\" | \"Down\" | \"Left\" | \"Right\"?",
-    FocusDirection => "\"Next\" | \"Prev\" | \"Up\" | \"Down\" | \"Left\" | \"Right\"?",
-    ZoomDirection => "\"In\" | \"Out\"?",
-);
+impl<T: CommandType> CommandType for Vec<T> {
+    fn luau_ty() -> decl::Ty {
+        T::luau_ty().array()
+    }
 
-/// Implement array command type metadata for supported command values.
-macro_rules! impl_vec_command_type {
-    ($($ty:ty => $luau:literal),+ $(,)?) => {
-        $(
-            impl CommandType for Vec<$ty> {
-                const LUAU_TYPE: &'static str = $luau;
-            }
-        )+
-    };
+    fn luau_decls(registry: &mut DeclRegistry<'_>) {
+        T::luau_decls(registry);
+    }
 }
 
-impl_vec_command_type!(
-    bool => "{boolean}",
-    String => "{string}",
-    i8 => "{number}",
-    i16 => "{number}",
-    i32 => "{number}",
-    i64 => "{number}",
-    isize => "{number}",
-    u8 => "{number}",
-    u16 => "{number}",
-    u32 => "{number}",
-    u64 => "{number}",
-    usize => "{number}",
-    f32 => "{number}",
-    f64 => "{number}",
-);
+impl<T: CommandType> CommandType for BTreeMap<String, T> {
+    fn luau_ty() -> decl::Ty {
+        decl::Ty::map(decl::Ty::String, T::luau_ty())
+    }
 
-/// Implement string-keyed map command type metadata for supported command values.
-macro_rules! impl_string_map_command_type {
-    ($($ty:ty => $luau:literal),+ $(,)?) => {
-        $(
-            impl CommandType for BTreeMap<String, $ty> {
-                const LUAU_TYPE: &'static str = $luau;
-            }
-
-            impl CommandType for HashMap<String, $ty> {
-                const LUAU_TYPE: &'static str = $luau;
-            }
-        )+
-    };
+    fn luau_decls(registry: &mut DeclRegistry<'_>) {
+        T::luau_decls(registry);
+    }
 }
 
-impl_string_map_command_type!(
-    bool => "{[string]: boolean}",
-    String => "{[string]: string}",
-    i8 => "{[string]: number}",
-    i16 => "{[string]: number}",
-    i32 => "{[string]: number}",
-    i64 => "{[string]: number}",
-    isize => "{[string]: number}",
-    u8 => "{[string]: number}",
-    u16 => "{[string]: number}",
-    u32 => "{[string]: number}",
-    u64 => "{[string]: number}",
-    usize => "{[string]: number}",
-    f32 => "{[string]: number}",
-    f64 => "{[string]: number}",
-);
+impl<T: CommandType> CommandType for HashMap<String, T> {
+    fn luau_ty() -> decl::Ty {
+        decl::Ty::map(decl::Ty::String, T::luau_ty())
+    }
+
+    fn luau_decls(registry: &mut DeclRegistry<'_>) {
+        T::luau_decls(registry);
+    }
+}
+
+/// Registry for declaration items required by command argument and return types.
+pub struct DeclRegistry<'a> {
+    /// Underlying declaration builder.
+    builder: &'a mut decl::DeclBuilder,
+}
+
+impl<'a> DeclRegistry<'a> {
+    /// Wrap a declaration builder.
+    pub fn new(builder: &'a mut decl::DeclBuilder) -> Self {
+        Self { builder }
+    }
+
+    /// Registers an alias declaration.
+    pub fn alias(&mut self, alias: decl::Alias) {
+        self.builder.alias(alias);
+    }
+
+    /// Registers a class declaration.
+    pub fn class(&mut self, class: decl::Class) {
+        self.builder.class(class);
+    }
+
+    /// Registers an external type name.
+    pub fn extern_ty(&mut self, name: impl Into<decl::Name>) {
+        self.builder.extern_ty(name);
+    }
+}
 
 /// Wrapper for fallible serde argument conversion.
 pub struct SerdeArg<T>(pub T);
 
 /// Convert ArgValue into a JSON value for serde interop.
-fn arg_value_to_json(value: ArgValue) -> Result<JsonValue, CommandError> {
+fn arg_value_to_json(value: ArgValue, node_json: NodeJson) -> Result<JsonValue, CommandError> {
     Ok(match value {
         ArgValue::Null => JsonValue::Null,
         ArgValue::Bool(value) => JsonValue::Bool(value),
@@ -716,20 +741,40 @@ fn arg_value_to_json(value: ArgValue) -> Result<JsonValue, CommandError> {
             JsonValue::Number(num)
         }
         ArgValue::String(value) => JsonValue::String(value),
+        ArgValue::Node(id) => match node_json {
+            NodeJson::Reject => {
+                return Err(CommandError::conversion(
+                    "NodeId is not representable as JSON",
+                ));
+            }
+            NodeJson::Token => JsonValue::Object(JsonMap::from_iter([
+                ("type".to_string(), JsonValue::String("NodeId".to_string())),
+                ("token".to_string(), JsonValue::String(format!("{id:?}"))),
+            ])),
+        },
         ArgValue::Array(values) => JsonValue::Array(
             values
                 .into_iter()
-                .map(arg_value_to_json)
+                .map(|value| arg_value_to_json(value, node_json))
                 .collect::<Result<Vec<_>, _>>()?,
         ),
         ArgValue::Map(values) => {
             let mut map = JsonMap::new();
             for (key, value) in values {
-                map.insert(key, arg_value_to_json(value)?);
+                map.insert(key, arg_value_to_json(value, node_json)?);
             }
             JsonValue::Object(map)
         }
     })
+}
+
+/// Node-handle rendering mode for JSON conversion.
+#[derive(Clone, Copy)]
+enum NodeJson {
+    /// Reject node handles for serde-compatible conversion.
+    Reject,
+    /// Render node handles as opaque reporting tokens.
+    Token,
 }
 
 /// Convert a JSON value into ArgValue for serde interop.
@@ -806,7 +851,7 @@ where
     T: CommandArg,
 {
     fn from_arg_value(v: &ArgValue) -> Result<Self, CommandError> {
-        let json = arg_value_to_json(v.clone())?;
+        let json = arg_value_to_json(v.clone(), NodeJson::Reject)?;
         serde_json::from_value(json).map_err(|err| CommandError::conversion(err.to_string()))
     }
 }
@@ -957,15 +1002,37 @@ pub enum CommandParamKind {
 }
 
 /// Static metadata for a type in command signatures.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug)]
 pub struct CommandTypeSpec {
     /// Rust type name for introspection.
     pub rust: &'static str,
-    /// Optional Luau type override.
-    pub luau: Option<&'static str>,
+    /// Luau type expression factory.
+    pub ty: fn() -> decl::Ty,
+    /// Declaration dependency registration function.
+    pub decls: for<'a> fn(&mut DeclRegistry<'a>),
     /// Optional documentation string.
     pub doc: Option<&'static str>,
 }
+
+impl CommandTypeSpec {
+    /// Returns the Luau type expression.
+    pub fn luau_ty(self) -> decl::Ty {
+        (self.ty)()
+    }
+
+    /// Registers declaration dependencies for this type.
+    pub fn luau_decls(self, registry: &mut DeclRegistry<'_>) {
+        (self.decls)(registry);
+    }
+}
+
+impl PartialEq for CommandTypeSpec {
+    fn eq(&self, other: &Self) -> bool {
+        self.rust == other.rust && self.doc == other.doc && self.luau_ty() == other.luau_ty()
+    }
+}
+
+impl Eq for CommandTypeSpec {}
 
 /// Static metadata for a command parameter.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1100,35 +1167,8 @@ impl<'a> CommandResolver<'a> {
         }
     }
 
-    /// Resolve an invocation by looking up its command specification.
-    pub fn resolve_invocation(
-        &self,
-        inv: &CommandInvocation,
-    ) -> Result<Option<CommandResolution>, CommandError> {
-        let spec =
-            self.core
-                .commands
-                .get(inv.id.0)
-                .ok_or_else(|| CommandError::UnknownCommand {
-                    id: inv.id.0.to_string(),
-                })?;
-        Ok(self.resolve(spec))
-    }
-
-    /// Return availability for every registered command.
-    pub fn availability(&self) -> Vec<CommandAvailability<'a>> {
-        self.core
-            .commands
-            .iter()
-            .map(|(_, spec)| CommandAvailability {
-                spec,
-                resolution: self.resolve(spec),
-            })
-            .collect()
-    }
-
-    /// Resolve a node owner with subtree targets preferred over ancestors.
-    fn resolve_owner(&self, owner: &'static str) -> Option<CommandResolution> {
+    /// Resolve a node-owner name with subtree targets preferred over ancestors.
+    pub fn resolve_owner(&self, owner: &str) -> Option<CommandResolution> {
         if !self.core.nodes.contains_key(self.start) {
             return None;
         }
@@ -1154,6 +1194,33 @@ impl<'a> CommandResolver<'a> {
         }
 
         None
+    }
+
+    /// Resolve an invocation by looking up its command specification.
+    pub fn resolve_invocation(
+        &self,
+        inv: &CommandInvocation,
+    ) -> Result<Option<CommandResolution>, CommandError> {
+        let spec =
+            self.core
+                .commands
+                .get(inv.id.0)
+                .ok_or_else(|| CommandError::UnknownCommand {
+                    id: inv.id.0.to_string(),
+                })?;
+        Ok(self.resolve(spec))
+    }
+
+    /// Return availability for every registered command.
+    pub fn availability(&self) -> Vec<CommandAvailability<'a>> {
+        self.core
+            .commands
+            .iter()
+            .map(|(_, spec)| CommandAvailability {
+                spec,
+                resolution: self.resolve(spec),
+            })
+            .collect()
     }
 }
 
@@ -1318,6 +1385,13 @@ pub enum CommandError {
         id: String,
         /// Expected owner node name.
         owner: String,
+    },
+
+    /// A node handle no longer points at a live node.
+    #[error("node handle is no longer valid: {id:?}")]
+    InvalidNode {
+        /// Stale node id.
+        id: NodeId,
     },
 
     /// Incorrect number of arguments.
@@ -1578,6 +1652,8 @@ pub fn dispatch(
             id: inv.id.0.to_string(),
         })?;
 
+    validate_node_args(core, &inv.args)?;
+
     let resolution = CommandResolver::new(core, current_id).resolve(spec);
 
     match resolution {
@@ -1610,6 +1686,45 @@ fn dispatch_on_node(
         (spec.invoke)(Some(widget as &mut dyn Any), &mut ctx, inv)
     })
     .map_err(|err| CommandError::Exec(err.into()))?
+}
+
+/// Validate every node handle carried by an invocation before command code sees it.
+fn validate_node_args(core: &Core, args: &CommandArgs) -> Result<(), CommandError> {
+    match args {
+        CommandArgs::Positional(values) => {
+            for value in values {
+                validate_node_arg(core, value)?;
+            }
+        }
+        CommandArgs::Named(values) => {
+            for value in values.values() {
+                validate_node_arg(core, value)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Validate every node handle reachable from a dynamic argument value.
+fn validate_node_arg(core: &Core, value: &ArgValue) -> Result<(), CommandError> {
+    match value {
+        ArgValue::Node(id) if !core.nodes.contains_key(*id) => {
+            Err(CommandError::InvalidNode { id: *id })
+        }
+        ArgValue::Array(values) => {
+            for value in values {
+                validate_node_arg(core, value)?;
+            }
+            Ok(())
+        }
+        ArgValue::Map(values) => {
+            for value in values.values() {
+                validate_node_arg(core, value)?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
 }
 
 /// Convenience macro for building named arguments.
@@ -1687,9 +1802,20 @@ mod tests {
     #[test]
     fn uint_arg_round_trip() {
         let value = ArgValue::UInt(u64::MAX);
-        let json = arg_value_to_json(value.clone()).unwrap();
+        let json = value.to_json_value().unwrap();
         let out = json_to_arg_value(json).unwrap();
         assert_eq!(out, value);
+    }
+
+    #[test]
+    fn node_arg_json_requires_external_mode() {
+        let value = ArgValue::Node(NodeId::default());
+
+        assert!(value.to_json_value().is_err());
+
+        let json = value.to_external_json_value().unwrap();
+        assert_eq!(json["type"], JsonValue::String("NodeId".to_string()));
+        assert!(json["token"].is_string());
     }
 
     #[test]

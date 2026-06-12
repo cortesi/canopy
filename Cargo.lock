@@ -3468,6 +3468,7 @@ dependencies = [
  "oxau-analysis",
  "oxau-ast",
  "oxau-bytecode",
+ "oxau-decl",
  "oxau-fsresolver",
  "oxau-pretty",
  "oxau-source",
@@ -3505,6 +3506,10 @@ dependencies = [
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "oxau-decl"
+version = "0.1.0"
 
 [[package]]
 name = "oxau-fsresolver"
@@ -3550,6 +3555,7 @@ dependencies = [
  "blake3",
  "foldhash 0.2.0",
  "oxau-bytecode",
+ "oxau-decl",
  "oxau-source",
  "oxau-vm-api",
  "serde",
@@ -3562,6 +3568,7 @@ dependencies = [
 name = "oxau-vm-api"
 version = "0.1.0"
 dependencies = [
+ "oxau-decl",
  "serde",
 ]
 

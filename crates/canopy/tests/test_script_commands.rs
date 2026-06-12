@@ -12,8 +12,10 @@ mod tests {
     };
     use serde::{Deserialize, Serialize};
 
+    /// Payload used to prove structural command argument declarations.
     #[derive(Debug, Clone, Serialize, Deserialize, CommandArg)]
     struct Payload {
+        /// Count carried through serde conversion.
         count: usize,
     }
 
@@ -113,8 +115,110 @@ mod tests {
             assert_eq!(target.payload_value, 4);
         });
 
-        let err = harness.script(r#"canopy.cmd("script_target::set", { foo = 11 })"#);
-        assert!(matches!(err, Err(Error::Script(_))));
+        let err = harness
+            .script(r#"canopy.cmd("script_target::set", { foo = 11 })"#)
+            .expect_err("unknown named args are structured script errors");
+        let Error::ScriptStructured { kind, command, .. } = err else {
+            panic!("expected structured script error, got {err:?}");
+        };
+        assert_eq!(kind, "type_mismatch");
+        assert_eq!(command, None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn command_discovery_reports_contract_and_availability() -> Result<()> {
+        let mut harness = Harness::builder(ScriptTarget::new()).size(10, 1).build()?;
+
+        let command = harness.canopy.eval_script_value(
+            r#"
+            local found: any = nil
+            for _, command in ipairs(canopy.commands()) do
+                if command.name == "set" then
+                    found = command
+                end
+            end
+            return found
+            "#,
+        )?;
+        let ArgValue::Map(command) = command else {
+            panic!("command metadata is a record");
+        };
+        assert_eq!(
+            command.get("ret"),
+            Some(&ArgValue::String("()".to_string()))
+        );
+        assert_eq!(command.get("available"), Some(&ArgValue::Bool(true)));
+        assert!(matches!(command.get("target"), Some(ArgValue::Node(_))));
+
+        let resolved = harness
+            .canopy
+            .eval_script_value(r#"return canopy.resolve("script_target") ~= nil"#)?;
+        assert_eq!(resolved, ArgValue::Bool(true));
+
+        let forged_node = harness.canopy.eval_script_value(
+            r#"
+            local forged: any = 1
+            local ok, err = pcall(function()
+                canopy.node_info(forged)
+            end)
+            local detail: any = err
+            return { ok = ok, kind = detail.kind, expected = detail.expected }
+            "#,
+        )?;
+        let ArgValue::Map(forged_node) = forged_node else {
+            panic!("structured node error is a record");
+        };
+        assert_eq!(forged_node.get("ok"), Some(&ArgValue::Bool(false)));
+        assert_eq!(
+            forged_node.get("kind"),
+            Some(&ArgValue::String("type_mismatch".to_string()))
+        );
+        assert_eq!(
+            forged_node.get("expected"),
+            Some(&ArgValue::String("NodeId".to_string()))
+        );
+
+        let error = harness.canopy.eval_script_value(
+            r#"
+            local ok, err = pcall(function()
+                canopy.cmd("missing::command")
+            end)
+            local detail: any = err
+            return { ok = ok, kind = detail.kind, command = detail.command }
+            "#,
+        )?;
+        let ArgValue::Map(error) = error else {
+            panic!("structured error is a record");
+        };
+        assert_eq!(error.get("ok"), Some(&ArgValue::Bool(false)));
+        assert_eq!(
+            error.get("kind"),
+            Some(&ArgValue::String("unknown_command".to_string()))
+        );
+        assert_eq!(
+            error.get("command"),
+            Some(&ArgValue::String("missing::command".to_string()))
+        );
+
+        let payload_param = harness.canopy.eval_script_value(
+            r#"
+            for _, command in ipairs(canopy.commands()) do
+                if command.name == "set_payload" then
+                    return command.params[1]
+                end
+            end
+            error("missing command")
+            "#,
+        )?;
+        let ArgValue::Map(payload_param) = payload_param else {
+            panic!("parameter metadata is a record");
+        };
+        assert_eq!(
+            payload_param.get("luau_type"),
+            Some(&ArgValue::String("Payload".to_string()))
+        );
 
         Ok(())
     }

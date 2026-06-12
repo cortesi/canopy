@@ -69,6 +69,8 @@ mod tests {
         }
 
         #[command]
+        /// Return a string.
+        /// @return The generated string.
         fn naked_str(&mut self, _core: &mut dyn canopy::Context) -> String {
             self.naked_str_triggered = true;
             "".into()
@@ -154,7 +156,8 @@ mod tests {
         let cmd_str = Foo::cmd_naked_str();
         assert!(matches!(
             cmd_str.ret,
-            CommandReturnSpec::Value(spec) if spec.rust == "String"
+            CommandReturnSpec::Value(spec)
+                if spec.rust == "String" && spec.doc == Some("The generated string.")
         ));
 
         let cmd_result = Foo::cmd_result_str();

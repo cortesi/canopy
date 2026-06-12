@@ -2,11 +2,20 @@
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        process,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
     use canopy::{
         Canopy, Context, EventOutcome, Loader, NodeId, ReadContext, Widget, command,
+        commands::ArgValue,
         derive_commands,
         error::Result,
         event::{Event, mouse},
+        geom::Line,
         layout::Layout,
         render::Render,
         testing::harness::Harness,
@@ -34,7 +43,8 @@ mod tests {
     }
 
     impl Widget for ApiLeaf {
-        fn render(&mut self, _frame: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+        fn render(&mut self, frame: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+            frame.text("default", Line::new(0, 0, 8), &self.value.to_string())?;
             Ok(())
         }
 
@@ -106,6 +116,34 @@ mod tests {
             .into_iter()
             .map(|node| harness.with_widget::<ApiLeaf, _>(node, |leaf| leaf.value))
             .collect()
+    }
+
+    fn test_dir(name: &str) -> PathBuf {
+        let started = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock is before the Unix epoch");
+        let dir = PathBuf::from("tmp").join(format!(
+            "canopy-script-framework-{name}-{}-{}",
+            process::id(),
+            started.as_nanos()
+        ));
+        fs::create_dir_all(&dir).expect("create test directory");
+        dir
+    }
+
+    fn write_script(path: &Path, source: &str) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create script parent");
+        }
+        fs::write(path, source).expect("write script");
+    }
+
+    fn raw_canopy_with_leaf() -> Result<Canopy> {
+        let mut canopy = Canopy::new();
+        ApiLeaf::load(&mut canopy)?;
+        let leaf = canopy.create_detached(ApiLeaf::new());
+        canopy.set_root_child(leaf)?;
+        Ok(canopy)
     }
 
     #[test]
@@ -278,10 +316,196 @@ mod tests {
             r#"
             canopy.set_mode("insert")
             canopy.assert(canopy.input_mode() == "insert", "mode should switch")
+            canopy.push_mode("palette")
+            canopy.assert(canopy.input_mode() == "palette", "push should activate top mode")
+            canopy.assert(canopy.pop_mode() == "insert", "pop should restore previous mode")
+            canopy.assert(canopy.pop_mode() == "", "pop should return to default mode")
         "#,
         )?;
 
-        assert_eq!(harness.canopy.input_mode(), "insert");
+        assert_eq!(harness.canopy.input_mode(), "");
+        Ok(())
+    }
+
+    #[test]
+    fn luau_observation_helpers_expose_runtime_state() -> Result<()> {
+        let mut harness = Harness::builder(ApiRoot).size(20, 5).build()?;
+        harness.render()?;
+
+        harness.canopy.eval_script(
+            r##"
+            canopy.send_key("x")
+
+            local cells = canopy.screen_cells()
+            canopy.assert(#cells > 0, "screen cells should include rows")
+            canopy.assert(cells[1][1].fg:sub(1, 1) == "#", "cell fg should be RGB text")
+
+            local region = canopy.screen_region(0, 0, 8, 1)
+            canopy.assert(type(region) == "string", "screen region should be text")
+
+            local leaves = canopy.find_nodes("api_root/api_leaf")
+            canopy.assert(canopy.node_region(leaves[1]):find("0") ~= nil, "node region should crop text")
+
+            local trace = canopy.route_trace()
+            canopy.assert(#trace > 0, "route trace should record the injected key")
+
+            local dump = canopy.diagnostic_dump(leaves[1])
+            canopy.assert(dump:find("node tree") ~= nil, "diagnostic dump should include the tree")
+
+            local help = canopy.help_snapshot()
+            canopy.assert(help.focus ~= nil, "help snapshot should include focus")
+            canopy.assert(#help.commands > 0, "help snapshot should include commands")
+
+            local api = canopy.api()
+            canopy.assert(api:find("declare canopy") ~= nil, "api text should be script-visible")
+        "##,
+        )?;
+
+        assert_eq!(harness.canopy.script_journal().len(), 1);
+        harness.canopy.eval_script(
+            r#"
+            local journal = canopy.script_journal()
+            canopy.assert(#journal == 1, "previous eval should be journaled")
+            canopy.assert(journal[1].ok, "previous eval should have succeeded")
+            canopy.assert(#journal[1].assertions > 0, "journal should preserve assertions")
+        "#,
+        )?;
+        assert_eq!(harness.canopy.script_journal().len(), 2);
+
+        Ok(())
+    }
+
+    #[test]
+    fn startup_scripts_layer_app_user_and_project_modules() -> Result<()> {
+        let root = test_dir("startup");
+        let user_root = root.join("user");
+        let project_root = root.join("work/.canopy");
+        write_script(
+            &user_root.join("keymap.luau"),
+            r#"
+            local M = {}
+            function M.apply()
+                api_leaf.set(api_leaf.get() + 2)
+            end
+            return M
+        "#,
+        );
+        write_script(
+            &user_root.join("keymap.d.luau"),
+            r#"
+            declare module: {
+                apply: () -> (),
+            }
+        "#,
+        );
+        write_script(
+            &user_root.join("init.luau"),
+            r#"
+            local keymap = require("@user/keymap")
+            keymap.apply()
+        "#,
+        );
+        write_script(
+            &project_root.join("project.luau"),
+            r#"
+            local M = {}
+            function M.apply()
+                api_leaf.set(api_leaf.get() + 30)
+            end
+            return M
+        "#,
+        );
+        write_script(
+            &project_root.join("project.d.luau"),
+            r#"
+            declare module: {
+                apply: () -> (),
+            }
+        "#,
+        );
+        write_script(
+            &project_root.join("init.luau"),
+            r#"
+            local project = require("@project/project")
+            project.apply()
+        "#,
+        );
+
+        let mut canopy = raw_canopy_with_leaf()?;
+        canopy.set_user_script_root(&user_root)?;
+        canopy.set_project_script_root(&project_root)?;
+        canopy.register_startup_script("app", "api_leaf.set(1)")?;
+
+        assert_eq!(canopy.run_startup_scripts()?, 3);
+        assert_eq!(
+            canopy.eval_script_value("return api_leaf.get()")?,
+            ArgValue::Int(33)
+        );
+        assert_eq!(canopy.run_startup_scripts()?, 0);
+
+        let _removed = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn script_module_declarations_must_conform() -> Result<()> {
+        let root = test_dir("conformance");
+        let project_root = root.join("work/.canopy");
+        write_script(
+            &project_root.join("settings.luau"),
+            r#"
+            return { value = "wrong" }
+        "#,
+        );
+        write_script(
+            &project_root.join("settings.d.luau"),
+            r#"
+            declare module: {
+                value: number,
+            }
+        "#,
+        );
+
+        let mut canopy = raw_canopy_with_leaf()?;
+        canopy.set_project_script_root(&project_root)?;
+        let err = canopy
+            .finalize_api()
+            .expect_err("mismatched declaration should fail finalization");
+        assert!(err.to_string().contains("settings.d.luau"));
+
+        let _removed = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn run_config_loads_named_files_with_relative_requires() -> Result<()> {
+        let root = test_dir("config");
+        let project_root = root.join("work/.canopy");
+        write_script(
+            &project_root.join("lib.luau"),
+            r#"
+            return { value = 44 }
+        "#,
+        );
+        let config = project_root.join("main.luau");
+        write_script(
+            &config,
+            r#"
+            local lib = require("./lib")
+            api_leaf.set(lib.value)
+        "#,
+        );
+
+        let mut canopy = raw_canopy_with_leaf()?;
+        canopy.set_project_script_root(&project_root)?;
+        canopy.run_config(&config)?;
+
+        assert_eq!(
+            canopy.eval_script_value("return api_leaf.get()")?,
+            ArgValue::Int(44)
+        );
+
+        let _removed = fs::remove_dir_all(root);
         Ok(())
     }
 }

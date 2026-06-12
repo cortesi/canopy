@@ -36,16 +36,18 @@ impl ParamMeta {
 
     /// Render command metadata for this parameter when it is externally visible.
     fn spec_tokens(&self) -> Option<proc_macro2::TokenStream> {
-        let (kind_tokens, luau_tokens) = match self.kind {
+        let (kind_tokens, ty_tokens, decls_tokens) = match self.kind {
             ParamKind::Injected => (
                 quote! { canopy::commands::CommandParamKind::Injected },
-                quote! { None },
+                quote! { <canopy::commands::ArgValue as canopy::commands::CommandType>::luau_ty },
+                quote! { <canopy::commands::ArgValue as canopy::commands::CommandType>::luau_decls },
             ),
             ParamKind::User => {
                 let ty = &self.ty;
                 (
                     quote! { canopy::commands::CommandParamKind::User },
-                    quote! { Some(<#ty as canopy::commands::CommandType>::LUAU_TYPE) },
+                    quote! { <#ty as canopy::commands::CommandType>::luau_ty },
+                    quote! { <#ty as canopy::commands::CommandType>::luau_decls },
                 )
             }
             ParamKind::Context { .. } => return None,
@@ -72,8 +74,9 @@ impl ParamMeta {
                 doc: #doc,
                 ty: canopy::commands::CommandTypeSpec {
                     rust: #ty,
-                    luau: #luau_tokens,
-                    doc: None,
+                    ty: #ty_tokens,
+                    decls: #decls_tokens,
+                    doc: #doc,
                 },
                 optional: #optional,
                 default: #default,
@@ -192,12 +195,20 @@ impl ReturnMeta {
             ReturnKind::Unit => quote! { canopy::commands::CommandReturnSpec::Unit },
             ReturnKind::Value { ty, ty_str } => {
                 let ty_lit = syn::LitStr::new(ty_str, proc_macro2::Span::call_site());
+                let doc = self.doc.as_ref().map_or_else(
+                    || quote! { None },
+                    |doc| {
+                        let doc = syn::LitStr::new(doc, proc_macro2::Span::call_site());
+                        quote! { Some(#doc) }
+                    },
+                );
                 quote! {
                     canopy::commands::CommandReturnSpec::Value(
                         canopy::commands::CommandTypeSpec {
                             rust: #ty_lit,
-                            luau: Some(<#ty as canopy::commands::CommandType>::LUAU_TYPE),
-                            doc: None,
+                            ty: <#ty as canopy::commands::CommandType>::luau_ty,
+                            decls: <#ty as canopy::commands::CommandType>::luau_decls,
+                            doc: #doc,
                         }
                     )
                 }

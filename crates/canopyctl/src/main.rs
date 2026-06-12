@@ -12,7 +12,9 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow, bail};
-use canopy_mcp::{ApplyFixtureRequest, ScriptEvalOutcome, ScriptEvalRequest};
+use canopy_mcp::{
+    ApplyFixtureRequest, BootstrapResponse, ScriptAssertion, ScriptEvalOutcome, ScriptEvalRequest,
+};
 use clap::{Args, Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use tmcp::{Client, ToolError, ToolResult, mcp_server, schema::CallToolResult, tool, tool_params};
@@ -46,11 +48,17 @@ enum Commands {
     Mcp,
     /// Execute a Luau smoke suite through the headless MCP server.
     Smoke(SmokeArgs),
+    /// Replay a recorded script journal through a headless app instance.
+    Replay(ReplayArgs),
+    /// Print MCP bootstrap information from a headless app instance.
+    Bootstrap(SpawnArgs),
     /// List registered fixtures from a headless app instance.
     Fixtures(SpawnArgs),
     /// Evaluate one Luau script against a headless app instance.
+    #[command(alias = "script-eval")]
     Eval(EvalArgs),
     /// Print the rendered `.d.luau` API from a headless app instance.
+    #[command(alias = "script-api")]
     Api(SpawnArgs),
 }
 
@@ -92,6 +100,28 @@ struct SmokeArgs {
     command: Vec<String>,
 }
 
+/// Arguments for `canopyctl replay`.
+#[derive(Args)]
+struct ReplayArgs {
+    /// Path to a JSON replay journal.
+    journal: PathBuf,
+    /// Optional fixture to apply before each replayed entry.
+    #[arg(long)]
+    fixture: Option<String>,
+    /// Stop after the first failing replay entry.
+    #[arg(long)]
+    fail_fast: bool,
+    /// Replay entries that originally failed.
+    #[arg(long)]
+    include_failed: bool,
+    /// Optional per-entry timeout override in milliseconds.
+    #[arg(long)]
+    timeout_ms: Option<u64>,
+    /// Command override passed after `--`.
+    #[arg(last = true)]
+    command: Vec<String>,
+}
+
 /// Arguments for `canopyctl eval`.
 #[derive(Args)]
 struct EvalArgs {
@@ -106,6 +136,9 @@ struct EvalArgs {
     /// Optional evaluation timeout override in milliseconds.
     #[arg(long)]
     timeout_ms: Option<u64>,
+    /// Write a replay journal containing this evaluation.
+    #[arg(long)]
+    journal_out: Option<PathBuf>,
     /// Command override passed after `--`.
     #[arg(last = true)]
     command: Vec<String>,
@@ -362,6 +395,85 @@ impl From<ScriptEvalRequest> for EvalRequestPayload {
     }
 }
 
+/// JSON replay journal accepted by `canopyctl replay`.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct ReplayJournal {
+    /// Recorded script evaluations.
+    journal: Vec<ReplayEntry>,
+}
+
+/// One replayable script evaluation.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct ReplayEntry {
+    /// Optional monotonic source journal id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    id: Option<u64>,
+    /// Script origin such as `eval` or `startup:app`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    origin: Option<String>,
+    /// Evaluated Luau source text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    source: Option<String>,
+    /// Alternate source field accepted for hand-written replay files.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    script: Option<String>,
+    /// Whether the original evaluation completed successfully.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ok: Option<bool>,
+    /// Error message from the original evaluation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+    /// Logs emitted by the original evaluation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    logs: Vec<String>,
+    /// Assertions emitted by the original evaluation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    assertions: Vec<ScriptAssertion>,
+    /// Original wall-clock duration in milliseconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    duration_ms: Option<u64>,
+}
+
+impl ReplayEntry {
+    /// Return a stable human-readable origin.
+    fn origin(&self) -> &str {
+        self.origin.as_deref().unwrap_or("journal")
+    }
+
+    /// Return the script source for this replay entry.
+    fn source(&self) -> Result<&str> {
+        self.source
+            .as_deref()
+            .or(self.script.as_deref())
+            .ok_or_else(|| {
+                anyhow!(
+                    "replay entry from {} has no source/script field",
+                    self.origin()
+                )
+            })
+    }
+}
+
+/// Accepted top-level JSON shapes for replay journals.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+enum ReplayInput {
+    /// Object form emitted by `canopyctl eval --journal-out`.
+    Object(ReplayJournal),
+    /// Bare array accepted for simple hand-authored replays.
+    Entries(Vec<ReplayEntry>),
+}
+
+impl ReplayInput {
+    /// Convert into replay entries.
+    fn into_entries(self) -> Vec<ReplayEntry> {
+        match self {
+            Self::Object(journal) => journal.journal,
+            Self::Entries(entries) => entries,
+        }
+    }
+}
+
 /// One discovered smoke script together with its derived fixture.
 #[derive(Debug)]
 struct SmokeScript {
@@ -451,6 +563,11 @@ impl Session {
             .ok_or_else(|| anyhow!("script_api returned no text"))
     }
 
+    /// Request bootstrap information.
+    async fn bootstrap(&self) -> Result<BootstrapResponse> {
+        Ok(self.client.call_tool_structured("bootstrap", ()).await?)
+    }
+
     /// Request the fixture catalog.
     async fn fixtures(&self) -> Result<Vec<FixtureInfo>> {
         Ok(self.client.call_tool_structured("fixtures", ()).await?)
@@ -527,6 +644,16 @@ impl SessionManager {
             .as_mut()
             .ok_or_else(|| anyhow!("session missing after initialization"))?;
         session.api().await
+    }
+
+    /// Request bootstrap information on the active session, auto-spawning headless if needed.
+    async fn bootstrap(&self) -> Result<BootstrapResponse> {
+        self.ensure_headless_if_missing().await?;
+        let mut state = self.state.lock().await;
+        let session = state
+            .as_mut()
+            .ok_or_else(|| anyhow!("session missing after initialization"))?;
+        session.bootstrap().await
     }
 
     /// Request the fixture catalog on the active session, auto-spawning headless if needed.
@@ -618,6 +745,25 @@ impl CanopyctlMcpServer {
     }
 
     #[tool]
+    /// Evaluate a script on the active session.
+    async fn script_eval(&self, params: ScriptEvalRequest) -> ToolResult<CallToolResult> {
+        self.touch().await;
+        let outcome = self.sessions.eval(params).await.map_err(tool_error)?;
+        Ok(outcome.to_tool_result())
+    }
+
+    #[tool]
+    /// Return bootstrap information for the active session.
+    async fn bootstrap(&self) -> ToolResult<CallToolResult> {
+        self.touch().await;
+        let bootstrap = self.sessions.bootstrap().await.map_err(tool_error)?;
+        let value = serde_json::to_value(bootstrap).map_err(tool_error)?;
+        Ok(CallToolResult::new()
+            .with_structured_content(value.clone())
+            .with_text_content(value.to_string()))
+    }
+
+    #[tool]
     /// Apply a fixture to the active session.
     async fn apply_fixture(&self, params: ApplyFixtureRequest) -> ToolResult<CallToolResult> {
         self.touch().await;
@@ -634,6 +780,14 @@ impl CanopyctlMcpServer {
     #[tool]
     /// Return the rendered `.d.luau` API for the active session.
     async fn api(&self) -> ToolResult<CallToolResult> {
+        self.touch().await;
+        let api = self.sessions.api().await.map_err(tool_error)?;
+        Ok(CallToolResult::new().with_text_content(api))
+    }
+
+    #[tool]
+    /// Return the rendered `.d.luau` API for the active session.
+    async fn script_api(&self) -> ToolResult<CallToolResult> {
         self.touch().await;
         let api = self.sessions.api().await.map_err(tool_error)?;
         Ok(CallToolResult::new().with_text_content(api))
@@ -660,6 +814,8 @@ async fn main() -> Result<()> {
         Commands::Run(args) => run_command(config, args).await,
         Commands::Mcp => mcp_command(config).await,
         Commands::Smoke(args) => smoke_command(config, args).await,
+        Commands::Replay(args) => replay_command(config, args).await,
+        Commands::Bootstrap(args) => bootstrap_command(config, args).await,
         Commands::Fixtures(args) => fixtures_command(config, args).await,
         Commands::Eval(args) => eval_command(config, args).await,
         Commands::Api(args) => api_command(config, args).await,
@@ -734,6 +890,61 @@ async fn smoke_command(config: LoadedConfig, args: SmokeArgs) -> Result<()> {
     Ok(())
 }
 
+/// Execute `canopyctl replay`.
+async fn replay_command(config: LoadedConfig, args: ReplayArgs) -> Result<()> {
+    let command = config.headless_command(&args.command)?;
+    let session = Session::spawn_headless(&command).await?;
+    let journal = load_replay_journal(&args.journal)?;
+    let mut failed = 0usize;
+    let mut skipped = 0usize;
+
+    for (index, entry) in journal.into_iter().enumerate() {
+        let replay_id = index + 1;
+        if entry.ok == Some(false) && !args.include_failed {
+            skipped += 1;
+            println!(
+                "SKIP replay#{replay_id} origin={} (originally failed)",
+                entry.origin()
+            );
+            continue;
+        }
+        let script = entry.source()?;
+        let outcome = session
+            .eval(ScriptEvalRequest {
+                script: script.to_string(),
+                fixture: args.fixture.clone(),
+                timeout_ms: args.timeout_ms,
+            })
+            .await?;
+        if outcome.success {
+            println!("PASS replay#{replay_id} origin={}", entry.origin());
+        } else {
+            failed += 1;
+            println!("FAIL replay#{replay_id} origin={}", entry.origin());
+            if let Some(error) = outcome.error {
+                println!("  {}", error.message);
+            }
+            if args.fail_fast {
+                break;
+            }
+        }
+    }
+
+    if failed > 0 {
+        bail!("{failed} replay entries failed; {skipped} skipped");
+    }
+    Ok(())
+}
+
+/// Execute `canopyctl bootstrap`.
+async fn bootstrap_command(config: LoadedConfig, args: SpawnArgs) -> Result<()> {
+    let command = config.headless_command(&args.command)?;
+    let session = Session::spawn_headless(&command).await?;
+    let bootstrap = session.bootstrap().await?;
+    println!("{}", serde_json::to_string_pretty(&bootstrap)?);
+    Ok(())
+}
+
 /// Format a smoke script path relative to the suite root and fixture.
 fn smoke_test_name(suite_dir: &Path, script_path: &Path) -> String {
     let relative = script_path
@@ -772,12 +983,15 @@ async fn eval_command(config: LoadedConfig, args: EvalArgs) -> Result<()> {
     let script = read_eval_script(args.file.as_deref(), args.script.as_deref())?;
     let outcome = session
         .eval(ScriptEvalRequest {
-            script,
+            script: script.clone(),
             fixture: args.fixture,
             timeout_ms: args.timeout_ms,
         })
         .await?;
     println!("{}", serde_json::to_string_pretty(&outcome)?);
+    if let Some(path) = args.journal_out {
+        write_replay_journal(&path, replay_entry_from_eval(script, &outcome))?;
+    }
     if !outcome.success {
         exit(1);
     }
@@ -937,6 +1151,43 @@ fn read_eval_script(file: Option<&Path>, inline: Option<&str>) -> Result<String>
     }
 }
 
+/// Load replay entries from a journal file.
+fn load_replay_journal(path: &Path) -> Result<Vec<ReplayEntry>> {
+    let contents = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+    Ok(serde_json::from_str::<ReplayInput>(&contents)
+        .with_context(|| format!("parse {}", path.display()))?
+        .into_entries())
+}
+
+/// Write a single-entry replay journal.
+fn write_replay_journal(path: &Path, entry: ReplayEntry) -> Result<()> {
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    }
+    let journal = ReplayJournal {
+        journal: vec![entry],
+    };
+    let encoded = serde_json::to_string_pretty(&journal)?;
+    fs::write(path, encoded).with_context(|| format!("write {}", path.display()))
+}
+
+/// Build a replay entry from an eval outcome and original source.
+fn replay_entry_from_eval(source: String, outcome: &ScriptEvalOutcome) -> ReplayEntry {
+    ReplayEntry {
+        id: None,
+        origin: Some("canopyctl eval".to_string()),
+        source: Some(source),
+        script: None,
+        ok: Some(outcome.success),
+        error: outcome.error.as_ref().map(|error| error.message.clone()),
+        logs: outcome.logs.clone(),
+        assertions: outcome.assertions.clone(),
+        duration_ms: Some(outcome.timing.total_ms),
+    }
+}
+
 /// Convert an arbitrary error into a tmcp tool error.
 fn tool_error(error: impl Display) -> ToolError {
     ToolError::internal(error.to_string())
@@ -961,5 +1212,27 @@ mod tests {
         let suite = Path::new("/tmp/smoke");
         let script = Path::new("/tmp/smoke/bootstrap.luau");
         assert_eq!(fixture_for_script(suite, script), None);
+    }
+
+    #[test]
+    fn replay_input_accepts_object_journal() -> Result<()> {
+        let parsed = serde_json::from_str::<ReplayInput>(
+            r#"{"journal":[{"origin":"eval","source":"return true","ok":true}]}"#,
+        )?;
+        let entries = parsed.into_entries();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].source()?, "return true");
+        Ok(())
+    }
+
+    #[test]
+    fn replay_input_accepts_bare_script_array() -> Result<()> {
+        let parsed = serde_json::from_str::<ReplayInput>(
+            r#"[{"origin":"manual","script":"canopy.assert(true, \"ok\")"}]"#,
+        )?;
+        let entries = parsed.into_entries();
+        assert_eq!(entries[0].origin(), "manual");
+        assert_eq!(entries[0].source()?, "canopy.assert(true, \"ok\")");
+        Ok(())
     }
 }

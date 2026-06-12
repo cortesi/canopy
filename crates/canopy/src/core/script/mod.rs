@@ -12,37 +12,44 @@ use std::{
 
 use oxau::{
     compile::{BytecodeChunk, CompileOptions, compile_for, restrict_compile_options},
-    diagnostic::DiagnosticSeverity,
+    diagnostic::{DiagnosticSeverity, TypeDiagnostic},
     embed::{
-        Function, IntoLua, ModuleBinding, ModuleBuilder, ModuleBuilderExt, MultiValue,
-        NativeModule, RuntimeError, Scope, ScopedHostFunction, ScopedValue, ScriptError,
-        StashedClosure, Table,
+        Function, HostType, HostTypeBuilder, IntoLua, ModuleBinding, ModuleBuilder,
+        ModuleBuilderExt, MultiValue, NativeModule, RuntimeError, Scope, ScopedHostFunction,
+        ScopedValue, ScriptError, ScriptErrorField, StashedClosure, Table,
     },
     profile::Profile,
     session::{Ambient, Cancel, Limits, LoadedModule, RuntimeErrorKind, SinkQuota, Vm},
+    source::{ModuleId, ModuleSource},
     surface::SurfaceSpec,
-    types::{BuiltinDefinitionModule, BuiltinEnvironment, Checker, TypeArena},
 };
-use slotmap::{Key, KeyData};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     Canopy, NodeId,
     commands::{self, ArgValue, CommandArgs, CommandInvocation, CommandSet, CommandSpec},
     core::{
         context::{Context, CoreContext, CoreViewContext, ReadContext},
+        help::BindingKind,
         inputmap::{self, BindingTarget},
+        termbuf::Cell,
         widget_access,
     },
     error::{self, Result},
     event::{key, mouse},
-    geom::{Point, RectI32, Size},
+    geom::{Point, Rect, RectI32, Size},
     path::PathFilter,
+    style::{AttrSet, Color},
 };
 
 /// Base `canopy` scripting API declarations and native registration.
 mod base_api;
 /// Render Luau definition files from the current command set.
 pub mod defs;
+/// Persistent script module roots and module source.
+mod modules;
+
+pub use modules::{CanopyModuleSource, ScriptModuleRoots};
 
 /// Script identifier.
 pub type ScriptId = u64;
@@ -52,7 +59,7 @@ pub type ScriptId = u64;
 pub struct LuauFunctionId(u64);
 
 /// Recorded assertion outcome for a script evaluation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScriptAssertion {
     /// Whether the assertion passed.
     pub passed: bool,
@@ -136,6 +143,8 @@ struct Script {
     chunk: BytecodeChunk,
     /// Original source text.
     source: String,
+    /// Module name used when loading the chunk into the retained VM.
+    module_name: Vec<u8>,
     /// Module loaded into the retained VM, shared so executions need not hold
     /// the host state borrow while the script runs.
     module: Option<Rc<LoadedModule>>,
@@ -160,7 +169,7 @@ impl ScriptCache {
     }
 
     /// Insert a compiled script and return its id.
-    fn insert(&mut self, chunk: BytecodeChunk, source: &str) -> ScriptId {
+    fn insert(&mut self, chunk: BytecodeChunk, source: &str, module_name: &[u8]) -> ScriptId {
         let id = self.next_script_id;
         self.next_script_id = self.next_script_id.saturating_add(1);
         self.scripts.insert(
@@ -168,6 +177,7 @@ impl ScriptCache {
             Script {
                 chunk,
                 source: source.to_string(),
+                module_name: module_name.to_vec(),
                 module: None,
             },
         );
@@ -184,6 +194,13 @@ impl ScriptCache {
     /// Return a clone of the compiled chunk for a script.
     fn chunk(&self, id: ScriptId) -> Option<BytecodeChunk> {
         self.scripts.get(&id).map(|script| script.chunk.clone())
+    }
+
+    /// Return the module name used when loading a script.
+    fn module_name(&self, id: ScriptId) -> Option<Vec<u8>> {
+        self.scripts
+            .get(&id)
+            .map(|script| script.module_name.clone())
     }
 
     /// Record the loaded module for a script.
@@ -285,9 +302,19 @@ impl ScriptDiagnostics {
         mem::take(&mut self.logs)
     }
 
+    /// Return a clone of current log lines.
+    fn logs(&self) -> Vec<String> {
+        self.logs.clone()
+    }
+
     /// Drain assertion results.
     fn take_assertions(&mut self) -> Vec<ScriptAssertion> {
         mem::take(&mut self.assertions)
+    }
+
+    /// Return a clone of current assertion results.
+    fn assertions(&self) -> Vec<ScriptAssertion> {
+        self.assertions.clone()
     }
 }
 
@@ -302,6 +329,8 @@ struct LuauState {
     diagnostics: ScriptDiagnostics,
     /// Cached rendered d.luau definitions.
     definitions: Option<String>,
+    /// Audited script surface used for checks and VM construction.
+    surface: Option<SurfaceSpec>,
     /// Whether the command surface has been finalized.
     finalized: bool,
     /// Deferred hooks to execute after the first live render.
@@ -319,8 +348,9 @@ impl LuauState {
     }
 
     /// Mark the script API as finalized and cache its definitions.
-    fn finalize(&mut self, definitions: String) {
+    fn finalize(&mut self, definitions: String, surface: SurfaceSpec) {
         self.definitions = Some(definitions);
+        self.surface = Some(surface);
         self.finalized = true;
     }
 
@@ -540,6 +570,28 @@ fn format_typecheck_diagnostics(result: &ScriptCheckResult) -> String {
         .join("\n")
 }
 
+/// Convert an Oxau type diagnostic to Canopy's stable script diagnostic shape.
+pub(crate) fn type_diagnostic_to_script(diagnostic: &TypeDiagnostic) -> ScriptCheckDiagnostic {
+    let begin = diagnostic.primary_location.begin;
+    ScriptCheckDiagnostic {
+        severity: match diagnostic.severity {
+            DiagnosticSeverity::Error => "error",
+            DiagnosticSeverity::Warning | DiagnosticSeverity::Info => "warning",
+        }
+        .to_string(),
+        line: begin.line as usize + 1,
+        column: begin.column as usize + 1,
+        message: format!(
+            "{}: {}",
+            diagnostic.category,
+            diagnostic
+                .context
+                .as_deref()
+                .unwrap_or("type checker diagnostic")
+        ),
+    }
+}
+
 /// Convert a displayable error into a canopy script error.
 fn lua_to_canopy(err: impl fmt::Display) -> error::Error {
     error::Error::Script(err.to_string())
@@ -565,20 +617,41 @@ fn with_current_canopy<R>(f: impl FnOnce(&mut Canopy, NodeId) -> Result<R>) -> R
     })
 }
 
-/// Convert a node identifier into its scripting representation.
-fn node_id_to_arg(node_id: NodeId) -> ArgValue {
-    ArgValue::Int(node_id.data().as_ffi() as i64)
+/// Script-side opaque handle for a canopy node.
+#[derive(Clone, Copy, Debug)]
+struct NodeHandle {
+    /// Backing arena id.
+    id: NodeId,
 }
 
-/// Convert a script integer back into a node identifier.
-fn node_id_from_value<'s>(scope: &Scope<'s>, value: ScopedValue<'s>) -> StdResult<NodeId, String> {
-    let _ = scope;
+/// Build the host userdata descriptor for `NodeId` handles.
+fn node_handle_type() -> HostType {
+    HostTypeBuilder::<NodeHandle>::new("NodeId")
+        .class(commands::decl::Class::new("NodeId"))
+        .eq_by(|left, right| left.id == right.id)
+        .build()
+}
+
+/// Convert a node identifier into its scripting representation.
+fn node_id_to_arg(node_id: NodeId) -> ArgValue {
+    ArgValue::Node(node_id)
+}
+
+/// Convert a script node handle back into a node identifier.
+fn node_id_from_value<'s>(
+    scope: &Scope<'s>,
+    value: ScopedValue<'s>,
+) -> StdResult<NodeId, RuntimeError> {
     match value {
-        ScopedValue::Integer(value) => Ok(NodeId::from(KeyData::from_ffi(value as u64))),
-        ScopedValue::Number(value) if value.fract() == 0.0 && value >= 0.0 => {
-            Ok(NodeId::from(KeyData::from_ffi(value as u64)))
-        }
-        other => Err(format!("expected NodeId, got {}", scoped_type_name(&other))),
+        ScopedValue::Userdata(userdata) => Ok(userdata.borrow::<NodeHandle>(scope)?.id),
+        other => Err(RuntimeError::structured(
+            format!("expected NodeId, got {}", scoped_type_name(&other)),
+            [
+                ScriptErrorField::new("kind", "type_mismatch"),
+                ScriptErrorField::new("expected", "NodeId"),
+                ScriptErrorField::new("got", scoped_type_name(&other)),
+            ],
+        )),
     }
 }
 
@@ -635,6 +708,12 @@ fn scoped_to_arg_value<'s>(
         ScopedValue::Number(value) => Ok(ArgValue::Float(value)),
         ScopedValue::String(_) => Ok(ArgValue::String(scoped_value_to_string(scope, value)?)),
         ScopedValue::Table(table) => table_to_arg_value(scope, table),
+        ScopedValue::Userdata(userdata) => Ok(ArgValue::Node(
+            userdata
+                .borrow::<NodeHandle>(scope)
+                .map_err(|err| err.message().to_string())?
+                .id,
+        )),
         other => Err(format!(
             "unsupported script value type: {}",
             scoped_type_name(&other)
@@ -701,6 +780,7 @@ fn arg_value_to_scoped<'s>(
         ArgValue::UInt(value) => ScopedValue::Number(*value as f64),
         ArgValue::Float(value) => ScopedValue::Number(*value),
         ArgValue::String(value) => ScopedValue::String(scope.create_string(value)?),
+        ArgValue::Node(id) => ScopedValue::Userdata(scope.create_userdata(NodeHandle { id: *id })?),
         ArgValue::Array(values) => {
             let array = values
                 .iter()
@@ -937,7 +1017,7 @@ fn command_param_to_arg(param: &commands::CommandParamSpec) -> ArgValue {
         ),
         (
             "luau_type".to_string(),
-            ArgValue::String(defs::command_type_to_luau(&param.ty).to_string()),
+            ArgValue::String(defs::command_type_to_luau(&param.ty)),
         ),
         ("optional".to_string(), ArgValue::Bool(param.optional)),
     ]);
@@ -951,7 +1031,10 @@ fn command_param_to_arg(param: &commands::CommandParamSpec) -> ArgValue {
 }
 
 /// Convert a command specification into its scripting record.
-fn command_info_to_arg(spec: &CommandSpec) -> ArgValue {
+fn command_info_to_arg(
+    spec: &CommandSpec,
+    resolution: Option<commands::CommandResolution>,
+) -> ArgValue {
     let owner = match spec.dispatch {
         commands::CommandDispatchKind::Node { owner } => owner,
         commands::CommandDispatchKind::Free => "",
@@ -963,9 +1046,28 @@ fn command_info_to_arg(spec: &CommandSpec) -> ArgValue {
             "params".to_string(),
             ArgValue::Array(spec.params.iter().map(command_param_to_arg).collect()),
         ),
+        (
+            "ret".to_string(),
+            ArgValue::String(match spec.ret {
+                commands::CommandReturnSpec::Unit => "()".to_string(),
+                commands::CommandReturnSpec::Value(ty) => defs::command_type_to_luau(&ty),
+            }),
+        ),
+        (
+            "available".to_string(),
+            ArgValue::Bool(resolution.is_some()),
+        ),
     ]);
     if let Some(doc) = spec.doc.long.or(spec.doc.short) {
         record.insert("doc".to_string(), ArgValue::String(doc.to_string()));
+    }
+    if let commands::CommandReturnSpec::Value(ty) = spec.ret
+        && let Some(doc) = ty.doc
+    {
+        record.insert("ret_doc".to_string(), ArgValue::String(doc.to_string()));
+    }
+    if let Some(target) = resolution.and_then(commands::CommandResolution::target) {
+        record.insert("target".to_string(), node_id_to_arg(target));
     }
     ArgValue::Map(record)
 }
@@ -985,6 +1087,243 @@ fn screen_to_arg(canopy: &mut Canopy) -> Result<ArgValue> {
             .map(|row| ArgValue::Array(row.into_iter().map(ArgValue::String).collect()))
             .collect(),
     ))
+}
+
+/// Convert the current rendered screen buffer into styled cell records.
+fn screen_cells_to_arg(canopy: &mut Canopy) -> Result<ArgValue> {
+    canopy.refresh_snapshot()?;
+    let Some(buffer) = canopy.buf() else {
+        return Err(error::Error::Script(
+            "screen unavailable before render".into(),
+        ));
+    };
+    let size = buffer.size();
+    let mut rows = Vec::with_capacity(size.h as usize);
+    for y in 0..size.h {
+        let mut row = Vec::with_capacity(size.w as usize);
+        for x in 0..size.w {
+            let cell = buffer
+                .get(Point { x, y })
+                .expect("buffer coordinates should always be valid");
+            row.push(cell_to_arg(x, y, cell));
+        }
+        rows.push(ArgValue::Array(row));
+    }
+    Ok(ArgValue::Array(rows))
+}
+
+/// Convert one terminal cell into a scripting record.
+fn cell_to_arg(x: u32, y: u32, cell: &Cell) -> ArgValue {
+    ArgValue::Map(BTreeMap::from([
+        ("x".to_string(), ArgValue::UInt(u64::from(x))),
+        ("y".to_string(), ArgValue::UInt(u64::from(y))),
+        ("text".to_string(), ArgValue::String(cell.rendered_text())),
+        ("fg".to_string(), color_to_arg(cell.style.fg)),
+        ("bg".to_string(), color_to_arg(cell.style.bg)),
+        ("attrs".to_string(), attrs_to_arg(cell.style.attrs)),
+        (
+            "continuation".to_string(),
+            ArgValue::Bool(cell.continuation),
+        ),
+    ]))
+}
+
+/// Convert a color to a stable RGB string.
+fn color_to_arg(color: Color) -> ArgValue {
+    let Color::Rgb { r, g, b } = color.to_rgb() else {
+        unreachable!("to_rgb always returns Color::Rgb")
+    };
+    ArgValue::String(format!("#{r:02x}{g:02x}{b:02x}"))
+}
+
+/// Convert text attributes to stable lowercase names.
+fn attrs_to_arg(attrs: AttrSet) -> ArgValue {
+    let mut names = Vec::new();
+    if attrs.bold {
+        names.push(ArgValue::String("bold".to_string()));
+    }
+    if attrs.crossedout {
+        names.push(ArgValue::String("crossedout".to_string()));
+    }
+    if attrs.dim {
+        names.push(ArgValue::String("dim".to_string()));
+    }
+    if attrs.italic {
+        names.push(ArgValue::String("italic".to_string()));
+    }
+    if attrs.overline {
+        names.push(ArgValue::String("overline".to_string()));
+    }
+    if attrs.underline {
+        names.push(ArgValue::String("underline".to_string()));
+    }
+    ArgValue::Array(names)
+}
+
+/// Return the rendered screen text inside a rectangle.
+fn screen_text_for_rect(canopy: &mut Canopy, rect: Rect) -> Result<String> {
+    canopy.refresh_snapshot()?;
+    let Some(buffer) = canopy.buf() else {
+        return Err(error::Error::Script(
+            "screen unavailable before render".into(),
+        ));
+    };
+    let Some(rect) = buffer.rect().intersect(&rect) else {
+        return Ok(String::new());
+    };
+    let mut rows = Vec::with_capacity(rect.h as usize);
+    for y in rect.tl.y..rect.tl.y + rect.h {
+        let mut row = String::new();
+        for x in rect.tl.x..rect.tl.x + rect.w {
+            let cell = buffer
+                .get(Point { x, y })
+                .expect("buffer coordinates should always be valid");
+            row.push_str(&cell.rendered_text());
+        }
+        rows.push(row);
+    }
+    Ok(rows.join("\n"))
+}
+
+/// Convert a signed view rectangle to a clipped screen rectangle.
+fn screen_rect_from_signed(rect: RectI32, bounds: Rect) -> Option<Rect> {
+    let left = rect.tl.x.max(0) as u32;
+    let top = rect.tl.y.max(0) as u32;
+    let right = (rect.tl.x + rect.w as i32).clamp(0, bounds.w as i32) as u32;
+    let bottom = (rect.tl.y + rect.h as i32).clamp(0, bounds.h as i32) as u32;
+    (right > left && bottom > top).then(|| Rect::new(left, top, right - left, bottom - top))
+}
+
+/// Convert the most recent route trace to scripting records.
+fn route_trace_to_arg(canopy: &Canopy) -> ArgValue {
+    ArgValue::Array(
+        canopy
+            .route_trace()
+            .iter()
+            .map(|entry| {
+                let mut record = BTreeMap::from([
+                    (
+                        "phase".to_string(),
+                        ArgValue::String(entry.phase.as_str().to_string()),
+                    ),
+                    ("path".to_string(), ArgValue::String(entry.path.clone())),
+                    ("detail".to_string(), ArgValue::String(entry.detail.clone())),
+                ]);
+                if let Some(node) = entry.node {
+                    record.insert("node".to_string(), node_id_to_arg(node));
+                }
+                ArgValue::Map(record)
+            })
+            .collect(),
+    )
+}
+
+/// Convert the current help snapshot to a scripting record.
+fn help_snapshot_to_arg(canopy: &Canopy) -> ArgValue {
+    let snapshot = canopy.help_snapshot();
+    let bindings = snapshot
+        .bindings
+        .iter()
+        .map(|binding| {
+            ArgValue::Map(BTreeMap::from([
+                (
+                    "input".to_string(),
+                    ArgValue::String(binding.input.to_string()),
+                ),
+                (
+                    "mode".to_string(),
+                    ArgValue::String(binding.mode.to_string()),
+                ),
+                (
+                    "path".to_string(),
+                    ArgValue::String(binding.path_filter.to_string()),
+                ),
+                (
+                    "kind".to_string(),
+                    ArgValue::String(
+                        match binding.kind {
+                            BindingKind::PreEventOverride => "pre",
+                            BindingKind::PostEventFallback => "post",
+                        }
+                        .to_string(),
+                    ),
+                ),
+                (
+                    "target".to_string(),
+                    ArgValue::String(binding_target_summary(binding.target)),
+                ),
+                ("label".to_string(), ArgValue::String(binding.label.clone())),
+            ]))
+        })
+        .collect();
+    let commands = snapshot
+        .commands
+        .iter()
+        .filter(|command| !command.spec.doc.hidden)
+        .map(|command| command_info_to_arg(command.spec, command.resolution))
+        .collect();
+    ArgValue::Map(BTreeMap::from([
+        ("focus".to_string(), node_id_to_arg(snapshot.focus)),
+        (
+            "focus_path".to_string(),
+            ArgValue::String(snapshot.focus_path.to_string()),
+        ),
+        (
+            "input_mode".to_string(),
+            ArgValue::String(snapshot.input_mode.to_string()),
+        ),
+        ("bindings".to_string(), ArgValue::Array(bindings)),
+        ("commands".to_string(), ArgValue::Array(commands)),
+    ]))
+}
+
+/// Convert the script journal to scripting records.
+fn script_journal_to_arg(canopy: &Canopy) -> ArgValue {
+    ArgValue::Array(
+        canopy
+            .script_journal()
+            .iter()
+            .map(|entry| {
+                ArgValue::Map(BTreeMap::from([
+                    ("id".to_string(), ArgValue::UInt(entry.id)),
+                    ("origin".to_string(), ArgValue::String(entry.origin.clone())),
+                    ("source".to_string(), ArgValue::String(entry.source.clone())),
+                    ("ok".to_string(), ArgValue::Bool(entry.ok)),
+                    (
+                        "error".to_string(),
+                        entry
+                            .error
+                            .clone()
+                            .map(ArgValue::String)
+                            .unwrap_or(ArgValue::Null),
+                    ),
+                    (
+                        "logs".to_string(),
+                        ArgValue::Array(entry.logs.iter().cloned().map(ArgValue::String).collect()),
+                    ),
+                    (
+                        "assertions".to_string(),
+                        ArgValue::Array(
+                            entry
+                                .assertions
+                                .iter()
+                                .map(|assertion| {
+                                    ArgValue::Map(BTreeMap::from([
+                                        ("passed".to_string(), ArgValue::Bool(assertion.passed)),
+                                        (
+                                            "message".to_string(),
+                                            ArgValue::String(assertion.message.clone()),
+                                        ),
+                                    ]))
+                                })
+                                .collect(),
+                        ),
+                    ),
+                    ("duration_ms".to_string(), ArgValue::UInt(entry.duration_ms)),
+                ]))
+            })
+            .collect(),
+    )
 }
 
 /// Determine whether a map matches a command's named parameters.
@@ -1037,8 +1376,12 @@ fn dispatch_command(
     allow_map_named: bool,
 ) -> Result<ArgValue> {
     with_current_canopy(|canopy, _| {
-        let args = build_args_from_values(spec, values, allow_map_named)
-            .map_err(|message| error::Error::Script(format!("command {}: {message}", spec.id.0)))?;
+        let args = build_args_from_values(spec, values, allow_map_named).map_err(|message| {
+            error::Error::from(commands::CommandError::conversion(format!(
+                "command {}: {message}",
+                spec.id.0
+            )))
+        })?;
         let invocation = CommandInvocation { id: spec.id, args };
         commands::dispatch(&mut canopy.core, node_id, &invocation).map_err(error::Error::from)
     })
@@ -1048,13 +1391,12 @@ fn dispatch_command(
 fn dispatch_command_by_name(name: &str, values: Vec<ArgValue>) -> Result<ArgValue> {
     let allow_map_named = values.len() == 1;
     with_current_canopy(|canopy, node_id| {
-        let spec = canopy
-            .core
-            .commands
-            .get(name)
-            .ok_or_else(|| error::Error::Script(format!("unknown command: {name}")))?;
+        let spec = canopy.core.commands.get(name).ok_or_else(|| {
+            error::Error::from(commands::CommandError::UnknownCommand {
+                id: name.to_string(),
+            })
+        })?;
         dispatch_command(spec, node_id, values, allow_map_named)
-            .map_err(|err| error::Error::Script(format!("command {name} failed: {err}")))
     })
 }
 
@@ -1156,9 +1498,36 @@ impl<'s> ArgReader<'s> {
 
     /// Take a required node id argument.
     fn node_id(&mut self, scope: &Scope<'s>) -> StdResult<NodeId, RuntimeError> {
-        let index = self.index + 1;
-        node_id_from_value(scope, self.next_value())
-            .map_err(|message| RuntimeError::runtime(format!("argument {index}: {message}")))
+        let node_id = node_id_from_value(scope, self.next_value())?;
+        with_current_canopy(|canopy, _| {
+            if canopy.core.nodes.contains_key(node_id) {
+                Ok(node_id)
+            } else {
+                Err(error::Error::from(commands::CommandError::InvalidNode {
+                    id: node_id,
+                }))
+            }
+        })
+        .map_err(|err| canopy_to_host(&err))
+    }
+
+    /// Take an optional node id argument.
+    fn opt_node_id(&mut self, scope: &Scope<'s>) -> StdResult<Option<NodeId>, RuntimeError> {
+        let next = self.next_value();
+        if matches!(next, ScopedValue::Nil) {
+            return Ok(None);
+        }
+        let node_id = node_id_from_value(scope, next)?;
+        with_current_canopy(|canopy, _| {
+            if canopy.core.nodes.contains_key(node_id) {
+                Ok(Some(node_id))
+            } else {
+                Err(error::Error::from(commands::CommandError::InvalidNode {
+                    id: node_id,
+                }))
+            }
+        })
+        .map_err(|err| canopy_to_host(&err))
     }
 
     /// Take a required function argument.
@@ -1215,7 +1584,133 @@ fn ret_arg<'s>(scope: &Scope<'s>, value: &ArgValue) -> StdResult<MultiValue<'s>,
 
 /// Convert a canopy error into a host-call error.
 fn canopy_to_host(err: &error::Error) -> RuntimeError {
-    RuntimeError::runtime(err.to_string())
+    let payload = CanopyErrorPayload::from(err);
+    let mut fields = vec![ScriptErrorField::new("kind", payload.kind.clone())];
+    if let Some(command) = payload.command.clone() {
+        fields.push(ScriptErrorField::new("command", command));
+    }
+    if let Some(owner) = payload.owner.clone() {
+        fields.push(ScriptErrorField::new("owner", owner));
+    }
+    RuntimeError::structured(payload.message.clone(), fields).with_payload(payload)
+}
+
+/// Normalized cloneable canopy error payload carried through Oxau errors.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CanopyErrorPayload {
+    /// Stable script-visible category.
+    kind: String,
+    /// Command id when the error came from command dispatch.
+    command: Option<String>,
+    /// Owner name when the error came from node-target resolution.
+    owner: Option<String>,
+    /// Human-readable error message.
+    message: String,
+}
+
+impl From<&error::Error> for CanopyErrorPayload {
+    fn from(err: &error::Error) -> Self {
+        match err {
+            error::Error::Command(err) => Self::from(err),
+            error::Error::ScriptTimeout { .. } => Self::new("timeout", err.to_string()),
+            error::Error::NodeNotFound(node) => {
+                Self::new("node_not_found", err.to_string()).with_owner(format!("{node:?}"))
+            }
+            error::Error::TypeMismatch { .. } => Self::new("type_mismatch", err.to_string()),
+            error::Error::NotFound(_) => Self::new("not_found", err.to_string()),
+            error::Error::Invalid(_) | error::Error::InvalidOperation(_) => {
+                Self::new("invalid", err.to_string())
+            }
+            error::Error::ScriptStructured {
+                kind,
+                command,
+                owner,
+                message,
+            } => Self {
+                kind: kind.clone(),
+                command: command.clone(),
+                owner: owner.clone(),
+                message: message.clone(),
+            },
+            _ => Self::new("canopy_error", err.to_string()),
+        }
+    }
+}
+
+impl From<&commands::CommandError> for CanopyErrorPayload {
+    fn from(err: &commands::CommandError) -> Self {
+        match err {
+            commands::CommandError::UnknownCommand { id } => {
+                Self::new("unknown_command", err.to_string()).with_command(id.clone())
+            }
+            commands::CommandError::DuplicateCommand { id } => {
+                Self::new("duplicate_command", err.to_string()).with_command(id.clone())
+            }
+            commands::CommandError::NoTarget { id, owner } => {
+                Self::new("no_target", err.to_string())
+                    .with_command(id.clone())
+                    .with_owner(owner.clone())
+            }
+            commands::CommandError::InvalidNode { .. } => {
+                Self::new("node_invalid", err.to_string())
+            }
+            commands::CommandError::ArityMismatch { .. } => {
+                Self::new("arity_mismatch", err.to_string())
+            }
+            commands::CommandError::MissingNamedArg { .. } => {
+                Self::new("missing_named_arg", err.to_string())
+            }
+            commands::CommandError::UnknownNamedArg { .. } => {
+                Self::new("unknown_named_arg", err.to_string())
+            }
+            commands::CommandError::TypeMismatch { .. } => {
+                Self::new("type_mismatch", err.to_string())
+            }
+            commands::CommandError::MissingInjected { .. } => {
+                Self::new("missing_injected", err.to_string())
+            }
+            commands::CommandError::Conversion { .. } => Self::new("conversion", err.to_string()),
+            commands::CommandError::Exec(_) => Self::new("command_exec", err.to_string()),
+        }
+    }
+}
+
+impl CanopyErrorPayload {
+    /// Builds a payload without command routing context.
+    fn new(kind: impl Into<String>, message: String) -> Self {
+        Self {
+            kind: kind.into(),
+            command: None,
+            owner: None,
+            message,
+        }
+    }
+
+    /// Attaches a command id.
+    fn with_command(mut self, command: String) -> Self {
+        self.command = Some(command);
+        self
+    }
+
+    /// Attaches an owner name.
+    fn with_owner(mut self, owner: String) -> Self {
+        self.owner = Some(owner);
+        self
+    }
+
+    /// Convert this host payload into a core error while preserving traceback context.
+    fn to_canopy_error(&self, label: &str, traceback: Option<&str>) -> error::Error {
+        let message = match traceback {
+            Some(traceback) => format!("{label} failed: {}\n{traceback}", self.message),
+            None => format!("{label} failed: {}", self.message),
+        };
+        error::Error::ScriptStructured {
+            kind: self.kind.clone(),
+            command: self.command.clone(),
+            owner: self.owner.clone(),
+            message,
+        }
+    }
 }
 
 /// Host function adapter: installs the live scope on the script context stack
@@ -1666,20 +2161,37 @@ fn host_commands<'s>(
     scope: &Scope<'s>,
     _args: MultiValue<'s>,
 ) -> StdResult<MultiValue<'s>, RuntimeError> {
-    let commands = with_current_canopy(|canopy, _| {
-        let mut specs = canopy
-            .core
-            .commands
-            .iter()
-            .map(|(_, spec)| spec)
-            .collect::<Vec<_>>();
-        specs.sort_by_key(|spec| spec.id.0);
+    let commands = with_current_canopy(|canopy, node_id| {
+        let resolver = commands::CommandResolver::new(&canopy.core, node_id);
+        let mut availability = resolver.availability();
+        availability.sort_by_key(|item| item.spec.id.0);
         Ok(ArgValue::Array(
-            specs.into_iter().map(command_info_to_arg).collect(),
+            availability
+                .into_iter()
+                .map(|item| command_info_to_arg(item.spec, item.resolution))
+                .collect(),
         ))
     })
     .map_err(|err| canopy_to_host(&err))?;
     ret_arg(scope, &commands)
+}
+
+/// `canopy.resolve`: return the dispatch target for an owner.
+fn host_resolve<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let mut args = ArgReader::new(args);
+    let owner = args.string(scope)?;
+    let node = with_current_canopy(|canopy, node_id| {
+        let resolver = commands::CommandResolver::new(&canopy.core, node_id);
+        Ok(resolver
+            .resolve_owner(&owner)
+            .and_then(commands::CommandResolution::target)
+            .map_or(ArgValue::Null, node_id_to_arg))
+    })
+    .map_err(|err| canopy_to_host(&err))?;
+    ret_arg(scope, &node)
 }
 
 /// `canopy.input_mode`: return the active input mode.
@@ -1705,6 +2217,31 @@ fn host_set_mode<'s>(
     })
     .map_err(|err| canopy_to_host(&err))?;
     Ok(ret_none())
+}
+
+/// `canopy.push_mode`: push an input mode above the current mode.
+fn host_push_mode<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let mut args = ArgReader::new(args);
+    let mode = args.string(scope)?;
+    with_current_canopy(|canopy, _| {
+        canopy.push_input_mode(&mode)?;
+        Ok(())
+    })
+    .map_err(|err| canopy_to_host(&err))?;
+    Ok(ret_none())
+}
+
+/// `canopy.pop_mode`: pop the top input mode and return the active mode.
+fn host_pop_mode<'s>(
+    scope: &Scope<'s>,
+    _args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let mode = with_current_canopy(|canopy, _| Ok(canopy.pop_input_mode().to_string()))
+        .map_err(|err| canopy_to_host(&err))?;
+    Ok(ret_one(ScopedValue::String(scope.create_string(&mode)?)))
 }
 
 /// `canopy.bind`: bind a key spec to a Luau callback.
@@ -1834,6 +2371,16 @@ fn host_screen<'s>(
     ret_arg(scope, &rows)
 }
 
+/// `canopy.screen_cells`: return the rendered screen with style metadata.
+fn host_screen_cells<'s>(
+    scope: &Scope<'s>,
+    _args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let rows = with_current_canopy(|canopy, _| screen_cells_to_arg(canopy))
+        .map_err(|err| canopy_to_host(&err))?;
+    ret_arg(scope, &rows)
+}
+
 /// `canopy.screen_text`: return the rendered screen as plain text.
 fn host_screen_text<'s>(
     scope: &Scope<'s>,
@@ -1850,6 +2397,110 @@ fn host_screen_text<'s>(
     })
     .map_err(|err| canopy_to_host(&err))?;
     Ok(ret_one(ScopedValue::String(scope.create_string(&text)?)))
+}
+
+/// `canopy.screen_region`: return rendered plain text inside a screen rectangle.
+fn host_screen_region<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let mut args = ArgReader::new(args);
+    let x = args.integer(scope)?;
+    let y = args.integer(scope)?;
+    let w = args.integer(scope)?;
+    let h = args.integer(scope)?;
+    let rect = Rect::new(
+        u32::try_from(x).unwrap_or(0),
+        u32::try_from(y).unwrap_or(0),
+        u32::try_from(w).unwrap_or(0),
+        u32::try_from(h).unwrap_or(0),
+    );
+    let text = with_current_canopy(|canopy, _| screen_text_for_rect(canopy, rect))
+        .map_err(|err| canopy_to_host(&err))?;
+    Ok(ret_one(ScopedValue::String(scope.create_string(&text)?)))
+}
+
+/// `canopy.node_region`: return rendered plain text inside a node's content rect.
+fn host_node_region<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let mut args = ArgReader::new(args);
+    let node_id = args.node_id(scope)?;
+    let text = with_current_canopy(|canopy, _| {
+        canopy.refresh_snapshot()?;
+        let Some(buffer) = canopy.buf() else {
+            return Err(error::Error::Script(
+                "screen unavailable before render".into(),
+            ));
+        };
+        let view = canopy
+            .core
+            .node(node_id)
+            .ok_or_else(|| error::Error::from(commands::CommandError::InvalidNode { id: node_id }))?
+            .view();
+        let Some(rect) = screen_rect_from_signed(view.content, buffer.rect()) else {
+            return Ok(String::new());
+        };
+        screen_text_for_rect(canopy, rect)
+    })
+    .map_err(|err| canopy_to_host(&err))?;
+    Ok(ret_one(ScopedValue::String(scope.create_string(&text)?)))
+}
+
+/// `canopy.route_trace`: return the most recent input route trace.
+fn host_route_trace<'s>(
+    scope: &Scope<'s>,
+    _args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let trace = with_current_canopy(|canopy, _| Ok(route_trace_to_arg(canopy)))
+        .map_err(|err| canopy_to_host(&err))?;
+    ret_arg(scope, &trace)
+}
+
+/// `canopy.diagnostic_dump`: return a diagnostic dump for a node.
+fn host_diagnostic_dump<'s>(
+    scope: &Scope<'s>,
+    args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let mut args = ArgReader::new(args);
+    let requested = args.opt_node_id(scope)?;
+    let dump = with_current_canopy(|canopy, node_id| {
+        let target = requested.unwrap_or(node_id);
+        Ok(canopy.diagnostic_dump(target))
+    })
+    .map_err(|err| canopy_to_host(&err))?;
+    Ok(ret_one(ScopedValue::String(scope.create_string(&dump)?)))
+}
+
+/// `canopy.help_snapshot`: return the current contextual help snapshot.
+fn host_help_snapshot<'s>(
+    scope: &Scope<'s>,
+    _args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let snapshot = with_current_canopy(|canopy, _| Ok(help_snapshot_to_arg(canopy)))
+        .map_err(|err| canopy_to_host(&err))?;
+    ret_arg(scope, &snapshot)
+}
+
+/// `canopy.script_journal`: return recorded script evaluations.
+fn host_script_journal<'s>(
+    scope: &Scope<'s>,
+    _args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let journal = with_current_canopy(|canopy, _| Ok(script_journal_to_arg(canopy)))
+        .map_err(|err| canopy_to_host(&err))?;
+    ret_arg(scope, &journal)
+}
+
+/// `canopy.api`: return the generated Luau API definition.
+fn host_api<'s>(
+    scope: &Scope<'s>,
+    _args: MultiValue<'s>,
+) -> StdResult<MultiValue<'s>, RuntimeError> {
+    let api = with_current_canopy(|canopy, _| Ok(canopy.script_api().to_string()))
+        .map_err(|err| canopy_to_host(&err))?;
+    Ok(ret_one(ScopedValue::String(scope.create_string(&api)?)))
 }
 
 /// `canopy.on_start`: register a callback to run after the first render.
@@ -1910,6 +2561,7 @@ impl NativeModule for CanopyBaseModule {
     }
 
     fn build(&self, builder: &mut dyn ModuleBuilder) {
+        ModuleBuilderExt::host_type(builder, node_handle_type());
         base_api::install(builder);
     }
 }
@@ -1948,9 +2600,7 @@ impl NativeModule for OwnerCommandsModule {
                     let values = values_to_args(scope, ArgReader::new(args).rest())?;
                     let allow_map_named = values.len() == 1;
                     let result = with_current_canopy(|_, node_id| {
-                        dispatch_command(spec, node_id, values, allow_map_named).map_err(|err| {
-                            error::Error::Script(format!("command {} failed: {err}", spec.id.0))
-                        })
+                        dispatch_command(spec, node_id, values, allow_map_named)
                     })
                     .map_err(|err| canopy_to_host(&err))?;
                     ret_arg(scope, &result)
@@ -2024,6 +2674,9 @@ fn script_error_to_canopy<'s>(
     if let Some(timeout_error) = timeout_error(error.kind(), timeout) {
         return timeout_error;
     }
+    if let Some(payload) = error.payload_ref::<CanopyErrorPayload>() {
+        return payload.to_canopy_error(label, error.traceback());
+    }
     let message = scoped_value_to_display(scope, error.value());
     match error.traceback() {
         Some(traceback) => error::Error::Script(format!("{label} failed: {message}\n{traceback}")),
@@ -2039,6 +2692,9 @@ fn runtime_error_to_canopy(
 ) -> error::Error {
     if let Some(timeout_error) = timeout_error(error.kind(), timeout) {
         return timeout_error;
+    }
+    if let Some(payload) = error.payload_ref::<CanopyErrorPayload>() {
+        return payload.to_canopy_error(label, None);
     }
     error::Error::Script(format!("{label} failed: {error}"))
 }
@@ -2082,10 +2738,18 @@ fn call_in_scope<'s>(
 /// Load a compiled chunk into the retained VM with an isolated chunk
 /// environment, matching the per-chunk global isolation scripts ran under
 /// previously.
-fn load_into_vm(vm: &mut Vm, chunk: &BytecodeChunk) -> Result<Rc<LoadedModule>> {
-    let module = vm
-        .load_named(chunk, b"canopy")
-        .map_err(|err| error::Error::Script(format!("loading script failed: {err}")))?;
+fn load_into_vm(
+    vm: &mut Vm,
+    chunk: &BytecodeChunk,
+    module_name: impl AsRef<[u8]>,
+) -> Result<Rc<LoadedModule>> {
+    let module_name = module_name.as_ref();
+    let module = if module_name.starts_with(b"@") {
+        vm.load_module(chunk, ModuleId::new(module_name.to_vec()))
+    } else {
+        vm.load_named(chunk, module_name)
+    }
+    .map_err(|err| error::Error::Script(format!("loading script failed: {err}")))?;
     vm.bind_chunk_environment(&module)
         .map_err(|err| error::Error::Script(format!("binding script environment failed: {err}")))?;
     Ok(Rc::new(module))
@@ -2106,53 +2770,33 @@ impl LuauHost {
         self.state.borrow().finalized
     }
 
+    /// Return the finalized script surface.
+    pub(crate) fn surface(&self) -> Option<SurfaceSpec> {
+        self.state.borrow().surface.clone()
+    }
+
     /// Type-check a Luau source string against the finalized canopy API.
     pub fn check_script(&self, source: &str) -> Result<ScriptCheckResult> {
-        let definitions = self.state.borrow().definitions.clone().ok_or_else(|| {
+        let surface = self.state.borrow().surface.clone().ok_or_else(|| {
             error::Error::InvalidOperation(
                 "cannot type-check scripts before finalize_api()".to_string(),
             )
         })?;
-        self.check_script_with_definitions(source, &definitions)
+        self.check_script_with_surface(source, &surface)
     }
 
-    /// Type-check Luau source against pre-rendered definitions.
-    fn check_script_with_definitions(
+    /// Type-check Luau source against the audited surface.
+    fn check_script_with_surface(
         &self,
         source: &str,
-        definitions: &str,
+        surface: &SurfaceSpec,
     ) -> Result<ScriptCheckResult> {
-        let mut arena = TypeArena::new();
-        let modules = [BuiltinDefinitionModule {
-            name: "canopy".to_owned().into(),
-            source: definitions.to_owned().into(),
-        }];
-        let builtins = BuiltinEnvironment::standard_with_definition_modules(&mut arena, &modules);
-        let mut checker = Checker::with_builtins(arena, builtins);
+        let mut checker = surface.new_checker();
         let checked = checker.check_source(&strict_source(source));
         let diagnostics = checked
             .diagnostics()
             .iter()
-            .map(|diagnostic| {
-                let begin = diagnostic.primary_location.begin;
-                ScriptCheckDiagnostic {
-                    severity: match diagnostic.severity {
-                        DiagnosticSeverity::Error => "error",
-                        DiagnosticSeverity::Warning | DiagnosticSeverity::Info => "warning",
-                    }
-                    .to_string(),
-                    line: begin.line as usize + 1,
-                    column: begin.column as usize + 1,
-                    message: format!(
-                        "{}: {}",
-                        diagnostic.category,
-                        diagnostic
-                            .context
-                            .as_deref()
-                            .unwrap_or("type checker diagnostic")
-                    ),
-                }
-            })
+            .map(type_diagnostic_to_script)
             .collect();
         Ok(ScriptCheckResult { diagnostics })
     }
@@ -2205,9 +2849,19 @@ impl LuauHost {
         self.state.borrow_mut().diagnostics.take_logs()
     }
 
+    /// Return log lines collected during the most recent evaluation.
+    pub fn logs(&self) -> Vec<String> {
+        self.state.borrow().diagnostics.logs()
+    }
+
     /// Take the assertions collected during the most recent evaluation.
     pub fn take_assertions(&self) -> Vec<ScriptAssertion> {
         self.state.borrow_mut().diagnostics.take_assertions()
+    }
+
+    /// Return assertions collected during the most recent evaluation.
+    pub fn assertions(&self) -> Vec<ScriptAssertion> {
+        self.state.borrow().diagnostics.assertions()
     }
 
     /// Finalize the command surface: audit and build the script surface, then
@@ -2217,6 +2871,8 @@ impl LuauHost {
         &self,
         commands: &CommandSet,
         default_binding_owners: &BTreeSet<String>,
+        extra_modules: &[Arc<dyn NativeModule>],
+        module_source: Option<Arc<dyn ModuleSource>>,
         definitions: String,
     ) -> Result<()> {
         if self.is_finalized() {
@@ -2226,6 +2882,12 @@ impl LuauHost {
         }
         let mut builder =
             SurfaceSpec::builder(canopy_profile()).module(Arc::new(CanopyBaseModule::new()));
+        if let Some(source) = module_source {
+            builder = builder.module_source(source);
+        }
+        for module in extra_modules {
+            builder = builder.module(Arc::clone(module));
+        }
         for module in build_owner_modules(commands, default_binding_owners) {
             builder = builder.module(Arc::new(module));
         }
@@ -2245,21 +2907,34 @@ impl LuauHost {
                     .scripts
                     .chunk(id)
                     .expect("script id enumerated from the cache");
-                let module = load_into_vm(&mut vm, &chunk)?;
+                let module_name = state
+                    .scripts
+                    .module_name(id)
+                    .expect("script id enumerated from the cache");
+                let module = load_into_vm(&mut vm, &chunk, module_name)?;
                 state.scripts.set_module(id, module);
             }
         }
 
         *self.vm.borrow_mut() = Some(vm);
-        self.state.borrow_mut().finalize(definitions);
+        self.state.borrow_mut().finalize(definitions, surface);
         Ok(())
     }
 
     /// Compile a script and return its id.
     pub fn compile(&self, source: &str) -> Result<ScriptId> {
+        self.compile_named(source, b"canopy")
+    }
+
+    /// Compile a script with an explicit VM module name.
+    pub fn compile_named(&self, source: &str, module_name: impl AsRef<[u8]>) -> Result<ScriptId> {
         self.maybe_typecheck(source)?;
         let chunk = compile_chunk(&strict_source(source))?;
-        let sid = self.state.borrow_mut().scripts.insert(chunk, source);
+        let sid = self
+            .state
+            .borrow_mut()
+            .scripts
+            .insert(chunk, source, module_name.as_ref());
         if self.is_finalized() {
             self.load_script(sid)?;
         }
@@ -2280,7 +2955,13 @@ impl LuauHost {
         let vm = vm_cell.as_mut().ok_or_else(|| {
             error::Error::InvalidOperation("cannot load scripts before finalize_api()".to_string())
         })?;
-        let module = load_into_vm(vm, &chunk)?;
+        let module_name = self
+            .state
+            .borrow()
+            .scripts
+            .module_name(sid)
+            .ok_or_else(|| error::Error::Script(format!("script {sid} not found")))?;
+        let module = load_into_vm(vm, &chunk, module_name)?;
         self.state
             .borrow_mut()
             .scripts
