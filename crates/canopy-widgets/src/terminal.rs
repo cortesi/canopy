@@ -1252,7 +1252,8 @@ mod tests {
 
     use canopy::event::{key, mouse};
     use itty_script::{
-        RunMetrics, ScriptExecPolicy, SharedEngineFactory, TermModuleBuilder, run_source,
+        RunMetrics, ScriptExecPolicy, SharedScriptSurfaceFactory, TermModuleBuilder,
+        default_script_surface, run_source,
     };
 
     use super::*;
@@ -1337,15 +1338,14 @@ mod tests {
             );
             let metrics = Arc::new(RunMetrics::new());
             let builder = TermModuleBuilder::new(&runtime, &handle, &metrics);
-            let setup: SharedEngineFactory =
-                Arc::new(|lua, term_builder| term_builder.install_lua(lua));
+            let setup: SharedScriptSurfaceFactory = Arc::new(default_script_surface);
             let result = run_source(
                 builder.context(),
                 &setup,
                 ScriptExecPolicy::default(),
                 None,
                 "attached_test.luau",
-                "local term = open()\nterm:paste('echo canopy\\r')\nterm:wait_text('canopy')\n",
+                "local term = require('term')\nlocal t = term.open()\nt:paste('echo canopy\\r')\nt:wait_text('canopy')\n",
                 BTreeMap::new(),
             );
             script_tx.send(()).expect("script receiver alive");
