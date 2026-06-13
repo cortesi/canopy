@@ -2547,8 +2547,8 @@ impl NativeModule for CanopyBaseModule {
         "canopy"
     }
 
-    fn declaration(&self) -> &str {
-        &self.declaration
+    fn declaration(&self) -> oxau::decl::DeclSource<'_> {
+        oxau::decl::DeclSource::Text(&self.declaration)
     }
 
     fn build(&self, builder: &mut dyn ModuleBuilder) {
@@ -2577,8 +2577,8 @@ impl NativeModule for OwnerCommandsModule {
         &self.global_name
     }
 
-    fn declaration(&self) -> &str {
-        &self.declaration
+    fn declaration(&self) -> oxau::decl::DeclSource<'_> {
+        oxau::decl::DeclSource::Text(&self.declaration)
     }
 
     fn build(&self, builder: &mut dyn ModuleBuilder) {
@@ -3087,13 +3087,13 @@ impl LuauHost {
         let step = vm.step_with(
             oxau::session::CallOptions::new().limits(invocation_limits(timeout)),
             |scope| {
-            let _guard = ScriptContextGuard::push_with_scope(canopy, node_id, scope);
-            let result = match target.resolve(scope) {
-                Ok(function) => call_in_scope(scope, function, label, timeout),
-                Err(err) => Err(err),
-            };
-            outcome = Some(result);
-            Ok(())
+                let _guard = ScriptContextGuard::push_with_scope(canopy, node_id, scope);
+                let result = match target.resolve(scope) {
+                    Ok(function) => call_in_scope(scope, function, label, timeout),
+                    Err(err) => Err(err),
+                };
+                outcome = Some(result);
+                Ok(())
             },
         );
         match step {

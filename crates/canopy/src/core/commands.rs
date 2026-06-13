@@ -1,6 +1,6 @@
 use std::{
     any::{Any, type_name},
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     fmt,
 };
 
@@ -697,15 +697,32 @@ impl<T: CommandType> CommandType for HashMap<String, T> {
 }
 
 /// Registry for declaration items required by command argument and return types.
+///
+/// Tracks in-flight named registrations so recursive and shared types
+/// terminate: a type's `luau_decls` claims its name with [`DeclRegistry::begin`]
+/// before recursing into field types.
 pub struct DeclRegistry<'a> {
     /// Underlying declaration builder.
     builder: &'a mut decl::DeclBuilder,
+    /// Names already claimed during this registration pass.
+    seen: HashSet<decl::Text>,
 }
 
 impl<'a> DeclRegistry<'a> {
     /// Wrap a declaration builder.
     pub fn new(builder: &'a mut decl::DeclBuilder) -> Self {
-        Self { builder }
+        Self {
+            builder,
+            seen: HashSet::new(),
+        }
+    }
+
+    /// Claim a type name for registration.
+    ///
+    /// Returns false when the name was already claimed in this pass, in which
+    /// case the caller must skip both recursion and registration.
+    pub fn begin(&mut self, name: impl Into<decl::Text>) -> bool {
+        self.seen.insert(name.into())
     }
 
     /// Registers an alias declaration.
@@ -719,7 +736,7 @@ impl<'a> DeclRegistry<'a> {
     }
 
     /// Registers an external type name.
-    pub fn extern_ty(&mut self, name: impl Into<decl::Name>) {
+    pub fn extern_ty(&mut self, name: impl Into<decl::Text>) {
         self.builder.extern_ty(name);
     }
 }
