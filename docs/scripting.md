@@ -77,6 +77,29 @@ Registered widget default bindings appear as `owner.default_bindings()` in the
 generated API. Calling that helper installs the Rust-registered default binding script
 for that owner.
 
+## Startup Scripts
+
+Startup scripts run once, after the app finalizes its script API. The layer order is:
+app scripts registered with `Canopy::register_startup_script`, then `@user/init.luau`,
+then `@project/init.luau`.
+
+Every startup root must define:
+
+```luau
+function setup()
+end
+```
+
+Canopy typechecks startup roots with an obligated checker before execution. Missing or
+mismatched obligations fail startup with a `required-export` diagnostic naming the
+global and required type. App code may add more obligations with
+`Canopy::require_startup_global(name, type_text)` before `finalize_api()`.
+
+Keep top level startup code to imports, locals, and pure construction. Put side effects
+such as bindings, mode setup, and command calls inside `setup()`. Required modules
+loaded by startup scripts keep the ordinary paired `.d.luau` conformance contract; they
+do not need their own `setup`.
+
 ## Fixtures
 
 Fixtures are named setup functions registered by Rust code. Automation tooling can
@@ -109,7 +132,7 @@ MCP evaluation returns:
 ## Typechecking
 
 `Canopy::check_script(source)` checks Luau source against the finalized canopy API
-using the oxau type checker and returns a `ScriptCheckResult`. Checking is available
+using the ruau type checker and returns a `ScriptCheckResult`. Checking is available
 unconditionally on every build target.
 
 Diagnostics use source-bound `error` or `warning` severities. Error diagnostics fail
@@ -120,7 +143,7 @@ builds skip that enforcement.
 
 ## The VM, sandboxing, and limits
 
-Scripts run on the oxau Luau VM, a pure-Rust implementation. The VM is built once at
+Scripts run on the ruau Luau VM, a pure-Rust implementation. The VM is built once at
 API finalization from a validated surface: the static preamble plus per-owner command
 declarations are audited against the host functions actually registered, so the typed
 surface and the runtime surface cannot drift apart. The VM is sandboxed: globals are

@@ -1,5 +1,7 @@
 //! Input routing and event dispatch for the canopy facade.
 
+use ruau::embed::Scope;
+
 use super::{Canopy, RoutePhase, RouteTraceEntry};
 use crate::{
     Core, NodeId, commands,
@@ -104,8 +106,19 @@ impl Canopy {
     fn route_input(
         &mut self,
         start: Option<NodeId>,
+        path: Path,
+        input: RoutedInput,
+    ) -> Result<bool> {
+        self.route_input_with_scope(start, path, input, None)
+    }
+
+    /// Propagate input while preserving an active script scope for Luau bindings.
+    fn route_input_with_scope(
+        &mut self,
+        start: Option<NodeId>,
         mut path: Path,
         input: RoutedInput,
+        scope: Option<&Scope<'_>>,
     ) -> Result<bool> {
         self.route_trace.clear();
         self.trace_route(
@@ -141,7 +154,8 @@ impl Canopy {
                         &path,
                         "matched before widget event",
                     );
-                    return self.execute_routed_binding(id, &path, input, binding);
+                    return self
+                        .execute_routed_binding_with_scope(id, &path, input, binding, scope);
                 }
                 fallback_binding = Some(binding);
             }
@@ -168,7 +182,8 @@ impl Canopy {
                             &path,
                             "matched after widget ignored event",
                         );
-                        return self.execute_routed_binding(id, &path, input, binding);
+                        return self
+                            .execute_routed_binding_with_scope(id, &path, input, binding, scope);
                     }
                     self.trace_route(RoutePhase::Bubble, Some(id), &path, "ignored");
                     target = self.core.nodes.get(id).and_then(|node| node.parent);
@@ -181,13 +196,14 @@ impl Canopy {
         Ok(false)
     }
 
-    /// Execute a binding after route resolution.
-    fn execute_routed_binding(
+    /// Execute a binding after route resolution, preserving an active script scope.
+    fn execute_routed_binding_with_scope(
         &mut self,
         node_id: NodeId,
         path: &Path,
         input: RoutedInput,
         binding: inputmap::BindingTarget,
+        scope: Option<&Scope<'_>>,
     ) -> Result<bool> {
         let label = help::binding_label(
             &binding,
@@ -200,7 +216,7 @@ impl Canopy {
         let event = input.event_for_node(&self.core, node_id);
         let frame = self.core.command_scope_for_event(&event);
         let depth = self.core.push_command_scope(frame);
-        let result = self.execute_binding(node_id, binding);
+        let result = self.execute_binding_with_scope(node_id, binding, scope);
         self.core.pop_command_scope(depth);
         self.fulfill_pending_help_request();
         result?;
@@ -224,6 +240,21 @@ impl Canopy {
         Ok(())
     }
 
+    /// Propagate a script-originated mouse event through the current live scope.
+    pub(crate) fn mouse_in_script_scope(
+        &mut self,
+        scope: &Scope<'_>,
+        m: mouse::MouseEvent,
+    ) -> Result<()> {
+        let (target, path) = self.mouse_route_start(m.location)?;
+        let changed =
+            self.route_input_with_scope(target, path, RoutedInput::Mouse(m), Some(scope))?;
+        if changed {
+            self.render_pending = true;
+        }
+        Ok(())
+    }
+
     /// Propagate a key event through the focus and all its ancestors.
     pub(crate) fn key<T>(&mut self, tk: T) -> Result<()>
     where
@@ -237,6 +268,27 @@ impl Canopy {
         let start = self.core.focus.unwrap_or(self.core.root);
         let path = self.core.node_path(self.core.root, start);
         let changed = self.route_input(Some(start), path, RoutedInput::Key(key))?;
+        if changed {
+            self.render_pending = true;
+        }
+
+        Ok(())
+    }
+
+    /// Propagate a script-originated key event through the current live scope.
+    pub(crate) fn key_in_script_scope<T>(&mut self, scope: &Scope<'_>, tk: T) -> Result<()>
+    where
+        T: Into<key::Key>,
+    {
+        let key = tk.into();
+        if self.core.focus.is_none() {
+            self.core.focus_first(self.core.root);
+        }
+
+        let start = self.core.focus.unwrap_or(self.core.root);
+        let path = self.core.node_path(self.core.root, start);
+        let changed =
+            self.route_input_with_scope(Some(start), path, RoutedInput::Key(key), Some(scope))?;
         if changed {
             self.render_pending = true;
         }
@@ -316,10 +368,22 @@ impl Canopy {
         Ok(())
     }
 
-    /// Execute a resolved binding target on a node.
-    fn execute_binding(&mut self, node_id: NodeId, binding: inputmap::BindingTarget) -> Result<()> {
+    /// Execute a resolved binding target, re-entering the live scope for scripts.
+    fn execute_binding_with_scope(
+        &mut self,
+        node_id: NodeId,
+        binding: inputmap::BindingTarget,
+        scope: Option<&Scope<'_>>,
+    ) -> Result<()> {
         match binding {
-            inputmap::BindingTarget::Script(sid) => self.run_script(node_id, sid),
+            inputmap::BindingTarget::Script(sid) => {
+                if let Some(scope) = scope {
+                    let host = self.script_host.clone();
+                    host.execute_in_scope(scope, node_id, sid)
+                } else {
+                    self.run_script(node_id, sid)
+                }
+            }
             inputmap::BindingTarget::Command(cmd) => {
                 commands::dispatch(&mut self.core, node_id, &cmd)
                     .map(|_| ())
@@ -334,7 +398,11 @@ impl Canopy {
             inputmap::BindingTarget::SetInputMode(mode) => self.set_input_mode(&mode),
             inputmap::BindingTarget::LuauFunction(id) => {
                 let host = self.script_host.clone();
-                host.call_function(self, node_id, id)
+                if let Some(scope) = scope {
+                    host.call_function_in_scope(scope, node_id, id)
+                } else {
+                    host.call_function(self, node_id, id)
+                }
             }
         }
     }

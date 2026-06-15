@@ -13,11 +13,7 @@ use std::{
 };
 
 use comfy_table::{ContentArrangement, Table, presets::UTF8_FULL};
-use oxau::{
-    embed::NativeModule,
-    source::{EmptyConfigResolver, ModuleId, ModuleSource},
-    types::CheckedFrontend,
-};
+use ruau::{embed::NativeModule, source::ModuleSource};
 use serde::{Deserialize, Serialize};
 
 use super::{inputmap, poll::Poller, termbuf::TermBuf};
@@ -68,17 +64,21 @@ pub struct Canopy {
     /// Configured persistent Luau module roots.
     script_module_roots: script::ScriptModuleRoots,
     /// Finalized persistent Luau module source, if any.
-    script_module_source: Option<Arc<script::CanopyModuleSource>>,
-    /// Extra audited Oxau native modules registered by the app.
+    script_module_source: Option<Arc<script::ScriptModuleSource>>,
+    /// Extra audited Ruau native modules registered by the app.
     script_native_modules: Vec<Arc<dyn NativeModule>>,
     /// App-level startup scripts run before user and project init files.
     startup_scripts: Vec<StartupScript>,
     /// Whether startup scripts have been run for this process.
     startup_scripts_ran: bool,
-    /// Latest conformance fingerprints for checked paired script declarations.
-    script_conformance_cache: HashMap<PathBuf, u64>,
     /// In-memory journal of script evaluations.
     script_journal: Vec<ScriptJournalEntry>,
+    /// Stack of active script dispatch anchors for the current VM invocation.
+    pub(crate) script_context_stack: Vec<NodeId>,
+    /// Next journal entry id; never reused, even after the journal is cleared.
+    script_journal_next_id: u64,
+    /// Maximum number of retained journal entries; oldest are evicted first.
+    script_journal_limit: usize,
     /// Registered default binding scripts keyed by owner name.
     default_bindings: HashMap<String, DefaultBindingsScript>,
     /// Registered named fixtures keyed by fixture name.
@@ -214,10 +214,41 @@ struct StartupScript {
 
 /// Paired implementation and declaration module found under a script root.
 struct ScriptDeclarationPair {
-    /// Module id for the implementation source.
-    module_id: ModuleId,
+    /// Implementation source path.
+    implementation_path: PathBuf,
     /// Declaration source path.
     declaration_path: PathBuf,
+}
+
+/// Default maximum number of retained script journal entries.
+const DEFAULT_SCRIPT_JOURNAL_LIMIT: usize = 1024;
+
+/// Baseline captured when a journaled script evaluation begins.
+///
+/// Nested evaluations record only the logs and assertions they add on top of
+/// the enclosing evaluation's state.
+#[derive(Clone, Copy)]
+pub struct ScriptJournalBaseline {
+    /// Evaluation start time.
+    started: Instant,
+    /// Log count at evaluation start.
+    logs: usize,
+    /// Assertion count at evaluation start.
+    assertions: usize,
+}
+
+/// Data needed to run a default-bindings script after dropping the Canopy borrow.
+pub struct DefaultBindingsRun {
+    /// Script host that owns the retained VM.
+    pub(crate) host: script::ScriptHost,
+    /// Node anchor for the nested default-bindings run.
+    pub(crate) root_id: NodeId,
+    /// Compiled default-bindings script id.
+    pub(crate) script_id: script::ScriptId,
+    /// Source text recorded in the script journal.
+    pub(crate) source: String,
+    /// Journal baseline captured before the nested run.
+    baseline: ScriptJournalBaseline,
 }
 
 /// Replayable record of one script evaluation.
@@ -264,8 +295,10 @@ impl Canopy {
             script_native_modules: Vec::new(),
             startup_scripts: Vec::new(),
             startup_scripts_ran: false,
-            script_conformance_cache: HashMap::new(),
             script_journal: Vec::new(),
+            script_context_stack: Vec::new(),
+            script_journal_next_id: 1,
+            script_journal_limit: DEFAULT_SCRIPT_JOURNAL_LIMIT,
             default_bindings: HashMap::new(),
             fixtures: HashMap::new(),
             style: solarized::solarized_dark(),
@@ -359,7 +392,7 @@ impl Canopy {
 
     /// Evaluate a Luau source string in the current app context.
     pub fn eval_script(&mut self, source: &str) -> Result<()> {
-        let started = Instant::now();
+        let baseline = self.begin_script_journal();
         let result = (|| {
             if !self.script_host.is_finalized() {
                 self.finalize_api()?;
@@ -367,13 +400,13 @@ impl Canopy {
             let script_id = self.compile_script(source)?;
             self.run_script(self.core.root_id(), script_id)
         })();
-        self.record_script_journal("eval", source, started, &result);
+        self.record_script_journal("eval", source, baseline, &result);
         result
     }
 
     /// Evaluate a Luau source string and return its value.
     pub fn eval_script_value(&mut self, source: &str) -> Result<commands::ArgValue> {
-        let started = Instant::now();
+        let baseline = self.begin_script_journal();
         let result = (|| {
             if !self.script_host.is_finalized() {
                 self.finalize_api()?;
@@ -382,7 +415,7 @@ impl Canopy {
             let host = self.script_host.clone();
             host.execute_value(self, self.core.root_id(), script_id)
         })();
-        self.record_script_journal("eval", source, started, &result);
+        self.record_script_journal("eval", source, baseline, &result);
         result
     }
 
@@ -392,7 +425,7 @@ impl Canopy {
         source: &str,
         timeout: Duration,
     ) -> Result<commands::ArgValue> {
-        let started = Instant::now();
+        let baseline = self.begin_script_journal();
         let result = (|| {
             if !self.script_host.is_finalized() {
                 self.finalize_api()?;
@@ -401,7 +434,7 @@ impl Canopy {
             let host = self.script_host.clone();
             host.execute_value_with_timeout(self, self.core.root_id(), script_id, timeout)
         })();
-        self.record_script_journal("eval", source, started, &result);
+        self.record_script_journal("eval", source, baseline, &result);
         result
     }
 
@@ -446,7 +479,21 @@ impl Canopy {
             .map(|source| source.invalidate())
     }
 
-    /// Register an audited Oxau native module on the same surface as Canopy commands.
+    /// Invalidate cached exports from the `@user` persistent script root.
+    pub fn invalidate_user_script_modules(&self) -> Option<u64> {
+        self.script_module_source
+            .as_ref()
+            .and_then(|source| source.invalidate_user())
+    }
+
+    /// Invalidate cached exports from the `@project` persistent script root.
+    pub fn invalidate_project_script_modules(&self) -> Option<u64> {
+        self.script_module_source
+            .as_ref()
+            .and_then(|source| source.invalidate_project())
+    }
+
+    /// Register an audited Ruau native module on the same surface as Canopy commands.
     pub fn register_script_module(&mut self, module: Arc<dyn NativeModule>) -> Result<()> {
         self.ensure_api_unfinalized("script native module registration")?;
         self.script_native_modules.push(module);
@@ -481,6 +528,12 @@ impl Canopy {
         Ok(())
     }
 
+    /// Require every startup script root to define a typed global.
+    pub fn require_startup_global(&mut self, name: &str, type_text: &str) -> Result<()> {
+        self.ensure_api_unfinalized("startup global requirement")?;
+        self.script_host.require_startup_global(name, type_text)
+    }
+
     /// Run app, user, and project startup scripts once.
     pub fn run_startup_scripts(&mut self) -> Result<usize> {
         if self.startup_scripts_ran {
@@ -494,17 +547,18 @@ impl Canopy {
         let startup_ids = self
             .startup_scripts
             .iter()
-            .filter_map(|script| {
-                script
+            .map(|script| {
+                let script_id = script
                     .script_id
-                    .map(|script_id| (script.name.clone(), script_id))
+                    .expect("startup scripts are compiled during finalize_api()");
+                (script.name.clone(), script_id)
             })
             .collect::<Vec<_>>();
         for (name, script_id) in startup_ids {
             let source = host.script_source(script_id).unwrap_or_default();
-            let started = Instant::now();
+            let baseline = self.begin_script_journal();
             let result = host.execute(self, self.core.root_id(), script_id);
-            self.record_script_journal(format!("startup:{name}"), &source, started, &result);
+            self.record_script_journal(format!("startup:{name}"), &source, baseline, &result);
             result?;
             ran += 1;
         }
@@ -515,13 +569,13 @@ impl Canopy {
                     module.namespace.name()
                 ))
             })?;
-            let script_id = host.compile_named(&source, module.module_id.as_bytes())?;
-            let started = Instant::now();
+            let script_id = host.compile_startup_named(&source, module.module_id.as_bytes())?;
+            let baseline = self.begin_script_journal();
             let result = host.execute(self, self.core.root_id(), script_id);
             self.record_script_journal(
                 format!("startup:{}", module.module_id),
                 &source,
-                started,
+                baseline,
                 &result,
             );
             result?;
@@ -641,8 +695,21 @@ impl Canopy {
     }
 
     /// Return the in-memory script evaluation journal.
+    ///
+    /// The journal retains the most recent entries up to the configured limit.
+    /// Entry ids are monotonic and never reused, so a first id greater than
+    /// one indicates that older entries were evicted or cleared.
     pub fn script_journal(&self) -> &[ScriptJournalEntry] {
         &self.script_journal
+    }
+
+    /// Set the maximum number of retained script journal entries.
+    ///
+    /// When the journal exceeds the limit the oldest entries are evicted. A
+    /// limit of zero disables retention entirely.
+    pub fn set_script_journal_limit(&mut self, limit: usize) {
+        self.script_journal_limit = limit;
+        self.enforce_script_journal_limit();
     }
 
     /// Clear the in-memory script evaluation journal.
@@ -652,7 +719,7 @@ impl Canopy {
 
     /// Evaluate a Luau config file from disk.
     pub fn run_config(&mut self, path: &FsPath) -> Result<()> {
-        let started = Instant::now();
+        let baseline = self.begin_script_journal();
         let source = fs::read_to_string(path)
             .map_err(|err| error::Error::Invalid(format!("config read failed: {err}")))?;
         let result = (|| {
@@ -671,7 +738,7 @@ impl Canopy {
         self.record_script_journal(
             format!("config:{}", path.display()),
             &source,
-            started,
+            baseline,
             &result,
         );
         result
@@ -751,11 +818,6 @@ impl Canopy {
     /// Return active non-default input modes from oldest to newest.
     pub fn input_mode_stack(&self) -> &[String] {
         self.keymap.mode_stack()
-    }
-
-    /// Return input modes in binding-resolution order.
-    pub fn active_input_modes(&self) -> Vec<&str> {
-        self.keymap.active_modes()
     }
 
     /// Set the active input mode.
@@ -846,11 +908,11 @@ impl Canopy {
             .expect("script API requested before finalize_api()")
     }
 
-    /// Run a registered default binding script by owner name.
-    pub(crate) fn run_registered_default_bindings(&mut self, owner: &str) -> Result<()> {
-        if !self.script_host.is_finalized() {
-            self.finalize_api()?;
-        }
+    /// Prepare a registered default binding script for a nested scoped run.
+    pub(crate) fn prepare_registered_default_bindings(
+        &self,
+        owner: &str,
+    ) -> Result<DefaultBindingsRun> {
         let script_id = self
             .default_bindings
             .get(owner)
@@ -860,15 +922,29 @@ impl Canopy {
             })?;
         let host = self.script_host.clone();
         let source = host.script_source(script_id).unwrap_or_default();
-        let started = Instant::now();
-        let result = host.execute(self, self.core.root_id(), script_id);
+        let baseline = self.begin_script_journal();
+        Ok(DefaultBindingsRun {
+            host,
+            root_id: self.core.root_id(),
+            script_id,
+            source,
+            baseline,
+        })
+    }
+
+    /// Record a nested default-bindings run after it completes.
+    pub(crate) fn record_registered_default_bindings(
+        &mut self,
+        owner: &str,
+        run: &DefaultBindingsRun,
+        result: &Result<()>,
+    ) {
         self.record_script_journal(
             format!("default-bindings:{owner}"),
-            &source,
-            started,
-            &result,
+            &run.source,
+            run.baseline,
+            result,
         );
-        result
     }
 
     /// Return true if the named owner already exports a `default_bindings` command.
@@ -890,31 +966,26 @@ impl Canopy {
     }
 
     /// Validate paired `.luau`/`.d.luau` modules under persistent roots.
-    fn validate_script_module_declarations(&mut self) -> Result<()> {
-        let Some(source) = &self.script_module_source else {
-            return Ok(());
-        };
+    fn validate_script_module_declarations(&self) -> Result<()> {
         let Some(surface) = self.script_host.surface() else {
             return Ok(());
         };
-        let configs = EmptyConfigResolver;
         let mut failures = Vec::new();
         for pair in self.script_declaration_pairs()? {
+            let implementation_source =
+                fs::read_to_string(&pair.implementation_path).map_err(|err| {
+                    error::Error::Invalid(format!(
+                        "script implementation read failed for {}: {err}",
+                        pair.implementation_path.display()
+                    ))
+                })?;
             let declaration_source = fs::read_to_string(&pair.declaration_path).map_err(|err| {
                 error::Error::Invalid(format!(
                     "script declaration read failed for {}: {err}",
                     pair.declaration_path.display()
                 ))
             })?;
-            let module_name = pair.module_id.as_str().ok_or_else(|| {
-                error::Error::Invalid(format!("script module id {} is not UTF-8", pair.module_id))
-            })?;
-            let mut frontend =
-                CheckedFrontend::with_checker(source.as_ref(), &configs, surface.new_checker());
-            frontend.set_source_mode_override(Some(surface.analysis_mode()));
-            let check = frontend.check_conformance(module_name, &declaration_source);
-            self.script_conformance_cache
-                .insert(pair.declaration_path.clone(), check.fingerprint().as_u64());
+            let check = surface.check_conformance(&implementation_source, &declaration_source);
             if check.is_ok() {
                 continue;
             }
@@ -953,26 +1024,56 @@ impl Canopy {
         Ok(pairs)
     }
 
+    /// Begin a journaled script evaluation and capture its diagnostics baseline.
+    fn begin_script_journal(&self) -> ScriptJournalBaseline {
+        // Top-level evaluations clear diagnostics on entry, so their baseline
+        // is empty; nested evaluations record only what they add.
+        let (logs, assertions) = if script::in_live_scope(self) {
+            self.script_host.diagnostics_counts()
+        } else {
+            (0, 0)
+        };
+        ScriptJournalBaseline {
+            started: Instant::now(),
+            logs,
+            assertions,
+        }
+    }
+
     /// Append a script evaluation to the in-memory journal.
     fn record_script_journal<T>(
         &mut self,
         origin: impl Into<String>,
         source: &str,
-        started: Instant,
+        baseline: ScriptJournalBaseline,
         result: &Result<T>,
     ) {
-        let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
-        let id = self.script_journal.len() as u64 + 1;
+        let duration_ms = u64::try_from(baseline.started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let mut logs = self.script_host.logs();
+        let logs = logs.split_off(baseline.logs.min(logs.len()));
+        let mut assertions = self.script_host.assertions();
+        let assertions = assertions.split_off(baseline.assertions.min(assertions.len()));
+        let id = self.script_journal_next_id;
+        self.script_journal_next_id += 1;
         self.script_journal.push(ScriptJournalEntry {
             id,
             origin: origin.into(),
             source: source.to_string(),
             ok: result.is_ok(),
             error: result.as_ref().err().map(ToString::to_string),
-            logs: self.script_host.logs(),
-            assertions: self.script_host.assertions(),
+            logs,
+            assertions,
             duration_ms,
         });
+        self.enforce_script_journal_limit();
+    }
+
+    /// Evict the oldest journal entries beyond the retention limit.
+    fn enforce_script_journal_limit(&mut self) {
+        if self.script_journal.len() > self.script_journal_limit {
+            let excess = self.script_journal.len() - self.script_journal_limit;
+            self.script_journal.drain(..excess);
+        }
     }
 
     /// Return the set of owners with registered default binding scripts.
@@ -996,7 +1097,7 @@ impl Canopy {
         let host = self.script_host.clone();
         for script in &mut self.startup_scripts {
             if script.script_id.is_none() {
-                script.script_id = Some(host.compile_named(
+                script.script_id = Some(host.compile_startup_named(
                     &script.source,
                     format!("startup/{}", script.name).as_bytes(),
                 )?);
@@ -1273,16 +1374,14 @@ fn collect_script_declaration_pairs(
                 path.display()
             )));
         }
-        let module_id = roots
-            .module_id_for_path(&implementation_path)
-            .ok_or_else(|| {
-                error::Error::Invalid(format!(
-                    "script implementation {} is outside configured roots",
-                    implementation_path.display()
-                ))
-            })?;
+        if roots.module_id_for_path(&implementation_path).is_none() {
+            return Err(error::Error::Invalid(format!(
+                "script implementation {} is outside configured roots",
+                implementation_path.display()
+            )));
+        }
         pairs.push(ScriptDeclarationPair {
-            module_id,
+            implementation_path,
             declaration_path: path,
         });
     }

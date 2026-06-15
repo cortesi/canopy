@@ -738,14 +738,6 @@ impl CanopyctlMcpServer {
 
     #[tool]
     /// Evaluate a script on the active session.
-    async fn eval(&self, params: ScriptEvalRequest) -> ToolResult<CallToolResult> {
-        self.touch().await;
-        let outcome = self.sessions.eval(params).await.map_err(tool_error)?;
-        Ok(outcome.to_tool_result())
-    }
-
-    #[tool]
-    /// Evaluate a script on the active session.
     async fn script_eval(&self, params: ScriptEvalRequest) -> ToolResult<CallToolResult> {
         self.touch().await;
         let outcome = self.sessions.eval(params).await.map_err(tool_error)?;
@@ -775,14 +767,6 @@ impl CanopyctlMcpServer {
         Ok(CallToolResult::new()
             .with_structured_content(value.clone())
             .with_text_content(value.to_string()))
-    }
-
-    #[tool]
-    /// Return the rendered `.d.luau` API for the active session.
-    async fn api(&self) -> ToolResult<CallToolResult> {
-        self.touch().await;
-        let api = self.sessions.api().await.map_err(tool_error)?;
-        Ok(CallToolResult::new().with_text_content(api))
     }
 
     #[tool]

@@ -19,6 +19,15 @@ mod tests {
         count: usize,
     }
 
+    /// Self-referential payload used to prove declaration recursion terminates.
+    #[derive(Debug, Clone, Serialize, Deserialize, CommandArg)]
+    struct TreePayload {
+        /// Node label.
+        label: String,
+        /// Child subtrees.
+        children: Vec<Self>,
+    }
+
     struct ScriptTarget {
         value: usize,
         payload_value: usize,
@@ -135,7 +144,7 @@ mod tests {
             r#"
             local found: any = nil
             for _, command in ipairs(canopy.commands()) do
-                if command.name == "set" then
+                if command.owner == "script_target" and command.name == "set" then
                     found = command
                 end
             end
@@ -150,7 +159,14 @@ mod tests {
             Some(&ArgValue::String("()".to_string()))
         );
         assert_eq!(command.get("available"), Some(&ArgValue::Bool(true)));
-        assert!(matches!(command.get("target"), Some(ArgValue::Node(_))));
+        let Some(ArgValue::Map(target)) = command.get("target") else {
+            panic!("command target should be an external node token: {command:?}");
+        };
+        assert_eq!(
+            target.get("type"),
+            Some(&ArgValue::String("NodeId".to_string()))
+        );
+        assert!(matches!(target.get("token"), Some(ArgValue::String(_))));
 
         let resolved = harness
             .canopy
@@ -263,5 +279,19 @@ mod tests {
         });
 
         Ok(())
+    }
+
+    #[test]
+    fn recursive_command_arg_declarations_terminate() {
+        use canopy::commands::{CommandType, DeclRegistry, decl};
+
+        let mut builder = decl::DeclBuilder::new();
+        let mut registry = DeclRegistry::new(&mut builder);
+        TreePayload::luau_decls(&mut registry);
+        TreePayload::luau_decls(&mut registry);
+
+        let rendered = builder.finish().expect("valid declarations").render();
+        assert_eq!(rendered.matches("export type TreePayload").count(), 1);
+        assert!(rendered.contains("children: {TreePayload}"));
     }
 }

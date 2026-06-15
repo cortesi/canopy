@@ -4,7 +4,7 @@ use std::{
     fmt,
 };
 
-pub use oxau::decl;
+pub use ruau::decl;
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Map as JsonMap, Number as JsonNumber, Value as JsonValue};
 
@@ -704,7 +704,7 @@ impl<T: CommandType> CommandType for HashMap<String, T> {
 pub struct DeclRegistry<'a> {
     /// Underlying declaration builder.
     builder: &'a mut decl::DeclBuilder,
-    /// Names already claimed during this registration pass.
+    /// Names currently being declared during this registration pass.
     seen: HashSet<decl::Text>,
 }
 
@@ -719,10 +719,10 @@ impl<'a> DeclRegistry<'a> {
 
     /// Claim a type name for registration.
     ///
-    /// Returns false when the name was already claimed in this pass, in which
+    /// Returns false when the name is already present or in progress, in which
     /// case the caller must skip both recursion and registration.
-    pub fn begin(&mut self, name: impl Into<decl::Text>) -> bool {
-        self.seen.insert(name.into())
+    pub fn begin(&mut self, name: &str) -> bool {
+        !self.builder.contains_name(name) && self.seen.insert(name.to_string().into())
     }
 
     /// Registers an alias declaration.

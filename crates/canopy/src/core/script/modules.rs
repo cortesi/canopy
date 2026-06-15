@@ -1,14 +1,15 @@
 use std::{
     path::{Component, Path, PathBuf},
-    str,
     sync::Arc,
 };
 
-use oxau::{
+#[cfg(test)]
+use ruau::source::{ModuleSourceError, poll_ready_once};
+use ruau::{
     fs::{FilesystemModuleSource, FilesystemSourceEpoch},
     source::{
-        ModuleId, ModuleSource, ModuleSourceError, ModuleSourceFuture, ModuleSourceMetadata,
-        poll_ready_once, ready,
+        ModuleId, ModuleInstanceKey, ModuleSource, ModuleSourceFuture, ModuleSourceMetadata,
+        MountedModuleSource, ReadRequest,
     },
 };
 
@@ -132,12 +133,16 @@ impl ScriptModuleRoots {
     }
 
     /// Build a composite module source for the configured roots.
-    pub(crate) fn module_source(&self) -> Option<Arc<CanopyModuleSource>> {
+    pub(crate) fn module_source(&self) -> Option<Arc<ScriptModuleSource>> {
         (self.user.is_some() || self.project.is_some()).then(|| {
-            Arc::new(CanopyModuleSource {
-                user: self.user.clone().map(ModuleRootSource::new),
-                project: self.project.clone().map(ModuleRootSource::new),
-            })
+            let mut source = ScriptModuleSource::new();
+            if let Some(root) = &self.user {
+                source.mount(Namespace::User, root.clone());
+            }
+            if let Some(root) = &self.project {
+                source.mount(Namespace::Project, root.clone());
+            }
+            Arc::new(source)
         })
     }
 
@@ -150,26 +155,25 @@ impl ScriptModuleRoots {
     }
 }
 
-/// Canopy's composite Luau module source for persistent script roots.
+/// Canopy's persistent Luau module source.
 #[derive(Debug)]
-pub struct CanopyModuleSource {
-    /// Root backing `@user`.
-    user: Option<ModuleRootSource>,
-    /// Root backing `@project`.
-    project: Option<ModuleRootSource>,
+pub struct ScriptModuleSource {
+    /// Prefix-dispatching source shared with Ruau embedders.
+    source: MountedModuleSource,
+    /// Root backing `@user`, if configured.
+    user: Option<ScriptRootMount>,
+    /// Root backing `@project`, if configured.
+    project: Option<ScriptRootMount>,
 }
 
-impl CanopyModuleSource {
-    /// Return the configured `@user` root.
-    #[must_use]
-    pub fn user_root(&self) -> Option<&Path> {
-        self.user.as_ref().map(ModuleRootSource::root)
-    }
-
-    /// Return the configured `@project` root.
-    #[must_use]
-    pub fn project_root(&self) -> Option<&Path> {
-        self.project.as_ref().map(ModuleRootSource::root)
+impl ScriptModuleSource {
+    /// Construct an empty persistent source.
+    fn new() -> Self {
+        Self {
+            source: MountedModuleSource::new(),
+            user: None,
+            project: None,
+        }
     }
 
     /// Invalidate all configured roots and return the composite epoch.
@@ -180,14 +184,14 @@ impl CanopyModuleSource {
         if let Some(root) = &self.project {
             root.epoch.bump();
         }
-        self.composite_epoch()
+        self.source.epoch()
     }
 
     /// Invalidate the `@user` root and return the composite epoch.
     pub fn invalidate_user(&self) -> Option<u64> {
         self.user.as_ref().map(|root| {
             root.epoch.bump();
-            self.composite_epoch()
+            self.source.epoch()
         })
     }
 
@@ -195,126 +199,51 @@ impl CanopyModuleSource {
     pub fn invalidate_project(&self) -> Option<u64> {
         self.project.as_ref().map(|root| {
             root.epoch.bump();
-            self.composite_epoch()
+            self.source.epoch()
         })
     }
 
-    /// Return the mounted source for a namespace.
-    fn root(&self, namespace: Namespace) -> Result<&ModuleRootSource, ModuleSourceError> {
+    /// Add one namespace root to the mounted source.
+    fn mount(&mut self, namespace: Namespace, root: PathBuf) {
+        let source = FilesystemModuleSource::new(root);
+        let epoch = source.epoch_handle();
+        let source: Arc<dyn ModuleSource> = Arc::new(source);
+        self.source.mount(namespace.name(), source);
+        let mount = ScriptRootMount { epoch };
         match namespace {
-            Namespace::User => self.user.as_ref(),
-            Namespace::Project => self.project.as_ref(),
+            Namespace::User => self.user = Some(mount),
+            Namespace::Project => self.project = Some(mount),
         }
-        .ok_or_else(|| ModuleSourceError::MissingModule {
-            id: ModuleId::from(namespace.name()),
-        })
-    }
-
-    /// Resolve a module request across the configured root namespace sources.
-    fn resolve_root(
-        &self,
-        requester: Option<&ModuleId>,
-        request: &[u8],
-    ) -> Result<ModuleId, ModuleSourceError> {
-        let request_text = str::from_utf8(request).map_err(|error| {
-            ModuleSourceError::other(format!("module request is not UTF-8: {error}"))
-        })?;
-        if let Some((namespace, inner)) = split_prefixed(request_text) {
-            return self.resolve_in(namespace, None, inner);
-        }
-        let Some((namespace, requester_inner)) = requester.and_then(prefixed_id_parts) else {
-            if is_relative_request(request_text) {
-                return Err(ModuleSourceError::UnresolvableRelativeRequest {
-                    request: request.to_vec(),
-                });
-            }
-            return Err(ModuleSourceError::MissingModule {
-                id: ModuleId::new(request.to_vec()),
-            });
-        };
-        let requester_id = ModuleId::canonicalized(&requester_inner);
-        self.resolve_in(namespace, Some(&requester_id), request_text)
-    }
-
-    /// Resolve one request inside a namespace, optionally relative to a requester.
-    fn resolve_in(
-        &self,
-        namespace: Namespace,
-        requester: Option<&ModuleId>,
-        request: &str,
-    ) -> Result<ModuleId, ModuleSourceError> {
-        if request.is_empty() {
-            return Err(ModuleSourceError::MissingModule {
-                id: prefixed_module_id(namespace, request),
-            });
-        }
-        let root = self.root(namespace)?;
-        let id = poll_ready_once(
-            root.source.resolve(requester, request.as_bytes()),
-            "resolving canopy module",
-        )?;
-        prefix_resolved_id(namespace, &id)
-    }
-
-    /// Read a prefixed module id from its backing namespace source.
-    fn read_root(&self, id: &ModuleId) -> Result<Vec<u8>, ModuleSourceError> {
-        let (namespace, inner) = prefixed_id_parts(id)
-            .ok_or_else(|| ModuleSourceError::MissingModule { id: id.clone() })?;
-        let root = self.root(namespace)?;
-        let inner_id = ModuleId::canonicalized(&inner);
-        poll_ready_once(root.source.read(&inner_id), "reading canopy module")
-    }
-
-    /// Return diagnostic metadata for a prefixed module id.
-    fn metadata_root(&self, id: &ModuleId) -> ModuleSourceMetadata {
-        let Some((namespace, inner)) = prefixed_id_parts(id) else {
-            return ModuleSourceMetadata::new(id.to_diagnostic_string());
-        };
-        let Ok(root) = self.root(namespace) else {
-            return ModuleSourceMetadata::new(id.to_diagnostic_string());
-        };
-        let inner_id = ModuleId::canonicalized(&inner);
-        let mut metadata = root.source.metadata(&inner_id);
-        metadata.display_name = format!("{}{}", namespace.prefix(), metadata.display_name);
-        metadata
-    }
-
-    /// Combine configured root epochs into one stable source epoch.
-    fn composite_epoch(&self) -> u64 {
-        let mut epoch = 0xcbf2_9ce4_8422_2325;
-        for value in [
-            self.user.as_ref().map(ModuleRootSource::epoch),
-            self.project.as_ref().map(ModuleRootSource::epoch),
-        ]
-        .into_iter()
-        .flatten()
-        {
-            epoch ^= value;
-            epoch = epoch.wrapping_mul(0x1000_0000_01b3);
-        }
-        epoch
     }
 }
 
-impl ModuleSource for CanopyModuleSource {
+impl ModuleSource for ScriptModuleSource {
     fn resolve(
         &self,
         requester: Option<&ModuleId>,
         request: &[u8],
     ) -> ModuleSourceFuture<ModuleId> {
-        ready(self.resolve_root(requester, request))
+        self.source.resolve(requester, request)
     }
 
     fn read(&self, id: &ModuleId) -> ModuleSourceFuture<Vec<u8>> {
-        ready(self.read_root(id))
+        self.source.read(id)
+    }
+
+    fn read_request(&self, request: ReadRequest<'_>) -> ModuleSourceFuture<Vec<u8>> {
+        self.source.read_request(request)
+    }
+
+    fn instance_key(&self, request: ReadRequest<'_>) -> ModuleInstanceKey {
+        self.source.instance_key(request)
     }
 
     fn metadata(&self, id: &ModuleId) -> ModuleSourceMetadata {
-        self.metadata_root(id)
+        self.source.metadata(id)
     }
 
     fn epoch(&self) -> u64 {
-        self.composite_epoch()
+        self.source.epoch()
     }
 }
 
@@ -356,78 +285,16 @@ pub struct StartupModule {
     pub(crate) module_id: ModuleId,
 }
 
-/// Filesystem-backed module source and epoch handle for one root.
+/// Filesystem-backed epoch handle for one mounted root.
 #[derive(Debug)]
-struct ModuleRootSource {
-    /// Mounted root directory.
-    root: PathBuf,
-    /// Oxau filesystem source for this root.
-    source: FilesystemModuleSource,
+struct ScriptRootMount {
     /// Shared epoch handle used for explicit invalidation.
     epoch: FilesystemSourceEpoch,
-}
-
-impl ModuleRootSource {
-    /// Construct a root source from a filesystem path.
-    fn new(root: PathBuf) -> Self {
-        let source = FilesystemModuleSource::new(root.clone());
-        let epoch = source.epoch_handle();
-        Self {
-            root,
-            source,
-            epoch,
-        }
-    }
-
-    /// Return the mounted filesystem root.
-    fn root(&self) -> &Path {
-        &self.root
-    }
-
-    /// Return the current root epoch.
-    fn epoch(&self) -> u64 {
-        self.epoch.get()
-    }
-}
-
-/// Split a request or id into a known namespace and unprefixed module name.
-fn split_prefixed(request: &str) -> Option<(Namespace, &str)> {
-    request
-        .strip_prefix(USER_PREFIX)
-        .map(|inner| (Namespace::User, inner))
-        .or_else(|| {
-            request
-                .strip_prefix(PROJECT_PREFIX)
-                .map(|inner| (Namespace::Project, inner))
-        })
-}
-
-/// Split a module id into a known namespace and unprefixed module name.
-fn prefixed_id_parts(id: &ModuleId) -> Option<(Namespace, String)> {
-    id.as_str()
-        .and_then(split_prefixed)
-        .map(|(namespace, inner)| (namespace, inner.to_owned()))
-}
-
-/// Prefix an id returned by a namespace source.
-fn prefix_resolved_id(namespace: Namespace, id: &ModuleId) -> Result<ModuleId, ModuleSourceError> {
-    let inner = id.as_str().ok_or_else(|| {
-        ModuleSourceError::other(format!(
-            "resolved module id '{}' is not UTF-8",
-            id.to_diagnostic_string()
-        ))
-    })?;
-    Ok(prefixed_module_id(namespace, inner))
 }
 
 /// Build a canonical module id in a namespace.
 fn prefixed_module_id(namespace: Namespace, inner: &str) -> ModuleId {
     ModuleId::canonicalized(&format!("{}{}", namespace.prefix(), inner))
-}
-
-/// Return true when a module request is relative to the requester.
-fn is_relative_request(request: &str) -> bool {
-    request.starts_with("./") || request.starts_with("../")
 }
 
 /// Convert a filesystem path under a root to a prefixed module id.

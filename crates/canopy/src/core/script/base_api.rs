@@ -1,8 +1,8 @@
 //! Base `canopy` scripting API declarations and native registration.
 
-use oxau::{
+use ruau::{
     decl::{DeclBuilder, Field, FnSig, Func, Global, Ty},
-    embed::{ModuleBinding, ModuleBuilder, ModuleBuilderExt},
+    embed::{AsyncHostFunction, ModuleBinding, ModuleBuilder, ModuleBuilderExt},
 };
 
 use super::{
@@ -14,7 +14,8 @@ use super::{
     host_on_start, host_parent, host_pop_mode, host_push_mode, host_resolve, host_root,
     host_route_trace, host_screen, host_screen_cells, host_screen_region, host_screen_text,
     host_script_journal, host_send_click, host_send_key, host_send_scroll, host_set_focus,
-    host_set_mode, host_tree, host_unbind, host_unbind_key,
+    host_set_mode, host_tree, host_unbind, host_unbind_key, wait_for_host_fn,
+    wait_for_node_host_fn, wait_for_screen_text_host_fn,
 };
 
 /// One native function exposed on the global `canopy` library table.
@@ -27,6 +28,18 @@ pub(super) struct BaseFunction {
     signature: fn() -> FnSig,
     /// Native host implementation.
     handler: HostHandler,
+}
+
+/// One asynchronous native function exposed on the global `canopy` library table.
+pub(super) struct AsyncBaseFunction {
+    /// Function name inside the `canopy` table.
+    name: &'static str,
+    /// Luau doc comments rendered above the declaration.
+    docs: &'static [&'static str],
+    /// Luau function type signature.
+    signature: fn() -> FnSig,
+    /// Native host implementation factory.
+    handler: fn() -> Box<dyn AsyncHostFunction>,
 }
 
 /// Native functions exposed on the `canopy` library table.
@@ -403,18 +416,53 @@ const CANOPY_FUNCTIONS: &[BaseFunction] = &[
     },
 ];
 
+/// Async native functions exposed on the `canopy` library table.
+const ASYNC_CANOPY_FUNCTIONS: &[AsyncBaseFunction] = &[
+    AsyncBaseFunction {
+        name: "wait_for",
+        docs: &["Wait until a predicate returns a truthy value."],
+        signature: || {
+            FnSig::new()
+                .param(("predicate", Ty::func(FnSig::new().ret(Ty::Boolean))))
+                .param(("timeout_ms", Ty::Number.optional()))
+                .ret(Ty::Boolean)
+        },
+        handler: wait_for_host_fn,
+    },
+    AsyncBaseFunction {
+        name: "wait_for_node",
+        docs: &["Wait until a command owner resolves to a mounted node."],
+        signature: || {
+            FnSig::new()
+                .param(("owner", Ty::String))
+                .param(("timeout_ms", Ty::Number.optional()))
+                .ret(Ty::Boolean)
+        },
+        handler: wait_for_node_host_fn,
+    },
+    AsyncBaseFunction {
+        name: "wait_for_screen_text",
+        docs: &["Wait until the rendered screen contains text."],
+        signature: || {
+            FnSig::new()
+                .param(("text", Ty::String))
+                .param(("timeout_ms", Ty::Number.optional()))
+                .ret(Ty::Boolean)
+        },
+        handler: wait_for_screen_text_host_fn,
+    },
+];
+
 /// Register the base Luau declarations generated from the native registration table.
 pub(super) fn register_declarations(decl: &mut DeclBuilder) {
     decl.global(Global::new(
         "canopy",
-        Ty::table(CANOPY_FUNCTIONS.iter().map(|function| {
-            let doc = (!function.docs.is_empty()).then(|| function.docs.join("\n"));
-            let mut field = Field::new(function.name, Ty::func((function.signature)()));
-            if let Some(doc) = doc {
-                field = field.doc(doc);
-            }
-            field
-        })),
+        Ty::table(
+            CANOPY_FUNCTIONS
+                .iter()
+                .map(base_function_field)
+                .chain(ASYNC_CANOPY_FUNCTIONS.iter().map(async_base_function_field)),
+        ),
     ));
     decl.function(
         Func::new(
@@ -425,6 +473,26 @@ pub(super) fn register_declarations(decl: &mut DeclBuilder) {
     );
 }
 
+/// Render a sync base function as a declaration table field.
+fn base_function_field(function: &BaseFunction) -> Field {
+    let doc = (!function.docs.is_empty()).then(|| function.docs.join("\n"));
+    let mut field = Field::new(function.name, Ty::func((function.signature)()));
+    if let Some(doc) = doc {
+        field = field.doc(doc);
+    }
+    field
+}
+
+/// Render an async base function as a declaration table field.
+fn async_base_function_field(function: &AsyncBaseFunction) -> Field {
+    let doc = (!function.docs.is_empty()).then(|| function.docs.join("\n"));
+    let mut field = Field::new(function.name, Ty::func((function.signature)()));
+    if let Some(doc) = doc {
+        field = field.doc(doc);
+    }
+    field
+}
+
 /// Register the base `canopy` table and global helpers.
 pub(super) fn install(builder: &mut dyn ModuleBuilder) {
     for function in CANOPY_FUNCTIONS {
@@ -432,6 +500,13 @@ pub(super) fn install(builder: &mut dyn ModuleBuilder) {
             function.name,
             ModuleBinding::library("canopy"),
             canopy_host_fn(function.handler),
+        );
+    }
+    for function in ASYNC_CANOPY_FUNCTIONS {
+        builder.async_function(
+            function.name,
+            ModuleBinding::library("canopy"),
+            (function.handler)(),
         );
     }
     builder.scoped_function(

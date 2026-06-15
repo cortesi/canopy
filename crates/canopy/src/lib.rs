@@ -50,7 +50,7 @@ pub use core::{
 
 // Re-export derive macros
 pub use canopy_derive::{CommandArg, CommandEnum, command, derive_commands};
-/// Oxau declaration and embedding APIs used for app-provided native modules.
-pub use oxau::{decl, embed};
+/// Ruau declaration and embedding APIs used for app-provided native modules.
+pub use ruau::{decl, embed};
 // Re-export widget trait and event outcome
 pub use widget::{EventOutcome, Widget};

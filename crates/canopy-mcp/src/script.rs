@@ -111,10 +111,11 @@ impl ScriptTiming {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ScriptErrorInfo {
     #[serde(rename = "type")]
-    /// Error category such as `build`, `typecheck`, `timeout`, or `runtime`.
+    /// Pipeline stage that failed: `build`, `typecheck`, `timeout`, or `runtime`.
     pub error_type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    /// Stable host error category when one is available.
+    /// Stable host error category such as `no_target` or `unknown_command`,
+    /// when the failure carried structured fields.
     pub kind: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     /// Command id when the error came from command dispatch.
@@ -646,8 +647,15 @@ fn script_error_info(error: &crate::Error) -> ScriptErrorInfo {
         message,
     }) = error
     {
+        // `error_type` stays on the pipeline-stage axis; the host category
+        // travels in `kind`.
+        let error_type = if kind == "timeout" {
+            "timeout"
+        } else {
+            "runtime"
+        };
         return ScriptErrorInfo {
-            error_type: kind.clone(),
+            error_type: error_type.to_string(),
             kind: Some(kind.clone()),
             command: command.clone(),
             owner: owner.clone(),
@@ -826,7 +834,7 @@ declare script_target: {
     fn evaluate_returns_node_handles_as_external_tokens() {
         let evaluator = AppEvaluator::new(test_factory());
         let outcome = evaluator.evaluate(&ScriptEvalRequest {
-            script: "return canopy.root()".to_string(),
+            script: "local root = canopy.root()\nprint(root)\nreturn root".to_string(),
             fixture: None,
             timeout_ms: None,
         });
@@ -835,6 +843,7 @@ declare script_target: {
         let value = outcome.value.expect("node token");
         assert_eq!(value["type"], JsonValue::String("NodeId".to_string()));
         assert!(value["token"].is_string());
+        assert_eq!(outcome.logs, vec![value["token"].as_str().unwrap()]);
     }
 
     #[test]
@@ -907,7 +916,7 @@ declare script_target: {
         assert!(!outcome.success);
         assert_eq!(outcome.state, ScriptTaskState::Failed);
         let error = outcome.error.as_ref().expect("structured error");
-        assert_eq!(error.error_type, "unknown_command");
+        assert_eq!(error.error_type, "runtime");
         assert_eq!(error.kind.as_deref(), Some("unknown_command"));
         assert_eq!(error.command.as_deref(), Some("missing::command"));
         assert_eq!(error.owner, None);

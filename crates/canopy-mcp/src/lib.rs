@@ -14,7 +14,7 @@ pub mod server;
 pub mod smoke;
 
 pub use error::{Error, Result};
-pub use launch::{LaunchMode, launch, launch_with};
+pub use launch::{LaunchMode, launch};
 pub use script::{
     AppEvaluator, BootstrapCommand, BootstrapJournalEntry, BootstrapResponse, ScriptAssertion,
     ScriptDiagnostic, ScriptErrorInfo, ScriptEvalOutcome, ScriptEvalRequest, ScriptTaskState,

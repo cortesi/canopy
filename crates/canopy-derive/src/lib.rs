@@ -52,12 +52,17 @@ pub fn derive_command_arg(input: proc_macro::TokenStream) -> proc_macro::TokenSt
         _ => abort!(ident.span(), "CommandArg can only be derived for structs"),
     };
     let mut generics = input.generics.clone();
-    let where_clause = generics.make_where_clause();
-    for field in fields {
-        let ty = &field.ty;
-        where_clause
-            .predicates
-            .push(parse_quote!(#ty: canopy::commands::CommandType));
+    // Field-type bounds are only needed to propagate generic parameters; for
+    // concrete structs they would turn self-referential fields into cyclic
+    // trait obligations, so they are omitted there.
+    if !generics.params.is_empty() {
+        let where_clause = generics.make_where_clause();
+        for field in fields {
+            let ty = &field.ty;
+            where_clause
+                .predicates
+                .push(parse_quote!(#ty: canopy::commands::CommandType));
+        }
     }
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
@@ -91,6 +96,9 @@ pub fn derive_command_arg(input: proc_macro::TokenStream) -> proc_macro::TokenSt
             }
 
             fn luau_decls(registry: &mut canopy::commands::DeclRegistry<'_>) {
+                if !registry.begin(#type_name) {
+                    return;
+                }
                 #(#field_decl_regs)*
                 registry.alias(
                     canopy::commands::decl::Alias::new(
@@ -234,6 +242,9 @@ pub fn derive_command_enum(input: proc_macro::TokenStream) -> proc_macro::TokenS
             }
 
             fn luau_decls(registry: &mut canopy::commands::DeclRegistry<'_>) {
+                if !registry.begin(#type_name) {
+                    return;
+                }
                 registry.alias(canopy::commands::decl::Alias::new(
                     #type_name,
                     canopy::commands::decl::Ty::literals(Self::LUAU_VALUES.iter().copied()),

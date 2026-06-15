@@ -16,7 +16,7 @@ script-journal summary.
 cargo run -p canopyctl -- bootstrap -- cargo run -p todo -- mcp :memory:
 ```
 
-Inside Luau, use `canopy.api()`, `canopy.commands()`, `canopy.fixtures()`, and
+Inside Luau, use `canopy.api()`, `canopy.commands()`, `fixtures()`, and
 `canopy.help_snapshot()` when a scenario needs to inspect the app from inside
 the same eval that will act on it.
 
@@ -27,7 +27,7 @@ fixture directly; live sessions apply fixtures before eval.
 
 ```sh
 cargo run -p canopyctl -- eval --fixture with_items \
-  'return #canopy.fixtures() > 0' \
+  'return #fixtures() > 0' \
   -- cargo run -p todo -- mcp :memory:
 ```
 
@@ -61,9 +61,22 @@ Observation helpers are script-visible:
 - `canopy.diagnostic_dump(node?)` for tree, focus, binding, and route context.
 - `canopy.script_journal()` for recent eval records.
 
-Async predicate waits are still a runtime item. Until `canopy.wait_for(fn)` lands
-on the Oxau async driver, scenarios should arrange deterministic state with
-fixtures and commands, then assert against the rendered snapshot after the eval.
+Async predicate waits run on the Ruau async driver. Use
+`canopy.wait_for(fn, timeout_ms?)`, `canopy.wait_for_node(owner, timeout_ms?)`,
+or `canopy.wait_for_screen_text(text, timeout_ms?)` when an eval must observe
+state that may arrive through automation while the script is active. The wait
+helpers service automation between predicate checks; broader terminal event
+redraw during a pending eval is tracked in `plans/ruau.md` as the remaining
+live-loop refinement.
+
+## Startup Shape
+
+Reusable app/user/project startup scripts are typed roots with an obligated
+`setup: () -> ()` global. Top level startup code should import modules and build pure
+locals; bindings, mode changes, and command calls belong inside `setup()`. Canopy runs
+app-registered startup scripts first, then `@user/init.luau`, then `@project/init.luau`.
+Required modules loaded by those roots keep the ordinary `.d.luau` conformance contract
+and do not need their own `setup`.
 
 ## Replay
 

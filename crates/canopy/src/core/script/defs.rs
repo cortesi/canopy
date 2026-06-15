@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use oxau::decl;
+use ruau::decl;
 
 use super::{base_api, luau_global_owner_name};
 use crate::{

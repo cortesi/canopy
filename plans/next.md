@@ -96,7 +96,7 @@ as the UI changes.
 ## Current verification notes
 
 - `cargo metadata --locked` succeeds; the live sibling path dependencies are
-  oxau, tmcp, itty, and itty-script.
+  ruau, tmcp, itty, and itty-script.
 - The registry is already sealed at `finalize_api()` (`Canopy::add_commands`
   returns `InvalidOperation` after it), so the static-surface guarantee holds
   today. What's missing is the script-side half: a `NoTarget` failure is
@@ -124,20 +124,20 @@ as the UI changes.
   forgeable number: `node_id_to_arg` packs the slotmap key into an int, and
   `node_id_from_value` accepts any integer (negatives wrap through `as u64`) or
   any whole non-negative float.
-- oxau has no declaration model: `NativeModule::declaration` returns `&str`
-  (in `oxau-vm-api`), `HostTypeBuilder::declaration` takes a snippet string (in
-  `oxau-vm`), and `SurfaceSpecBuilder::declaration_global` stores text that
+- ruau has no declaration model: `NativeModule::declaration` returns `&str`
+  (in `ruau-vm-api`), `HostTypeBuilder::declaration` takes a snippet string (in
+  `ruau-vm`), and `SurfaceSpecBuilder::declaration_global` stores text that
   `DeclarationGlobalSpec::source` `format!`s into a declaration. The
   `SurfaceSpec` audit (`validate_host_modules`) parses declarations with
   `allow_declaration_syntax` and structurally diffs them against runtime
-  bindings, but composes nothing. `oxau-vm-api` has no internal dependencies —
+  bindings, but composes nothing. `ruau-vm-api` has no internal dependencies —
   it is the deliberately stable embedding crate — so a declaration model it
   returns must itself be dependency-free; hence a new bottom crate re-exported
-  as `oxau::decl`. Userdata marshaling is hardcoded to `Opaque("userdata")`
-  (`oxau-vm/src/value_marshal.rs`) with no per-`HostType` hook, and JSON
+  as `ruau::decl`. Userdata marshaling is hardcoded to `Opaque("userdata")`
+  (`ruau-vm/src/value_marshal.rs`) with no per-`HostType` hook, and JSON
   conversion rejects opaques, so userdata cannot cross an MCP eval boundary at
   all today.
-- oxau already has the pieces stages 4-5 need: `ModuleSource` and
+- ruau already has the pieces stages 4-5 need: `ModuleSource` and
   `SyncModuleSource` with epoch invalidation, `FilesystemModuleSource` with the
   `FilesystemSourceEpoch` handle, `CheckedFrontend::check_conformance` with
   `ConformanceFingerprint`, `RuntimeError::structured`/`with_payload` with
@@ -165,39 +165,39 @@ as the UI changes.
 
 Items are ordered by priority; stages 1-5 are the core agent-native thrust. Each
 stage is a coherent slice. After any stage the workspace passes `cargo xtask
-tidy` and the relevant focused tests. Items marked **(oxau)** are extensions to
-the oxau runtime itself. During development the sibling path dependencies stay
+tidy` and the relevant focused tests. Items marked **(ruau)** are extensions to
+the ruau runtime itself. During development the sibling path dependencies stay
 as-is; the release path is deferred to the end of this document.
 
-1. (oxau) The declaration builder
+1. (ruau) The declaration builder
 
-Today every `.d.luau` in the stack is assembled by hand: oxau modules return raw
+Today every `.d.luau` in the stack is assembled by hand: ruau modules return raw
 declaration strings, `HostTypeBuilder::declaration` takes a `declare class`
 snippet, `SurfaceSpecBuilder` formats global declarations from text, canopy's
 `base_api.rs` pairs handlers with signature strings, and `defs.rs` concatenates
-text. oxau parses and audits declarations but composes nothing; eguidev and
-verber hand-assemble the same way. Build the typed model once, in oxau, and
+text. ruau parses and audits declarations but composes nothing; eguidev and
+verber hand-assemble the same way. Build the typed model once, in ruau, and
 render everything through it. Every later stage (structural `CommandArg` types,
 return metadata, NodeId-as-class, app modules) needs this model, so it lands
-first, as a self-contained oxau work package.
+first, as a self-contained ruau work package.
 
-**Crate placement.** A new `oxau-decl` crate with zero dependencies,
-re-exported as `oxau::decl`. It must sit below `oxau-vm-api`, because
-`NativeModule::declaration` returns the model and `oxau-vm-api` is the
-deliberately dependency-free stable embedding crate — `oxau-decl` inherits that
+**Crate placement.** A new `ruau-decl` crate with zero dependencies,
+re-exported as `ruau::decl`. It must sit below `ruau-vm-api`, because
+`NativeModule::declaration` returns the model and `ruau-vm-api` is the
+deliberately dependency-free stable embedding crate — `ruau-decl` inherits that
 constraint: pure data plus a renderer, no parser. The model does not go into
-`oxau-vm-api` itself because it is independently useful (derive macros, doc
+`ruau-vm-api` itself because it is independently useful (derive macros, doc
 tooling, embedders without the vm) and vm-api should stay a pure embedding
-interface. Self-validation needs no parser dependency either: `oxau-decl` takes
-`oxau-ast` as a dev-dependency for a render-then-reparse property test (every
+interface. Self-validation needs no parser dependency either: `ruau-decl` takes
+`ruau-ast` as a dev-dependency for a render-then-reparse property test (every
 rendered module must parse under `allow_declaration_syntax`), and at runtime
 the existing `SurfaceSpec` audit re-parses everything anyway.
 
-**Relation to existing type models.** oxau already has two type
-representations: the syntactic `oxau-ast::ast::Type` (span-carrying,
-parse-shaped) and the semantic `oxau-typecheck::types::TypeKind`
+**Relation to existing type models.** ruau already has two type
+representations: the syntactic `ruau-ast::ast::Type` (span-carrying,
+parse-shaped) and the semantic `ruau-typecheck::types::TypeKind`
 (arena/`TypeId`-based, inference-shaped), plus the derived `ModuleSchema`
-surface in `oxau-typecheck::schema`. `decl::Ty` is deliberately a third: an
+surface in `ruau-typecheck::schema`. `decl::Ty` is deliberately a third: an
 *authoring* model — owned, span-free, doc-carrying, cheap to construct from
 derive macros and host-registration code. Rendered text stays the interchange
 format between the models: the builder renders, the audit parses and diffs.
@@ -206,7 +206,7 @@ No model-to-model conversion, no second source of truth.
 **The model.** Items are plain values built with `new(...)` plus with-style
 methods; `DeclBuilder` is an ordered collection with validation. No closure
 DSLs, no entry handles, no sub-builder lifetimes — the same `Class` value that
-declares a host type in `oxau-vm` drops into a module declaration unchanged.
+declares a host type in `ruau-vm` drops into a module declaration unchanged.
 
 ```rust
 use std::borrow::Cow;
@@ -362,7 +362,7 @@ declare editor: {
   parenthesizes by precedence (`(A | B)?`, function types inside unions),
   escapes string literals, and formats all docs through one formatter: wrapped
   `---` lines, `--- @param`/`--- @return` tags for functions.
-- The render-then-reparse property test (dev-dep on `oxau-ast`) pins the output
+- The render-then-reparse property test (dev-dep on `ruau-ast`) pins the output
   grammar; the `SurfaceSpec` audit keeps consuming rendered text at runtime, so
   there is no second source of truth to drift.
 
@@ -380,19 +380,19 @@ impl DeclSource<'_> {
     pub fn render(&self) -> Cow<'_, str>;
 }
 
-// oxau-vm-api — implementors build their DeclModule once and return a borrow.
+// ruau-vm-api — implementors build their DeclModule once and return a borrow.
 pub trait NativeModule: Send + Sync {
     fn name(&self) -> &str;
     fn declaration(&self) -> DeclSource<'_>;
     fn build(&self, builder: &mut dyn ModuleBuilder);
 }
 
-// oxau-vm — typed alternative to `declaration(String)`.
+// ruau-vm — typed alternative to `declaration(String)`.
 impl<T: Send + 'static> HostTypeBuilder<T> {
     pub fn class(self, class: decl::Class) -> Self;
 }
 
-// oxau
+// ruau
 impl SurfaceSpecBuilder {
     pub fn declaration_global_ty(self, name: &str, ty: decl::Ty) -> Self;
 }
@@ -406,14 +406,14 @@ existing string declaration working during migration. Because `declaration()`
 is called more than once per startup, implementors build the model at
 construction time and return `DeclSource::Model(&self.decl)`.
 
-1. [x] **(oxau)** Create the `oxau-decl` crate: `Ty`/`Field`/`Param`/`FnSig`,
+1. [x] **(ruau)** Create the `ruau-decl` crate: `Ty`/`Field`/`Param`/`FnSig`,
        the `Alias`/`Global`/`Func`/`Class` items, `DeclBuilder`/`DeclModule`
        with finish-time validation (identifier checks, identical-body dedup,
        conflict detection, `Named`-reference resolution against declared and
        `extern_ty` names), the deterministic renderer with one doc formatter,
        and the render-then-reparse property test as a dev-dependency on
-       `oxau-ast`. Re-export as `oxau::decl`.
-2. [x] **(oxau)** Thread `DeclSource` through `oxau-vm-api::NativeModule::
+       `ruau-ast`. Re-export as `ruau::decl`.
+2. [x] **(ruau)** Thread `DeclSource` through `ruau-vm-api::NativeModule::
        declaration_source`, add `HostTypeBuilder::class` and
        `SurfaceSpecBuilder::declaration_global_ty`, and route the audit, the
        manifest hash, and checker injection through one `render` call so text
@@ -421,19 +421,19 @@ construction time and return `DeclSource::Model(&self.decl)`.
        staged adapter rather than changing the object-safe `declaration()` text
        method in the same patch; model-owning modules override
        `declaration_source()`.
-3. [ ] **(oxau)** Migrate oxau's own surfaces onto the model:
+3. [ ] **(ruau)** Migrate ruau's own surfaces onto the model:
        `GlobalValueModule`, `DeclarationGlobalSpec`, and the example hosts
        (`eguidev_host`, `verber_tool_host`, `agent_host`, `demo_server`,
        `embed_host`, `vm_only`, `analyze`) — the in-repo proving ground for
        construction ergonomics.
 4. [ ] Prove the API on an external consumer: port eguidev's or verber's
-       hand-assembled declarations onto `oxau::decl` and fold what that teaches
+       hand-assembled declarations onto `ruau::decl` and fold what that teaches
        back into the builder before stage 2 leans on it.
 
 2. Re-ground canopy's command metadata on the model
 
 Canopy's command system renders Luau types from const strings. Move it onto
-`oxau::decl`. `CommandType` becomes function-based — fn pointers keep
+`ruau::decl`. `CommandType` becomes function-based — fn pointers keep
 `CommandSpec` and `CANOPY_FUNCTIONS` const-constructible — which finally
 permits generic container impls:
 
@@ -530,7 +530,7 @@ on.
        type (one definition, so record and declaration cannot drift), and
        populate `CommandTypeSpec.doc` for parameters and returns from doc
        comments instead of leaving discovery docs empty.
-3. [x] Make `NodeId` unforgeable: represent node ids script-side as an oxau
+3. [x] Make `NodeId` unforgeable: represent node ids script-side as an ruau
        `HostType` userdata (`NodeHandle`) and add an internal
        `ArgValue::Node(NodeId)` variant so command dispatch can carry handles
        without pretending they are JSON. Convert `ArgValue::Node` to a scoped
@@ -566,7 +566,7 @@ on.
        }
        ```
 
-       The landed path keeps oxau unchanged for now: Canopy's ordinary
+       The landed path keeps ruau unchanged for now: Canopy's ordinary
        `ArgValue::to_json_value` rejects `NodeId`, while the MCP/smoke boundary
        calls `to_external_json_value`, which renders a descriptive opaque token
        that cannot be fed back into scripts as a forged handle.
@@ -623,14 +623,16 @@ limited to `run_config`, a bare file eval during setup. Open the persistent
 avenue using the same typed surface agents see. Customization, configuration,
 and automation are the same activity at different lifetimes.
 
-1. [x] Wire oxau `ModuleSource` into the app surface with two durable roots:
+1. [x] Wire ruau `ModuleSource` into the app surface with two durable roots:
        `@user` (per-user, e.g. `~/.config/<app>/`) and `@project` (nearest
        `.canopy/` directory). Implement a Canopy-owned composite `ModuleSource`
        that dispatches those prefixes to `FilesystemModuleSource`s, install it with
        `SurfaceSpecBuilder::module_source`, and invalidate deliberately with the
        filesystem epoch handles. Conformance-check paired `.luau`/`.d.luau`
-       modules with `CheckedFrontend::check_conformance`, cached by
-       `ConformanceFingerprint`.
+       modules with `CheckedFrontend::check_conformance` at `finalize_api()`.
+       `ConformanceFingerprint` caching is deferred until a module-revalidation
+       path exists — `finalize_api()` runs once per process, so a cache has
+       nothing to key across yet.
 
        ```rust
        struct CanopyModuleSource {
@@ -659,8 +661,10 @@ and automation are the same activity at different lifetimes.
        local keys = require("@user/keymap")
        local project = require("@project/project")
 
-       keys.bind_editor_defaults()
-       project.open_last_workspace()
+       function setup()
+           keys.bind_editor_defaults()
+           project.open_last_workspace()
+       end
        ```
 2. [x] Layer startup scripts as app defaults, `@user/init.luau`, and
        `@project/init.luau`, each strict-checked and run against the full surface
@@ -678,9 +682,9 @@ and automation are the same activity at different lifetimes.
        inheritance rules, binding resolution that walks the stack before the
        default mode fallback, `canopy.push_mode`/`canopy.pop_mode` script APIs,
        and updated editor, command-mode, and binding-discovery call sites.
-4. [x] Let apps register typed oxau `NativeModule`s beyond the derived command
+4. [x] Let apps register typed ruau `NativeModule`s beyond the derived command
        surface — for example a document-like buffer API with search and
-       diff-based edits — with declarations built on `oxau::decl` and audited
+       diff-based edits — with declarations built on `ruau::decl` and audited
        through the same `SurfaceSpec` as the generated surface.
 
 5. The agent loop: drive, wait, observe, record
@@ -703,8 +707,13 @@ effect.
        let factory = app_factory(move || create_app_with_config(&path, config.as_deref()));
        let code = launch(factory, LaunchMode::run_with_mcp(socket_path))?;
        ```
-2. [ ] Add predicate waits on the live path: `canopy.wait_for(fn)` plus node and
-       screen variants. Concretely: evaluate scripts through oxau's async driver
+2. [x] Add predicate waits on the live path: `canopy.wait_for(fn)` plus node and
+       screen variants. Implemented in `plans/ruau.md` stage B6: top-level evals
+       use Ruau's async owned-result driver, waits are async host functions, and
+       automation is serviced between predicate checks. The terminal-event redraw
+       portion of the original design remains as the live-loop refinement noted
+       in B6.
+       Concretely: evaluate scripts through ruau's async driver
        (`call_protected_owned_async`) and poll that future from the canopy
        runloop. While the eval future is `Pending`, one active-eval guard owns
        the VM; the app may pump Rust events and redraw, but concurrent script

@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use canopy::backend::crossterm::{RunloopOptions, runloop_with_options};
 
 use crate::{
-    Result, ScriptStatus, SuiteConfig, app_factory, run_suite,
+    Result, ScriptStatus, SuiteConfig, run_suite,
     script::AppFactory,
     server::{serve_stdio, serve_uds},
 };
@@ -65,14 +65,6 @@ pub fn launch(factory: AppFactory, mode: LaunchMode) -> Result<i32> {
             Ok(0)
         }
     }
-}
-
-/// Convert a closure into an app factory and launch it.
-pub fn launch_with<F>(factory: F, mode: LaunchMode) -> Result<i32>
-where
-    F: Fn() -> Result<canopy::Canopy> + Send + Sync + 'static,
-{
-    launch(app_factory(factory), mode)
 }
 
 /// Run the interactive terminal UI, optionally serving live MCP automation.

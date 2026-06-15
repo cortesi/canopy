@@ -376,6 +376,51 @@ mod tests {
     }
 
     #[test]
+    fn script_journal_is_bounded_with_monotonic_ids() -> Result<()> {
+        let mut canopy = raw_canopy_with_leaf()?;
+        canopy.set_script_journal_limit(2);
+        canopy.eval_script("api_leaf.set(1)")?;
+        canopy.eval_script("api_leaf.set(2)")?;
+        canopy.eval_script("api_leaf.set(3)")?;
+
+        let journal = canopy.script_journal();
+        assert_eq!(journal.len(), 2);
+        assert_eq!(journal[0].id, 2);
+        assert_eq!(journal[1].id, 3);
+        Ok(())
+    }
+
+    #[test]
+    fn nested_evaluations_keep_outer_diagnostics_and_journal_deltas() -> Result<()> {
+        let mut canopy = raw_canopy_with_leaf()?;
+        canopy.register_default_bindings("api_leaf", r#"canopy.log("from bindings")"#)?;
+        canopy.eval_script(
+            r#"
+            canopy.log("outer before")
+            api_leaf.default_bindings()
+            canopy.log("outer after")
+        "#,
+        )?;
+
+        let journal = canopy.script_journal();
+        assert_eq!(journal.len(), 2);
+        let nested = &journal[0];
+        assert_eq!(nested.origin, "default-bindings:api_leaf");
+        assert_eq!(nested.logs, vec!["from bindings".to_string()]);
+        let outer = &journal[1];
+        assert_eq!(outer.origin, "eval");
+        assert_eq!(
+            outer.logs,
+            vec![
+                "outer before".to_string(),
+                "from bindings".to_string(),
+                "outer after".to_string(),
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
     fn startup_scripts_layer_app_user_and_project_modules() -> Result<()> {
         let root = test_dir("startup");
         let user_root = root.join("user");
@@ -402,7 +447,10 @@ mod tests {
             &user_root.join("init.luau"),
             r#"
             local keymap = require("@user/keymap")
-            keymap.apply()
+
+            function setup()
+                keymap.apply()
+            end
         "#,
         );
         write_script(
@@ -427,14 +475,24 @@ mod tests {
             &project_root.join("init.luau"),
             r#"
             local project = require("@project/project")
-            project.apply()
+
+            function setup()
+                project.apply()
+            end
         "#,
         );
 
         let mut canopy = raw_canopy_with_leaf()?;
         canopy.set_user_script_root(&user_root)?;
         canopy.set_project_script_root(&project_root)?;
-        canopy.register_startup_script("app", "api_leaf.set(1)")?;
+        canopy.register_startup_script(
+            "app",
+            r#"
+            function setup()
+                api_leaf.set(1)
+            end
+        "#,
+        )?;
 
         assert_eq!(canopy.run_startup_scripts()?, 3);
         assert_eq!(
@@ -444,6 +502,46 @@ mod tests {
         assert_eq!(canopy.run_startup_scripts()?, 0);
 
         let _removed = fs::remove_dir_all(root);
+        Ok(())
+    }
+
+    #[test]
+    fn startup_scripts_require_setup_global() -> Result<()> {
+        let mut canopy = raw_canopy_with_leaf()?;
+        canopy.register_startup_script("app", "api_leaf.set(1)")?;
+
+        let error = canopy
+            .run_startup_scripts()
+            .expect_err("startup script without setup should fail typechecking");
+        assert!(
+            error.to_string().contains("required global 'setup'"),
+            "{error}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn startup_scripts_accept_additional_global_requirements() -> Result<()> {
+        let mut canopy = raw_canopy_with_leaf()?;
+        canopy.require_startup_global("configure_workspace", "() -> ()")?;
+        canopy.register_startup_script(
+            "app",
+            r#"
+            function configure_workspace()
+                api_leaf.set(1)
+            end
+
+            function setup()
+                configure_workspace()
+            end
+        "#,
+        )?;
+
+        assert_eq!(canopy.run_startup_scripts()?, 1);
+        assert_eq!(
+            canopy.eval_script_value("return api_leaf.get()")?,
+            ArgValue::Int(1)
+        );
         Ok(())
     }
 
