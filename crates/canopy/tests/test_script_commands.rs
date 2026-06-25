@@ -285,7 +285,7 @@ mod tests {
     fn recursive_command_arg_declarations_terminate() {
         use canopy::commands::{CommandType, DeclRegistry, decl};
 
-        let mut builder = decl::DeclBuilder::new();
+        let mut builder = decl::Builder::new();
         let mut registry = DeclRegistry::new(&mut builder);
         TreePayload::luau_decls(&mut registry);
         TreePayload::luau_decls(&mut registry);

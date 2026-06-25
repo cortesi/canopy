@@ -15,24 +15,25 @@ use std::{
 
 use futures::executor;
 use ruau::{
-    compile::{BytecodeChunk, CompileError, CompileOptions, compile_for, restrict_compile_options},
+    abi::{
+        HostReturn, ModuleBinding, ModuleBuilder, NativeModule, OwnedValue, RuntimeErrorKind,
+        ScriptErrorField,
+    },
+    compile::{BytecodeChunk, CompileError, CompileOptions, compile_for, restrict_options},
     decl::DeclSource,
-    diagnostic::{DiagnosticPayload, DiagnosticSeverity, TypeDiagnostic},
-    embed::{
-        AsyncHostFunction, FromLuaMulti, Function, HostCtx, HostReturn, HostType, HostTypeBuilder,
-        IntoLua, MarshaledPair, MarshaledScriptError, MarshaledValue, ModuleBinding, ModuleBuilder,
-        ModuleBuilderExt, MultiValue, NativeModule, OwnedValue, RuntimeError, Scope,
-        ScopedHostFunction, ScopedValue, ScriptError, ScriptErrorField, StashedClosure, Table,
-        async_host_fn,
-    },
-    profile::Profile,
-    session::{
-        Ambient, CallOptions, Cancel, ExecError, Limits, LoadedModule, RuntimeErrorKind, SinkQuota,
-        Vm,
-    },
     source::{ModuleId, ModuleSource},
     surface::SurfaceSpec,
-    types::Checker,
+    typecheck::{
+        checker::Checker,
+        diagnostic::{Payload, Severity, TypeDiagnostic},
+    },
+    vm::{
+        Ambient, AsyncHostContext, AsyncHostFunction, CallOptions, Cancel, ExecError, FromLuaMulti,
+        Function, HostType, HostTypeBuilder, IntoLua, Limits, LoadedModule, MarshaledPair,
+        MarshaledScriptError, MarshaledValue, ModuleBuilderExt, MultiValue, Profile, RuntimeError,
+        Scope, ScopedHostFunction, ScopedValue, ScriptError, SinkQuota, StashedClosure, Table, Vm,
+        async_host_fn,
+    },
 };
 use serde::{Deserialize, Serialize};
 use tokio::{
@@ -591,7 +592,7 @@ fn compile_chunk_with_surface(surface: &SurfaceSpec, source: &str) -> Result<Byt
 /// Compile Luau source under an explicit VM profile.
 fn compile_chunk_with_profile(profile: &Profile, source: &str) -> Result<BytecodeChunk> {
     let mut options = CompileOptions::for_vm_execution();
-    restrict_compile_options(profile, &mut options);
+    restrict_options(profile, &mut options);
     compile_for(profile, source.as_bytes(), &options).map_err(|err| compile_error_to_canopy(&err))
 }
 
@@ -623,7 +624,7 @@ fn format_typecheck_diagnostics(result: &ScriptCheckResult) -> String {
 pub(crate) fn type_diagnostic_to_script(diagnostic: &TypeDiagnostic) -> ScriptCheckDiagnostic {
     let begin = diagnostic.primary_location.begin;
     let message = match &diagnostic.typed_payload {
-        DiagnosticPayload::RequiredExport {
+        Payload::RequiredExport {
             name,
             required,
             actual,
@@ -648,8 +649,8 @@ pub(crate) fn type_diagnostic_to_script(diagnostic: &TypeDiagnostic) -> ScriptCh
     };
     ScriptCheckDiagnostic {
         severity: match diagnostic.severity {
-            DiagnosticSeverity::Error => "error",
-            DiagnosticSeverity::Warning | DiagnosticSeverity::Info => "warning",
+            Severity::Error => "error",
+            Severity::Warning | Severity::Info => "warning",
         }
         .to_string(),
         line: begin.line as usize + 1,
@@ -725,7 +726,7 @@ struct NodeHandle {
 /// Build the host userdata descriptor for `NodeId` handles.
 fn node_handle_type() -> HostType {
     HostTypeBuilder::<NodeHandle>::new("NodeId")
-        .class(commands::decl::Class::new("NodeId"))
+        .class(&commands::decl::Class::new("NodeId"))
         .eq_by(|left, right| left.id == right.id)
         .marshal(node_handle_marshal)
         .tostring(|handle| node_token(handle.id))
@@ -1761,12 +1762,14 @@ fn wait_timeout(timeout_ms: u64) -> RuntimeError {
 
 /// Poll app state and a predicate until it succeeds or times out.
 async fn wait_until<F>(
-    ctx: HostCtx,
+    ctx: AsyncHostContext,
     timeout_ms: Option<u64>,
     mut ready: F,
 ) -> StdResult<HostReturn, RuntimeError>
 where
-    F: FnMut(HostCtx) -> Pin<Box<dyn Future<Output = StdResult<bool, RuntimeError>> + Send>>,
+    F: FnMut(
+        AsyncHostContext,
+    ) -> Pin<Box<dyn Future<Output = StdResult<bool, RuntimeError>> + Send>>,
 {
     let started = Instant::now();
     loop {
@@ -1792,7 +1795,7 @@ where
 
 /// Async implementation of `canopy.wait_for`.
 async fn wait_for_predicate(
-    ctx: HostCtx,
+    ctx: AsyncHostContext,
     args: WaitForArgs,
 ) -> StdResult<HostReturn, RuntimeError> {
     wait_until(ctx, args.timeout_ms, move |ctx| {
@@ -1811,7 +1814,10 @@ async fn wait_for_predicate(
 }
 
 /// Async implementation of `canopy.wait_for_node`.
-async fn wait_for_node(ctx: HostCtx, args: WaitForNodeArgs) -> StdResult<HostReturn, RuntimeError> {
+async fn wait_for_node(
+    ctx: AsyncHostContext,
+    args: WaitForNodeArgs,
+) -> StdResult<HostReturn, RuntimeError> {
     wait_until(ctx, args.timeout_ms, move |ctx| {
         let owner = args.owner.clone();
         Box::pin(async move {
@@ -1839,7 +1845,7 @@ async fn wait_for_node(ctx: HostCtx, args: WaitForNodeArgs) -> StdResult<HostRet
 
 /// Async implementation of `canopy.wait_for_screen_text`.
 async fn wait_for_screen_text(
-    ctx: HostCtx,
+    ctx: AsyncHostContext,
     args: WaitForScreenTextArgs,
 ) -> StdResult<HostReturn, RuntimeError> {
     wait_until(ctx, args.timeout_ms, move |ctx| {
@@ -3680,7 +3686,7 @@ impl LuauHost {
         let mut outcome: Option<Result<ArgValue>> = None;
         let step = vm.step_with_context(
             canopy,
-            CallOptions::new().limits(invocation_limits(timeout)),
+            &CallOptions::new().limits(invocation_limits(timeout)),
             |scope| {
                 let _guard = match ScriptAnchorGuard::push(scope, node_id) {
                     Ok(guard) => guard,

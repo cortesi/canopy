@@ -21,7 +21,7 @@ pub(crate) fn preamble() -> String {
         output.push('\n');
     }
     output.push('\n');
-    let mut builder = decl::DeclBuilder::new();
+    let mut builder = decl::Builder::new();
     register_framework_declarations(&mut builder);
     base_api::register_declarations(&mut builder);
     output.push_str(
@@ -60,7 +60,7 @@ pub(crate) fn render_owner_declaration(
     specs: &[&'static CommandSpec],
     has_default_bindings: bool,
 ) -> String {
-    let mut builder = decl::DeclBuilder::new();
+    let mut builder = decl::Builder::new();
     register_owner_declaration(&mut builder, owner, specs, has_default_bindings);
     builder
         .finish()
@@ -83,7 +83,7 @@ pub fn render_definitions(
             output.push_str(&format!("-- {}: {}\n", fixture.name, fixture.description));
         }
     }
-    let mut builder = decl::DeclBuilder::new();
+    let mut builder = decl::Builder::new();
     builder.section("Application Commands");
     for (owner, specs) in owners {
         register_owner_declaration(
@@ -124,7 +124,7 @@ pub fn command_type_to_luau(spec: &CommandTypeSpec) -> String {
 }
 
 /// Register framework-owned record, class, and alias declarations.
-fn register_framework_declarations(builder: &mut decl::DeclBuilder) {
+fn register_framework_declarations(builder: &mut decl::Builder) {
     builder.class(decl::Class::new("NodeId"));
     builder.alias(decl::Alias::new(
         "Point",
@@ -218,7 +218,7 @@ fn register_framework_declarations(builder: &mut decl::DeclBuilder) {
 }
 
 /// Register the active-binding discovery record.
-fn register_binding_info(builder: &mut decl::DeclBuilder) {
+fn register_binding_info(builder: &mut decl::Builder) {
     builder.alias(decl::Alias::new(
         "BindingInfo",
         decl::Ty::table([
@@ -238,7 +238,7 @@ fn register_binding_info(builder: &mut decl::DeclBuilder) {
 }
 
 /// Register command discovery records.
-fn register_command_info(builder: &mut decl::DeclBuilder) {
+fn register_command_info(builder: &mut decl::Builder) {
     builder.alias(decl::Alias::new(
         "CommandParamInfo",
         decl::Ty::table([
@@ -282,7 +282,7 @@ fn register_command_info(builder: &mut decl::DeclBuilder) {
 }
 
 /// Register observation and diagnostics records.
-fn register_observation_info(builder: &mut decl::DeclBuilder) {
+fn register_observation_info(builder: &mut decl::Builder) {
     builder.alias(decl::Alias::new(
         "ScreenCell",
         decl::Ty::table([
@@ -361,7 +361,7 @@ fn register_observation_info(builder: &mut decl::DeclBuilder) {
 
 /// Register one owner command table and all command-owned declaration dependencies.
 fn register_owner_declaration(
-    builder: &mut decl::DeclBuilder,
+    builder: &mut decl::Builder,
     owner: &str,
     specs: &[&'static CommandSpec],
     has_default_bindings: bool,
@@ -391,7 +391,7 @@ fn register_owner_declaration(
 }
 
 /// Register declaration dependencies for command parameters and returns.
-fn register_command_deps(builder: &mut decl::DeclBuilder, specs: &[&'static CommandSpec]) {
+fn register_command_deps(builder: &mut decl::Builder, specs: &[&'static CommandSpec]) {
     let mut registry = DeclRegistry::new(builder);
     for spec in specs {
         for param in spec

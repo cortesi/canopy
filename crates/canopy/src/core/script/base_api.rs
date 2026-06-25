@@ -1,8 +1,9 @@
 //! Base `canopy` scripting API declarations and native registration.
 
 use ruau::{
-    decl::{DeclBuilder, Field, FnSig, Func, Global, Ty},
-    embed::{AsyncHostFunction, ModuleBinding, ModuleBuilder, ModuleBuilderExt},
+    abi::{ModuleBinding, ModuleBuilder},
+    decl::{Builder, Field, FnSig, Func, Global, Ty},
+    vm::{AsyncHostFunction, ModuleBuilderExt},
 };
 
 use super::{
@@ -454,7 +455,7 @@ const ASYNC_CANOPY_FUNCTIONS: &[AsyncBaseFunction] = &[
 ];
 
 /// Register the base Luau declarations generated from the native registration table.
-pub(super) fn register_declarations(decl: &mut DeclBuilder) {
+pub(super) fn register_declarations(decl: &mut Builder) {
     decl.global(Global::new(
         "canopy",
         Ty::table(

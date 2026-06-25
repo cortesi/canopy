@@ -703,14 +703,14 @@ impl<T: CommandType> CommandType for HashMap<String, T> {
 /// before recursing into field types.
 pub struct DeclRegistry<'a> {
     /// Underlying declaration builder.
-    builder: &'a mut decl::DeclBuilder,
+    builder: &'a mut decl::Builder,
     /// Names currently being declared during this registration pass.
     seen: HashSet<decl::Text>,
 }
 
 impl<'a> DeclRegistry<'a> {
     /// Wrap a declaration builder.
-    pub fn new(builder: &'a mut decl::DeclBuilder) -> Self {
+    pub fn new(builder: &'a mut decl::Builder) -> Self {
         Self {
             builder,
             seen: HashSet::new(),

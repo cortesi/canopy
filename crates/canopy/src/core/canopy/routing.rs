@@ -1,6 +1,6 @@
 //! Input routing and event dispatch for the canopy facade.
 
-use ruau::embed::Scope;
+use ruau::vm::Scope;
 
 use super::{Canopy, RoutePhase, RouteTraceEntry};
 use crate::{

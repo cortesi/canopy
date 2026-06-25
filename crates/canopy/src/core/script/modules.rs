@@ -6,10 +6,10 @@ use std::{
 #[cfg(test)]
 use ruau::source::{ModuleSourceError, poll_ready_once};
 use ruau::{
-    fs::{FilesystemModuleSource, FilesystemSourceEpoch},
+    fs::{FilesystemEpoch, FilesystemSource},
     source::{
-        ModuleId, ModuleInstanceKey, ModuleSource, ModuleSourceFuture, ModuleSourceMetadata,
-        MountedModuleSource, ReadRequest,
+        InstanceKey, ModuleId, ModuleSource, ModuleSourceFuture, MountedSource, ReadRequest,
+        SourceMetadata,
     },
 };
 
@@ -159,7 +159,7 @@ impl ScriptModuleRoots {
 #[derive(Debug)]
 pub struct ScriptModuleSource {
     /// Prefix-dispatching source shared with Ruau embedders.
-    source: MountedModuleSource,
+    source: MountedSource,
     /// Root backing `@user`, if configured.
     user: Option<ScriptRootMount>,
     /// Root backing `@project`, if configured.
@@ -170,7 +170,7 @@ impl ScriptModuleSource {
     /// Construct an empty persistent source.
     fn new() -> Self {
         Self {
-            source: MountedModuleSource::new(),
+            source: MountedSource::new(),
             user: None,
             project: None,
         }
@@ -205,7 +205,7 @@ impl ScriptModuleSource {
 
     /// Add one namespace root to the mounted source.
     fn mount(&mut self, namespace: Namespace, root: PathBuf) {
-        let source = FilesystemModuleSource::new(root);
+        let source = FilesystemSource::new(root);
         let epoch = source.epoch_handle();
         let source: Arc<dyn ModuleSource> = Arc::new(source);
         self.source.mount(namespace.name(), source);
@@ -234,11 +234,11 @@ impl ModuleSource for ScriptModuleSource {
         self.source.read_request(request)
     }
 
-    fn instance_key(&self, request: ReadRequest<'_>) -> ModuleInstanceKey {
+    fn instance_key(&self, request: ReadRequest<'_>) -> InstanceKey {
         self.source.instance_key(request)
     }
 
-    fn metadata(&self, id: &ModuleId) -> ModuleSourceMetadata {
+    fn metadata(&self, id: &ModuleId) -> SourceMetadata {
         self.source.metadata(id)
     }
 
@@ -289,7 +289,7 @@ pub struct StartupModule {
 #[derive(Debug)]
 struct ScriptRootMount {
     /// Shared epoch handle used for explicit invalidation.
-    epoch: FilesystemSourceEpoch,
+    epoch: FilesystemEpoch,
 }
 
 /// Build a canonical module id in a namespace.

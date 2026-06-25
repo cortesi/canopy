@@ -51,6 +51,6 @@ pub use core::{
 // Re-export derive macros
 pub use canopy_derive::{CommandArg, CommandEnum, command, derive_commands};
 /// Ruau declaration and embedding APIs used for app-provided native modules.
-pub use ruau::{decl, embed};
+pub use ruau::{abi, decl, vm};
 // Re-export widget trait and event outcome
 pub use widget::{EventOutcome, Widget};
