@@ -16,7 +16,7 @@ use canopy::{
     state::NodeName,
     style::{AttrSet, Color, ResolvedStyle},
 };
-use itty::{
+use itty_core::{
     SelectionSnapshot, SelectionSpec, Session,
     clipboard::ClipboardHandler,
     config::{EguiTTYConfig, EguiTTYConfigBuilder, Hex, PaletteConfig, PaletteKind, PaletteMeta},
@@ -1007,7 +1007,7 @@ fn canopy_hex(color: Color) -> Hex {
     let Color::Rgb { r, g, b } = color.to_rgb() else {
         unreachable!("Color::to_rgb always returns Color::Rgb");
     };
-    Hex::from_rgb(itty::Rgb { r, g, b })
+    Hex::from_rgb(itty_core::Rgb { r, g, b })
 }
 
 /// Build an `itty` config from Canopy's terminal config.

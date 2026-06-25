@@ -23,7 +23,7 @@ anyhow = "1.0.102"
 fontdue = "0.9.3"
 thiserror = "2.0.18"
 tokio = { version = "1.52.1", features = ["rt-multi-thread", "time", "sync"] }
-itty = { version = "0.1.0", path = "../../../eguitty/crates/itty" }
+itty-core = { version = "0.1.0", path = "../../../eguitty/crates/itty-core" }
 
 [dev-dependencies]
 canopy = { path = "../canopy", features = ["testing"] }
