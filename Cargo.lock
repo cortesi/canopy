@@ -28,9 +28,9 @@ dependencies = [
 
 [[package]]
 name = "alacritty_terminal"
-version = "0.25.1"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46319972e74179d707445f64aaa2893bbf6a111de3a9af29b7eb382f8b39e282"
+checksum = "bda177466b9524d59f1b12f0dd30b68696788e9992a7e959021c4a0ed96fcf59"
 dependencies = [
  "base64",
  "bitflags 2.11.1",
@@ -45,7 +45,7 @@ dependencies = [
  "rustix",
  "rustix-openpty",
  "serde",
- "signal-hook",
+ "signal-hook 0.4.4",
  "unicode-width",
  "vte",
  "windows-sys 0.59.0",
@@ -1010,7 +1010,7 @@ dependencies = [
  "mio",
  "parking_lot",
  "rustix",
- "signal-hook",
+ "signal-hook 0.3.18",
  "signal-hook-mio",
  "winapi",
 ]
@@ -2321,9 +2321,6 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
- "tokio-metrics",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -2481,9 +2478,9 @@ checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
 
 [[package]]
 name = "linkify"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1dfa36d52c581e9ec783a7ce2a5e0143da6237be5811a0b3153fedfdbe9f780"
+checksum = "92f9ae2f3d31697697311f016320fe984127e636b45cf5eb5c175b7eb103dadb"
 dependencies = [
  "memchr",
 ]
@@ -2547,15 +2544,6 @@ name = "lru-slab"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
-
-[[package]]
-name = "matchers"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1525a2a28c7f4fa0fc98bb91ae755d1e2d1505079e05539e35bc876b5d65ae9"
-dependencies = [
- "regex-automata",
-]
 
 [[package]]
 name = "matchit"
@@ -3861,25 +3849,17 @@ dependencies = [
 name = "ruau"
 version = "0.1.0"
 dependencies = [
- "blake3",
- "ruau-abi",
  "ruau-analysis",
  "ruau-ast",
  "ruau-bytecode",
  "ruau-decl",
+ "ruau-fs",
+ "ruau-host",
+ "ruau-runner",
  "ruau-source",
+ "ruau-surface",
  "ruau-typecheck",
  "ruau-vm",
- "serde",
- "serde_json",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "ruau-abi"
-version = "0.1.0"
-dependencies = [
  "ruau-vm-api",
 ]
 
@@ -3915,8 +3895,63 @@ name = "ruau-decl"
 version = "0.1.0"
 
 [[package]]
+name = "ruau-fs"
+version = "0.1.0"
+dependencies = [
+ "ruau-analysis",
+ "ruau-ast",
+ "ruau-source",
+ "serde_json",
+]
+
+[[package]]
+name = "ruau-host"
+version = "0.1.0"
+dependencies = [
+ "ruau-bytecode",
+ "ruau-decl",
+ "ruau-surface",
+ "ruau-vm",
+ "ruau-vm-api",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "ruau-runner"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "ruau-analysis",
+ "ruau-ast",
+ "ruau-bytecode",
+ "ruau-decl",
+ "ruau-source",
+ "ruau-surface",
+ "ruau-typecheck",
+ "ruau-vm",
+ "ruau-vm-api",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "ruau-source"
 version = "0.1.0"
+
+[[package]]
+name = "ruau-surface"
+version = "0.1.0"
+dependencies = [
+ "ruau-analysis",
+ "ruau-ast",
+ "ruau-bytecode",
+ "ruau-decl",
+ "ruau-source",
+ "ruau-typecheck",
+ "ruau-vm",
+ "ruau-vm-api",
+]
 
 [[package]]
 name = "ruau-typecheck"
@@ -3937,7 +3972,6 @@ dependencies = [
  "foldhash 0.2.0",
  "pin-project-lite",
  "rmp-serde",
- "ruau-abi",
  "ruau-bytecode",
  "ruau-decl",
  "ruau-source",
@@ -4329,6 +4363,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "signal-hook"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b2a0c28ca5908dbdbcd52e6fdaa00358ab88637f8ab33e1f188dd510eb44b53d"
+dependencies = [
+ "libc",
+ "signal-hook-registry",
+]
+
+[[package]]
 name = "signal-hook-mio"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4336,7 +4380,7 @@ checksum = "b75a19a7a740b25bc7944bdee6172368f988763b744e3d4dfe753f6b4ece40cc"
 dependencies = [
  "libc",
  "mio",
- "signal-hook",
+ "signal-hook 0.3.18",
 ]
 
 [[package]]
@@ -4860,18 +4904,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tokio-metrics"
-version = "0.4.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e0410015c6db7b67b9c9ab2a3af4d74a942d637ff248d0d055073750deac6f9"
-dependencies = [
- "futures-util",
- "pin-project-lite",
- "tokio",
- "tokio-stream",
-]
-
-[[package]]
 name = "tokio-native-tls"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4888,17 +4920,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1729aa945f29d91ba541258c8df89027d5792d85a8841fb65e8bf0f4ede4ef61"
 dependencies = [
  "rustls",
- "tokio",
-]
-
-[[package]]
-name = "tokio-stream"
-version = "0.1.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32da49809aab5c3bc678af03902d4ccddea2a87d028d86392a4b1560c6906c70"
-dependencies = [
- "futures-core",
- "pin-project-lite",
  "tokio",
 ]
 
@@ -5055,15 +5076,10 @@ version = "0.3.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb7f578e5945fb242538965c2d0b04418d38ec25c79d160cd279bf0731c8d319"
 dependencies = [
- "matchers",
  "nu-ansi-term",
- "once_cell",
- "regex-automata",
  "sharded-slab",
  "smallvec",
  "thread_local",
- "time",
- "tracing",
  "tracing-core",
  "tracing-log",
 ]

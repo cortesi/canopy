@@ -15,24 +15,24 @@ use std::{
 
 use futures::executor;
 use ruau::{
-    abi::{
-        HostReturn, ModuleBinding, ModuleBuilder, NativeModule, OwnedValue, RuntimeErrorKind,
-        ScriptErrorField,
-    },
-    compile::{BytecodeChunk, CompileError, CompileOptions, compile_for, restrict_options},
+    bytecode::{BytecodeChunk, CompileError, CompileOptions},
     decl::DeclSource,
     source::{ModuleId, ModuleSource},
-    surface::SurfaceSpec,
+    surface::Surface,
     typecheck::{
         checker::Checker,
-        diagnostic::{Payload, Severity, TypeDiagnostic},
+        diagnostics::{Diagnostic as TypeDiagnostic, Payload, Severity},
     },
     vm::{
         Ambient, AsyncHostContext, AsyncHostFunction, CallOptions, Cancel, ExecError, FromLuaMulti,
         Function, HostType, HostTypeBuilder, IntoLua, Limits, LoadedModule, MarshaledPair,
-        MarshaledScriptError, MarshaledValue, ModuleBuilderExt, MultiValue, Profile, RuntimeError,
-        Scope, ScopedHostFunction, ScopedValue, ScriptError, SinkQuota, StashedClosure, Table, Vm,
-        async_host_fn,
+        MarshaledScriptError, MarshaledValue, ModuleBuilderExt, MultiValue, RuntimeCapabilities,
+        RuntimeError, Scope, ScopedHostFunction, ScopedValue, ScriptError, SinkQuota,
+        StashedClosure, Table, Vm, async_host_fn,
+    },
+    vm_api::{
+        HostReturn, ModuleBinding, ModuleBuilder, NativeModule, OwnedValue, RuntimeErrorKind,
+        ScriptErrorField,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -351,7 +351,7 @@ struct LuauState {
     /// Cached rendered d.luau definitions.
     definitions: Option<String>,
     /// Audited script surface used for checks and VM construction.
-    surface: Option<SurfaceSpec>,
+    surface: Option<Surface>,
     /// Retained checker for repeated checks against the finalized surface.
     checker: Option<Checker>,
     /// Retained checker with startup-script global obligations.
@@ -381,7 +381,7 @@ impl LuauState {
     }
 
     /// Mark the script API as finalized and cache its definitions.
-    fn finalize(&mut self, definitions: String, surface: SurfaceSpec, startup_checker: Checker) {
+    fn finalize(&mut self, definitions: String, surface: Surface, startup_checker: Checker) {
         let checker = surface.new_checker();
         self.definitions = Some(definitions);
         self.surface = Some(surface);
@@ -521,10 +521,10 @@ impl fmt::Debug for LuauHost {
     }
 }
 
-/// The VM profile every canopy app runs under: the full safe standard library
+/// The VM runtime capabilities every canopy app runs under: the full safe standard library
 /// without runtime compilation (`loadstring`), and no `require` source.
-fn canopy_profile() -> Profile {
-    Profile::full().without_runtime_compilation()
+fn canopy_runtime_capabilities() -> RuntimeCapabilities {
+    RuntimeCapabilities::default()
 }
 
 /// Builder-level execution ceilings for the retained VM. Gas bounds runaway
@@ -578,22 +578,26 @@ fn startup_runtime_source(source: &str) -> String {
 
 /// Compile Luau source under the canopy profile before the surface is finalized.
 fn compile_chunk(source: &str) -> Result<BytecodeChunk> {
-    compile_chunk_with_profile(&canopy_profile(), source)
+    compile_chunk_with_runtime_capabilities(&canopy_runtime_capabilities(), source)
 }
 
 /// Compile Luau source under the finalized canopy surface.
-fn compile_chunk_with_surface(surface: &SurfaceSpec, source: &str) -> Result<BytecodeChunk> {
+fn compile_chunk_with_surface(surface: &Surface, source: &str) -> Result<BytecodeChunk> {
     let options = CompileOptions::for_vm_execution();
     surface
         .compile(source.as_bytes(), &options)
         .map_err(|err| compile_error_to_canopy(&err))
 }
 
-/// Compile Luau source under an explicit VM profile.
-fn compile_chunk_with_profile(profile: &Profile, source: &str) -> Result<BytecodeChunk> {
-    let mut options = CompileOptions::for_vm_execution();
-    restrict_options(profile, &mut options);
-    compile_for(profile, source.as_bytes(), &options).map_err(|err| compile_error_to_canopy(&err))
+/// Compile Luau source under explicit VM runtime capabilities.
+fn compile_chunk_with_runtime_capabilities(
+    runtime_capabilities: &RuntimeCapabilities,
+    source: &str,
+) -> Result<BytecodeChunk> {
+    let options = CompileOptions::for_vm_execution();
+    runtime_capabilities
+        .compile_source(source.as_bytes(), &options)
+        .map_err(|err| compile_error_to_canopy(&err))
 }
 
 /// Convert an Ruau compile error to Canopy's parse error shape.
@@ -3264,7 +3268,7 @@ impl LuauHost {
     }
 
     /// Return the finalized script surface.
-    pub(crate) fn surface(&self) -> Option<SurfaceSpec> {
+    pub(crate) fn surface(&self) -> Option<Surface> {
         self.state.borrow().surface.clone()
     }
 
@@ -3439,8 +3443,7 @@ impl LuauHost {
                 "Luau API already finalized".into(),
             ));
         }
-        let mut builder =
-            SurfaceSpec::builder(canopy_profile()).module(Arc::new(CanopyBaseModule::new()));
+        let mut builder = Surface::builder().module(Arc::new(CanopyBaseModule::new()));
         if let Some(source) = module_source {
             builder = builder.module_source(source);
         }

@@ -13,7 +13,7 @@ use std::{
 };
 
 use comfy_table::{ContentArrangement, Table, presets::UTF8_FULL};
-use ruau::{abi::NativeModule, source::ModuleSource};
+use ruau::{source::ModuleSource, vm_api::NativeModule};
 use serde::{Deserialize, Serialize};
 
 use super::{inputmap, poll::Poller, termbuf::TermBuf};

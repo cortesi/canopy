@@ -1,9 +1,9 @@
 //! Base `canopy` scripting API declarations and native registration.
 
 use ruau::{
-    abi::{ModuleBinding, ModuleBuilder},
     decl::{Builder, Field, FnSig, Func, Global, Ty},
     vm::{AsyncHostFunction, ModuleBuilderExt},
+    vm_api::{ModuleBinding, ModuleBuilder},
 };
 
 use super::{
