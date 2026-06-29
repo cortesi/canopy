@@ -18,7 +18,7 @@ use ruau::{
     bytecode::{BytecodeChunk, CompileError, CompileOptions},
     decl::DeclSource,
     source::{ModuleId, ModuleSource},
-    surface::Surface,
+    surface::{Surface, VmConfig},
     typecheck::{
         checker::Checker,
         diagnostics::{Diagnostic as TypeDiagnostic, Payload, Severity},
@@ -583,9 +583,8 @@ fn compile_chunk(source: &str) -> Result<BytecodeChunk> {
 
 /// Compile Luau source under the finalized canopy surface.
 fn compile_chunk_with_surface(surface: &Surface, source: &str) -> Result<BytecodeChunk> {
-    let options = CompileOptions::for_vm_execution();
     surface
-        .compile(source.as_bytes(), &options)
+        .compile(source.as_bytes())
         .map_err(|err| compile_error_to_canopy(&err))
 }
 
@@ -594,7 +593,7 @@ fn compile_chunk_with_runtime_capabilities(
     runtime_capabilities: &RuntimeCapabilities,
     source: &str,
 ) -> Result<BytecodeChunk> {
-    let options = CompileOptions::for_vm_execution();
+    let options = CompileOptions::new();
     runtime_capabilities
         .compile_source(source.as_bytes(), &options)
         .map_err(|err| compile_error_to_canopy(&err))
@@ -3466,8 +3465,11 @@ impl LuauHost {
         }
         let startup_checker = startup_surface.new_checker();
         let mut vm = surface
-            .vm_builder(Ambient::production(0), default_vm_limits())
-            .build_sandboxed()
+            .vm_builder(&VmConfig::untrusted(
+                Ambient::production(0),
+                default_vm_limits(),
+            ))
+            .build()
             .map_err(|err| error::Error::Script(format!("building script VM failed: {err}")))?;
 
         {

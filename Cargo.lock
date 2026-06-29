@@ -3910,6 +3910,7 @@ version = "0.1.0"
 dependencies = [
  "ruau-bytecode",
  "ruau-decl",
+ "ruau-source",
  "ruau-surface",
  "ruau-vm",
  "ruau-vm-api",
