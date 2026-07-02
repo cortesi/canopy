@@ -332,11 +332,11 @@ mod tests {
 
         assert_eq!(
             roots.module_id_for_path(Path::new("tmp/canopy-user/keymap.luau")),
-            Some(ModuleId::from("@user/keymap"))
+            Some(ModuleId::canonicalized("@user/keymap"))
         );
         assert_eq!(
             roots.module_id_for_path(Path::new("tmp/work/.canopy/nested/init.luau")),
-            Some(ModuleId::from("@project/nested/init"))
+            Some(ModuleId::canonicalized("@project/nested/init"))
         );
         assert_eq!(
             roots.module_id_for_path(Path::new("tmp/elsewhere/init.luau")),
