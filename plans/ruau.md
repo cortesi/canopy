@@ -1,292 +1,271 @@
-# Ruau API improvements for Canopy
+# Ruau API cleanup for Canopy
 
-Canopy now depends on the sibling Ruau checkout directly:
-`../../../../private/ruau/crates/ruau`, with no crate version pin. The migration is
-working, but the current integration still exposes several places where Canopy is
-repeating logic that belongs in Ruau or using lower-level Ruau primitives directly.
+Canopy depends on the sibling Ruau checkout directly:
+`../../../../private/ruau/crates/ruau`, with `default-features = false`. This plan
+is for the remaining API cleanup between Canopy and Ruau: use Ruau APIs that now
+exist, add only the missing general APIs that Canopy proves it needs, and keep
+Canopy's own scripting surface stable unless a later stage deliberately changes
+that public contract.
 
-This plan is for Ruau work first, in `/Users/cortesi/git/private/ruau`, followed by
-small Canopy adoption patches in this repository. Each stage names the concrete
-Canopy pattern that justifies the Ruau API change and the downstream proof that
-the new API actually improves Canopy.
+This file was re-baselined against the live Canopy tree and
+`/Users/cortesi/git/private/ruau` on 2026-07-09. The old plan was directionally
+right, but several proposed Ruau APIs now exist under different names:
 
-## 1. Root-source graph checking on `SurfaceSpec`
+- `ruau::surface::Surface::check_graph` and `check_graph_async` return
+  `CheckedGraph`.
+- `ruau::typecheck::Diagnostics::views` and `GraphDiagnostics::views` expose
+  conversion-friendly diagnostic views.
+- `ruau::vm::ModuleBuilderExt::scoped_function_fn` and `async_function_fn`
+  already cover typed closure registration.
+- `ruau::host::SurfaceSession` exists as a retained, compiled-chunk session, but
+  it does not yet cover Canopy's borrowed `&mut Canopy` execution path.
+- `ruau::source::MountedSource` already has mount-local epochs; Canopy still owns
+  root discovery and filesystem-path-to-module-id mapping.
 
-Canopy's retained checkers currently call `Checker::check_source` on one source
-string in `crates/canopy/src/core/script/mod.rs`. That validates the root source
-against the surface builtins and required globals, but it does not use the
-surface's `ModuleSource`, so a root script's `require` graph is not checked through
-the same path as runtime compilation. Ruau already has the right implementation
-internally in `crates/ruau/src/runner/pipeline.rs`: it wraps the source in
-`RootOverlaySource`, delegates non-root reads to `SurfaceSpec::module_source()`,
-builds a `GraphChecker`, applies the surface analysis mode, and returns flattened
-graph diagnostics. That private runner code should become a public surface API.
+The current Canopy integration still has useful adoption targets:
 
-1. [ ] In Ruau, add `surface::RootSourceOptions` with at least:
-       `root_id: ModuleId`, `display_name: String`, optional
-       `root_requester: ModuleId`, parse options, syntax flags,
-       `max_diagnostics`, and optional cancel flag.
-2. [ ] In Ruau, add `surface::CheckedSourceGraph` with:
-       `has_errors()` and `diagnostics() -> &[TypeDiagnostic]`. State whether it
-       wraps, extends, or intentionally parallels the existing `CheckedModule`
-       returned by `SurfaceSpec::check_source_bytes`; do not create overlapping
-       result types without a migration story.
-3. [ ] Move or share the runner helpers currently named like
-       `checked_frontend_for_root`, `check_root_source_async`, and
-       `source_front_door_check_from_frontend` behind public
-       `SurfaceSpec::check_root_source_bytes` and
-       `SurfaceSpec::check_root_source_bytes_async`.
-4. [ ] Keep runner-only accounting internal unless another caller needs it. The
-       existing runner count is `checker.arena().type_len() +
-       checker.arena().pack_len()`; if it becomes public, expose it as optional
-       advanced accounting, not as part of Canopy's required API.
-5. [ ] Preserve the existing single-source fast path for sourceless binary input:
-       when there is no module source and the root bytes are not UTF-8, call
-       `check_source_bytes_with_config` and return the same result shape.
-6. [ ] Add Ruau tests under `crates/ruau/tests/api.rs` proving that a root source
-       requiring a dependency reports dependency diagnostics, honors
-       `root_requester`, rejects synthetic-root id collisions when requested, and
-       inherits required globals and analysis mode from the surface.
-7. [ ] Update Ruau API snapshots with `cargo xtask api-check`, then run the
-       relevant Ruau tests: `cargo test -p ruau --test api`,
-       `cargo test -p ruau-source`, and the runner tests that used the private
-       helper.
-8. [ ] In Canopy, retain both the base `SurfaceSpec` and the startup
-       `SurfaceSpec` clone created in `LuauHost::finalize`. The startup surface
-       carries the additional `require_global` obligations; using only the base
-       surface would drop the `setup` contract.
-9. [ ] In Canopy, replace `LuauHost::check_script`,
-       `LuauHost::check_startup_script`, and debug-build `maybe_typecheck` with
-       the sync root-graph surface check. Preserve `strict_source` wrapping, use
-       synthetic ids such as `@canopy/eval` and `@canopy/startup`, and use the
-       startup surface for startup roots.
-10. [ ] Add a Canopy test in `crates/canopy/tests/test_script_framework.rs` where
-       a checked script `require`s a filesystem module containing a type error.
-       Assert that `ScriptCheckResult` reports the dependency diagnostic before
-       runtime execution. Keep the existing startup setup obligation test green.
+- Retained `Checker` fields in `LuauHost` still check one source at a time.
+- `type_diagnostic_to_script` still matches `Payload::RequiredExport` manually.
+- `CanopyHostFn` still wraps `MultiValue -> MultiValue` handlers locally.
+- Live scoped values and owned `MarshaledValue`s still have separate
+  `ArgValue` conversion traversals.
+- `ScriptModuleRoots` and `ScriptModuleSource` still wrap Ruau filesystem
+  sources for invalidation and path lookup.
 
-## 2. Diagnostic rendering for embedders
+## 1. Re-baseline the two repositories before implementation
 
-Canopy manually converts Ruau type diagnostics in
-`type_diagnostic_to_script`. It knows about `Payload::RequiredExport`, severity
-names, zero-to-one-based line conversion, and fallback message rendering. That is
-small but fragile: every new structured diagnostic Ruau adds requires embedders to
-know another payload variant. Ruau should expose an embedder-oriented diagnostic
-view that keeps the rich `TypeDiagnostic` available but centralizes the ordinary
-display contract.
+Start every implementation pass by proving the local state that shaped the plan.
+The Canopy checkout currently has unrelated dirty manifest/source edits, so the
+first implementation batch must preserve that boundary.
 
-1. [ ] In `ruau-typecheck`, inventory the existing rendering helpers before
-       adding anything new: `TypeDiagnostic::user_message`,
-       `diagnostic_snapshot`, `render_diagnostic_snapshot`,
-       `render_diagnostic_summary`, and `wire_json`.
-2. [ ] Add the smallest missing embedder report helper, either by extending the
-       existing helpers or by adding a type such as `DiagnosticReport` with
-       `severity`, one-based `line` and `column`, `message`, optional `category`,
-       and an optional structured payload view for known diagnostics.
-3. [ ] Format `RequiredExport` as Canopy currently does: missing globals name the
-       global and required type, mismatches include the actual type when Ruau has
-       it. Preserve or document Canopy's current severity mapping, where `Info`
-       becomes `"warning"`.
-4. [ ] Keep source filenames out of the core report. The caller should attach
-       chunk labels or module display names because Canopy reports diagnostics in
-       API-specific envelopes.
-5. [ ] Add Ruau tests for required-export rendering, severity mapping, one-based
-       positions, and fallback rendering for an ordinary type mismatch.
-6. [ ] In Canopy, delete the custom payload match from
-       `crates/canopy/src/core/script/mod.rs` and build `ScriptCheckDiagnostic`
-       from the Ruau report. Keep Canopy's public struct unchanged unless the
-       separate Canopy API decision is to expose `category`; otherwise drop
-       `category` at the Canopy boundary.
-7. [ ] Update `validate_script_module_declarations` in
-       `crates/canopy/src/core/canopy/mod.rs` to use the same report helper so
-       conformance errors do not keep a second hand-rolled diagnostic path.
+1. [ ] In Canopy, record the current dirty baseline with `git status --short`
+       and review the relevant diffs before editing. Keep unrelated `tmcp`,
+       `itty`, and compatibility edits out of any Ruau-plan batch unless the
+       user explicitly widens the scope.
+2. [ ] In Ruau, inspect the public API skeleton for `ruau-surface`,
+       `ruau-typecheck`, `ruau-vm`, `ruau-host`, `ruau-fs`, and `ruau-source`
+       with `ruskel` before changing those crates.
+3. [ ] Prove Canopy can see the sibling Ruau API with its real dependency
+       settings. At minimum, run `cargo check -p canopy --all-targets
+       --all-features` before the first adoption patch.
+4. [ ] If either repository has pre-existing unrelated dirt, write down the
+       intended ownership boundary in the implementation notes before touching
+       code.
 
-## 3. Host function registration ergonomics
+## 2. Adopt `Surface::check_graph` for script type checking
 
-Ruau already has `ruau::vm::scoped_host_fn`, so Canopy no longer needs a new typed
-wrapper from scratch. Canopy's dominant native shape is still
-`MultiValue -> MultiValue`: `canopy_host_fn` is a local adapter around
-`ScopedHostFunction`, and owner command declarations are rendered separately from
-owner command registration. The high-value API work is declaration/registration
-coupling for generated modules and deletion of local adapter code where existing
-Ruau helpers already fit.
+This is the highest-value cleanup. Canopy still type-checks retained snippets
+with `Checker::check_source`, so a root script's `require` graph is not checked
+through the same module-source path that runtime compilation and execution use.
+Ruau now has the public graph-checking API the old plan asked for, so this stage
+is mostly Canopy adoption.
 
-1. [ ] In Canopy, first try to delete `CanopyHostFn` and `canopy_host_fn` by
-       calling the existing `ruau::vm::scoped_host_fn` directly for the
-       `MultiValue -> MultiValue` handlers. If the existing generic bounds do not
-       accept that shape, record the exact missing trait impl or helper in Ruau.
-2. [ ] In Ruau `crates/ruau-vm/src/host_ext.rs`, add a builder helper such as
-       `scoped_function_fn(name, binding, f)` only if item 1 proves the current
-       `scoped_host_fn` plus `scoped_function` call is still materially noisy.
-       Treat this as minor sugar, not the central API win.
-3. [ ] Defer an analogous `typed_async_function` until a real callsite appears.
-       Canopy already registers async functions with `async_host_fn` factories.
-4. [ ] Add a small declaration-coupled registration helper in the umbrella
-       `ruau` crate, not `ruau-vm`, so it can mention both `decl` and `vm`.
-       Focus the first design on generated owner modules, where Canopy currently
-       registers scoped functions in `OwnerCommandsModule::build` and renders
-       matching declarations through `defs.rs`.
-5. [ ] Keep the coupled helper optional. Lower-level embedders must still be able
-       to build declarations and native modules independently.
-6. [ ] Add Ruau API tests that register one `MultiValue -> MultiValue` scoped
-       function, one strongly typed scoped function returning a scalar, and one
-       function reading `Scope::context_mut`.
-7. [ ] In Canopy, convert one owner-command registration path to the
-       declaration-coupled helper. If the helper is expressive enough, also
-       collapse one entry from `CANOPY_FUNCTIONS` so declaration and registration
-       are authored in one place.
+1. [ ] In Canopy, replace the retained `checker` and `startup_checker` fields in
+       `LuauState` with retained base and startup `Surface` values, or otherwise
+       make `check_script` and `check_startup_script` go through the finalized
+       surfaces instead of long-lived `Checker`s.
+2. [ ] Keep the startup surface distinct from the base surface. It carries
+       `require_startup_global` obligations such as `setup`; collapsing to one
+       surface would silently drop the startup contract.
+3. [ ] Add one Canopy helper that builds a strict `ruau::source::Source` for a
+       checked root, including a stable `ModuleId` and display name. Use
+       synthetic ids such as `@canopy/eval` for ad hoc eval/config snippets.
+4. [ ] Before converting startup checks, test how `Surface::check_graph` behaves
+       when the synthetic root id is also present in the mounted module source
+       (`@user/init`, `@project/init`). If the existing root-overlay collision
+       policy blocks real startup roots, either use a Canopy-only synthetic id
+       for checking or add the smallest Ruau option needed to separate root id
+       from requester identity.
+5. [ ] Convert `LuauHost::check_script`, `LuauHost::check_startup_script`, and
+       debug-build `maybe_typecheck` to `Surface::check_graph`. Convert returned
+       `GraphDiagnostics::views()` into `ScriptCheckDiagnostic`s.
+6. [ ] Keep `strict_source` wrapping exactly once. The checked source and the
+       compiled source must agree on strictness and module identity.
+7. [ ] Add a Canopy test where `check_script` catches a type error in a required
+       filesystem module before runtime execution.
+8. [ ] Add or extend startup tests so a user/project startup file requiring a
+       bad dependency reports the dependency diagnostic, while the existing
+       missing-`setup` and additional-startup-global tests remain green.
+9. [ ] In Ruau, add new graph-checking API only if the startup collision spike
+       proves `Surface::check_graph` cannot represent Canopy's real root/requester
+       needs. Do not reintroduce the old `SurfaceSpec::check_root_source_bytes`
+       or `CheckedSourceGraph` names.
 
-## 4. Value conversion policy over scoped and marshaled values
+## 3. Replace hand-rendered diagnostics with Ruau views
 
-Canopy owns an `ArgValue` model for commands and automation. It currently has two
-parallel Ruau conversion paths in `script/mod.rs`: scoped values to `ArgValue`
-inside a live `Scope`, and owned `MarshaledValue` to `ArgValue` after async
-execution. Those paths duplicate table shape rules, number handling, strings,
-userdata handling, and unsupported-value errors. Ruau's serde bridge is useful,
-but it is intentionally JSON-shaped and does not know Canopy's `NodeId` token
-policy. Ruau should expose a reusable conversion traversal/policy API rather than
-make embedders hand-walk both value representations.
+Ruau now exposes `DiagnosticView` and `ModuleDiagnosticView`, including
+payload-aware messages and one-based locations. Canopy should consume those views
+instead of matching individual payload variants.
 
-1. [ ] In Ruau VM core, add a `ValueCodec` or `ValuePolicy` abstraction that is
-       available without the `serde` feature. It should share table, number,
-       string, and unsupported-value policy between `ScopedValue<'s>` and
-       `MarshaledValue`, while acknowledging that the two value families do not
-       carry identical information.
-2. [ ] Make table policy explicit: strict arrays require integer keys `1..n`,
-       maps require string keys, mixed tables are rejected unless the policy
-       opts into a defined conversion, and empty tables have an explicit
-       array/object decision.
-3. [ ] Make number policy explicit: preserve `Integer`, accept integral
-       `Number` as integer only when the policy asks for it, document that
-       Canopy's inbound `ArgValue::UInt` currently flattens to Lua `number`, and
-       reject non-finite floats.
-4. [ ] Address the marshal-boundary identity problem explicitly. A live
-       `ScopedValue::Userdata(NodeHandle)` can become `ArgValue::Node`, but an
-       async `MarshaledValue` currently sees only the host-type marshal output,
-       such as Canopy's `{ type = "NodeId", token = ... }` table. Either add a
-       Ruau hook that preserves a host-supplied opaque identity across owned
-       marshaling, or document the asymmetry and make token-table decoding the
-       Canopy-owned contract.
-5. [ ] Add policy hooks for live userdata, marshaled host-type output, and opaque
-       values. Canopy should be able to say how `NodeHandle` is represented in
-       both the scoped and owned result paths without forking the whole table
-       traversal.
-6. [ ] Reuse the path-prefix style from Ruau's serde bridge for errors, for
+1. [ ] Add a Canopy conversion helper from `DiagnosticView` to
+       `ScriptCheckDiagnostic`. Preserve Canopy's public fields and its current
+       severity policy: `Error` stays `"error"`, while `Warning` and `Info`
+       become `"warning"`.
+2. [ ] For graph diagnostics, include the module display name only where Canopy's
+       current envelope needs it. Keep `ScriptCheckDiagnostic` unchanged unless a
+       separate Canopy API decision adds a source/module field.
+3. [ ] Delete the `Payload::RequiredExport` match from
+       `crates/canopy/src/core/script/mod.rs` and use Ruau's rendered message.
+       Verify that missing and mismatched required globals still produce useful
+       text.
+4. [ ] Update `validate_script_module_declarations` in
+       `crates/canopy/src/core/canopy/mod.rs` to use the same conversion helper,
+       so conformance errors do not keep a second diagnostic rendering path.
+5. [ ] Add focused tests for required startup globals, declaration conformance
+       failures, ordinary type mismatches, and dependency diagnostics produced by
+       graph checking.
+6. [ ] Add Ruau diagnostic helpers only if Canopy still has to repeat a general
+       transformation that belongs in `ruau-typecheck`.
+
+## 4. Delete the local scoped host-function adapter
+
+Ruau already provides `scoped_host_fn` and
+`ModuleBuilderExt::scoped_function_fn`. Canopy should first try to delete its
+local adapter before adding more Ruau sugar.
+
+1. [ ] Replace `CanopyHostFn` and `canopy_host_fn` call sites with
+       `builder.scoped_function_fn` or direct `ruau::vm::scoped_host_fn`, keeping
+       the existing `MultiValue -> MultiValue` command-dispatch shape.
+2. [ ] If `MultiValue` cannot be used directly through the generic helper,
+       capture the exact missing trait bound or impl in Ruau and add only that
+       minimal support.
+3. [ ] Convert owner command registration in `OwnerCommandsModule::build` first,
+       including the `default_bindings` branch.
+4. [ ] After the adapter is gone, re-evaluate the declaration/registration split
+       between `OwnerCommandsModule::build` and `defs::render_owner_declaration`.
+       Add a declaration-coupled Ruau helper only if it can author one generated
+       owner command in one place without making lower-level embedders pay for
+       the abstraction.
+5. [ ] If a coupled helper is justified, put it in the umbrella `ruau` crate or
+       another layer that can mention both `decl` and `vm`. Do not put
+       declaration-aware code in `ruau-vm`.
+6. [ ] Prove the conversion with `test_script_commands`, one owner-command
+       dispatch test, default-bindings coverage, and the Ruau API tests for
+       scoped functions.
+
+## 5. Share value conversion policy across scoped and marshaled values
+
+This is still genuine Ruau API work. Canopy currently has two conversion
+traversals for outbound script values: live `ScopedValue` inside a `Scope`, and
+owned `MarshaledValue` after async execution. The two paths disagree in edge
+cases, especially mixed array/map tables, userdata, and host-type marshaling.
+
+1. [ ] In Canopy, first write tests that pin the intended `ArgValue` policy for
+       live and async results: arrays, maps, empty tables, sparse arrays, mixed
+       tables, integral floats, non-finite floats, strings, userdata, and opaque
+       values.
+2. [ ] Decide Canopy's table policy explicitly. Do not keep the current
+       accidental split where live mixed tables are rejected while marshaled
+       mixed tables become maps with numeric string keys unless that is the
+       documented contract.
+3. [ ] In Ruau VM core, add a `ValuePolicy`, `ValueCodec`, or visitor-style
+       traversal that is available without the `serde` feature and can walk both
+       `ScopedValue<'_>` and `MarshaledValue`.
+4. [ ] Make number policy explicit: preserve `Integer`, optionally accept
+       integral `Number` as integer, reject non-finite floats, and document that
+       Canopy's inbound `ArgValue::UInt` still flattens to Lua `number`.
+5. [ ] Add hooks for live userdata, marshaled host-type output, and opaque
+       values. Canopy must be able to map live `NodeHandle` userdata and choose a
+       documented owned-result representation after marshaling.
+6. [ ] Reuse Ruau's existing path-prefix style for conversion errors, for
        example `actions[3].target: expected NodeId userdata`.
-7. [ ] Add Ruau tests that run equivalent table/number/string policies over a
-       live `ScopedValue` table and a `MarshaledValue` table, and add separate
-       tests for the known userdata asymmetry or new identity-preserving hook.
-8. [ ] In Canopy, replace outbound `scoped_to_arg_value`, `table_to_arg_value`,
+7. [ ] Add Ruau tests that run equivalent policies over live and marshaled table
+       shapes, plus separate tests for the chosen userdata/host-type asymmetry.
+8. [ ] In Canopy, replace `scoped_to_arg_value`, `table_to_arg_value`,
        `marshaled_to_arg_value`, and `marshaled_table_to_arg_value` with one
-       Canopy policy over Ruau's shared traversal. Keep `arg_value_to_scoped` as
-       a separate inbound builder because it needs a live `Scope` to allocate Lua
-       strings, tables, and userdata.
-9. [ ] Add a Canopy async-result test where a module returns a node handle. The
-       test must pin the chosen contract: either the owned path reconstructs
-       `ArgValue::Node`, or it intentionally returns the documented token table.
+       Canopy policy over Ruau's shared traversal.
+9. [ ] Keep `arg_value_to_scoped` separate unless a later inbound-builder API is
+       clearly useful. It allocates Lua strings, tables, and userdata inside a
+       live `Scope`, so it is not the same problem as outbound traversal.
 
-## 5. Retained session host for non-JSON embedders
+## 6. Evaluate and fill retained-session gaps
 
-Ruau's current `host::Evaluator` is a good retained source-eval helper for JSON
-arguments and JSON results, but Canopy's live path has a retained VM, a borrowed
-`&mut Canopy` context, command dispatch, NodeId userdata, custom print capture,
-startup script obligations, loaded script caches, and async result marshaling to
-`ArgValue`. Canopy therefore still owns a lot of session plumbing in
-`LuauHost`. Ruau should grow a lower-level retained session abstraction that is
-not tied to JSON and does not force a fresh VM per eval.
+The old plan asked Ruau to create a retained session. Ruau now has
+`ruau::host::SurfaceSession`, but Canopy still needs borrowed host context,
+script ids, loaded-script caches, closure stashes, startup orchestration,
+journals, and reentrant Canopy state. This stage should adopt only the parts
+that actually reduce local plumbing.
 
-1. [ ] In Ruau, add `host::Session` that owns a `SurfaceSpec`, a
-       retained `Vm`, compile options, default `Limits`, and an optional module
-       cache.
-2. [ ] Provide explicit operations for Canopy's current lifecycle:
-       `compile`, `load_named`, `LoadedModule` execution through
-       `exec_async_with_context`, and borrowed-scope execution through
-       `step_with_context`. Mirror the existing Ruau vocabulary instead of
-       inventing names that obscure the VM operations being wrapped.
-3. [ ] Accept per-call `CallOptions` by value or reference consistently with the
-       current VM API. The session should not mutate the VM's global print sink
-       for ordinary per-call capture; it should use `CallOptions` print sinks.
-       Name the Canopy asymmetry being removed: `run_target` mutates the global
-       sink, while `run_module_async` already uses `CallOptions`.
-4. [ ] Return `Vec<MarshaledValue>` or a generic caller-selected result codec,
-       not JSON. Keep the existing JSON `Evaluator` as a convenience wrapper over
-       the session if that makes the layering simpler.
-5. [ ] Expose a unified error enum that preserves compile, load, exec,
-       cancellation, timeout, runtime, and marshal categories without hiding the
-       original Ruau error types.
-6. [ ] Add Ruau examples or tests showing a retained session with a borrowed
-       context, an async host wait, print capture, and non-JSON userdata result
-       marshaling.
-7. [ ] Keep Canopy-local orchestration explicitly out of the first Ruau session
-       slice: script ids, the loaded-script cache policy, closure registry,
-       `active_eval`, `on_start` hooks, journals, startup obligations, and
-       reentrant Canopy state remain in `LuauHost` unless a later stage proves
-       they belong in Ruau.
-8. [ ] In Canopy, adopt the session first for `run_module_async`, which already
-       uses owned async execution and per-call `CallOptions`. Then migrate the
-       sync stashed-call path enough to remove `vm.set_print_sink_with_quota` in
-       favor of per-call print sinks. Preserve Canopy's public API and error
-       shapes.
+1. [ ] Audit `SurfaceSession` against Canopy's `run_module_async` path:
+       retained VM ownership, module-source epoch invalidation, load target,
+       `CallOptions`, print capture, cancellation, `execution_count`, and error
+       categories.
+2. [ ] Decide whether `SurfaceSession` needs a borrowed-context execution
+       method over `Vm::exec_async_with_context`. If so, design it around
+       non-`Send` host context and the existing blocking runtime instead of
+       forcing Canopy state into global app data.
+3. [ ] If the borrowed-context method lands, adopt it first for
+       `run_module_async`, where Canopy already uses owned async execution and
+       per-call `CallOptions`.
+4. [ ] Do not move Canopy-local orchestration into Ruau in this stage: script
+       ids, the loaded-script cache policy, closure registry, `active_eval`,
+       `on_start` hooks, journals, startup obligations, and reentrant Canopy
+       state remain in `LuauHost`.
+5. [ ] Fix the sync stashed-call path's print capture. `run_target` still mutates
+       the VM-global sink with `set_print_sink_with_quota`; if `step_with_context`
+       ignores `CallOptions::print_sink_with_quota`, add Ruau support there or
+       document why the global sink is still required.
+6. [ ] Preserve Canopy's current public error shapes while mapping any new
+       Ruau session errors to compile, load, exec, cancellation, timeout,
+       runtime, and marshal categories.
+7. [ ] Prove this stage with startup/config script tests, async module execution
+       tests, print-capture tests, and at least one reentrant host-call test.
 
-## 6. Mount invalidation and path lookup conveniences
+## 7. Move filesystem mount conveniences toward Ruau
 
-Ruau's `MountedSource`, `FilesystemSource`, and `FilesystemEpoch` already removed
-most of Canopy's custom module-source implementation. Canopy still keeps thin
-wrappers in `ScriptModuleRoots` and `ScriptModuleSource` for namespace-specific
-invalidation and path-to-module-id lookup. Those are common embedder needs for
-editor/watch integrations and should live beside the source combinator.
+Ruau's `MountedSource`, `MountEpoch`, `FilesystemSource`, and `FilesystemEpoch`
+already provide most low-level pieces. Canopy still owns a useful embedder
+convenience layer: namespace roots, per-root invalidation, composite epoch, and
+filesystem-path-to-module-id lookup.
 
-1. [ ] In Ruau, decide the ownership boundary first. Either add
-       `ruau::fs::FilesystemMounts` in the `ruau` crate, where
-       `FilesystemSource` and `FilesystemEpoch` already live, or first move those
-       filesystem types down into `ruau-source`.
-2. [ ] Add the mounted-filesystem helper at that resolved boundary. It should own
-       a `MountedSource` plus per-prefix `FilesystemEpoch` handles.
+1. [ ] Decide the Ruau ownership boundary first. A helper that creates
+       filesystem-backed mounts belongs with `ruau::fs`; lower-level
+       `MountedSource` must remain in `ruau::source`.
+2. [ ] Add a filesystem mount helper that owns a `MountedSource` plus per-prefix
+       epoch handles. It should mount `ModuleId` prefixes, not plain strings.
 3. [ ] Support mounting `prefix -> root path`, invalidating one prefix,
-       invalidating all prefixes, and returning the current composite epoch.
-4. [ ] Provide `module_id_for_path(path)` that returns the mounted `ModuleId`
-       for an on-disk `.luau` file when the path belongs to a configured root.
-       Keep startup discovery and `init.luau` root selection in Canopy; path
-       lookup should stay a general root-relative mapping.
-5. [ ] Keep the lower-level `MountedSource` API public. The new helper is for
-       the common filesystem case, not a replacement for arbitrary custom
+       invalidating all prefixes, and returning the composite epoch.
+4. [ ] Add `module_id_for_path(path)` for on-disk `.luau` files under a mounted
+       root. Keep Canopy-specific startup discovery and `init.luau` layer order
+       in Canopy.
+5. [ ] Keep `MountedSource` and `FilesystemSource` public and composable. The new
+       helper is only the common filesystem case, not a replacement for custom
        `ModuleSource` implementations.
-6. [ ] Add tests in the crate that hosts the helper, mirroring Canopy's current
-       cases: user/project roots, explicit root imports only, relative imports
-       within a mount, unknown mount errors, path-to-id mapping, and per-root
-       invalidation changing the epoch.
+6. [ ] Add Ruau tests mirroring Canopy's current cases: user/project roots,
+       explicit root imports only, relative imports within a mount, unknown
+       mount errors, path-to-id mapping, and per-root invalidation changing the
+       epoch.
 7. [ ] In Canopy, replace most of
        `crates/canopy/src/core/script/modules.rs` with the new helper, leaving
-       only Canopy namespace discovery and startup-root selection locally.
+       only root discovery, namespace policy, and startup-root selection locally.
 
-## 7. Validation and rollout
+## 8. Validation and rollout
 
-Each Ruau stage should be landed with a small Canopy adoption patch before moving
-on, so the API is shaped by real use rather than hypothetical convenience.
+Land each stage as a Ruau patch plus the smallest Canopy adoption patch that
+proves the API. Do not commit either repository until the user explicitly asks.
 
-1. [ ] In Ruau, run the focused crate tests for the touched crates after each
-       stage, then run `cargo xtask api-check` before considering the Ruau API
-       stable for Canopy.
-2. [ ] Prove every new Ruau API used by Canopy is reachable with Canopy's actual
-       dependency settings: `ruau = { default-features = false }`. At minimum,
-       `cargo check -p canopy --all-targets --all-features` must see the new API.
-3. [ ] In Canopy, after each adoption patch, run `cargo check --workspace
-       --all-targets --all-features`, `cargo clippy -q --fix --all --all-targets
-       --all-features --allow-dirty --tests --examples 2>&1`, and the focused
-       tests named in the stage.
-4. [ ] Use this per-stage Canopy proof matrix:
-       Stage 1 runs `test_script_framework`, the existing script typecheck unit
-       tests, and the new require-graph diagnostic test. Stage 2 runs script
-       typecheck and conformance-diagnostic tests. Stage 3 runs
-       `test_script_commands` and one owner-command dispatch test. Stage 4 runs
-       command marshaling tests and the async node-result test. Stage 5 runs
-       startup/config script tests and async module execution tests. Stage 6 runs
-       module-source unit tests and filesystem-backed script framework tests.
+1. [ ] In Ruau, run focused tests for the touched crates after each stage, then
+       run `cargo xtask api-check` before considering any public API stable for
+       Canopy.
+2. [ ] In Canopy, after each adoption patch, run `cargo check --workspace
+       --all-targets --all-features`.
+3. [ ] Run the repository clippy command and fix all warnings:
+       `cargo clippy -q --fix --all --all-targets --all-features --allow-dirty
+       --tests --examples 2>&1`.
+4. [ ] Run focused Canopy tests for the stage:
+       Stage 2 runs `test_script_framework` plus script typecheck tests.
+       Stage 3 runs typecheck and declaration-conformance tests.
+       Stage 4 runs `test_script_commands` and owner-command dispatch tests.
+       Stage 5 runs command marshaling and async-result tests.
+       Stage 6 runs startup/config, async module, print-capture, and reentrant
+       host-call tests.
+       Stage 7 runs module-source unit tests and filesystem-backed script
+       framework tests.
 5. [ ] Before final review, format Canopy with the repository formatter and run
        `cargo nextest run --all --all-features`. If `nextest` is unavailable,
        run `cargo test --all --all-features`.
 6. [ ] Before final review, run the corresponding Ruau full gate:
        `cargo xtask api-check` and `cargo xtask test` if available, otherwise
        `cargo nextest run --all --all-features`.
-7. [ ] Keep commits separate by repository. Do not commit either repository until
-       explicitly asked.
+7. [ ] Keep commits separate by repository and review the exact diff in each
+       repository before staging.

@@ -208,7 +208,8 @@ impl ScriptModuleSource {
         let source = FilesystemSource::new(root);
         let epoch = source.epoch_handle();
         let source: Arc<dyn ModuleSource> = Arc::new(source);
-        self.source.mount(namespace.name(), source);
+        self.source
+            .mount(ModuleId::new(namespace.name().as_bytes().to_vec()), source);
         let mount = ScriptRootMount { epoch };
         match namespace {
             Namespace::User => self.user = Some(mount),

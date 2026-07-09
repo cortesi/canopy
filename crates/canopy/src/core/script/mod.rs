@@ -19,10 +19,7 @@ use ruau::{
     decl::DeclSource,
     source::{ModuleId, ModuleSource},
     surface::{Surface, VmConfig},
-    typecheck::{
-        checker::Checker,
-        diagnostics::{Diagnostic as TypeDiagnostic, Payload, Severity},
-    },
+    typecheck::{Checker, Diagnostic as TypeDiagnostic, Payload, Severity},
     vm::{
         Ambient, AsyncHostContext, AsyncHostFunction, CallOptions, Cancel, ExecError, FromLuaMulti,
         Function, HostType, HostTypeBuilder, IntoLua, Limits, LoadedModule, MarshaledPair,
@@ -584,7 +581,7 @@ fn compile_chunk(source: &str) -> Result<BytecodeChunk> {
 /// Compile Luau source under the finalized canopy surface.
 fn compile_chunk_with_surface(surface: &Surface, source: &str) -> Result<BytecodeChunk> {
     surface
-        .compile(source.as_bytes())
+        .compile_bytes(source.as_bytes())
         .map_err(|err| compile_error_to_canopy(&err))
 }
 
