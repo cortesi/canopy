@@ -5,7 +5,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::{
     core::text,
     cursor,
-    error::Result,
+    error::{Error, Result},
     geom::{FrameRects, Line, Point, Rect, Size},
     render::RenderBackend,
     style::{Attr, AttrSet, Color, ResolvedStyle},
@@ -18,6 +18,71 @@ const NULL: char = '\0';
 const MAX_LINE_SHIFT: usize = 8;
 /// Maximum per-row shift to consider when diffing.
 const MAX_ROW_SHIFT: usize = 4;
+
+/// Limits for a materialized visible render target.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RenderLimits {
+    /// Maximum visible render-target width.
+    pub max_width: u32,
+    /// Maximum visible render-target height.
+    pub max_height: u32,
+    /// Maximum total number of materialized terminal cells.
+    pub max_cells: usize,
+}
+
+impl RenderLimits {
+    /// Construct explicit visible render-target limits.
+    pub const fn new(max_width: u32, max_height: u32, max_cells: usize) -> Self {
+        Self {
+            max_width,
+            max_height,
+            max_cells,
+        }
+    }
+
+    /// Validate a visible target size and return its exact cell count.
+    pub(crate) fn cell_count(self, size: Size) -> Result<usize> {
+        if size.w > self.max_width {
+            return Err(Error::RenderWidthLimit {
+                requested: size.w,
+                limit: self.max_width,
+            });
+        }
+        if size.h > self.max_height {
+            return Err(Error::RenderHeightLimit {
+                requested: size.h,
+                limit: self.max_height,
+            });
+        }
+        let width = usize::try_from(size.w).map_err(|_| Error::RenderCellCountOverflow {
+            width: size.w,
+            height: size.h,
+        })?;
+        let height = usize::try_from(size.h).map_err(|_| Error::RenderCellCountOverflow {
+            width: size.w,
+            height: size.h,
+        })?;
+        let cells = width
+            .checked_mul(height)
+            .ok_or(Error::RenderCellCountOverflow {
+                width: size.w,
+                height: size.h,
+            })?;
+        if cells > self.max_cells {
+            return Err(Error::RenderCellLimit {
+                requested: cells,
+                limit: self.max_cells,
+            });
+        }
+        Ok(cells)
+    }
+}
+
+impl Default for RenderLimits {
+    fn default() -> Self {
+        Self::new(2048, 2048, 1_000_000)
+    }
+}
 
 /// A terminal cell with glyph and style.
 #[derive(Clone, Debug, PartialEq)]
@@ -111,6 +176,19 @@ impl Cell {
     }
 }
 
+/// Reject characters that cannot be represented by a single canonical cell.
+fn validate_cell_character(ch: char) -> Result<()> {
+    if ch == NULL {
+        return Ok(());
+    }
+    let mut encoded = [0; 4];
+    let width = text::grapheme_width(ch.encode_utf8(&mut encoded));
+    if width != 1 {
+        return Err(Error::InvalidCellCharacter { ch, width });
+    }
+    Ok(())
+}
+
 /// A 2D terminal buffer of styled cells.
 #[derive(Clone, Debug)]
 pub struct TermBuf {
@@ -122,88 +200,62 @@ pub struct TermBuf {
 
 impl TermBuf {
     /// Construct a buffer filled with the given character and style.
-    pub fn new(size: impl Into<Size>, ch: char, style: ResolvedStyle) -> Self {
+    pub fn new(size: impl Into<Size>, ch: char, style: ResolvedStyle) -> Result<Self> {
+        Self::new_with_limits(size, ch, style, RenderLimits::default())
+    }
+
+    /// Construct a buffer with explicit visible render-target limits.
+    pub fn new_with_limits(
+        size: impl Into<Size>,
+        ch: char,
+        style: ResolvedStyle,
+        limits: RenderLimits,
+    ) -> Result<Self> {
         let size = size.into();
-        let cell = Cell::new(ch, style);
-        Self {
-            size,
-            cells: vec![cell; size.area() as usize],
-        }
+        validate_cell_character(ch)?;
+        let cell = if ch == NULL {
+            Cell::empty(style)
+        } else {
+            Cell::new(ch, style)
+        };
+        let count = limits.cell_count(size)?;
+        let mut cells = Vec::new();
+        cells
+            .try_reserve_exact(count)
+            .map_err(|_| Error::RenderAllocation { cells: count })?;
+        cells.resize(count, cell);
+        Ok(Self { size, cells })
     }
     /// Create an empty TermBuf filled with NULL characters.
-    pub fn empty_with_style(size: impl Into<Size>, style: ResolvedStyle) -> Self {
+    pub fn empty_with_style(size: impl Into<Size>, style: ResolvedStyle) -> Result<Self> {
+        Self::empty_with_style_and_limits(size, style, RenderLimits::default())
+    }
+
+    /// Create an empty buffer with explicit visible render-target limits.
+    pub fn empty_with_style_and_limits(
+        size: impl Into<Size>,
+        style: ResolvedStyle,
+        limits: RenderLimits,
+    ) -> Result<Self> {
         let size = size.into();
         let cell = Cell::empty(style);
-        Self {
-            size,
-            cells: vec![cell; size.area() as usize],
-        }
+        let count = limits.cell_count(size)?;
+        let mut cells = Vec::new();
+        cells
+            .try_reserve_exact(count)
+            .map_err(|_| Error::RenderAllocation { cells: count })?;
+        cells.resize(count, cell);
+        Ok(Self { size, cells })
     }
 
     /// Create an empty TermBuf filled with NULL characters.
-    pub fn empty(size: impl Into<Size>) -> Self {
+    pub fn empty(size: impl Into<Size>) -> Result<Self> {
         let default_style = ResolvedStyle {
             fg: Color::White,
             bg: Color::Black,
             attrs: AttrSet::default(),
         };
         Self::empty_with_style(size, default_style)
-    }
-
-    /// Copy non-empty cells from a rectangle of another TermBuf into this one
-    pub fn copy(&mut self, src: &Self, rect: Rect) {
-        if src.size != self.size {
-            return;
-        }
-
-        // Intersect the rectangle with our bounds
-        if let Some(isec) = self.rect().intersect(&rect) {
-            for y in isec.tl.y..isec.tl.y + isec.h {
-                for x in isec.tl.x..isec.tl.x + isec.w {
-                    let p = Point { x, y };
-                    if let Some(cell) = src.get(p)
-                        && !cell.is_empty()
-                        && let Some(i) = self.idx(p)
-                    {
-                        self.cells[i] = cell.clone();
-                    }
-                }
-            }
-        }
-    }
-
-    /// Copy non-empty cells from a source TermBuf into a destination rectangle
-    pub fn copy_to_rect(&mut self, src: &Self, dest_rect: Rect) {
-        // The source buffer represents content to be placed at dest_rect
-        // We need to map from source coordinates to destination coordinates
-
-        // Intersect the destination rectangle with our bounds
-        if let Some(clipped_dest) = self.rect().intersect(&dest_rect) {
-            // Calculate the offset into the source buffer based on clipping
-            let src_offset_x = (clipped_dest.tl.x - dest_rect.tl.x) as i32;
-            let src_offset_y = (clipped_dest.tl.y - dest_rect.tl.y) as i32;
-
-            // Copy the visible portion
-            for dy in 0..clipped_dest.h {
-                for dx in 0..clipped_dest.w {
-                    let src_x = (dx as i32 + src_offset_x) as u32;
-                    let src_y = (dy as i32 + src_offset_y) as u32;
-                    let src_p = Point { x: src_x, y: src_y };
-
-                    if let Some(cell) = src.get(src_p)
-                        && !cell.is_empty()
-                    {
-                        let dest_p = Point {
-                            x: clipped_dest.tl.x + dx,
-                            y: clipped_dest.tl.y + dy,
-                        };
-                        if let Some(i) = self.idx(dest_p) {
-                            self.cells[i] = cell.clone();
-                        }
-                    }
-                }
-            }
-        }
     }
 
     /// Return the buffer size.
@@ -218,74 +270,116 @@ impl TermBuf {
 
     /// Convert a point into a cell index.
     fn idx(&self, p: Point) -> Option<usize> {
-        if self.rect().contains_point(p) {
-            Some(p.y as usize * self.size.w as usize + p.x as usize)
-        } else {
-            None
+        if !self.rect().contains_point(p) {
+            return None;
+        }
+        let width = usize::try_from(self.size.w).ok()?;
+        let x = usize::try_from(p.x).ok()?;
+        let y = usize::try_from(p.y).ok()?;
+        y.checked_mul(width)?.checked_add(x)
+    }
+
+    /// Clear the complete grapheme occupying one cell index.
+    fn clear_grapheme_at(&mut self, index: usize, style: ResolvedStyle) {
+        let Ok(width) = usize::try_from(self.size.w) else {
+            return;
+        };
+        if width == 0 || index >= self.cells.len() {
+            return;
+        }
+        let row_start = index / width * width;
+        let row_end = row_start.saturating_add(width).min(self.cells.len());
+        let x = index - row_start;
+        let range = grapheme_range(&self.cells[row_start..row_end], x, 1);
+        if let Some((start, end)) = range {
+            self.cells[row_start + start..row_start + end].fill(Cell::empty(style));
         }
     }
 
-    /// Write a cell at a specific point.
-    pub(crate) fn put(&mut self, p: Point, ch: char, style: ResolvedStyle) {
-        if let Some(i) = self.idx(p) {
-            self.cells[i] = Cell::new(ch, style);
+    /// Clear every complete grapheme touched by a destination cell range.
+    fn clear_graphemes(&mut self, start: usize, width: usize, style: ResolvedStyle) {
+        for index in start..start.saturating_add(width) {
+            self.clear_grapheme_at(index, style);
         }
+    }
+
+    /// Write a single-cell character at a specific point.
+    pub(crate) fn put(&mut self, p: Point, ch: char, style: ResolvedStyle) -> Result<()> {
+        validate_cell_character(ch)?;
+        let Some(index) = self.idx(p) else {
+            return Ok(());
+        };
+        self.clear_grapheme_at(index, style);
+        self.cells[index] = if ch == NULL {
+            Cell::empty(style)
+        } else {
+            Cell::new(ch, style)
+        };
+        Ok(())
     }
 
     /// Write a grapheme cluster and return its terminal cell width.
-    pub(crate) fn put_grapheme(&mut self, p: Point, grapheme: &str, style: ResolvedStyle) -> usize {
+    pub(crate) fn put_grapheme(
+        &mut self,
+        p: Point,
+        grapheme: &str,
+        style: ResolvedStyle,
+    ) -> Result<usize> {
         let width = text::grapheme_width(grapheme);
         if width == 0 {
-            return 0;
+            return Ok(0);
         }
-        if let Some(i) = self.idx(p) {
-            let mut chars = grapheme.chars();
-            let ch = chars.next().unwrap_or(' ');
-            let suffix: String = chars.collect();
-            self.cells[i] = Cell {
-                ch,
-                suffix,
-                style,
-                continuation: false,
-            };
+        let Some(index) = self.idx(p) else {
+            return Ok(0);
+        };
+        let available = usize::try_from(self.size.w.saturating_sub(p.x)).unwrap_or(0);
+        if width > available {
+            return Ok(0);
         }
+        self.clear_graphemes(index, width, style);
+        let mut chars = grapheme.chars();
+        let ch = chars.next().unwrap_or(' ');
+        let suffix: String = chars.collect();
+        self.cells[index] = Cell {
+            ch,
+            suffix,
+            style,
+            continuation: false,
+        };
         for offset in 1..width {
-            self.put_continuation(
-                Point {
-                    x: p.x.saturating_add(offset as u32),
-                    y: p.y,
-                },
-                style,
-            );
+            self.cells[index + offset] = Cell::continuation(style);
         }
-        width
-    }
-
-    /// Write a continuation cell for a wide glyph.
-    fn put_continuation(&mut self, p: Point, style: ResolvedStyle) {
-        if let Some(i) = self.idx(p) {
-            self.cells[i] = Cell::continuation(style);
-        }
+        Ok(width)
     }
 
     /// Fill a rectangle with a glyph and style.
-    pub fn fill(&mut self, style: &ResolvedStyle, r: Rect, ch: char) {
+    pub fn fill(&mut self, style: &ResolvedStyle, r: Rect, ch: char) -> Result<()> {
+        validate_cell_character(ch)?;
         if let Some(isec) = self.rect().intersect(&r) {
-            for y in isec.tl.y..isec.tl.y + isec.h {
-                for x in isec.tl.x..isec.tl.x + isec.w {
-                    self.put(Point { x, y }, ch, *style);
+            let end_y = isec.tl.y.saturating_add(isec.h);
+            let end_x = isec.tl.x.saturating_add(isec.w);
+            for y in isec.tl.y..end_y {
+                for x in isec.tl.x..end_x {
+                    self.put(Point { x, y }, ch, *style)?;
                 }
             }
         }
+        Ok(())
     }
 
     /// Fill all empty cells with the given character and style.
-    pub fn fill_empty(&mut self, ch: char, style: &ResolvedStyle) {
+    pub fn fill_empty(&mut self, ch: char, style: &ResolvedStyle) -> Result<()> {
+        validate_cell_character(ch)?;
         for i in 0..self.cells.len() {
             if self.cells[i].is_empty() {
-                self.cells[i] = Cell::new(ch, *style);
+                self.cells[i] = if ch == NULL {
+                    Cell::empty(*style)
+                } else {
+                    Cell::new(ch, *style)
+                };
             }
         }
+        Ok(())
     }
 
     /// Overlay a cursor on a cell by adjusting its style.
@@ -293,37 +387,45 @@ impl TermBuf {
         let Some(idx) = self.idx(location) else {
             return;
         };
-        let mut cell = self.cells[idx].clone();
-        match shape {
-            cursor::CursorShape::Underscore => {
-                cell.style.attrs = cell.style.attrs.with(Attr::Underline);
-            }
-            cursor::CursorShape::Block | cursor::CursorShape::Line => {
-                mem::swap(&mut cell.style.fg, &mut cell.style.bg);
+        if self.cells[idx].is_empty() {
+            self.cells[idx] = Cell::new(' ', self.cells[idx].style);
+        }
+        let Ok(width) = usize::try_from(self.size.w) else {
+            return;
+        };
+        let row_start = idx / width * width;
+        let row_end = row_start.saturating_add(width).min(self.cells.len());
+        let Some((start, end)) =
+            grapheme_range(&self.cells[row_start..row_end], idx - row_start, 1)
+        else {
+            return;
+        };
+        for cell in &mut self.cells[row_start + start..row_start + end] {
+            match shape {
+                cursor::CursorShape::Underscore => {
+                    cell.style.attrs = cell.style.attrs.with(Attr::Underline);
+                }
+                cursor::CursorShape::Block | cursor::CursorShape::Line => {
+                    mem::swap(&mut cell.style.fg, &mut cell.style.bg);
+                }
             }
         }
-        if cell.is_empty() || cell.continuation {
-            cell.ch = ' ';
-            cell.suffix.clear();
-            cell.continuation = false;
-        }
-        self.cells[idx] = cell;
     }
 
     /// Fill the frame outline with a glyph and style.
-    pub fn solid_frame(&mut self, style: &ResolvedStyle, f: FrameRects, ch: char) {
-        self.fill(style, f.top, ch);
-        self.fill(style, f.left, ch);
-        self.fill(style, f.right, ch);
-        self.fill(style, f.bottom, ch);
-        self.fill(style, f.topleft, ch);
-        self.fill(style, f.topright, ch);
-        self.fill(style, f.bottomleft, ch);
-        self.fill(style, f.bottomright, ch);
+    pub fn solid_frame(&mut self, style: &ResolvedStyle, f: FrameRects, ch: char) -> Result<()> {
+        self.fill(style, f.top, ch)?;
+        self.fill(style, f.left, ch)?;
+        self.fill(style, f.right, ch)?;
+        self.fill(style, f.bottom, ch)?;
+        self.fill(style, f.topleft, ch)?;
+        self.fill(style, f.topright, ch)?;
+        self.fill(style, f.bottomleft, ch)?;
+        self.fill(style, f.bottomright, ch)
     }
 
     /// Draw text clipped to the given line.
-    pub fn text(&mut self, style: &ResolvedStyle, l: Line, txt: &str) {
+    pub fn text(&mut self, style: &ResolvedStyle, l: Line, txt: &str) -> Result<()> {
         if let Some(isec) = self.rect().intersect(&l.rect()) {
             let offset = isec.tl.x.saturating_sub(l.tl.x) as usize;
             let max = isec.w as usize;
@@ -340,27 +442,84 @@ impl TermBuf {
                     break;
                 }
 
-                self.put_grapheme(Point { x, y: isec.tl.y }, grapheme, *style);
-                x += width as u32;
-                col += width;
+                self.put_grapheme(Point { x, y: isec.tl.y }, grapheme, *style)?;
+                x = x.saturating_add(u32::try_from(width).unwrap_or(u32::MAX));
+                col = col.saturating_add(width);
             }
 
             for i in col..max {
                 self.put(
                     Point {
-                        x: isec.tl.x + i as u32,
+                        x: isec
+                            .tl
+                            .x
+                            .saturating_add(u32::try_from(i).unwrap_or(u32::MAX)),
                         y: isec.tl.y,
                     },
                     ' ',
                     *style,
-                );
+                )?;
             }
         }
+        Ok(())
     }
 
     /// Get a cell by position.
     pub fn get(&self, p: Point) -> Option<&Cell> {
         self.idx(p).map(|i| &self.cells[i])
+    }
+
+    /// Validate the canonical base-plus-continuation cell representation.
+    fn validate_canonical(&self) -> Result<()> {
+        let width = usize::try_from(self.size.w)
+            .map_err(|_| Error::Invariant("terminal buffer width does not fit usize".into()))?;
+        if width == 0 {
+            return if self.cells.is_empty() {
+                Ok(())
+            } else {
+                Err(Error::Invariant(
+                    "zero-width terminal buffer contains cells".into(),
+                ))
+            };
+        }
+        let mut rows = self.cells.chunks_exact(width);
+        for (row_index, row) in rows.by_ref().enumerate() {
+            for (x, cell) in row.iter().enumerate() {
+                if cell.continuation {
+                    let valid_base =
+                        x.checked_sub(1)
+                            .and_then(|base| row.get(base))
+                            .is_some_and(|base| {
+                                !base.continuation
+                                    && base.rendered_width() == 2
+                                    && base.style == cell.style
+                            });
+                    if !valid_base {
+                        return Err(Error::Invariant(format!(
+                            "orphan terminal continuation at ({x}, {row_index})"
+                        )));
+                    }
+                    continue;
+                }
+                let rendered_width = cell.rendered_width();
+                if rendered_width == 0 {
+                    return Err(Error::Invariant(format!(
+                        "zero-width terminal base at ({x}, {row_index})"
+                    )));
+                }
+                if rendered_width == 2 && !row.get(x + 1).is_some_and(|next| next.continuation) {
+                    return Err(Error::Invariant(format!(
+                        "wide terminal base lacks continuation at ({x}, {row_index})"
+                    )));
+                }
+            }
+        }
+        if !rows.remainder().is_empty() {
+            return Err(Error::Invariant(
+                "terminal buffer cell count is not divisible by its width".into(),
+            ));
+        }
+        Ok(())
     }
 
     /// Return the rendered screen as rows of cell strings.
@@ -391,6 +550,8 @@ impl TermBuf {
     /// Diff this terminal buffer against a previous state, emitting changes
     /// to the provided render backend.
     pub fn diff<R: RenderBackend>(&self, prev: &Self, backend: &mut R) -> Result<()> {
+        self.validate_canonical()?;
+        prev.validate_canonical()?;
         let mut wrote = false;
         if self.size != prev.size {
             return self.render(backend);
@@ -521,6 +682,7 @@ impl TermBuf {
     /// Render this terminal buffer in full using the provided backend,
     /// batching runs of text with the same style.
     pub fn render<R: RenderBackend>(&self, backend: &mut R) -> Result<()> {
+        self.validate_canonical()?;
         let mut wrote = false;
         let width = self.size.w as usize;
         for y in 0..self.size.h {
@@ -861,11 +1023,13 @@ fn render_styled_cells<R: RenderBackend>(
 
 #[cfg(test)]
 mod tests {
-    use proptest::prelude::*;
+    use proptest::{prelude::*, test_runner::TestCaseResult};
     use unicode_segmentation::UnicodeSegmentation;
+    use unicode_width::UnicodeWidthStr;
 
     use super::*;
     use crate::{
+        backend::crossterm::CrosstermRender,
         buf,
         core::text::grapheme_width,
         geom::Line,
@@ -885,17 +1049,21 @@ mod tests {
         let height = rows.len() as u32;
         let width = rows.first().map(|row| row.len()).unwrap_or(0) as u32;
         let style = def_style();
-        let mut tb = TermBuf::new(Size::new(width, height), ' ', style);
+        let mut tb = TermBuf::new(Size::new(width, height), ' ', style)
+            .expect("test render target should allocate");
         for (y, row) in rows.iter().enumerate() {
-            tb.text(&style, Line::new(0, y as u32, width), row);
+            tb.text(&style, Line::new(0, y as u32, width), row)
+                .expect("test buffer mutation should succeed");
         }
         tb
     }
 
     #[test]
     fn basic_fill() {
-        let mut tb = TermBuf::new(Size::new(4, 2), ' ', def_style());
-        tb.fill(&def_style(), Rect::new(1, 0, 2, 2), 'x');
+        let mut tb = TermBuf::new(Size::new(4, 2), ' ', def_style())
+            .expect("test render target should allocate");
+        tb.fill(&def_style(), Rect::new(1, 0, 2, 2), 'x')
+            .expect("test buffer mutation should succeed");
 
         BufTest::new(&tb).assert_matches(buf![
             " xx "
@@ -904,9 +1072,138 @@ mod tests {
     }
 
     #[test]
+    fn allocation_limits_are_checked_before_reservation() {
+        let style = def_style();
+        assert!(matches!(
+            TermBuf::new_with_limits(Size::new(5, 1), ' ', style, RenderLimits::new(4, 4, 16),),
+            Err(Error::RenderWidthLimit { .. })
+        ));
+        assert!(matches!(
+            TermBuf::new_with_limits(Size::new(2, 5), ' ', style, RenderLimits::new(5, 4, 20),),
+            Err(Error::RenderHeightLimit { .. })
+        ));
+        assert!(matches!(
+            TermBuf::new_with_limits(Size::new(4, 4), ' ', style, RenderLimits::new(4, 4, 15),),
+            Err(Error::RenderCellLimit { .. })
+        ));
+        assert!(matches!(
+            TermBuf::new_with_limits(
+                Size::new(u32::MAX, u32::MAX),
+                ' ',
+                style,
+                RenderLimits::new(u32::MAX, u32::MAX, usize::MAX),
+            ),
+            Err(Error::RenderAllocation { .. } | Error::RenderCellCountOverflow { .. })
+        ));
+    }
+
+    #[test]
+    fn single_cell_apis_reject_non_cell_characters() {
+        let style = def_style();
+        assert!(matches!(
+            TermBuf::new(Size::new(1, 1), '界', style),
+            Err(Error::InvalidCellCharacter { width: 2, .. })
+        ));
+        let mut buf = TermBuf::empty(Size::new(3, 3)).expect("test render target should allocate");
+        assert!(matches!(
+            buf.fill(&style, Rect::new(0, 0, 1, 1), '界'),
+            Err(Error::InvalidCellCharacter { width: 2, .. })
+        ));
+        assert!(matches!(
+            buf.fill_empty('\u{0301}', &style),
+            Err(Error::InvalidCellCharacter { width: 0, .. })
+        ));
+        assert!(matches!(
+            buf.solid_frame(&style, FrameRects::new(buf.rect(), 1), '界'),
+            Err(Error::InvalidCellCharacter { width: 2, .. })
+        ));
+    }
+
+    #[test]
+    fn grapheme_replacement_clears_every_touched_grapheme() -> Result<()> {
+        let style = def_style();
+        let mut buf = TermBuf::new(Size::new(4, 1), '.', style)?;
+        assert_eq!(buf.put_grapheme(Point { x: 1, y: 0 }, "界", style)?, 2);
+        buf.put(Point { x: 2, y: 0 }, 'x', style)?;
+        assert!(buf.get(Point { x: 1, y: 0 }).is_some_and(Cell::is_empty));
+        assert_eq!(buf.get(Point { x: 2, y: 0 }).map(|cell| cell.ch), Some('x'));
+
+        buf.put(Point { x: 1, y: 0 }, 'a', style)?;
+        buf.put(Point { x: 2, y: 0 }, 'b', style)?;
+        buf.put_grapheme(Point { x: 1, y: 0 }, "界", style)?;
+        assert_eq!(
+            buf.get(Point { x: 1, y: 0 }).map(|cell| cell.ch),
+            Some('界')
+        );
+        assert!(
+            buf.get(Point { x: 2, y: 0 })
+                .is_some_and(|cell| cell.continuation)
+        );
+        buf.validate_canonical()
+    }
+
+    #[test]
+    fn zero_width_and_right_clipped_graphemes_are_no_ops() -> Result<()> {
+        let style = def_style();
+        let mut buf = TermBuf::new(Size::new(2, 1), '.', style)?;
+        assert_eq!(
+            buf.put_grapheme(Point { x: 0, y: 0 }, "\u{0301}", style)?,
+            0
+        );
+        assert_eq!(buf.screen_text(), "..");
+        assert_eq!(buf.put_grapheme(Point { x: 1, y: 0 }, "界", style)?, 0);
+        assert_eq!(buf.screen_text(), "..");
+        buf.validate_canonical()
+    }
+
+    #[test]
+    fn cursor_overlay_styles_complete_graphemes() -> Result<()> {
+        let style = def_style();
+        let mut buf = TermBuf::empty(Size::new(2, 1))?;
+        buf.put_grapheme(Point::zero(), "界", style)?;
+        buf.overlay_cursor(Point { x: 1, y: 0 }, cursor::CursorShape::Block);
+
+        let base = buf.get(Point::zero()).expect("missing wide base");
+        let continuation = buf.get(Point { x: 1, y: 0 }).expect("missing continuation");
+        assert_eq!(base.ch, '界');
+        assert!(continuation.continuation);
+        assert_eq!(base.style, continuation.style);
+        assert_eq!(base.style.fg, style.bg);
+        assert_eq!(base.style.bg, style.fg);
+        buf.validate_canonical()
+    }
+
+    #[test]
+    fn rendering_rejects_noncanonical_buffers() -> Result<()> {
+        let mut buf = TermBuf::empty(Size::new(1, 1))?;
+        buf.cells[0] = Cell::continuation(def_style());
+        let mut backend = RecBackend::new();
+        assert!(matches!(buf.render(&mut backend), Err(Error::Invariant(_))));
+
+        let mut ragged = TermBuf::empty(Size::new(2, 1))?;
+        ragged.cells.pop();
+        assert!(matches!(
+            ragged.render(&mut backend),
+            Err(Error::Invariant(_))
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn canonical_buffer_renders_through_crossterm_backend() -> Result<()> {
+        let style = def_style();
+        let mut buf = TermBuf::new(Size::new(4, 1), ' ', style)?;
+        buf.text(&style, Line::new(0, 0, 4), "a界")?;
+        buf.overlay_cursor(Point { x: 2, y: 0 }, cursor::CursorShape::Underscore);
+        buf.render(&mut CrosstermRender::default())
+    }
+
+    #[test]
     fn text_write() {
-        let mut tb = TermBuf::new(Size::new(5, 1), ' ', def_style());
-        tb.text(&def_style(), Line::new(0, 0, 5), "hi");
+        let mut tb = TermBuf::new(Size::new(5, 1), ' ', def_style())
+            .expect("test render target should allocate");
+        tb.text(&def_style(), Line::new(0, 0, 5), "hi")
+            .expect("test buffer mutation should succeed");
 
         BufTest::new(&tb).assert_matches(buf!["hi   "]);
     }
@@ -914,8 +1211,10 @@ mod tests {
     #[test]
     fn text_handles_combining_and_wide_graphemes() {
         let style = def_style();
-        let mut tb = TermBuf::new(Size::new(12, 1), ' ', style);
-        tb.text(&style, Line::new(0, 0, 12), "A\u{0301}界👩‍💻B");
+        let mut tb =
+            TermBuf::new(Size::new(12, 1), ' ', style).expect("test render target should allocate");
+        tb.text(&style, Line::new(0, 0, 12), "A\u{0301}界👩‍💻B")
+            .expect("test buffer mutation should succeed");
 
         let first = tb.get(Point { x: 0, y: 0 }).expect("missing cell");
         assert!(
@@ -946,9 +1245,11 @@ mod tests {
 
     #[test]
     fn solid_frame_draw() {
-        let mut tb = TermBuf::new(Size::new(4, 4), ' ', def_style());
+        let mut tb = TermBuf::new(Size::new(4, 4), ' ', def_style())
+            .expect("test render target should allocate");
         let f = FrameRects::new(Rect::new(0, 0, 4, 4), 1);
-        tb.solid_frame(&def_style(), f, '#');
+        tb.solid_frame(&def_style(), f, '#')
+            .expect("test buffer mutation should succeed");
 
         BufTest::new(&tb).assert_matches(buf![
             "####"
@@ -1088,56 +1389,6 @@ mod tests {
         }
     }
 
-    #[derive(Default)]
-    struct CountingBackend {
-        style_calls: usize,
-        text_calls: usize,
-        shift_calls: usize,
-        flush_calls: usize,
-        reset_calls: usize,
-    }
-
-    impl CountingBackend {
-        fn total_calls(&self) -> usize {
-            self.style_calls
-                + self.text_calls
-                + self.shift_calls
-                + self.flush_calls
-                + self.reset_calls
-        }
-    }
-
-    impl RenderBackend for CountingBackend {
-        fn style(&mut self, _style: &ResolvedStyle) -> Result<()> {
-            self.style_calls += 1;
-            Ok(())
-        }
-
-        fn text(&mut self, _loc: Point, _txt: &str) -> Result<()> {
-            self.text_calls += 1;
-            Ok(())
-        }
-
-        fn supports_char_shift(&self) -> bool {
-            false
-        }
-
-        fn shift_chars(&mut self, _loc: Point, _count: i32) -> Result<()> {
-            self.shift_calls += 1;
-            Ok(())
-        }
-
-        fn flush(&mut self) -> Result<()> {
-            self.flush_calls += 1;
-            Ok(())
-        }
-
-        fn reset(&mut self) -> Result<()> {
-            self.reset_calls += 1;
-            Ok(())
-        }
-    }
-
     struct ReplayBackend {
         size: Size,
         rows: Vec<Vec<char>>,
@@ -1162,12 +1413,6 @@ mod tests {
                 wide_as_narrow: true,
                 ..Self::blank(size)
             }
-        }
-
-        fn from_buffer(buf: &TermBuf) -> Self {
-            let mut backend = Self::blank(buf.size());
-            buf.render(&mut backend).unwrap();
-            backend
         }
 
         fn screen_text(&self) -> String {
@@ -1286,49 +1531,390 @@ mod tests {
         }
     }
 
-    fn char_strategy() -> impl Strategy<Value = char> {
-        prop::sample::select(vec![' ', 'a', 'b', 'c', 'x', 'y'])
+    #[derive(Clone, Debug, PartialEq)]
+    struct ModelCell {
+        grapheme: Option<String>,
+        style: ResolvedStyle,
+        continuation: bool,
     }
 
-    prop_compose! {
-        fn buf_strategy()
-            (width in 1u32..6, height in 1u32..6)
-            (width in Just(width), height in Just(height),
-             cells in prop::collection::vec(char_strategy(), (width * height) as usize..=(width * height) as usize))
-             -> (u32, u32, Vec<char>) {
-                (width, height, cells)
-            }
-    }
-
-    prop_compose! {
-        fn buf_pair_strategy()
-            (width in 1u32..8, height in 1u32..6)
-            (width in Just(width), height in Just(height),
-             prev in prop::collection::vec(char_strategy(), (width * height) as usize..=(width * height) as usize),
-             current in prop::collection::vec(char_strategy(), (width * height) as usize..=(width * height) as usize))
-             -> (u32, u32, Vec<char>, Vec<char>) {
-                (width, height, prev, current)
-            }
-    }
-
-    fn buf_from_cells(width: u32, height: u32, cells: &[char]) -> TermBuf {
-        let style = def_style();
-        let mut buf = TermBuf::new(Size::new(width, height), ' ', style);
-        let mut index = 0usize;
-        for y in 0..height {
-            for x in 0..width {
-                buf.put(Point { x, y }, cells[index], style);
-                index += 1;
+    impl ModelCell {
+        fn space(style: ResolvedStyle) -> Self {
+            Self {
+                grapheme: Some(" ".into()),
+                style,
+                continuation: false,
             }
         }
-        buf
+
+        fn empty(style: ResolvedStyle) -> Self {
+            Self {
+                grapheme: None,
+                style,
+                continuation: false,
+            }
+        }
+
+        fn displayed(&self) -> &str {
+            if self.continuation {
+                ""
+            } else {
+                self.grapheme.as_deref().unwrap_or(" ")
+            }
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct ModelBuffer {
+        size: Size,
+        cells: Vec<ModelCell>,
+    }
+
+    impl ModelBuffer {
+        fn new(size: Size, style: ResolvedStyle) -> Self {
+            let count = usize::try_from(size.w)
+                .ok()
+                .and_then(|width| {
+                    usize::try_from(size.h)
+                        .ok()
+                        .and_then(|height| width.checked_mul(height))
+                })
+                .expect("generated model dimensions should fit");
+            Self {
+                size,
+                cells: vec![ModelCell::space(style); count],
+            }
+        }
+
+        fn width(grapheme: &str) -> usize {
+            UnicodeWidthStr::width(grapheme).min(2)
+        }
+
+        fn index(&self, point: Point) -> Option<usize> {
+            if point.x >= self.size.w || point.y >= self.size.h {
+                return None;
+            }
+            let width = usize::try_from(self.size.w).ok()?;
+            usize::try_from(point.y)
+                .ok()?
+                .checked_mul(width)?
+                .checked_add(usize::try_from(point.x).ok()?)
+        }
+
+        fn grapheme_range(&self, index: usize) -> (usize, usize) {
+            let width = usize::try_from(self.size.w).expect("generated width should fit");
+            let row_start = index / width * width;
+            let row_end = row_start.saturating_add(width).min(self.cells.len());
+            let mut start = index;
+            while start > row_start && self.cells[start].continuation {
+                start -= 1;
+            }
+            let mut end = start.saturating_add(1);
+            while end < row_end && self.cells[end].continuation {
+                end += 1;
+            }
+            (start, end)
+        }
+
+        fn clear_at(&mut self, index: usize, style: ResolvedStyle) {
+            let (start, end) = self.grapheme_range(index);
+            self.cells[start..end].fill(ModelCell::empty(style));
+        }
+
+        fn put_grapheme(&mut self, point: Point, grapheme: &str, style: ResolvedStyle) {
+            let width = Self::width(grapheme);
+            if width == 0 {
+                return;
+            }
+            let Some(index) = self.index(point) else {
+                return;
+            };
+            let available = usize::try_from(self.size.w.saturating_sub(point.x)).unwrap_or(0);
+            if width > available {
+                return;
+            }
+            for offset in 0..width {
+                self.clear_at(index + offset, style);
+            }
+            self.cells[index] = ModelCell {
+                grapheme: Some(grapheme.into()),
+                style,
+                continuation: false,
+            };
+            for offset in 1..width {
+                self.cells[index + offset] = ModelCell {
+                    grapheme: None,
+                    style,
+                    continuation: true,
+                };
+            }
+        }
+
+        fn fill(&mut self, rect: Rect, ch: char, style: ResolvedStyle) {
+            let Some(rect) = self.size.rect().intersect(&rect) else {
+                return;
+            };
+            for y in rect.tl.y..rect.tl.y.saturating_add(rect.h) {
+                for x in rect.tl.x..rect.tl.x.saturating_add(rect.w) {
+                    self.put_grapheme(Point { x, y }, &ch.to_string(), style);
+                }
+            }
+        }
+
+        fn text(&mut self, line: Line, text: &str, style: ResolvedStyle) {
+            let Some(line) = self.size.rect().intersect(&line.rect()) else {
+                return;
+            };
+            let mut x = line.tl.x;
+            let mut used = 0usize;
+            let available = usize::try_from(line.w).unwrap_or(usize::MAX);
+            for grapheme in text.graphemes(true) {
+                let width = Self::width(grapheme);
+                if width == 0 {
+                    continue;
+                }
+                if used.saturating_add(width) > available {
+                    break;
+                }
+                self.put_grapheme(Point { x, y: line.tl.y }, grapheme, style);
+                x = x.saturating_add(u32::try_from(width).unwrap_or(u32::MAX));
+                used = used.saturating_add(width);
+            }
+            for offset in used..usize::try_from(line.w).unwrap_or(usize::MAX) {
+                self.put_grapheme(
+                    Point {
+                        x: line
+                            .tl
+                            .x
+                            .saturating_add(u32::try_from(offset).unwrap_or(u32::MAX)),
+                        y: line.tl.y,
+                    },
+                    " ",
+                    style,
+                );
+            }
+        }
+
+        fn overlay_cursor(&mut self, point: Point, shape: cursor::CursorShape) {
+            let Some(index) = self.index(point) else {
+                return;
+            };
+            if self.cells[index].grapheme.is_none() && !self.cells[index].continuation {
+                self.cells[index].grapheme = Some(" ".into());
+            }
+            let (start, end) = self.grapheme_range(index);
+            for cell in &mut self.cells[start..end] {
+                match shape {
+                    cursor::CursorShape::Underscore => {
+                        cell.style.attrs = cell.style.attrs.with(Attr::Underline);
+                    }
+                    cursor::CursorShape::Block | cursor::CursorShape::Line => {
+                        mem::swap(&mut cell.style.fg, &mut cell.style.bg);
+                    }
+                }
+            }
+        }
+
+        fn assert_matches(&self, actual: &TermBuf) -> TestCaseResult {
+            prop_assert_eq!(actual.size(), self.size);
+            prop_assert_eq!(actual.cells.len(), self.cells.len());
+            for (actual, expected) in actual.cells.iter().zip(&self.cells) {
+                prop_assert_eq!(actual.rendered_text(), expected.displayed());
+                prop_assert_eq!(actual.style, expected.style);
+                prop_assert_eq!(actual.continuation, expected.continuation);
+            }
+            Ok(())
+        }
+    }
+
+    struct ModelBackend {
+        model: ModelBuffer,
+        style: ResolvedStyle,
+    }
+
+    impl RenderBackend for ModelBackend {
+        fn style(&mut self, style: &ResolvedStyle) -> Result<()> {
+            self.style = *style;
+            Ok(())
+        }
+
+        fn text(&mut self, location: Point, text: &str) -> Result<()> {
+            let mut x = location.x;
+            for grapheme in text.graphemes(true) {
+                let width = ModelBuffer::width(grapheme);
+                self.model
+                    .put_grapheme(Point { x, y: location.y }, grapheme, self.style);
+                x = x.saturating_add(u32::try_from(width).unwrap_or(u32::MAX));
+            }
+            Ok(())
+        }
+
+        fn supports_char_shift(&self) -> bool {
+            false
+        }
+
+        fn shift_chars(&mut self, _location: Point, _count: i32) -> Result<()> {
+            Err(Error::Invariant(
+                "model backend does not support character shifts".into(),
+            ))
+        }
+
+        fn flush(&mut self) -> Result<()> {
+            Ok(())
+        }
+
+        fn reset(&mut self) -> Result<()> {
+            self.model = ModelBuffer::new(self.model.size, self.style);
+            Ok(())
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    enum BufferOperation {
+        Grapheme {
+            x: u32,
+            y: u32,
+            grapheme: &'static str,
+            alternate_style: bool,
+        },
+        Fill {
+            rect: Rect,
+            ch: char,
+            alternate_style: bool,
+        },
+        Text {
+            line: Line,
+            text: &'static str,
+            alternate_style: bool,
+        },
+        Cursor {
+            x: u32,
+            y: u32,
+            shape: cursor::CursorShape,
+        },
+        Resize {
+            width: u32,
+            height: u32,
+        },
+    }
+
+    fn buffer_operation_strategy() -> impl Strategy<Value = BufferOperation> {
+        prop_oneof![
+            (
+                0u32..8,
+                0u32..5,
+                prop::sample::select(vec!["a", "界", "👩‍💻", "A\u{0301}", "\u{0301}", " "]),
+                any::<bool>(),
+            )
+                .prop_map(|(x, y, grapheme, alternate_style)| {
+                    BufferOperation::Grapheme {
+                        x,
+                        y,
+                        grapheme,
+                        alternate_style,
+                    }
+                }),
+            (
+                0u32..8,
+                0u32..5,
+                0u32..8,
+                0u32..5,
+                prop::sample::select(vec![' ', '.', 'x']),
+                any::<bool>(),
+            )
+                .prop_map(|(x, y, width, height, ch, alternate_style)| {
+                    BufferOperation::Fill {
+                        rect: Rect::new(x, y, width, height),
+                        ch,
+                        alternate_style,
+                    }
+                }),
+            (
+                0u32..8,
+                0u32..5,
+                0u32..8,
+                prop::sample::select(vec!["", "a界", "👩‍💻b", "A\u{0301}", "界界", "\u{0301}a"]),
+                any::<bool>(),
+            )
+                .prop_map(|(x, y, width, text, alternate_style)| {
+                    BufferOperation::Text {
+                        line: Line::new(x, y, width),
+                        text,
+                        alternate_style,
+                    }
+                }),
+            (
+                0u32..8,
+                0u32..5,
+                prop::sample::select(vec![
+                    cursor::CursorShape::Block,
+                    cursor::CursorShape::Line,
+                    cursor::CursorShape::Underscore,
+                ]),
+            )
+                .prop_map(|(x, y, shape)| BufferOperation::Cursor { x, y, shape }),
+            (0u32..7, 0u32..5)
+                .prop_map(|(width, height)| BufferOperation::Resize { width, height }),
+        ]
+    }
+
+    fn apply_buffer_operation(
+        actual: &mut TermBuf,
+        model: &mut ModelBuffer,
+        operation: &BufferOperation,
+        styles: [ResolvedStyle; 2],
+    ) -> Result<()> {
+        let style_for = |alternate| styles[usize::from(alternate)];
+        match operation {
+            BufferOperation::Grapheme {
+                x,
+                y,
+                grapheme,
+                alternate_style,
+            } => {
+                let style = style_for(*alternate_style);
+                actual.put_grapheme(Point { x: *x, y: *y }, grapheme, style)?;
+                model.put_grapheme(Point { x: *x, y: *y }, grapheme, style);
+            }
+            BufferOperation::Fill {
+                rect,
+                ch,
+                alternate_style,
+            } => {
+                let style = style_for(*alternate_style);
+                actual.fill(&style, *rect, *ch)?;
+                model.fill(*rect, *ch, style);
+            }
+            BufferOperation::Text {
+                line,
+                text,
+                alternate_style,
+            } => {
+                let style = style_for(*alternate_style);
+                actual.text(&style, *line, text)?;
+                model.text(*line, text, style);
+            }
+            BufferOperation::Cursor { x, y, shape } => {
+                let point = Point { x: *x, y: *y };
+                actual.overlay_cursor(point, *shape);
+                model.overlay_cursor(point, *shape);
+            }
+            BufferOperation::Resize { width, height } => {
+                let size = Size::new(*width, *height);
+                *actual = TermBuf::new(size, ' ', styles[0])?;
+                *model = ModelBuffer::new(size, styles[0]);
+            }
+        }
+        Ok(())
     }
 
     #[test]
     fn diff_no_change() {
         let style = def_style();
-        let tb1 = TermBuf::new(Size::new(3, 1), ' ', style);
-        let tb2 = TermBuf::new(Size::new(3, 1), ' ', style);
+        let tb1 =
+            TermBuf::new(Size::new(3, 1), ' ', style).expect("test render target should allocate");
+        let tb2 =
+            TermBuf::new(Size::new(3, 1), ' ', style).expect("test render target should allocate");
         let mut be = RecBackend::new();
         tb2.diff(&tb1, &mut be).unwrap();
         assert!(be.ops.is_empty());
@@ -1336,34 +1922,37 @@ mod tests {
 
     proptest! {
         #[test]
-        fn diff_identical_buffers_have_no_ops((width, height, cells) in buf_strategy()) {
-            let style = def_style();
-            let mut buf = TermBuf::new(Size::new(width, height), ' ', style);
-            let mut idx = 0usize;
-            for y in 0..height {
-                for x in 0..width {
-                    buf.put(Point { x, y }, cells[idx], style);
-                    idx += 1;
-                }
+        fn generated_grapheme_operations_remain_canonical_and_replayable(
+            operations in prop::collection::vec(buffer_operation_strategy(), 0..48),
+        ) {
+            let base_style = def_style();
+            let mut alternate_style = base_style;
+            alternate_style.fg = Color::Red;
+            alternate_style.bg = Color::Blue;
+            let styles = [base_style, alternate_style];
+            let initial_size = Size::new(4, 2);
+            let mut actual = TermBuf::new(initial_size, ' ', base_style)?;
+            let mut model = ModelBuffer::new(initial_size, base_style);
+
+            for operation in operations {
+                let previous_actual = actual.clone();
+                let previous_model = model.clone();
+                apply_buffer_operation(&mut actual, &mut model, &operation, styles)?;
+                actual.validate_canonical()?;
+                model.assert_matches(&actual)?;
+
+                let replay_model = if previous_actual.size() == actual.size() {
+                    previous_model
+                } else {
+                    ModelBuffer::new(actual.size(), base_style)
+                };
+                let mut backend = ModelBackend {
+                    model: replay_model,
+                    style: base_style,
+                };
+                actual.diff(&previous_actual, &mut backend)?;
+                backend.model.assert_matches(&actual)?;
             }
-            let prev = buf.clone();
-            let mut backend = CountingBackend::default();
-            buf.diff(&prev, &mut backend).unwrap();
-            prop_assert_eq!(backend.total_calls(), 0);
-        }
-
-        #[test]
-        fn diff_replay_matches_full_render((width, height, prev_cells, current_cells) in buf_pair_strategy()) {
-            let prev = buf_from_cells(width, height, &prev_cells);
-            let current = buf_from_cells(width, height, &current_cells);
-
-            let mut full = ReplayBackend::blank(Size::new(width, height));
-            current.render(&mut full).unwrap();
-
-            let mut diff = ReplayBackend::from_buffer(&prev);
-            current.diff(&prev, &mut diff).unwrap();
-
-            prop_assert_eq!(diff.screen_text(), full.screen_text());
         }
     }
 
@@ -1390,9 +1979,12 @@ mod tests {
     #[test]
     fn diff_single_run() {
         let style = def_style();
-        let prev = TermBuf::new(Size::new(3, 1), ' ', style);
-        let mut cur = TermBuf::new(Size::new(3, 1), ' ', style);
-        cur.text(&style, Line::new(0, 0, 3), "ab");
+        let prev =
+            TermBuf::new(Size::new(3, 1), ' ', style).expect("test render target should allocate");
+        let mut cur =
+            TermBuf::new(Size::new(3, 1), ' ', style).expect("test render target should allocate");
+        cur.text(&style, Line::new(0, 0, 3), "ab")
+            .expect("test buffer mutation should succeed");
         let mut be = RecBackend::new();
         cur.diff(&prev, &mut be).unwrap();
         assert_eq!(be.ops.len(), 2);
@@ -1406,10 +1998,14 @@ mod tests {
         let mut style2 = style1;
         style2.fg = Color::Red;
 
-        let prev = TermBuf::new(Size::new(2, 1), ' ', style1);
-        let mut cur = TermBuf::new(Size::new(2, 1), ' ', style1);
-        cur.fill(&style2, Rect::new(0, 0, 1, 1), 'a');
-        cur.fill(&style1, Rect::new(1, 0, 1, 1), 'b');
+        let prev =
+            TermBuf::new(Size::new(2, 1), ' ', style1).expect("test render target should allocate");
+        let mut cur =
+            TermBuf::new(Size::new(2, 1), ' ', style1).expect("test render target should allocate");
+        cur.fill(&style2, Rect::new(0, 0, 1, 1), 'a')
+            .expect("test buffer mutation should succeed");
+        cur.fill(&style1, Rect::new(1, 0, 1, 1), 'b')
+            .expect("test buffer mutation should succeed");
 
         let mut be = RecBackend::new();
         cur.diff(&prev, &mut be).unwrap();
@@ -1424,9 +2020,12 @@ mod tests {
     #[test]
     fn diff_multi_line() {
         let style = def_style();
-        let prev = TermBuf::new(Size::new(3, 2), ' ', style);
-        let mut cur = TermBuf::new(Size::new(3, 2), ' ', style);
-        cur.fill(&style, Rect::new(0, 1, 2, 1), 'x');
+        let prev =
+            TermBuf::new(Size::new(3, 2), ' ', style).expect("test render target should allocate");
+        let mut cur =
+            TermBuf::new(Size::new(3, 2), ' ', style).expect("test render target should allocate");
+        cur.fill(&style, Rect::new(0, 1, 2, 1), 'x')
+            .expect("test buffer mutation should succeed");
         let mut be = RecBackend::new();
         cur.diff(&prev, &mut be).unwrap();
         assert_eq!(be.ops.len(), 2);
@@ -1437,8 +2036,10 @@ mod tests {
     #[test]
     fn render_whole_buffer() {
         let style = def_style();
-        let mut tb = TermBuf::new(Size::new(3, 1), ' ', style);
-        tb.text(&style, Line::new(0, 0, 3), "ab");
+        let mut tb =
+            TermBuf::new(Size::new(3, 1), ' ', style).expect("test render target should allocate");
+        tb.text(&style, Line::new(0, 0, 3), "ab")
+            .expect("test buffer mutation should succeed");
         let mut be = RecBackend::new();
         tb.render(&mut be).unwrap();
         assert_eq!(
@@ -1450,9 +2051,12 @@ mod tests {
     #[test]
     fn render_repositions_after_wide_graphemes() {
         let style = def_style();
-        let mut tb = TermBuf::new(Size::new(8, 1), ' ', style);
-        tb.text(&style, Line::new(0, 0, 7), "a界bc");
-        tb.fill(&style, Rect::new(7, 0, 1, 1), '|');
+        let mut tb =
+            TermBuf::new(Size::new(8, 1), ' ', style).expect("test render target should allocate");
+        tb.text(&style, Line::new(0, 0, 7), "a界bc")
+            .expect("test buffer mutation should succeed");
+        tb.fill(&style, Rect::new(7, 0, 1, 1), '|')
+            .expect("test buffer mutation should succeed");
 
         let mut backend = ReplayBackend::blank_with_narrow_wide(Size::new(8, 1));
         tb.render(&mut backend).unwrap();
@@ -1463,19 +2067,23 @@ mod tests {
     #[test]
     fn text_overwrites_stale_wide_continuation_cells() {
         let style = def_style();
-        let mut tb = TermBuf::new(Size::new(3, 1), ' ', style);
-        tb.text(&style, Line::new(0, 0, 3), "界a");
+        let mut tb =
+            TermBuf::new(Size::new(3, 1), ' ', style).expect("test render target should allocate");
+        tb.text(&style, Line::new(0, 0, 3), "界a")
+            .expect("test buffer mutation should succeed");
         BufTest::new(&tb).assert_matches(buf!["界Xa"]);
 
-        tb.text(&style, Line::new(0, 0, 3), "b");
+        tb.text(&style, Line::new(0, 0, 3), "b")
+            .expect("test buffer mutation should succeed");
         BufTest::new(&tb).assert_matches(buf!["b  "]);
     }
 
     #[test]
     fn text_clips_wide_grapheme_without_partial_cell() {
         let style = def_style();
-        let mut tb = TermBuf::empty(Size::new(1, 1));
-        tb.text(&style, Line::new(0, 0, 1), "界");
+        let mut tb = TermBuf::empty(Size::new(1, 1)).expect("test render target should allocate");
+        tb.text(&style, Line::new(0, 0, 1), "界")
+            .expect("test buffer mutation should succeed");
 
         let cell = tb.get(Point { x: 0, y: 0 }).expect("missing cell");
         assert_eq!(cell.ch, ' ');
@@ -1485,9 +2093,12 @@ mod tests {
     #[test]
     fn diff_size_change_rerender() {
         let style = def_style();
-        let prev = TermBuf::new(Size::new(2, 1), ' ', style);
-        let mut cur = TermBuf::new(Size::new(3, 1), ' ', style);
-        cur.text(&style, Line::new(0, 0, 3), "abc");
+        let prev =
+            TermBuf::new(Size::new(2, 1), ' ', style).expect("test render target should allocate");
+        let mut cur =
+            TermBuf::new(Size::new(3, 1), ' ', style).expect("test render target should allocate");
+        cur.text(&style, Line::new(0, 0, 3), "abc")
+            .expect("test buffer mutation should succeed");
         let mut be = RecBackend::new();
         cur.diff(&prev, &mut be).unwrap();
         assert_eq!(
@@ -1498,9 +2109,12 @@ mod tests {
 
     #[test]
     fn contains_text() {
-        let mut tb = TermBuf::new(Size::new(10, 3), ' ', def_style());
-        tb.text(&def_style(), Line::new(0, 0, 10), "hello");
-        tb.text(&def_style(), Line::new(0, 1, 10), "world");
+        let mut tb = TermBuf::new(Size::new(10, 3), ' ', def_style())
+            .expect("test render target should allocate");
+        tb.text(&def_style(), Line::new(0, 0, 10), "hello")
+            .expect("test buffer mutation should succeed");
+        tb.text(&def_style(), Line::new(0, 1, 10), "world")
+            .expect("test buffer mutation should succeed");
 
         let bt = BufTest::new(&tb);
         assert!(bt.contains_text("hello"));
@@ -1510,7 +2124,8 @@ mod tests {
 
     #[test]
     fn contains_text_style() {
-        let mut tb = TermBuf::new(Size::new(10, 3), ' ', def_style());
+        let mut tb = TermBuf::new(Size::new(10, 3), ' ', def_style())
+            .expect("test render target should allocate");
 
         // Add text with different styles
         let mut red_style = def_style();
@@ -1519,9 +2134,12 @@ mod tests {
         let mut blue_style = def_style();
         blue_style.fg = Color::Blue;
 
-        tb.text(&red_style, Line::new(0, 0, 5), "hello");
-        tb.text(&blue_style, Line::new(5, 0, 5), "world");
-        tb.text(&def_style(), Line::new(0, 1, 10), "test line");
+        tb.text(&red_style, Line::new(0, 0, 5), "hello")
+            .expect("test buffer mutation should succeed");
+        tb.text(&blue_style, Line::new(5, 0, 5), "world")
+            .expect("test buffer mutation should succeed");
+        tb.text(&def_style(), Line::new(0, 1, 10), "test line")
+            .expect("test buffer mutation should succeed");
 
         // Test with foreground color partial style
         assert!(BufTest::new(&tb).contains_text_style("hello", &PartialStyle::fg(Color::Red)));
@@ -1544,12 +2162,14 @@ mod tests {
     #[test]
     fn contains_text_fg_compat() {
         use crate::style::solarized;
-        let mut tb = TermBuf::new(Size::new(10, 1), ' ', def_style());
+        let mut tb = TermBuf::new(Size::new(10, 1), ' ', def_style())
+            .expect("test render target should allocate");
 
         let mut blue_style = def_style();
         blue_style.fg = solarized::BLUE;
 
-        tb.text(&blue_style, Line::new(0, 0, 3), "two");
+        tb.text(&blue_style, Line::new(0, 0, 3), "two")
+            .expect("test buffer mutation should succeed");
 
         // Test the old method
         assert!(BufTest::new(&tb).contains_text_fg("two", solarized::BLUE));
@@ -1559,61 +2179,21 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_and_copy() {
-        // Test empty constructor
-        let empty = TermBuf::empty(Size::new(5, 3));
+    fn empty_constructor_uses_canonical_empty_cells() {
+        let empty = TermBuf::empty(Size::new(5, 3)).expect("test render target should allocate");
         assert_eq!(empty.size(), Size::new(5, 3));
         BufTest::new(&empty).assert_matches(buf![
             "XXXXX"
             "XXXXX"
             "XXXXX"
         ]);
-
-        // Test copy functionality
-        let mut src = TermBuf::new(Size::new(5, 3), ' ', def_style());
-        src.text(&def_style(), Line::new(1, 1, 3), "ABC");
-
-        BufTest::new(&src).assert_matches(buf![
-            "     "
-            " ABC "
-            "     "
-        ]);
-
-        let mut dst = TermBuf::empty(Size::new(5, 3));
-        dst.copy(&src, Rect::new(1, 1, 3, 1));
-
-        // Check that only the text was copied (spaces are not copied)
-        BufTest::new(&dst).assert_matches(buf![
-            "XXXXX"
-            "XABCX"
-            "XXXXX"
-        ]);
-
-        // Test copy with partial rectangle
-        let mut dst2 = TermBuf::empty(Size::new(5, 3));
-        dst2.copy(&src, Rect::new(2, 1, 2, 1));
-
-        BufTest::new(&dst2).assert_matches(buf![
-            "XXXXX"
-            "XXBCX"
-            "XXXXX"
-        ]);
-
-        // Test copy with different sizes (should do nothing)
-        let mut wrong_size = TermBuf::empty(Size::new(4, 3));
-        wrong_size.copy(&src, Rect::new(0, 0, 5, 3));
-
-        BufTest::new(&wrong_size).assert_matches(buf![
-            "XXXX"
-            "XXXX"
-            "XXXX"
-        ]);
     }
 
     #[test]
     fn contains_text_style_builders() {
         use crate::style::Attr;
-        let mut tb = TermBuf::new(Size::new(10, 2), ' ', def_style());
+        let mut tb = TermBuf::new(Size::new(10, 2), ' ', def_style())
+            .expect("test render target should allocate");
 
         // Create styles with different attributes
         let mut bold_red = def_style();
@@ -1624,8 +2204,10 @@ mod tests {
         italic_blue.fg = Color::Blue;
         italic_blue.attrs = AttrSet::new(Attr::Italic);
 
-        tb.text(&bold_red, Line::new(0, 0, 4), "bold");
-        tb.text(&italic_blue, Line::new(0, 1, 6), "italic");
+        tb.text(&bold_red, Line::new(0, 0, 4), "bold")
+            .expect("test buffer mutation should succeed");
+        tb.text(&italic_blue, Line::new(0, 1, 6), "italic")
+            .expect("test buffer mutation should succeed");
 
         // Test using builder methods
         assert!(BufTest::new(&tb).contains_text_style("bold", &PartialStyle::fg(Color::Red)));
@@ -1653,7 +2235,7 @@ mod tests {
     #[test]
     fn test_fill_empty() {
         // Create an empty buffer
-        let mut tb = TermBuf::empty(Size::new(5, 3));
+        let mut tb = TermBuf::empty(Size::new(5, 3)).expect("test render target should allocate");
 
         // Verify all cells are NULL initially using buf macro
         BufTest::new(&tb).assert_matches(buf![
@@ -1663,7 +2245,8 @@ mod tests {
         ]);
 
         // Add some content to part of the buffer
-        tb.text(&def_style(), Line::new(1, 1, 3), "ABC");
+        tb.text(&def_style(), Line::new(1, 1, 3), "ABC")
+            .expect("test buffer mutation should succeed");
 
         // Verify the content before fill_empty
         BufTest::new(&tb).assert_matches(buf![
@@ -1675,7 +2258,8 @@ mod tests {
         // Fill empty cells with a specific character and style
         let mut fill_style = def_style();
         fill_style.fg = Color::Red;
-        tb.fill_empty('.', &fill_style);
+        tb.fill_empty('.', &fill_style)
+            .expect("test buffer mutation should succeed");
 
         // Check that the buffer now has dots where there were NULLs
         BufTest::new(&tb).assert_matches(buf![

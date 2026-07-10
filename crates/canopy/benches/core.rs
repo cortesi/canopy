@@ -170,10 +170,11 @@ fn style() -> ResolvedStyle {
 /// Return a populated terminal buffer for diff benchmarks.
 fn filled_buffer() -> TermBuf {
     let style = style();
-    let mut buf = TermBuf::new((160, 60), ' ', style);
+    let mut buf = TermBuf::new((160, 60), ' ', style).expect("test render target should allocate");
     for y in 0..60 {
         let text = format!("row {y:02} abc \u{754c} \u{1f642}");
-        buf.text(&style, Line::new(0, y, 160), &text);
+        buf.text(&style, Line::new(0, y, 160), &text)
+            .expect("test buffer mutation should succeed");
     }
     buf
 }
@@ -193,7 +194,7 @@ fn bench_layout(c: &mut Criterion) {
 /// Benchmark diff rendering from an empty buffer to a populated buffer.
 fn bench_render_diffing(c: &mut Criterion) {
     c.bench_function("render_diffing", |b| {
-        let previous = TermBuf::empty((160, 60));
+        let previous = TermBuf::empty((160, 60)).expect("test render target should allocate");
         let current = filled_buffer();
         let mut backend = CountingBackend::default();
         b.iter(|| {
@@ -212,11 +213,17 @@ fn bench_text_buffer(c: &mut Criterion) {
             || {
                 let style = style();
                 let text = "abc \u{754c} \u{1f642} xyz ".repeat(16);
-                (TermBuf::new((160, 60), ' ', style), style, text)
+                (
+                    TermBuf::new((160, 60), ' ', style)
+                        .expect("benchmark render target should allocate"),
+                    style,
+                    text,
+                )
             },
             |(mut buf, style, text)| {
                 for y in 0..60 {
-                    buf.text(&style, Line::new(0, y, 160), black_box(&text));
+                    buf.text(&style, Line::new(0, y, 160), black_box(&text))
+                        .expect("benchmark text write should succeed");
                 }
                 black_box(buf)
             },
@@ -244,9 +251,13 @@ fn bench_frame_fill(c: &mut Criterion) {
         let style = style();
         let frame = FrameRects::new(Rect::new(0, 0, 120, 40), 1);
         b.iter_batched(
-            || TermBuf::new((120, 40), ' ', style),
+            || {
+                TermBuf::new((120, 40), ' ', style)
+                    .expect("benchmark render target should allocate")
+            },
             |mut buf| {
-                buf.solid_frame(&style, frame, '#');
+                buf.solid_frame(&style, frame, '#')
+                    .expect("benchmark frame fill should succeed");
                 black_box(buf)
             },
             BatchSize::SmallInput,

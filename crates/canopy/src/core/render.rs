@@ -1,6 +1,6 @@
 use unicode_segmentation::UnicodeSegmentation;
 
-use super::termbuf::TermBuf;
+use super::termbuf::{RenderLimits, TermBuf};
 use crate::{
     core::text,
     error::Result,
@@ -38,17 +38,17 @@ pub trait RenderBackend {
 /// Signed translation offset in cell coordinates.
 struct Offset {
     /// Horizontal offset.
-    x: i32,
+    x: i64,
     /// Vertical offset.
-    y: i32,
+    y: i64,
 }
 
 impl Offset {
     /// Compute the translation from a source point to a destination point.
     fn between(dest: geom::Point, src: geom::Point) -> Self {
         Self {
-            x: dest.x as i32 - src.x as i32,
-            y: dest.y as i32 - src.y as i32,
+            x: i64::from(dest.x) - i64::from(src.x),
+            y: i64::from(dest.y) - i64::from(src.y),
         }
     }
 }
@@ -79,20 +79,35 @@ pub struct Render<'a> {
 
 impl<'a> Render<'a> {
     /// Construct a renderer for the given rectangle.
-    pub fn new(stylemap: &'a StyleMap, style: &'a mut StyleManager, rect: geom::Rect) -> Self {
-        let buf = TermBuf::new(
+    pub fn new(
+        stylemap: &'a StyleMap,
+        style: &'a mut StyleManager,
+        rect: geom::Rect,
+    ) -> Result<Self> {
+        Self::new_with_limits(stylemap, style, rect, RenderLimits::default())
+    }
+
+    /// Construct a renderer with explicit visible render-target limits.
+    pub fn new_with_limits(
+        stylemap: &'a StyleMap,
+        style: &'a mut StyleManager,
+        rect: geom::Rect,
+        limits: RenderLimits,
+    ) -> Result<Self> {
+        let buf = TermBuf::new_with_limits(
             (rect.w, rect.h),
             '\0',
             ResolvedStyle::new(Color::White, Color::Black, AttrSet::default()),
-        );
-        Render {
+            limits,
+        )?;
+        Ok(Render {
             target: RenderTarget::Owned(buf),
             style,
             stylemap,
             clip: rect,
             origin: Offset::between(geom::Point::zero(), rect.tl),
             effects: &[],
-        }
+        })
     }
 
     /// Construct a renderer that writes directly into a shared buffer.
@@ -176,7 +191,7 @@ impl<'a> Render<'a> {
             let style = self.resolve_style(style);
             if let Some(resolved) = style.resolve_solid() {
                 let adjusted = self.translate_rect(intersection);
-                self.buffer_mut().fill(&resolved, adjusted, c);
+                self.buffer_mut().fill(&resolved, adjusted, c)?;
             } else {
                 let max_y = intersection.tl.y.saturating_add(intersection.h);
                 let max_x = intersection.tl.x.saturating_add(intersection.w);
@@ -185,7 +200,7 @@ impl<'a> Render<'a> {
                         let point = geom::Point { x, y };
                         let adjusted = self.translate_point(point);
                         let resolved = style.resolve_at(r, point);
-                        self.buffer_mut().put(adjusted, c, resolved);
+                        self.buffer_mut().put(adjusted, c, resolved)?;
                     }
                 }
             }
@@ -222,7 +237,7 @@ impl<'a> Render<'a> {
                     tl: self.translate_point(intersection.tl),
                     w: intersection.w,
                 };
-                self.buffer_mut().text(&resolved, adjusted_line, out);
+                self.buffer_mut().text(&resolved, adjusted_line, out)?;
                 if out_width < adjusted_line.w as usize {
                     let pad_rect = geom::Rect::new(
                         adjusted_line.tl.x + out_width as u32,
@@ -230,7 +245,7 @@ impl<'a> Render<'a> {
                         adjusted_line.w - out_width as u32,
                         1,
                     );
-                    self.buffer_mut().fill(&resolved, pad_rect, ' ');
+                    self.buffer_mut().fill(&resolved, pad_rect, ' ')?;
                 }
                 return Ok(());
             }
@@ -252,7 +267,8 @@ impl<'a> Render<'a> {
                 };
                 let adjusted = self.translate_point(point);
                 let resolved = style.resolve_at(line_rect, point);
-                self.buffer_mut().put_grapheme(adjusted, grapheme, resolved);
+                self.buffer_mut()
+                    .put_grapheme(adjusted, grapheme, resolved)?;
                 x = x.saturating_add(width as u32);
                 col = col.saturating_add(width);
             }
@@ -264,7 +280,7 @@ impl<'a> Render<'a> {
                 };
                 let adjusted = self.translate_point(point);
                 let resolved = style.resolve_at(line_rect, point);
-                self.buffer_mut().put(adjusted, ' ', resolved);
+                self.buffer_mut().put(adjusted, ' ', resolved)?;
             }
         }
         Ok(())
@@ -274,7 +290,7 @@ impl<'a> Render<'a> {
     pub fn put_cell(&mut self, style: ResolvedStyle, p: geom::Point, ch: char) -> Result<()> {
         if self.clip.contains_point(p) {
             let adjusted = self.translate_point(p);
-            self.buffer_mut().put(adjusted, ch, style);
+            self.buffer_mut().put(adjusted, ch, style)?;
         }
         Ok(())
     }
@@ -293,7 +309,7 @@ impl<'a> Render<'a> {
         let glyph_rect = geom::Rect::new(p.x, p.y, width as u32, 1);
         if self.clip.contains_rect(&glyph_rect) {
             let adjusted = self.translate_point(p);
-            self.buffer_mut().put_grapheme(adjusted, grapheme, style);
+            self.buffer_mut().put_grapheme(adjusted, grapheme, style)?;
         }
         Ok(())
     }
@@ -316,8 +332,8 @@ impl<'a> Render<'a> {
 
     /// Translate a point from canvas coordinates to buffer coordinates.
     fn translate_point(&self, p: geom::Point) -> geom::Point {
-        let x = p.x as i32 + self.origin.x;
-        let y = p.y as i32 + self.origin.y;
+        let x = i64::from(p.x) + self.origin.x;
+        let y = i64::from(p.y) + self.origin.y;
         debug_assert!(
             x >= 0 && y >= 0,
             "translated point out of bounds: {:?} + {:?}",
@@ -325,8 +341,8 @@ impl<'a> Render<'a> {
             self.origin
         );
         geom::Point {
-            x: x.max(0) as u32,
-            y: y.max(0) as u32,
+            x: u32::try_from(x.clamp(0, i64::from(u32::MAX))).unwrap_or(u32::MAX),
+            y: u32::try_from(y.clamp(0, i64::from(u32::MAX))).unwrap_or(u32::MAX),
         }
     }
 
@@ -359,7 +375,8 @@ mod tests {
         let mut style_manager = StyleManager::new();
         let render_rect = geom::Rect::new(5, 5, 10, 10);
 
-        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect);
+        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect)
+            .expect("test render target should allocate");
 
         // Fill entirely within the render rectangle
         let result = part_render.fill("default", geom::Rect::new(6, 6, 3, 3), '#');
@@ -389,7 +406,8 @@ mod tests {
         let mut style_manager = StyleManager::new();
         let render_rect = geom::Rect::new(5, 5, 10, 10);
 
-        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect);
+        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect)
+            .expect("test render target should allocate");
 
         // Fill that partially overlaps the render rectangle
         let result = part_render.fill("default", geom::Rect::new(3, 3, 5, 5), '#');
@@ -439,7 +457,8 @@ mod tests {
         let mut style_manager = StyleManager::new();
         let render_rect = geom::Rect::new(5, 5, 10, 10);
 
-        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect);
+        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect)
+            .expect("test render target should allocate");
 
         // Fill completely outside the render rectangle but within canvas
         let result = part_render.fill("default", geom::Rect::new(0, 0, 3, 3), '#');
@@ -475,7 +494,8 @@ mod tests {
             .get(&stylemap, "")
             .resolve_solid()
             .expect("default style resolves to solid colors");
-        let mut target = TermBuf::empty_with_style(geom::Size::new(6, 4), default_style);
+        let mut target = TermBuf::empty_with_style(geom::Size::new(6, 4), default_style)
+            .expect("test render target should allocate");
 
         let clip = geom::Rect::new(2, 1, 2, 2);
         let screen_origin = geom::Point { x: 3, y: 0 };
@@ -511,7 +531,8 @@ mod tests {
             .get(&stylemap, "")
             .resolve_solid()
             .expect("default style resolves to solid colors");
-        let mut render = Render::new(&stylemap, &mut style_manager, geom::Rect::new(0, 0, 2, 1));
+        let mut render = Render::new(&stylemap, &mut style_manager, geom::Rect::new(0, 0, 2, 1))
+            .expect("test render target should allocate");
 
         render
             .put_grapheme(style, geom::Point { x: 1, y: 0 }, "界")
@@ -530,7 +551,8 @@ mod tests {
         let mut style_manager = StyleManager::new();
         let render_rect = geom::Rect::new(5, 5, 10, 10);
 
-        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect);
+        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect)
+            .expect("test render target should allocate");
 
         // Fill that extends beyond canvas bounds
         part_render
@@ -571,7 +593,8 @@ mod tests {
         let mut style_manager = StyleManager::new();
         let render_rect = geom::Rect::new(5, 5, 10, 10);
 
-        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect);
+        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect)
+            .expect("test render target should allocate");
 
         // Text entirely within render rectangle
         let result = part_render.text(
@@ -634,7 +657,8 @@ mod tests {
         let mut style_manager = StyleManager::new();
         let render_rect = geom::Rect::new(5, 5, 10, 10);
 
-        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect);
+        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect)
+            .expect("test render target should allocate");
 
         // Text that starts before render rect
         let result = part_render.text(
@@ -698,7 +722,8 @@ mod tests {
         let mut style_manager = StyleManager::new();
         let render_rect = geom::Rect::new(5, 5, 10, 10);
 
-        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect);
+        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect)
+            .expect("test render target should allocate");
 
         // Text that extends beyond canvas
         part_render
@@ -748,7 +773,8 @@ mod tests {
         let mut style_manager = StyleManager::new();
         let render_rect = geom::Rect::new(5, 5, 10, 10);
 
-        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect);
+        let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect)
+            .expect("test render target should allocate");
 
         // Frame within bounds
         let frame = geom::FrameRects::new(geom::Rect::new(6, 6, 8, 8), 1);
@@ -789,7 +815,8 @@ mod tests {
         ];
 
         for (render_rect, position) in positions {
-            let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect);
+            let mut part_render = Render::new(&stylemap, &mut style_manager, render_rect)
+                .expect("test render target should allocate");
 
             // Fill within the specific render rect
             let fill_rect = geom::Rect::new(render_rect.tl.x + 1, render_rect.tl.y + 1, 5, 5);

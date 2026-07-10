@@ -227,28 +227,28 @@ apply only to the visible render target. They do not constrain virtual coordinat
 images, or other widget-owned off-screen data, which may be much larger than the viewport and use
 lazy, tiled, or application-specific storage.
 
-26. [ ] Make terminal-buffer allocation checked and fallible.
+26. [x] Make terminal-buffer allocation checked and fallible.
 
    Compute materialized render-target cell counts with checked `usize` arithmetic, apply
    `RenderLimits`, and use fallible reservation before initialization. Ensure indexing uses the
    same calculation and propagate construction errors through root sizing and renderer setup.
    Keep virtual canvas extents separate so off-screen content never drives `TermBuf` allocation.
 
-27. [ ] Make grapheme replacement an atomic buffer operation.
+27. [x] Make grapheme replacement an atomic buffer operation.
 
    Before writing, clear the complete grapheme occupying the destination and every cell covered by
    the new grapheme. Reject width-two `char` values in `new`, `fill`, `fill_empty`, and frame fills,
    or make those paths grapheme-aware. Define zero-width behavior without forcing it to one cell,
    and maintain a canonical base-plus-continuation representation after every operation.
 
-28. [ ] Make clipping and cursor overlays preserve canonical graphemes.
+28. [x] Make clipping and cursor overlays preserve canonical graphemes.
 
    Delete the production-unused `copy` and `copy_to_rect` APIs. Make cursor styling cover a complete
    grapheme without rewriting a continuation into a base, and never install a wide base when its
    continuation is clipped at the right edge. Keep the already grapheme-aware diff algorithm and
    verify it only receives canonical buffers.
 
-29. [ ] Pass the rendering stage gate.
+29. [x] Pass the rendering stage gate.
 
    Replace the narrow ASCII-only diff property with generated grapheme writes, fills, overwrites,
    right-edge clipping, resizes, and cursor moves. Replay every diff against a reference cell model

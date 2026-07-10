@@ -54,12 +54,12 @@ pub fn slice_by_columns(s: &str, start: usize, max: usize) -> (&str, usize) {
     (&s[start_byte..end_byte], out_cols)
 }
 
-/// Return the display width of a grapheme cluster, clamped to terminal cell widths.
+/// Return the display width of a grapheme cluster, capped at terminal cell widths.
 pub fn grapheme_width(grapheme: &str) -> usize {
     if grapheme.is_empty() {
         return 0;
     }
-    UnicodeWidthStr::width(grapheme).clamp(1, 2)
+    UnicodeWidthStr::width(grapheme).min(2)
 }
 
 /// Expand tabs into spaces using the configured tab stop.
@@ -153,5 +153,10 @@ mod tests {
     #[test]
     fn expand_tabs_handles_wide_graphemes() {
         assert_eq!(expand_tabs("界\tb", 4), "界  b");
+    }
+
+    #[test]
+    fn standalone_zero_width_graphemes_remain_zero_width() {
+        assert_eq!(grapheme_width("\u{0301}"), 0);
     }
 }

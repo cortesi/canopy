@@ -314,8 +314,9 @@ mod tests {
 
     #[test]
     fn test_bufmatch_default() {
-        let mut buf = TermBuf::empty(Size::new(5, 3));
-        buf.text(&test_style(), Line::new(0, 0, 5), "hello");
+        let mut buf = TermBuf::empty(Size::new(5, 3)).expect("test render target should allocate");
+        buf.text(&test_style(), Line::new(0, 0, 5), "hello")
+            .expect("test buffer mutation should succeed");
 
         let matcher = BufTest::new(&buf);
         assert!(matcher.matches(&["hello", "XXXXX", "XXXXX"]));
@@ -324,8 +325,9 @@ mod tests {
 
     #[test]
     fn test_bufmatch_custom_null() {
-        let mut buf = TermBuf::empty(Size::new(4, 2));
-        buf.text(&test_style(), Line::new(0, 0, 2), "ab");
+        let mut buf = TermBuf::empty(Size::new(4, 2)).expect("test render target should allocate");
+        buf.text(&test_style(), Line::new(0, 0, 2), "ab")
+            .expect("test buffer mutation should succeed");
 
         let matcher = BufTest::new(&buf).with_null('_');
         assert!(matcher.matches(&["ab__", "____"]));
@@ -334,9 +336,12 @@ mod tests {
 
     #[test]
     fn test_bufmatch_any_char() {
-        let mut buf = TermBuf::new(Size::new(4, 2), ' ', test_style());
-        buf.text(&test_style(), Line::new(0, 0, 4), "test");
-        buf.text(&test_style(), Line::new(0, 1, 4), "word");
+        let mut buf = TermBuf::new(Size::new(4, 2), ' ', test_style())
+            .expect("test render target should allocate");
+        buf.text(&test_style(), Line::new(0, 0, 4), "test")
+            .expect("test buffer mutation should succeed");
+        buf.text(&test_style(), Line::new(0, 1, 4), "word")
+            .expect("test buffer mutation should succeed");
 
         let matcher = BufTest::new(&buf).with_any('?');
         assert!(matcher.matches(&["????", "????"])); // all wildcards
@@ -347,8 +352,9 @@ mod tests {
 
     #[test]
     fn test_bufmatch_combined() {
-        let mut buf = TermBuf::empty(Size::new(6, 2));
-        buf.text(&test_style(), Line::new(0, 0, 3), "foo");
+        let mut buf = TermBuf::empty(Size::new(6, 2)).expect("test render target should allocate");
+        buf.text(&test_style(), Line::new(0, 0, 3), "foo")
+            .expect("test buffer mutation should succeed");
 
         let matcher = BufTest::new(&buf).with_null('_').with_any('*');
         assert!(matcher.matches(&["foo___", "______"])); // custom null char
@@ -358,13 +364,16 @@ mod tests {
 
     #[test]
     fn test_contains_functions() {
-        let mut buf = TermBuf::new(Size::new(10, 2), ' ', test_style());
+        let mut buf = TermBuf::new(Size::new(10, 2), ' ', test_style())
+            .expect("test render target should allocate");
 
         let mut red_style = test_style();
         red_style.fg = Color::Red;
 
-        buf.text(&test_style(), Line::new(0, 0, 5), "hello");
-        buf.text(&red_style, Line::new(5, 0, 5), "world");
+        buf.text(&test_style(), Line::new(0, 0, 5), "hello")
+            .expect("test buffer mutation should succeed");
+        buf.text(&red_style, Line::new(5, 0, 5), "world")
+            .expect("test buffer mutation should succeed");
 
         let bt = BufTest::new(&buf);
         assert!(bt.contains_text("hello"));
@@ -380,9 +389,11 @@ mod tests {
 
     #[test]
     fn test_dump() {
-        let mut buf = TermBuf::empty(Size::new(5, 3));
-        buf.text(&test_style(), Line::new(0, 0, 5), "hello");
-        buf.text(&test_style(), Line::new(1, 1, 3), "abc");
+        let mut buf = TermBuf::empty(Size::new(5, 3)).expect("test render target should allocate");
+        buf.text(&test_style(), Line::new(0, 0, 5), "hello")
+            .expect("test buffer mutation should succeed");
+        buf.text(&test_style(), Line::new(1, 1, 3), "abc")
+            .expect("test buffer mutation should succeed");
 
         // This test just verifies dump() runs without panicking
         // The actual output goes to stdout
@@ -392,20 +403,27 @@ mod tests {
     #[test]
     fn test_dump_with_larger_buffer() {
         // Test with a larger buffer to see the ruler wrap around
-        let mut buf = TermBuf::empty(Size::new(25, 15));
-        buf.text(&test_style(), Line::new(0, 0, 10), "0123456789");
-        buf.text(&test_style(), Line::new(10, 5, 15), "Offset at (10,5)");
-        buf.text(&test_style(), Line::new(5, 10, 10), "Row 10 test");
+        let mut buf =
+            TermBuf::empty(Size::new(25, 15)).expect("test render target should allocate");
+        buf.text(&test_style(), Line::new(0, 0, 10), "0123456789")
+            .expect("test buffer mutation should succeed");
+        buf.text(&test_style(), Line::new(10, 5, 15), "Offset at (10,5)")
+            .expect("test buffer mutation should succeed");
+        buf.text(&test_style(), Line::new(5, 10, 10), "Row 10 test")
+            .expect("test buffer mutation should succeed");
 
         BufTest::new(&buf).dump();
     }
 
     #[test]
     fn test_dump_line() {
-        let mut buf = TermBuf::empty(Size::new(20, 5));
-        buf.text(&test_style(), Line::new(0, 0, 10), "First line");
-        buf.text(&test_style(), Line::new(5, 2, 15), "Middle line at 5");
-        buf.text(&test_style(), Line::new(0, 4, 20), "Last line with text!");
+        let mut buf = TermBuf::empty(Size::new(20, 5)).expect("test render target should allocate");
+        buf.text(&test_style(), Line::new(0, 0, 10), "First line")
+            .expect("test buffer mutation should succeed");
+        buf.text(&test_style(), Line::new(5, 2, 15), "Middle line at 5")
+            .expect("test buffer mutation should succeed");
+        buf.text(&test_style(), Line::new(0, 4, 20), "Last line with text!")
+            .expect("test buffer mutation should succeed");
 
         // Test dumping various lines
         let bt = BufTest::new(&buf);
@@ -417,13 +435,16 @@ mod tests {
 
     #[test]
     fn test_buftest_instance_methods() {
-        let mut buf = TermBuf::new(Size::new(10, 2), ' ', test_style());
+        let mut buf = TermBuf::new(Size::new(10, 2), ' ', test_style())
+            .expect("test render target should allocate");
 
         let mut red_style = test_style();
         red_style.fg = Color::Red;
 
-        buf.text(&test_style(), Line::new(0, 0, 5), "hello");
-        buf.text(&red_style, Line::new(5, 0, 5), "world");
+        buf.text(&test_style(), Line::new(0, 0, 5), "hello")
+            .expect("test buffer mutation should succeed");
+        buf.text(&red_style, Line::new(5, 0, 5), "world")
+            .expect("test buffer mutation should succeed");
 
         let bt = BufTest::new(&buf);
 

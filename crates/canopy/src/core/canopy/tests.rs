@@ -961,3 +961,30 @@ fn zero_size_child_ok() -> Result<()> {
     canopy.render(&mut cr)?;
     Ok(())
 }
+
+#[test]
+fn visible_render_limits_reject_sizes_before_publication() -> Result<()> {
+    let mut canopy = Canopy::new();
+    assert!(matches!(
+        canopy.set_root_size(Size::new(2049, 1)),
+        Err(Error::RenderWidthLimit { .. })
+    ));
+    assert_eq!(canopy.root_size, None);
+
+    canopy.set_render_limits(RenderLimits::new(4, 4, 15))?;
+    assert!(matches!(
+        canopy.set_root_size(Size::new(4, 4)),
+        Err(Error::RenderCellLimit { .. })
+    ));
+    assert_eq!(canopy.root_size, None);
+
+    let accepted = RenderLimits::new(4, 4, 16);
+    canopy.set_render_limits(accepted)?;
+    canopy.set_root_size(Size::new(4, 4))?;
+    assert!(matches!(
+        canopy.set_render_limits(RenderLimits::new(3, 4, 16)),
+        Err(Error::RenderWidthLimit { .. })
+    ));
+    assert_eq!(canopy.render_limits, accepted);
+    Ok(())
+}

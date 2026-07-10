@@ -49,6 +49,52 @@ pub enum Error {
     #[error("render: {0}")]
     /// Rendering failure.
     Render(String),
+    /// A render target exceeds its configured width limit.
+    #[error("render target width {requested} exceeds limit {limit}")]
+    RenderWidthLimit {
+        /// Requested target width.
+        requested: u32,
+        /// Configured maximum width.
+        limit: u32,
+    },
+    /// A render target exceeds its configured height limit.
+    #[error("render target height {requested} exceeds limit {limit}")]
+    RenderHeightLimit {
+        /// Requested target height.
+        requested: u32,
+        /// Configured maximum height.
+        limit: u32,
+    },
+    /// Render-target dimensions cannot be represented as a cell count.
+    #[error("render target {width}x{height} cell count overflows usize")]
+    RenderCellCountOverflow {
+        /// Requested target width.
+        width: u32,
+        /// Requested target height.
+        height: u32,
+    },
+    /// A render target exceeds its configured total-cell limit.
+    #[error("render target cell count {requested} exceeds limit {limit}")]
+    RenderCellLimit {
+        /// Requested target cell count.
+        requested: usize,
+        /// Configured maximum cell count.
+        limit: usize,
+    },
+    /// Render-target backing storage could not be reserved.
+    #[error("could not allocate render target with {cells} cells")]
+    RenderAllocation {
+        /// Requested target cell count.
+        cells: usize,
+    },
+    /// A single-cell drawing API received a character with an invalid width.
+    #[error("single-cell drawing character {ch:?} has terminal width {width}")]
+    InvalidCellCharacter {
+        /// Rejected character.
+        ch: char,
+        /// Computed terminal width.
+        width: usize,
+    },
     #[error("geometry: {0}")]
     /// Geometry failure.
     Geometry(String),

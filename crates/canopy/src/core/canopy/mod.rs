@@ -16,7 +16,11 @@ use comfy_table::{ContentArrangement, Table, presets::UTF8_FULL};
 use ruau::{fs::FilesystemMountsError, source::ModuleSource, vm_api::NativeModule};
 use serde::{Deserialize, Serialize};
 
-use super::{inputmap, poll::Poller, termbuf::TermBuf};
+use super::{
+    inputmap,
+    poll::Poller,
+    termbuf::{RenderLimits, TermBuf},
+};
 
 mod rendering;
 mod routing;
@@ -50,6 +54,8 @@ pub struct Canopy {
 
     /// Root window size.
     pub(crate) root_size: Option<Size>,
+    /// Limits for the materialized visible render target.
+    pub(crate) render_limits: RenderLimits,
 
     /// Script execution host.
     pub(crate) script_host: script::LuauHost,
@@ -324,6 +330,7 @@ impl Canopy {
             fixtures: HashMap::new(),
             style: solarized::solarized_dark(),
             root_size: None,
+            render_limits: RenderLimits::default(),
             termbuf: None,
             render_pending: true,
             core,
@@ -341,6 +348,15 @@ impl Canopy {
     /// Return the root node ID.
     pub fn root_id(&self) -> NodeId {
         self.core.root_id()
+    }
+
+    /// Replace the visible render-target limits.
+    pub fn set_render_limits(&mut self, limits: RenderLimits) -> Result<()> {
+        if let Some(size) = self.root_size {
+            limits.cell_count(size)?;
+        }
+        self.render_limits = limits;
+        Ok(())
     }
 
     /// Create a detached widget node.

@@ -233,7 +233,7 @@ impl Canopy {
             .get(&self.style, "")
             .resolve_solid()
             .expect("default style resolves to solid colors");
-        let mut next = TermBuf::new(root_size, ' ', def_style);
+        let mut next = TermBuf::new_with_limits(root_size, ' ', def_style, self.render_limits)?;
 
         let screen_clip = Rect::new(0, 0, root_size.w, root_size.h);
         let mut effect_stack: Vec<Effect> = Vec::new();

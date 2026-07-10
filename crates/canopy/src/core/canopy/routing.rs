@@ -362,6 +362,7 @@ impl Canopy {
 
     /// Set the size on the root node.
     pub fn set_root_size(&mut self, size: Size) -> Result<()> {
+        self.render_limits.cell_count(size)?;
         self.root_size = Some(size);
         self.render_pending = true;
         self.core.update_layout(size)?;

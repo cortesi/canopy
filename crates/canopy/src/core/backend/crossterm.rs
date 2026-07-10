@@ -233,10 +233,19 @@ impl CrosstermRender {
     /// Write text at a position.
     fn text(&mut self, loc: Point, txt: &str) -> io::Result<()> {
         for run in positioned_text_runs(loc, txt) {
-            self.fp.queue(ccursor::MoveTo(
-                run.location.x as u16,
-                run.location.y as u16,
-            ))?;
+            let x = u16::try_from(run.location.x).map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "terminal x coordinate exceeds u16",
+                )
+            })?;
+            let y = u16::try_from(run.location.y).map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "terminal y coordinate exceeds u16",
+                )
+            })?;
+            self.fp.queue(ccursor::MoveTo(x, y))?;
             self.fp.queue(style::Print(run.text))?;
         }
         Ok(())

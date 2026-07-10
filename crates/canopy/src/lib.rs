@@ -29,7 +29,7 @@ pub mod layout;
 pub mod prelude;
 pub(crate) mod widget;
 
-pub use core::termbuf::TermBuf;
+pub use core::termbuf::{RenderLimits, TermBuf};
 #[cfg(any(test, feature = "testing"))]
 pub use core::testing;
 // Stable app-author surface.

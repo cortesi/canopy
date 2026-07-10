@@ -2,8 +2,8 @@
 
 pub use crate::{
     Canopy, ChangeOutcome, ChildKey, CommandArg, CommandEnum, Context, EventOutcome, Loader,
-    NodeId, Path, PathFilter, ReadContext, ScriptApiState, Slot, TypedId, Widget, command,
-    derive_commands, error,
+    NodeId, Path, PathFilter, ReadContext, RenderLimits, ScriptApiState, Slot, TypedId, Widget,
+    command, derive_commands, error,
     event::{Event, key::Key, mouse},
     geom::{Point, Rect, Size},
     key,

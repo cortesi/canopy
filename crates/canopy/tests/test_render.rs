@@ -99,7 +99,8 @@ mod tests {
                 .unwrap_or_else(|| geom::Rect::new(0, 0, buf_size.w, buf_size.h));
 
             let (stylemap, mut style_manager) = setup_render_test(canvas_size, render_rect);
-            let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
+            let mut render = Render::new(&stylemap, &mut style_manager, render_rect)
+                .expect("test render target should allocate");
 
             let result = render.text("default", self.line, self.text);
             if let Err(e) = result {
@@ -131,7 +132,8 @@ mod tests {
         let canvas_size = Size::new(10, 5);
         let render_rect = geom::Rect::new(0, 0, 10, 5);
         let (stylemap, mut style_manager) = setup_render_test(canvas_size, render_rect);
-        let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
+        let mut render = Render::new(&stylemap, &mut style_manager, render_rect)
+            .expect("test render target should allocate");
 
         // Fill a rectangle in the middle of the buffer
         let rect = geom::Rect::new(2, 1, 4, 2);
@@ -155,7 +157,8 @@ mod tests {
         let canvas_size = Size::new(20, 10);
         let render_rect = geom::Rect::new(5, 2, 10, 5);
         let (stylemap, mut style_manager) = setup_render_test(canvas_size, render_rect);
-        let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
+        let mut render = Render::new(&stylemap, &mut style_manager, render_rect)
+            .expect("test render target should allocate");
 
         // Fill a rectangle that partially overlaps the render rect
         // Rectangle at (3, 1) with size 10x5 should only render the part that overlaps with render_rect
@@ -368,7 +371,8 @@ mod tests {
         let canvas_size = Size::new(10, 10);
         let render_rect = geom::Rect::new(0, 0, 10, 10);
         let (stylemap, mut style_manager) = setup_render_test(canvas_size, render_rect);
-        let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
+        let mut render = Render::new(&stylemap, &mut style_manager, render_rect)
+            .expect("test render target should allocate");
 
         // Create a frame around a 6x6 area starting at (2,2)
         let frame = geom::FrameRects::new(geom::Rect::new(2, 2, 6, 6), 1);
@@ -397,7 +401,8 @@ mod tests {
         let canvas_size = Size::new(5, 5);
         let render_rect = geom::Rect::new(0, 0, 5, 5);
         let (stylemap, mut style_manager) = setup_render_test(canvas_size, render_rect);
-        let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
+        let mut render = Render::new(&stylemap, &mut style_manager, render_rect)
+            .expect("test render target should allocate");
 
         // Create a minimal frame
         let frame = geom::FrameRects::new(geom::Rect::new(1, 1, 3, 3), 1);
@@ -412,7 +417,8 @@ mod tests {
         let canvas_size = Size::new(20, 15);
         let render_rect = geom::Rect::new(5, 5, 10, 5);
         let (stylemap, mut style_manager) = setup_render_test(canvas_size, render_rect);
-        let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
+        let mut render = Render::new(&stylemap, &mut style_manager, render_rect)
+            .expect("test render target should allocate");
 
         // Create a frame that partially overlaps the render rect
         let frame = geom::FrameRects::new(geom::Rect::new(3, 3, 10, 8), 1);
@@ -447,7 +453,8 @@ mod tests {
 
         for (render_rect, position) in positions {
             let (stylemap, mut style_manager) = setup_render_test(canvas_size, render_rect);
-            let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
+            let mut render = Render::new(&stylemap, &mut style_manager, render_rect)
+                .expect("test render target should allocate");
 
             // Fill the entire render rect with a pattern
             render.fill("default", render_rect, '.').unwrap();
@@ -480,7 +487,8 @@ mod tests {
         let canvas_size = Size::new(20, 20);
         let render_rect = geom::Rect::new(5, 5, 10, 10);
         let (stylemap, mut style_manager) = setup_render_test(canvas_size, render_rect);
-        let mut render = Render::new(&stylemap, &mut style_manager, render_rect);
+        let mut render = Render::new(&stylemap, &mut style_manager, render_rect)
+            .expect("test render target should allocate");
 
         // Try to fill a rectangle that extends outside the canvas
         render
