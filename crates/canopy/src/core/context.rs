@@ -30,14 +30,16 @@ use crate::{
 /// This trait associates a string key with a specific widget type, providing
 /// compile-time type safety for keyed child access.
 ///
-/// Use the [`key!`] macro to define keys:
+/// Use the [`crate::key!`] macro to define keys:
 ///
-/// ```ignore
-/// // Key with same name as widget type
-/// Editor);
+/// ```
+/// use canopy::{ChildKey, Widget, key};
 ///
-/// // Key with custom name
-/// ModalSlot: Modal);
+/// pub struct Modal;
+/// impl Widget for Modal {}
+///
+/// key!(ModalSlot: Modal);
+/// assert_eq!(ModalSlot::KEY, "ModalSlot");
 /// ```
 pub trait ChildKey {
     /// The widget type associated with this key.
@@ -132,14 +134,18 @@ impl<K: ChildKey> Slot<K> {
 ///
 /// # Examples
 ///
-/// ```ignore
-/// // Simple form: key name matches widget type, string key is snake_case
-/// Editor);  // KEY = "Editor", Widget = Editor (private)
-/// pub Editor);  // same, but public
+/// ```
+/// use canopy::{ChildKey, Widget, key};
 ///
-/// // Custom name form: specify the widget type explicitly
-/// ModalSlot: Modal);  // KEY = "ModalSlot", Widget = Modal (private)
-/// pub ModalSlot: Modal);  // same, but public
+/// key!(Editor);
+/// impl Widget for Editor {}
+///
+/// pub struct Modal;
+/// impl Widget for Modal {}
+/// key!(pub ModalSlot: Modal);
+///
+/// assert_eq!(Editor::KEY, "Editor");
+/// assert_eq!(ModalSlot::KEY, "ModalSlot");
 /// ```
 #[macro_export]
 macro_rules! key {

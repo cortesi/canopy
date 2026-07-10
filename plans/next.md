@@ -320,7 +320,7 @@ permanently blocked detached reader thread is not an acceptable fallback.
    trivial accessors, and add a reviewable API-surface artifact for intent and complexity review.
    Treat the artifact as a design budget, not as a compatibility baseline.
 
-39. [ ] Pass the API stage gate.
+39. [x] Pass the API stage gate.
 
    Build every downstream crate and example against the facade. Repair the corrupted `ChildKey`
    and `key!` rustdoc, convert the four ignored examples into compiling doctests, and verify the

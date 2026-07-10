@@ -681,14 +681,16 @@ pub mod canopy {
         /// This trait associates a string key with a specific widget type, providing
         /// compile-time type safety for keyed child access.
         ///
-        /// Use the [`key!`] macro to define keys:
+        /// Use the [`crate::key!`] macro to define keys:
         ///
-        /// ```ignore
-        /// // Key with same name as widget type
-        /// Editor);
+        /// ```
+        /// use canopy::{ChildKey, Widget, key};
         ///
-        /// // Key with custom name
-        /// ModalSlot: Modal);
+        /// pub struct Modal;
+        /// impl Widget for Modal {}
+        ///
+        /// key!(ModalSlot: Modal);
+        /// assert_eq!(ModalSlot::KEY, "ModalSlot");
         /// ```
         pub trait ChildKey {
             type Widget: Widget + 'static;
@@ -1808,14 +1810,18 @@ pub mod canopy {
         ///
         /// # Examples
         ///
-        /// ```ignore
-        /// // Simple form: key name matches widget type, string key is snake_case
-        /// Editor);  // KEY = "Editor", Widget = Editor (private)
-        /// pub Editor);  // same, but public
+        /// ```
+        /// use canopy::{ChildKey, Widget, key};
         ///
-        /// // Custom name form: specify the widget type explicitly
-        /// ModalSlot: Modal);  // KEY = "ModalSlot", Widget = Modal (private)
-        /// pub ModalSlot: Modal);  // same, but public
+        /// key!(Editor);
+        /// impl Widget for Editor {}
+        ///
+        /// pub struct Modal;
+        /// impl Widget for Modal {}
+        /// key!(pub ModalSlot: Modal);
+        ///
+        /// assert_eq!(Editor::KEY, "Editor");
+        /// assert_eq!(ModalSlot::KEY, "ModalSlot");
         /// ```
         #[macro_export]
         macro_rules! key {
@@ -2181,14 +2187,18 @@ pub mod canopy {
         ///
         /// # Example
         ///
-        /// ```ignore
+        /// ```
+        /// use canopy::style::{Attr, StyleBuilder, StyleMap, solarized};
+        ///
         /// let selected = StyleBuilder::new()
         ///     .fg(solarized::BASE3)
         ///     .bg(solarized::BLUE)
-        ///     .attrs(selected_attrs);
+        ///     .attr(Attr::Bold);
         ///
-        /// style_map.rules()
-        ///     .rule("item/selected").style(selected)
+        /// let mut style_map = StyleMap::new();
+        /// style_map
+        ///     .rules()
+        ///     .style("item/selected", selected)
         ///     .apply();
         /// ```
         #[derive(Clone, Default, Debug, StructuralPartialEq, PartialEq)]
@@ -2227,8 +2237,12 @@ pub mod canopy {
             ///
             /// # Example
             ///
-            /// ```ignore
-            /// style_map.rules()
+            /// ```
+            /// use canopy::style::{StyleMap, solarized};
+            ///
+            /// let mut style_map = StyleMap::new();
+            /// style_map
+            ///     .rules()
             ///     .fg("red/text", solarized::RED)
             ///     .fg("blue/text", solarized::BLUE)
             ///     .apply();
@@ -2731,14 +2745,16 @@ pub mod canopy {
     /// This trait associates a string key with a specific widget type, providing
     /// compile-time type safety for keyed child access.
     ///
-    /// Use the [`key!`] macro to define keys:
+    /// Use the [`crate::key!`] macro to define keys:
     ///
-    /// ```ignore
-    /// // Key with same name as widget type
-    /// Editor);
+    /// ```
+    /// use canopy::{ChildKey, Widget, key};
     ///
-    /// // Key with custom name
-    /// ModalSlot: Modal);
+    /// pub struct Modal;
+    /// impl Widget for Modal {}
+    ///
+    /// key!(ModalSlot: Modal);
+    /// assert_eq!(ModalSlot::KEY, "ModalSlot");
     /// ```
     pub trait ChildKey {
         type Widget: Widget + 'static;
@@ -5990,14 +6006,18 @@ pub mod canopy {
         ///
         /// # Example
         ///
-        /// ```ignore
+        /// ```
+        /// use canopy::style::{Attr, StyleBuilder, StyleMap, solarized};
+        ///
         /// let selected = StyleBuilder::new()
         ///     .fg(solarized::BASE3)
         ///     .bg(solarized::BLUE)
-        ///     .attrs(selected_attrs);
+        ///     .attr(Attr::Bold);
         ///
-        /// style_map.rules()
-        ///     .rule("item/selected").style(selected)
+        /// let mut style_map = StyleMap::new();
+        /// style_map
+        ///     .rules()
+        ///     .style("item/selected", selected)
         ///     .apply();
         /// ```
         #[derive(Clone, Default, Debug, StructuralPartialEq, PartialEq)]
@@ -6036,8 +6056,12 @@ pub mod canopy {
             ///
             /// # Example
             ///
-            /// ```ignore
-            /// style_map.rules()
+            /// ```
+            /// use canopy::style::{StyleMap, solarized};
+            ///
+            /// let mut style_map = StyleMap::new();
+            /// style_map
+            ///     .rules()
             ///     .fg("red/text", solarized::RED)
             ///     .fg("blue/text", solarized::BLUE)
             ///     .apply();
@@ -6329,14 +6353,18 @@ pub mod canopy {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// // Simple form: key name matches widget type, string key is snake_case
-    /// Editor);  // KEY = "Editor", Widget = Editor (private)
-    /// pub Editor);  // same, but public
+    /// ```
+    /// use canopy::{ChildKey, Widget, key};
     ///
-    /// // Custom name form: specify the widget type explicitly
-    /// ModalSlot: Modal);  // KEY = "ModalSlot", Widget = Modal (private)
-    /// pub ModalSlot: Modal);  // same, but public
+    /// key!(Editor);
+    /// impl Widget for Editor {}
+    ///
+    /// pub struct Modal;
+    /// impl Widget for Modal {}
+    /// key!(pub ModalSlot: Modal);
+    ///
+    /// assert_eq!(Editor::KEY, "Editor");
+    /// assert_eq!(ModalSlot::KEY, "ModalSlot");
     /// ```
     #[macro_export]
     macro_rules! key {

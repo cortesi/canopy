@@ -327,14 +327,18 @@ pub struct PartialStyle {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
+/// use canopy::style::{Attr, StyleBuilder, StyleMap, solarized};
+///
 /// let selected = StyleBuilder::new()
 ///     .fg(solarized::BASE3)
 ///     .bg(solarized::BLUE)
-///     .attrs(selected_attrs);
+///     .attr(Attr::Bold);
 ///
-/// style_map.rules()
-///     .rule("item/selected").style(selected)
+/// let mut style_map = StyleMap::new();
+/// style_map
+///     .rules()
+///     .style("item/selected", selected)
 ///     .apply();
 /// ```
 #[derive(Clone, Default, Debug, PartialEq)]
@@ -517,8 +521,12 @@ impl StyleMap {
     ///
     /// # Example
     ///
-    /// ```ignore
-    /// style_map.rules()
+    /// ```
+    /// use canopy::style::{StyleMap, solarized};
+    ///
+    /// let mut style_map = StyleMap::new();
+    /// style_map
+    ///     .rules()
     ///     .fg("red/text", solarized::RED)
     ///     .fg("blue/text", solarized::BLUE)
     ///     .apply();
