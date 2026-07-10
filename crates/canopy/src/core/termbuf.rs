@@ -1031,7 +1031,7 @@ mod tests {
     use crate::{
         backend::crossterm::CrosstermRender,
         buf,
-        core::text::grapheme_width,
+        core::{testing::model::trace_result, text::grapheme_width},
         geom::Line,
         style::{AttrSet, Color, PartialStyle},
         testing::buf::BufTest,
@@ -1934,24 +1934,27 @@ mod tests {
             let mut actual = TermBuf::new(initial_size, ' ', base_style)?;
             let mut model = ModelBuffer::new(initial_size, base_style);
 
-            for operation in operations {
-                let previous_actual = actual.clone();
-                let previous_model = model.clone();
-                apply_buffer_operation(&mut actual, &mut model, &operation, styles)?;
-                actual.validate_canonical()?;
-                model.assert_matches(&actual)?;
+            for (index, operation) in operations.iter().enumerate() {
+                let result = (|| {
+                    let previous_actual = actual.clone();
+                    let previous_model = model.clone();
+                    apply_buffer_operation(&mut actual, &mut model, operation, styles)?;
+                    actual.validate_canonical()?;
+                    model.assert_matches(&actual)?;
 
-                let replay_model = if previous_actual.size() == actual.size() {
-                    previous_model
-                } else {
-                    ModelBuffer::new(actual.size(), base_style)
-                };
-                let mut backend = ModelBackend {
-                    model: replay_model,
-                    style: base_style,
-                };
-                actual.diff(&previous_actual, &mut backend)?;
-                backend.model.assert_matches(&actual)?;
+                    let replay_model = if previous_actual.size() == actual.size() {
+                        previous_model
+                    } else {
+                        ModelBuffer::new(actual.size(), base_style)
+                    };
+                    let mut backend = ModelBackend {
+                        model: replay_model,
+                        style: base_style,
+                    };
+                    actual.diff(&previous_actual, &mut backend)?;
+                    backend.model.assert_matches(&actual)
+                })();
+                trace_result(result, &operations, index)?;
             }
         }
     }

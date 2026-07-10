@@ -660,6 +660,14 @@ impl InputMap {
             .map(|m| m.bindings_for_path(path))
             .unwrap_or_default()
     }
+
+    /// Replace the next binding identifier for deterministic exhaustion tests.
+    #[cfg(test)]
+    pub(crate) fn replace_next_id(&mut self, next_id: u64) -> u64 {
+        let previous = self.next_id;
+        self.next_id = next_id;
+        previous
+    }
 }
 
 /// Validate a binding target before mutating the input map.
@@ -713,8 +721,288 @@ pub struct ModeBindingInfo<'a> {
 
 #[cfg(test)]
 mod tests {
+    use proptest::{prelude::*, test_runner::TestCaseResult};
+
     use super::*;
-    use crate::{error::Result, event::key, script};
+    use crate::{core::testing::model::trace_result, error::Result, event::key, script};
+
+    #[derive(Clone, Debug)]
+    enum RegistryOperation {
+        Bind {
+            mode: u8,
+            key: u8,
+            path: u8,
+            target: u8,
+        },
+        Replace {
+            mode: u8,
+            key: u8,
+            path: u8,
+            target: u8,
+        },
+        Unbind(u8),
+        UnbindInput {
+            key: u8,
+            mode: Option<u8>,
+            path: Option<u8>,
+        },
+        SetMode(u8),
+        PushMode(u8),
+        PopMode,
+        Clear,
+        ExhaustIdentifier,
+    }
+
+    #[derive(Clone, Debug, PartialEq)]
+    struct ModelBinding {
+        id: BindingId,
+        mode: String,
+        input: InputSpec,
+        path: String,
+        target: BindingTarget,
+    }
+
+    #[derive(Debug)]
+    struct RegistryModel {
+        bindings: Vec<ModelBinding>,
+        mode_stack: Vec<String>,
+        next_id: u64,
+    }
+
+    impl RegistryModel {
+        fn new() -> Self {
+            Self {
+                bindings: Vec::new(),
+                mode_stack: Vec::new(),
+                next_id: 1,
+            }
+        }
+    }
+
+    fn registry_operation_strategy() -> impl Strategy<Value = Vec<RegistryOperation>> {
+        prop::collection::vec(
+            prop_oneof![
+                (0_u8..3, 0_u8..3, 0_u8..4, 0_u8..3).prop_map(|(mode, key, path, target)| {
+                    RegistryOperation::Bind {
+                        mode,
+                        key,
+                        path,
+                        target,
+                    }
+                },),
+                (0_u8..3, 0_u8..3, 0_u8..4, 0_u8..3).prop_map(|(mode, key, path, target)| {
+                    RegistryOperation::Replace {
+                        mode,
+                        key,
+                        path,
+                        target,
+                    }
+                },),
+                (0_u8..12).prop_map(RegistryOperation::Unbind),
+                (
+                    0_u8..3,
+                    prop::option::of(0_u8..3),
+                    prop::option::of(0_u8..3)
+                )
+                    .prop_map(|(key, mode, path)| RegistryOperation::UnbindInput {
+                        key,
+                        mode,
+                        path
+                    },),
+                (0_u8..3).prop_map(RegistryOperation::SetMode),
+                (0_u8..3).prop_map(RegistryOperation::PushMode),
+                Just(RegistryOperation::PopMode),
+                Just(RegistryOperation::Clear),
+                Just(RegistryOperation::ExhaustIdentifier),
+            ],
+            1..80,
+        )
+    }
+
+    fn model_mode(index: u8) -> &'static str {
+        ["", "normal", "modal"][usize::from(index) % 3]
+    }
+
+    fn model_input(index: u8) -> InputSpec {
+        InputSpec::Key(['a', 'b', 'c'][usize::from(index) % 3].into())
+    }
+
+    fn model_path(index: u8) -> &'static str {
+        ["", "foo", "foo/**", "invalid-name"][usize::from(index) % 4]
+    }
+
+    fn model_target(index: u8) -> BindingTarget {
+        match index % 3 {
+            0 => BindingTarget::Script(u64::from(index) + 1),
+            1 => BindingTarget::SetInputMode(model_mode(index).to_string()),
+            _ => BindingTarget::Script(0),
+        }
+    }
+
+    fn registry_signature(map: &InputMap) -> Vec<ModelBinding> {
+        let mut bindings = map
+            .bindings()
+            .into_iter()
+            .map(|binding| ModelBinding {
+                id: binding.info.id,
+                mode: binding.mode.to_string(),
+                input: binding.info.input,
+                path: binding.info.path_filter.to_string(),
+                target: binding.info.target.clone(),
+            })
+            .collect::<Vec<_>>();
+        bindings.sort_by_key(|binding| binding.id.as_u64());
+        bindings
+    }
+
+    fn assert_registry_model(map: &InputMap, model: &RegistryModel) -> TestCaseResult {
+        let mut expected = model.bindings.clone();
+        expected.sort_by_key(|binding| binding.id.as_u64());
+        prop_assert_eq!(registry_signature(map), expected);
+        prop_assert_eq!(map.mode_stack(), model.mode_stack.as_slice());
+        prop_assert_eq!(
+            map.current_mode(),
+            model.mode_stack.last().map_or("", String::as_str)
+        );
+        prop_assert_eq!(map.next_id, model.next_id);
+        Ok(())
+    }
+
+    fn apply_registry_operation(
+        map: &mut InputMap,
+        model: &mut RegistryModel,
+        operation: &RegistryOperation,
+    ) -> TestCaseResult {
+        match *operation {
+            RegistryOperation::Bind {
+                mode,
+                key,
+                path,
+                target,
+            } => {
+                let mode = model_mode(mode);
+                let input = model_input(key);
+                let path = model_path(path);
+                let target = model_target(target);
+                let result = map.bind_action(mode, input, path, target.clone());
+                let valid = path != "invalid-name" && !matches!(target, BindingTarget::Script(0));
+                prop_assert_eq!(result.is_ok(), valid);
+                if let Ok(id) = result {
+                    model.bindings.push(ModelBinding {
+                        id,
+                        mode: mode.to_string(),
+                        input,
+                        path: path.to_string(),
+                        target,
+                    });
+                    model.next_id += 1;
+                }
+            }
+            RegistryOperation::Replace {
+                mode,
+                key,
+                path,
+                target,
+            } => {
+                let mode = model_mode(mode);
+                let input = model_input(key);
+                let path = model_path(path);
+                let target = model_target(target);
+                let result = map.replace_binding(mode, input, path, target.clone());
+                let valid = path != "invalid-name" && !matches!(target, BindingTarget::Script(0));
+                prop_assert_eq!(result.is_ok(), valid);
+                if let Ok((id, _)) = result {
+                    model.bindings.retain(|binding| {
+                        binding.mode != mode || binding.input != input || binding.path != path
+                    });
+                    model.bindings.push(ModelBinding {
+                        id,
+                        mode: mode.to_string(),
+                        input,
+                        path: path.to_string(),
+                        target,
+                    });
+                    model.next_id += 1;
+                }
+            }
+            RegistryOperation::Unbind(index) => {
+                let id = model
+                    .bindings
+                    .get(usize::from(index) % model.bindings.len().max(1))
+                    .map_or(BindingId::from_u64(u64::MAX - 1), |binding| binding.id);
+                let removed = map.unbind_with_targets(id);
+                let before = model.bindings.len();
+                model.bindings.retain(|binding| binding.id != id);
+                prop_assert_eq!(!removed.is_empty(), before != model.bindings.len());
+            }
+            RegistryOperation::UnbindInput { key, mode, path } => {
+                let input = model_input(key);
+                let mode = mode.map(model_mode);
+                let path = path.map(model_path);
+                map.unbind_input(
+                    input,
+                    BindingFilter {
+                        mode,
+                        path_filter: path,
+                    },
+                );
+                model.bindings.retain(|binding| {
+                    binding.input != input
+                        || mode.is_some_and(|mode| binding.mode != mode)
+                        || path.is_some_and(|path| binding.path != path)
+                });
+            }
+            RegistryOperation::SetMode(mode) => {
+                let mode = model_mode(mode);
+                map.set_mode(mode)?;
+                model.mode_stack.clear();
+                if !mode.is_empty() {
+                    model.mode_stack.push(mode.to_string());
+                }
+            }
+            RegistryOperation::PushMode(mode) => {
+                let mode = model_mode(mode);
+                map.push_mode(mode)?;
+                if !mode.is_empty() {
+                    model.mode_stack.push(mode.to_string());
+                }
+            }
+            RegistryOperation::PopMode => {
+                map.pop_mode();
+                model.mode_stack.pop();
+            }
+            RegistryOperation::Clear => {
+                map.clear();
+                model.bindings.clear();
+                model.mode_stack.clear();
+            }
+            RegistryOperation::ExhaustIdentifier => {
+                let before = registry_signature(map);
+                map.next_id = u64::MAX;
+                let result =
+                    map.bind_action("", InputSpec::Key('z'.into()), "", BindingTarget::Script(1));
+                prop_assert!(result.is_err());
+                prop_assert_eq!(registry_signature(map), before);
+                map.next_id = model.next_id;
+            }
+        }
+        assert_registry_model(map, model)
+    }
+
+    proptest! {
+        #[test]
+        fn input_registry_state_machine_matches_model(operations in registry_operation_strategy()) {
+            let mut map = InputMap::new();
+            let mut model = RegistryModel::new();
+            for (index, operation) in operations.iter().enumerate() {
+                trace_result(
+                    apply_registry_operation(&mut map, &mut model, operation),
+                    &operations,
+                    index,
+                )?;
+            }
+        }
+    }
 
     trait ResolveTarget {
         fn resolve(&self, path: &Path, input: &InputSpec) -> Option<BindingTarget>;

@@ -8,6 +8,9 @@ pub mod dummyctx;
 pub mod grid;
 /// Harness for node testing.
 pub mod harness;
+/// Shared property-model failure diagnostics.
+#[cfg(test)]
+pub(crate) mod model;
 /// Render helpers for tests.
 pub mod render;
 /// Test tree helpers.

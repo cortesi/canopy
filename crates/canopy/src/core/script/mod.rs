@@ -4263,8 +4263,177 @@ impl LuauHost {
 
 #[cfg(test)]
 mod tests {
+    use proptest::{
+        prelude::*,
+        test_runner::{TestCaseError, TestCaseResult},
+    };
+
     use super::*;
-    use crate::testing::ttree::{get_state, run_ttree};
+    use crate::{
+        core::testing::model::trace_result,
+        testing::ttree::{get_state, run_ttree},
+    };
+
+    #[derive(Clone, Debug)]
+    enum ClosureOperation {
+        Bind(u8),
+        Unbind(u8),
+        ClearBindings,
+        OnStart,
+        InvalidKey,
+        InvalidPath,
+        ExhaustClosureIdentifier,
+        ExhaustBindingIdentifier,
+    }
+
+    #[derive(Debug)]
+    struct ClosureModel {
+        bound_keys: BTreeSet<char>,
+        on_start_hooks: usize,
+    }
+
+    impl ClosureModel {
+        fn new() -> Self {
+            Self {
+                bound_keys: BTreeSet::new(),
+                on_start_hooks: 0,
+            }
+        }
+    }
+
+    fn closure_operation_strategy() -> impl Strategy<Value = Vec<ClosureOperation>> {
+        prop::collection::vec(
+            prop_oneof![
+                (0_u8..3).prop_map(ClosureOperation::Bind),
+                (0_u8..3).prop_map(ClosureOperation::Unbind),
+                Just(ClosureOperation::ClearBindings),
+                Just(ClosureOperation::OnStart),
+                Just(ClosureOperation::InvalidKey),
+                Just(ClosureOperation::InvalidPath),
+                Just(ClosureOperation::ExhaustClosureIdentifier),
+                Just(ClosureOperation::ExhaustBindingIdentifier),
+            ],
+            1..30,
+        )
+    }
+
+    fn closure_key(index: u8) -> char {
+        ['a', 'b', 'c'][usize::from(index) % 3]
+    }
+
+    fn execute_registry_script(canopy: &mut Canopy, host: &LuauHost, source: &str) -> Result<()> {
+        let script = host.compile(source)?;
+        host.execute(canopy, canopy.core.root_id(), script)
+    }
+
+    fn assert_closure_model(
+        canopy: &Canopy,
+        host: &LuauHost,
+        model: &ClosureModel,
+    ) -> TestCaseResult {
+        let state = host.state.borrow();
+        prop_assert_eq!(state.on_start_hooks.len(), model.on_start_hooks);
+        prop_assert_eq!(
+            state.closures.functions.len(),
+            model.bound_keys.len() + model.on_start_hooks
+        );
+        prop_assert_eq!(canopy.keymap.bindings().len(), model.bound_keys.len());
+        Ok(())
+    }
+
+    fn apply_closure_operation(
+        canopy: &mut Canopy,
+        host: &LuauHost,
+        model: &mut ClosureModel,
+        operation: &ClosureOperation,
+    ) -> TestCaseResult {
+        match *operation {
+            ClosureOperation::Bind(index) => {
+                let key = closure_key(index);
+                let result = execute_registry_script(
+                    canopy,
+                    host,
+                    &format!(r#"canopy.bind("{key}", function() end)"#),
+                );
+                prop_assert!(result.is_ok(), "{result:?}");
+                model.bound_keys.insert(key);
+            }
+            ClosureOperation::Unbind(index) => {
+                let key = closure_key(index);
+                let result = execute_registry_script(
+                    canopy,
+                    host,
+                    &format!(r#"canopy.unbind_key("{key}")"#),
+                );
+                prop_assert!(result.is_ok(), "{result:?}");
+                model.bound_keys.remove(&key);
+            }
+            ClosureOperation::ClearBindings => {
+                let result = execute_registry_script(canopy, host, "canopy.clear_bindings()");
+                prop_assert!(result.is_ok(), "{result:?}");
+                model.bound_keys.clear();
+            }
+            ClosureOperation::OnStart => {
+                let result =
+                    execute_registry_script(canopy, host, "canopy.on_start(function() end)");
+                prop_assert!(result.is_ok(), "{result:?}");
+                model.on_start_hooks += 1;
+            }
+            ClosureOperation::InvalidKey => {
+                let result = execute_registry_script(
+                    canopy,
+                    host,
+                    r#"canopy.bind("Ctrl+", function() end)"#,
+                );
+                prop_assert!(result.is_err());
+            }
+            ClosureOperation::InvalidPath => {
+                let result = execute_registry_script(
+                    canopy,
+                    host,
+                    r#"canopy.bind_with("a", { path = "invalid-name" }, function() end)"#,
+                );
+                prop_assert!(result.is_err());
+            }
+            ClosureOperation::ExhaustClosureIdentifier => {
+                let previous = host.state.borrow().closures.next_function_id;
+                host.state.borrow_mut().closures.next_function_id = u64::MAX;
+                let result =
+                    execute_registry_script(canopy, host, "canopy.on_start(function() end)");
+                prop_assert!(result.is_err());
+                host.state.borrow_mut().closures.next_function_id = previous;
+            }
+            ClosureOperation::ExhaustBindingIdentifier => {
+                let previous = canopy.keymap.replace_next_id(u64::MAX);
+                let result =
+                    execute_registry_script(canopy, host, r#"canopy.bind("z", function() end)"#);
+                prop_assert!(result.is_err());
+                canopy.keymap.replace_next_id(previous);
+            }
+        }
+        assert_closure_model(canopy, host, model)
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(32))]
+
+        #[test]
+        fn script_closure_registry_matches_model(operations in closure_operation_strategy()) {
+            let mut canopy = Canopy::new();
+            canopy
+                .finalize_api()
+                .map_err(|error| TestCaseError::fail(error.to_string()))?;
+            let host = canopy.script_host.clone();
+            let mut model = ClosureModel::new();
+            for (index, operation) in operations.iter().enumerate() {
+                trace_result(
+                    apply_closure_operation(&mut canopy, &host, &mut model, operation),
+                    &operations,
+                    index,
+                )?;
+            }
+        }
+    }
 
     /// Build one marshaled table pair for value-policy tests.
     fn pair(key: MarshaledValue, value: MarshaledValue) -> MarshaledPair {

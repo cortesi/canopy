@@ -353,7 +353,7 @@ the normal CI and source archive depend on specially provisioned sibling checkou
    to editors and CI. Include this check in `cargo xtask ci` so Rust and Luau API changes cannot
    drift independently.
 
-43. [ ] Add model and fault-injection suites for the core state machines.
+43. [x] Add model and fault-injection suites for the core state machines.
 
    Extend the structural, identity, and rendering harnesses from earlier stages to registries and
    scripting, then unify their minimized failure output. Generate failures at every fallible

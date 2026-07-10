@@ -19,6 +19,7 @@ use crate::{
     core::{
         context::{CoreContext, CoreViewContext},
         script::validate_node_handle,
+        testing::model::trace_result,
     },
     error::{Error, NodeOperationKind, Result},
     geom::{Point, Size},
@@ -573,8 +574,12 @@ proptest! {
         let mut nodes = property_nodes(&mut core)?;
         prop_assert!(core.validate_invariants().is_ok());
 
-        for mutation in mutations {
-            apply_tree_mutation(&mut core, &mut nodes, &mutation)?;
+        for (index, mutation) in mutations.iter().enumerate() {
+            trace_result(
+                apply_tree_mutation(&mut core, &mut nodes, mutation),
+                &mutations,
+                index,
+            )?;
         }
     }
 }
@@ -753,8 +758,12 @@ proptest! {
         }
         assert_identity_model(&core, &model)?;
 
-        for action in actions {
-            apply_identity_mutation(&mut core, &mut model, &action)?;
+        for (index, action) in actions.iter().enumerate() {
+            trace_result(
+                apply_identity_mutation(&mut core, &mut model, action),
+                &actions,
+                index,
+            )?;
         }
     }
 }
