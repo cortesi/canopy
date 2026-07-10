@@ -1316,7 +1316,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "unstable under full-workspace nextest runs; verify with a targeted cargo test"]
+    #[ignore = "owner: terminal; run cargo test -p canopy-widgets itty_script_can_drive_attached_handle -- --ignored"]
     fn itty_script_can_drive_attached_handle() {
         let (exit_tx, exit_rx) = mpsc::channel();
         let mut terminal = Terminal::new(TerminalConfig::new().with_on_exit(move |_| {

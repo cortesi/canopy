@@ -764,7 +764,7 @@ pub(crate) fn diagnostic_record_to_script(
         (0, 0)
     } else {
         let begin = diagnostic.primary_location.begin;
-        (begin.line as usize, begin.column as usize)
+        (begin.line as usize + 1, begin.column as usize + 1)
     };
     ScriptCheckDiagnostic {
         source,
@@ -3606,14 +3606,14 @@ impl LuauHost {
         })
     }
 
-    /// Type-check a Luau source string against the finalized canopy API.
-    pub fn check_script(&self, source: &str) -> Result<ScriptCheckResult> {
+    /// Type-check a named Luau source against the finalized canopy API.
+    pub fn check_script(&self, source_name: &str, source: &str) -> Result<ScriptCheckResult> {
         let surface = self.state.borrow().surface.clone().ok_or_else(|| {
             error::Error::InvalidOperation(
                 "cannot type-check scripts before finalize_api()".to_string(),
             )
         })?;
-        let source = named_source(ModuleId::new("canopy/check"), source);
+        let source = named_source(ModuleId::new(source_name), source);
         Ok(check_source_with_surface(&surface, &source))
     }
 
@@ -3644,7 +3644,7 @@ impl LuauHost {
         if !cfg!(debug_assertions) || !self.is_finalized() {
             return Ok(());
         }
-        let result = self.check_script(source)?;
+        let result = self.check_script("canopy/eval", source)?;
         if result.is_ok() {
             Ok(())
         } else {
@@ -4704,14 +4704,23 @@ mod tests {
     fn tcheck_script_reports_type_errors() -> Result<()> {
         run_ttree(|c, _, _| {
             c.finalize_api()?;
-            let result = c.script_host.check_script("local value: string = 1")?;
+            let result = c
+                .script_host
+                .check_script("tests/type-error.luau", "local value: string = 1")?;
             assert!(!result.is_ok());
             assert!(result.has_errors());
             assert!(
                 result
                     .diagnostics()
                     .iter()
-                    .all(|diagnostic| diagnostic.source.as_deref() == Some("canopy/check"))
+                    .all(|diagnostic| diagnostic.source.as_deref()
+                        == Some("tests/type-error.luau"))
+            );
+            assert!(
+                result
+                    .diagnostics()
+                    .iter()
+                    .all(|diagnostic| { diagnostic.line > 0 && diagnostic.column > 0 })
             );
             Ok(())
         })

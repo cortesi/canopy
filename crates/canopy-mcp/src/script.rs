@@ -673,7 +673,7 @@ fn script_error_info(error: &crate::Error) -> ScriptErrorInfo {
 
 /// Return Luau typecheck diagnostics for a script.
 fn typecheck_diagnostics(canopy: &mut Canopy, script: &str) -> Result<Vec<ScriptDiagnostic>> {
-    let result = canopy.check_script(script)?;
+    let result = canopy.check_script("canopy/mcp-eval", script)?;
     Ok(result
         .diagnostics()
         .iter()

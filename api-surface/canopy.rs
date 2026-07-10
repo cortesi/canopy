@@ -509,8 +509,13 @@ pub mod canopy {
             ) -> Result<R> {
             }
 
-            /// Type-check a Luau source string against the finalized app API.
-            pub fn check_script(&mut self, source: &str) -> Result<script::ScriptCheckResult> {}
+            /// Type-check a named Luau source against the finalized app API.
+            pub fn check_script(
+                &mut self,
+                source_name: &str,
+                source: &str,
+            ) -> Result<script::ScriptCheckResult> {
+            }
 
             /// Drain and return log lines recorded by the most recent script evaluation.
             pub fn take_script_logs(&self) -> Vec<String> {}
@@ -2581,8 +2586,13 @@ pub mod canopy {
         ) -> Result<R> {
         }
 
-        /// Type-check a Luau source string against the finalized app API.
-        pub fn check_script(&mut self, source: &str) -> Result<script::ScriptCheckResult> {}
+        /// Type-check a named Luau source against the finalized app API.
+        pub fn check_script(
+            &mut self,
+            source_name: &str,
+            source: &str,
+        ) -> Result<script::ScriptCheckResult> {
+        }
 
         /// Drain and return log lines recorded by the most recent script evaluation.
         pub fn take_script_logs(&self) -> Vec<String> {}

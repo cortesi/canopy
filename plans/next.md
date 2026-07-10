@@ -347,7 +347,7 @@ the normal CI and source archive depend on specially provisioned sibling checkou
    repair or remove its nine unlabeled ignored tests, and give the remaining flaky or platform-only
    tests explicit owners and commands.
 
-42. [ ] Add strict Luau checking to the repository gate.
+42. [x] Add strict Luau checking to the repository gate.
 
    Validate checked-in scripts and generated declarations with source paths and diagnostics suited
    to editors and CI. Include this check in `cargo xtask ci` so Rust and Luau API changes cannot

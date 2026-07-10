@@ -48,7 +48,7 @@ work.
 
 | Artifact | Current lines | Review ceiling | Intended responsibility |
 | --- | ---: | ---: | --- |
-| `canopy.rs` | 6,374 | 6,500 | Retained tree, layout, input, rendering, scripting, runtime facade. |
+| `canopy.rs` | 6,384 | 6,500 | Retained tree, layout, input, rendering, scripting, runtime facade. |
 | `canopy-widgets.rs` | 1,954 | 2,050 | Reusable widgets and the experimental editor. |
 | `canopy-mcp.rs` | 1,012 | 1,050 | Automation protocol, evaluation, launch, and smoke helpers. |
 | `canopy-geom.rs` | 536 | 575 | Geometry values and checked operations. |

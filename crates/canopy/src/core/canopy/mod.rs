@@ -864,12 +864,16 @@ impl Canopy {
         Ok(f(&context))
     }
 
-    /// Type-check a Luau source string against the finalized app API.
-    pub fn check_script(&mut self, source: &str) -> Result<script::ScriptCheckResult> {
+    /// Type-check a named Luau source against the finalized app API.
+    pub fn check_script(
+        &mut self,
+        source_name: &str,
+        source: &str,
+    ) -> Result<script::ScriptCheckResult> {
         if !self.script_host.is_finalized() {
             self.finalize_api()?;
         }
-        self.script_host.check_script(source)
+        self.script_host.check_script(source_name, source)
     }
 
     /// Drain and return log lines recorded by the most recent script evaluation.
