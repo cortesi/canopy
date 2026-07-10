@@ -196,10 +196,16 @@ pub struct Layout {
     /// Gap between children along the main axis (cells).
     pub gap: u32,
 
-    /// Horizontal alignment of children within content area.
+    /// Horizontal alignment of children within the content area.
+    ///
+    /// For rows this aligns the complete child group on the main axis. For
+    /// columns it aligns each child on the cross axis. Stacks align each child.
     pub align_horizontal: Align,
 
-    /// Vertical alignment of children within content area.
+    /// Vertical alignment of children within the content area.
+    ///
+    /// For columns this aligns the complete child group on the main axis. For
+    /// rows it aligns each child on the cross axis. Stacks align each child.
     pub align_vertical: Align,
 }
 
@@ -261,15 +267,19 @@ impl Layout {
         self
     }
 
-    /// Set width to flex with the provided weight (clamped to at least 1).
+    /// Set width to flex with the provided weight.
+    ///
+    /// A zero weight is rejected when the layout is applied.
     pub fn flex_horizontal(mut self, weight: u32) -> Self {
-        self.width = Sizing::Flex(weight.max(1));
+        self.width = Sizing::Flex(weight);
         self
     }
 
-    /// Set height to flex with the provided weight (clamped to at least 1).
+    /// Set height to flex with the provided weight.
+    ///
+    /// A zero weight is rejected when the layout is applied.
     pub fn flex_vertical(mut self, weight: u32) -> Self {
-        self.height = Sizing::Flex(weight.max(1));
+        self.height = Sizing::Flex(weight);
         self
     }
 
@@ -563,11 +573,6 @@ impl CanvasChild {
     pub fn new(rect: Rect, canvas: Size<u32>) -> Self {
         Self { rect, canvas }
     }
-}
-
-/// Clamp a flex weight to at least 1.
-pub fn clamp_weight(weight: u32) -> u32 {
-    weight.max(1)
 }
 
 #[cfg(test)]

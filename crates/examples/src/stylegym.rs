@@ -162,44 +162,44 @@ impl Widget for DemoContent {
         let mut row = 0;
 
         // Color palette section
-        rndr.text("frame/title", rect.line(row), "Color Palette")?;
+        rndr.text("frame/title", rect.line(row)?, "Color Palette")?;
         row += 1;
 
         if rect.h > row + 8 {
-            rndr.text("red", rect.line(row), "████ Red")?;
-            rndr.text("orange", rect.line(row + 1), "████ Orange")?;
-            rndr.text("yellow", rect.line(row + 2), "████ Yellow")?;
-            rndr.text("green", rect.line(row + 3), "████ Green")?;
-            rndr.text("cyan", rect.line(row + 4), "████ Cyan")?;
-            rndr.text("blue", rect.line(row + 5), "████ Blue")?;
-            rndr.text("violet", rect.line(row + 6), "████ Violet")?;
-            rndr.text("magenta", rect.line(row + 7), "████ Magenta")?;
+            rndr.text("red", rect.line(row)?, "████ Red")?;
+            rndr.text("orange", rect.line(row + 1)?, "████ Orange")?;
+            rndr.text("yellow", rect.line(row + 2)?, "████ Yellow")?;
+            rndr.text("green", rect.line(row + 3)?, "████ Green")?;
+            rndr.text("cyan", rect.line(row + 4)?, "████ Cyan")?;
+            rndr.text("blue", rect.line(row + 5)?, "████ Blue")?;
+            rndr.text("violet", rect.line(row + 6)?, "████ Violet")?;
+            rndr.text("magenta", rect.line(row + 7)?, "████ Magenta")?;
             row += 9;
         }
 
         // Text styles section
         if rect.h > row + 5 {
-            rndr.text("frame/title", rect.line(row), "Text Styles")?;
+            rndr.text("frame/title", rect.line(row)?, "Text Styles")?;
             row += 1;
-            rndr.text("", rect.line(row), "Normal text sample")?;
+            rndr.text("", rect.line(row)?, "Normal text sample")?;
             row += 1;
-            rndr.text("text/bold", rect.line(row), "Bold text sample")?;
+            rndr.text("text/bold", rect.line(row)?, "Bold text sample")?;
             row += 1;
-            rndr.text("text/italic", rect.line(row), "Italic text sample")?;
+            rndr.text("text/italic", rect.line(row)?, "Italic text sample")?;
             row += 1;
-            rndr.text("text/underline", rect.line(row), "Underlined text sample")?;
+            rndr.text("text/underline", rect.line(row)?, "Underlined text sample")?;
             row += 2;
         }
 
         // Instructions section
         if rect.h > row + 4 {
-            rndr.text("frame/title", rect.line(row), "Controls")?;
+            rndr.text("frame/title", rect.line(row)?, "Controls")?;
             row += 1;
-            rndr.text("", rect.line(row), "Tab: cycle focus")?;
+            rndr.text("", rect.line(row)?, "Tab: cycle focus")?;
             row += 1;
-            rndr.text("", rect.line(row), "Space/Enter: toggle selection")?;
+            rndr.text("", rect.line(row)?, "Space/Enter: toggle selection")?;
             row += 1;
-            rndr.text("", rect.line(row), "m: show modal, Esc: hide modal")?;
+            rndr.text("", rect.line(row)?, "m: show modal, Esc: hide modal")?;
         }
 
         Ok(())
@@ -224,8 +224,8 @@ impl Widget for ModalContent {
         // Fill background so dimmed content doesn't show through
         rndr.fill("", rect, ' ')?;
 
-        rndr.text("", rect.line(0), "This is a modal overlay.")?;
-        rndr.text("", rect.line(1), "Press Esc to dismiss.")?;
+        rndr.text("", rect.line(0)?, "This is a modal overlay.")?;
+        rndr.text("", rect.line(1)?, "Press Esc to dismiss.")?;
 
         Ok(())
     }

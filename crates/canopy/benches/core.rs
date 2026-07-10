@@ -126,7 +126,7 @@ impl RenderBackend for CountingBackend {
 /// Build a deterministic tree for layout and render benchmarks.
 fn build_tree() -> Result<Canopy> {
     let mut app = Canopy::new();
-    let root_child = app.core_mut().create_detached(BenchNode::branch(0));
+    let root_child = app.core_mut().create_detached(BenchNode::branch(0))?;
     app.set_root_child(root_child)?;
     let mut next_index = 1;
     add_children(&mut app, root_child, TREE_DEPTH, &mut next_index)?;
@@ -150,7 +150,7 @@ fn add_children(
             app.core_mut().create_detached(BenchNode::leaf(index))
         } else {
             app.core_mut().create_detached(BenchNode::branch(index))
-        };
+        }?;
 
         if depth > 1 {
             add_children(app, child, depth - 1, next_index)?;

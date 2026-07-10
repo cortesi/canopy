@@ -235,10 +235,13 @@ where
         let is_widget_focused = ctx.is_focused();
 
         for (idx, item) in self.items.iter().enumerate() {
-            if idx as u32 >= rect.h {
+            let Ok(row) = u32::try_from(idx) else {
+                break;
+            };
+            if row >= rect.h {
                 break;
             }
-            let line_rect = rect.line(idx as u32);
+            let line_rect = rect.line(row)?;
             let label = item.label();
             let is_selected = self.selected.contains(&idx);
             let is_item_focused = idx == self.focused;

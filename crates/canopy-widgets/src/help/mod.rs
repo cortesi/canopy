@@ -94,10 +94,10 @@ impl Help {
     /// Build the help subtree and return its node id.
     pub fn install(core: &mut Core) -> Result<NodeId> {
         // Create content widget - uses its own layout() with overflow and padding
-        let content_id = core.create_detached(HelpContent::new());
+        let content_id = core.create_detached(HelpContent::new())?;
 
         // Wrap content in Frame for visual boundary
-        let frame_id = core.create_detached(frame::Frame::new().with_title("Help"));
+        let frame_id = core.create_detached(frame::Frame::new().with_title("Help"))?;
         core.set_children(frame_id, vec![content_id])?;
         // Frame has fixed size - this is what gets centered
         core.with_layout_of(frame_id, |layout| {
@@ -108,12 +108,12 @@ impl Help {
         })?;
 
         // Wrap frame in Modal for centering
-        let modal_id = core.create_detached(Modal::new());
+        let modal_id = core.create_detached(Modal::new())?;
         core.set_children(modal_id, vec![frame_id])?;
         // Modal uses its own layout (Stack with Center alignment), don't override
 
         // Create the Help widget as the root of this subtree
-        let help_id = core.create_detached(Self::new());
+        let help_id = core.create_detached(Self::new())?;
         core.set_children(help_id, vec![modal_id])?;
         core.set_layout_of(help_id, Layout::fill())?;
 

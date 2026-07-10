@@ -9,8 +9,8 @@ use rand::{RngExt, SeedableRng, rngs::StdRng};
 
 use super::{
     layout_driver::{
-        LayoutPass, allocate_flex_shares, clamp_outer, clamp_scroll, constraint_for_axis,
-        refresh_layouts,
+        LayoutPass, align_offset, allocate_flex_shares, clamp_outer, clamp_scroll,
+        constraint_for_axis, refresh_layouts,
     },
     *,
 };
@@ -83,6 +83,14 @@ struct FocusableWidget;
 impl Widget for FocusableWidget {
     fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
         true
+    }
+}
+
+struct LayoutWidget(Layout);
+
+impl Widget for LayoutWidget {
+    fn layout(&self) -> Layout {
+        self.0
     }
 }
 
@@ -349,7 +357,7 @@ fn simple_widget() -> TestWidget {
 #[test]
 fn typed_id_conversion_rejects_wrong_type_and_stale_generation() -> Result<()> {
     let mut core = Core::new();
-    let original = core.create_detached(simple_widget());
+    let original = core.create_detached(simple_widget())?;
 
     let typed = {
         let context = CoreContext::new(&mut core, original);
@@ -366,7 +374,7 @@ fn typed_id_conversion_rejects_wrong_type_and_stale_generation() -> Result<()> {
     assert!(matches!(wrong_type, Err(Error::NodeTypeMismatch { .. })));
 
     core.remove_subtree(original)?;
-    let replacement = core.create_detached(simple_widget());
+    let replacement = core.create_detached(simple_widget())?;
     assert_ne!(replacement, original);
     let stale = {
         let context = CoreContext::new(&mut core, replacement);
@@ -404,12 +412,12 @@ struct CallbackMutationNodes {
 
 fn callback_mutation_tree() -> Result<(Core, CallbackMutationNodes)> {
     let mut core = Core::new();
-    let parent = core.create_detached(simple_widget());
-    let current = core.create_detached(simple_widget());
-    let sibling = core.create_detached(simple_widget());
-    let focused = core.create_detached(FocusableWidget);
-    let focus_fallback = core.create_detached(FocusableWidget);
-    let mouse_capture = core.create_detached(simple_widget());
+    let parent = core.create_detached(simple_widget())?;
+    let current = core.create_detached(simple_widget())?;
+    let sibling = core.create_detached(simple_widget())?;
+    let focused = core.create_detached(FocusableWidget)?;
+    let focus_fallback = core.create_detached(FocusableWidget)?;
+    let mouse_capture = core.create_detached(simple_widget())?;
     core.set_children(
         parent,
         vec![current, sibling, focused, focus_fallback, mouse_capture],
@@ -465,9 +473,9 @@ fn with_callback_core(
     })
 }
 
-fn property_nodes(core: &mut Core) -> Vec<Option<NodeId>> {
+fn property_nodes(core: &mut Core) -> Result<Vec<Option<NodeId>>> {
     (0..PROPERTY_NODE_COUNT)
-        .map(|_| Some(core.create_detached(simple_widget())))
+        .map(|_| core.create_detached(simple_widget()).map(Some))
         .collect()
 }
 
@@ -561,7 +569,7 @@ proptest! {
     #[test]
     fn random_tree_mutations_preserve_invariants(mutations in tree_mutation_strategy()) {
         let mut core = Core::new();
-        let mut nodes = property_nodes(&mut core);
+        let mut nodes = property_nodes(&mut core)?;
         prop_assert!(core.validate_invariants().is_ok());
 
         for mutation in mutations {
@@ -732,15 +740,16 @@ proptest! {
     #[test]
     fn identity_state_machine_matches_core(actions in identity_mutation_strategy()) {
         let mut core = Core::new();
-        let mut model = (0..IDENTITY_NODE_COUNT)
-            .map(|_| IdentityNodeModel {
-                id: core.create_detached(FocusableWidget),
+        let mut model = Vec::with_capacity(IDENTITY_NODE_COUNT);
+        for _ in 0..IDENTITY_NODE_COUNT {
+            model.push(IdentityNodeModel {
+                id: core.create_detached(FocusableWidget)?,
                 live: true,
                 attached: false,
                 focusable: true,
                 hidden: false,
-            })
-            .collect::<Vec<_>>();
+            });
+        }
         assert_identity_model(&core, &model)?;
 
         for action in actions {
@@ -752,8 +761,8 @@ proptest! {
 #[test]
 fn validate_invariants_accepts_laid_out_tree() -> Result<()> {
     let mut core = Core::new();
-    let parent = core.create_detached(simple_widget());
-    let child = core.create_detached(simple_widget());
+    let parent = core.create_detached(simple_widget())?;
+    let child = core.create_detached(simple_widget())?;
     core.set_children(parent, vec![child])?;
     attach_root_child(&mut core, parent)?;
     core.update_layout(Size::new(10, 10))?;
@@ -763,7 +772,7 @@ fn validate_invariants_accepts_laid_out_tree() -> Result<()> {
 #[test]
 fn focus_transition_reports_changes_and_rejects_invalid_targets() -> Result<()> {
     let mut core = Core::new();
-    let child = core.create_detached(FocusableWidget);
+    let child = core.create_detached(FocusableWidget)?;
     assert!(matches!(core.set_focus(child), Err(Error::NodeDetached(id)) if id == child));
 
     core.attach(core.root, child)?;
@@ -780,7 +789,7 @@ fn focus_transition_reports_changes_and_rejects_invalid_targets() -> Result<()> 
 #[test]
 fn focus_path_queries_tolerate_a_stale_internal_id() -> Result<()> {
     let mut core = Core::new();
-    let child = core.create_detached(FocusableWidget);
+    let child = core.create_detached(FocusableWidget)?;
     core.attach(core.root, child)?;
     core.remove_subtree(child)?;
 
@@ -796,7 +805,7 @@ fn focus_path_queries_tolerate_a_stale_internal_id() -> Result<()> {
 #[test]
 fn mouse_capture_transition_reports_changes_and_rejects_invalid_targets() -> Result<()> {
     let mut core = Core::new();
-    let child = core.create_detached(simple_widget());
+    let child = core.create_detached(simple_widget())?;
     assert!(matches!(core.capture_mouse(child), Err(Error::NodeDetached(id)) if id == child));
 
     core.attach(core.root, child)?;
@@ -814,7 +823,7 @@ fn mouse_capture_transition_reports_changes_and_rejects_invalid_targets() -> Res
 #[test]
 fn visibility_transition_reports_changes_and_missing_nodes() -> Result<()> {
     let mut core = Core::new();
-    let node = core.create_detached(simple_widget());
+    let node = core.create_detached(simple_widget())?;
     assert_eq!(core.set_hidden(node, true)?, ChangeOutcome::Changed);
     assert_eq!(core.set_hidden(node, true)?, ChangeOutcome::Unchanged);
     assert_eq!(core.set_hidden(node, false)?, ChangeOutcome::Changed);
@@ -830,8 +839,8 @@ fn visibility_transition_reports_changes_and_missing_nodes() -> Result<()> {
 #[test]
 fn validate_invariants_rejects_missing_child_link() -> Result<()> {
     let mut core = Core::new();
-    let parent = core.create_detached(simple_widget());
-    let child = core.create_detached(simple_widget());
+    let parent = core.create_detached(simple_widget())?;
+    let child = core.create_detached(simple_widget())?;
     core.set_children(parent, vec![child])?;
     core.nodes.remove(child);
 
@@ -845,7 +854,7 @@ fn validate_invariants_rejects_missing_child_link() -> Result<()> {
 #[test]
 fn validate_invariants_rejects_initialized_attached_unmounted_node() -> Result<()> {
     let mut core = Core::new();
-    let child = core.create_detached(simple_widget());
+    let child = core.create_detached(simple_widget())?;
     attach_root_child(&mut core, child)?;
     if let Some(node) = core.nodes.get_mut(child) {
         node.mounted = false;
@@ -862,7 +871,7 @@ fn validate_invariants_rejects_initialized_attached_unmounted_node() -> Result<(
 #[test]
 fn read_only_widget_access_allows_nested_reads() -> Result<()> {
     let mut core = Core::new();
-    let child = core.create_detached(simple_widget());
+    let child = core.create_detached(simple_widget())?;
 
     let nested = core.with_widget_read(
         child,
@@ -883,7 +892,7 @@ fn read_only_widget_access_allows_nested_reads() -> Result<()> {
 #[test]
 fn widget_read_errors_include_operation_node_and_path() -> Result<()> {
     let mut core = Core::new();
-    let child = core.create_detached(simple_widget());
+    let child = core.create_detached(simple_widget())?;
     attach_root_child(&mut core, child)?;
     let path = core.node_path(core.root, child).to_string();
 
@@ -905,7 +914,7 @@ fn widget_read_errors_include_operation_node_and_path() -> Result<()> {
 #[test]
 fn widget_slot_restores_after_nested_access_error() -> Result<()> {
     let mut core = Core::new();
-    let child = core.create_detached(simple_widget());
+    let child = core.create_detached(simple_widget())?;
 
     core.with_widget_mut(child, |_widget, core| {
         let nested = core.with_widget_mut(child, |_widget, _core| ());
@@ -921,7 +930,7 @@ fn widget_slot_restores_after_nested_access_error() -> Result<()> {
 #[test]
 fn layout_refresh_errors_include_operation_node_and_path() -> Result<()> {
     let mut core = Core::new();
-    let child = core.create_detached(simple_widget());
+    let child = core.create_detached(simple_widget())?;
     attach_root_child(&mut core, child)?;
     let path = core.node_path(core.root, child).to_string();
     core.nodes[child].layout_dirty = true;
@@ -938,7 +947,7 @@ fn layout_refresh_errors_include_operation_node_and_path() -> Result<()> {
 #[test]
 fn measure_errors_include_operation_node_and_path() -> Result<()> {
     let mut core = Core::new();
-    let child = core.create_detached(simple_widget());
+    let child = core.create_detached(simple_widget())?;
     attach_root_child(&mut core, child)?;
     let path = core.node_path(core.root, child).to_string();
     let constraints = MeasureConstraints {
@@ -961,7 +970,7 @@ fn measure_errors_include_operation_node_and_path() -> Result<()> {
 #[test]
 fn canvas_errors_include_operation_node_and_path() -> Result<()> {
     let mut core = Core::new();
-    let child = core.create_detached(simple_widget());
+    let child = core.create_detached(simple_widget())?;
     attach_root_child(&mut core, child)?;
     let path = core.node_path(core.root, child).to_string();
 
@@ -980,7 +989,7 @@ fn canvas_errors_include_operation_node_and_path() -> Result<()> {
 #[test]
 fn widget_slot_restores_after_callback_error() -> Result<()> {
     let mut core = Core::new();
-    let child = core.create_detached(simple_widget());
+    let child = core.create_detached(simple_widget())?;
 
     let result = core.with_widget_mut(child, |_widget, _core| -> Result<()> {
         Err(Error::Invalid("callback failed".into()))
@@ -994,7 +1003,7 @@ fn widget_slot_restores_after_callback_error() -> Result<()> {
 #[test]
 fn widget_slot_restores_after_callback_panic() -> Result<()> {
     let mut core = Core::new();
-    let child = core.create_detached(simple_widget());
+    let child = core.create_detached(simple_widget())?;
 
     let result = catch_unwind(AssertUnwindSafe(|| {
         let _ignored = core.with_widget_mut(child, |_widget, _core| {
@@ -1157,14 +1166,6 @@ fn clamp_outer_max_only() {
 }
 
 #[test]
-fn clamp_outer_min_greater_than_max() {
-    let mut layout = Layout::column();
-    layout.min_width = Some(10);
-    layout.max_width = Some(5);
-    assert_eq!(clamp_outer(Size::new(8, 1), layout), Size::new(5, 1));
-}
-
-#[test]
 fn constraint_for_axis_flex_is_exact() {
     let c = constraint_for_axis(Sizing::Flex(1), 10, None, None, 0, false);
     assert_eq!(c, Constraint::Exact(10));
@@ -1186,7 +1187,7 @@ fn constraint_for_axis_max_caps_available() {
 fn leaf_measure_adds_padding() -> Result<()> {
     let mut core = Core::new();
     let (widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(5, 5)));
-    let child = core.add_boxed(Box::new(widget));
+    let child = core.add_boxed(Box::new(widget))?;
     attach_root_child(&mut core, child)?;
     core.with_layout_of(child, |layout| {
         *layout = Layout::column().padding(Edges::all(1));
@@ -1203,7 +1204,7 @@ fn leaf_measure_adds_padding() -> Result<()> {
 fn leaf_padding_consumes_all() -> Result<()> {
     let mut core = Core::new();
     let (widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(1, 1)));
-    let child = core.add_boxed(Box::new(widget));
+    let child = core.add_boxed(Box::new(widget))?;
     attach_root_child(&mut core, child)?;
     core.with_layout_of(child, |layout| {
         *layout = Layout::fill().padding(Edges::all(1));
@@ -1218,7 +1219,7 @@ fn leaf_padding_consumes_all() -> Result<()> {
 fn flex_axis_constraints_are_exact() -> Result<()> {
     let mut core = Core::new();
     let (widget, calls) = TestWidget::new(|_c| Measurement::Fixed(Size::new(1, 1)));
-    let child = core.add_boxed(Box::new(widget));
+    let child = core.add_boxed(Box::new(widget))?;
     attach_root_child(&mut core, child)?;
     core.with_layout_of(child, |layout| {
         *layout = Layout::column().flex_horizontal(1);
@@ -1241,7 +1242,7 @@ fn remeasure_when_min_width_expands_measured() -> Result<()> {
         let height = if width >= 10 { 2 } else { 4 };
         Measurement::Fixed(Size::new(width, height))
     });
-    let child = core.add_boxed(Box::new(widget));
+    let child = core.add_boxed(Box::new(widget))?;
     attach_root_child(&mut core, child)?;
     core.with_layout_of(child, |layout| {
         *layout = Layout::column().min_width(10);
@@ -1264,7 +1265,7 @@ fn remeasure_when_min_width_expands_flex() -> Result<()> {
         };
         Measurement::Fixed(Size::new(width, width.max(1)))
     });
-    let child = core.add_boxed(Box::new(widget));
+    let child = core.add_boxed(Box::new(widget))?;
     attach_root_child(&mut core, child)?;
     core.with_layout_of(child, |layout| {
         *layout = Layout::column()
@@ -1283,7 +1284,7 @@ fn remeasure_when_min_width_expands_flex() -> Result<()> {
 fn wrap_no_children() -> Result<()> {
     let mut core = Core::new();
     let (widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.add_boxed(Box::new(widget));
+    let parent = core.add_boxed(Box::new(widget))?;
     attach_root_child(&mut core, parent)?;
     core.with_layout_of(parent, |layout| {
         *layout = Layout::column().padding(Edges::all(1));
@@ -1300,13 +1301,13 @@ fn wrap_no_children() -> Result<()> {
 fn wrap_sum_main_max_cross() -> Result<()> {
     let mut core = Core::new();
     let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.add_boxed(Box::new(parent_widget));
+    let parent = core.add_boxed(Box::new(parent_widget))?;
     let (c1, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(2, 1)));
     let (c2, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(4, 3)));
     let (c3, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(3, 2)));
-    let child1 = core.add_boxed(Box::new(c1));
-    let child2 = core.add_boxed(Box::new(c2));
-    let child3 = core.add_boxed(Box::new(c3));
+    let child1 = core.add_boxed(Box::new(c1))?;
+    let child2 = core.add_boxed(Box::new(c2))?;
+    let child3 = core.add_boxed(Box::new(c3))?;
     core.set_children(parent, vec![child1, child2, child3])?;
     attach_root_child(&mut core, parent)?;
     core.with_layout_of(parent, |layout| {
@@ -1322,9 +1323,9 @@ fn wrap_sum_main_max_cross() -> Result<()> {
 fn wrap_includes_child_padding() -> Result<()> {
     let mut core = Core::new();
     let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.add_boxed(Box::new(parent_widget));
+    let parent = core.add_boxed(Box::new(parent_widget))?;
     let (child_widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(3, 1)));
-    let child = core.add_boxed(Box::new(child_widget));
+    let child = core.add_boxed(Box::new(child_widget))?;
     core.set_children(parent, vec![child])?;
     attach_root_child(&mut core, parent)?;
     core.with_layout_of(parent, |layout| {
@@ -1343,9 +1344,9 @@ fn wrap_includes_child_padding() -> Result<()> {
 fn wrap_flex_child_treated_as_measure_when_parent_not_exact() -> Result<()> {
     let mut core = Core::new();
     let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.add_boxed(Box::new(parent_widget));
+    let parent = core.add_boxed(Box::new(parent_widget))?;
     let (child_widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(2, 4)));
-    let child = core.add_boxed(Box::new(child_widget));
+    let child = core.add_boxed(Box::new(child_widget))?;
     core.set_children(parent, vec![child])?;
     attach_root_child(&mut core, parent)?;
     core.with_layout_of(parent, |layout| {
@@ -1364,7 +1365,7 @@ fn wrap_flex_child_treated_as_measure_when_parent_not_exact() -> Result<()> {
 fn wrap_flex_child_behaves_as_flex_when_parent_exact() -> Result<()> {
     let mut core = Core::new();
     let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.add_boxed(Box::new(parent_widget));
+    let parent = core.add_boxed(Box::new(parent_widget))?;
     let (child1_widget, calls1) = TestWidget::new(|c| {
         let width = match c.width {
             Constraint::Exact(n) => n,
@@ -1381,8 +1382,8 @@ fn wrap_flex_child_behaves_as_flex_when_parent_exact() -> Result<()> {
         };
         Measurement::Fixed(Size::new(width, width))
     });
-    let child1 = core.add_boxed(Box::new(child1_widget));
-    let child2 = core.add_boxed(Box::new(child2_widget));
+    let child1 = core.add_boxed(Box::new(child1_widget))?;
+    let child2 = core.add_boxed(Box::new(child2_widget))?;
     core.set_children(parent, vec![child1, child2])?;
     attach_root_child(&mut core, parent)?;
     core.with_layout_of(parent, |layout| {
@@ -1408,13 +1409,13 @@ fn wrap_flex_child_behaves_as_flex_when_parent_exact() -> Result<()> {
 fn wrap_gap_counts_only_visible_children() -> Result<()> {
     let mut core = Core::new();
     let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.add_boxed(Box::new(parent_widget));
+    let parent = core.add_boxed(Box::new(parent_widget))?;
     let (c1, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(1, 1)));
     let (c2, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(1, 1)));
     let (c3, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(1, 1)));
-    let child1 = core.add_boxed(Box::new(c1));
-    let child2 = core.add_boxed(Box::new(c2));
-    let child3 = core.add_boxed(Box::new(c3));
+    let child1 = core.add_boxed(Box::new(c1))?;
+    let child2 = core.add_boxed(Box::new(c2))?;
+    let child3 = core.add_boxed(Box::new(c3))?;
     core.set_children(parent, vec![child1, child2, child3])?;
     attach_root_child(&mut core, parent)?;
     core.with_layout_of(parent, |layout| {
@@ -1448,9 +1449,20 @@ fn flex_shares_stable_tie_break() {
     assert_eq!(shares, vec![1, 1, 0]);
 }
 
+fn boundary_layout_u32() -> impl Strategy<Value = u32> {
+    prop_oneof![
+        Just(0),
+        Just(1),
+        Just(2),
+        Just(u32::MAX - 1),
+        Just(u32::MAX),
+        any::<u32>(),
+    ]
+}
+
 proptest! {
     #[test]
-    fn flex_shares_preserve_remaining_space(remaining in 0u32..1000, weights in prop::collection::vec(0u32..20, 0..12)) {
+    fn flex_shares_preserve_remaining_space(remaining in 0u32..1000, weights in prop::collection::vec(1u32..20, 0..12)) {
         let shares = allocate_flex_shares(remaining, &weights);
         prop_assert_eq!(shares.len(), weights.len());
         let expected = if weights.is_empty() { 0 } else { remaining };
@@ -1489,9 +1501,9 @@ proptest! {
     ) {
         let mut core = Core::new();
         let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-        let parent = core.add_boxed(Box::new(parent_widget));
+        let parent = core.add_boxed(Box::new(parent_widget))?;
         let (child_widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(3, 2)));
-        let child = core.add_boxed(Box::new(child_widget));
+        let child = core.add_boxed(Box::new(child_widget))?;
 
         prop_assert!(core.set_children(parent, vec![child]).is_ok());
         prop_assert!(attach_root_child(&mut core, parent).is_ok());
@@ -1529,31 +1541,163 @@ proptest! {
             prop_assert!(child_node.rect.h <= parent_node.content_size.h);
         }
     }
+
+    #[test]
+    fn sequential_layout_boundaries_preserve_alignment_and_order(
+        is_row in any::<bool>(),
+        main_align in 0u8..3,
+        cross_align in 0u8..3,
+        padding in 0u32..4,
+        gap in boundary_layout_u32(),
+        screen_w in boundary_layout_u32(),
+        screen_h in boundary_layout_u32(),
+        hide_last in any::<bool>(),
+        remove_last in any::<bool>(),
+        overflow in any::<bool>(),
+    ) {
+        let direction = if is_row { Direction::Row } else { Direction::Column };
+        let align = |value| match value {
+            0 => Align::Start,
+            1 => Align::Center,
+            _ => Align::End,
+        };
+        let (horizontal, vertical) = if is_row {
+            (align(main_align), align(cross_align))
+        } else {
+            (align(cross_align), align(main_align))
+        };
+        let mut layout = Layout::fill()
+            .direction(direction)
+            .padding(Edges::all(padding))
+            .gap(gap)
+            .align_horizontal(horizontal)
+            .align_vertical(vertical);
+        let equivalent = Layout::fill()
+            .align_vertical(vertical)
+            .gap(gap)
+            .align_horizontal(horizontal)
+            .padding(Edges::all(padding))
+            .direction(direction);
+        prop_assert_eq!(layout, equivalent);
+        if overflow {
+            layout = layout.overflow_x().overflow_y();
+        }
+
+        let mut core = Core::new();
+        let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+        let parent = core.add_boxed(Box::new(parent_widget))?;
+        let (first_widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(3, 2)));
+        let (second_widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(5, 4)));
+        let (last_widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(2, 1)));
+        let first = core.add_boxed(Box::new(first_widget))?;
+        let second = core.add_boxed(Box::new(second_widget))?;
+        let last = core.add_boxed(Box::new(last_widget))?;
+        core.set_children(parent, vec![first, second, last])?;
+        attach_root_child(&mut core, parent)?;
+        core.set_layout_of(parent, layout)?;
+        core.set_layout_of(first, Layout::column().fixed_width(3).fixed_height(2))?;
+        let second_layout = if is_row {
+            Layout::column().flex_horizontal(1).fixed_height(4)
+        } else {
+            Layout::column().fixed_width(5).flex_vertical(1)
+        };
+        core.set_layout_of(second, second_layout)?;
+        core.set_layout_of(
+            last,
+            if remove_last {
+                Layout::column().fixed_width(2).fixed_height(1).none()
+            } else {
+                Layout::column().fixed_width(2).fixed_height(1)
+            },
+        )?;
+        core.set_hidden(last, hide_last)?;
+        core.update_layout(Size::new(screen_w, screen_h))?;
+
+        let visible = [first, second, last]
+            .into_iter()
+            .filter(|node| !core.nodes[*node].hidden && core.nodes[*node].layout.display == Display::Block)
+            .collect::<Vec<_>>();
+        let content = core.nodes[parent].content_size;
+        let available_main = direction.main_size(content);
+        let available_cross = direction.cross_size(content);
+        let children_main = visible.iter().fold(0u32, |total, node| {
+            total.saturating_add(direction.main_size(core.nodes[*node].rect.expanse()))
+        });
+        let gap_total = gap.saturating_mul(u32::try_from(visible.len().saturating_sub(1)).unwrap_or(u32::MAX));
+        let group_main = children_main.saturating_add(gap_total);
+        let mut expected_main = align_offset(group_main, available_main, align(main_align));
+
+        for node in visible {
+            let rect = core.nodes[node].rect;
+            let actual_main = if is_row { rect.tl.x } else { rect.tl.y };
+            let actual_cross = if is_row { rect.tl.y } else { rect.tl.x };
+            prop_assert_eq!(actual_main, expected_main);
+            prop_assert_eq!(
+                actual_cross,
+                align_offset(direction.cross_size(rect.expanse()), available_cross, align(cross_align))
+            );
+            expected_main = expected_main
+                .saturating_add(direction.main_size(rect.expanse()))
+                .saturating_add(gap);
+        }
+    }
+
+    #[test]
+    fn generated_invalid_layouts_never_mutate_nodes(kind in 0u8..3) {
+        let mut core = Core::new();
+        let node = core.create_detached(LayoutWidget(Layout::column()))?;
+        let before = core.nodes[node].layout;
+        let invalid = match kind {
+            0 => Layout::column().flex_vertical(0),
+            1 => Layout::column().min_height(u32::MAX).max_height(u32::MAX - 1),
+            _ => Layout::column().padding(Edges::new(u32::MAX, 0, 1, 0)),
+        };
+        prop_assert!(matches!(core.set_layout_of(node, invalid), Err(Error::InvalidLayout(_))));
+        prop_assert_eq!(core.nodes[node].layout, before);
+    }
 }
 
 #[test]
-fn flex_weight_zero_clamped() -> Result<()> {
+fn invalid_layout_mutations_are_rejected_without_change() -> Result<()> {
     let mut core = Core::new();
     let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.add_boxed(Box::new(parent_widget));
-    let (c1, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(1, 1)));
-    let (c2, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(1, 1)));
-    let child1 = core.add_boxed(Box::new(c1));
-    let child2 = core.add_boxed(Box::new(c2));
-    core.set_children(parent, vec![child1, child2])?;
-    attach_root_child(&mut core, parent)?;
-    core.with_layout_of(parent, |layout| {
-        *layout = Layout::row().flex_horizontal(1);
-    })?;
-    core.with_layout_of(child1, |layout| {
-        layout.width = Sizing::Flex(0);
-    })?;
-    core.with_layout_of(child2, |layout| {
-        layout.width = Sizing::Flex(0);
-    })?;
-    core.update_layout(Size::new(10, 5))?;
-    assert_eq!(core.nodes[child1].rect.w, 5);
-    assert_eq!(core.nodes[child2].rect.w, 5);
+    let parent = core.add_boxed(Box::new(parent_widget))?;
+    let before = core.nodes[parent].layout;
+
+    let invalid = [
+        Layout::column().width(Sizing::Flex(0)),
+        Layout::column().min_width(2).max_width(1),
+        Layout::column().padding(Edges::new(0, u32::MAX, 0, 1)),
+    ];
+    for layout in invalid {
+        assert!(matches!(
+            core.set_layout_of(parent, layout),
+            Err(Error::InvalidLayout(_))
+        ));
+        assert_eq!(core.nodes[parent].layout, before);
+    }
+    Ok(())
+}
+
+#[test]
+fn invalid_widget_layouts_are_rejected_before_publication() -> Result<()> {
+    let mut core = Core::new();
+    let node_count = core.nodes.len();
+    let invalid = Layout::row().flex_horizontal(0);
+
+    assert!(matches!(
+        core.create_detached(LayoutWidget(invalid)),
+        Err(Error::InvalidLayout(_))
+    ));
+    assert_eq!(core.nodes.len(), node_count);
+
+    let target = core.create_detached(LayoutWidget(Layout::column()))?;
+    let before = core.nodes[target].layout;
+    assert!(matches!(
+        core.replace_subtree(target, LayoutWidget(invalid)),
+        Err(Error::InvalidLayout(_))
+    ));
+    assert_eq!(core.nodes[target].layout, before);
     Ok(())
 }
 
@@ -1561,13 +1705,13 @@ fn flex_weight_zero_clamped() -> Result<()> {
 fn positions_monotonic_main() -> Result<()> {
     let mut core = Core::new();
     let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.add_boxed(Box::new(parent_widget));
+    let parent = core.add_boxed(Box::new(parent_widget))?;
     let (c1, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(2, 1)));
     let (c2, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(2, 1)));
     let (c3, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(2, 1)));
-    let child1 = core.add_boxed(Box::new(c1));
-    let child2 = core.add_boxed(Box::new(c2));
-    let child3 = core.add_boxed(Box::new(c3));
+    let child1 = core.add_boxed(Box::new(c1))?;
+    let child2 = core.add_boxed(Box::new(c2))?;
+    let child3 = core.add_boxed(Box::new(c3))?;
     core.set_children(parent, vec![child1, child2, child3])?;
     attach_root_child(&mut core, parent)?;
     core.with_layout_of(parent, |layout| {
@@ -1585,11 +1729,11 @@ fn positions_monotonic_main() -> Result<()> {
 fn no_overlaps_with_min_expansion() -> Result<()> {
     let mut core = Core::new();
     let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.add_boxed(Box::new(parent_widget));
+    let parent = core.add_boxed(Box::new(parent_widget))?;
     let (c1, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(1, 1)));
     let (c2, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(1, 1)));
-    let child1 = core.add_boxed(Box::new(c1));
-    let child2 = core.add_boxed(Box::new(c2));
+    let child1 = core.add_boxed(Box::new(c1))?;
+    let child2 = core.add_boxed(Box::new(c2))?;
     core.set_children(parent, vec![child1, child2])?;
     attach_root_child(&mut core, parent)?;
     core.with_layout_of(parent, |layout| {
@@ -1614,11 +1758,11 @@ fn no_overlaps_with_min_expansion() -> Result<()> {
 fn overflow_positions_consistent() -> Result<()> {
     let mut core = Core::new();
     let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.add_boxed(Box::new(parent_widget));
+    let parent = core.add_boxed(Box::new(parent_widget))?;
     let (c1, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(4, 1)));
     let (c2, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(4, 1)));
-    let child1 = core.add_boxed(Box::new(c1));
-    let child2 = core.add_boxed(Box::new(c2));
+    let child1 = core.add_boxed(Box::new(c1))?;
+    let child2 = core.add_boxed(Box::new(c2))?;
     core.set_children(parent, vec![child1, child2])?;
     attach_root_child(&mut core, parent)?;
     core.with_layout_of(parent, |layout| {
@@ -1634,7 +1778,7 @@ fn canvas_clamped_at_least_view() -> Result<()> {
     let mut core = Core::new();
     let (widget, _) =
         TestWidget::with_canvas(|_c| Measurement::Wrap, |_view, _ctx| Size::new(1, 1));
-    let child = core.add_boxed(Box::new(widget));
+    let child = core.add_boxed(Box::new(widget))?;
     attach_root_child(&mut core, child)?;
     core.with_layout_of(child, |layout| {
         *layout = Layout::fill();
@@ -1654,7 +1798,7 @@ fn offset_clamped_when_canvas_shrinks() -> Result<()> {
         |_c| Measurement::Wrap,
         move |_view, _ctx| *canvas_clone.lock().unwrap(),
     );
-    let child = core.add_boxed(Box::new(widget));
+    let child = core.add_boxed(Box::new(widget))?;
     attach_root_child(&mut core, child)?;
     core.with_layout_of(child, |layout| {
         *layout = Layout::fill();
@@ -1679,7 +1823,7 @@ fn offset_clamped_when_view_grows() -> Result<()> {
         |_c| Measurement::Wrap,
         move |_view, _ctx| *canvas_clone.lock().unwrap(),
     );
-    let child = core.add_boxed(Box::new(widget));
+    let child = core.add_boxed(Box::new(widget))?;
     attach_root_child(&mut core, child)?;
     core.with_layout_of(child, |layout| {
         *layout = Layout::fill();
@@ -1703,7 +1847,7 @@ fn zero_view_clamps_scroll() -> Result<()> {
         |_c| Measurement::Wrap,
         move |_view, _ctx| *canvas_clone.lock().unwrap(),
     );
-    let child = core.add_boxed(Box::new(widget));
+    let child = core.add_boxed(Box::new(widget))?;
     attach_root_child(&mut core, child)?;
     core.with_layout_of(child, |layout| {
         *layout = Layout::fill();
@@ -1717,20 +1861,17 @@ fn zero_view_clamps_scroll() -> Result<()> {
 }
 
 #[test]
-fn extreme_padding_layout_does_not_panic() -> Result<()> {
+fn extreme_padding_is_rejected_without_mutation() -> Result<()> {
     let mut core = Core::new();
     let (widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(u32::MAX, u32::MAX)));
-    let child = core.add_boxed(Box::new(widget));
+    let child = core.add_boxed(Box::new(widget))?;
     attach_root_child(&mut core, child)?;
-    core.with_layout_of(child, |layout| {
-        *layout = Layout::fill().padding(Edges::all(u32::MAX));
-    })?;
-
-    core.update_layout(Size::new(u32::MAX, u32::MAX))?;
-
-    let node = &core.nodes[child];
-    assert_eq!(node.content_size, Size::ZERO);
-    assert_eq!(node.canvas, Size::ZERO);
+    let before = core.nodes[child].layout;
+    assert!(matches!(
+        core.set_layout_of(child, Layout::fill().padding(Edges::all(u32::MAX))),
+        Err(Error::InvalidLayout(_))
+    ));
+    assert_eq!(core.nodes[child].layout, before);
     Ok(())
 }
 
@@ -1739,9 +1880,9 @@ fn child_screen_origin_signed() -> Result<()> {
     let mut core = Core::new();
     let (parent_widget, _) =
         TestWidget::with_canvas(|_c| Measurement::Wrap, |_view, _ctx| Size::new(20, 10));
-    let parent = core.add_boxed(Box::new(parent_widget));
+    let parent = core.add_boxed(Box::new(parent_widget))?;
     let (child_widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(2, 2)));
-    let child = core.add_boxed(Box::new(child_widget));
+    let child = core.add_boxed(Box::new(child_widget))?;
     core.set_children(parent, vec![child])?;
     attach_root_child(&mut core, parent)?;
     core.with_layout_of(parent, |layout| {
@@ -1763,7 +1904,7 @@ fn child_screen_origin_signed() -> Result<()> {
 fn content_rect_respects_padding() -> Result<()> {
     let mut core = Core::new();
     let (widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(5, 5)));
-    let child = core.add_boxed(Box::new(widget));
+    let child = core.add_boxed(Box::new(widget))?;
     attach_root_child(&mut core, child)?;
     core.with_layout_of(child, |layout| {
         *layout = Layout::column().padding(Edges::all(1));
@@ -1824,17 +1965,17 @@ fn random_tree_no_panics() -> Result<()> {
 
 fn build_random_tree(core: &mut Core, rng: &mut StdRng, depth: usize) -> Result<NodeId> {
     let (widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(1, 1)));
-    let node = core.add_boxed(Box::new(widget));
+    let node = core.add_boxed(Box::new(widget))?;
     let mut layout = if rng.random_bool(0.5) {
         Layout::row()
     } else {
         Layout::column()
     };
     if rng.random_bool(0.6) {
-        layout.width = Sizing::Flex(rng.random_range(0..3));
+        layout.width = Sizing::Flex(rng.random_range(1..3));
     }
     if rng.random_bool(0.6) {
-        layout.height = Sizing::Flex(rng.random_range(0..3));
+        layout.height = Sizing::Flex(rng.random_range(1..3));
     }
     layout.padding = Edges::new(
         rng.random_range(0..3),
@@ -1843,18 +1984,20 @@ fn build_random_tree(core: &mut Core, rng: &mut StdRng, depth: usize) -> Result<
         rng.random_range(0..3),
     );
     layout.gap = rng.random_range(0..3);
-    if rng.random_bool(0.3) {
-        layout.min_width = Some(rng.random_range(0..6));
-    }
-    if rng.random_bool(0.3) {
-        layout.max_width = Some(rng.random_range(0..6));
-    }
-    if rng.random_bool(0.3) {
-        layout.min_height = Some(rng.random_range(0..6));
-    }
-    if rng.random_bool(0.3) {
-        layout.max_height = Some(rng.random_range(0..6));
-    }
+    let width_bounds = [rng.random_range(0..6), rng.random_range(0..6)];
+    let height_bounds = [rng.random_range(0..6), rng.random_range(0..6)];
+    layout.min_width = rng
+        .random_bool(0.3)
+        .then_some(width_bounds[0].min(width_bounds[1]));
+    layout.max_width = rng
+        .random_bool(0.3)
+        .then_some(width_bounds[0].max(width_bounds[1]));
+    layout.min_height = rng
+        .random_bool(0.3)
+        .then_some(height_bounds[0].min(height_bounds[1]));
+    layout.max_height = rng
+        .random_bool(0.3)
+        .then_some(height_bounds[0].max(height_bounds[1]));
     core.with_layout_of(node, |l| {
         *l = layout;
     })?;
@@ -1877,11 +2020,11 @@ fn build_random_tree(core: &mut Core, rng: &mut StdRng, depth: usize) -> Result<
 fn stack_children_overlap() -> Result<()> {
     let mut core = Core::new();
     let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.add_boxed(Box::new(parent_widget));
+    let parent = core.add_boxed(Box::new(parent_widget))?;
     let (c1, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(10, 10)));
     let (c2, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(5, 5)));
-    let child1 = core.add_boxed(Box::new(c1));
-    let child2 = core.add_boxed(Box::new(c2));
+    let child1 = core.add_boxed(Box::new(c1))?;
+    let child2 = core.add_boxed(Box::new(c2))?;
     core.set_children(parent, vec![child1, child2])?;
     attach_root_child(&mut core, parent)?;
     core.with_layout_of(parent, |layout| {
@@ -1902,14 +2045,61 @@ fn stack_children_overlap() -> Result<()> {
 }
 
 #[test]
+fn sequential_alignment_controls_group_and_cross_axes() -> Result<()> {
+    for (direction, screen, expected) in [
+        (
+            Direction::Row,
+            Size::new(20, 10),
+            [Point { x: 10, y: 4 }, Point { x: 15, y: 3 }],
+        ),
+        (
+            Direction::Column,
+            Size::new(10, 20),
+            [Point { x: 3, y: 12 }, Point { x: 2, y: 16 }],
+        ),
+    ] {
+        let mut core = Core::new();
+        let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
+        let parent = core.add_boxed(Box::new(parent_widget))?;
+        let (first_widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(3, 2)));
+        let (second_widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(5, 4)));
+        let first = core.add_boxed(Box::new(first_widget))?;
+        let second = core.add_boxed(Box::new(second_widget))?;
+        core.set_children(parent, vec![first, second])?;
+        attach_root_child(&mut core, parent)?;
+        core.set_layout_of(
+            parent,
+            Layout::fill()
+                .direction(direction)
+                .gap(2)
+                .align_horizontal(if direction == Direction::Row {
+                    Align::End
+                } else {
+                    Align::Center
+                })
+                .align_vertical(if direction == Direction::Column {
+                    Align::End
+                } else {
+                    Align::Center
+                }),
+        )?;
+
+        core.update_layout(screen)?;
+        assert_eq!(core.nodes[first].rect.tl, expected[0]);
+        assert_eq!(core.nodes[second].rect.tl, expected[1]);
+    }
+    Ok(())
+}
+
+#[test]
 fn locate_node_prefers_topmost_stack_child() -> Result<()> {
     let mut core = Core::new();
     let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.add_boxed(Box::new(parent_widget));
+    let parent = core.add_boxed(Box::new(parent_widget))?;
     let (c1, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(10, 10)));
     let (c2, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(10, 10)));
-    let child1 = core.add_boxed(Box::new(c1));
-    let child2 = core.add_boxed(Box::new(c2));
+    let child1 = core.add_boxed(Box::new(c1))?;
+    let child2 = core.add_boxed(Box::new(c2))?;
     core.set_children(parent, vec![child1, child2])?;
     attach_root_child(&mut core, parent)?;
     core.with_layout_of(parent, |layout| {
@@ -1926,9 +2116,9 @@ fn locate_node_prefers_topmost_stack_child() -> Result<()> {
 fn stack_with_center_alignment() -> Result<()> {
     let mut core = Core::new();
     let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.add_boxed(Box::new(parent_widget));
+    let parent = core.add_boxed(Box::new(parent_widget))?;
     let (child_widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(10, 10)));
-    let child = core.add_boxed(Box::new(child_widget));
+    let child = core.add_boxed(Box::new(child_widget))?;
     core.set_children(parent, vec![child])?;
     attach_root_child(&mut core, parent)?;
     core.with_layout_of(parent, |layout| {
@@ -1947,9 +2137,9 @@ fn stack_with_center_alignment() -> Result<()> {
 fn stack_with_end_alignment() -> Result<()> {
     let mut core = Core::new();
     let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.add_boxed(Box::new(parent_widget));
+    let parent = core.add_boxed(Box::new(parent_widget))?;
     let (child_widget, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(10, 10)));
-    let child = core.add_boxed(Box::new(child_widget));
+    let child = core.add_boxed(Box::new(child_widget))?;
     core.set_children(parent, vec![child])?;
     attach_root_child(&mut core, parent)?;
     core.with_layout_of(parent, |layout| {
@@ -1971,11 +2161,11 @@ fn stack_with_end_alignment() -> Result<()> {
 fn stack_multiple_children_centered() -> Result<()> {
     let mut core = Core::new();
     let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.add_boxed(Box::new(parent_widget));
+    let parent = core.add_boxed(Box::new(parent_widget))?;
     let (c1, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(20, 20)));
     let (c2, _) = TestWidget::new(|_c| Measurement::Fixed(Size::new(10, 10)));
-    let child1 = core.add_boxed(Box::new(c1));
-    let child2 = core.add_boxed(Box::new(c2));
+    let child1 = core.add_boxed(Box::new(c1))?;
+    let child2 = core.add_boxed(Box::new(c2))?;
     core.set_children(parent, vec![child1, child2])?;
     attach_root_child(&mut core, parent)?;
     core.with_layout_of(parent, |layout| {
@@ -1997,11 +2187,11 @@ fn stack_multiple_children_centered() -> Result<()> {
 fn set_children_detaches_from_previous_parent() -> Result<()> {
     let mut core = Core::new();
     let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent_a = core.add_boxed(Box::new(parent_widget));
+    let parent_a = core.add_boxed(Box::new(parent_widget))?;
     let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent_b = core.add_boxed(Box::new(parent_widget));
+    let parent_b = core.add_boxed(Box::new(parent_widget))?;
     let (child_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let child = core.add_boxed(Box::new(child_widget));
+    let child = core.add_boxed(Box::new(child_widget))?;
 
     core.set_children(parent_a, vec![child])?;
     core.set_children(parent_b, vec![child])?;
@@ -2016,9 +2206,9 @@ fn set_children_detaches_from_previous_parent() -> Result<()> {
 fn set_children_rejects_cycles() -> Result<()> {
     let mut core = Core::new();
     let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.add_boxed(Box::new(parent_widget));
+    let parent = core.add_boxed(Box::new(parent_widget))?;
     let (child_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let child = core.add_boxed(Box::new(child_widget));
+    let child = core.add_boxed(Box::new(child_widget))?;
     core.set_children(parent, vec![child])?;
 
     let err = core.set_children(child, vec![parent]).unwrap_err();
@@ -2030,9 +2220,9 @@ fn set_children_rejects_cycles() -> Result<()> {
 fn set_children_rejects_duplicates() -> Result<()> {
     let mut core = Core::new();
     let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.add_boxed(Box::new(parent_widget));
+    let parent = core.add_boxed(Box::new(parent_widget))?;
     let (child_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let child = core.add_boxed(Box::new(child_widget));
+    let child = core.add_boxed(Box::new(child_widget))?;
 
     let err = core
         .set_children(parent, vec![child, child])
@@ -2051,9 +2241,9 @@ fn set_children_rejects_duplicates() -> Result<()> {
 fn attach_rejects_cycles() -> Result<()> {
     let mut core = Core::new();
     let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.create_detached(parent_widget);
+    let parent = core.create_detached(parent_widget)?;
     let (child_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let child = core.create_detached(child_widget);
+    let child = core.create_detached(child_widget)?;
 
     core.attach(parent, child)?;
     let err = core.attach(child, parent).unwrap_err();
@@ -2064,8 +2254,8 @@ fn attach_rejects_cycles() -> Result<()> {
 #[test]
 fn remove_subtree_recovers_focus_to_next() -> Result<()> {
     let mut core = Core::new();
-    let first = core.create_detached(FocusableWidget);
-    let second = core.create_detached(FocusableWidget);
+    let first = core.create_detached(FocusableWidget)?;
+    let second = core.create_detached(FocusableWidget)?;
     core.set_children(core.root, vec![first, second])?;
     core.with_layout_of(core.root, |layout| {
         *layout = Layout::fill();
@@ -2088,8 +2278,8 @@ fn remove_subtree_recovers_focus_to_next() -> Result<()> {
 #[test]
 fn remove_subtree_recovers_focus_to_prev() -> Result<()> {
     let mut core = Core::new();
-    let first = core.create_detached(FocusableWidget);
-    let second = core.create_detached(FocusableWidget);
+    let first = core.create_detached(FocusableWidget)?;
+    let second = core.create_detached(FocusableWidget)?;
     core.set_children(core.root, vec![first, second])?;
     core.with_layout_of(core.root, |layout| {
         *layout = Layout::fill();
@@ -2112,7 +2302,7 @@ fn remove_subtree_recovers_focus_to_prev() -> Result<()> {
 #[test]
 fn detach_clears_mouse_capture() -> Result<()> {
     let mut core = Core::new();
-    let child = core.create_detached(FocusableWidget);
+    let child = core.create_detached(FocusableWidget)?;
     core.attach(core.root, child)?;
     core.capture_mouse(child)?;
 
@@ -2127,7 +2317,7 @@ fn detach_clears_mouse_capture() -> Result<()> {
 #[test]
 fn remove_subtree_clears_mouse_capture() -> Result<()> {
     let mut core = Core::new();
-    let child = core.create_detached(FocusableWidget);
+    let child = core.create_detached(FocusableWidget)?;
     core.attach(core.root, child)?;
     core.capture_mouse(child)?;
 
@@ -2142,7 +2332,7 @@ fn remove_subtree_clears_mouse_capture() -> Result<()> {
 fn keyed_children_require_unique_keys() -> Result<()> {
     let mut core = Core::new();
     let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.create_detached(parent_widget);
+    let parent = core.create_detached(parent_widget)?;
     core.attach(core.root, parent)?;
     let (child_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
     let child = core.add_child_to_keyed_boxed(parent, "slot", Box::new(child_widget))?;
@@ -2163,7 +2353,7 @@ fn keyed_children_require_unique_keys() -> Result<()> {
 fn detach_clears_keyed_mapping() -> Result<()> {
     let mut core = Core::new();
     let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.create_detached(parent_widget);
+    let parent = core.create_detached(parent_widget)?;
     core.attach(core.root, parent)?;
     let (child_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
     let child = core.add_child_to_keyed_boxed(parent, "slot", Box::new(child_widget))?;
@@ -2179,7 +2369,7 @@ fn detach_clears_keyed_mapping() -> Result<()> {
 fn add_child_rolls_back_on_mount_failure() -> Result<()> {
     let mut core = Core::new();
     let (parent_widget, _) = TestWidget::new(|_c| Measurement::Wrap);
-    let parent = core.create_detached(parent_widget);
+    let parent = core.create_detached(parent_widget)?;
     core.attach(core.root, parent)?;
     let node_count = core.nodes.len();
 
@@ -2204,11 +2394,11 @@ fn set_children_fault_restores_core_state_and_unwinds_completed_mounts() -> Resu
     let mounted = core.create_detached(
         FaultWidget::new("mounted", Arc::clone(&log))
             .with_unmount(UnmountAction::TryStructuralEdit),
-    );
+    )?;
     let failing = core.create_detached(
         FaultWidget::new("failing", Arc::clone(&log))
             .with_mount(MountAction::FailAfterCoreMutations),
-    );
+    )?;
 
     let error = assert_structural_rollback(&mut core, |core| {
         core.set_children(core.root, vec![mounted, failing])
@@ -2233,7 +2423,7 @@ fn nested_mount_failure_joins_outer_tree_edit() -> Result<()> {
     let log = Arc::new(Mutex::new(Vec::new()));
     let parent = core.create_detached(
         FaultWidget::new("parent", Arc::clone(&log)).with_mount(MountAction::FailFromNestedEdit),
-    );
+    )?;
 
     let error = assert_structural_rollback(&mut core, |core| core.attach(core.root, parent));
 
@@ -2248,7 +2438,7 @@ fn handled_nested_failure_restores_its_savepoint() -> Result<()> {
     let log = Arc::new(Mutex::new(Vec::new()));
     let parent = core.create_detached(
         FaultWidget::new("parent", Arc::clone(&log)).with_mount(MountAction::HandleNestedFailure),
-    );
+    )?;
 
     core.attach(core.root, parent)?;
 
@@ -2262,11 +2452,11 @@ fn handled_nested_failure_restores_its_savepoint() -> Result<()> {
 fn pre_remove_nested_edit_rolls_back_with_outer_failure() -> Result<()> {
     let mut core = Core::new();
     let log = Arc::new(Mutex::new(Vec::new()));
-    let sibling = core.create_detached(FaultWidget::new("sibling", Arc::clone(&log)));
+    let sibling = core.create_detached(FaultWidget::new("sibling", Arc::clone(&log)))?;
     let target = core.create_detached(
         FaultWidget::new("target", Arc::clone(&log))
             .with_pre_remove(PreRemoveAction::RemoveThenFail(sibling)),
-    );
+    )?;
     core.set_children(core.root, vec![target, sibling])?;
     log.lock().unwrap().clear();
 
@@ -2288,8 +2478,8 @@ fn pre_remove_nested_edit_rolls_back_with_outer_failure() -> Result<()> {
 fn replacement_mount_failure_restores_old_widget_and_children() -> Result<()> {
     let mut core = Core::new();
     let log = Arc::new(Mutex::new(Vec::new()));
-    let target = core.create_detached(FaultWidget::new("old", Arc::clone(&log)));
-    let child = core.create_detached(simple_widget());
+    let target = core.create_detached(FaultWidget::new("old", Arc::clone(&log)))?;
+    let child = core.create_detached(simple_widget())?;
     core.set_children(target, vec![child])?;
     core.attach(core.root, target)?;
     log.lock().unwrap().clear();
@@ -2318,8 +2508,8 @@ fn replacement_mount_failure_restores_old_widget_and_children() -> Result<()> {
 fn replace_subtree_runs_complete_lifecycle_in_tree_order() -> Result<()> {
     let mut core = Core::new();
     let log = Arc::new(Mutex::new(Vec::new()));
-    let target = core.create_detached(FaultWidget::new("old", Arc::clone(&log)));
-    let child = core.create_detached(FaultWidget::new("child", Arc::clone(&log)));
+    let target = core.create_detached(FaultWidget::new("old", Arc::clone(&log)))?;
+    let child = core.create_detached(FaultWidget::new("child", Arc::clone(&log)))?;
     core.set_children(target, vec![child])?;
     core.attach(core.root, target)?;
     log.lock().unwrap().clear();
@@ -2344,7 +2534,7 @@ fn replace_subtree_runs_complete_lifecycle_in_tree_order() -> Result<()> {
 #[test]
 fn keyed_child_add_rolls_back_key_and_node_on_mount_failure() -> Result<()> {
     let mut core = Core::new();
-    let parent = core.create_detached(simple_widget());
+    let parent = core.create_detached(simple_widget())?;
     core.attach(core.root, parent)?;
 
     let error = assert_structural_rollback(&mut core, |core| {
@@ -2363,7 +2553,7 @@ fn pre_remove_veto_leaves_subtree_mounted() -> Result<()> {
     let log = Arc::new(Mutex::new(Vec::new()));
     let target = core.create_detached(
         FaultWidget::new("target", Arc::clone(&log)).with_pre_remove(PreRemoveAction::Fail),
-    );
+    )?;
     core.attach(core.root, target)?;
     log.lock().unwrap().clear();
 
@@ -2377,7 +2567,7 @@ fn pre_remove_veto_leaves_subtree_mounted() -> Result<()> {
 #[test]
 fn keyed_reconcile_update_failure_preserves_core_and_helper_state() -> Result<()> {
     let mut core = Core::new();
-    let parent = core.create_detached(simple_widget());
+    let parent = core.create_detached(simple_widget())?;
     core.attach(core.root, parent)?;
     let mut keyed = KeyedChildren::<&'static str, ReconcileWidget>::new();
     let before = StructuralSnapshot::capture(&core);
@@ -2411,7 +2601,7 @@ fn keyed_reconcile_update_failure_preserves_core_and_helper_state() -> Result<()
 #[test]
 fn keyed_reconcile_mount_failure_preserves_core_and_helper_state() -> Result<()> {
     let mut core = Core::new();
-    let parent = core.create_detached(simple_widget());
+    let parent = core.create_detached(simple_widget())?;
     core.attach(core.root, parent)?;
     let mut keyed = KeyedChildren::<&'static str, ReconcileWidget>::new();
     let before = StructuralSnapshot::capture(&core);
@@ -2444,7 +2634,7 @@ fn keyed_reconcile_mount_failure_preserves_core_and_helper_state() -> Result<()>
 #[test]
 fn keyed_reconcile_prunes_removed_hidden_nodes() -> Result<()> {
     let mut core = Core::new();
-    let parent = core.create_detached(simple_widget());
+    let parent = core.create_detached(simple_widget())?;
     core.attach(core.root, parent)?;
     let mut keyed = KeyedChildren::<&'static str, ReconcileWidget>::new();
 
@@ -2497,7 +2687,7 @@ fn keyed_reconcile_prunes_removed_hidden_nodes() -> Result<()> {
 #[test]
 fn keyed_reconcile_defers_removal_until_updates_succeed() -> Result<()> {
     let mut core = Core::new();
-    let parent = core.create_detached(simple_widget());
+    let parent = core.create_detached(simple_widget())?;
     core.attach(core.root, parent)?;
     let mut keyed = KeyedChildren::<&'static str, ReconcileWidget>::new();
     {

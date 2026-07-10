@@ -33,8 +33,8 @@ impl Add for PointI32 {
 
     fn add(self, other: Self) -> Self {
         Self {
-            x: self.x + other.x,
-            y: self.y + other.y,
+            x: self.x.saturating_add(other.x),
+            y: self.y.saturating_add(other.y),
         }
     }
 }
@@ -49,8 +49,22 @@ impl From<(i32, i32)> for PointI32 {
 impl From<Point> for PointI32 {
     fn from(p: Point) -> Self {
         Self {
-            x: p.x as i32,
-            y: p.y as i32,
+            x: i32::try_from(p.x).unwrap_or(i32::MAX),
+            y: i32::try_from(p.y).unwrap_or(i32::MAX),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unsigned_conversion_and_addition_clamp() {
+        assert_eq!(PointI32::from(Point { x: u32::MAX, y: 1 }).x, i32::MAX);
+        assert_eq!(
+            PointI32::new(i32::MAX, i32::MIN) + PointI32::new(1, -1),
+            PointI32::new(i32::MAX, i32::MIN)
+        );
     }
 }

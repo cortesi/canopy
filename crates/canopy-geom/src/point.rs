@@ -34,11 +34,21 @@ impl Point {
         };
         (nx, ny).into()
     }
-    /// Clamp a point, constraining it to fall within `rect`.
+    /// Clamp a point to the cells in `rect`.
+    ///
+    /// An empty rectangle contains no point, so its origin is returned as the
+    /// canonical clamped value.
     pub fn clamp(&self, rect: Rect) -> Self {
+        if rect.is_zero() {
+            return rect.tl;
+        }
         Self {
-            x: self.x.clamp(rect.tl.x, rect.tl.x + rect.w),
-            y: self.y.clamp(rect.tl.y, rect.tl.y + rect.h),
+            x: self
+                .x
+                .clamp(rect.tl.x, rect.tl.x.saturating_add(rect.w - 1)),
+            y: self
+                .y
+                .clamp(rect.tl.y, rect.tl.y.saturating_add(rect.h - 1)),
         }
     }
     /// Like scroll, but constrained within a rectangle.
@@ -62,8 +72,8 @@ impl Add for Point {
 
     fn add(self, other: Self) -> Self {
         Self {
-            x: self.x + other.x,
-            y: self.y + other.y,
+            x: self.x.saturating_add(other.x),
+            y: self.y.saturating_add(other.y),
         }
     }
 }
@@ -86,5 +96,30 @@ mod tests {
         assert_eq!(Point::zero() + (1u32, 0u32).into(), (1u32, 0u32).into());
         assert_eq!(Point::zero() + (0u32, 1u32).into(), (0u32, 1u32).into());
         Ok(())
+    }
+
+    #[test]
+    fn addition_saturates() {
+        assert_eq!(
+            Point {
+                x: u32::MAX,
+                y: u32::MAX - 1,
+            } + Point { x: 1, y: 2 },
+            Point {
+                x: u32::MAX,
+                y: u32::MAX,
+            }
+        );
+    }
+
+    #[test]
+    fn clamp_obeys_half_open_rect() {
+        let rect = Rect::new(10, 20, 2, 3);
+        assert_eq!(Point { x: 99, y: 99 }.clamp(rect), Point { x: 11, y: 22 });
+        assert_eq!(Point::zero().clamp(rect), rect.tl);
+        assert_eq!(
+            Point { x: 99, y: 99 }.clamp(Rect::new(7, 8, 0, 2)),
+            (7, 8).into()
+        );
     }
 }

@@ -60,6 +60,7 @@ pub(super) fn refresh_layouts(core: &mut Core) -> Result<()> {
             WidgetOperation::layout("layout refresh"),
             |widget, _core| widget.layout(),
         )?;
+        layout.validate()?;
         if let Some(node) = core.nodes.get_mut(node_id) {
             node.layout = layout;
             node.layout_dirty = false;
@@ -189,21 +190,23 @@ impl<'a> LayoutPass<'a> {
             return Ok(());
         }
 
-        let outer_x = parent_view.content.tl.x as i64 + rect.tl.x as i64 - parent_view.tl.x as i64;
-        let outer_y = parent_view.content.tl.y as i64 + rect.tl.y as i64 - parent_view.tl.y as i64;
+        let outer_x = i64::from(parent_view.content.tl.x) + i64::from(rect.tl.x)
+            - i64::from(parent_view.tl.x);
+        let outer_y = i64::from(parent_view.content.tl.y) + i64::from(rect.tl.y)
+            - i64::from(parent_view.tl.y);
 
         let outer = RectI32::new(
-            outer_x.clamp(i32::MIN as i64, i32::MAX as i64) as i32,
-            outer_y.clamp(i32::MIN as i64, i32::MAX as i64) as i32,
+            clamp_i64_to_i32(outer_x),
+            clamp_i64_to_i32(outer_y),
             rect.w,
             rect.h,
         );
 
-        let content_x = outer.tl.x as i64 + layout.padding.left as i64;
-        let content_y = outer.tl.y as i64 + layout.padding.top as i64;
+        let content_x = i64::from(outer.tl.x) + i64::from(layout.padding.left);
+        let content_y = i64::from(outer.tl.y) + i64::from(layout.padding.top);
         let content = RectI32::new(
-            content_x.clamp(i32::MIN as i64, i32::MAX as i64) as i32,
-            content_y.clamp(i32::MIN as i64, i32::MAX as i64) as i32,
+            clamp_i64_to_i32(content_x),
+            clamp_i64_to_i32(content_y),
             content_size.w,
             content_size.h,
         );
@@ -380,7 +383,7 @@ impl<'a> LayoutPass<'a> {
 
             let eff_main = main_sizing(effective, layout.direction);
             if let Sizing::Flex(w) = eff_main {
-                flex_children.push((i, w.max(1)));
+                flex_children.push((i, w));
                 continue;
             }
 
@@ -395,7 +398,7 @@ impl<'a> LayoutPass<'a> {
         let remaining = avail_main.saturating_sub(fixed_main_total.saturating_add(gap_total));
 
         if main_fixed && !flex_children.is_empty() {
-            let weights: Vec<u32> = flex_children.iter().map(|(_, w)| (*w).max(1)).collect();
+            let weights: Vec<u32> = flex_children.iter().map(|(_, w)| *w).collect();
             let shares = allocate_flex_shares(remaining, &weights);
             for (idx, (child_index, _)) in flex_children.iter().enumerate() {
                 let child_layout = self.node_layout_snapshot(children[*child_index])?.0;
@@ -536,7 +539,7 @@ impl<'a> LayoutPass<'a> {
             let child_layout = self.node_layout_snapshot(*child)?.0;
             let main = main_sizing(child_layout, layout.direction);
             if let Sizing::Flex(w) = main {
-                flex_children.push((i, w.max(1)));
+                flex_children.push((i, w));
                 continue;
             }
 
@@ -562,11 +565,11 @@ impl<'a> LayoutPass<'a> {
             .main_size(content)
             .saturating_sub(fixed_main_total.saturating_add(gap_total));
 
-        let weights: Vec<u32> = flex_children.iter().map(|(_, w)| (*w).max(1)).collect();
+        let weights: Vec<u32> = flex_children.iter().map(|(_, w)| *w).collect();
         let shares = allocate_flex_shares(remaining, &weights);
 
-        let mut pos_main = 0u32;
         let mut flex_idx = 0usize;
+        let mut actual_sizes = Vec::with_capacity(children.len());
         for (i, child) in children.iter().enumerate() {
             let child_layout = self.node_layout_snapshot(*child)?.0;
             let mut effective = child_layout;
@@ -589,13 +592,37 @@ impl<'a> LayoutPass<'a> {
             let child_available = layout
                 .direction
                 .size_from_main_cross(main, layout.direction.cross_size(content));
-            let child_pos = match layout.direction {
-                LayoutDirection::Row => Point { x: pos_main, y: 0 },
-                LayoutDirection::Column => Point { x: 0, y: pos_main },
+            let actual =
+                self.layout_node(*child, child_available, Point::zero(), parent_overflow)?;
+            actual_sizes.push(actual);
+        }
+
+        let children_main = actual_sizes.iter().fold(0u32, |total, size| {
+            total.saturating_add(layout.direction.main_size(*size))
+        });
+        let group_main = children_main.saturating_add(gap_total);
+        let available_main = layout.direction.main_size(content);
+        let available_cross = layout.direction.cross_size(content);
+        let mut pos_main = align_offset(group_main, available_main, main_alignment(layout));
+
+        for (child, actual) in children.iter().zip(actual_sizes) {
+            let cross = align_offset(
+                layout.direction.cross_size(actual),
+                available_cross,
+                cross_alignment(layout),
+            );
+            let position = match layout.direction {
+                LayoutDirection::Row => Point {
+                    x: pos_main,
+                    y: cross,
+                },
+                LayoutDirection::Column => Point {
+                    x: cross,
+                    y: pos_main,
+                },
                 LayoutDirection::Stack => unreachable!(),
             };
-
-            let actual = self.layout_node(*child, child_available, child_pos, parent_overflow)?;
+            self.set_node_position(*child, position)?;
             pos_main = pos_main
                 .saturating_add(layout.direction.main_size(actual))
                 .saturating_add(layout.gap);
@@ -830,7 +857,7 @@ pub(super) fn allocate_flex_shares(remaining: u32, weights: &[u32]) -> Vec<u32> 
     if remaining == 0 || weights.is_empty() {
         return vec![0; weights.len()];
     }
-    let total: u64 = weights.iter().map(|w| (*w).max(1) as u64).sum();
+    let total: u64 = weights.iter().map(|w| u64::from(*w)).sum();
     if total == 0 {
         return vec![0; weights.len()];
     }
@@ -838,10 +865,10 @@ pub(super) fn allocate_flex_shares(remaining: u32, weights: &[u32]) -> Vec<u32> 
     let mut base = Vec::with_capacity(weights.len());
     let mut rem = Vec::with_capacity(weights.len());
     for w in weights {
-        let weight = (*w).max(1) as u64;
-        let prod = remaining as u64 * weight;
-        base.push((prod / total) as u32);
-        rem.push((prod % total) as u32);
+        let weight = u64::from(*w);
+        let prod = u64::from(remaining) * weight;
+        base.push(u32::try_from(prod / total).unwrap_or(u32::MAX));
+        rem.push(u32::try_from(prod % total).unwrap_or(u32::MAX));
     }
 
     let used: u32 = base.iter().sum();
@@ -894,12 +921,39 @@ fn set_cross_sizing(layout: &mut Layout, direction: LayoutDirection, sizing: Siz
 }
 
 /// Calculate the offset for aligning a child within available space.
-fn align_offset(child_size: u32, available: u32, align: Align) -> u32 {
+pub(super) fn align_offset(child_size: u32, available: u32, align: Align) -> u32 {
     match align {
         Align::Start => 0,
         Align::Center => available.saturating_sub(child_size) / 2,
         Align::End => available.saturating_sub(child_size),
     }
+}
+
+/// Return the alignment controlling a sequential layout's child group.
+fn main_alignment(layout: Layout) -> Align {
+    match layout.direction {
+        LayoutDirection::Row => layout.align_horizontal,
+        LayoutDirection::Column => layout.align_vertical,
+        LayoutDirection::Stack => unreachable!(),
+    }
+}
+
+/// Return the alignment controlling each sequential child's cross axis.
+fn cross_alignment(layout: Layout) -> Align {
+    match layout.direction {
+        LayoutDirection::Row => layout.align_vertical,
+        LayoutDirection::Column => layout.align_horizontal,
+        LayoutDirection::Stack => unreachable!(),
+    }
+}
+
+/// Clamp a widened coordinate to the signed view coordinate domain.
+fn clamp_i64_to_i32(value: i64) -> i32 {
+    i32::try_from(value).unwrap_or(if value.is_negative() {
+        i32::MIN
+    } else {
+        i32::MAX
+    })
 }
 
 /// Depth-first search for a node at a screen-space point.

@@ -350,7 +350,7 @@ fn mouse_capture_routes_drag_outside() -> Result<()> {
 #[test]
 fn mouse_routing_clears_a_stale_internal_capture() -> Result<()> {
     let mut canopy = Canopy::new();
-    let stale = canopy.core.create_detached(CaptureWidget::new());
+    let stale = canopy.core.create_detached(CaptureWidget::new())?;
     canopy.core.remove_subtree(stale)?;
     canopy.core.mouse_capture = Some(stale);
 
@@ -873,7 +873,7 @@ fn tkey_no_render() -> Result<()> {
         }
 
         fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
-            r.text("any", ctx.view().outer_rect_local().line(0), "<n>")
+            r.text("any", ctx.view().outer_rect_local().line(0)?, "<n>")
         }
 
         fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {

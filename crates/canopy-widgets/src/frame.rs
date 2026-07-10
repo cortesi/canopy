@@ -153,14 +153,14 @@ impl Widget for Frame {
             let title_with_spaces = format!(" {title} ");
             let title_len = title_with_spaces.len();
 
-            let title_line = f.top.line(0);
+            let title_line = f.top.line(0)?;
             let title_rect = geom::Rect::new(
                 title_line.tl.x,
                 title_line.tl.y,
                 title_len.min(f.top.w as usize) as u32,
                 1,
             );
-            rndr.text("frame/title", title_rect.line(0), &title_with_spaces)?;
+            rndr.text("frame/title", title_rect.line(0)?, &title_with_spaces)?;
         }
 
         let child = ctx.children().into_iter().next();

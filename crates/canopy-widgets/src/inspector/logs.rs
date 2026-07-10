@@ -86,7 +86,7 @@ impl Widget for LogEntry {
         // Text content starts at column 2
         for (idx, line) in lines.iter().enumerate() {
             let line_rect = Rect::new(2, idx as u32, line.len() as u32, 1);
-            rndr.text("text", line_rect.line(0), line)?;
+            rndr.text("text", line_rect.line(0)?, line)?;
         }
 
         Ok(())

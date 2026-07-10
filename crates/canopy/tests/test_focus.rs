@@ -241,8 +241,10 @@ mod tests {
     #[test]
     fn test_focus_moves_off_zero_view_nodes() -> Result<()> {
         let mut canopy = Canopy::new();
-        let first = canopy.core_mut().create_detached(FocusLeaf::new("first"));
-        let second = canopy.core_mut().create_detached(FocusLeaf::new("second"));
+        let first = canopy.core_mut().create_detached(FocusLeaf::new("first"))?;
+        let second = canopy
+            .core_mut()
+            .create_detached(FocusLeaf::new("second"))?;
 
         let root = canopy.core().root_id();
         canopy.core_mut().set_children(root, vec![first, second])?;

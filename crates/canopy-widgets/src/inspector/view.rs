@@ -27,9 +27,9 @@ impl View {
 
     /// Construct a new inspector view.
     pub fn install(core: &mut Core) -> Result<(NodeId, NodeId, NodeId)> {
-        let tabs = core.create_detached(Tabs::new(vec!["Stats", "Logs"]));
-        let logs = core.create_detached(super::logs::Logs::new());
-        let view_id = core.create_detached(Self::new());
+        let tabs = core.create_detached(Tabs::new(vec!["Stats", "Logs"]))?;
+        let logs = core.create_detached(super::logs::Logs::new())?;
+        let view_id = core.create_detached(Self::new())?;
         core.set_children(view_id, vec![tabs, logs])?;
         core.set_layout_of(view_id, Layout::fill())?;
         core.set_layout_of(tabs, Layout::column().flex_horizontal(1).fixed_height(1))?;

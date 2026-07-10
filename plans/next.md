@@ -179,14 +179,14 @@ earlier startup scripts or unrelated evaluations.
 
 ## 4. Stage Four: Unify geometry and layout semantics
 
-20. [ ] Specify one half-open geometry and overflow contract.
+20. [x] Specify one half-open geometry and overflow contract.
 
    Define rectangle edges, empty rectangles, point clamping, intersections, and signed conversion
    in `canopy-geom` documentation. Rename operations whose current inclusive behavior does not
    match that contract instead of preserving ambiguous names. Specify how containment and
    intersection agree for empty rectangles, and make `Rect::line` checked rather than panicking.
 
-21. [ ] Replace unchecked coordinate arithmetic with deliberate operations.
+21. [x] Replace unchecked coordinate arithmetic with deliberate operations.
 
    Use checked or saturating unsigned arithmetic and `i64` intermediates for signed geometry.
    Replace narrowing `as` conversions with `TryFrom` or explicit clamping in
@@ -194,27 +194,27 @@ earlier startup scripts or unrelated evaluations.
    offsets. Repair unchecked `Point` addition and clamping, `Rect::contains_rect`, `Rect::line`,
    and `LineSegment::split_active`.
 
-22. [ ] Enforce layout validity at the mutation boundary.
+22. [x] Enforce layout validity at the mutation boundary.
 
    Wire the existing `Layout::validate` and `LayoutValidationError` into the mutation boundary, or
    replace them with one checked application path. Reject contradictory bounds, zero flex weights,
    and overflowing padding; remove dead `clamp_weight`, scattered `.max(1)` normalization, and the
    test that currently codifies silent zero-weight repair.
 
-23. [ ] Define and implement alignment for row and column layouts.
+23. [x] Define and implement alignment for row and column layouts.
 
    Specify main-axis group alignment and cross-axis child alignment when free space exists, then
    apply `align_horizontal` and `align_vertical` consistently to row, column, and stack layouts.
    Cover fixed, flex, wrap, hidden, padded, gapped, and overflowing children.
 
-24. [ ] Expand geometry and layout properties to boundary-biased inputs.
+24. [x] Expand geometry and layout properties to boundary-biased inputs.
 
    Generate values around zero, `i32` limits, and `u32::MAX`, plus invalid layouts and mixed
    signed offsets. Assert no panic, half-open containment laws, containment/intersection agreement,
    conversion guarantees, monotonic placement, and stable results under equivalent construction
    orders.
 
-25. [ ] Pass the geometry and layout stage gate.
+25. [x] Pass the geometry and layout stage gate.
 
    Run all `canopy-geom` and layout properties under debug and release arithmetic, then exercise
    widget snapshots and smoke flows at zero, tiny, ordinary, and maximum supported terminal sizes.

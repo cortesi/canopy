@@ -268,13 +268,10 @@ impl Canopy {
         if let Some((_nid, view, c)) = cursor_spec {
             let view_rect = Rect::new(0, 0, view.content.w, view.content.h);
             if view_rect.contains_point(c.location) {
-                let screen_x = view.content.tl.x + c.location.x as i32;
-                let screen_y = view.content.tl.y + c.location.y as i32;
-                if screen_x >= 0 && screen_y >= 0 {
-                    let screen_pos = Point {
-                        x: screen_x as u32,
-                        y: screen_y as u32,
-                    };
+                let screen_x = i64::from(view.content.tl.x) + i64::from(c.location.x);
+                let screen_y = i64::from(view.content.tl.y) + i64::from(c.location.y);
+                if let (Ok(x), Ok(y)) = (u32::try_from(screen_x), u32::try_from(screen_y)) {
+                    let screen_pos = Point { x, y };
                     buf.overlay_cursor(screen_pos, c.shape);
                 }
             }
@@ -336,8 +333,10 @@ impl Canopy {
 
     /// Convert a screen-space clip rect into local outer coordinates.
     fn outer_clip_to_local(outer: RectI32, clip: Rect) -> Rect {
-        let dx = (clip.tl.x as i64 - outer.tl.x as i64).max(0) as u32;
-        let dy = (clip.tl.y as i64 - outer.tl.y as i64).max(0) as u32;
+        let dx = i64::from(clip.tl.x) - i64::from(outer.tl.x);
+        let dy = i64::from(clip.tl.y) - i64::from(outer.tl.y);
+        let dx = u32::try_from(dx.clamp(0, i64::from(u32::MAX))).unwrap_or(u32::MAX);
+        let dy = u32::try_from(dy.clamp(0, i64::from(u32::MAX))).unwrap_or(u32::MAX);
         Rect::new(dx, dy, clip.w, clip.h)
     }
 }

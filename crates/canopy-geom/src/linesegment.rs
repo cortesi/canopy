@@ -1,6 +1,6 @@
 use super::{Error, Result};
 
-/// An exctent is a directionless one-dimensional line segment.
+/// A half-open, directionless one-dimensional line segment.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct LineSegment {
     /// The offset of this extent.
@@ -10,18 +10,20 @@ pub struct LineSegment {
 }
 
 impl LineSegment {
-    /// The far limit of the extent.
-    pub fn far(&self) -> u32 {
-        self.off.saturating_add(self.len)
+    /// The exclusive far edge of the extent using widened arithmetic.
+    pub fn end(&self) -> u64 {
+        u64::from(self.off) + u64::from(self.len)
     }
 
-    /// Return a line segment that encloses this line segment and another. If
-    /// the lines overlap or abut, this is equivalent to joining the segments.
-    pub fn enclose(&self, other: &Self) -> Self {
+    /// Return a segment starting at the nearer input and extending toward the
+    /// farther input.
+    ///
+    /// The length saturates when the complete span exceeds `u32::MAX`.
+    pub fn saturating_enclose(&self, other: &Self) -> Self {
         let off = self.off.min(other.off);
         Self {
             off,
-            len: self.far().max(other.far()) - off,
+            len: u32::try_from(self.end().max(other.end()) - u64::from(off)).unwrap_or(u32::MAX),
         }
     }
 
@@ -59,7 +61,7 @@ impl LineSegment {
             (
                 *self,
                 Self {
-                    off: self.far(),
+                    off: u32::try_from(self.end()).unwrap_or(u32::MAX),
                     len: 0,
                 },
             )
@@ -71,7 +73,7 @@ impl LineSegment {
             (
                 s,
                 Self {
-                    off: s.far(),
+                    off: u32::try_from(s.end()).unwrap_or(u32::MAX),
                     len: n,
                 },
             )
@@ -80,12 +82,12 @@ impl LineSegment {
 
     /// Are these two line segments adjacent but non-overlapping?
     pub fn abuts(&self, other: &Self) -> bool {
-        self.far() == other.off || other.far() == self.off
+        self.end() == u64::from(other.off) || other.end() == u64::from(self.off)
     }
 
     /// Does other lie completely within this extent.
     pub fn contains(&self, other: &Self) -> bool {
-        self.off <= other.off && self.far() >= other.far()
+        self.off <= other.off && self.end() >= other.end()
     }
 
     /// Return true if the two segments overlap.
@@ -102,15 +104,15 @@ impl LineSegment {
             Some(*other)
         } else if other.contains(self) {
             Some(*self)
-        } else if self.off <= other.off && other.off < self.far() {
+        } else if self.off <= other.off && u64::from(other.off) < self.end() {
             Some(Self {
                 off: other.off,
-                len: self.far() - other.off,
+                len: u32::try_from(self.end() - u64::from(other.off)).ok()?,
             })
-        } else if other.off <= self.off && self.off < other.far() {
+        } else if other.off <= self.off && u64::from(self.off) < other.end() {
             Some(Self {
                 off: self.off,
-                len: other.far() - self.off,
+                len: u32::try_from(other.end() - u64::from(self.off)).ok()?,
             })
         } else {
             None
@@ -118,7 +120,7 @@ impl LineSegment {
     }
 
     /// Split this extent into (pre, active, post) extents, based on the
-    /// position of a window within a view. The main use for this funtion is
+    /// position of a window within a view. The main use for this function is
     /// computation of the active indicator size and position in a scrollbar.
     pub fn split_active(&self, window: Self, view: Self) -> Result<(Self, Self, Self)> {
         if window.len == 0 {
@@ -128,31 +130,31 @@ impl LineSegment {
                 "view {view:?} does not contain window {window:?}",
             )))
         } else {
-            // Compute the fraction each section occupies of the view.
-            let pref = (window.off - view.off) as f64 / view.len as f64;
-            let postf = (view.far() - window.far()) as f64 / view.len as f64;
-            let lenf = self.len as f64;
-
-            // Now compute the true true length in terms of the space. It's
-            // important for the active portion to remain the same length
-            // regardless of position in the face of rounding, so we compute it
-            // first, then compute the other values in terms of it.
-            let active = (lenf - (pref * lenf) - (postf * lenf)).ceil();
-            let pre = (pref * self.len as f64).floor();
-            let post = lenf - active - pre;
+            let track_len = u64::from(self.len);
+            let view_len = u64::from(view.len);
+            let leading = u64::from(window.off - view.off);
+            let pre = track_len * leading / view_len;
+            let active_numerator = track_len * u64::from(window.len);
+            let active = active_numerator.div_ceil(view_len).min(track_len - pre);
+            let post = track_len - pre - active;
+            let pre = u32::try_from(pre).unwrap_or(u32::MAX);
+            let active = u32::try_from(active).unwrap_or(u32::MAX);
+            let post = u32::try_from(post).unwrap_or(u32::MAX);
+            let active_off = self.off.saturating_add(pre);
+            let post_off = active_off.saturating_add(active);
 
             Ok((
                 Self {
                     off: self.off,
-                    len: pre as u32,
+                    len: pre,
                 },
                 Self {
-                    off: self.off + pre as u32,
-                    len: active as u32,
+                    off: active_off,
+                    len: active,
                 },
                 Self {
-                    off: self.off + pre as u32 + active as u32,
-                    len: post as u32,
+                    off: post_off,
+                    len: post,
                 },
             ))
         }
@@ -170,19 +172,19 @@ mod tests {
     }
 
     #[test]
-    fn far() -> Result<()> {
+    fn end() -> Result<()> {
         let s = LineSegment { off: 5, len: 5 };
-        assert_eq!(s.far(), 10);
+        assert_eq!(s.end(), 10);
         Ok(())
     }
 
     #[test]
-    fn far_saturates() {
+    fn end_widens() {
         let s = LineSegment {
             off: u32::MAX - 1,
             len: 10,
         };
-        assert_eq!(s.far(), u32::MAX);
+        assert_eq!(s.end(), u64::from(u32::MAX) + 9);
     }
 
     proptest! {
@@ -200,7 +202,7 @@ mod tests {
 
         #[test]
         fn enclose_contains_both_segments(a in segment_strategy(), b in segment_strategy()) {
-            let enclosure = a.enclose(&b);
+            let enclosure = a.saturating_enclose(&b);
             prop_assert!(enclosure.contains(&a));
             prop_assert!(enclosure.contains(&b));
         }
@@ -298,8 +300,8 @@ mod tests {
     }
 
     fn check_enclosure(a: LineSegment, b: LineSegment, enclosure: LineSegment) {
-        assert_eq!(a.enclose(&b), enclosure);
-        assert_eq!(b.enclose(&a), enclosure);
+        assert_eq!(a.saturating_enclose(&b), enclosure);
+        assert_eq!(b.saturating_enclose(&a), enclosure);
     }
 
     #[test]
@@ -373,6 +375,32 @@ mod tests {
                 LineSegment { off: 10, len: 10 },
                 LineSegment { off: 20, len: 0 },
             )
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn split_active_handles_extreme_extents() -> Result<()> {
+        let track = LineSegment {
+            off: u32::MAX - 1,
+            len: u32::MAX,
+        };
+        let (pre, active, post) = track.split_active(
+            LineSegment {
+                off: u32::MAX - 1,
+                len: 1,
+            },
+            LineSegment {
+                off: 0,
+                len: u32::MAX,
+            },
+        )?;
+        assert_eq!(pre.len, u32::MAX - 1);
+        assert_eq!(active.len, 1);
+        assert_eq!(post.len, 0);
+        assert_eq!(
+            pre.len.saturating_add(active.len).saturating_add(post.len),
+            track.len
         );
         Ok(())
     }

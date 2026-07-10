@@ -65,11 +65,11 @@ impl Inspector {
     /// Build the inspector subtree and return its node id.
     pub fn install(core: &mut Core) -> Result<NodeId> {
         let (view_id, _tabs, _logs) = view::View::install(core)?;
-        let frame_id = core.create_detached(frame::Frame::new());
+        let frame_id = core.create_detached(frame::Frame::new())?;
         core.set_children(frame_id, vec![view_id])?;
         core.set_layout_of(frame_id, Layout::fill())?;
 
-        let inspector_id = core.create_detached(Self::new());
+        let inspector_id = core.create_detached(Self::new())?;
         core.set_children(inspector_id, vec![frame_id])?;
         core.set_layout_of(inspector_id, Layout::fill())?;
 

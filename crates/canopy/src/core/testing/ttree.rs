@@ -116,7 +116,7 @@ macro_rules! leaf {
             fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
                 r.text(
                     "any",
-                    ctx.view().outer_rect_local().line(0),
+                    ctx.view().outer_rect_local().line(0)?,
                     &format!("<{}>", self.name()),
                 )
             }
@@ -182,7 +182,7 @@ macro_rules! branch {
             fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
                 r.text(
                     "any",
-                    ctx.view().outer_rect_local().line(0),
+                    ctx.view().outer_rect_local().line(0)?,
                     &format!("<{}>", self.name()),
                 )
             }
@@ -266,7 +266,7 @@ impl Widget for R {
     fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
         r.text(
             "any",
-            ctx.view().outer_rect_local().line(0),
+            ctx.view().outer_rect_local().line(0)?,
             &format!("<{}>", self.name()),
         )
     }
@@ -308,12 +308,12 @@ pub struct TestTree {
 fn build_tree(core: &mut Core) -> Result<TestTree> {
     core.replace_subtree(core.root, R::new())?;
 
-    let a = core.create_detached(Ba::new());
-    let b = core.create_detached(Bb::new());
-    let a_a = core.create_detached(BaLa::new());
-    let a_b = core.create_detached(BaLb::new());
-    let b_a = core.create_detached(BbLa::new());
-    let b_b = core.create_detached(BbLb::new());
+    let a = core.create_detached(Ba::new())?;
+    let b = core.create_detached(Bb::new())?;
+    let a_a = core.create_detached(BaLa::new())?;
+    let a_b = core.create_detached(BaLb::new())?;
+    let b_a = core.create_detached(BbLa::new())?;
+    let b_b = core.create_detached(BbLb::new())?;
 
     core.set_children(core.root, vec![a, b])?;
     core.set_children(a, vec![a_a, a_b])?;

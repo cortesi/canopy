@@ -66,8 +66,8 @@ mod tests {
         canopy
             .core
             .replace_subtree(canopy.core.root, Block::new(true))?;
-        let left = canopy.core.create_detached(Block::new(false));
-        let right = canopy.core.create_detached(Block::new(false));
+        let left = canopy.core.create_detached(Block::new(false))?;
+        let right = canopy.core.create_detached(Block::new(false))?;
         canopy
             .core
             .set_children(canopy.core.root, vec![left, right])?;
@@ -89,8 +89,8 @@ mod tests {
         canopy
             .core
             .replace_subtree(canopy.core.root, Block::new(true))?;
-        let left = canopy.core.create_detached(Block::new(false));
-        let right = canopy.core.create_detached(Block::new(false));
+        let left = canopy.core.create_detached(Block::new(false))?;
+        let right = canopy.core.create_detached(Block::new(false))?;
         canopy
             .core
             .set_children(canopy.core.root, vec![left, right])?;

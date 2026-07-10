@@ -142,7 +142,7 @@ mod tests {
     fn raw_canopy_with_leaf() -> Result<Canopy> {
         let mut canopy = Canopy::new();
         ApiLeaf::load(&mut canopy)?;
-        let leaf = canopy.create_detached(ApiLeaf::new());
+        let leaf = canopy.create_detached(ApiLeaf::new())?;
         canopy.set_root_child(leaf)?;
         Ok(canopy)
     }

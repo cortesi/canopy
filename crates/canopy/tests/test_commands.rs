@@ -70,8 +70,8 @@ mod tests {
 
         let mut canopy = Canopy::new();
         canopy.add_commands::<TestLeaf>()?;
-        let leaf_id = canopy.core_mut().create_detached(TestLeaf);
-        let branch_id = canopy.core_mut().create_detached(TestBranch);
+        let leaf_id = canopy.core_mut().create_detached(TestLeaf)?;
+        let branch_id = canopy.core_mut().create_detached(TestBranch)?;
         canopy.core_mut().set_children(branch_id, vec![leaf_id])?;
         let root_id = canopy.root_id();
         canopy.core_mut().set_children(root_id, vec![branch_id])?;
@@ -93,8 +93,8 @@ mod tests {
         canopy.add_commands::<TestLeaf>()?;
         canopy.add_commands::<TestLeaf>()?;
 
-        let leaf_id = canopy.core_mut().create_detached(TestLeaf);
-        let branch_id = canopy.core_mut().create_detached(TestBranch);
+        let leaf_id = canopy.core_mut().create_detached(TestLeaf)?;
+        let branch_id = canopy.core_mut().create_detached(TestBranch)?;
         canopy.core_mut().set_children(branch_id, vec![leaf_id])?;
         let root_id = canopy.root_id();
         canopy.core_mut().set_children(root_id, vec![branch_id])?;
@@ -134,9 +134,9 @@ mod tests {
         let mut canopy = Canopy::new();
         canopy.add_commands::<TestLeaf>()?;
         canopy.add_commands::<TestBranch>()?;
-        let first_leaf = canopy.core_mut().create_detached(TestLeaf);
-        let second_leaf = canopy.core_mut().create_detached(TestLeaf);
-        let branch_id = canopy.core_mut().create_detached(TestBranch);
+        let first_leaf = canopy.core_mut().create_detached(TestLeaf)?;
+        let second_leaf = canopy.core_mut().create_detached(TestLeaf)?;
+        let branch_id = canopy.core_mut().create_detached(TestBranch)?;
         canopy
             .core_mut()
             .set_children(branch_id, vec![first_leaf, second_leaf])?;

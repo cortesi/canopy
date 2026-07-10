@@ -226,10 +226,13 @@ where
         if self.expanded {
             // Render all items
             for (idx, item) in self.items.iter().enumerate() {
-                if idx as u32 >= rect.h {
+                let Ok(row) = u32::try_from(idx) else {
+                    break;
+                };
+                if row >= rect.h {
                     break;
                 }
-                let line_rect = rect.line(idx as u32);
+                let line_rect = rect.line(row)?;
                 let label = item.label();
 
                 if idx == self.highlighted {
@@ -251,7 +254,7 @@ where
             let label = self.items[self.selected].label();
             let indicator = " ▼";
             let display = format!("{}{}", label, indicator);
-            rndr.text("dropdown", rect.line(0), &display)?;
+            rndr.text("dropdown", rect.line(0)?, &display)?;
         }
 
         Ok(())

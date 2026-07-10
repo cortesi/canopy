@@ -93,7 +93,7 @@ impl Widget for TodoEntry {
             for (i, line) in lines.iter().enumerate().take(area.h as usize) {
                 let line_rect =
                     Rect::new(text_start_x, area.tl.y + i as u32, text_visible_width, 1);
-                rndr.text("text", line_rect.line(0), line)?;
+                rndr.text("text", line_rect.line(0)?, line)?;
             }
         }
 
@@ -120,7 +120,7 @@ impl Widget for StatusBar {
         r.push_layer("statusbar");
         r.text(
             "statusbar/text",
-            ctx.view().outer_rect_local().line(0),
+            ctx.view().outer_rect_local().line(0)?,
             "todo",
         )?;
         Ok(())

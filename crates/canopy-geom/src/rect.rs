@@ -1,6 +1,6 @@
 use super::{Direction, Error, Line, LineSegment, Point, Result, Size};
 
-/// A rectangle
+/// A half-open rectangle with an unsigned origin and size.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct Rect {
     /// Top-left corner
@@ -27,12 +27,12 @@ impl Rect {
         }
     }
 
-    /// The width times the height of the rectangle
+    /// The width times the height of the rectangle, saturated to `u32::MAX`.
     pub fn area(&self) -> u32 {
         self.w.saturating_mul(self.h)
     }
 
-    /// Creat a zero-sized `Rect` at the origin.
+    /// Create a zero-sized `Rect` at the origin.
     pub fn zero() -> Self {
         Self::new(0, 0, 0, 0)
     }
@@ -90,48 +90,52 @@ impl Rect {
         if rect.w < self.w || rect.h < self.h {
             Err(Error::Geometry("can't clamp to smaller rectangle".into()))
         } else {
+            let max_x = rect.tl.x.saturating_add(rect.w - self.w);
+            let max_y = rect.tl.y.saturating_add(rect.h - self.h);
             Ok(Self {
-                tl: self.tl.clamp(Self {
-                    tl: rect.tl,
-                    h: rect.h.saturating_sub(self.h),
-                    w: rect.w.saturating_sub(self.w),
-                }),
+                tl: Point {
+                    x: self.tl.x.clamp(rect.tl.x, max_x),
+                    y: self.tl.y.clamp(rect.tl.y, max_y),
+                },
                 w: self.w,
                 h: self.h,
             })
         }
     }
 
-    /// Does this rectangle contain the point?
+    /// Return the exclusive right edge using widened arithmetic.
+    pub fn right(&self) -> u64 {
+        u64::from(self.tl.x) + u64::from(self.w)
+    }
+
+    /// Return the exclusive bottom edge using widened arithmetic.
+    pub fn bottom(&self) -> u64 {
+        u64::from(self.tl.y) + u64::from(self.h)
+    }
+
+    /// Does this half-open rectangle contain the point?
     pub fn contains_point(&self, p: impl Into<Point>) -> bool {
         let p = p.into();
         if self.is_zero() {
-            p == self.tl
+            false
         } else {
-            let right = self.tl.x.saturating_add(self.w);
-            let bottom = self.tl.y.saturating_add(self.h);
-            !((p.x < self.tl.x || p.x >= right) || (p.y < self.tl.y || p.y >= bottom))
+            p.x >= self.tl.x
+                && u64::from(p.x) < self.right()
+                && p.y >= self.tl.y
+                && u64::from(p.y) < self.bottom()
         }
     }
 
-    /// Does this rectangle completely enclose the other? If other is
-    /// zero-sized but its origin lies within this rect, it's considered
-    /// contained.
+    /// Does this rectangle completely enclose the other's half-open bounds?
+    ///
+    /// Empty rectangles are treated as anchored bounds. They are contained
+    /// when their coincident edges fall within this rectangle's closed edge
+    /// bounds, including the far edge.
     pub fn contains_rect(&self, other: &Self) -> bool {
-        // The rectangle is completely contained if both the upper left and the
-        // lower right points are inside self. There's a subtlety here: if other
-        // is zero-sized, but it's origin lies within this rect, it is
-        // considered contained. The saturating_subs below make sure that this
-        // doesn't crash.
-        if other.is_zero() {
-            self.contains_point(other.tl)
-        } else {
-            self.contains_point(other.tl)
-                && self.contains_point(Point {
-                    x: (other.tl.x + other.w).saturating_sub(1),
-                    y: (other.tl.y + other.h).saturating_sub(1),
-                })
-        }
+        self.tl.x <= other.tl.x
+            && self.tl.y <= other.tl.y
+            && self.right() >= other.right()
+            && self.bottom() >= other.bottom()
     }
 
     /// Extracts an inner rectangle, given a border width. If the border width
@@ -223,16 +227,14 @@ impl Rect {
         if rect.w < self.w || rect.h < self.h {
             *self
         } else {
+            let shifted = self.tl.scroll(x, y);
+            let max_x = rect.tl.x.saturating_add(rect.w - self.w);
+            let max_y = rect.tl.y.saturating_add(rect.h - self.h);
             Self {
-                tl: self.tl.scroll_within(
-                    x,
-                    y,
-                    Self {
-                        tl: rect.tl,
-                        h: rect.h.saturating_sub(self.h),
-                        w: rect.w.saturating_sub(self.w),
-                    },
-                ),
+                tl: Point {
+                    x: shifted.x.clamp(rect.tl.x, max_x),
+                    y: shifted.y.clamp(rect.tl.y, max_y),
+                },
                 w: self.w,
                 h: self.h,
             }
@@ -245,9 +247,9 @@ impl Rect {
         let widths = split(self.w, n)?;
         let mut off: u32 = self.tl.x;
         let mut ret = vec![];
-        for i in 0..n {
-            ret.push(Self::new(off, self.tl.y, widths[i as usize], self.h));
-            off = off.saturating_add(widths[i as usize]);
+        for width in widths {
+            ret.push(Self::new(off, self.tl.y, width, self.h));
+            off = off.saturating_add(width);
         }
         Ok(ret)
     }
@@ -258,9 +260,9 @@ impl Rect {
         let heights = split(self.h, n)?;
         let mut off: u32 = self.tl.y;
         let mut ret = vec![];
-        for i in 0..n {
-            ret.push(Self::new(self.tl.x, off, self.w, heights[i as usize]));
-            off = off.saturating_add(heights[i as usize]);
+        for height in heights {
+            ret.push(Self::new(self.tl.x, off, self.w, height));
+            off = off.saturating_add(height);
         }
         Ok(ret)
     }
@@ -270,7 +272,9 @@ impl Rect {
     pub fn split_panes(&self, spec: &[u32]) -> Result<Vec<Vec<Self>>> {
         let mut ret = vec![];
 
-        let cols = split(self.w, spec.len() as u32)?;
+        let column_count = u32::try_from(spec.len())
+            .map_err(|_| Error::Geometry("pane column count exceeds u32".into()))?;
+        let cols = split(self.w, column_count)?;
         let mut x = self.tl.x;
         for (ci, width) in cols.iter().enumerate() {
             let mut y = self.tl.y;
@@ -365,19 +369,22 @@ impl Rect {
     }
 
     /// Return a line with a given offset in the rectangle.
-    pub fn line(&self, off: u32) -> Line {
+    pub fn line(&self, off: u32) -> Result<Line> {
         if off >= self.h {
-            panic!("offset exceeds rectangle height")
+            return Err(Error::Geometry(format!(
+                "line offset {off} exceeds rectangle height {}",
+                self.h
+            )));
         }
-        Line {
+        Ok(Line {
             tl: (self.tl.x, self.tl.y.saturating_add(off)).into(),
             w: self.w,
-        }
+        })
     }
 
     /// Does this rect have a zero size?
     pub fn is_zero(&self) -> bool {
-        self.area() == 0
+        self.w == 0 || self.h == 0
     }
 
     /// Return the `Size` of this rectangle, which has the same size as the
@@ -484,6 +491,27 @@ mod tests {
         (0u32..200, 0u32..200, 0u32..100, 0u32..100).prop_map(|(x, y, w, h)| Rect::new(x, y, w, h))
     }
 
+    fn boundary_u32() -> impl Strategy<Value = u32> {
+        prop_oneof![
+            Just(0),
+            Just(1),
+            Just(i32::MAX as u32),
+            Just(u32::MAX - 1),
+            Just(u32::MAX),
+            any::<u32>(),
+        ]
+    }
+
+    fn boundary_rect_strategy() -> impl Strategy<Value = Rect> {
+        (
+            boundary_u32(),
+            boundary_u32(),
+            boundary_u32(),
+            boundary_u32(),
+        )
+            .prop_map(|(x, y, w, h)| Rect::new(x, y, w, h))
+    }
+
     #[test]
     fn carve() -> Result<()> {
         let r = Rect::new(5, 5, 10, 10);
@@ -539,6 +567,36 @@ mod tests {
     }
 
     proptest! {
+        #[test]
+        fn boundary_intersection_and_containment_agree(
+            a in boundary_rect_strategy(),
+            b in boundary_rect_strategy(),
+        ) {
+            let intersection = a.intersect(&b);
+            prop_assert_eq!(intersection, b.intersect(&a));
+            if let Some(intersection) = intersection {
+                prop_assert!(!intersection.is_zero());
+                prop_assert!(a.contains_rect(&intersection));
+                prop_assert!(b.contains_rect(&intersection));
+            }
+            if a.contains_rect(&b) && !b.is_zero() {
+                prop_assert_eq!(a.intersect(&b), Some(b));
+            }
+        }
+
+        #[test]
+        fn boundary_point_clamping_is_total(
+            point in (boundary_u32(), boundary_u32()).prop_map(Point::from),
+            rect in boundary_rect_strategy(),
+        ) {
+            let clamped = point.clamp(rect);
+            if rect.is_zero() {
+                prop_assert_eq!(clamped, rect.tl);
+            } else {
+                prop_assert!(rect.contains_point(clamped));
+            }
+        }
+
         #[test]
         fn intersection_is_commutative_and_contained(a in rect_strategy(), b in rect_strategy()) {
             let ab = a.intersect(&b);
@@ -739,9 +797,8 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "offset exceeds rectangle height")]
     fn line_rejects_bottom_edge() {
-        Rect::new(0, 0, 10, 10).line(10);
+        assert!(Rect::new(0, 0, 10, 10).line(10).is_err());
     }
 
     #[test]
@@ -758,7 +815,8 @@ mod tests {
         assert!(r.contains_rect(&r));
 
         let r = Rect::new(0, 0, 0, 0);
-        assert!(r.contains_point((0, 0)));
+        assert!(!r.contains_point((0, 0)));
+        assert!(r.contains_rect(&r));
 
         Ok(())
     }
@@ -834,7 +892,7 @@ mod tests {
             p.scroll_within(-10, -10, Rect::new(10, 10, 10, 10),)
         );
         assert_eq!(
-            Point { x: 20, y: 20 },
+            Point { x: 19, y: 19 },
             p.scroll_within(10, 10, Rect::new(10, 10, 10, 10),)
         );
         assert_eq!(

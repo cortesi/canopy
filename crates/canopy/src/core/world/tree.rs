@@ -78,12 +78,13 @@ impl MountedWidget {
 
 impl Core {
     /// Add a boxed widget to the arena and return its node ID.
-    pub(super) fn add_boxed(&mut self, widget: Box<dyn Widget>) -> NodeId {
+    pub(super) fn add_boxed(&mut self, widget: Box<dyn Widget>) -> Result<NodeId> {
         let layout = widget.layout();
+        layout.validate()?;
         let name = widget.name();
         let widget_type = widget.as_ref().type_id();
 
-        self.nodes.insert(Node {
+        Ok(self.nodes.insert(Node {
             widget: Rc::new(RwLock::new(Some(widget))),
             widget_type,
             parent: None,
@@ -102,7 +103,7 @@ impl Core {
             layout_dirty: false,
             effects: None,
             clear_inherited_effects: false,
-        })
+        }))
     }
 
     /// Update the layout for a node.
@@ -118,6 +119,7 @@ impl Core {
             .ok_or_else(|| Error::Internal("missing node".into()))?;
         let mut layout = node_ref.layout;
         f(&mut layout);
+        layout.validate()?;
         if let Some(node) = self.nodes.get_mut(node) {
             node.layout = layout;
         }
@@ -165,6 +167,10 @@ impl Core {
         if !self.nodes.contains_key(node_id) {
             return Err(Error::NodeNotFound(node_id));
         }
+        let name = widget.name();
+        let layout = widget.layout();
+        layout.validate()?;
+        let widget_type = widget.as_ref().type_id();
 
         let plan = if remove_descendants {
             self.plan_subtree_removal(node_id, "replace subtree")?
@@ -203,9 +209,6 @@ impl Core {
             self.clear_removed_targets(&removed);
         }
 
-        let name = widget.name();
-        let layout = widget.layout();
-        let widget_type = widget.as_ref().type_id();
         let node = self
             .nodes
             .get_mut(node_id)
@@ -634,7 +637,7 @@ impl Core {
     }
 
     /// Create a node in the arena detached from the tree.
-    pub fn create_detached<W>(&mut self, widget: W) -> NodeId
+    pub fn create_detached<W>(&mut self, widget: W) -> Result<NodeId>
     where
         W: Widget + 'static,
     {
@@ -642,7 +645,7 @@ impl Core {
     }
 
     /// Create a node in the arena detached from the tree using a boxed widget.
-    pub fn create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> NodeId {
+    pub fn create_detached_boxed(&mut self, widget: Box<dyn Widget>) -> Result<NodeId> {
         self.add_boxed(widget)
     }
 
@@ -653,7 +656,7 @@ impl Core {
                 operation: "create detached",
             });
         }
-        Ok(self.create_detached_boxed(widget))
+        self.create_detached_boxed(widget)
     }
 
     /// Add a boxed widget as a child of a specific parent and return the new node ID.
@@ -664,7 +667,7 @@ impl Core {
     ) -> Result<NodeId> {
         let parent = parent.into();
         self.with_tree_edit("add child", |core| {
-            let child = core.create_detached_boxed(widget);
+            let child = core.create_detached_boxed(widget)?;
             core.attach(parent, child)?;
             Ok(child)
         })
@@ -682,7 +685,7 @@ impl Core {
             if core.child_keyed(parent, key).is_some() {
                 return Err(Error::DuplicateChildKey(key.to_string()));
             }
-            let child = core.create_detached_boxed(widget);
+            let child = core.create_detached_boxed(widget)?;
             core.attach_keyed(parent, key, child)?;
             Ok(child)
         })

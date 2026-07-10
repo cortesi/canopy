@@ -184,7 +184,7 @@ impl Widget for StatusBar {
         r.push_layer("statusbar");
         r.text(
             "statusbar/text",
-            ctx.view().outer_rect_local().line(0),
+            ctx.view().outer_rect_local().line(0)?,
             "intervals",
         )?;
         Ok(())

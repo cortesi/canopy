@@ -196,7 +196,7 @@ impl Widget for StatusBar {
     fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
         r.push_layer("statusbar");
         let label = self.label(ctx);
-        r.text("text", ctx.view().outer_rect_local().line(0), &label)?;
+        r.text("text", ctx.view().outer_rect_local().line(0)?, &label)?;
         Ok(())
     }
 }

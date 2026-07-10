@@ -2,7 +2,7 @@ use std::{result::Result as StdResult, sync::mpsc};
 
 use thiserror::Error;
 
-use crate::{commands::CommandError, core::id::NodeId, geom};
+use crate::{commands::CommandError, core::id::NodeId, geom, layout::LayoutValidationError};
 
 /// Result type for canopy-core operations.
 pub type Result<T> = StdResult<T, Error>;
@@ -55,6 +55,9 @@ pub enum Error {
     #[error("layout: {0}")]
     /// Layout failure.
     Layout(String),
+    /// Invalid layout configuration.
+    #[error(transparent)]
+    InvalidLayout(#[from] LayoutValidationError),
     #[error("runloop: {0}")]
     /// Run loop failure.
     RunLoop(String),

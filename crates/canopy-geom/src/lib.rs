@@ -1,4 +1,17 @@
 //! Geometry primitives used across canopy.
+//!
+//! Rectangles and line segments use half-open bounds: their near edge is
+//! included and their far edge is excluded. A rectangle is empty when either
+//! dimension is zero, contains no points, and never intersects another
+//! rectangle. Empty rectangles retain an anchor: one is contained by another
+//! rectangle when all of its (coincident) edges lie within the containing
+//! rectangle's closed edge bounds.
+//!
+//! Unsigned coordinates and sizes use saturating arithmetic unless an
+//! operation is explicitly fallible. Edge calculations widen before adding so
+//! rectangles extending beyond `u32::MAX` retain their full mathematical
+//! extent. Conversions to signed coordinates clamp values that cannot be
+//! represented.
 
 #![warn(missing_docs)]
 

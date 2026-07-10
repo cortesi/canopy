@@ -252,7 +252,7 @@ impl Root {
     where
         W: Widget + 'static,
     {
-        let app_id = canopy.create_detached(app);
+        let app_id = canopy.create_detached(app)?;
         Self::install_with_inspector(canopy.core_mut(), app_id, inspector_active)?;
         Ok(app_id)
     }
@@ -270,7 +270,7 @@ impl Root {
     ) -> Result<NodeId> {
         let app = app.into();
         // Create main pane container for app + inspector
-        let main_pane = core.create_detached(MainPane);
+        let main_pane = core.create_detached(MainPane)?;
         let inspector = Inspector::install(core)?;
 
         // Attach app and inspector to main pane
@@ -419,9 +419,9 @@ mod tests {
         let mut canopy = Canopy::new();
         Root::load(&mut canopy)?;
 
-        let app_id = canopy.create_detached(App);
-        let left = canopy.create_detached(FocusLeaf::new("left"));
-        let right = canopy.create_detached(FocusLeaf::new("right"));
+        let app_id = canopy.create_detached(App)?;
+        let left = canopy.create_detached(FocusLeaf::new("left"))?;
+        let right = canopy.create_detached(FocusLeaf::new("right"))?;
         canopy
             .core_mut()
             .set_children(app_id, vec![left.into(), right.into()])?;

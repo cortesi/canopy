@@ -344,11 +344,11 @@ impl Canopy {
     }
 
     /// Create a detached widget node.
-    pub fn create_detached<W>(&mut self, widget: W) -> TypedId<W>
+    pub fn create_detached<W>(&mut self, widget: W) -> Result<TypedId<W>>
     where
         W: Widget + 'static,
     {
-        TypedId::new(self.core.create_detached(widget))
+        Ok(TypedId::new(self.core.create_detached(widget)?))
     }
 
     /// Replace the root's children with a single node.
