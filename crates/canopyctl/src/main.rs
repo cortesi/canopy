@@ -1,3 +1,4 @@
+#![deny(unsafe_code)]
 //! Command-line tooling for running and automating canopy apps.
 
 use std::{

@@ -1,3 +1,4 @@
+#![deny(unsafe_code)]
 //! Developer workflow tasks for the canopy workspace.
 
 use std::{
@@ -28,6 +29,8 @@ enum Task {
     Test,
     /// Type-check every tracked Luau source against its owning app surface.
     Luau,
+    /// Run targeted Loom and Miri checks for concurrent and unsafe code.
+    Dynamic,
     /// Run all smoke-test integration targets.
     Smoke,
 }
@@ -39,6 +42,7 @@ fn main() -> ExitCode {
         Task::Ci => run_ci(),
         Task::Test => run_test(),
         Task::Luau => exit_code(run_luau_check(&workspace_root())),
+        Task::Dynamic => run_dynamic(),
         Task::Smoke => run_smoke(),
     }
 }
@@ -48,6 +52,9 @@ const FORMAT_TOOLCHAIN: &str = "+nightly-2026-07-01";
 
 /// Cargo-nextest version required locally and in CI.
 const NEXTEST_VERSION: &str = "0.9.99";
+
+/// Rust nightly used for the repository's Miri checks.
+const MIRI_TOOLCHAIN: &str = "+nightly-2026-07-01";
 
 /// Run the workspace tidy workflow.
 fn run_tidy() -> ExitCode {
@@ -94,6 +101,50 @@ fn run_test() -> ExitCode {
     let workspace_root = workspace_root();
     if !run_nextest(&workspace_root) || !run_doctests(&workspace_root) {
         return ExitCode::FAILURE;
+    }
+    ExitCode::SUCCESS
+}
+
+/// Run the targeted deterministic-concurrency and unsafe-code suites.
+fn run_dynamic() -> ExitCode {
+    let workspace_root = workspace_root();
+    if installed_nextest_version(&workspace_root).as_deref() != Some(NEXTEST_VERSION) {
+        eprintln!("cargo-nextest {NEXTEST_VERSION} is required for the dynamic gate");
+        return ExitCode::FAILURE;
+    }
+    if !run_cargo_command(
+        &workspace_root,
+        &[
+            "nextest",
+            "run",
+            "--workspace",
+            "--all-features",
+            "-E",
+            "test(loom_)",
+        ],
+    ) {
+        return ExitCode::FAILURE;
+    }
+    for filter in [
+        "widget_slot_restores",
+        "core::backend::tests",
+        "reentrant_canopy_guard_restores_nested_stack",
+    ] {
+        if !run_cargo_command(
+            &workspace_root,
+            &[
+                MIRI_TOOLCHAIN,
+                "miri",
+                "test",
+                "-p",
+                "canopy",
+                "--all-features",
+                "--lib",
+                filter,
+            ],
+        ) {
+            return ExitCode::FAILURE;
+        }
     }
     ExitCode::SUCCESS
 }

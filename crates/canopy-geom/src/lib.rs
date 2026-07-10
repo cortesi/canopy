@@ -1,3 +1,5 @@
+#![deny(unsafe_code)]
+#![warn(missing_docs)]
 //! Geometry primitives used across canopy.
 //!
 //! Rectangles and line segments use half-open bounds: their near edge is
@@ -12,8 +14,6 @@
 //! rectangles extending beyond `u32::MAX` retain their full mathematical
 //! extent. Conversions to signed coordinates clamp values that cannot be
 //! represented.
-
-#![warn(missing_docs)]
 
 /// Error types for geometry operations.
 mod error;

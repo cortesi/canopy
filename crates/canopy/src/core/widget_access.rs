@@ -1,6 +1,6 @@
-use std::ptr::NonNull;
+use std::rc::Rc;
 
-use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
+use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use super::{context::CoreViewContext, id::NodeId, node::Node, world::Core};
 use crate::{
@@ -73,10 +73,8 @@ impl<'a> WidgetMutGuard<'a> {
 
 /// Temporary widget extraction guard for callbacks that need mutable core access.
 pub struct WidgetSlotGuard {
-    /// Core pointer used to restore the slot on drop.
-    core: NonNull<Core>,
-    /// Node that owns the widget slot.
-    node_id: NodeId,
+    /// Owned reference to the extracted widget slot.
+    slot: Rc<RwLock<Option<Box<dyn Widget>>>>,
     /// Widget owned while the node slot is empty.
     widget: Option<Box<dyn Widget>>,
 }
@@ -88,14 +86,15 @@ impl WidgetSlotGuard {
             .nodes
             .get(node_id)
             .ok_or(Error::NodeNotFound(node_id))?;
-        let mut slot = node
-            .widget
-            .try_write()
-            .ok_or(Error::ReentrantWidgetBorrow(node_id))?;
-        let widget = slot.take().ok_or(Error::ReentrantWidgetBorrow(node_id))?;
+        let slot = Rc::clone(&node.widget);
+        let widget = {
+            let mut widget = slot
+                .try_write()
+                .ok_or(Error::ReentrantWidgetBorrow(node_id))?;
+            widget.take().ok_or(Error::ReentrantWidgetBorrow(node_id))?
+        };
         Ok(Self {
-            core: NonNull::from(core),
-            node_id,
+            slot,
             widget: Some(widget),
         })
     }
@@ -110,19 +109,10 @@ impl WidgetSlotGuard {
 
 impl Drop for WidgetSlotGuard {
     fn drop(&mut self) {
-        // SAFETY: `WidgetSlotGuard` is created only from a live `Core` reference and never leaves
-        // the callback that created it. During the guard lifetime, the removed widget is owned by
-        // this guard. On drop, restoration is best-effort: if the node was removed, or if a
-        // replacement widget already occupies the slot, this guard drops its widget instead of
-        // overwriting current tree state.
-        unsafe {
-            let core = self.core.as_ref();
-            if let Some(node) = core.nodes.get(self.node_id)
-                && let Some(mut slot) = node.widget.try_write()
-                && slot.is_none()
-            {
-                *slot = self.widget.take();
-            }
+        if let Some(mut slot) = self.slot.try_write()
+            && slot.is_none()
+        {
+            *slot = self.widget.take();
         }
     }
 }

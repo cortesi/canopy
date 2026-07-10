@@ -359,7 +359,7 @@ the normal CI and source archive depend on specially provisioned sibling checkou
    scripting, then unify their minimized failure output. Generate failures at every fallible
    boundary rather than building a second set of overlapping model tests.
 
-44. [ ] Add targeted dynamic checks for unsafe and concurrent code.
+44. [x] Add targeted dynamic checks for unsafe and concurrent code.
 
    Run Miri on the widget-slot guard, terminal-session, and script-reentrancy tests. Use a
    maintained deterministic concurrency checker only for the terminal driver and poller, and deny

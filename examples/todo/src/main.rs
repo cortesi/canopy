@@ -1,3 +1,4 @@
+#![deny(unsafe_code)]
 //! Command-line entry point for the Todo example application.
 
 use std::{path::PathBuf, process};

@@ -4435,6 +4435,42 @@ mod tests {
         }
     }
 
+    #[test]
+    fn reentrant_canopy_guard_restores_nested_stack() -> Result<()> {
+        REENTRANT_CANOPY.with(|stack| assert!(stack.borrow().is_empty()));
+        let mut outer = Canopy::new();
+        let mut inner = Canopy::new();
+
+        {
+            let _outer_guard = ReentrantCanopyGuard::push(&mut outer);
+            with_reentrant_canopy(|canopy| {
+                canopy.script_context_stack.push(canopy.root_id());
+                Ok(())
+            })
+            .expect("outer guard installed")?;
+
+            {
+                let _inner_guard = ReentrantCanopyGuard::push(&mut inner);
+                with_reentrant_canopy(|canopy| {
+                    canopy.script_context_stack.push(canopy.root_id());
+                    Ok(())
+                })
+                .expect("inner guard installed")?;
+            }
+
+            with_reentrant_canopy(|canopy| {
+                canopy.script_context_stack.push(canopy.root_id());
+                Ok(())
+            })
+            .expect("outer guard restored")?;
+        }
+
+        assert_eq!(outer.script_context_stack.len(), 2);
+        assert_eq!(inner.script_context_stack.len(), 1);
+        assert!(with_reentrant_canopy(|_| Ok(())).is_none());
+        Ok(())
+    }
+
     /// Build one marshaled table pair for value-policy tests.
     fn pair(key: MarshaledValue, value: MarshaledValue) -> MarshaledPair {
         MarshaledPair { key, value }

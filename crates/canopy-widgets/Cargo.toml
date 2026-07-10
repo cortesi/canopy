@@ -28,6 +28,7 @@ itty-core = { version = "0.1.0", path = "../../../itty/crates/itty-core" }
 canopy = { path = "../canopy", features = ["testing"] }
 criterion = "0.8"
 itty-script = { path = "../../../itty/crates/itty-script" }
+loom = "0.7.2"
 proptest = "1.11.0"
 
 [features]

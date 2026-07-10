@@ -364,4 +364,66 @@ mod tests {
             drop(Poller::new(event_tx));
         }
     }
+
+    #[test]
+    fn loom_poller_schedule_shutdown_protocol() {
+        loom::model(|| {
+            use loom::{
+                sync::{
+                    Arc, Mutex,
+                    atomic::{AtomicBool, AtomicUsize, Ordering},
+                    mpsc,
+                },
+                thread,
+            };
+
+            #[derive(Clone, Copy)]
+            enum Command {
+                Schedule,
+                Shutdown,
+            }
+
+            let (tx, rx) = mpsc::channel();
+            let sender = Arc::new(Mutex::new(Some(tx)));
+            let accepted = Arc::new(AtomicBool::new(false));
+            let processed = Arc::new(AtomicUsize::new(0));
+
+            let worker_processed = Arc::clone(&processed);
+            let worker = thread::spawn(move || {
+                while let Ok(command) = rx.recv() {
+                    match command {
+                        Command::Schedule => {
+                            worker_processed.fetch_add(1, Ordering::SeqCst);
+                        }
+                        Command::Shutdown => break,
+                    }
+                }
+            });
+
+            let schedule_sender = Arc::clone(&sender);
+            let schedule_accepted = Arc::clone(&accepted);
+            let schedule = thread::spawn(move || {
+                let sender = schedule_sender.lock().expect("sender lock");
+                if let Some(sender) = sender.as_ref() {
+                    sender.send(Command::Schedule).expect("worker alive");
+                    schedule_accepted.store(true, Ordering::SeqCst);
+                }
+            });
+
+            let shutdown_sender = Arc::clone(&sender);
+            let shutdown = thread::spawn(move || {
+                if let Some(sender) = shutdown_sender.lock().expect("sender lock").take() {
+                    sender.send(Command::Shutdown).expect("worker alive");
+                }
+            });
+
+            schedule.join().expect("schedule thread");
+            shutdown.join().expect("shutdown thread");
+            worker.join().expect("worker thread");
+            assert_eq!(
+                processed.load(Ordering::SeqCst),
+                usize::from(accepted.load(Ordering::SeqCst))
+            );
+        });
+    }
 }

@@ -1,3 +1,4 @@
+#![deny(unsafe_code)]
 #![warn(missing_docs)]
 
 //! MCP and smoke-test helpers for canopy applications.

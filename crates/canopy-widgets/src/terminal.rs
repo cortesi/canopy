@@ -1245,6 +1245,7 @@ mod tests {
         collections::BTreeMap,
         sync::{
             Arc,
+            atomic::Ordering,
             mpsc::{self, TryRecvError},
         },
         thread,
@@ -1383,5 +1384,43 @@ mod tests {
 
         let encoded = encode_mouse(&event, &state).expect("mouse bytes");
         assert_eq!(encoded, b"\x1b[<0;5;7M");
+    }
+
+    #[test]
+    fn loom_terminal_driver_handoff_protocol() {
+        loom::model(|| {
+            use loom::{
+                sync::{Arc, Mutex, atomic::AtomicBool, mpsc},
+                thread,
+            };
+            let (tx, rx) = mpsc::channel();
+            let seen = Arc::new(Mutex::new(Vec::new()));
+            let polling = Arc::new(AtomicBool::new(false));
+
+            let first_tx = tx.clone();
+            let first = thread::spawn(move || first_tx.send(1_u8).expect("UI driver alive"));
+            let second = thread::spawn(move || tx.send(2_u8).expect("UI driver alive"));
+
+            let ui_seen = Arc::clone(&seen);
+            let ui_polling = Arc::clone(&polling);
+            let ui = thread::spawn(move || {
+                assert!(!ui_polling.swap(true, Ordering::SeqCst));
+                for _ in 0..2 {
+                    ui_seen
+                        .lock()
+                        .expect("seen lock")
+                        .push(rx.recv().expect("driver input"));
+                }
+                ui_polling.store(false, Ordering::SeqCst);
+            });
+
+            first.join().expect("first producer");
+            second.join().expect("second producer");
+            ui.join().expect("UI consumer");
+            let mut seen = seen.lock().expect("seen lock").clone();
+            seen.sort_unstable();
+            assert_eq!(seen, [1, 2]);
+            assert!(!polling.load(Ordering::SeqCst));
+        });
     }
 }

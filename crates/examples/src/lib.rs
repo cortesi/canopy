@@ -1,3 +1,5 @@
+#![deny(unsafe_code)]
+#![warn(missing_docs)]
 //! Example widgets used by canopy demos.
 
 use canopy::{Canopy, error::Result};

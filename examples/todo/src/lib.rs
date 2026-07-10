@@ -1,3 +1,5 @@
+#![deny(unsafe_code)]
+#![warn(missing_docs)]
 //! Todo application used as Canopy's end-to-end example and smoke-test target.
 
 use std::{fmt::Display, mem, path::Path};

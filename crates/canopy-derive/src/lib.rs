@@ -1,3 +1,5 @@
+#![deny(unsafe_code)]
+#![warn(missing_docs)]
 //! Proc-macro support for canopy commands and nodes.
 
 /// Command metadata token emission.
