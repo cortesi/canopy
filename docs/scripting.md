@@ -64,6 +64,15 @@ Injected Rust parameters, such as context and events, are not supplied by script
 They are filled by command dispatch when available. Missing injections fail the
 command.
 
+Values crossing from Luau into command arguments follow one policy on synchronous and
+asynchronous paths. Finite integral numbers in the `i64` range become integers; other finite
+numbers remain floats; non-finite numbers fail conversion. Strings must be valid UTF-8. Empty
+tables become maps, dense positive integer tables become arrays, and string-keyed tables become
+maps. Sparse, mixed-key, and unsupported-key tables fail with a path to the nested value.
+
+Live `NodeId` userdata retains its process-local identity. A marshaled Node ID token is only an
+external data record and does not reconstruct that identity.
+
 ## Bindings
 
 Scripts can create key and mouse bindings with `canopy.bind`, `canopy.bind_with`,
@@ -76,6 +85,22 @@ matching key bindings. `canopy.clear_bindings()` removes every binding.
 Registered widget default bindings appear as `owner.default_bindings()` in the
 generated API. Calling that helper installs the Rust-registered default binding script
 for that owner.
+
+## Persistent Modules
+
+Canopy can mount existing user and project directories at `@user` and `@project`. The roots are
+validated when the API is finalized. Scripts may use explicit-root imports such as
+`require("@user/keymap")` and relative imports within the current mount. Parent traversal, unknown
+mounts, ambiguous reverse mappings, and symlink escapes are rejected.
+
+Rooted config and startup files keep one source identity through typechecking, compilation,
+loading, diagnostics, and tracebacks. `init.luau` maps to its mount root (`@user` or `@project`),
+matching directory-module resolution.
+
+The three invalidation methods refresh all roots, `@user`, or `@project`. Invalidation also removes
+Luau-backed key and mouse bindings and pending startup hooks because their retained function
+handles belong to the previous source epoch. The next script load prepares dependencies again;
+ordinary Rust command and mode bindings remain installed.
 
 ## Startup Scripts
 
@@ -90,9 +115,9 @@ function setup()
 end
 ```
 
-Canopy typechecks startup roots with an obligated checker before execution. Missing or
-mismatched obligations fail startup with a `required-export` diagnostic naming the
-global and required type. App code may add more obligations with
+Canopy typechecks startup roots against an obligated surface before execution. Missing or
+mismatched obligations fail startup with a diagnostic naming the global and required type. App
+code may add more obligations with
 `Canopy::require_startup_global(name, type_text)` before `finalize_api()`.
 
 Keep top level startup code to imports, locals, and pure construction. Put side effects
@@ -135,8 +160,8 @@ MCP evaluation returns:
 using the ruau type checker and returns a `ScriptCheckResult`. Checking is available
 unconditionally on every build target.
 
-Diagnostics use source-bound `error` or `warning` severities. Error diagnostics fail
-MCP evaluation before execution.
+Diagnostics use `error` or `warning` severities and carry a source name when Ruau associates them
+with a named source. Error diagnostics fail MCP evaluation before execution.
 
 Debug builds typecheck scripts before compiling them after API finalization. Release
 builds skip that enforcement.
@@ -148,8 +173,8 @@ API finalization from a validated surface: the static preamble plus per-owner co
 declarations are audited against the host functions actually registered, so the typed
 surface and the runtime surface cannot drift apart. The VM is sandboxed: globals are
 frozen, and each compiled script runs in its own chunk environment, so global writes
-in one script are not visible to another. Runtime compilation (`loadstring`) and
-`require` are not available.
+in one script are not visible to another. Runtime compilation (`loadstring`) is not available.
+`require` is available only through configured module sources such as the persistent roots above.
 
 Every script invocation runs under resource ceilings: a gas (instruction) budget
 bounds runaway loops even without an explicit timeout, and a memory cap bounds

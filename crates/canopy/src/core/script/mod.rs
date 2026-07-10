@@ -16,21 +16,19 @@ use std::{
 use futures::executor;
 use ruau::{
     bytecode::{BytecodeChunk, CompileError, CompileOptions},
-    decl::DeclSource,
-    source::{ModuleId, ModuleSource},
-    surface::{Surface, VmConfig},
-    typecheck::{Checker, Diagnostic as TypeDiagnostic, Payload, Severity},
+    host::{FunctionHandle, RetainedRuntime, RetainedRuntimeError, RootHandle},
+    module::{NativeBinding, NativeModuleBuilder},
+    source::{ModuleId, ModuleSource, Source},
+    surface::{PrepareGraphError, PrepareOptions, PreparedGraphScript, Surface, VmConfig},
+    typecheck::{DiagnosticRecord, ModuleDiagnosticRecord, Severity},
     vm::{
         Ambient, AsyncHostContext, AsyncHostFunction, CallOptions, Cancel, ExecError, FromLuaMulti,
-        Function, HostType, HostTypeBuilder, IntoLua, Limits, LoadedModule, MarshaledPair,
-        MarshaledScriptError, MarshaledValue, ModuleBuilderExt, MultiValue, RuntimeCapabilities,
-        RuntimeError, Scope, ScopedHostFunction, ScopedValue, ScriptError, SinkQuota,
-        StashedClosure, Table, Vm, async_host_fn,
+        Function, HostType, HostTypeBuilder, IntoLua, Limits, MarshaledPair, MarshaledScriptError,
+        MarshaledValue, MultiValue, RuntimeCapabilities, RuntimeError, Scope, ScopedValue,
+        ScriptError, SinkQuota, StashedClosure, Table, TableLayout, UnsupportedTableKey,
+        async_host_fn, classify_marshaled_table,
     },
-    vm_api::{
-        HostReturn, ModuleBinding, ModuleBuilder, NativeModule, OwnedValue, RuntimeErrorKind,
-        ScriptErrorField,
-    },
+    vm_api::{HostReturn, NativeModule, OwnedValue, RuntimeErrorKind, ScriptErrorField},
 };
 use serde::{Deserialize, Serialize};
 use tokio::{
@@ -88,6 +86,8 @@ pub struct ScriptAssertion {
 /// Structured Luau typecheck diagnostic.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScriptCheckDiagnostic {
+    /// Diagnostic source name, when the diagnostic belongs to a named source.
+    pub source: Option<String>,
     /// Diagnostic severity such as `error` or `warning`.
     pub severity: String,
     /// One-based line number, or zero when the diagnostic is not source-bound.
@@ -102,6 +102,7 @@ impl ScriptCheckDiagnostic {
     /// Construct an error diagnostic at a source location.
     pub fn error(line: usize, column: usize, message: impl Into<String>) -> Self {
         Self {
+            source: None,
             severity: "error".to_string(),
             line,
             column,
@@ -112,6 +113,20 @@ impl ScriptCheckDiagnostic {
     /// Return true if this diagnostic should fail script evaluation.
     pub fn is_error(&self) -> bool {
         self.severity == "error"
+    }
+}
+
+impl fmt::Display for ScriptCheckDiagnostic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(source) = &self.source {
+            write!(
+                f,
+                "{source}:{}:{}: {}",
+                self.line, self.column, self.message
+            )
+        } else {
+            write!(f, "{}:{}: {}", self.line, self.column, self.message)
+        }
     }
 }
 
@@ -153,19 +168,18 @@ impl ScriptCheckResult {
     }
 }
 
-/// Cached compiled script: the compiled chunk plus its module once loaded into
-/// the retained VM. Loading happens at `finalize()` for scripts compiled
-/// earlier, and at `compile()` time afterwards.
+/// Cached compiled script and its retained root once the host is finalized.
 struct Script {
     /// Compiled bytecode chunk.
     chunk: BytecodeChunk,
     /// Original source text.
     source: String,
-    /// Module name used when loading the chunk into the retained VM.
-    module_name: Vec<u8>,
-    /// Module loaded into the retained VM, shared so executions need not hold
-    /// the host state borrow while the script runs.
-    module: Option<Rc<LoadedModule>>,
+    /// Strict source executed at runtime, including identity and diagnostic metadata.
+    runtime_source: Source,
+    /// Checked graph artifact used to produce the chunk, when the surface is finalized.
+    prepared: Option<PreparedGraphScript>,
+    /// Root loaded into the retained runtime.
+    root: Option<RootHandle>,
 }
 
 /// Compiled script cache.
@@ -187,7 +201,13 @@ impl ScriptCache {
     }
 
     /// Insert a compiled script and return its id.
-    fn insert(&mut self, chunk: BytecodeChunk, source: &str, module_name: &[u8]) -> ScriptId {
+    fn insert(
+        &mut self,
+        chunk: BytecodeChunk,
+        source: &str,
+        runtime_source: Source,
+        prepared: Option<PreparedGraphScript>,
+    ) -> ScriptId {
         let id = self.next_script_id;
         self.next_script_id = self.next_script_id.saturating_add(1);
         self.scripts.insert(
@@ -195,18 +215,17 @@ impl ScriptCache {
             Script {
                 chunk,
                 source: source.to_string(),
-                module_name: module_name.to_vec(),
-                module: None,
+                runtime_source,
+                prepared,
+                root: None,
             },
         );
         id
     }
 
-    /// Return the loaded module for a script, if the script exists and is loaded.
-    fn module(&self, id: ScriptId) -> Option<Rc<LoadedModule>> {
-        self.scripts
-            .get(&id)
-            .and_then(|script| script.module.clone())
+    /// Return the retained root for a script, if it is loaded.
+    fn root(&self, id: ScriptId) -> Option<RootHandle> {
+        self.scripts.get(&id).and_then(|script| script.root.clone())
     }
 
     /// Return a clone of the compiled chunk for a script.
@@ -214,17 +233,33 @@ impl ScriptCache {
         self.scripts.get(&id).map(|script| script.chunk.clone())
     }
 
-    /// Return the module name used when loading a script.
-    fn module_name(&self, id: ScriptId) -> Option<Vec<u8>> {
+    /// Return the prepared graph for a script.
+    fn prepared(&self, id: ScriptId) -> Option<PreparedGraphScript> {
         self.scripts
             .get(&id)
-            .map(|script| script.module_name.clone())
+            .and_then(|script| script.prepared.clone())
     }
 
-    /// Record the loaded module for a script.
-    fn set_module(&mut self, id: ScriptId, module: Rc<LoadedModule>) {
+    /// Replace a script's compiled chunk with its checked graph artifact.
+    fn set_prepared(&mut self, id: ScriptId, prepared: PreparedGraphScript) {
         if let Some(script) = self.scripts.get_mut(&id) {
-            script.module = Some(module);
+            script.chunk = prepared.chunk().clone();
+            script.prepared = Some(prepared);
+        }
+    }
+
+    /// Record the loaded root for a script.
+    fn set_root(&mut self, id: ScriptId, root: RootHandle) {
+        if let Some(script) = self.scripts.get_mut(&id) {
+            script.root = Some(root);
+        }
+    }
+
+    /// Clear every loaded root after source invalidation.
+    fn clear_roots(&mut self) {
+        for script in self.scripts.values_mut() {
+            script.root = None;
+            script.prepared = None;
         }
     }
 
@@ -232,15 +267,31 @@ impl ScriptCache {
     fn source(&self, id: ScriptId) -> Option<String> {
         self.scripts.get(&id).map(|script| script.source.clone())
     }
+
+    /// Return the source executed for a script.
+    fn runtime_source(&self, id: ScriptId) -> Option<Source> {
+        self.scripts
+            .get(&id)
+            .map(|script| script.runtime_source.clone())
+    }
 }
 
 /// Stored Luau closure with a stable host-side id. The stash pins the closure
 /// in the VM registry; dropping it queues the release for the VM's next step.
 struct StoredFunction {
-    /// Registry-rooted closure handle.
-    stashed: StashedClosure,
+    /// Pending VM stash or retained generational handle.
+    target: StoredFunctionTarget,
     /// Help/debug label for the closure.
     label: Option<String>,
+}
+
+/// Callback state before and after promotion into the retained runtime.
+#[derive(Clone)]
+enum StoredFunctionTarget {
+    /// Stash created during the currently active VM invocation.
+    Pending(StashedClosure),
+    /// Generational retained-runtime handle.
+    Retained(FunctionHandle),
 }
 
 /// Stored Luau closure registry.
@@ -250,6 +301,8 @@ struct ClosureRegistry {
     functions: HashMap<LuauFunctionId, StoredFunction>,
     /// Next stored function identifier.
     next_function_id: u64,
+    /// Retained handles queued for release after the current VM invocation.
+    released: Vec<FunctionHandle>,
 }
 
 impl ClosureRegistry {
@@ -265,15 +318,21 @@ impl ClosureRegistry {
     fn insert(&mut self, stashed: StashedClosure, label: Option<String>) -> LuauFunctionId {
         let id = LuauFunctionId(self.next_function_id);
         self.next_function_id = self.next_function_id.saturating_add(1);
-        self.functions.insert(id, StoredFunction { stashed, label });
+        self.functions.insert(
+            id,
+            StoredFunction {
+                target: StoredFunctionTarget::Pending(stashed),
+                label,
+            },
+        );
         id
     }
 
-    /// Return a shared handle to a stored function's stash.
-    fn stashed(&self, id: LuauFunctionId) -> Option<StashedClosure> {
+    /// Return a stored function target.
+    fn target(&self, id: LuauFunctionId) -> Option<StoredFunctionTarget> {
         self.functions
             .get(&id)
-            .map(|function| function.stashed.clone())
+            .map(|function| function.target.clone())
     }
 
     /// Return the help/debug label for a stored function.
@@ -283,9 +342,39 @@ impl ClosureRegistry {
             .and_then(|function| function.label.clone())
     }
 
-    /// Remove a stored function, dropping its registry pin.
+    /// Remove a stored function and queue its retained handle for release.
     fn remove(&mut self, id: LuauFunctionId) {
-        self.functions.remove(&id);
+        if let Some(function) = self.functions.remove(&id)
+            && let StoredFunctionTarget::Retained(handle) = function.target
+        {
+            self.released.push(handle);
+        }
+    }
+
+    /// Promote pending stashes and release removed handles between VM invocations.
+    fn synchronize(
+        &mut self,
+        runtime: &mut RetainedRuntime,
+    ) -> StdResult<(), RetainedRuntimeError> {
+        for handle in self.released.drain(..) {
+            match runtime.release_function(&handle) {
+                Ok(()) | Err(RetainedRuntimeError::StaleHandle { .. }) => {}
+                Err(error) => return Err(error),
+            }
+        }
+        for function in self.functions.values_mut() {
+            if let StoredFunctionTarget::Pending(stash) = &function.target {
+                function.target =
+                    StoredFunctionTarget::Retained(runtime.stash_function(stash.clone()));
+            }
+        }
+        Ok(())
+    }
+
+    /// Forget every callback after a source generation change.
+    fn clear(&mut self) {
+        self.functions.clear();
+        self.released.clear();
     }
 }
 
@@ -349,10 +438,8 @@ struct LuauState {
     definitions: Option<String>,
     /// Audited script surface used for checks and VM construction.
     surface: Option<Surface>,
-    /// Retained checker for repeated checks against the finalized surface.
-    checker: Option<Checker>,
-    /// Retained checker with startup-script global obligations.
-    startup_checker: Option<Checker>,
+    /// Script surface with startup-root global obligations.
+    startup_surface: Option<Surface>,
     /// Typed globals every startup script root must define.
     startup_requirements: Vec<StartupRequirement>,
     /// Whether the command surface has been finalized.
@@ -378,12 +465,10 @@ impl LuauState {
     }
 
     /// Mark the script API as finalized and cache its definitions.
-    fn finalize(&mut self, definitions: String, surface: Surface, startup_checker: Checker) {
-        let checker = surface.new_checker();
+    fn finalize(&mut self, definitions: String, surface: Surface, startup_surface: Surface) {
         self.definitions = Some(definitions);
         self.surface = Some(surface);
-        self.checker = Some(checker);
-        self.startup_checker = Some(startup_checker);
+        self.startup_surface = Some(startup_surface);
         self.finalized = true;
     }
 
@@ -503,14 +588,11 @@ pub(crate) fn in_live_scope(canopy: &Canopy) -> bool {
 /// Luau host state shared by the canopy runtime.
 #[derive(Clone)]
 pub(crate) struct LuauHost {
-    /// Retained ruau VM, built by `finalize()`.
-    vm: Rc<RefCell<Option<Vm>>>,
+    /// Retained Ruau runtime, built by `finalize()`.
+    runtime: Rc<RefCell<Option<RetainedRuntime>>>,
     /// Shared mutable host state.
     state: Rc<RefCell<LuauState>>,
 }
-
-/// Backwards-compatible type alias used throughout the current codebase.
-pub(crate) type ScriptHost = LuauHost;
 
 impl fmt::Debug for LuauHost {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -551,6 +633,26 @@ fn invocation_limits(timeout: Option<Duration>) -> Limits {
     }
 }
 
+/// Build per-invocation options and capture script output for host diagnostics.
+fn invocation_options(
+    timeout: Option<Duration>,
+    print_lines: &Arc<Mutex<Vec<String>>>,
+) -> CallOptions {
+    let sink_lines = Arc::clone(print_lines);
+    CallOptions::new()
+        .limits(invocation_limits(timeout))
+        .print_sink_with_quota(
+            Box::new(move |bytes: &[u8]| {
+                let line = String::from_utf8_lossy(bytes).trim_end().to_string();
+                tracing::info!("{line}");
+                if let Ok(mut lines) = sink_lines.lock() {
+                    lines.push(line);
+                }
+            }),
+            PRINT_QUOTA,
+        )
+}
+
 /// Prefix scripts with strict mode unless they already declare a mode.
 fn strict_source(source: &str) -> String {
     let trimmed = source.trim_start();
@@ -559,6 +661,27 @@ fn strict_source(source: &str) -> String {
     } else {
         format!("--!strict\n{source}")
     }
+}
+
+/// Build one named strict source for checking, compilation, loading, and tracebacks.
+fn named_source(module_id: impl Into<ModuleId>, source: &str) -> Source {
+    Source::text(module_id, strict_source(source))
+}
+
+/// Replace source text while retaining module identity and diagnostic metadata.
+fn source_with_text(source: &Source, text: String) -> Source {
+    Source::text(source.id().clone(), text).with_metadata(source.metadata().clone())
+}
+
+/// Apply Canopy strict mode to a source while preserving its full identity.
+fn strict_named_source(source: &Source) -> Result<Source> {
+    let text = source.as_str().ok_or_else(|| {
+        error::Error::Invalid(format!(
+            "script source {} is not valid UTF-8",
+            source.display_name()
+        ))
+    })?;
+    Ok(source_with_text(source, strict_source(text)))
 }
 
 /// Runtime source for a startup script: evaluate the root, then call its
@@ -576,13 +699,6 @@ fn startup_runtime_source(source: &str) -> String {
 /// Compile Luau source under the canopy profile before the surface is finalized.
 fn compile_chunk(source: &str) -> Result<BytecodeChunk> {
     compile_chunk_with_runtime_capabilities(&canopy_runtime_capabilities(), source)
-}
-
-/// Compile Luau source under the finalized canopy surface.
-fn compile_chunk_with_surface(surface: &Surface, source: &str) -> Result<BytecodeChunk> {
-    surface
-        .compile_bytes(source.as_bytes())
-        .map_err(|err| compile_error_to_canopy(&err))
 }
 
 /// Compile Luau source under explicit VM runtime capabilities.
@@ -610,53 +726,72 @@ fn compile_error_to_canopy(err: &CompileError) -> error::Error {
 fn format_typecheck_diagnostics(result: &ScriptCheckResult) -> String {
     result
         .errors()
-        .map(|diagnostic| {
-            format!(
-                "{}:{}: {}",
-                diagnostic.line, diagnostic.column, diagnostic.message
-            )
-        })
+        .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join("\n")
 }
 
-/// Convert an Ruau type diagnostic to Canopy's stable script diagnostic shape.
-pub(crate) fn type_diagnostic_to_script(diagnostic: &TypeDiagnostic) -> ScriptCheckDiagnostic {
-    let begin = diagnostic.primary_location.begin;
-    let message = match &diagnostic.typed_payload {
-        Payload::RequiredExport {
-            name,
-            required,
-            actual,
-        } => match actual {
-            Some(actual) => format!(
-                "required-export: required global '{name}' has type '{actual}', expected '{required}'"
-            ),
-            None => {
-                format!(
-                    "required-export: required global '{name}' is missing, expected '{required}'"
-                )
-            }
-        },
-        _ => format!(
-            "{}: {}",
-            diagnostic.category,
-            diagnostic
-                .context
-                .as_deref()
-                .unwrap_or("type checker diagnostic")
-        ),
+/// Convert one owned Ruau diagnostic record to Canopy's stable script shape.
+pub(crate) fn diagnostic_record_to_script(
+    source: Option<String>,
+    diagnostic: DiagnosticRecord,
+) -> ScriptCheckDiagnostic {
+    let (line, column) = if diagnostic.primary_location.is_missing() {
+        (0, 0)
+    } else {
+        let begin = diagnostic.primary_location.begin;
+        (begin.line as usize, begin.column as usize)
     };
     ScriptCheckDiagnostic {
+        source,
         severity: match diagnostic.severity {
             Severity::Error => "error",
             Severity::Warning | Severity::Info => "warning",
         }
         .to_string(),
-        line: begin.line as usize + 1,
-        column: begin.column as usize + 1,
-        message,
+        line,
+        column,
+        message: diagnostic.message,
     }
+}
+
+/// Convert one module-qualified record through the shared Canopy adapter.
+fn module_diagnostic_to_script(diagnostic: ModuleDiagnosticRecord) -> ScriptCheckDiagnostic {
+    diagnostic_record_to_script(Some(diagnostic.display_name), diagnostic.diagnostic)
+}
+
+/// Check a named source and convert its owned diagnostics through the Canopy adapter.
+fn check_source_with_surface(surface: &Surface, source: &Source) -> ScriptCheckResult {
+    let source_name = source.display_name().to_string();
+    let checked = surface.check(source);
+    ScriptCheckResult {
+        diagnostics: checked
+            .diagnostics()
+            .records()
+            .map(|diagnostic| diagnostic_record_to_script(Some(source_name.clone()), diagnostic))
+            .collect(),
+    }
+}
+
+/// Convert preparation failures into Canopy's existing public error categories.
+fn prepare_graph_error_to_canopy(error: &PrepareGraphError) -> error::Error {
+    if let Some(diagnostics) = error.diagnostics()
+        && diagnostics.has_errors()
+    {
+        let result = ScriptCheckResult {
+            diagnostics: diagnostics
+                .records()
+                .map(module_diagnostic_to_script)
+                .collect(),
+        };
+        return error::Error::Parse(error::ParseError::new(format_typecheck_diagnostics(
+            &result,
+        )));
+    }
+    if let Some(error) = error.compile_error() {
+        return compile_error_to_canopy(error);
+    }
+    error::Error::Script(format!("preparing script graph failed: {error}"))
 }
 
 /// Convert a displayable error into a canopy script error.
@@ -767,21 +902,17 @@ fn node_id_from_value<'s>(
     match value {
         ScopedValue::Userdata(userdata) => Ok(userdata.borrow::<NodeHandle>(scope)?.id),
         other => Err(RuntimeError::structured(
-            format!("expected NodeId, got {}", scoped_type_name(&other)),
+            format!("expected NodeId, got {}", other.type_name()),
             [
                 ScriptErrorField::new("kind", "type_mismatch"),
                 ScriptErrorField::new("expected", "NodeId"),
-                ScriptErrorField::new("got", scoped_type_name(&other)),
+                ScriptErrorField::new("got", other.type_name()),
             ],
         )),
     }
 }
 
 /// Return a display name for a scoped value's type.
-fn scoped_type_name(value: &ScopedValue<'_>) -> &'static str {
-    value.type_name()
-}
-
 /// Copy the text behind a scoped string value.
 fn scoped_value_to_string<'s>(
     scope: &Scope<'s>,
@@ -792,7 +923,7 @@ fn scoped_value_to_string<'s>(
             .string_bytes(text)
             .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
             .map_err(|err| err.to_string()),
-        other => Err(format!("expected string, got {}", scoped_type_name(&other))),
+        other => Err(format!("expected string, got {}", other.type_name())),
     }
 }
 
@@ -807,8 +938,125 @@ fn scoped_value_to_display<'s>(scope: &Scope<'s>, value: ScopedValue<'s>) -> Str
             .string_bytes(text)
             .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
             .unwrap_or_else(|_| "<string>".to_string()),
-        other => format!("<{}>", scoped_type_name(&other)),
+        other => format!("<{}>", other.type_name()),
     }
+}
+
+/// Canopy-owned location within a nested command value.
+#[derive(Clone)]
+struct ValuePath(String);
+
+impl ValuePath {
+    /// Start a value path at a named boundary.
+    fn root(name: &str) -> Self {
+        Self(name.to_string())
+    }
+
+    /// Extend this path with a one-based sequence index.
+    fn index(&self, index: usize) -> Self {
+        Self(format!("{}[{index}]", self.0))
+    }
+
+    /// Extend this path with a string map field.
+    fn field(&self, field: &str) -> Self {
+        if is_luau_identifier(field) {
+            Self(format!("{}.{field}", self.0))
+        } else {
+            let field = field.replace('\\', "\\\\").replace('"', "\\\"");
+            Self(format!("{}[\"{field}\"]", self.0))
+        }
+    }
+
+    /// Prefix a conversion failure with this path.
+    fn error(&self, message: impl fmt::Display) -> String {
+        format!("{}: {message}", self.0)
+    }
+}
+
+/// Return whether a string can use dotted Luau field notation.
+fn is_luau_identifier(value: &str) -> bool {
+    let mut chars = value.chars();
+    chars
+        .next()
+        .is_some_and(|first| first == '_' || first.is_ascii_alphabetic())
+        && chars.all(|character| character == '_' || character.is_ascii_alphanumeric())
+}
+
+/// Apply Canopy's shared numeric policy to a script number.
+fn number_to_arg_value(value: f64, path: &ValuePath) -> StdResult<ArgValue, String> {
+    if !value.is_finite() {
+        return Err(path.error("non-finite numbers are not supported"));
+    }
+    if value.fract() == 0.0 && value >= i64::MIN as f64 && value < -(i64::MIN as f64) {
+        Ok(ArgValue::Int(value as i64))
+    } else {
+        Ok(ArgValue::Float(value))
+    }
+}
+
+/// Reject table layouts outside Canopy's array-or-string-map domain model.
+fn reject_unsupported_layout(layout: &TableLayout, path: &ValuePath) -> StdResult<(), String> {
+    match layout {
+        TableLayout::Empty | TableLayout::Sequence { .. } | TableLayout::StringMap { .. } => Ok(()),
+        TableLayout::Sparse { first_missing, .. } => {
+            Err(path.error(format!("sparse table missing index {first_missing}")))
+        }
+        TableLayout::Mixed { .. } => {
+            Err(path.error("mixed integer and string table keys are not supported"))
+        }
+        TableLayout::UnsupportedKey { key } => Err(path.error(unsupported_key_message(key))),
+        _ => Err(path.error("unsupported table layout")),
+    }
+}
+
+/// Describe one table key rejected by the shared Ruau classifier.
+fn unsupported_key_message(key: &UnsupportedTableKey) -> String {
+    match key {
+        UnsupportedTableKey::NonPositiveInteger { value } => {
+            format!("table index must be positive, got {value}")
+        }
+        UnsupportedTableKey::FractionalNumber { display } => {
+            format!("table index must be integral, got {display}")
+        }
+        UnsupportedTableKey::IndexOutOfRange { display } => {
+            format!("table index is out of range: {display}")
+        }
+        UnsupportedTableKey::DuplicateIndex { index } => {
+            format!("duplicate table index {index}")
+        }
+        UnsupportedTableKey::Type { type_name } => {
+            format!("unsupported table key type: {type_name}")
+        }
+        _ => "unsupported table key".to_string(),
+    }
+}
+
+/// Read a sequence key after `TableLayout` has established a dense layout.
+fn scoped_sequence_index(key: ScopedValue<'_>, path: &ValuePath) -> StdResult<usize, String> {
+    match key {
+        ScopedValue::Integer(index) => usize::try_from(index)
+            .map_err(|_| path.error(format!("table index is out of range: {index}"))),
+        ScopedValue::Number(index) => Ok(index as usize),
+        other => Err(path.error(format!(
+            "expected sequence index, got {}",
+            other.type_name()
+        ))),
+    }
+}
+
+/// Read a strict UTF-8 string key after layout classification.
+fn scoped_table_key<'s>(
+    scope: &Scope<'s>,
+    key: ScopedValue<'s>,
+    path: &ValuePath,
+) -> StdResult<String, String> {
+    let ScopedValue::String(key) = key else {
+        return Err(path.error(format!("expected string key, got {}", key.type_name())));
+    };
+    let bytes = scope
+        .string_bytes(key)
+        .map_err(|error| path.error(error.to_string()))?;
+    String::from_utf8(bytes).map_err(|error| path.error(format!("invalid UTF-8 key: {error}")))
 }
 
 /// Convert a scoped value into a dynamic command argument.
@@ -816,75 +1064,87 @@ fn scoped_to_arg_value<'s>(
     scope: &Scope<'s>,
     value: ScopedValue<'s>,
 ) -> StdResult<ArgValue, String> {
+    scoped_to_arg_value_at(scope, value, &ValuePath::root("value"))
+}
+
+/// Convert a scoped value at one nested command-value path.
+fn scoped_to_arg_value_at<'s>(
+    scope: &Scope<'s>,
+    value: ScopedValue<'s>,
+    path: &ValuePath,
+) -> StdResult<ArgValue, String> {
     match value {
         ScopedValue::Nil => Ok(ArgValue::Null),
         ScopedValue::Boolean(value) => Ok(ArgValue::Bool(value)),
         ScopedValue::Integer(value) => Ok(ArgValue::Int(value)),
-        // Whole numbers surface as integers, matching the previous VM's
-        // integer representation for integral Luau values.
-        ScopedValue::Number(value)
-            if value.fract() == 0.0 && (i64::MIN as f64..=i64::MAX as f64).contains(&value) =>
-        {
-            Ok(ArgValue::Int(value as i64))
-        }
-        ScopedValue::Number(value) => Ok(ArgValue::Float(value)),
-        ScopedValue::String(_) => Ok(ArgValue::String(scoped_value_to_string(scope, value)?)),
-        ScopedValue::Table(table) => table_to_arg_value(scope, table),
-        ScopedValue::Userdata(userdata) => Ok(ArgValue::Node(
-            userdata
-                .borrow::<NodeHandle>(scope)
-                .map_err(|err| err.message().to_string())?
-                .id,
-        )),
-        other => Err(format!(
+        ScopedValue::Number(value) => number_to_arg_value(value, path),
+        ScopedValue::String(text) => scope
+            .string_bytes(text)
+            .map_err(|error| path.error(error.to_string()))
+            .and_then(|bytes| {
+                String::from_utf8(bytes)
+                    .map(ArgValue::String)
+                    .map_err(|error| path.error(format!("invalid UTF-8 string: {error}")))
+            }),
+        ScopedValue::Table(table) => table_to_arg_value(scope, table, path),
+        ScopedValue::Userdata(userdata) => userdata
+            .borrow::<NodeHandle>(scope)
+            .map(|handle| ArgValue::Node(handle.id))
+            .map_err(|_| path.error("expected NodeId userdata")),
+        other => Err(path.error(format!(
             "unsupported script value type: {}",
-            scoped_type_name(&other)
-        )),
+            other.type_name()
+        ))),
     }
 }
 
 /// Convert a scoped table into an `ArgValue`.
-fn table_to_arg_value<'s>(scope: &Scope<'s>, table: Table<'s>) -> StdResult<ArgValue, String> {
-    let mut indexed = BTreeMap::new();
-    let mut named = BTreeMap::new();
-
-    for (key, value) in table.pairs(scope).map_err(|err| err.to_string())? {
-        match key {
-            ScopedValue::Integer(index) if index > 0 => {
-                indexed.insert(index as usize, scoped_to_arg_value(scope, value)?);
+fn table_to_arg_value<'s>(
+    scope: &Scope<'s>,
+    table: Table<'s>,
+    path: &ValuePath,
+) -> StdResult<ArgValue, String> {
+    let layout = table
+        .layout(scope)
+        .map_err(|error| path.error(error.to_string()))?;
+    reject_unsupported_layout(&layout, path)?;
+    match layout {
+        TableLayout::Empty => Ok(ArgValue::Map(BTreeMap::new())),
+        TableLayout::Sequence { len } => {
+            let mut values = vec![None; len];
+            for (key, value) in table
+                .pairs(scope)
+                .map_err(|error| path.error(error.to_string()))?
+            {
+                let index = scoped_sequence_index(key, path)?;
+                values[index - 1] = Some(scoped_to_arg_value_at(scope, value, &path.index(index))?);
             }
-            ScopedValue::Number(index) if index.fract() == 0.0 && index >= 1.0 => {
-                indexed.insert(index as usize, scoped_to_arg_value(scope, value)?);
-            }
-            ScopedValue::String(_) => {
-                let key = scoped_value_to_string(scope, key)?;
-                named.insert(key, scoped_to_arg_value(scope, value)?);
-            }
-            other => {
-                return Err(format!(
-                    "unsupported table key type for command args: {}",
-                    scoped_type_name(&other)
-                ));
-            }
+            Ok(ArgValue::Array(
+                values
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, value)| {
+                        value.ok_or_else(|| path.error(format!("missing index {}", index + 1)))
+                    })
+                    .collect::<StdResult<_, _>>()?,
+            ))
         }
-    }
-
-    if named.is_empty() && !indexed.is_empty() {
-        let mut values = Vec::with_capacity(indexed.len());
-        for expected in 1..=indexed.len() {
-            let value = indexed
-                .remove(&expected)
-                .ok_or_else(|| "sparse arrays are not supported in command args".to_string())?;
-            values.push(value);
+        TableLayout::StringMap { .. } => {
+            let mut values = BTreeMap::new();
+            for (key, value) in table
+                .pairs(scope)
+                .map_err(|error| path.error(error.to_string()))?
+            {
+                let key = scoped_table_key(scope, key, path)?;
+                values.insert(
+                    key.clone(),
+                    scoped_to_arg_value_at(scope, value, &path.field(&key))?,
+                );
+            }
+            Ok(ArgValue::Map(values))
         }
-        return Ok(ArgValue::Array(values));
+        _ => unreachable!("unsupported layouts were rejected"),
     }
-
-    if indexed.is_empty() {
-        return Ok(ArgValue::Map(named));
-    }
-
-    Err("mixed array/map tables are not supported in command args".into())
 }
 
 /// Convert an `ArgValue` into a scoped Luau value.
@@ -1621,7 +1881,7 @@ impl<'s> ArgReader<'s> {
             ScopedValue::Number(value) if value.fract() == 0.0 => Ok(value as i64),
             other => Err(RuntimeError::runtime(format!(
                 "argument {index}: expected integer, got {}",
-                scoped_type_name(&other)
+                other.type_name()
             ))),
         }
     }
@@ -1667,7 +1927,7 @@ impl<'s> ArgReader<'s> {
             ScopedValue::Function(function) => Ok(function),
             other => Err(RuntimeError::runtime(format!(
                 "argument {index}: expected function, got {}",
-                scoped_type_name(&other)
+                other.type_name()
             ))),
         }
     }
@@ -1680,7 +1940,7 @@ impl<'s> ArgReader<'s> {
             ScopedValue::Table(table) => Ok(Some(table)),
             other => Err(RuntimeError::runtime(format!(
                 "argument {index}: expected table, got {}",
-                scoped_type_name(&other)
+                other.type_name()
             ))),
         }
     }
@@ -1750,7 +2010,7 @@ fn optional_timeout_ms(value: ScopedValue<'_>) -> StdResult<Option<u64>, Runtime
         }
         other => Err(RuntimeError::runtime(format!(
             "expected non-negative timeout milliseconds, got {}",
-            scoped_type_name(&other)
+            other.type_name()
         ))),
     }
 }
@@ -2080,68 +2340,96 @@ impl CanopyErrorPayload {
 
 /// Convert an owned async-driver result into a command argument value.
 fn marshaled_to_arg_value(value: &MarshaledValue) -> StdResult<ArgValue, String> {
+    marshaled_to_arg_value_at(value, &ValuePath::root("result"))
+}
+
+/// Convert a marshaled value at one nested command-value path.
+fn marshaled_to_arg_value_at(
+    value: &MarshaledValue,
+    path: &ValuePath,
+) -> StdResult<ArgValue, String> {
     match value {
         MarshaledValue::Nil => Ok(ArgValue::Null),
         MarshaledValue::Boolean(value) => Ok(ArgValue::Bool(*value)),
         MarshaledValue::Integer(value) => Ok(ArgValue::Int(*value)),
-        MarshaledValue::Number(value)
-            if value.fract() == 0.0 && (i64::MIN as f64..=i64::MAX as f64).contains(value) =>
-        {
-            Ok(ArgValue::Int(*value as i64))
-        }
-        MarshaledValue::Number(value) => Ok(ArgValue::Float(*value)),
+        MarshaledValue::Number(value) => number_to_arg_value(*value, path),
         MarshaledValue::String(bytes) => Ok(ArgValue::String(
-            String::from_utf8(bytes.clone()).map_err(|err| err.to_string())?,
+            String::from_utf8(bytes.clone())
+                .map_err(|error| path.error(format!("invalid UTF-8 string: {error}")))?,
         )),
-        MarshaledValue::Table(pairs) => marshaled_table_to_arg_value(pairs),
-        MarshaledValue::Vector(_) => Err("unsupported script value type: vector".to_string()),
+        MarshaledValue::Table(pairs) => marshaled_table_to_arg_value(pairs, path),
+        MarshaledValue::Vector(_) => Err(path.error("unsupported script value type: vector")),
         MarshaledValue::LightUserdata { .. } => {
-            Err("unsupported script value type: lightuserdata".to_string())
+            Err(path.error("unsupported script value type: lightuserdata"))
         }
-        MarshaledValue::Buffer(_) => Err("unsupported script value type: buffer".to_string()),
-        MarshaledValue::Opaque(kind) => Err(format!("unsupported script value type: {kind}")),
+        MarshaledValue::Buffer(_) => Err(path.error("unsupported script value type: buffer")),
+        MarshaledValue::Opaque(kind) => {
+            Err(path.error(format!("unsupported script value type: {kind}")))
+        }
     }
 }
 
 /// Convert an owned marshaled table into a command argument value.
-fn marshaled_table_to_arg_value(pairs: &[MarshaledPair]) -> StdResult<ArgValue, String> {
-    let mut indexed = BTreeMap::new();
-    let mut named = BTreeMap::new();
-    for pair in pairs {
-        match &pair.key {
-            MarshaledValue::Integer(index) if *index > 0 => {
-                indexed.insert(*index as usize, marshaled_to_arg_value(&pair.value)?);
+fn marshaled_table_to_arg_value(
+    pairs: &[MarshaledPair],
+    path: &ValuePath,
+) -> StdResult<ArgValue, String> {
+    let layout = classify_marshaled_table(pairs);
+    reject_unsupported_layout(&layout, path)?;
+    match layout {
+        TableLayout::Empty => Ok(ArgValue::Map(BTreeMap::new())),
+        TableLayout::Sequence { len } => {
+            let mut values = vec![None; len];
+            for pair in pairs {
+                let index = marshaled_sequence_index(&pair.key, path)?;
+                values[index - 1] =
+                    Some(marshaled_to_arg_value_at(&pair.value, &path.index(index))?);
             }
-            MarshaledValue::Number(index) if index.fract() == 0.0 && *index >= 1.0 => {
-                indexed.insert(*index as usize, marshaled_to_arg_value(&pair.value)?);
-            }
-            MarshaledValue::String(bytes) => {
-                let key = String::from_utf8(bytes.clone()).map_err(|err| err.to_string())?;
-                named.insert(key, marshaled_to_arg_value(&pair.value)?);
-            }
-            other => {
-                return Err(format!(
-                    "unsupported table key type for command args: {}",
-                    other.type_name()
-                ));
-            }
+            Ok(ArgValue::Array(
+                values
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, value)| {
+                        value.ok_or_else(|| path.error(format!("missing index {}", index + 1)))
+                    })
+                    .collect::<StdResult<_, _>>()?,
+            ))
         }
+        TableLayout::StringMap { .. } => {
+            let mut values = BTreeMap::new();
+            for pair in pairs {
+                let key = marshaled_table_key(&pair.key, path)?;
+                values.insert(
+                    key.clone(),
+                    marshaled_to_arg_value_at(&pair.value, &path.field(&key))?,
+                );
+            }
+            Ok(ArgValue::Map(values))
+        }
+        _ => unreachable!("unsupported layouts were rejected"),
     }
-    if named.is_empty() && !indexed.is_empty() {
-        let mut values = Vec::with_capacity(indexed.len());
-        for expected in 1..=indexed.len() {
-            let value = indexed
-                .remove(&expected)
-                .ok_or_else(|| format!("sparse array table missing index {expected}"))?;
-            values.push(value);
-        }
-        Ok(ArgValue::Array(values))
-    } else {
-        for (index, value) in indexed {
-            named.insert(index.to_string(), value);
-        }
-        Ok(ArgValue::Map(named))
+}
+
+/// Read a sequence index from a classified marshaled key.
+fn marshaled_sequence_index(key: &MarshaledValue, path: &ValuePath) -> StdResult<usize, String> {
+    match key {
+        MarshaledValue::Integer(index) => usize::try_from(*index)
+            .map_err(|_| path.error(format!("table index is out of range: {index}"))),
+        MarshaledValue::Number(index) => Ok(*index as usize),
+        other => Err(path.error(format!(
+            "expected sequence index, got {}",
+            other.type_name()
+        ))),
     }
+}
+
+/// Read a strict UTF-8 string key from a classified marshaled key.
+fn marshaled_table_key(key: &MarshaledValue, path: &ValuePath) -> StdResult<String, String> {
+    let MarshaledValue::String(bytes) = key else {
+        return Err(path.error(format!("expected string key, got {}", key.type_name())));
+    };
+    String::from_utf8(bytes.clone())
+        .map_err(|error| path.error(format!("invalid UTF-8 key: {error}")))
 }
 
 /// Display an owned async-driver value in an error message.
@@ -2156,38 +2444,9 @@ fn marshaled_value_to_display(value: &MarshaledValue) -> String {
     }
 }
 
-/// Host function adapter for canopy scoped handlers.
-struct CanopyHostFn<F>(F);
-
-impl<F> ScopedHostFunction for CanopyHostFn<F>
-where
-    F: for<'s> Fn(&Scope<'s>, MultiValue<'s>) -> StdResult<MultiValue<'s>, RuntimeError>
-        + Send
-        + Sync,
-{
-    fn call<'s>(
-        &self,
-        scope: &Scope<'s>,
-        args: MultiValue<'s>,
-    ) -> StdResult<MultiValue<'s>, RuntimeError> {
-        (self.0)(scope, args)
-    }
-}
-
 /// A plain-function canopy host handler.
 type HostHandler =
     for<'s> fn(&Scope<'s>, MultiValue<'s>) -> StdResult<MultiValue<'s>, RuntimeError>;
-
-/// Box a canopy host handler.
-fn canopy_host_fn<F>(f: F) -> Box<dyn ScopedHostFunction>
-where
-    F: for<'s> Fn(&Scope<'s>, MultiValue<'s>) -> StdResult<MultiValue<'s>, RuntimeError>
-        + Send
-        + Sync
-        + 'static,
-{
-    Box::new(CanopyHostFn(f))
-}
 
 /// Run an owner's default-bindings script inside the current live scope.
 fn run_default_bindings_in_scope(scope: &Scope<'_>, owner: &str) -> Result<()> {
@@ -2993,127 +3252,100 @@ fn host_fixtures<'s>(
     ret_arg(scope, &fixtures)
 }
 
-/// The base canopy native module: the `canopy` library plus global helpers.
-struct CanopyBaseModule {
-    /// Rendered base API declaration used by the surface audit.
-    declaration: String,
+/// Build the declaration-coupled base Canopy module.
+fn build_base_module() -> Result<Arc<dyn NativeModule>> {
+    let mut builder = NativeModuleBuilder::new("canopy");
+    defs::register_framework_types(&mut builder);
+    builder.host_type(
+        commands::decl::Class::new("NodeId"),
+        Arc::new(node_handle_type()),
+    );
+    base_api::register(&mut builder);
+    builder.build().map_err(|error| {
+        error::Error::Script(format!("building base script module failed: {error}"))
+    })
 }
 
-impl CanopyBaseModule {
-    /// Build a base module with declarations generated from the native table.
-    fn new() -> Self {
-        Self {
-            declaration: defs::preamble(),
-        }
-    }
-}
-
-impl NativeModule for CanopyBaseModule {
-    fn name(&self) -> &str {
-        "canopy"
-    }
-
-    fn declaration(&self) -> DeclSource<'_> {
-        DeclSource::Text(&self.declaration)
-    }
-
-    fn build(&self, builder: &mut dyn ModuleBuilder) {
-        ModuleBuilderExt::host_type(builder, node_handle_type());
-        base_api::install(builder);
-    }
-}
-
-/// A per-owner native module exposing that owner's registered commands (and
-/// optionally its `default_bindings` trigger) as a library table.
-struct OwnerCommandsModule {
-    /// Original command owner name.
-    owner: String,
-    /// Luau-safe global table name.
-    global_name: String,
-    /// Rendered `declare` block for the audit.
-    declaration: String,
-    /// Sorted command specs registered under this owner.
-    specs: Vec<&'static CommandSpec>,
-    /// Whether the owner registered default bindings.
-    default_bindings: bool,
-}
-
-impl NativeModule for OwnerCommandsModule {
-    fn name(&self) -> &str {
-        &self.global_name
-    }
-
-    fn declaration(&self) -> DeclSource<'_> {
-        DeclSource::Text(&self.declaration)
-    }
-
-    fn build(&self, builder: &mut dyn ModuleBuilder) {
-        for spec in &self.specs {
-            let spec: &'static CommandSpec = spec;
-            builder.scoped_function(
-                spec.name,
-                ModuleBinding::library(self.global_name.clone()),
-                canopy_host_fn(move |scope: &Scope<'_>, args: MultiValue<'_>| {
-                    let values = values_to_args(scope, ArgReader::new(args).rest())?;
-                    let allow_map_named = values.len() == 1;
-                    let node_id =
-                        current_script_anchor(scope).map_err(|err| canopy_to_host(&err))?;
-                    let result = dispatch_command(scope, spec, node_id, values, allow_map_named)
-                        .map_err(|err| canopy_to_host(&err))?;
-                    ret_arg(scope, &result)
-                }),
-            );
-        }
-        if self.default_bindings {
-            let owner = self.owner.clone();
-            builder.scoped_function(
-                "default_bindings",
-                ModuleBinding::library(self.global_name.clone()),
-                canopy_host_fn(move |scope: &Scope<'_>, _args: MultiValue<'_>| {
-                    run_default_bindings_in_scope(scope, &owner)
-                        .map_err(|err| canopy_to_host(&err))?;
-                    Ok(ret_none())
-                }),
-            );
-        }
-    }
-}
-
-/// Build the per-owner command modules for the surface.
+/// Build declaration-coupled per-owner command modules for the surface.
 fn build_owner_modules(
     commands: &CommandSet,
     default_binding_owners: &BTreeSet<String>,
-) -> Vec<OwnerCommandsModule> {
-    defs::owner_command_specs(commands, default_binding_owners)
-        .into_iter()
-        .map(|(owner, specs)| {
-            let has_defaults = default_binding_owners.contains(&owner);
-            OwnerCommandsModule {
-                global_name: luau_global_owner_name(&owner),
-                declaration: defs::render_owner_declaration(&owner, &specs, has_defaults),
-                specs,
-                owner,
-                default_bindings: has_defaults,
+) -> Result<Vec<Arc<dyn NativeModule>>> {
+    let mut modules = Vec::new();
+    for (owner, specs) in defs::owner_command_specs(commands, default_binding_owners) {
+        let global_name = luau_global_owner_name(&owner);
+        let mut builder = NativeModuleBuilder::new(global_name.clone());
+        defs::register_owner_dependencies(&mut builder, &specs);
+        for spec in specs {
+            let mut binding = NativeBinding::library(
+                global_name.clone(),
+                commands::decl::Ty::func(defs::command_fn_sig(spec)),
+            );
+            if let Some(documentation) = defs::command_doc(spec) {
+                binding = binding.doc(documentation);
             }
-        })
-        .collect()
+            builder.borrowed_function(
+                spec.name,
+                binding,
+                move |scope: &Scope<'_>, args: MultiValue<'_>| {
+                    let values = values_to_args(scope, ArgReader::new(args).rest())?;
+                    let allow_map_named = values.len() == 1;
+                    let node_id =
+                        current_script_anchor(scope).map_err(|error| canopy_to_host(&error))?;
+                    let result = dispatch_command(scope, spec, node_id, values, allow_map_named)
+                        .map_err(|error| canopy_to_host(&error))?;
+                    ret_arg(scope, &result)
+                },
+            );
+        }
+        if default_binding_owners.contains(&owner) {
+            builder.borrowed_function(
+                "default_bindings",
+                NativeBinding::library(
+                    global_name,
+                    commands::decl::Ty::func(commands::decl::FnSig::new()),
+                )
+                .doc("Register this widget's default bindings."),
+                move |scope: &Scope<'_>, _args: MultiValue<'_>| {
+                    run_default_bindings_in_scope(scope, &owner)
+                        .map_err(|error| canopy_to_host(&error))?;
+                    Ok(ret_none())
+                },
+            );
+        }
+        modules.push(builder.build().map_err(|error| {
+            error::Error::Script(format!("building owner script module failed: {error}"))
+        })?);
+    }
+    Ok(modules)
 }
 
-/// A script callable resolvable inside a VM scope: a loaded module's main
-/// closure, or a stored (stashed) Luau closure.
+/// A retained script root or stored callback resolvable inside a live VM scope.
 enum CallTarget {
-    /// A compiled script's loaded module.
-    Module(Rc<LoadedModule>),
-    /// A stored Luau closure.
-    Stored(StashedClosure),
+    /// A compiled script root owned by the retained runtime.
+    Root(RootHandle),
+    /// A callback pending promotion or owned by the retained runtime.
+    Stored(StoredFunctionTarget),
 }
 
 impl CallTarget {
     /// Resolve the callable inside the given scope.
-    fn resolve<'s>(&self, scope: &Scope<'s>) -> Result<Function<'s>> {
+    fn resolve<'s>(
+        &self,
+        scope: &Scope<'s>,
+        label: &str,
+        timeout: Option<Duration>,
+    ) -> Result<Function<'s>> {
         match self {
-            Self::Module(module) => Ok(scope.module_function(module)),
-            Self::Stored(stashed) => scope.fetch_function(stashed).map_err(lua_to_canopy),
+            Self::Root(root) => root
+                .resolve(scope)
+                .map_err(|error| retained_runtime_error_to_canopy(&error, label, timeout)),
+            Self::Stored(StoredFunctionTarget::Pending(stashed)) => {
+                scope.fetch_function(stashed).map_err(lua_to_canopy)
+            }
+            Self::Stored(StoredFunctionTarget::Retained(handle)) => handle
+                .resolve(scope)
+                .map_err(|error| retained_runtime_error_to_canopy(&error, label, timeout)),
         }
     }
 }
@@ -3173,6 +3405,24 @@ fn exec_error_to_canopy(error: &ExecError, label: &str, timeout: Option<Duration
     }
 }
 
+/// Convert a retained-runtime state or execution failure into a canopy error.
+fn retained_runtime_error_to_canopy(
+    error: &RetainedRuntimeError,
+    label: &str,
+    timeout: Option<Duration>,
+) -> error::Error {
+    match error {
+        RetainedRuntimeError::Exec(error) => exec_error_to_canopy(error, label, timeout),
+        RetainedRuntimeError::Runtime(error) => runtime_error_to_canopy(error, label, timeout),
+        RetainedRuntimeError::StaleHandle { .. }
+        | RetainedRuntimeError::Load(_)
+        | RetainedRuntimeError::PreparedLoad(_)
+        | RetainedRuntimeError::BindEnvironment(_) => {
+            error::Error::Script(format!("{label} failed: {error}"))
+        }
+    }
+}
+
 /// Convert an async owned script error into a canopy error.
 fn marshaled_script_error_to_canopy(
     error: &MarshaledScriptError,
@@ -3228,32 +3478,12 @@ fn call_in_scope<'s>(
     }
 }
 
-/// Load a compiled chunk into the retained VM with an isolated chunk
-/// environment, matching the per-chunk global isolation scripts ran under
-/// previously.
-fn load_into_vm(
-    vm: &mut Vm,
-    chunk: &BytecodeChunk,
-    module_name: impl AsRef<[u8]>,
-) -> Result<Rc<LoadedModule>> {
-    let module_name = module_name.as_ref();
-    let module = if module_name.starts_with(b"@") {
-        vm.load_module(chunk, ModuleId::new(module_name.to_vec()))
-    } else {
-        vm.load_named(chunk, module_name)
-    }
-    .map_err(|err| error::Error::Script(format!("loading script failed: {err}")))?;
-    vm.bind_chunk_environment(&module)
-        .map_err(|err| error::Error::Script(format!("binding script environment failed: {err}")))?;
-    Ok(Rc::new(module))
-}
-
 impl LuauHost {
-    /// Construct a new Luau host. The VM itself is built by `finalize()`, once
+    /// Construct a new Luau host. The runtime is built by `finalize()`, once
     /// the full command surface is known.
     pub fn new() -> Self {
         Self {
-            vm: Rc::new(RefCell::new(None)),
+            runtime: Rc::new(RefCell::new(None)),
             state: Rc::new(RefCell::new(LuauState::new())),
         }
     }
@@ -3288,7 +3518,7 @@ impl LuauHost {
         Ok(())
     }
 
-    /// Mark the retained VM as busy with a top-level async evaluation.
+    /// Mark the retained runtime as busy with a top-level async evaluation.
     fn begin_active_eval(&self) -> Result<ActiveEvalGuard> {
         let mut state = self.state.borrow_mut();
         if state.active_eval {
@@ -3307,41 +3537,28 @@ impl LuauHost {
 
     /// Type-check a Luau source string against the finalized canopy API.
     pub fn check_script(&self, source: &str) -> Result<ScriptCheckResult> {
-        let mut state = self.state.borrow_mut();
-        let checker = state.checker.as_mut().ok_or_else(|| {
+        let surface = self.state.borrow().surface.clone().ok_or_else(|| {
             error::Error::InvalidOperation(
                 "cannot type-check scripts before finalize_api()".to_string(),
             )
         })?;
-        let checked = checker.check_source(&strict_source(source));
-        let diagnostics = checked
-            .diagnostics()
-            .iter()
-            .map(type_diagnostic_to_script)
-            .collect();
-        Ok(ScriptCheckResult { diagnostics })
+        let source = named_source(ModuleId::new("canopy/check"), source);
+        Ok(check_source_with_surface(&surface, &source))
     }
 
-    /// Type-check a startup script against the finalized API and startup obligations.
-    pub fn check_startup_script(&self, source: &str) -> Result<ScriptCheckResult> {
-        let mut state = self.state.borrow_mut();
-        let checker = state.startup_checker.as_mut().ok_or_else(|| {
+    /// Type-check a named startup script against its runtime module identity.
+    fn check_startup_source(&self, source: &Source) -> Result<ScriptCheckResult> {
+        let surface = self.state.borrow().startup_surface.clone().ok_or_else(|| {
             error::Error::InvalidOperation(
                 "cannot type-check startup scripts before finalize_api()".to_string(),
             )
         })?;
-        let checked = checker.check_source(&strict_source(source));
-        let diagnostics = checked
-            .diagnostics()
-            .iter()
-            .map(type_diagnostic_to_script)
-            .collect();
-        Ok(ScriptCheckResult { diagnostics })
+        Ok(check_source_with_surface(&surface, source))
     }
 
     /// Enforce the startup-script obligation before compiling a startup root.
-    fn typecheck_startup_script(&self, source: &str) -> Result<()> {
-        let result = self.check_startup_script(source)?;
+    fn typecheck_startup_source(&self, source: &Source) -> Result<()> {
+        let result = self.check_startup_source(source)?;
         if result.is_ok() {
             Ok(())
         } else {
@@ -3424,7 +3641,7 @@ impl LuauHost {
     }
 
     /// Finalize the command surface: audit and build the script surface, then
-    /// construct the retained sandboxed VM and load any scripts compiled
+    /// construct the retained sandboxed runtime and load any scripts compiled
     /// before finalization.
     pub fn finalize(
         &self,
@@ -3439,15 +3656,15 @@ impl LuauHost {
                 "Luau API already finalized".into(),
             ));
         }
-        let mut builder = Surface::builder().module(Arc::new(CanopyBaseModule::new()));
+        let mut builder = Surface::builder().module(build_base_module()?);
         if let Some(source) = module_source {
             builder = builder.module_source(source);
         }
         for module in extra_modules {
             builder = builder.module(Arc::clone(module));
         }
-        for module in build_owner_modules(commands, default_binding_owners) {
-            builder = builder.module(Arc::new(module));
+        for module in build_owner_modules(commands, default_binding_owners)? {
+            builder = builder.module(module);
         }
         let surface = builder.build().map_err(|err| {
             error::Error::Script(format!("building script surface failed: {err}"))
@@ -3460,36 +3677,36 @@ impl LuauHost {
                     error::Error::Script(format!("building startup script checker failed: {err}"))
                 })?;
         }
-        let startup_checker = startup_surface.new_checker();
-        let mut vm = surface
-            .vm_builder(&VmConfig::untrusted(
-                Ambient::production(0),
-                default_vm_limits(),
-            ))
-            .build()
-            .map_err(|err| error::Error::Script(format!("building script VM failed: {err}")))?;
+        let mut runtime = RetainedRuntime::new(
+            surface.clone(),
+            &VmConfig::untrusted(Ambient::production(0), default_vm_limits()),
+        )
+        .map_err(|err| error::Error::Script(format!("building script VM failed: {err}")))?;
 
-        {
+        let pending = self
+            .state
+            .borrow()
+            .scripts
+            .scripts
+            .iter()
+            .map(|(id, script)| (*id, script.runtime_source.clone()))
+            .collect::<Vec<_>>();
+        for (id, source) in pending {
+            let prepared = surface
+                .prepare_graph(source)
+                .map_err(|error| prepare_graph_error_to_canopy(&error))?;
+            let root = runtime.load_prepared(&prepared).map_err(|error| {
+                retained_runtime_error_to_canopy(&error, "loading prepared script", None)
+            })?;
             let mut state = self.state.borrow_mut();
-            let ids = state.scripts.scripts.keys().copied().collect::<Vec<_>>();
-            for id in ids {
-                let chunk = state
-                    .scripts
-                    .chunk(id)
-                    .expect("script id enumerated from the cache");
-                let module_name = state
-                    .scripts
-                    .module_name(id)
-                    .expect("script id enumerated from the cache");
-                let module = load_into_vm(&mut vm, &chunk, module_name)?;
-                state.scripts.set_module(id, module);
-            }
+            state.scripts.set_prepared(id, prepared);
+            state.scripts.set_root(id, root);
         }
 
-        *self.vm.borrow_mut() = Some(vm);
+        *self.runtime.borrow_mut() = Some(runtime);
         self.state
             .borrow_mut()
-            .finalize(definitions, surface, startup_checker);
+            .finalize(definitions, surface, startup_surface);
         Ok(())
     }
 
@@ -3500,18 +3717,37 @@ impl LuauHost {
 
     /// Compile a script with an explicit VM module name.
     pub fn compile_named(&self, source: &str, module_name: impl AsRef<[u8]>) -> Result<ScriptId> {
-        self.maybe_typecheck(source)?;
-        let strict = strict_source(source);
-        let chunk = if let Some(surface) = self.state.borrow().surface.clone() {
-            compile_chunk_with_surface(&surface, &strict)?
+        let module_name = module_name.as_ref().to_vec();
+        self.compile_source(&Source::text(ModuleId::new(module_name), source))
+    }
+
+    /// Compile a source while preserving its module identity and diagnostic metadata.
+    pub(crate) fn compile_source(&self, source: &Source) -> Result<ScriptId> {
+        let original = source.as_str().ok_or_else(|| {
+            error::Error::Invalid(format!(
+                "script source {} is not valid UTF-8",
+                source.display_name()
+            ))
+        })?;
+        let original = original.to_string();
+        let runtime_source = strict_named_source(source)?;
+        let (chunk, prepared) = if let Some(surface) = self.state.borrow().surface.clone() {
+            let prepared = surface
+                .prepare_graph(runtime_source.clone())
+                .map_err(|error| prepare_graph_error_to_canopy(&error))?;
+            (prepared.chunk().clone(), Some(prepared))
         } else {
-            compile_chunk(&strict)?
+            self.maybe_typecheck(&original)?;
+            (
+                compile_chunk(runtime_source.as_str().expect("strict source is UTF-8"))?,
+                None,
+            )
         };
-        let sid = self
-            .state
-            .borrow_mut()
-            .scripts
-            .insert(chunk, source, module_name.as_ref());
+        let sid =
+            self.state
+                .borrow_mut()
+                .scripts
+                .insert(chunk, &original, runtime_source, prepared);
         if self.is_finalized() {
             self.load_script(sid)?;
         }
@@ -3524,57 +3760,102 @@ impl LuauHost {
         source: &str,
         module_name: impl AsRef<[u8]>,
     ) -> Result<ScriptId> {
-        self.typecheck_startup_script(source)?;
-        let runtime_source = startup_runtime_source(source);
-        let strict = strict_source(&runtime_source);
-        let chunk = if let Some(surface) = self.state.borrow().surface.clone() {
-            compile_chunk_with_surface(&surface, &strict)?
-        } else {
-            compile_chunk(&strict)?
-        };
-        let sid = self
-            .state
-            .borrow_mut()
-            .scripts
-            .insert(chunk, source, module_name.as_ref());
+        self.compile_startup_source(&Source::text(
+            ModuleId::new(module_name.as_ref().to_vec()),
+            source,
+        ))
+    }
+
+    /// Compile a startup source while preserving its mounted identity and metadata.
+    pub(crate) fn compile_startup_source(&self, source: &Source) -> Result<ScriptId> {
+        let original = source.as_str().ok_or_else(|| {
+            error::Error::Invalid(format!(
+                "startup source {} is not valid UTF-8",
+                source.display_name()
+            ))
+        })?;
+        let original = original.to_string();
+        self.typecheck_startup_source(&strict_named_source(source)?)?;
+        let runtime_source = source_with_text(source, startup_runtime_source(&original));
+        let runtime_source = strict_named_source(&runtime_source)?;
+        let surface = self.state.borrow().surface.clone().ok_or_else(|| {
+            error::Error::InvalidOperation(
+                "cannot compile startup scripts before finalize_api()".to_string(),
+            )
+        })?;
+        let prepared = surface
+            .prepare_graph(runtime_source.clone())
+            .map_err(|error| prepare_graph_error_to_canopy(&error))?;
+        let chunk = prepared.chunk().clone();
+        let sid = self.state.borrow_mut().scripts.insert(
+            chunk,
+            &original,
+            runtime_source,
+            Some(prepared),
+        );
         if self.is_finalized() {
             self.load_script(sid)?;
         }
         Ok(sid)
     }
 
-    /// Load a compiled script into the retained VM.
-    fn load_script(&self, sid: ScriptId) -> Result<Rc<LoadedModule>> {
-        let chunk = self
-            .state
-            .borrow()
-            .scripts
-            .chunk(sid)
-            .ok_or_else(|| error::Error::Script(format!("script {sid} not found")))?;
-        let mut vm_cell = self.vm.try_borrow_mut().map_err(|_| {
+    /// Load a compiled script into the retained runtime.
+    fn load_script(&self, sid: ScriptId) -> Result<RootHandle> {
+        let (source, prepared) = {
+            let state = self.state.borrow();
+            (
+                state.scripts.runtime_source(sid),
+                state.scripts.prepared(sid),
+            )
+        };
+        let source =
+            source.ok_or_else(|| error::Error::Script(format!("script {sid} not found")))?;
+        let mut runtime_cell = self.runtime.try_borrow_mut().map_err(|_| {
             error::Error::Script("cannot load a script while the script VM is executing".into())
         })?;
-        let vm = vm_cell.as_mut().ok_or_else(|| {
+        let runtime = runtime_cell.as_mut().ok_or_else(|| {
             error::Error::InvalidOperation("cannot load scripts before finalize_api()".to_string())
         })?;
-        let module_name = self
-            .state
-            .borrow()
-            .scripts
-            .module_name(sid)
-            .ok_or_else(|| error::Error::Script(format!("script {sid} not found")))?;
-        let module = load_into_vm(vm, &chunk, module_name)?;
-        self.state
-            .borrow_mut()
-            .scripts
-            .set_module(sid, module.clone());
-        Ok(module)
+        if runtime.invalidate_if_source_changed().is_some() {
+            let mut state = self.state.borrow_mut();
+            state.scripts.clear_roots();
+            state.closures.clear();
+        }
+        let prepared = match prepared {
+            Some(prepared) => prepared,
+            None => runtime
+                .prepare(source, PrepareOptions::new())
+                .map_err(|error| prepare_graph_error_to_canopy(&error))?,
+        };
+        let root = runtime.load_prepared(&prepared).map_err(|error| {
+            retained_runtime_error_to_canopy(&error, "loading prepared script", None)
+        })?;
+        let mut state = self.state.borrow_mut();
+        state.scripts.set_prepared(sid, prepared);
+        state.scripts.set_root(sid, root.clone());
+        Ok(root)
     }
 
-    /// Return the loaded module for a script, loading it if necessary.
-    fn loaded_module(&self, sid: ScriptId) -> Result<Rc<LoadedModule>> {
-        if let Some(module) = self.state.borrow().scripts.module(sid) {
-            return Ok(module);
+    /// Return the loaded root for a script, reloading after source invalidation.
+    fn loaded_root(&self, sid: ScriptId) -> Result<RootHandle> {
+        let invalidated = {
+            let mut runtime = self.runtime.try_borrow_mut().map_err(|_| {
+                error::Error::Script(
+                    "cannot inspect scripts while the script VM is executing".into(),
+                )
+            })?;
+            runtime
+                .as_mut()
+                .and_then(RetainedRuntime::invalidate_if_source_changed)
+                .is_some()
+        };
+        if invalidated {
+            let mut state = self.state.borrow_mut();
+            state.scripts.clear_roots();
+            state.closures.clear();
+        }
+        if let Some(root) = self.state.borrow().scripts.root(sid) {
+            return Ok(root);
         }
         if self.state.borrow().scripts.chunk(sid).is_none() {
             return Err(error::Error::Script(format!("script {sid} not found")));
@@ -3620,10 +3901,14 @@ impl LuauHost {
         node_id: impl Into<NodeId>,
         sid: ScriptId,
     ) -> Result<()> {
-        let module = self.loaded_module(sid)?;
+        let root = self.state.borrow().scripts.root(sid).ok_or_else(|| {
+            error::Error::Script(format!(
+                "script {sid} is not loaded for reentrant execution"
+            ))
+        })?;
         let node_id = node_id.into();
         let label = format!("script {sid} on node {node_id:?}");
-        self.run_target_in_scope(scope, node_id, &CallTarget::Module(module), &label, None)
+        self.run_target_in_scope(scope, node_id, &CallTarget::Root(root), &label, None)
             .map(|_| ())
     }
 
@@ -3635,7 +3920,7 @@ impl LuauHost {
         sid: ScriptId,
         timeout: Option<Duration>,
     ) -> Result<ArgValue> {
-        let module = self.loaded_module(sid)?;
+        let root = self.loaded_root(sid)?;
         // Diagnostics accumulate per top-level evaluation: a nested run
         // triggered from inside a live script must not erase the logs and
         // assertions the outer evaluation has already collected.
@@ -3643,13 +3928,7 @@ impl LuauHost {
             self.clear_diagnostics();
         }
         let label = format!("script {sid} on node {node_id:?}");
-        self.run_target(
-            canopy,
-            node_id,
-            &CallTarget::Module(module),
-            &label,
-            timeout,
-        )
+        self.run_target(canopy, node_id, &CallTarget::Root(root), &label, timeout)
     }
 
     /// Run a script callable through a fresh limited scope step.
@@ -3661,91 +3940,70 @@ impl LuauHost {
         label: &str,
         timeout: Option<Duration>,
     ) -> Result<ArgValue> {
-        if let CallTarget::Module(module) = target {
-            return self.run_module_async(canopy, node_id, module, label, timeout);
+        if let CallTarget::Root(root) = target {
+            return self.run_root_async(canopy, node_id, root, label, timeout);
         }
-        let vm = self.vm.clone();
-        let mut vm_cell = vm.try_borrow_mut().map_err(|_| {
+        let _active_eval = self.begin_active_eval()?;
+        let runtime = self.runtime.clone();
+        let mut runtime_cell = runtime.try_borrow_mut().map_err(|_| {
             error::Error::Script("script VM re-entered without a live scope".into())
         })?;
-        let vm = vm_cell.as_mut().ok_or_else(|| {
+        let runtime = runtime_cell.as_mut().ok_or_else(|| {
             error::Error::InvalidOperation(
                 "cannot execute scripts before finalize_api()".to_string(),
             )
         })?;
         let print_lines = Arc::new(Mutex::new(Vec::new()));
-        let sink_lines = Arc::clone(&print_lines);
-        vm.set_print_sink_with_quota(
-            Box::new(move |bytes: &[u8]| {
-                let line = String::from_utf8_lossy(bytes).trim_end().to_string();
-                tracing::info!("{line}");
-                if let Ok(mut lines) = sink_lines.lock() {
-                    lines.push(line);
-                }
-            }),
-            PRINT_QUOTA,
-        );
+        let options = invocation_options(timeout, &print_lines);
         let mut outcome: Option<Result<ArgValue>> = None;
-        let step = vm.step_with_context(
-            canopy,
-            &CallOptions::new().limits(invocation_limits(timeout)),
-            |scope| {
-                let _guard = match ScriptAnchorGuard::push(scope, node_id) {
-                    Ok(guard) => guard,
-                    Err(error) => return Err(error),
-                };
-                let result = match target.resolve(scope) {
-                    Ok(function) => call_in_scope(scope, function, label, timeout),
-                    Err(err) => Err(err),
-                };
-                outcome = Some(result);
-                Ok(())
-            },
-        );
+        let step = runtime.step_with_context(canopy, &options, |scope| {
+            let _guard = match ScriptAnchorGuard::push(scope, node_id) {
+                Ok(guard) => guard,
+                Err(error) => return Err(error),
+            };
+            let result = match target.resolve(scope, label, timeout) {
+                Ok(function) => call_in_scope(scope, function, label, timeout),
+                Err(err) => Err(err),
+            };
+            outcome = Some(result);
+            Ok(())
+        });
+        let synchronized = self.synchronize_closures(runtime, label, timeout);
         self.push_print_lines(&print_lines);
         match step {
-            Ok(()) => outcome.unwrap_or_else(|| {
-                Err(error::Error::Script(format!("{label} produced no result")))
-            }),
-            Err(error) => Err(runtime_error_to_canopy(&error, label, timeout)),
+            Ok(()) => {
+                synchronized?;
+                outcome.unwrap_or_else(|| {
+                    Err(error::Error::Script(format!("{label} produced no result")))
+                })
+            }
+            Err(error) => Err(retained_runtime_error_to_canopy(&error, label, timeout)),
         }
     }
 
-    /// Run a loaded module through Ruau's async owned-result driver.
-    fn run_module_async(
+    /// Run a retained root through Ruau's async owned-result driver.
+    fn run_root_async(
         &self,
         canopy: &mut Canopy,
         node_id: NodeId,
-        module: &LoadedModule,
+        root: &RootHandle,
         label: &str,
         timeout: Option<Duration>,
     ) -> Result<ArgValue> {
         let _active_eval = self.begin_active_eval()?;
-        let vm = self.vm.clone();
-        let mut vm_cell = vm.try_borrow_mut().map_err(|_| {
+        let runtime = self.runtime.clone();
+        let mut runtime_cell = runtime.try_borrow_mut().map_err(|_| {
             error::Error::Script("script VM re-entered without a live scope".into())
         })?;
-        let vm = vm_cell.as_mut().ok_or_else(|| {
+        let runtime = runtime_cell.as_mut().ok_or_else(|| {
             error::Error::InvalidOperation(
                 "cannot execute scripts before finalize_api()".to_string(),
             )
         })?;
         let print_lines = Arc::new(Mutex::new(Vec::new()));
-        let sink_lines = Arc::clone(&print_lines);
-        let options = CallOptions::new()
-            .limits(invocation_limits(timeout))
-            .print_sink_with_quota(
-                Box::new(move |bytes: &[u8]| {
-                    let line = String::from_utf8_lossy(bytes).trim_end().to_string();
-                    tracing::info!("{line}");
-                    if let Ok(mut lines) = sink_lines.lock() {
-                        lines.push(line);
-                    }
-                }),
-                PRINT_QUOTA,
-            );
+        let options = invocation_options(timeout, &print_lines);
         canopy.script_context_stack.push(node_id);
-        let future = vm.exec_async_with_context(module, canopy, options);
+        let future = runtime.run_async_with_context(root, canopy, options);
         let outcome = if Handle::try_current().is_ok() {
             executor::block_on(future)
         } else {
@@ -3759,14 +4017,16 @@ impl LuauHost {
         };
         let popped = canopy.script_context_stack.pop();
         debug_assert_eq!(popped, Some(node_id));
+        let synchronized = self.synchronize_closures(runtime, label, timeout);
         self.push_print_lines(&print_lines);
         match outcome {
             Ok(values) => {
+                synchronized?;
                 let value = values.first().unwrap_or(&MarshaledValue::Nil);
                 marshaled_to_arg_value(value)
                     .map_err(|message| error::Error::Script(format!("{label}: {message}")))
             }
-            Err(error) => Err(exec_error_to_canopy(&error, label, timeout)),
+            Err(error) => Err(retained_runtime_error_to_canopy(&error, label, timeout)),
         }
     }
 
@@ -3781,8 +4041,22 @@ impl LuauHost {
     ) -> Result<ArgValue> {
         let _guard = ScriptAnchorGuard::push(scope, node_id)
             .map_err(|err| runtime_error_to_canopy(&err, label, timeout))?;
-        let function = target.resolve(scope)?;
+        let function = target.resolve(scope, label, timeout)?;
         call_in_scope(scope, function, label, timeout)
+    }
+
+    /// Promote and release callback handles between retained-runtime invocations.
+    fn synchronize_closures(
+        &self,
+        runtime: &mut RetainedRuntime,
+        label: &str,
+        timeout: Option<Duration>,
+    ) -> Result<()> {
+        self.state
+            .borrow_mut()
+            .closures
+            .synchronize(runtime)
+            .map_err(|error| retained_runtime_error_to_canopy(&error, label, timeout))
     }
 
     /// Push lines captured from `print` into the diagnostics buffer.
@@ -3822,14 +4096,14 @@ impl LuauHost {
         node_id: NodeId,
         id: LuauFunctionId,
     ) -> Result<()> {
-        let stashed = self
+        let target = self
             .state
             .borrow()
             .closures
-            .stashed(id)
+            .target(id)
             .ok_or_else(|| error::Error::Script(format!("Luau function {id:?} not found")))?;
         let label = format!("Luau binding on node {node_id:?}");
-        self.run_target(canopy, node_id, &CallTarget::Stored(stashed), &label, None)
+        self.run_target(canopy, node_id, &CallTarget::Stored(target), &label, None)
             .map(|_| ())
     }
 
@@ -3840,14 +4114,14 @@ impl LuauHost {
         node_id: NodeId,
         id: LuauFunctionId,
     ) -> Result<()> {
-        let stashed = self
+        let target = self
             .state
             .borrow()
             .closures
-            .stashed(id)
+            .target(id)
             .ok_or_else(|| error::Error::Script(format!("Luau function {id:?} not found")))?;
         let label = format!("Luau binding on node {node_id:?}");
-        self.run_target_in_scope(scope, node_id, &CallTarget::Stored(stashed), &label, None)
+        self.run_target_in_scope(scope, node_id, &CallTarget::Stored(target), &label, None)
             .map(|_| ())
     }
 }
@@ -3857,9 +4131,201 @@ mod tests {
     use super::*;
     use crate::testing::ttree::{get_state, run_ttree};
 
+    /// Build one marshaled table pair for value-policy tests.
+    fn pair(key: MarshaledValue, value: MarshaledValue) -> MarshaledPair {
+        MarshaledPair { key, value }
+    }
+
+    #[test]
+    fn marshaled_scalar_policy_is_explicit() {
+        assert_eq!(
+            marshaled_to_arg_value(&MarshaledValue::Nil),
+            Ok(ArgValue::Null)
+        );
+        assert_eq!(
+            marshaled_to_arg_value(&MarshaledValue::Boolean(true)),
+            Ok(ArgValue::Bool(true))
+        );
+        assert_eq!(
+            marshaled_to_arg_value(&MarshaledValue::Integer(7)),
+            Ok(ArgValue::Int(7))
+        );
+        assert_eq!(
+            marshaled_to_arg_value(&MarshaledValue::Number(7.0)),
+            Ok(ArgValue::Int(7))
+        );
+        assert_eq!(
+            marshaled_to_arg_value(&MarshaledValue::Number(7.5)),
+            Ok(ArgValue::Float(7.5))
+        );
+        for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(
+                marshaled_to_arg_value(&MarshaledValue::Number(value)),
+                Err("result: non-finite numbers are not supported".to_string())
+            );
+        }
+        assert_eq!(
+            marshaled_to_arg_value(&MarshaledValue::String(vec![0xff])),
+            Err(
+                "result: invalid UTF-8 string: invalid utf-8 sequence of 1 bytes from index 0"
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn marshaled_table_policy_uses_shared_layouts_and_paths() {
+        assert_eq!(
+            marshaled_to_arg_value(&MarshaledValue::Table(Vec::new())),
+            Ok(ArgValue::Map(BTreeMap::new()))
+        );
+        assert_eq!(
+            marshaled_to_arg_value(&MarshaledValue::Table(vec![
+                pair(
+                    MarshaledValue::Integer(2),
+                    MarshaledValue::String(b"b".to_vec())
+                ),
+                pair(
+                    MarshaledValue::Integer(1),
+                    MarshaledValue::String(b"a".to_vec())
+                ),
+            ])),
+            Ok(ArgValue::Array(vec![
+                ArgValue::String("a".to_string()),
+                ArgValue::String("b".to_string()),
+            ]))
+        );
+
+        let external_node = MarshaledValue::Table(vec![
+            pair(
+                MarshaledValue::String(b"type".to_vec()),
+                MarshaledValue::String(b"NodeId".to_vec()),
+            ),
+            pair(
+                MarshaledValue::String(b"token".to_vec()),
+                MarshaledValue::String(b"node-1".to_vec()),
+            ),
+        ]);
+        assert!(matches!(
+            marshaled_to_arg_value(&external_node),
+            Ok(ArgValue::Map(_))
+        ));
+
+        let nested = MarshaledValue::Table(vec![pair(
+            MarshaledValue::String(b"actions".to_vec()),
+            MarshaledValue::Table(vec![pair(
+                MarshaledValue::Integer(1),
+                MarshaledValue::Table(vec![pair(
+                    MarshaledValue::String(b"target".to_vec()),
+                    MarshaledValue::Opaque("userdata"),
+                )]),
+            )]),
+        )]);
+        assert_eq!(
+            marshaled_to_arg_value(&nested),
+            Err("result.actions[1].target: unsupported script value type: userdata".to_string())
+        );
+
+        let invalid = [
+            (
+                MarshaledValue::Table(vec![
+                    pair(MarshaledValue::Integer(1), MarshaledValue::Nil),
+                    pair(MarshaledValue::Integer(3), MarshaledValue::Nil),
+                ]),
+                "result: sparse table missing index 2",
+            ),
+            (
+                MarshaledValue::Table(vec![
+                    pair(MarshaledValue::Integer(1), MarshaledValue::Nil),
+                    pair(
+                        MarshaledValue::String(b"name".to_vec()),
+                        MarshaledValue::Nil,
+                    ),
+                ]),
+                "result: mixed integer and string table keys are not supported",
+            ),
+            (
+                MarshaledValue::Table(vec![pair(
+                    MarshaledValue::Boolean(true),
+                    MarshaledValue::Nil,
+                )]),
+                "result: unsupported table key type: boolean",
+            ),
+        ];
+        for (value, expected) in invalid {
+            assert_eq!(marshaled_to_arg_value(&value), Err(expected.to_string()));
+        }
+    }
+
+    #[test]
+    fn live_and_marshaled_value_policy_agree_without_erasing_node_identity() {
+        let surface = Surface::builder()
+            .module(build_base_module().expect("base module builds"))
+            .build()
+            .expect("surface builds");
+        let mut vm = surface
+            .vm_builder(&VmConfig::deterministic(0))
+            .build()
+            .expect("VM builds");
+        vm.step(|scope| {
+            let ordinary = scope.create_table()?;
+            ordinary.set_index(scope, 2, "two")?;
+            ordinary.set_index(scope, 1, true)?;
+            let path = ValuePath::root("value");
+            let live = scoped_to_arg_value_at(scope, ScopedValue::Table(ordinary), &path)
+                .expect("ordinary live value converts");
+            let marshaled = scope.marshal(ScopedValue::Table(ordinary))?;
+            let owned = marshaled_to_arg_value_at(&marshaled, &path)
+                .expect("ordinary marshaled value converts");
+            assert_eq!(live, owned);
+
+            let node_id = NodeId::default();
+            let nested_node = scope.create_table()?;
+            nested_node.set(
+                scope,
+                "target",
+                scope.create_userdata(NodeHandle { id: node_id })?,
+            )?;
+            assert_eq!(
+                scoped_to_arg_value(scope, ScopedValue::Table(nested_node)),
+                Ok(ArgValue::Map(BTreeMap::from([(
+                    "target".to_string(),
+                    ArgValue::Node(node_id),
+                )])))
+            );
+
+            let sparse = scope.create_table()?;
+            sparse.set_index(scope, 1, true)?;
+            sparse.set_index(scope, 3, true)?;
+            assert_eq!(
+                scoped_to_arg_value(scope, ScopedValue::Table(sparse)),
+                Err("value: sparse table missing index 2".to_string())
+            );
+
+            let mixed = scope.create_table()?;
+            mixed.set_index(scope, 1, true)?;
+            mixed.set(scope, "name", "mixed")?;
+            assert_eq!(
+                scoped_to_arg_value(scope, ScopedValue::Table(mixed)),
+                Err("value: mixed integer and string table keys are not supported".to_string())
+            );
+            assert_eq!(
+                scoped_to_arg_value(scope, ScopedValue::Number(f64::INFINITY)),
+                Err("value: non-finite numbers are not supported".to_string())
+            );
+            let invalid_utf8 = scope.create_string([0xff])?;
+            assert!(
+                scoped_to_arg_value(scope, ScopedValue::String(invalid_utf8))
+                    .is_err_and(|error| error.starts_with("value: invalid UTF-8 string:"))
+            );
+            Ok(())
+        })
+        .expect("live conversion scope succeeds");
+    }
+
     #[test]
     fn tcompile_error_reports_details() {
-        let host = ScriptHost::new();
+        let host = LuauHost::new();
         let err = host.compile("local =").unwrap_err();
         let error::Error::Parse(parse) = err else {
             panic!("expected a parse error");
@@ -3889,20 +4355,42 @@ mod tests {
     }
 
     #[test]
+    fn print_quota_and_sequential_diagnostics_are_per_invocation() -> Result<()> {
+        run_ttree(|c, _, _| {
+            c.finalize_api()?;
+            let host = c.script_host.clone();
+            let noisy = host.compile("for i = 1, 5000 do print(i) end")?;
+            host.execute(c, c.core.root_id(), noisy)?;
+            let logs = host.take_logs();
+            let marker = String::from_utf8_lossy(SinkQuota::TRUNCATION_MARKER)
+                .trim_end()
+                .to_string();
+            assert!(logs.iter().any(|line| line == &marker));
+            assert!(logs.len() <= 4097, "quota should bound captured calls");
+
+            let quiet = host.compile("return true")?;
+            host.execute(c, c.core.root_id(), quiet)?;
+            assert!(host.take_logs().is_empty());
+            Ok(())
+        })
+    }
+
+    #[test]
     fn node_handle_marshal_hook_returns_external_token_record() -> Result<()> {
         run_ttree(|c, _, tree| {
             c.finalize_api()?;
             let host = c.script_host.clone();
-            let mut vm_cell = host.vm.borrow_mut();
-            let vm = vm_cell.as_mut().expect("finalized VM");
+            let mut runtime_cell = host.runtime.borrow_mut();
+            let runtime = runtime_cell.as_mut().expect("finalized runtime");
             let mut marshaled = None;
-            vm.step(|scope| {
-                let value =
-                    ScopedValue::Userdata(scope.create_userdata(NodeHandle { id: tree.a })?);
-                marshaled = Some(scope.marshal(value)?);
-                Ok(())
-            })
-            .map_err(|err| error::Error::Script(err.to_string()))?;
+            runtime
+                .step(&CallOptions::new(), |scope| {
+                    let value =
+                        ScopedValue::Userdata(scope.create_userdata(NodeHandle { id: tree.a })?);
+                    marshaled = Some(scope.marshal(value)?);
+                    Ok(())
+                })
+                .map_err(|err| error::Error::Script(err.to_string()))?;
 
             assert_eq!(
                 marshaled.expect("marshaled value"),
@@ -4010,6 +4498,12 @@ mod tests {
             let result = c.script_host.check_script("local value: string = 1")?;
             assert!(!result.is_ok());
             assert!(result.has_errors());
+            assert!(
+                result
+                    .diagnostics()
+                    .iter()
+                    .all(|diagnostic| diagnostic.source.as_deref() == Some("canopy/check"))
+            );
             Ok(())
         })
     }

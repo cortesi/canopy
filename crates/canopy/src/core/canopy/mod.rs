@@ -13,7 +13,7 @@ use std::{
 };
 
 use comfy_table::{ContentArrangement, Table, presets::UTF8_FULL};
-use ruau::{source::ModuleSource, vm_api::NativeModule};
+use ruau::{fs::FilesystemMountsError, source::ModuleSource, vm_api::NativeModule};
 use serde::{Deserialize, Serialize};
 
 use super::{inputmap, poll::Poller, termbuf::TermBuf};
@@ -58,7 +58,7 @@ pub struct Canopy {
     pub(crate) root_size: Option<Size>,
 
     /// Script execution host.
-    pub(crate) script_host: script::ScriptHost,
+    pub(crate) script_host: script::LuauHost,
     /// Cached Luau API definition text.
     script_api_text: Option<String>,
     /// Configured persistent Luau module roots.
@@ -239,8 +239,8 @@ pub struct ScriptJournalBaseline {
 
 /// Data needed to run a default-bindings script after dropping the Canopy borrow.
 pub struct DefaultBindingsRun {
-    /// Script host that owns the retained VM.
-    pub(crate) host: script::ScriptHost,
+    /// Script host that owns the retained runtime.
+    pub(crate) host: script::LuauHost,
     /// Node anchor for the nested default-bindings run.
     pub(crate) root_id: NodeId,
     /// Compiled default-bindings script id.
@@ -288,7 +288,7 @@ impl Canopy {
             automation_rx,
             keymap: inputmap::InputMap::new(),
             route_trace: Vec::new(),
-            script_host: script::ScriptHost::new(),
+            script_host: script::LuauHost::new(),
             script_api_text: None,
             script_module_roots: script::ScriptModuleRoots::new(),
             script_module_source: None,
@@ -473,24 +473,39 @@ impl Canopy {
     }
 
     /// Invalidate cached exports from persistent script modules.
-    pub fn invalidate_script_modules(&self) -> Option<u64> {
-        self.script_module_source
+    pub fn invalidate_script_modules(&mut self) -> Option<u64> {
+        let epoch = self
+            .script_module_source
             .as_ref()
-            .map(|source| source.invalidate())
+            .map(|source| source.invalidate_all());
+        if epoch.is_some() {
+            self.clear_script_callbacks();
+        }
+        epoch
     }
 
     /// Invalidate cached exports from the `@user` persistent script root.
-    pub fn invalidate_user_script_modules(&self) -> Option<u64> {
-        self.script_module_source
+    pub fn invalidate_user_script_modules(&mut self) -> Option<u64> {
+        let epoch = self
+            .script_module_source
             .as_ref()
-            .and_then(|source| source.invalidate_user())
+            .and_then(|source| source.invalidate("@user").ok());
+        if epoch.is_some() {
+            self.clear_script_callbacks();
+        }
+        epoch
     }
 
     /// Invalidate cached exports from the `@project` persistent script root.
-    pub fn invalidate_project_script_modules(&self) -> Option<u64> {
-        self.script_module_source
+    pub fn invalidate_project_script_modules(&mut self) -> Option<u64> {
+        let epoch = self
+            .script_module_source
             .as_ref()
-            .and_then(|source| source.invalidate_project())
+            .and_then(|source| source.invalidate("@project").ok());
+        if epoch.is_some() {
+            self.clear_script_callbacks();
+        }
+        epoch
     }
 
     /// Register an audited Ruau native module on the same surface as Canopy commands.
@@ -559,25 +574,36 @@ impl Canopy {
             let baseline = self.begin_script_journal();
             let result = host.execute(self, self.core.root_id(), script_id);
             self.record_script_journal(format!("startup:{name}"), &source, baseline, &result);
+            if result.is_err() {
+                self.clear_script_callbacks();
+            }
             result?;
             ran += 1;
         }
         for module in self.script_module_roots.startup_modules() {
-            let source = fs::read_to_string(&module.path).map_err(|err| {
-                error::Error::Invalid(format!(
-                    "{} startup script read failed: {err}",
-                    module.namespace.name()
-                ))
-            })?;
-            let script_id = host.compile_startup_named(&source, module.module_id.as_bytes())?;
+            let mounted_source = self
+                .script_module_source
+                .as_ref()
+                .expect("startup modules require a finalized filesystem source")
+                .source_for_path(&module.path)
+                .map_err(|err| {
+                    error::Error::Invalid(format!(
+                        "{} startup script read failed: {err}",
+                        module.namespace.name()
+                    ))
+                })?;
+            let source = mounted_source
+                .as_str()
+                .expect("filesystem sources are validated as UTF-8")
+                .to_string();
+            let module_id = mounted_source.id().clone();
+            let script_id = host.compile_startup_source(&mounted_source)?;
             let baseline = self.begin_script_journal();
             let result = host.execute(self, self.core.root_id(), script_id);
-            self.record_script_journal(
-                format!("startup:{}", module.module_id),
-                &source,
-                baseline,
-                &result,
-            );
+            self.record_script_journal(format!("startup:{module_id}"), &source, baseline, &result);
+            if result.is_err() {
+                self.clear_script_callbacks();
+            }
             result?;
             ran += 1;
         }
@@ -726,12 +752,22 @@ impl Canopy {
             if !self.script_host.is_finalized() {
                 self.finalize_api()?;
             }
-            let module_name = self
-                .script_module_roots
-                .module_id_for_path(path)
-                .map(|id| id.as_bytes().to_vec())
-                .unwrap_or_else(|| b"canopy".to_vec());
-            let script_id = self.script_host.compile_named(&source, module_name)?;
+            let mounted_source = match &self.script_module_source {
+                Some(mounts) => match mounts.source_for_path(path) {
+                    Ok(source) => Some(source),
+                    Err(FilesystemMountsError::OutsideRoots { .. }) => None,
+                    Err(error) => {
+                        return Err(error::Error::Invalid(format!(
+                            "config path is invalid for script module roots: {error}"
+                        )));
+                    }
+                },
+                None => None,
+            };
+            let script_id = match mounted_source {
+                Some(source) => self.script_host.compile_source(&source)?,
+                None => self.script_host.compile_named(&source, b"canopy")?,
+            };
             let host = self.script_host.clone();
             host.execute(self, self.core.root_id(), script_id)
         })();
@@ -794,6 +830,15 @@ impl Canopy {
     pub fn clear_bindings(&mut self) -> usize {
         let removed = self.keymap.clear();
         self.release_removed_bindings(removed)
+    }
+
+    /// Remove all callbacks whose VM ownership is tied to the current source epoch.
+    fn clear_script_callbacks(&mut self) {
+        let removed = self.keymap.remove_luau_functions();
+        self.release_removed_bindings(removed);
+        for hook in self.script_host.drain_on_start_hooks() {
+            self.script_host.release_function(hook);
+        }
     }
 
     /// Return all bindings defined for a mode.
@@ -876,7 +921,9 @@ impl Canopy {
         if self.script_host.is_finalized() {
             return Ok(());
         }
-        let module_source = self.script_module_roots.module_source();
+        let module_source = self.script_module_roots.module_source().map_err(|error| {
+            error::Error::Invalid(format!("script module roots are invalid: {error}"))
+        })?;
         let surface_source = module_source
             .as_ref()
             .map(|source| Arc::clone(source) as Arc<dyn ModuleSource>);
@@ -991,8 +1038,13 @@ impl Canopy {
             }
             let diagnostics = check
                 .diagnostics()
-                .iter()
-                .map(script::type_diagnostic_to_script)
+                .records()
+                .map(|diagnostic| {
+                    script::diagnostic_record_to_script(
+                        Some(pair.implementation_path.display().to_string()),
+                        diagnostic,
+                    )
+                })
                 .collect::<Vec<_>>();
             failures.push(format!(
                 "{}:\n{}",
@@ -1019,7 +1071,11 @@ impl Canopy {
         .into_iter()
         .flatten()
         {
-            collect_script_declaration_pairs(&self.script_module_roots, root, &mut pairs)?;
+            let source = self
+                .script_module_source
+                .as_ref()
+                .expect("configured roots have a finalized filesystem source");
+            collect_script_declaration_pairs(source, root, &mut pairs)?;
         }
         Ok(pairs)
     }
@@ -1348,7 +1404,7 @@ impl Canopy {
 
 /// Recursively collect adjacent `.luau` and `.d.luau` module pairs.
 fn collect_script_declaration_pairs(
-    roots: &script::ScriptModuleRoots,
+    source: &script::ScriptModuleSource,
     dir: &FsPath,
     pairs: &mut Vec<ScriptDeclarationPair>,
 ) -> Result<()> {
@@ -1362,7 +1418,7 @@ fn collect_script_declaration_pairs(
             .map_err(|err| error::Error::Invalid(format!("script root scan failed: {err}")))?;
         let path = entry.path();
         if path.is_dir() {
-            collect_script_declaration_pairs(roots, &path, pairs)?;
+            collect_script_declaration_pairs(source, &path, pairs)?;
             continue;
         }
         let Some(implementation_path) = implementation_path_for_declaration(&path) else {
@@ -1374,7 +1430,7 @@ fn collect_script_declaration_pairs(
                 path.display()
             )));
         }
-        if roots.module_id_for_path(&implementation_path).is_none() {
+        if source.module_id_for_path(&implementation_path).is_err() {
             return Err(error::Error::Invalid(format!(
                 "script implementation {} is outside configured roots",
                 implementation_path.display()
@@ -1400,12 +1456,7 @@ fn format_script_diagnostics(diagnostics: &[script::ScriptCheckDiagnostic]) -> S
     diagnostics
         .iter()
         .filter(|diagnostic| diagnostic.is_error())
-        .map(|diagnostic| {
-            format!(
-                "{}:{}: {}",
-                diagnostic.line, diagnostic.column, diagnostic.message
-            )
-        })
+        .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join("\n")
 }

@@ -1,22 +1,24 @@
 //! Base `canopy` scripting API declarations and native registration.
 
+use std::sync::Arc;
+
 use ruau::{
     decl::{Builder, Field, FnSig, Func, Global, Ty},
-    vm::{AsyncHostFunction, ModuleBuilderExt},
-    vm_api::{ModuleBinding, ModuleBuilder},
+    module::{NativeBinding, NativeModuleBuilder},
+    vm::AsyncHostFunction,
 };
 
 use super::{
-    HostHandler, canopy_host_fn, host_api, host_assert, host_bind, host_bind_mouse,
-    host_bind_mouse_with, host_bind_with, host_bindings, host_children, host_clear_bindings,
-    host_cmd, host_cmd_on, host_commands, host_diagnostic_dump, host_find_node, host_find_nodes,
-    host_fixtures, host_focus_dir, host_focus_next, host_focus_prev, host_focused,
-    host_help_snapshot, host_input_mode, host_log, host_node_at, host_node_info, host_node_region,
-    host_on_start, host_parent, host_pop_mode, host_push_mode, host_resolve, host_root,
-    host_route_trace, host_screen, host_screen_cells, host_screen_region, host_screen_text,
-    host_script_journal, host_send_click, host_send_key, host_send_scroll, host_set_focus,
-    host_set_mode, host_tree, host_unbind, host_unbind_key, wait_for_host_fn,
-    wait_for_node_host_fn, wait_for_screen_text_host_fn,
+    HostHandler, host_api, host_assert, host_bind, host_bind_mouse, host_bind_mouse_with,
+    host_bind_with, host_bindings, host_children, host_clear_bindings, host_cmd, host_cmd_on,
+    host_commands, host_diagnostic_dump, host_find_node, host_find_nodes, host_fixtures,
+    host_focus_dir, host_focus_next, host_focus_prev, host_focused, host_help_snapshot,
+    host_input_mode, host_log, host_node_at, host_node_info, host_node_region, host_on_start,
+    host_parent, host_pop_mode, host_push_mode, host_resolve, host_root, host_route_trace,
+    host_screen, host_screen_cells, host_screen_region, host_screen_text, host_script_journal,
+    host_send_click, host_send_key, host_send_scroll, host_set_focus, host_set_mode, host_tree,
+    host_unbind, host_unbind_key, wait_for_host_fn, wait_for_node_host_fn,
+    wait_for_screen_text_host_fn,
 };
 
 /// One native function exposed on the global `canopy` library table.
@@ -495,24 +497,40 @@ fn async_base_function_field(function: &AsyncBaseFunction) -> Field {
 }
 
 /// Register the base `canopy` table and global helpers.
-pub(super) fn install(builder: &mut dyn ModuleBuilder) {
+pub(super) fn register(builder: &mut NativeModuleBuilder) {
     for function in CANOPY_FUNCTIONS {
-        builder.scoped_function(
+        builder.borrowed_function(
             function.name,
-            ModuleBinding::library("canopy"),
-            canopy_host_fn(function.handler),
+            documented_binding(
+                NativeBinding::library("canopy", Ty::func((function.signature)())),
+                function.docs,
+            ),
+            function.handler,
         );
     }
     for function in ASYNC_CANOPY_FUNCTIONS {
         builder.async_function(
             function.name,
-            ModuleBinding::library("canopy"),
-            (function.handler)(),
+            documented_binding(
+                NativeBinding::library("canopy", Ty::func((function.signature)())),
+                function.docs,
+            ),
+            Arc::from((function.handler)()),
         );
     }
-    builder.scoped_function(
+    builder.borrowed_function(
         "fixtures",
-        ModuleBinding::Global,
-        canopy_host_fn(host_fixtures),
+        NativeBinding::global(Ty::func(FnSig::new().ret(Ty::named("FixtureInfo").array())))
+            .doc("List all registered fixtures available to the current app."),
+        host_fixtures,
     );
+}
+
+/// Attach the declaration docs recorded for one base function.
+fn documented_binding(binding: NativeBinding, docs: &[&str]) -> NativeBinding {
+    if docs.is_empty() {
+        binding
+    } else {
+        binding.doc(docs.join("\n"))
+    }
 }

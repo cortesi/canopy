@@ -1,22 +1,16 @@
 use std::{
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
     sync::Arc,
 };
 
+use ruau::fs::{FilesystemMounts, FilesystemMountsError};
 #[cfg(test)]
-use ruau::source::{ModuleSourceError, poll_ready_once};
-use ruau::{
-    fs::{FilesystemEpoch, FilesystemSource},
-    source::{
-        InstanceKey, ModuleId, ModuleSource, ModuleSourceFuture, MountedSource, ReadRequest,
-        SourceMetadata,
-    },
-};
+use ruau::source::{ModuleId, ModuleSource, ModuleSourceError, poll_ready_once};
 
 /// Module id prefix for the per-user script root.
-const USER_PREFIX: &str = "@user/";
+const USER_PREFIX: &str = "@user";
 /// Module id prefix for the per-project script root.
-const PROJECT_PREFIX: &str = "@project/";
+const PROJECT_PREFIX: &str = "@project";
 /// Conventional startup module name under each script root.
 const INIT_MODULE: &str = "init";
 /// Luau source file extension used by filesystem module ids.
@@ -110,40 +104,26 @@ impl ScriptModuleRoots {
             .filter_map(|namespace| {
                 let root = self.root_for(namespace)?;
                 let path = root.join(format!("{INIT_MODULE}{LUAU_EXTENSION}"));
-                path.is_file().then(|| StartupModule {
-                    namespace,
-                    path,
-                    module_id: prefixed_module_id(namespace, INIT_MODULE),
-                })
+                path.is_file().then_some(StartupModule { namespace, path })
             })
             .collect()
     }
 
-    /// Resolve a filesystem path under one of the configured roots to a module id.
-    pub(crate) fn module_id_for_path(&self, path: &Path) -> Option<ModuleId> {
-        let user = self
-            .user
-            .as_deref()
-            .and_then(|root| module_id_for_root(Namespace::User, root, path));
-        user.or_else(|| {
-            self.project
-                .as_deref()
-                .and_then(|root| module_id_for_root(Namespace::Project, root, path))
-        })
-    }
-
-    /// Build a composite module source for the configured roots.
-    pub(crate) fn module_source(&self) -> Option<Arc<ScriptModuleSource>> {
-        (self.user.is_some() || self.project.is_some()).then(|| {
-            let mut source = ScriptModuleSource::new();
-            if let Some(root) = &self.user {
-                source.mount(Namespace::User, root.clone());
-            }
-            if let Some(root) = &self.project {
-                source.mount(Namespace::Project, root.clone());
-            }
-            Arc::new(source)
-        })
+    /// Build the validated filesystem source for the configured roots.
+    pub(crate) fn module_source(
+        &self,
+    ) -> Result<Option<Arc<ScriptModuleSource>>, FilesystemMountsError> {
+        if self.user.is_none() && self.project.is_none() {
+            return Ok(None);
+        }
+        let mut builder = FilesystemMounts::builder();
+        if let Some(root) = &self.user {
+            builder = builder.mount(USER_PREFIX, root);
+        }
+        if let Some(root) = &self.project {
+            builder = builder.mount(PROJECT_PREFIX, root);
+        }
+        builder.build().map(Arc::new).map(Some)
     }
 
     /// Return the configured root for a namespace.
@@ -155,98 +135,8 @@ impl ScriptModuleRoots {
     }
 }
 
-/// Canopy's persistent Luau module source.
-#[derive(Debug)]
-pub struct ScriptModuleSource {
-    /// Prefix-dispatching source shared with Ruau embedders.
-    source: MountedSource,
-    /// Root backing `@user`, if configured.
-    user: Option<ScriptRootMount>,
-    /// Root backing `@project`, if configured.
-    project: Option<ScriptRootMount>,
-}
-
-impl ScriptModuleSource {
-    /// Construct an empty persistent source.
-    fn new() -> Self {
-        Self {
-            source: MountedSource::new(),
-            user: None,
-            project: None,
-        }
-    }
-
-    /// Invalidate all configured roots and return the composite epoch.
-    pub fn invalidate(&self) -> u64 {
-        if let Some(root) = &self.user {
-            root.epoch.bump();
-        }
-        if let Some(root) = &self.project {
-            root.epoch.bump();
-        }
-        self.source.epoch()
-    }
-
-    /// Invalidate the `@user` root and return the composite epoch.
-    pub fn invalidate_user(&self) -> Option<u64> {
-        self.user.as_ref().map(|root| {
-            root.epoch.bump();
-            self.source.epoch()
-        })
-    }
-
-    /// Invalidate the `@project` root and return the composite epoch.
-    pub fn invalidate_project(&self) -> Option<u64> {
-        self.project.as_ref().map(|root| {
-            root.epoch.bump();
-            self.source.epoch()
-        })
-    }
-
-    /// Add one namespace root to the mounted source.
-    fn mount(&mut self, namespace: Namespace, root: PathBuf) {
-        let source = FilesystemSource::new(root);
-        let epoch = source.epoch_handle();
-        let source: Arc<dyn ModuleSource> = Arc::new(source);
-        self.source
-            .mount(ModuleId::new(namespace.name().as_bytes().to_vec()), source);
-        let mount = ScriptRootMount { epoch };
-        match namespace {
-            Namespace::User => self.user = Some(mount),
-            Namespace::Project => self.project = Some(mount),
-        }
-    }
-}
-
-impl ModuleSource for ScriptModuleSource {
-    fn resolve(
-        &self,
-        requester: Option<&ModuleId>,
-        request: &[u8],
-    ) -> ModuleSourceFuture<ModuleId> {
-        self.source.resolve(requester, request)
-    }
-
-    fn read(&self, id: &ModuleId) -> ModuleSourceFuture<Vec<u8>> {
-        self.source.read(id)
-    }
-
-    fn read_request(&self, request: ReadRequest<'_>) -> ModuleSourceFuture<Vec<u8>> {
-        self.source.read_request(request)
-    }
-
-    fn instance_key(&self, request: ReadRequest<'_>) -> InstanceKey {
-        self.source.instance_key(request)
-    }
-
-    fn metadata(&self, id: &ModuleId) -> SourceMetadata {
-        self.source.metadata(id)
-    }
-
-    fn epoch(&self) -> u64 {
-        self.source.epoch()
-    }
-}
+/// Canopy's persistent source is Ruau's validated multi-root filesystem source.
+pub type ScriptModuleSource = FilesystemMounts;
 
 /// Persistent script namespace.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -258,14 +148,6 @@ pub enum Namespace {
 }
 
 impl Namespace {
-    /// Return the module id prefix for this namespace.
-    fn prefix(self) -> &'static str {
-        match self {
-            Self::User => USER_PREFIX,
-            Self::Project => PROJECT_PREFIX,
-        }
-    }
-
     /// Return the user-facing namespace name.
     pub(crate) fn name(self) -> &'static str {
         match self {
@@ -282,78 +164,73 @@ pub struct StartupModule {
     pub(crate) namespace: Namespace,
     /// Filesystem path to the startup script.
     pub(crate) path: PathBuf,
-    /// Prefixed module id used when loading the script.
-    pub(crate) module_id: ModuleId,
-}
-
-/// Filesystem-backed epoch handle for one mounted root.
-#[derive(Debug)]
-struct ScriptRootMount {
-    /// Shared epoch handle used for explicit invalidation.
-    epoch: FilesystemEpoch,
-}
-
-/// Build a canonical module id in a namespace.
-fn prefixed_module_id(namespace: Namespace, inner: &str) -> ModuleId {
-    ModuleId::canonicalized(&format!("{}{}", namespace.prefix(), inner))
-}
-
-/// Convert a filesystem path under a root to a prefixed module id.
-fn module_id_for_root(namespace: Namespace, root: &Path, path: &Path) -> Option<ModuleId> {
-    let relative = path.strip_prefix(root).ok()?;
-    let module_name = module_name_from_relative(relative)?;
-    Some(prefixed_module_id(namespace, &module_name))
-}
-
-/// Convert a relative Luau path to a slash-separated module name.
-fn module_name_from_relative(relative: &Path) -> Option<String> {
-    let mut parts = Vec::new();
-    for component in relative.components() {
-        let Component::Normal(name) = component else {
-            return None;
-        };
-        parts.push(name.to_str()?.to_owned());
-    }
-    let last = parts.last_mut()?;
-    if let Some(stripped) = last.strip_suffix(LUAU_EXTENSION) {
-        *last = stripped.to_owned();
-    }
-    Some(parts.join("/"))
 }
 
 #[cfg(test)]
 mod tests {
+    use std::{fs, process, thread};
+
     use super::*;
+
+    /// Create an isolated repository-local filesystem fixture.
+    fn fixture_root(label: &str) -> PathBuf {
+        let thread = thread::current();
+        let name = thread.name().unwrap_or("test");
+        let root = Path::new("tmp").join(format!("modules-{}-{name}-{label}", process::id()));
+        if root.exists() {
+            fs::remove_dir_all(&root).expect("stale fixture removes");
+        }
+        fs::create_dir_all(&root).expect("fixture root creates");
+        root
+    }
+
+    /// Write one fixture file, creating its parent directories.
+    fn write(path: &Path, source: &str) {
+        fs::create_dir_all(path.parent().expect("fixture file has parent"))
+            .expect("fixture parent creates");
+        fs::write(path, source).expect("fixture file writes");
+    }
 
     #[test]
     fn module_id_for_path_maps_configured_roots() {
+        let base = fixture_root("reverse");
+        let user = base.join("user");
+        let project = base.join("project");
+        let user_file = user.join("keymap.luau");
+        let project_file = project.join("nested/init.luau");
+        write(&user_file, "return {}");
+        write(&project_file, "return {}");
         let roots = ScriptModuleRoots::new()
-            .with_user_root("tmp/canopy-user")
-            .with_project_root("tmp/work/.canopy");
+            .with_user_root(&user)
+            .with_project_root(&project);
+        let source = roots
+            .module_source()
+            .expect("mounts build")
+            .expect("source exists");
 
         assert_eq!(
-            roots.module_id_for_path(Path::new("tmp/canopy-user/keymap.luau")),
-            Some(ModuleId::canonicalized("@user/keymap"))
+            source.module_id_for_path(&user_file),
+            Ok(ModuleId::canonicalized("@user/keymap"))
         );
         assert_eq!(
-            roots.module_id_for_path(Path::new("tmp/work/.canopy/nested/init.luau")),
-            Some(ModuleId::canonicalized("@project/nested/init"))
+            source.module_id_for_path(&project_file),
+            Ok(ModuleId::canonicalized("@project/nested"))
         );
-        assert_eq!(
-            roots.module_id_for_path(Path::new("tmp/elsewhere/init.luau")),
-            None
-        );
+        fs::remove_dir_all(base).expect("fixture removes");
     }
 
     #[test]
     fn composite_source_requires_explicit_roots_for_root_imports() {
+        let user = fixture_root("explicit");
         let source = ScriptModuleRoots::new()
-            .with_user_root("tmp/canopy-user")
+            .with_user_root(&user)
             .module_source()
+            .expect("mounts build")
             .expect("source");
 
         let error = poll_ready_once(source.resolve(None, b"keymap"), "resolving")
             .expect_err("bare root imports are rejected");
         assert!(matches!(error, ModuleSourceError::MissingModule { .. }));
+        fs::remove_dir_all(user).expect("fixture removes");
     }
 }

@@ -317,6 +317,23 @@ impl InputMode {
         self.inputs.clear();
         removed
     }
+
+    /// Remove every Luau-backed binding from this mode.
+    fn remove_luau_functions(&mut self) -> Vec<(BindingId, BindingTarget)> {
+        let mut removed = Vec::new();
+        for actions in self.inputs.values_mut() {
+            actions.retain(|action| {
+                if matches!(action.action, BindingTarget::LuauFunction(_)) {
+                    removed.push((action.id, action.action.clone()));
+                    false
+                } else {
+                    true
+                }
+            });
+        }
+        self.inputs.retain(|_, actions| !actions.is_empty());
+        removed
+    }
 }
 
 /// The InputMap struct manages the global set of key and mouse bindings for the
@@ -641,6 +658,17 @@ impl InputMap {
         removed
     }
 
+    /// Remove every Luau-backed binding while preserving command and mode bindings.
+    pub(crate) fn remove_luau_functions(&mut self) -> Vec<(BindingId, BindingTarget)> {
+        let mut removed = Vec::new();
+        for mode in self.modes.values_mut() {
+            removed.extend(mode.remove_luau_functions());
+        }
+        self.modes
+            .retain(|mode, actions| mode == DEFAULT_MODE || !actions.inputs.is_empty());
+        removed
+    }
+
     /// Return the name of the current input mode.
     pub fn current_mode(&self) -> &str {
         &self.current_mode
@@ -714,7 +742,7 @@ mod tests {
 
     #[test]
     fn caseconfusion() -> Result<()> {
-        let e = script::ScriptHost::new();
+        let e = script::LuauHost::new();
         let mut m = InputMode::new();
         let a_foo = e.compile("x()")?;
 
@@ -741,7 +769,7 @@ mod tests {
 
     #[test]
     fn keymode() -> Result<()> {
-        let e = script::ScriptHost::new();
+        let e = script::LuauHost::new();
 
         let mut m = InputMode::new();
         let a_foo = e.compile("x()")?;
@@ -801,7 +829,7 @@ mod tests {
     #[test]
     fn keymap() -> Result<()> {
         let mut m = InputMap::new();
-        let e = script::ScriptHost::new();
+        let e = script::LuauHost::new();
 
         let a_default = e.compile("x()")?;
         let a_m = e.compile("x()")?;
@@ -827,7 +855,7 @@ mod tests {
     #[test]
     fn mode_stack_resolves_top_to_bottom_then_default() -> Result<()> {
         let mut m = InputMap::new();
-        let e = script::ScriptHost::new();
+        let e = script::LuauHost::new();
         let a_default = e.compile("default()")?;
         let a_normal = e.compile("normal()")?;
         let a_modal = e.compile("modal()")?;
@@ -880,7 +908,7 @@ mod tests {
     #[test]
     fn layered_modes_fall_back_to_default() -> Result<()> {
         let mut m = InputMap::new();
-        let e = script::ScriptHost::new();
+        let e = script::LuauHost::new();
         let a_default = e.compile("x()")?;
         m.bind("", InputSpec::Key('b'.into()), "", a_default)?;
         m.set_mode("m")?;
@@ -895,7 +923,7 @@ mod tests {
     #[test]
     fn missing_active_mode_falls_back_to_default() -> Result<()> {
         let mut m = InputMap::new();
-        let e = script::ScriptHost::new();
+        let e = script::LuauHost::new();
         let a_default = e.compile("x()")?;
         m.bind("", InputSpec::Key('b'.into()), "", a_default)?;
         m.current_mode = "missing".to_string();
@@ -915,7 +943,7 @@ mod tests {
     #[test]
     fn unbind_removes_binding() -> Result<()> {
         let mut m = InputMap::new();
-        let e = script::ScriptHost::new();
+        let e = script::LuauHost::new();
         let a_default = e.compile("x()")?;
         let id = m.bind("", InputSpec::Key('a'.into()), "", a_default)?;
 
@@ -931,7 +959,7 @@ mod tests {
     #[test]
     fn binding_precedence_prefers_anchored_end() -> Result<()> {
         let mut m = InputMode::new();
-        let e = script::ScriptHost::new();
+        let e = script::LuauHost::new();
         let a_loose = e.compile("x()")?;
         let a_anchor = e.compile("x()")?;
 
@@ -959,7 +987,7 @@ mod tests {
     #[test]
     fn binding_precedence_prefers_depth_when_literals_equal() -> Result<()> {
         let mut m = InputMode::new();
-        let e = script::ScriptHost::new();
+        let e = script::LuauHost::new();
         let a_shallow = e.compile("x()")?;
         let a_deep = e.compile("x()")?;
 
@@ -987,7 +1015,7 @@ mod tests {
     #[test]
     fn binding_precedence_prefers_insertion_order_on_tie() -> Result<()> {
         let mut m = InputMode::new();
-        let e = script::ScriptHost::new();
+        let e = script::LuauHost::new();
         let a_first = e.compile("x()")?;
         let a_last = e.compile("x()")?;
 

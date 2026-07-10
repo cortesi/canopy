@@ -257,6 +257,23 @@ mod tests {
     }
 
     #[test]
+    fn stored_callback_prints_use_fresh_call_options() -> Result<()> {
+        let mut harness = Harness::builder(ApiRoot).size(20, 5).build()?;
+        harness.render()?;
+        harness
+            .canopy
+            .eval_script(r#"canopy.bind("p", function() print("callback print") end)"#)?;
+        let _ = harness.canopy.take_script_logs();
+
+        harness.key('p')?;
+        assert_eq!(
+            harness.canopy.take_script_logs(),
+            vec!["callback print".to_string()]
+        );
+        Ok(())
+    }
+
+    #[test]
     fn script_find_rejects_invalid_path_filters() -> Result<()> {
         let mut harness = Harness::builder(ApiRoot).size(20, 5).build()?;
         harness.render()?;
@@ -514,7 +531,9 @@ mod tests {
             .run_startup_scripts()
             .expect_err("startup script without setup should fail typechecking");
         assert!(
-            error.to_string().contains("required global 'setup'"),
+            error
+                .to_string()
+                .contains("startup/app:0:0: Required global 'setup'"),
             "{error}"
         );
         Ok(())
@@ -541,6 +560,30 @@ mod tests {
         assert_eq!(
             canopy.eval_script_value("return api_leaf.get()")?,
             ArgValue::Int(1)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn startup_failure_releases_registered_callbacks() -> Result<()> {
+        let mut canopy = raw_canopy_with_leaf()?;
+        canopy.register_startup_script(
+            "failing",
+            r#"
+            function setup()
+                canopy.bind("x", function() api_leaf.set(99) end)
+                error("startup failed")
+            end
+        "#,
+        )?;
+
+        canopy
+            .run_startup_scripts()
+            .expect_err("startup execution should fail");
+        canopy.eval_script(r#"canopy.send_key("x")"#)?;
+        assert_eq!(
+            canopy.eval_script_value("return api_leaf.get()")?,
+            ArgValue::Int(0)
         );
         Ok(())
     }
@@ -591,6 +634,7 @@ mod tests {
             r#"
             local lib = require("./lib")
             api_leaf.set(lib.value)
+            canopy.bind("x", function() api_leaf.set(99) end)
         "#,
         );
 
@@ -601,6 +645,19 @@ mod tests {
         assert_eq!(
             canopy.eval_script_value("return api_leaf.get()")?,
             ArgValue::Int(44)
+        );
+
+        write_script(&project_root.join("lib.luau"), "return { value = 45 }");
+        assert!(canopy.invalidate_project_script_modules().is_some());
+        canopy.eval_script(r#"canopy.send_key("x")"#)?;
+        assert_eq!(
+            canopy.eval_script_value("return api_leaf.get()")?,
+            ArgValue::Int(44)
+        );
+        canopy.run_config(&config)?;
+        assert_eq!(
+            canopy.eval_script_value("return api_leaf.get()")?,
+            ArgValue::Int(45)
         );
 
         let _removed = fs::remove_dir_all(root);

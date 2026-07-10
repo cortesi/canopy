@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use ruau::decl;
+use ruau::{decl, module::NativeModuleBuilder};
 
 use super::{base_api, luau_global_owner_name};
 use crate::{
@@ -22,6 +22,7 @@ pub(crate) fn preamble() -> String {
     }
     output.push('\n');
     let mut builder = decl::Builder::new();
+    builder.class(decl::Class::new("NodeId"));
     register_framework_declarations(&mut builder);
     base_api::register_declarations(&mut builder);
     output.push_str(
@@ -52,20 +53,6 @@ pub(crate) fn owner_command_specs(
         specs.sort_by_key(|spec| spec.id.0);
     }
     owners
-}
-
-/// Render one owner's `declare` block for its sorted command specs.
-pub(crate) fn render_owner_declaration(
-    owner: &str,
-    specs: &[&'static CommandSpec],
-    has_default_bindings: bool,
-) -> String {
-    let mut builder = decl::Builder::new();
-    register_owner_declaration(&mut builder, owner, specs, has_default_bindings);
-    builder
-        .finish()
-        .expect("owner command declarations are statically valid")
-        .render()
 }
 
 /// Render the complete Luau definition file for the current command set.
@@ -105,7 +92,7 @@ pub fn render_definitions(
 }
 
 /// Build a Luau function signature for a command.
-fn command_fn_sig(spec: &CommandSpec) -> decl::FnSig {
+pub(crate) fn command_fn_sig(spec: &CommandSpec) -> decl::FnSig {
     let params = spec
         .params
         .iter()
@@ -123,9 +110,8 @@ pub fn command_type_to_luau(spec: &CommandTypeSpec) -> String {
     spec.luau_ty().render()
 }
 
-/// Register framework-owned record, class, and alias declarations.
-fn register_framework_declarations(builder: &mut decl::Builder) {
-    builder.class(decl::Class::new("NodeId"));
+/// Register framework-owned record and alias declarations.
+fn register_framework_declarations(builder: &mut impl FrameworkDeclarationSink) {
     builder.alias(decl::Alias::new(
         "Point",
         decl::Ty::table([
@@ -217,8 +203,31 @@ fn register_framework_declarations(builder: &mut decl::Builder) {
     register_observation_info(builder);
 }
 
+/// Add framework-owned aliases to a generated native module.
+pub(crate) fn register_framework_types(builder: &mut NativeModuleBuilder) {
+    register_framework_declarations(builder);
+}
+
+/// Target supporting Canopy's framework-owned alias and class declarations.
+trait FrameworkDeclarationSink {
+    /// Add one alias.
+    fn alias(&mut self, alias: decl::Alias);
+}
+
+impl FrameworkDeclarationSink for decl::Builder {
+    fn alias(&mut self, alias: decl::Alias) {
+        Self::alias(self, alias);
+    }
+}
+
+impl FrameworkDeclarationSink for NativeModuleBuilder {
+    fn alias(&mut self, alias: decl::Alias) {
+        Self::alias(self, alias);
+    }
+}
+
 /// Register the active-binding discovery record.
-fn register_binding_info(builder: &mut decl::Builder) {
+fn register_binding_info(builder: &mut impl FrameworkDeclarationSink) {
     builder.alias(decl::Alias::new(
         "BindingInfo",
         decl::Ty::table([
@@ -238,7 +247,7 @@ fn register_binding_info(builder: &mut decl::Builder) {
 }
 
 /// Register command discovery records.
-fn register_command_info(builder: &mut decl::Builder) {
+fn register_command_info(builder: &mut impl FrameworkDeclarationSink) {
     builder.alias(decl::Alias::new(
         "CommandParamInfo",
         decl::Ty::table([
@@ -282,7 +291,7 @@ fn register_command_info(builder: &mut decl::Builder) {
 }
 
 /// Register observation and diagnostics records.
-fn register_observation_info(builder: &mut decl::Builder) {
+fn register_observation_info(builder: &mut impl FrameworkDeclarationSink) {
     builder.alias(decl::Alias::new(
         "ScreenCell",
         decl::Ty::table([
@@ -366,7 +375,8 @@ fn register_owner_declaration(
     specs: &[&'static CommandSpec],
     has_default_bindings: bool,
 ) {
-    register_command_deps(builder, specs);
+    let mut registry = DeclRegistry::new(builder);
+    register_command_deps(&mut registry, specs);
     builder.section(format!("Commands for widget \"{owner}\""));
     let mut fields = specs
         .iter()
@@ -391,24 +401,32 @@ fn register_owner_declaration(
 }
 
 /// Register declaration dependencies for command parameters and returns.
-fn register_command_deps(builder: &mut decl::Builder, specs: &[&'static CommandSpec]) {
-    let mut registry = DeclRegistry::new(builder);
+fn register_command_deps(registry: &mut DeclRegistry<'_>, specs: &[&'static CommandSpec]) {
     for spec in specs {
         for param in spec
             .params
             .iter()
             .filter(|param| param.kind == CommandParamKind::User)
         {
-            param.ty.luau_decls(&mut registry);
+            param.ty.luau_decls(registry);
         }
         if let CommandReturnSpec::Value(ty) = spec.ret {
-            ty.luau_decls(&mut registry);
+            ty.luau_decls(registry);
         }
     }
 }
 
+/// Add command-owned declaration dependencies to a generated owner module.
+pub(crate) fn register_owner_dependencies(
+    builder: &mut NativeModuleBuilder,
+    specs: &[&'static CommandSpec],
+) {
+    let mut registry = DeclRegistry::native_module(builder);
+    register_command_deps(&mut registry, specs);
+}
+
 /// Compose command docs and parameter tags for a command table field.
-fn command_doc(spec: &CommandSpec) -> Option<String> {
+pub(crate) fn command_doc(spec: &CommandSpec) -> Option<String> {
     let mut lines = Vec::new();
     if let Some(short) = spec.doc.short {
         lines.push(short.to_string());
