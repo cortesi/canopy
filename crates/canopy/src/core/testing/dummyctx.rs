@@ -69,6 +69,10 @@ impl ViewContext for DummyContext {
         None
     }
 
+    fn node_layout(&self, _node: NodeId) -> Option<Layout> {
+        None
+    }
+
     fn node_type_id(&self, _node: NodeId) -> Option<TypeId> {
         None
     }
@@ -83,6 +87,10 @@ impl ViewContext for DummyContext {
 
     fn node_is_focused(&self, _node: NodeId) -> bool {
         false
+    }
+
+    fn focused_node(&self) -> Option<NodeId> {
+        None
     }
 
     fn is_on_focus_path(&self) -> bool {
@@ -115,6 +123,10 @@ impl ViewContext for DummyContext {
 
     fn node_path(&self, _root: NodeId, _node: NodeId) -> Path {
         Path::empty()
+    }
+
+    fn locate(&self, _root: NodeId, _point: Point) -> Result<Option<NodeId>> {
+        Ok(None)
     }
 
     fn child_keyed(&self, _key: &str) -> Option<NodeId> {

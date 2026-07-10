@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use canopy::backend::crossterm::{RunloopOptions, runloop_with_options};
+use canopy::terminal::{RunloopOptions, runloop_with_options};
 
 use crate::{
     Result, ScriptStatus, SuiteConfig, run_suite,

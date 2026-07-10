@@ -72,7 +72,7 @@ pub use children::{KeyedChildren, RemovePolicy};
 pub use context::{ChildKey, Context, FocusScope, Preorder, Slot, ViewContext};
 pub use fixture::{Fixture, FixtureInfo};
 pub use id::{NodeId, TypedId};
-pub use inputmap::{BindingId, InputMap, InputSpec};
+pub use inputmap::{BindingId, InputSpec};
 pub use path::{Path, PathFilter};
 pub use script::ScriptModuleRoots;
 pub use world::Core;

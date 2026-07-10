@@ -4,7 +4,7 @@ mod logs;
 mod view;
 
 use canopy::{
-    Canopy, Core, Loader, NodeId, ViewContext, Widget, derive_commands, error::Result,
+    Canopy, Context, Loader, NodeId, ViewContext, Widget, derive_commands, error::Result,
     layout::Layout, render::Render, state::NodeName,
 };
 use logs::Logs;
@@ -63,17 +63,17 @@ impl Inspector {
     }
 
     /// Build the inspector subtree and return its node id.
-    pub fn install(core: &mut Core) -> Result<NodeId> {
-        let (view_id, _tabs, _logs) = view::View::install(core)?;
-        let frame_id = core.create_detached(frame::Frame::new())?;
-        core.set_children(frame_id, vec![view_id])?;
-        core.set_layout_of(frame_id, Layout::fill())?;
+    pub fn install(context: &mut dyn Context) -> Result<NodeId> {
+        let (view_id, _tabs, _logs) = view::View::install(context)?;
+        let frame_id = context.create_detached(frame::Frame::new())?;
+        context.set_children_of(frame_id.into(), vec![view_id])?;
+        context.set_layout_of(frame_id, Layout::fill())?;
 
-        let inspector_id = core.create_detached(Self::new())?;
-        core.set_children(inspector_id, vec![frame_id])?;
-        core.set_layout_of(inspector_id, Layout::fill())?;
+        let inspector_id = context.create_detached(Self::new())?;
+        context.set_children_of(inspector_id.into(), vec![frame_id.into()])?;
+        context.set_layout_of(inspector_id, Layout::fill())?;
 
-        Ok(inspector_id)
+        Ok(inspector_id.into())
     }
 }
 

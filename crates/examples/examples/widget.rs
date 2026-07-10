@@ -8,8 +8,8 @@ use std::{
 };
 
 use canopy::{
-    backend::crossterm::{RunloopOptions, runloop_with_options},
     prelude::*,
+    terminal::{RunloopOptions, runloop_with_options},
 };
 use canopy_examples::{
     print_luau_api,

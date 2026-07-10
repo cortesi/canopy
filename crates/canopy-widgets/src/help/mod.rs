@@ -7,7 +7,7 @@ use std::cell::RefCell;
 // Re-export help types for convenience
 pub use canopy::help::{BindingKind, OwnedHelpBinding, OwnedHelpCommand, OwnedHelpSnapshot};
 use canopy::{
-    Canopy, Context, Core, EventOutcome, Loader, NodeId, ViewContext, Widget, command,
+    Canopy, Context, EventOutcome, InputSpec, Loader, NodeId, ViewContext, Widget, command,
     derive_commands,
     error::Result,
     event::{
@@ -15,7 +15,6 @@ use canopy::{
         key::{Empty, KeyCode},
     },
     geom::Line,
-    inputmap::InputSpec,
     layout::{CanvasContext, Edges, Layout, Size},
     render::Render,
     state::NodeName,
@@ -92,15 +91,15 @@ impl Help {
     }
 
     /// Build the help subtree and return its node id.
-    pub fn install(core: &mut Core) -> Result<NodeId> {
+    pub fn install(context: &mut dyn Context) -> Result<NodeId> {
         // Create content widget - uses its own layout() with overflow and padding
-        let content_id = core.create_detached(HelpContent::new())?;
+        let content_id = context.create_detached(HelpContent::new())?;
 
         // Wrap content in Frame for visual boundary
-        let frame_id = core.create_detached(frame::Frame::new().with_title("Help"))?;
-        core.set_children(frame_id, vec![content_id])?;
+        let frame_id = context.create_detached(frame::Frame::new().with_title("Help"))?;
+        context.set_children_of(frame_id.into(), vec![content_id.into()])?;
         // Frame has fixed size - this is what gets centered
-        core.with_layout_of(frame_id, |layout| {
+        context.with_layout_of(frame_id.into(), &mut |layout: &mut Layout| {
             layout.min_width = Some(50);
             layout.max_width = Some(50);
             layout.min_height = Some(20);
@@ -108,16 +107,16 @@ impl Help {
         })?;
 
         // Wrap frame in Modal for centering
-        let modal_id = core.create_detached(Modal::new())?;
-        core.set_children(modal_id, vec![frame_id])?;
+        let modal_id = context.create_detached(Modal::new())?;
+        context.set_children_of(modal_id.into(), vec![frame_id.into()])?;
         // Modal uses its own layout (Stack with Center alignment), don't override
 
         // Create the Help widget as the root of this subtree
-        let help_id = core.create_detached(Self::new())?;
-        core.set_children(help_id, vec![modal_id])?;
-        core.set_layout_of(help_id, Layout::fill())?;
+        let help_id = context.create_detached(Self::new())?;
+        context.set_children_of(help_id.into(), vec![modal_id.into()])?;
+        context.set_layout_of(help_id, Layout::fill())?;
 
-        Ok(help_id)
+        Ok(help_id.into())
     }
 }
 

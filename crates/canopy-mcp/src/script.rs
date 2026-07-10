@@ -757,10 +757,7 @@ mod tests {
                 |canopy| canopy.eval_script("script_target.set(31)"),
             ))?;
             canopy.finalize_api()?;
-            let root_id = canopy.root_id();
-            canopy
-                .core_mut()
-                .replace_subtree(root_id, ScriptTarget::new())?;
+            canopy.replace_root(ScriptTarget::new())?;
             Ok(canopy)
         })
     }

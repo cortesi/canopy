@@ -21,8 +21,8 @@ mod tests {
 
         for (recursion, divisions, expected) in test_cases {
             let mut canopy = Canopy::new();
-            let grid = Grid::install(canopy.core_mut(), recursion, divisions)
-                .expect("Failed to build grid");
+            let grid =
+                Grid::install(&mut canopy, recursion, divisions).expect("Failed to build grid");
             let dimensions = grid.dimensions();
             assert_eq!(
                 dimensions, expected,

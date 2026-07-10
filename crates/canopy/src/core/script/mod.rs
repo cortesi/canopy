@@ -41,9 +41,10 @@ thread_local! {
 }
 
 use crate::{
-    Canopy, ChangeOutcome, Core, NodeId,
+    Canopy, ChangeOutcome, NodeId,
     commands::{self, ArgValue, CommandArgs, CommandInvocation, CommandSet, CommandSpec},
     core::{
+        Core,
         context::{Context, CoreContext, CoreViewContext, FocusScope, ViewContext},
         help::BindingKind,
         inputmap::{self, BindingTarget},

@@ -406,6 +406,17 @@ impl Canopy {
         self.core.set_children(root, vec![child.into()])
     }
 
+    /// Replace the root widget while preserving its stable node ID.
+    pub fn replace_root<W>(&mut self, widget: W) -> Result<TypedId<W>>
+    where
+        W: Widget + 'static,
+    {
+        let root = self.root_id();
+        self.core.replace_subtree(root, widget)?;
+        self.render_pending = true;
+        Ok(TypedId::new(root))
+    }
+
     /// Return the active style map.
     pub fn style(&self) -> &StyleMap {
         &self.style
@@ -423,21 +434,8 @@ impl Canopy {
         self.render_pending = true;
     }
 
-    /// Return the internal core state.
-    #[doc(hidden)]
-    pub fn core(&self) -> &Core {
-        &self.core
-    }
-
-    /// Return the internal core state mutably.
-    #[doc(hidden)]
-    pub fn core_mut(&mut self) -> &mut Core {
-        self.render_pending = true;
-        &mut self.core
-    }
-
     /// Register a backend controller.
-    pub fn register_backend<T: BackendControl + 'static>(&mut self, be: T) {
+    pub(crate) fn register_backend<T: BackendControl + 'static>(&mut self, be: T) {
         self.backend = Some(Box::new(be));
     }
 
@@ -829,9 +827,41 @@ impl Canopy {
         &mut self,
         f: impl FnOnce(&mut dyn crate::Context) -> Result<R>,
     ) -> Result<R> {
-        let root_id = self.core.root_id();
-        let mut ctx = crate::core::context::CoreContext::new(&mut self.core, root_id);
-        f(&mut ctx)
+        self.with_context(self.core.root_id(), f)
+    }
+
+    /// Run a closure against a mutable context bound to a node.
+    pub fn with_context<R>(
+        &mut self,
+        node: impl Into<NodeId>,
+        f: impl FnOnce(&mut dyn crate::Context) -> Result<R>,
+    ) -> Result<R> {
+        let node = node.into();
+        if !self.core.nodes.contains_key(node) {
+            return Err(error::Error::NodeNotFound(node));
+        }
+        let mut context = crate::core::context::CoreContext::new(&mut self.core, node);
+        f(&mut context)
+    }
+
+    /// Run a closure against an immutable view of the root context.
+    pub fn with_root_view<R>(&self, f: impl FnOnce(&dyn crate::ViewContext) -> R) -> R {
+        self.with_view(self.core.root_id(), f)
+            .expect("root context should always exist")
+    }
+
+    /// Run a closure against an immutable view context bound to a node.
+    pub fn with_view<R>(
+        &self,
+        node: impl Into<NodeId>,
+        f: impl FnOnce(&dyn crate::ViewContext) -> R,
+    ) -> Result<R> {
+        let node = node.into();
+        if !self.core.nodes.contains_key(node) {
+            return Err(error::Error::NodeNotFound(node));
+        }
+        let context = crate::core::context::CoreViewContext::new(&self.core, node);
+        Ok(f(&context))
     }
 
     /// Type-check a Luau source string against the finalized app API.

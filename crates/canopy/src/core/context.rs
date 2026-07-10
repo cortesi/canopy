@@ -182,6 +182,9 @@ pub trait ViewContext {
     /// View information for a specific node.
     fn node_view(&self, node: NodeId) -> Option<View>;
 
+    /// Layout configuration for a specific node.
+    fn node_layout(&self, node: NodeId) -> Option<Layout>;
+
     /// Widget type identifier for a specific node.
     fn node_type_id(&self, node: NodeId) -> Option<TypeId>;
 
@@ -219,6 +222,9 @@ pub trait ViewContext {
     /// Does the specified node have focus?
     fn node_is_focused(&self, node: NodeId) -> bool;
 
+    /// Return the currently focused node, including one not yet laid out.
+    fn focused_node(&self) -> Option<NodeId>;
+
     /// Is the current node on the focus path?
     fn is_on_focus_path(&self) -> bool;
 
@@ -242,6 +248,9 @@ pub trait ViewContext {
 
     /// Return the path for a node relative to a root.
     fn node_path(&self, root: NodeId, node: NodeId) -> Path;
+
+    /// Locate the deepest visible node at a point within a subtree.
+    fn locate(&self, root: NodeId, point: Point) -> Result<Option<NodeId>>;
 
     /// Return a keyed child relative to the current node.
     fn child_keyed(&self, key: &str) -> Option<NodeId>;
@@ -1264,6 +1273,10 @@ impl<'a> ViewContext for CoreContext<'a> {
         self.core.nodes.get(node).map(|n| n.view)
     }
 
+    fn node_layout(&self, node: NodeId) -> Option<Layout> {
+        self.core.nodes.get(node).map(|n| n.layout)
+    }
+
     fn node_type_id(&self, node: NodeId) -> Option<TypeId> {
         self.core.nodes.get(node).map(|n| n.widget_type)
     }
@@ -1282,6 +1295,10 @@ impl<'a> ViewContext for CoreContext<'a> {
 
     fn node_is_focused(&self, node: NodeId) -> bool {
         self.core.is_focused(node)
+    }
+
+    fn focused_node(&self) -> Option<NodeId> {
+        self.core.focus
     }
 
     fn is_on_focus_path(&self) -> bool {
@@ -1314,6 +1331,10 @@ impl<'a> ViewContext for CoreContext<'a> {
 
     fn node_path(&self, root: NodeId, node: NodeId) -> Path {
         self.core.node_path(root, node)
+    }
+
+    fn locate(&self, root: NodeId, point: Point) -> Result<Option<NodeId>> {
+        self.core.locate_node(root, point)
     }
 
     fn child_keyed(&self, key: &str) -> Option<NodeId> {
@@ -1597,6 +1618,10 @@ impl<'a> ViewContext for CoreViewContext<'a> {
         self.core.nodes.get(node).map(|n| n.view)
     }
 
+    fn node_layout(&self, node: NodeId) -> Option<Layout> {
+        self.core.nodes.get(node).map(|n| n.layout)
+    }
+
     fn node_type_id(&self, node: NodeId) -> Option<TypeId> {
         self.core.nodes.get(node).map(|n| n.widget_type)
     }
@@ -1615,6 +1640,10 @@ impl<'a> ViewContext for CoreViewContext<'a> {
 
     fn node_is_focused(&self, node: NodeId) -> bool {
         self.core.is_focused(node)
+    }
+
+    fn focused_node(&self) -> Option<NodeId> {
+        self.core.focus
     }
 
     fn is_on_focus_path(&self) -> bool {
@@ -1647,6 +1676,10 @@ impl<'a> ViewContext for CoreViewContext<'a> {
 
     fn node_path(&self, root: NodeId, node: NodeId) -> Path {
         self.core.node_path(root, node)
+    }
+
+    fn locate(&self, root: NodeId, point: Point) -> Result<Option<NodeId>> {
+        self.core.locate_node(root, point)
     }
 
     fn child_keyed(&self, key: &str) -> Option<NodeId> {

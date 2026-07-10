@@ -19,7 +19,7 @@ pub trait BackendControl: Debug + Send {
 }
 
 /// Guard that ensures backend start/stop are paired for a terminal session.
-pub(crate) struct TerminalSession {
+pub struct TerminalSession {
     /// Shared session state used by normal exit, panic cleanup, and drop.
     state: Arc<Mutex<TerminalState>>,
 }
@@ -34,7 +34,7 @@ struct TerminalState {
 
 /// Cloneable cleanup capability for a panic hook.
 #[derive(Clone)]
-pub(crate) struct TerminalCleanup {
+pub struct TerminalCleanup {
     /// Shared terminal state.
     state: Arc<Mutex<TerminalState>>,
 }

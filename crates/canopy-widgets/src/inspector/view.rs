@@ -1,5 +1,5 @@
 use canopy::{
-    Core, NodeId, ViewContext, Widget, derive_commands, error::Result, layout::Layout,
+    Context, NodeId, ViewContext, Widget, derive_commands, error::Result, layout::Layout,
     state::NodeName,
 };
 
@@ -26,14 +26,14 @@ impl View {
     }
 
     /// Construct a new inspector view.
-    pub fn install(core: &mut Core) -> Result<(NodeId, NodeId, NodeId)> {
-        let tabs = core.create_detached(Tabs::new(vec!["Stats", "Logs"]))?;
-        let logs = core.create_detached(super::logs::Logs::new())?;
-        let view_id = core.create_detached(Self::new())?;
-        core.set_children(view_id, vec![tabs, logs])?;
-        core.set_layout_of(view_id, Layout::fill())?;
-        core.set_layout_of(tabs, Layout::column().flex_horizontal(1).fixed_height(1))?;
-        core.set_layout_of(logs, Layout::fill())?;
-        Ok((view_id, tabs, logs))
+    pub fn install(context: &mut dyn Context) -> Result<(NodeId, NodeId, NodeId)> {
+        let tabs = context.create_detached(Tabs::new(vec!["Stats", "Logs"]))?;
+        let logs = context.create_detached(super::logs::Logs::new())?;
+        let view_id = context.create_detached(Self::new())?;
+        context.set_children_of(view_id.into(), vec![tabs.into(), logs.into()])?;
+        context.set_layout_of(view_id, Layout::fill())?;
+        context.set_layout_of(tabs, Layout::column().flex_horizontal(1).fixed_height(1))?;
+        context.set_layout_of(logs, Layout::fill())?;
+        Ok((view_id.into(), tabs.into(), logs.into()))
     }
 }

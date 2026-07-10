@@ -6,10 +6,7 @@ mod tests {
 
     use canopy::{
         Canopy, Context, ViewContext, Widget, command,
-        commands::{
-            ArgValue, CommandDispatchKind, CommandError, CommandNode, CommandResolution,
-            CommandResolver, dispatch,
-        },
+        commands::{ArgValue, CommandDispatchKind, CommandError, CommandNode, CommandResolution},
         derive_commands,
         error::Result,
         render::Render,
@@ -70,14 +67,17 @@ mod tests {
 
         let mut canopy = Canopy::new();
         canopy.add_commands::<TestLeaf>()?;
-        let leaf_id = canopy.core_mut().create_detached(TestLeaf)?;
-        let branch_id = canopy.core_mut().create_detached(TestBranch)?;
-        canopy.core_mut().set_children(branch_id, vec![leaf_id])?;
-        let root_id = canopy.root_id();
-        canopy.core_mut().set_children(root_id, vec![branch_id])?;
+        let branch_id = canopy.with_root_context(|context| {
+            let leaf_id = context.create_detached(TestLeaf)?;
+            let branch_id = context.create_detached(TestBranch)?;
+            context.set_children_of(branch_id.into(), vec![leaf_id.into()])?;
+            context.set_children(vec![branch_id.into()])?;
+            Ok(branch_id)
+        })?;
 
         let inv = TestLeaf::cmd_c_leaf().call_with(()).invocation();
-        let result = dispatch(canopy.core_mut(), branch_id, &inv)?;
+        let result =
+            canopy.with_context(branch_id, |context| Ok(context.dispatch_command(&inv)))??;
 
         assert_eq!(result, ArgValue::Null);
         assert_eq!(state_path(), vec!["test_leaf.c_leaf()"]);
@@ -93,14 +93,17 @@ mod tests {
         canopy.add_commands::<TestLeaf>()?;
         canopy.add_commands::<TestLeaf>()?;
 
-        let leaf_id = canopy.core_mut().create_detached(TestLeaf)?;
-        let branch_id = canopy.core_mut().create_detached(TestBranch)?;
-        canopy.core_mut().set_children(branch_id, vec![leaf_id])?;
-        let root_id = canopy.root_id();
-        canopy.core_mut().set_children(root_id, vec![branch_id])?;
+        let branch_id = canopy.with_root_context(|context| {
+            let leaf_id = context.create_detached(TestLeaf)?;
+            let branch_id = context.create_detached(TestBranch)?;
+            context.set_children_of(branch_id.into(), vec![leaf_id.into()])?;
+            context.set_children(vec![branch_id.into()])?;
+            Ok(branch_id)
+        })?;
 
         let inv = TestLeaf::cmd_c_leaf().call_with(()).invocation();
-        let result = dispatch(canopy.core_mut(), branch_id, &inv)?;
+        let result =
+            canopy.with_context(branch_id, |context| Ok(context.dispatch_command(&inv)))??;
         assert_eq!(result, ArgValue::Null);
         assert_eq!(state_path(), vec!["test_leaf.c_leaf()"]);
 
@@ -113,8 +116,9 @@ mod tests {
         canopy.add_commands::<TestLeaf>()?;
         let inv = TestLeaf::cmd_c_leaf().call_with(()).invocation();
 
-        let root_id = canopy.core().root_id();
-        let err = dispatch(canopy.core_mut(), root_id, &inv).unwrap_err();
+        let err = canopy
+            .with_root_context(|context| Ok(context.dispatch_command(&inv)))?
+            .unwrap_err();
         let owner_name = match TestLeaf::cmd_c_leaf().dispatch {
             CommandDispatchKind::Node { owner } => owner,
             CommandDispatchKind::Free => "free",
@@ -134,35 +138,40 @@ mod tests {
         let mut canopy = Canopy::new();
         canopy.add_commands::<TestLeaf>()?;
         canopy.add_commands::<TestBranch>()?;
-        let first_leaf = canopy.core_mut().create_detached(TestLeaf)?;
-        let second_leaf = canopy.core_mut().create_detached(TestLeaf)?;
-        let branch_id = canopy.core_mut().create_detached(TestBranch)?;
-        canopy
-            .core_mut()
-            .set_children(branch_id, vec![first_leaf, second_leaf])?;
-        let root_id = canopy.root_id();
-        canopy.core_mut().set_children(root_id, vec![branch_id])?;
+        let (first_leaf, branch_id) = canopy.with_root_context(|context| {
+            let first_leaf = context.create_detached(TestLeaf)?;
+            let second_leaf = context.create_detached(TestLeaf)?;
+            let branch_id = context.create_detached(TestBranch)?;
+            context.set_children_of(
+                branch_id.into(),
+                vec![first_leaf.into(), second_leaf.into()],
+            )?;
+            context.set_children(vec![branch_id.into()])?;
+            Ok((first_leaf, branch_id))
+        })?;
 
-        let resolver = CommandResolver::new(canopy.core(), branch_id);
+        let availability = canopy.command_availability_from_node(branch_id.into());
+        let leaf_availability = availability
+            .iter()
+            .find(|availability| availability.spec.id == TestLeaf::cmd_c_leaf().id)
+            .expect("leaf command availability");
         assert_eq!(
-            resolver.resolve(TestLeaf::cmd_c_leaf()),
-            Some(CommandResolution::Subtree { target: first_leaf })
+            leaf_availability.resolution,
+            Some(CommandResolution::Subtree {
+                target: first_leaf.into()
+            })
         );
 
-        let resolver = CommandResolver::new(canopy.core(), first_leaf);
-        assert_eq!(
-            resolver.resolve(TestBranch::cmd_c_branch()),
-            Some(CommandResolution::Ancestor { target: branch_id })
-        );
-
-        let availability = resolver.availability();
+        let availability = canopy.command_availability_from_node(first_leaf.into());
         let branch_availability = availability
             .iter()
             .find(|availability| availability.spec.id == TestBranch::cmd_c_branch().id)
             .expect("branch command availability");
         assert_eq!(
             branch_availability.resolution,
-            Some(CommandResolution::Ancestor { target: branch_id })
+            Some(CommandResolution::Ancestor {
+                target: branch_id.into()
+            })
         );
 
         Ok(())

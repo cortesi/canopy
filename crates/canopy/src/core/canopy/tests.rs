@@ -456,23 +456,23 @@ fn set_widget_resets_initialization() -> Result<()> {
 #[test]
 fn tbindings() -> Result<()> {
     run_ttree(|c, _, tree| {
-        c.keymap.bind(
+        c.keymap.replace_binding(
             "",
             inputmap::InputSpec::Key('a'.into()),
             "",
-            c.script_host.compile(r#"ba_la.c_leaf()"#)?,
+            inputmap::BindingTarget::Script(c.script_host.compile(r#"ba_la.c_leaf()"#)?),
         )?;
-        c.keymap.bind(
+        c.keymap.replace_binding(
             "",
             inputmap::InputSpec::Key('r'.into()),
             "",
-            c.script_host.compile(r#"r.c_root()"#)?,
+            inputmap::BindingTarget::Script(c.script_host.compile(r#"r.c_root()"#)?),
         )?;
-        c.keymap.bind(
+        c.keymap.replace_binding(
             "",
             inputmap::InputSpec::Key('x'.into()),
             "ba/",
-            c.script_host.compile(r#"r.c_root()"#)?,
+            inputmap::BindingTarget::Script(c.script_host.compile(r#"r.c_root()"#)?),
         )?;
 
         c.core.set_focus(tree.a_a)?;

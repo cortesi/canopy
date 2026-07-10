@@ -1,14 +1,8 @@
 //! Grid test utility for creating configurable grid layouts.
 
 use crate::{
-    NodeId, ViewContext,
-    core::Core,
-    derive_commands,
-    error::Result,
-    geom::{Point, Size},
-    layout::Layout,
-    state::NodeName,
-    widget::Widget,
+    Canopy, Context, NodeId, ViewContext, derive_commands, error::Result, geom::Size,
+    layout::Layout, state::NodeName, widget::Widget,
 };
 
 /// Grid node kind used for layout selection.
@@ -87,8 +81,9 @@ pub struct Grid {
 
 impl Grid {
     /// Create a new grid with specified recursion levels and subdivisions per level.
-    pub fn install(core: &mut Core, recursion: usize, divisions: usize) -> Result<Self> {
-        let root = build_node(core, 0, 0, recursion, divisions)?;
+    pub fn install(canopy: &mut Canopy, recursion: usize, divisions: usize) -> Result<Self> {
+        let root =
+            canopy.with_root_context(|context| build_node(context, 0, 0, recursion, divisions))?;
         Ok(Self {
             root,
             recursion,
@@ -116,23 +111,11 @@ impl Grid {
         };
         (cells_per_side, cells_per_side)
     }
-
-    /// Helper to find the deepest leaf node at a given position.
-    pub fn find_leaf_at(&self, core: &Core, x: u32, y: u32) -> Option<String> {
-        let point = Point { x, y };
-        let id = core.locate_node(self.root, point).ok().flatten()?;
-        let name = core.nodes.get(id)?.name.to_string();
-        if name.starts_with("cell_") || name.starts_with("container_") {
-            Some(name)
-        } else {
-            None
-        }
-    }
 }
 
 /// Recursively build grid nodes and apply layout styles.
 fn build_node(
-    core: &mut Core,
+    core: &mut dyn Context,
     x: usize,
     y: usize,
     recursion: usize,
@@ -145,17 +128,17 @@ fn build_node(
     };
 
     if recursion == 0 {
-        return core.create_detached(GridNode::cell(name));
+        return Ok(core.create_detached(GridNode::cell(name))?.into());
     }
 
-    let node_id = core.create_detached(GridNode::column(name))?;
+    let node_id: NodeId = core.create_detached(GridNode::column(name))?.into();
 
     let mut children = Vec::new();
     let child_scale = divisions.pow((recursion - 1) as u32);
 
     for row in 0..divisions {
         let row_name = format!("row_{x}_{y}_{row}");
-        let row_node = core.create_detached(GridNode::row(row_name))?;
+        let row_node: NodeId = core.create_detached(GridNode::row(row_name))?.into();
         let mut row_children = Vec::new();
         for col in 0..divisions {
             let child_x = x + col * child_scale;
@@ -163,11 +146,11 @@ fn build_node(
             let child = build_node(core, child_x, child_y, recursion - 1, divisions)?;
             row_children.push(child);
         }
-        core.set_children(row_node, row_children)?;
+        core.set_children_of(row_node, row_children)?;
         children.push(row_node);
     }
 
-    core.set_children(node_id, children)?;
+    core.set_children_of(node_id, children)?;
 
     Ok(node_id)
 }

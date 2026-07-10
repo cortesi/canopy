@@ -920,7 +920,9 @@ mod tests {
     }
 
     fn focused_row(harness: &Harness) -> Option<NodeId> {
-        harness.canopy.core().focus_id()
+        harness
+            .canopy
+            .with_root_view(|context| context.focused_node())
     }
 
     #[test]

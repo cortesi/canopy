@@ -192,14 +192,6 @@ impl InputMode {
         });
     }
 
-    /// Resolve a key with a given path filter to a binding target.
-    ///
-    /// The input is normalized before matching.
-    pub fn resolve(&self, path: &Path, input: &InputSpec) -> Option<BindingTarget> {
-        self.resolve_match(path, input)
-            .map(|(action, _match)| action)
-    }
-
     /// Resolve a key with a given path filter, returning the match metadata.
     ///
     /// The input is normalized before matching.
@@ -478,13 +470,6 @@ impl InputMap {
         None
     }
 
-    /// Resolve a binding in the current mode.
-    ///
-    /// The input is normalized before matching.
-    pub fn resolve(&self, path: &Path, input: &InputSpec) -> Option<BindingTarget> {
-        self.resolve_in_modes(|mode| mode.resolve(path, input))
-    }
-
     /// Resolve a binding in the current mode, returning match metadata.
     ///
     /// The input is normalized before matching.
@@ -494,56 +479,6 @@ impl InputMap {
         input: &InputSpec,
     ) -> Option<(BindingTarget, PathMatch)> {
         self.resolve_in_modes(|mode| mode.resolve_match(path, input))
-    }
-
-    /// Bind a key, within a given mode, with a given context to a list of commands.
-    ///
-    /// The input is normalized before storing.
-    ///
-    /// Returns the new binding ID.
-    pub fn bind(
-        &mut self,
-        mode: &str,
-        input: InputSpec,
-        path_filter: &str,
-        script: script::ScriptId,
-    ) -> Result<BindingId> {
-        self.bind_action(mode, input, path_filter, BindingTarget::Script(script))
-    }
-
-    /// Bind a key, within a given mode, with a given context to a direct command invocation.
-    ///
-    /// The input is normalized before storing.
-    ///
-    /// Returns the new binding ID.
-    pub fn bind_command(
-        &mut self,
-        mode: &str,
-        input: InputSpec,
-        path_filter: &str,
-        command: CommandInvocation,
-    ) -> Result<BindingId> {
-        self.bind_action(mode, input, path_filter, BindingTarget::Command(command))
-    }
-
-    /// Bind a key or mouse input to a direct command sequence.
-    ///
-    /// The input is normalized before storing.
-    ///
-    /// Returns the new binding ID.
-    pub fn bind_commands(
-        &mut self,
-        mode: &str,
-        input: InputSpec,
-        path_filter: &str,
-        commands: Vec<CommandInvocation>,
-    ) -> Result<BindingId> {
-        self.bind_action(
-            mode,
-            input,
-            path_filter,
-            BindingTarget::CommandSequence(commands),
-        )
     }
 
     /// Bind a key or mouse input to switch the active input mode.
@@ -566,26 +501,6 @@ impl InputMap {
         )
     }
 
-    /// Bind a key or mouse input to a stored Luau closure.
-    ///
-    /// The input is normalized before storing.
-    ///
-    /// Returns the new binding ID.
-    pub fn bind_luau_function(
-        &mut self,
-        mode: &str,
-        input: InputSpec,
-        path_filter: &str,
-        function: script::LuauFunctionId,
-    ) -> Result<BindingId> {
-        self.bind_action(
-            mode,
-            input,
-            path_filter,
-            BindingTarget::LuauFunction(function),
-        )
-    }
-
     /// Store a key binding action for a mode and path filter.
     ///
     /// Returns the new binding ID.
@@ -604,11 +519,6 @@ impl InputMap {
             .or_insert_with(InputMode::new)
             .insert(id, pathmatch, input, action);
         Ok(id)
-    }
-
-    /// Remove a binding by ID. Returns true if a binding was removed.
-    pub fn unbind(&mut self, id: BindingId) -> bool {
-        !self.unbind_with_targets(id).is_empty()
     }
 
     /// Remove a binding by ID and return removed targets.
@@ -805,6 +715,54 @@ pub struct ModeBindingInfo<'a> {
 mod tests {
     use super::*;
     use crate::{error::Result, event::key, script};
+
+    trait ResolveTarget {
+        fn resolve(&self, path: &Path, input: &InputSpec) -> Option<BindingTarget>;
+    }
+
+    impl ResolveTarget for InputMode {
+        fn resolve(&self, path: &Path, input: &InputSpec) -> Option<BindingTarget> {
+            self.resolve_match(path, input).map(|(target, _)| target)
+        }
+    }
+
+    impl ResolveTarget for InputMap {
+        fn resolve(&self, path: &Path, input: &InputSpec) -> Option<BindingTarget> {
+            self.resolve_match(path, input).map(|(target, _)| target)
+        }
+    }
+
+    trait BindScript {
+        fn bind(
+            &mut self,
+            mode: &str,
+            input: InputSpec,
+            path_filter: &str,
+            script: script::ScriptId,
+        ) -> Result<BindingId>;
+    }
+
+    impl BindScript for InputMap {
+        fn bind(
+            &mut self,
+            mode: &str,
+            input: InputSpec,
+            path_filter: &str,
+            script: script::ScriptId,
+        ) -> Result<BindingId> {
+            self.bind_action(mode, input, path_filter, BindingTarget::Script(script))
+        }
+    }
+
+    trait Unbind {
+        fn unbind(&mut self, id: BindingId) -> bool;
+    }
+
+    impl Unbind for InputMap {
+        fn unbind(&mut self, id: BindingId) -> bool {
+            !self.unbind_with_targets(id).is_empty()
+        }
+    }
 
     #[test]
     fn replacement_errors_preserve_the_old_binding() -> Result<()> {

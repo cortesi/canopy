@@ -301,7 +301,7 @@ permanently blocked detached reader thread is not an acceptable fallback.
    aliases and local/global method triplets in the same change. Add no deprecated wrappers or
    replacement capability traits.
 
-36. [ ] Close the concrete `Core` and low-level surface leaks.
+36. [x] Close the concrete `Core` and low-level surface leaks.
 
    Replace widget installer `&mut Core` signatures with the smallest intent-level `Canopy` facade,
    remove the `core_mut` redraw side effect and escape hatch, decide privacy rather than relying on

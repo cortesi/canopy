@@ -342,10 +342,7 @@ mod tests {
                 |canopy| canopy.eval_script("echo_node.set(41)"),
             ))?;
             canopy.finalize_api()?;
-            let root_id = canopy.root_id();
-            canopy
-                .core_mut()
-                .replace_subtree(root_id, EchoNode::new())?;
+            canopy.replace_root(EchoNode::new())?;
             Ok(canopy)
         }))
     }

@@ -4,8 +4,8 @@ use ruau::vm::Scope;
 
 use super::{AUTOMATION_SERVICE_BUDGET, Canopy, RoutePhase, RouteTraceEntry};
 use crate::{
-    Core, NodeId, commands,
-    core::{help, inputmap},
+    NodeId, commands,
+    core::{Core, help, inputmap},
     error::Result,
     event::{Event, key, mouse},
     geom::{Point, Size},

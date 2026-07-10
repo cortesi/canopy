@@ -29,28 +29,30 @@ pub mod layout;
 pub mod prelude;
 pub(crate) mod widget;
 
+pub(crate) use core::backend;
 pub use core::termbuf::{RenderLimits, TermBuf};
 #[cfg(any(test, feature = "testing"))]
 pub use core::testing;
 // Stable app-author surface.
 pub use core::{
     AutomationCallback, AutomationHandle, BindingId, Canopy, ChangeOutcome, ChildKey, Context,
-    Fixture, FixtureInfo, FocusScope, KeyedChildren, Loader, NodeId, Path, PathFilter,
-    RemovePolicy, ScriptApiState, ScriptJournalEntry, ScriptModuleRoots, Slot, TypedId,
-    ViewContext,
+    Fixture, FixtureInfo, FocusScope, InputSpec, KeyedChildren, Loader, NodeId, Path, PathFilter,
+    Preorder, RemovePolicy, RoutePhase, RouteTraceEntry, ScriptApiState, ScriptJournalEntry,
+    ScriptModuleRoots, Slot, TypedId, ViewContext,
 };
-// Lower-level runtime exports retained for internal crates and diagnostics.
-#[doc(hidden)]
-pub use core::{Core, InputMap, InputSpec, Preorder, RoutePhase, RouteTraceEntry};
-#[doc(hidden)]
+// App-author modules used by widget implementations and derive output.
 pub use core::{
-    backend, commands, cursor, error, event, help, inputmap, path, render, script, state, style,
-    text, view,
+    commands, cursor, error, event, help, path, render, script, state, style, text, view,
 };
+
+/// Crossterm terminal run-loop integration.
+pub mod terminal {
+    pub use crate::core::backend::crossterm::{
+        CtrlCBehavior, RunloopOptions, runloop, runloop_with_options,
+    };
+}
 
 // Re-export derive macros
 pub use canopy_derive::{CommandArg, CommandEnum, command, derive_commands};
-/// Ruau declaration and embedding APIs used for app-provided native modules.
-pub use ruau::{decl, vm, vm_api};
 // Re-export widget trait and event outcome
 pub use widget::{EventOutcome, Widget};

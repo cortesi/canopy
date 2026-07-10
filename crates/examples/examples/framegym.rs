@@ -3,8 +3,8 @@
 use std::process;
 
 use canopy::{
-    backend::crossterm::{RunloopOptions, runloop_with_options},
     prelude::*,
+    terminal::{RunloopOptions, runloop_with_options},
 };
 use canopy_examples::{
     framegym::{FrameGym, setup_bindings},

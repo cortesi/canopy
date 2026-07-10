@@ -3,7 +3,7 @@
 use std::hint::black_box;
 
 use canopy::{
-    Canopy, NodeId, TermBuf, ViewContext, Widget,
+    Canopy, Context, NodeId, TermBuf, ViewContext, Widget,
     error::Result,
     geom::{FrameRects, Line, Point, Rect, Size},
     layout::{Layout, MeasureConstraints, Measurement},
@@ -126,17 +126,19 @@ impl RenderBackend for CountingBackend {
 /// Build a deterministic tree for layout and render benchmarks.
 fn build_tree() -> Result<Canopy> {
     let mut app = Canopy::new();
-    let root_child = app.core_mut().create_detached(BenchNode::branch(0))?;
-    app.set_root_child(root_child)?;
     let mut next_index = 1;
-    add_children(&mut app, root_child, TREE_DEPTH, &mut next_index)?;
+    app.with_root_context(|context| {
+        let root_child: NodeId = context.create_detached(BenchNode::branch(0))?.into();
+        context.set_children(vec![root_child])?;
+        add_children(context, root_child, TREE_DEPTH, &mut next_index)
+    })?;
     app.set_root_size(SCREEN)?;
     Ok(app)
 }
 
 /// Add a fixed fanout subtree below `parent`.
 fn add_children(
-    app: &mut Canopy,
+    context: &mut dyn Context,
     parent: NodeId,
     depth: usize,
     next_index: &mut usize,
@@ -147,19 +149,20 @@ fn add_children(
         let index = *next_index;
         *next_index += 1;
         let child = if depth == 1 {
-            app.core_mut().create_detached(BenchNode::leaf(index))
+            context.create_detached(BenchNode::leaf(index))
         } else {
-            app.core_mut().create_detached(BenchNode::branch(index))
-        }?;
+            context.create_detached(BenchNode::branch(index))
+        }?
+        .into();
 
         if depth > 1 {
-            add_children(app, child, depth - 1, next_index)?;
+            add_children(context, child, depth - 1, next_index)?;
         }
 
         children.push(child);
     }
 
-    app.core_mut().set_children(parent, children)
+    context.set_children_of(parent, children)
 }
 
 /// Return the solid style used in terminal buffer benchmarks.
@@ -184,8 +187,7 @@ fn bench_layout(c: &mut Criterion) {
     c.bench_function("layout_large_tree", |b| {
         let mut app = build_tree().expect("benchmark tree should build");
         b.iter(|| {
-            app.core_mut()
-                .update_layout(black_box(SCREEN))
+            app.set_root_size(black_box(SCREEN))
                 .expect("layout should succeed");
         });
     });
