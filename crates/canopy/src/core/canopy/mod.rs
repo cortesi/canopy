@@ -9,6 +9,7 @@ use std::{
     io::Write,
     path::{Path as FsPath, PathBuf},
     sync::{Arc, mpsc},
+    thread::{self, ThreadId},
     time::{Duration, Instant},
 };
 
@@ -102,9 +103,11 @@ pub struct Canopy {
     /// Event receiver channel.
     pub(crate) event_rx: Option<mpsc::Receiver<Event>>,
     /// Cross-thread automation callback sender.
-    automation_tx: mpsc::Sender<AutomationCallback>,
+    automation_tx: mpsc::SyncSender<AutomationCallback>,
     /// Cross-thread automation callback receiver.
     automation_rx: mpsc::Receiver<AutomationCallback>,
+    /// Thread that exclusively owns this application instance.
+    ui_thread: ThreadId,
 
     /// Style map used for rendering.
     style: StyleMap,
@@ -174,21 +177,35 @@ pub struct RouteTraceEntry {
 /// Callback marshalled onto the UI thread for live automation.
 pub type AutomationCallback = Box<dyn FnOnce(&mut Canopy) + Send + 'static>;
 
+/// Maximum queued automation callbacks before producers receive backpressure.
+const AUTOMATION_QUEUE_CAPACITY: usize = 256;
+/// Maximum automation callbacks serviced during one event-loop turn.
+const AUTOMATION_SERVICE_BUDGET: usize = 64;
+
 /// Handle for submitting automation work to a live canopy runloop.
 #[derive(Clone)]
 pub struct AutomationHandle {
     /// Sender for queued UI-thread callbacks.
-    callback_tx: mpsc::Sender<AutomationCallback>,
+    callback_tx: mpsc::SyncSender<AutomationCallback>,
     /// Sender for wake events so the runloop notices queued work.
     wake_tx: mpsc::Sender<Event>,
+    /// Thread that owns the associated Canopy instance.
+    ui_thread: ThreadId,
 }
 
 impl AutomationHandle {
     /// Queue a callback to run on the UI thread.
     pub fn submit(&self, callback: AutomationCallback) -> Result<()> {
         self.callback_tx
-            .send(callback)
-            .map_err(|_| error::Error::RunLoop("automation callback channel closed".into()))?;
+            .try_send(callback)
+            .map_err(|error| match error {
+                mpsc::TrySendError::Full(_) => {
+                    error::Error::RunLoop("automation callback queue is full".into())
+                }
+                mpsc::TrySendError::Disconnected(_) => {
+                    error::Error::RunLoop("automation callback channel closed".into())
+                }
+            })?;
         self.wake_tx
             .send(Event::Wake)
             .map_err(|_| error::Error::RunLoop("event loop wake channel closed".into()))?;
@@ -201,6 +218,11 @@ impl AutomationHandle {
         R: Send + 'static,
         F: FnOnce(&mut Canopy) -> Result<R> + Send + 'static,
     {
+        if thread::current().id() == self.ui_thread {
+            return Err(error::Error::RunLoop(
+                "synchronous automation request from the UI thread".into(),
+            ));
+        }
         let (tx, rx) = mpsc::channel();
         self.submit(Box::new(move |canopy| {
             let _ignored = tx.send(callback(canopy));
@@ -303,7 +325,7 @@ impl Canopy {
     /// Construct a new Canopy instance.
     pub fn new() -> Self {
         let (tx, rx) = mpsc::channel();
-        let (automation_tx, automation_rx) = mpsc::channel();
+        let (automation_tx, automation_rx) = mpsc::sync_channel(AUTOMATION_QUEUE_CAPACITY);
         let core = Core::new();
         Self {
             poller: Poller::new(tx.clone()),
@@ -311,6 +333,7 @@ impl Canopy {
             event_rx: Some(rx),
             automation_tx,
             automation_rx,
+            ui_thread: thread::current().id(),
             keymap: inputmap::InputMap::new(),
             route_trace: Vec::new(),
             script_host: script::LuauHost::new(),
@@ -342,7 +365,13 @@ impl Canopy {
         AutomationHandle {
             callback_tx: self.automation_tx.clone(),
             wake_tx: self.event_tx.clone(),
+            ui_thread: self.ui_thread,
         }
+    }
+
+    /// Mark the visible application state for redraw.
+    pub fn request_redraw(&mut self) {
+        self.render_pending = true;
     }
 
     /// Return the root node ID.

@@ -256,14 +256,14 @@ lazy, tiled, or application-specific storage.
 
 ## 6. Stage Six: Own runtime resources and event-loop boundaries
 
-30. [ ] Replace the parked poll thread with an owned scheduler.
+30. [x] Replace the parked poll thread with an owned scheduler.
 
    Use an explicit command channel or condition variable for schedule, reschedule, cancel, and
    shutdown. Join the worker on drop, detect and restart or reject a dead worker, use checked
    deadline arithmetic without poisoning shared state, and inject a clock so tests require no
    sleeps or wall-clock timing.
 
-31. [ ] Make automation requests safe with respect to the UI thread.
+31. [x] Make automation requests safe with respect to the UI thread.
 
    Detect or encode UI-thread ownership so synchronous requests cannot deadlock. Bound the work
    drained per event-loop turn, define backpressure, and make callback-driven state changes request

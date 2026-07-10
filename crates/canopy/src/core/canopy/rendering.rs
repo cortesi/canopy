@@ -111,7 +111,7 @@ impl Canopy {
                     w.poll(&mut ctx)
                 })?;
                 if let Some(d) = next {
-                    self.poller.schedule(id, d);
+                    self.poller.schedule(id, d)?;
                 }
                 if let Some(node) = self.core.nodes.get_mut(id) {
                     node.initialized = true;

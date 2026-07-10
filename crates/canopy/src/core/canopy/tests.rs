@@ -1,6 +1,9 @@
 use std::{
     any::Any,
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
     time::Duration,
 };
 
@@ -24,6 +27,51 @@ use crate::{
 };
 
 static POLL_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+#[test]
+fn synchronous_automation_request_rejects_ui_thread() {
+    let canopy = Canopy::new();
+    let error = canopy
+        .automation_handle()
+        .request(|_| Ok(()))
+        .expect_err("UI-thread request should be rejected");
+    assert!(matches!(error, Error::RunLoop(_)));
+}
+
+#[test]
+fn automation_service_is_bounded_and_requests_redraw() -> Result<()> {
+    let mut canopy = Canopy::new();
+    let handle = canopy.automation_handle();
+    let count = Arc::new(AtomicUsize::new(0));
+    for _ in 0..=AUTOMATION_SERVICE_BUDGET {
+        let count = Arc::clone(&count);
+        handle.submit(Box::new(move |_| {
+            count.fetch_add(1, Ordering::Relaxed);
+        }))?;
+    }
+
+    canopy.render_pending = false;
+    assert_eq!(canopy.service_automation(), AUTOMATION_SERVICE_BUDGET);
+    assert_eq!(count.load(Ordering::Relaxed), AUTOMATION_SERVICE_BUDGET);
+    assert!(canopy.render_pending);
+    assert_eq!(canopy.service_automation(), 1);
+    assert_eq!(count.load(Ordering::Relaxed), AUTOMATION_SERVICE_BUDGET + 1);
+    Ok(())
+}
+
+#[test]
+fn automation_submission_applies_backpressure() -> Result<()> {
+    let canopy = Canopy::new();
+    let handle = canopy.automation_handle();
+    for _ in 0..AUTOMATION_QUEUE_CAPACITY {
+        handle.submit(Box::new(|_| {}))?;
+    }
+    assert!(matches!(
+        handle.submit(Box::new(|_| {})),
+        Err(Error::RunLoop(_))
+    ));
+    Ok(())
+}
 
 fn canopy_with_binding_order(inputs: [char; 2]) -> Result<Canopy> {
     let mut canopy = Canopy::new();

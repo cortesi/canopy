@@ -2,7 +2,7 @@
 
 use ruau::vm::Scope;
 
-use super::{Canopy, RoutePhase, RouteTraceEntry};
+use super::{AUTOMATION_SERVICE_BUDGET, Canopy, RoutePhase, RouteTraceEntry};
 use crate::{
     Core, NodeId, commands,
     core::{help, inputmap},
@@ -316,18 +316,31 @@ impl Canopy {
                     w.poll(&mut ctx)
                 })?;
                 if let Some(d) = next {
-                    self.poller.schedule(*id, d);
+                    self.poller.schedule(*id, d)?;
                 }
             }
         }
         Ok(())
     }
 
-    /// Drain queued automation callbacks that were marshalled onto the UI thread.
-    pub(crate) fn service_automation(&mut self) {
-        while let Ok(callback) = self.automation_rx.try_recv() {
+    /// Service a bounded batch of callbacks marshalled onto the UI thread.
+    ///
+    /// Custom run loops should call this after receiving [`Event::Wake`]. The return value is the
+    /// number of callbacks executed during this turn.
+    pub fn service_automation(&mut self) -> usize {
+        let mut serviced = 0;
+        while serviced < AUTOMATION_SERVICE_BUDGET {
+            let Ok(callback) = self.automation_rx.try_recv() else {
+                break;
+            };
             callback(self);
+            self.request_redraw();
+            serviced += 1;
         }
+        if serviced == AUTOMATION_SERVICE_BUDGET {
+            let _receiver_closed = self.event_tx.send(Event::Wake);
+        }
+        serviced
     }
 
     /// Propagate an event through the tree.
