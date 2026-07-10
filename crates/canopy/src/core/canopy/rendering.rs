@@ -145,7 +145,7 @@ impl Canopy {
         })?;
         result.map_err(|error| {
             self.core
-                .widget_operation_error(WidgetOperation::render("render"), node_id, &error)
+                .widget_operation_error(WidgetOperation::render("render"), node_id, error)
         })
     }
 

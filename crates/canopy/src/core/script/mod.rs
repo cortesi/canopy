@@ -2218,7 +2218,7 @@ fn owned_value_to_display(value: &OwnedValue) -> String {
 /// Convert a canopy error into a host-call error.
 fn canopy_to_host(err: &error::Error) -> RuntimeError {
     let payload = CanopyErrorPayload::from(err);
-    let mut fields = vec![ScriptErrorField::new("kind", payload.kind.clone())];
+    let mut fields = vec![ScriptErrorField::new("kind", payload.kind.as_str())];
     if let Some(command) = payload.command.clone() {
         fields.push(ScriptErrorField::new("command", command));
     }
@@ -2232,7 +2232,7 @@ fn canopy_to_host(err: &error::Error) -> RuntimeError {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct CanopyErrorPayload {
     /// Stable script-visible category.
-    kind: String,
+    kind: error::ScriptErrorKind,
     /// Timeout duration for script timeout errors.
     timeout_ms: Option<u64>,
     /// Command id when the error came from command dispatch.
@@ -2248,20 +2248,25 @@ impl From<&error::Error> for CanopyErrorPayload {
         match err {
             error::Error::Command(err) => Self::from(err),
             error::Error::ScriptTimeout { timeout_ms } => {
-                Self::new("timeout", err.to_string()).with_timeout_ms(*timeout_ms)
+                Self::new(error::ScriptErrorKind::Timeout, err.to_string())
+                    .with_timeout_ms(*timeout_ms)
             }
             error::Error::NodeNotFound(node) => {
-                Self::new("node_not_found", err.to_string()).with_owner(format!("{node:?}"))
+                Self::new(error::ScriptErrorKind::NodeNotFound, err.to_string())
+                    .with_owner(format!("{node:?}"))
             }
             error::Error::NodeDetached(node) => {
-                Self::new("node_detached", err.to_string()).with_owner(format!("{node:?}"))
+                Self::new(error::ScriptErrorKind::NodeDetached, err.to_string())
+                    .with_owner(format!("{node:?}"))
             }
             error::Error::TypeMismatch { .. } | error::Error::NodeTypeMismatch { .. } => {
-                Self::new("type_mismatch", err.to_string())
+                Self::new(error::ScriptErrorKind::TypeMismatch, err.to_string())
             }
-            error::Error::NotFound(_) => Self::new("not_found", err.to_string()),
+            error::Error::NotFound(_) => {
+                Self::new(error::ScriptErrorKind::NotFound, err.to_string())
+            }
             error::Error::Invalid(_) | error::Error::InvalidOperation(_) => {
-                Self::new("invalid", err.to_string())
+                Self::new(error::ScriptErrorKind::Invalid, err.to_string())
             }
             error::Error::ScriptStructured {
                 kind,
@@ -2269,13 +2274,13 @@ impl From<&error::Error> for CanopyErrorPayload {
                 owner,
                 message,
             } => Self {
-                kind: kind.clone(),
+                kind: *kind,
                 timeout_ms: None,
                 command: command.clone(),
                 owner: owner.clone(),
                 message: message.clone(),
             },
-            _ => Self::new("canopy_error", err.to_string()),
+            _ => Self::new(error::ScriptErrorKind::Canopy, err.to_string()),
         }
     }
 }
@@ -2284,51 +2289,64 @@ impl From<&commands::CommandError> for CanopyErrorPayload {
     fn from(err: &commands::CommandError) -> Self {
         match err {
             commands::CommandError::UnknownCommand { id } => {
-                Self::new("unknown_command", err.to_string()).with_command(id.clone())
+                Self::new(error::ScriptErrorKind::UnknownCommand, err.to_string())
+                    .with_command(id.clone())
             }
             commands::CommandError::DuplicateCommand { id } => {
-                Self::new("duplicate_command", err.to_string()).with_command(id.clone())
+                Self::new(error::ScriptErrorKind::DuplicateCommand, err.to_string())
+                    .with_command(id.clone())
             }
             commands::CommandError::ConflictingCommand { id } => {
-                Self::new("conflicting_command", err.to_string()).with_command(id.clone())
+                Self::new(error::ScriptErrorKind::ConflictingCommand, err.to_string())
+                    .with_command(id.clone())
             }
             commands::CommandError::InvalidCommand { id, .. } => {
-                Self::new("invalid_command", err.to_string()).with_command(id.clone())
+                Self::new(error::ScriptErrorKind::InvalidCommand, err.to_string())
+                    .with_command(id.clone())
             }
             commands::CommandError::NoTarget { id, owner } => {
-                Self::new("no_target", err.to_string())
+                Self::new(error::ScriptErrorKind::NoTarget, err.to_string())
                     .with_command(id.clone())
                     .with_owner(owner.clone())
             }
             commands::CommandError::InvalidNode { .. } => {
-                Self::new("node_invalid", err.to_string())
+                Self::new(error::ScriptErrorKind::InvalidNode, err.to_string())
             }
             commands::CommandError::ArityMismatch { .. } => {
-                Self::new("arity_mismatch", err.to_string())
+                Self::new(error::ScriptErrorKind::ArityMismatch, err.to_string())
             }
-            commands::CommandError::MissingNamedArg { .. } => {
-                Self::new("missing_named_arg", err.to_string())
-            }
-            commands::CommandError::UnknownNamedArg { .. } => {
-                Self::new("unknown_named_arg", err.to_string())
-            }
+            commands::CommandError::MissingNamedArg { .. } => Self::new(
+                error::ScriptErrorKind::MissingNamedArgument,
+                err.to_string(),
+            ),
+            commands::CommandError::UnknownNamedArg { .. } => Self::new(
+                error::ScriptErrorKind::UnknownNamedArgument,
+                err.to_string(),
+            ),
             commands::CommandError::TypeMismatch { .. } => {
-                Self::new("type_mismatch", err.to_string())
+                Self::new(error::ScriptErrorKind::TypeMismatch, err.to_string())
             }
             commands::CommandError::MissingInjected { .. } => {
-                Self::new("missing_injected", err.to_string())
+                Self::new(error::ScriptErrorKind::MissingInjected, err.to_string())
             }
-            commands::CommandError::Conversion { .. } => Self::new("conversion", err.to_string()),
-            commands::CommandError::Exec(_) => Self::new("command_exec", err.to_string()),
+            commands::CommandError::Conversion { .. } => {
+                Self::new(error::ScriptErrorKind::Conversion, err.to_string())
+            }
+            commands::CommandError::TargetTypeMismatch => {
+                Self::new(error::ScriptErrorKind::TargetTypeMismatch, err.to_string())
+            }
+            commands::CommandError::Exec(_) => {
+                Self::new(error::ScriptErrorKind::CommandExecution, err.to_string())
+            }
         }
     }
 }
 
 impl CanopyErrorPayload {
     /// Builds a payload without command routing context.
-    fn new(kind: impl Into<String>, message: String) -> Self {
+    fn new(kind: error::ScriptErrorKind, message: String) -> Self {
         Self {
-            kind: kind.into(),
+            kind,
             timeout_ms: None,
             command: None,
             owner: None,
@@ -2364,7 +2382,7 @@ impl CanopyErrorPayload {
             None => format!("{label} failed: {}", self.message),
         };
         error::Error::ScriptStructured {
-            kind: self.kind.clone(),
+            kind: self.kind,
             command: self.command.clone(),
             owner: self.owner.clone(),
             message,
@@ -3576,7 +3594,7 @@ impl LuauHost {
         let mut state = self.state.borrow_mut();
         if state.active_eval {
             return Err(error::Error::ScriptStructured {
-                kind: "script_busy".to_string(),
+                kind: error::ScriptErrorKind::ScriptBusy,
                 command: None,
                 owner: None,
                 message: "a script evaluation is already active".to_string(),

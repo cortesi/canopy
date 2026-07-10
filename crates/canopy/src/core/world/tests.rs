@@ -20,7 +20,7 @@ use crate::{
         context::{CoreContext, CoreViewContext},
         script::validate_node_handle,
     },
-    error::{Error, Result},
+    error::{Error, NodeOperationKind, Result},
     geom::{Point, Size},
     layout::{
         Align, CanvasContext, Constraint, Direction, Direction as LayoutDirection, Display, Edges,
@@ -386,19 +386,20 @@ fn typed_id_conversion_rejects_wrong_type_and_stale_generation() -> Result<()> {
 }
 
 fn assert_error_context(error: &Error, operation: &str, node_id: NodeId, path: &str) {
-    let message = error.to_string();
-    assert!(
-        message.contains(operation),
-        "expected {message:?} to contain operation {operation:?}"
-    );
-    assert!(
-        message.contains(&format!("{node_id:?}")),
-        "expected {message:?} to contain node ID {node_id:?}"
-    );
-    assert!(
-        message.contains(path),
-        "expected {message:?} to contain path {path:?}"
-    );
+    let Error::NodeOperation {
+        operation: actual_operation,
+        node,
+        path: actual_path,
+        source,
+        ..
+    } = error
+    else {
+        panic!("expected node operation error, got {error:?}");
+    };
+    assert_eq!(*actual_operation, operation);
+    assert_eq!(*node, node_id);
+    assert_eq!(actual_path, path);
+    assert!(!source.to_string().is_empty());
 }
 
 struct CallbackMutationNodes {
@@ -906,7 +907,13 @@ fn widget_read_errors_include_operation_node_and_path() -> Result<()> {
         })?
         .expect_err("nested read should fail while the widget is extracted");
 
-    assert!(matches!(error, Error::WidgetAccess(_)));
+    assert!(matches!(
+        error,
+        Error::NodeOperation {
+            kind: NodeOperationKind::Access,
+            ..
+        }
+    ));
     assert_error_context(&error, "test read", child, &path);
     Ok(())
 }
@@ -919,7 +926,13 @@ fn widget_slot_restores_after_nested_access_error() -> Result<()> {
     core.with_widget_mut(child, |_widget, core| {
         let nested = core.with_widget_mut(child, |_widget, _core| ());
         let error = nested.expect_err("nested mutation should fail");
-        assert!(matches!(error, Error::WidgetAccess(_)));
+        assert!(matches!(
+            error,
+            Error::NodeOperation {
+                kind: NodeOperationKind::Access,
+                ..
+            }
+        ));
         assert_error_context(&error, "mutation callback", child, "<detached>");
     })?;
     core.with_widget_mut(child, |_widget, _core| ())?;
@@ -939,7 +952,13 @@ fn layout_refresh_errors_include_operation_node_and_path() -> Result<()> {
         .with_widget_mut(child, |_widget, core| refresh_layouts(core))?
         .expect_err("layout refresh should fail while the widget is extracted");
 
-    assert!(matches!(error, Error::Layout(_)));
+    assert!(matches!(
+        error,
+        Error::NodeOperation {
+            kind: NodeOperationKind::Layout,
+            ..
+        }
+    ));
     assert_error_context(&error, "layout refresh", child, &path);
     Ok(())
 }
@@ -962,7 +981,13 @@ fn measure_errors_include_operation_node_and_path() -> Result<()> {
         })?
         .expect_err("measure should fail while the widget is extracted");
 
-    assert!(matches!(error, Error::Layout(_)));
+    assert!(matches!(
+        error,
+        Error::NodeOperation {
+            kind: NodeOperationKind::Layout,
+            ..
+        }
+    ));
     assert_error_context(&error, "measure", child, &path);
     Ok(())
 }
@@ -981,7 +1006,13 @@ fn canvas_errors_include_operation_node_and_path() -> Result<()> {
         })?
         .expect_err("canvas should fail while the widget is extracted");
 
-    assert!(matches!(error, Error::Layout(_)));
+    assert!(matches!(
+        error,
+        Error::NodeOperation {
+            kind: NodeOperationKind::Layout,
+            ..
+        }
+    ));
     assert_error_context(&error, "canvas", child, &path);
     Ok(())
 }
@@ -1026,7 +1057,13 @@ fn callback_cannot_remove_current_node() -> Result<()> {
     })?
     .expect_err("callback should not remove the current node");
 
-    assert!(matches!(error, Error::WidgetAccess(_)));
+    assert!(matches!(
+        error,
+        Error::NodeOperation {
+            kind: NodeOperationKind::Access,
+            ..
+        }
+    ));
     assert_error_context(&error, "remove subtree", nodes.current, &path);
     assert!(core.nodes.contains_key(nodes.current));
     core.validate_invariants()
@@ -1042,7 +1079,13 @@ fn callback_cannot_replace_current_node() -> Result<()> {
     })?
     .expect_err("callback should not replace the current node");
 
-    assert!(matches!(error, Error::WidgetAccess(_)));
+    assert!(matches!(
+        error,
+        Error::NodeOperation {
+            kind: NodeOperationKind::Access,
+            ..
+        }
+    ));
     assert_error_context(&error, "replace subtree", nodes.current, &path);
     assert_eq!(
         core.nodes[nodes.current].widget_type,
@@ -1061,7 +1104,13 @@ fn callback_cannot_remove_parent_containing_current_node() -> Result<()> {
     })?
     .expect_err("callback should not remove the current node's parent");
 
-    assert!(matches!(error, Error::WidgetAccess(_)));
+    assert!(matches!(
+        error,
+        Error::NodeOperation {
+            kind: NodeOperationKind::Access,
+            ..
+        }
+    ));
     assert_error_context(&error, "remove subtree", nodes.current, &path);
     assert!(core.nodes.contains_key(nodes.parent));
     assert!(core.nodes.contains_key(nodes.current));
@@ -1078,7 +1127,13 @@ fn callback_cannot_replace_parent_containing_current_node() -> Result<()> {
     })?
     .expect_err("callback should not replace the current node's parent");
 
-    assert!(matches!(error, Error::WidgetAccess(_)));
+    assert!(matches!(
+        error,
+        Error::NodeOperation {
+            kind: NodeOperationKind::Access,
+            ..
+        }
+    ));
     assert_error_context(&error, "replace subtree", nodes.current, &path);
     assert!(core.nodes.contains_key(nodes.parent));
     assert!(core.nodes.contains_key(nodes.current));

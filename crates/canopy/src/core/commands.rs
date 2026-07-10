@@ -1,6 +1,7 @@
 use std::{
     any::{Any, type_name},
     collections::{BTreeMap, HashMap, HashSet},
+    error::Error as StdError,
     fmt, ptr,
 };
 
@@ -1564,12 +1565,22 @@ pub enum CommandError {
         message: String,
     },
 
+    /// The command target did not have the registered owner type.
+    #[error("command target type mismatch")]
+    TargetTypeMismatch,
+
     /// Command execution failure.
     #[error("command execution failed: {0}")]
-    Exec(#[from] anyhow::Error),
+    Exec(#[source] Box<dyn StdError + Send + Sync>),
 }
 
 impl CommandError {
+    /// Preserve a command implementation's concrete error as the execution source.
+    #[doc(hidden)]
+    pub fn execution(error: impl StdError + Send + Sync + 'static) -> Self {
+        Self::Exec(Box::new(error))
+    }
+
     #[doc(hidden)]
     pub fn with_param(self, param: &str) -> Self {
         match self {
@@ -1801,7 +1812,7 @@ fn dispatch_on_node(
         let mut ctx = CoreContext::new(core, node_id);
         (spec.invoke)(Some(widget as &mut dyn Any), &mut ctx, inv)
     })
-    .map_err(|err| CommandError::Exec(err.into()))?
+    .map_err(CommandError::execution)?
 }
 
 /// Validate every node handle carried by an invocation before command code sees it.

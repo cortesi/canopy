@@ -6,7 +6,7 @@ mod tests {
         Canopy, CommandArg, Context, Loader, ViewContext, Widget, command,
         commands::ArgValue,
         derive_commands,
-        error::{Error, Result},
+        error::{Error, Result, ScriptErrorKind},
         render::Render,
         testing::harness::Harness,
     };
@@ -130,7 +130,7 @@ mod tests {
         let Error::ScriptStructured { kind, command, .. } = err else {
             panic!("expected structured script error, got {err:?}");
         };
-        assert_eq!(kind, "type_mismatch");
+        assert_eq!(kind, ScriptErrorKind::TypeMismatch);
         assert_eq!(command, None);
 
         Ok(())

@@ -21,7 +21,6 @@ unicode-segmentation = "1.13.2"
 unicode-width = "0.2.2"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
-anyhow = "1.0.102"
 schemars = "1.2.1"
 ruau = { path = "../../../../private/ruau/crates/ruau", default-features = false }
 tokio = { version = "1.52.3", features = ["rt", "time", "sync"] }

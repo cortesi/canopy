@@ -88,7 +88,10 @@ impl Rect {
     pub fn clamp_within(&self, rect: impl Into<Self>) -> Result<Self> {
         let rect = rect.into();
         if rect.w < self.w || rect.h < self.h {
-            Err(Error::Geometry("can't clamp to smaller rectangle".into()))
+            Err(Error::ClampTargetTooSmall {
+                rect: *self,
+                target: rect,
+            })
         } else {
             let max_x = rect.tl.x.saturating_add(rect.w - self.w);
             let max_y = rect.tl.y.saturating_add(rect.h - self.h);
@@ -159,7 +162,10 @@ impl Rect {
     /// Extract a horizontal section of this rect based on an extent.
     pub fn hslice(&self, e: &LineSegment) -> Result<Self> {
         if !self.hextent().contains(e) {
-            Err(Error::Geometry("extract extent outside rectangle".into()))
+            Err(Error::ExtentOutsideRect {
+                extent: *e,
+                rect: *self,
+            })
         } else {
             Ok(Self::new(e.off, self.tl.y, e.len, self.h))
         }
@@ -186,7 +192,10 @@ impl Rect {
     pub fn rebase_point(&self, pt: impl Into<Point>) -> Result<Point> {
         let pt = pt.into();
         if !self.contains_point(pt) {
-            return Err(Error::Geometry("rebase of non-contained point".into()));
+            return Err(Error::PointOutsideRect {
+                point: pt,
+                rect: *self,
+            });
         }
         Ok(Point {
             x: pt.x.saturating_sub(self.tl.x),
@@ -199,9 +208,10 @@ impl Rect {
     /// contained, an error is returned.
     pub fn rebase_rect(&self, other: &Self) -> Result<Self> {
         if !self.contains_rect(other) {
-            return Err(Error::Geometry(format!(
-                "rebase of non-contained rect - outer={self:?} inner={other:?}",
-            )));
+            return Err(Error::RectOutsideRect {
+                inner: *other,
+                outer: *self,
+            });
         }
         Ok(Self {
             tl: self.rebase_point(other.tl)?,
@@ -273,7 +283,7 @@ impl Rect {
         let mut ret = vec![];
 
         let column_count = u32::try_from(spec.len())
-            .map_err(|_| Error::Geometry("pane column count exceeds u32".into()))?;
+            .map_err(|_| Error::PaneColumnCountOverflow { count: spec.len() })?;
         let cols = split(self.w, column_count)?;
         let mut x = self.tl.x;
         for (ci, width) in cols.iter().enumerate() {
@@ -354,7 +364,10 @@ impl Rect {
     /// Extract a slice of this rect based on a vertical extent.
     pub fn vslice(&self, e: &LineSegment) -> Result<Self> {
         if !self.vextent().contains(e) {
-            Err(Error::Geometry("extract extent outside rectangle".into()))
+            Err(Error::ExtentOutsideRect {
+                extent: *e,
+                rect: *self,
+            })
         } else {
             Ok(Self::new(self.tl.x, e.off, self.w, e.len))
         }
@@ -371,10 +384,10 @@ impl Rect {
     /// Return a line with a given offset in the rectangle.
     pub fn line(&self, off: u32) -> Result<Line> {
         if off >= self.h {
-            return Err(Error::Geometry(format!(
-                "line offset {off} exceeds rectangle height {}",
-                self.h
-            )));
+            return Err(Error::LineOffsetOutside {
+                offset: off,
+                height: self.h,
+            });
         }
         Ok(Line {
             tl: (self.tl.x, self.tl.y.saturating_add(off)).into(),
@@ -470,7 +483,7 @@ impl From<(u32, u32, u32, u32)> for Rect {
 /// Split a length into n sections, as evenly as possible.
 fn split(len: u32, n: u32) -> Result<Vec<u32>> {
     if n == 0 {
-        return Err(Error::Geometry("divide by zero".into()));
+        return Err(Error::ZeroSections);
     }
     let w = len / n;
     let rem = len % n;

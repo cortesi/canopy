@@ -29,7 +29,8 @@ fn luau_smoke_suite_passes() -> Result<()> {
                 if db_path.exists() {
                     fs::remove_file(&db_path)?;
                 }
-                create_app(db_path.to_str().expect("utf-8 db path")).map_err(McpError::app)
+                create_app(db_path.to_str().expect("utf-8 db path"))
+                    .map_err(|error| McpError::app_boxed(error.into_boxed_dyn_error()))
             }
         },
         &SuiteConfig::new(suite_dir),

@@ -230,7 +230,7 @@ impl ReturnMeta {
             if self.is_result {
                 quote! {
                     let _ = #call
-                        .map_err(|err| canopy::commands::CommandError::Exec(anyhow::Error::from(err)))?;
+                        .map_err(canopy::commands::CommandError::execution)?;
                     return Ok(canopy::commands::ArgValue::Null);
                 }
             } else {
@@ -242,7 +242,7 @@ impl ReturnMeta {
         } else if self.is_result {
             quote! {
                 let value = #call
-                    .map_err(|err| canopy::commands::CommandError::Exec(anyhow::Error::from(err)))?;
+                    .map_err(canopy::commands::CommandError::execution)?;
                 return Ok(canopy::commands::ToArgValue::to_arg_value(value));
             }
         } else {
@@ -430,9 +430,7 @@ impl CommandMeta {
             {
                 let #target_ident = target
                     .and_then(|target| target.downcast_mut::<Self>())
-                    .ok_or_else(|| canopy::commands::CommandError::Exec(
-                        anyhow::anyhow!("command target type mismatch"),
-                    ))?;
+                    .ok_or(canopy::commands::CommandError::TargetTypeMismatch)?;
                 #(#shared_bindings)*
                 match &inv.args {
                     canopy::commands::CommandArgs::Positional(values) => {

@@ -198,9 +198,7 @@ impl UdsServerHandle {
             let _ignored = shutdown_tx.send(());
         }
         let join_result = if let Some(thread) = self.thread.take() {
-            thread
-                .join()
-                .map_err(|_| Error::app("UDS listener thread panicked"))?
+            thread.join().map_err(|_| Error::ListenerThreadPanicked)?
         } else {
             Ok(())
         };
@@ -244,7 +242,7 @@ pub fn serve_uds(
                 }
                 Err(error) => {
                     let error = Error::from(error);
-                    let _ignored = ready_tx.send(Err(Error::app(error)));
+                    let _ignored = ready_tx.send(Err(error));
                     return Ok(());
                 }
             };
@@ -273,7 +271,7 @@ pub fn serve_uds(
 
     ready_rx
         .recv()
-        .map_err(|_| Error::app("UDS listener failed to report readiness"))??;
+        .map_err(|_| Error::ListenerReadinessClosed)??;
 
     Ok(UdsServerHandle {
         socket_path,

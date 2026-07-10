@@ -85,7 +85,7 @@ mod tests {
         focus_first(canopy, grid.root)?;
         let initial = get_focused_cell(canopy);
         if initial != Some("cell_0_0".to_string()) {
-            return Err(Error::Focus(format!(
+            return Err(Error::Invariant(format!(
                 "Expected to start at cell_0_0, but started at {initial:?}"
             )));
         }
@@ -122,7 +122,7 @@ mod tests {
                         let after = get_focused_cell(canopy);
 
                         if before == after {
-                            return Err(Error::Focus(format!(
+                            return Err(Error::Invariant(format!(
                                 "Failed to move right from row {row}, col {col} (stuck at {before:?})"
                             )));
                         }
@@ -156,7 +156,7 @@ mod tests {
                         let after = get_focused_cell(canopy);
 
                         if before == after {
-                            return Err(Error::Focus(format!(
+                            return Err(Error::Invariant(format!(
                                 "Failed to move left from row {row}, col {col} (stuck at {before:?})"
                             )));
                         }
@@ -170,7 +170,7 @@ mod tests {
                 let after = get_focused_cell(canopy);
 
                 if before == after {
-                    return Err(Error::Focus(format!(
+                    return Err(Error::Invariant(format!(
                         "Failed to move down after row {row} (stuck at {before:?})"
                     )));
                 }
@@ -178,7 +178,7 @@ mod tests {
         }
 
         if visited_cells.len() != total_cells {
-            return Err(Error::Focus(format!(
+            return Err(Error::Invariant(format!(
                 "Only visited {} out of {} cells ({:.1}% coverage)",
                 visited_cells.len(),
                 total_cells,
@@ -187,7 +187,7 @@ mod tests {
         }
 
         if !position_errors.is_empty() {
-            return Err(Error::Focus(format!(
+            return Err(Error::Invariant(format!(
                 "Navigation completed but {} position errors occurred:\n{}",
                 position_errors.len(),
                 position_errors[..5.min(position_errors.len())].join("\n")

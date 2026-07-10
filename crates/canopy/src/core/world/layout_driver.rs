@@ -658,7 +658,7 @@ impl<'a> LayoutPass<'a> {
     ) -> Result<Size<u32>> {
         let children = self.visible_children(node_id).map_err(|error| {
             self.core
-                .widget_operation_error(WidgetOperation::layout("canvas"), node_id, &error)
+                .widget_operation_error(WidgetOperation::layout("canvas"), node_id, error)
         })?;
         let mut canvas_children = Vec::with_capacity(children.len());
         for child in children {
@@ -671,7 +671,7 @@ impl<'a> LayoutPass<'a> {
                     self.core.widget_operation_error(
                         WidgetOperation::layout("canvas"),
                         node_id,
-                        &error,
+                        error,
                     )
                 })?;
             let child_canvas: Size<u32> = node.canvas;

@@ -15,7 +15,7 @@ use crate::{
     Context, ViewContext,
     commands::{CommandNode, CommandSpec},
     derive_commands,
-    error::{Error, Result},
+    error::{Error, NodeOperationKind, Result},
     event::{Event, key, mouse},
     geom::{Direction, Point, RectI32},
     layout::Layout,
@@ -319,19 +319,20 @@ fn make_mouse_event(core: &Core, node_id: NodeId) -> mouse::MouseEvent {
 }
 
 fn assert_error_context(error: &Error, operation: &str, node_id: NodeId, path: &str) {
-    let message = error.to_string();
-    assert!(
-        message.contains(operation),
-        "expected {message:?} to contain operation {operation:?}"
-    );
-    assert!(
-        message.contains(&format!("{node_id:?}")),
-        "expected {message:?} to contain node ID {node_id:?}"
-    );
-    assert!(
-        message.contains(path),
-        "expected {message:?} to contain path {path:?}"
-    );
+    let Error::NodeOperation {
+        operation: actual_operation,
+        node,
+        path: actual_path,
+        source,
+        ..
+    } = error
+    else {
+        panic!("expected node operation error, got {error:?}");
+    };
+    assert_eq!(*actual_operation, operation);
+    assert_eq!(*node, node_id);
+    assert_eq!(actual_path, path);
+    assert!(!source.to_string().is_empty());
 }
 
 #[test]
@@ -349,7 +350,13 @@ fn render_errors_include_operation_node_and_path() -> Result<()> {
         .render(&mut render)
         .expect_err("render should include node context");
 
-    assert!(matches!(error, Error::Render(_)));
+    assert!(matches!(
+        error,
+        Error::NodeOperation {
+            kind: NodeOperationKind::Render,
+            ..
+        }
+    ));
     assert_error_context(&error, "render", node_id, &path);
     Ok(())
 }

@@ -6,7 +6,7 @@ use std::{
 use canopy::{
     Canopy, FixtureInfo,
     commands::{ArgValue, CommandDispatchKind, CommandResolution},
-    error::Error as CanopyError,
+    error::{Error as CanopyError, ScriptErrorKind},
     geom::Size,
     testing::render::NopBackend,
 };
@@ -649,14 +649,14 @@ fn script_error_info(error: &crate::Error) -> ScriptErrorInfo {
     {
         // `error_type` stays on the pipeline-stage axis; the host category
         // travels in `kind`.
-        let error_type = if kind == "timeout" {
+        let error_type = if *kind == ScriptErrorKind::Timeout {
             "timeout"
         } else {
             "runtime"
         };
         return ScriptErrorInfo {
             error_type: error_type.to_string(),
-            kind: Some(kind.clone()),
+            kind: Some(kind.as_str().to_string()),
             command: command.clone(),
             owner: owner.clone(),
             message: message.clone(),

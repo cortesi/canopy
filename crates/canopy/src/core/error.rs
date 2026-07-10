@@ -1,4 +1,4 @@
-use std::{result::Result as StdResult, sync::mpsc};
+use std::{error::Error as StdError, fmt, io, result::Result as StdResult, sync::mpsc};
 
 use thiserror::Error;
 
@@ -8,11 +8,14 @@ use crate::{commands::CommandError, core::id::NodeId, geom, layout::LayoutValida
 pub type Result<T> = StdResult<T, Error>;
 
 /// Parse error marker type.
-#[derive(PartialEq, Eq, Error, Debug, Clone)]
-#[error("{message}")]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct ParseError {
-    /// Parse error message, optionally including location.
-    message: String,
+    /// Parse error message.
+    pub message: String,
+    /// One-based source line, when known.
+    pub line: Option<usize>,
+    /// Source byte offset, when known.
+    pub offset: Option<usize>,
 }
 
 impl ParseError {
@@ -20,6 +23,8 @@ impl ParseError {
     pub fn new(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
+            line: None,
+            offset: None,
         }
     }
 
@@ -29,26 +34,134 @@ impl ParseError {
         line: Option<usize>,
         offset: Option<usize>,
     ) -> Self {
-        let message = message.into();
-        let message = match (line, offset) {
-            (Some(line), Some(offset)) => format!("{message} (line {line}, offset {offset})"),
-            (Some(line), None) => format!("{message} (line {line})"),
-            (None, Some(offset)) => format!("{message} (offset {offset})"),
-            (None, None) => message,
-        };
-        Self { message }
+        Self {
+            message: message.into(),
+            line,
+            offset,
+        }
+    }
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.message)?;
+        match (self.line, self.offset) {
+            (Some(line), Some(offset)) => write!(f, " (line {line}, offset {offset})"),
+            (Some(line), None) => write!(f, " (line {line})"),
+            (None, Some(offset)) => write!(f, " (offset {offset})"),
+            (None, None) => Ok(()),
+        }
+    }
+}
+
+impl StdError for ParseError {}
+
+/// Phase in which a node-bound widget operation failed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NodeOperationKind {
+    /// Widget access or lifecycle callback.
+    Access,
+    /// Widget measurement or layout.
+    Layout,
+    /// Widget rendering.
+    Render,
+}
+
+impl fmt::Display for NodeOperationKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Access => "widget access",
+            Self::Layout => "layout",
+            Self::Render => "render",
+        })
+    }
+}
+
+/// Stable category for a structured script or command failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScriptErrorKind {
+    /// Cooperative execution timeout.
+    Timeout,
+    /// Node lookup failed.
+    NodeNotFound,
+    /// A node exists but is detached.
+    NodeDetached,
+    /// A value or widget type did not match.
+    TypeMismatch,
+    /// A requested value was not found.
+    NotFound,
+    /// Invalid input or operation.
+    Invalid,
+    /// Unclassified Canopy failure.
+    Canopy,
+    /// Unknown command identifier.
+    UnknownCommand,
+    /// Duplicate command identifier.
+    DuplicateCommand,
+    /// Conflicting command definition.
+    ConflictingCommand,
+    /// Invalid command definition.
+    InvalidCommand,
+    /// No command target was found.
+    NoTarget,
+    /// A command node handle is stale.
+    InvalidNode,
+    /// Positional argument count mismatch.
+    ArityMismatch,
+    /// Required named argument is missing.
+    MissingNamedArgument,
+    /// An unknown named argument was supplied.
+    UnknownNamedArgument,
+    /// Argument conversion failed.
+    Conversion,
+    /// An injected value is missing.
+    MissingInjected,
+    /// The routed target has the wrong widget type.
+    TargetTypeMismatch,
+    /// Command implementation returned an error.
+    CommandExecution,
+    /// Another top-level script evaluation is active.
+    ScriptBusy,
+}
+
+impl ScriptErrorKind {
+    /// Return the stable protocol label for this category.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Timeout => "timeout",
+            Self::NodeNotFound => "node_not_found",
+            Self::NodeDetached => "node_detached",
+            Self::TypeMismatch => "type_mismatch",
+            Self::NotFound => "not_found",
+            Self::Invalid => "invalid",
+            Self::Canopy => "canopy_error",
+            Self::UnknownCommand => "unknown_command",
+            Self::DuplicateCommand => "duplicate_command",
+            Self::ConflictingCommand => "conflicting_command",
+            Self::InvalidCommand => "invalid_command",
+            Self::NoTarget => "no_target",
+            Self::InvalidNode => "node_invalid",
+            Self::ArityMismatch => "arity_mismatch",
+            Self::MissingNamedArgument => "missing_named_arg",
+            Self::UnknownNamedArgument => "unknown_named_arg",
+            Self::Conversion => "conversion",
+            Self::MissingInjected => "missing_injected",
+            Self::TargetTypeMismatch => "target_type_mismatch",
+            Self::CommandExecution => "command_exec",
+            Self::ScriptBusy => "script_busy",
+        }
+    }
+}
+
+impl fmt::Display for ScriptErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
 /// Core error type.
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("focus: {0}")]
-    /// Focus-related failure.
-    Focus(String),
-    #[error("render: {0}")]
-    /// Rendering failure.
-    Render(String),
     /// A render target exceeds its configured width limit.
     #[error("render target width {requested} exceeds limit {limit}")]
     RenderWidthLimit {
@@ -95,15 +208,15 @@ pub enum Error {
         /// Computed terminal width.
         width: usize,
     },
-    #[error("geometry: {0}")]
     /// Geometry failure.
-    Geometry(String),
-    #[error("layout: {0}")]
-    /// Layout failure.
-    Layout(String),
+    #[error(transparent)]
+    Geometry(#[from] geom::Error),
     /// Invalid layout configuration.
     #[error(transparent)]
     InvalidLayout(#[from] LayoutValidationError),
+    /// Terminal I/O failure.
+    #[error("terminal I/O failed: {0}")]
+    TerminalIo(#[source] io::Error),
     #[error("runloop: {0}")]
     /// Run loop failure.
     RunLoop(String),
@@ -116,9 +229,21 @@ pub enum Error {
     /// Re-entrant widget borrow attempt.
     #[error("re-entrant widget borrow: {0:?}")]
     ReentrantWidgetBorrow(NodeId),
-    /// Widget access failure with node and operation context.
-    #[error("widget access: {0}")]
-    WidgetAccess(String),
+    /// Node-bound widget operation failure with its original source.
+    #[error("{kind} {operation} for node {node:?} at {path}: {source}")]
+    NodeOperation {
+        /// Operation phase.
+        kind: NodeOperationKind,
+        /// Stable operation name.
+        operation: &'static str,
+        /// Node being operated on.
+        node: NodeId,
+        /// Node path at the time of failure.
+        path: String,
+        /// Original typed failure.
+        #[source]
+        source: Box<Self>,
+    },
     #[error("invalid: {0}")]
     /// Invalid input error.
     Invalid(String),
@@ -191,7 +316,7 @@ pub enum Error {
     #[error("script run error: {message}")]
     ScriptStructured {
         /// Stable script-visible category.
-        kind: String,
+        kind: ScriptErrorKind,
         /// Command id when the error came from command dispatch.
         command: Option<String>,
         /// Owner name when the error came from node-target resolution.
@@ -225,8 +350,17 @@ impl From<mpsc::RecvError> for Error {
     }
 }
 
-impl From<geom::Error> for Error {
-    fn from(e: geom::Error) -> Self {
-        Self::Geometry(e.to_string())
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_error_preserves_source_position() {
+        let error = ParseError::with_position("unexpected token", Some(3), Some(17));
+
+        assert_eq!(error.message, "unexpected token");
+        assert_eq!(error.line, Some(3));
+        assert_eq!(error.offset, Some(17));
+        assert_eq!(error.to_string(), "unexpected token (line 3, offset 17)");
     }
 }

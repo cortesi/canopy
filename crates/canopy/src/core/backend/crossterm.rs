@@ -119,9 +119,7 @@ where
 fn terminal_event(event: Option<io::Result<cevent::Event>>) -> Result<Event> {
     match event {
         Some(Ok(event)) => Ok(translate_event(event)),
-        Some(Err(error)) => Err(error::Error::RunLoop(format!(
-            "terminal event reader failed: {error}"
-        ))),
+        Some(Err(error)) => Err(error::Error::TerminalIo(error)),
         None => Err(error::Error::RunLoop("terminal event stream closed".into())),
     }
 }
@@ -158,7 +156,7 @@ fn translate_color(c: Color) -> style::Color {
 fn translate_result<T>(e: io::Result<T>) -> Result<T> {
     match e {
         Ok(t) => Ok(t),
-        Err(e) => Err(error::Error::Render(e.to_string())),
+        Err(error) => Err(error::Error::TerminalIo(error)),
     }
 }
 
@@ -1074,9 +1072,10 @@ mod tests {
         let mut events = EventSource::new(terminal, internal_rx);
 
         let error = block_on(events.next()).expect_err("reader failure should reach run loop");
-        assert!(
-            matches!(error, error::Error::RunLoop(message) if message.contains("reader failed"))
-        );
+        assert!(matches!(
+            error,
+            error::Error::TerminalIo(source) if source.to_string() == "reader failed"
+        ));
     }
 
     #[test]

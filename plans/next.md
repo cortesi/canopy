@@ -309,7 +309,7 @@ permanently blocked detached reader thread is not an acceptable fallback.
    integration types. Audit the already large `Canopy` inherent surface while adding the facade,
    and retain no transitional low-level entry points.
 
-37. [ ] Replace string-bag and `anyhow`-leaking public errors with structured errors.
+37. [x] Replace string-bag and `anyhow`-leaking public errors with structured errors.
 
    Give each crate a `thiserror` error type with structured variants and sources. Preserve node,
    operation, script, and geometry context without making callers parse display strings.

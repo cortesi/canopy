@@ -1123,7 +1123,7 @@ impl Core {
             return Err(self.widget_operation_error(
                 WidgetOperation::access(operation),
                 node_id,
-                &Error::ReentrantWidgetBorrow(node_id),
+                Error::ReentrantWidgetBorrow(node_id),
             ));
         };
         if widget.is_some() {
@@ -1132,7 +1132,7 @@ impl Core {
         Err(self.widget_operation_error(
             WidgetOperation::access(operation),
             node_id,
-            &Error::ReentrantWidgetBorrow(node_id),
+            Error::ReentrantWidgetBorrow(node_id),
         ))
     }
 

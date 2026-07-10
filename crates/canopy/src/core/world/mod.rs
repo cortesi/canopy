@@ -22,7 +22,7 @@ use crate::{
     ChangeOutcome, ViewContext,
     commands::{CommandScopeFrame, CommandSet},
     core::{id::NodeId, node::Node, view::View},
-    error::{Error, Result},
+    error::{Error, NodeOperationKind, Result},
     geom::{Point, Rect, Size},
     layout::Layout,
     render::Render,
@@ -310,7 +310,7 @@ impl Core {
             self.widget_operation_error(
                 WidgetOperation::access("mutation callback"),
                 node_id,
-                &error,
+                error,
             )
         })?;
         Ok(f(guard.widget_mut(), self))
@@ -327,9 +327,9 @@ impl Core {
             .nodes
             .get(node_id)
             .ok_or(Error::NodeNotFound(node_id))
-            .map_err(|error| self.widget_operation_error(operation, node_id, &error))?;
+            .map_err(|error| self.widget_operation_error(operation, node_id, error))?;
         let guard = WidgetReadGuard::borrow(node_id, node)
-            .map_err(|error| self.widget_operation_error(operation, node_id, &error))?;
+            .map_err(|error| self.widget_operation_error(operation, node_id, error))?;
         Ok(f(guard.widget(), self))
     }
 
@@ -347,11 +347,11 @@ impl Core {
                 self.widget_operation_error(
                     WidgetOperation::render("render access"),
                     node_id,
-                    &error,
+                    error,
                 )
             })?;
         let mut guard = WidgetMutGuard::borrow(node_id, node).map_err(|error| {
-            self.widget_operation_error(WidgetOperation::render("render access"), node_id, &error)
+            self.widget_operation_error(WidgetOperation::render("render access"), node_id, error)
         })?;
         Ok(f(guard.widget_mut(), self))
     }
@@ -361,20 +361,20 @@ impl Core {
         &self,
         operation: WidgetOperation,
         node_id: NodeId,
-        source: &Error,
+        source: Error,
     ) -> Error {
-        let message = self.node_operation_message(operation.name, node_id, source);
-        match operation.kind {
-            WidgetOperationKind::Access => Error::WidgetAccess(message),
-            WidgetOperationKind::Layout => Error::Layout(message),
-            WidgetOperationKind::Render => Error::Render(message),
+        let kind = match operation.kind {
+            WidgetOperationKind::Access => NodeOperationKind::Access,
+            WidgetOperationKind::Layout => NodeOperationKind::Layout,
+            WidgetOperationKind::Render => NodeOperationKind::Render,
+        };
+        Error::NodeOperation {
+            kind,
+            operation: operation.name,
+            node: node_id,
+            path: self.node_path_label(node_id),
+            source: Box::new(source),
         }
-    }
-
-    /// Format a node operation failure with operation, node ID, path, and source.
-    fn node_operation_message(&self, operation: &str, node_id: NodeId, source: &Error) -> String {
-        let path = self.node_path_label(node_id);
-        format!("{operation} for node {node_id:?} at {path}: {source}")
     }
 
     /// Return a path label suitable for diagnostics.

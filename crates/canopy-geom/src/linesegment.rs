@@ -124,11 +124,9 @@ impl LineSegment {
     /// computation of the active indicator size and position in a scrollbar.
     pub fn split_active(&self, window: Self, view: Self) -> Result<(Self, Self, Self)> {
         if window.len == 0 {
-            Err(Error::Geometry("window cannot be zero length".into()))
+            Err(Error::ZeroLengthWindow)
         } else if !view.contains(&window) {
-            Err(Error::Geometry(format!(
-                "view {view:?} does not contain window {window:?}",
-            )))
+            Err(Error::WindowOutsideView { window, view })
         } else {
             let track_len = u64::from(self.len);
             let view_len = u64::from(view.len);

@@ -109,7 +109,7 @@ mod tests {
         fn start(&mut self) -> Result<()> {
             self.lifecycle.lock().starts += 1;
             if self.fail_start {
-                return Err(Error::Render("injected start failure".into()));
+                return Err(Error::Internal("injected start failure".into()));
             }
             Ok(())
         }

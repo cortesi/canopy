@@ -58,7 +58,10 @@ enum Command {
 }
 
 fn make_factory(path: String, config: Option<PathBuf>) -> canopy_mcp::script::AppFactory {
-    app_factory(move || create_app_with_config(&path, config.as_deref()).map_err(McpError::app))
+    app_factory(move || {
+        create_app_with_config(&path, config.as_deref())
+            .map_err(|error| McpError::app_boxed(error.into_boxed_dyn_error()))
+    })
 }
 
 pub fn main() -> Result<()> {
