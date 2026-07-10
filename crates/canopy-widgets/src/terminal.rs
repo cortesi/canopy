@@ -1345,7 +1345,7 @@ mod tests {
                 ScriptExecPolicy::default(),
                 None,
                 "attached_test.luau",
-                "local term = require('term')\nlocal t = term.open()\nt:paste('echo canopy\\r')\nt:wait_text('canopy')\n",
+                "local t = term.open()\nlocal marker = 'CANOPY_SCRIPT_READY'\nt:paste(\"printf 'CANOPY_SCRIPT_%s\\\\n' 'READY'\", { submit = 'enter' })\nt:wait_text(marker)\n",
                 BTreeMap::new(),
             );
             script_tx.send(()).expect("script receiver alive");
