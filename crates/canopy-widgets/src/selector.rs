@@ -1,7 +1,7 @@
 //! Selector widget for multi-value selection with checkbox-style items.
 
 use canopy::{
-    Context, EventOutcome, ReadContext, Widget, command, derive_commands,
+    Context, EventOutcome, ViewContext, Widget, command, derive_commands,
     error::Result,
     event::{Event, mouse},
     layout::{MeasureConstraints, Measurement, Size},
@@ -229,7 +229,7 @@ where
         Ok(EventOutcome::Ignore)
     }
 
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         let rect = view.view_rect_local();
         let is_widget_focused = ctx.is_focused();
@@ -277,7 +277,7 @@ where
         self.content_size()
     }
 
-    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 

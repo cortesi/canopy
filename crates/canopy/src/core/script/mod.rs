@@ -44,7 +44,7 @@ use crate::{
     Canopy, ChangeOutcome, Core, NodeId,
     commands::{self, ArgValue, CommandArgs, CommandInvocation, CommandSet, CommandSpec},
     core::{
-        context::{Context, CoreContext, CoreViewContext, ReadContext},
+        context::{Context, CoreContext, CoreViewContext, FocusScope, ViewContext},
         help::BindingKind,
         inputmap::{self, BindingTarget},
         termbuf::Cell,
@@ -2779,7 +2779,7 @@ fn host_focus_next<'s>(
     with_current_canopy(scope, |canopy, _| {
         let root_id = canopy.core.root_id();
         let mut ctx = CoreContext::new(&mut canopy.core, root_id);
-        ctx.focus_next_global()?;
+        ctx.focus_next(FocusScope::Root)?;
         Ok(())
     })
     .map_err(|err| canopy_to_host(&err))?;
@@ -2794,7 +2794,7 @@ fn host_focus_prev<'s>(
     with_current_canopy(scope, |canopy, _| {
         let root_id = canopy.core.root_id();
         let mut ctx = CoreContext::new(&mut canopy.core, root_id);
-        ctx.focus_prev_global()?;
+        ctx.focus_prev(FocusScope::Root)?;
         Ok(())
     })
     .map_err(|err| canopy_to_host(&err))?;
@@ -2813,7 +2813,7 @@ fn host_focus_dir<'s>(
             .map_err(error::Error::from)?;
         let root_id = canopy.core.root_id();
         let mut ctx = CoreContext::new(&mut canopy.core, root_id);
-        ctx.focus_dir_global(dir)?;
+        ctx.focus_dir(FocusScope::Root, dir)?;
         Ok(())
     })
     .map_err(|err| canopy_to_host(&err))?;

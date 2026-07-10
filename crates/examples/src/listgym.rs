@@ -122,7 +122,7 @@ impl Selectable for ListEntry {
 }
 
 impl Widget for ListEntry {
-    fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         self.text.render(r, ctx)
     }
 
@@ -134,7 +134,7 @@ impl Widget for ListEntry {
         self.text.canvas(view, ctx)
     }
 
-    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 
@@ -168,12 +168,12 @@ impl StatusBar {
     }
 
     /// Locate the panes node in the tree.
-    fn panes_id(ctx: &dyn ReadContext) -> Option<NodeId> {
+    fn panes_id(ctx: &dyn ViewContext) -> Option<NodeId> {
         ctx.first_in_tree::<Panes>().map(Into::into)
     }
 
     /// Build the status text based on the focused column.
-    fn label(&self, ctx: &dyn ReadContext) -> String {
+    fn label(&self, ctx: &dyn ViewContext) -> String {
         let Some(panes_id) = Self::panes_id(ctx) else {
             return "listgym".to_string();
         };
@@ -193,7 +193,7 @@ impl StatusBar {
 }
 
 impl Widget for StatusBar {
-    fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         r.push_layer("statusbar");
         let label = self.label(ctx);
         r.text("text", ctx.view().outer_rect_local().line(0)?, &label)?;
@@ -231,7 +231,7 @@ impl ListGym {
             List::<ListEntry>::new().with_selection_indicator("list/selected", "█ ", true),
         )?;
         // Add initial items
-        c.with_typed(list_id, |list: &mut List<ListEntry>, ctx| {
+        c.with_widget(list_id, |list: &mut List<ListEntry>, ctx| {
             for i in 0..10 {
                 list.append(ctx, list_item(i))?;
             }
@@ -251,7 +251,8 @@ impl ListGym {
 
     /// Find the list to target for list commands.
     fn list_id(&self, c: &dyn Context) -> Result<TypedId<List<ListEntry>>> {
-        c.focused_or_first_descendant::<List<ListEntry>>()
+        (c as &dyn ViewContext)
+            .focused_or_first_descendant::<List<ListEntry>>()
             .ok_or_else(|| Error::Invalid("list not initialized".into()))
     }
 
@@ -300,7 +301,7 @@ impl ListGym {
 }
 
 impl Widget for ListGym {
-    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 
@@ -314,13 +315,13 @@ impl Widget for ListGym {
         )?;
 
         let frame_id = Self::create_column(c)?;
-        c.with_typed(panes_id, |panes: &mut Panes, ctx| {
+        c.with_widget(panes_id, |panes: &mut Panes, ctx| {
             panes.insert_col(ctx, frame_id)
         })?;
         Ok(())
     }
 
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 }

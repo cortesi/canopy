@@ -108,7 +108,7 @@ impl CounterItem {
 
     /// Update the box layout based on the current label width.
     fn update_box_layout(&self, ctx: &mut dyn Context) -> Result<()> {
-        let Some(box_id) = ctx.unique_descendant::<Box>()? else {
+        let Some(box_id) = (ctx as &dyn ViewContext).unique_descendant::<Box>()? else {
             return Ok(());
         };
 
@@ -156,7 +156,7 @@ impl Widget for CounterItem {
         c.clamp(Size::new(desired_width, ENTRY_HEIGHT))
     }
 
-    fn render(&mut self, rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         rndr.push_layer("entry");
         if self.selected {
             rndr.push_layer("selected");
@@ -164,7 +164,7 @@ impl Widget for CounterItem {
         Ok(())
     }
 
-    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 
@@ -180,7 +180,7 @@ pub struct StatusBar;
 impl StatusBar {}
 
 impl Widget for StatusBar {
-    fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         r.push_layer("statusbar");
         r.text(
             "statusbar/text",
@@ -226,7 +226,7 @@ impl Intervals {
 }
 
 impl Widget for Intervals {
-    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 
@@ -242,7 +242,7 @@ impl Widget for Intervals {
         Ok(())
     }
 
-    fn render(&mut self, r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         r.push_layer("intervals");
         Ok(())
     }

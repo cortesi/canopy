@@ -95,7 +95,7 @@ impl Widget for TermEntry {
         Ok(())
     }
 
-    fn render(&mut self, rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         rndr.push_layer("entry");
         if self.selected {
             rndr.push_layer("selected");
@@ -111,7 +111,7 @@ impl Widget for TermEntry {
         c.clamp(Size::new(width, ENTRY_HEIGHT))
     }
 
-    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 
@@ -136,7 +136,7 @@ impl Widget for TerminalStack {
         Layout::fill().direction(Direction::Stack)
     }
 
-    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 }
@@ -179,7 +179,7 @@ impl TermGym {
     /// Return terminal stack children in order.
     fn terminal_ids(&self, c: &mut dyn Context) -> Result<Vec<NodeId>> {
         self.with_stack(c, |_stack, ctx| {
-            Ok(ctx
+            Ok((ctx as &dyn ViewContext)
                 .children_of_type::<Terminal>()
                 .into_iter()
                 .map(NodeId::from)
@@ -298,7 +298,7 @@ impl TermGym {
             if let Some(selected) = list.selected_item() {
                 ctx.set_focus(NodeId::from(selected))?;
             } else {
-                ctx.focus_first_in(ctx.node_id())?;
+                ctx.focus_first(FocusScope::Current)?;
             }
             Ok(())
         })
@@ -390,7 +390,7 @@ impl TermGym {
 }
 
 impl Widget for TermGym {
-    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 
@@ -422,7 +422,7 @@ impl Widget for TermGym {
         Ok(())
     }
 
-    fn render(&mut self, r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         r.push_layer("termgym");
         Ok(())
     }

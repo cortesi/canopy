@@ -164,7 +164,7 @@ impl Block {
         if !self.size_limited(size) && c.children().is_empty() {
             c.add_child(Self::new(!self.horizontal))?;
             c.add_child(Self::new(!self.horizontal))?;
-            c.focus_next()?;
+            c.focus_next(FocusScope::Current)?;
         }
         Ok(())
     }
@@ -202,11 +202,11 @@ impl Block {
 }
 
 impl Widget for Block {
-    fn accept_focus(&self, ctx: &dyn ReadContext) -> bool {
+    fn accept_focus(&self, ctx: &dyn ViewContext) -> bool {
         ctx.children().is_empty()
     }
 
-    fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         // Only render leaf blocks (those without children)
         if ctx.children().is_empty() {
             let bc = if ctx.is_focused() { "violet" } else { "blue" };
@@ -247,7 +247,7 @@ impl FocusGym {
     #[command]
     /// Delete the currently focused block.
     fn delete_focused(&self, c: &mut dyn Context) -> Result<()> {
-        let Some(root_block) = c.unique_child::<Block>()? else {
+        let Some(root_block) = (c as &dyn ViewContext).unique_child::<Block>()? else {
             return Ok(());
         };
         let root_block = NodeId::from(root_block);
@@ -255,13 +255,13 @@ impl FocusGym {
             return Ok(());
         };
         c.remove_subtree(focused)?;
-        c.focus_first_in(root_block)?;
+        c.focus_first(FocusScope::Node(root_block))?;
         Ok(())
     }
 }
 
 impl Widget for FocusGym {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 

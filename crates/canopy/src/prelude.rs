@@ -1,9 +1,9 @@
 //! Convenience re-exports for common Canopy types.
 
 pub use crate::{
-    Canopy, ChangeOutcome, ChildKey, CommandArg, CommandEnum, Context, EventOutcome, Loader,
-    NodeId, Path, PathFilter, ReadContext, RenderLimits, ScriptApiState, Slot, TypedId, Widget,
-    command, derive_commands, error,
+    Canopy, ChangeOutcome, ChildKey, CommandArg, CommandEnum, Context, EventOutcome, FocusScope,
+    Loader, NodeId, Path, PathFilter, RenderLimits, ScriptApiState, Slot, TypedId, ViewContext,
+    Widget, command, derive_commands, error,
     event::{Event, key::Key, mouse},
     geom::{Point, Rect, Size},
     key,

@@ -8,7 +8,7 @@ struct ViewMetrics {
     canvas: geom::Size,
 }
 
-fn metrics(ctx: &dyn ReadContext) -> ViewMetrics {
+fn metrics(ctx: &dyn ViewContext) -> ViewMetrics {
     let view = ctx.view();
     ViewMetrics {
         outer: view.outer,

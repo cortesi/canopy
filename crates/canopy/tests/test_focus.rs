@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Core, NodeId, ReadContext, Widget,
+        Canopy, Core, NodeId, ViewContext, Widget,
         commands::{CommandNode, CommandSpec},
         error::{Error, Result},
         geom::{Direction, Size},
@@ -30,11 +30,11 @@ mod tests {
     }
 
     impl Widget for FocusLeaf {
-        fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
             true
         }
 
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
 

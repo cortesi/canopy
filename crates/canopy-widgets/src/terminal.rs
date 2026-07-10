@@ -7,7 +7,7 @@ use std::{
 };
 
 use canopy::{
-    Context, EventOutcome, ReadContext, Widget, cursor, derive_commands,
+    Context, EventOutcome, ViewContext, Widget, cursor, derive_commands,
     error::{Error, Result},
     event::{self, key, mouse},
     geom,
@@ -832,7 +832,7 @@ impl Terminal {
 }
 
 impl Widget for Terminal {
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         let content_size = view.content_size();
         if content_size.w == 0 || content_size.h == 0 {
@@ -979,7 +979,7 @@ impl Widget for Terminal {
         view
     }
 
-    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 

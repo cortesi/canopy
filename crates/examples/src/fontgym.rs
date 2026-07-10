@@ -1,7 +1,7 @@
 use std::{f32::consts::TAU, time::Duration};
 
 use canopy::{
-    Canopy, Context, EventOutcome, Loader, ReadContext, Widget, command,
+    Canopy, Context, EventOutcome, Loader, ViewContext, Widget, command,
     cursor::{Cursor, CursorShape},
     derive_commands,
     error::Result,
@@ -128,7 +128,7 @@ impl Widget for FontGym {
         let list_id = ctx.create_detached(List::new())?;
         ctx.set_layout_of(list_id, Layout::fill())?;
 
-        let blocks = ctx.with_typed(list_id, |list: &mut List<FontBlock>, ctx| {
+        let blocks = ctx.with_widget(list_id, |list: &mut List<FontBlock>, ctx| {
             let mut ids = Vec::new();
             let centered = LayoutOptions {
                 h_align: Align::Center,
@@ -300,7 +300,7 @@ impl FocusFrame {
         ctx: &mut dyn Context,
         action: impl FnOnce(&mut dyn Context) -> bool,
     ) -> Result<bool> {
-        ctx.with_typed(self.list_id, |_, list_ctx| Ok(action(list_ctx)))
+        ctx.with_widget(self.list_id, |_, list_ctx| Ok(action(list_ctx)))
     }
 }
 
@@ -309,11 +309,11 @@ impl Widget for FocusFrame {
         Layout::fill()
     }
 
-    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         self.frame.render(rndr, ctx)
     }
 
@@ -370,7 +370,7 @@ impl FontBlock {
     /// Update the banner text.
     fn set_text(&mut self, ctx: &mut dyn Context, text: String) -> Result<()> {
         if let Some(banner_id) = self.banner_id {
-            ctx.with_typed(banner_id, |banner, _| {
+            ctx.with_widget(banner_id, |banner, _| {
                 banner.set_text(text);
                 Ok(())
             })?;
@@ -383,7 +383,7 @@ impl FontBlock {
     /// Update the banner effects.
     fn set_effects(&mut self, ctx: &mut dyn Context, effects: FontEffects) -> Result<()> {
         if let Some(banner_id) = self.banner_id {
-            ctx.with_typed(banner_id, |banner, _| {
+            ctx.with_widget(banner_id, |banner, _| {
                 banner.set_effects(effects);
                 Ok(())
             })?;
@@ -454,7 +454,7 @@ impl Widget for FontLabel {
         Layout::fill()
     }
 
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         let view_rect = view.view_rect();
         let origin = view.content_origin();
@@ -567,7 +567,7 @@ impl FontGymInput {
     /// Push the current text into all target banners.
     fn sync_targets(&self, ctx: &mut dyn Context) -> Result<()> {
         for target in &self.targets {
-            ctx.with_typed(*target, |block, ctx| block.set_text(ctx, self.text.clone()))?;
+            ctx.with_widget(*target, |block, ctx| block.set_text(ctx, self.text.clone()))?;
         }
         Ok(())
     }
@@ -575,7 +575,7 @@ impl FontGymInput {
     /// Update block layouts to the current height.
     fn sync_heights(&self, ctx: &mut dyn Context) -> Result<()> {
         for target in &self.targets {
-            ctx.with_typed(*target, |block, ctx| {
+            ctx.with_widget(*target, |block, ctx| {
                 block.set_banner_height(ctx, self.banner_height)
             })?;
             ctx.set_layout_of(*target, block_layout(self.banner_height))?;
@@ -587,7 +587,7 @@ impl FontGymInput {
     fn sync_effects(&self, ctx: &mut dyn Context) -> Result<()> {
         let effects = self.style_state.effects();
         for target in &self.targets {
-            ctx.with_typed(*target, |block, ctx| block.set_effects(ctx, effects))?;
+            ctx.with_widget(*target, |block, ctx| block.set_effects(ctx, effects))?;
         }
         Ok(())
     }
@@ -645,7 +645,7 @@ impl FontGymInput {
     /// Update the status panel contents.
     fn sync_status(&self, ctx: &mut dyn Context) -> Result<()> {
         let status = status_text(self.banner_height, self.style_state);
-        ctx.with_typed(self.status_text, |text, _| {
+        ctx.with_widget(self.status_text, |text, _| {
             text.set_raw(status);
             Ok(())
         })?;
@@ -658,7 +658,7 @@ impl Widget for FontGymInput {
         Layout::fill()
     }
 
-    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 
@@ -673,7 +673,7 @@ impl Widget for FontGymInput {
         })
     }
 
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         let view_rect = view.view_rect();
         let origin = view.content_origin();
@@ -828,7 +828,7 @@ impl Widget for ControlsLegend {
         Layout::fill()
     }
 
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         let view_rect = view.view_rect_local();
         let lines = controls_legend_lines();

@@ -1,5 +1,5 @@
 use canopy::{
-    Context, NodeId, ReadContext, Widget, command,
+    Context, NodeId, ViewContext, Widget, command,
     commands::{CommandNode, CommandSpec},
     derive_commands,
     error::Result,
@@ -21,7 +21,7 @@ impl Widget for PaneColumn {
         Layout::fill()
     }
 
-    fn render(&mut self, _rndr: &mut canopy::render::Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, _rndr: &mut canopy::render::Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 
@@ -193,7 +193,7 @@ fn focus_column_node(c: &mut dyn Context, column_node: NodeId) -> Result<()> {
     if let Some(target) = focusables
         .first()
         .copied()
-        .or_else(|| c.first_leaf(column_node))
+        .or_else(|| (c as &dyn ViewContext).first_leaf(column_node))
     {
         c.set_focus(target)?;
     }
@@ -207,7 +207,7 @@ impl Default for Panes {
 }
 
 impl Widget for Panes {
-    fn render(&mut self, _rndr: &mut canopy::render::Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, _rndr: &mut canopy::render::Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 

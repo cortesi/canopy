@@ -152,7 +152,7 @@ pub struct DemoContent;
 impl DemoContent {}
 
 impl Widget for DemoContent {
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         let rect = view.view_rect_local();
 
@@ -217,7 +217,7 @@ struct ModalContent;
 impl ModalContent {}
 
 impl Widget for ModalContent {
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         let rect = view.view_rect_local();
 
@@ -395,7 +395,7 @@ struct Container;
 impl Container {}
 
 impl Widget for Container {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 
@@ -405,7 +405,7 @@ impl Widget for Container {
 }
 
 impl Widget for Stylegym {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 

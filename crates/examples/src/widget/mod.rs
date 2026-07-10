@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use canopy::{
-    Context, NodeId, ReadContext, TypedId, Widget,
+    Context, NodeId, TypedId, ViewContext, Widget,
     error::{Error, Result},
     layout::{Edges, Layout},
     render::Render,
@@ -134,7 +134,7 @@ impl Widget for DemoHost {
         Ok(())
     }
 
-    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 
@@ -205,7 +205,7 @@ impl Widget for ListDemo {
             .overflow_x()
             .fixed_width(max_width);
         ctx.set_layout_of(list_id, list_layout)?;
-        ctx.with_typed(list_id, |list: &mut List<Text>, ctx| {
+        ctx.with_widget(list_id, |list: &mut List<Text>, ctx| {
             for item in item_texts {
                 let text = Text::new(item)
                     .with_style(LIST_STYLE_PATH)
@@ -227,7 +227,7 @@ impl Widget for ListDemo {
             return Some(interval);
         }
         if ctx
-            .with_typed(list_id, |list: &mut List<Text>, ctx| {
+            .with_widget(list_id, |list: &mut List<Text>, ctx| {
                 let len = list.len();
                 if len == 0 {
                     return Ok(());

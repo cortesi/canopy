@@ -81,7 +81,7 @@ impl Widget for TestWidget {
 struct FocusableWidget;
 
 impl Widget for FocusableWidget {
-    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 }
@@ -362,14 +362,14 @@ fn typed_id_conversion_rejects_wrong_type_and_stale_generation() -> Result<()> {
     let typed = {
         let context = CoreContext::new(&mut core, original);
         let context: &dyn Context = &context;
-        context.typed_id::<TestWidget>(original)?
+        (context as &dyn ViewContext).typed_id::<TestWidget>(original)?
     };
     assert_eq!(NodeId::from(typed), original);
 
     let wrong_type = {
         let context = CoreContext::new(&mut core, original);
         let context: &dyn Context = &context;
-        context.typed_id::<FocusableWidget>(original)
+        (context as &dyn ViewContext).typed_id::<FocusableWidget>(original)
     };
     assert!(matches!(wrong_type, Err(Error::NodeTypeMismatch { .. })));
 
@@ -379,7 +379,7 @@ fn typed_id_conversion_rejects_wrong_type_and_stale_generation() -> Result<()> {
     let stale = {
         let context = CoreContext::new(&mut core, replacement);
         let context: &dyn Context = &context;
-        context.typed_id::<TestWidget>(original)
+        (context as &dyn ViewContext).typed_id::<TestWidget>(original)
     };
     assert!(matches!(stale, Err(Error::NodeNotFound(id)) if id == original));
     Ok(())
@@ -719,7 +719,7 @@ fn apply_identity_mutation(
         }
         IdentityMutation::CheckRustHandle(_) => {
             let context = CoreViewContext::new(core, core.root);
-            let context: &dyn ReadContext = &context;
+            let context: &dyn ViewContext = &context;
             let valid = if state.focusable {
                 context.typed_id::<FocusableWidget>(state.id).is_ok()
             } else {

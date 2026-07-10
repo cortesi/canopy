@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use canopy::{
-    Canopy, Context, Loader, ReadContext, Widget, command,
+    Canopy, Context, Loader, ViewContext, Widget, command,
     commands::ZoomDirection,
     derive_commands, error as canopy_error,
     geom::{Direction, Point, Rect, Size},
@@ -404,7 +404,7 @@ impl Widget for ImageView {
     }
 
     /// Render the current image view into the terminal buffer.
-    fn render(&mut self, render: &mut Render, ctx: &dyn ReadContext) -> canopy_error::Result<()> {
+    fn render(&mut self, render: &mut Render, ctx: &dyn ViewContext) -> canopy_error::Result<()> {
         let view = ctx.view();
         let view_rect = view.view_rect();
         if view_rect.w == 0 || view_rect.h == 0 {
@@ -419,7 +419,7 @@ impl Widget for ImageView {
     }
 
     /// Accept focus so key bindings apply to this widget.
-    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 }

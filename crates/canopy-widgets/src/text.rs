@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
 use canopy::{
-    Context, ReadContext, Widget, command, derive_commands,
+    Context, ViewContext, Widget, command, derive_commands,
     error::Result,
     geom::{Direction, Line},
     layout::{Constraint, MeasureConstraints, Measurement, Size},
@@ -181,7 +181,7 @@ struct WrapCache {
 }
 
 impl Widget for Text {
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         let view_rect = view.view_rect();
         let content_origin = view.content_origin();

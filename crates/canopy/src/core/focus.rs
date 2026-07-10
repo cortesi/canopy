@@ -1,5 +1,5 @@
 use crate::{
-    ChangeOutcome, ReadContext,
+    ChangeOutcome, ViewContext,
     core::{context::CoreViewContext, id::NodeId, widget_access, world::Core},
     error::{Error, Result},
     geom::{Direction, RectI32},
@@ -133,7 +133,7 @@ impl Core {
     pub fn focus_dir(&mut self, root: NodeId, dir: Direction) -> Result<ChangeOutcome> {
         let mut focusables = Vec::new();
         let ctx = CoreViewContext::new(self, root);
-        let ctx = &ctx as &dyn ReadContext;
+        let ctx = &ctx as &dyn ViewContext;
         for id in ctx.preorder(root) {
             if is_focus_candidate(self, id, true) {
                 focusables.push(id);
@@ -367,7 +367,7 @@ fn first_focusable(core: &Core, root: NodeId) -> Option<NodeId> {
 /// Return the first focusable node under `root` with view requirement control.
 fn first_focusable_with(core: &Core, root: NodeId, require_view: bool) -> Option<NodeId> {
     let ctx = CoreViewContext::new(core, root);
-    let ctx = &ctx as &dyn ReadContext;
+    let ctx = &ctx as &dyn ViewContext;
     ctx.preorder(root)
         .find(|id| is_focus_candidate(core, *id, require_view))
 }
@@ -393,7 +393,7 @@ fn find_next_focus_with(
     require_view: bool,
 ) -> Option<NodeId> {
     let ctx = CoreViewContext::new(core, root);
-    let ctx = &ctx as &dyn ReadContext;
+    let ctx = &ctx as &dyn ViewContext;
     let mut past_target = false;
     for id in ctx.preorder(root) {
         if id == target {
@@ -434,7 +434,7 @@ fn find_prev_focus_with(
 ) -> Option<NodeId> {
     let mut prev = None;
     let ctx = CoreViewContext::new(core, root);
-    let ctx = &ctx as &dyn ReadContext;
+    let ctx = &ctx as &dyn ViewContext;
     for id in ctx.preorder(root) {
         if let Some(t) = target
             && id == t

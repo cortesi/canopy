@@ -1,7 +1,7 @@
 //! Grid test utility for creating configurable grid layouts.
 
 use crate::{
-    NodeId, ReadContext,
+    NodeId, ViewContext,
     core::Core,
     derive_commands,
     error::Result,
@@ -54,7 +54,7 @@ impl GridNode {
 }
 
 impl Widget for GridNode {
-    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         matches!(self.kind, GridKind::Cell)
     }
 
@@ -66,7 +66,7 @@ impl Widget for GridNode {
         }
     }
 
-    fn render(&mut self, _r: &mut crate::render::Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, _r: &mut crate::render::Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 

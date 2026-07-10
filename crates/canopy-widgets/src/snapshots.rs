@@ -3,7 +3,7 @@ mod tests {
     use std::{env, fs, path::PathBuf};
 
     use canopy::{
-        Canopy, Context, Loader, Widget,
+        Canopy, Context, Loader, ViewContext, Widget,
         commands::{CommandNode, CommandSpec},
         error::Result,
         layout::Layout,
@@ -149,7 +149,8 @@ mod tests {
 
         harness.render()?;
         harness.with_root_context(|_root: &mut SnapshotRoot<List<Text>>, ctx| {
-            let list_id = ctx.find_one("**/list")?;
+            let view = ctx as &dyn ViewContext;
+            let list_id = view.typed_id::<List<Text>>(view.find_one("**/list")?)?;
             ctx.with_widget::<List<Text>, _>(list_id, |list, ctx| {
                 list.append(ctx, Text::new("One"))?;
                 list.append(ctx, Text::new("Two"))?;

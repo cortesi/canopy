@@ -5,7 +5,7 @@ mod tests {
     use std::{any::Any, marker::PhantomData};
 
     use canopy::{
-        self, ReadContext, Widget,
+        self, ViewContext, Widget,
         commands::{
             ArgValue, CommandDispatchKind, CommandError, CommandNode, CommandParamKind,
             CommandReturnSpec,
@@ -95,7 +95,7 @@ mod tests {
     }
 
     impl Widget for Foo {
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
     }
@@ -124,7 +124,7 @@ mod tests {
     where
         N: Widget,
     {
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
     }

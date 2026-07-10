@@ -12,7 +12,7 @@ use futures::{StreamExt, executor::block_on};
 
 use super::*;
 use crate::{
-    Context, ReadContext,
+    Context, ViewContext,
     commands::{CommandNode, CommandSpec},
     derive_commands,
     error::{Error, Result},
@@ -224,7 +224,7 @@ impl StaticWidget {
 }
 
 impl Widget for StaticWidget {
-    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 }
@@ -236,7 +236,7 @@ impl Widget for FailRenderWidget {
         Layout::fill()
     }
 
-    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Err(Error::Invalid("render failed".into()))
     }
 
@@ -935,11 +935,11 @@ fn tkey_no_render() -> Result<()> {
             Layout::fill()
         }
 
-        fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
             true
         }
 
-        fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+        fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
             r.text("any", ctx.view().outer_rect_local().line(0)?, "<n>")
         }
 
@@ -983,7 +983,7 @@ fn zero_size_child_ok() -> Result<()> {
     impl Child {}
 
     impl Widget for Child {
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
 
@@ -1002,7 +1002,7 @@ fn zero_size_child_ok() -> Result<()> {
     }
 
     impl Widget for Parent {
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
 

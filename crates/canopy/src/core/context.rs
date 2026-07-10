@@ -124,7 +124,7 @@ impl<K: ChildKey> Slot<K> {
             .get_child_in::<K>(parent)?
             .ok_or_else(|| Error::NotFound(K::KEY.to_string()))?;
         self.id = Some(id);
-        ctx.with_typed(id, f)
+        ctx.with_widget(id, f)
     }
 }
 
@@ -166,7 +166,7 @@ macro_rules! key {
 }
 
 /// Read-only context available to widgets during render and measure.
-pub trait ReadContext {
+pub trait ViewContext {
     /// The node currently being rendered.
     fn node_id(&self) -> NodeId;
 
@@ -268,7 +268,7 @@ pub trait ReadContext {
                 return Some(id);
             }
 
-            let children = ReadContext::children_of(self, id);
+            let children = ViewContext::children_of(self, id);
             for child in children.into_iter().rev() {
                 stack.push(child);
             }
@@ -299,7 +299,7 @@ pub trait ReadContext {
                 out.push(id);
             }
 
-            let children = ReadContext::children_of(self, id);
+            let children = ViewContext::children_of(self, id);
             for child in children.into_iter().rev() {
                 stack.push(child);
             }
@@ -318,7 +318,7 @@ pub trait ReadContext {
 /// Pre-order traversal iterator over a subtree.
 pub struct Preorder<'a> {
     /// Read-only context used to access children.
-    ctx: &'a dyn ReadContext,
+    ctx: &'a dyn ViewContext,
     /// Traversal stack.
     stack: Vec<NodeId>,
 }
@@ -327,7 +327,7 @@ pub struct Preorder<'a> {
 fn checked_typed_id<W, C>(ctx: &C, node: NodeId) -> Result<TypedId<W>>
 where
     W: Widget + 'static,
-    C: ReadContext + ?Sized,
+    C: ViewContext + ?Sized,
 {
     let actual = ctx.node_type_id(node).ok_or(Error::NodeNotFound(node))?;
     if actual != TypeId::of::<W>() {
@@ -344,7 +344,7 @@ impl<'a> Iterator for Preorder<'a> {
 
     fn next(&mut self) -> Option<NodeId> {
         let id = self.stack.pop()?;
-        let children = ReadContext::children_of(self.ctx, id);
+        let children = ViewContext::children_of(self.ctx, id);
         for child in children.into_iter().rev() {
             self.stack.push(child);
         }
@@ -352,7 +352,7 @@ impl<'a> Iterator for Preorder<'a> {
     }
 }
 
-impl dyn ReadContext + '_ {
+impl dyn ViewContext + '_ {
     /// Validate an untyped node ID and return its typed form.
     pub fn typed_id<W: Widget + 'static>(&self, node: impl Into<NodeId>) -> Result<TypedId<W>> {
         checked_typed_id(self, node.into())
@@ -370,7 +370,7 @@ impl dyn ReadContext + '_ {
     pub fn first_from<W: Widget + 'static>(&self, root: impl Into<NodeId>) -> Option<TypedId<W>> {
         let root = root.into();
         for id in self.preorder(root) {
-            if ReadContext::node_type_id(self, id) == Some(TypeId::of::<W>()) {
+            if ViewContext::node_type_id(self, id) == Some(TypeId::of::<W>()) {
                 return Some(TypedId::new(id));
             }
         }
@@ -382,7 +382,7 @@ impl dyn ReadContext + '_ {
         let root = root.into();
         let mut out = Vec::new();
         for id in self.preorder(root) {
-            if ReadContext::node_type_id(self, id) == Some(TypeId::of::<W>()) {
+            if ViewContext::node_type_id(self, id) == Some(TypeId::of::<W>()) {
                 out.push(TypedId::new(id));
             }
         }
@@ -500,25 +500,25 @@ impl dyn ReadContext + '_ {
     pub fn focused_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
         self.descendants_of_type::<W>()
             .into_iter()
-            .find(|id| ReadContext::node_is_on_focus_path(self, (*id).into()))
+            .find(|id| ViewContext::node_is_on_focus_path(self, (*id).into()))
     }
 
     /// Return the descendant of type `W` on the focus path, or the first if none focused.
     ///
     /// This searches only within the current node's subtree. Use the tree-wide helpers on
-    /// `ReadContext` if you need to search from an arbitrary root.
+    /// `ViewContext` if you need to search from an arbitrary root.
     pub fn focused_or_first_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
         let descendants = self.descendants_of_type::<W>();
         let focused = descendants
             .iter()
             .copied()
-            .find(|id| ReadContext::node_is_on_focus_path(self, (*id).into()));
+            .find(|id| ViewContext::node_is_on_focus_path(self, (*id).into()));
         focused.or_else(|| descendants.into_iter().next())
     }
 
     /// Return true if the node's widget type matches `W`.
     fn node_matches_type<W: Widget + 'static>(&self, node: NodeId) -> bool {
-        ReadContext::node_type_id(self, node) == Some(TypeId::of::<W>())
+        ViewContext::node_type_id(self, node) == Some(TypeId::of::<W>())
     }
 
     /// Return the first leaf node under `root` using pre-order traversal.
@@ -527,7 +527,7 @@ impl dyn ReadContext + '_ {
     pub fn first_leaf(&self, root: impl Into<NodeId>) -> Option<NodeId> {
         let root = root.into();
         self.preorder(root)
-            .find(|id| ReadContext::children_of(self, *id).is_empty())
+            .find(|id| ViewContext::children_of(self, *id).is_empty())
     }
 }
 
@@ -563,122 +563,44 @@ fn clamp_scroll_offset(scroll: &mut Point, view: Size, canvas: Size) {
     scroll.y = scroll.y.min(max_y);
 }
 
+/// Subtree used by a focus traversal operation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FocusScope {
+    /// The current widget's subtree.
+    Current,
+    /// The complete widget tree.
+    Root,
+    /// A subtree rooted at an explicit node.
+    Node(NodeId),
+}
+
+impl FocusScope {
+    /// Resolve this scope against a node-bound context.
+    fn resolve(self, context: &dyn ViewContext) -> NodeId {
+        match self {
+            Self::Current => context.node_id(),
+            Self::Root => context.root_id(),
+            Self::Node(node) => node,
+        }
+    }
+}
+
 /// Mutable context available to widgets during event handling.
-pub trait Context: ReadContext {
+pub trait Context: ViewContext {
     /// Focus an attached node.
     fn set_focus(&mut self, node: NodeId) -> Result<ChangeOutcome>;
 
-    /// Move focus in a specified direction within the current node's subtree.
-    fn focus_dir(&mut self, dir: Direction) -> Result<ChangeOutcome> {
-        self.focus_dir_in(self.node_id(), dir)
-    }
+    /// Move focus in a direction within an explicit scope.
+    fn focus_dir(&mut self, scope: FocusScope, dir: Direction) -> Result<ChangeOutcome>;
 
-    /// Move focus in a specified direction within the specified subtree.
-    fn focus_dir_in(&mut self, root: NodeId, dir: Direction) -> Result<ChangeOutcome>;
+    /// Focus the first focusable node within an explicit scope.
+    fn focus_first(&mut self, scope: FocusScope) -> Result<ChangeOutcome>;
 
-    /// Move focus in a specified direction within the entire tree (from root).
-    fn focus_dir_global(&mut self, dir: Direction) -> Result<ChangeOutcome> {
-        self.focus_dir_in(self.root_id(), dir)
-    }
+    /// Focus the next focusable node within an explicit scope.
+    fn focus_next(&mut self, scope: FocusScope) -> Result<ChangeOutcome>;
 
-    /// Focus the first node that accepts focus in the current node's subtree.
-    fn focus_first(&mut self) -> Result<ChangeOutcome> {
-        self.focus_first_in(self.node_id())
-    }
-
-    /// Focus the first node that accepts focus in the specified subtree.
-    fn focus_first_in(&mut self, root: NodeId) -> Result<ChangeOutcome>;
-
-    /// Focus the first node that accepts focus in the entire tree (from root).
-    fn focus_first_global(&mut self) -> Result<ChangeOutcome> {
-        self.focus_first_in(self.root_id())
-    }
-
-    /// Focus the next node in the current node's subtree.
-    fn focus_next(&mut self) -> Result<ChangeOutcome> {
-        self.focus_next_in(self.node_id())
-    }
-
-    /// Focus the next node in the specified subtree.
-    fn focus_next_in(&mut self, root: NodeId) -> Result<ChangeOutcome>;
-
-    /// Focus the next node in the entire tree (from root).
-    fn focus_next_global(&mut self) -> Result<ChangeOutcome> {
-        self.focus_next_in(self.root_id())
-    }
-
-    /// Focus the previous node in the current node's subtree.
-    fn focus_prev(&mut self) -> Result<ChangeOutcome> {
-        self.focus_prev_in(self.node_id())
-    }
-
-    /// Focus the previous node in the specified subtree.
-    fn focus_prev_in(&mut self, root: NodeId) -> Result<ChangeOutcome>;
-
-    /// Focus the previous node in the entire tree (from root).
-    fn focus_prev_global(&mut self) -> Result<ChangeOutcome> {
-        self.focus_prev_in(self.root_id())
-    }
-
-    /// Move focus to the right within the current node's subtree.
-    fn focus_right(&mut self) -> Result<ChangeOutcome> {
-        self.focus_dir(Direction::Right)
-    }
-
-    /// Move focus to the right within the specified subtree.
-    fn focus_right_in(&mut self, root: NodeId) -> Result<ChangeOutcome> {
-        self.focus_dir_in(root, Direction::Right)
-    }
-
-    /// Move focus to the right within the entire tree (from root).
-    fn focus_right_global(&mut self) -> Result<ChangeOutcome> {
-        self.focus_dir_global(Direction::Right)
-    }
-
-    /// Move focus to the left within the current node's subtree.
-    fn focus_left(&mut self) -> Result<ChangeOutcome> {
-        self.focus_dir(Direction::Left)
-    }
-
-    /// Move focus to the left within the specified subtree.
-    fn focus_left_in(&mut self, root: NodeId) -> Result<ChangeOutcome> {
-        self.focus_dir_in(root, Direction::Left)
-    }
-
-    /// Move focus to the left within the entire tree (from root).
-    fn focus_left_global(&mut self) -> Result<ChangeOutcome> {
-        self.focus_dir_global(Direction::Left)
-    }
-
-    /// Move focus upward within the current node's subtree.
-    fn focus_up(&mut self) -> Result<ChangeOutcome> {
-        self.focus_dir(Direction::Up)
-    }
-
-    /// Move focus upward within the specified subtree.
-    fn focus_up_in(&mut self, root: NodeId) -> Result<ChangeOutcome> {
-        self.focus_dir_in(root, Direction::Up)
-    }
-
-    /// Move focus upward within the entire tree (from root).
-    fn focus_up_global(&mut self) -> Result<ChangeOutcome> {
-        self.focus_dir_global(Direction::Up)
-    }
-
-    /// Move focus downward within the current node's subtree.
-    fn focus_down(&mut self) -> Result<ChangeOutcome> {
-        self.focus_dir(Direction::Down)
-    }
-
-    /// Move focus downward within the specified subtree.
-    fn focus_down_in(&mut self, root: NodeId) -> Result<ChangeOutcome> {
-        self.focus_dir_in(root, Direction::Down)
-    }
-
-    /// Move focus downward within the entire tree (from root).
-    fn focus_down_global(&mut self) -> Result<ChangeOutcome> {
-        self.focus_dir_global(Direction::Down)
-    }
+    /// Focus the previous focusable node within an explicit scope.
+    fn focus_prev(&mut self, scope: FocusScope) -> Result<ChangeOutcome>;
 
     /// Capture mouse events for the current node.
     fn capture_mouse(&mut self) -> Result<ChangeOutcome>;
@@ -866,84 +788,6 @@ pub trait Context: ReadContext {
 }
 
 impl dyn Context + '_ {
-    /// Validate an untyped node ID and return its typed form.
-    pub fn typed_id<W: Widget + 'static>(&self, node: impl Into<NodeId>) -> Result<TypedId<W>> {
-        checked_typed_id(self, node.into())
-    }
-
-    /// Get a read-only view of this context.
-    ///
-    /// This is useful for calling methods defined on `ReadContext` that are not
-    /// directly available on `Context`.
-    pub fn read(&self) -> &dyn ReadContext {
-        self
-    }
-
-    /// Find exactly one node matching a path filter.
-    pub fn find_one(&self, path: &str) -> Result<NodeId> {
-        self.read().find_one(path)
-    }
-
-    /// Try to find exactly one node matching a path filter.
-    pub fn try_find_one(&self, path: &str) -> Result<Option<NodeId>> {
-        self.read().try_find_one(path)
-    }
-
-    /// Find exactly one node matching a validated path filter.
-    pub fn find_one_matching(&self, path_filter: &PathFilter) -> Result<NodeId> {
-        self.read().find_one_matching(path_filter)
-    }
-
-    /// Try to find exactly one node matching a validated path filter.
-    pub fn try_find_one_matching(&self, path_filter: &PathFilter) -> Result<Option<NodeId>> {
-        self.read().try_find_one_matching(path_filter)
-    }
-
-    /// Return the first child of type `W`.
-    pub fn first_child<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
-        self.read().first_child()
-    }
-
-    /// Return the unique child of type `W`, or error if more than one exists.
-    pub fn unique_child<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
-        self.read().unique_child()
-    }
-
-    /// Return all direct children of type `W`.
-    pub fn children_of_type<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
-        self.read().children_of_type()
-    }
-
-    /// Return the first descendant of type `W` (excluding self).
-    pub fn first_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
-        self.read().first_descendant()
-    }
-
-    /// Return the unique descendant of type `W`, or error if more than one exists.
-    pub fn unique_descendant<W: Widget + 'static>(&self) -> Result<Option<TypedId<W>>> {
-        self.read().unique_descendant()
-    }
-
-    /// Return all descendants of type `W` (excluding self).
-    pub fn descendants_of_type<W: Widget + 'static>(&self) -> Vec<TypedId<W>> {
-        self.read().descendants_of_type()
-    }
-
-    /// Return the descendant of type `W` that is on the focus path, if any.
-    pub fn focused_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
-        self.read().focused_descendant()
-    }
-
-    /// Return the descendant of type `W` on the focus path, or the first if none focused.
-    pub fn focused_or_first_descendant<W: Widget + 'static>(&self) -> Option<TypedId<W>> {
-        self.read().focused_or_first_descendant()
-    }
-
-    /// Return the first leaf node under `root` using pre-order traversal.
-    pub fn first_leaf(&self, root: impl Into<NodeId>) -> Option<NodeId> {
-        self.read().first_leaf(root.into())
-    }
-
     /// Set the layout for the current node.
     pub fn set_layout(&mut self, layout: Layout) -> Result<()> {
         self.with_layout(&mut |l| *l = layout)
@@ -954,8 +798,20 @@ impl dyn Context + '_ {
         Context::with_layout_of(self, node.into(), &mut |l| *l = layout)
     }
 
-    /// Execute a closure with mutable access to a widget of type `W`.
+    /// Execute a closure with mutable access through a typed widget ID.
     pub fn with_widget<W, R>(
+        &mut self,
+        node: TypedId<W>,
+        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
+    ) -> Result<R>
+    where
+        W: Widget + 'static,
+    {
+        self.with_node(node, f)
+    }
+
+    /// Execute a closure with mutable access to a runtime-checked widget node.
+    pub fn with_node<W, R>(
         &mut self,
         node: impl Into<NodeId>,
         f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
@@ -968,7 +824,7 @@ impl dyn Context + '_ {
         let mut f = Some(f);
         let expected = TypeId::of::<W>();
         self.with_widget_mut(node, &mut |widget, ctx| {
-            let actual = ReadContext::node_type_id(ctx, node).ok_or(Error::NodeNotFound(node))?;
+            let actual = ViewContext::node_type_id(ctx, node).ok_or(Error::NodeNotFound(node))?;
             if actual != expected {
                 return Err(Error::TypeMismatch {
                     expected: type_name::<W>().to_string(),
@@ -988,20 +844,8 @@ impl dyn Context + '_ {
         output.ok_or_else(|| Error::Internal("missing widget result".into()))
     }
 
-    /// Execute a closure with mutable access to a widget using a typed node ID.
-    pub fn with_typed<W, R>(
-        &mut self,
-        node: TypedId<W>,
-        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
-    ) -> Result<R>
-    where
-        W: Widget + 'static,
-    {
-        self.with_widget(node, f)
-    }
-
-    /// Execute a closure with mutable access to a widget of type `W` if it matches.
-    pub fn try_with_widget<W, R>(
+    /// Execute a closure with mutable access if a node stores the requested widget type.
+    pub fn try_with_node<W, R>(
         &mut self,
         node: impl Into<NodeId>,
         f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
@@ -1015,7 +859,7 @@ impl dyn Context + '_ {
         let mut f = Some(f);
         let expected = TypeId::of::<W>();
         self.with_widget_mut(node, &mut |widget, ctx| {
-            let actual = ReadContext::node_type_id(ctx, node).ok_or(Error::NodeNotFound(node))?;
+            let actual = ViewContext::node_type_id(ctx, node).ok_or(Error::NodeNotFound(node))?;
             if actual != expected {
                 return Ok(());
             }
@@ -1037,18 +881,6 @@ impl dyn Context + '_ {
         } else {
             Ok(None)
         }
-    }
-
-    /// Execute a closure with mutable access to a widget using a typed node ID if it matches.
-    pub fn try_with_typed<W, R>(
-        &mut self,
-        node: TypedId<W>,
-        f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
-    ) -> Result<Option<R>>
-    where
-        W: Widget + 'static,
-    {
-        self.try_with_widget(node, f)
     }
 
     /// Create a widget node detached from the tree.
@@ -1174,8 +1006,8 @@ impl dyn Context + '_ {
         path: &str,
         f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<R> {
-        let node = (self as &dyn ReadContext).find_one(path)?;
-        self.with_widget(node, f)
+        let node = (self as &dyn ViewContext).find_one(path)?;
+        self.with_node(node, f)
     }
 
     /// Execute a closure with a widget at a unique path match if it exists.
@@ -1184,11 +1016,11 @@ impl dyn Context + '_ {
         path: &str,
         f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<Option<R>> {
-        let node = (self as &dyn ReadContext).try_find_one(path)?;
+        let node = (self as &dyn ViewContext).try_find_one(path)?;
         let Some(node) = node else {
             return Ok(None);
         };
-        self.with_widget(node, f).map(Some)
+        self.with_node(node, f).map(Some)
     }
 
     /// Execute a closure with a keyed child of type `W`.
@@ -1200,7 +1032,7 @@ impl dyn Context + '_ {
         let node = self
             .child_keyed(key)
             .ok_or_else(|| Error::NotFound(format!("key {key}")))?;
-        self.with_widget(node, f)
+        self.with_node(node, f)
     }
 
     /// Execute a closure with a keyed child of type `W` if it exists.
@@ -1212,7 +1044,7 @@ impl dyn Context + '_ {
         let Some(node) = self.child_keyed(key) else {
             return Ok(None);
         };
-        self.with_widget(node, f).map(Some)
+        self.with_node(node, f).map(Some)
     }
 
     /// Check if a typed keyed child exists.
@@ -1232,7 +1064,7 @@ impl dyn Context + '_ {
         &self,
         parent: impl Into<NodeId>,
     ) -> Result<Option<TypedId<K::Widget>>> {
-        ReadContext::child_keyed_in(self, parent.into(), K::KEY)
+        ViewContext::child_keyed_in(self, parent.into(), K::KEY)
             .map(|node| checked_typed_id(self, node))
             .transpose()
     }
@@ -1286,10 +1118,10 @@ impl dyn Context + '_ {
         &mut self,
         f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<R> {
-        let node = (self as &dyn ReadContext)
+        let node = (self as &dyn ViewContext)
             .focused_or_first_descendant::<W>()
             .ok_or_else(|| Error::NotFound(type_name::<W>().to_string()))?;
-        self.with_typed(node, f)
+        self.with_widget(node, f)
     }
 
     /// Execute a closure with the first descendant of type `W`.
@@ -1297,10 +1129,10 @@ impl dyn Context + '_ {
         &mut self,
         f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<R> {
-        let node = (self as &dyn ReadContext)
+        let node = (self as &dyn ViewContext)
             .first_descendant::<W>()
             .ok_or_else(|| Error::NotFound(type_name::<W>().to_string()))?;
-        self.with_typed(node, f)
+        self.with_widget(node, f)
     }
 
     /// Execute a closure with the first descendant of type `W` if it exists.
@@ -1308,10 +1140,10 @@ impl dyn Context + '_ {
         &mut self,
         f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<Option<R>> {
-        let Some(node) = (self as &dyn ReadContext).first_descendant::<W>() else {
+        let Some(node) = (self as &dyn ViewContext).first_descendant::<W>() else {
             return Ok(None);
         };
-        self.with_typed(node, f).map(Some)
+        self.with_widget(node, f).map(Some)
     }
 
     /// Execute a closure with the unique descendant of type `W`.
@@ -1319,10 +1151,10 @@ impl dyn Context + '_ {
         &mut self,
         f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<R> {
-        let node = (self as &dyn ReadContext)
+        let node = (self as &dyn ViewContext)
             .unique_descendant::<W>()?
             .ok_or_else(|| Error::NotFound(type_name::<W>().to_string()))?;
-        self.with_typed(node, f)
+        self.with_widget(node, f)
     }
 
     /// Execute a closure with the unique descendant of type `W` if it exists.
@@ -1330,11 +1162,11 @@ impl dyn Context + '_ {
         &mut self,
         f: impl FnOnce(&mut W, &mut dyn Context) -> Result<R>,
     ) -> Result<Option<R>> {
-        let node = (self as &dyn ReadContext).unique_descendant::<W>()?;
+        let node = (self as &dyn ViewContext).unique_descendant::<W>()?;
         let Some(node) = node else {
             return Ok(None);
         };
-        self.with_typed(node, f).map(Some)
+        self.with_widget(node, f).map(Some)
     }
 }
 
@@ -1359,7 +1191,7 @@ fn is_descendant(core: &Core, root: NodeId, node: NodeId) -> bool {
 fn focusable_leaves_for(core: &Core, root: NodeId) -> Vec<NodeId> {
     let mut out = Vec::new();
     let ctx = CoreViewContext::new(core, root);
-    let ctx = &ctx as &dyn ReadContext;
+    let ctx = &ctx as &dyn ViewContext;
     for id in ctx.preorder(root) {
         let Some(node) = core.nodes.get(id) else {
             continue;
@@ -1403,7 +1235,7 @@ impl<'a> CoreContext<'a> {
     }
 }
 
-impl<'a> ReadContext for CoreContext<'a> {
+impl<'a> ViewContext for CoreContext<'a> {
     fn node_id(&self) -> NodeId {
         self.node_id
     }
@@ -1506,20 +1338,20 @@ impl<'a> Context for CoreContext<'a> {
         self.core.set_focus(node)
     }
 
-    fn focus_dir_in(&mut self, root: NodeId, dir: Direction) -> Result<ChangeOutcome> {
-        self.core.focus_dir(root, dir)
+    fn focus_dir(&mut self, scope: FocusScope, dir: Direction) -> Result<ChangeOutcome> {
+        self.core.focus_dir(scope.resolve(self), dir)
     }
 
-    fn focus_first_in(&mut self, root: NodeId) -> Result<ChangeOutcome> {
-        self.core.focus_first(root)
+    fn focus_first(&mut self, scope: FocusScope) -> Result<ChangeOutcome> {
+        self.core.focus_first(scope.resolve(self))
     }
 
-    fn focus_next_in(&mut self, root: NodeId) -> Result<ChangeOutcome> {
-        self.core.focus_next(root)
+    fn focus_next(&mut self, scope: FocusScope) -> Result<ChangeOutcome> {
+        self.core.focus_next(scope.resolve(self))
     }
 
-    fn focus_prev_in(&mut self, root: NodeId) -> Result<ChangeOutcome> {
-        self.core.focus_prev(root)
+    fn focus_prev(&mut self, scope: FocusScope) -> Result<ChangeOutcome> {
+        self.core.focus_prev(scope.resolve(self))
     }
 
     fn capture_mouse(&mut self) -> Result<ChangeOutcome> {
@@ -1736,7 +1568,7 @@ impl<'a> CoreViewContext<'a> {
     }
 }
 
-impl<'a> ReadContext for CoreViewContext<'a> {
+impl<'a> ViewContext for CoreViewContext<'a> {
     fn node_id(&self) -> NodeId {
         self.node_id
     }

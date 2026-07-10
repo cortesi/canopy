@@ -3,7 +3,7 @@
 use std::env;
 
 use canopy::{
-    Context, NodeId, ReadContext, TypedId, Widget, command, derive_commands,
+    Context, NodeId, TypedId, ViewContext, Widget, command, derive_commands,
     error::{Error, Result},
     layout::{Direction, Edges, Layout},
     render::Render,
@@ -37,7 +37,7 @@ impl Widget for TabBar {
             .fixed_height(TAB_HEIGHT)
     }
 
-    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 
@@ -61,7 +61,7 @@ impl Widget for TerminalStack {
         Layout::fill().direction(Direction::Stack)
     }
 
-    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 
@@ -111,7 +111,7 @@ impl TermDemo {
 
         for (idx, tab_id) in self.tab_ids.iter().enumerate() {
             let active = idx == self.active;
-            ctx.with_typed(*tab_id, |tab: &mut Button, _ctx| {
+            ctx.with_widget(*tab_id, |tab: &mut Button, _ctx| {
                 tab.set_active(active);
                 Ok(())
             })?;
@@ -199,7 +199,7 @@ impl Widget for TermDemo {
         Ok(())
     }
 
-    fn render(&mut self, rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         rndr.push_layer("term_demo");
         Ok(())
     }

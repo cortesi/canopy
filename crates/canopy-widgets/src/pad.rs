@@ -1,7 +1,7 @@
 //! Padding container widget.
 
 use canopy::{
-    Context, NodeId, ReadContext, Widget, derive_commands,
+    Context, NodeId, ViewContext, Widget, derive_commands,
     error::Result,
     layout::{Edges, Layout},
     render::Render,
@@ -56,7 +56,7 @@ impl Widget for Pad {
         Layout::fill().padding(self.padding)
     }
 
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 

@@ -7,7 +7,7 @@ use std::cell::RefCell;
 // Re-export help types for convenience
 pub use canopy::help::{BindingKind, OwnedHelpBinding, OwnedHelpCommand, OwnedHelpSnapshot};
 use canopy::{
-    Canopy, Context, Core, EventOutcome, Loader, NodeId, ReadContext, Widget, command,
+    Canopy, Context, Core, EventOutcome, Loader, NodeId, ViewContext, Widget, command,
     derive_commands,
     error::Result,
     event::{
@@ -128,7 +128,7 @@ impl Default for Help {
 }
 
 impl Widget for Help {
-    fn render(&mut self, r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         r.push_layer("help");
         Ok(())
     }
@@ -381,7 +381,7 @@ impl Default for HelpContent {
 }
 
 impl Widget for HelpContent {
-    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 
@@ -410,7 +410,7 @@ impl Widget for HelpContent {
         Ok(EventOutcome::Ignore)
     }
 
-    fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         // Check for pending snapshot and copy to local state if present
         if let Some(pending) = ctx.pending_help_snapshot() {
             self.snapshot = Some(pending.clone());

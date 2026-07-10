@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, CommandArg, Context, Loader, ReadContext, Widget, command,
+        Canopy, CommandArg, Context, Loader, ViewContext, Widget, command,
         commands::ArgValue,
         derive_commands,
         error::{Error, Result},
@@ -63,7 +63,7 @@ mod tests {
     }
 
     impl Widget for ScriptTarget {
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
     }

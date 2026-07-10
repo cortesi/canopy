@@ -51,7 +51,7 @@ impl TextGym {
 }
 
 impl Widget for TextGym {
-    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 
@@ -105,7 +105,7 @@ impl Widget for TextGym {
         Ok(())
     }
 
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 }

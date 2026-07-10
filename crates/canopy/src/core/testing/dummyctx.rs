@@ -3,7 +3,7 @@ use std::{any::TypeId, result::Result as StdResult};
 use slotmap::Key;
 
 use crate::{
-    ChangeOutcome, Context, ReadContext,
+    ChangeOutcome, Context, FocusScope, ViewContext,
     commands::{ArgValue, CommandError, CommandInvocation, CommandScopeFrame, ListRowContext},
     core::{NodeId, help::OwnedHelpSnapshot, style::Effect, view::View},
     error::Result,
@@ -48,7 +48,7 @@ impl Default for DummyContext {
     }
 }
 
-impl ReadContext for DummyContext {
+impl ViewContext for DummyContext {
     fn node_id(&self) -> NodeId {
         self.node_id
     }
@@ -135,19 +135,19 @@ impl Context for DummyContext {
         Ok(ChangeOutcome::Unchanged)
     }
 
-    fn focus_dir_in(&mut self, _root: NodeId, _dir: Direction) -> Result<ChangeOutcome> {
+    fn focus_dir(&mut self, _scope: FocusScope, _dir: Direction) -> Result<ChangeOutcome> {
         Ok(ChangeOutcome::Unchanged)
     }
 
-    fn focus_first_in(&mut self, _root: NodeId) -> Result<ChangeOutcome> {
+    fn focus_first(&mut self, _scope: FocusScope) -> Result<ChangeOutcome> {
         Ok(ChangeOutcome::Unchanged)
     }
 
-    fn focus_next_in(&mut self, _root: NodeId) -> Result<ChangeOutcome> {
+    fn focus_next(&mut self, _scope: FocusScope) -> Result<ChangeOutcome> {
         Ok(ChangeOutcome::Unchanged)
     }
 
-    fn focus_prev_in(&mut self, _root: NodeId) -> Result<ChangeOutcome> {
+    fn focus_prev(&mut self, _scope: FocusScope) -> Result<ChangeOutcome> {
         Ok(ChangeOutcome::Unchanged)
     }
 

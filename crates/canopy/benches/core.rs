@@ -3,7 +3,7 @@
 use std::hint::black_box;
 
 use canopy::{
-    Canopy, NodeId, ReadContext, TermBuf, Widget,
+    Canopy, NodeId, TermBuf, ViewContext, Widget,
     error::Result,
     geom::{FrameRects, Line, Point, Rect, Size},
     layout::{Layout, MeasureConstraints, Measurement},
@@ -63,7 +63,7 @@ impl Widget for BenchNode {
         }
     }
 
-    fn render(&mut self, frame: &mut Render<'_>, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, frame: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {
         if let Some(label) = self.label {
             frame.text("default", Line::new(0, 0, 18), label)?;
         }

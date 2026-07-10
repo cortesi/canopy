@@ -35,8 +35,9 @@ pub use core::testing;
 // Stable app-author surface.
 pub use core::{
     AutomationCallback, AutomationHandle, BindingId, Canopy, ChangeOutcome, ChildKey, Context,
-    Fixture, FixtureInfo, KeyedChildren, Loader, NodeId, Path, PathFilter, ReadContext,
+    Fixture, FixtureInfo, FocusScope, KeyedChildren, Loader, NodeId, Path, PathFilter,
     RemovePolicy, ScriptApiState, ScriptJournalEntry, ScriptModuleRoots, Slot, TypedId,
+    ViewContext,
 };
 // Lower-level runtime exports retained for internal crates and diagnostics.
 #[doc(hidden)]

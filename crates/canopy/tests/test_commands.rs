@@ -5,7 +5,7 @@ mod tests {
     use std::cell::RefCell;
 
     use canopy::{
-        Canopy, Context, ReadContext, Widget, command,
+        Canopy, Context, ViewContext, Widget, command,
         commands::{
             ArgValue, CommandDispatchKind, CommandError, CommandNode, CommandResolution,
             CommandResolver, dispatch,
@@ -41,7 +41,7 @@ mod tests {
     }
 
     impl Widget for TestLeaf {
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
     }
@@ -59,7 +59,7 @@ mod tests {
     }
 
     impl Widget for TestBranch {
-        fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+        fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
     }
@@ -193,7 +193,7 @@ mod tests {
         }
 
         impl Widget for Foo {
-            fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+            fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
                 Ok(())
             }
         }

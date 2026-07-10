@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use canopy::{
-    Context, ReadContext, TypedId, Widget,
+    Context, TypedId, ViewContext, Widget,
     error::{Error, Result},
     layout::{Align, Layout},
     render::Render,
@@ -103,7 +103,7 @@ impl FontDemo {
             .banner_id
             .ok_or_else(|| Error::Internal("font banner missing".into()))?;
         let renderer = self.renderer_for(index)?;
-        ctx.with_typed(banner_id, |banner: &mut FontBanner, _ctx| {
+        ctx.with_widget(banner_id, |banner: &mut FontBanner, _ctx| {
             banner.set_renderer(renderer);
             Ok(())
         })?;
@@ -167,7 +167,7 @@ impl Widget for FontDemo {
         Some(interval)
     }
 
-    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 

@@ -1,7 +1,7 @@
 //! Button widget.
 
 use canopy::{
-    Context, EventOutcome, ReadContext, Slot, Widget, command,
+    Context, EventOutcome, Slot, ViewContext, Widget, command,
     commands::{CommandCall, CommandInvocation},
     derive_commands,
     error::Result,
@@ -136,7 +136,7 @@ impl Button {
         let label_id = self
             .label_slot
             .get_or_create_in(ctx, center_id, || Text::new(self.label.clone()))?;
-        ctx.with_typed(label_id, |text, _| {
+        ctx.with_widget(label_id, |text, _| {
             text.set_raw(self.label.clone());
             Ok(())
         })?;
@@ -160,7 +160,7 @@ impl Widget for Button {
         self.sync_label(ctx)
     }
 
-    fn render(&mut self, rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         rndr.push_layer("button");
         if self.selected {
             rndr.push_layer("selected");

@@ -1,5 +1,5 @@
 use canopy::{
-    Context, EventOutcome, ReadContext, Widget, command, cursor, derive_commands,
+    Context, EventOutcome, ViewContext, Widget, command, cursor, derive_commands,
     error::Result,
     event::{Event, key},
     geom::{Line, Point},
@@ -243,7 +243,7 @@ impl Input {
 }
 
 impl Widget for Input {
-    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 
@@ -258,7 +258,7 @@ impl Widget for Input {
         })
     }
 
-    fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         let view_rect = view.view_rect();
         let content_origin = view.content_origin();

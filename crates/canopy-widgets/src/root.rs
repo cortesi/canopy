@@ -1,8 +1,10 @@
 use canopy::{
-    Canopy, ChildKey, Context, Core, Loader, NodeId, ReadContext, TypedId, Widget, command,
+    Canopy, ChildKey, Context, Core, FocusScope, Loader, NodeId, TypedId, ViewContext, Widget,
+    command,
     commands::{CommandNode, CommandSpec, FocusDirection},
     derive_commands,
     error::{Error, Result},
+    geom,
     layout::{Direction, Layout, Sizing},
     render::Render,
     state::NodeName,
@@ -151,12 +153,12 @@ impl Root {
     #[command]
     pub fn focus(&mut self, c: &mut dyn Context, direction: FocusDirection) -> Result<()> {
         match direction {
-            FocusDirection::Next => c.focus_next_global(),
-            FocusDirection::Prev => c.focus_prev_global(),
-            FocusDirection::Up => c.focus_up_global(),
-            FocusDirection::Down => c.focus_down_global(),
-            FocusDirection::Left => c.focus_left_global(),
-            FocusDirection::Right => c.focus_right_global(),
+            FocusDirection::Next => c.focus_next(FocusScope::Root),
+            FocusDirection::Prev => c.focus_prev(FocusScope::Root),
+            FocusDirection::Up => c.focus_dir(FocusScope::Root, geom::Direction::Up),
+            FocusDirection::Down => c.focus_dir(FocusScope::Root, geom::Direction::Down),
+            FocusDirection::Left => c.focus_dir(FocusScope::Root, geom::Direction::Left),
+            FocusDirection::Right => c.focus_dir(FocusScope::Root, geom::Direction::Right),
         }?;
         Ok(())
     }
@@ -167,7 +169,7 @@ impl Root {
         self.inspector_active = false;
         self.sync_layout(c)?;
         let app = self.app_id(c)?;
-        c.focus_first_in(app)?;
+        c.focus_first(FocusScope::Node(app))?;
         Ok(())
     }
 
@@ -177,7 +179,7 @@ impl Root {
         self.inspector_active = true;
         self.sync_layout(c)?;
         let inspector = self.inspector_id(c)?;
-        c.focus_first_in(inspector)?;
+        c.focus_first(FocusScope::Node(inspector))?;
         Ok(())
     }
 
@@ -197,7 +199,7 @@ impl Root {
         let inspector = self.inspector_id(c)?;
         let app = self.app_id(c)?;
         if c.node_is_on_focus_path(inspector) {
-            c.focus_first_in(app)?;
+            c.focus_first(FocusScope::Node(app))?;
         }
         Ok(())
     }
@@ -211,7 +213,7 @@ impl Root {
 
         self.help_active = true;
         self.sync_layout(c)?;
-        c.focus_first_in(help)?;
+        c.focus_first(FocusScope::Node(help))?;
         Ok(())
     }
 
@@ -221,7 +223,7 @@ impl Root {
         self.help_active = false;
         self.sync_layout(c)?;
         let app = self.app_id(c)?;
-        c.focus_first_in(app)?;
+        c.focus_first(FocusScope::Node(app))?;
         Ok(())
     }
 
@@ -307,7 +309,7 @@ impl Root {
 struct MainPane;
 
 impl Widget for MainPane {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 
@@ -323,7 +325,7 @@ impl CommandNode for MainPane {
 }
 
 impl Widget for Root {
-    fn render(&mut self, _rndr: &mut canopy::render::Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, _rndr: &mut canopy::render::Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 
@@ -355,7 +357,7 @@ impl Loader for Root {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        ReadContext, Widget,
+        ViewContext, Widget,
         commands::{CommandNode, CommandSpec},
         error::Result,
         geom::Size,
@@ -376,7 +378,7 @@ mod tests {
     }
 
     impl Widget for App {
-        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
 
@@ -402,11 +404,11 @@ mod tests {
     }
 
     impl Widget for FocusLeaf {
-        fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
             true
         }
 
-        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
 

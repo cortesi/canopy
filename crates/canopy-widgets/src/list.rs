@@ -4,7 +4,7 @@
 //! Items participate in focus management and can be composed from other widgets.
 
 use canopy::{
-    Context, EventOutcome, KeyedChildren, NodeId, ReadContext, RemovePolicy, TypedId, Widget,
+    Context, EventOutcome, KeyedChildren, NodeId, RemovePolicy, TypedId, ViewContext, Widget,
     command,
     commands::{
         CommandArgs, CommandCall, CommandInvocation, CommandScopeFrame, ListRowContext, ToArgValue,
@@ -641,7 +641,7 @@ impl<W: Selectable> List<W> {
     }
 
     /// Build (start_y, height) tuples for each item.
-    fn item_metrics(&self, c: &dyn ReadContext, available_width: u32) -> Vec<(u32, u32)> {
+    fn item_metrics(&self, c: &dyn ViewContext, available_width: u32) -> Vec<(u32, u32)> {
         let mut metrics = Vec::with_capacity(self.items.len());
         let mut y_offset = 0u32;
 
@@ -759,7 +759,7 @@ impl<W: Selectable + Send + 'static> Widget for List<W> {
         Ok(EventOutcome::Ignore)
     }
 
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         let area = view.outer_rect_local();
 
@@ -830,7 +830,7 @@ impl<W: Selectable + Send + 'static> Widget for List<W> {
         Size::new(max_width, total_height.max(1))
     }
 
-    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         // List itself doesn't accept focus; items do
         false
     }
@@ -860,7 +860,7 @@ fn drag_exceeded(origin: Point, current: Point, threshold: u32) -> bool {
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Canopy, Loader, NodeId, ReadContext, derive_commands, state::NodeName,
+        Canopy, Loader, NodeId, ViewContext, derive_commands, state::NodeName,
         testing::harness::Harness,
     };
 
@@ -885,7 +885,7 @@ mod tests {
     }
 
     impl Widget for Row {
-        fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
             true
         }
 

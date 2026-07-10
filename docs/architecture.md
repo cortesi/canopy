@@ -10,7 +10,7 @@ adding behavior.
 ## Public API Surface
 
 Application code should start from `canopy::prelude::*` and selected
-`canopy_widgets` types. The stable surface is `Canopy`, `Widget`, `ReadContext`,
+`canopy_widgets` types. The stable surface is `Canopy`, `Widget`, `ViewContext`,
 `Context`, capability context traits, typed node IDs, layout types, geometry,
 styles, command macros, and validated path types.
 

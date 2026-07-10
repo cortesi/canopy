@@ -689,7 +689,7 @@ fn typecheck_diagnostics(canopy: &mut Canopy, script: &str) -> Result<Vec<Script
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Fixture, ReadContext, command, commands::FocusDirection, derive_commands,
+        Fixture, ViewContext, command, commands::FocusDirection, derive_commands,
         error::Result as CanopyResult, prelude::*,
     };
 
@@ -731,7 +731,7 @@ mod tests {
     }
 
     impl Widget for ScriptTarget {
-        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ReadContext) -> CanopyResult<()> {
+        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> CanopyResult<()> {
             Ok(())
         }
 

@@ -10,7 +10,7 @@ mod tests {
     };
 
     use canopy::{
-        Canopy, Context, EventOutcome, Loader, NodeId, ReadContext, ScriptApiState, Widget,
+        Canopy, Context, EventOutcome, Loader, NodeId, ScriptApiState, ViewContext, Widget,
         command,
         commands::ArgValue,
         derive_commands,
@@ -44,7 +44,7 @@ mod tests {
     }
 
     impl Widget for ApiLeaf {
-        fn render(&mut self, frame: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+        fn render(&mut self, frame: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             frame.text("default", Line::new(0, 0, 8), &self.value.to_string())?;
             Ok(())
         }
@@ -70,7 +70,7 @@ mod tests {
             }
         }
 
-        fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
             true
         }
     }
@@ -88,7 +88,7 @@ mod tests {
             Layout::row()
         }
 
-        fn render(&mut self, _frame: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+        fn render(&mut self, _frame: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
             Ok(())
         }
 

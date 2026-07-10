@@ -294,7 +294,7 @@ permanently blocked detached reader thread is not an acceptable fallback.
 
 ## 7. Stage Seven: Reduce the public API to the core model
 
-35. [ ] Reduce `Context` aliases and local/global method triplets.
+35. [x] Reduce `Context` aliases and local/global method triplets.
 
    After the checked primitives settle, keep one honest `Context` and use an explicit scope value
    or extension helpers for derived behavior. Update every in-repo caller and delete the one-line

@@ -285,7 +285,7 @@ pub fn serve_uds(
 #[cfg(test)]
 mod tests {
     use canopy::{
-        Fixture, ReadContext, command, derive_commands, error::Result as CanopyResult, prelude::*,
+        Fixture, ViewContext, command, derive_commands, error::Result as CanopyResult, prelude::*,
     };
 
     use super::*;
@@ -317,7 +317,7 @@ mod tests {
     }
 
     impl Widget for EchoNode {
-        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ReadContext) -> CanopyResult<()> {
+        fn render(&mut self, _rndr: &mut Render, _ctx: &dyn ViewContext) -> CanopyResult<()> {
             Ok(())
         }
 

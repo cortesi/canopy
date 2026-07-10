@@ -1,5 +1,5 @@
 use canopy::{
-    ReadContext, Widget,
+    ViewContext, Widget,
     error::Result,
     geom::{Point, Rect, Size},
     layout::{Align, Layout},
@@ -141,7 +141,7 @@ impl Widget for FontBanner {
         Layout::fill()
     }
 
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         let view_rect = view.view_rect_local();
         if view_rect.w == 0 || view_rect.h == 0 {

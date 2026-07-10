@@ -1,5 +1,5 @@
 use canopy::{
-    Context, ReadContext, Widget, command, derive_commands, error::Result, render::Render,
+    Context, ViewContext, Widget, command, derive_commands, error::Result, render::Render,
     state::NodeName,
 };
 
@@ -38,7 +38,7 @@ impl Tabs {
 }
 
 impl Widget for Tabs {
-    fn render(&mut self, r: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         if self.tabs.is_empty() {
             return Ok(());
         }

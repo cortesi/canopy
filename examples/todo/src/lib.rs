@@ -63,7 +63,7 @@ impl Widget for TodoEntry {
         c.clamp(Size::new(available_width, height))
     }
 
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
         let area = view.view_rect_local();
 
@@ -100,7 +100,7 @@ impl Widget for TodoEntry {
         Ok(())
     }
 
-    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 
@@ -116,7 +116,7 @@ pub struct StatusBar;
 impl StatusBar {}
 
 impl Widget for StatusBar {
-    fn render(&mut self, r: &mut Render, ctx: &dyn canopy::ReadContext) -> Result<()> {
+    fn render(&mut self, r: &mut Render, ctx: &dyn canopy::ViewContext) -> Result<()> {
         r.push_layer("statusbar");
         r.text(
             "statusbar/text",
@@ -134,7 +134,7 @@ struct MainContent;
 impl MainContent {}
 
 impl Widget for MainContent {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 }
@@ -182,7 +182,7 @@ impl Todo {
 
         if !self.pending.is_empty() {
             let pending = std::mem::take(&mut self.pending);
-            c.with_typed(list_id, |list: &mut List<TodoEntry>, ctx| {
+            c.with_widget(list_id, |list: &mut List<TodoEntry>, ctx| {
                 for item in pending.iter().cloned() {
                     list.append(ctx, TodoEntry::new(item))?;
                 }
@@ -282,7 +282,7 @@ impl Todo {
                 input.set_value("");
                 Ok(())
             })?;
-            if let Some(input_id) = c.unique_descendant::<Input>()? {
+            if let Some(input_id) = (c as &dyn ViewContext).unique_descendant::<Input>()? {
                 c.set_focus(NodeId::from(input_id))?;
             }
         } else if items.is_empty() {
@@ -301,7 +301,7 @@ impl Todo {
             input.set_value("");
             Ok(())
         })?;
-        if let Some(input_id) = c.unique_descendant::<Input>()? {
+        if let Some(input_id) = (c as &dyn ViewContext).unique_descendant::<Input>()? {
             c.set_focus(NodeId::from(input_id))?;
         }
         Ok(())
@@ -377,11 +377,11 @@ impl Todo {
 }
 
 impl Widget for Todo {
-    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn canopy::ReadContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn canopy::ViewContext) -> Result<()> {
         Ok(())
     }
 

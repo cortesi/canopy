@@ -3,7 +3,7 @@
 use std::hint::black_box;
 
 use canopy::{
-    Canopy, Context, Loader, ReadContext, Widget, derive_commands, error::Result, layout::Layout,
+    Canopy, Context, Loader, ViewContext, Widget, derive_commands, error::Result, layout::Layout,
     render::Render, testing::harness::Harness,
 };
 use canopy_widgets::editor::{EditMode, Editor, EditorConfig, LineNumbers, WrapMode};
@@ -28,7 +28,7 @@ impl BenchmarkEditorWrapper {
 }
 
 impl Widget for BenchmarkEditorWrapper {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 

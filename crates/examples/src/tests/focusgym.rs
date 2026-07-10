@@ -17,7 +17,7 @@ fn with_root_block<R>(
 ) -> Result<R> {
     let mut f = Some(f);
     harness.with_root_context(|_root: &mut FocusGym, ctx| {
-        let root_block = ctx
+        let root_block = (ctx as &dyn ViewContext)
             .unique_child::<Block>()?
             .ok_or_else(|| Error::NotFound("root block".into()))?;
         let f = f.take().expect("root block closure already consumed");

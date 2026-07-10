@@ -19,7 +19,7 @@ use super::{
     widget_access::{WidgetMutGuard, WidgetReadGuard, WidgetSlotGuard},
 };
 use crate::{
-    ChangeOutcome, ReadContext,
+    ChangeOutcome, ViewContext,
     commands::{CommandScopeFrame, CommandSet},
     core::{id::NodeId, node::Node, view::View},
     error::{Error, Result},
@@ -400,7 +400,7 @@ impl Widget for RootContainer {
         Layout::fill()
     }
 
-    fn render(&mut self, _frame: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, _frame: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 

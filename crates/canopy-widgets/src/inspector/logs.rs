@@ -7,7 +7,7 @@ use std::{
 };
 
 use canopy::{
-    Canopy, Context, Loader, ReadContext, Widget, command, derive_commands,
+    Canopy, Context, Loader, ViewContext, Widget, command, derive_commands,
     error::{Error, Result},
     geom::{Direction, Rect},
     layout::{CanvasContext, Constraint, Layout, MeasureConstraints, Measurement, Size},
@@ -60,7 +60,7 @@ impl Widget for LogEntry {
         c.clamp(Size::new(available_width, lines.len() as u32))
     }
 
-    fn render(&mut self, rndr: &mut Render, ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, ctx: &dyn ViewContext) -> Result<()> {
         let view = ctx.view();
 
         if view.is_zero() {
@@ -92,7 +92,7 @@ impl Widget for LogEntry {
         Ok(())
     }
 
-    fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {
+    fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
 
@@ -134,7 +134,7 @@ impl Widget for Logs {
         Layout::fill()
     }
 
-    fn render(&mut self, rndr: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, rndr: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         rndr.push_layer("logs");
         Ok(())
     }

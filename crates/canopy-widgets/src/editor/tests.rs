@@ -4,7 +4,7 @@ use std::sync::{
 };
 
 use canopy::{
-    Canopy, Context, Loader, ReadContext, Widget, buf, command, derive_commands,
+    Canopy, Context, FocusScope, Loader, ViewContext, Widget, buf, command, derive_commands,
     error::Result,
     event::{key, mouse},
     geom::Point,
@@ -57,7 +57,7 @@ impl EditorHost {
 }
 
 impl Widget for EditorHost {
-    fn render(&mut self, _r: &mut Render, _ctx: &dyn ReadContext) -> Result<()> {
+    fn render(&mut self, _r: &mut Render, _ctx: &dyn ViewContext) -> Result<()> {
         Ok(())
     }
 
@@ -91,7 +91,7 @@ fn build_harness(text: &str, config: EditorConfig, width: u32, height: u32) -> H
     harness.render().expect("Failed to render");
     harness
         .with_root_context(|_root: &mut EditorHost, ctx| {
-            ctx.focus_first()?;
+            ctx.focus_first(FocusScope::Current)?;
             Ok(())
         })
         .expect("Failed to focus editor");
