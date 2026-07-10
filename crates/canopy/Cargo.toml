@@ -36,5 +36,9 @@ loom = "0.7.2"
 [features]
 testing = []
 
+[[bench]]
+name = "core"
+harness = false
+
 [lints]
 workspace = true

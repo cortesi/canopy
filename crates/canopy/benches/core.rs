@@ -3,7 +3,7 @@
 use std::hint::black_box;
 
 use canopy::{
-    Canopy, Context, NodeId, TermBuf, ViewContext, Widget,
+    Canopy, Context, NodeId, TermBuf, ViewContext, Widget, command, derive_commands,
     error::Result,
     geom::{FrameRects, Line, Point, Rect, Size},
     layout::{Layout, MeasureConstraints, Measurement},
@@ -75,6 +75,18 @@ impl Widget for BenchNode {
     }
 }
 
+/// Command target placed after the synthetic tree to exercise full subtree resolution.
+struct CommandLeaf;
+
+#[derive_commands]
+impl CommandLeaf {
+    /// No-op command used to measure target resolution.
+    #[command]
+    fn resolve(&self, _ctx: &mut dyn Context) {}
+}
+
+impl Widget for CommandLeaf {}
+
 /// Render backend that counts output operations without touching a terminal.
 #[derive(Default)]
 struct CountingBackend {
@@ -126,11 +138,30 @@ impl RenderBackend for CountingBackend {
 /// Build a deterministic tree for layout and render benchmarks.
 fn build_tree() -> Result<Canopy> {
     let mut app = Canopy::new();
+    populate_tree(&mut app)?;
+    app.set_root_size(SCREEN)?;
+    Ok(app)
+}
+
+/// Populate an app with the deterministic benchmark tree and return its top node.
+fn populate_tree(app: &mut Canopy) -> Result<NodeId> {
     let mut next_index = 1;
     app.with_root_context(|context| {
         let root_child: NodeId = context.create_detached(BenchNode::branch(0))?.into();
         context.set_children(vec![root_child])?;
-        add_children(context, root_child, TREE_DEPTH, &mut next_index)
+        add_children(context, root_child, TREE_DEPTH, &mut next_index)?;
+        Ok(root_child)
+    })
+}
+
+/// Build a benchmark tree whose command target is visited after the main subtree.
+fn build_command_tree() -> Result<Canopy> {
+    let mut app = Canopy::new();
+    app.add_commands::<CommandLeaf>()?;
+    let root_child = populate_tree(&mut app)?;
+    app.with_context(root_child, |context| {
+        let command_leaf: NodeId = context.create_detached(CommandLeaf)?.into();
+        context.attach(root_child, command_leaf)
     })?;
     app.set_root_size(SCREEN)?;
     Ok(app)
@@ -193,6 +224,30 @@ fn bench_layout(c: &mut Criterion) {
     });
 }
 
+/// Benchmark one transactional tree attachment against an established tree.
+fn bench_tree_edit(c: &mut Criterion) {
+    c.bench_function("tree_edit_attach", |b| {
+        b.iter_batched(
+            || {
+                let mut app = build_tree().expect("benchmark tree should build");
+                let child = app
+                    .create_detached(BenchNode::leaf(usize::MAX))
+                    .expect("detached benchmark node should build");
+                (app, child)
+            },
+            |(mut app, child)| {
+                let root = app.root_id();
+                app.with_root_context(|context| {
+                    context.apply_tree_edit(&mut |context| context.attach(root, child.into()))
+                })
+                .expect("tree edit should succeed");
+                black_box(app)
+            },
+            BatchSize::SmallInput,
+        );
+    });
+}
+
 /// Benchmark diff rendering from an empty buffer to a populated buffer.
 fn bench_render_diffing(c: &mut Criterion) {
     c.bench_function("render_diffing", |b| {
@@ -205,6 +260,38 @@ fn bench_render_diffing(c: &mut Criterion) {
                 .expect("diff render should succeed");
             black_box((backend.text_bytes, backend.char_shifts, backend.line_shifts));
         });
+    });
+}
+
+/// Benchmark command target resolution through the synthetic subtree.
+fn bench_command_resolution(c: &mut Criterion) {
+    c.bench_function("command_resolution", |b| {
+        let app = build_command_tree().expect("command benchmark tree should build");
+        b.iter(|| black_box(app.command_availability_from_node(black_box(app.root_id()))));
+    });
+}
+
+/// Benchmark first-run startup script finalization, compilation, and execution.
+fn bench_script_startup(c: &mut Criterion) {
+    c.bench_function("script_startup", |b| {
+        b.iter_batched(
+            || {
+                let mut app = Canopy::new();
+                app.register_startup_script(
+                    "benchmark",
+                    "function setup() local values = { 1, 2, 3, 4 }; assert(#values == 4) end",
+                )
+                .expect("startup script should register");
+                app
+            },
+            |mut app| {
+                black_box(
+                    app.run_startup_scripts()
+                        .expect("startup script should execute"),
+                );
+            },
+            BatchSize::SmallInput,
+        );
     });
 }
 
@@ -269,8 +356,11 @@ fn bench_frame_fill(c: &mut Criterion) {
 
 criterion_group!(
     benches,
+    bench_tree_edit,
     bench_layout,
     bench_render_diffing,
+    bench_command_resolution,
+    bench_script_startup,
     bench_text_buffer,
     bench_large_tree_render,
     bench_frame_fill

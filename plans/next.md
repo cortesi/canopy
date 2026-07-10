@@ -366,7 +366,7 @@ the normal CI and source archive depend on specially provisioned sibling checkou
    `unsafe_code` in crates that currently contain none. Keep these suites small and diagnostic
    instead of adding broad sanitizer jobs without a demonstrated target.
 
-45. [ ] Add performance baselines for core operations.
+45. [x] Add performance baselines for core operations.
 
    First declare the core Criterion target with `harness = false`; its current auto-discovered
    target runs an empty libtest harness. Add it to validation, then measure tree edits, layout,
