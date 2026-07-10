@@ -1,3 +1,5 @@
+//! Thread-local SQLite storage for the todo example.
+
 use std::{cell::RefCell, path::Path, rc::Rc};
 
 use anyhow::{Result, anyhow};
@@ -8,17 +10,23 @@ thread_local! {
 }
 
 #[derive(Debug, Clone)]
+/// A persisted todo record.
 pub struct Todo {
+    /// Database identifier.
     pub id: i64,
+    /// User-provided todo text.
     pub item: String,
 }
 
 #[derive(Debug, Clone)]
+/// Handle to the current todo database.
 pub struct Store {
+    /// Shared connection for cloned store handles on one thread.
     conn: Rc<Connection>,
 }
 
 impl Store {
+    /// Open or initialize a SQLite store.
     fn open(path: &str) -> Result<Self> {
         let conn = if Path::new(path).is_file() {
             Connection::open(path)?
@@ -33,11 +41,12 @@ impl Store {
             )?;
             conn
         };
-        Ok(Store {
+        Ok(Self {
             conn: Rc::new(conn),
         })
     }
 
+    /// Insert a todo and return its persisted record.
     pub fn add_todo(&self, item: &str) -> Result<Todo> {
         self.conn.execute(
             "INSERT INTO todo (item) VALUES (?1);",
@@ -49,18 +58,21 @@ impl Store {
         })
     }
 
+    /// Delete a todo by database identifier.
     pub fn delete_todo(&self, id: i64) -> Result<()> {
         self.conn
             .execute("DELETE FROM todo WHERE id=?1;", rusqlite::params![id])?;
         Ok(())
     }
 
+    /// Delete every todo in the store.
     pub fn clear_todos(&self) -> Result<()> {
         self.conn
             .execute("DELETE FROM todo;", rusqlite::params![])?;
         Ok(())
     }
 
+    /// Replace all todos and return their new persisted records.
     pub fn replace_todos<'a>(&self, items: impl IntoIterator<Item = &'a str>) -> Result<Vec<Todo>> {
         self.clear_todos()?;
         let mut todos = Vec::new();
@@ -70,6 +82,7 @@ impl Store {
         Ok(todos)
     }
 
+    /// Load every persisted todo.
     pub fn todos(&self) -> Result<Vec<Todo>> {
         let mut stmt = self.conn.prepare("SELECT id, item FROM todo")?;
         let todos = stmt
@@ -84,6 +97,7 @@ impl Store {
     }
 }
 
+/// Open a store for the current thread.
 pub fn open(path: &str) -> Result<()> {
     let s = Store::open(path)?;
     STORE.with(|store| {
@@ -92,6 +106,7 @@ pub fn open(path: &str) -> Result<()> {
     Ok(())
 }
 
+/// Return the store opened for the current thread.
 pub fn get() -> Result<Store> {
     STORE.with(|store| {
         store

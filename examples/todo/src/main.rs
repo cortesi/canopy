@@ -1,13 +1,19 @@
+//! Command-line entry point for the Todo example application.
+
 use std::{path::PathBuf, process};
 
 use anyhow::Result;
-use canopy_mcp::{Error as McpError, LaunchMode, SuiteConfig, app_factory, launch};
+use canopy_mcp::{
+    Error as McpError, LaunchMode, SuiteConfig, app_factory, launch, script::AppFactory,
+};
 use clap::{Parser, Subcommand};
 use todo::create_app_with_config;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
+/// Todo command-line arguments.
 struct Args {
+    /// Optional headless operation.
     #[command(subcommand)]
     command: Option<Command>,
 
@@ -23,10 +29,12 @@ struct Args {
     #[clap(long)]
     mcp: Option<PathBuf>,
 
+    /// SQLite database path for interactive mode.
     path: Option<String>,
 }
 
 #[derive(Subcommand, Debug)]
+/// Headless Todo operations.
 enum Command {
     /// Serve headless MCP automation over stdio.
     Mcp {
@@ -57,14 +65,15 @@ enum Command {
     },
 }
 
-fn make_factory(path: String, config: Option<PathBuf>) -> canopy_mcp::script::AppFactory {
+/// Build an application factory for a database and optional config.
+fn make_factory(path: String, config: Option<PathBuf>) -> AppFactory {
     app_factory(move || {
         create_app_with_config(&path, config.as_deref())
             .map_err(|error| McpError::app_boxed(error.into_boxed_dyn_error()))
     })
 }
 
-pub fn main() -> Result<()> {
+fn main() -> Result<()> {
     let args = Args::parse();
 
     if args.api {

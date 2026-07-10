@@ -53,7 +53,7 @@ work.
 | `canopy-mcp.rs` | 1,012 | 1,050 | Automation protocol, evaluation, launch, and smoke helpers. |
 | `canopy-geom.rs` | 536 | 575 | Geometry values and checked operations. |
 | `canopy-examples.rs` | 978 | 1,050 | Demo application APIs used by example tests and binaries. |
-| `todo.rs` | 195 | 225 | Todo example construction and store integration. |
+| `todo.rs` | 223 | 225 | Todo example construction and store integration. |
 | `canopy-derive.rs` | 28 | 40 | Command proc macros only. |
 
 ## Review findings

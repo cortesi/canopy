@@ -74,6 +74,17 @@ impl<W: Widget + Loader + 'static> HarnessBuilder<W> {
 }
 
 impl Harness {
+    /// Wrap an already configured Canopy application in a test harness.
+    pub fn from_canopy(mut canopy: Canopy, size: Size) -> Result<Self> {
+        canopy.set_root_size(size)?;
+        let root = canopy.root_id();
+        Ok(Self {
+            canopy,
+            backend: NopBackend::new(),
+            root,
+        })
+    }
+
     /// Create a harness builder for constructing a test harness with a fluent API.
     pub fn builder<W: Widget + Loader + 'static>(root: W) -> HarnessBuilder<W> {
         HarnessBuilder::new(root)

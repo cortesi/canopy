@@ -1,4 +1,6 @@
-use std::{fmt::Display, path::Path};
+//! Todo application used as Canopy's end-to-end example and smoke-test target.
+
+use std::{fmt::Display, mem, path::Path};
 
 use anyhow::Result as AnyResult;
 use canopy::{
@@ -13,8 +15,10 @@ use canopy_widgets::{Frame, Input, List, Modal, Root, Selectable};
 canopy::key!(MainSlot: MainContent);
 canopy::key!(ModalSlot: Modal);
 
+/// SQLite persistence for todo entries.
 pub mod store;
 
+/// Stable sample data used by automation fixtures.
 const FIXTURE_WITH_ITEMS: &[&str] = &[
     "Buy milk",
     "Ship fixture-driven smoke tests",
@@ -141,12 +145,15 @@ impl Widget for MainContent {
 
 /// Root node for the todo demo.
 pub struct Todo {
+    /// Entries waiting for the widget tree to mount.
     pending: Vec<store::Todo>,
+    /// Whether the add-item modal is active.
     adder_active: bool,
 }
 
 #[derive_commands]
 impl Todo {
+    /// Load a todo widget from the current store.
     pub fn new() -> AnyResult<Self> {
         let pending = store::get()?.todos()?;
         Ok(Self {
@@ -155,6 +162,7 @@ impl Todo {
         })
     }
 
+    /// Build the Todo widget subtree once.
     fn ensure_tree(&mut self, c: &mut dyn Context) -> Result<()> {
         if c.has_child::<MainSlot>()? {
             return Ok(());
@@ -181,7 +189,7 @@ impl Todo {
         c.set_children(vec![main_content_node])?;
 
         if !self.pending.is_empty() {
-            let pending = std::mem::take(&mut self.pending);
+            let pending = mem::take(&mut self.pending);
             c.with_widget(list_id, |list: &mut List<TodoEntry>, ctx| {
                 for item in pending.iter().cloned() {
                     list.append(ctx, TodoEntry::new(item))?;
@@ -193,7 +201,8 @@ impl Todo {
         Ok(())
     }
 
-    fn ensure_modal(&mut self, c: &mut dyn Context) -> Result<()> {
+    /// Build the add-item modal once.
+    fn ensure_modal(&self, c: &mut dyn Context) -> Result<()> {
         if c.has_child::<ModalSlot>()? {
             return Ok(());
         }
@@ -215,7 +224,8 @@ impl Todo {
         Ok(())
     }
 
-    fn sync_modal_state(&mut self, c: &mut dyn Context) -> Result<()> {
+    /// Synchronize modal visibility and the main-content dimming effect.
+    fn sync_modal_state(&self, c: &mut dyn Context) -> Result<()> {
         let main_content_id = c
             .get_child::<MainSlot>()?
             .expect("main content not initialized");
@@ -239,7 +249,8 @@ impl Todo {
         Ok(())
     }
 
-    fn with_list<F>(&mut self, c: &mut dyn Context, mut f: F) -> Result<()>
+    /// Run a mutation against the unique todo list.
+    fn with_list<F>(&self, c: &mut dyn Context, mut f: F) -> Result<()>
     where
         F: FnMut(&mut List<TodoEntry>, &mut dyn Context) -> Result<()>,
     {
@@ -247,7 +258,8 @@ impl Todo {
         Ok(())
     }
 
-    fn with_input<F>(&mut self, c: &mut dyn Context, mut f: F) -> Result<()>
+    /// Run a mutation against the unique modal input.
+    fn with_input<F>(&self, c: &mut dyn Context, mut f: F) -> Result<()>
     where
         F: FnMut(&mut Input) -> Result<()>,
     {
@@ -257,10 +269,11 @@ impl Todo {
         Ok(())
     }
 
+    /// Replace list state and set the requested modal state for a fixture.
     fn apply_items_fixture(
         &mut self,
         c: &mut dyn Context,
-        items: Vec<store::Todo>,
+        items: &[store::Todo],
         modal_open: bool,
     ) -> Result<()> {
         self.ensure_tree(c)?;
@@ -292,6 +305,7 @@ impl Todo {
     }
 
     #[command]
+    /// Open the add-item modal and focus its input.
     pub fn enter_item(&mut self, c: &mut dyn Context) -> Result<()> {
         self.ensure_tree(c)?;
         self.ensure_modal(c)?;
@@ -308,6 +322,7 @@ impl Todo {
     }
 
     #[command]
+    /// Delete the selected todo entry.
     pub fn delete_item(&mut self, c: &mut dyn Context) -> Result<()> {
         // Get the selected item's todo id before deleting
         let mut to_delete = None;
@@ -330,6 +345,7 @@ impl Todo {
     }
 
     #[command]
+    /// Store the pending input and close the add-item modal.
     pub fn accept_add(&mut self, c: &mut dyn Context) -> Result<()> {
         let mut value = String::new();
         self.with_input(c, |input| {
@@ -353,6 +369,7 @@ impl Todo {
     }
 
     #[command]
+    /// Discard pending input and close the add-item modal.
     pub fn cancel_add(&mut self, c: &mut dyn Context) -> Result<()> {
         self.adder_active = false;
         self.sync_modal_state(c)?;
@@ -361,22 +378,29 @@ impl Todo {
     }
 
     #[command]
+    /// Select the first todo entry.
     pub fn select_first(&mut self, c: &mut dyn Context) -> Result<()> {
         self.with_list(c, |list, ctx| list.select_first(ctx))
     }
 
     #[command]
+    /// Move the todo selection by a signed number of entries.
     pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
         self.with_list(c, |list, ctx| list.select_by(ctx, delta))
     }
 
     #[command]
+    /// Move the todo selection by a signed number of pages.
     pub fn page(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {
         self.with_list(c, |list, ctx| list.page(ctx, delta))
     }
 }
 
 impl Widget for Todo {
+    fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {
+        self.ensure_tree(c)
+    }
+
     fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {
         true
     }
@@ -384,16 +408,11 @@ impl Widget for Todo {
     fn render(&mut self, _r: &mut Render, _ctx: &dyn canopy::ViewContext) -> Result<()> {
         Ok(())
     }
-
-    fn poll(&mut self, c: &mut dyn Context) -> Option<std::time::Duration> {
-        let _ = self.ensure_tree(c);
-        None
-    }
 }
 
 impl Loader for Todo {
     fn load(c: &mut Canopy) -> Result<()> {
-        c.add_commands::<Todo>()?;
+        c.add_commands::<Self>()?;
         c.add_commands::<List<TodoEntry>>()?;
         c.add_commands::<Input>()?;
         Ok(())
@@ -438,6 +457,7 @@ canopy.bind_with("Escape", { path = "input", desc = "Cancel add" }, function()
 end)
 "#;
 
+/// Install the todo application's style rules.
 pub fn style(cnpy: &mut Canopy) {
     use canopy::style::StyleBuilder;
 
@@ -453,28 +473,34 @@ pub fn style(cnpy: &mut Canopy) {
         .apply();
 }
 
+/// Open the todo store at `path` for the current thread.
 pub fn open_store(path: &str) -> AnyResult<()> {
     store::open(path)
 }
 
+/// Convert persistence failures into application errors.
 fn store_error(error: impl Display) -> Error {
     Error::Invalid(error.to_string())
 }
 
+/// Return the current thread's store as an application result.
 fn current_store() -> Result<store::Store> {
     store::get().map_err(store_error)
 }
 
+/// Register and finalize the todo application API with default bindings.
 pub fn setup_app(cnpy: &mut Canopy) -> Result<()> {
     setup_app_with_config(cnpy, None)
 }
 
+/// Replace store contents with fixture data.
 fn store_fixture_items(items: &[&str]) -> Result<Vec<store::Todo>> {
     current_store()?
         .replace_todos(items.iter().copied())
         .map_err(store_error)
 }
 
+/// Run a mutation against the unique Todo widget.
 fn with_todo<R>(
     cnpy: &mut Canopy,
     f: impl FnOnce(&mut Todo, &mut dyn Context) -> Result<R>,
@@ -482,6 +508,7 @@ fn with_todo<R>(
     cnpy.with_root_context(|ctx| ctx.with_unique_descendant::<Todo, _>(|todo, ctx| f(todo, ctx)))
 }
 
+/// Register the Todo automation fixtures.
 fn register_fixtures(cnpy: &mut Canopy) -> Result<()> {
     cnpy.register_fixture(canopy::Fixture::new(
         "empty",
@@ -489,7 +516,7 @@ fn register_fixtures(cnpy: &mut Canopy) -> Result<()> {
         |cnpy| {
             let items = store_fixture_items(&[])?;
             with_todo(cnpy, |todo, ctx| {
-                todo.apply_items_fixture(ctx, items, false)
+                todo.apply_items_fixture(ctx, &items, false)
             })
         },
     ))?;
@@ -499,7 +526,7 @@ fn register_fixtures(cnpy: &mut Canopy) -> Result<()> {
         |cnpy| {
             let items = store_fixture_items(FIXTURE_WITH_ITEMS)?;
             with_todo(cnpy, |todo, ctx| {
-                todo.apply_items_fixture(ctx, items, false)
+                todo.apply_items_fixture(ctx, &items, false)
             })
         },
     ))?;
@@ -508,7 +535,9 @@ fn register_fixtures(cnpy: &mut Canopy) -> Result<()> {
         "App with the add-item modal open and ready for typing",
         |cnpy| {
             let items = store_fixture_items(FIXTURE_WITH_ITEMS)?;
-            with_todo(cnpy, |todo, ctx| todo.apply_items_fixture(ctx, items, true))
+            with_todo(cnpy, |todo, ctx| {
+                todo.apply_items_fixture(ctx, &items, true)
+            })
         },
     ))?;
     Ok(())
@@ -528,6 +557,7 @@ pub fn setup_app_with_config(cnpy: &mut Canopy, config: Option<&Path>) -> Result
     Ok(())
 }
 
+/// Create a fully configured todo application backed by `db_path`.
 pub fn create_app(db_path: &str) -> AnyResult<Canopy> {
     create_app_with_config(db_path, None)
 }

@@ -17,3 +17,6 @@ tracing = "0.1.44"
 canopy = { path = "../../crates/canopy", features = ["testing"] }
 canopy-widgets = { path = "../../crates/canopy-widgets", features = ["testing"] }
 tmcp = { path = "../../../tmcp/crates/tmcp" }
+
+[lints]
+workspace = true

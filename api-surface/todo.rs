@@ -2,34 +2,50 @@
 // settings: target=examples/todo, visibility=public, auto_impls=false, blanket_impls=false
 
 pub mod todo {
+    //! Todo application used as Canopy's end-to-end example and smoke-test target.
+
     pub mod store {
+        //! SQLite persistence for todo entries.
+        //! Thread-local SQLite storage for the todo example.
+
+        /// A persisted todo record.
         #[derive(Debug, Clone)]
         pub struct Todo {
+            /// Database identifier.
             pub id: i64,
+            /// User-provided todo text.
             pub item: String,
         }
 
+        /// Handle to the current todo database.
         #[derive(Debug, Clone)]
         pub struct Store {}
 
         impl Store {
+            /// Insert a todo and return its persisted record.
             pub fn add_todo(&self, item: &str) -> Result<Todo> {}
 
+            /// Delete a todo by database identifier.
             pub fn delete_todo(&self, id: i64) -> Result<()> {}
 
+            /// Delete every todo in the store.
             pub fn clear_todos(&self) -> Result<()> {}
 
+            /// Replace all todos and return their new persisted records.
             pub fn replace_todos<'a>(
                 &self,
                 items: impl IntoIterator<Item = &'a str>,
             ) -> Result<Vec<Todo>> {
             }
 
+            /// Load every persisted todo.
             pub fn todos(&self) -> Result<Vec<Todo>> {}
         }
 
+        /// Open a store for the current thread.
         pub fn open(path: &str) -> anyhow::Result<()> {}
 
+        /// Return the store opened for the current thread.
         pub fn get() -> anyhow::Result<Store> {}
     }
 
@@ -79,20 +95,28 @@ pub mod todo {
     pub struct Todo {}
 
     impl Todo {
+        /// Load a todo widget from the current store.
         pub fn new() -> AnyResult<Self> {}
 
+        /// Open the add-item modal and focus its input.
         pub fn enter_item(&mut self, c: &mut dyn Context) -> Result<()> {}
 
+        /// Delete the selected todo entry.
         pub fn delete_item(&mut self, c: &mut dyn Context) -> Result<()> {}
 
+        /// Store the pending input and close the add-item modal.
         pub fn accept_add(&mut self, c: &mut dyn Context) -> Result<()> {}
 
+        /// Discard pending input and close the add-item modal.
         pub fn cancel_add(&mut self, c: &mut dyn Context) -> Result<()> {}
 
+        /// Select the first todo entry.
         pub fn select_first(&mut self, c: &mut dyn Context) -> Result<()> {}
 
+        /// Move the todo selection by a signed number of entries.
         pub fn select_by(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
 
+        /// Move the todo selection by a signed number of pages.
         pub fn page(&mut self, c: &mut dyn Context, delta: i32) -> Result<()> {}
 
         /// Return a typed command reference for this command.
@@ -122,11 +146,11 @@ pub mod todo {
     }
 
     impl Widget for Todo {
+        fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
+
         fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
         fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn canopy::ViewContext) -> Result<()> {}
-
-        fn poll(&mut self, c: &mut dyn Context) -> Option<std::time::Duration> {}
     }
 
     impl Loader for Todo {
@@ -171,10 +195,13 @@ canopy.bind_with("Escape", { path = "input", desc = "Cancel add" }, function()
 end)
 "#;
 
+    /// Install the todo application's style rules.
     pub fn style(cnpy: &mut Canopy) {}
 
+    /// Open the todo store at `path` for the current thread.
     pub fn open_store(path: &str) -> anyhow::Result<()> {}
 
+    /// Register and finalize the todo application API with default bindings.
     pub fn setup_app(cnpy: &mut Canopy) -> Result<()> {}
 
     /// Register commands, finalize the Luau API, and apply default/user bindings.
@@ -184,6 +211,7 @@ end)
     ) -> Result<()> {
     }
 
+    /// Create a fully configured todo application backed by `db_path`.
     pub fn create_app(db_path: &str) -> anyhow::Result<Canopy> {}
 
     /// Create a todo canopy app with optional user config.
