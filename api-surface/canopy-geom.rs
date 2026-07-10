@@ -3,12 +3,74 @@
 
 pub mod canopy_geom {
     //! Geometry primitives used across canopy.
+    //!
+    //! Rectangles and line segments use half-open bounds: their near edge is
+    //! included and their far edge is excluded. A rectangle is empty when either
+    //! dimension is zero, contains no points, and never intersects another
+    //! rectangle. Empty rectangles retain an anchor: one is contained by another
+    //! rectangle when all of its (coincident) edges lie within the containing
+    //! rectangle's closed edge bounds.
+    //!
+    //! Unsigned coordinates and sizes use saturating arithmetic unless an
+    //! operation is explicitly fallible. Edge calculations widen before adding so
+    //! rectangles extending beyond `u32::MAX` retain their full mathematical
+    //! extent. Conversions to signed coordinates clamp values that cannot be
+    //! represented.
 
     /// Geometry error type.
-    #[derive(Debug, Clone, Display, Error)]
+    #[derive(Debug, Clone, Error, Display, StructuralPartialEq, PartialEq, Eq)]
     pub enum Error {
-        /// Generic geometry error message.
-        Geometry(String),
+        /// A zero-length window cannot be projected into a track.
+        ZeroLengthWindow,
+        /// A window lies outside the view used to project it.
+        WindowOutsideView {
+            /// Window extent.
+            window: crate::LineSegment,
+            /// Enclosing view extent.
+            view: crate::LineSegment,
+        },
+        /// A rectangle cannot fit within a smaller target rectangle.
+        ClampTargetTooSmall {
+            /// Rectangle being moved.
+            rect: crate::Rect,
+            /// Requested enclosing rectangle.
+            target: crate::Rect,
+        },
+        /// A line extent lies outside the requested rectangle axis.
+        ExtentOutsideRect {
+            /// Rejected extent.
+            extent: crate::LineSegment,
+            /// Rectangle used as the bound.
+            rect: crate::Rect,
+        },
+        /// A point cannot be rebased because it lies outside the rectangle.
+        PointOutsideRect {
+            /// Rejected point.
+            point: crate::Point,
+            /// Enclosing rectangle.
+            rect: crate::Rect,
+        },
+        /// A rectangle cannot be rebased because it is not contained.
+        RectOutsideRect {
+            /// Rejected inner rectangle.
+            inner: crate::Rect,
+            /// Expected outer rectangle.
+            outer: crate::Rect,
+        },
+        /// A pane column count cannot be represented by the geometry model.
+        PaneColumnCountOverflow {
+            /// Requested number of columns.
+            count: usize,
+        },
+        /// A line offset lies outside a rectangle's height.
+        LineOffsetOutside {
+            /// Requested line offset.
+            offset: u32,
+            /// Rectangle height.
+            height: u32,
+        },
+        /// A split requested zero sections.
+        ZeroSections,
     }
 
     /// Result type for geometry operations.
@@ -75,7 +137,7 @@ pub mod canopy_geom {
         fn from(l: Line) -> Self {}
     }
 
-    /// An exctent is a directionless one-dimensional line segment.
+    /// A half-open, directionless one-dimensional line segment.
     #[derive(Debug, Clone, Copy, Hash, StructuralPartialEq, PartialEq, Eq)]
     pub struct LineSegment {
         /// The offset of this extent.
@@ -85,12 +147,14 @@ pub mod canopy_geom {
     }
 
     impl LineSegment {
-        /// The far limit of the extent.
-        pub fn far(&self) -> u32 {}
+        /// The exclusive far edge of the extent using widened arithmetic.
+        pub fn end(&self) -> u64 {}
 
-        /// Return a line segment that encloses this line segment and another. If
-        /// the lines overlap or abut, this is equivalent to joining the segments.
-        pub fn enclose(&self, other: &Self) -> Self {}
+        /// Return a segment starting at the nearer input and extending toward the
+        /// farther input.
+        ///
+        /// The length saturates when the complete span exceeds `u32::MAX`.
+        pub fn saturating_enclose(&self, other: &Self) -> Self {}
 
         /// Carve off a fixed-size portion from the start of this LineSegment,
         /// returning a (head, tail) tuple. If the segment is too short to carve out
@@ -116,7 +180,7 @@ pub mod canopy_geom {
         pub fn intersection(&self, other: &Self) -> Option<Self> {}
 
         /// Split this extent into (pre, active, post) extents, based on the
-        /// position of a window within a view. The main use for this funtion is
+        /// position of a window within a view. The main use for this function is
         /// computation of the active indicator size and position in a scrollbar.
         pub fn split_active(&self, window: Self, view: Self) -> Result<(Self, Self, Self)> {}
     }
@@ -140,7 +204,10 @@ pub mod canopy_geom {
         /// Shift the point by an offset, avoiding under- or overflow.
         pub fn scroll(&self, x: i32, y: i32) -> Self {}
 
-        /// Clamp a point, constraining it to fall within `rect`.
+        /// Clamp a point to the cells in `rect`.
+        ///
+        /// An empty rectangle contains no point, so its origin is returned as the
+        /// canonical clamped value.
         pub fn clamp(&self, rect: Rect) -> Self {}
 
         /// Like scroll, but constrained within a rectangle.
@@ -193,7 +260,7 @@ pub mod canopy_geom {
         fn from(p: Point) -> Self {}
     }
 
-    /// A rectangle
+    /// A half-open rectangle with an unsigned origin and size.
     #[derive(Debug, Clone, Copy, Hash, StructuralPartialEq, PartialEq, Eq, Default)]
     pub struct Rect {
         /// Top-left corner
@@ -208,10 +275,10 @@ pub mod canopy_geom {
         /// Construct a rectangle from coordinates and size.
         pub fn new(x: u32, y: u32, w: u32, h: u32) -> Self {}
 
-        /// The width times the height of the rectangle
+        /// The width times the height of the rectangle, saturated to `u32::MAX`.
         pub fn area(&self) -> u32 {}
 
-        /// Creat a zero-sized `Rect` at the origin.
+        /// Create a zero-sized `Rect` at the origin.
         pub fn zero() -> Self {}
 
         /// Return a rect with the same size, with the top left at the given point.
@@ -242,12 +309,20 @@ pub mod canopy_geom {
         /// larger than the enclosing rectangle, return an error.
         pub fn clamp_within(&self, rect: impl Into<Self>) -> Result<Self> {}
 
-        /// Does this rectangle contain the point?
+        /// Return the exclusive right edge using widened arithmetic.
+        pub fn right(&self) -> u64 {}
+
+        /// Return the exclusive bottom edge using widened arithmetic.
+        pub fn bottom(&self) -> u64 {}
+
+        /// Does this half-open rectangle contain the point?
         pub fn contains_point(&self, p: impl Into<Point>) -> bool {}
 
-        /// Does this rectangle completely enclose the other? If other is
-        /// zero-sized but its origin lies within this rect, it's considered
-        /// contained.
+        /// Does this rectangle completely enclose the other's half-open bounds?
+        ///
+        /// Empty rectangles are treated as anchored bounds. They are contained
+        /// when their coincident edges fall within this rectangle's closed edge
+        /// bounds, including the far edge.
         pub fn contains_rect(&self, other: &Self) -> bool {}
 
         /// Extracts an inner rectangle, given a border width. If the border width
@@ -321,7 +396,7 @@ pub mod canopy_geom {
         pub fn vextent(&self) -> LineSegment {}
 
         /// Return a line with a given offset in the rectangle.
-        pub fn line(&self, off: u32) -> Line {}
+        pub fn line(&self, off: u32) -> Result<Line> {}
 
         /// Does this rect have a zero size?
         pub fn is_zero(&self) -> bool {}
@@ -355,7 +430,7 @@ pub mod canopy_geom {
         fn from(r: Rect) -> Self {}
     }
 
-    /// A rectangle with a signed origin and unsigned size.
+    /// A half-open rectangle with a signed origin and unsigned size.
     #[derive(Debug, Clone, Copy, Hash, StructuralPartialEq, PartialEq, Eq, Default)]
     pub struct RectI32 {
         /// Top-left corner.
@@ -459,4 +534,3 @@ pub mod canopy_geom {
         Right,
     }
 }
-

@@ -314,7 +314,7 @@ permanently blocked detached reader thread is not an acceptable fallback.
    Give each crate a `thiserror` error type with structured variants and sources. Preserve node,
    operation, script, and geometry context without making callers parse display strings.
 
-38. [ ] Review the settled public API with `ruskel` and record an API budget.
+38. [x] Review the settled public API with `ruskel` and record an API budget.
 
    Inspect every workspace crate and the `Canopy` inherent methods, remove accidental exports and
    trivial accessors, and add a reviewable API-surface artifact for intent and complexity review.

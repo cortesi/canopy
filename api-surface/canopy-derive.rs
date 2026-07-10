@@ -20,10 +20,9 @@ pub mod canopy_derive {
     ) -> proc_macro::TokenStream {
     }
     /// Derive the CommandArg marker trait for serde-backed types.
-    #[proc_macro_derive(CommandArg)]
+    #[proc_macro_derive(CommandArg, attributes(canopy))]
     pub fn CommandArg(input: proc_macro::TokenStream) -> proc_macro::TokenStream {}
     /// Derive command enum conversions from/to ArgValue.
-    #[proc_macro_derive(CommandEnum)]
+    #[proc_macro_derive(CommandEnum, attributes(canopy))]
     pub fn CommandEnum(input: proc_macro::TokenStream) -> proc_macro::TokenStream {}
 }
-

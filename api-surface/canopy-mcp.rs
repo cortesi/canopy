@@ -24,14 +24,21 @@ pub mod canopy_mcp {
             /// An MCP transport or protocol error.
             Tmcp(tmcp::Error),
             /// The application factory failed to build an app instance.
-            App(String),
+            App(Box<dyn StdError + Send + Sync>),
+            /// The UDS listener thread panicked while shutting down.
+            ListenerThreadPanicked,
+            /// The UDS listener stopped before reporting startup readiness.
+            ListenerReadinessClosed,
             /// A smoke suite did not resolve to any Luau scripts.
             NoScripts(std::path::PathBuf),
         }
 
         impl Error {
             /// Wrap an application-specific setup error.
-            pub fn app(error: impl Display) -> Self {}
+            pub fn app(error: impl StdError + Send + Sync + 'static) -> Self {}
+
+            /// Wrap an already type-erased application setup error.
+            pub fn app_boxed(error: Box<dyn StdError + Send + Sync>) -> Self {}
         }
 
         impl From<Error> for Error {
@@ -53,6 +60,42 @@ pub mod canopy_mcp {
         impl From<Error> for Error {
             fn from(source: tmcp::Error) -> Self {}
         }
+    }
+
+    pub mod launch {
+        //! Shared executable launch harness for app binaries.
+
+        /// Launcher mode for a Canopy application.
+        pub enum LaunchMode {
+            /// Run the interactive terminal UI.
+            Run {
+                /// Optional live MCP Unix-domain socket path.
+                mcp_socket: Option<std::path::PathBuf>,
+                /// Crossterm runloop options.
+                runloop: canopy::terminal::RunloopOptions,
+            },
+            /// Serve the headless MCP automation server over stdio.
+            HeadlessMcp,
+            /// Run a Luau smoke suite against fresh headless app instances.
+            Smoke(crate::SuiteConfig),
+            /// Print the generated Luau API and exit.
+            Api,
+        }
+
+        impl LaunchMode {
+            /// Run the interactive terminal UI with the default Ctrl+C diagnostics.
+            pub fn run() -> Self {}
+
+            /// Run the interactive terminal UI with a live MCP socket.
+            pub fn run_with_mcp(socket_path: PathBuf) -> Self {}
+        }
+
+        /// Launch a Canopy app in the selected mode.
+        ///
+        /// The caller owns CLI parsing and app-specific configuration. This function
+        /// owns the repeated framework wiring: API output, headless MCP, smoke suites,
+        /// live MCP, and the terminal runloop.
+        pub fn launch(factory: crate::script::AppFactory, mode: LaunchMode) -> crate::Result<i32> {}
     }
 
     pub mod script {
@@ -90,9 +133,7 @@ pub mod canopy_mcp {
         }
 
         /// Structured typecheck diagnostic returned by `script_eval`.
-        #[derive(
-            Serialize, Debug, Clone, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize,
-        )]
+        #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize)]
         pub struct ScriptDiagnostic {
             /// Diagnostic severity such as `error` or `warning`.
             pub severity: String,
@@ -115,9 +156,7 @@ pub mod canopy_mcp {
         }
 
         /// Assertion outcome recorded during script execution.
-        #[derive(
-            Serialize, Debug, Clone, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize,
-        )]
+        #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize)]
         pub struct ScriptAssertion {
             /// Whether the assertion passed.
             pub passed: bool,
@@ -136,9 +175,7 @@ pub mod canopy_mcp {
         }
 
         /// Timing information for a script evaluation.
-        #[derive(
-            Serialize, Debug, Clone, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize,
-        )]
+        #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize)]
         pub struct ScriptTiming {
             /// Time spent constructing and rendering the headless app.
             pub build_ms: u64,
@@ -165,15 +202,7 @@ pub mod canopy_mcp {
 
         /// Evaluation task state exposed to automation callers.
         #[derive(
-            Serialize,
-            Debug,
-            Clone,
-            Copy,
-            StructuralPartialEq,
-            PartialEq,
-            Eq,
-            Serialize,
-            Deserialize,
+            Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize,
         )]
         pub enum ScriptTaskState {
             /// Evaluation completed successfully.
@@ -195,12 +224,17 @@ pub mod canopy_mcp {
         }
 
         /// Error details included in a failed script evaluation.
-        #[derive(
-            Serialize, Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize,
-        )]
+        #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize)]
         pub struct ScriptErrorInfo {
-            /// Error category such as `build`, `typecheck`, `timeout`, or `runtime`.
+            /// Pipeline stage that failed: `build`, `typecheck`, `timeout`, or `runtime`.
             pub error_type: String,
+            /// Stable host error category such as `no_target` or `unknown_command`,
+            /// when the failure carried structured fields.
+            pub kind: Option<String>,
+            /// Command id when the error came from command dispatch.
+            pub command: Option<String>,
+            /// Owner name when the error came from node-target resolution.
+            pub owner: Option<String>,
             /// Human-readable error message.
             pub message: String,
         }
@@ -216,9 +250,7 @@ pub mod canopy_mcp {
         }
 
         /// Structured response for the `script_eval` tool and smoke runner.
-        #[derive(
-            Serialize, Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize,
-        )]
+        #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize)]
         pub struct ScriptEvalOutcome {
             /// Whether the script completed successfully.
             pub success: bool,
@@ -262,8 +294,81 @@ pub mod canopy_mcp {
             fn inline_schema() -> bool {}
         }
 
-        impl From<ScriptEvalOutcome> for tmcp::schema::CallToolResult {
-            fn from(outcome: ScriptEvalOutcome) -> Self {}
+        /// Compact command availability record returned by bootstrap.
+        #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize)]
+        pub struct BootstrapCommand {
+            /// Command name relative to its owner.
+            pub name: String,
+            /// Widget owner name, or empty for free commands.
+            pub owner: String,
+            /// Whether the command currently resolves.
+            pub available: bool,
+            /// Debug token for the current target node, when available.
+            pub target: Option<String>,
+        }
+
+        impl JsonSchema for BootstrapCommand {
+            fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+            fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+            fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+            fn inline_schema() -> bool {}
+        }
+
+        /// Compact script journal record returned by bootstrap.
+        #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize)]
+        pub struct BootstrapJournalEntry {
+            /// Monotonic journal id.
+            pub id: u64,
+            /// Script origin.
+            pub origin: String,
+            /// Whether the evaluation completed successfully.
+            pub ok: bool,
+            /// Number of logs emitted by this evaluation.
+            pub log_count: usize,
+            /// Number of assertions emitted by this evaluation.
+            pub assertion_count: usize,
+            /// Wall-clock duration in milliseconds.
+            pub duration_ms: u64,
+        }
+
+        impl JsonSchema for BootstrapJournalEntry {
+            fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+            fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+            fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+            fn inline_schema() -> bool {}
+        }
+
+        /// Bootstrap payload for an agent entering a Canopy app.
+        #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize)]
+        pub struct BootstrapResponse {
+            /// Operating guide for the automation surface.
+            pub guide: String,
+            /// Full generated Luau API definition.
+            pub api: String,
+            /// Stable FNV-1a digest of `api`.
+            pub api_digest: String,
+            /// Registered fixtures.
+            pub fixtures: Vec<canopy::FixtureInfo>,
+            /// Current command availability.
+            pub commands: Vec<BootstrapCommand>,
+            /// Recent script journal entries.
+            pub journal: Vec<BootstrapJournalEntry>,
+        }
+
+        impl JsonSchema for BootstrapResponse {
+            fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+            fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+            fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+            fn inline_schema() -> bool {}
         }
 
         /// Headless evaluator that creates a fresh canopy app instance for each request.
@@ -283,11 +388,17 @@ pub mod canopy_mcp {
             /// Return the evaluator's registered fixture catalog.
             pub fn fixtures(&self) -> Result<Vec<FixtureInfo>> {}
 
-            /// Evaluate a Luau script, enforcing the requested timeout when present.
-            pub fn evaluate_with_timeout(&self, request: &ScriptEvalRequest) -> ScriptEvalOutcome {}
+            /// Return bootstrap information for a fresh headless app instance.
+            pub fn bootstrap(&self) -> Result<BootstrapResponse> {}
 
             /// Evaluate a Luau script against a fresh headless app.
             pub fn evaluate(&self, request: &ScriptEvalRequest) -> ScriptEvalOutcome {}
+        }
+
+        /// Build a bootstrap payload from a finalized app.
+        pub fn bootstrap_for_canopy(
+            canopy: &mut canopy::Canopy,
+        ) -> crate::Result<BootstrapResponse> {
         }
 
         /// Evaluate a Luau script against an existing live canopy app.
@@ -302,9 +413,7 @@ pub mod canopy_mcp {
         //! Stdio MCP server wrapper for script automation.
 
         /// Request payload for applying a named fixture to a live app.
-        #[derive(
-            Serialize, Debug, Clone, StructuralPartialEq, PartialEq, Eq, Deserialize, Serialize,
-        )]
+        #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq, Deserialize, Serialize)]
         pub struct ApplyFixtureRequest {
             /// Registered fixture name.
             pub name: String,
@@ -369,15 +478,7 @@ pub mod canopy_mcp {
 
         /// Final status for a smoke script.
         #[derive(
-            Serialize,
-            Debug,
-            Clone,
-            Copy,
-            StructuralPartialEq,
-            PartialEq,
-            Eq,
-            Serialize,
-            Deserialize,
+            Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize,
         )]
         pub enum ScriptStatus {
             /// The script passed.
@@ -387,9 +488,7 @@ pub mod canopy_mcp {
         }
 
         /// Result of running one smoke script.
-        #[derive(
-            Serialize, Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize,
-        )]
+        #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize)]
         pub struct ScriptResult {
             /// Script path on disk.
             pub path: std::path::PathBuf,
@@ -406,9 +505,7 @@ pub mod canopy_mcp {
         }
 
         /// Aggregated result for a smoke suite.
-        #[derive(
-            Serialize, Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize,
-        )]
+        #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize)]
         pub struct SuiteResult {
             /// Per-script results in execution order.
             pub scripts: Vec<ScriptResult>,
@@ -441,14 +538,21 @@ pub mod canopy_mcp {
         /// An MCP transport or protocol error.
         Tmcp(tmcp::Error),
         /// The application factory failed to build an app instance.
-        App(String),
+        App(Box<dyn StdError + Send + Sync>),
+        /// The UDS listener thread panicked while shutting down.
+        ListenerThreadPanicked,
+        /// The UDS listener stopped before reporting startup readiness.
+        ListenerReadinessClosed,
         /// A smoke suite did not resolve to any Luau scripts.
         NoScripts(std::path::PathBuf),
     }
 
     impl Error {
         /// Wrap an application-specific setup error.
-        pub fn app(error: impl Display) -> Self {}
+        pub fn app(error: impl StdError + Send + Sync + 'static) -> Self {}
+
+        /// Wrap an already type-erased application setup error.
+        pub fn app_boxed(error: Box<dyn StdError + Send + Sync>) -> Self {}
     }
 
     impl From<Error> for Error {
@@ -474,6 +578,38 @@ pub mod canopy_mcp {
     /// Result type used by `canopy-mcp`.
     pub type Result<T> = std::result::Result<T, Error>;
 
+    /// Launcher mode for a Canopy application.
+    pub enum LaunchMode {
+        /// Run the interactive terminal UI.
+        Run {
+            /// Optional live MCP Unix-domain socket path.
+            mcp_socket: Option<std::path::PathBuf>,
+            /// Crossterm runloop options.
+            runloop: canopy::terminal::RunloopOptions,
+        },
+        /// Serve the headless MCP automation server over stdio.
+        HeadlessMcp,
+        /// Run a Luau smoke suite against fresh headless app instances.
+        Smoke(crate::SuiteConfig),
+        /// Print the generated Luau API and exit.
+        Api,
+    }
+
+    impl LaunchMode {
+        /// Run the interactive terminal UI with the default Ctrl+C diagnostics.
+        pub fn run() -> Self {}
+
+        /// Run the interactive terminal UI with a live MCP socket.
+        pub fn run_with_mcp(socket_path: PathBuf) -> Self {}
+    }
+
+    /// Launch a Canopy app in the selected mode.
+    ///
+    /// The caller owns CLI parsing and app-specific configuration. This function
+    /// owns the repeated framework wiring: API output, headless MCP, smoke suites,
+    /// live MCP, and the terminal runloop.
+    pub fn launch(factory: crate::script::AppFactory, mode: LaunchMode) -> crate::Result<i32> {}
+
     /// Headless evaluator that creates a fresh canopy app instance for each request.
     #[derive(Clone)]
     pub struct AppEvaluator {}
@@ -491,17 +627,92 @@ pub mod canopy_mcp {
         /// Return the evaluator's registered fixture catalog.
         pub fn fixtures(&self) -> Result<Vec<FixtureInfo>> {}
 
-        /// Evaluate a Luau script, enforcing the requested timeout when present.
-        pub fn evaluate_with_timeout(&self, request: &ScriptEvalRequest) -> ScriptEvalOutcome {}
+        /// Return bootstrap information for a fresh headless app instance.
+        pub fn bootstrap(&self) -> Result<BootstrapResponse> {}
 
         /// Evaluate a Luau script against a fresh headless app.
         pub fn evaluate(&self, request: &ScriptEvalRequest) -> ScriptEvalOutcome {}
     }
 
+    /// Compact command availability record returned by bootstrap.
+    #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize)]
+    pub struct BootstrapCommand {
+        /// Command name relative to its owner.
+        pub name: String,
+        /// Widget owner name, or empty for free commands.
+        pub owner: String,
+        /// Whether the command currently resolves.
+        pub available: bool,
+        /// Debug token for the current target node, when available.
+        pub target: Option<String>,
+    }
+
+    impl JsonSchema for BootstrapCommand {
+        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+        fn inline_schema() -> bool {}
+    }
+
+    /// Compact script journal record returned by bootstrap.
+    #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize)]
+    pub struct BootstrapJournalEntry {
+        /// Monotonic journal id.
+        pub id: u64,
+        /// Script origin.
+        pub origin: String,
+        /// Whether the evaluation completed successfully.
+        pub ok: bool,
+        /// Number of logs emitted by this evaluation.
+        pub log_count: usize,
+        /// Number of assertions emitted by this evaluation.
+        pub assertion_count: usize,
+        /// Wall-clock duration in milliseconds.
+        pub duration_ms: u64,
+    }
+
+    impl JsonSchema for BootstrapJournalEntry {
+        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+        fn inline_schema() -> bool {}
+    }
+
+    /// Bootstrap payload for an agent entering a Canopy app.
+    #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize)]
+    pub struct BootstrapResponse {
+        /// Operating guide for the automation surface.
+        pub guide: String,
+        /// Full generated Luau API definition.
+        pub api: String,
+        /// Stable FNV-1a digest of `api`.
+        pub api_digest: String,
+        /// Registered fixtures.
+        pub fixtures: Vec<canopy::FixtureInfo>,
+        /// Current command availability.
+        pub commands: Vec<BootstrapCommand>,
+        /// Recent script journal entries.
+        pub journal: Vec<BootstrapJournalEntry>,
+    }
+
+    impl JsonSchema for BootstrapResponse {
+        fn schema_name() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn schema_id() -> schemars::_private::alloc::borrow::Cow<'static, str> {}
+
+        fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {}
+
+        fn inline_schema() -> bool {}
+    }
+
     /// Assertion outcome recorded during script execution.
-    #[derive(
-        Serialize, Debug, Clone, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize,
-    )]
+    #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize)]
     pub struct ScriptAssertion {
         /// Whether the assertion passed.
         pub passed: bool,
@@ -520,9 +731,7 @@ pub mod canopy_mcp {
     }
 
     /// Structured typecheck diagnostic returned by `script_eval`.
-    #[derive(
-        Serialize, Debug, Clone, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize,
-    )]
+    #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize)]
     pub struct ScriptDiagnostic {
         /// Diagnostic severity such as `error` or `warning`.
         pub severity: String,
@@ -545,10 +754,17 @@ pub mod canopy_mcp {
     }
 
     /// Error details included in a failed script evaluation.
-    #[derive(Serialize, Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize)]
     pub struct ScriptErrorInfo {
-        /// Error category such as `build`, `typecheck`, `timeout`, or `runtime`.
+        /// Pipeline stage that failed: `build`, `typecheck`, `timeout`, or `runtime`.
         pub error_type: String,
+        /// Stable host error category such as `no_target` or `unknown_command`,
+        /// when the failure carried structured fields.
+        pub kind: Option<String>,
+        /// Command id when the error came from command dispatch.
+        pub command: Option<String>,
+        /// Owner name when the error came from node-target resolution.
+        pub owner: Option<String>,
         /// Human-readable error message.
         pub message: String,
     }
@@ -564,7 +780,7 @@ pub mod canopy_mcp {
     }
 
     /// Structured response for the `script_eval` tool and smoke runner.
-    #[derive(Serialize, Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize)]
     pub struct ScriptEvalOutcome {
         /// Whether the script completed successfully.
         pub success: bool,
@@ -608,10 +824,6 @@ pub mod canopy_mcp {
         fn inline_schema() -> bool {}
     }
 
-    impl From<ScriptEvalOutcome> for tmcp::schema::CallToolResult {
-        fn from(outcome: ScriptEvalOutcome) -> Self {}
-    }
-
     /// Request payload for the `script_eval` tool.
     #[derive(Deserialize, Debug, Clone, StructuralPartialEq, PartialEq)]
     pub struct ScriptEvalRequest {
@@ -634,9 +846,7 @@ pub mod canopy_mcp {
     }
 
     /// Evaluation task state exposed to automation callers.
-    #[derive(
-        Serialize, Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize,
-    )]
+    #[derive(Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize)]
     pub enum ScriptTaskState {
         /// Evaluation completed successfully.
         Completed,
@@ -657,9 +867,7 @@ pub mod canopy_mcp {
     }
 
     /// Timing information for a script evaluation.
-    #[derive(
-        Serialize, Debug, Clone, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize,
-    )]
+    #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize)]
     pub struct ScriptTiming {
         /// Time spent constructing and rendering the headless app.
         pub build_ms: u64,
@@ -698,9 +906,7 @@ pub mod canopy_mcp {
     }
 
     /// Request payload for applying a named fixture to a live app.
-    #[derive(
-        Serialize, Debug, Clone, StructuralPartialEq, PartialEq, Eq, Deserialize, Serialize,
-    )]
+    #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Eq, Deserialize, Serialize)]
     pub struct ApplyFixtureRequest {
         /// Registered fixture name.
         pub name: String,
@@ -742,7 +948,7 @@ pub mod canopy_mcp {
     }
 
     /// Result of running one smoke script.
-    #[derive(Serialize, Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize)]
     pub struct ScriptResult {
         /// Script path on disk.
         pub path: std::path::PathBuf,
@@ -759,9 +965,7 @@ pub mod canopy_mcp {
     }
 
     /// Final status for a smoke script.
-    #[derive(
-        Serialize, Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize,
-    )]
+    #[derive(Debug, Clone, Copy, StructuralPartialEq, PartialEq, Eq, Serialize, Deserialize)]
     pub enum ScriptStatus {
         /// The script passed.
         Passed,
@@ -788,7 +992,7 @@ pub mod canopy_mcp {
     }
 
     /// Aggregated result for a smoke suite.
-    #[derive(Serialize, Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, StructuralPartialEq, PartialEq, Serialize, Deserialize)]
     pub struct SuiteResult {
         /// Per-script results in execution order.
         pub scripts: Vec<ScriptResult>,
@@ -806,4 +1010,3 @@ pub mod canopy_mcp {
     ) -> crate::Result<SuiteResult> {
     }
 }
-

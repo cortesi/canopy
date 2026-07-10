@@ -208,7 +208,7 @@ impl Input {
         }
     }
 
-    /// Return the current input text.
+    /// Return the currently visible input slice.
     pub fn text(&self) -> &str {
         self.buffer.text()
     }

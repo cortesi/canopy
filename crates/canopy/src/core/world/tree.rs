@@ -131,21 +131,6 @@ impl Core {
         self.with_layout_of(node, |l| *l = layout)
     }
 
-    /// Replace the widget stored at a node.
-    pub fn replace_widget_keep_children<W>(
-        &mut self,
-        node_id: impl Into<NodeId>,
-        widget: W,
-    ) -> Result<()>
-    where
-        W: Widget + 'static,
-    {
-        let node_id = node_id.into();
-        self.with_tree_edit("replace widget", move |core| {
-            core.replace_widget_inner(node_id, Box::new(widget), false)
-        })
-    }
-
     /// Replace a widget and remove all descendant nodes.
     pub fn replace_subtree<W>(&mut self, node_id: impl Into<NodeId>, widget: W) -> Result<()>
     where
@@ -1175,16 +1160,6 @@ impl Core {
         } else {
             Ok(ChangeOutcome::Unchanged)
         }
-    }
-
-    /// Hide a node.
-    pub fn hide(&mut self, node_id: impl Into<NodeId>) -> Result<ChangeOutcome> {
-        self.set_hidden(node_id, true)
-    }
-
-    /// Show a node.
-    pub fn show(&mut self, node_id: impl Into<NodeId>) -> Result<ChangeOutcome> {
-        self.set_hidden(node_id, false)
     }
 
     /// Return the path for a node relative to a root.

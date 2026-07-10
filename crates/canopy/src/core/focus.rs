@@ -310,21 +310,6 @@ impl Core {
         Ok(())
     }
 
-    /// Return the focus path as node IDs from root to focus.
-    pub fn focus_path_ids(&self) -> Vec<NodeId> {
-        let mut ids = Vec::new();
-        let mut current = self.focus;
-        while let Some(id) = current {
-            let Some(node) = self.nodes.get(id) else {
-                return Vec::new();
-            };
-            ids.push(id);
-            current = node.parent;
-        }
-        ids.reverse();
-        ids
-    }
-
     /// Precompute focus recovery candidates for a removed subtree.
     pub fn focus_recovery_hint(&self, removed_root: NodeId) -> FocusRecoveryHint {
         FocusRecoveryHint {

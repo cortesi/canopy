@@ -452,9 +452,7 @@ fn set_widget_resets_initialization() -> Result<()> {
     render.render(&mut canopy)?;
     assert_eq!(POLL_COUNT.load(Ordering::SeqCst), 1);
 
-    canopy
-        .core
-        .replace_widget_keep_children(node_id, PollWidget::new())?;
+    canopy.core.replace_subtree(node_id, PollWidget::new())?;
     render.render(&mut canopy)?;
     assert_eq!(POLL_COUNT.load(Ordering::SeqCst), 2);
     Ok(())

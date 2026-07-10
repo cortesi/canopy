@@ -60,62 +60,32 @@ pub struct Node {
 
 impl Node {
     /// Return the node's widget name.
-    pub fn name(&self) -> &NodeName {
+    pub(crate) fn name(&self) -> &NodeName {
         &self.name
     }
 
-    /// Return the node's parent, if any.
-    pub fn parent(&self) -> Option<NodeId> {
-        self.parent
-    }
-
     /// Return the node's children.
-    pub fn children(&self) -> &[NodeId] {
+    pub(crate) fn children(&self) -> &[NodeId] {
         &self.children
     }
 
-    /// Return the cached layout configuration.
-    pub fn layout(&self) -> Layout {
-        self.layout
-    }
-
-    /// Return the outer rectangle relative to the parent content origin.
-    pub fn rect(&self) -> Rect {
-        self.rect
-    }
-
-    /// Return the content size.
-    pub fn content_size(&self) -> Size {
-        self.content_size
-    }
-
     /// Return the canvas size.
-    pub fn canvas(&self) -> Size {
+    pub(crate) fn canvas(&self) -> Size {
         self.canvas
     }
 
     /// Return the scroll offset.
-    pub fn scroll(&self) -> Point {
+    pub(crate) fn scroll(&self) -> Point {
         self.scroll
     }
 
     /// Return the view data.
-    pub fn view(&self) -> View {
+    pub(crate) fn view(&self) -> View {
         self.view
     }
 
     /// Return true if the node is hidden.
-    pub fn hidden(&self) -> bool {
+    pub(crate) fn hidden(&self) -> bool {
         self.hidden
-    }
-
-    /// Return true if polling has been initialized.
-    pub fn initialized(&self) -> bool {
-        self.initialized
-    }
-
-    /// Return true if the widget mount hook has run.
-    pub fn mounted(&self) -> bool {
-        self.mounted
     }
 }

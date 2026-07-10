@@ -22,7 +22,7 @@ pub mod canopy_examples {
         impl Widget for Ed {
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
 
-            fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
         }
 
         impl Loader for Ed {
@@ -51,11 +51,11 @@ pub mod canopy_examples {
         }
 
         impl Widget for CharGym {
-            fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {}
+            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
 
-            fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
         }
 
         impl Loader for CharGym {
@@ -180,9 +180,9 @@ pub mod canopy_examples {
         }
 
         impl Widget for Block {
-            fn accept_focus(&self, ctx: &dyn ReadContext) -> bool {}
+            fn accept_focus(&self, ctx: &dyn ViewContext) -> bool {}
 
-            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
             fn layout(&self) -> Layout {}
         }
@@ -204,7 +204,7 @@ pub mod canopy_examples {
         }
 
         impl Widget for FocusGym {
-            fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
 
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
         }
@@ -320,7 +320,7 @@ pub mod canopy_examples {
         }
 
         impl Widget for TestPattern {
-            fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {}
+            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
             fn layout(&self) -> Layout {}
 
@@ -328,7 +328,7 @@ pub mod canopy_examples {
 
             fn canvas(&self, _view: Size<u32>, _ctx: &CanvasContext<'_>) -> Size<u32> {}
 
-            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
         }
 
         /// Root node for the frame gym demo.
@@ -347,7 +347,7 @@ pub mod canopy_examples {
         impl Widget for FrameGym {
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
 
-            fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
         }
 
         impl Loader for FrameGym {
@@ -398,9 +398,9 @@ pub mod canopy_examples {
 
             fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
-            fn render(&mut self, rndr: &mut Render<'_>, _ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, rndr: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
 
-            fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {}
+            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
             fn name(&self) -> NodeName {}
         }
@@ -413,7 +413,7 @@ pub mod canopy_examples {
         }
 
         impl Widget for StatusBar {
-            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
         }
 
         /// Root node for the intervals demo.
@@ -436,11 +436,11 @@ pub mod canopy_examples {
         }
 
         impl Widget for Intervals {
-            fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {}
+            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
 
-            fn render(&mut self, r: &mut Render<'_>, _ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
 
             fn poll(&mut self, c: &mut dyn Context) -> Option<Duration> {}
         }
@@ -473,13 +473,13 @@ pub mod canopy_examples {
         }
 
         impl Widget for ListEntry {
-            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
             fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
             fn canvas(&self, view: Size<u32>, ctx: &CanvasContext<'_>) -> Size<u32> {}
 
-            fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {}
+            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
             fn name(&self) -> NodeName {}
         }
@@ -498,7 +498,7 @@ pub mod canopy_examples {
         }
 
         impl Widget for StatusBar {
-            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
         }
 
         /// Root node for the list gym demo.
@@ -545,11 +545,11 @@ pub mod canopy_examples {
         }
 
         impl Widget for ListGym {
-            fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {}
+            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
 
-            fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
         }
 
         impl Loader for ListGym {
@@ -576,11 +576,11 @@ pub mod canopy_examples {
         }
 
         impl Widget for Pager {
-            fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {}
+            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
 
-            fn render(&mut self, _rndr: &mut Render<'_>, _ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, _rndr: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
         }
 
         impl Loader for Pager {
@@ -629,7 +629,7 @@ pub mod canopy_examples {
         }
 
         impl Widget for DemoContent {
-            fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
             fn layout(&self) -> Layout {}
         }
@@ -672,7 +672,7 @@ pub mod canopy_examples {
         }
 
         impl Widget for Stylegym {
-            fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
 
             fn layout(&self) -> Layout {}
 
@@ -764,11 +764,11 @@ pub mod canopy_examples {
         }
 
         impl Widget for TermGym {
-            fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {}
+            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
 
-            fn render(&mut self, r: &mut Render<'_>, _ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
         }
 
         impl Loader for TermGym {
@@ -802,11 +802,11 @@ pub mod canopy_examples {
         }
 
         impl Widget for TextGym {
-            fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {}
+            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
             fn on_mount(&mut self, c: &mut dyn Context) -> Result<()> {}
 
-            fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
         }
 
         impl Loader for TextGym {
@@ -840,7 +840,7 @@ pub mod canopy_examples {
 
             fn poll(&mut self, ctx: &mut dyn Context) -> Option<Duration> {}
 
-            fn render(&mut self, _rndr: &mut Render<'_>, _ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, _rndr: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
 
             fn name(&self) -> NodeName {}
         }
@@ -878,7 +878,7 @@ pub mod canopy_examples {
 
             fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
 
-            fn render(&mut self, rndr: &mut Render<'_>, _ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, rndr: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
 
             fn name(&self) -> NodeName {}
         }
@@ -916,7 +916,7 @@ pub mod canopy_examples {
 
             fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
 
-            fn render(&mut self, _rndr: &mut Render<'_>, _ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, _rndr: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
 
             fn name(&self) -> NodeName {}
         }
@@ -976,4 +976,3 @@ pub mod canopy_examples {
     /// Finalize and print the Luau API definitions for a demo app.
     pub fn print_luau_api(cnpy: &mut canopy::Canopy) -> canopy::error::Result<()> {}
 }
-

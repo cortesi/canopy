@@ -307,11 +307,11 @@ pub mod canopy_widgets {
         }
 
         impl Widget for Editor {
-            fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {}
+            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
             fn cursor(&self) -> Option<cursor::Cursor> {}
 
-            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
             fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
@@ -442,7 +442,7 @@ pub mod canopy_widgets {
             }
 
             /// Build the help subtree and return its node id.
-            pub fn install(core: &mut Core) -> Result<NodeId> {}
+            pub fn install(context: &mut dyn Context) -> Result<NodeId> {}
         }
 
         impl CommandNode for Help {
@@ -450,7 +450,7 @@ pub mod canopy_widgets {
         }
 
         impl Widget for Help {
-            fn render(&mut self, r: &mut Render<'_>, _ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
 
             fn name(&self) -> NodeName {}
         }
@@ -506,7 +506,7 @@ pub mod canopy_widgets {
         }
 
         impl Widget for HelpContent {
-            fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {}
+            fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
             fn layout(&self) -> Layout {}
 
@@ -514,7 +514,7 @@ pub mod canopy_widgets {
 
             fn on_event(&mut self, _event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
 
-            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
             fn name(&self) -> NodeName {}
         }
@@ -532,7 +532,7 @@ pub mod canopy_widgets {
             pub fn new() -> Self {}
 
             /// Build the inspector subtree and return its node id.
-            pub fn install(core: &mut Core) -> Result<NodeId> {}
+            pub fn install(context: &mut dyn Context) -> Result<NodeId> {}
         }
 
         impl CommandNode for Inspector {
@@ -540,7 +540,7 @@ pub mod canopy_widgets {
         }
 
         impl Widget for Inspector {
-            fn render(&mut self, r: &mut Render<'_>, _ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
 
             fn name(&self) -> NodeName {}
         }
@@ -577,7 +577,7 @@ pub mod canopy_widgets {
         }
 
         impl Widget for Tabs {
-            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ReadContext) -> Result<()> {}
+            fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
             fn name(&self) -> NodeName {}
         }
@@ -612,7 +612,7 @@ pub mod canopy_widgets {
     }
 
     impl Widget for Box {
-        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ReadContext) -> Result<()> {}
+        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
         fn layout(&self) -> Layout {}
 
@@ -698,7 +698,7 @@ pub mod canopy_widgets {
 
         fn on_mount(&mut self, ctx: &mut dyn Context) -> Result<()> {}
 
-        fn render(&mut self, rndr: &mut Render<'_>, _ctx: &dyn ReadContext) -> Result<()> {}
+        fn render(&mut self, rndr: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
 
         fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
 
@@ -721,7 +721,7 @@ pub mod canopy_widgets {
     impl Widget for Center {
         fn layout(&self) -> Layout {}
 
-        fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ReadContext) -> Result<()> {}
+        fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
 
         fn name(&self) -> NodeName {}
     }
@@ -799,13 +799,13 @@ pub mod canopy_widgets {
     {
         fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
 
-        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ReadContext) -> Result<()> {}
+        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
         fn canvas(&self, _view: Size<u32>, _ctx: &canopy::layout::CanvasContext<'_>) -> Size<u32> {}
 
-        fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {}
+        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
         fn name(&self) -> NodeName {}
     }
@@ -1014,7 +1014,7 @@ pub mod canopy_widgets {
     impl Widget for FontBanner {
         fn layout(&self) -> Layout {}
 
-        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ReadContext) -> Result<()> {}
+        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
     }
 
     /// A frame around an element with optional title and indicators.
@@ -1057,7 +1057,7 @@ pub mod canopy_widgets {
     }
 
     impl Widget for Frame {
-        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ReadContext) -> Result<()> {}
+        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
         fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
 
@@ -1124,12 +1124,12 @@ pub mod canopy_widgets {
         fn render(
             &mut self,
             render: &mut Render<'_>,
-            ctx: &dyn ReadContext,
+            ctx: &dyn ViewContext,
         ) -> canopy_error::Result<()> {
         }
 
         /// Accept focus so key bindings apply to this widget.
-        fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {}
+        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
     }
 
     impl Loader for ImageView {
@@ -1144,7 +1144,7 @@ pub mod canopy_widgets {
         /// Construct a new input with initial text.
         pub fn new(txt: impl Into<String>) -> Self {}
 
-        /// Return the current input text.
+        /// Return the currently visible input slice.
         pub fn text(&self) -> &str {}
 
         /// Return the raw input value without padding.
@@ -1168,11 +1168,11 @@ pub mod canopy_widgets {
     }
 
     impl Widget for Input {
-        fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {}
+        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
         fn cursor(&self) -> Option<cursor::Cursor> {}
 
-        fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ReadContext) -> Result<()> {}
+        fn render(&mut self, r: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
         fn on_event(&mut self, event: &Event, _ctx: &mut dyn Context) -> Result<EventOutcome> {}
 
@@ -1320,13 +1320,13 @@ pub mod canopy_widgets {
 
         fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
 
-        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ReadContext) -> Result<()> {}
+        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
         fn canvas(&self, view: Size<u32>, ctx: &CanvasContext<'_>) -> Size<u32> {}
 
-        fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {}
+        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
         fn name(&self) -> NodeName {}
     }
@@ -1376,7 +1376,7 @@ pub mod canopy_widgets {
     impl Widget for Modal {
         fn layout(&self) -> Layout {}
 
-        fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ReadContext) -> Result<()> {}
+        fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
 
         fn name(&self) -> NodeName {}
     }
@@ -1416,7 +1416,7 @@ pub mod canopy_widgets {
     impl Widget for Pad {
         fn layout(&self) -> Layout {}
 
-        fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ReadContext) -> Result<()> {}
+        fn render(&mut self, _r: &mut Render<'_>, _ctx: &dyn ViewContext) -> Result<()> {}
 
         fn name(&self) -> NodeName {}
     }
@@ -1465,7 +1465,7 @@ pub mod canopy_widgets {
         fn render(
             &mut self,
             _rndr: &mut canopy::render::Render<'_>,
-            _ctx: &dyn ReadContext,
+            _ctx: &dyn ViewContext,
         ) -> Result<()> {
         }
 
@@ -1533,12 +1533,12 @@ pub mod canopy_widgets {
             W: Widget + 'static, {
         }
 
-        /// Helper to install a root widget into the core and configure children.
-        pub fn install(core: &mut Core, app: impl Into<NodeId>) -> Result<NodeId> {}
+        /// Helper to install a root widget and configure children.
+        pub fn install(canopy: &mut Canopy, app: impl Into<NodeId>) -> Result<NodeId> {}
 
-        /// Helper to install a root widget into the core with an optional inspector pane.
+        /// Helper to install a root widget with an optional inspector pane.
         pub fn install_with_inspector(
-            core: &mut Core,
+            canopy: &mut Canopy,
             app: impl Into<NodeId>,
             inspector_active: bool,
         ) -> Result<NodeId> {
@@ -1583,7 +1583,7 @@ pub mod canopy_widgets {
         fn render(
             &mut self,
             _rndr: &mut canopy::render::Render<'_>,
-            _ctx: &dyn ReadContext,
+            _ctx: &dyn ViewContext,
         ) -> Result<()> {
         }
 
@@ -1682,13 +1682,13 @@ pub mod canopy_widgets {
     {
         fn on_event(&mut self, event: &Event, ctx: &mut dyn Context) -> Result<EventOutcome> {}
 
-        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ReadContext) -> Result<()> {}
+        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
         fn canvas(&self, _view: Size<u32>, _ctx: &canopy::layout::CanvasContext<'_>) -> Size<u32> {}
 
-        fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {}
+        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
         fn name(&self) -> NodeName {}
     }
@@ -1724,7 +1724,7 @@ pub mod canopy_widgets {
     }
 
     impl Widget for Terminal {
-        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ReadContext) -> Result<()> {}
+        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
         fn on_event(
             &mut self,
@@ -1737,7 +1737,7 @@ pub mod canopy_widgets {
 
         fn canvas(&self, view: Size<u32>, _ctx: &CanvasContext<'_>) -> Size<u32> {}
 
-        fn accept_focus(&self, _ctx: &dyn ReadContext) -> bool {}
+        fn accept_focus(&self, _ctx: &dyn ViewContext) -> bool {}
 
         fn cursor(&self) -> Option<cursor::Cursor> {}
 
@@ -1916,7 +1916,7 @@ pub mod canopy_widgets {
     }
 
     impl Widget for Text {
-        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ReadContext) -> Result<()> {}
+        fn render(&mut self, rndr: &mut Render<'_>, ctx: &dyn ViewContext) -> Result<()> {}
 
         fn measure(&self, c: MeasureConstraints) -> Measurement {}
 
@@ -1952,4 +1952,3 @@ pub mod canopy_widgets {
         fn name(&self) -> NodeName {}
     }
 }
-

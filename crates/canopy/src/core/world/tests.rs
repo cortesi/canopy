@@ -797,7 +797,6 @@ fn focus_path_queries_tolerate_a_stale_internal_id() -> Result<()> {
     core.focus = Some(child);
     assert!(!core.is_on_focus_path(core.root));
     assert_eq!(core.focus_path(core.root), Path::empty());
-    assert!(core.focus_path_ids().is_empty());
     core.ensure_focus_valid(None)?;
     assert_eq!(core.focus_id(), None);
     Ok(())
@@ -2540,7 +2539,7 @@ fn replacement_mount_failure_restores_old_widget_and_children() -> Result<()> {
     log.lock().unwrap().clear();
 
     let error = assert_structural_rollback(&mut core, |core| {
-        core.replace_widget_keep_children(
+        core.replace_subtree(
             target,
             FaultWidget::new("new", Arc::clone(&log))
                 .with_mount(MountAction::FailAfterCoreMutations),

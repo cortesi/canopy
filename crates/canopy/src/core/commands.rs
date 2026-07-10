@@ -1201,7 +1201,7 @@ impl CommandResolution {
 }
 
 /// Resolves command targets relative to a starting node.
-pub struct CommandResolver<'a> {
+pub(crate) struct CommandResolver<'a> {
     /// Core tree and command registry.
     core: &'a Core,
     /// Starting node for command dispatch.
@@ -1210,12 +1210,12 @@ pub struct CommandResolver<'a> {
 
 impl<'a> CommandResolver<'a> {
     /// Construct a resolver for commands dispatched from `start`.
-    pub fn new(core: &'a Core, start: NodeId) -> Self {
+    pub(crate) fn new(core: &'a Core, start: NodeId) -> Self {
         Self { core, start }
     }
 
     /// Resolve a command specification to the target dispatch would use.
-    pub fn resolve(&self, spec: &CommandSpec) -> Option<CommandResolution> {
+    pub(crate) fn resolve(&self, spec: &CommandSpec) -> Option<CommandResolution> {
         match spec.dispatch {
             CommandDispatchKind::Free => Some(CommandResolution::Free),
             CommandDispatchKind::Node { owner } => self.resolve_owner(owner),
@@ -1223,7 +1223,7 @@ impl<'a> CommandResolver<'a> {
     }
 
     /// Resolve a node-owner name with subtree targets preferred over ancestors.
-    pub fn resolve_owner(&self, owner: &str) -> Option<CommandResolution> {
+    pub(crate) fn resolve_owner(&self, owner: &str) -> Option<CommandResolution> {
         if !self.core.nodes.contains_key(self.start) {
             return None;
         }
@@ -1251,23 +1251,8 @@ impl<'a> CommandResolver<'a> {
         None
     }
 
-    /// Resolve an invocation by looking up its command specification.
-    pub fn resolve_invocation(
-        &self,
-        inv: &CommandInvocation,
-    ) -> Result<Option<CommandResolution>, CommandError> {
-        let spec =
-            self.core
-                .commands
-                .get(inv.id.0)
-                .ok_or_else(|| CommandError::UnknownCommand {
-                    id: inv.id.0.to_string(),
-                })?;
-        Ok(self.resolve(spec))
-    }
-
     /// Return availability for every registered command.
-    pub fn availability(&self) -> Vec<CommandAvailability<'a>> {
+    pub(crate) fn availability(&self) -> Vec<CommandAvailability<'a>> {
         self.core
             .commands
             .iter()
@@ -1767,7 +1752,7 @@ pub fn normalize_named_args<'a>(
 }
 
 /// Dispatch a command relative to a node.
-pub fn dispatch(
+pub(crate) fn dispatch(
     core: &mut Core,
     current_id: NodeId,
     inv: &CommandInvocation,
